@@ -32,5 +32,5 @@ echo assign >> %tmp%/clear.dps
 echo Running Command...
 diskpart /s %tmp%/clear.dps
 del clear.dps
-echo OK!Press Any Key To Exit.
+echo OK! Press Any Key To Exit.
 pause > nul
