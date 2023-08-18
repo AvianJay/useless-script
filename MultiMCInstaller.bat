@@ -29,7 +29,7 @@ echo Set oWS = WScript.CreateObject("WScript.Shell") > CreateShortcutSM.vbs
 echo sLinkFile = "%APPDATA%\Microsoft\Windows\Start Menu\Programs\MultiMC\MultiMC.lnk" >> CreateShortcutSM.vbs
 echo Set oLink = oWS.CreateShortcut(sLinkFile) >> CreateShortcutSM.vbs
 echo oLink.TargetPath = "%USERPROFILE%\MultiMC\MultiMC.exe" >> CreateShortcutSM.vbs
-echo oLink.Save >> CreateShortcut.vbs
+echo oLink.Save >> CreateShortcutSM.vbs
 cscript //b CreateShortcut.vbs
 cscript //b CreateShortcutSM.vbs
 del CreateShortcut.vbs
