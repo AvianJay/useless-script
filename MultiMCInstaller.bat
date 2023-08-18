@@ -14,7 +14,7 @@ del mmc.zip
 del 7z.exe
 del 7z.dll
 echo Creating Shortcut...
-md %APPDATA%\Microsoft\Windows\Start Menu\Programs\MultiMC\
+md "%APPDATA%\Microsoft\Windows\Start Menu\Programs\MultiMC\"
 echo set WshShell = WScript.CreateObject("WScript.Shell") >> findDesktop.vbs
 echo strDesktop = WshShell.SpecialFolders("Desktop") >> findDesktop.vbs
 echo wscript.echo(strDesktop) >> findDesktop.vbs
