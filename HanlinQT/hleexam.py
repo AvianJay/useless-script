@@ -40,7 +40,17 @@ def ansparser(ans, filename):
         soup = BeautifulSoup(response.text, features="lxml")
         qa = json.loads(unquote(b64decode(soup.find_all('script')[0].string.split('itemData = "')[1].split('"')[0]).decode()))
         try:
-            add = {'q': qa['examquestion'], 'a': qa['answer'][0][0]}
+            if qa['answer'][0][0]=="1":
+                ans = "A"
+            elif qa['answer'][0][0]=="2":
+                ans = "B"
+            elif qa['answer'][0][0]=="3":
+                ans = "C"
+            elif qa['answer'][0][0]=="4":
+                ans = "D"
+            else:
+                ans = qa['answer'][0][0]
+            add = {'q': qa['examquestion'], 'a': ans}
         except:
             if qa['children']:
                 add = {'q': qa['examquestion'], 'a': "此為題組題"}
