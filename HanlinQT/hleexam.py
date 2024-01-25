@@ -3,8 +3,10 @@ from bs4 import BeautifulSoup
 from urllib.parse import unquote
 from base64 import b64decode
 import json
+import argparse
+import sys
 
-def ansparser(ans):
+def ansparser(ans, filename):
     qs = []
     es = []
     for q in ans['items']:
@@ -50,16 +52,18 @@ def ansparser(ans):
         if not qs == None:
             qs.append(add)
     print("獲取到", len(qs), "個題目，共", len(es), "個錯誤")
-    open('hqa.json', 'w').write(json.dumps(qs))
-    open('her.json', 'w').write(json.dumps(es))
-    return "成功儲存題目到 hqa.json"
+    if filename.lower().endswith(".json"):
+        open(filename, 'w').write(json.dumps(qs))
+        return f"成功儲存題目到 {filename}"
+    else:
+        open(filename + ".json", 'w').write(json.dumps(qs))
+        return f"成功儲存題目到 {filename + '.json'}"
 
-def get(tid):
+def get(tid, fn):
     headers = {
         'authority': 'hanlintest.ehanlin.com.tw',
         'accept': 'text/plain, application/json, text/json',
         'accept-language': 'zh-TW,zh;q=0.9',
-        'authorization': 'Bearer eyJhbGciOiJSUzI1NiIsImtpZCI6Ijg1NzgwNWYxZGQ3ZmE5YTZiNTI3ZjQ0ZWNmZmJkNDhjIiwidHlwIjoiYXQrand0In0.eyJuYmYiOjE3MDU3MTExODksImV4cCI6MTczNzg1MTk4OSwiaXNzIjoiaHR0cHM6Ly9pZC5obGUuY29tLnR3IiwiY2xpZW50X2lkIjoianMiLCJzdWIiOiJkY2M5NzBhZS1iMGE2LTQ0M2EtOWRiOC1mOWIxZGFmZjk2MzIiLCJhdXRoX3RpbWUiOjE3MDU3MTExODgsImlkcCI6Im1vZSIsImh0dHA6Ly9zY2hlbWFzLnhtbHNvYXAub3JnL3dzLzIwMDUvMDUvaWRlbnRpdHkvY2xhaW1zL2VtYWlsYWRkcmVzcyI6InN0MTEwMzE1QG50ZXMudGMuZWR1LnR3QGhhbmxpbiIsIkFzcE5ldC5JZGVudGl0eS5TZWN1cml0eVN0YW1wIjoiVkRONFVMWVpIUlhMVlJGS0lTRklNVE01RFBJVE5DQzciLCJuYW1lIjoiNWYzMzhhZWMtYjdlNS00MDYwLTkzZmQtNDdiOWYwNGI1MzE0IiwiZW1haWwiOiJzdDExMDMxNUBudGVzLnRjLmVkdS50d0BoYW5saW4iLCJlbWFpbF92ZXJpZmllZCI6dHJ1ZSwicHJlZmVycmVkX3VzZXJuYW1lIjoi5b6Q6bW_5YKRIiwidXNlcl9kb21haW4iOiJlZHUiLCJyb2xlIjoi5a2455SfIiwiZWR1QWNjb3VudCI6Im50ZXMxMDYwMzAzMTUiLCJlZHVJZCI6IjVmMzM4YWVjLWI3ZTUtNDA2MC05M2ZkLTQ3YjlmMDRiNTMxNCIsInNjaG9vbFN5c3RlbSI6IuWci-awkeWwj-WtuCIsImlzaWRlbnRpZmllZCI6ZmFsc2UsImxvY2siOmZhbHNlLCJ2ZXIiOjMsInNjb3BlIjpbIm9wZW5pZCIsInByb2ZpbGUiXSwiYW1yIjpbImV4dGVybmFsIl19.mh8FldJ42GxYSnlJhzLovZjC8cApfuMatj1Y5sDZ9QJtiJmHaW-CW80pgCXQXSxvuUno--rS6-l30QhuiRH7YDIh8E1H14zT3IzSFLsbrjckTptIWZGqZCrcRllDcYRom3Gs5xY2TdGWlI46lntcfvbGquZcyPrx1wTIN2uxTqRdXOrD8AtS1UmVbHPypaisJmFDlu5rCq09yoecIG91GZ9uCiWMUycFEX-c7Zdwp3YwhZoFUSVflI1J2H5Pu0X1xXCYRl0lMz5R75U6_VPJv8mCGTKTfjKMXp8UOHXHl-xJoSat3eB2DsQ2ioXOE4ii_QBkM5pec4VMpV1S3hJnEw',
         'origin': 'https://qt.hle.com.tw',
         'referer': 'https://qt.hle.com.tw/',
         'sec-ch-ua': '"Google Chrome";v="119", "Chromium";v="119", "Not?A_Brand";v="24"',
@@ -76,7 +80,7 @@ def get(tid):
     }
 
     response = requests.get('https://hanlintest.ehanlin.com.tw/hanlintest-api/Examine/taskMetadata', params=params, headers=headers)
-    return ansparser(response.json())
+    return ansparser(response.json(), fn)
 
 def getcid(qcode):
     headers = {
@@ -105,24 +109,79 @@ def getcid(qcode):
     return tid
 
 def create(questions, savename):
-    template = open('hleqa.html', 'r', encoding="utf-8").read()
+    template = '''<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HanlinQT</title>
+    <style>
+        .keyword {
+            color: blue;
+            text-decoration: underline;
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+
+<script>
+    var data = ['QAJSON'];
+
+    for (var i = 0; i < data.length; i++) {
+        var question = data[i].q;
+        var answer = data[i].a;
+
+        var questionContainer = document.createElement('div');
+        questionContainer.innerHTML = question;
+
+        var keywords = questionContainer.getElementsByClassName('keyword');
+        for (var j = 0; j < keywords.length; j++) {
+            keywords[j].addEventListener('click', function (event) {
+                alert('你點擊了關鍵字: ' + event.target.dataset.keyword);
+            });
+        }
+
+        var answerContainer = document.createElement('div');
+        answerContainer.innerHTML = '<p>答案：' + answer + '</p>';
+
+        document.body.appendChild(questionContainer);
+        document.body.appendChild(answerContainer);
+    }
+</script>
+
+</body>
+</html>
+    '''
     replaced = template.replace("['QAJSON']", str(questions))
     open(savename, 'w', encoding="utf-8").write(replaced)
 
 if __name__=='__main__':
-    import sys
-    if len(sys.argv) > 1:
-        if sys.argv[1] == "file" and len(sys.argv)>2:
-            print(ansparser(json.load(open(sys.argv[2]))))
-        else:
-            print(get(getcid(sys.argv[1])))
-        if sys.argv[-2] == "genhtml":
-            if sys.argv[-1].lower().endswith('.html'):
-                savename = sys.argv[-1]
-            else:
-                savename = sys.argv[-1] + '.html'
-            q = open("hqa.json", 'r', encoding="utf-8").read()
-            create(q, savename)
-            print("成功創建HTML到", sys.argv[-1])
+    parser = argparse.ArgumentParser()
+    parser.add_argument("-i", "--id", help="題目的ID", dest="id", default=False)
+    parser.add_argument("-s", "--savename", help="保存的json檔案名稱", dest="savename", default="HanlinQT.json")
+    parser.add_argument("-j", "--json", help="taskMetadata的JSON路徑", dest="json_path", default=False)
+    parser.add_argument("-g", "--genhtml", help="生成HTML的檔案名稱", dest="genhtml", default=False)
+    args = parser.parse_args()
+
+    if args.id and not args.json_path:
+        print(get(getcid(args.id), args.savename))
+    elif args.json_path and not args.id:
+        print(ansparser(json.load(open(args.json_path, 'r', encoding="utf-8")), args.savename))
     else:
-        print("用法:", sys.argv[0], '[試卷ID |或| file 題目.json]', '[genhtml <檔案.html>](可選)')
+        print("錯誤！請提供題目ID或taskMetadata的JSON路徑(只能選1個)！")
+        sys.exit(1)
+
+    if args.genhtml:
+        if args.genhtml.lower().endswith('.html'):
+            savename = args.genhtml
+        else:
+            savename = args.genhtml + '.html'
+        if args.savename.lower().endswith(".json"):
+            q = open(args.savename, 'r', encoding="utf-8").read()
+        else:
+            q = open(args.savename + '.json', 'r', encoding="utf-8").read()
+        create(q, savename)
+        print("成功創建HTML到", savename)
+
