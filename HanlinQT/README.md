@@ -1,5 +1,6 @@
 # 翰林任務中心-答案獲取器
 獲取答案。
+從<a href="https://github.com/AvianJay/useless-script/releases/tag/HanlinQT-1.0">這裡</a>取得最新的版本
 # 範例用法
 <pre>$>python hleexam.py --help
 usage: hleexam.py [-h] [-i ID] [-s SAVENAME] [-j JSON_PATH] [-g GENHTML]
