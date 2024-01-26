@@ -20,6 +20,15 @@ $>python hleexam.py -i ******** -s chinese.json -g chinese.html
 獲取到 50 個題目，共 0 個錯誤
 成功儲存題目到 chinese.json
 成功創建HTML到 chinese.html</pre>
+# 用源代碼執行&構建
+<pre>git clone https://github.com/AvianJay/useless-script.git
+cd useless-script/HanlinQT
+pip install -r requirements.txt
+python hanlinqt.py ********</pre>
+構建
+<pre>pip install pyinstaller
+pyinstaller -F -c hanlinqt.py
+</pre>
 # 獲取taskMetadata
 1. 右鍵檢查進入DevTools
 <img src="./screenshots/1.png">
