@@ -1,6 +1,6 @@
 # 翰林任務中心-答案獲取器
 獲取答案。
-從<a href="https://github.com/AvianJay/useless-script/releases/tag/HanlinQT-1.0">這裡</a>取得最新的版本
+從<a href="https://github.com/AvianJay/useless-script/releases/tag/HanlinQT-1.1">這裡</a>取得最新的版本
 # 範例用法
 <pre>$>python hleexam.py --help
 usage: hleexam.py [-h] [-i ID] [-s SAVENAME] [-j JSON_PATH] [-g GENHTML]
@@ -17,7 +17,9 @@ options:
 
 $>python hleexam.py -i ******** -s chinese.json -g chinese.html
 得到任務ID: ************************_************************
-獲取到 50 個題目，共 0 個錯誤
+共有 50 題(不包含子題目)，開始獲取...
+100%|███████████████████| 36/36 [00:19<00:00,  1.80it/s]
+獲取到 50 個題目，其中有 0 個子題目，共 0 個錯誤
 成功儲存題目到 chinese.json
 成功創建HTML到 chinese.html</pre>
 # 用源代碼執行&構建

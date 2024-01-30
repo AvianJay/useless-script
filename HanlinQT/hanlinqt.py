@@ -5,11 +5,14 @@ from base64 import b64decode
 import json
 import argparse
 import sys
+from time import sleep
+from tqdm import tqdm
 
 def ansparser(ans, filename):
     qs = []
     es = []
-    for q in ans['items']:
+    print("共有", len(ans['items']), "題(不包含子題目)，開始獲取...")
+    for q in tqdm(ans['items']):
         headers = {
             'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
             'Accept-Language': 'zh-TW,zh;q=0.9',
@@ -41,27 +44,42 @@ def ansparser(ans, filename):
         qa = json.loads(unquote(b64decode(soup.find_all('script')[0].string.split('itemData = "')[1].split('"')[0]).decode()))
         try:
             if qa['answer'][0][0]=="1":
-                ans = "A"
+                anss = "A"
             elif qa['answer'][0][0]=="2":
-                ans = "B"
+                anss = "B"
             elif qa['answer'][0][0]=="3":
-                ans = "C"
+                anss = "C"
             elif qa['answer'][0][0]=="4":
-                ans = "D"
+                anss = "D"
             else:
-                ans = qa['answer'][0][0]
-            add = {'q': qa['examquestion'], 'a': ans}
+                anss = qa['answer'][0][0]
+            add = {'q': qa['examquestion'], 'a': anss}
         except:
             if qa['children']:
-                add = {'q': qa['examquestion'], 'a': "此為題組題"}
+                add = None
+                qs.append({'q': qa['examquestion'], 'a': "此為題組題"})
                 for qc in qa['children']:
-                    qs.append({'q': qc['examquestion'], 'a': qc['answer'][0][0]})
+                    if qc['answer'][0][0]=="1":
+                        anss = "A"
+                    elif qc['answer'][0][0]=="2":
+                        anss = "B"
+                    elif qc['answer'][0][0]=="3":
+                        anss = "C"
+                    elif qc['answer'][0][0]=="4":
+                        anss = "D"
+                    else:
+                        anss = qc['answer'][0][0]
+                    qs.append({'q': qc['examquestion'], 'a': anss})
             else:
                 add = {'q': qa['examquestion'], 'a': "無法獲取答案"}
                 es.append(qa)
         if not qs == None:
             qs.append(add)
-    print("獲取到", len(qs), "個題目，共", len(es), "個錯誤")
+    print("獲取到", len(qs), "個題目，其中有", len(qs)-len(ans['items']), "個子題目，共", len(es), "個錯誤")
+    if len(es)>=1:
+        print("有錯誤的題目！\n上傳ErrorQuestions.json到 https://github.com/AvianJay/useless-script/issues 讓開發者解決問題。")
+        open("ErrorQuestions.json", 'w').write(json.dumps(es))
+        print("成功儲存錯誤的題目到 ErrorQuestions.json")
     if filename.lower().endswith(".json"):
         open(filename, 'w').write(json.dumps(qs))
         return f"成功儲存題目到 {filename}"
