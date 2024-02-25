@@ -73,7 +73,7 @@ def ansparser(ans, filename):
             else:
                 add = {'q': qa['examquestion'], 'a': "無法獲取答案"}
                 es.append(qa)
-        if not qs == None:
+        if not add == None:
             qs.append(add)
     print("獲取到", len(qs), "個題目，其中有", len(qs)-len(ans['items']), "個子題目，共", len(es), "個錯誤")
     if len(es)>=1:
