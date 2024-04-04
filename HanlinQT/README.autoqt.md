@@ -1,6 +1,6 @@
 # 翰林任務中心-答案獲取器
 獲取答案。
-從[這裡](https://github.com/AvianJay/useless-script/releases/tag/HanlinQT-1.1)取得最新的版本
+從[這裡](https://github.com/AvianJay/useless-script/releases/tag/HanlinAutoQT-1.0)取得最新的版本
 # 範例用法
 <pre>$>python autoqt.py --help
 usage: autoqt.py [-h] [-t TOKEN] [-n NAME] [-s SEAT] [-i ID] [-r RANDOMQS] [-sk] [-w WAIT]
@@ -50,8 +50,12 @@ pip install -r requirements.txt
 python autoqt.py ********</pre>
 構建
 <pre>pip install pyinstaller
-pyinstaller -F -c hanlinqt.py
+pyinstaller -F -c autoqt.py
 </pre>
 # 獲取Token
-1.將這個加入你的書籤內。
+1. 將這個加入你的書籤內。
 <pre>javascript:var tkn=document.getElementById("test-name");if(tkn){if(localStorage.token){tkn.value=localStorage.token;tkn.select();tkn.setSelectionRange(0,99999);navigator.clipboard.writeText(tkn.value);alert("帳戶密鑰已複製。")}else{alert("找不到帳戶密鑰。你登入了嗎？");tkn.value="找不到"}}else{alert("找不到元素。你在登入頁面嗎？")};</pre>
+![](screenshots/token.1.png)
+![](screenshots/token.2.png)
+2. 前往登入畫面並開啟書籤。
+![](screenshots/token.3.png)
