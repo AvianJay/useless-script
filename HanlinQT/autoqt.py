@@ -276,7 +276,7 @@ if __name__=="__main__":
     parser.add_argument("-s", "--seat", help="座號", dest="seat", default=False)
     parser.add_argument("-i", "--id", help="題目的ID", dest="id")
     parser.add_argument("-r", "--random", help="隨機作答題數", dest="randomqs", default=False)
-    parser.add_argument('-sk', '--skip-random-check', dest="skipr", action='store_true')
+    parser.add_argument('-sk', '--skip-random-check', help="跳過確認隨機作答提醒", dest="skipr", action='store_true')
     parser.add_argument("-w", "--wait", help="等待秒數", dest="wait", default=False)
     args = parser.parse_args()
     if not args.token and not args.name and not args.seat:
