@@ -54,4 +54,4 @@ pyinstaller -F -c hanlinqt.py
 </pre>
 # 獲取Token
 1.將這個加入你的書籤內。
-<pre>javascript:var tkn=document.getElementById("test-name");if(tkn){if(localStorage.token){tkn.value=localStorage.token;tkn.select();tkn.setSelectionRange(0,99999);navigator.clipboard.writeText(tkn.value);alert("帳戶密鑰已複製。")}else{alert("找不到帳戶密鑰。你登入了嗎？");tkn.value="找不到"}}else{alert("找不到元素。你在登入頁面嗎？")};</pre>
+    javascript:var tkn=document.getElementById("test-name");if(tkn){if(localStorage.token){tkn.value=localStorage.token;tkn.select();tkn.setSelectionRange(0,99999);navigator.clipboard.writeText(tkn.value);alert("帳戶密鑰已複製。")}else{alert("找不到帳戶密鑰。你登入了嗎？");tkn.value="找不到"}}else{alert("找不到元素。你在登入頁面嗎？")};
