@@ -7,6 +7,7 @@ import argparse
 import sys
 from time import sleep
 from tqdm import tqdm
+import autoqt
 
 def ansparser(ans, filename):
     qs = []
