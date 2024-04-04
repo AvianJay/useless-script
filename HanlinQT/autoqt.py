@@ -234,7 +234,7 @@ def startexam(tid, cid, token=None, name=None, seatNo=None):
     json_data = {
         'taskId': tid,
         'userName': sdata["name"],
-        'seatNo': sdata["seatNo"],
+        'seatNo': str(sdata["seatNo"]),
         'studentId': sdata["id"],
     }
 
