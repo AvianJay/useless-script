@@ -1,6 +1,6 @@
 # 翰林任務中心-自動作答器
 獲取答案並自動作答。支持隨機猜題與等待。
-從[這裡](https://github.com/AvianJay/useless-script/releases/tag/HanlinAutoQT-1.0)取得最新的版本
+從[這裡](https://github.com/AvianJay/useless-script/releases/tag/HanlinAutoQT-1.1)取得最新的版本
 # 範例用法
 <pre>$>python autoqt.py --help
 usage: autoqt.py [-h] [-t TOKEN] [-n NAME] [-s SEAT] [-i ID] [-r RANDOMQS] [-sk] [-w WAIT]
