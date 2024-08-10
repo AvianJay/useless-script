@@ -4,7 +4,7 @@ sudo rm /tmp/Discord.deb
 fi
 wget "https://discord.com/api/download?platform=linux&format=deb" -O /tmp/Discord.deb
 sudo dpkg -i /tmp/Discord.deb
-set returncode = $?
+export returncode=$?
 if [ $returncode == 0 ]
 then
 screen -L -dmS Discord /bin/bash -c discord
