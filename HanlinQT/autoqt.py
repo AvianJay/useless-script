@@ -309,12 +309,8 @@ if __name__=="__main__":
     ctid = getcid(args.id)
     cid = ctid['c']
     tid = ctid['t']
-    if args.token:
-        eid = startexam(tid, cid, token=args.token)
-    else:
-        eid = startexam(tid, cid, name=args.name, seatNo=args.seat)
     print('開始生成所有正確答案...')
-    ans = genall(tid, eid)
+    ans = genall(tid, "")
     oans = ans
     print('成功。')
     if args.randomqs:
@@ -362,6 +358,11 @@ if __name__=="__main__":
                     print("成功。\n本來的答案：", b, '\n現在的答案：', a)
                 else:
                     break
+    if args.token:
+        eid = startexam(tid, cid, token=args.token)
+    else:
+        eid = startexam(tid, cid, name=args.name, seatNo=args.seat)
+    ans["examAnswerId"] = eid
     if args.wait:
         print('已指定等待送出時間。\n', args.wait, '秒。正在等待...')
         for i in tqdm(range(int(args.wait))):
