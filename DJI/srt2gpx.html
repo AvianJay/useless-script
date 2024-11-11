@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>srt2gpx for DJI</title>
+</head>
+<body>
+    <h2>DJI無人機路徑檔產生器</h2>
+    <input type="file" id="srtFile" accept=".srt" /><br>
+    <button onclick="convertToGpx()">轉換！</button><br>
+    <a href="https://github.com/AvianJay/useless-script">Powered by AvianJay's useless tools</a>
+
+    <script>
+        async function convertToGpx() {
+            const fileInput = document.getElementById('srtFile');
+            if (!fileInput.files.length) {
+                alert("請選擇srt檔。");
+                return;
+            }
+
+            const srtFile = fileInput.files[0];
+            const srtText = await srtFile.text();
+            const gpxContent = srtToGpx(srtText);
+
+            const blob = new Blob([gpxContent], { type: 'application/gpx+xml' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'output.gpx';
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        }
+
+        function srtToGpx(srtText) {
+            let gpxData = '<?xml version="1.0" encoding="UTF-8"?>\n';
+            gpxData += '<gpx version="1.1" creator="AvianJay"><metadata><name>DJI Drone</name><desc>Converted with AvianJay\'s Tool</desc></metadata>\n';
+            gpxData += '  <trk>\n';
+            gpxData += '    <name>DJI Drone Flight</name>\n';
+            gpxData += '    <trkseg>\n';
+
+            const entries = srtText.split("\n\n").filter(line => line.trim());
+
+            entries.forEach(entry => {
+                const timestampMatch = entry.match(/\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d+/);
+                const latMatch = entry.match(/latitude: ([\d.]+)/);
+                const lonMatch = entry.match(/longitude: ([\d.]+)/);
+                const altMatch = entry.match(/rel_alt: ([\d.]+)/);
+
+                if (timestampMatch && latMatch && lonMatch && altMatch) {
+                    const timestamp = new Date(timestampMatch[0]).toISOString();
+                    const latitude = latMatch[1];
+                    const longitude = lonMatch[1];
+                    const altitude = altMatch[1];
+
+                    gpxData += `      <trkpt lat="${latitude}" lon="${longitude}">\n`;
+                    gpxData += `        <ele>${altitude}</ele>\n`;
+                    gpxData += `        <time>${timestamp}</time>\n`;
+                    gpxData += '      </trkpt>\n';
+                }
+            });
+
+            gpxData += '    </trkseg>\n';
+            gpxData += '  </trk>\n';
+            gpxData += '</gpx>\n';
+
+            return gpxData;
+        }
+    </script>
+</body>
+</html>
