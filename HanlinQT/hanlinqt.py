@@ -44,32 +44,39 @@ def ansparser(ans, filename):
         soup = BeautifulSoup(response.text, features="lxml")
         qa = json.loads(unquote(b64decode(soup.find_all('script')[0].string.split('itemData = "')[1].split('"')[0]).decode()))
         try:
-            if qa['answer'][0][0]=="1":
-                anss = "A"
-            elif qa['answer'][0][0]=="2":
-                anss = "B"
-            elif qa['answer'][0][0]=="3":
-                anss = "C"
-            elif qa['answer'][0][0]=="4":
-                anss = "D"
-            else:
-                anss = qa['answer'][0][0]
+            anss = ""
+            for a in qa['answer'][0]:
+                if a=="1":
+                    anss += "A"
+                elif a=="2":
+                    anss += "B"
+                elif a=="3":
+                    anss += "C"
+                elif a=="4":
+                    anss += "D"
+                elif a=="5":
+                    anss += "E"
+                else:
+                    anss += a
             add = {'q': qa['examquestion'], 'a': anss}
         except:
             if qa['children']:
                 add = None
                 qs.append({'q': qa['examquestion'], 'a': "此為題組題"})
                 for qc in qa['children']:
-                    if qc['answer'][0][0]=="1":
-                        anss = "A"
-                    elif qc['answer'][0][0]=="2":
-                        anss = "B"
-                    elif qc['answer'][0][0]=="3":
-                        anss = "C"
-                    elif qc['answer'][0][0]=="4":
-                        anss = "D"
-                    else:
-                        anss = qc['answer'][0][0]
+                    for a in qc['answer'][0]:
+                        if a=="1":
+                            anss += "A"
+                        elif a=="2":
+                            anss += "B"
+                        elif a=="3":
+                            anss += "C"
+                        elif a=="4":
+                            anss += "D"
+                        elif a=="5":
+                            anss += "E"
+                        else:
+                            anss += a
                     qs.append({'q': qc['examquestion'], 'a': anss})
             else:
                 add = {'q': qa['examquestion'], 'a': "無法獲取答案"}
