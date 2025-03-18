@@ -16,6 +16,6 @@ exit 1
 set host=%1
 type %USERPROFILE%\.ssh\id_rsa.pub | ssh %host% "cat >> ~/.ssh/authorized_keys"
 if %ERRORLEVEL%==0 else (goto ssherr)
-echo Copyed Key!
+echo Copied Key!
 echo Run "ssh %host%" to login!
 exit 0
