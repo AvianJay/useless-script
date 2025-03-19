@@ -1,5 +1,6 @@
 import os
 import re
+import sys
 import json
 import requests
 import urllib.parse
@@ -89,7 +90,7 @@ def main(url):
         path = os.path.join(basedir, legalize_filename(v["name"]) + ".mp4")
         print("Requesting for mp4 url...")
         mp4_url = get_mp4_url(v["apireq"], session)
-        print("Started downloading:", name)
+        print("Started downloading:", v["name"])
         download_file(mp4_url, session, v["name"], path)
         print("Done.")
 
