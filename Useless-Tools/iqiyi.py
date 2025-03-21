@@ -9,6 +9,7 @@
 #  changed program to ffmpeg
 #  fixed "No m3u8 data."
 #  add subtitle downloader
+# todo: use selenium to get dash link
 
 import requests
 import json
