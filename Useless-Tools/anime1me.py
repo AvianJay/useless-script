@@ -1,3 +1,8 @@
+# anime1.me downloader
+# by AvianJay
+# todo: support more page type
+#        find other pages
+
 import os
 import re
 import sys
@@ -71,9 +76,9 @@ def main(url):
     session = requests.Session()
     web = session.get(url)
     soup = BeautifulSoup(web.text, "html.parser")
-    og_title = soup.find('meta', property='og:title')
-    print("Downloading: ", og_title.get('content'))
-    basedir = legalize_filename(og_title.get('content'))
+    title = soup.find('h1').text
+    print("Downloading: ", title)
+    basedir = legalize_filename(title)
     if not os.path.exists(basedir):
         try:
             os.mkdir(basedir)
