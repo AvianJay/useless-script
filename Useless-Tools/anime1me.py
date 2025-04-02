@@ -71,7 +71,53 @@ def get_mp4_url(data, session):
     response = session.post('https://v.anime1.me/api', headers=headers, data=f"d={data}").json()
     return "https:" + response["s"][0]["src"]
 
-def main(url):
+def generate_agpp(path):
+    os.chdir(path)
+    script = """import os
+import sys
+import cv2
+import json
+import random
+
+exp = {"videos": []}
+
+exp["anime_name"] = os.path.basename(os.getcwd())
+print("Anime name:", exp["anime_name"])
+exp["source"] = "anime1.me"
+exp["unique_sn"] = str(random.randint(0, 999999)).zfill(6)
+print("unique sn:", exp["unique_sn"])
+
+for _, __, files in os.walk("."):
+    for file in files:
+        vid = cv2.VideoCapture(file)
+        resolution = int(vid.get(cv2.CAP_PROP_FRAME_HEIGHT))
+        episode_stage1 = file.split("[")[1].split("]")[0]
+        # 據我所知的
+        if "ova" in episode_stage1.lower():
+            type = "OVA"
+            episode_stage2 = episode_stage1.lower().replace("ova", "")
+            if episode_stage2 == "":
+                episode = 1
+            else:
+                episode = int(episode_stage2)
+        elif "sp" in episode_stage1.lower():
+            type = "SP"
+            episode_stage2 = episode_stage1.lower().replace("sp", "")
+            if episode_stage2 == "":
+                episode = 1
+            else:
+                episode = int(episode_stage2)
+        else:
+            type = "normal"
+            episode = int(episode_stage1)
+        exp["videos"].append({"episode": episode, "resolution": resolution, "type": type, "filename": file})
+
+json.dump(exp, open(".aniGamerPlus.json", "w"))
+print("Done.")
+"""
+    exec(script)
+
+def main(url, gen_agpp):
     videos = []
     session = requests.Session()
     web = session.get(url)
@@ -98,9 +144,11 @@ def main(url):
         print("Started downloading:", v["name"])
         download_file(mp4_url, session, v["name"], path)
         print("Done.")
+    if gen_agpp:
+        generate_agpp(os.path.abspath(basedir))
 
 if __name__ == "__main__":
-    if not len(sys.argv) == 2:
+    if not len(sys.argv) == 2 or not len(sys.argv) == 3:
         print("Invalid arguments.")
         print("Usage:", sys.argv[0], "[anime1.me URL]")
         exit(1)
@@ -108,4 +156,8 @@ if __name__ == "__main__":
         print("Invalid URL.")
         print("Usage:", sys.argv[0], "[anime1.me URL]")
         exit(1)
-    main(sys.argv[1])
+    if len(sys.argv) == 3:
+        if sys.argv[2] == "true":
+            main(sys.argv[1], True)
+    else:
+        main(sys.argv[1])
