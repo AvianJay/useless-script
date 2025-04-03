@@ -1,7 +1,7 @@
 # anime1.me downloader
 # by AvianJay
 # todo: support more page type
-#        find other pages
+#        Done: find other pages
 
 import os
 import re
@@ -44,7 +44,7 @@ def download_file(url, session, name, filename):
         r.raise_for_status()
         total_size = int(r.headers.get('Content-Length', 0))
         with open(filename, 'wb') as f:
-            with tqdm(total=total_size, unit='B', unit_scale=True, desc=name) as pbar:
+            with tqdm(total=total_size, unit='B', unit_scale=True) as pbar:
                 for chunk in r.iter_content(chunk_size=8192):
                     if chunk:
                         f.write(chunk)
@@ -70,6 +70,30 @@ def get_mp4_url(data, session):
 
     response = session.post('https://v.anime1.me/api', headers=headers, data=f"d={data}").json()
     return "https:" + response["s"][0]["src"]
+
+def get_info(url, session):
+    videos = []
+    if "/page/" in url:
+        url = url.split("/page/")[0]
+    web = session.get(url)
+    soup = BeautifulSoup(web.text, "html.parser")
+    title = soup.find('h1', class_='page-title').text
+
+    while True:
+        articles = soup.find_all('article')
+        for a in articles:
+            name = a.find("h2").find("a").text
+            da = a.find("video").get("data-apireq")
+            videos.append({"name": name, "apireq": da})
+
+        prevbtn = soup.find("div", class_="nav-previous")
+        if prevbtn:
+            print("Found another page.")
+            web = session.get(prevbtn.find("a")["href"])
+            soup = BeautifulSoup(web.text, "html.parser")
+        else:
+            break
+    return title, videos
 
 def generate_agpp(path):
     os.chdir(path)
@@ -118,11 +142,9 @@ print("Done.")
     exec(script)
 
 def main(url, gen_agpp):
-    videos = []
     session = requests.Session()
-    web = session.get(url)
-    soup = BeautifulSoup(web.text, "html.parser")
-    title = soup.find('h1').text
+    print("Getting info...")
+    title, videos = get_info(url, session)
     print("Downloading: ", title)
     basedir = legalize_filename(title)
     if not os.path.exists(basedir):
@@ -130,13 +152,7 @@ def main(url, gen_agpp):
             os.mkdir(basedir)
         except:
             pass
-
-    articles = soup.find_all('article')
-    for a in articles:
-        name = a.find("h2").find("a").text
-        da = a.find("video").get("data-apireq")
-        videos.append({"name": name, "apireq": da})
-
+    print("Episodes:", len(videos))
     for v in videos:
         path = os.path.join(basedir, legalize_filename(v["name"]) + ".mp4")
         print("Requesting for mp4 url...")
@@ -150,11 +166,11 @@ def main(url, gen_agpp):
 if __name__ == "__main__":
     if not len(sys.argv) == 2 or not len(sys.argv) == 3:
         print("Invalid arguments.")
-        print("Usage:", sys.argv[0], "[anime1.me URL]")
+        print("Usage:", sys.argv[0], "[anime1.me URL] [gen aGP?]")
         exit(1)
     elif not "https://anime1.me" in sys.argv[1]:
         print("Invalid URL.")
-        print("Usage:", sys.argv[0], "[anime1.me URL]")
+        print("Usage:", sys.argv[0], "[anime1.me URL] [gen aGP?]")
         exit(1)
     if len(sys.argv) == 3:
         if sys.argv[2] == "true":

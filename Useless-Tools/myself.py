@@ -154,3 +154,4 @@ if __name__ == "__main__":
                 generate_agpp(os.path.abspath(r))
     else:
         print("[ERROR] Invalid arguments.")
+        print("[INFO] Usage:", sys.argv[0], "[myself-bbs.com thread URL] [gen aGP?]")
