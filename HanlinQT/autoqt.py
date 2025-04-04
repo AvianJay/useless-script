@@ -30,9 +30,7 @@ def genj(id, ans, points):
                     'answeringMethod': '單一選擇題',
                     'questionIndex': 0,
                     'answers': [
-                        [
-                            value,
-                        ],
+                        value,
                     ],
                     'corrected': None,
                     'correctness': None,
@@ -53,9 +51,7 @@ def genj(id, ans, points):
                     'answeringMethod': '單一選擇題',
                     'questionIndex': 0,
                     'answers': [
-                        [
-                            ans[0],
-                        ],
+                        ans
                     ],
                     'corrected': None,
                     'correctness': None,
@@ -157,7 +153,7 @@ def ansparser(ans):
         soup = BeautifulSoup(response.text, features="lxml")
         qa = json.loads(unquote(b64decode(soup.find_all('script')[0].string.split('itemData = "')[1].split('"')[0]).decode()))
         try:
-            add = {'id': q["itemId"], 'a': [qa['answer'][0][0]], 'p': q['pointsPerAnswer']}
+            add = {'id': q["itemId"], 'a': qa['answer'][0], 'p': q['pointsPerAnswer'], 't': qa["genre"]}
         except:
             if qa['children']:
                 anss = []
