@@ -1,6 +1,7 @@
 # anime1.me downloader
 # by AvianJay
 # todo: support more page type
+#        server mode so it can auto update
 #        Done: find other pages
 
 import os
@@ -83,7 +84,7 @@ def get_info(url, session):
         articles = soup.find_all('article')
         for a in articles:
             name = a.find("h2").find("a").text
-            da = a.find("video").get("data-apireq")
+            da = a.find("video").get("data-apireq") if a.find("video") else None
             videos.append({"name": name, "apireq": da})
 
         prevbtn = soup.find("div", class_="nav-previous")
@@ -94,6 +95,119 @@ def get_info(url, session):
         else:
             break
     return title, videos
+
+def get_anime_list(check_page_if_serializing=False, check_page_if_dot=False):
+    alist = requests.get("https://d1zquzjgwo9yb.cloudfront.net/").json()
+    ealist = []
+    for a in alist:
+        if "href=" in a[1]:
+            url = a[1].split("href=\"")[1].split("\">")[0]
+            name = a[1].split("\">")[0].split("</a>")[0]
+        else:
+            url = "https://anime1.me/?cat=" + str(a[0])
+            name = a[1]
+
+        episodes = []
+        if "連載中" in a[2]:
+            if check_page_if_serializing:
+                t, vs = get_info(url, requests.session())
+                for v in vs:
+                    episodes.append(v["name"].split("[")[-1].split("]")[0])
+            else:
+                for i in range(1, int(a[2].split("(")[-1].split(")")[0].split()[0])+1):
+                    episodes.append(str(i).zfill(2))
+        elif "-" == a[2]:
+            t, vs = get_info(url, requests.session())
+            for v in vs:
+                episodes.append(v["name"].split("[")[-1].split("]")[0])
+        else:
+            epsf = a[2].split("+")
+            for e in epsf:
+                if "ova" in e.lower():
+                    if "ova" == e.lower() or "ova extra" == e.lower():
+                        episodes.append(e)
+                    else:
+                        if "ova extra" in e.lower():
+                            epss = e.lower().strip("ova extra").split("-")
+                        else:
+                            epss = e.lower().strip("ova").split("-")
+                        if len(epss) == 1:
+                            episodes.append(e)
+                        else:
+                            for i in range(int(epss[0]), int(epss[1])+1):
+                                episodes.append(str(i).zfill(2))
+                elif "sp" in e.lower():
+                    if "sp" == e.lower():
+                        episodes.append(e)
+                    else:
+                        epss = e.lower().strip("sp").split("-")
+                        if len(epss) == 1:
+                            episodes.append(e)
+                        else:
+                            for i in range(int(epss[0]), int(epss[1])+1):
+                                episodes.append(str(i).zfill(2))
+                elif "oad" in e.lower():
+                    if "oad" == e.lower():
+                        episodes.append(e)
+                    else:
+                        epss = e.lower().strip("oad").split("-")
+                        if len(epss) == 1:
+                            episodes.append(e)
+                        else:
+                            for i in range(int(epss[0]), int(epss[1])+1):
+                                episodes.append(str(i).zfill(2))
+                elif "ona" in e.lower():
+                    if "ona" == e.lower() or "ona extra" == e.lower():
+                        episodes.append(e)
+                    else:
+                        epss = e.lower().strip("ona").split("-")
+                        if len(epss) == 1:
+                            episodes.append(e)
+                        else:
+                            for i in range(int(epss[0]), int(epss[1])+1):
+                                episodes.append(str(i).zfill(2))
+                elif "extra" in e.lower():
+                    if "extra" == e.lower():
+                        episodes.append(e)
+                    else:
+                        epss = e.lower().strip("extra").split("-")
+                        if len(epss) == 1:
+                            episodes.append(e)
+                        else:
+                            for i in range(int(epss[0]), int(epss[1])+1):
+                                episodes.append(str(i).zfill(2))
+                elif e == "劇場版":
+                    episodes.append(e)
+                elif e == "特別編":
+                    episodes.append(e)
+                else:
+                    epss = e.split("-")
+                    if len(epss) == 1:
+                        episodes.append(e)
+                    else:
+                        if "." in epss[1]:
+                            if check_page_if_dot:
+                                t, vs = get_info(url, requests.session())
+                                episode = []
+                                for v in vs:
+                                    episodes.append(v["name"].split("[")[-1].split("]")[0])
+                                break
+                            else:
+                                epss[1] = abs(float(epss[1]))
+                                episodes.append(epss[1])
+                        for i in range(int(epss[0]), int(epss[1])+1):
+                            episodes.append(str(i).zfill(2))
+
+        anime = {
+            "name": name,
+            "url": url,
+            "episodes": episodes,
+            "year": a[3],
+            "season": a[4],
+            "source": a[5]
+        }
+        ealist.append(anime)
+    return ealist
 
 def generate_agpp(path):
     os.chdir(path)
