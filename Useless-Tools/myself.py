@@ -41,6 +41,9 @@ def get_info(url):
     for l in ml.find_all("a"):
         if "javascript" in l.get("href"):
             continue
+        elif "xfplay" in l.get("data-href"):
+            # unsupported xfplay
+            continue
         fs = l.get("data-href").split("/")
         result["id"] = fs[-2]
         result["episodes"].append(int(fs[-1]))
