@@ -164,7 +164,7 @@ def main(url, gen_agpp):
         generate_agpp(os.path.abspath(basedir))
 
 if __name__ == "__main__":
-    if not len(sys.argv) == 2 or not len(sys.argv) == 3:
+    if len(sys.argv) < 2 or len(sys.argv) > 3:
         print("Invalid arguments.")
         print("Usage:", sys.argv[0], "[anime1.me URL] [gen aGP?]")
         exit(1)
@@ -176,4 +176,4 @@ if __name__ == "__main__":
         if sys.argv[2] == "true":
             main(sys.argv[1], True)
     else:
-        main(sys.argv[1])
+        main(sys.argv[1], False)
