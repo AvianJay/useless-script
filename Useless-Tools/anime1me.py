@@ -1,6 +1,7 @@
 # anime1.me downloader
 # by AvianJay
 # todo: support more page type
+#        support ipp video(p2p, hls)
 #        server mode so it can auto update
 #        Done: find other pages
 
@@ -268,6 +269,9 @@ def main(url, gen_agpp):
             pass
     print("Episodes:", len(videos))
     for v in videos:
+        if not v["apireq"]:
+            print(v["name"], "has no apireq. Skipping.")
+            continue
         path = os.path.join(basedir, legalize_filename(v["name"]) + ".mp4")
         print("Requesting for mp4 url...")
         mp4_url = get_mp4_url(v["apireq"], session)
