@@ -10,6 +10,8 @@ import re
 import sys
 import json
 import requests
+import subprocess
+#import curl_cffi as requests
 import urllib.parse
 from tqdm import tqdm
 from bs4 import BeautifulSoup
@@ -53,6 +55,20 @@ def download_file(url, session, name, filename):
                         pbar.update(len(chunk))
     return filename
 
+def download_hls(url, file, program="ffmpeg"):
+    cmd = [program, '-protocol_whitelist', 'file,http,https,tcp,tls', '-i', url, '-acodec', 'copy', '-http_persistent', '0', '-vcodec', 'copy', file]
+    tr = 0
+    while tr <= 5:
+        try:
+            subprocess.run(cmd)
+            return True
+        except Exception as e:
+            print("[WARN] Failed to download. Tried", tr, "times.", e)
+            tr+=1
+            continue
+    print("[ERROR] Giving up.")
+    return False
+
 def get_mp4_url(data, session):
     headers = {
         'authority': 'v.anime1.me',
@@ -69,9 +85,24 @@ def get_mp4_url(data, session):
         'sec-fetch-site': 'same-site',
         'user-agent': 'Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/132.0.0.0 Mobile Safari/537.36',
     }
+    #print(data)
+    response = session.post('https://v.anime1.me/api', headers=headers, data=f"d={data}")
+    return "https:" + response.json()["s"][0]["src"]
 
-    response = session.post('https://v.anime1.me/api', headers=headers, data=f"d={data}").json()
-    return "https:" + response["s"][0]["src"]
+def download_anime(data, path, session):
+    if not data["data"]:
+        return False
+    try:
+        if data["method"] == "apireq":
+            mp4_url = get_mp4_url(data["data"], session)
+            download_file(mp4_url, session, data["name"], path)
+            return True
+        elif data["method"] == "p2p":
+            download_hls(data["data"], path)
+            return True
+    except Exception as e:
+        print("ERROR:", e)
+        return False
 
 def get_info(url, session):
     videos = []
@@ -85,8 +116,17 @@ def get_info(url, session):
         articles = soup.find_all('article')
         for a in articles:
             name = a.find("h2").find("a").text
-            da = a.find("video").get("data-apireq") if a.find("video") else None
-            videos.append({"name": name, "apireq": da})
+            # a.find("button").get("data-src")
+            if a.find("video"):
+                method = "apireq"
+                data = a.find("video").get("data-apireq") if a.find("video") else None
+            elif a.find("button"):
+                method = "p2p"
+                url = a.find("button").get("data-src")
+                res = session.get(url)
+                psoup = BeautifulSoup(res.text, "html.parser")
+                data = psoup.find("source").get("src") if psoup.find("source") else None
+            videos.append({"name": name, "method": method, "data": data})
 
         prevbtn = soup.find("div", class_="nav-previous")
         if prevbtn:
@@ -212,49 +252,10 @@ def get_anime_list(check_page_if_serializing=False, check_page_if_dot=False):
 
 def generate_agpp(path):
     os.chdir(path)
-    script = """import os
-import sys
-import cv2
-import json
-import random
-
-exp = {"videos": []}
-
-exp["anime_name"] = os.path.basename(os.getcwd())
-print("Anime name:", exp["anime_name"])
-exp["source"] = "anime1.me"
-exp["unique_sn"] = str(random.randint(0, 999999)).zfill(6)
-print("unique sn:", exp["unique_sn"])
-
-for _, __, files in os.walk("."):
-    for file in files:
-        vid = cv2.VideoCapture(file)
-        resolution = int(vid.get(cv2.CAP_PROP_FRAME_HEIGHT))
-        episode_stage1 = file.split("[")[1].split("]")[0]
-        # 據我所知的
-        if "ova" in episode_stage1.lower():
-            type = "OVA"
-            episode_stage2 = episode_stage1.lower().replace("ova", "")
-            if episode_stage2 == "":
-                episode = 1
-            else:
-                episode = int(episode_stage2)
-        elif "sp" in episode_stage1.lower():
-            type = "SP"
-            episode_stage2 = episode_stage1.lower().replace("sp", "")
-            if episode_stage2 == "":
-                episode = 1
-            else:
-                episode = int(episode_stage2)
-        else:
-            type = "normal"
-            episode = int(episode_stage1)
-        exp["videos"].append({"episode": episode, "resolution": resolution, "type": type, "filename": file})
-
-json.dump(exp, open(".aniGamerPlus.json", "w"))
-print("Done.")
-"""
-    exec(script)
+    response = requests.get("https://raw.githubusercontent.com/AvianJay/useless-script/refs/heads/main/Useless-Tools/agpp_custom_generator.py")
+    if response.status_code == 200:
+        script = response.text
+        exec(script)
 
 def main(url, gen_agpp):
     session = requests.Session()
@@ -269,15 +270,16 @@ def main(url, gen_agpp):
             pass
     print("Episodes:", len(videos))
     for v in videos:
-        if not v["apireq"]:
-            print(v["name"], "has no apireq. Skipping.")
+        #print(v)
+        if not v["data"]:
+            print(v["name"], ": Unknown method. Skipping.")
             continue
         path = os.path.join(basedir, legalize_filename(v["name"]) + ".mp4")
-        print("Requesting for mp4 url...")
-        mp4_url = get_mp4_url(v["apireq"], session)
-        print("Started downloading:", v["name"])
-        download_file(mp4_url, session, v["name"], path)
-        print("Done.")
+        print("Trying to download with method", v["method"])
+        if download_anime(v, path, session):
+            print("Done.")
+        else:
+            print("Failed to download", v["name"])
     if gen_agpp:
         generate_agpp(os.path.abspath(basedir))
 

@@ -7,9 +7,11 @@ import os
 import re
 import sys
 import json
+import asyncio
 import requests
-import subprocess
 import urllib.parse
+import subprocess
+import websockets
 from tqdm import tqdm
 from bs4 import BeautifulSoup
 
@@ -41,12 +43,15 @@ def get_info(url):
     for l in ml.find_all("a"):
         if "javascript" in l.get("href"):
             continue
-        elif "xfplay" in l.get("data-href"):
-            # unsupported xfplay
+        if not "v.myself-bbs.com" in l.get("data-href", ""):
+            # only "站內"
             continue
+        #print(l.get("data-href"))
         fs = l.get("data-href").split("/")
         result["id"] = fs[-2]
-        result["episodes"].append(int(fs[-1]))
+        result["episode"].append(int(fs[-1]))
+        #try:
+        #    result["episodes"].append({'episode': int(fs[-1]), 'method': 'vid', 'data': int(fs[-1])})
     return result
 
 def download(url, file, program="ffmpeg"):
@@ -61,6 +66,24 @@ def download(url, file, program="ffmpeg"):
             continue
     print("[ERROR] Giving up.")
     return False
+
+async def websocket_request(tid="", vid="", id=""):
+    headers = {
+        'Upgrade': 'websocket',
+        'Origin': 'https://v.myself-bbs.com',
+        'Cache-Control': 'no-cache',
+        'Accept-Language': 'zh-TW,zh;q=0.9,en-US;q=0.8,en;q=0.7',
+        'Pragma': 'no-cache',
+        'Connection': 'Upgrade',
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36',
+    }
+    uri = "wss://v.myself-bbs.com/ws"
+    data = {"tid": tid, "vid": vid, "id": id}
+    async with websockets.connect(uri, additional_headers=headers) as ws:
+        await ws.send(json.dumps(data))
+        response = await ws.recv()
+        await ws.close()
+    return response
 
 def get_base_url(id: str):
     b = "https://vpx05.myself-bbs.com/vpx/"
