@@ -40,6 +40,7 @@ def get_info(url):
             if u.get("href") in url:
                 result["name"] = u.text.split("【")[0]
     ml = soup.find("ul", class_="main_list")
+    # counter = 1
     for l in ml.find_all("a"):
         if "javascript" in l.get("href"):
             continue
@@ -49,9 +50,16 @@ def get_info(url):
         #print(l.get("data-href"))
         fs = l.get("data-href").split("/")
         result["id"] = fs[-2]
-        result["episode"].append(int(fs[-1]))
-        #try:
-        #    result["episodes"].append({'episode': int(fs[-1]), 'method': 'vid', 'data': int(fs[-1])})
+        #result["episode"].append(int(fs[-1]))
+        try:
+            result["episodes"].append({'episode': int(fs[-1]), 'method': 'vid', 'data': int(fs[-1])})
+        except:
+            ep = l.parent.parent.parent.find("a").text
+            match = re.search(r"第\s*(\d+)\s*話", ep)
+            if match:
+                episode = int(match.group(1))
+            result["episodes"].append({'episode': episode, 'method': 'id', 'data': fs[-1]})
+        # counter += 1
     return result
 
 def download(url, file, program="ffmpeg"):
@@ -83,7 +91,24 @@ async def websocket_request(tid="", vid="", id=""):
         await ws.send(json.dumps(data))
         response = await ws.recv()
         await ws.close()
-    return response
+    try:
+        response = json.loads(response)
+    except json.JSONDecodeError:
+        print("[ERROR] Failed to decode JSON response.")
+        return False
+    
+def request_url(episode, tid=""):
+    if episode["method"] == "vid":
+        data = asyncio.run(websocket_request(tid=tid, vid=episode["data"]))
+    elif episode["method"] == "id":
+        data = asyncio.run(websocket_request(id=episode["data"])) 
+    else:
+        print("[ERROR] Unknown method.")
+        return False
+    if not data:
+        print("[ERROR] Failed to get data.")
+        return False
+    return "https:" + data["video"]
 
 def get_base_url(id: str):
     b = "https://vpx05.myself-bbs.com/vpx/"
@@ -107,9 +132,9 @@ def download_all(url):
         return False
     print("[INFO] Downloading:", info["name"])
     print("[INFO] Episodes:", len(info["episodes"]))
-    baseurl = get_base_url(info["id"])
-    if not baseurl:
-        return False
+    # baseurl = get_base_url(info["id"])
+    # if not baseurl:
+    #     return False
     safename = legalize_filename(info["name"])
     try:
         os.mkdir(safename)
@@ -118,56 +143,21 @@ def download_all(url):
     for e in info["episodes"]:
         print("[INFO] Downloading episode", e)
         filepath = os.path.abspath(os.path.join(safename, f"{safename} [{str(e).zfill(2)}].mp4"))
-        url = baseurl.replace("xxx", str(e).zfill(3)) + "720p.m3u8"
+        # url = baseurl.replace("xxx", str(e).zfill(3)) + "720p.m3u8"
+        url = request_url(e, info["id"])
+        if not url:
+            print("[ERROR] Failed to get url. Skipping episode.")
+            continue
         download(url, filepath)
     print("[INFO] Done.")
     return safename
 
 def generate_agpp(path):
     os.chdir(path)
-    script = """import os
-import sys
-import cv2
-import json
-import random
-
-exp = {"videos": []}
-
-exp["anime_name"] = os.path.basename(os.getcwd())
-print("Anime name:", exp["anime_name"])
-exp["source"] = "Myself"
-exp["unique_sn"] = str(random.randint(0, 999999)).zfill(6)
-print("unique sn:", exp["unique_sn"])
-
-for _, __, files in os.walk("."):
-    for file in files:
-        vid = cv2.VideoCapture(file)
-        resolution = int(vid.get(cv2.CAP_PROP_FRAME_HEIGHT))
-        episode_stage1 = file.split("[")[1].split("]")[0]
-        # 據我所知的
-        if "ova" in episode_stage1.lower():
-            type = "OVA"
-            episode_stage2 = episode_stage1.lower().replace("ova", "")
-            if episode_stage2 == "":
-                episode = 1
-            else:
-                episode = int(episode_stage2)
-        elif "sp" in episode_stage1.lower():
-            type = "SP"
-            episode_stage2 = episode_stage1.lower().replace("sp", "")
-            if episode_stage2 == "":
-                episode = 1
-            else:
-                episode = int(episode_stage2)
-        else:
-            type = "normal"
-            episode = int(episode_stage1)
-        exp["videos"].append({"episode": episode, "resolution": resolution, "type": type, "filename": file})
-
-json.dump(exp, open(".aniGamerPlus.json", "w"))
-print("Done.")
-"""
-    exec(script)
+    response = requests.get("https://raw.githubusercontent.com/AvianJay/useless-script/refs/heads/main/Useless-Tools/agpp_custom_generator.py")
+    if response.status_code == 200:
+        script = response.text.replace('if len(sys.argv)>1:\n    exp["source"] = sys.argv[1]\nelse:\n    exp["source"] = input("Source?: ")', 'exp["source"] = "Myself"')
+        exec(script)
 
 if __name__ == "__main__":
     if len(sys.argv) > 1:

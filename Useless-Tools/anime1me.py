@@ -254,7 +254,7 @@ def generate_agpp(path):
     os.chdir(path)
     response = requests.get("https://raw.githubusercontent.com/AvianJay/useless-script/refs/heads/main/Useless-Tools/agpp_custom_generator.py")
     if response.status_code == 200:
-        script = response.text
+        script = response.text.replace('if len(sys.argv)>1:\n    exp["source"] = sys.argv[1]\nelse:\n    exp["source"] = input("Source?: ")', 'exp["source"] = "Anime1.me"')
         exec(script)
 
 def main(url, gen_agpp):
