@@ -58,7 +58,7 @@ def get_info(url):
             match = re.search(r"第\s*(\d+)\s*話", ep)
             if match:
                 episode = int(match.group(1))
-            result["episodes"].append({'episode': episode, 'method': 'id', 'data': fs[-1]})
+            result["episodes"].append({'episode': episode, 'method': 'id', 'data': fs[-1].strip("\r")})
         # counter += 1
     return result
 
@@ -93,6 +93,7 @@ async def websocket_request(tid="", vid="", id=""):
         await ws.close()
     try:
         response = json.loads(response)
+        return response
     except json.JSONDecodeError:
         print("[ERROR] Failed to decode JSON response.")
         return False
@@ -141,8 +142,8 @@ def download_all(url):
     except:
         pass
     for e in info["episodes"]:
-        print("[INFO] Downloading episode", e)
-        filepath = os.path.abspath(os.path.join(safename, f"{safename} [{str(e).zfill(2)}].mp4"))
+        print("[INFO] Downloading episode", e["episode"])
+        filepath = os.path.abspath(os.path.join(safename, f"{safename} [{str(e["episode"]).zfill(2)}].mp4"))
         # url = baseurl.replace("xxx", str(e).zfill(3)) + "720p.m3u8"
         url = request_url(e, info["id"])
         if not url:
