@@ -86,7 +86,7 @@ async def websocket_request(tid="", vid="", id=""):
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36',
     }
     uri = "wss://v.myself-bbs.com/ws"
-    data = {"tid": tid, "vid": vid, "id": id}
+    data = {"tid": str(tid), "vid": str(vid).zfill(3), "id": id}
     async with websockets.connect(uri, additional_headers=headers) as ws:
         await ws.send(json.dumps(data))
         response = await ws.recv()
