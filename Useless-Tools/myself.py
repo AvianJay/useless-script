@@ -143,7 +143,7 @@ def download_all(url):
         pass
     for e in info["episodes"]:
         print("[INFO] Downloading episode", e["episode"])
-        filepath = os.path.abspath(os.path.join(safename, f"{safename} [{str(e["episode"]).zfill(2)}].mp4"))
+        filepath = os.path.abspath(os.path.join(safename, f"{safename} [{str(e['episode']).zfill(2)}].mp4"))
         # url = baseurl.replace("xxx", str(e).zfill(3)) + "720p.m3u8"
         url = request_url(e, info["id"])
         if not url:
