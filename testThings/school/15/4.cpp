@@ -1,13 +1,15 @@
-#include<iostream>
+#include <iostream>
 using namespace std;
-int main() {
+int main()
+{
     double t;
-    double f=0;
-    cin>>t;
-    for (int i=0; i<t; i++) {
+    double f = 0;
+    cin >> t;
+    for (int i = 0; i < t; i++)
+    {
         double inp;
-        cin>>inp;
-        f+=inp;
+        cin >> inp;
+        f += inp;
     }
-    cout<<f/t;
+    cout << f / t;
 }
