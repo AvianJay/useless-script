@@ -77,29 +77,6 @@ def download(url, file, program="ffmpeg"):
     return False
 
 async def websocket_request(tid="", vid="", id=""):
-<<<<<<< HEAD
-    headers = {
-        'Upgrade': 'websocket',
-        'Origin': 'https://v.myself-bbs.com',
-        'Cache-Control': 'no-cache',
-        'Accept-Language': 'zh-TW,zh;q=0.9,en-US;q=0.8,en;q=0.7',
-        'Pragma': 'no-cache',
-        'Connection': 'Upgrade',
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36',
-    }
-    uri = "wss://v.myself-bbs.com/ws"
-    data = {"tid": str(tid), "vid": str(vid).zfill(3), "id": id}
-    async with websockets.connect(uri, additional_headers=headers) as ws:
-        await ws.send(json.dumps(data))
-        response = await ws.recv()
-        await ws.close()
-    try:
-        response = json.loads(response)
-        return response
-    except json.JSONDecodeError:
-        print("[ERROR] Failed to decode JSON response.")
-        return False
-=======
     tr = 0
     while tr <= 5:
         try:
@@ -129,7 +106,6 @@ async def websocket_request(tid="", vid="", id=""):
             continue
     print("[ERROR] Giving up.")
     return False
->>>>>>> e0ac281 (add try)
     
 def request_url(episode, tid=""):
     if episode["method"] == "vid":
