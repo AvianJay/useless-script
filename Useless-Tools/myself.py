@@ -72,6 +72,7 @@ def download(url, file, program="ffmpeg"):
             return True
         except Exception as e:
             print("[WARN] Failed to download. Tried", tr, "times.", e)
+            tr+=1
             continue
     print("[ERROR] Giving up.")
     return False
@@ -93,7 +94,7 @@ async def websocket_request(tid="", vid="", id=""):
             data = {"tid": tid, "vid": vid, "id": id}
             async with websockets.connect(uri, additional_headers=headers) as ws:
                 await ws.send(json.dumps(data))
-                response = await ws.recv()
+                response = await asyncio.wait_for(ws.recv(), timeout=10)
                 await ws.close()
             try:
                 response = json.loads(response)
@@ -103,6 +104,7 @@ async def websocket_request(tid="", vid="", id=""):
                 return False
         except Exception as e:
             print("[WARN] Failed to request video URL. Tried", tr, "times.", str(e))
+            tr+=1
             continue
     print("[ERROR] Giving up.")
     return False
