@@ -13,6 +13,7 @@ import requests
 import urllib.parse
 import subprocess
 import websockets
+import traceback
 from tqdm import tqdm
 from bs4 import BeautifulSoup
 
@@ -83,15 +84,17 @@ async def websocket_request(tid="", vid="", id=""):
         try:
             headers = {
                 'Upgrade': 'websocket',
+                'sec-websocket-extensions': 'permessage-deflate; client_max_window_bits',
                 'Origin': 'https://v.myself-bbs.com',
                 'Cache-Control': 'no-cache',
                 'Accept-Language': 'zh-TW,zh;q=0.9,en-US;q=0.8,en;q=0.7',
                 'Pragma': 'no-cache',
                 'Connection': 'Upgrade',
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36',
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36',
             }
             uri = "wss://v.myself-bbs.com/ws"
-            data = {"tid": tid, "vid": vid, "id": id}
+            data = {"tid": tid, "vid": str(vid).zfill(3), "id": id}
+            # print(data)
             async with websockets.connect(uri, additional_headers=headers) as ws:
                 await ws.send(json.dumps(data))
                 response = await asyncio.wait_for(ws.recv(), timeout=10)
@@ -104,6 +107,7 @@ async def websocket_request(tid="", vid="", id=""):
                 return False
         except Exception as e:
             print("[WARN] Failed to request video URL. Tried", tr, "times.", str(e))
+            traceback.print_exc()
             tr+=1
             continue
     print("[ERROR] Giving up.")
