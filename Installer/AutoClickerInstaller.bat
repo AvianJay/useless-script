@@ -30,7 +30,7 @@ echo echo Press Any Key To Uninstall. >> uninstall.bat
 echo pause >> uninstall.bat
 echo cd %USERPROFILE% >> uninstall.bat
 echo rmdir /S /Q %USERPROFILE%\autoclicker >> uninstall.bat
-echo echo Uninstalled.Press Any Key To Exit. >> uninstall.bat
+echo echo Uninstalled. Press Any Key To Exit. >> uninstall.bat
 echo pause >> uninstall.bat
 echo exit >> uninstall.bat
 echo Installed.
