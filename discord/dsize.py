@@ -36,10 +36,11 @@ async def on_ready():
 @bot.tree.command(name="dsize", description="量屌長")
 async def dsize(interaction: discord.Interaction):
     user_id = interaction.user.id
-    now = datetime.utcnow()
+    now = datetime.utcnow().date()
+    last = datetime.utcfromtimestamp(last_used[user_id]).date()
 
     # 檢查是否已經使用過指令，並且是否已超過一天
-    if user_id in last_used and now - last_used[user_id] < timedelta(days=1):
+    if user_id in last_used and now == last:
         await interaction.response.send_message("一天只能量一次屌長。", ephemeral=True)
         return
 
