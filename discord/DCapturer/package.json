@@ -1,0 +1,17 @@
+{
+  "name": "dcapturer",
+  "version": "1.0.0",
+  "description": "Discord message capturer",
+  "license": "ISC",
+  "author": "AvianJay",
+  "type": "commonjs",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "start": "electron ."
+  },
+  "dependencies": {
+    "electron": "^38.1.2",
+    "express": "^5.1.0"
+  }
+}
