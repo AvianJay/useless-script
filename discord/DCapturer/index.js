@@ -66,8 +66,8 @@ app.whenReady().then(async () => {
                     const r2 = el2.getBoundingClientRect();
                     observer.disconnect();
                     setTimeout(() => {
-                    resolve({ x: r2.x, y: r2.y, width: r2.width, height: r2.height });
-                    }, 500);
+                        resolve({ x: r2.x, y: r2.y, width: r2.width, height: r2.height });
+                    }, 800);
                 }
                 });
 
