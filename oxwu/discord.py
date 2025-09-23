@@ -219,7 +219,7 @@ def main():
     msg_id = send_webhook_embed(data, screenshot)
     print(f"[+] 發送成功，訊息 ID：{msg_id}")
 
-    for t in range(45 - 1, -1, -1):
+    for t in range(35 - 1, -1, -1):
         time.sleep(1)
         screenshot = screenshot_window()
         data = get_warning_info()
