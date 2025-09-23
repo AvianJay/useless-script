@@ -185,7 +185,10 @@ async function handleGetReportInfo(req, res) {
 
 function startHttpServer() {
     http.createServer(async (req, res) => {
-        if (req.url === "/screenshot") {
+        if (req.url === "/") {
+            res.writeHead(200, { "Content-Type": "text/plain" });
+            return res.end("OXWU API");
+        } else if (req.url === "/screenshot") {
             const win = BrowserWindow.getAllWindows()[0];
             if (!win) {
                 res.writeHead(500);
