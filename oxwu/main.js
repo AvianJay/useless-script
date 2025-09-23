@@ -191,13 +191,9 @@ function startHttpServer() {
                 res.writeHead(500);
                 return res.end("No window");
             }
-
             const image = await win.webContents.capturePage();
-            const savePath = path.join(app.getPath("userData"), "screenshot.png");
-            fs.writeFileSync(savePath, image.toPNG());
-
-            res.writeHead(200);
-            res.end(savePath);
+            res.writeHead(200, { "Content-Type": "image/png" });
+            res.end(image.toPNG());
         } else if (req.url === "/gotoReport") {
             const win = BrowserWindow.getAllWindows()[0];
             if (!win) {
