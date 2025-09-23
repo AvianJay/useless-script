@@ -112,15 +112,82 @@ def warning_to_embed(data: dict) -> dict:
     return embed
 
 
+def report_to_embed(data: dict) -> dict:
+    report = data["report"]
+
+    # 時間轉換 (UTC+8 → UTC ISO8601)
+    dt = datetime.strptime(report["time"], "%Y-%m-%d %H:%M:%S")
+    dt_utc = dt.replace(tzinfo=timezone(timedelta(hours=8))).astimezone(timezone.utc)
+    timestamp = dt_utc.isoformat().replace("+00:00", "Z")
+
+    # 各地震度排版
+    area_fields = []
+    for area in report["intensities"]:
+        stations_texts = []
+        for station in area["stations"]:
+            names = "、".join(station["names"])
+            stations_texts.append(f'{station["level"]}級: {names}')
+        
+        area_fields.append(
+            {
+                "name": f'{area["area"]} ({area["maxIntensity"]})',
+                "value": "\n".join(stations_texts),
+                "inline": False
+            }
+        )
+
+    embed = {
+        "embeds": [
+            {
+                "title": f'🌏 地震報告 {report["number"]}',
+                "description": "中央氣象署發布地震報告",
+                "color": 16733440,  # 橘黃
+                "timestamp": timestamp,
+                "fields": [
+                    {
+                        "name": "📍 震央位置",
+                        "value": f'北緯 {report["latitude"]}° / 東經 {report["longitude"]}°',
+                        "inline": False
+                    },
+                    {
+                        "name": "📏 深度",
+                        "value": f'{report["depth"]} 公里',
+                        "inline": True
+                    },
+                    {
+                        "name": "📊 規模",
+                        "value": f'M{report["magnitude"]}',
+                        "inline": True
+                    },
+                    {
+                        "name": "⚡ 最大震度",
+                        "value": report["maxIntensity"],
+                        "inline": True
+                    }
+                ],
+                "footer": {
+                    "text": "資料來源：OXWU"
+                }
+            }
+        ]
+    }
+    embed["embeds"][0]["fields"].extend(area_fields)
+
+    return embed
+
+
 def screenshot_window() -> bytes:
     resp = requests.get("http://127.0.0.1:10281/screenshot")
     resp.raise_for_status()
     return resp.content  # bytes
 
 
-def send_webhook_embed(data: dict, screenshot: bytes) -> str:
+def send_webhook_embed(data: dict, screenshot: bytes, report=False) -> str:
     files = {"file": ("screenshot.png", screenshot, "image/png")}
-    data = warning_to_embed(data)
+    if report:
+        data = report_to_embed(data)
+    else:
+        data = warning_to_embed(data)
     data["embeds"][0]["image"] = {"url": "attachment://screenshot.png"}
     resp = safe_request(
         "POST",
