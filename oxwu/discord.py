@@ -15,6 +15,8 @@ else:
         f.write("https://discord.com/api/webhooks/your_webhook_id/your_webhook_token")
     print("請在 .webhook_url 檔案中填入你的 Discord Webhook URL。")
     sys.exit(1)
+REPORT_WAIT_LIMIT = 3600  # second
+SCREENSHOT = True
 
 
 def safe_request(method, url, **kwargs):
@@ -182,13 +184,16 @@ def screenshot_window() -> bytes:
     return resp.content  # bytes
 
 
-def send_webhook_embed(data: dict, screenshot: bytes, report=False) -> str:
-    files = {"file": ("screenshot.png", screenshot, "image/png")}
+def send_webhook_embed(data: dict, screenshot: bytes=None, report=False) -> str:
     if report:
         data = report_to_embed(data)
     else:
         data = warning_to_embed(data)
-    data["embeds"][0]["image"] = {"url": "attachment://screenshot.png"}
+    if screenshot:
+        files = {"file": ("screenshot.png", screenshot, "image/png")}
+        data["embeds"][0]["image"] = {"url": "attachment://screenshot.png"}
+    else:
+        files = {}
     resp = safe_request(
         "POST",
         WEBHOOK_URL,
@@ -198,12 +203,15 @@ def send_webhook_embed(data: dict, screenshot: bytes, report=False) -> str:
     return resp.json()["id"]
 
 
-def edit_webhook_embed(message_id: str, data: dict, screenshot: bytes):
+def edit_webhook_embed(message_id: str, data: dict, screenshot: bytes=None):
     url = f"{WEBHOOK_URL}/messages/{message_id}"
-    files = {"file": ("screenshot.png", screenshot, "image/png")}
     data = warning_to_embed(data)
-    data["embeds"][0]["image"] = {"url": "attachment://screenshot.png"}
-    data["attachments"] = []  # clear old attachment
+    if screenshot:
+        files = {"file": ("screenshot.png", screenshot, "image/png")}
+        data["embeds"][0]["image"] = {"url": "attachment://screenshot.png"}
+        data["attachments"] = []  # clear old attachment
+    else:
+        files = {}
     safe_request(
         "PATCH",
         url,
@@ -216,23 +224,50 @@ def main():
     if sys.argv[1:] and sys.argv[1] == "report":
         requests.get("http://127.0.0.1:10281/gotoReport")
         data = get_report_info()
-        screenshot = screenshot_window()
-        msg_id = send_webhook_embed(data, screenshot, report=True)
+        if SCREENSHOT:
+            screenshot = screenshot_window()
+            msg_id = send_webhook_embed(data, screenshot, report=True)
+        else:
+            msg_id = send_webhook_embed(data, report=True)
         print(f"[+] 發送成功，訊息 ID：{msg_id}")
         return
+    report = get_report_info()
     # first
     requests.get("http://127.0.0.1:10281/gotoWarning")
-    screenshot = screenshot_window()
     data = get_warning_info()
-    msg_id = send_webhook_embed(data, screenshot)
+    if SCREENSHOT:
+        screenshot = screenshot_window()
+        msg_id = send_webhook_embed(data, screenshot)
+    else:
+        msg_id = send_webhook_embed(data)
     print(f"[+] 發送成功，訊息 ID：{msg_id}")
 
     for t in range(35 - 1, -1, -1):
         time.sleep(1)
-        screenshot = screenshot_window()
         data = get_warning_info()
-        edit_webhook_embed(msg_id, data, screenshot)
+        if SCREENSHOT:
+            screenshot = screenshot_window()
+            edit_webhook_embed(msg_id, data, screenshot)
+        else:
+            edit_webhook_embed(msg_id, data)
         print(f"[+] 更新成功，剩餘時間：{t} 秒")
+    
+    requests.get("http://127.0.0.1:10281/gotoReport")
+    print("[+] 等待地震報告出現...")
+    counter = 0
+    while counter < REPORT_WAIT_LIMIT:
+        checkReport = get_report_info()
+        if report["report"]["number"] != checkReport["report"]["number"]:
+            break
+        time.sleep(1)
+        counter += 1
+    data = get_report_info()
+    if SCREENSHOT:
+        screenshot = screenshot_window()
+        msg_id = send_webhook_embed(data, screenshot, report=True)
+    else:
+        msg_id = send_webhook_embed(data, report=True)
+    print(f"[+] 發送成功，訊息 ID：{msg_id}")
 
 
 if __name__ == "__main__":
