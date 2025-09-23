@@ -1,1 +1,8 @@
 .webhook_url
+dist/
+__pycache__/
+*.pyc
+venv/
+build/
+*.spec
+.DS_Store
