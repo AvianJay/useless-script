@@ -213,7 +213,15 @@ def edit_webhook_embed(message_id: str, data: dict, screenshot: bytes):
 
 
 def main():
+    if sys.argv[1:] and sys.argv[1] == "report":
+        requests.get("http://127.0.0.1:10281/gotoReport")
+        data = get_report_info()
+        screenshot = screenshot_window()
+        msg_id = send_webhook_embed(data, screenshot, report=True)
+        print(f"[+] 發送成功，訊息 ID：{msg_id}")
+        return
     # first
+    requests.get("http://127.0.0.1:10281/gotoWarning")
     screenshot = screenshot_window()
     data = get_warning_info()
     msg_id = send_webhook_embed(data, screenshot)
