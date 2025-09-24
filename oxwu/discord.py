@@ -6,17 +6,73 @@ import json
 import requests
 from datetime import datetime, timezone, timedelta
 
+config_version = 1
+config_path = 'config.json'
+
+default_config = {
+    "version": config_version,
+    "webhook_url": "https://discord.com/api/webhooks/your_webhook_id/your_webhook_token",
+    "screenshot": True,
+    "report_wait_limit": 3600,
+    "message_warning": "⚠️地震速報",
+    "message_report": "📢地震報告",
+}
+_config = None
+
+try:
+    if os.path.exists(config_path):
+        _config = json.load(open(config_path, "r"))
+        # Todo: verify
+        if not isinstance(_config, dict):
+            print("Config file is not a valid JSON object, \
+                resetting to default config.")
+            _config = default_config.copy()
+        for key in _config.keys():
+            if not isinstance(_config[key], type(default_config[key])):
+                print(f"Config key '{key}' has an invalid type, \
+                      resetting to default value.")
+                _config[key] = default_config[key]
+        if "config_version" not in _config:
+            print("Config file does not have 'config_version', \
+                resetting to default config.")
+            _config = default_config.copy()
+    else:
+        _config = default_config.copy()
+        json.dump(_config, open(config_path, "w"), indent=4)
+except ValueError:
+    _config = default_config.copy()
+    json.dump(_config, open(config_path, "w"), indent=4)
+
+if _config.get("config_version", 0) < config_version:
+    print("Updating config file from version",
+          _config.get("config_version", 0),
+          "to version",
+          config_version
+          )
+    for k in default_config.keys():
+        if _config.get(k) is None:
+            _config[k] = default_config[k]
+    _config["config_version"] = config_version
+    print("Saving...")
+    json.dump(_config, open(config_path, "w"), indent=4)
+    print("Done.")
+
+def config(key, value=None, mode="r"):
+    if mode == "r":
+        return _config.get(key)
+    elif mode == "w":
+        _config[key] = value
+        json.dump(_config, open(config_path, "w"), indent=4)
+        return True
+    else:
+        raise ValueError(f"Invalid mode: {mode}")
+
 
 if os.path.exists(".webhook_url"):
     with open(".webhook_url", "r") as f:
         WEBHOOK_URL = f.read().strip()
-else:
-    with open(".webhook_url", "w") as f:
-        f.write("https://discord.com/api/webhooks/your_webhook_id/your_webhook_token")
-    print("請在 .webhook_url 檔案中填入你的 Discord Webhook URL。")
-    sys.exit(1)
-REPORT_WAIT_LIMIT = 3600  # second
-SCREENSHOT = True
+        config("webhook_url", WEBHOOK_URL, "w")
+        os.remove(".webhook_url")
 
 
 def safe_request(method, url, **kwargs):
@@ -66,9 +122,10 @@ def warning_to_embed(data: dict) -> dict:
     list_text = "```yaml\n" + "\n".join(list_lines) + "\n```" if list_lines else "無資料"
 
     embed = {
+        "content": config("message_warning"),
         "embeds": [
             {
-                "title": "🌏 地震速報",
+                "title": "⚠️ 地震速報",
                 "description": "發生地震",
                 "color": 16733440,  # 橘黃
                 "timestamp": timestamp,
@@ -139,6 +196,7 @@ def report_to_embed(data: dict) -> dict:
         )
 
     embed = {
+        "content": config("message_report"),
         "embeds": [
             {
                 "title": f'🌏 地震報告 {report["number"]}',
@@ -196,7 +254,7 @@ def send_webhook_embed(data: dict, screenshot: bytes=None, report=False) -> str:
         files = {}
     resp = safe_request(
         "POST",
-        WEBHOOK_URL,
+        config("webhook_url"),
         data={"payload_json": json.dumps(data)},
         files=files
     )
@@ -204,7 +262,7 @@ def send_webhook_embed(data: dict, screenshot: bytes=None, report=False) -> str:
 
 
 def edit_webhook_embed(message_id: str, data: dict, screenshot: bytes=None):
-    url = f"{WEBHOOK_URL}/messages/{message_id}"
+    url = f"{config("webhook_url")}/messages/{message_id}"
     data = warning_to_embed(data)
     if screenshot:
         files = {"file": ("screenshot.png", screenshot, "image/png")}
@@ -212,19 +270,22 @@ def edit_webhook_embed(message_id: str, data: dict, screenshot: bytes=None):
         data["attachments"] = []  # clear old attachment
     else:
         files = {}
-    safe_request(
-        "PATCH",
-        url,
-        data={"payload_json": json.dumps(data)},
-        files=files
-    )
+    try:
+        safe_request(
+            "PATCH",
+            url,
+            data={"payload_json": json.dumps(data)},
+            files=files
+        )
+    except Exception as e:
+        print("[!] 無法更改訊息:", str(e))
 
 
 def main():
     if sys.argv[1:] and sys.argv[1] == "report":
         requests.get("http://127.0.0.1:10281/gotoReport")
         data = get_report_info()
-        if SCREENSHOT:
+        if config("screenshot"):
             screenshot = screenshot_window()
             msg_id = send_webhook_embed(data, screenshot, report=True)
         else:
@@ -235,7 +296,7 @@ def main():
     # first
     requests.get("http://127.0.0.1:10281/gotoWarning")
     data = get_warning_info()
-    if SCREENSHOT:
+    if config("screenshot"):
         screenshot = screenshot_window()
         msg_id = send_webhook_embed(data, screenshot)
     else:
@@ -245,7 +306,7 @@ def main():
     for t in range(35 - 1, -1, -1):
         time.sleep(1)
         data = get_warning_info()
-        if SCREENSHOT:
+        if config("screenshot"):
             screenshot = screenshot_window()
             edit_webhook_embed(msg_id, data, screenshot)
         else:
@@ -255,14 +316,17 @@ def main():
     requests.get("http://127.0.0.1:10281/gotoReport")
     print("[+] 等待地震報告出現...")
     counter = 0
-    while counter < REPORT_WAIT_LIMIT:
+    while counter < config("report_wait_limit"):
         checkReport = get_report_info()
         if report["report"]["number"] != checkReport["report"]["number"]:
             break
         time.sleep(1)
         counter += 1
+    if counter >= config("report_wait_limit"):
+        print("[!] 等待達到上限。")
+        sys.exit(1)
     data = get_report_info()
-    if SCREENSHOT:
+    if config("screenshot"):
         screenshot = screenshot_window()
         msg_id = send_webhook_embed(data, screenshot, report=True)
     else:
