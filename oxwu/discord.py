@@ -14,8 +14,8 @@ default_config = {
     "webhook_url": "https://discord.com/api/webhooks/your_webhook_id/your_webhook_token",
     "screenshot": True,
     "report_wait_limit": 3600,
-    "message_warning": "⚠️地震速報",
-    "message_report": "📢地震報告",
+    "message_warning": "⚠️ 地震速報",
+    "message_report": "📢 地震報告",
 }
 _config = None
 
