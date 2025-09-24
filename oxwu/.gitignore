@@ -6,3 +6,4 @@ venv/
 build/
 *.spec
 .DS_Store
+config.json
