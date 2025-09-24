@@ -10,7 +10,7 @@ config_version = 1
 config_path = 'config.json'
 
 default_config = {
-    "version": config_version,
+    "config_version": config_version,
     "webhook_url": "https://discord.com/api/webhooks/your_webhook_id/your_webhook_token",
     "screenshot": True,
     "report_wait_limit": 3600,
