@@ -4,6 +4,7 @@ import sys
 import time
 import json
 import requests
+from bs4 import BeautifulSoup
 from datetime import datetime, timezone, timedelta
 
 config_version = 2
@@ -104,6 +105,18 @@ def get_report_info() -> dict:
     return resp.json()
 
 
+def cwa_get_last_link() -> str:
+    BASE_URL = "https://www.cwa.gov.tw"
+    LIST_URL = "https://www.cwa.gov.tw/V8/C/E/MOD/EQ_ROW.html?T=2025092510-5"
+    resp = requests.get(LIST_URL)
+    resp.encoding = "utf-8"
+    soup = BeautifulSoup(resp.text, "html.parser")
+    latest = soup.select_one("tr.eq-row a")
+    if latest:
+        return BASE_URL + latest["href"]
+    return ""
+
+
 def warning_to_embed(data: dict) -> dict:
     # convert to ISO8601 UTC
     dt = datetime.strptime(data["time"], "%Y-%m-%d %H:%M:%S")
@@ -190,6 +203,31 @@ def report_to_embed(data: dict) -> dict:
                 "inline": False
             }
         )
+    
+    components = []
+    if config("report_link_cwa"):
+        link = cwa_get_last_link()
+        if link:
+            components.append(
+                {
+                    "type": 2,
+                    "style": 5,
+                    "label": "中央氣象局",
+                    "url": link,
+                    "emoji": {"name": "📰"}
+                }
+            )
+    # not working
+    # if config("report_link_oxwu"):
+    #     components.append(
+    #         {
+    #             "type": 2,
+    #             "style": 5,
+    #             "label": "地牛Wake Up!",
+    #             "url": f'https://eew.earthquake.tw/?act=eew_detail&identifier={report["number"]}',
+    #             "emoji": {"name": "🐂"}
+    #         }
+    #     )
 
     embed = {
         "content": config("message_report"),
@@ -229,6 +267,12 @@ def report_to_embed(data: dict) -> dict:
                 "footer": {
                     "text": "資料來源：OXWU"
                 }
+            }
+        ],
+        "components": [
+            {
+                "type": 1,
+                "components": components
             }
         ]
     }
@@ -302,6 +346,7 @@ def main():
                     checkTime = report["report"]["time"]
                     time.sleep(1)
         else:
+            requests.get("http://127.0.0.1:10281/gotoReport")
             data = get_report_info()
             if config("screenshot"):
                 screenshot = screenshot_window()
