@@ -194,6 +194,7 @@ function startHttpServer() {
                 res.writeHead(500);
                 return res.end("No window");
             }
+            win.show();
             const image = await win.webContents.capturePage();
             res.writeHead(200, { "Content-Type": "image/png" });
             res.end(image.toPNG());
