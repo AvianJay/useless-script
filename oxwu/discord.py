@@ -202,6 +202,7 @@ def report_to_embed(data: dict) -> dict:
     dt = datetime.strptime(report["time"], "%Y-%m-%d %H:%M:%S")
     dt_utc = dt.replace(tzinfo=timezone(timedelta(hours=8))).astimezone(timezone.utc)
     timestamp = dt_utc.isoformat().replace("+00:00", "Z")
+    ts = int(dt_utc.timestamp())
 
     # 各地震度排版
     area_fields = []
@@ -256,6 +257,11 @@ def report_to_embed(data: dict) -> dict:
                     {
                         "name": "#️⃣ 編號",
                         "value": report["number"],
+                        "inline": False
+                    },
+                    {
+                        "name": "🕑 發生時間",
+                        "value": f'<t:{ts}:F>',
                         "inline": False
                     },
                     {
