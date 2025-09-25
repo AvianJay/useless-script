@@ -242,6 +242,30 @@ function startHttpServer() {
             win.webContents.executeJavaScript(SCRIPT);
             res.writeHead(200);
             res.end("{\"status\":\"injected\"}");
+        } else if (req.url === "/injectErudaSettings") {
+            const win = BrowserWindow.getAllWindows()[1];
+            if (!win) {
+                res.writeHead(500);
+                return res.end("No window");
+            }
+            SCRIPT = `
+                (function(){
+                    if (window.__ERUDA_INJECTED__) return;
+                    window.__ERUDA_INJECTED__ = true;
+
+                    var s = document.createElement('script');
+                    s.src = 'https://cdn.jsdelivr.net/npm/eruda';
+                    s.onload = function(){
+                        eruda.init();
+                        console.log('[INJECT] eruda loaded');
+                    };
+                    s.onerror = function(e){ console.error('[INJECT] eruda failed', e); };
+                    document.head.appendChild(s);
+                })();
+            `
+            win.webContents.executeJavaScript(SCRIPT);
+            res.writeHead(200);
+            res.end("{\"status\":\"injected\"}");
         } else if (req.url === "/getWarningInfo") {
             handleGetWarningInfo(req, res);
         } else if (req.url === "/getReportInfo") {
