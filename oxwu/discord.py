@@ -16,9 +16,9 @@ default_config = {
     "report_wait_limit": 3600,
     "message_warning": "⚠️ 地震速報",
     "message_report": "📢 地震報告",
-    "report_daemon": false,
-    "report_link_cwa": true,
-    "report_link_oxwu": true,
+    "report_daemon": False,
+    "report_link_cwa": True,
+    "report_link_oxwu": True,
 }
 _config = None
 
@@ -102,13 +102,6 @@ def get_report_info() -> dict:
     resp = requests.get("http://127.0.0.1:10281/getReportInfo")
     resp.raise_for_status()
     return resp.json()
-
-
-def get_level(argv1: str) -> str:
-    """轉換震度顯示格式"""
-    if "+" in argv1 or "-" in argv1:
-        return argv1.replace("+", "強").replace("-", "弱")
-    return argv1 + "級"
 
 
 def warning_to_embed(data: dict) -> dict:
