@@ -5,6 +5,8 @@ import time
 import json
 import requests
 from bs4 import BeautifulSoup
+from urllib.parse import urlparse, parse_qs, urlencode, urlunparse
+from decouple import config
 from datetime import datetime, timezone, timedelta
 
 config_version = 2
@@ -79,6 +81,19 @@ if os.path.exists(".webhook_url"):
         os.remove(".webhook_url")
 
 
+webhook_url = config("webhook_url")
+parsed = urlparse(webhook_url)
+query = parse_qs(parsed.query)
+
+if "with_components" not in query:
+    query["with_components"] = "true"
+    new_query = urlencode(query, doseq=True)
+    new_webhook = urlunparse(parsed._replace(query=new_query))
+    config("webhook_url", new_webhook, "w")
+
+    print("[+] Added with_components query to webhook")
+
+
 def safe_request(method, url, **kwargs):
     """Anti Discord rate limit"""
     while True:
@@ -107,7 +122,7 @@ def get_report_info() -> dict:
 
 def cwa_get_last_link() -> str:
     BASE_URL = "https://www.cwa.gov.tw"
-    LIST_URL = "https://www.cwa.gov.tw/V8/C/E/MOD/EQ_ROW.html?T=2025092510-5"
+    LIST_URL = "https://www.cwa.gov.tw/V8/C/E/MOD/EQ_ROW.html?T=" + int(datetime.now().timestamp())
     resp = requests.get(LIST_URL)
     resp.encoding = "utf-8"
     soup = BeautifulSoup(resp.text, "html.parser")
