@@ -24,16 +24,16 @@ try:
         _config = json.load(open(config_path, "r"))
         # Todo: verify
         if not isinstance(_config, dict):
-            print("Config file is not a valid JSON object, \
+            print("[!] Config file is not a valid JSON object, \
                 resetting to default config.")
             _config = default_config.copy()
         for key in _config.keys():
             if not isinstance(_config[key], type(default_config[key])):
-                print(f"Config key '{key}' has an invalid type, \
+                print(f"[!] Config key '{key}' has an invalid type, \
                       resetting to default value.")
                 _config[key] = default_config[key]
         if "config_version" not in _config:
-            print("Config file does not have 'config_version', \
+            print("[!] Config file does not have 'config_version', \
                 resetting to default config.")
             _config = default_config.copy()
     else:
@@ -44,7 +44,7 @@ except ValueError:
     json.dump(_config, open(config_path, "w"), indent=4)
 
 if _config.get("config_version", 0) < config_version:
-    print("Updating config file from version",
+    print("[+] Updating config file from version",
           _config.get("config_version", 0),
           "to version",
           config_version
@@ -53,9 +53,9 @@ if _config.get("config_version", 0) < config_version:
         if _config.get(k) is None:
             _config[k] = default_config[k]
     _config["config_version"] = config_version
-    print("Saving...")
+    print("[+] Saving...")
     json.dump(_config, open(config_path, "w"), indent=4)
-    print("Done.")
+    print("[+] Done.")
 
 def config(key, value=None, mode="r"):
     if mode == "r":
@@ -199,11 +199,16 @@ def report_to_embed(data: dict) -> dict:
         "content": config("message_report"),
         "embeds": [
             {
-                "title": f'🌏 地震報告 {report["number"]}',
+                "title": f'🌏 地震報告',
                 "description": "中央氣象署發布地震報告",
                 "color": 16733440,  # 橘黃
                 "timestamp": timestamp,
                 "fields": [
+                    {
+                        "name": "#️⃣ 編號",
+                        "value": report["number"],
+                        "inline": False
+                    },
                     {
                         "name": "📍 震央位置",
                         "value": f'北緯 {report["latitude"]}° / 東經 {report["longitude"]}°',
