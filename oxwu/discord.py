@@ -6,7 +6,7 @@ import json
 import requests
 from datetime import datetime, timezone, timedelta
 
-config_version = 1
+config_version = 2
 config_path = 'config.json'
 
 default_config = {
@@ -16,6 +16,9 @@ default_config = {
     "report_wait_limit": 3600,
     "message_warning": "⚠️ 地震速報",
     "message_report": "📢 地震報告",
+    "report_daemon": false,
+    "report_link_cwa": true,
+    "report_link_oxwu": true,
 }
 _config = None
 
@@ -288,15 +291,32 @@ def edit_webhook_embed(message_id: str, data: dict, screenshot: bytes=None):
 
 def main():
     if sys.argv[1:] and sys.argv[1] == "report":
-        requests.get("http://127.0.0.1:10281/gotoReport")
-        data = get_report_info()
-        if config("screenshot"):
-            screenshot = screenshot_window()
-            msg_id = send_webhook_embed(data, screenshot, report=True)
+        if config("report_daemon"):
+            report = get_report_info()
+            checkTime = report["report"]["time"]
+            while True:
+                print("[+] 等待地震報告出現...")
+                report = get_report_info()
+                if report["report"]["time"] != checkTime:
+                    requests.get("http://127.0.0.1:10281/gotoReport")
+                    data = get_report_info()
+                    if config("screenshot"):
+                        screenshot = screenshot_window()
+                        msg_id = send_webhook_embed(report, screenshot, report=True)
+                    else:
+                        msg_id = send_webhook_embed(data, report=True)
+                    print(f"[+] 發送成功，訊息 ID：{msg_id}")
+                    checkTime = report["report"]["time"]
+                    time.sleep(1)
         else:
-            msg_id = send_webhook_embed(data, report=True)
-        print(f"[+] 發送成功，訊息 ID：{msg_id}")
-        return
+            data = get_report_info()
+            if config("screenshot"):
+                screenshot = screenshot_window()
+                msg_id = send_webhook_embed(data, screenshot, report=True)
+            else:
+                msg_id = send_webhook_embed(data, report=True)
+            print(f"[+] 發送成功，訊息 ID：{msg_id}")
+            return
     report = get_report_info()
     # first
     requests.get("http://127.0.0.1:10281/gotoWarning")
@@ -317,13 +337,14 @@ def main():
         else:
             edit_webhook_embed(msg_id, data)
         print(f"[+] 更新成功，剩餘時間：{t} 秒")
-    
+    if config("report_daemon"):
+        return
     requests.get("http://127.0.0.1:10281/gotoReport")
     print("[+] 等待地震報告出現...")
     counter = 0
     while counter < config("report_wait_limit"):
         checkReport = get_report_info()
-        if report["report"]["number"] != checkReport["report"]["number"]:
+        if report["report"]["time"] != checkReport["report"]["time"]:
             break
         time.sleep(1)
         counter += 1
