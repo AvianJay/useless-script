@@ -121,7 +121,7 @@ def get_report_info() -> dict:
 
 def cwa_get_last_link() -> str:
     BASE_URL = "https://www.cwa.gov.tw"
-    LIST_URL = "https://www.cwa.gov.tw/V8/C/E/MOD/EQ_ROW.html?T=" + int(datetime.now().timestamp())
+    LIST_URL = "https://www.cwa.gov.tw/V8/C/E/MOD/EQ_ROW.html?T=" + str(int(datetime.now().timestamp()))
     resp = requests.get(LIST_URL)
     resp.encoding = "utf-8"
     soup = BeautifulSoup(resp.text, "html.parser")
