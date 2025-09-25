@@ -331,8 +331,8 @@ def main():
         if config("report_daemon"):
             report = get_report_info()
             checkTime = report["report"]["time"]
+            print("[+] 等待地震報告出現...")
             while True:
-                print("[+] 等待地震報告出現...")
                 report = get_report_info()
                 if report["report"]["time"] != checkTime:
                     requests.get("http://127.0.0.1:10281/gotoReport")
@@ -344,7 +344,8 @@ def main():
                         msg_id = send_webhook_embed(data, report=True)
                     print(f"[+] 發送成功，訊息 ID：{msg_id}")
                     checkTime = report["report"]["time"]
-                    time.sleep(1)
+                    print("[+] 等待地震報告出現...")
+                time.sleep(1)
         else:
             requests.get("http://127.0.0.1:10281/gotoReport")
             data = get_report_info()
