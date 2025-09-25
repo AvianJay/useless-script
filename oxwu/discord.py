@@ -6,7 +6,6 @@ import json
 import requests
 from bs4 import BeautifulSoup
 from urllib.parse import urlparse, parse_qs, urlencode, urlunparse
-from decouple import config
 from datetime import datetime, timezone, timedelta
 
 config_version = 2
