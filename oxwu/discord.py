@@ -227,7 +227,7 @@ def report_to_embed(data: dict) -> dict:
                 {
                     "type": 2,
                     "style": 5,
-                    "label": "中央氣象局",
+                    "label": "中央氣象署",
                     "url": link,
                     "emoji": {"name": "📰"}
                 }
