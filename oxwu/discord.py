@@ -267,7 +267,7 @@ def send_webhook_embed(data: dict, screenshot: bytes=None, report=False) -> str:
 
 
 def edit_webhook_embed(message_id: str, data: dict, screenshot: bytes=None):
-    url = f"{config("webhook_url")}/messages/{message_id}"
+    url = f"{config('webhook_url')}/messages/{message_id}"
     data = warning_to_embed(data)
     if screenshot:
         files = {"file": ("screenshot.png", screenshot, "image/png")}
