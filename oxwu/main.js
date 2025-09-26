@@ -5,7 +5,7 @@ const fs = require("fs");
 const path = require("path");
 
 async function handleGetWarningInfo(req, res) {
-    const win = BrowserWindow.getAllWindows()[0];
+    const win = await getWindow();
     if (!win) {
         res.writeHead(500, { "Content-Type": "text/plain" });
         return res.end("No window");
@@ -107,7 +107,7 @@ async function handleGetWarningInfo(req, res) {
 }
 
 async function handleGetReportInfo(req, res) {
-    const win = BrowserWindow.getAllWindows()[0];
+    const win = await getWindow();
     if (!win) {
         res.writeHead(500, { "Content-Type": "text/plain" });
         return res.end("No window");
@@ -134,7 +134,7 @@ async function handleGetReportInfo(req, res) {
                         magnitude: getText("report-magnitude"),
                         maxIntensity: getText("report-max-intensity"),
                         intensities: []
-                    };
+                    }
 
                     // 各地震度
                     const areas = document.querySelectorAll("#report-intensity .intensity-button");
@@ -183,13 +183,53 @@ async function handleGetReportInfo(req, res) {
     }
 }
 
+async function getWindow(settings=false) {
+    let win = BrowserWindow.getAllWindows()[0];
+    if (!win) {
+        return null;
+    }
+    CHECK_SCRIPT = `
+        (function(){
+            return (document.getElementsByClassName("title")[0]?.innerText || "").includes("設定")
+        })();
+    `;
+    let isSettings = await win.webContents.executeJavaScript(CHECK_SCRIPT);
+    if (settings && isSettings) {
+        return win;
+    } else if (!settings && !isSettings) {
+        return win;
+    } else if (settings && !isSettings) {
+        win = BrowserWindow.getAllWindows()[1];
+        if (!win) {
+            win = BrowserWindow.getAllWindows()[0];
+            OPEN_SETTINGS_SCRIPT = `
+                (function(){
+                    document.getElementById("setting-icon").click();
+                })();
+            `;
+            await win.webContents.executeJavaScript(OPEN_SETTINGS_SCRIPT);
+            await new Promise(resolve => setTimeout(resolve, 1000)); // 等待視窗打開
+            return await getWindow(true);
+        };
+        isSettings = await win.webContents.executeJavaScript(CHECK_SCRIPT);
+        if (isSettings) return win;
+        return null;
+    } else if (!settings && isSettings) {
+        win = BrowserWindow.getAllWindows()[1];
+        if (!win) return null;
+        isSettings = await win.webContents.executeJavaScript(CHECK_SCRIPT);
+        if (!isSettings) return win;
+        return null;
+    }
+}
+
 function startHttpServer() {
     http.createServer(async (req, res) => {
         if (req.url === "/") {
             res.writeHead(200, { "Content-Type": "text/plain" });
             return res.end("OXWU API");
         } else if (req.url === "/screenshot") {
-            const win = BrowserWindow.getAllWindows()[0];
+            const win = getWindow();
             if (!win) {
                 res.writeHead(500);
                 return res.end("No window");
@@ -199,7 +239,7 @@ function startHttpServer() {
             res.writeHead(200, { "Content-Type": "image/png" });
             res.end(image.toPNG());
         } else if (req.url === "/gotoReport") {
-            const win = BrowserWindow.getAllWindows()[0];
+            const win = await getWindow();
             if (!win) {
                 res.writeHead(500);
                 return res.end("No window");
@@ -209,7 +249,7 @@ function startHttpServer() {
             res.writeHead(200);
             res.end("{\"status\":\"navigated\"}");
         } else if (req.url === "/gotoWarning") {
-            const win = BrowserWindow.getAllWindows()[0];
+            const win = await getWindow();
             if (!win) {
                 res.writeHead(500);
                 return res.end("No window");
@@ -219,7 +259,7 @@ function startHttpServer() {
             res.writeHead(200);
             res.end("{\"status\":\"navigated\"}");
         } else if (req.url === "/injectEruda") {
-            const win = BrowserWindow.getAllWindows()[0];
+            const win = await getWindow();
             if (!win) {
                 res.writeHead(500);
                 return res.end("No window");
@@ -243,8 +283,8 @@ function startHttpServer() {
             res.writeHead(200);
             res.end("{\"status\":\"injected\"}");
         } else if (req.url === "/injectErudaSettings") {
-            const win = BrowserWindow.getAllWindows()[1];
-            if (!win) {
+            const winSettings = await getWindow(true);
+            if (!winSettings) {
                 res.writeHead(500);
                 return res.end("No window");
             }
@@ -263,7 +303,7 @@ function startHttpServer() {
                     document.head.appendChild(s);
                 })();
             `
-            win.webContents.executeJavaScript(SCRIPT);
+            winSettings.webContents.executeJavaScript(SCRIPT);
             res.writeHead(200);
             res.end("{\"status\":\"injected\"}");
         } else if (req.url === "/getWarningInfo") {
