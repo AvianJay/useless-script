@@ -310,6 +310,10 @@ function startHttpServer() {
             handleGetWarningInfo(req, res);
         } else if (req.url === "/getReportInfo") {
             handleGetReportInfo(req, res);
+        } else if (req.url === "/openSettings") {
+            win = await getWindow(true);
+            res.writeHead(200);
+            res.end("{\"status\":\"opened\"}");
         } else {
             res.writeHead(404);
             res.end("Not found");
