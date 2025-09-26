@@ -311,9 +311,14 @@ function startHttpServer() {
         } else if (req.url === "/getReportInfo") {
             handleGetReportInfo(req, res);
         } else if (req.url === "/openSettings") {
-            win = await getWindow(true);
+            await getWindow(true);
             res.writeHead(200);
             res.end("{\"status\":\"opened\"}");
+        } else if (req.url === "/closeSettings") {
+            const win = await getWindow(true);
+            if (win) win.close();
+            res.writeHead(200);
+            res.end("{\"status\":\"closed\"}");
         } else {
             res.writeHead(404);
             res.end("Not found");
