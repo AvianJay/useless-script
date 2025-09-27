@@ -37,7 +37,7 @@ async def on_ready():
 async def dsize(interaction: discord.Interaction):
     user_id = interaction.user.id
     now = datetime.utcnow().date()
-    last = datetime.utcfromtimestamp(last_used[user_id]).date()
+    last = last_used.get(user_id, datetime(1970, 1, 1).date())
 
     # 檢查是否已經使用過指令，並且是否已超過一天
     if user_id in last_used and now == last:
@@ -45,7 +45,7 @@ async def dsize(interaction: discord.Interaction):
         return
 
     # 更新使用時間
-    last_used[user_id] = now
+    last_used[user_id] = datetime.utcnow().date()
 
     # 隨機產生長度 (2-30)
     size = random.randint(2, 30)
