@@ -353,7 +353,12 @@ def main():
             checkTime = report["report"]["time"]
             print("[+] 等待地震報告出現...")
             while True:
-                report = get_report_info()
+                try:
+                    report = get_report_info()
+                except Exception as e:
+                    print("[!] 無法取得地震報告:", str(e))
+                    time.sleep(5)
+                    continue
                 if report["report"]["time"] != checkTime:
                     requests.get("http://127.0.0.1:10281/gotoReport")
                     data = get_report_info()
@@ -365,7 +370,7 @@ def main():
                     print(f"[+] 發送成功，訊息 ID：{msg_id}")
                     checkTime = report["report"]["time"]
                     print("[+] 等待地震報告出現...")
-                time.sleep(1)
+                time.sleep(5)
         else:
             requests.get("http://127.0.0.1:10281/gotoReport")
             data = get_report_info()
