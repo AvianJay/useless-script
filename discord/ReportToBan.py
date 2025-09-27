@@ -78,6 +78,7 @@ REPORTED_MESSAGE = config("REPORTED_MESSAGE")
 REPORT_BLACKLIST = config("REPORT_BLACKLIST")
 REPORT_RATE_LIMIT = config("REPORT_RATE_LIMIT")
 last_report_times = {}  # 用戶 ID -> 上次檢舉時間
+reported_messages = []
 
 SERVER_RULES = """
 # 地球Online台服玩家交流區新版規則 (摘要)
@@ -286,6 +287,8 @@ class doModerationActions(discord.ui.View):
 
 @bot.tree.context_menu(name="檢舉訊息")
 async def report_message(interaction: discord.Interaction, message: discord.Message):
+    global last_report_times
+    global reported_messages
     # check if the user's role is in the blacklist
     for role in interaction.user.roles:
         if role.id in REPORT_BLACKLIST:
@@ -301,8 +304,25 @@ async def report_message(interaction: discord.Interaction, message: discord.Mess
             can_report_time = last_report_time + timedelta(seconds=REPORT_RATE_LIMIT)
             await interaction.response.send_message(f"您檢舉的頻率過快，請在 {can_report_time.strftime('%Y-%m-%d %H:%M:%S')} 後再試。", ephemeral=True)
             return
+        
+    if message.id in reported_messages:
+        await interaction.response.send_message("此訊息已被檢舉過，請勿重複檢舉。", ephemeral=True)
+        return
 
     async def handle_report(interaction: discord.Interaction, message: discord.Message, reason: str):
+        global last_report_times
+        global reported_messages
+        # check again
+        if message.id in reported_messages:
+            await interaction.response.send_message("此訊息已被檢舉過，請勿重複檢舉。", ephemeral=True)
+            return
+        last_report_times[interaction.user.id] = datetime.utcnow()
+        reported_messages.append(message.id)
+        # clean old message ids (limit 100)
+        if len(reported_messages) > 100:
+            reported_messages = reported_messages[-100:]
+            print("[!] 清理舊的檢舉訊息ID")
+        print(f"[+] {interaction.user} 檢舉訊息 {message.id}，原因：{reason}")
         # 發送到檢舉紀錄頻道
         report_channel = bot.get_channel(REPORT_CHANNEL_ID)
         if report_channel:
