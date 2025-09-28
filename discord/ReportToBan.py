@@ -168,17 +168,16 @@ def get_time_text(seconds: int) -> str:
         return f"{seconds // 86400} 天"
 
 
-def send_moderation_message(user: discord.Member, moderator: discord.Member, actions: dict, reason: str, message_content: str, is_ai: bool=False) -> str:
+def send_moderation_message(user: discord.Member, moderator: discord.Member, action: dict, reason: str, message_content: str, is_ai: bool=False) -> str:
     action_texts = []
-    print("[DEBUG] Actions:", actions)
-    for action in actions:
-        if action["action"] == "ban":
-            action_texts.append("驅逐出境至柬服KK副本||永久停權||")
-        elif action["action"] == "kick":
-            action_texts.append("踢出")
-        elif action["action"] == "mute":
-            time_text = action.get("duration", 0)
-            action_texts.append(f"羈押禁見||禁言||{get_time_text(time_text)}")
+    print("[DEBUG] Actions:", action)
+    if action["action"] == "ban":
+        action_texts.append("驅逐出境至柬服KK副本||永久停權||")
+    elif action["action"] == "kick":
+        action_texts.append("踢出")
+    elif action["action"] == "mute":
+        time_text = action.get("duration", 0)
+        action_texts.append(f"羈押禁見||禁言||{get_time_text(time_text)}")
     action_text = "+".join(action_texts)
     print("[DEBUG] Action Text:", action_text)
     text = f"""
@@ -210,7 +209,7 @@ async def timeout_user(*, user_id: int, guild_id: int, until, reason: str="") ->
 
 
 class doModerationActions(discord.ui.View):
-    def __init__(self, user: discord.Member, interaction: discord.Interaction, ai_suggestions: list, ai_reason: str="", message: discord.Message=None):
+    def __init__(self, user: discord.Member, interaction: discord.Interaction, ai_suggestions: list, ai_reason: str="", message: discord.Message=None, reporter: discord.Member=None):
         super().__init__(timeout=None)
         self.user = user
         self.interaction = interaction
@@ -226,17 +225,18 @@ class doModerationActions(discord.ui.View):
     # AI 建議的處置按鈕
     @discord.ui.button(label="執行 AI 建議處置", style=discord.ButtonStyle.danger, custom_id="ai_suggestion_button")
     async def ai_suggestion_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await interaction.response.send_message(f"已執行 AI 建議處置 {self.user.mention}", ephemeral=True)
+        await interaction.response.send_message(f"已執行 AI 建議處置", ephemeral=True)
         for action in self.ai_suggestions:
+            target = action.get("target", "reported_user")
             if action.get("action") == "ban":
-                await interaction.guild.ban(self.user, reason=self.ai_reason)
+                await interaction.guild.ban(target, reason=self.ai_reason)
             elif action.get("action") == "kick":
-                await interaction.guild.kick(self.user, reason=self.ai_reason)
+                await interaction.guild.kick(target, reason=self.ai_reason)
             elif action.get("action") == "mute":
                 duration = action.get("duration", 0)
                 if duration > 0:
-                    await timeout_user(user_id=self.user.id, guild_id=interaction.guild.id, until=duration, reason=self.ai_reason)
-        send_moderation_message(self.user, interaction.user, self.ai_suggestions, self.ai_reason, self.message_content, is_ai=True)
+                    await timeout_user(user_id=target.id, guild_id=interaction.guild.id, until=duration, reason=self.ai_reason)
+            send_moderation_message(target, interaction.user, action, self.ai_reason, self.message_content, is_ai=True)
 
     @discord.ui.button(label="封鎖", style=discord.ButtonStyle.danger, custom_id="ban_button")
     async def ban_button(self, interaction: discord.Interaction, button: discord.ui.Button):
@@ -352,7 +352,7 @@ async def report_message(interaction: discord.Interaction, message: discord.Mess
                 attachment_urls = "\n".join([att.url for att in message.attachments])
                 embed.add_field(name="附件", value=attachment_urls, inline=False)
 
-            sent_msg = await report_channel.send(REPORT_MESSAGE, embed=embed, view=doModerationActions(message.author, interaction, [], message=message))
+            sent_msg = await report_channel.send(REPORT_MESSAGE, embed=embed, view=doModerationActions(message.author, interaction, [], message=message, reporter=interaction.user))
 
             # 呼叫 AI 判斷訊息是否正當
             try:
@@ -375,15 +375,16 @@ async def report_message(interaction: discord.Interaction, message: discord.Mess
                         action_desc = f"{action.get('action', 'N/A')}"
                         if action.get('action') == 'mute':
                             action_desc += f" ({get_time_text(action.get('duration', 0))})"
+                        action_desc += f" ({action.get('target', 'N/A')})"
                         action_texts.append(action_desc)
                     verdict_text += ", ".join(action_texts)
 
                 # 更新嵌入訊息
                 embed.set_field_at(4, name="AI 判斷", value=verdict_text, inline=False)
-                await sent_msg.edit(content=REPORT_MESSAGE, embed=embed, view=doModerationActions(message.author, interaction, actions, message=message, ai_reason=verdict.get('reason', '')))
+                await sent_msg.edit(content=REPORT_MESSAGE, embed=embed, view=doModerationActions(message.author, interaction, actions, message=message, ai_reason=verdict.get('reason', ''), reporter=interaction.user))
             except Exception as e:
                 embed.set_field_at(4, name="AI 判斷", value=f"錯誤：\n{str(e)}", inline=False)
-                await sent_msg.edit(content=REPORT_MESSAGE, embed=embed, view=doModerationActions(message.author, interaction, [], message=message))
+                await sent_msg.edit(content=REPORT_MESSAGE, embed=embed, view=doModerationActions(message.author, interaction, [], message=message, reporter=interaction.user))
                 return
     class ReasonModal(discord.ui.Modal, title="檢舉原因"):
         reason = discord.ui.TextInput(label="檢舉原因", placeholder="請輸入檢舉原因", required=True, max_length=100)
