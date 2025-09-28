@@ -348,6 +348,9 @@ async def report_message(interaction: discord.Interaction, message: discord.Mess
             embed.add_field(name="檢舉原因", value=reason, inline=False)
             embed.add_field(name="AI 判斷", value="正在載入中...", inline=False)
             embed.add_field(name="訊息連結", value=f"[跳轉]({message.jump_url})", inline=False)
+            if message.attachments:
+                attachment_urls = "\n".join([att.url for att in message.attachments])
+                embed.add_field(name="附件", value=attachment_urls, inline=False)
 
             sent_msg = await report_channel.send(REPORT_MESSAGE, embed=embed, view=doModerationActions(message.author, interaction, [], message=message))
 
