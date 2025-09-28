@@ -389,6 +389,7 @@ async def report_message(interaction: discord.Interaction, message: discord.Mess
             await handle_report(modal_interaction, message, self.reason.value)
 
     await interaction.response.send_modal(ReasonModal())
+    return
 
 
 @bot.event
