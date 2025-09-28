@@ -161,7 +161,7 @@ def get_time_text(seconds: int) -> str:
         return f"{seconds // 86400} 天"
 
 
-def send_moderation_message(user: discord.Member, moderator: discord.Member, actions: dict, reason: str) -> str:
+def send_moderation_message(user: discord.Member, moderator: discord.Member, actions: dict, reason: str, message_content: str, is_ai: bool=False) -> str:
     action_texts = []
     print("[DEBUG] Actions:", actions)
     for action in actions:
@@ -177,6 +177,7 @@ def send_moderation_message(user: discord.Member, moderator: discord.Member, act
     text = f"""
 ### ⛔ 違規處分
 > - 被處分者： {user.mention}
+> - 訊息內容： {message_content}
 > - 處分原因：{reason}
 > - 處分結果：{action_text}
 > - 處分執行： {moderator.mention}
@@ -207,6 +208,7 @@ class doModerationActions(discord.ui.View):
         self.ai_suggestions = ai_suggestions
         self.ai_reason = ai_reason
         self.message = message
+        self.message_content = message.content if message else "(無內容)"
 
         # 如果 AI 建議為空，不顯示按鈕
         if not self.ai_suggestions:
@@ -225,7 +227,7 @@ class doModerationActions(discord.ui.View):
                 duration = action.get("duration", 0)
                 if duration > 0:
                     await timeout_user(user_id=self.user.id, guild_id=interaction.guild.id, until=duration, reason=self.ai_reason)
-        send_moderation_message(self.user, interaction.user, self.ai_suggestions, self.ai_reason)
+        send_moderation_message(self.user, interaction.user, self.ai_suggestions, self.ai_reason, self.message_content, is_ai=True)
 
     @discord.ui.button(label="封鎖", style=discord.ButtonStyle.danger, custom_id="ban_button")
     async def ban_button(self, interaction: discord.Interaction, button: discord.ui.Button):
@@ -235,7 +237,7 @@ class doModerationActions(discord.ui.View):
             async def on_submit(self, modal_interaction: discord.Interaction):
                 await modal_interaction.response.send_message(f"已封鎖 {self.user.mention}", ephemeral=True)
                 await interaction.guild.ban(self.user, reason=self.reason.value or "違反規則")
-                send_moderation_message(self.user, interaction.user, [{"action": "ban"}], self.reason.value or "違反規則")
+                send_moderation_message(self.user, interaction.user, [{"action": "ban"}], self.reason.value or "違反規則", self.message_content)
         await interaction.response.send_modal(BanReasonModal())
 
     @discord.ui.button(label="踢出", style=discord.ButtonStyle.primary, custom_id="kick_button")
@@ -246,7 +248,7 @@ class doModerationActions(discord.ui.View):
             async def on_submit(self, modal_interaction: discord.Interaction):
                 await modal_interaction.response.send_message(f"已踢出 {self.user.mention}", ephemeral=True)
                 await interaction.guild.kick(self.user, reason=self.reason.value or "違反規則")
-                send_moderation_message(self.user, interaction.user, [{"action": "kick"}], self.reason.value or "違反規則")
+                send_moderation_message(self.user, interaction.user, [{"action": "kick"}], self.reason.value or "違反規則", self.message_content)
         await interaction.response.send_modal(KickReasonModal())
 
     @discord.ui.button(label="禁言", style=discord.ButtonStyle.secondary, custom_id="mute_button")
@@ -265,7 +267,7 @@ class doModerationActions(discord.ui.View):
                         return
                     await timeout_user(user_id=parent_user.id, guild_id=interaction.guild.id, until=mins * 60, reason=self.reason.value or "違反規則")
                     await modal_interaction.response.send_message(f"已禁言 {parent_user.mention} {mins} 分鐘", ephemeral=True)
-                    send_moderation_message(parent_user, interaction.user, [{"action": "mute", "duration": mins * 60}], self.reason.value or "違反規則")
+                    send_moderation_message(parent_user, interaction.user, [{"action": "mute", "duration": mins * 60}], self.reason.value or "違反規則", self.message_content)
                 except Exception as e:
                     print(f"Error occurred: {str(e)}")
                     await modal_interaction.response.send_message(f"發生錯誤，請稍後再試。\n{str(e)}", ephemeral=True)
