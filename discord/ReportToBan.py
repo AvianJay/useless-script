@@ -377,10 +377,10 @@ async def report_message(interaction: discord.Interaction, message: discord.Mess
 
                 # 更新嵌入訊息
                 embed.set_field_at(4, name="AI 判斷", value=verdict_text, inline=False)
-                await sent_msg.edit(REPORT_MESSAGE, embed=embed, view=doModerationActions(message.author, interaction, actions, message=message, ai_reason=verdict.get('reason', '')))
+                await sent_msg.edit(content=REPORT_MESSAGE, embed=embed, view=doModerationActions(message.author, interaction, actions, message=message, ai_reason=verdict.get('reason', '')))
             except Exception as e:
                 embed.set_field_at(4, name="AI 判斷", value=f"錯誤：\n{str(e)}", inline=False)
-                await sent_msg.edit(REPORT_MESSAGE, embed=embed, view=doModerationActions(message.author, interaction, [], message=message))
+                await sent_msg.edit(content=REPORT_MESSAGE, embed=embed, view=doModerationActions(message.author, interaction, [], message=message))
                 return
     class ReasonModal(discord.ui.Modal, title="檢舉原因"):
         reason = discord.ui.TextInput(label="檢舉原因", placeholder="請輸入檢舉原因", required=True, max_length=100)
