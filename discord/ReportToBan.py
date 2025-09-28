@@ -104,11 +104,15 @@ bot = commands.Bot(command_prefix="!", intents=intents)
 async def check_message_with_ai(text: str, history_messages: str="", reason: str="") -> dict:
     """
     使用 g4f + Pollinations 判斷訊息是否違反群規
-    回傳格式 JSON: {"level": 違規等級，0到5, "reason": "簡短說明，若違規需指出違反哪一條規則", "suggestion_actions": [{"action": "ban" | "kick" | "mute", "duration": 若禁言，請提供禁言時間，格式如秒數，若非封鎖則為 0 (只能為秒數)}]}
+    回傳格式 JSON: {"level": 違規等級，0到5, "reason": "簡短說明，若違規需指出違反哪一條規則", "suggestion_actions": [{"action": "ban" | "kick" | "mute", "duration": 若禁言，請提供禁言時間，格式如秒數，若非封鎖則為 0 (只能為秒數)}]}, "target": "reporter" | "reported_user" (若是封鎖檢舉人，請填 reporter，若是封鎖被檢舉人，請填 reported_user)
     """
 
     if history_messages:
         history_messages = "\n用戶歷史訊息：\n" + history_messages + "\n"
+    
+    safe_text = json.dumps(text, ensure_ascii=False)
+    safe_history = json.dumps(history_messages, ensure_ascii=False) if history_messages else '""'
+    safe_reason = json.dumps(reason, ensure_ascii=False)
 
     prompt = f"""
 你是 Discord 伺服器的審核助手。
@@ -116,12 +120,13 @@ async def check_message_with_ai(text: str, history_messages: str="", reason: str
 {SERVER_RULES}
 
 請根據規則判斷這則訊息是否違規。
+檢舉人的檢舉原因也有可能是錯的，請以規則為準。
+如果檢舉人的原因違反規則，請一併指出。
 
-訊息內容：
-{text}
-{history_messages}
-檢舉原因：
-{reason}
+被檢舉的原始資料（已 escape 為 JSON 字串）：
+REPORTED_MESSAGE: {safe_text}
+HISTORY_MESSAGES: {safe_history}
+REPORT_REASON: {safe_reason}
 
 請輸出 JSON，格式如下：
 {{
