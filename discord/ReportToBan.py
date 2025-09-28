@@ -8,8 +8,7 @@ from discord.ext import commands
 import aiohttp
 import os
 
-# 你要放檢舉紀錄的頻道 ID
-config_version = 1
+config_version = 2
 config_path = 'config.reporttoban.json'
 
 default_config = {
@@ -19,7 +18,8 @@ default_config = {
     "TOKEN": "YOUR_BOT_TOKEN_HERE",  # 機器人 Token
     "REPORTED_MESSAGE": "感謝您的檢舉，我們會盡快處理您的檢舉。",  # 用戶檢舉後的回覆訊息
     "REPORT_BLACKLIST": [],  # 無法使用檢舉功能的角色 ID 陣列
-    "REPORT_RATE_LIMIT": 300  # 用戶檢舉頻率限制，單位為秒
+    "REPORT_RATE_LIMIT": 300,  # 用戶檢舉頻率限制，單位為秒
+    "REPORT_MESSAGE": "@Admin"  # 檢舉通知頻道的 @ 提醒 (可選)
 }
 _config = None
 
@@ -77,6 +77,7 @@ TOKEN = config("TOKEN")
 REPORTED_MESSAGE = config("REPORTED_MESSAGE")
 REPORT_BLACKLIST = config("REPORT_BLACKLIST")
 REPORT_RATE_LIMIT = config("REPORT_RATE_LIMIT")
+REPORT_MESSAGE = config("REPORT_MESSAGE")
 last_report_times = {}  # 用戶 ID -> 上次檢舉時間
 reported_messages = []
 
@@ -347,7 +348,7 @@ async def report_message(interaction: discord.Interaction, message: discord.Mess
             embed.add_field(name="AI 判斷", value="正在載入中...", inline=False)
             embed.add_field(name="訊息連結", value=f"[跳轉]({message.jump_url})", inline=False)
 
-            sent_msg = await report_channel.send(embed=embed, view=doModerationActions(message.author, interaction, [], message=message))
+            sent_msg = await report_channel.send(REPORT_MESSAGE, embed=embed, view=doModerationActions(message.author, interaction, [], message=message))
 
             # 呼叫 AI 判斷訊息是否正當
             try:
@@ -375,10 +376,10 @@ async def report_message(interaction: discord.Interaction, message: discord.Mess
 
                 # 更新嵌入訊息
                 embed.set_field_at(4, name="AI 判斷", value=verdict_text, inline=False)
-                await sent_msg.edit(embed=embed, view=doModerationActions(message.author, interaction, actions, message=message, ai_reason=verdict.get('reason', '')))
+                await sent_msg.edit(REPORT_MESSAGE, embed=embed, view=doModerationActions(message.author, interaction, actions, message=message, ai_reason=verdict.get('reason', '')))
             except Exception as e:
                 embed.set_field_at(4, name="AI 判斷", value=f"錯誤：\n{str(e)}", inline=False)
-                await sent_msg.edit(embed=embed, view=doModerationActions(message.author, interaction, [], message=message))
+                await sent_msg.edit(REPORT_MESSAGE, embed=embed, view=doModerationActions(message.author, interaction, [], message=message))
                 return
     class ReasonModal(discord.ui.Modal, title="檢舉原因"):
         reason = discord.ui.TextInput(label="檢舉原因", placeholder="請輸入檢舉原因", required=True, max_length=100)
