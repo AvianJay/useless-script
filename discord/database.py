@@ -28,7 +28,7 @@ class Database:
             # Create server_configs table
             cursor.execute('''
                 CREATE TABLE IF NOT EXISTS server_configs (
-                    guild_id INTEGER PRIMARY KEY,
+                    guild_id INTEGER NOT NULL,
                     config_key TEXT NOT NULL,
                     config_value TEXT NOT NULL,
                     UNIQUE(guild_id, config_key)
