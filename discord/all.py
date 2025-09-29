@@ -12,7 +12,7 @@ import sqlite3
 from database import db, DEFAULT_SERVER_CONFIG
 
 # Global configuration for backward compatibility (mainly for TOKEN)
-config_version = 2
+config_version = 3
 config_path = 'config.json'
 
 default_config = {
