@@ -87,7 +87,9 @@ async def dsize_leaderboard(interaction: discord.Interaction):
         else:
             description += f"**{rank}. 用戶ID {user_id}** - {size} cm\n"
 
-    embed = discord.Embed(title="長度排行榜", description=description, color=0x00ff00)
+    embed = discord.Embed(title="今天的長度排行榜", description=description, color=0x00ff00)
+    # server info
+    embed.set_footer(text=interaction.guild.name, icon_url=interaction.guild.icon.url if interaction.guild.icon else None)
     await interaction.response.send_message(embed=embed)
 
 
