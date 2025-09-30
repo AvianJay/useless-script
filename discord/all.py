@@ -18,6 +18,8 @@ import ModerationNotify
 print("Imported ModerationNotify")
 import dsize
 print("Imported dsize")
+import doomcord
+print("Imported doomcord")
 
 if __name__ == "__main__":
     start_bot()
