@@ -8,8 +8,7 @@ from discord.ext import commands
 import aiohttp
 import os
 import random
-import sqlite3
-from database import db, DEFAULT_SERVER_CONFIG
+from database import db
 
 # Global configuration for backward compatibility (mainly for TOKEN)
 config_version = 3
