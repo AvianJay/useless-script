@@ -136,7 +136,6 @@ async def check_message_with_ai(text: str, history_messages: str="", reason: str
         "action": "ban" | "kick" | "mute", (請盡量使用 mute，極端的情況下才使用 ban)
         "duration": 若禁言，請提供禁言時間，格式如秒數，若非封鎖則為 0 (只能為秒數),
       }},
-      ... (可建議多個動作)
   ]
 }}
 """
