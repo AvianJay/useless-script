@@ -7,19 +7,7 @@ import random
 from discord.ext import commands
 from discord import app_commands
 from datetime import datetime, timedelta
-
-if os.path.exists("config.dsize.json"):
-    config = json.load(open("config.dsize.json", "r"))
-    TOKEN = config["token"]
-else:
-    config = {"token": "YOUR_TOKEN_HERE"}
-    json.dump(config, open("config.dsize.json", "w"))
-    print("No config! Saved default config, please edit!")
-    sys.exit(1)
-
-# 設定指令前綴
-intents = discord.Intents.default()
-bot = commands.Bot(command_prefix="!", intents=intents)
+from globalenv import bot, start_bot
 
 # 記錄使用者的上次使用時間
 last_used = {}
@@ -57,5 +45,6 @@ async def dsize(interaction: discord.Interaction):
 
     await interaction.response.send_message(embed=embed)
 
-# 啟動機器人
-bot.run(TOKEN)
+
+if __name__ == "__main__":
+    start_bot()

@@ -4,3 +4,4 @@ config.json
 __pycache__/
 venv/
 .venv/
+data.db
