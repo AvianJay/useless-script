@@ -30,17 +30,21 @@ async def notify_user(user: discord.User, guild: discord.Guild, action: str, rea
 @bot.event
 async def on_member_remove(member):
     guild = member.guild
-    async for entry in guild.audit_logs(limit=1):
-        if entry.target.id != member.id:
-            continue
+    try:
+        async for entry in guild.audit_logs(limit=1):
+            if entry.target.id != member.id:
+                continue
 
-        if entry.action == discord.AuditLogAction.kick:
-            await notify_user(member, guild, "踢出", entry.reason or "未提供")
-        elif entry.action == discord.AuditLogAction.ban:
-            # ban
-            await notify_user(member, guild, "封禁", entry.reason or "未提供")
-        else:
-            pass
+            if entry.action == discord.AuditLogAction.kick:
+                await notify_user(member, guild, "踢出", entry.reason or "未提供")
+            elif entry.action == discord.AuditLogAction.ban:
+                # ban
+                await notify_user(member, guild, "封禁", entry.reason or "未提供")
+            else:
+                pass
+    except Exception as e:
+        print(f"Error fetching audit logs: {e}")
+        await notify_user(member, guild, "移除", "無法取得")
 
 
 # timeout
@@ -48,11 +52,15 @@ async def on_member_remove(member):
 async def on_member_update(before, after):
     if before.timed_out_until != after.timed_out_until and after.timed_out_until is not None:
         guild = after.guild
-        async for entry in guild.audit_logs(limit=1, action=discord.AuditLogAction.member_update):
-            if entry.target.id == after.id:
-                reason = entry.reason or "未提供"
-                end_time = after.timed_out_until.astimezone(timezone(timedelta(hours=8)))  # 台灣時間
-                await notify_user(after, guild, "禁言", reason, end_time)
+        try:
+            async for entry in guild.audit_logs(limit=1, action=discord.AuditLogAction.member_update):
+                if entry.target.id == after.id:
+                    reason = entry.reason or "未提供"
+                    end_time = after.timed_out_until.astimezone(timezone(timedelta(hours=8)))  # 台灣時間
+                    await notify_user(after, guild, "禁言", reason, end_time)
+        except Exception as e:
+            print(f"Error fetching audit logs: {e}")
+            await notify_user(after, guild, "禁言", "無法取得", after.timed_out_until)
 
 
 if __name__ == "__main__":
