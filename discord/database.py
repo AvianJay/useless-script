@@ -12,7 +12,10 @@ DEFAULT_SERVER_CONFIG = {
     "REPORTED_MESSAGE": "感謝您的檢舉，我們會盡快處理您的檢舉。",
     "REPORT_BLACKLIST": [],
     "REPORT_RATE_LIMIT": 300,
-    "REPORT_MESSAGE": "@Admin"
+    "REPORT_MESSAGE": "@Admin",
+    "notify_user_on_mute": True,
+    "notify_user_on_kick": True,
+    "notify_user_on_ban": True,
 }
 
 class Database:

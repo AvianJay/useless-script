@@ -1,6 +1,7 @@
 import discord
+from discord import app_commands
 from datetime import datetime, timedelta, timezone
-from globalenv import bot, start_bot
+from globalenv import bot, start_bot, get_server_config, set_server_config
 
 
 async def notify_user(user: discord.User, guild: discord.Guild, action: str, reason: str = "未提供", end_time=None):
@@ -35,10 +36,13 @@ async def on_member_remove(member):
             if entry.target.id != member.id:
                 continue
 
-            if entry.action == discord.AuditLogAction.kick:
+            if entry.action == discord.AuditLogAction.kick:  # kick
+                if not get_server_config(guild.id, "notify_user_on_kick", True):
+                    return
                 await notify_user(member, guild, "踢出", entry.reason or "未提供")
-            elif entry.action == discord.AuditLogAction.ban:
-                # ban
+            elif entry.action == discord.AuditLogAction.ban:  # ban
+                if not get_server_config(guild.id, "notify_user_on_ban", True):
+                    return
                 await notify_user(member, guild, "封禁", entry.reason or "未提供")
             else:
                 pass
@@ -50,6 +54,8 @@ async def on_member_remove(member):
 # timeout
 @bot.event
 async def on_member_update(before, after):
+    if not get_server_config(after.guild.id, "notify_user_on_mute", True):
+        return
     if before.timed_out_until != after.timed_out_until and after.timed_out_until is not None:
         guild = after.guild
         try:
@@ -61,6 +67,26 @@ async def on_member_update(before, after):
         except Exception as e:
             print(f"Error fetching audit logs: {e}")
             await notify_user(after, guild, "禁言", "無法取得", after.timed_out_until)
+
+
+@bot.tree.command(name="設定-懲罰通知", description="設定是否通知被懲罰的用戶")
+@app_commands.describe(
+    action="選擇要設定的懲罰類型",
+    enable="是否啟用通知"
+)
+@app_commands.choices(action=[
+    app_commands.Choice(name="踢出", value="kick"),
+    app_commands.Choice(name="封禁", value="ban"),
+    app_commands.Choice(name="禁言", value="mute"),
+])
+async def set_moderation_notification(interaction: discord.Interaction, action: str, enable: bool):
+    guild = interaction.guild
+    if action not in ["kick", "ban", "mute"]:
+        await interaction.response.send_message("無效的懲罰類型。", ephemeral=True)
+        return
+
+    set_server_config(guild.id, f"notify_user_on_{action}", enable)
+    await interaction.response.send_message(f"已將 {action} 通知設定為{'啟用' if enable else '禁用'}。", ephemeral=True)
 
 
 if __name__ == "__main__":
