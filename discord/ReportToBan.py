@@ -7,16 +7,7 @@ from discord import app_commands
 from discord.ext import commands
 import aiohttp
 from database import db
-from globalenv import bot, start_bot
-
-# Helper functions for per-server configuration
-def get_server_config(guild_id: int, key: str, default=None):
-    """Get server-specific configuration"""
-    return db.get_server_config(guild_id, key, default)
-
-def set_server_config(guild_id: int, key: str, value):
-    """Set server-specific configuration"""
-    return db.set_server_config(guild_id, key, value)
+from globalenv import bot, start_bot, db, get_server_config, set_server_config
 last_report_times = {}  # 用戶 ID -> 上次檢舉時間
 reported_messages = []
 

@@ -3,6 +3,7 @@ import json
 import discord
 from discord.ext import commands
 from discord import app_commands
+from database import db
 
 intents = discord.Intents.default()
 intents.message_content = True
@@ -63,6 +64,16 @@ def config(key, value=None, mode="r"):
         return True
     else:
         raise ValueError(f"Invalid mode: {mode}")
+
+
+# Helper functions for per-server configuration
+def get_server_config(guild_id: int, key: str, default=None):
+    """Get server-specific configuration"""
+    return db.get_server_config(guild_id, key, default)
+
+def set_server_config(guild_id: int, key: str, value):
+    """Set server-specific configuration"""
+    return db.set_server_config(guild_id, key, value)
 
 
 @bot.event
