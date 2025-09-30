@@ -1,35 +1,28 @@
 # Powered by ChatGPT lol
-import os
-import sys
-import json
 import discord
 import random
 from discord.ext import commands
 from discord import app_commands
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from globalenv import bot, start_bot
 
 # 記錄使用者的上次使用時間
 last_used = {}
 
-@bot.event
-async def on_ready():
-    print(f"Logged in as {bot.user}")
-    try:
-        synced = await bot.tree.sync()  # 同步 Slash 指令
-        print(f"Synced {len(synced)} command(s)")
-    except Exception as e:
-        print(f"Error syncing commands: {e}")
 
 @bot.tree.command(name="dsize", description="量屌長")
 async def dsize(interaction: discord.Interaction):
     user_id = interaction.user.id
-    now = datetime.utcnow().date()
+    now = datetime.utcnow().astimezone(timezone(timedelta(hours=8))).date()  # 台灣時間
     last = last_used.get(user_id, datetime(1970, 1, 1).date())
 
     # 檢查是否已經使用過指令，並且是否已超過一天
     if user_id in last_used and now == last:
-        await interaction.response.send_message("一天只能量一次屌長。", ephemeral=True)
+        # calculate time left
+        # Convert last (date) to datetime at midnight in Taiwan timezone
+        next_day = datetime.combine(last + timedelta(days=1), datetime.min.time()).replace(tzinfo=timezone(timedelta(hours=8)))
+        timestamp_next = next_day.astimezone(timezone.utc)  # Convert to UTC for Discord timestamp
+        await interaction.response.send_message(f"一天只能量一次屌長。<t:{int(timestamp_next.timestamp())}:R> 才能再次使用。", ephemeral=True)
         return
 
     # 更新使用時間
