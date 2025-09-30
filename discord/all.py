@@ -20,6 +20,10 @@ import dsize
 print("Imported dsize")
 import doomcord
 print("Imported doomcord")
+import PresenceChange
+print("Imported PresenceChange")
+import OwnerTools
+print("Imported OwnerTools")
 
 if __name__ == "__main__":
     start_bot()
