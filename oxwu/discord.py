@@ -119,7 +119,8 @@ def get_report_info() -> dict:
     return resp.json()
 
 
-def cwa_get_last_link() -> str:
+cwa_last_link = None
+def cwa_get_last_link() -> tuple[str, bool]:
     BASE_URL = "https://www.cwa.gov.tw"
     LIST_URL = "https://www.cwa.gov.tw/V8/C/E/MOD/EQ_ROW.html?T=" + str(int(datetime.now().timestamp()))
     resp = requests.get(LIST_URL)
@@ -127,8 +128,13 @@ def cwa_get_last_link() -> str:
     soup = BeautifulSoup(resp.text, "html.parser")
     latest = soup.select_one("tr.eq-row a")
     if latest:
-        return BASE_URL + latest["href"]
-    return ""
+        link = BASE_URL + latest["href"]
+        global cwa_last_link
+        is_same = (link == cwa_last_link)
+        cwa_last_link = link
+        return link, is_same
+    return "", False
+cwa_get_last_link()  # get first
 
 
 def warning_to_embed(data: dict) -> dict:
@@ -220,9 +226,10 @@ def report_to_embed(data: dict) -> dict:
         )
     
     components = []
+    cwa_got = False
     if config("report_link_cwa"):
-        link = cwa_get_last_link()
-        if link:
+        link, is_same = cwa_get_last_link()
+        if link and not is_same:
             components.append(
                 {
                     "type": 2,
@@ -232,6 +239,11 @@ def report_to_embed(data: dict) -> dict:
                     "emoji": {"name": "📰"}
                 }
             )
+            cwa_got = True
+        else:
+            cwa_got = False
+    else:
+        cwa_got = True  # disabled
     # not working
     # if config("report_link_oxwu"):
     #     components.append(
@@ -298,18 +310,22 @@ def report_to_embed(data: dict) -> dict:
     }
     embed["embeds"][0]["fields"].extend(area_fields)
 
-    return embed
+    return embed, cwa_got
 
 
 def screenshot_window() -> bytes:
-    resp = requests.get("http://127.0.0.1:10281/screenshot")
-    resp.raise_for_status()
-    return resp.content  # bytes
+    try:
+        resp = requests.get("http://127.0.0.1:10281/screenshot")
+        resp.raise_for_status()
+        return resp.content  # bytes
+    except Exception as e:
+        print(f"[!] 取得螢幕截圖失敗: {e}")
+        return None
 
 
 def send_webhook_embed(data: dict, screenshot: bytes=None, report=False) -> str:
     if report:
-        data = report_to_embed(data)
+        data, cwa_got = report_to_embed(data)
     else:
         data = warning_to_embed(data)
     if screenshot:
@@ -323,12 +339,25 @@ def send_webhook_embed(data: dict, screenshot: bytes=None, report=False) -> str:
         data={"payload_json": json.dumps(data)},
         files=files
     )
-    return resp.json()["id"]
+    if report:
+        return resp.json()["id"], cwa_got
+    else:
+        return resp.json()["id"]
 
 
-def edit_webhook_embed(message_id: str, data: dict, screenshot: bytes=None):
+def edit_webhook_embed(message_id: str, data: dict, screenshot: bytes=None, report=False):
     url = f"{config('webhook_url')}/messages/{message_id}"
-    data = warning_to_embed(data)
+    if report:
+        # wait for cwa link
+        cwa_got = False
+        counter = 0
+        while not cwa_got and counter < 10:
+            counter += 1
+            time.sleep(10)
+            print(f"[+] 嘗試取得中央氣象署連結 (嘗試次數 {counter})...")
+            data, cwa_got = report_to_embed(data)
+    else:
+        data = warning_to_embed(data)
     if screenshot:
         files = {"file": ("screenshot.png", screenshot, "image/png")}
         data["embeds"][0]["image"] = {"url": "attachment://screenshot.png"}
@@ -361,12 +390,17 @@ def main():
                     continue
                 if report["report"]["time"] != checkTime:
                     requests.get("http://127.0.0.1:10281/gotoReport")
-                    data = get_report_info()
                     if config("screenshot"):
                         screenshot = screenshot_window()
-                        msg_id = send_webhook_embed(report, screenshot, report=True)
+                        msg_id, cwa_got = send_webhook_embed(report, screenshot, report=True)
+                        if not cwa_got:
+                            print("[!] 無法取得中央氣象署連結。")
+                            edit_webhook_embed(msg_id, report, screenshot, report=True)
                     else:
-                        msg_id = send_webhook_embed(data, report=True)
+                        msg_id, cwa_got = send_webhook_embed(report, report=True)
+                        if not cwa_got:
+                            print("[!] 無法取得中央氣象署連結。")
+                            edit_webhook_embed(msg_id, report, report=True)
                     print(f"[+] 發送成功，訊息 ID：{msg_id}")
                     checkTime = report["report"]["time"]
                     print("[+] 等待地震報告出現...")
@@ -376,9 +410,15 @@ def main():
             data = get_report_info()
             if config("screenshot"):
                 screenshot = screenshot_window()
-                msg_id = send_webhook_embed(data, screenshot, report=True)
+                msg_id, cwa_got = send_webhook_embed(data, screenshot, report=True)
+                if not cwa_got:
+                    print("[!] 無法取得中央氣象署連結。")
+                    edit_webhook_embed(msg_id, data, screenshot, report=True)
             else:
-                msg_id = send_webhook_embed(data, report=True)
+                msg_id, cwa_got = send_webhook_embed(data, report=True)
+                if not cwa_got:
+                    print("[!] 無法取得中央氣象署連結。")
+                    edit_webhook_embed(msg_id, data, report=True)
             print(f"[+] 發送成功，訊息 ID：{msg_id}")
             return
     report = get_report_info()
@@ -418,10 +458,17 @@ def main():
     data = get_report_info()
     if config("screenshot"):
         screenshot = screenshot_window()
-        msg_id = send_webhook_embed(data, screenshot, report=True)
+        msg_id, cwa_got = send_webhook_embed(data, screenshot, report=True)
+        print(f"[+] 發送成功，訊息 ID：{msg_id}")
+        if not cwa_got:
+            print("[!] 無法取得中央氣象署連結。")
+            edit_webhook_embed(msg_id, data, screenshot, report=True)
     else:
-        msg_id = send_webhook_embed(data, report=True)
-    print(f"[+] 發送成功，訊息 ID：{msg_id}")
+        msg_id, cwa_got = send_webhook_embed(data, report=True)
+        print(f"[+] 發送成功，訊息 ID：{msg_id}")
+        if not cwa_got:
+            print("[!] 無法取得中央氣象署連結。")
+            edit_webhook_embed(msg_id, data, report=True)
 
 
 if __name__ == "__main__":
