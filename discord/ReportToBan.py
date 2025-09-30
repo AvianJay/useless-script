@@ -416,8 +416,8 @@ async def report_message(interaction: discord.Interaction, message: discord.Mess
     value="設定的值 (對於頻道，請使用 #頻道名稱 或頻道ID)"
 )
 @app_commands.choices(setting=[
-    app_commands.Choice(name="檢舉紀錄頻道", value="REPORT_CHANNEL_ID"),
-    app_commands.Choice(name="管理員通知頻道", value="MODERATION_MESSAGE_CHANNEL_ID"),
+    app_commands.Choice(name="檢舉通知頻道", value="REPORT_CHANNEL_ID"),
+    app_commands.Choice(name="處分通知頻道", value="MODERATION_MESSAGE_CHANNEL_ID"),
     app_commands.Choice(name="檢舉回覆訊息", value="REPORTED_MESSAGE"),
     app_commands.Choice(name="檢舉頻率限制(秒)", value="REPORT_RATE_LIMIT"),
     app_commands.Choice(name="檢舉通知訊息", value="REPORT_MESSAGE"),
@@ -440,12 +440,12 @@ async def setting_command(interaction: discord.Interaction, setting: str, value:
         mod_channel = bot.get_channel(config.get("MODERATION_MESSAGE_CHANNEL_ID")) if config.get("MODERATION_MESSAGE_CHANNEL_ID") else None
         
         embed.add_field(
-            name="檢舉紀錄頻道", 
+            name="檢舉通知頻道", 
             value=report_channel.mention if report_channel else "❌ 未設定", 
             inline=False
         )
         embed.add_field(
-            name="管理員通知頻道", 
+            name="處分通知頻道", 
             value=mod_channel.mention if mod_channel else "❌ 未設定", 
             inline=False
         )
@@ -515,7 +515,7 @@ async def setting_command(interaction: discord.Interaction, setting: str, value:
         
         success = set_server_config(guild_id, setting, channel.id)
         if success:
-            setting_name = "檢舉紀錄頻道" if setting == "REPORT_CHANNEL_ID" else "管理員通知頻道"
+            setting_name = "檢舉通知頻道" if setting == "REPORT_CHANNEL_ID" else "處分通知頻道"
             await interaction.response.send_message(f"✅ {setting_name} 已設定為 {channel.mention}", ephemeral=True)
         else:
             await interaction.response.send_message("❌ 設定失敗，請稍後再試。", ephemeral=True)
