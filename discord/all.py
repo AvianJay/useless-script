@@ -273,29 +273,33 @@ class doModerationActions(discord.ui.View):
 
     @discord.ui.button(label="封鎖", style=discord.ButtonStyle.danger, custom_id="ban_button")
     async def ban_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        message_content = self.message_content
         class BanReasonModal(discord.ui.Modal, title="封鎖原因"):
             reason = discord.ui.TextInput(label="封鎖原因", placeholder="請輸入封鎖原因", required=True, max_length=100)
+            delete_messages = discord.ui.TextInput(label="刪除訊息小時數", placeholder="請輸入要刪除的訊息小時數 (0-168)", required=False, max_length=3, default="0")
 
             async def on_submit(self, modal_interaction: discord.Interaction):
                 await modal_interaction.response.send_message(f"已封鎖 {self.user.mention}", ephemeral=True)
-                await interaction.guild.ban(self.user, reason=self.reason.value or "違反規則")
-                send_moderation_message(self.user, interaction.user, [{"action": "ban"}], self.reason.value or "違反規則", self.message_content)
+                await interaction.guild.ban(self.user, reason=self.reason.value or "違反規則", delete_message_seconds=int(self.delete_messages.value) * 3600 if self.delete_messages.value.isdigit() else 0)
+                send_moderation_message(self.user, interaction.user, [{"action": "ban"}], self.reason.value or "違反規則", message_content)
         await interaction.response.send_modal(BanReasonModal())
 
     @discord.ui.button(label="踢出", style=discord.ButtonStyle.primary, custom_id="kick_button")
     async def kick_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        message_content = self.message_content
         class KickReasonModal(discord.ui.Modal, title="踢出原因"):
             reason = discord.ui.TextInput(label="踢出原因", placeholder="請輸入踢出原因", required=True, max_length=100)
 
             async def on_submit(self, modal_interaction: discord.Interaction):
                 await modal_interaction.response.send_message(f"已踢出 {self.user.mention}", ephemeral=True)
                 await interaction.guild.kick(self.user, reason=self.reason.value or "違反規則")
-                send_moderation_message(self.user, interaction.user, [{"action": "kick"}], self.reason.value or "違反規則", self.message_content)
+                send_moderation_message(self.user, interaction.user, [{"action": "kick"}], self.reason.value or "違反規則", message_content)
         await interaction.response.send_modal(KickReasonModal())
 
     @discord.ui.button(label="禁言", style=discord.ButtonStyle.secondary, custom_id="mute_button")
     async def mute_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         parent_user = self.user  # 先存外部 self.user
+        message_content = self.message_content
 
         class MuteModal(discord.ui.Modal, title="禁言時間設定"):
             minutes = discord.ui.TextInput(label="禁言分鐘數", placeholder="請輸入禁言時間（分鐘）", required=True)
@@ -308,7 +312,7 @@ class doModerationActions(discord.ui.View):
                         await modal_interaction.response.send_message("請輸入正整數分鐘。", ephemeral=True)
                         return
                     await timeout_user(user_id=parent_user.id, guild_id=interaction.guild.id, until=mins * 60, reason=self.reason.value or "違反規則")
-                    send_moderation_message(parent_user, interaction.user, [{"action": "mute", "duration": mins * 60}], self.reason.value or "違反規則", self.message_content)
+                    send_moderation_message(parent_user, interaction.user, [{"action": "mute", "duration": mins * 60}], self.reason.value or "違反規則", message_content)
                     await modal_interaction.response.send_message(f"已禁言 {parent_user.mention} {mins} 分鐘", ephemeral=True)
                 except Exception as e:
                     print(f"Error occurred: {str(e)}")
