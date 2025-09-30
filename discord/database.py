@@ -43,6 +43,17 @@ class Database:
                 )
             ''')
             
+            # Create user_data table
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS user_data (
+                    user_id INTEGER NOT NULL,
+                    guild_id INTEGER, -- Nullable for global data
+                    data_key TEXT NOT NULL,
+                    data_value TEXT NOT NULL,
+                    UNIQUE(user_id, guild_id, data_key)
+                )
+            ''')
+
             conn.commit()
     
     def get_server_config(self, guild_id: int, key: str, default: Any = None) -> Any:
