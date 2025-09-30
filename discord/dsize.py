@@ -10,7 +10,7 @@ from globalenv import bot, start_bot, get_user_data, set_user_data, get_all_user
 @bot.tree.command(name="dsize", description="量屌長")
 async def dsize(interaction: discord.Interaction):
     user_id = interaction.user.id
-    now = datetime.utcnow().astimezone(timezone(timedelta(hours=8))).date()  # 台灣時間
+    now = (datetime.utcnow() + timedelta(hours=8)).date()  # 台灣時間
     last = get_user_data(interaction.guild.id, user_id, "last_dsize")
     if last is not None and not isinstance(last, datetime):
         # If last is a string (e.g., from JSON), convert to date
@@ -65,7 +65,7 @@ async def dsize_leaderboard(interaction: discord.Interaction):
                 user_date = datetime(1970, 1, 1).date()
         elif isinstance(user_date, datetime):
             user_date = user_date.date()
-        if user_date is not None and user_date != datetime.utcnow().astimezone(timezone(timedelta(hours=8))).date():
+        if user_date is not None and user_date != (datetime.utcnow() + timedelta(hours=8)).date():
             continue
         if size is not None:
             leaderboard.append((user_id, size))
@@ -99,7 +99,7 @@ async def dsize_battle(interaction: discord.Interaction, opponent: discord.Membe
     original_user = interaction.user
     user_id = interaction.user.id
     opponent_id = opponent.id
-    now = datetime.utcnow().astimezone(timezone(timedelta(hours=8))).date()  # 台灣時間
+    now = (datetime.utcnow() + timedelta(hours=8)).date()  # 台灣時間
 
     if user_id == opponent_id:
         await interaction.response.send_message("不能跟自己比屌長。", ephemeral=True)
