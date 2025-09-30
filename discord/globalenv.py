@@ -1,23 +1,27 @@
 import os
 import json
 import discord
+import asyncio
+import threading
 from discord.ext import commands
 from discord import app_commands
 from database import db
 
-intents = discord.Intents.default()
-intents.message_content = True
-intents.members = True
-intents.guilds = True
-bot = commands.Bot(command_prefix="!", intents=intents)
 
 # Global configuration for backward compatibility (mainly for TOKEN)
-config_version = 3
+config_version = 4
 config_path = 'config.json'
 
 default_config = {
     "config_version": config_version,
     "TOKEN": "YOUR_BOT_TOKEN_HERE",  # 機器人 Token
+    "presence_loop_time": 10, # second
+    "bot_status": "online", # online, idle, dnd, invisible
+    "bot_activities": [
+        {"type": "playing", "name": "Robot"}
+    ],
+    "owners": [123456789012345678],  # 機器人擁有者 ID 列表
+    "prefix": "!",  # 指令前綴
 }
 _config = None
 
@@ -57,13 +61,20 @@ if _config.get("config_version", 0) < config_version:
 
 def config(key, value=None, mode="r"):
     if mode == "r":
-        return _config.get(key)
+        return _config.get(key, value)
     elif mode == "w":
         _config[key] = value
         json.dump(_config, open(config_path, "w"), indent=4)
         return True
     else:
         raise ValueError(f"Invalid mode: {mode}")
+
+
+intents = discord.Intents.default()
+intents.message_content = True
+intents.members = True
+intents.guilds = True
+bot = commands.Bot(command_prefix=config("prefix", "!"), intents=intents)
 
 
 # Helper functions for per-server configuration
@@ -89,12 +100,17 @@ def get_all_user_data(guild_id: int, key: str):
     return db.get_all_user_data(guild_id, key)
 
 
+on_ready_tasks = []
+
+
 @bot.event
 async def on_ready():
     print(f'Logged in as {bot.user}')
     try:
         synced = await bot.tree.sync()  # 同步
         print(f"Synced {len(synced)} command(s)")
+        for task in on_ready_tasks:
+            threading.Thread(target=asyncio.run, args=(task(),)).start()
     except Exception as e:
         print(f"Error syncing commands: {e}")
 
