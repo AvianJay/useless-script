@@ -411,7 +411,7 @@ async def report_message(interaction: discord.Interaction, message: discord.Mess
 
 
 # 設定 slash command
-@bot.tree.command(name="設定", description="設定伺服器的檢舉系統配置")
+@bot.tree.command(name="設定-檢舉系統", description="設定伺服器的檢舉系統配置")
 @app_commands.describe(
     setting="要設定的項目",
     value="設定的值 (對於頻道，請使用 #頻道名稱 或頻道ID)"
@@ -550,7 +550,7 @@ async def setting_command(interaction: discord.Interaction, setting: str, value:
         else:
             await interaction.response.send_message("❌ 設定失敗，請稍後再試。", ephemeral=True)
 
-@bot.tree.command(name="檢舉黑名單", description="管理檢舉黑名單身分組")
+@bot.tree.command(name="設定-檢舉黑名單", description="管理檢舉黑名單身分組")
 @app_commands.describe(
     action="要執行的動作",
     role="身分組"
