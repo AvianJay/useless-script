@@ -168,42 +168,46 @@ class doModerationActions(discord.ui.View):
     # AI 建議的處置按鈕
     @discord.ui.button(label="執行 AI 建議處置", style=discord.ButtonStyle.danger, custom_id="ai_suggestion_button")
     async def ai_suggestion_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await interaction.response.send_message(f"已執行 AI 建議處置。", ephemeral=True)
-        for action in self.ai_suggestions:
-            # target_str = action.get("target")
-            target = self.user
-            if action.get("action") == "ban":
-                await interaction.guild.ban(target, reason=self.ai_reason)
-            elif action.get("action") == "kick":
-                await interaction.guild.kick(target, reason=self.ai_reason)
-            elif action.get("action") == "mute":
-                duration = action.get("duration", 0)
-                if duration > 0:
-                    await timeout_user(user_id=target.id, guild_id=interaction.guild.id, until=duration, reason=self.ai_reason)
-            elif action.get("action") == "blacklist_reporter" and target_str == "reporter":
-                # 封鎖檢舉人
-                if self.reporter:
-                    guild_id = interaction.guild.id
-                    report_blacklist = get_server_config(guild_id, "REPORT_BLACKLIST", [])
-                    for role_id in report_blacklist:
-                        role = interaction.guild.get_role(role_id)
-                        if role and role not in self.reporter.roles:
-                            await self.reporter.add_roles(role, reason=self.ai_reason)
-        # actions 按人分類
-        actions_by_target = {
-            "reported_user": [],
-            "reporter": []
-        }
-        for action in self.ai_suggestions:
-            target_str = action.get("target")
-            if target_str in actions_by_target:
-                actions_by_target[target_str].append(action)
-        for target_str, actions in actions_by_target.items():
-            if not actions:
-                continue
-            target_str = action.get("target")
-            target = self.user if target_str == "reported_user" else (self.interaction.guild.get_member(self.reporter.id) if self.reporter else None)
-            send_moderation_message(target, interaction.user, actions, self.ai_reason, self.message_content, is_ai=True)
+        try:
+            for action in self.ai_suggestions:
+                # target_str = action.get("target")
+                target = self.user
+                if action.get("action") == "ban":
+                    await interaction.guild.ban(target, reason=self.ai_reason)
+                elif action.get("action") == "kick":
+                    await interaction.guild.kick(target, reason=self.ai_reason)
+                elif action.get("action") == "mute":
+                    duration = action.get("duration", 0)
+                    if duration > 0:
+                        await timeout_user(user_id=target.id, guild_id=interaction.guild.id, until=duration, reason=self.ai_reason)
+                elif action.get("action") == "blacklist_reporter" and target_str == "reporter":
+                    # 封鎖檢舉人
+                    if self.reporter:
+                        guild_id = interaction.guild.id
+                        report_blacklist = get_server_config(guild_id, "REPORT_BLACKLIST", [])
+                        for role_id in report_blacklist:
+                            role = interaction.guild.get_role(role_id)
+                            if role and role not in self.reporter.roles:
+                                await self.reporter.add_roles(role, reason=self.ai_reason)
+            # actions 按人分類
+            actions_by_target = {
+                "reported_user": [],
+                "reporter": []
+            }
+            for action in self.ai_suggestions:
+                target_str = action.get("target")
+                if target_str in actions_by_target:
+                    actions_by_target[target_str].append(action)
+            for target_str, actions in actions_by_target.items():
+                if not actions:
+                    continue
+                target_str = action.get("target")
+                target = self.user if target_str == "reported_user" else (self.interaction.guild.get_member(self.reporter.id) if self.reporter else None)
+                send_moderation_message(target, interaction.user, actions, self.ai_reason, self.message_content, is_ai=True)
+            await interaction.response.send_message(f"已執行 AI 建議處置。", ephemeral=True)
+        except Exception as e:
+            print(f"Error occurred: {str(e)}")
+            await interaction.response.send_message(f"發生錯誤，請稍後再試。\n{str(e)}", ephemeral=True)
 
     @discord.ui.button(label="封鎖", style=discord.ButtonStyle.danger, custom_id="ban_button")
     async def ban_button(self, interaction: discord.Interaction, button: discord.ui.Button):
@@ -213,9 +217,12 @@ class doModerationActions(discord.ui.View):
             delete_messages = discord.ui.TextInput(label="刪除訊息小時數", placeholder="請輸入要刪除的訊息小時數 (0-168)", required=False, max_length=3, default="0")
 
             async def on_submit(self, modal_interaction: discord.Interaction):
-                await modal_interaction.response.send_message(f"已封鎖 {self.user.mention}", ephemeral=True)
-                await interaction.guild.ban(self.user, reason=self.reason.value or "違反規則", delete_message_seconds=int(self.delete_messages.value) * 3600 if self.delete_messages.value.isdigit() else 0)
-                send_moderation_message(self.user, interaction.user, [{"action": "ban"}], self.reason.value or "違反規則", message_content)
+                try:
+                    await interaction.guild.ban(self.user, reason=self.reason.value or "違反規則", delete_message_seconds=int(self.delete_messages.value) * 3600 if self.delete_messages.value.isdigit() else 0)
+                    send_moderation_message(self.user, interaction.user, [{"action": "ban"}], self.reason.value or "違反規則", message_content)
+                except Exception as e:
+                    print(f"Error occurred: {str(e)}")
+                    await modal_interaction.response.send_message(f"發生錯誤，請稍後再試。\n{str(e)}", ephemeral=True)
         await interaction.response.send_modal(BanReasonModal())
 
     @discord.ui.button(label="踢出", style=discord.ButtonStyle.primary, custom_id="kick_button")
@@ -225,9 +232,12 @@ class doModerationActions(discord.ui.View):
             reason = discord.ui.TextInput(label="踢出原因", placeholder="請輸入踢出原因", required=True, max_length=100)
 
             async def on_submit(self, modal_interaction: discord.Interaction):
-                await modal_interaction.response.send_message(f"已踢出 {self.user.mention}", ephemeral=True)
-                await interaction.guild.kick(self.user, reason=self.reason.value or "違反規則")
-                send_moderation_message(self.user, interaction.user, [{"action": "kick"}], self.reason.value or "違反規則", message_content)
+                try:
+                    await interaction.guild.kick(self.user, reason=self.reason.value or "違反規則")
+                    send_moderation_message(self.user, interaction.user, [{"action": "kick"}], self.reason.value or "違反規則", message_content)
+                except Exception as e:
+                    print(f"Error occurred: {str(e)}")
+                    await modal_interaction.response.send_message(f"發生錯誤，請稍後再試。\n{str(e)}", ephemeral=True)
         await interaction.response.send_modal(KickReasonModal())
 
     @discord.ui.button(label="禁言", style=discord.ButtonStyle.secondary, custom_id="mute_button")
