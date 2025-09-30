@@ -8,38 +8,30 @@ from discord.ext import commands
 import aiohttp
 import os
 import random
+from database import db
 
-config_version = 2
+# Global configuration for backward compatibility (mainly for TOKEN)
+config_version = 3
 config_path = 'config.json'
 
 default_config = {
     "config_version": config_version,
-    "REPORT_CHANNEL_ID": 123456789012345678,  # 檢舉紀錄頻道 ID
-    "MODERATION_MESSAGE_CHANNEL_ID": 123456789012345678,  # 管理員通知頻道 ID
     "TOKEN": "YOUR_BOT_TOKEN_HERE",  # 機器人 Token
-    "REPORTED_MESSAGE": "感謝您的檢舉，我們會盡快處理您的檢舉。",  # 用戶檢舉後的回覆訊息
-    "REPORT_BLACKLIST": [],  # 無法使用檢舉功能的角色 ID 陣列
-    "REPORT_RATE_LIMIT": 300,  # 用戶檢舉頻率限制，單位為秒
-    "REPORT_MESSAGE": "@Admin"  # 檢舉通知頻道的 @ 提醒 (可選)
 }
 _config = None
 
 try:
     if os.path.exists(config_path):
         _config = json.load(open(config_path, "r"))
-        # Todo: verify
         if not isinstance(_config, dict):
-            print("[!] Config file is not a valid JSON object, \
-                resetting to default config.")
+            print("[!] Config file is not a valid JSON object, resetting to default config.")
             _config = default_config.copy()
         for key in _config.keys():
-            if not isinstance(_config[key], type(default_config[key])):
-                print(f"[!] Config key '{key}' has an invalid type, \
-                      resetting to default value.")
+            if key in default_config and not isinstance(_config[key], type(default_config[key])):
+                print(f"[!] Config key '{key}' has an invalid type, resetting to default value.")
                 _config[key] = default_config[key]
         if "config_version" not in _config:
-            print("[!] Config file does not have 'config_version', \
-                resetting to default config.")
+            print("[!] Config file does not have 'config_version', resetting to default config.")
             _config = default_config.copy()
     else:
         _config = default_config.copy()
@@ -72,13 +64,17 @@ def config(key, value=None, mode="r"):
     else:
         raise ValueError(f"Invalid mode: {mode}")
 
-REPORT_CHANNEL_ID = config("REPORT_CHANNEL_ID")
-MODERATION_MESSAGE_CHANNEL_ID = config("MODERATION_MESSAGE_CHANNEL_ID")
+# Global config - only TOKEN is still global
 TOKEN = config("TOKEN")
-REPORTED_MESSAGE = config("REPORTED_MESSAGE")
-REPORT_BLACKLIST = config("REPORT_BLACKLIST")
-REPORT_RATE_LIMIT = config("REPORT_RATE_LIMIT")
-REPORT_MESSAGE = config("REPORT_MESSAGE")
+
+# Helper functions for per-server configuration
+def get_server_config(guild_id: int, key: str, default=None):
+    """Get server-specific configuration"""
+    return db.get_server_config(guild_id, key, default)
+
+def set_server_config(guild_id: int, key: str, value):
+    """Set server-specific configuration"""
+    return db.set_server_config(guild_id, key, value)
 last_report_times = {}  # 用戶 ID -> 上次檢舉時間
 reported_messages = []
 
@@ -140,7 +136,6 @@ async def check_message_with_ai(text: str, history_messages: str="", reason: str
         "action": "ban" | "kick" | "mute", (請盡量使用 mute，極端的情況下才使用 ban)
         "duration": 若禁言，請提供禁言時間，格式如秒數，若非封鎖則為 0 (只能為秒數),
       }},
-      ... (可建議多個動作)
   ]
 }}
 """
@@ -198,9 +193,14 @@ def send_moderation_message(user: discord.Member, moderator: discord.Member, act
 """
     if is_ai:
         text += "\n-# 此處分由 AI 建議的處分"
-    mod_channel = bot.get_channel(MODERATION_MESSAGE_CHANNEL_ID)
-    if mod_channel:
-        asyncio.create_task(mod_channel.send(text))
+    
+    # Get server-specific moderation channel
+    guild_id = user.guild.id
+    moderation_channel_id = get_server_config(guild_id, "MODERATION_MESSAGE_CHANNEL_ID")
+    if moderation_channel_id:
+        mod_channel = bot.get_channel(moderation_channel_id)
+        if mod_channel:
+            asyncio.create_task(mod_channel.send(text))
 
 
 async def timeout_user(*, user_id: int, guild_id: int, until, reason: str="") -> bool:
@@ -249,7 +249,9 @@ class doModerationActions(discord.ui.View):
             elif action.get("action") == "blacklist_reporter" and target_str == "reporter":
                 # 封鎖檢舉人
                 if self.reporter:
-                    for role_id in REPORT_BLACKLIST:
+                    guild_id = interaction.guild.id
+                    report_blacklist = get_server_config(guild_id, "REPORT_BLACKLIST", [])
+                    for role_id in report_blacklist:
                         role = interaction.guild.get_role(role_id)
                         if role and role not in self.reporter.roles:
                             await self.reporter.add_roles(role, reason=self.ai_reason)
@@ -340,7 +342,9 @@ class doModerationActions(discord.ui.View):
                 if not member:
                     await modal_interaction.response.send_message("找不到檢舉人，無法執行此操作。", ephemeral=True)
                     return
-                for role_id in REPORT_BLACKLIST:
+                guild_id = interaction.guild.id
+                report_blacklist = get_server_config(guild_id, "REPORT_BLACKLIST", [])
+                for role_id in report_blacklist:
                     role = interaction.guild.get_role(role_id)
                     if role and role not in member.roles:
                         await member.add_roles(role, reason=reason or "惡意檢舉")
@@ -353,9 +357,17 @@ class doModerationActions(discord.ui.View):
 async def report_message(interaction: discord.Interaction, message: discord.Message):
     global last_report_times
     global reported_messages
+    
+    guild_id = interaction.guild.id
+    
+    # Get server-specific configuration
+    report_blacklist = get_server_config(guild_id, "REPORT_BLACKLIST", [])
+    report_rate_limit = get_server_config(guild_id, "REPORT_RATE_LIMIT", 300)
+    reported_message = get_server_config(guild_id, "REPORTED_MESSAGE", "感謝您的檢舉，我們會盡快處理您的檢舉。")
+    
     # check if the user's role is in the blacklist
     for role in interaction.user.roles:
-        if role.id in REPORT_BLACKLIST:
+        if role.id in report_blacklist:
             await interaction.response.send_message("您無法檢舉此訊息。", ephemeral=True)
             return
     
@@ -364,8 +376,8 @@ async def report_message(interaction: discord.Interaction, message: discord.Mess
     if not (interaction.user.guild_permissions.administrator):
         now = datetime.utcnow()
         last_report_time = last_report_times.get(interaction.user.id)
-        if last_report_time and (now - last_report_time).total_seconds() < REPORT_RATE_LIMIT:
-            can_report_time = last_report_time + timedelta(seconds=REPORT_RATE_LIMIT)
+        if last_report_time and (now - last_report_time).total_seconds() < report_rate_limit:
+            can_report_time = last_report_time + timedelta(seconds=report_rate_limit)
             await interaction.response.send_message(f"您檢舉的頻率過快，請在 {can_report_time.strftime('%Y-%m-%d %H:%M:%S')} 後再試。", ephemeral=True)
             return
         
@@ -387,8 +399,14 @@ async def report_message(interaction: discord.Interaction, message: discord.Mess
             reported_messages = reported_messages[-100:]
             print("[!] 清理舊的檢舉訊息ID")
         print(f"[+] {interaction.user} 檢舉訊息 {message.id}，原因：{reason}")
+        
+        # Get server-specific configuration
+        guild_id = interaction.guild.id
+        report_channel_id = get_server_config(guild_id, "REPORT_CHANNEL_ID")
+        report_message_mention = get_server_config(guild_id, "REPORT_MESSAGE", "@Admin")
+        
         # 發送到檢舉紀錄頻道
-        report_channel = bot.get_channel(REPORT_CHANNEL_ID)
+        report_channel = bot.get_channel(report_channel_id) if report_channel_id else None
         if report_channel:
             embed = discord.Embed(
                 title="📣 新檢舉紀錄",
@@ -404,7 +422,7 @@ async def report_message(interaction: discord.Interaction, message: discord.Mess
                 attachment_urls = "\n".join([att.url for att in message.attachments])
                 embed.add_field(name="附件", value=attachment_urls, inline=False)
 
-            sent_msg = await report_channel.send(REPORT_MESSAGE, embed=embed, view=doModerationActions(message.author, interaction, [], message=message, reporter=interaction.user))
+            sent_msg = await report_channel.send(report_message_mention, embed=embed, view=doModerationActions(message.author, interaction, [], message=message, reporter=interaction.user))
 
             # 呼叫 AI 判斷訊息是否正當
             try:
@@ -434,20 +452,227 @@ async def report_message(interaction: discord.Interaction, message: discord.Mess
 
                 # 更新嵌入訊息
                 embed.set_field_at(4, name="AI 判斷", value=verdict_text, inline=False)
-                await sent_msg.edit(content=REPORT_MESSAGE, embed=embed, view=doModerationActions(message.author, interaction, actions, message=message, ai_reason=verdict.get('reason', ''), reporter=interaction.user))
+                await sent_msg.edit(content=report_message_mention, embed=embed, view=doModerationActions(message.author, interaction, actions, message=message, ai_reason=verdict.get('reason', ''), reporter=interaction.user))
             except Exception as e:
                 embed.set_field_at(4, name="AI 判斷", value=f"錯誤：\n{str(e)}", inline=False)
-                await sent_msg.edit(content=REPORT_MESSAGE, embed=embed, view=doModerationActions(message.author, interaction, [], message=message, reporter=interaction.user))
+                await sent_msg.edit(content=report_message_mention, embed=embed, view=doModerationActions(message.author, interaction, [], message=message, reporter=interaction.user))
                 return
+        else:
+            await interaction.followup.send("檢舉頻道未設定，請管理員使用 `/設定` 指令進行設定。", ephemeral=True)
+            
     class ReasonModal(discord.ui.Modal, title="檢舉原因"):
         reason = discord.ui.TextInput(label="檢舉原因", placeholder="請輸入檢舉原因", required=True, max_length=100)
 
         async def on_submit(self, modal_interaction: discord.Interaction):
-            await modal_interaction.response.send_message(REPORTED_MESSAGE, ephemeral=True)
+            await modal_interaction.response.send_message(reported_message, ephemeral=True)
             await handle_report(modal_interaction, message, self.reason.value)
 
     await interaction.response.send_modal(ReasonModal())
     return
+
+
+# 設定 slash command
+@bot.tree.command(name="設定", description="設定伺服器的檢舉系統配置")
+@app_commands.describe(
+    setting="要設定的項目",
+    value="設定的值 (對於頻道，請使用 #頻道名稱 或頻道ID)"
+)
+@app_commands.choices(setting=[
+    app_commands.Choice(name="檢舉紀錄頻道", value="REPORT_CHANNEL_ID"),
+    app_commands.Choice(name="管理員通知頻道", value="MODERATION_MESSAGE_CHANNEL_ID"),
+    app_commands.Choice(name="檢舉回覆訊息", value="REPORTED_MESSAGE"),
+    app_commands.Choice(name="檢舉頻率限制(秒)", value="REPORT_RATE_LIMIT"),
+    app_commands.Choice(name="檢舉通知訊息", value="REPORT_MESSAGE"),
+])
+async def setting_command(interaction: discord.Interaction, setting: str, value: str = None):
+    # Check if user has administrator permissions
+    if not interaction.user.guild_permissions.administrator:
+        await interaction.response.send_message("❌ 您需要管理員權限才能使用此指令。", ephemeral=True)
+        return
+
+    guild_id = interaction.guild.id
+    
+    # If no value provided, show current configuration
+    if value is None:
+        config = db.get_all_server_config(guild_id)
+        embed = discord.Embed(title="🔧 伺服器檢舉系統設定", color=discord.Color.blue())
+        
+        # Display current settings
+        report_channel = bot.get_channel(config.get("REPORT_CHANNEL_ID")) if config.get("REPORT_CHANNEL_ID") else None
+        mod_channel = bot.get_channel(config.get("MODERATION_MESSAGE_CHANNEL_ID")) if config.get("MODERATION_MESSAGE_CHANNEL_ID") else None
+        
+        embed.add_field(
+            name="檢舉紀錄頻道", 
+            value=report_channel.mention if report_channel else "❌ 未設定", 
+            inline=False
+        )
+        embed.add_field(
+            name="管理員通知頻道", 
+            value=mod_channel.mention if mod_channel else "❌ 未設定", 
+            inline=False
+        )
+        embed.add_field(
+            name="檢舉回覆訊息", 
+            value=config.get("REPORTED_MESSAGE", "感謝您的檢舉，我們會盡快處理您的檢舉。"), 
+            inline=False
+        )
+        embed.add_field(
+            name="檢舉頻率限制", 
+            value=f"{config.get('REPORT_RATE_LIMIT', 300)} 秒", 
+            inline=False
+        )
+        embed.add_field(
+            name="檢舉通知訊息", 
+            value=config.get("REPORT_MESSAGE", "@Admin"), 
+            inline=False
+        )
+        
+        blacklist_roles = config.get("REPORT_BLACKLIST", [])
+        if blacklist_roles:
+            role_mentions = []
+            for role_id in blacklist_roles:
+                role = interaction.guild.get_role(role_id)
+                if role:
+                    role_mentions.append(role.mention)
+            embed.add_field(
+                name="檢舉黑名單身分組", 
+                value=", ".join(role_mentions) if role_mentions else "無", 
+                inline=False
+            )
+        
+        embed.set_footer(text="使用 /設定 [項目] [值] 來修改設定")
+        await interaction.response.send_message(embed=embed, ephemeral=True)
+        return
+    
+    # Handle different setting types
+    if setting in ["REPORT_CHANNEL_ID", "MODERATION_MESSAGE_CHANNEL_ID"]:
+        # Handle channel settings
+        channel = None
+        
+        # Try to parse channel mention or ID
+        if value.startswith("<#") and value.endswith(">"):
+            channel_id = int(value[2:-1])
+            channel = interaction.guild.get_channel(channel_id)
+        else:
+            try:
+                channel_id = int(value)
+                channel = interaction.guild.get_channel(channel_id)
+            except ValueError:
+                # Try to find channel by name
+                channel = discord.utils.get(interaction.guild.channels, name=value.lstrip("#"))
+        
+        if not channel:
+            await interaction.response.send_message(f"❌ 找不到頻道：{value}", ephemeral=True)
+            return
+        
+        if not isinstance(channel, discord.TextChannel):
+            await interaction.response.send_message("❌ 只能設定文字頻道。", ephemeral=True)
+            return
+        
+        # Check bot permissions
+        permissions = channel.permissions_for(interaction.guild.me)
+        if not (permissions.send_messages and permissions.view_channel):
+            await interaction.response.send_message(f"❌ 機器人在 {channel.mention} 沒有發送訊息的權限。", ephemeral=True)
+            return
+        
+        success = set_server_config(guild_id, setting, channel.id)
+        if success:
+            setting_name = "檢舉紀錄頻道" if setting == "REPORT_CHANNEL_ID" else "管理員通知頻道"
+            await interaction.response.send_message(f"✅ {setting_name} 已設定為 {channel.mention}", ephemeral=True)
+        else:
+            await interaction.response.send_message("❌ 設定失敗，請稍後再試。", ephemeral=True)
+    
+    elif setting == "REPORT_RATE_LIMIT":
+        # Handle rate limit setting
+        try:
+            rate_limit = int(value)
+            if rate_limit < 0:
+                await interaction.response.send_message("❌ 頻率限制不能為負數。", ephemeral=True)
+                return
+            
+            success = set_server_config(guild_id, setting, rate_limit)
+            if success:
+                await interaction.response.send_message(f"✅ 檢舉頻率限制已設定為 {rate_limit} 秒", ephemeral=True)
+            else:
+                await interaction.response.send_message("❌ 設定失敗，請稍後再試。", ephemeral=True)
+        except ValueError:
+            await interaction.response.send_message("❌ 請輸入有效的數字。", ephemeral=True)
+    
+    elif setting in ["REPORTED_MESSAGE", "REPORT_MESSAGE"]:
+        # Handle text settings
+        if len(value) > 500:
+            await interaction.response.send_message("❌ 訊息內容過長（最多500字元）。", ephemeral=True)
+            return
+        
+        success = set_server_config(guild_id, setting, value)
+        if success:
+            setting_name = "檢舉回覆訊息" if setting == "REPORTED_MESSAGE" else "檢舉通知訊息"
+            await interaction.response.send_message(f"✅ {setting_name} 已更新", ephemeral=True)
+        else:
+            await interaction.response.send_message("❌ 設定失敗，請稍後再試。", ephemeral=True)
+
+@bot.tree.command(name="檢舉黑名單", description="管理檢舉黑名單身分組")
+@app_commands.describe(
+    action="要執行的動作",
+    role="身分組"
+)
+@app_commands.choices(action=[
+    app_commands.Choice(name="新增", value="add"),
+    app_commands.Choice(name="移除", value="remove"),
+    app_commands.Choice(name="查看", value="view"),
+])
+async def blacklist_command(interaction: discord.Interaction, action: str, role: discord.Role = None):
+    # Check if user has administrator permissions
+    if not interaction.user.guild_permissions.administrator:
+        await interaction.response.send_message("❌ 您需要管理員權限才能使用此指令。", ephemeral=True)
+        return
+
+    guild_id = interaction.guild.id
+    current_blacklist = get_server_config(guild_id, "REPORT_BLACKLIST", [])
+    
+    if action == "view":
+        if not current_blacklist:
+            await interaction.response.send_message("📋 檢舉黑名單為空。", ephemeral=True)
+            return
+        
+        role_mentions = []
+        for role_id in current_blacklist:
+            role_obj = interaction.guild.get_role(role_id)
+            if role_obj:
+                role_mentions.append(role_obj.mention)
+        
+        embed = discord.Embed(title="📋 檢舉黑名單身分組", color=discord.Color.orange())
+        embed.add_field(name="被禁止檢舉的身分組", value=", ".join(role_mentions) if role_mentions else "無", inline=False)
+        await interaction.response.send_message(embed=embed, ephemeral=True)
+        return
+    
+    if not role:
+        await interaction.response.send_message("❌ 請指定一個身分組。", ephemeral=True)
+        return
+    
+    if action == "add":
+        if role.id in current_blacklist:
+            await interaction.response.send_message(f"❌ {role.mention} 已經在檢舉黑名單中。", ephemeral=True)
+            return
+        
+        current_blacklist.append(role.id)
+        success = set_server_config(guild_id, "REPORT_BLACKLIST", current_blacklist)
+        if success:
+            await interaction.response.send_message(f"✅ 已將 {role.mention} 加入檢舉黑名單。", ephemeral=True)
+        else:
+            await interaction.response.send_message("❌ 設定失敗，請稍後再試。", ephemeral=True)
+    
+    elif action == "remove":
+        if role.id not in current_blacklist:
+            await interaction.response.send_message(f"❌ {role.mention} 不在檢舉黑名單中。", ephemeral=True)
+            return
+        
+        current_blacklist.remove(role.id)
+        success = set_server_config(guild_id, "REPORT_BLACKLIST", current_blacklist)
+        if success:
+            await interaction.response.send_message(f"✅ 已將 {role.mention} 從檢舉黑名單移除。", ephemeral=True)
+        else:
+            await interaction.response.send_message("❌ 設定失敗，請稍後再試。", ephemeral=True)
 
 
 # dsize.py
