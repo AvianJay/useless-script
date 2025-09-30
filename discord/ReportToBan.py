@@ -411,7 +411,7 @@ async def report_message(interaction: discord.Interaction, message: discord.Mess
 
 
 # 設定 slash command
-@bot.tree.command(name="設定 檢舉系統", description="設定伺服器的檢舉系統配置")
+@bot.tree.command(name="設定", description="設定伺服器的檢舉系統配置")
 @app_commands.describe(
     setting="要設定的項目",
     value="設定的值 (對於頻道，請使用 #頻道名稱 或頻道ID)"
