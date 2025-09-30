@@ -1,7 +1,7 @@
 # Doomcord
 # uses PortalRunner's Doomcord (https://doom.p2r3.com/)
 import discord
-from globalenv import bot, start_bot
+from globalenv import bot, start_bot, get_user_data, set_user_data
 
 
 def generate_doom_embed(link="https://doom.p2r3.com/i.webp", step=None):
@@ -39,6 +39,33 @@ async def doom_command(interaction: discord.Interaction):
             embed, link = generate_doom_embed(link=link, step=self.step)
             # edit the original message with the new embed (keep the same view)
             await interaction.response.edit_message(embed=embed, view=self.view)
+    
+    class SaveButton(discord.ui.Button):
+        def __init__(self):
+            super().__init__(label=None, style=discord.ButtonStyle.primary, row=0, emoji="💾")
+
+        async def callback(self, interaction: discord.Interaction):
+            user_id = str(interaction.user.id)
+            guild_id = None
+            set_user_data(guild_id, user_id, "doom_link", link)
+            await interaction.response.send_message("存檔成功！", ephemeral=True)
+    
+    class LoadButton(discord.ui.Button):
+        def __init__(self):
+            super().__init__(label=None, style=discord.ButtonStyle.primary, row=1, emoji="📂")
+
+        async def callback(self, interaction: discord.Interaction):
+            user_id = str(interaction.user.id)
+            guild_id = None
+            saved_link = get_user_data(guild_id, user_id, "doom_link")
+            if not saved_link:
+                await interaction.response.send_message("錯誤：沒有存檔。", ephemeral=True)
+                return
+            nonlocal link
+            link = saved_link
+            embed, link = generate_doom_embed(link=link)
+            await interaction.response.edit_message(embed=embed, view=self.view)
+            await interaction.followup.send("讀檔成功！", ephemeral=True)
 
     # initial embed (if a step was provided when running the command)
     embed, link = generate_doom_embed()
@@ -56,6 +83,8 @@ async def doom_command(interaction: discord.Interaction):
     for i, s in enumerate(["q", "w", "e", "a", "s", "d"]):
         row = 0 if i < 3 else 1  # put a, s, d on the second row (row index 1)
         view.add_item(StepButton(step=s, emoji=emoji_map.get(s), row=row))
+    view.add_item(SaveButton())
+    view.add_item(LoadButton())
 
     await interaction.response.send_message(embed=embed, view=view)
     
