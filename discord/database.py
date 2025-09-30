@@ -167,6 +167,47 @@ class Database:
         except Exception as e:
             print(f"Error setting global config: {e}")
             return False
+    
+    def get_user_data(self, user_id: int, guild_id: Optional[int], key: str, default: Any = None) -> Any:
+        """Get user-specific data, optionally scoped to a guild"""
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                'SELECT data_value FROM user_data WHERE user_id = ? AND guild_id IS ? AND data_key = ?',
+                (user_id, guild_id, key)
+            )
+            result = cursor.fetchone()
+            
+            if result:
+                try:
+                    return json.loads(result[0])
+                except (json.JSONDecodeError, TypeError):
+                    return result[0]
+            
+            return default
+    
+    def set_user_data(self, user_id: int, guild_id: Optional[int], key: str, value: Any) -> bool:
+        """Set user-specific data, optionally scoped to a guild"""
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                cursor = conn.cursor()
+                
+                # Convert value to JSON if it's a complex type
+                if isinstance(value, (dict, list)):
+                    json_value = json.dumps(value)
+                else:
+                    json_value = str(value)
+                
+                cursor.execute('''
+                    INSERT OR REPLACE INTO user_data (user_id, guild_id, data_key, data_value)
+                    VALUES (?, ?, ?, ?)
+                ''', (user_id, guild_id, key, json_value))
+                
+                conn.commit()
+                return True
+        except Exception as e:
+            print(f"Error setting user data: {e}")
+            return False
 
 # Global database instance
 db = Database()
