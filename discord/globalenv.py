@@ -75,6 +75,19 @@ def set_server_config(guild_id: int, key: str, value):
     """Set server-specific configuration"""
     return db.set_server_config(guild_id, key, value)
 
+# User data functions
+def get_user_data(guild_id: int, user_id: int, key: str, default=None):
+    """Get user-specific data in a server"""
+    return db.get_user_data(user_id, guild_id, key, default)
+
+def set_user_data(guild_id: int, user_id: int, key: str, value):
+    """Set user-specific data in a server"""
+    return db.set_user_data(user_id, guild_id, key, value)
+
+def get_all_user_data(guild_id: int, key: str):
+    """Get all user-specific data for a specific key in a server"""
+    return db.get_all_user_data(guild_id, key)
+
 
 @bot.event
 async def on_ready():

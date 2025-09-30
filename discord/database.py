@@ -208,6 +208,35 @@ class Database:
         except Exception as e:
             print(f"Error setting user data: {e}")
             return False
+    
+    def get_all_user_data(self, guild_id: Optional[int] = None, key: Optional[str] = None) -> Dict[int, Dict[str, Any]]:
+        """Get all user data, optionally filtered by guild and/or key"""
+        data = {}
+        
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.cursor()
+            query = 'SELECT user_id, data_key, data_value FROM user_data WHERE 1=1'
+            params = []
+            
+            if guild_id is not None:
+                query += ' AND guild_id IS ?'
+                params.append(guild_id)
+            if key is not None:
+                query += ' AND data_key = ?'
+                params.append(key)
+            
+            cursor.execute(query, params)
+            results = cursor.fetchall()
+            
+            for user_id, data_key, data_value in results:
+                if user_id not in data:
+                    data[user_id] = {}
+                try:
+                    data[user_id][data_key] = json.loads(data_value)
+                except (json.JSONDecodeError, TypeError):
+                    data[user_id][data_key] = data_value
+        
+        return data
 
 # Global database instance
 db = Database()
