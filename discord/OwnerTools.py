@@ -1,5 +1,6 @@
+import json
 import discord
-from globalenv import bot, start_bot, get_user_data, set_user_data, config, get_server_config, set_server_config, _config
+from globalenv import bot, start_bot, get_user_data, set_user_data, config, get_server_config, set_server_config, _config, default_config
 from discord.ext import commands
 from typing import Callable
 
@@ -16,8 +17,39 @@ async def settings(ctx, key: str=None, value: str=None):
     elif value is None:
         await ctx.send(f"{key}: {config(key, '未設定')}")
     elif key in config().keys():
+        # check original type
+        original_type = type(default_config.get(key))
+        try:
+            if original_type is bool:
+                if value.lower() in ['true', '1', 'yes', 'on']:
+                    value = True
+                elif value.lower() in ['false', '0', 'no', 'off']:
+                    value = False
+                else:
+                    await ctx.send(f"無法將 {value} 轉換為布林值。請使用 true/false。")
+                    return
+            elif original_type is int:
+                value = int(value)
+            elif original_type is float:
+                value = float(value)
+            elif original_type is list:
+                try:
+                    value = json.loads(value)
+                except json.JSONDecodeError:  # fallback to comma split
+                    value = [v.strip() for v in value.split(',')]
+            elif original_type is dict:
+                try:
+                    value = json.loads(value)
+                except json.JSONDecodeError:
+                    await ctx.send(f"無法將 {value} 轉換為字典：請使用有效的 JSON 格式。")
+                    return
+            else:
+                value = original_type(value)
+        except Exception as e:
+            await ctx.send(f"無法將 {value} 轉換為 {original_type.__name__}：{e}")
+            return
         config(key, value, mode="w")
-        await ctx.send(f"已更新 {key} 為 {value}。")
+        await ctx.send(f"已更新 {key} 為 {str(value)}。")
 
 
 @bot.command()
