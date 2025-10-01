@@ -1,6 +1,7 @@
 # Doomcord
 # uses PortalRunner's Doomcord (https://doom.p2r3.com/)
 import discord
+from discord import app_commands
 from globalenv import bot, start_bot, get_user_data, set_user_data
 
 
@@ -24,6 +25,8 @@ async def update_doom(interaction: discord.Interaction, step: str, link="https:/
 
 
 @bot.tree.command(name="doom", description="開始玩 DOOM")
+@app_commands.allowed_installs(guilds=True, users=True)
+@app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
 async def doom_command(interaction: discord.Interaction):
     link = "https://doom.p2r3.com/i.webp"
     user = interaction.user
