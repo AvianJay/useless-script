@@ -293,6 +293,8 @@ class doModerationActions(discord.ui.View):
 
 
 @bot.tree.context_menu(name="檢舉訊息")
+@app_commands.allowed_installs(guilds=True, users=False)
+@app_commands.allowed_contexts(guilds=True, dms=False, private_channels=False)
 async def report_message(interaction: discord.Interaction, message: discord.Message):
     global last_report_times
     global reported_messages
@@ -423,6 +425,8 @@ async def report_message(interaction: discord.Interaction, message: discord.Mess
     app_commands.Choice(name="檢舉頻率限制(秒)", value="REPORT_RATE_LIMIT"),
     app_commands.Choice(name="檢舉通知訊息", value="REPORT_MESSAGE"),
 ])
+@app_commands.allowed_installs(guilds=True, users=False)
+@app_commands.allowed_contexts(guilds=True, dms=False, private_channels=False)
 async def setting_command(interaction: discord.Interaction, setting: str, value: str = None):
     # Check if user has administrator permissions
     if not interaction.user.guild_permissions.administrator:
@@ -560,6 +564,8 @@ async def setting_command(interaction: discord.Interaction, setting: str, value:
     app_commands.Choice(name="移除", value="remove"),
     app_commands.Choice(name="查看", value="view"),
 ])
+@app_commands.allowed_installs(guilds=True, users=False)
+@app_commands.allowed_contexts(guilds=True, dms=False, private_channels=False)
 async def blacklist_command(interaction: discord.Interaction, action: str, role: discord.Role = None):
     # Check if user has administrator permissions
     if not interaction.user.guild_permissions.administrator:
