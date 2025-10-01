@@ -70,6 +70,9 @@ async def dsize_leaderboard(interaction: discord.Interaction, limit: int = 10, g
     else:
         guild_id = interaction.guild.id if interaction.guild else None  # None for global
     leaderboard = []
+    if limit < 1 or limit > 50:
+        await interaction.response.send_message("限制必須在 1 到 50 之間。", ephemeral=True)
+        return
 
     all_data = get_all_user_data(guild_id, "last_dsize_size")
     for user_id, data in all_data.items():
@@ -100,7 +103,10 @@ async def dsize_leaderboard(interaction: discord.Interaction, limit: int = 10, g
     # 建立排行榜訊息
     description = ""
     for rank, (user_id, size) in enumerate(top_users, start=1):
-        user = interaction.guild.get_member(user_id)
+        if global_leaderboard:
+            user = await bot.fetch_user(user_id)
+        else:
+            user = interaction.guild.get_member(user_id) if interaction.guild else await bot.fetch_user(user_id)
         if user:
             description += f"**{rank}. {user.name}** - {size} cm\n"
         else:
@@ -116,6 +122,8 @@ async def dsize_leaderboard(interaction: discord.Interaction, limit: int = 10, g
 
 
 @bot.tree.command(name="dsize-對決", description="比屌長(需要雙方今天沒有量過)")
+@app_commands.allowed_installs(guilds=True, users=False)
+@app_commands.allowed_contexts(guilds=True, dms=False, private_channels=False)
 @app_commands.describe(opponent="要比屌長的對象")
 async def dsize_battle(interaction: discord.Interaction, opponent: discord.Member):
     original_user = interaction.user
