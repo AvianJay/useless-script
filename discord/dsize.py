@@ -8,10 +8,22 @@ from globalenv import bot, start_bot, get_user_data, set_user_data, get_all_user
 
 
 @bot.tree.command(name="dsize", description="量屌長")
-async def dsize(interaction: discord.Interaction):
+@app_commands.describe(global_dsize="是否使用全域紀錄 (預設否)")
+@app_commands.allowed_installs(guilds=True, users=True)
+@app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
+async def dsize(interaction: discord.Interaction, global_dsize: bool = False):
     user_id = interaction.user.id
+    # Use timezone-aware UTC and convert to Taiwan time (UTC+8)
+    # ew broken
     now = (datetime.utcnow() + timedelta(hours=8)).date()  # 台灣時間
-    last = get_user_data(interaction.guild.id, user_id, "last_dsize")
+
+    # If invoked in DM (user-installed command), use None as the guild_key.
+    # Otherwise use the guild id to keep per-server records.
+    guild_key = interaction.guild.id if interaction.guild else None
+    if global_dsize:
+        guild_key = None  # override to global
+
+    last = get_user_data(guild_key, user_id, "last_dsize")
     if last is not None and not isinstance(last, datetime):
         # If last is a string (e.g., from JSON), convert to date
         try:
@@ -26,10 +38,11 @@ async def dsize(interaction: discord.Interaction):
     # 檢查是否已經使用過指令，並且是否已超過一天
     if now == last:
         # calculate time left
-        # Convert last (date) to datetime at midnight in Taiwan timezone
         next_day = datetime.combine(last + timedelta(days=1), datetime.min.time()).replace(tzinfo=timezone(timedelta(hours=8)))
         timestamp_next = next_day.astimezone(timezone.utc)  # Convert to UTC for Discord timestamp
-        await interaction.response.send_message(f"一天只能量一次屌長。<t:{int(timestamp_next.timestamp())}:R> 才能再次使用。", ephemeral=True)
+        # ephemeral only works in guild interactions; for DMs just send a normal message
+        ephemeral_flag = True if interaction.guild else False
+        await interaction.response.send_message(f"一天只能量一次屌長。<t:{int(timestamp_next.timestamp())}:R> 才能再次使用。", ephemeral=ephemeral_flag)
         return
 
     # 隨機產生長度 (2-30)
@@ -42,14 +55,20 @@ async def dsize(interaction: discord.Interaction):
 
     await interaction.response.send_message(embed=embed)
 
-    # 更新使用時間
-    set_user_data(interaction.guild.id, user_id, "last_dsize", now)
-    set_user_data(interaction.guild.id, user_id, "last_dsize_size", size)
+    # 更新使用時間 — 存到對應的 guild_key（若為 user-install 則是 None）
+    set_user_data(guild_key, user_id, "last_dsize", now)
+    set_user_data(guild_key, user_id, "last_dsize_size", size)
 
 
 @bot.tree.command(name="dsize-排行榜", description="查看屌長排行榜")
-async def dsize_leaderboard(interaction: discord.Interaction):
-    guild_id = interaction.guild.id
+@app_commands.describe(limit="顯示前幾名 (預設10)", global_leaderboard="顯示全域排行榜 (預設否)")
+@app_commands.allowed_installs(guilds=True, users=True)
+@app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
+async def dsize_leaderboard(interaction: discord.Interaction, limit: int = 10, global_leaderboard: bool = False):
+    if global_leaderboard:
+        guild_id = None  # global
+    else:
+        guild_id = interaction.guild.id if interaction.guild else None  # None for global
     leaderboard = []
 
     all_data = get_all_user_data(guild_id, "last_dsize_size")
@@ -74,13 +93,13 @@ async def dsize_leaderboard(interaction: discord.Interaction):
         await interaction.response.send_message("今天還沒有任何人量過屌長。", ephemeral=True)
         return
 
-    # 按照大小排序並取前10名
+    # 按照大小排序並取前limit名
     leaderboard.sort(key=lambda x: x[1], reverse=True)
-    top10 = leaderboard[:10]
+    top_users = leaderboard[:limit]
 
     # 建立排行榜訊息
     description = ""
-    for rank, (user_id, size) in enumerate(top10, start=1):
+    for rank, (user_id, size) in enumerate(top_users, start=1):
         user = interaction.guild.get_member(user_id)
         if user:
             description += f"**{rank}. {user.name}** - {size} cm\n"
@@ -89,7 +108,10 @@ async def dsize_leaderboard(interaction: discord.Interaction):
 
     embed = discord.Embed(title="今天的長度排行榜", description=description, color=0x00ff00)
     # server info
-    embed.set_footer(text=interaction.guild.name, icon_url=interaction.guild.icon.url if interaction.guild.icon else None)
+    if interaction.guild and not global_leaderboard:
+        embed.set_footer(text=interaction.guild.name, icon_url=interaction.guild.icon.url if interaction.guild.icon else None)
+    else:
+        embed.set_footer(text="全域排行榜")
     await interaction.response.send_message(embed=embed)
 
 
