@@ -176,7 +176,25 @@ async def on_guild_join(guild):
         owner = bot.get_user(owner_id)
         if owner:
             try:
-                await owner.send(f"已加入新伺服器：{guild.name} (ID: `{guild.id}`)")
+                # build embed with server icon and member count
+                embed = discord.Embed(
+                    title="已加入新伺服器",
+                    description=f"{guild.name} (ID: `{guild.id}`)",
+                    color=discord.Color.blurple()
+                )
+                embed.add_field(name="成員數", value=str(getattr(guild, "member_count", "未知")), inline=True)
+
+                # try to get icon URL (works for discord.py v1.x and v2.x)
+                icon_url = None
+                if getattr(guild, "icon", None):
+                    try:
+                        icon_url = guild.icon.url  # v2.x
+                    except Exception:
+                        icon_url = getattr(guild, "icon_url", None)  # v1.x fallback
+                if icon_url:
+                    embed.set_thumbnail(url=icon_url)
+
+                await owner.send(embed=embed)
             except discord.Forbidden:
                 print(f"無法私訊擁有者 {owner_id}")
                 
@@ -189,7 +207,20 @@ async def on_guild_remove(guild):
         owner = bot.get_user(owner_id)
         if owner:
             try:
-                await owner.send(f"已離開伺服器：{guild.name} (ID: `{guild.id}`)")
+                embed = discord.Embed(
+                    title="已離開伺服器",
+                    description=f"{guild.name} (ID: `{guild.id}`)",
+                    color=discord.Color.red()
+                )
+                icon_url = None
+                if getattr(guild, "icon", None):
+                    try:
+                        icon_url = guild.icon.url  # v2.x
+                    except Exception:
+                        icon_url = getattr(guild, "icon_url", None)  # v1.x fallback
+                if icon_url:
+                    embed.set_thumbnail(url=icon_url)
+                await owner.send(embed=embed)
             except discord.Forbidden:
                 print(f"無法私訊擁有者 {owner_id}")
 
