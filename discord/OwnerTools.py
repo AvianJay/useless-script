@@ -152,6 +152,22 @@ async def listservers(ctx):
     await ctx.send(f"機器人目前加入的伺服器：\n{description}")
 
 
+@bot.command()
+@is_owner()
+async def sendmessage(ctx, channel_id: int, *, message: str):
+    channel = bot.get_channel(channel_id)
+    if channel is None:
+        await ctx.send("找不到該頻道。")
+        return
+    try:
+        await channel.send(message)
+        await ctx.send(f"已在頻道 {channel.name} 發送訊息。")
+    except discord.Forbidden:
+        await ctx.send("無法在該頻道發送訊息，機器人缺少權限。")
+    except Exception as e:
+        await ctx.send(f"發送訊息時發生錯誤：{e}")
+
+
 @bot.event
 async def on_guild_join(guild):
     print(f"Joined guild: {guild.name} (ID: {guild.id})")
