@@ -9,21 +9,26 @@ import aiohttp
 import os
 import random
 from database import db
-from globalenv import bot, start_bot
+from globalenv import bot, start_bot, config
+
+modules = [
+    "ReportToBan",
+    "ModerationNotify",
+    "dsize",
+    "doomcord",
+    "PresenceChange",
+    "OwnerTools"
+]
+
+for mod in config("disabled_modules", []):
+    if mod in modules:
+        print(f"[!] Module {mod} is disabled in config.")
+        modules.remove(mod)
 
 # Import all modules to register their events and commands
-import ReportToBan
-print("Imported ReportToBan")
-import ModerationNotify
-print("Imported ModerationNotify")
-import dsize
-print("Imported dsize")
-import doomcord
-print("Imported doomcord")
-import PresenceChange
-print("Imported PresenceChange")
-import OwnerTools
-print("Imported OwnerTools")
+for module in modules:
+    __import__(module)
+    print(f"[+] Module {module} loaded.")
 
 if __name__ == "__main__":
     start_bot()
