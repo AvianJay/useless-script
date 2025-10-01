@@ -26,6 +26,7 @@ async def update_doom(interaction: discord.Interaction, step: str, link="https:/
 @bot.tree.command(name="doom", description="開始玩 DOOM")
 async def doom_command(interaction: discord.Interaction):
     link = "https://doom.p2r3.com/i.webp"
+    user = interaction.user
 
     class StepButton(discord.ui.Button):
         def __init__(self, step, label=None, emoji=None, style=discord.ButtonStyle.primary, row: int = 0):
@@ -35,6 +36,9 @@ async def doom_command(interaction: discord.Interaction):
 
         async def callback(self, interaction: discord.Interaction):
             nonlocal link
+            if interaction.user.id != user.id:
+                await interaction.response.send_message("這不是你的遊戲。", ephemeral=True)
+                return
             # update link and embed using the current link + chosen step
             embed, link = generate_doom_embed(link=link, step=self.step)
             # edit the original message with the new embed (keep the same view)
@@ -46,6 +50,9 @@ async def doom_command(interaction: discord.Interaction):
 
         async def callback(self, interaction: discord.Interaction):
             user_id = str(interaction.user.id)
+            if interaction.user.id != user.id:
+                await interaction.response.send_message("這不是你的遊戲。", ephemeral=True)
+                return
             guild_id = None
             set_user_data(guild_id, user_id, "doom_link", link)
             await interaction.response.send_message("存檔成功！", ephemeral=True)
@@ -56,6 +63,9 @@ async def doom_command(interaction: discord.Interaction):
 
         async def callback(self, interaction: discord.Interaction):
             user_id = str(interaction.user.id)
+            if interaction.user.id != user.id:
+                await interaction.response.send_message("這不是你的遊戲。", ephemeral=True)
+                return
             guild_id = None
             saved_link = get_user_data(guild_id, user_id, "doom_link")
             if not saved_link:
