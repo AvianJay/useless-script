@@ -99,6 +99,7 @@ def safe_request(method, url, **kwargs):
         resp = requests.request(method, url, **kwargs)
         if resp.status_code == 429 or resp.status_code == 400:  # 被限流
             data = resp.json()
+            # print("[!] Response 429 or 400:", data)
             wait = data.get("retry_after", 1000) / 1000  # 毫秒 → 秒
             print(f"[!] Rate limited. 等待 {wait} 秒")
             time.sleep(wait)
@@ -301,14 +302,15 @@ def report_to_embed(data: dict) -> dict:
                 }
             }
         ],
-        "components": [
+    }
+    embed["embeds"][0]["fields"].extend(area_fields)
+    if components:
+        embed["components"] = [
             {
                 "type": 1,
                 "components": components
             }
         ]
-    }
-    embed["embeds"][0]["fields"].extend(area_fields)
 
     return embed, cwa_got
 
@@ -355,7 +357,11 @@ def edit_webhook_embed(message_id: str, data: dict, screenshot: bytes=None, repo
             counter += 1
             time.sleep(10)
             print(f"[+] 嘗試取得中央氣象署連結 (嘗試次數 {counter})...")
-            data, cwa_got = report_to_embed(data)
+            data2, cwa_got = report_to_embed(data)
+        if not cwa_got:
+            print("[!] 無法取得中央氣象署連結，跳過。")
+            return
+        data = data2
     else:
         data = warning_to_embed(data)
     if screenshot:
@@ -411,15 +417,17 @@ def main():
             if config("screenshot"):
                 screenshot = screenshot_window()
                 msg_id, cwa_got = send_webhook_embed(data, screenshot, report=True)
+                print(f"[+] 發送成功，訊息 ID：{msg_id}")
                 if not cwa_got:
                     print("[!] 無法取得中央氣象署連結。")
                     edit_webhook_embed(msg_id, data, screenshot, report=True)
             else:
                 msg_id, cwa_got = send_webhook_embed(data, report=True)
+                print(f"[+] 發送成功，訊息 ID：{msg_id}")
                 if not cwa_got:
                     print("[!] 無法取得中央氣象署連結。")
                     edit_webhook_embed(msg_id, data, report=True)
-            print(f"[+] 發送成功，訊息 ID：{msg_id}")
+            print(f"[+] 執行完畢。")
             return
     report = get_report_info()
     # first
