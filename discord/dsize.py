@@ -59,7 +59,7 @@ async def dsize(interaction: discord.Interaction, global_dsize: bool = False):
     set_user_data(guild_key, user_id, "last_dsize", now)
     set_user_data(guild_key, user_id, "last_dsize_size", size)
     
-    if random.randint(1, 50) == 1:
+    if random.randint(1, 1) == 1:
         class dsize_SurgeryView(discord.ui.View):
             def __init__(self):
                 super().__init__(timeout=60)  # 60 seconds to click
@@ -80,10 +80,13 @@ async def dsize(interaction: discord.Interaction, global_dsize: bool = False):
                     current_size = size + i
                     embed = discord.Embed(title=f"{interaction.user.name} 的新長度：", color=0xff0000)
                     embed.add_field(name=f"{current_size} cm", value=f"8{d_string_new}D", inline=False)
-                    await interaction.edit_original_response(embed=embed)
-                    await discord.utils.sleep_until(datetime.utcnow() + timedelta(milliseconds=80))  # 約0.08秒
+                    await interaction.edit_original_response(content="正在手術中...", embed=embed)
+                    await discord.utils.sleep_until(datetime.utcnow() + timedelta(seconds=1))
+                embed = discord.Embed(title=f"{interaction.user.name} 的新長度：", color=0x00ff00)
+                embed.add_field(name=f"{size + new_size} cm", value=f"8{'=' * (size + new_size - 2)}D", inline=False)
+                await interaction.edit_original_response(content="手術成功。", embed=embed)
                 set_user_data(guild_key, user_id, "last_dsize_size", new_size + size)
-        await interaction.followup.send("你獲得了一次做手術的機會！\n點擊下方按鈕開始手術吧！", view=dsize_SurgeryView())
+        await interaction.followup.send("你獲得了一次做手術的機會！\n點擊下方按鈕開始手術。", view=dsize_SurgeryView())
 
 
 @bot.tree.command(name="dsize-排行榜", description="查看屌長排行榜")
