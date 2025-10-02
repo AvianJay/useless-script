@@ -59,7 +59,7 @@ async def dsize(interaction: discord.Interaction, global_dsize: bool = False):
     set_user_data(guild_key, user_id, "last_dsize", now)
     set_user_data(guild_key, user_id, "last_dsize_size", size)
     
-    if random.randint(1, 1) == 1:
+    if random.randint(1, 50) == 1:
         class dsize_SurgeryView(discord.ui.View):
             def __init__(self):
                 super().__init__(timeout=60)  # 60 seconds to click
