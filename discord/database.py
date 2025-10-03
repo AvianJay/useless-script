@@ -18,6 +18,7 @@ DEFAULT_SERVER_CONFIG = {
     "notify_user_on_ban": True,
     "dsize_max": 30,
     "dsize_surgery_percent": 2,
+    "dsize_surgery_max": 10
 }
 
 class Database:

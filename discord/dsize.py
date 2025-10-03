@@ -81,7 +81,7 @@ async def dsize(interaction: discord.Interaction, global_dsize: bool = False):
                     await interaction.response.send_message("這不是你的手術機會。", ephemeral=True)
                     return
                 self.stop()
-                new_size = random.randint(1, 10)
+                new_size = random.randint(1, get_server_config(guild_key, "dsize_surgery_max", 10))
                 embed = discord.Embed(title=f"{interaction.user.name} 的新長度：", color=0xff0000)
                 embed.add_field(name=f"{size} cm", value=f"8{d_string}D", inline=False)
                 await interaction.response.edit_message(embed=embed, view=None)
@@ -279,11 +279,12 @@ async def dsize_battle(interaction: discord.Interaction, opponent: discord.Membe
 
 
 # server settings command
-@bot.tree.command(name="dsize-設定", description="設定dsize")
+@bot.tree.command(name="設定-dsize", description="設定dsize")
 @app_commands.describe(setting="要設定的項目", value="設定的值")
 @app_commands.choices(setting=[
     app_commands.Choice(name="最大長度", value="dsize_max"),
     app_commands.Choice(name="手術機率(%)", value="dsize_surgery_percent"),
+    app_commands.Choice(name="手術最大長度", value="dsize_surgery_max"),
 ])
 @app_commands.default_permissions(administrator=True)
 @app_commands.allowed_installs(guilds=True, users=False)
@@ -296,6 +297,9 @@ async def dsize_settings(interaction: discord.Interaction, setting: str, value: 
     elif setting == "dsize_surgery_percent":
         set_server_config(guild_key, "dsize_surgery_percent", int(value))
         await interaction.response.send_message(f"已設定手術機率為 {str(int(value))}%")
+    elif setting == "dsize_surgery_max":
+        set_server_config(guild_key, "dsize_surgery_max", int(value))
+        await interaction.response.send_message(f"已設定手術最大長度為 {value} cm")
     else:
         await interaction.response.send_message("未知的設定項目。")
 
