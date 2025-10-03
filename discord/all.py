@@ -17,7 +17,8 @@ modules = [
     "dsize",
     "doomcord",
     "PresenceChange",
-    "OwnerTools"
+    "OwnerTools",
+    "MultiModerate",
 ]
 
 for mod in config("disabled_modules", []):
