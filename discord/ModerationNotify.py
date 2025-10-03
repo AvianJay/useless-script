@@ -1,7 +1,7 @@
 import discord
 from discord import app_commands
 from datetime import datetime, timedelta, timezone
-from globalenv import bot, start_bot, get_server_config, set_server_config
+from globalenv import bot, start_bot, get_server_config, set_server_config, get_user_data, set_user_data
 
 
 async def notify_user(user: discord.User, guild: discord.Guild, action: str, reason: str = "未提供", end_time=None):
@@ -57,6 +57,10 @@ async def on_member_update(before, after):
     if not get_server_config(after.guild.id, "notify_user_on_mute", True):
         return
     if before.timed_out_until != after.timed_out_until and after.timed_out_until is not None:
+        # 檢查database的值避免重複
+        if get_user_data(after.guild.id, after.id, "muted_until") == after.timed_out_until.isoformat():
+            return
+        set_user_data(after.guild.id, after.id, "muted_until", after.timed_out_until.isoformat())
         guild = after.guild
         try:
             async for entry in guild.audit_logs(limit=1, action=discord.AuditLogAction.member_update):
