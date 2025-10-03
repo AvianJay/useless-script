@@ -16,6 +16,8 @@ DEFAULT_SERVER_CONFIG = {
     "notify_user_on_mute": True,
     "notify_user_on_kick": True,
     "notify_user_on_ban": True,
+    "dsize_max": 30,
+    "dsize_surgery_percent": 2,
 }
 
 class Database:

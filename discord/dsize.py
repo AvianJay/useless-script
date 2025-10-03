@@ -4,7 +4,11 @@ import random
 from discord.ext import commands
 from discord import app_commands
 from datetime import datetime, timedelta, timezone
-from globalenv import bot, start_bot, get_user_data, set_user_data, get_all_user_data
+from globalenv import bot, start_bot, get_user_data, set_user_data, get_all_user_data, get_server_config, set_server_config
+
+
+def percent_random(percent):
+    return random.randint(1, 100 // percent) == 1
 
 
 @bot.tree.command(name="dsize", description="量屌長")
@@ -22,6 +26,11 @@ async def dsize(interaction: discord.Interaction, global_dsize: bool = False):
     guild_key = interaction.guild.id if interaction.guild else None
     if global_dsize:
         guild_key = None  # override to global
+    
+    if guild_key:
+        max_size = get_server_config(guild_key, "dsize_max", 30)
+    else:
+        max_size = 30
 
     last = get_user_data(guild_key, user_id, "last_dsize")
     if last is not None and not isinstance(last, datetime):
@@ -45,8 +54,8 @@ async def dsize(interaction: discord.Interaction, global_dsize: bool = False):
         await interaction.response.send_message(f"一天只能量一次屌長。<t:{int(timestamp_next.timestamp())}:R> 才能再次使用。", ephemeral=ephemeral_flag)
         return
 
-    # 隨機產生長度 (2-30)
-    size = random.randint(2, 30)
+    # 隨機產生長度
+    size = random.randint(2, max_size)
     d_string = "=" * (size - 2)
 
     # 建立 Embed 訊息
@@ -59,7 +68,9 @@ async def dsize(interaction: discord.Interaction, global_dsize: bool = False):
     set_user_data(guild_key, user_id, "last_dsize", now)
     set_user_data(guild_key, user_id, "last_dsize_size", size)
     
-    if random.randint(1, 50) == 1:
+    surgery_percent = get_server_config(guild_key, "dsize_surgery_percent", 2)
+    # check if user got surgery chance
+    if percent_random(surgery_percent):
         class dsize_SurgeryView(discord.ui.View):
             def __init__(self):
                 super().__init__(timeout=60)  # 60 seconds to click
@@ -159,6 +170,7 @@ async def dsize_battle(interaction: discord.Interaction, opponent: discord.Membe
     user_id = interaction.user.id
     opponent_id = opponent.id
     now = (datetime.utcnow() + timedelta(hours=8)).date()  # 台灣時間
+    max_size = get_server_config(interaction.guild.id, "dsize_max", 30)
 
     if user_id == opponent_id:
         await interaction.response.send_message("不能跟自己比屌長。", ephemeral=True)
@@ -209,9 +221,9 @@ async def dsize_battle(interaction: discord.Interaction, opponent: discord.Membe
             self.value = True
             self.stop()
             await interaction.response.edit_message(content="開始對決。", view=None)
-            size_user = random.randint(2, 30)
-            size_opponent = random.randint(2, 30)
-            
+            size_user = random.randint(2, max_size)
+            size_opponent = random.randint(2, max_size)
+
             # 取得訊息物件
             msg = await interaction.original_response()
 
@@ -264,6 +276,28 @@ async def dsize_battle(interaction: discord.Interaction, opponent: discord.Membe
 
     # 徵求對方同意
     await interaction.response.send_message(f"{opponent.mention}，{interaction.user.name} 想跟你比長度。\n請在 30 秒內按下 ✅ 同意 或 ❌ 拒絕。", ephemeral=False, view=dsize_Confirm())
+
+
+# server settings command
+@bot.tree.command(name="dsize-設定", description="設定dsize")
+@app_commands.describe(setting="要設定的項目", value="設定的值")
+@app_commands.choices(setting=[
+    app_commands.Choice(name="最大長度", value="dsize_max"),
+    app_commands.Choice(name="手術機率(%)", value="dsize_surgery_percent"),
+])
+@app_commands.default_permissions(administrator=True)
+@app_commands.allowed_installs(guilds=True, users=False)
+@app_commands.allowed_contexts(guilds=True, dms=False, private_channels=False)
+async def dsize_settings(interaction: discord.Interaction, setting: str, value: str):
+    guild_key = interaction.guild.id
+    if setting == "dsize_max":
+        set_server_config(guild_key, "dsize_max", int(value))
+        await interaction.response.send_message(f"已設定最大長度為 {value} cm")
+    elif setting == "dsize_surgery_percent":
+        set_server_config(guild_key, "dsize_surgery_percent", int(value))
+        await interaction.response.send_message(f"已設定手術機率為 {str(int(value))}%")
+    else:
+        await interaction.response.send_message("未知的設定項目。")
 
 
 if __name__ == "__main__":
