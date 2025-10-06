@@ -1,3 +1,4 @@
+import io
 import json
 import discord
 from globalenv import bot, start_bot, get_user_data, set_user_data, config, get_server_config, set_server_config, _config, default_config, get_all_user_data
@@ -198,6 +199,33 @@ async def sendmessage(ctx, channel_id: int, *, message: str):
         await ctx.send("無法在該頻道發送訊息，機器人缺少權限。")
     except Exception as e:
         await ctx.send(f"發送訊息時發生錯誤：{e}")
+
+
+@bot.command()
+@is_owner()
+async def createtranscript(ctx, channel_id: int, after_message_id: int=None, before_message_id: int=None, limit: int=500):
+    channel = bot.get_channel(channel_id)
+    if channel is None or not isinstance(channel, discord.TextChannel):
+        await ctx.send("找不到該文字頻道。")
+        return
+    try:
+        messages = []
+        async for msg in channel.history(limit=limit, after=discord.Object(id=after_message_id) if after_message_id else None, before=discord.Object(id=before_message_id) if before_message_id else None, oldest_first=True):
+            timestamp = msg.created_at.strftime("%Y-%m-%d %H:%M:%S")
+            author = f"{msg.author} (ID: {msg.author.id})"
+            content = msg.content
+            attachments = " ".join(att.url for att in msg.attachments)
+            full_message = f"[{timestamp}] {author}: {content} {attachments}".strip()
+            messages.append(full_message)
+        transcript = "\n".join(messages) if messages else "沒有找到符合條件的訊息。"
+        # send as file
+        transcript_file = io.BytesIO(transcript.encode('utf-8'))
+        transcript_file.name = f"transcript_{channel.id}.txt"
+        await ctx.send("以下是頻道的對話紀錄：", file=discord.File(fp=transcript_file))
+    except discord.Forbidden:
+        await ctx.send("無法讀取該頻道的歷史訊息，機器人缺少權限。")
+    except Exception as e:
+        await ctx.send(f"創建對話紀錄時發生錯誤：{e}")
 
 
 @bot.event
