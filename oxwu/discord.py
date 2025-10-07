@@ -8,7 +8,7 @@ from bs4 import BeautifulSoup
 from urllib.parse import urlparse, parse_qs, urlencode, urlunparse
 from datetime import datetime, timezone, timedelta
 
-config_version = 2
+config_version = 3
 config_path = 'config.json'
 
 default_config = {
@@ -21,6 +21,7 @@ default_config = {
     "report_daemon": False,
     "report_link_cwa": True,
     "report_link_oxwu": True,
+    "debug": False,
 }
 _config = None
 
@@ -95,16 +96,21 @@ if "with_components" not in query:
 
 def safe_request(method, url, **kwargs):
     """Anti Discord rate limit"""
+    if config("debug"):
+        print(f"[DEBUG] {method} {url} {kwargs}")
     while True:
         resp = requests.request(method, url, **kwargs)
         if resp.status_code == 429 or resp.status_code == 400:  # 被限流
             data = resp.json()
-            # print("[!] Response 429 or 400:", data)
+            if config("debug"):
+                print("[DEBUG] Response 429 or 400:", data)
             wait = data.get("retry_after", 1000) / 1000  # 毫秒 → 秒
             print(f"[!] Rate limited. 等待 {wait} 秒")
             time.sleep(wait)
             continue
         resp.raise_for_status()
+        if config("debug"):
+            print(f"[DEBUG] Response {resp.status_code}: {resp.text}")
         return resp
 
 
@@ -133,6 +139,8 @@ def cwa_get_last_link() -> tuple[str, bool]:
         global cwa_last_link
         is_same = (link == cwa_last_link)
         cwa_last_link = link
+        if config("debug"):
+            print(f"[DEBUG] CWA link: {link}, is_same: {is_same}")
         return link, is_same
     return "", False
 cwa_get_last_link()  # get first
