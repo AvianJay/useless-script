@@ -108,10 +108,16 @@ on_ready_tasks = []
 async def on_ready():
     print(f'Logged in as {bot.user}')
     try:
-        synced = await bot.tree.sync()  # 同步
+        synced = await bot.tree.sync()  # 同步指令
         print(f"Synced {len(synced)} command(s)")
-        for task in on_ready_tasks:
-            threading.Thread(target=asyncio.run, args=(task(),)).start()
+
+        # 防止重複建立相同的 background task（例如 reconnect）
+        if not getattr(bot, "_on_ready_tasks_started", False):
+            for task_coro_func in on_ready_tasks:
+                # task_coro_func 應該是 coroutine function，不是 coroutine object
+                bot.loop.create_task(task_coro_func())
+            bot._on_ready_tasks_started = True
+
     except Exception as e:
         print(f"Error syncing commands: {e}")
 
