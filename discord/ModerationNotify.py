@@ -1,7 +1,21 @@
+import time
 import discord
+import threading
 from discord import app_commands
 from datetime import datetime, timedelta, timezone
 from globalenv import bot, start_bot, get_server_config, set_server_config, get_user_data, set_user_data
+
+
+ignore = []
+
+def _ingore_user(user_id: int):
+    if user_id not in ignore:
+        ignore.append(user_id)
+        time.sleep(5)  # 避免重複觸發
+        ignore.remove(user_id)
+
+def ignore_user(user_id: int):
+    threading.Thread(target=_ingore_user, args=(user_id,)).start()
 
 
 async def notify_user(user: discord.User, guild: discord.Guild, action: str, reason: str = "未提供", end_time=None):
@@ -16,9 +30,10 @@ async def notify_user(user: discord.User, guild: discord.Guild, action: str, rea
     if guild.icon:
         embed.set_thumbnail(url=guild.icon.url)
 
-    # if mute
+    # if present
+    # print("Debug:", end_time)
     if end_time:
-        embed.add_field(name="解禁時間", value=end_time.strftime("%Y-%m-%d %H:%M:%S"), inline=False)
+        embed.add_field(name="解禁時間", value=f"<t:{str(int(end_time.timestamp()))}:F>", inline=False)
 
     embed.set_footer(text=f"{guild.name}")
 
@@ -30,6 +45,8 @@ async def notify_user(user: discord.User, guild: discord.Guild, action: str, rea
 
 @bot.event
 async def on_member_remove(member):
+    if member.id in ignore:
+        return
     guild = member.guild
     try:
         async for entry in guild.audit_logs(limit=1):
@@ -48,7 +65,7 @@ async def on_member_remove(member):
                 pass
     except Exception as e:
         print(f"Error fetching audit logs: {e}")
-        await notify_user(member, guild, "移除", "無法取得")
+        # await notify_user(member, guild, "移除", "無法取得")
 
 
 # timeout

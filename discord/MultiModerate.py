@@ -1,10 +1,37 @@
-from globalenv import bot, start_bot, get_server_config, set_server_config, get_user_data, set_user_data
+from globalenv import bot, start_bot, get_server_config, set_server_config, get_user_data, set_user_data, on_ready_tasks
 import discord
 from discord import app_commands
 from discord.ext import commands
 import json
+import asyncio
 import aiohttp
 from datetime import datetime, timedelta, timezone
+from typing import Union
+import ModerationNotify
+
+
+def timestr_to_seconds(timestr: str) -> int:
+    """將時間字串轉換為秒數"""
+    units = {
+        's': 1,
+        'm': 60,
+        'h': 3600,
+        'd': 86400,
+        'w': 604800,
+        'M': 2592000,  # 假設一個月30天
+        'y': 31536000, # 假設一年365天
+    }
+    total_seconds = 0
+    num = ''
+    for char in timestr:
+        if char.isdigit():
+            num += char
+        elif char in units and num:
+            total_seconds += int(num) * units[char]
+            num = ''
+    if num:  # 如果字串以數字結尾，則忽略這些數字
+        pass
+    return total_seconds
 
 
 def get_time_text(seconds: int) -> str:
@@ -51,6 +78,45 @@ def guess_role(guild: discord.Guild, role_name: str):
     return None
 
 
+async def check_unban():
+    await bot.wait_until_ready()
+    print("[+] 自動解封任務已啟動")
+    while not bot.is_closed():
+        for guild in bot.guilds:
+            guild_id = guild.id
+            to_unban = []
+
+            try:
+                # 使用 async for 逐項讀取封鎖列表（memory-friendly）
+                async for entry in guild.bans():
+                    user = entry.user
+                    unban_time_str = get_user_data(guild_id, user.id, "unban_time")
+                    if unban_time_str is None:
+                        continue
+                    try:
+                        unban_time = datetime.fromisoformat(unban_time_str)
+                    except Exception:
+                        continue
+                    if unban_time.tzinfo is None:
+                        unban_time = unban_time.replace(tzinfo=timezone.utc)
+                    if unban_time <= datetime.now(timezone.utc):
+                        to_unban.append(user)
+            except Exception as e:
+                print(f"[!] 讀取 {guild.name} 的封鎖列表發生錯誤：{e}")
+                continue
+
+            for user in to_unban:
+                try:
+                    await guild.unban(user, reason="自動解封")
+                    set_user_data(guild_id, user.id, "unban_time", None)
+                    print(f"[+] 已自動解封 {user} 在 {guild.name} 的封禁。")
+                except Exception as e:
+                    print(f"[!] 解封 {user} 時發生錯誤：{e}")
+
+        await asyncio.sleep(60)  # 每分鐘檢查一次
+on_ready_tasks.append(check_unban)
+
+
 async def timeout_user(*, user_id: int, guild_id: int, until, reason: str="") -> bool:
     headers = {"Authorization": f"Bot {bot.http.token}"}
     url = f"https://discord.com/api/v9/guilds/{guild_id}/members/{user_id}"
@@ -79,6 +145,8 @@ async def moderation_message_settings(interaction: discord.Interaction, user: di
             action_texts.append(f"給予身分組 {action['role']}")
         elif action["action"] == "remove_role":
             action_texts.append(f"移除身分組 {action['role']}")
+        elif action["action"] == "custom":
+            action_texts.append(action.get("custom_action", "無"))
     action_text = "+".join(action_texts) if action_texts else "無"
     # get reason
     reason = None
@@ -331,3 +399,212 @@ async def multi_moderate(interaction: discord.Interaction, user: discord.Member)
     embed.add_field(name="目前操作", value="無", inline=False)
     view = ActionButtons()
     message = await interaction.response.send_message(embed=embed, view=view)
+
+
+@bot.tree.command(name="管理-發送懲處公告", description="手動發送懲處公告")
+@app_commands.describe(user="選擇用戶", reason="處分原因", action="處分結果", moderator="執行管理員（可選）")
+@app_commands.default_permissions(administrator=True)
+@app_commands.allowed_installs(guilds=True, users=False)
+async def send_moderation_message(interaction: discord.Interaction, user: discord.Member, reason: str, action: str, moderator: discord.Member=None):
+    guild = interaction.guild
+    if guild is None:
+        await interaction.response.send_message("此指令只能在伺服器中使用。", ephemeral=True)
+        return
+    if moderator is None:
+        moderator = interaction.user
+    actions = [{"action": "custom", "custom_action": action, "reason": reason}]
+    await moderation_message_settings(interaction, user, moderator, actions)
+
+
+@bot.tree.command(name="管理-封禁", description="封禁用戶")
+@app_commands.describe(user="選擇用戶（@或ID）", reason="封禁原因（可選）", duration="封禁時間（可選，預設永久）", delete_message="刪除訊息時間（可選，預設不刪除）")
+@app_commands.default_permissions(ban_members=True)
+async def ban_user(interaction: discord.Interaction, user: str, reason: str = "無", duration: str = "", delete_message: str = ""):
+    guild = interaction.guild
+    if guild is None:
+        await interaction.response.send_message("此指令只能在伺服器中使用。", ephemeral=True)
+        return
+    
+    if user.startswith("<@") and user.endswith(">"):
+        user = user[2:-1]
+        if user.startswith("!"):
+            user = user[1:]
+
+    # 解析目標 user id / 取得 User/Member 物件（若在伺服器內會是 Member）
+    if isinstance(user, discord.Member):
+        user_id = user.id
+        user_obj = user
+    else:
+        try:
+            user_id = int(user)
+        except Exception:
+            await interaction.response.send_message("無效的使用者或 ID。", ephemeral=True)
+            return
+        user_obj = None
+        try:
+            user_obj = await bot.fetch_user(user_id)
+        except Exception:
+            user_obj = None  # 仍可以 id 封禁，但無法直接私訊
+
+    # 解析封禁時間（可選，若提供則記錄 unban_time）
+    unban_time = None
+    if duration:
+        duration_seconds = timestr_to_seconds(duration)
+        if duration_seconds <= 0:
+            await interaction.response.send_message("無效的封禁時間，請使用類似 10m、2h、3d 的格式。", ephemeral=True)
+            return
+        unban_time = datetime.now(timezone.utc) + timedelta(seconds=duration_seconds)
+
+    # 記錄解封時間（若為永久則存 None）
+    set_user_data(guild.id, user_id, "unban_time", unban_time.isoformat() if unban_time else None)
+
+    # 通知與忽略（使用 id 與可用的 user 物件）
+    ModerationNotify.ignore_user(user_id)
+    try:
+        await ModerationNotify.notify_user(user_obj if user_obj else user_id, guild, "封禁", reason, end_time=unban_time)
+    except Exception:
+        # 如果 notify_user 期待 Member/User 物件但我們只有 id，忽略錯誤
+        pass
+
+    # 解析要刪除訊息的秒數
+    delete_message_seconds = timestr_to_seconds(delete_message)
+
+    # 執行封禁：若有 Member 直接用 member.ban，否則用 guild.ban 與 discord.Object(id=...)
+    try:
+        if isinstance(user, discord.Member):
+            await user.ban(reason=reason, delete_message_seconds=delete_message_seconds)
+        else:
+            await guild.ban(discord.Object(id=user_id), reason=reason, delete_message_seconds=delete_message_seconds)
+    except Exception as e:
+        await interaction.response.send_message(f"封禁時發生錯誤：{e}", ephemeral=True)
+        return
+
+    mention = user_obj.mention if user_obj else f"<@{user_id}>"
+    await interaction.response.send_message(f"已將 {mention} 封禁。")
+
+
+@bot.tree.command(name="管理-解封", description="解封用戶")
+@app_commands.describe(user="選擇用戶（@或ID）")
+@app_commands.default_permissions(ban_members=True)
+async def unban_user(interaction: discord.Interaction, user: str):
+    guild = interaction.guild
+    if guild is None:
+        await interaction.response.send_message("此指令只能在伺服器中使用。", ephemeral=True)
+        return
+    
+    if user.startswith("<@") and user.endswith(">"):
+        user = user[2:-1]
+        if user.startswith("!"):
+            user = user[1:]
+
+    # 解析目標 user id
+    try:
+        user_id = int(user)
+    except Exception:
+        await interaction.response.send_message("無效的使用者或 ID。", ephemeral=True)
+        return
+
+    # 執行解封
+    try:
+        await guild.unban(discord.Object(id=user_id), reason="手動解封")
+        set_user_data(guild.id, user_id, "unban_time", None)
+    except Exception as e:
+        await interaction.response.send_message(f"解封時發生錯誤：{e}", ephemeral=True)
+        return
+
+    await interaction.response.send_message(f"已將 <@{user_id}> 解封。")
+
+
+@bot.tree.command(name="管理-踢出", description="踢出用戶")
+@app_commands.describe(user="選擇用戶（@或ID）", reason="踢出原因（可選）")
+@app_commands.default_permissions(kick_members=True)
+async def kick_user(interaction: discord.Interaction, user: str, reason: str = "無"):
+    guild = interaction.guild
+    if guild is None:
+        await interaction.response.send_message("此指令只能在伺服器中使用。", ephemeral=True)
+        return
+    
+    if user.startswith("<@") and user.endswith(">"):
+        user = user[2:-1]
+        if user.startswith("!"):
+            user = user[1:]
+
+    # 解析目標 user id / 取得 Member 物件
+    if isinstance(user, discord.Member):
+        user_id = user.id
+        member = user
+    else:
+        try:
+            user_id = int(user)
+        except Exception:
+            await interaction.response.send_message("無效的使用者或 ID。", ephemeral=True)
+            return
+        member = guild.get_member(user_id)
+        if member is None:
+            await interaction.response.send_message("該用戶不在伺服器中，無法踢出。", ephemeral=True)
+            return
+
+    # 通知與忽略
+    ModerationNotify.ignore_user(user_id)
+    try:
+        await ModerationNotify.notify_user(member, guild, "踢出", reason)
+    except Exception:
+        pass
+
+    # 執行踢出
+    try:
+        await member.kick(reason=reason)
+    except Exception as e:
+        await interaction.response.send_message(f"踢出時發生錯誤：{e}", ephemeral=True)
+        return
+
+    await interaction.response.send_message(f"已將 {member.mention} 踢出伺服器。")
+
+
+@bot.tree.command(name="管理-禁言", description="禁言用戶")
+@app_commands.describe(user="選擇用戶（@或ID）", reason="禁言原因（可選）", duration="禁言時間（可選，預設10分鐘）")
+@app_commands.default_permissions(mute_members=True)
+async def mute_user(interaction: discord.Interaction, user: str, reason: str = "無", duration: str = "10m"):
+    guild = interaction.guild
+    if guild is None:
+        await interaction.response.send_message("此指令只能在伺服器中使用。", ephemeral=True)
+        return
+    
+    if user.startswith("<@") and user.endswith(">"):
+        user = user[2:-1]
+        if user.startswith("!"):
+            user = user[1:]
+
+    # 解析目標 user id / 取得 Member 物件
+    if isinstance(user, discord.Member):
+        user_id = user.id
+        member = user
+    else:
+        try:
+            user_id = int(user)
+        except Exception:
+            await interaction.response.send_message("無效的使用者或 ID。", ephemeral=True)
+            return
+        member = guild.get_member(user_id)
+        if member is None:
+            await interaction.response.send_message("該用戶不在伺服器中，無法禁言。", ephemeral=True)
+            return
+
+    # 解析禁言時間
+    duration_seconds = timestr_to_seconds(duration)
+    if duration_seconds <= 0:
+        await interaction.response.send_message("無效的禁言時間，請使用類似 10m、2h、3d 的格式。", ephemeral=True)
+        return
+
+    # 執行禁言
+    try:
+        await timeout_user(user_id=user_id, guild_id=guild.id, until=duration_seconds, reason=reason)
+    except Exception as e:
+        await interaction.response.send_message(f"禁言時發生錯誤：{e}", ephemeral=True)
+        return
+
+    await interaction.response.send_message(f"已對 {member.mention} 禁言 {get_time_text(duration_seconds)}。")
+
+
+if __name__ == "__main__":
+    start_bot()
