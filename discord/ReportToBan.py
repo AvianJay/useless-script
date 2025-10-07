@@ -203,14 +203,15 @@ class doModerationActions(discord.ui.View):
     @discord.ui.button(label="封鎖", style=discord.ButtonStyle.danger, custom_id="ban_button")
     async def ban_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         message_content = self.message_content
+        user = self.user
         class BanReasonModal(discord.ui.Modal, title="封鎖原因"):
             reason = discord.ui.TextInput(label="封鎖原因", placeholder="請輸入封鎖原因", required=True, max_length=100)
             delete_messages = discord.ui.TextInput(label="刪除訊息小時數", placeholder="請輸入要刪除的訊息小時數 (0-168)", required=False, max_length=3, default="0")
 
             async def on_submit(self, modal_interaction: discord.Interaction):
                 try:
-                    await interaction.guild.ban(self.user, reason=self.reason.value or "違反規則", delete_message_seconds=int(self.delete_messages.value) * 3600 if self.delete_messages.value.isdigit() else 0)
-                    send_moderation_message(self.user, interaction.user, [{"action": "ban"}], self.reason.value or "違反規則", message_content)
+                    await interaction.guild.ban(user, reason=self.reason.value or "違反規則", delete_message_seconds=int(self.delete_messages.value) * 3600 if self.delete_messages.value.isdigit() else 0)
+                    send_moderation_message(user, interaction.user, [{"action": "ban"}], self.reason.value or "違反規則", message_content)
                 except Exception as e:
                     print(f"Error occurred: {str(e)}")
                     await modal_interaction.response.send_message(f"發生錯誤，請稍後再試。\n{str(e)}", ephemeral=True)
@@ -219,13 +220,14 @@ class doModerationActions(discord.ui.View):
     @discord.ui.button(label="踢出", style=discord.ButtonStyle.primary, custom_id="kick_button")
     async def kick_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         message_content = self.message_content
+        user = self.user
         class KickReasonModal(discord.ui.Modal, title="踢出原因"):
             reason = discord.ui.TextInput(label="踢出原因", placeholder="請輸入踢出原因", required=True, max_length=100)
 
             async def on_submit(self, modal_interaction: discord.Interaction):
                 try:
-                    await interaction.guild.kick(self.user, reason=self.reason.value or "違反規則")
-                    send_moderation_message(self.user, interaction.user, [{"action": "kick"}], self.reason.value or "違反規則", message_content)
+                    await interaction.guild.kick(user, reason=self.reason.value or "違反規則")
+                    send_moderation_message(user, interaction.user, [{"action": "kick"}], self.reason.value or "違反規則", message_content)
                 except Exception as e:
                     print(f"Error occurred: {str(e)}")
                     await modal_interaction.response.send_message(f"發生錯誤，請稍後再試。\n{str(e)}", ephemeral=True)
