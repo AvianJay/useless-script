@@ -427,6 +427,7 @@ async def report_message(interaction: discord.Interaction, message: discord.Mess
 ])
 @app_commands.allowed_installs(guilds=True, users=False)
 @app_commands.allowed_contexts(guilds=True, dms=False, private_channels=False)
+@app_commands.checks.has_permissions(administrator=True)
 async def setting_command(interaction: discord.Interaction, setting: str, value: str = None):
     # Check if user has administrator permissions
     if not interaction.user.guild_permissions.administrator:
@@ -566,6 +567,7 @@ async def setting_command(interaction: discord.Interaction, setting: str, value:
 ])
 @app_commands.allowed_installs(guilds=True, users=False)
 @app_commands.allowed_contexts(guilds=True, dms=False, private_channels=False)
+@app_commands.checks.has_permissions(administrator=True)
 async def blacklist_command(interaction: discord.Interaction, action: str, role: discord.Role = None):
     # Check if user has administrator permissions
     if not interaction.user.guild_permissions.administrator:
