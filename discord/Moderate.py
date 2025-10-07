@@ -364,12 +364,18 @@ async def multi_moderate(interaction: discord.Interaction, user: discord.Member)
                         results.append(f"已對 {user.mention} 禁言 {get_time_text(duration)}。")
                     elif action["action"] == "kick":
                         ModerationNotify.ignore_user(user.id)  # 避免重複通知
-                        await ModerationNotify.notify_user(user, interaction.guild, "踢出", action.get("reason", "無"))
+                        try:
+                            await ModerationNotify.notify_user(user, interaction.guild, "踢出", action.get("reason", "無"))
+                        except Exception as e:
+                            print(f"[!] 無法私訊 {user}：{e}")
                         await user.kick(reason=action.get("reason", "無"))
                         results.append(f"已將 {user.mention} 踢出伺服器。")
                     elif action["action"] == "ban":
                         ModerationNotify.ignore_user(user.id)  # 避免重複通知
-                        await ModerationNotify.notify_user(user, interaction.guild, "封禁", action.get("reason", "無"))
+                        try:
+                            await ModerationNotify.notify_user(user, interaction.guild, "封禁", action.get("reason", "無"))
+                        except Exception as e:
+                            print(f"[!] 無法私訊 {user}：{e}")
                         await user.ban(reason=action.get("reason", "無"))
                         results.append(f"已將 {user.mention} 封禁。")
                     elif action["action"] == "add_role":
