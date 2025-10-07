@@ -418,11 +418,13 @@ async def send_moderation_message(interaction: discord.Interaction, user: discor
 
 @bot.tree.command(name="管理-封禁", description="封禁用戶")
 @app_commands.describe(user="選擇用戶（@或ID）", reason="封禁原因（可選）", duration="封禁時間（可選，預設永久）", delete_message="刪除訊息時間（可選，預設不刪除）")
+@app_commands.allowed_installs(guilds=True, users=False)
 @app_commands.default_permissions(ban_members=True)
 async def ban_user(interaction: discord.Interaction, user: str, reason: str = "無", duration: str = "", delete_message: str = ""):
+    await interaction.response.defer()
     guild = interaction.guild
     if guild is None:
-        await interaction.response.send_message("此指令只能在伺服器中使用。", ephemeral=True)
+        await interaction.followup.send("此指令只能在伺服器中使用。")
         return
     
     if user.startswith("<@") and user.endswith(">"):
@@ -438,7 +440,7 @@ async def ban_user(interaction: discord.Interaction, user: str, reason: str = "�
         try:
             user_id = int(user)
         except Exception:
-            await interaction.response.send_message("無效的使用者或 ID。", ephemeral=True)
+            await interaction.followup.send("無效的使用者或 ID。")
             return
         user_obj = None
         try:
@@ -451,7 +453,7 @@ async def ban_user(interaction: discord.Interaction, user: str, reason: str = "�
     if duration:
         duration_seconds = timestr_to_seconds(duration)
         if duration_seconds <= 0:
-            await interaction.response.send_message("無效的封禁時間，請使用類似 10m、2h、3d 的格式。", ephemeral=True)
+            await interaction.followup.send("無效的封禁時間，請使用類似 10m、2h、3d 的格式。")
             return
         unban_time = datetime.now(timezone.utc) + timedelta(seconds=duration_seconds)
 
@@ -476,20 +478,22 @@ async def ban_user(interaction: discord.Interaction, user: str, reason: str = "�
         else:
             await guild.ban(discord.Object(id=user_id), reason=reason, delete_message_seconds=delete_message_seconds)
     except Exception as e:
-        await interaction.response.send_message(f"封禁時發生錯誤：{e}", ephemeral=True)
+        await interaction.followup.send(f"封禁時發生錯誤：{e}")
         return
 
     mention = user_obj.mention if user_obj else f"<@{user_id}>"
-    await interaction.response.send_message(f"已將 {mention} 封禁。")
+    await interaction.followup.send(f"已將 {mention} 封禁。")
 
 
 @bot.tree.command(name="管理-解封", description="解封用戶")
 @app_commands.describe(user="選擇用戶（@或ID）")
 @app_commands.default_permissions(ban_members=True)
+@app_commands.allowed_installs(guilds=True, users=False)
 async def unban_user(interaction: discord.Interaction, user: str):
+    await interaction.response.defer()
     guild = interaction.guild
     if guild is None:
-        await interaction.response.send_message("此指令只能在伺服器中使用。", ephemeral=True)
+        await interaction.followup.send("此指令只能在伺服器中使用。")
         return
     
     if user.startswith("<@") and user.endswith(">"):
@@ -501,7 +505,7 @@ async def unban_user(interaction: discord.Interaction, user: str):
     try:
         user_id = int(user)
     except Exception:
-        await interaction.response.send_message("無效的使用者或 ID。", ephemeral=True)
+        await interaction.followup.send("無效的使用者或 ID。")
         return
 
     # 執行解封
@@ -509,19 +513,21 @@ async def unban_user(interaction: discord.Interaction, user: str):
         await guild.unban(discord.Object(id=user_id), reason="手動解封")
         set_user_data(guild.id, user_id, "unban_time", None)
     except Exception as e:
-        await interaction.response.send_message(f"解封時發生錯誤：{e}", ephemeral=True)
+        await interaction.followup.send(f"解封時發生錯誤：{e}")
         return
 
-    await interaction.response.send_message(f"已將 <@{user_id}> 解封。")
+    await interaction.followup.send(f"已將 <@{user_id}> 解封。")
 
 
 @bot.tree.command(name="管理-踢出", description="踢出用戶")
 @app_commands.describe(user="選擇用戶（@或ID）", reason="踢出原因（可選）")
 @app_commands.default_permissions(kick_members=True)
+@app_commands.allowed_installs(guilds=True, users=False)
 async def kick_user(interaction: discord.Interaction, user: str, reason: str = "無"):
+    await interaction.response.defer()
     guild = interaction.guild
     if guild is None:
-        await interaction.response.send_message("此指令只能在伺服器中使用。", ephemeral=True)
+        await interaction.followup.send("此指令只能在伺服器中使用。")
         return
     
     if user.startswith("<@") and user.endswith(">"):
@@ -537,11 +543,11 @@ async def kick_user(interaction: discord.Interaction, user: str, reason: str = "
         try:
             user_id = int(user)
         except Exception:
-            await interaction.response.send_message("無效的使用者或 ID。", ephemeral=True)
+            await interaction.followup.send("無效的使用者或 ID。")
             return
         member = guild.get_member(user_id)
         if member is None:
-            await interaction.response.send_message("該用戶不在伺服器中，無法踢出。", ephemeral=True)
+            await interaction.followup.send("該用戶不在伺服器中，無法踢出。")
             return
 
     # 通知與忽略
@@ -555,27 +561,31 @@ async def kick_user(interaction: discord.Interaction, user: str, reason: str = "
     try:
         await member.kick(reason=reason)
     except Exception as e:
-        await interaction.response.send_message(f"踢出時發生錯誤：{e}", ephemeral=True)
+        await interaction.followup.send(f"踢出時發生錯誤：{e}")
         return
 
-    await interaction.response.send_message(f"已將 {member.mention} 踢出伺服器。")
+    await interaction.followup.send(f"已將 {member.mention} 踢出伺服器。")
 
 
 @bot.tree.command(name="管理-禁言", description="禁言用戶")
 @app_commands.describe(user="選擇用戶（@或ID）", reason="禁言原因（可選）", duration="禁言時間（可選，預設10分鐘）")
 @app_commands.default_permissions(mute_members=True)
+@app_commands.allowed_installs(guilds=True, users=False)
 async def mute_user(interaction: discord.Interaction, user: str, reason: str = "無", duration: str = "10m"):
+    # 先 defer，避免耗時操作導致 interaction 過期
+    await interaction.response.defer()
+
     guild = interaction.guild
     if guild is None:
-        await interaction.response.send_message("此指令只能在伺服器中使用。", ephemeral=True)
+        await interaction.followup.send("此指令只能在伺服器中使用。")
         return
-    
+
     if user.startswith("<@") and user.endswith(">"):
         user = user[2:-1]
         if user.startswith("!"):
             user = user[1:]
 
-    # 解析目標 user id / 取得 Member 物件
+    # 解析 target
     if isinstance(user, discord.Member):
         user_id = user.id
         member = user
@@ -583,27 +593,28 @@ async def mute_user(interaction: discord.Interaction, user: str, reason: str = "
         try:
             user_id = int(user)
         except Exception:
-            await interaction.response.send_message("無效的使用者或 ID。", ephemeral=True)
+            await interaction.followup.send("無效的使用者或 ID。")
             return
         member = guild.get_member(user_id)
         if member is None:
-            await interaction.response.send_message("該用戶不在伺服器中，無法禁言。", ephemeral=True)
+            await interaction.followup.send("該用戶不在伺服器中，無法禁言。")
             return
 
-    # 解析禁言時間
     duration_seconds = timestr_to_seconds(duration)
     if duration_seconds <= 0:
-        await interaction.response.send_message("無效的禁言時間，請使用類似 10m、2h、3d 的格式。", ephemeral=True)
+        await interaction.followup.send("無效的禁言時間，請使用類似 10m、2h、3d 的格式。")
         return
 
-    # 執行禁言
+    # 執行禁言（可能耗時）
     try:
         await timeout_user(user_id=user_id, guild_id=guild.id, until=duration_seconds, reason=reason)
     except Exception as e:
-        await interaction.response.send_message(f"禁言時發生錯誤：{e}", ephemeral=True)
+        print(f"[!] 禁言 {member} 時發生錯誤：{e}")
+        await interaction.followup.send(f"禁言時發生錯誤：{e}")
         return
 
-    await interaction.response.send_message(f"已對 {member.mention} 禁言 {get_time_text(duration_seconds)}。")
+    # 使用 followup 送出最終訊息
+    await interaction.followup.send(f"已對 {member.mention} 禁言 {get_time_text(duration_seconds)}。")
 
 
 if __name__ == "__main__":
