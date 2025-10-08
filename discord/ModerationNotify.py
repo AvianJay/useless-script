@@ -90,7 +90,7 @@ async def on_member_update(before, after):
             await notify_user(after, guild, "禁言", "無法取得", after.timed_out_until)
 
 
-@bot.tree.command(name="設定-懲罰通知", description="設定是否通知被懲罰的用戶")
+@bot.tree.command(name=app_commands.locale_str("settings-punishment-notify"), description="設定是否通知被懲罰的用戶")
 @app_commands.describe(
     action="選擇要設定的懲罰類型",
     enable="是否啟用通知"

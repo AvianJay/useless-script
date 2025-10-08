@@ -6,6 +6,7 @@ import threading
 from discord.ext import commands
 from discord import app_commands
 from database import db
+import traceback
 
 
 # Global configuration for backward compatibility (mainly for TOKEN)
@@ -101,6 +102,38 @@ def get_all_user_data(guild_id: int, key: str):
     return db.get_all_user_data(guild_id, key)
 
 
+class CommandNameTranslator(app_commands.Translator):
+    async def translate(
+        self,
+        string: app_commands.locale_str,
+        locale: discord.Locale,
+        context: app_commands.TranslationContext
+    ):
+        if not isinstance(context.data, app_commands.commands.Command):
+            # pass
+            return None
+        if locale == discord.Locale.taiwan_chinese:
+            # print("DEBUG: Translate", type(string), type(context.data))
+            translations = {
+                "test": "測試",
+                "admin-multi-moderate": "管理-多重操作",
+                "admin-ban": "管理-封禁",
+                "admin-unban": "管理-解封",
+                "admin-timeout": "管理-禁言",
+                "admin-kick": "管理-踢出",
+                "admin-send-moderation-message": "管理-發送懲處公告",
+                "settings-punishment-notify": "設定-懲罰通知",
+            }
+            return translations.get(context.data.name, None)
+        return None
+
+
+async def setup_hook():
+    await bot.tree.set_translator(CommandNameTranslator())
+    print("[+] Command translator set up.")
+
+
+bot.setup_hook = setup_hook
 on_ready_tasks = []
 
 
@@ -120,6 +153,7 @@ async def on_ready():
 
     except Exception as e:
         print(f"Error syncing commands: {e}")
+        traceback.print_exc()
 
 
 def start_bot():

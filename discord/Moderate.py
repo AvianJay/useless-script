@@ -227,7 +227,7 @@ async def moderation_message_settings(interaction: discord.Interaction, user: di
             
 
 
-@bot.tree.command(name="管理-多重操作", description="對用戶進行多重操作")
+@bot.tree.command(name=app_commands.locale_str("admin-multi-moderate"), description="對用戶進行多重操作")
 @app_commands.describe(user="選擇用戶")
 @app_commands.default_permissions(administrator=True)
 @app_commands.allowed_installs(guilds=True, users=False)
@@ -411,7 +411,7 @@ async def multi_moderate(interaction: discord.Interaction, user: discord.Member)
     message = await interaction.response.send_message(embed=embed, view=view)
 
 
-@bot.tree.command(name="管理-發送懲處公告", description="手動發送懲處公告")
+@bot.tree.command(name=app_commands.locale_str("admin-send-moderation-message"), description="手動發送懲處公告")
 @app_commands.describe(user="選擇用戶", reason="處分原因", action="處分結果", moderator="執行管理員（可選）")
 @app_commands.default_permissions(administrator=True)
 @app_commands.allowed_installs(guilds=True, users=False)
@@ -426,7 +426,7 @@ async def send_moderation_message(interaction: discord.Interaction, user: discor
     await moderation_message_settings(interaction, user, moderator, actions)
 
 
-@bot.tree.command(name="管理-封禁", description="封禁用戶")
+@bot.tree.command(name=app_commands.locale_str("admin-ban"), description="封禁用戶")
 @app_commands.describe(user="選擇用戶（@或ID）", reason="封禁原因（可選）", duration="封禁時間（可選，預設永久）", delete_message="刪除訊息時間（可選，預設不刪除）")
 @app_commands.allowed_installs(guilds=True, users=False)
 @app_commands.default_permissions(ban_members=True)
@@ -495,7 +495,7 @@ async def ban_user(interaction: discord.Interaction, user: str, reason: str = "�
     await interaction.followup.send(f"已將 {mention} 封禁。")
 
 
-@bot.tree.command(name="管理-解封", description="解封用戶")
+@bot.tree.command(name=app_commands.locale_str("admin-unban"), description="解封用戶")
 @app_commands.describe(user="選擇用戶（@或ID）")
 @app_commands.default_permissions(ban_members=True)
 @app_commands.allowed_installs(guilds=True, users=False)
@@ -529,7 +529,7 @@ async def unban_user(interaction: discord.Interaction, user: str):
     await interaction.followup.send(f"已將 <@{user_id}> 解封。")
 
 
-@bot.tree.command(name="管理-踢出", description="踢出用戶")
+@bot.tree.command(name=app_commands.locale_str("admin-kick"), description="踢出用戶")
 @app_commands.describe(user="選擇用戶（@或ID）", reason="踢出原因（可選）")
 @app_commands.default_permissions(kick_members=True)
 @app_commands.allowed_installs(guilds=True, users=False)
@@ -577,7 +577,7 @@ async def kick_user(interaction: discord.Interaction, user: str, reason: str = "
     await interaction.followup.send(f"已將 {member.mention} 踢出伺服器。")
 
 
-@bot.tree.command(name="管理-禁言", description="禁言用戶")
+@bot.tree.command(name=app_commands.locale_str("admin-timeout"), description="禁言用戶")
 @app_commands.describe(user="選擇用戶（@或ID）", reason="禁言原因（可選）", duration="禁言時間（可選，預設10分鐘）")
 @app_commands.default_permissions(mute_members=True)
 @app_commands.allowed_installs(guilds=True, users=False)
