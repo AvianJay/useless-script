@@ -316,9 +316,16 @@ async def dsize_battle(interaction: discord.Interaction, opponent: discord.Membe
 async def dsize_settings(interaction: discord.Interaction, setting: str, value: str):
     guild_key = interaction.guild.id
     if setting == "dsize_max":
+        # check between 1 and 1000
+        if not value.isdigit() or int(value) < 1 or int(value) > 1000:
+            await interaction.response.send_message("最大長度必須是介於 1 到 1000 之間的整數。", ephemeral=True)
+            return
         set_server_config(guild_key, "dsize_max", int(value))
         await interaction.response.send_message(f"已設定最大長度為 {value} cm")
     elif setting == "dsize_surgery_percent":
+        if not value.isdigit() or int(value) < 1 or int(value) > 100:
+            await interaction.response.send_message("手術機率必須是介於 1 到 100 之間的整數。", ephemeral=True)
+            return
         set_server_config(guild_key, "dsize_surgery_percent", int(value))
         await interaction.response.send_message(f"已設定手術機率為 {str(int(value))}%")
     elif setting == "dsize_surgery_max":
