@@ -123,8 +123,9 @@ class CommandNameTranslator(app_commands.Translator):
                 "admin-kick": "管理-踢出",
                 "admin-send-moderation-message": "管理-發送懲處公告",
                 "settings-punishment-notify": "設定-懲罰通知",
-                "dsize-leaderboard": "dsize-排行榜",
-                "dsize-battle": "dsize-對決",
+                "leaderboard": "排行榜",
+                "battle": "對決",
+                "settings": "設定",
             }
             return translations.get(context.data.name, None)
         return None
