@@ -229,7 +229,7 @@ function startHttpServer() {
             res.writeHead(200, { "Content-Type": "text/plain" });
             return res.end("OXWU API");
         } else if (req.url === "/screenshot") {
-            const win = getWindow();
+            const win = await getWindow();
             if (!win) {
                 res.writeHead(500);
                 return res.end("No window");
