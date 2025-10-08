@@ -330,6 +330,9 @@ class DSize(commands.GroupCog, group_name="dsize"):
     @app_commands.default_permissions(administrator=True)
     async def dsize_settings(self, interaction: discord.Interaction, setting: str, value: str):
         guild_key = interaction.guild.id
+        if not interaction.user.guild_permissions.administrator:
+            await interaction.response.send_message("你沒有權限使用這個指令。", ephemeral=True)
+            return
         if setting == "dsize_max":
             if not value.isdigit() or int(value) < 1 or int(value) > 1000:
                 await interaction.response.send_message("最大長度必須是介於 1 到 1000 之間的整數。", ephemeral=True)
