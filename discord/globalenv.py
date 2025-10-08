@@ -125,10 +125,10 @@ class CommandNameTranslator(app_commands.Translator):
                 "battle": "對決",
                 "settings": "設定",
             }
-            if isinstance(context.data, app_commands.commands.Command):
+            if isinstance(context.data, app_commands.commands.Command) or isinstance(context.data, app_commands.commands.Group):
+                # print("[DEBUG] Translating command/group:", context.data.name)
+                # print("[DEBUG] Translated to:", translations.get(context.data.name, None))
                 return translations.get(context.data.name, None)
-            elif isinstance(context.data, commands.Group):
-                return translations.get(context.data.group_name, None)
         return None
 
 

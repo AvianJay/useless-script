@@ -213,6 +213,8 @@ async def moderation_message_settings(interaction: discord.Interaction, user: di
     await interaction.response.send_message(embed=embed, view=MessageButtons())
             
 
+@app_commands.guild_only()
+@app_commands.default_permissions(administrator=True)
 class Moderate(commands.GroupCog, group_name=app_commands.locale_str("admin")):
     def __init__(self, bot):
         self.bot = bot
