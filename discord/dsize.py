@@ -137,7 +137,7 @@ async def dsize(interaction: discord.Interaction, global_dsize: bool = False):
         await interaction.followup.send(f"你獲得了一次做手術的機會。\n請問你是否同意手術？\n-# 失敗機率：{fail_chance}%", view=dsize_SurgeryView())
 
 
-@bot.tree.command(name="dsize-排行榜", description="查看屌長排行榜")
+@bot.tree.command(name=app_commands.locale_str("dsize-leaderboard"), description="查看屌長排行榜")
 @app_commands.describe(limit="顯示前幾名 (預設10)", global_leaderboard="顯示全域排行榜 (預設否)")
 @app_commands.allowed_installs(guilds=True, users=True)
 @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
@@ -180,14 +180,18 @@ async def dsize_leaderboard(interaction: discord.Interaction, limit: int = 10, g
     # 建立排行榜訊息
     description = ""
     for rank, (user_id, size) in enumerate(top_users, start=1):
+        if size == -1:
+            size = "**男娘！**"
+        else:
+            size = f"{size} cm"
         if global_leaderboard:
             user = await bot.fetch_user(user_id)
         else:
             user = interaction.guild.get_member(user_id) if interaction.guild else await bot.fetch_user(user_id)
         if user:
-            description += f"**{rank}. {user.name}** - {size} cm\n"
+            description += f"**{rank}. {user.name}** - {size}\n"
         else:
-            description += f"**{rank}. 用戶ID {user_id}** - {size} cm\n"
+            description += f"**{rank}. 用戶ID {user_id}** - {size}\n"
 
     embed = discord.Embed(title="今天的長度排行榜", description=description, color=0x00ff00)
     # server info
@@ -198,7 +202,7 @@ async def dsize_leaderboard(interaction: discord.Interaction, limit: int = 10, g
     await interaction.response.send_message(embed=embed)
 
 
-@bot.tree.command(name="dsize-對決", description="比屌長(需要雙方今天沒有量過)")
+@bot.tree.command(name=app_commands.locale_str("dsize-battle"), description="比屌長(需要雙方今天沒有量過)")
 @app_commands.allowed_installs(guilds=True, users=False)
 @app_commands.allowed_contexts(guilds=True, dms=False, private_channels=False)
 @app_commands.describe(opponent="要比屌長的對象")
