@@ -55,8 +55,8 @@ async def dsize(interaction: discord.Interaction, global_dsize: bool = False):
         return
 
     # 隨機產生長度
-    size = random.randint(2, max_size)
-    d_string = "=" * (size - 2)
+    size = random.randint(1, max_size)
+    d_string = "=" * (size - 1)
 
     # 建立 Embed 訊息
     embed = discord.Embed(title=f"{interaction.user.name} 的長度：", color=0x00ff00)
@@ -91,12 +91,12 @@ async def dsize(interaction: discord.Interaction, global_dsize: bool = False):
                 # animate to new size
                 for i in range(1, new_size + 1):
                     if will_fail and i == on_fail_size:
-                        d_string_new = "?" * (size + i - 2)
+                        d_string_new = "?" * (size + i - 1)
                         embed = discord.Embed(title=f"{interaction.user.name} 的新長度：", color=0xff0000)
                         embed.add_field(name=f"{size + i} cm", value=f"8{d_string_new}D", inline=False)
                         await interaction.edit_original_response(content="正在手術中...？", embed=embed)
                         await discord.utils.sleep_until(datetime.utcnow() + timedelta(seconds=3))
-                        d_string_new = "💥" * (size + i - 2)
+                        d_string_new = "💥" * (size + i - 1)
                         embed.set_field_at(0, name=f"{size + i} cm", value=f"8{d_string_new}D", inline=False)
                         await interaction.edit_original_response(content="正在手術中...💥", embed=embed)
                         await discord.utils.sleep_until(datetime.utcnow() + timedelta(seconds=1))
@@ -106,7 +106,7 @@ async def dsize(interaction: discord.Interaction, global_dsize: bool = False):
                             embed.set_field_at(0, name=f"{size + i} cm", value=f"8{d_string_new}", inline=False)
                             await interaction.edit_original_response(content="正在手術中...💥", embed=embed)
                             await discord.utils.sleep_until(datetime.utcnow() + timedelta(seconds=1))
-                            ori -= random.randint(1, ori)
+                            ori -= min(3, ori)
                         embed.set_field_at(0, name=f"-1 cm", value=f"8", inline=False)
                         await interaction.edit_original_response(content="手術失敗，你變男娘了。", embed=embed)
                         set_user_data(guild_key, user_id, "last_dsize_size", -1)
@@ -245,24 +245,24 @@ async def dsize_battle(interaction: discord.Interaction, opponent: discord.Membe
             self.value = True
             self.stop()
             await interaction.response.edit_message(content="開始對決。", view=None)
-            size_user = random.randint(2, max_size)
-            size_opponent = random.randint(2, max_size)
+            size_user = random.randint(1, max_size)
+            size_opponent = random.randint(1, max_size)
 
             # 取得訊息物件
             msg = await interaction.original_response()
 
             for i in range(1, max(size_user, size_opponent) - 1):
-                d_string_user = "=" * min(i, size_user - 2)
-                d_string_opponent = "=" * min(i, size_opponent - 2)
+                d_string_user = "=" * min(i, size_user - 1)
+                d_string_opponent = "=" * min(i, size_opponent - 1)
                 embed = discord.Embed(title="比長度", color=0x00ff00)
                 embed.add_field(
                     name=f"{original_user.name} 的長度：",
-                    value=f"{size_user if i >= size_user - 2 else '??'} cm\n8{d_string_user}D",
+                    value=f"{size_user if i >= size_user - 1 else '??'} cm\n8{d_string_user}D",
                     inline=False,
                 )
                 embed.add_field(
                     name=f"{opponent.name} 的長度：",
-                    value=f"{size_opponent if i >= size_opponent - 2 else '??'} cm\n8{d_string_opponent}D",
+                    value=f"{size_opponent if i >= size_opponent - 1 else '??'} cm\n8{d_string_opponent}D",
                     inline=False,
                 )
                 await msg.edit(embed=embed)
