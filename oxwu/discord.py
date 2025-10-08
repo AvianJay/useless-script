@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import io
 import os
 import sys
 import time
@@ -92,6 +93,14 @@ if "with_components" not in query:
     config("webhook_url", new_webhook, "w")
 
     print("[+] Added with_components query to webhook")
+
+if "wait" not in query:
+    query["wait"] = "true"
+    new_query = urlencode(query, doseq=True)
+    new_webhook = urlunparse(parsed._replace(query=new_query))
+    config("webhook_url", new_webhook, "w")
+
+    print("[+] Added wait query to webhook")
 
 
 def safe_request(method, url, **kwargs):
@@ -356,7 +365,8 @@ def send_webhook_embed(data: dict, screenshot: bytes=None, report=False) -> str:
 
 
 def edit_webhook_embed(message_id: str, data: dict, screenshot: bytes=None, report=False):
-    url = f"{config('webhook_url')}/messages/{message_id}"
+    clean_webhook_url = config("webhook_url").split("?")[0]
+    url = f"{clean_webhook_url}/messages/{message_id}?with_components=true&wait=true"
     if report:
         # wait for cwa link
         cwa_got = False
@@ -372,19 +382,19 @@ def edit_webhook_embed(message_id: str, data: dict, screenshot: bytes=None, repo
         data = data2
     else:
         data = warning_to_embed(data)
-    if screenshot:
-        files = {"file": ("screenshot.png", screenshot, "image/png")}
-        data["embeds"][0]["image"] = {"url": "attachment://screenshot.png"}
-        data["attachments"] = []  # clear old attachment
-    else:
-        files = {}
     try:
-        safe_request(
-            "PATCH",
-            url,
-            data={"payload_json": json.dumps(data)},
-            files=files
-        )
+        if screenshot:
+            files = {
+                "file": ("screenshot.png", io.BytesIO(screenshot), "image/png"),
+                "payload_json": (None, json.dumps(data), "application/json")
+            }
+            data["embeds"][0]["image"] = {"url": "attachment://screenshot.png"}
+            data["attachments"] = []  # clear old attachment
+
+            print("[DEBUG] Files:", files.keys())
+            safe_request("PATCH", url, files=files)
+        else:
+            safe_request("PATCH", url, json=data)
     except Exception as e:
         print("[!] 無法更改訊息:", str(e))
 
