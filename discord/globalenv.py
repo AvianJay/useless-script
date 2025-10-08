@@ -109,25 +109,26 @@ class CommandNameTranslator(app_commands.Translator):
         locale: discord.Locale,
         context: app_commands.TranslationContext
     ):
-        if not isinstance(context.data, app_commands.commands.Command):
-            # pass
-            return None
         if locale == discord.Locale.taiwan_chinese:
-            # print("DEBUG: Translate", type(string), type(context.data))
+            # print("DEBUG: Translate", type(context.data))
             translations = {
                 "test": "測試",
-                "admin-multi-moderate": "管理-多重操作",
-                "admin-ban": "管理-封禁",
-                "admin-unban": "管理-解封",
-                "admin-timeout": "管理-禁言",
-                "admin-kick": "管理-踢出",
-                "admin-send-moderation-message": "管理-發送懲處公告",
+                "admin": "管理",
+                "multi-moderate": "多重操作",
+                "ban": "封禁",
+                "unban": "解封",
+                "timeout": "禁言",
+                "kick": "踢出",
+                "send-moderation-message": "發送懲處公告",
                 "settings-punishment-notify": "設定-懲罰通知",
                 "leaderboard": "排行榜",
                 "battle": "對決",
                 "settings": "設定",
             }
-            return translations.get(context.data.name, None)
+            if isinstance(context.data, app_commands.commands.Command):
+                return translations.get(context.data.name, None)
+            elif isinstance(context.data, commands.Group):
+                return translations.get(context.data.group_name, None)
         return None
 
 

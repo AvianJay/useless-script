@@ -117,19 +117,6 @@ async def check_unban():
 on_ready_tasks.append(check_unban)
 
 
-async def timeout_user(*, user_id: int, guild_id: int, until, reason: str="") -> bool:
-    headers = {"Authorization": f"Bot {bot.http.token}"}
-    url = f"https://discord.com/api/v9/guilds/{guild_id}/members/{user_id}"
-    timeout_dt = discord.utils.utcnow() + timedelta(seconds=until)
-    timeout = timeout_dt.replace(microsecond=0).isoformat()
-    payload = {'communication_disabled_until': timeout, 'reason': reason}
-    async with aiohttp.ClientSession() as session:
-        async with session.patch(url, json=payload, headers=headers) as resp:
-            if resp.status in range(200, 299):
-                return True
-            return False
-
-
 async def moderation_message_settings(interaction: discord.Interaction, user: discord.Member, moderator: discord.Member, actions: list):
     # generate message
     action_texts = []
@@ -226,405 +213,412 @@ async def moderation_message_settings(interaction: discord.Interaction, user: di
     await interaction.response.send_message(embed=embed, view=MessageButtons())
             
 
-
-@bot.tree.command(name=app_commands.locale_str("admin-multi-moderate"), description="對用戶進行多重操作")
-@app_commands.describe(user="選擇用戶")
-@app_commands.default_permissions(administrator=True)
-@app_commands.allowed_installs(guilds=True, users=False)
-async def multi_moderate(interaction: discord.Interaction, user: discord.Member):
-    guild = interaction.guild
-    if guild is None:
-        await interaction.response.send_message("此指令只能在伺服器中使用。", ephemeral=True)
-        return
-    actions = []  # {"action": "mute/kick/ban/add_role/remove_role", "reason": "reason", "duration": minutes, "role": role_id}
-    def actions_to_str(actions):
-        if not actions:
-            return "無"
-        return "\n".join(f"- {a['action']}" + (f" ({a['duration']} 分鐘)" if a['action'] == 'mute' and 'duration' in a else '') + (f" (角色 ID: {a['role']} / 名稱: {interaction.guild.get_role(a['role']).name})" if a['action'] in ['add_role', 'remove_role'] and 'role' in a else '') + (f": {a['reason']}" if 'reason' in a else '') for a in actions)
-    class ActionButtons(discord.ui.View):
-        def __init__(self):
-            super().__init__()
-        
-        @discord.ui.button(label="禁言", style=discord.ButtonStyle.primary, row=0)
-        async def mute_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-            class MuteModal(discord.ui.Modal, title="禁言時間設定"):
-                minutes = discord.ui.TextInput(label="禁言分鐘數", placeholder="請輸入禁言時間（分鐘）", required=True)
-                reason = discord.ui.TextInput(label="禁言原因", placeholder="請輸入禁言原因", required=True, max_length=100)
-                async def on_submit(self, interaction: discord.Interaction):
-                    if not interaction.user.guild_permissions.administrator:
-                        await interaction.response.send_message("你沒有權限執行此操作。", ephemeral=True)
-                        return
-                    try:
-                        duration = int(self.minutes.value)
-                        if duration <= 0:
-                            raise ValueError
-                    except ValueError:
-                        await interaction.response.send_message("無效的禁言時間，請輸入正整數。", ephemeral=True)
-                        return
-                    actions.append({"action": "mute", "duration": duration, "reason": self.reason.value})
-                    embed.set_field_at(0, name="目前操作", value=actions_to_str(actions), inline=False)
-                    await interaction.response.edit_message(embed=embed, view=view)
-            await interaction.response.send_modal(MuteModal())
-
-        @discord.ui.button(label="踢出", style=discord.ButtonStyle.danger, row=0)
-        async def kick_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-            class KickModal(discord.ui.Modal, title="踢出原因設定"):
-                reason = discord.ui.TextInput(label="踢出原因", placeholder="請輸入踢出原因", required=True, max_length=100)
-                async def on_submit(self, interaction: discord.Interaction):
-                    if not interaction.user.guild_permissions.administrator:
-                        await interaction.response.send_message("你沒有權限執行此操作。", ephemeral=True)
-                        return
-                    actions.append({"action": "kick", "reason": self.reason.value})
-                    embed.set_field_at(0, name="目前操作", value=actions_to_str(actions), inline=False)
-                    await interaction.response.edit_message(embed=embed, view=view)
-            await interaction.response.send_modal(KickModal())
-
-        @discord.ui.button(label="封禁", style=discord.ButtonStyle.danger, row=0)
-        async def ban_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-            class BanModal(discord.ui.Modal, title="封禁原因設定"):
-                reason = discord.ui.TextInput(label="封禁原因", placeholder="請輸入封禁原因", required=True, max_length=100)
-                async def on_submit(self, interaction: discord.Interaction):
-                    if not interaction.user.guild_permissions.administrator:
-                        await interaction.response.send_message("你沒有權限執行此操作。", ephemeral=True)
-                        return
-                    actions.append({"action": "ban", "reason": self.reason.value})
-                    embed.set_field_at(0, name="目前操作", value=actions_to_str(actions), inline=False)
-                    await interaction.response.edit_message(embed=embed, view=view)
-            await interaction.response.send_modal(BanModal())
+class Moderate(commands.GroupCog, group_name=app_commands.locale_str("admin")):
+    def __init__(self, bot):
+        self.bot = bot
+    
+    
+    @app_commands.command(name=app_commands.locale_str("multi-moderate"), description="對用戶進行多重操作")
+    @app_commands.describe(user="選擇用戶")
+    @app_commands.default_permissions(administrator=True)
+    @app_commands.allowed_installs(guilds=True, users=False)
+    async def multi_moderate(self, interaction: discord.Interaction, user: discord.Member):
+        guild = interaction.guild
+        if guild is None:
+            await interaction.response.send_message("此指令只能在伺服器中使用。", ephemeral=True)
+            return
+        actions = []  # {"action": "mute/kick/ban/add_role/remove_role", "reason": "reason", "duration": minutes, "role": role_id}
+        def actions_to_str(actions):
+            if not actions:
+                return "無"
+            return "\n".join(f"- {a['action']}" + (f" ({a['duration']} 分鐘)" if a['action'] == 'mute' and 'duration' in a else '') + (f" (角色 ID: {a['role']} / 名稱: {interaction.guild.get_role(a['role']).name})" if a['action'] in ['add_role', 'remove_role'] and 'role' in a else '') + (f": {a['reason']}" if 'reason' in a else '') for a in actions)
+        class ActionButtons(discord.ui.View):
+            def __init__(self):
+                super().__init__()
             
-        @discord.ui.button(label="新增身分組", style=discord.ButtonStyle.secondary, row=1)
-        async def add_role_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-            class AddRoleModal(discord.ui.Modal, title="新增身分組設定"):
-                role_name = discord.ui.TextInput(label="身分組名稱", placeholder="請輸入身分組名稱/ID/關鍵字", required=True, max_length=100)
-                async def on_submit(self, interaction: discord.Interaction):
-                    if not interaction.user.guild_permissions.administrator:
-                        await interaction.response.send_message("你沒有權限執行此操作。", ephemeral=True)
-                        return
-                    role_id = guess_role(interaction.guild, self.role_name.value)
-                    if role_id is None:
-                        await interaction.response.send_message("找不到指定的身分組，請確認名稱或 ID 是否正確。", ephemeral=True)
-                        return
-                    actions.append({"action": "add_role", "role": role_id})
-                    embed.set_field_at(0, name="目前操作", value=actions_to_str(actions), inline=False)
-                    await interaction.response.edit_message(embed=embed, view=view)
-            await interaction.response.send_modal(AddRoleModal())
+            @discord.ui.button(label="禁言", style=discord.ButtonStyle.primary, row=0)
+            async def mute_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+                class MuteModal(discord.ui.Modal, title="禁言時間設定"):
+                    minutes = discord.ui.TextInput(label="禁言分鐘數", placeholder="請輸入禁言時間（分鐘）", required=True)
+                    reason = discord.ui.TextInput(label="禁言原因", placeholder="請輸入禁言原因", required=True, max_length=100)
+                    async def on_submit(self, interaction: discord.Interaction):
+                        if not interaction.user.guild_permissions.administrator:
+                            await interaction.response.send_message("你沒有權限執行此操作。", ephemeral=True)
+                            return
+                        try:
+                            duration = int(self.minutes.value)
+                            if duration <= 0:
+                                raise ValueError
+                        except ValueError:
+                            await interaction.response.send_message("無效的禁言時間，請輸入正整數。", ephemeral=True)
+                            return
+                        actions.append({"action": "mute", "duration": duration, "reason": self.reason.value})
+                        embed.set_field_at(0, name="目前操作", value=actions_to_str(actions), inline=False)
+                        await interaction.response.edit_message(embed=embed, view=view)
+                await interaction.response.send_modal(MuteModal())
 
-        @discord.ui.button(label="移除身分組", style=discord.ButtonStyle.secondary, row=1)
-        async def remove_role_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-            class RemoveRoleModal(discord.ui.Modal, title="移除身分組設定"):
-                role_name = discord.ui.TextInput(label="身分組名稱", placeholder="請輸入身分組名稱/ID/關鍵字", required=True, max_length=100)
-                async def on_submit(self, interaction: discord.Interaction):
-                    if not interaction.user.guild_permissions.administrator:
-                        await interaction.response.send_message("你沒有權限執行此操作。", ephemeral=True)
-                        return
-                    role_id = guess_role(interaction.guild, self.role_name.value)
-                    if role_id is None:
-                        await interaction.response.send_message("找不到指定的身分組，請確認名稱或 ID 是否正確。", ephemeral=True)
-                        return
-                    actions.append({"action": "remove_role", "role": role_id})
-                    embed.set_field_at(0, name="目前操作", value=actions_to_str(actions), inline=False)
-                    await interaction.response.edit_message(embed=embed, view=view)
-            await interaction.response.send_modal(RemoveRoleModal())
-        
-        
-        @discord.ui.button(label="執行公告設定", style=discord.ButtonStyle.success, row=1)
-        async def moderation_message(self, interaction: discord.Interaction, button: discord.ui.Button):
-            if not interaction.user.guild_permissions.administrator:
-                await interaction.response.send_message("你沒有權限執行此操作。", ephemeral=True)
-                return
-            if not actions:
-                await interaction.response.send_message("請先選擇至少一個操作。", ephemeral=True)
-                return
-            actions_with_mention = actions.copy()
-            for action in actions_with_mention:
-                if action["action"] in ["add_role", "remove_role"]:
-                    role = interaction.guild.get_role(action["role"])
-                    if role:
-                        action["role"] = role.mention
-                    else:
-                        action["role"] = str(action["role"])
-            await moderation_message_settings(interaction, user, interaction.user, actions_with_mention)
-        
-        @discord.ui.button(label="執行操作", style=discord.ButtonStyle.success, row=2)
-        async def execute_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-            if not interaction.user.guild_permissions.administrator:
-                await interaction.response.send_message("你沒有權限執行此操作。", ephemeral=True)
-                return
-            if not actions:
-                await interaction.response.send_message("請先選擇至少一個操作。", ephemeral=True)
-                return
-            self.stop()
-            # execute actions
-            results = []
-            for action in actions:
-                try:
-                    if action["action"] == "mute":
-                        duration = action.get("duration", 0)
-                        await timeout_user(user_id=user.id, guild_id=interaction.guild.id, until=duration*60, reason=action.get("reason", "無"))
-                        results.append(f"已對 {user.mention} 禁言 {get_time_text(duration)}。")
-                    elif action["action"] == "kick":
-                        ModerationNotify.ignore_user(user.id)  # 避免重複通知
-                        try:
-                            await ModerationNotify.notify_user(user, interaction.guild, "踢出", action.get("reason", "無"))
-                        except Exception as e:
-                            print(f"[!] 無法私訊 {user}：{e}")
-                        await user.kick(reason=action.get("reason", "無"))
-                        results.append(f"已將 {user.mention} 踢出伺服器。")
-                    elif action["action"] == "ban":
-                        ModerationNotify.ignore_user(user.id)  # 避免重複通知
-                        try:
-                            await ModerationNotify.notify_user(user, interaction.guild, "封禁", action.get("reason", "無"))
-                        except Exception as e:
-                            print(f"[!] 無法私訊 {user}：{e}")
-                        await user.ban(reason=action.get("reason", "無"))
-                        results.append(f"已將 {user.mention} 封禁。")
-                    elif action["action"] == "add_role":
+            @discord.ui.button(label="踢出", style=discord.ButtonStyle.danger, row=0)
+            async def kick_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+                class KickModal(discord.ui.Modal, title="踢出原因設定"):
+                    reason = discord.ui.TextInput(label="踢出原因", placeholder="請輸入踢出原因", required=True, max_length=100)
+                    async def on_submit(self, interaction: discord.Interaction):
+                        if not interaction.user.guild_permissions.administrator:
+                            await interaction.response.send_message("你沒有權限執行此操作。", ephemeral=True)
+                            return
+                        actions.append({"action": "kick", "reason": self.reason.value})
+                        embed.set_field_at(0, name="目前操作", value=actions_to_str(actions), inline=False)
+                        await interaction.response.edit_message(embed=embed, view=view)
+                await interaction.response.send_modal(KickModal())
+
+            @discord.ui.button(label="封禁", style=discord.ButtonStyle.danger, row=0)
+            async def ban_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+                class BanModal(discord.ui.Modal, title="封禁原因設定"):
+                    reason = discord.ui.TextInput(label="封禁原因", placeholder="請輸入封禁原因", required=True, max_length=100)
+                    async def on_submit(self, interaction: discord.Interaction):
+                        if not interaction.user.guild_permissions.administrator:
+                            await interaction.response.send_message("你沒有權限執行此操作。", ephemeral=True)
+                            return
+                        actions.append({"action": "ban", "reason": self.reason.value})
+                        embed.set_field_at(0, name="目前操作", value=actions_to_str(actions), inline=False)
+                        await interaction.response.edit_message(embed=embed, view=view)
+                await interaction.response.send_modal(BanModal())
+                
+            @discord.ui.button(label="新增身分組", style=discord.ButtonStyle.secondary, row=1)
+            async def add_role_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+                class AddRoleModal(discord.ui.Modal, title="新增身分組設定"):
+                    role_name = discord.ui.TextInput(label="身分組名稱", placeholder="請輸入身分組名稱/ID/關鍵字", required=True, max_length=100)
+                    async def on_submit(self, interaction: discord.Interaction):
+                        if not interaction.user.guild_permissions.administrator:
+                            await interaction.response.send_message("你沒有權限執行此操作。", ephemeral=True)
+                            return
+                        role_id = guess_role(interaction.guild, self.role_name.value)
+                        if role_id is None:
+                            await interaction.response.send_message("找不到指定的身分組，請確認名稱或 ID 是否正確。", ephemeral=True)
+                            return
+                        actions.append({"action": "add_role", "role": role_id})
+                        embed.set_field_at(0, name="目前操作", value=actions_to_str(actions), inline=False)
+                        await interaction.response.edit_message(embed=embed, view=view)
+                await interaction.response.send_modal(AddRoleModal())
+
+            @discord.ui.button(label="移除身分組", style=discord.ButtonStyle.secondary, row=1)
+            async def remove_role_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+                class RemoveRoleModal(discord.ui.Modal, title="移除身分組設定"):
+                    role_name = discord.ui.TextInput(label="身分組名稱", placeholder="請輸入身分組名稱/ID/關鍵字", required=True, max_length=100)
+                    async def on_submit(self, interaction: discord.Interaction):
+                        if not interaction.user.guild_permissions.administrator:
+                            await interaction.response.send_message("你沒有權限執行此操作。", ephemeral=True)
+                            return
+                        role_id = guess_role(interaction.guild, self.role_name.value)
+                        if role_id is None:
+                            await interaction.response.send_message("找不到指定的身分組，請確認名稱或 ID 是否正確。", ephemeral=True)
+                            return
+                        actions.append({"action": "remove_role", "role": role_id})
+                        embed.set_field_at(0, name="目前操作", value=actions_to_str(actions), inline=False)
+                        await interaction.response.edit_message(embed=embed, view=view)
+                await interaction.response.send_modal(RemoveRoleModal())
+            
+            
+            @discord.ui.button(label="執行公告設定", style=discord.ButtonStyle.success, row=1)
+            async def moderation_message(self, interaction: discord.Interaction, button: discord.ui.Button):
+                if not interaction.user.guild_permissions.administrator:
+                    await interaction.response.send_message("你沒有權限執行此操作。", ephemeral=True)
+                    return
+                if not actions:
+                    await interaction.response.send_message("請先選擇至少一個操作。", ephemeral=True)
+                    return
+                actions_with_mention = actions.copy()
+                for action in actions_with_mention:
+                    if action["action"] in ["add_role", "remove_role"]:
                         role = interaction.guild.get_role(action["role"])
                         if role:
-                            await user.add_roles(role, reason="多重操作")
-                            results.append(f"已給予 {user.mention} 身分組 {role.name}。")
+                            action["role"] = role.mention
                         else:
-                            results.append(f"找不到身分組 ID {action['role']}，無法新增身分組。")
-                    elif action["action"] == "remove_role":
-                        role = interaction.guild.get_role(action["role"])
-                        if role:
-                            await user.remove_roles(role, reason="多重操作")
-                            results.append(f"已移除 {user.mention} 身分組 {role.name}。")
-                        else:
-                            results.append(f"找不到身分組 ID {action['role']}，無法移除身分組。")
-                except Exception as e:
-                    results.append(f"執行 {action['action']} 時發生錯誤：{e}")
-            await interaction.response.edit_message(content="\n".join(results), embed=None, view=None)
+                            action["role"] = str(action["role"])
+                await moderation_message_settings(interaction, user, interaction.user, actions_with_mention)
+            
+            @discord.ui.button(label="執行操作", style=discord.ButtonStyle.success, row=2)
+            async def execute_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+                if not interaction.user.guild_permissions.administrator:
+                    await interaction.response.send_message("你沒有權限執行此操作。", ephemeral=True)
+                    return
+                if not actions:
+                    await interaction.response.send_message("請先選擇至少一個操作。", ephemeral=True)
+                    return
+                self.stop()
+                # execute actions
+                results = []
+                for action in actions:
+                    try:
+                        if action["action"] == "mute":
+                            duration = action.get("duration", 0)
+                            await user.timeout(timedelta(minutes=duration), reason=action.get("reason", "無"))
+                            results.append(f"已對 {user.mention} 禁言 {get_time_text(duration)}。")
+                        elif action["action"] == "kick":
+                            ModerationNotify.ignore_user(user.id)  # 避免重複通知
+                            try:
+                                await ModerationNotify.notify_user(user, interaction.guild, "踢出", action.get("reason", "無"))
+                            except Exception as e:
+                                print(f"[!] 無法私訊 {user}：{e}")
+                            await user.kick(reason=action.get("reason", "無"))
+                            results.append(f"已將 {user.mention} 踢出伺服器。")
+                        elif action["action"] == "ban":
+                            ModerationNotify.ignore_user(user.id)  # 避免重複通知
+                            try:
+                                await ModerationNotify.notify_user(user, interaction.guild, "封禁", action.get("reason", "無"))
+                            except Exception as e:
+                                print(f"[!] 無法私訊 {user}：{e}")
+                            await user.ban(reason=action.get("reason", "無"))
+                            results.append(f"已將 {user.mention} 封禁。")
+                        elif action["action"] == "add_role":
+                            role = interaction.guild.get_role(action["role"])
+                            if role:
+                                await user.add_roles(role, reason="多重操作")
+                                results.append(f"已給予 {user.mention} 身分組 {role.name}。")
+                            else:
+                                results.append(f"找不到身分組 ID {action['role']}，無法新增身分組。")
+                        elif action["action"] == "remove_role":
+                            role = interaction.guild.get_role(action["role"])
+                            if role:
+                                await user.remove_roles(role, reason="多重操作")
+                                results.append(f"已移除 {user.mention} 身分組 {role.name}。")
+                            else:
+                                results.append(f"找不到身分組 ID {action['role']}，無法移除身分組。")
+                    except Exception as e:
+                        results.append(f"執行 {action['action']} 時發生錯誤：{e}")
+                await interaction.response.edit_message(content="\n".join(results), embed=None, view=None)
 
-        @discord.ui.button(label="取消", style=discord.ButtonStyle.secondary, row=2)
-        async def cancel_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-            if not interaction.user.guild_permissions.administrator:
-                await interaction.response.send_message("你沒有權限執行此操作。", ephemeral=True)
+            @discord.ui.button(label="取消", style=discord.ButtonStyle.secondary, row=2)
+            async def cancel_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+                if not interaction.user.guild_permissions.administrator:
+                    await interaction.response.send_message("你沒有權限執行此操作。", ephemeral=True)
+                    return
+                actions.append({"action": "cancel", "user": user.id})
+                self.stop()
+                await interaction.response.edit_message(content="操作已取消。", view=None)
+        
+        embed = discord.Embed(title="多重操作", description=f"請選擇對 {user.name} 執行的操作：", color=0xff0000)
+        embed.add_field(name="目前操作", value="無", inline=False)
+        view = ActionButtons()
+        message = await interaction.response.send_message(embed=embed, view=view)
+
+
+    @app_commands.command(name=app_commands.locale_str("send-moderation-message"), description="手動發送懲處公告")
+    @app_commands.describe(user="選擇用戶", reason="處分原因", action="處分結果", moderator="執行管理員（可選）")
+    @app_commands.default_permissions(administrator=True)
+    @app_commands.allowed_installs(guilds=True, users=False)
+    async def send_moderation_message(self, interaction: discord.Interaction, user: discord.Member, reason: str, action: str, moderator: discord.Member=None):
+        guild = interaction.guild
+        if guild is None:
+            await interaction.response.send_message("此指令只能在伺服器中使用。", ephemeral=True)
+            return
+        if moderator is None:
+            moderator = interaction.user
+        actions = [{"action": "custom", "custom_action": action, "reason": reason}]
+        await moderation_message_settings(interaction, user, moderator, actions)
+
+
+    @bot.tree.command(name=app_commands.locale_str("ban"), description="封禁用戶")
+    @app_commands.describe(user="選擇用戶（@或ID）", reason="封禁原因（可選）", duration="封禁時間（可選，預設永久）", delete_message="刪除訊息時間（可選，預設不刪除）")
+    @app_commands.allowed_installs(guilds=True, users=False)
+    @app_commands.default_permissions(ban_members=True)
+    async def ban_user(self, interaction: discord.Interaction, user: str, reason: str = "無", duration: str = "", delete_message: str = ""):
+        await interaction.response.defer()
+        guild = interaction.guild
+        if guild is None:
+            await interaction.followup.send("此指令只能在伺服器中使用。")
+            return
+        
+        if user.startswith("<@") and user.endswith(">"):
+            user = user[2:-1]
+            if user.startswith("!"):
+                user = user[1:]
+
+        # 解析目標 user id / 取得 User/Member 物件（若在伺服器內會是 Member）
+        if isinstance(user, discord.Member):
+            user_id = user.id
+            user_obj = user
+        else:
+            try:
+                user_id = int(user)
+            except Exception:
+                await interaction.followup.send("無效的使用者或 ID。")
                 return
-            actions.append({"action": "cancel", "user": user.id})
-            self.stop()
-            await interaction.response.edit_message(content="操作已取消。", view=None)
-    
-    embed = discord.Embed(title="多重操作", description=f"請選擇對 {user.name} 執行的操作：", color=0xff0000)
-    embed.add_field(name="目前操作", value="無", inline=False)
-    view = ActionButtons()
-    message = await interaction.response.send_message(embed=embed, view=view)
+            user_obj = None
+            try:
+                user_obj = await bot.fetch_user(user_id)
+            except Exception:
+                user_obj = None  # 仍可以 id 封禁，但無法直接私訊
+
+        # 解析封禁時間（可選，若提供則記錄 unban_time）
+        unban_time = None
+        if duration:
+            duration_seconds = timestr_to_seconds(duration)
+            if duration_seconds <= 0:
+                await interaction.followup.send("無效的封禁時間，請使用類似 10m、2h、3d 的格式。")
+                return
+            unban_time = datetime.now(timezone.utc) + timedelta(seconds=duration_seconds)
+
+        # 記錄解封時間（若為永久則存 None）
+        set_user_data(guild.id, user_id, "unban_time", unban_time.isoformat() if unban_time else None)
+
+        # 通知與忽略（使用 id 與可用的 user 物件）
+        ModerationNotify.ignore_user(user_id)
+        try:
+            await ModerationNotify.notify_user(user_obj if user_obj else user_id, guild, "封禁", reason, end_time=unban_time)
+        except Exception:
+            # 如果 notify_user 期待 Member/User 物件但我們只有 id，忽略錯誤
+            pass
+
+        # 解析要刪除訊息的秒數
+        delete_message_seconds = timestr_to_seconds(delete_message)
+
+        # 執行封禁：若有 Member 直接用 member.ban，否則用 guild.ban 與 discord.Object(id=...)
+        try:
+            if isinstance(user, discord.Member):
+                await user.ban(reason=reason, delete_message_seconds=delete_message_seconds)
+            else:
+                await guild.ban(discord.Object(id=user_id), reason=reason, delete_message_seconds=delete_message_seconds)
+        except Exception as e:
+            await interaction.followup.send(f"封禁時發生錯誤：{e}")
+            return
+
+        mention = user_obj.mention if user_obj else f"<@{user_id}>"
+        await interaction.followup.send(f"已將 {mention} 封禁。")
 
 
-@bot.tree.command(name=app_commands.locale_str("admin-send-moderation-message"), description="手動發送懲處公告")
-@app_commands.describe(user="選擇用戶", reason="處分原因", action="處分結果", moderator="執行管理員（可選）")
-@app_commands.default_permissions(administrator=True)
-@app_commands.allowed_installs(guilds=True, users=False)
-async def send_moderation_message(interaction: discord.Interaction, user: discord.Member, reason: str, action: str, moderator: discord.Member=None):
-    guild = interaction.guild
-    if guild is None:
-        await interaction.response.send_message("此指令只能在伺服器中使用。", ephemeral=True)
-        return
-    if moderator is None:
-        moderator = interaction.user
-    actions = [{"action": "custom", "custom_action": action, "reason": reason}]
-    await moderation_message_settings(interaction, user, moderator, actions)
+    @app_commands.command(name=app_commands.locale_str("unban"), description="解封用戶")
+    @app_commands.describe(user="選擇用戶（@或ID）")
+    @app_commands.default_permissions(ban_members=True)
+    @app_commands.allowed_installs(guilds=True, users=False)
+    async def unban_user(self, interaction: discord.Interaction, user: str):
+        await interaction.response.defer()
+        guild = interaction.guild
+        if guild is None:
+            await interaction.followup.send("此指令只能在伺服器中使用。")
+            return
+        
+        if user.startswith("<@") and user.endswith(">"):
+            user = user[2:-1]
+            if user.startswith("!"):
+                user = user[1:]
 
-
-@bot.tree.command(name=app_commands.locale_str("admin-ban"), description="封禁用戶")
-@app_commands.describe(user="選擇用戶（@或ID）", reason="封禁原因（可選）", duration="封禁時間（可選，預設永久）", delete_message="刪除訊息時間（可選，預設不刪除）")
-@app_commands.allowed_installs(guilds=True, users=False)
-@app_commands.default_permissions(ban_members=True)
-async def ban_user(interaction: discord.Interaction, user: str, reason: str = "無", duration: str = "", delete_message: str = ""):
-    await interaction.response.defer()
-    guild = interaction.guild
-    if guild is None:
-        await interaction.followup.send("此指令只能在伺服器中使用。")
-        return
-    
-    if user.startswith("<@") and user.endswith(">"):
-        user = user[2:-1]
-        if user.startswith("!"):
-            user = user[1:]
-
-    # 解析目標 user id / 取得 User/Member 物件（若在伺服器內會是 Member）
-    if isinstance(user, discord.Member):
-        user_id = user.id
-        user_obj = user
-    else:
+        # 解析目標 user id
         try:
             user_id = int(user)
         except Exception:
             await interaction.followup.send("無效的使用者或 ID。")
             return
-        user_obj = None
-        try:
-            user_obj = await bot.fetch_user(user_id)
-        except Exception:
-            user_obj = None  # 仍可以 id 封禁，但無法直接私訊
 
-    # 解析封禁時間（可選，若提供則記錄 unban_time）
-    unban_time = None
-    if duration:
+        # 執行解封
+        try:
+            await guild.unban(discord.Object(id=user_id), reason="手動解封")
+            set_user_data(guild.id, user_id, "unban_time", None)
+        except Exception as e:
+            await interaction.followup.send(f"解封時發生錯誤：{e}")
+            return
+
+        await interaction.followup.send(f"已將 <@{user_id}> 解封。")
+
+
+    @bot.tree.command(name=app_commands.locale_str("kick"), description="踢出用戶")
+    @app_commands.describe(user="選擇用戶（@或ID）", reason="踢出原因（可選）")
+    @app_commands.default_permissions(kick_members=True)
+    @app_commands.allowed_installs(guilds=True, users=False)
+    async def kick_user(self, interaction: discord.Interaction, user: str, reason: str = "無"):
+        await interaction.response.defer()
+        guild = interaction.guild
+        if guild is None:
+            await interaction.followup.send("此指令只能在伺服器中使用。")
+            return
+        
+        if user.startswith("<@") and user.endswith(">"):
+            user = user[2:-1]
+            if user.startswith("!"):
+                user = user[1:]
+
+        # 解析目標 user id / 取得 Member 物件
+        if isinstance(user, discord.Member):
+            user_id = user.id
+            member = user
+        else:
+            try:
+                user_id = int(user)
+            except Exception:
+                await interaction.followup.send("無效的使用者或 ID。")
+                return
+            member = guild.get_member(user_id)
+            if member is None:
+                await interaction.followup.send("該用戶不在伺服器中，無法踢出。")
+                return
+
+        # 通知與忽略
+        ModerationNotify.ignore_user(user_id)
+        try:
+            await ModerationNotify.notify_user(member, guild, "踢出", reason)
+        except Exception:
+            pass
+
+        # 執行踢出
+        try:
+            await member.kick(reason=reason)
+        except Exception as e:
+            await interaction.followup.send(f"踢出時發生錯誤：{e}")
+            return
+
+        await interaction.followup.send(f"已將 {member.mention} 踢出伺服器。")
+
+
+    @bot.tree.command(name=app_commands.locale_str("timeout"), description="禁言用戶")
+    @app_commands.describe(user="選擇用戶（@或ID）", reason="禁言原因（可選）", duration="禁言時間（可選，預設10分鐘）")
+    @app_commands.default_permissions(mute_members=True)
+    @app_commands.allowed_installs(guilds=True, users=False)
+    async def timeout_user(self, interaction: discord.Interaction, user: str, reason: str = "無", duration: str = "10m"):
+        # 先 defer，避免耗時操作導致 interaction 過期
+        await interaction.response.defer()
+
+        guild = interaction.guild
+        if guild is None:
+            await interaction.followup.send("此指令只能在伺服器中使用。")
+            return
+
+        if user.startswith("<@") and user.endswith(">"):
+            user = user[2:-1]
+            if user.startswith("!"):
+                user = user[1:]
+
+        # 解析 target
+        if isinstance(user, discord.Member):
+            user_id = user.id
+            member = user
+        else:
+            try:
+                user_id = int(user)
+            except Exception:
+                await interaction.followup.send("無效的使用者或 ID。")
+                return
+            member = guild.get_member(user_id)
+            if member is None:
+                await interaction.followup.send("該用戶不在伺服器中，無法禁言。")
+                return
+
         duration_seconds = timestr_to_seconds(duration)
         if duration_seconds <= 0:
-            await interaction.followup.send("無效的封禁時間，請使用類似 10m、2h、3d 的格式。")
+            await interaction.followup.send("無效的禁言時間，請使用類似 10m、2h、3d 的格式。")
             return
-        unban_time = datetime.now(timezone.utc) + timedelta(seconds=duration_seconds)
 
-    # 記錄解封時間（若為永久則存 None）
-    set_user_data(guild.id, user_id, "unban_time", unban_time.isoformat() if unban_time else None)
-
-    # 通知與忽略（使用 id 與可用的 user 物件）
-    ModerationNotify.ignore_user(user_id)
-    try:
-        await ModerationNotify.notify_user(user_obj if user_obj else user_id, guild, "封禁", reason, end_time=unban_time)
-    except Exception:
-        # 如果 notify_user 期待 Member/User 物件但我們只有 id，忽略錯誤
-        pass
-
-    # 解析要刪除訊息的秒數
-    delete_message_seconds = timestr_to_seconds(delete_message)
-
-    # 執行封禁：若有 Member 直接用 member.ban，否則用 guild.ban 與 discord.Object(id=...)
-    try:
-        if isinstance(user, discord.Member):
-            await user.ban(reason=reason, delete_message_seconds=delete_message_seconds)
-        else:
-            await guild.ban(discord.Object(id=user_id), reason=reason, delete_message_seconds=delete_message_seconds)
-    except Exception as e:
-        await interaction.followup.send(f"封禁時發生錯誤：{e}")
-        return
-
-    mention = user_obj.mention if user_obj else f"<@{user_id}>"
-    await interaction.followup.send(f"已將 {mention} 封禁。")
-
-
-@bot.tree.command(name=app_commands.locale_str("admin-unban"), description="解封用戶")
-@app_commands.describe(user="選擇用戶（@或ID）")
-@app_commands.default_permissions(ban_members=True)
-@app_commands.allowed_installs(guilds=True, users=False)
-async def unban_user(interaction: discord.Interaction, user: str):
-    await interaction.response.defer()
-    guild = interaction.guild
-    if guild is None:
-        await interaction.followup.send("此指令只能在伺服器中使用。")
-        return
-    
-    if user.startswith("<@") and user.endswith(">"):
-        user = user[2:-1]
-        if user.startswith("!"):
-            user = user[1:]
-
-    # 解析目標 user id
-    try:
-        user_id = int(user)
-    except Exception:
-        await interaction.followup.send("無效的使用者或 ID。")
-        return
-
-    # 執行解封
-    try:
-        await guild.unban(discord.Object(id=user_id), reason="手動解封")
-        set_user_data(guild.id, user_id, "unban_time", None)
-    except Exception as e:
-        await interaction.followup.send(f"解封時發生錯誤：{e}")
-        return
-
-    await interaction.followup.send(f"已將 <@{user_id}> 解封。")
-
-
-@bot.tree.command(name=app_commands.locale_str("admin-kick"), description="踢出用戶")
-@app_commands.describe(user="選擇用戶（@或ID）", reason="踢出原因（可選）")
-@app_commands.default_permissions(kick_members=True)
-@app_commands.allowed_installs(guilds=True, users=False)
-async def kick_user(interaction: discord.Interaction, user: str, reason: str = "無"):
-    await interaction.response.defer()
-    guild = interaction.guild
-    if guild is None:
-        await interaction.followup.send("此指令只能在伺服器中使用。")
-        return
-    
-    if user.startswith("<@") and user.endswith(">"):
-        user = user[2:-1]
-        if user.startswith("!"):
-            user = user[1:]
-
-    # 解析目標 user id / 取得 Member 物件
-    if isinstance(user, discord.Member):
-        user_id = user.id
-        member = user
-    else:
+        # 執行禁言（可能耗時）
         try:
-            user_id = int(user)
-        except Exception:
-            await interaction.followup.send("無效的使用者或 ID。")
-            return
-        member = guild.get_member(user_id)
-        if member is None:
-            await interaction.followup.send("該用戶不在伺服器中，無法踢出。")
+            await member.timeout(timedelta(seconds=duration_seconds), reason=reason)
+        except Exception as e:
+            print(f"[!] 禁言 {member} 時發生錯誤：{e}")
+            await interaction.followup.send(f"禁言時發生錯誤：{e}")
             return
 
-    # 通知與忽略
-    ModerationNotify.ignore_user(user_id)
-    try:
-        await ModerationNotify.notify_user(member, guild, "踢出", reason)
-    except Exception:
-        pass
-
-    # 執行踢出
-    try:
-        await member.kick(reason=reason)
-    except Exception as e:
-        await interaction.followup.send(f"踢出時發生錯誤：{e}")
-        return
-
-    await interaction.followup.send(f"已將 {member.mention} 踢出伺服器。")
+        # 使用 followup 送出最終訊息
+        await interaction.followup.send(f"已對 {member.mention} 禁言 {get_time_text(duration_seconds)}。")
 
 
-@bot.tree.command(name=app_commands.locale_str("admin-timeout"), description="禁言用戶")
-@app_commands.describe(user="選擇用戶（@或ID）", reason="禁言原因（可選）", duration="禁言時間（可選，預設10分鐘）")
-@app_commands.default_permissions(mute_members=True)
-@app_commands.allowed_installs(guilds=True, users=False)
-async def mute_user(interaction: discord.Interaction, user: str, reason: str = "無", duration: str = "10m"):
-    # 先 defer，避免耗時操作導致 interaction 過期
-    await interaction.response.defer()
-
-    guild = interaction.guild
-    if guild is None:
-        await interaction.followup.send("此指令只能在伺服器中使用。")
-        return
-
-    if user.startswith("<@") and user.endswith(">"):
-        user = user[2:-1]
-        if user.startswith("!"):
-            user = user[1:]
-
-    # 解析 target
-    if isinstance(user, discord.Member):
-        user_id = user.id
-        member = user
-    else:
-        try:
-            user_id = int(user)
-        except Exception:
-            await interaction.followup.send("無效的使用者或 ID。")
-            return
-        member = guild.get_member(user_id)
-        if member is None:
-            await interaction.followup.send("該用戶不在伺服器中，無法禁言。")
-            return
-
-    duration_seconds = timestr_to_seconds(duration)
-    if duration_seconds <= 0:
-        await interaction.followup.send("無效的禁言時間，請使用類似 10m、2h、3d 的格式。")
-        return
-
-    # 執行禁言（可能耗時）
-    try:
-        await timeout_user(user_id=user_id, guild_id=guild.id, until=duration_seconds, reason=reason)
-    except Exception as e:
-        print(f"[!] 禁言 {member} 時發生錯誤：{e}")
-        await interaction.followup.send(f"禁言時發生錯誤：{e}")
-        return
-
-    # 使用 followup 送出最終訊息
-    await interaction.followup.send(f"已對 {member.mention} 禁言 {get_time_text(duration_seconds)}。")
+asyncio.run(bot.add_cog(Moderate(bot)))
 
 
 if __name__ == "__main__":
