@@ -71,6 +71,7 @@ async def dsize(interaction: discord.Interaction, global_dsize: bool = False):
     surgery_percent = get_server_config(guild_key, "dsize_surgery_percent", 2)
     # check if user got surgery chance
     if percent_random(surgery_percent):
+        fail_chance = random.randint(1, 100)
         class dsize_SurgeryView(discord.ui.View):
             def __init__(self):
                 super().__init__(timeout=60)  # 60 seconds to click
@@ -82,11 +83,34 @@ async def dsize(interaction: discord.Interaction, global_dsize: bool = False):
                     return
                 self.stop()
                 new_size = random.randint(1, get_server_config(guild_key, "dsize_surgery_max", 10))
+                will_fail = percent_random(fail_chance)
+                on_fail_size = random.randint(1, new_size) if will_fail else 0
                 embed = discord.Embed(title=f"{interaction.user.name} 的新長度：", color=0xff0000)
                 embed.add_field(name=f"{size} cm", value=f"8{d_string}D", inline=False)
                 await interaction.response.edit_message(embed=embed, view=None)
                 # animate to new size
                 for i in range(1, new_size + 1):
+                    if will_fail and i == on_fail_size:
+                        d_string_new = "?" * (size + i - 2)
+                        embed = discord.Embed(title=f"{interaction.user.name} 的新長度：", color=0xff0000)
+                        embed.add_field(name=f"{size + i} cm", value=f"8{d_string_new}D", inline=False)
+                        await interaction.edit_original_response(content="正在手術中...？", embed=embed)
+                        await discord.utils.sleep_until(datetime.utcnow() + timedelta(seconds=3))
+                        d_string_new = "💥" * (size + i - 2)
+                        embed.set_field_at(0, name=f"{size + i} cm", value=f"8{d_string_new}D", inline=False)
+                        await interaction.edit_original_response(content="正在手術中...💥", embed=embed)
+                        await discord.utils.sleep_until(datetime.utcnow() + timedelta(seconds=1))
+                        ori = size + i - 2
+                        while ori > 0:
+                            d_string_new = "💥" * ori
+                            embed.set_field_at(0, name=f"{size + i} cm", value=f"8{d_string_new}", inline=False)
+                            await interaction.edit_original_response(content="正在手術中...💥", embed=embed)
+                            await discord.utils.sleep_until(datetime.utcnow() + timedelta(seconds=1))
+                            ori -= random.randint(1, ori)
+                        embed.set_field_at(0, name=f"-1 cm", value=f"8", inline=False)
+                        await interaction.edit_original_response(content="手術失敗，你變男娘了。", embed=embed)
+                        set_user_data(guild_key, user_id, "last_dsize_size", -1)
+                        return
                     d_string_new = "=" * (size + i - 2)
                     current_size = size + i
                     embed = discord.Embed(title=f"{interaction.user.name} 的新長度：", color=0xff0000)
@@ -97,7 +121,7 @@ async def dsize(interaction: discord.Interaction, global_dsize: bool = False):
                 embed.add_field(name=f"{size + new_size} cm", value=f"8{'=' * (size + new_size - 2)}D", inline=False)
                 await interaction.edit_original_response(content="手術成功。", embed=embed)
                 set_user_data(guild_key, user_id, "last_dsize_size", new_size + size)
-        await interaction.followup.send("你獲得了一次做手術的機會！\n點擊下方按鈕開始手術。", view=dsize_SurgeryView())
+        await interaction.followup.send(f"你獲得了一次做手術的機會！\n點擊下方按鈕開始手術。\n-# 失敗機率：{fail_chance}%", view=dsize_SurgeryView())
 
 
 @bot.tree.command(name="dsize-排行榜", description="查看屌長排行榜")
