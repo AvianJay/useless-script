@@ -121,9 +121,9 @@ class CommandNameTranslator(app_commands.Translator):
                 "kick": "踢出",
                 "send-moderation-message": "發送懲處公告",
                 "settings-punishment-notify": "設定-懲罰通知",
-                "leaderboard": "排行榜",
-                "battle": "對決",
-                "settings": "設定",
+                "dsize-leaderboard": "dsize-排行榜",
+                "dsize-battle": "dsize-對決",
+                "dsize-settings": "dsize-設定",
             }
             if isinstance(context.data, app_commands.commands.Command) or isinstance(context.data, app_commands.commands.Group):
                 # print("[DEBUG] Translating command/group:", context.data.name)
