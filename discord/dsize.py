@@ -65,7 +65,7 @@ async def dsize(interaction: discord.Interaction, global_dsize: bool = False):
     d_string = "=" * (size - 1)
 
     # 建立 Embed 訊息
-    embed = discord.Embed(title=f"{interaction.user.mention} 的長度：", color=0x00ff00)
+    embed = discord.Embed(title=f"{interaction.user.name} 的長度：", color=0x00ff00)
     embed.add_field(name=f"{size} cm", value=f"8{d_string}D", inline=False)
 
     await interaction.response.send_message(embed=embed)
@@ -104,14 +104,14 @@ async def dsize(interaction: discord.Interaction, global_dsize: bool = False):
                 new_size = random.randint(1, get_server_config(guild_key, "dsize_surgery_max", 10))
                 will_fail = percent_random(fail_chance)
                 on_fail_size = random.randint(1, new_size) if will_fail else 0
-                embed = discord.Embed(title=f"{interaction.user.mention} 的新長度：", color=0xff0000)
+                embed = discord.Embed(title=f"{interaction.user.name} 的新長度：", color=0xff0000)
                 embed.add_field(name=f"{size} cm", value=f"8{d_string}D", inline=False)
                 await interaction.response.edit_message(embed=embed, view=None)
                 # animate to new size
                 for i in range(1, new_size + 1):
                     if will_fail and i == on_fail_size:
                         d_string_new = "?" * (size + i - 1)
-                        embed = discord.Embed(title=f"{interaction.user.mention} 的新長度：", color=0xff0000)
+                        embed = discord.Embed(title=f"{interaction.user.name} 的新長度：", color=0xff0000)
                         embed.add_field(name=f"{size + i} cm", value=f"8{d_string_new}D", inline=False)
                         await interaction.edit_original_response(content="正在手術中...？", embed=embed)
                         await discord.utils.sleep_until(datetime.utcnow() + timedelta(seconds=3))
@@ -249,10 +249,10 @@ async def dsize_battle(interaction: discord.Interaction, opponent: discord.Membe
         last_opponent = datetime(1970, 1, 1).date()
 
     if now == last_user:
-        await interaction.response.send_message("你今天已經量過屌長了，不能再比了。", ephemeral=True)
+        await interaction.response.send_message("你今天已經量過屌長了。", ephemeral=True)
         return
     if now == last_opponent:
-        await interaction.response.send_message(f"{opponent.name} 今天已經量過屌長了，不能比。", ephemeral=True)
+        await interaction.response.send_message(f"{opponent.name} 今天已經量過屌長了。", ephemeral=True)
         return
     
     class dsize_Confirm(discord.ui.View):
@@ -307,8 +307,8 @@ async def dsize_battle(interaction: discord.Interaction, opponent: discord.Membe
             d_string_user = "=" * (size_user - 1)
             d_string_opponent = "=" * (size_opponent - 1)
             embed = discord.Embed(title="比長度", color=0x00ff00)
-            embed.add_field(name=f"{original_user.mention} 的長度：", value=f"{size_user} cm\n8{d_string_user}D", inline=False)
-            embed.add_field(name=f"{opponent.mention} 的長度：", value=f"{size_opponent} cm\n8{d_string_opponent}D", inline=False)
+            embed.add_field(name=f"{original_user.name} 的長度：", value=f"{size_user} cm\n8{d_string_user}D", inline=False)
+            embed.add_field(name=f"{opponent.name} 的長度：", value=f"{size_opponent} cm\n8{d_string_opponent}D", inline=False)
             embed.add_field(name="結果：", value=result, inline=False)
             await msg.edit(embed=embed)
 
