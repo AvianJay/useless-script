@@ -102,7 +102,7 @@ async def check_unban():
                     if unban_time <= datetime.now(timezone.utc):
                         to_unban.append(user)
             except Exception as e:
-                print(f"[!] 讀取 {guild.name} 的封鎖列表發生錯誤：{e}")
+                # print(f"[!] 讀取 {guild.name} 的封鎖列表發生錯誤：{e}")
                 continue
 
             for user in to_unban:
@@ -419,7 +419,7 @@ class Moderate(commands.GroupCog, group_name=app_commands.locale_str("admin")):
         await moderation_message_settings(interaction, user, moderator, actions)
 
 
-    @bot.tree.command(name=app_commands.locale_str("ban"), description="封禁用戶")
+    @app_commands.command(name=app_commands.locale_str("ban"), description="封禁用戶")
     @app_commands.describe(user="選擇用戶（@或ID）", reason="封禁原因（可選）", duration="封禁時間（可選，預設永久）", delete_message="刪除訊息時間（可選，預設不刪除）")
     @app_commands.allowed_installs(guilds=True, users=False)
     @app_commands.default_permissions(ban_members=True)
@@ -522,7 +522,7 @@ class Moderate(commands.GroupCog, group_name=app_commands.locale_str("admin")):
         await interaction.followup.send(f"已將 <@{user_id}> 解封。")
 
 
-    @bot.tree.command(name=app_commands.locale_str("kick"), description="踢出用戶")
+    @app_commands.command(name=app_commands.locale_str("kick"), description="踢出用戶")
     @app_commands.describe(user="選擇用戶（@或ID）", reason="踢出原因（可選）")
     @app_commands.default_permissions(kick_members=True)
     @app_commands.allowed_installs(guilds=True, users=False)
@@ -570,7 +570,7 @@ class Moderate(commands.GroupCog, group_name=app_commands.locale_str("admin")):
         await interaction.followup.send(f"已將 {member.mention} 踢出伺服器。")
 
 
-    @bot.tree.command(name=app_commands.locale_str("timeout"), description="禁言用戶")
+    @app_commands.command(name=app_commands.locale_str("timeout"), description="禁言用戶")
     @app_commands.describe(user="選擇用戶（@或ID）", reason="禁言原因（可選）", duration="禁言時間（可選，預設10分鐘）")
     @app_commands.default_permissions(mute_members=True)
     @app_commands.allowed_installs(guilds=True, users=False)
