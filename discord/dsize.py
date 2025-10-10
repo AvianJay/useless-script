@@ -284,23 +284,23 @@ async def dsize_battle(interaction: discord.Interaction, opponent: discord.Membe
                 d_string_opponent = "=" * min(i, size_opponent - 1)
                 embed = discord.Embed(title="比長度", color=0x00ff00)
                 embed.add_field(
-                    name=f"{original_user.mention} 的長度：",
+                    name=f"{original_user.name} 的長度：",
                     value=f"{size_user if i >= size_user - 1 else '??'} cm\n8{d_string_user}D",
                     inline=False,
                 )
                 embed.add_field(
-                    name=f"{opponent.mention} 的長度：",
+                    name=f"{opponent.name} 的長度：",
                     value=f"{size_opponent if i >= size_opponent - 1 else '??'} cm\n8{d_string_opponent}D",
                     inline=False,
                 )
                 await msg.edit(embed=embed)
-                await discord.utils.sleep_until(datetime.utcnow() + timedelta(milliseconds=80))  # 約0.08秒
+                await discord.utils.sleep_until(datetime.utcnow() + timedelta(milliseconds=100))  # 約0.1秒
 
             # 最終結果
             if size_user > size_opponent:
-                result = f"🎉 {original_user.mention} 勝利！"
+                result = f"🎉 {original_user.name} 勝利！"
             elif size_user < size_opponent:
-                result = f"🎉 {opponent.mention} 勝利！"
+                result = f"🎉 {opponent.name} 勝利！"
             else:
                 result = "🤝 平手！"
 
