@@ -124,6 +124,13 @@ class CommandNameTranslator(app_commands.Translator):
                 "dsize-leaderboard": "dsize-排行榜",
                 "dsize-battle": "dsize-對決",
                 "dsize-settings": "dsize-設定",
+                "item": "物品",
+                "list": "列出",
+                "use": "使用",
+                "drop": "丟棄",
+                "give": "給予",
+                "remove": "移除",
+                "listuser": "列出用戶",
             }
             if isinstance(context.data, app_commands.commands.Command) or isinstance(context.data, app_commands.commands.Group):
                 # print("[DEBUG] Translating command/group:", context.data.name)
