@@ -12,7 +12,7 @@ def percent_random(percent: int) -> bool:
         percent = int(percent)
         if percent <= 0:
             return False
-        return random.randint(1, max(1, 100 // percent)) == 1
+        return random.random() < percent / 100
     except Exception:
         return False
 
