@@ -23,7 +23,6 @@ default_config = {
     ],
     "owners": [123456789012345678],  # 機器人擁有者 ID 列表
     "prefix": "!",  # 指令前綴
-    "disabled_modules": [],  # 禁用的模組
 }
 _config = None
 
