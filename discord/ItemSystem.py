@@ -17,14 +17,14 @@ async def get_user_items_autocomplete(interaction: discord.Interaction, current:
     user_items = get_user_data(guild_id, user_id, "items", [])
     choices = [item for item in items if item["id"] in user_items and current.lower() in item["name"].lower()]
     # id
-    choices.extend([item for item in items if item["id"] in user_items and current.lower() in item["id"].lower()])
+    # choices.extend([item for item in items if item["id"] in user_items and current.lower() in item["id"].lower()])
     return [app_commands.Choice(name=item["name"], value=item["id"]) for item in choices[:25]]
 
 
 async def all_items_autocomplete(interaction: discord.Interaction, current: str):
     choices = [item for item in items if current.lower() in item["name"].lower()]
     # id
-    choices.extend([item for item in items if current.lower() in item["id"].lower()])
+    # choices.extend([item for item in items if current.lower() in item["id"].lower()])
     return [app_commands.Choice(name=item["name"], value=item["id"]) for item in choices[:25]]
 
 
