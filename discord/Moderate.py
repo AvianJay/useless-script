@@ -24,6 +24,8 @@ def timestr_to_seconds(timestr: str) -> int:
     total_seconds = 0
     num = ''
     for char in timestr:
+        if not char.strip():
+            continue
         if char.isdigit():
             num += char
         elif char in units and num:
