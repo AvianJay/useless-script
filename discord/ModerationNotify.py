@@ -87,6 +87,8 @@ async def on_member_update(before, after):
         # 檢查database的值避免重複
         if get_user_data(after.guild.id, after.id, "muted_until") == after.timed_out_until.isoformat():
             return
+        if after.communication_disabled_until <= datetime.now(timezone.utc):
+            return
         set_user_data(after.guild.id, after.id, "muted_until", after.timed_out_until.isoformat())
         guild = after.guild
         try:
