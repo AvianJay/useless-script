@@ -16,6 +16,15 @@ async def get_user_items_autocomplete(interaction: discord.Interaction, current:
     user_id = interaction.user.id
     user_items = get_user_data(guild_id, user_id, "items", [])
     choices = [item for item in items if item["id"] in user_items and current.lower() in item["name"].lower()]
+    # id
+    choices.extend([item for item in items if item["id"] in user_items and current.lower() in item["id"].lower()])
+    return [app_commands.Choice(name=item["name"], value=item["id"]) for item in choices[:25]]
+
+
+async def all_items_autocomplete(interaction: discord.Interaction, current: str):
+    choices = [item for item in items if current.lower() in item["name"].lower()]
+    # id
+    choices.extend([item for item in items if current.lower() in item["id"].lower()])
     return [app_commands.Choice(name=item["name"], value=item["id"]) for item in choices[:25]]
 
 
@@ -99,7 +108,7 @@ class ItemSystem(commands.GroupCog, name="item", description="物品系統指令
             return
         target_item = next((i for i in items if i["id"] == item_id), None)
 
-        remove_item_from_user(guild_id, user_id, item_id, amount)
+        await remove_item_from_user(guild_id, user_id, item_id, amount)
         # drop to current channel
         class DropView(discord.ui.View):
             def __init__(self):
@@ -109,7 +118,7 @@ class ItemSystem(commands.GroupCog, name="item", description="物品系統指令
             async def on_timeout(self):
                 for child in self.children:
                     child.disabled = True
-                await self.interaction.edit_original_response("物品消失了！", view=self)
+                await self.interaction.edit_original_response(content="物品消失了！", view=self)
 
             @discord.ui.button(label="撿起物品", style=discord.ButtonStyle.green, custom_id="pick_up_item")
             async def pick_up(self, interaction: discord.Interaction, button: discord.ui.Button):
@@ -122,7 +131,7 @@ class ItemSystem(commands.GroupCog, name="item", description="物品系統指令
                 set_user_data(guild_id, user_id, "items", other_user_items)
                 await interaction.response.send_message(f"你撿起了 {target_item['name']}。", ephemeral=True)
                 if not user_items:
-                    await interaction.edit_original_response("物品已經被撿光了！", view=None)
+                    await interaction.edit_original_response(content="物品已經被撿光了！", view=None)
                     self.stop()
 
         await interaction.response.send_message(f"{interaction.user.name} 丟棄了 {target_item['name']} x{amount}！", view=DropView())
@@ -135,7 +144,7 @@ class ItemSystem(commands.GroupCog, name="item", description="物品系統指令
         receiver_id = user.id
         guild_id = interaction.guild.id if interaction.guild else None
         
-        giver_items = get_user_items(guild_id, giver_id, item_id)
+        giver_items = await get_user_items(guild_id, giver_id, item_id)
         if not giver_items:
             await interaction.response.send_message("你沒有這個物品。", ephemeral=True)
             return
@@ -146,10 +155,10 @@ class ItemSystem(commands.GroupCog, name="item", description="物品系統指令
             return
         
         # Remove from giver
-        remove_item_from_user(guild_id, giver_id, item_id, amount)
+        await remove_item_from_user(guild_id, giver_id, item_id, amount)
         
         # Add to receiver
-        give_item_to_user(guild_id, receiver_id, item_id, amount)
+        await give_item_to_user(guild_id, receiver_id, item_id, amount)
         
         await interaction.response.send_message(f"你給了 {user.name} 一個 {item['name']}。", ephemeral=True)
         # dm the receiver
@@ -169,8 +178,9 @@ class ItemModerate(commands.GroupCog, name="itemmod", description="物品系統�
         super().__init__()
     
     @app_commands.command(name="give", description="給予用戶一個物品")
-    @app_commands.describe(user="你想給予物品的用戶", item_id="你想給予的物品ID")
-    async def admin_give_item(self, interaction: discord.Interaction, user: discord.User, item_id: str):
+    @app_commands.describe(user="你想給予物品的用戶", item_id="你想給予的物品ID", amount="你想給予的數量")
+    @app_commands.autocomplete(item_id=all_items_autocomplete)
+    async def admin_give_item(self, interaction: discord.Interaction, user: discord.User, item_id: str, amount: int = 1):
         if not interaction.user.guild_permissions.administrator:
             await interaction.response.send_message("你沒有權限使用這個指令。", ephemeral=True)
             return
@@ -183,15 +193,14 @@ class ItemModerate(commands.GroupCog, name="itemmod", description="物品系統�
             await interaction.response.send_message("無效的物品ID。", ephemeral=True)
             return
         
-        receiver_items = get_user_data(guild_id, receiver_id, "items", [])
-        receiver_items.append(item_id)
-        set_user_data(guild_id, receiver_id, "items", receiver_items)
-        
-        await interaction.response.send_message(f"你給了 {user.name} 一個 {item['name']}。", ephemeral=True)
-        
+        await give_item_to_user(guild_id, receiver_id, item_id, amount)
+
+        await interaction.response.send_message(f"你給了 {user.name} {amount} 個 {item['name']}。", ephemeral=True)
+
     @app_commands.command(name="remove", description="移除用戶的一個物品")
-    @app_commands.describe(user="你想移除物品的用戶", item_id="你想移除的物品ID")
-    async def admin_remove_item(self, interaction: discord.Interaction, user: discord.User, item_id: str):
+    @app_commands.describe(user="你想移除物品的用戶", item_id="你想移除的物品ID", amount="你想移除的數量")
+    @app_commands.autocomplete(item_id=all_items_autocomplete)
+    async def admin_remove_item(self, interaction: discord.Interaction, user: discord.User, item_id: str, amount: int):
         if not interaction.user.guild_permissions.administrator:
             await interaction.response.send_message("你沒有權限使用這個指令。", ephemeral=True)
             return
@@ -199,19 +208,16 @@ class ItemModerate(commands.GroupCog, name="itemmod", description="物品系統�
         receiver_id = user.id
         guild_id = interaction.guild.id if interaction.guild else None
         
-        receiver_items = get_user_data(guild_id, receiver_id, "items", [])
-        if item_id not in receiver_items:
-            await interaction.response.send_message("該用戶沒有這個物品。", ephemeral=True)
+        removed_count = await remove_item_from_user(guild_id, receiver_id, item_id, amount)
+        if removed_count == 0:
+            await interaction.response.send_message(f"{user.name} 沒有這個物品。", ephemeral=True)
             return
-        
-        receiver_items.remove(item_id)
-        set_user_data(guild_id, receiver_id, "items", receiver_items)
         
         item = next((i for i in items if i["id"] == item_id), None)
         item_name = item['name'] if item else "未知物品"
-        
-        await interaction.response.send_message(f"你移除了 {user.name} 的一個 {item_name}。", ephemeral=True)
-        
+
+        await interaction.response.send_message(f"你移除了 {user.name} 的 {removed_count} 個 {item_name}。", ephemeral=True)
+
     @app_commands.command(name="list", description="列出所有可用的物品")
     async def admin_list_items(self, interaction: discord.Interaction):
         if not interaction.user.guild_permissions.administrator:
