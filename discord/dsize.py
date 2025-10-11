@@ -105,7 +105,7 @@ async def dsize(interaction: discord.Interaction, global_dsize: bool = False):
             async def on_timeout(self):
                 for child in self.children:
                     child.disabled = True
-                await interaction.edit_original_response(content="手術機會已過期。", view=self)
+                await surgery_msg.edit(content="手術機會已過期。", view=self)
 
             @discord.ui.button(label="拒絕手術", style=discord.ButtonStyle.secondary)
             async def reject(self, interaction: discord.Interaction, button: discord.ui.Button):
@@ -160,7 +160,7 @@ async def dsize(interaction: discord.Interaction, global_dsize: bool = False):
                 embed.add_field(name=f"{size + new_size} cm", value=f"8{'=' * (size + new_size - 2)}D", inline=False)
                 await interaction.edit_original_response(content="手術成功。", embed=embed)
                 set_user_data(guild_key, user_id, "last_dsize_size", new_size + size)
-        await interaction.followup.send(f"你獲得了一次做手術的機會。\n請問你是否同意手術？\n-# 失敗機率：{fail_chance}%", view=dsize_SurgeryView())
+        surgery_msg = await interaction.followup.send(f"你獲得了一次做手術的機會。\n請問你是否同意手術？\n-# 失敗機率：{fail_chance}%", view=dsize_SurgeryView())
     if ItemSystem and percent_random(drop_fake_ruler_chance):
         msg = await interaction.followup.send("...?")
         await asyncio.sleep(1)
@@ -220,7 +220,7 @@ async def dsize_leaderboard(interaction: discord.Interaction, limit: int = 10, g
             size = "**男娘！**"
         else:
             if all_data_fake.get(user_id) and all_data_fake[user_id].get("last_dsize_fake_size") is not None:
-                size = f"{size} {all_data_fake[user_id].get('last_dsize_fake_size')} cm..?"
+                size = f"{all_data_fake[user_id].get('last_dsize_fake_size')} cm..?"
             else:
                 size = f"{size} cm"
         if global_leaderboard:
