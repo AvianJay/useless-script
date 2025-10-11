@@ -94,6 +94,7 @@ async def dsize(interaction: discord.Interaction, global_dsize: bool = False):
     set_user_data(guild_key, user_id, "last_dsize_size", size)
     
     surgery_percent = get_server_config(guild_key, "dsize_surgery_percent", 10)
+    drop_fake_ruler_chance = get_server_config(guild_key, "dsize_drop_fake_ruler_chance", 5)
     # check if user got surgery chance
     if percent_random(surgery_percent):
         fail_chance = random.randint(1, 100)
@@ -160,6 +161,9 @@ async def dsize(interaction: discord.Interaction, global_dsize: bool = False):
                 await interaction.edit_original_response(content="手術成功。", embed=embed)
                 set_user_data(guild_key, user_id, "last_dsize_size", new_size + size)
         await interaction.followup.send(f"你獲得了一次做手術的機會。\n請問你是否同意手術？\n-# 失敗機率：{fail_chance}%", view=dsize_SurgeryView())
+    if ItemSystem and percent_random(drop_fake_ruler_chance):
+        await ItemSystem.give_item_to_user(interaction.guild.id, interaction.user.id, "fake_ruler", 1)
+        await interaction.followup.send("你撿到了一把自欺欺人尺！\n可以用來讓下次量長度時變長。")
 
 
 @bot.tree.command(name=app_commands.locale_str("dsize-leaderboard"), description="查看屌長排行榜")
