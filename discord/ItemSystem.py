@@ -51,6 +51,7 @@ async def remove_item_from_user(guild_id: int, user_id: int, item_id: str, amoun
 
 
 @app_commands.guild_only()
+@app_commands.allowed_contexts(guilds=True, dms=False, private_channels=False)
 class ItemSystem(commands.GroupCog, name="item", description="物品系統指令"):
     def __init__(self):
         super().__init__()
@@ -64,12 +65,15 @@ class ItemSystem(commands.GroupCog, name="item", description="物品系統指令
         if not user_items:
             await interaction.response.send_message("你沒有任何物品。", ephemeral=True)
             return
+        items_amounts = {}
+        for item_id in user_items:
+            items_amounts[item_id] = items_amounts.get(item_id, 0) + 1
 
         embed = discord.Embed(title=f"{interaction.user.name} 的物品", color=0x00ff00)
-        for item_id in user_items:
+        for item_id, amount in items_amounts.items():
             item = next((i for i in items if i["id"] == item_id), None)
             if item:
-                embed.add_field(name=item["name"], value=item["description"], inline=False)
+                embed.add_field(name=f"{item['name']} x{amount}", value=item["description"], inline=False)
         embed.set_footer(text=interaction.guild.name, icon_url=interaction.guild.icon.url if interaction.guild.icon else None)
         
         await interaction.response.send_message(embed=embed)
@@ -102,13 +106,14 @@ class ItemSystem(commands.GroupCog, name="item", description="物品系統指令
         user_id = interaction.user.id
         guild_id = interaction.guild.id if interaction.guild else None
         user_items = await get_user_items(guild_id, user_id, item_id)
+        user_items = user_items[:amount]  # limit to amount
 
         if not user_items:
             await interaction.response.send_message("你沒有這個物品。", ephemeral=True)
             return
         target_item = next((i for i in items if i["id"] == item_id), None)
 
-        await remove_item_from_user(guild_id, user_id, item_id, amount)
+        amount = await remove_item_from_user(guild_id, user_id, item_id, amount)
         # drop to current channel
         class DropView(discord.ui.View):
             def __init__(self):
@@ -122,9 +127,11 @@ class ItemSystem(commands.GroupCog, name="item", description="物品系統指令
 
             @discord.ui.button(label="撿起物品", style=discord.ButtonStyle.green, custom_id="pick_up_item")
             async def pick_up(self, interaction: discord.Interaction, button: discord.ui.Button):
+                # print("[DEBUG] user_items before:", user_items)
                 if not user_items:
                     await interaction.response.send_message("物品已經被撿光了！", ephemeral=True)
                     return
+                user_id = interaction.user.id
                 other_user_items = get_user_data(guild_id, user_id, "items", [])
                 user_items.pop(0)  # remove one item
                 other_user_items.append(item_id)
@@ -173,6 +180,7 @@ asyncio.run(bot.add_cog(ItemSystem()))
 # admin cheating
 @app_commands.guild_only()
 @commands.has_permissions(administrator=True)
+@app_commands.allowed_contexts(guilds=True, dms=False, private_channels=False)
 class ItemModerate(commands.GroupCog, name="itemmod", description="物品系統管理指令"):
     def __init__(self):
         super().__init__()
@@ -244,16 +252,19 @@ class ItemModerate(commands.GroupCog, name="itemmod", description="物品系統�
 
         guild_id = interaction.guild.id if interaction.guild else None
         user_items = get_user_data(guild_id, user.id, "items", [])
+        items_amounts = {}
+        for item_id in user_items:
+            items_amounts[item_id] = items_amounts.get(item_id, 0) + 1
 
-        if not user_items:
+        if not items_amounts:
             await interaction.response.send_message(f"{user.name} 目前沒有任何物品。", ephemeral=True)
             return
 
         embed = discord.Embed(title=f"{user.name} 擁有的物品", color=0x00ff00)
-        for item_id in user_items:
+        for item_id, amount in items_amounts.items():
             item = next((i for i in items if i["id"] == item_id), None)
             if item:
-                embed.add_field(name=item["name"], value=item["description"], inline=False)
+                embed.add_field(name=f"{item['name']} x{amount}", value=item["description"], inline=False)
         embed.set_footer(text=interaction.guild.name, icon_url=interaction.guild.icon.url if interaction.guild.icon else None)
 
         await interaction.response.send_message(embed=embed)
