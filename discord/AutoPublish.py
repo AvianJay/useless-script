@@ -47,6 +47,7 @@ class AutoPublish(commands.GroupCog, name=app_commands.locale_str("autopublish")
         if message.channel.type == discord.ChannelType.news:
             try:
                 await message.publish()
+                print(f"[+] Auto-published message ID {message.id} in guild {guild.id}")
             except Exception as e:
                 print(f"Error auto-publishing message: {e}")
 
