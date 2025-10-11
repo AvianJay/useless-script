@@ -9,7 +9,8 @@ import aiohttp
 import os
 import random
 from database import db
-from globalenv import bot, start_bot, modules
+from globalenv import bot, start_bot
+import globalenv
 import traceback
 
 # Load modules from modules.json
@@ -33,6 +34,7 @@ except json.JSONDecodeError:
     print("[!] modules.json is not a valid JSON file. Please check its contents.")
     modules = []
 
+globalenv.modules = modules
 print(f"[+] Loading {len(modules)} module(s)...")
 
 # Import all modules to register their events and commands
