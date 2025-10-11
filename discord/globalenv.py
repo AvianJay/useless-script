@@ -69,6 +69,9 @@ def config(key, value=None, mode="r"):
         return True
     else:
         raise ValueError(f"Invalid mode: {mode}")
+    
+
+modules = []
 
 
 intents = discord.Intents.default()

@@ -9,7 +9,8 @@ import aiohttp
 import os
 import random
 from database import db
-from globalenv import bot, start_bot, config
+from globalenv import bot, start_bot, modules
+import traceback
 
 # Load modules from modules.json
 try:
@@ -36,8 +37,13 @@ print(f"[+] Loading {len(modules)} module(s)...")
 
 # Import all modules to register their events and commands
 for module in modules:
-    __import__(module)
-    print(f"[+] Module {module} loaded.")
+    try:
+        __import__(module)
+        print(f"[+] Module {module} loaded.")
+    except Exception as e:
+        print(f"[!] Failed to load module {module}: {e}")
+        traceback.print_exc()
+        modules.remove(module)
 
 if __name__ == "__main__":
     start_bot()
