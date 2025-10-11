@@ -384,12 +384,12 @@ def edit_webhook_embed(message_id: str, data: dict, screenshot: bytes=None, repo
         data = warning_to_embed(data)
     try:
         if screenshot:
+            data["embeds"][0]["image"] = {"url": "attachment://screenshot.png"}
+            data["attachments"] = []  # clear old attachment
             files = {
                 "file": ("screenshot.png", io.BytesIO(screenshot), "image/png"),
                 "payload_json": (None, json.dumps(data), "application/json")
             }
-            data["embeds"][0]["image"] = {"url": "attachment://screenshot.png"}
-            data["attachments"] = []  # clear old attachment
 
             print("[DEBUG] Files:", files.keys())
             safe_request("PATCH", url, files=files)
