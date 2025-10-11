@@ -141,6 +141,8 @@ class CommandNameTranslator(app_commands.Translator):
                 "escape_punish-punishment": "逃避責任懲處-懲處",
                 "escape_punish-duration": "逃避責任懲處-持續時間",
                 "itemmod": "物品管理",
+                "autopublish": "公告自動發布",
+                "view": "查看",
             }
             # print("[DEBUG] Translating command/group:", context.data.name)
             # print("[DEBUG] Translated to:", translations.get(context.data.name, None))
