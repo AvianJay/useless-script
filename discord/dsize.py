@@ -65,7 +65,7 @@ async def dsize(interaction: discord.Interaction, global_dsize: bool = False):
     size = random.randint(1, max_size)
     fake_size = None
     if "ItemSystem" in modules:
-        fake_ruler_used = get_user_data(guild_key, user_id, "dsize_fake_ruler_used", False)
+        fake_ruler_used = bool(get_user_data(guild_key, user_id, "dsize_fake_ruler_used", False))
         if fake_ruler_used:
             extra_size = random.randint(10, 20)
             fake_size = size + extra_size
@@ -145,7 +145,7 @@ async def dsize(interaction: discord.Interaction, global_dsize: bool = False):
                             embed.set_field_at(0, name=f"{size + i} cm", value=f"8{d_string_new}", inline=False)
                             await interaction.edit_original_response(content="正在手術中...💥", embed=embed)
                             await discord.utils.sleep_until(datetime.utcnow() + timedelta(seconds=1))
-                            ori -= min(3, ori)
+                            ori -= min(random.randint(2, 5), ori)
                         embed.set_field_at(0, name=f"-1 cm", value=f"8", inline=False)
                         await interaction.edit_original_response(content="手術失敗，你變男娘了。", embed=embed)
                         set_user_data(guild_key, user_id, "last_dsize_size", -1)
