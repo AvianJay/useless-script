@@ -87,7 +87,7 @@ async def ban_user(guild: discord.Guild, user: Union[discord.Member, discord.Use
             set_user_data(guild.id, user.id, "unban_time", unban_time.isoformat())
         ModerationNotify.ignore_user(user.id)  # 避免重複通知
         try:
-            ModerationNotify.notify_user(user, guild, "封禁", reason, end_time=unban_time if duration > 0 else None)
+            await ModerationNotify.notify_user(user, guild, "封禁", reason, end_time=unban_time if duration > 0 else None)
         except Exception:
             pass
         if isinstance(user, discord.Member):

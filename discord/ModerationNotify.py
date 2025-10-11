@@ -16,9 +16,19 @@ def _ingore_user(user_id: int):
 
 def ignore_user(user_id: int):
     threading.Thread(target=_ingore_user, args=(user_id,)).start()
+    
+
+ch2en_map = {
+    "踢出": "kick",
+    "封禁": "ban",
+    "禁言": "mute",
+}
 
 
 async def notify_user(user: discord.User, guild: discord.Guild, action: str, reason: str = "未提供", end_time=None):
+    en_action = ch2en_map.get(action, action.lower())
+    if not get_server_config(guild.id, f"notify_user_on_{en_action}", True):
+        return
     embed = discord.Embed(
         title=f"你在 {guild.name} 被{action}。",
         description=f"原因：{reason}",
