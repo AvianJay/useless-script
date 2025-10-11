@@ -71,6 +71,7 @@ async def dsize(interaction: discord.Interaction, global_dsize: bool = False):
             fake_size = size + extra_size
             # reset fake ruler usage
             set_user_data(guild_key, user_id, "dsize_fake_ruler_used", False)
+            set_user_data(guild_key, user_id, "last_dsize_fake_size", fake_size)
     final_size = fake_size if fake_size is not None else size
 
     # 建立 Embed 訊息
@@ -176,6 +177,7 @@ async def dsize_leaderboard(interaction: discord.Interaction, limit: int = 10, g
         return
 
     all_data = get_all_user_data(guild_id, "last_dsize_size")
+    all_data_fake = get_all_user_data(guild_id, "last_dsize_fake_size")
     for user_id, data in all_data.items():
         size = data.get("last_dsize_size")
         # check dsize date is today
@@ -207,7 +209,10 @@ async def dsize_leaderboard(interaction: discord.Interaction, limit: int = 10, g
         if size == -1:
             size = "**男娘！**"
         else:
-            size = f"{size} cm"
+            if all_data_fake.get(user_id) and all_data_fake[user_id].get("last_dsize_fake_size") is not None:
+                size = f"{size} {all_data_fake[user_id].get('last_dsize_fake_size')} cm..?"
+            else:
+                size = f"{size} cm"
         if global_leaderboard:
             user = await bot.fetch_user(user_id)
         else:
