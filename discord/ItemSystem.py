@@ -19,6 +19,21 @@ async def get_user_items_autocomplete(interaction: discord.Interaction, current:
     return [app_commands.Choice(name=item["name"], value=item["id"]) for item in choices[:25]]
 
 
+async def give_item_to_user(guild_id: int, user_id: int, item_id: str):
+    user_items = get_user_data(guild_id, user_id, "items", [])
+    user_items.append(item_id)
+    set_user_data(guild_id, user_id, "items", user_items)
+
+
+async def remove_item_from_user(guild_id: int, user_id: int, item_id: str):
+    user_items = get_user_data(guild_id, user_id, "items", [])
+    if item_id in user_items:
+        user_items.remove(item_id)
+        set_user_data(guild_id, user_id, "items", user_items)
+        return True
+    return False
+
+
 @app_commands.guild_only()
 class ItemSystem(commands.GroupCog, name="item", description="物品系統指令"):
     def __init__(self):
