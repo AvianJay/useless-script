@@ -80,6 +80,27 @@ def guess_role(guild: discord.Guild, role_name: str):
     return None
 
 
+async def ban_user(guild: discord.Guild, user: Union[discord.Member, discord.User], reason: str, duration: int = 0, delete_message_seconds: int = 0):
+    try:
+        if duration > 0:
+            unban_time = datetime.now(timezone.utc) + timedelta(seconds=duration)
+            set_user_data(guild.id, user.id, "unban_time", unban_time.isoformat())
+        ModerationNotify.ignore_user(user.id)  # 避免重複通知
+        try:
+            ModerationNotify.notify_user(user, guild, "封禁", reason, end_time=unban_time if duration > 0 else None)
+        except Exception:
+            pass
+        if isinstance(user, discord.Member):
+            await user.ban(reason=reason, delete_message_seconds=delete_message_seconds)
+        else:
+            await guild.ban(user, reason=reason, delete_message_seconds=delete_message_seconds)
+        print(f"[+] 已封禁用戶 {user}，原因：{reason}，解封時間：{'無' if duration == 0 else unban_time.isoformat()}")
+        return True
+    except Exception as e:
+        print(f"[!] 無法封禁用戶 {user}：{e}")
+        return False
+
+
 async def check_unban():
     await bot.wait_until_ready()
     print("[+] 自動解封任務已啟動")
@@ -462,28 +483,13 @@ class Moderate(commands.GroupCog, group_name=app_commands.locale_str("admin")):
                 return
             unban_time = datetime.now(timezone.utc) + timedelta(seconds=duration_seconds)
 
-        # 記錄解封時間（若為永久則存 None）
-        set_user_data(guild.id, user_id, "unban_time", unban_time.isoformat() if unban_time else None)
-
-        # 通知與忽略（使用 id 與可用的 user 物件）
-        ModerationNotify.ignore_user(user_id)
-        try:
-            await ModerationNotify.notify_user(user_obj if user_obj else user_id, guild, "封禁", reason, end_time=unban_time)
-        except Exception:
-            # 如果 notify_user 期待 Member/User 物件但我們只有 id，忽略錯誤
-            pass
-
         # 解析要刪除訊息的秒數
         delete_message_seconds = timestr_to_seconds(delete_message)
 
         # 執行封禁：若有 Member 直接用 member.ban，否則用 guild.ban 與 discord.Object(id=...)
-        try:
-            if isinstance(user, discord.Member):
-                await user.ban(reason=reason, delete_message_seconds=delete_message_seconds)
-            else:
-                await guild.ban(discord.Object(id=user_id), reason=reason, delete_message_seconds=delete_message_seconds)
-        except Exception as e:
-            await interaction.followup.send(f"封禁時發生錯誤：{e}")
+        success = await ban_user(guild, user_obj if user_obj else discord.Object(id=user_id), reason, duration=duration_seconds if unban_time else 0, delete_message_seconds=delete_message_seconds)
+        if not success:
+            await interaction.followup.send("封禁時發生錯誤，請確認機器人是否有足夠的權限。")
             return
 
         mention = user_obj.mention if user_obj else f"<@{user_id}>"
