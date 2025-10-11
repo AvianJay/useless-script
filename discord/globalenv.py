@@ -144,6 +144,9 @@ class CommandNameTranslator(app_commands.Translator):
             }
             # print("[DEBUG] Translating command/group:", context.data.name)
             # print("[DEBUG] Translated to:", translations.get(context.data.name, None))
+            allowed_locations = [app_commands.TranslationContextLocation.command_name, app_commands.TranslationContextLocation.group_name]
+            if context.location not in allowed_locations:
+                return None
             try:
                 return translations.get(context.data.name, None)
             except Exception as e:
