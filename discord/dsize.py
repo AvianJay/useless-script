@@ -379,7 +379,7 @@ if "ItemSystem" in modules:
         {
             "id": "fake_ruler",
             "name": "自欺欺人尺",
-            "description": "使用後可隨機增加1~10cm的長度",
+            "description": "使用後下次量長度時或許會更長？",
             "callback": use_fake_ruler,
         }
     ]
