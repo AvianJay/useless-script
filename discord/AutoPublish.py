@@ -33,7 +33,7 @@ class AutoPublish(commands.GroupCog, name=app_commands.locale_str("autopublish")
         return
     
     @commands.Cog.listener()
-    async def on_message(message: discord.Message):
+    async def on_message(self, message: discord.Message):
         guild = message.guild
         if guild is None:
             return
