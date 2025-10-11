@@ -131,7 +131,7 @@ class ItemSystem(commands.GroupCog, name="item", description="物品系統指令
                 set_user_data(guild_id, user_id, "items", other_user_items)
                 await interaction.response.send_message(f"你撿起了 {target_item['name']}。", ephemeral=True)
                 if not user_items:
-                    await interaction.edit_original_response(content="物品已經被撿光了！", view=None)
+                    await self.interaction.edit_original_response(content="物品已經被撿光了！", view=None)
                     self.stop()
 
         await interaction.response.send_message(f"{interaction.user.name} 丟棄了 {target_item['name']} x{amount}！", view=DropView())

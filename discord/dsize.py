@@ -372,7 +372,7 @@ async def use_fake_ruler(interaction: discord.Interaction):
         return
     ItemSystem.remove_item_from_user(interaction.user.id, "fake_ruler", 1)
     set_user_data(guild_key, user_id, "dsize_fake_ruler_used", True)
-    interaction.response.send_message("你使用了自欺欺人尺！\n下次量長度時或許會更長？")
+    await interaction.response.send_message("你使用了自欺欺人尺！\n下次量長度時或許會更長？")
 
 if "ItemSystem" in modules:
     items = [
