@@ -1,6 +1,7 @@
 # Powered by ChatGPT lol
 import discord
 import random
+import asyncio
 from discord.ext import commands
 from discord import app_commands
 from datetime import datetime, timedelta, timezone
@@ -62,13 +63,30 @@ async def dsize(interaction: discord.Interaction, global_dsize: bool = False):
 
     # 隨機產生長度
     size = random.randint(1, max_size)
-    d_string = "=" * (size - 1)
+    fake_size = None
+    if "ItemSystem" in modules:
+        fake_ruler_used = get_user_data(guild_key, user_id, "dsize_fake_ruler_used", False)
+        if fake_ruler_used:
+            extra_size = random.randint(10, 20)
+            fake_size = size + extra_size
+            # reset fake ruler usage
+            set_user_data(guild_key, user_id, "dsize_fake_ruler_used", False)
+    final_size = fake_size if fake_size is not None else size
 
     # 建立 Embed 訊息
     embed = discord.Embed(title=f"{interaction.user.name} 的長度：", color=0x00ff00)
-    embed.add_field(name=f"{size} cm", value=f"8{d_string}D", inline=False)
+    embed.add_field(name="1 cm", value=f"8D", inline=False)
 
     await interaction.response.send_message(embed=embed)
+    # animate to size
+    for i in range(1, size + 1):
+        d_string = "=" * (i - 1)
+        current_size = i
+        if i == size:  # final size
+            current_size = final_size
+        embed.set_field_at(0, name=f"{current_size} cm", value=f"8{d_string}D", inline=False)
+        await interaction.edit_original_response(embed=embed)
+        await asyncio.sleep(0.1)
 
     # 更新使用時間 — 存到對應的 guild_key（若為 user-install 則是 None）
     set_user_data(guild_key, user_id, "last_dsize", now)
@@ -114,11 +132,11 @@ async def dsize(interaction: discord.Interaction, global_dsize: bool = False):
                         embed = discord.Embed(title=f"{interaction.user.name} 的新長度：", color=0xff0000)
                         embed.add_field(name=f"{size + i} cm", value=f"8{d_string_new}D", inline=False)
                         await interaction.edit_original_response(content="正在手術中...？", embed=embed)
-                        await discord.utils.sleep_until(datetime.utcnow() + timedelta(seconds=3))
+                        await asyncio.sleep(3)
                         d_string_new = "💥" * (size + i - 1)
                         embed.set_field_at(0, name=f"{size + i} cm", value=f"8{d_string_new}D", inline=False)
                         await interaction.edit_original_response(content="正在手術中...💥", embed=embed)
-                        await discord.utils.sleep_until(datetime.utcnow() + timedelta(seconds=1))
+                        await asyncio.sleep(1)
                         ori = size + i - 2
                         while ori > 0:
                             d_string_new = "💥" * ori
@@ -135,7 +153,7 @@ async def dsize(interaction: discord.Interaction, global_dsize: bool = False):
                     embed = discord.Embed(title=f"{interaction.user.name} 的新長度：", color=0xff0000)
                     embed.add_field(name=f"{current_size} cm", value=f"8{d_string_new}D", inline=False)
                     await interaction.edit_original_response(content="正在手術中...", embed=embed)
-                    await discord.utils.sleep_until(datetime.utcnow() + timedelta(seconds=1))
+                    await asyncio.sleep(1)
                 embed = discord.Embed(title=f"{interaction.user.name} 的新長度：", color=0x00ff00)
                 embed.add_field(name=f"{size + new_size} cm", value=f"8{'=' * (size + new_size - 2)}D", inline=False)
                 await interaction.edit_original_response(content="手術成功。", embed=embed)
@@ -294,7 +312,7 @@ async def dsize_battle(interaction: discord.Interaction, opponent: discord.Membe
                     inline=False,
                 )
                 await msg.edit(embed=embed)
-                await discord.utils.sleep_until(datetime.utcnow() + timedelta(milliseconds=100))  # 約0.1秒
+                await asyncio.sleep(0.1)
 
             # 最終結果
             if size_user > size_opponent:
