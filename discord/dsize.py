@@ -92,7 +92,7 @@ async def dsize(interaction: discord.Interaction, global_dsize: bool = False):
     set_user_data(guild_key, user_id, "last_dsize", now)
     set_user_data(guild_key, user_id, "last_dsize_size", size)
     
-    surgery_percent = get_server_config(guild_key, "dsize_surgery_percent", 2)
+    surgery_percent = get_server_config(guild_key, "dsize_surgery_percent", 10)
     # check if user got surgery chance
     if percent_random(surgery_percent):
         fail_chance = random.randint(1, 100)
