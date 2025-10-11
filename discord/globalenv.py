@@ -133,11 +133,21 @@ class CommandNameTranslator(app_commands.Translator):
                 "give": "給予",
                 "remove": "移除",
                 "listuser": "列出用戶",
+                "view": "查看",
+                "toggle": "切換",
+                "automod": "自動管理",
+                "settings": "設定",
+                "escape_punish": "逃避責任懲處",
+                "escape_punish-punishment": "逃避責任懲處-懲處",
+                "escape_punish-duration": "逃避責任懲處-持續時間",
+                "itemmod": "物品管理",
             }
-            if isinstance(context.data, app_commands.commands.Command) or isinstance(context.data, app_commands.commands.Group):
-                # print("[DEBUG] Translating command/group:", context.data.name)
-                # print("[DEBUG] Translated to:", translations.get(context.data.name, None))
+            # print("[DEBUG] Translating command/group:", context.data.name)
+            # print("[DEBUG] Translated to:", translations.get(context.data.name, None))
+            try:
                 return translations.get(context.data.name, None)
+            except Exception as e:
+                pass
         return None
 
 

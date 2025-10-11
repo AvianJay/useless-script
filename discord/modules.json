@@ -6,5 +6,6 @@
     "PresenceChange",
     "OwnerTools",
     "Moderate",
-    "ItemSystem"
+    "ItemSystem",
+    "AutoModerate"
 ]
