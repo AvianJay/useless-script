@@ -108,7 +108,7 @@ async def dsize(interaction: discord.Interaction, global_dsize: bool = False):
                 await interaction.edit_original_response(content="手術機會已過期。", view=self)
 
             @discord.ui.button(label="拒絕手術", style=discord.ButtonStyle.secondary)
-            async def surgery(self, interaction: discord.Interaction, button: discord.ui.Button):
+            async def reject(self, interaction: discord.Interaction, button: discord.ui.Button):
                 if interaction.user.id != user_id:
                     await interaction.response.send_message("這不是你的手術機會。", ephemeral=True)
                     return
@@ -162,8 +162,14 @@ async def dsize(interaction: discord.Interaction, global_dsize: bool = False):
                 set_user_data(guild_key, user_id, "last_dsize_size", new_size + size)
         await interaction.followup.send(f"你獲得了一次做手術的機會。\n請問你是否同意手術？\n-# 失敗機率：{fail_chance}%", view=dsize_SurgeryView())
     if ItemSystem and percent_random(drop_fake_ruler_chance):
+        msg = await interaction.followup.send("...?")
+        await asyncio.sleep(1)
+        await msg.edit(content="......?")
+        await asyncio.sleep(1)
+        await msg.edit(content=".........?")
+        await asyncio.sleep(1)
         await ItemSystem.give_item_to_user(interaction.guild.id, interaction.user.id, "fake_ruler", 1)
-        await interaction.followup.send("你撿到了一把自欺欺人尺！\n可以用來讓下次量長度時變長。")
+        await msg.edit(content="你撿到了一把自欺欺人尺！\n使用 `/item use fake_ruler` 可能可以讓下次量長度時變長？")
 
 
 @bot.tree.command(name=app_commands.locale_str("dsize-leaderboard"), description="查看屌長排行榜")
@@ -364,6 +370,7 @@ async def dsize_battle(interaction: discord.Interaction, opponent: discord.Membe
     app_commands.Choice(name="最大長度", value="dsize_max"),
     app_commands.Choice(name="手術機率(%)", value="dsize_surgery_percent"),
     app_commands.Choice(name="手術最大長度", value="dsize_surgery_max"),
+    app_commands.Choice(name="撿到自欺欺人尺機率(%)", value="dsize_drop_fake_ruler_chance"),
 ])
 @app_commands.default_permissions(administrator=True)
 @app_commands.allowed_installs(guilds=True, users=False)
@@ -386,6 +393,12 @@ async def dsize_settings(interaction: discord.Interaction, setting: str, value: 
     elif setting == "dsize_surgery_max":
         set_server_config(guild_key, "dsize_surgery_max", int(value))
         await interaction.response.send_message(f"已設定手術最大長度為 {value} cm")
+    elif setting == "dsize_drop_fake_ruler_chance":
+        if not value.isdigit() or int(value) < 0 or int(value) > 100:
+            await interaction.response.send_message("撿到自欺欺人尺機率必須是介於 0 到 100 之間的整數。", ephemeral=True)
+            return
+        set_server_config(guild_key, "dsize_drop_fake_ruler_chance", int(value))
+        await interaction.response.send_message(f"已設定撿到自欺欺人尺機率為 {str(int(value))}%")
     else:
         await interaction.response.send_message("未知的設定項目。")
 
