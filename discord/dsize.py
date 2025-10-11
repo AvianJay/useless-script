@@ -4,7 +4,7 @@ import random
 from discord.ext import commands
 from discord import app_commands
 from datetime import datetime, timedelta, timezone
-from globalenv import bot, start_bot, get_user_data, set_user_data, get_all_user_data, get_server_config, set_server_config
+from globalenv import bot, start_bot, get_user_data, set_user_data, get_all_user_data, get_server_config, set_server_config, modules
 
 
 def percent_random(percent: int) -> bool:
@@ -361,6 +361,30 @@ async def dsize_settings(interaction: discord.Interaction, setting: str, value: 
         await interaction.response.send_message(f"已設定手術最大長度為 {value} cm")
     else:
         await interaction.response.send_message("未知的設定項目。")
+
+
+# setup items
+async def use_fake_ruler(interaction: discord.Interaction):
+    user_id = interaction.user.id
+    guild_key = interaction.guild.id if interaction.guild else None
+    if get_user_data(guild_key, user_id, "dsize_fake_ruler_used", False):
+        await interaction.response.send_message("你今天已經使用過自欺欺人尺了。", ephemeral=True)
+        return
+    ItemSystem.remove_item_from_user(interaction.user.id, "fake_ruler", 1)
+    set_user_data(guild_key, user_id, "dsize_fake_ruler_used", True)
+    interaction.response.send_message("你使用了自欺欺人尺！\n下次量長度時或許會更長？")
+
+if "ItemSystem" in modules:
+    items = [
+        {
+            "id": "fake_ruler",
+            "name": "自欺欺人尺",
+            "description": "使用後可隨機增加1~10cm的長度",
+            "callback": use_fake_ruler,
+        }
+    ]
+    import ItemSystem
+    ItemSystem.items.extend(items)
 
 
 if __name__ == "__main__":
