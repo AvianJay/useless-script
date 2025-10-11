@@ -19,19 +19,26 @@ async def get_user_items_autocomplete(interaction: discord.Interaction, current:
     return [app_commands.Choice(name=item["name"], value=item["id"]) for item in choices[:25]]
 
 
-async def give_item_to_user(guild_id: int, user_id: int, item_id: str):
+async def give_item_to_user(guild_id: int, user_id: int, item_id: str, amount: int = 1):
     user_items = get_user_data(guild_id, user_id, "items", [])
-    user_items.append(item_id)
+    user_items.extend([item_id] * amount)
     set_user_data(guild_id, user_id, "items", user_items)
 
 
-async def remove_item_from_user(guild_id: int, user_id: int, item_id: str):
+async def get_user_items(guild_id: int, user_id: int, item_id: str):
     user_items = get_user_data(guild_id, user_id, "items", [])
-    if item_id in user_items:
-        user_items.remove(item_id)
-        set_user_data(guild_id, user_id, "items", user_items)
-        return True
-    return False
+    return [item for item in user_items if item == item_id]
+
+
+async def remove_item_from_user(guild_id: int, user_id: int, item_id: str, amount: int = 1):
+    user_items = get_user_data(guild_id, user_id, "items", [])
+    removed = 0
+    for _ in range(amount):
+        if item_id in user_items:
+            user_items.remove(item_id)
+            removed += 1
+    set_user_data(guild_id, user_id, "items", user_items)
+    return removed
 
 
 @app_commands.guild_only()
@@ -80,30 +87,56 @@ class ItemSystem(commands.GroupCog, name="item", description="物品系統指令
             await item["callback"](interaction)
     
     @app_commands.command(name="drop", description="丟棄一個物品")
-    @app_commands.describe(item_id="你想丟棄的物品ID")
-    async def drop_item(self, interaction: discord.Interaction, item_id: str):
+    @app_commands.describe(item_id="你想丟棄的物品ID", amount="你想丟棄的數量")
+    @app_commands.autocomplete(item_id=get_user_items_autocomplete)
+    async def drop_item(self, interaction: discord.Interaction, item_id: str, amount: int = 1):
         user_id = interaction.user.id
         guild_id = interaction.guild.id if interaction.guild else None
-        user_items = get_user_data(guild_id, user_id, "items", [])
+        user_items = await get_user_items(guild_id, user_id, item_id)
 
-        if item_id not in user_items:
+        if not user_items:
             await interaction.response.send_message("你沒有這個物品。", ephemeral=True)
             return
+        target_item = next((i for i in items if i["id"] == item_id), None)
 
-        user_items.remove(item_id)
-        set_user_data(guild_id, user_id, "items", user_items)
+        remove_item_from_user(guild_id, user_id, item_id, amount)
+        # drop to current channel
+        class DropView(discord.ui.View):
+            def __init__(self):
+                super().__init__(timeout=60)
+                self.interaction = interaction
+            
+            async def on_timeout(self):
+                for child in self.children:
+                    child.disabled = True
+                await self.interaction.edit_original_response("物品消失了！", view=self)
 
-        await interaction.response.send_message(f"你丟棄了 {items[item_id]['name']}。", ephemeral=True)
+            @discord.ui.button(label="撿起物品", style=discord.ButtonStyle.green, custom_id="pick_up_item")
+            async def pick_up(self, interaction: discord.Interaction, button: discord.ui.Button):
+                if not user_items:
+                    await interaction.response.send_message("物品已經被撿光了！", ephemeral=True)
+                    return
+                other_user_items = get_user_data(guild_id, user_id, "items", [])
+                user_items.pop(0)  # remove one item
+                other_user_items.append(item_id)
+                set_user_data(guild_id, user_id, "items", other_user_items)
+                await interaction.response.send_message(f"你撿起了 {target_item['name']}。", ephemeral=True)
+                if not user_items:
+                    await interaction.edit_original_response("物品已經被撿光了！", view=None)
+                    self.stop()
+
+        await interaction.response.send_message(f"{interaction.user.name} 丟棄了 {target_item['name']} x{amount}！", view=DropView())
     
     @app_commands.command(name="give", description="給予另一個用戶一個物品")
     @app_commands.describe(user="你想給予物品的用戶", item_id="你想給予的物品ID")
-    async def give_item(self, interaction: discord.Interaction, user: discord.User, item_id: str):
+    @app_commands.autocomplete(item_id=get_user_items_autocomplete)
+    async def give_item(self, interaction: discord.Interaction, user: discord.User, item_id: str, amount: int = 1):
         giver_id = interaction.user.id
         receiver_id = user.id
         guild_id = interaction.guild.id if interaction.guild else None
         
-        giver_items = get_user_data(guild_id, giver_id, "items", [])
-        if item_id not in giver_items:
+        giver_items = get_user_items(guild_id, giver_id, item_id)
+        if not giver_items:
             await interaction.response.send_message("你沒有這個物品。", ephemeral=True)
             return
         
@@ -113,15 +146,17 @@ class ItemSystem(commands.GroupCog, name="item", description="物品系統指令
             return
         
         # Remove from giver
-        giver_items.remove(item_id)
-        set_user_data(guild_id, giver_id, "items", giver_items)
+        remove_item_from_user(guild_id, giver_id, item_id, amount)
         
         # Add to receiver
-        receiver_items = get_user_data(guild_id, receiver_id, "items", [])
-        receiver_items.append(item_id)
-        set_user_data(guild_id, receiver_id, "items", receiver_items)
+        give_item_to_user(guild_id, receiver_id, item_id, amount)
         
         await interaction.response.send_message(f"你給了 {user.name} 一個 {item['name']}。", ephemeral=True)
+        # dm the receiver
+        try:
+            await user.send(f"你從 {interaction.user.name} 那裡收到了 {amount} 個 {item['name']}！\n-# 伺服器: {interaction.guild.name if interaction.guild else '私人訊息'}")
+        except Exception:
+            pass
 
 asyncio.run(bot.add_cog(ItemSystem()))
 
