@@ -6,6 +6,8 @@ from discord.ext import commands
 from discord import app_commands
 from datetime import datetime, timedelta, timezone
 from globalenv import bot, start_bot, get_user_data, set_user_data, get_all_user_data, get_server_config, set_server_config, modules
+from PIL import Image, ImageDraw
+from io import BytesIO
 
 
 def percent_random(percent: int) -> bool:
@@ -75,7 +77,7 @@ async def dsize(interaction: discord.Interaction, global_dsize: bool = False):
     final_size = fake_size if fake_size is not None else size
 
     # 建立 Embed 訊息
-    embed = discord.Embed(title=f"{interaction.user.name} 的長度：", color=0x00ff00)
+    embed = discord.Embed(title=f"{interaction.user.display_name} 的長度：", color=0x00ff00)
     embed.add_field(name="1 cm", value=f"8D", inline=False)
 
     await interaction.response.send_message(embed=embed)
@@ -124,14 +126,14 @@ async def dsize(interaction: discord.Interaction, global_dsize: bool = False):
                 new_size = random.randint(1, get_server_config(guild_key, "dsize_surgery_max", 10))
                 will_fail = percent_random(fail_chance)
                 on_fail_size = random.randint(1, new_size) if will_fail else 0
-                embed = discord.Embed(title=f"{interaction.user.name} 的新長度：", color=0xff0000)
+                embed = discord.Embed(title=f"{interaction.user.display_name} 的新長度：", color=0xff0000)
                 embed.add_field(name=f"{size} cm", value=f"8{d_string}D", inline=False)
                 await interaction.response.edit_message(embed=embed, view=None)
                 # animate to new size
                 for i in range(1, new_size + 1):
                     if will_fail and i == on_fail_size:
                         d_string_new = "?" * (size + i - 1)
-                        embed = discord.Embed(title=f"{interaction.user.name} 的新長度：", color=0xff0000)
+                        embed = discord.Embed(title=f"{interaction.user.display_name} 的新長度：", color=0xff0000)
                         embed.add_field(name=f"{size + i} cm", value=f"8{d_string_new}D", inline=False)
                         await interaction.edit_original_response(content="正在手術中...？", embed=embed)
                         await asyncio.sleep(3)
@@ -152,11 +154,11 @@ async def dsize(interaction: discord.Interaction, global_dsize: bool = False):
                         return
                     d_string_new = "=" * (size + i - 2)
                     current_size = size + i
-                    embed = discord.Embed(title=f"{interaction.user.name} 的新長度：", color=0xff0000)
+                    embed = discord.Embed(title=f"{interaction.user.display_name} 的新長度：", color=0xff0000)
                     embed.add_field(name=f"{current_size} cm", value=f"8{d_string_new}D", inline=False)
                     await interaction.edit_original_response(content="正在手術中...", embed=embed)
                     await asyncio.sleep(1)
-                embed = discord.Embed(title=f"{interaction.user.name} 的新長度：", color=0x00ff00)
+                embed = discord.Embed(title=f"{interaction.user.display_name} 的新長度：", color=0x00ff00)
                 embed.add_field(name=f"{size + new_size} cm", value=f"8{'=' * (size + new_size - 2)}D", inline=False)
                 await interaction.edit_original_response(content="手術成功。", embed=embed)
                 set_user_data(guild_key, user_id, "last_dsize_size", new_size + size)
@@ -228,7 +230,7 @@ async def dsize_leaderboard(interaction: discord.Interaction, limit: int = 10, g
         else:
             user = interaction.guild.get_member(user_id) if interaction.guild else await bot.fetch_user(user_id)
         if user:
-            description += f"**{rank}. {user.name}** - {size}\n"
+            description += f"**{rank}. {user.display_name}**({user.name}) - {size}\n"
         else:
             description += f"**{rank}. 用戶ID {user_id}** - {size}\n"
 
@@ -285,7 +287,7 @@ async def dsize_battle(interaction: discord.Interaction, opponent: discord.Membe
         await interaction.response.send_message("你今天已經量過屌長了。", ephemeral=True)
         return
     if now == last_opponent:
-        await interaction.response.send_message(f"{opponent.name} 今天已經量過屌長了。", ephemeral=True)
+        await interaction.response.send_message(f"{opponent.display_name} 今天已經量過屌長了。", ephemeral=True)
         return
     
     class dsize_Confirm(discord.ui.View):
@@ -317,12 +319,12 @@ async def dsize_battle(interaction: discord.Interaction, opponent: discord.Membe
                 d_string_opponent = "=" * min(i, size_opponent - 1)
                 embed = discord.Embed(title="比長度", color=0x00ff00)
                 embed.add_field(
-                    name=f"{original_user.name} 的長度：",
+                    name=f"{original_user.display_name} 的長度：",
                     value=f"{size_user if i >= size_user - 1 else '??'} cm\n8{d_string_user}D",
                     inline=False,
                 )
                 embed.add_field(
-                    name=f"{opponent.name} 的長度：",
+                    name=f"{opponent.display_name} 的長度：",
                     value=f"{size_opponent if i >= size_opponent - 1 else '??'} cm\n8{d_string_opponent}D",
                     inline=False,
                 )
@@ -331,17 +333,17 @@ async def dsize_battle(interaction: discord.Interaction, opponent: discord.Membe
 
             # 最終結果
             if size_user > size_opponent:
-                result = f"🎉 {original_user.name} 勝利！"
+                result = f"🎉 {original_user.display_name} 勝利！"
             elif size_user < size_opponent:
-                result = f"🎉 {opponent.name} 勝利！"
+                result = f"🎉 {opponent.display_name} 勝利！"
             else:
                 result = "🤝 平手！"
 
             d_string_user = "=" * (size_user - 1)
             d_string_opponent = "=" * (size_opponent - 1)
             embed = discord.Embed(title="比長度", color=0x00ff00)
-            embed.add_field(name=f"{original_user.name} 的長度：", value=f"{size_user} cm\n8{d_string_user}D", inline=False)
-            embed.add_field(name=f"{opponent.name} 的長度：", value=f"{size_opponent} cm\n8{d_string_opponent}D", inline=False)
+            embed.add_field(name=f"{original_user.display_name} 的長度：", value=f"{size_user} cm\n8{d_string_user}D", inline=False)
+            embed.add_field(name=f"{opponent.display_name} 的長度：", value=f"{size_opponent} cm\n8{d_string_opponent}D", inline=False)
             embed.add_field(name="結果：", value=result, inline=False)
             await msg.edit(embed=embed)
 
@@ -403,6 +405,59 @@ async def dsize_settings(interaction: discord.Interaction, setting: str, value: 
         await interaction.response.send_message("未知的設定項目。")
 
 
+@bot.tree.command(name=app_commands.locale_str("dsize-feedgrass"), description="草飼男娘")
+@app_commands.describe(user="要草飼的對象")
+@app_commands.allowed_installs(guilds=True, users=False)
+@app_commands.allowed_contexts(guilds=True, dms=False, private_channels=False)
+async def dsize_feedgrass(interaction: discord.Interaction, user: discord.Member):
+    if "ItemSystem" not in modules:
+        await interaction.response.send_message("此功能需要 ItemSystem 模組。", ephemeral=True)
+        return
+    if user.id == interaction.user.id:
+        await interaction.response.send_message("不能草飼自己。", ephemeral=True)
+        return
+    if get_user_data(interaction.guild.id, user.id, "last_dsize_size", 0) != -1:
+        await interaction.response.send_message(f"{user.name} 不是男娘，無法草飼。", ephemeral=True)
+        return
+    removed = await ItemSystem.remove_item_from_user(interaction.guild.id, interaction.user.id, "grass", 1)
+    if not removed:
+        await interaction.response.send_message("你沒有草，無法草飼。", ephemeral=True)
+        return
+    await interaction.response.defer()
+    image_bytes = await generate_feedgrass_image(interaction.user, user)
+    embed = discord.Embed(title=f"{interaction.user.display_name} 草飼了 {user.display_name}！", color=0x00ff00)
+    embed.image.url = "attachment://feed_grass.png"
+    await interaction.followup.send(embed=embed, file=discord.File(image_bytes, "feed_grass.png"))
+
+
+async def generate_feedgrass_image(feeder: discord.User, target: discord.User):
+    image = Image.open("assets/feed_grass.png").convert("RGBA")
+    # width, height = image.size
+    # fetch avatars
+    feeder_avatar_asset = feeder.display_avatar.with_size(128).with_static_format('png')
+    target_avatar_asset = target.display_avatar.with_size(128).with_static_format('png')
+    # to circle
+    feeder_avatar_bytes = await feeder_avatar_asset.read()
+    target_avatar_bytes = await target_avatar_asset.read()
+    feeder_avatar = Image.open(BytesIO(feeder_avatar_bytes)).convert("RGBA").resize((200, 200))
+    target_avatar = Image.open(BytesIO(target_avatar_bytes)).convert("RGBA").resize((200, 200))
+    mask_feeder = Image.new("L", (200, 200), 0)
+    mask_target = Image.new("L", (200, 200), 0)
+    draw_feeder = ImageDraw.Draw(mask_feeder)
+    draw_target = ImageDraw.Draw(mask_target)
+    draw_feeder.ellipse((0, 0, 200, 200), fill=255)
+    draw_target.ellipse((0, 0, 200, 200), fill=255)
+    feeder_avatar.putalpha(mask_feeder)
+    target_avatar.putalpha(mask_target)
+    image.paste(feeder_avatar, (400, 150), feeder_avatar)
+    image.paste(target_avatar, (533, 646), target_avatar)
+    # save to bytes
+    byte_io = BytesIO()
+    image.save(byte_io, 'PNG')
+    byte_io.seek(0)
+    return byte_io
+
+
 # setup items
 async def use_fake_ruler(interaction: discord.Interaction):
     user_id = interaction.user.id
@@ -421,6 +476,12 @@ if "ItemSystem" in modules:
             "name": "自欺欺人尺",
             "description": "使用後下次量長度時或許會更長？",
             "callback": use_fake_ruler,
+        },
+        {
+            "id": "grass",
+            "name": "草",
+            "description": "這是一把草，可以用來草飼男娘。使用 `/dsize-feedgrass`。",
+            "callback": None,
         }
     ]
     import ItemSystem

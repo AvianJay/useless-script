@@ -98,6 +98,8 @@ class ItemSystem(commands.GroupCog, name="item", description="物品系統指令
         # Call the item's callback function
         if "callback" in item and callable(item["callback"]):
             await item["callback"](interaction)
+        else:
+            await interaction.response.send_message("這個物品無法使用。", ephemeral=True)
     
     @app_commands.command(name="drop", description="丟棄一個物品")
     @app_commands.describe(item_id="你想丟棄的物品ID", amount="你想丟棄的數量")
