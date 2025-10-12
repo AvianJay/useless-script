@@ -126,6 +126,7 @@ class CommandNameTranslator(app_commands.Translator):
                 "dsize-leaderboard": "dsize-排行榜",
                 "dsize-battle": "dsize-對決",
                 "dsize-settings": "dsize-設定",
+                "dsize-feedgrass": "dsize-草飼",
                 "item": "物品",
                 "list": "列出",
                 "use": "使用",
