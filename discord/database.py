@@ -19,7 +19,7 @@ DEFAULT_SERVER_CONFIG = {
     "dsize_max": 30,
     "dsize_surgery_percent": 10,
     "dsize_surgery_max": 10,
-    "dsize_drop_fake_ruler_chance": 5,
+    "dsize_drop_item_chance": 5,
 }
 
 class Database:

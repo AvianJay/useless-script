@@ -96,7 +96,7 @@ async def dsize(interaction: discord.Interaction, global_dsize: bool = False):
     set_user_data(guild_key, user_id, "last_dsize_size", size)
     
     surgery_percent = get_server_config(guild_key, "dsize_surgery_percent", 10)
-    drop_fake_ruler_chance = get_server_config(guild_key, "dsize_drop_fake_ruler_chance", 5)
+    drop_item_chance = get_server_config(guild_key, "dsize_drop_item_chance", 5)
     # check if user got surgery chance
     if percent_random(surgery_percent):
         fail_chance = random.randint(1, 100)
@@ -163,15 +163,19 @@ async def dsize(interaction: discord.Interaction, global_dsize: bool = False):
                 await interaction.edit_original_response(content="手術成功。", embed=embed)
                 set_user_data(guild_key, user_id, "last_dsize_size", new_size + size)
         surgery_msg = await interaction.followup.send(f"你獲得了一次做手術的機會。\n請問你是否同意手術？\n-# 失敗機率：{fail_chance}%", view=dsize_SurgeryView())
-    if ItemSystem and percent_random(drop_fake_ruler_chance):
+    if ItemSystem and percent_random(drop_item_chance):
         msg = await interaction.followup.send("...?")
         await asyncio.sleep(1)
         await msg.edit(content="......?")
         await asyncio.sleep(1)
         await msg.edit(content=".........?")
         await asyncio.sleep(1)
-        await ItemSystem.give_item_to_user(interaction.guild.id, interaction.user.id, "fake_ruler", 1)
-        await msg.edit(content="你撿到了一把自欺欺人尺！\n使用 `/item use fake_ruler` 可能可以讓下次量長度時變長？")
+        if random.randint(1, 2) == 1:
+            await ItemSystem.give_item_to_user(interaction.guild.id, interaction.user.id, "fake_ruler", 1)
+            await msg.edit(content="你撿到了一把自欺欺人尺！\n使用 `/item use fake_ruler` 可能可以讓下次量長度時變長？")
+        else:
+            await ItemSystem.give_item_to_user(interaction.guild.id, interaction.user.id, "grass", 1)
+            await msg.edit(content="你撿到了草 x1！\n使用 `/dsize-feedgrass` 可以草飼男娘。")
 
 
 @bot.tree.command(name=app_commands.locale_str("dsize-leaderboard"), description="查看屌長排行榜")
@@ -372,7 +376,7 @@ async def dsize_battle(interaction: discord.Interaction, opponent: discord.Membe
     app_commands.Choice(name="最大長度", value="dsize_max"),
     app_commands.Choice(name="手術機率(%)", value="dsize_surgery_percent"),
     app_commands.Choice(name="手術最大長度", value="dsize_surgery_max"),
-    app_commands.Choice(name="撿到自欺欺人尺機率(%)", value="dsize_drop_fake_ruler_chance"),
+    app_commands.Choice(name="撿到物品機率(%)", value="dsize_drop_item_chance"),
 ])
 @app_commands.default_permissions(administrator=True)
 @app_commands.allowed_installs(guilds=True, users=False)
@@ -385,22 +389,22 @@ async def dsize_settings(interaction: discord.Interaction, setting: str, value: 
             await interaction.response.send_message("最大長度必須是介於 1 到 1000 之間的整數。", ephemeral=True)
             return
         set_server_config(guild_key, "dsize_max", int(value))
-        await interaction.response.send_message(f"已設定最大長度為 {value} cm")
+        await interaction.response.send_message(f"已設定最大長度為 {value} cm。")
     elif setting == "dsize_surgery_percent":
         if not value.isdigit() or int(value) < 1 or int(value) > 100:
             await interaction.response.send_message("手術機率必須是介於 1 到 100 之間的整數。", ephemeral=True)
             return
         set_server_config(guild_key, "dsize_surgery_percent", int(value))
-        await interaction.response.send_message(f"已設定手術機率為 {str(int(value))}%")
+        await interaction.response.send_message(f"已設定手術機率為 {str(int(value))}%。")
     elif setting == "dsize_surgery_max":
         set_server_config(guild_key, "dsize_surgery_max", int(value))
-        await interaction.response.send_message(f"已設定手術最大長度為 {value} cm")
-    elif setting == "dsize_drop_fake_ruler_chance":
+        await interaction.response.send_message(f"已設定手術最大長度為 {value} cm。")
+    elif setting == "dsize_drop_item_chance":
         if not value.isdigit() or int(value) < 0 or int(value) > 100:
-            await interaction.response.send_message("撿到自欺欺人尺機率必須是介於 0 到 100 之間的整數。", ephemeral=True)
+            await interaction.response.send_message("撿到物品機率必須是介於 0 到 100 之間的整數。", ephemeral=True)
             return
-        set_server_config(guild_key, "dsize_drop_fake_ruler_chance", int(value))
-        await interaction.response.send_message(f"已設定撿到自欺欺人尺機率為 {str(int(value))}%")
+        set_server_config(guild_key, "dsize_drop_item_chance", int(value))
+        await interaction.response.send_message(f"已設定撿到物品機率為 {str(int(value))}%。")
     else:
         await interaction.response.send_message("未知的設定項目。")
 
