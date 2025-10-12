@@ -426,7 +426,8 @@ async def dsize_feedgrass(interaction: discord.Interaction, user: discord.Member
     await interaction.response.defer()
     image_bytes = await generate_feedgrass_image(interaction.user, user)
     embed = discord.Embed(title=f"{interaction.user.display_name} 草飼了 {user.display_name}！", color=0x00ff00)
-    embed.image.url = "attachment://feed_grass.png"
+    embed.set_image(url="attachment://feed_grass.png")
+    embed.timestamp = datetime.utcnow()
     await interaction.followup.send(embed=embed, file=discord.File(image_bytes, "feed_grass.png"))
 
 
