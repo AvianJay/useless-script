@@ -7,9 +7,13 @@ from discord import app_commands
 from discord.ext import commands
 import aiohttp
 from database import db
-from globalenv import bot, start_bot, db, get_server_config, set_server_config
+from globalenv import bot, start_bot, db, get_server_config, set_server_config, modules
 last_report_times = {}  # 用戶 ID -> 上次檢舉時間
 reported_messages = []
+
+if not "Moderate" in modules:
+    raise ImportError("Moderate module is required for ReportToBan module")
+import Moderate
 
 SERVER_RULES = """
 # 地球Online台服玩家交流區新版規則 (摘要)
@@ -128,19 +132,6 @@ def send_moderation_message(user: discord.Member, moderator: discord.Member, act
             asyncio.create_task(mod_channel.send(text))
 
 
-async def timeout_user(*, user_id: int, guild_id: int, until, reason: str="") -> bool:
-    headers = {"Authorization": f"Bot {bot.http.token}"}
-    url = f"https://discord.com/api/v9/guilds/{guild_id}/members/{user_id}"
-    timeout_dt = discord.utils.utcnow() + timedelta(seconds=until)
-    timeout = timeout_dt.replace(microsecond=0).isoformat()
-    payload = {'communication_disabled_until': timeout, 'reason': reason}
-    async with aiohttp.ClientSession() as session:
-        async with session.patch(url, json=payload, headers=headers) as resp:
-            if resp.status in range(200, 299):
-                return True
-            return False
-
-
 class doModerationActions(discord.ui.View):
     def __init__(self, user: discord.Member, interaction: discord.Interaction, ai_suggestions: list, ai_reason: str="", message: discord.Message=None, reporter: discord.Member=None):
         super().__init__(timeout=None)
@@ -164,13 +155,13 @@ class doModerationActions(discord.ui.View):
                 # target_str = action.get("target")
                 target = self.user
                 if action.get("action") == "ban":
-                    await interaction.guild.ban(target, reason=self.ai_reason)
+                    await Moderate.ban_user(interaction.guild, target, reason=self.ai_reason)
                 elif action.get("action") == "kick":
                     await interaction.guild.kick(target, reason=self.ai_reason)
                 elif action.get("action") == "mute":
                     duration = action.get("duration", 0)
                     if duration > 0:
-                        await timeout_user(user_id=target.id, guild_id=interaction.guild.id, until=duration, reason=self.ai_reason)
+                        await interaction.guild.get_member(target.id).timeout(discord.utils.utcnow() + timedelta(seconds=duration), reason=self.ai_reason)
                 elif action.get("action") == "blacklist_reporter" and target_str == "reporter":
                     # 封鎖檢舉人
                     if self.reporter:
@@ -206,11 +197,14 @@ class doModerationActions(discord.ui.View):
         user = self.user
         class BanReasonModal(discord.ui.Modal, title="封鎖原因"):
             reason = discord.ui.TextInput(label="封鎖原因", placeholder="請輸入封鎖原因", required=True, max_length=100)
-            delete_messages = discord.ui.TextInput(label="刪除訊息小時數", placeholder="請輸入要刪除的訊息小時數 (0-168)", required=False, max_length=3, default="0")
+            delete_messages = discord.ui.TextInput(label="刪除訊息時間", placeholder="請輸入要刪除的訊息時間 (d/h/m/s)", required=False, max_length=3, default="0")
+            duration = discord.ui.TextInput(label="封鎖時間", placeholder="請輸入封鎖時間，若不填則為永久封鎖 (d/h/m/s)", required=False, max_length=3, default="0")
 
             async def on_submit(self, modal_interaction: discord.Interaction):
                 try:
-                    await interaction.guild.ban(user, reason=self.reason.value or "違反規則", delete_message_seconds=int(self.delete_messages.value) * 3600 if self.delete_messages.value.isdigit() else 0)
+                    duration = Moderate.timestr_to_seconds(self.duration.value) if self.duration.value else 0
+                    delete = Moderate.timestr_to_seconds(self.delete_messages.value) if self.delete_messages.value else 0
+                    await Moderate.ban_user(interaction.guild, user, reason=self.reason.value or "違反規則", duration=duration if duration > 0 else None, delete_message_seconds=delete if delete > 0 else 0)
                     send_moderation_message(user, interaction.user, [{"action": "ban"}], self.reason.value or "違反規則", message_content)
                 except Exception as e:
                     print(f"Error occurred: {str(e)}")
@@ -248,7 +242,7 @@ class doModerationActions(discord.ui.View):
                     if mins <= 0:
                         await modal_interaction.response.send_message("請輸入正整數分鐘。", ephemeral=True)
                         return
-                    await timeout_user(user_id=parent_user.id, guild_id=interaction.guild.id, until=mins * 60, reason=self.reason.value or "違反規則")
+                    await interaction.guild.get_member(parent_user.id).timeout(discord.utils.utcnow() + timedelta(minutes=mins), reason=self.reason.value or "違反規則")
                     send_moderation_message(parent_user, interaction.user, [{"action": "mute", "duration": mins * 60}], self.reason.value or "違反規則", message_content)
                     await modal_interaction.response.send_message(f"已禁言 {parent_user.mention} {mins} 分鐘", ephemeral=True)
                 except Exception as e:
@@ -321,7 +315,7 @@ async def report_message(interaction: discord.Interaction, message: discord.Mess
         last_report_time = last_report_times.get(interaction.user.id)
         if last_report_time and (now - last_report_time).total_seconds() < report_rate_limit:
             can_report_time = last_report_time + timedelta(seconds=report_rate_limit)
-            await interaction.response.send_message(f"您檢舉的頻率過快，請在 {can_report_time.strftime('%Y-%m-%d %H:%M:%S')} 後再試。", ephemeral=True)
+            await interaction.response.send_message(f"您檢舉的頻率過快，請在 <t:{int(can_report_time.timestamp())}:F> 後再試。", ephemeral=True)
             return
         
     if message.id in reported_messages:
