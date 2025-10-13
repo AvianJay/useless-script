@@ -19,7 +19,10 @@ async def info_command(interaction: discord.Interaction):
     await interaction.response.defer()
     server_count = len(bot.guilds)
     user_count = len(set(bot.get_all_members()))
-    bot_latency = round(bot.latency * 1000)  # Convert to milliseconds
+    try:
+        bot_latency = round(bot.latency * 1000)  # Convert to milliseconds
+    except OverflowError:
+        bot_latency = "N/A"
 
     embed = discord.Embed(title="機器人資訊", color=0x00ff00)
     embed.add_field(name="版本", value=full_version)
