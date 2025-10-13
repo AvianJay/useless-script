@@ -51,6 +51,7 @@ async def remove_item_from_user(guild_id: int, user_id: int, item_id: str, amoun
 
 
 @app_commands.guild_only()
+@app_commands.allowed_installs(guilds=True, users=False)
 @app_commands.allowed_contexts(guilds=True, dms=False, private_channels=False)
 class ItemSystem(commands.GroupCog, name="item", description="物品系統指令"):
     def __init__(self):

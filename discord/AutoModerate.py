@@ -25,6 +25,7 @@ async def settings_autocomplete(interaction: discord.Interaction, current: str):
 
 @app_commands.guild_only()
 @app_commands.default_permissions(administrator=True)
+@app_commands.allowed_installs(guilds=True, users=False)
 @app_commands.allowed_contexts(guilds=True, dms=False, private_channels=False)
 class AutoModerate(commands.GroupCog, name=app_commands.locale_str("automod")):
     def __init__(self, bot: commands.Bot) -> None:
