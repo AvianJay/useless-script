@@ -63,6 +63,8 @@ async def dsize(interaction: discord.Interaction, global_dsize: bool = False):
         await interaction.response.send_message(f"一天只能量一次屌長。<t:{int(timestamp_next.timestamp())}:R> 才能再次使用。", ephemeral=ephemeral_flag)
         return
 
+    set_user_data(guild_key, user_id, "last_dsize", now)
+
     # 隨機產生長度
     size = random.randint(1, max_size)
     fake_size = None
@@ -92,9 +94,8 @@ async def dsize(interaction: discord.Interaction, global_dsize: bool = False):
         await asyncio.sleep(0.1)
 
     # 更新使用時間 — 存到對應的 guild_key（若為 user-install 則是 None）
-    set_user_data(guild_key, user_id, "last_dsize", now)
     set_user_data(guild_key, user_id, "last_dsize_size", size)
-    
+
     surgery_percent = get_server_config(guild_key, "dsize_surgery_percent", 10)
     drop_item_chance = get_server_config(guild_key, "dsize_drop_item_chance", 5)
     # check if user got surgery chance
@@ -163,20 +164,21 @@ async def dsize(interaction: discord.Interaction, global_dsize: bool = False):
                 await interaction.edit_original_response(content="手術成功。", embed=embed)
                 set_user_data(guild_key, user_id, "last_dsize_size", new_size + size)
         surgery_msg = await interaction.followup.send(f"你獲得了一次做手術的機會。\n請問你是否同意手術？\n-# 失敗機率：{fail_chance}%", view=dsize_SurgeryView())
-    if ItemSystem and percent_random(drop_item_chance):
-        msg = await interaction.followup.send("...?")
-        await asyncio.sleep(1)
-        await msg.edit(content="......?")
-        await asyncio.sleep(1)
-        await msg.edit(content=".........?")
-        await asyncio.sleep(1)
-        if random.randint(1, 2) == 1:
-            await ItemSystem.give_item_to_user(interaction.guild.id, interaction.user.id, "fake_ruler", 1)
-            await msg.edit(content="你撿到了一把自欺欺人尺！\n使用 `/item use fake_ruler` 可能可以讓下次量長度時變長？")
-        else:
-            amount = random.randint(1, 3)
-            await ItemSystem.give_item_to_user(interaction.guild.id, interaction.user.id, "grass", amount)
-            await msg.edit(content=f"你撿到了草 x{amount}！\n使用 `/dsize-feedgrass` 可以草飼男娘。")
+    if interaction.guild:
+        if ItemSystem and percent_random(drop_item_chance):
+            msg = await interaction.followup.send("...?")
+            await asyncio.sleep(1)
+            await msg.edit(content="......?")
+            await asyncio.sleep(1)
+            await msg.edit(content=".........?")
+            await asyncio.sleep(1)
+            if random.randint(1, 2) == 1:
+                await ItemSystem.give_item_to_user(interaction.guild.id, interaction.user.id, "fake_ruler", 1)
+                await msg.edit(content="你撿到了一把自欺欺人尺！\n使用 `/item use fake_ruler` 可能可以讓下次量長度時變長？")
+            else:
+                amount = random.randint(1, 3)
+                await ItemSystem.give_item_to_user(interaction.guild.id, interaction.user.id, "grass", amount)
+                await msg.edit(content=f"你撿到了草 x{amount}！\n使用 `/dsize-feedgrass` 可以草飼男娘。")
 
 
 @bot.tree.command(name=app_commands.locale_str("dsize-leaderboard"), description="查看屌長排行榜")
@@ -313,6 +315,9 @@ async def dsize_battle(interaction: discord.Interaction, opponent: discord.Membe
                 return
             self.value = True
             self.stop()
+            set_user_data(interaction.guild.id, user_id, "last_dsize", now)
+            set_user_data(interaction.guild.id, opponent_id, "last_dsize", now)
+            
             await interaction.response.edit_message(content="開始對決。", view=None)
             size_user = random.randint(1, max_size)
             size_opponent = random.randint(1, max_size)
@@ -353,9 +358,7 @@ async def dsize_battle(interaction: discord.Interaction, opponent: discord.Membe
             embed.add_field(name="結果：", value=result, inline=False)
             await msg.edit(embed=embed)
 
-            set_user_data(interaction.guild.id, user_id, "last_dsize", now)
             set_user_data(interaction.guild.id, user_id, "last_dsize_size", size_user)
-            set_user_data(interaction.guild.id, opponent_id, "last_dsize", now)
             set_user_data(interaction.guild.id, opponent_id, "last_dsize_size", size_opponent)
 
         @discord.ui.button(label="❌ 拒絕", style=discord.ButtonStyle.danger)
