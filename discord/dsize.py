@@ -312,6 +312,9 @@ async def dsize_battle(interaction: discord.Interaction, opponent: discord.Membe
     if user_id in user_using_dsize_battle:
         await interaction.response.send_message("你已經在進行一場對決了，請先結束目前的對決。", ephemeral=True)
         return
+    if opponent_id in user_using_dsize_battle:
+        await interaction.response.send_message(f"{opponent.display_name} 正在進行一場對決，請稍後再試。", ephemeral=True)
+        return
     
     user_using_dsize_battle.add(user_id)
     user_using_dsize_battle.add(opponent_id)
