@@ -123,6 +123,7 @@ class CommandNameTranslator(app_commands.Translator):
                 "untimeout": "解除禁言",
                 "kick": "踢出",
                 "send-moderation-message": "發送懲處公告",
+                "moderation-message-channel": "懲處公告頻道",
                 "settings-punishment-notify": "設定-懲罰通知",
                 "dsize-leaderboard": "dsize-排行榜",
                 "dsize-battle": "dsize-對決",
@@ -148,6 +149,8 @@ class CommandNameTranslator(app_commands.Translator):
                 "info": "資訊",
                 "randomnumber": "隨機數字",
                 "randomuser": "隨機用戶",
+                "report": "檢舉系統",
+                "blacklist-role": "檢舉黑名單",
             }
             # print("[DEBUG] Translating command/group:", context.data.name)
             # print("[DEBUG] Translated to:", translations.get(context.data.name, None))
