@@ -669,6 +669,18 @@ class Moderate(commands.GroupCog, group_name=app_commands.locale_str("admin")):
             return
 
         await interaction.followup.send(f"已對 {member.mention} 解除禁言。")
+        
+    @app_commands.command(name=app_commands.locale_str("moderation-message-channel"), description="設定懲處公告頻道")
+    @app_commands.describe(channel="選擇頻道")
+    @app_commands.default_permissions(manage_channels=True)
+    async def set_moderation_message_channel(self, interaction: discord.Interaction, channel: discord.TextChannel):
+        await interaction.response.defer()
+        permissions = channel.permissions_for(interaction.guild.me)
+        if not (permissions.send_messages and permissions.view_channel):
+            await interaction.followup.send("機器人在該頻道沒有發送訊息的權限，請先調整權限後再嘗試。")
+            return
+        set_server_config(interaction.guild.id, "MODERATION_MESSAGE_CHANNEL_ID", channel.id)
+        await interaction.followup.send(f"已設定懲處公告頻道為 {channel.mention}。")
 
 
 asyncio.run(bot.add_cog(Moderate(bot)))
