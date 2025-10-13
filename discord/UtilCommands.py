@@ -16,6 +16,7 @@ full_version = f"{version} ({git_commit_hash})"
 @app_commands.allowed_installs(guilds=True, users=True)
 @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
 async def info_command(interaction: discord.Interaction):
+    await interaction.response.defer()
     server_count = len(bot.guilds)
     user_count = len(set(bot.get_all_members()))
     bot_latency = round(bot.latency * 1000)  # Convert to milliseconds
@@ -25,7 +26,7 @@ async def info_command(interaction: discord.Interaction):
     embed.add_field(name="伺服器數量", value=server_count)
     embed.add_field(name="用戶總數量", value=user_count)
     embed.add_field(name="機器人延遲", value=f"{bot_latency}ms")
-    await interaction.response.send_message(embed=embed)
+    await interaction.followup.send(embed=embed)
 
 @bot.tree.command(name=app_commands.locale_str("randomnumber"), description="生成一個隨機數字")
 @app_commands.describe(min="最小值", max="最大值")
