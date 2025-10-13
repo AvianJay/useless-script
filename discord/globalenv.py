@@ -120,6 +120,7 @@ class CommandNameTranslator(app_commands.Translator):
                 "ban": "封禁",
                 "unban": "解封",
                 "timeout": "禁言",
+                "untimeout": "解除禁言",
                 "kick": "踢出",
                 "send-moderation-message": "發送懲處公告",
                 "settings-punishment-notify": "設定-懲罰通知",

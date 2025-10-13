@@ -628,6 +628,47 @@ class Moderate(commands.GroupCog, group_name=app_commands.locale_str("admin")):
 
         # 使用 followup 送出最終訊息
         await interaction.followup.send(f"已對 {member.mention} 禁言 {get_time_text(duration_seconds)}。")
+        
+    @app_commands.command(name=app_commands.locale_str("untimeout"), description="解除用戶禁言")
+    @app_commands.describe(user="選擇用戶（@或ID）")
+    @app_commands.default_permissions(mute_members=True)
+    async def untimeout_user(self, interaction: discord.Interaction, user: str):
+        await interaction.response.defer()
+
+        guild = interaction.guild
+        if guild is None:
+            await interaction.followup.send("此指令只能在伺服器中使用。")
+            return
+
+        if user.startswith("<@") and user.endswith(">"):
+            user = user[2:-1]
+            if user.startswith("!"):
+                user = user[1:]
+
+        # 解析 target
+        if isinstance(user, discord.Member):
+            user_id = user.id
+            member = user
+        else:
+            try:
+                user_id = int(user)
+            except Exception:
+                await interaction.followup.send("無效的使用者或 ID。")
+                return
+            member = guild.get_member(user_id)
+            if member is None:
+                await interaction.followup.send("該用戶不在伺服器中，無法解除禁言。")
+                return
+
+        # 執行解除禁言
+        try:
+            await member.timeout(None, reason="解除禁言")
+        except Exception as e:
+            print(f"[!] 解除禁言 {member} 時發生錯誤：{e}")
+            await interaction.followup.send(f"解除禁言時發生錯誤：{e}")
+            return
+
+        await interaction.followup.send(f"已對 {member.mention} 解除禁言。")
 
 
 asyncio.run(bot.add_cog(Moderate(bot)))
