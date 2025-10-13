@@ -22,9 +22,14 @@ def percent_random(percent: int) -> bool:
 
 @bot.tree.command(name="dsize", description="量屌長")
 @app_commands.describe(global_dsize="是否使用全域紀錄 (預設否)")
+@app_commands.choices(global_dsize=[
+    app_commands.Choice(name="否", value=0),
+    app_commands.Choice(name="是", value=1),
+])
 @app_commands.allowed_installs(guilds=True, users=True)
 @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
-async def dsize(interaction: discord.Interaction, global_dsize: bool = False):
+async def dsize(interaction: discord.Interaction, global_dsize: int = 0):
+    global_dsize = bool(global_dsize)
     user_id = interaction.user.id
     # Use timezone-aware UTC and convert to Taiwan time (UTC+8)
     # ew broken
@@ -183,9 +188,14 @@ async def dsize(interaction: discord.Interaction, global_dsize: bool = False):
 
 @bot.tree.command(name=app_commands.locale_str("dsize-leaderboard"), description="查看屌長排行榜")
 @app_commands.describe(limit="顯示前幾名 (預設10)", global_leaderboard="顯示全域排行榜 (預設否)")
+@app_commands.choices(global_leaderboard=[
+    app_commands.Choice(name="否", value=0),
+    app_commands.Choice(name="是", value=1),
+])
 @app_commands.allowed_installs(guilds=True, users=True)
 @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
-async def dsize_leaderboard(interaction: discord.Interaction, limit: int = 10, global_leaderboard: bool = False):
+async def dsize_leaderboard(interaction: discord.Interaction, limit: int = 10, global_leaderboard: int = 0):
+    global_leaderboard = bool(global_leaderboard)
     if global_leaderboard:
         guild_id = None  # global
     else:

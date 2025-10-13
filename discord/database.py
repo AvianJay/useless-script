@@ -177,10 +177,12 @@ class Database:
     
     def get_user_data(self, user_id: int, guild_id: Optional[int], key: str, default: Any = None) -> Any:
         """Get user-specific data, optionally scoped to a guild"""
+        if not guild_id:
+            guild_id = 0  # Use 0 to represent global data
         with sqlite3.connect(self.db_path) as conn:
             cursor = conn.cursor()
             cursor.execute(
-                'SELECT data_value FROM user_data WHERE user_id = ? AND guild_id IS ? AND data_key = ?',
+                'SELECT data_value FROM user_data WHERE user_id = ? AND guild_id = ? AND data_key = ?',
                 (user_id, guild_id, key)
             )
             result = cursor.fetchone()
@@ -196,6 +198,8 @@ class Database:
     def set_user_data(self, user_id: int, guild_id: Optional[int], key: str, value: Any) -> bool:
         """Set user-specific data, optionally scoped to a guild"""
         try:
+            if not guild_id:
+                guild_id = 0  # Use 0 to represent global data
             with sqlite3.connect(self.db_path) as conn:
                 cursor = conn.cursor()
                 
@@ -219,6 +223,8 @@ class Database:
     def get_all_user_data(self, guild_id: Optional[int] = None, key: Optional[str] = None) -> Dict[int, Dict[str, Any]]:
         """Get all user data, optionally filtered by guild and/or key"""
         data = {}
+        if not guild_id:
+            guild_id = 0  # Use 0 to represent global data
         
         with sqlite3.connect(self.db_path) as conn:
             cursor = conn.cursor()
