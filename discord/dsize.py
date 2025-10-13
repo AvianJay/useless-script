@@ -187,6 +187,7 @@ async def dsize_leaderboard(interaction: discord.Interaction, limit: int = 10, g
     if global_leaderboard:
         guild_id = None  # global
     else:
+        global_leaderboard = False if interaction.guild else True
         guild_id = interaction.guild.id if interaction.guild else None  # None for global
     leaderboard = []
     if limit < 1 or limit > 50:
