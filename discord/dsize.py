@@ -67,7 +67,7 @@ async def dsize(interaction: discord.Interaction, global_dsize: bool = False):
     size = random.randint(1, max_size)
     fake_size = None
     if "ItemSystem" in modules:
-        fake_ruler_used = bool(get_user_data(guild_key, user_id, "dsize_fake_ruler_used", False))
+        fake_ruler_used = get_user_data(guild_key, user_id, "dsize_fake_ruler_used", "False") == "True"
         if fake_ruler_used:
             extra_size = random.randint(10, 20)
             fake_size = size + extra_size
@@ -467,7 +467,7 @@ async def generate_feedgrass_image(feeder: discord.User, target: discord.User):
 async def use_fake_ruler(interaction: discord.Interaction):
     user_id = interaction.user.id
     guild_key = interaction.guild.id if interaction.guild else None
-    if get_user_data(guild_key, user_id, "dsize_fake_ruler_used", False):
+    if get_user_data(guild_key, user_id, "dsize_fake_ruler_used", "False") == "True":
         await interaction.response.send_message("你今天已經使用過自欺欺人尺了。", ephemeral=True)
         return
     await ItemSystem.remove_item_from_user(interaction.user.id, "fake_ruler", 1)
