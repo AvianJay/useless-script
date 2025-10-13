@@ -150,18 +150,19 @@ class ItemSystem(commands.GroupCog, name="item", description="物品系統指令
     @app_commands.describe(user="你想給予物品的用戶", item_id="你想給予的物品ID")
     @app_commands.autocomplete(item_id=get_user_items_autocomplete)
     async def give_item(self, interaction: discord.Interaction, user: discord.User, item_id: str, amount: int = 1):
+        await interaction.response.defer()
         giver_id = interaction.user.id
         receiver_id = user.id
         guild_id = interaction.guild.id if interaction.guild else None
         
         giver_items = await get_user_items(guild_id, giver_id, item_id)
         if not giver_items:
-            await interaction.response.send_message("你沒有這個物品。", ephemeral=True)
+            await interaction.followup.send("你沒有這個物品。")
             return
         
         item = next((i for i in items if i["id"] == item_id), None)
         if not item:
-            await interaction.response.send_message("無效的物品ID。", ephemeral=True)
+            await interaction.followup.send("無效的物品ID。")
             return
         
         # Remove from giver
@@ -170,7 +171,7 @@ class ItemSystem(commands.GroupCog, name="item", description="物品系統指令
         # Add to receiver
         await give_item_to_user(guild_id, receiver_id, item_id, amount)
         
-        await interaction.response.send_message(f"你給了 {user.name} 一個 {item['name']}。", ephemeral=True)
+        await interaction.followup.send(f"你給了 {user.name} {amount} 個 {item['name']}。")
         # dm the receiver
         try:
             await user.send(f"你從 {interaction.user.name} 那裡收到了 {amount} 個 {item['name']}！\n-# 伺服器: {interaction.guild.name if interaction.guild else '私人訊息'}")
@@ -192,8 +193,9 @@ class ItemModerate(commands.GroupCog, name="itemmod", description="物品系統�
     @app_commands.describe(user="你想給予物品的用戶", item_id="你想給予的物品ID", amount="你想給予的數量")
     @app_commands.autocomplete(item_id=all_items_autocomplete)
     async def admin_give_item(self, interaction: discord.Interaction, user: discord.User, item_id: str, amount: int = 1):
+        await interaction.response.defer()
         if not interaction.user.guild_permissions.administrator:
-            await interaction.response.send_message("你沒有權限使用這個指令。", ephemeral=True)
+            await interaction.followup.send("你沒有權限使用這個指令。")
             return
         
         receiver_id = user.id
@@ -201,12 +203,12 @@ class ItemModerate(commands.GroupCog, name="itemmod", description="物品系統�
         
         item = next((i for i in items if i["id"] == item_id), None)
         if not item:
-            await interaction.response.send_message("無效的物品ID。", ephemeral=True)
+            await interaction.followup.send("無效的物品ID。")
             return
         
         await give_item_to_user(guild_id, receiver_id, item_id, amount)
 
-        await interaction.response.send_message(f"你給了 {user.name} {amount} 個 {item['name']}。", ephemeral=True)
+        await interaction.followup.send(f"你給了 {user.name} {amount} 個 {item['name']}。")
 
     @app_commands.command(name="remove", description="移除用戶的一個物品")
     @app_commands.describe(user="你想移除物品的用戶", item_id="你想移除的物品ID", amount="你想移除的數量")
