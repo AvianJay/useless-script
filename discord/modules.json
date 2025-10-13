@@ -8,5 +8,6 @@
     "Moderate",
     "ItemSystem",
     "AutoModerate",
-    "AutoPublish"
+    "AutoPublish",
+    "UtilCommands"
 ]

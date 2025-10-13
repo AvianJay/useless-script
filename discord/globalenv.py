@@ -144,6 +144,9 @@ class CommandNameTranslator(app_commands.Translator):
                 "itemmod": "物品管理",
                 "autopublish": "公告自動發布",
                 "view": "查看",
+                "info": "資訊",
+                "randomnumber": "隨機數字",
+                "randomuser": "隨機用戶",
             }
             # print("[DEBUG] Translating command/group:", context.data.name)
             # print("[DEBUG] Translated to:", translations.get(context.data.name, None))
