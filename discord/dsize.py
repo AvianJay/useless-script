@@ -251,6 +251,7 @@ async def dsize_leaderboard(interaction: discord.Interaction, limit: int = 10, g
     await interaction.response.send_message(embed=embed)
 
 
+user_using_dsize_battle = set()  # to prevent spamming the command
 @bot.tree.command(name=app_commands.locale_str("dsize-battle"), description="比屌長(需要雙方今天沒有量過)")
 @app_commands.allowed_installs(guilds=True, users=False)
 @app_commands.allowed_contexts(guilds=True, dms=False, private_channels=False)
@@ -298,12 +299,21 @@ async def dsize_battle(interaction: discord.Interaction, opponent: discord.Membe
         await interaction.response.send_message(f"{opponent.display_name} 今天已經量過屌長了。", ephemeral=True)
         return
     
+    if user_id in user_using_dsize_battle:
+        await interaction.response.send_message("你已經在進行一場對決了，請先結束目前的對決。", ephemeral=True)
+        return
+    
+    user_using_dsize_battle.add(user_id)
+    user_using_dsize_battle.add(opponent_id)
+    
     class dsize_Confirm(discord.ui.View):
         def __init__(self):
             super().__init__(timeout=30)
             self.value = None
         
         async def on_timeout(self):
+            user_using_dsize_battle.discard(user_id)
+            user_using_dsize_battle.discard(opponent_id)
             for child in self.children:
                 child.disabled = True
             await interaction.edit_original_response(content="對決邀請已過期。", view=self)
@@ -360,6 +370,8 @@ async def dsize_battle(interaction: discord.Interaction, opponent: discord.Membe
 
             set_user_data(interaction.guild.id, user_id, "last_dsize_size", size_user)
             set_user_data(interaction.guild.id, opponent_id, "last_dsize_size", size_opponent)
+            user_using_dsize_battle.discard(user_id)
+            user_using_dsize_battle.discard(opponent_id)
 
         @discord.ui.button(label="❌ 拒絕", style=discord.ButtonStyle.danger)
         async def cancel(self, interaction: discord.Interaction, button: discord.ui.Button):
@@ -369,6 +381,8 @@ async def dsize_battle(interaction: discord.Interaction, opponent: discord.Membe
             self.value = False
             self.stop()
             await interaction.response.edit_message(content="已拒絕對決邀請。", view=None)
+            user_using_dsize_battle.discard(user_id)
+            user_using_dsize_battle.discard(opponent_id)
 
     # 徵求對方同意
     await interaction.response.send_message(f"{opponent.mention}，{interaction.user.name} 想跟你比長度。\n請在 30 秒內按下 ✅ 同意 或 ❌ 拒絕。", ephemeral=False, view=dsize_Confirm())
