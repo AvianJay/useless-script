@@ -174,8 +174,9 @@ async def dsize(interaction: discord.Interaction, global_dsize: bool = False):
             await ItemSystem.give_item_to_user(interaction.guild.id, interaction.user.id, "fake_ruler", 1)
             await msg.edit(content="你撿到了一把自欺欺人尺！\n使用 `/item use fake_ruler` 可能可以讓下次量長度時變長？")
         else:
-            await ItemSystem.give_item_to_user(interaction.guild.id, interaction.user.id, "grass", 1)
-            await msg.edit(content="你撿到了草 x1！\n使用 `/dsize-feedgrass` 可以草飼男娘。")
+            amount = random.randint(1, 3)
+            await ItemSystem.give_item_to_user(interaction.guild.id, interaction.user.id, "grass", amount)
+            await msg.edit(content=f"你撿到了草 x{amount}！\n使用 `/dsize-feedgrass` 可以草飼男娘。")
 
 
 @bot.tree.command(name=app_commands.locale_str("dsize-leaderboard"), description="查看屌長排行榜")
