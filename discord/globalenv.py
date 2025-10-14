@@ -41,7 +41,7 @@ try:
             _config = default_config.copy()
     else:
         _config = default_config.copy()
-        json.dump(_config, open(config_path, "w"), indent=4)
+        json.dump(_config, open(config_path, "w", encoding="utf-8"), indent=4)
 except ValueError:
     _config = default_config.copy()
     json.dump(_config, open(config_path, "w", encoding="utf-8"), indent=4)
@@ -57,7 +57,7 @@ if _config.get("config_version", 0) < config_version:
             _config[k] = default_config[k]
     _config["config_version"] = config_version
     print("[+] Saving...")
-    json.dump(_config, open(config_path, "w"), indent=4)
+    json.dump(_config, open(config_path, "w", encoding="utf-8"), indent=4)
     print("[+] Done.")
 
 def config(key, value=None, mode="r"):
