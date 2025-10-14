@@ -103,7 +103,50 @@ def get_all_user_data(guild_id: int, key: str):
     """Get all user-specific data for a specific key in a server"""
     return db.get_all_user_data(guild_id, key)
 
-
+translations = {
+    "test": "測試",
+    "admin": "管理",
+    "multi-moderate": "多重操作",
+    "ban": "封禁",
+    "unban": "解封",
+    "timeout": "禁言",
+    "untimeout": "解除禁言",
+    "kick": "踢出",
+    "send-moderation-message": "發送懲處公告",
+    "moderation-message-channel": "懲處公告頻道",
+    "settings-punishment-notify": "設定-懲罰通知",
+    "dsize-leaderboard": "dsize-排行榜",
+    "dsize-battle": "dsize-對決",
+    "dsize-settings": "dsize-設定",
+    "dsize-feedgrass": "dsize-草飼",
+    "item": "物品",
+    "list": "列出",
+    "use": "使用",
+    "drop": "丟棄",
+    "give": "給予",
+    "remove": "移除",
+    "listuser": "列出用戶",
+    "view": "查看",
+    "toggle": "切換",
+    "automod": "自動管理",
+    "settings": "設定",
+    "escape_punish": "逃避責任懲處",
+    "escape_punish-punishment": "逃避責任懲處-懲處",
+    "escape_punish-duration": "逃避責任懲處-持續時間",
+    "itemmod": "物品管理",
+    "autopublish": "公告自動發布",
+    "view": "查看",
+    "info": "資訊",
+    "randomnumber": "隨機數字",
+    "randomuser": "隨機用戶",
+    "report": "檢舉系統",
+    "blacklist-role": "檢舉黑名單",
+    "too_many_h1-max_length": "過多標題-最大允許長度",
+    "too_many_h1-action": "過多標題-執行動作",
+    "too_many_emojis-max_emojis": "過多表情符號-偵測數量",
+    "too_many_emojis-action": "過多表情符號-執行動作",
+    "check-action": "檢查動作",
+}
 class CommandNameTranslator(app_commands.Translator):
     async def translate(
         self,
@@ -113,53 +156,9 @@ class CommandNameTranslator(app_commands.Translator):
     ):
         if locale == discord.Locale.taiwan_chinese:
             # print("DEBUG: Translate", type(context.data))
-            translations = {
-                "test": "測試",
-                "admin": "管理",
-                "multi-moderate": "多重操作",
-                "ban": "封禁",
-                "unban": "解封",
-                "timeout": "禁言",
-                "untimeout": "解除禁言",
-                "kick": "踢出",
-                "send-moderation-message": "發送懲處公告",
-                "moderation-message-channel": "懲處公告頻道",
-                "settings-punishment-notify": "設定-懲罰通知",
-                "dsize-leaderboard": "dsize-排行榜",
-                "dsize-battle": "dsize-對決",
-                "dsize-settings": "dsize-設定",
-                "dsize-feedgrass": "dsize-草飼",
-                "item": "物品",
-                "list": "列出",
-                "use": "使用",
-                "drop": "丟棄",
-                "give": "給予",
-                "remove": "移除",
-                "listuser": "列出用戶",
-                "view": "查看",
-                "toggle": "切換",
-                "automod": "自動管理",
-                "settings": "設定",
-                "escape_punish": "逃避責任懲處",
-                "escape_punish-punishment": "逃避責任懲處-懲處",
-                "escape_punish-duration": "逃避責任懲處-持續時間",
-                "itemmod": "物品管理",
-                "autopublish": "公告自動發布",
-                "view": "查看",
-                "info": "資訊",
-                "randomnumber": "隨機數字",
-                "randomuser": "隨機用戶",
-                "report": "檢舉系統",
-                "blacklist-role": "檢舉黑名單",
-                "too_many_h1-max_length": "過多標題-偵測長度",
-                "too_many_h1-action": "過多標題-執行動作",
-                "too_many_emojis-max_emojis": "過多表情符號-偵測數量",
-                "too_many_emojis-action": "過多表情符號-執行動作",
-                "check-action": "檢查動作",
-            }
             # print("[DEBUG] Translating command/group:", context.data.name)
             # print("[DEBUG] Translated to:", translations.get(context.data.name, None))
-            allowed_locations = [app_commands.TranslationContextLocation.command_name, app_commands.TranslationContextLocation.group_name]
+            allowed_locations = [app_commands.TranslationContextLocation.command_name, app_commands.TranslationContextLocation.group_name, app_commands.TranslationContextLocation.choice_name]
             if context.location not in allowed_locations:
                 return None
             try:
