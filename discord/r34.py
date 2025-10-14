@@ -11,6 +11,7 @@ if not config("r34_user_id") or not config("r34_api_key"):
 
 def r34(tags=None, pid=1):
     if tags:
+        tags = tags.replace(' ', '%20')
         r = requests.get(f'https://api.rule34.xxx/index.php?page=dapi&s=post&q=index&json=1&tags={tags}&pid={pid}&api_key={config("r34_api_key")}&user_id={config("r34_user_id")}')
     else:
         r = requests.get(f'https://api.rule34.xxx/index.php?page=dapi&s=post&q=index&json=1&pid={pid}&api_key={config("r34_api_key")}&user_id={config("r34_user_id")}')
