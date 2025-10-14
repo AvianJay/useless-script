@@ -235,7 +235,7 @@ class AutoModerate(commands.GroupCog, name=app_commands.locale_str("automod")):
                 if line.startswith("# "):
                     line = line[2:]
                     h1_count += len(line)
-            if h1_count > 5 or len(message.content) > max_length:
+            if h1_count > max_length:
                 try:
                     await do_action_str(action, guild=message.guild, user=message.author, message=message)
                     print(f"[+] 用戶 {message.author} 因標題長度過長被處理: {action}")
