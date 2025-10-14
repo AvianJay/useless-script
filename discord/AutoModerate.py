@@ -6,6 +6,7 @@ from datetime import datetime, timezone, timedelta
 import asyncio
 from typing import Optional
 import re
+import emoji
 
 if "Moderate" in modules:
     import Moderate
@@ -225,7 +226,7 @@ class AutoModerate(commands.GroupCog, name=app_commands.locale_str("automod")):
         
         # 標題過多檢查
         if automod_settings.get("too_many_h1", {}).get("enabled", False):
-            max_length = int(automod_settings["too_many_h1"].get("max_length", 200))
+            max_length = int(automod_settings["too_many_h1"].get("max_length", 20))
             action = automod_settings["too_many_h1"].get("action", "warn")
             h1_count = 0
             split_lines = message.content.split("\n")
@@ -237,7 +238,7 @@ class AutoModerate(commands.GroupCog, name=app_commands.locale_str("automod")):
             if h1_count > 5 or len(message.content) > max_length:
                 try:
                     await do_action_str(action, guild=message.guild, user=message.author, message=message)
-                    print(f"[+] 用戶 {message.author} 因標題過多被處理: {action}")
+                    print(f"[+] 用戶 {message.author} 因標題長度過長被處理: {action}")
                 except Exception as e:
                     print(f"[!] 無法對用戶 {message.author} 執行標題過多的處理: {e}")
         
@@ -245,7 +246,8 @@ class AutoModerate(commands.GroupCog, name=app_commands.locale_str("automod")):
         if automod_settings.get("too_many_emojis", {}).get("enabled", False):
             max_emojis = int(automod_settings["too_many_emojis"].get("max_emojis", 10))
             action = automod_settings["too_many_emojis"].get("action", "warn")
-            emoji_count = len(re.findall(r'<a?:\w+:\d+>|[\U0001F300-\U0001F6FF\U0001F900-\U0001F9FF\U0001FA00-\U0001FA6F\U0001FA70-\U0001FAFF\U00002702-\U000027B0\U000024C2-\U0001F251]', message.content))
+            emoji_count = len(re.findall(r'<a?:\w+:\d+>', message.content))
+            emoji_count += len([c for c in message.content if emoji.is_emoji(c)])
             if emoji_count > max_emojis:
                 try:
                     await do_action_str(action, guild=message.guild, user=message.author, message=message)
