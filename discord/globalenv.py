@@ -148,6 +148,10 @@ translations = {
     "too_many_emojis-max_emojis": "過多表情符號-偵測數量",
     "too_many_emojis-action": "過多表情符號-執行動作",
     "check-action": "檢查動作",
+    "dynamic-voice": "動態語音",
+    "setup": "設置",
+    "disable": "禁用",
+    "play-audio": "播放音效",
 }
 class CommandNameTranslator(app_commands.Translator):
     async def translate(
