@@ -89,6 +89,8 @@ class ItemSystem(commands.GroupCog, name="item", description="物品系統指令
             return
         embed = discord.Embed(title=f"{interaction.user.display_name} 的物品", color=0x00ff00)
         for item_id, amount in user_items.items():
+            if amount <= 0:
+                continue
             item = next((i for i in items if i["id"] == item_id), None)
             if item:
                 embed.add_field(name=f"{item['name']} x{amount}", value=item["description"], inline=False)

@@ -560,7 +560,7 @@ async def use_scalpel(interaction: discord.Interaction):
                 await interaction.edit_original_response(embed=embed)
                 await asyncio.sleep(1)
                 orig_size += 1
-            embed.set_field_at(0, name=f"{new_size} cm", value=f"8{'=' * (new_size - 1)}D", inline=False)
+            embed.set_field_at(0, name=f"{orig_size + new_size} cm", value=f"8{'=' * (orig_size + new_size - 1)}D", inline=False)
             embed.color = 0x00ff00
             await interaction.edit_original_response(content=f"{target_user.mention} 手術成功。", embed=embed)
     await interaction.response.send_modal(SelectUserModal())
