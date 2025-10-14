@@ -10,7 +10,7 @@ import traceback
 
 
 # Global configuration for backward compatibility (mainly for TOKEN)
-config_version = 5
+config_version = 6
 config_path = 'config.json'
 
 default_config = {
@@ -23,6 +23,8 @@ default_config = {
     ],
     "owners": [123456789012345678],  # 機器人擁有者 ID 列表
     "prefix": "!",  # 指令前綴
+    "r34_user_id": "",
+    "r34_api_key": "",
 }
 _config = None
 

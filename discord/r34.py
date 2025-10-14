@@ -4,14 +4,16 @@ from discord import app_commands
 import random
 import requests
 import json
-from globalenv import bot, start_bot
+from globalenv import bot, start_bot, config
+if not config("r34_user_id") or not config("r34_api_key"):
+    raise ValueError("r34_user_id or r34_api_key is not set in config.json")
 
 
 def r34(tags=None, pid=1):
     if tags:
-        r = requests.get(f'https://api.rule34.xxx/index.php?page=dapi&s=post&q=index&json=1&tags={tags}&pid={pid}')
+        r = requests.get(f'https://api.rule34.xxx/index.php?page=dapi&s=post&q=index&json=1&tags={tags}&pid={pid}&api_key={config("r34_api_key")}&user_id={config("r34_user_id")}')
     else:
-        r = requests.get(f'https://api.rule34.xxx/index.php?page=dapi&s=post&q=index&json=1&pid={pid}')
+        r = requests.get(f'https://api.rule34.xxx/index.php?page=dapi&s=post&q=index&json=1&pid={pid}&api_key={config("r34_api_key")}&user_id={config("r34_user_id")}')
     try:
         rj = r.json()
         selected = random.choice(rj)
@@ -21,7 +23,7 @@ def r34(tags=None, pid=1):
 
 
 def r34tags(query=None):
-    r = requests.get('https://api.rule34.xxx/index.php?page=dapi&s=tag&q=index&limit=999999')
+    r = requests.get(f'https://api.rule34.xxx/index.php?page=dapi&s=tag&q=index&limit=999999&api_key={config("r34_api_key")}&user_id={config("r34_user_id")}')
     tags = []
     try:
         r1 = r.text.split('name="')
