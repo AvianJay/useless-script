@@ -519,7 +519,7 @@ async def use_scalpel(interaction: discord.Interaction):
     guild_key = interaction.guild.id if interaction.guild else None
     
     class SelectUserModal(discord.ui.Modal, title="要幫誰手術？"):
-        target_user = discord.ui.Label(text="選擇用戶", component=discord.ui.UserSelect(placeholder="選擇一個用戶", min_values=1, max_values=1))
+        target_user = discord.ui.Label(text="選擇用戶", component=discord.ui.UserSelect(placeholder="選擇一個用戶", min_values=1, max_values=1, required=True))
 
         async def on_submit(self, interaction: discord.Interaction):
             target_user = self.target_user.component.values[0]
@@ -569,7 +569,7 @@ async def use_rusty_scalpel(interaction: discord.Interaction):
     guild_key = interaction.guild.id if interaction.guild else None
     
     class SelectUserModal(discord.ui.Modal, title="要幫誰手術？"):
-        target_user = discord.ui.Label(text="選擇用戶", component=discord.ui.UserSelect(placeholder="選擇一個用戶", min_values=1, max_values=1))
+        target_user = discord.ui.Label(text="選擇用戶", component=discord.ui.UserSelect(placeholder="選擇一個用戶", min_values=1, max_values=1, required=True))
 
         async def on_submit(self, interaction: discord.Interaction):
             target_user = self.target_user.component.values[0]
