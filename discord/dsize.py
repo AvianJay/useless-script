@@ -181,7 +181,7 @@ async def dsize(interaction: discord.Interaction, global_dsize: int = 0):
                 await ItemSystem.give_item_to_user(interaction.guild.id, interaction.user.id, "fake_ruler", 1)
                 await msg.edit(content="你撿到了一把自欺欺人尺！\n使用 `/item use fake_ruler` 可能可以讓下次量長度時變長？")
             else:
-                amount = random.randint(1, 3)
+                amount = random.randint(1, 5)
                 await ItemSystem.give_item_to_user(interaction.guild.id, interaction.user.id, "grass", amount)
                 await msg.edit(content=f"你撿到了草 x{amount}！\n使用 `/dsize-feedgrass` 可以草飼男娘。")
 
@@ -429,6 +429,10 @@ async def dsize_settings(interaction: discord.Interaction, setting: str, value: 
         set_server_config(guild_key, "dsize_surgery_percent", int(value))
         await interaction.response.send_message(f"已設定手術機率為 {str(int(value))}%。")
     elif setting == "dsize_surgery_max":
+        # limit 100
+        if not value.isdigit() or int(value) < 1 or int(value) > 100:
+            await interaction.response.send_message("手術最大長度必須是介於 1 到 100 之間的整數。", ephemeral=True)
+            return
         set_server_config(guild_key, "dsize_surgery_max", int(value))
         await interaction.response.send_message(f"已設定手術最大長度為 {value} cm。")
     elif setting == "dsize_drop_item_chance":
