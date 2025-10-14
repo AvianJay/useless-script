@@ -28,7 +28,7 @@ _config = None
 
 try:
     if os.path.exists(config_path):
-        _config = json.load(open(config_path, "r"))
+        _config = json.load(open(config_path, "r", encoding="utf-8"))
         if not isinstance(_config, dict):
             print("[!] Config file is not a valid JSON object, resetting to default config.")
             _config = default_config.copy()
@@ -44,7 +44,7 @@ try:
         json.dump(_config, open(config_path, "w"), indent=4)
 except ValueError:
     _config = default_config.copy()
-    json.dump(_config, open(config_path, "w"), indent=4)
+    json.dump(_config, open(config_path, "w", encoding="utf-8"), indent=4)
 
 if _config.get("config_version", 0) < config_version:
     print("[+] Updating config file from version",
@@ -65,7 +65,7 @@ def config(key, value=None, mode="r"):
         return _config.get(key, value)
     elif mode == "w":
         _config[key] = value
-        json.dump(_config, open(config_path, "w"), indent=4)
+        json.dump(_config, open(config_path, "w", encoding="utf-8"), indent=4)
         return True
     else:
         raise ValueError(f"Invalid mode: {mode}")
