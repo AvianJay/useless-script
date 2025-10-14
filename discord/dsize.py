@@ -89,14 +89,17 @@ async def dsize(interaction: discord.Interaction, global_dsize: int = 0):
 
     await interaction.response.send_message(embed=embed)
     # animate to size
-    for i in range(1, size + 1):
+    speed = max(1, size // 50)
+    for i in range(1, size + 1, speed):
         d_string = "=" * (i - 1)
         current_size = i
-        if i == size:  # final size
-            current_size = final_size
         embed.set_field_at(0, name=f"{current_size} cm", value=f"8{d_string}D", inline=False)
         await interaction.edit_original_response(embed=embed)
         await asyncio.sleep(0.1)
+    # final
+    d_string = "=" * (size - 1)
+    embed.set_field_at(0, name=f"{final_size} cm", value=f"8{d_string}D", inline=False)
+    await interaction.edit_original_response(embed=embed)
 
     # 更新使用時間 — 存到對應的 guild_key（若為 user-install 則是 None）
     set_user_data(guild_key, user_id, "last_dsize_size", size)
@@ -344,11 +347,12 @@ async def dsize_battle(interaction: discord.Interaction, opponent: discord.Membe
             await interaction.response.edit_message(content="開始對決。", view=None)
             size_user = random.randint(1, max_size)
             size_opponent = random.randint(1, max_size)
+            speed = max(1, max(size_user, size_opponent) // 50)
 
             # 取得訊息物件
             msg = await interaction.original_response()
 
-            for i in range(1, max(size_user, size_opponent) - 1):
+            for i in range(1, max(size_user, size_opponent) - 1, speed):
                 d_string_user = "=" * min(i, size_user - 1)
                 d_string_opponent = "=" * min(i, size_opponent - 1)
                 embed = discord.Embed(title="比長度", color=0x00ff00)
