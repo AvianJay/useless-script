@@ -1,7 +1,7 @@
 import io
 import json
 import discord
-from globalenv import bot, start_bot, get_user_data, set_user_data, config, get_server_config, set_server_config, _config, default_config, get_all_user_data
+from globalenv import bot, start_bot, get_user_data, set_user_data, config, get_server_config, set_server_config, _config, default_config, get_all_user_data, db
 from discord.ext import commands
 from typing import Callable
 
