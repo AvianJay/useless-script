@@ -233,18 +233,18 @@ class doModerationActions(discord.ui.View):
         message_content = self.message_content
 
         class MuteModal(discord.ui.Modal, title="禁言時間設定"):
-            minutes = discord.ui.TextInput(label="禁言分鐘數", placeholder="請輸入禁言時間（分鐘）", required=True)
+            duration = discord.ui.TextInput(label="禁言時間", placeholder="請輸入禁言時間（d/h/m/s）", required=True)
             reason = discord.ui.TextInput(label="禁言原因", placeholder="請輸入禁言原因", required=True, max_length=100)
 
             async def on_submit(self, modal_interaction: discord.Interaction):
                 try:
-                    mins = int(self.minutes.value)
-                    if mins <= 0:
+                    duration = Moderate.timestr_to_seconds(self.duration.value)
+                    if duration <= 0:
                         await modal_interaction.response.send_message("請輸入正整數分鐘。", ephemeral=True)
                         return
-                    await interaction.guild.get_member(parent_user.id).timeout(discord.utils.utcnow() + timedelta(minutes=mins), reason=self.reason.value or "違反規則")
-                    send_moderation_message(parent_user, interaction.user, [{"action": "mute", "duration": mins * 60}], self.reason.value or "違反規則", message_content)
-                    await modal_interaction.response.send_message(f"已禁言 {parent_user.mention} {mins} 分鐘", ephemeral=True)
+                    await interaction.guild.get_member(parent_user.id).timeout(discord.utils.utcnow() + timedelta(seconds=duration), reason=self.reason.value or "違反規則")
+                    send_moderation_message(parent_user, interaction.user, [{"action": "mute", "duration": duration}], self.reason.value or "違反規則", message_content)
+                    await modal_interaction.response.send_message(f"已禁言 {parent_user.mention} {get_time_text(duration)}", ephemeral=True)
                 except Exception as e:
                     print(f"Error occurred: {str(e)}")
                     await modal_interaction.response.send_message(f"發生錯誤，請稍後再試。\n{str(e)}", ephemeral=True)
