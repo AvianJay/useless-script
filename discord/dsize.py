@@ -629,7 +629,7 @@ if "ItemSystem" in modules:
         {
             "id": "scalpel",
             "name": "手術刀",
-            "description": "這是一把手術刀，可以用來進行手術。",
+            "description": "這是一把手術刀，可以用來進行手術，必定成功。",
             "callback": use_scalpel,
         },
         {
