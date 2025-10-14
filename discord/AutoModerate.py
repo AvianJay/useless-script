@@ -2,8 +2,10 @@ import discord
 from discord.ext import commands
 from discord import app_commands
 from globalenv import bot, start_bot, get_user_data, set_user_data, get_all_user_data, get_server_config, set_server_config, modules
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 import asyncio
+from typing import Optional
+import re
 
 if "Moderate" in modules:
     import Moderate
@@ -14,6 +16,10 @@ else:
 all_settings = [
     "escape_punish-punishment",
     "escape_punish-duration",
+    "too_many_h1-max_length",
+    "too_many_h1-action",
+    "too_many_emojis-max_emojis",
+    "too_many_emojis-action",
 ]
 
 async def settings_autocomplete(interaction: discord.Interaction, current: str):
@@ -21,6 +27,83 @@ async def settings_autocomplete(interaction: discord.Interaction, current: str):
         app_commands.Choice(name=app_commands.locale_str(key), value=key)
         for key in all_settings if current.lower() in key.lower()
     ][:25]  # Discord 限制最多 25 個選項
+
+
+async def do_action_str(action: str, guild: Optional[discord.Guild] = None, user: Optional[discord.Member] = None, message: Optional[discord.Message] = None):
+    # if user is none just check if action is valid
+    actions = action.split(",")
+    actions = [a.strip() for a in actions]
+    logs = []
+    for a in actions:
+        cmd = a.split(" ")
+        if cmd[0] == "ban":
+            # ban <duration> <reason> <delete_messages>
+            if len(cmd) == 1:
+                cmd.append("0s")
+            if len(cmd) == 2:
+                cmd.append("自動管理執行")
+            if len(cmd) == 3:
+                cmd.append("0s")
+
+            if Moderate:
+                duration_seconds = Moderate.timestr_to_seconds(cmd[1]) if cmd[1] != "0" else 0
+                delete_messages = Moderate.timestr_to_seconds(cmd[3]) if cmd[3] != "0" else 0
+                logs.append(f"封禁用戶，原因: {cmd[2]}，持續秒數: {duration_seconds}秒，刪除訊息時間: {delete_messages}秒")
+                if user:
+                    await Moderate.ban_user(guild, user, reason=cmd[2], duration=duration_seconds, delete_message_seconds=delete_messages)
+            else:
+                print("[!] Moderate module not loaded, cannot ban user.")
+                raise Exception("Moderate module not loaded")
+        elif cmd[0] == "kick":
+            # kick <reason>
+            if len(cmd) == 1:
+                cmd.append("自動管理執行")
+            logs.append(f"踢出用戶，原因: {cmd[1]}")
+            if user:
+                await user.kick(reason=cmd[1])
+        elif cmd[0] == "mute" or cmd[0] == "timeout":
+            # mute <duration> <reason>
+            if len(cmd) == 1:
+                cmd.append("10m")
+            if len(cmd) == 2:
+                cmd.append("自動管理執行")
+            if Moderate:
+                duration_seconds = Moderate.timestr_to_seconds(cmd[1]) if cmd[1] != "0" else 0
+                logs.append(f"禁言用戶，原因: {cmd[2]}，持續秒數: {duration_seconds}秒")
+                if user:
+                    await user.timeout(until=datetime.now(timezone.utc) + timedelta(seconds=duration_seconds), reason=cmd[2])
+            else:
+                print("[!] Moderate module not loaded, cannot mute user.")
+                raise Exception("Moderate module not loaded")
+        elif cmd[0] == "delete" or cmd[0] == "delete_dm":
+            # delete <warn_message>
+            logs.append("刪除訊息")
+            if message:
+                await message.delete()
+            if len(cmd) > 1:
+                msg = cmd.copy()
+                msg.pop(0)
+                warn_message = " ".join(msg)
+                warn_message = warn_message.replace("{user}", user.mention if user else "用戶")
+                logs.append(f"並警告: {warn_message}")
+                if cmd[0] == "delete_dm" and user:
+                    await user.send(warn_message)
+                elif message:
+                    await message.channel.send(warn_message)
+        elif cmd[0] == "warn" or cmd[0] == "warn_dm":
+            # warn <warn_message>
+            if len(cmd) == 1:
+                cmd.append(f"{user.mention if user else '用戶'}，請注意你的行為。")
+            msg = cmd.copy()
+            msg.pop(0)
+            warn_message = " ".join(msg)
+            warn_message = warn_message.replace("{user}", user.mention if user else "用戶")
+            logs.append(f"傳送警告訊息: {warn_message}")
+            if cmd[0] == "warn_dm" and user:
+                await user.send(warn_message)
+            elif message:
+                await message.channel.send(warn_message)
+    return logs
 
 
 @app_commands.guild_only()
@@ -55,6 +138,8 @@ class AutoModerate(commands.GroupCog, name=app_commands.locale_str("automod")):
     @app_commands.choices(
         setting=[
             app_commands.Choice(name="逃避責任懲處", value="escape_punish"),
+            app_commands.Choice(name="標題過多", value="too_many_h1"),
+            app_commands.Choice(name="表情符號過多", value="too_many_emojis"),
         ],
         enable=[
             app_commands.Choice(name="啟用", value="True"),
@@ -84,6 +169,19 @@ class AutoModerate(commands.GroupCog, name=app_commands.locale_str("automod")):
         automod_settings[setting_base][setting_key] = value
         set_server_config(guild_id, "automod", automod_settings)
         await interaction.response.send_message(f"已將自動管理設定 '{setting}' 設為 {value}。")
+    
+    @app_commands.command(name=app_commands.locale_str("check-action"), description="檢查自動管理動作指令是否有效")
+    @app_commands.describe(action="要檢查的動作指令")
+    async def check_automod_action(self, interaction: discord.Interaction, action: str):
+        try:
+            actions = await do_action_str(action)
+        except Exception as e:
+            await interaction.response.send_message(f"無法解析動作指令: {e}", ephemeral=True)
+            return
+        actions = [f"- {a}" for a in actions]
+        actions_str = "\n".join(actions) if actions else "無動作"
+        msg = f"指令有效，解析出的動作:\n{actions_str}"
+        await interaction.response.send_message(content=msg)
 
     @commands.Cog.listener()
     async def on_member_update(self, before: discord.Member, after: discord.Member):
@@ -117,6 +215,43 @@ class AutoModerate(commands.GroupCog, name=app_commands.locale_str("automod")):
                     print(f"[+] 用戶 {member} 因逃避禁言被 {punishment}")
                 except Exception as e:
                     print(f"[!] 無法對用戶 {member} 執行懲處: {e}")
+        
+    @commands.Cog.listener()
+    async def on_message(self, message: discord.Message):
+        if not message.guild or message.author.bot:
+            return
+        guild_id = message.guild.id
+        automod_settings = get_server_config(guild_id, "automod", {})
+        
+        # 標題過多檢查
+        if automod_settings.get("too_many_h1", {}).get("enabled", False):
+            max_length = int(automod_settings["too_many_h1"].get("max_length", 200))
+            action = automod_settings["too_many_h1"].get("action", "warn")
+            h1_count = 0
+            split_lines = message.content.split("\n")
+            for line in split_lines:
+                line = line.lstrip()
+                if line.startswith("# "):
+                    line = line[2:]
+                    h1_count += len(line)
+            if h1_count > 5 or len(message.content) > max_length:
+                try:
+                    await do_action_str(action, guild=message.guild, user=message.author, message=message)
+                    print(f"[+] 用戶 {message.author} 因標題過多被處理: {action}")
+                except Exception as e:
+                    print(f"[!] 無法對用戶 {message.author} 執行標題過多的處理: {e}")
+        
+        # 表情符號過多檢查
+        if automod_settings.get("too_many_emojis", {}).get("enabled", False):
+            max_emojis = int(automod_settings["too_many_emojis"].get("max_emojis", 10))
+            action = automod_settings["too_many_emojis"].get("action", "warn")
+            emoji_count = len(re.findall(r'<a?:\w+:\d+>|[\U0001F300-\U0001F6FF\U0001F900-\U0001F9FF\U0001FA00-\U0001FA6F\U0001FA70-\U0001FAFF\U00002702-\U000027B0\U000024C2-\U0001F251]', message.content))
+            if emoji_count > max_emojis:
+                try:
+                    await do_action_str(action, guild=message.guild, user=message.author, message=message)
+                    print(f"[+] 用戶 {message.author} 因表情符號過多被處理: {action}")
+                except Exception as e:
+                    print(f"[!] 無法對用戶 {message.author} 執行表情符號過多的處理: {e}")
 
 asyncio.run(bot.add_cog(AutoModerate(bot)))
 
