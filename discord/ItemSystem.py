@@ -59,11 +59,12 @@ async def convert_item_list_to_dict():
         members = guild.members
         for member in members:
             user_id = member.id
-            user_items = get_user_data(guild_id, user_id, "items", [])
+            user_items = get_user_data(guild_id, user_id, "items", None)
             if isinstance(user_items, list):
                 user_items_dict = {}
                 for item_id in user_items:
                     user_items_dict[item_id] = user_items_dict.get(item_id, 0) + 1
+                print(f"Converting items for user {user_id} in guild {guild_id}: {len(user_items)} -> {user_items_dict}")
                 set_user_data(guild_id, user_id, "items", user_items_dict)
 
 
@@ -78,17 +79,13 @@ class ItemSystem(commands.GroupCog, name="item", description="物品系統指令
     async def list_items(self, interaction: discord.Interaction):
         user_id = interaction.user.id
         guild_id = interaction.guild.id if interaction.guild else None
-        user_items = get_user_data(guild_id, user_id, "items", [])
+        user_items = get_user_data(guild_id, user_id, "items", {})
         
         if not user_items:
             await interaction.response.send_message("你沒有任何物品。", ephemeral=True)
             return
-        items_amounts = {}
-        for item_id in user_items:
-            items_amounts[item_id] = items_amounts.get(item_id, 0) + 1
-
-        embed = discord.Embed(title=f"{interaction.user.name} 的物品", color=0x00ff00)
-        for item_id, amount in items_amounts.items():
+        embed = discord.Embed(title=f"{interaction.user.display_name} 的物品", color=0x00ff00)
+        for item_id, amount in user_items.items():
             item = next((i for i in items if i["id"] == item_id), None)
             if item:
                 embed.add_field(name=f"{item['name']} x{amount}", value=item["description"], inline=False)
@@ -188,10 +185,10 @@ class ItemSystem(commands.GroupCog, name="item", description="物品系統指令
         # Add to receiver
         await give_item_to_user(guild_id, receiver_id, item_id, amount)
         
-        await interaction.followup.send(f"你給了 {user.name} {amount} 個 {item['name']}。")
+        await interaction.followup.send(f"你給了 {user.display_name}(`{user.name}`) {amount} 個 {item['name']}。")
         # dm the receiver
         try:
-            await user.send(f"你從 {interaction.user.name} 那裡收到了 {amount} 個 {item['name']}！\n-# 伺服器: {interaction.guild.name if interaction.guild else '私人訊息'}")
+            await user.send(f"你從 {interaction.user.display_name}(`{interaction.user.name}`) 那裡收到了 {amount} 個 {item['name']}！\n-# 伺服器: {interaction.guild.name if interaction.guild else '私人訊息'}")
         except Exception:
             pass
 
@@ -225,7 +222,7 @@ class ItemModerate(commands.GroupCog, name="itemmod", description="物品系統�
         
         await give_item_to_user(guild_id, receiver_id, item_id, amount)
 
-        await interaction.followup.send(f"你給了 {user.name} {amount} 個 {item['name']}。")
+        await interaction.followup.send(f"你給了 {user.display_name}(`{user.name}`) {amount} 個 {item['name']}。")
 
     @app_commands.command(name="remove", description="移除用戶的一個物品")
     @app_commands.describe(user="你想移除物品的用戶", item_id="你想移除的物品ID", amount="你想移除的數量")
@@ -246,7 +243,7 @@ class ItemModerate(commands.GroupCog, name="itemmod", description="物品系統�
         item = next((i for i in items if i["id"] == item_id), None)
         item_name = item['name'] if item else "未知物品"
 
-        await interaction.response.send_message(f"你移除了 {user.name} 的 {removed_count} 個 {item_name}。", ephemeral=True)
+        await interaction.response.send_message(f"你移除了 {user.display_name}(`{user.name}`) 的 {removed_count} 個 {item_name}。", ephemeral=True)
 
     @app_commands.command(name="list", description="列出所有可用的物品")
     async def admin_list_items(self, interaction: discord.Interaction):
@@ -291,8 +288,6 @@ class ItemModerate(commands.GroupCog, name="itemmod", description="物品系統�
 
 asyncio.run(bot.add_cog(ItemModerate()))
 
-
-asyncio.run(convert_item_list_to_dict())
 
 if __name__ == "__main__":
     start_bot()
