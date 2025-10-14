@@ -151,6 +151,11 @@ class CommandNameTranslator(app_commands.Translator):
                 "randomuser": "隨機用戶",
                 "report": "檢舉系統",
                 "blacklist-role": "檢舉黑名單",
+                "too_many_h1-max_length": "過多標題-偵測長度",
+                "too_many_h1-action": "過多標題-執行動作",
+                "too_many_emojis-max_emojis": "過多表情符號-偵測數量",
+                "too_many_emojis-action": "過多表情符號-執行動作",
+                "check-action": "檢查動作",
             }
             # print("[DEBUG] Translating command/group:", context.data.name)
             # print("[DEBUG] Translated to:", translations.get(context.data.name, None))
