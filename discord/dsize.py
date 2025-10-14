@@ -550,7 +550,8 @@ async def use_scalpel(interaction: discord.Interaction):
             new_size = random.randint(1, get_server_config(guild_key, "dsize_surgery_max", 10))
             orig_size = get_user_data(guild_key, target_id, "last_dsize_size", 0)
             set_user_data(guild_key, target_id, "last_dsize_size", orig_size + new_size)
-            embed = discord.Embed(title=f"{interaction.user.display_name} 幫 {target_user.display_name} 動手術！", color=0xff0000)
+            target_name = "自己" if target_id == user_id else " " + target_user.display_name + " "
+            embed = discord.Embed(title=f"{interaction.user.display_name} 幫{target_name}動手術！", color=0xff0000)
             embed.add_field(name=f"{orig_size} cm", value=f"8{'=' * (orig_size - 1)}D", inline=False)
             await interaction.response.send_message(content=f"{target_user.mention} 被抓去動手術。", embed=embed)
             for i in range(1, new_size + 1):
@@ -599,7 +600,8 @@ async def use_rusty_scalpel(interaction: discord.Interaction):
                 return
             orig_size = get_user_data(guild_key, target_id, "last_dsize_size", 0)
             set_user_data(guild_key, target_id, "last_dsize_size", -1)
-            embed = discord.Embed(title=f"{interaction.user.display_name} 幫 {target_user.display_name} 動手術！", color=0xff0000)
+            target_name = "自己" if target_id == user_id else " " + target_user.display_name + " "
+            embed = discord.Embed(title=f"{interaction.user.display_name} 幫{target_name}動手術！", color=0xff0000)
             embed.add_field(name=f"{orig_size} cm", value=f"8{'💥' * (orig_size - 1)}D", inline=False)
             await interaction.response.send_message(content=f"{target_user.mention} 被抓去動手術。", embed=embed)
             while orig_size > 0:
