@@ -14,8 +14,9 @@ items = []
 async def get_user_items_autocomplete(interaction: discord.Interaction, current: str):
     guild_id = interaction.guild.id if interaction.guild else None
     user_id = interaction.user.id
-    user_items = get_user_data(guild_id, user_id, "items", [])
-    choices = [item for item in items if item["id"] in user_items and current.lower() in item["name"].lower()]
+    user_items = get_user_data(guild_id, user_id, "items", {})
+    user_items = {item_id: count for item_id, count in user_items.items() if count > 0}
+    choices = [item for item in items if item["id"] in user_items.keys()]
     # id
     # choices.extend([item for item in items if item["id"] in user_items and current.lower() in item["id"].lower()])
     return [app_commands.Choice(name=item["name"], value=item["id"]) for item in choices[:25]]
@@ -29,25 +30,41 @@ async def all_items_autocomplete(interaction: discord.Interaction, current: str)
 
 
 async def give_item_to_user(guild_id: int, user_id: int, item_id: str, amount: int = 1):
-    user_items = get_user_data(guild_id, user_id, "items", [])
-    user_items.extend([item_id] * amount)
+    user_items = get_user_data(guild_id, user_id, "items", {})
+    user_items[item_id] = user_items.get(item_id, 0) + amount
     set_user_data(guild_id, user_id, "items", user_items)
 
 
 async def get_user_items(guild_id: int, user_id: int, item_id: str):
-    user_items = get_user_data(guild_id, user_id, "items", [])
-    return [item for item in user_items if item == item_id]
+    user_items = get_user_data(guild_id, user_id, "items", {})
+    if item_id in user_items:
+        return [item_id] * user_items[item_id]
+    return []
 
 
 async def remove_item_from_user(guild_id: int, user_id: int, item_id: str, amount: int = 1):
-    user_items = get_user_data(guild_id, user_id, "items", [])
-    removed = 0
-    for _ in range(amount):
-        if item_id in user_items:
-            user_items.remove(item_id)
-            removed += 1
+    user_items = get_user_data(guild_id, user_id, "items", {})
+    original_amount = user_items.get(item_id, 0)
+    if original_amount == 0:
+        return False
+    user_items[item_id] = max(0, original_amount - amount)
     set_user_data(guild_id, user_id, "items", user_items)
-    return removed
+    return abs(original_amount - amount)
+
+
+async def convert_item_list_to_dict():
+    all_guild = bot.guilds
+    for guild in all_guild:
+        guild_id = guild.id
+        members = guild.members
+        for member in members:
+            user_id = member.id
+            user_items = get_user_data(guild_id, user_id, "items", [])
+            if isinstance(user_items, list):
+                user_items_dict = {}
+                for item_id in user_items:
+                    user_items_dict[item_id] = user_items_dict.get(item_id, 0) + 1
+                set_user_data(guild_id, user_id, "items", user_items_dict)
 
 
 @app_commands.guild_only()
@@ -85,9 +102,9 @@ class ItemSystem(commands.GroupCog, name="item", description="物品系統指令
     async def use_item(self, interaction: discord.Interaction, item_id: str):
         user_id = interaction.user.id
         guild_id = interaction.guild.id if interaction.guild else None
-        user_items = get_user_data(guild_id, user_id, "items", [])
+        user_items = get_user_data(guild_id, user_id, "items", {})
         
-        if item_id not in user_items:
+        if item_id not in user_items.keys() or user_items[item_id] <= 0:
             await interaction.response.send_message("你沒有這個物品。", ephemeral=True)
             return
         
@@ -135,9 +152,9 @@ class ItemSystem(commands.GroupCog, name="item", description="物品系統指令
                     await interaction.response.send_message("物品已經被撿光了！", ephemeral=True)
                     return
                 user_id = interaction.user.id
-                other_user_items = get_user_data(guild_id, user_id, "items", [])
+                other_user_items = get_user_data(guild_id, user_id, "items", {})
                 user_items.pop(0)  # remove one item
-                other_user_items.append(item_id)
+                other_user_items[item_id] = other_user_items.get(item_id, 0) + 1
                 set_user_data(guild_id, user_id, "items", other_user_items)
                 await interaction.response.send_message(f"你撿起了 {target_item['name']}。", ephemeral=True)
                 if not user_items:
@@ -256,17 +273,15 @@ class ItemModerate(commands.GroupCog, name="itemmod", description="物品系統�
             return
 
         guild_id = interaction.guild.id if interaction.guild else None
-        user_items = get_user_data(guild_id, user.id, "items", [])
-        items_amounts = {}
-        for item_id in user_items:
-            items_amounts[item_id] = items_amounts.get(item_id, 0) + 1
+        user_items = get_user_data(guild_id, user.id, "items", {})
+        user_items = {item_id: count for item_id, count in user_items.items() if count > 0}
 
-        if not items_amounts:
+        if not user_items:
             await interaction.response.send_message(f"{user.name} 目前沒有任何物品。", ephemeral=True)
             return
 
         embed = discord.Embed(title=f"{user.name} 擁有的物品", color=0x00ff00)
-        for item_id, amount in items_amounts.items():
+        for item_id, amount in user_items.items():
             item = next((i for i in items if i["id"] == item_id), None)
             if item:
                 embed.add_field(name=f"{item['name']} x{amount}", value=item["description"], inline=False)
@@ -276,6 +291,8 @@ class ItemModerate(commands.GroupCog, name="itemmod", description="物品系統�
 
 asyncio.run(bot.add_cog(ItemModerate()))
 
+
+asyncio.run(convert_item_list_to_dict())
 
 if __name__ == "__main__":
     start_bot()
