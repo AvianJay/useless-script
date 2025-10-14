@@ -514,6 +514,104 @@ async def use_fake_ruler(interaction: discord.Interaction):
     set_user_data(guild_key, user_id, "dsize_fake_ruler_used", True)
     await interaction.response.send_message("你使用了自欺欺人尺！\n下次量長度時或許會更長？")
 
+async def use_scalpel(interaction: discord.Interaction):
+    user_id = interaction.user.id
+    guild_key = interaction.guild.id if interaction.guild else None
+    
+    class SelectUserModal(discord.ui.Modal, title="要幫誰手術？"):
+        target_user = discord.ui.Label(text="選擇用戶", component=discord.ui.UserSelect(placeholder="選擇一個用戶", min_values=1, max_values=1))
+
+        async def on_submit(self, interaction: discord.Interaction):
+            target_user = self.target_user.component.values[0]
+            target_id = target_user.id
+            target_id = int(target_id)
+            now = (datetime.utcnow() + timedelta(hours=8)).date()
+            last = get_user_data(guild_key, target_id, "last_dsize")
+            if last is not None and not isinstance(last, datetime):
+                # If last is a string (e.g., from JSON), convert to date
+                try:
+                    last = datetime.fromisoformat(str(last)).date()
+                except Exception:
+                    last = datetime(1970, 1, 1).date()
+            elif isinstance(last, datetime):
+                last = last.date()
+            if last is None:
+                last = datetime(1970, 1, 1).date()
+            if not now == last:
+                await interaction.response.send_message(f"{target_user.display_name} 今天還沒有量過屌長，無法進行手術。", ephemeral=True)
+                return
+            if get_user_data(guild_key, target_id, "last_dsize_size", 0) == -1:
+                await interaction.response.send_message(f"{target_user.display_name} 是男娘，無法進行手術。", ephemeral=True)
+                return
+            removed = await ItemSystem.remove_item_from_user(guild_key, user_id, "scalpel", 1)
+            if not removed:
+                await interaction.response.send_message("你沒有手術刀，無法進行手術。", ephemeral=True)
+                return
+            new_size = random.randint(1, get_server_config(guild_key, "dsize_surgery_max", 10))
+            orig_size = get_user_data(guild_key, target_id, "last_dsize_size", 0)
+            set_user_data(guild_key, target_id, "last_dsize_size", orig_size + new_size)
+            embed = discord.Embed(title=f"{interaction.user.display_name} 幫 {target_user.display_name} 動手術！", color=0xff0000)
+            embed.add_field(name=f"{orig_size} cm", value=f"8{'=' * (orig_size - 1)}D", inline=False)
+            await interaction.response.send_message(content=f"{target_user.mention} 被抓去動手術。", embed=embed)
+            for i in range(1, new_size + 1):
+                d_string_new = "=" * (orig_size + i - 1)
+                embed.set_field_at(0, name=f"{orig_size} cm", value=f"8{d_string_new}D", inline=False)
+                await interaction.edit_original_response(embed=embed)
+                await asyncio.sleep(1)
+                orig_size += 1
+            embed.set_field_at(0, name=f"{new_size} cm", value=f"8{'=' * (new_size - 1)}D", inline=False)
+            embed.color = 0x00ff00
+            await interaction.edit_original_response(content=f"{target_user.mention} 手術成功。", embed=embed)
+    await interaction.response.send_modal(SelectUserModal())
+
+async def use_rusty_scalpel(interaction: discord.Interaction):
+    user_id = interaction.user.id
+    guild_key = interaction.guild.id if interaction.guild else None
+    
+    class SelectUserModal(discord.ui.Modal, title="要幫誰手術？"):
+        target_user = discord.ui.Label(text="選擇用戶", component=discord.ui.UserSelect(placeholder="選擇一個用戶", min_values=1, max_values=1))
+
+        async def on_submit(self, interaction: discord.Interaction):
+            target_user = self.target_user.component.values[0]
+            target_id = target_user.id
+            target_id = int(target_id)
+            now = (datetime.utcnow() + timedelta(hours=8)).date()
+            last = get_user_data(guild_key, target_id, "last_dsize")
+            if last is not None and not isinstance(last, datetime):
+                # If last is a string (e.g., from JSON), convert to date
+                try:
+                    last = datetime.fromisoformat(str(last)).date()
+                except Exception:
+                    last = datetime(1970, 1, 1).date()
+            elif isinstance(last, datetime):
+                last = last.date()
+            if last is None:
+                last = datetime(1970, 1, 1).date()
+            if not now == last:
+                await interaction.response.send_message(f"{target_user.display_name} 今天還沒有量過屌長，無法進行手術。", ephemeral=True)
+                return
+            if get_user_data(guild_key, target_id, "last_dsize_size", 0) == -1:
+                await interaction.response.send_message(f"{target_user.display_name} 已經是男娘了。", ephemeral=True)
+                return
+            removed = await ItemSystem.remove_item_from_user(guild_key, user_id, "rusty_scalpel", 1)
+            if not removed:
+                await interaction.response.send_message("你沒有生鏽的手術刀，無法進行手術。", ephemeral=True)
+                return
+            orig_size = get_user_data(guild_key, target_id, "last_dsize_size", 0)
+            set_user_data(guild_key, target_id, "last_dsize_size", -1)
+            embed = discord.Embed(title=f"{interaction.user.display_name} 幫 {target_user.display_name} 動手術！", color=0xff0000)
+            embed.add_field(name=f"{orig_size} cm", value=f"8{'💥' * (orig_size - 1)}D", inline=False)
+            await interaction.response.send_message(content=f"{target_user.mention} 被抓去動手術。", embed=embed)
+            while orig_size > 0:
+                d_string_new = "💥" * orig_size
+                embed.set_field_at(0, name=f"{orig_size} cm", value=f"8{d_string_new}", inline=False)
+                await interaction.edit_original_response(embed=embed)
+                await asyncio.sleep(1)
+                orig_size -= min(random.randint(2, 5), orig_size)
+            embed.set_field_at(0, name=f"-1 cm", value=f"8", inline=False)
+            await interaction.edit_original_response(content=f"{target_user.mention} 變男娘了。", embed=embed)
+    await interaction.response.send_modal(SelectUserModal())
+
 if "ItemSystem" in modules:
     items = [
         {
@@ -527,6 +625,18 @@ if "ItemSystem" in modules:
             "name": "草",
             "description": "這是一把草，可以用來草飼男娘。使用 `/dsize-feedgrass`。",
             "callback": None,
+        },
+        {
+            "id": "scalpel",
+            "name": "手術刀",
+            "description": "這是一把手術刀，可以用來進行手術。",
+            "callback": use_scalpel,
+        },
+        {
+            "id": "rusty_scalpel",
+            "name": "生鏽的手術刀",
+            "description": "這是一把生鏽的手術刀，可以強制感染進而變成男娘。",
+            "callback": use_rusty_scalpel,
         }
     ]
     import ItemSystem
