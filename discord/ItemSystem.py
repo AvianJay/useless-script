@@ -46,10 +46,13 @@ async def remove_item_from_user(guild_id: int, user_id: int, item_id: str, amoun
     user_items = get_user_data(guild_id, user_id, "items", {})
     original_amount = user_items.get(item_id, 0)
     if original_amount == 0:
-        return False
+        return 0
+
+    removed_amount = min(original_amount, amount)
     user_items[item_id] = max(0, original_amount - amount)
     set_user_data(guild_id, user_id, "items", user_items)
-    return abs(original_amount - amount)
+
+    return removed_amount
 
 
 async def convert_item_list_to_dict():
