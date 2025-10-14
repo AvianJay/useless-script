@@ -5,7 +5,7 @@ from discord import app_commands
 from discord.ext import commands
 from globalenv import bot, start_bot, get_user_data, set_user_data
 
-version = "0.0.1"
+version = "0.0.2"
 try:
     git_commit_hash = os.popen("git rev-parse --short HEAD").read().strip()
 except Exception as e:
@@ -29,7 +29,7 @@ async def info_command(interaction: discord.Interaction):
     embed.add_field(name="伺服器數量", value=server_count)
     embed.add_field(name="用戶總數量", value=user_count)
     embed.add_field(name="機器人延遲", value=f"{bot_latency}ms")
-    await interaction.followup.send(embed=embed)
+    await interaction.followup.send(content="-# 提示：如果你指令用到一半停住或沒辦法用了那很有可能是傻逼開發者尼摳又再重開機器人了||不然就是機器人又當機了||", embed=embed)
 
 @bot.tree.command(name=app_commands.locale_str("randomnumber"), description="生成一個隨機數字")
 @app_commands.describe(min="最小值", max="最大值")
