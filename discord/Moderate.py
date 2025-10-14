@@ -313,15 +313,12 @@ class Moderate(commands.GroupCog, group_name=app_commands.locale_str("admin")):
             @discord.ui.button(label="新增身分組", style=discord.ButtonStyle.secondary, row=1)
             async def add_role_button(self, interaction: discord.Interaction, button: discord.ui.Button):
                 class AddRoleModal(discord.ui.Modal, title="新增身分組設定"):
-                    role_name = discord.ui.TextInput(label="身分組名稱", placeholder="請輸入身分組名稱/ID/關鍵字", required=True, max_length=100)
+                    role = discord.ui.Label(text="選擇身分組", component=discord.ui.RoleSelect(placeholder="選擇身分組", min_values=1, max_values=1, required=True))
                     async def on_submit(self, interaction: discord.Interaction):
                         if not interaction.user.guild_permissions.administrator:
                             await interaction.response.send_message("你沒有權限執行此操作。", ephemeral=True)
                             return
-                        role_id = guess_role(interaction.guild, self.role_name.value)
-                        if role_id is None:
-                            await interaction.response.send_message("找不到指定的身分組，請確認名稱或 ID 是否正確。", ephemeral=True)
-                            return
+                        role_id = self.role.component.values[0].id
                         actions.append({"action": "add_role", "role": role_id})
                         embed.set_field_at(0, name="目前操作", value=actions_to_str(actions), inline=False)
                         await interaction.response.edit_message(embed=embed, view=view)
