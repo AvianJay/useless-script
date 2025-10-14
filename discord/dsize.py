@@ -89,7 +89,7 @@ async def dsize(interaction: discord.Interaction, global_dsize: int = 0):
 
     await interaction.response.send_message(embed=embed)
     # animate to size
-    speed = max(1, size // 50)
+    speed = size // 50 + 1
     for i in range(1, size + 1, speed):
         d_string = "=" * (i - 1)
         current_size = i
@@ -347,7 +347,7 @@ async def dsize_battle(interaction: discord.Interaction, opponent: discord.Membe
             await interaction.response.edit_message(content="開始對決。", view=None)
             size_user = random.randint(1, max_size)
             size_opponent = random.randint(1, max_size)
-            speed = max(1, max(size_user, size_opponent) // 50)
+            speed = max(size_user, size_opponent) // 50 + 1
 
             # 取得訊息物件
             msg = await interaction.original_response()
