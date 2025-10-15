@@ -152,6 +152,8 @@ translations = {
     "setup": "設置",
     "disable": "禁用",
     "play-audio": "播放音效",
+    "bus": "公車",
+    "getroute": "查詢路線",
 }
 class CommandNameTranslator(app_commands.Translator):
     async def translate(
