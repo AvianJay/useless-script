@@ -3,6 +3,7 @@ from discord import app_commands
 from globalenv import bot, start_bot, set_server_config, get_server_config, on_ready_tasks
 from discord.ext import commands
 import asyncio
+import random
 
 
 @app_commands.guild_only()
@@ -99,7 +100,8 @@ class DynamicVoice(commands.GroupCog, name=app_commands.locale_str("dynamic-voic
                     voice_client = discord.utils.get(self.bot.voice_clients, guild=member.guild)
                     if voice_client and voice_client.is_connected():
                         voice_client.stop()  # Stop any existing audio
-                        audio_source = discord.FFmpegPCMAudio("assets/dynamic_voice_join.mp3")
+                        id = random.randint(1, 3)
+                        audio_source = discord.FFmpegPCMAudio(f"assets/dynamic_voice_join_{id}.mp3")
                         if not voice_client.is_playing():
                             print(f"[+] Playing join audio for user {member} in guild {guild_id}")
                             voice_client.play(audio_source)
@@ -110,7 +112,10 @@ class DynamicVoice(commands.GroupCog, name=app_commands.locale_str("dynamic-voic
                                 await asyncio.sleep(0.1)
                 except Exception as e:
                     print(f"[-] Failed to play join audio: {e}")
-            await member.move_to(new_channel)
+            try:
+                await member.move_to(new_channel)
+            except Exception as e:
+                print(f"[-] Failed to move user {member} to channel '{new_channel.name}': {e}")
             created_channels = get_server_config(guild_id, "created_dynamic_channels", [])  # refresh list
             created_channels.append(new_channel.id)
             set_server_config(guild_id, "created_dynamic_channels", created_channels)
