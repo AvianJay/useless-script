@@ -4,12 +4,13 @@ from discord.ext import commands
 from globalenv import bot, start_bot, on_ready_tasks
 from taiwanbus import api as busapi
 import asyncio
+import traceback
 
 
 async def bus_route_autocomplete(interaction: discord.Interaction, current: str):
     routes = busapi.fetch_routes_by_name(current)
     return [
-        app_commands.Choice(name=f"{route['route_name']} ({route['description']})", value=route['route_key'])
+        app_commands.Choice(name=f"{route['route_name']} ({route['description']})", value=str(route['route_key']))
         for route in routes[:25]  # Discord autocomplete limit
     ]
 
@@ -27,9 +28,11 @@ class TWBus(commands.GroupCog, name=app_commands.locale_str("bus")):
     @app_commands.autocomplete(route_key=bus_route_autocomplete)
     async def get_route(self, interaction: discord.Interaction, route_key: str):
         await interaction.response.defer()
+        print(f"[TWBus] {interaction.user} 查詢路線 {route_key}")
+        route_key = int(route_key)
         try:
             info = busapi.get_complete_bus_info(route_key)
-            route = busapi.fetch_route(route_key)
+            route = busapi.fetch_route(route_key)[0]
             if not info:
                 await interaction.followup.send("找不到該路線的公車到站資訊。", ephemeral=True)
                 return
@@ -40,6 +43,7 @@ class TWBus(commands.GroupCog, name=app_commands.locale_str("bus")):
             await interaction.followup.send(embed=embed)
         except Exception as e:
             await interaction.followup.send(f"發生錯誤：{e}", ephemeral=True)
+            traceback.print_exc()
     
 asyncio.run(bot.add_cog(TWBus(bot)))
 
