@@ -95,7 +95,7 @@ class DynamicVoice(commands.GroupCog, name=app_commands.locale_str("dynamic-voic
     
     @commands.Cog.listener()
     async def on_voice_state_update(self, member: discord.Member, before: discord.VoiceState, after: discord.VoiceState):
-        if member.bot:
+        if member.bot and member != bot.user:
             return  # Ignore bot users
         guild_id = member.guild.id
         channel_id = get_server_config(guild_id, "dynamic_voice_channel")
@@ -106,6 +106,23 @@ class DynamicVoice(commands.GroupCog, name=app_commands.locale_str("dynamic-voic
         if not channel_id:
             return  # Dynamic voice feature not set up for this guild
         channel_category = member.guild.get_channel(channel_category_id) if channel_category_id else None
+        
+        # Bot is not connected to the voice channel, try to connect
+        if before.channel:
+            if play_audio_enabled and channel_id == before.channel.id and member == bot.user:
+                if after.channel:
+                    if bot.user in after.channel.members:
+                        return
+                voice_client = discord.utils.get(self.bot.voice_clients, guild=member.guild)
+                if not voice_client or not voice_client.is_connected():
+                    channel = member.guild.get_channel(channel_id)
+                    if channel:
+                        try:
+                            await channel.connect()
+                            print(f"[+] Connected to dynamic voice channel '{channel.name}' in guild {guild_id}")
+                        except Exception as e:
+                            print(f"[-] Failed to connect to channel '{channel.name}': {e}")
+                        return
 
         # User joins the dynamic voice channel
         if after.channel and after.channel.id == channel_id and (not before.channel or before.channel.id != channel_id):
