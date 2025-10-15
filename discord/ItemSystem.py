@@ -206,7 +206,8 @@ asyncio.run(bot.add_cog(ItemSystem()))
 
 # admin cheating
 @app_commands.guild_only()
-@commands.has_permissions(administrator=True)
+@app_commands.default_permissions(administrator=True)
+@app_commands.allowed_installs(guilds=True, users=False)
 @app_commands.allowed_contexts(guilds=True, dms=False, private_channels=False)
 class ItemModerate(commands.GroupCog, name="itemmod", description="物品系統管理指令"):
     def __init__(self):
