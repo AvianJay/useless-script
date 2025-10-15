@@ -135,7 +135,7 @@ class DynamicVoice(commands.GroupCog, name=app_commands.locale_str("dynamic-voic
                 bitrate=member.guild.bitrate_limit  # maximum bitrate
             )
             # give user permission to manage the channel
-            await new_channel.set_permissions(member, manage_channels=True, manage_permissions=True, manage_roles=True)
+            await new_channel.set_permissions(member, manage_channels=True, create_events=True)
             # Move the user to the new channel
             if play_audio_enabled:
                 await asyncio.sleep(1)  # wait for a moment to ensure the user has joined the new channel
