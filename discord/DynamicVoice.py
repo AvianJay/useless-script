@@ -21,6 +21,11 @@ class DynamicVoice(commands.GroupCog, name=app_commands.locale_str("dynamic-voic
     async def setup(self, interaction: discord.Interaction, channel: discord.VoiceChannel, channel_category: discord.CategoryChannel, channel_name: str = "{user} 的頻道"):
         await interaction.response.defer(ephemeral=True)
         guild_id = interaction.guild.id
+        # set channel limit to 1
+        try:
+            await channel.edit(user_limit=1)
+        except Exception as e:
+            print(f"[-] Failed to set user limit for channel '{channel.name}': {e}")
         # Save configuration to database
         set_server_config(guild_id, "dynamic_voice_channel", channel.id)
         set_server_config(guild_id, "dynamic_voice_channel_category", channel_category.id)
@@ -63,6 +68,12 @@ class DynamicVoice(commands.GroupCog, name=app_commands.locale_str("dynamic-voic
             # set voice channel limit members to 2
             try:
                 await channel.edit(user_limit=2)
+            except Exception as e:
+                print(f"[-] Failed to set user limit for channel '{channel.name}': {e}")
+        else:
+            channel_id = get_server_config(guild_id, "dynamic_voice_channel")
+            try:
+                await channel.edit(user_limit=1)
             except Exception as e:
                 print(f"[-] Failed to set user limit for channel '{channel.name}': {e}")
         set_server_config(guild_id, "dynamic_voice_play_audio", enable)
@@ -116,10 +127,19 @@ class DynamicVoice(commands.GroupCog, name=app_commands.locale_str("dynamic-voic
                 await member.move_to(new_channel)
             except Exception as e:
                 print(f"[-] Failed to move user {member} to channel '{new_channel.name}': {e}")
-            created_channels = get_server_config(guild_id, "created_dynamic_channels", [])  # refresh list
-            created_channels.append(new_channel.id)
-            set_server_config(guild_id, "created_dynamic_channels", created_channels)
-            print(f"[+] Created dynamic voice channel '{new_channel.name}' for user {member} in guild {guild_id}")
+            await asyncio.sleep(0.5)
+            if new_channel and len(new_channel.members) == 0:
+                try:
+                    await new_channel.delete()
+                    print(f"[+] Deleted empty dynamic voice channel '{new_channel.name}' for user {member} in guild {guild_id}")
+                    return
+                except Exception as e:
+                    print(f"[-] Failed to delete empty channel '{new_channel.name}': {e}")
+            else:
+                created_channels = get_server_config(guild_id, "created_dynamic_channels", [])  # refresh list
+                created_channels.append(new_channel.id)
+                set_server_config(guild_id, "created_dynamic_channels", created_channels)
+                print(f"[+] Created dynamic voice channel '{new_channel.name}' for user {member} in guild {guild_id}")
         for user_channel_id in created_channels:
             # created_channels = get_server_config(guild_id, "created_dynamic_channels", [])
             try:
