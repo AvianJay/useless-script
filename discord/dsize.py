@@ -108,6 +108,9 @@ async def dsize(interaction: discord.Interaction, global_dsize: int = 0):
     drop_item_chance = get_server_config(guild_key, "dsize_drop_item_chance", 5)
     # check if user got surgery chance
     if percent_random(surgery_percent):
+        if get_user_data(guild_key, user_id, "dsize_anti_surgery") == str(now):
+            await interaction.followup.send("由於你使用了抗手術藥物，你無法進行手術。")
+            return
         fail_chance = random.randint(1, 100)
         class dsize_SurgeryView(discord.ui.View):
             def __init__(self):
@@ -543,6 +546,9 @@ async def use_scalpel(interaction: discord.Interaction):
             if get_user_data(guild_key, target_id, "last_dsize_size", 0) == -1:
                 await interaction.response.send_message(f"{target_user.display_name} 是男娘，無法進行手術。", ephemeral=True)
                 return
+            if get_user_data(guild_key, target_id, "dsize_anti_surgery") == str(now):
+                await interaction.response.send_message(f"{target_user.display_name} 使用了抗手術藥物，無法進行手術。", ephemeral=True)
+                return
             removed = await ItemSystem.remove_item_from_user(guild_key, user_id, "scalpel", 1)
             if not removed:
                 await interaction.response.send_message("你沒有手術刀，無法進行手術。", ephemeral=True)
@@ -594,6 +600,9 @@ async def use_rusty_scalpel(interaction: discord.Interaction):
             if get_user_data(guild_key, target_id, "last_dsize_size", 0) == -1:
                 await interaction.response.send_message(f"{target_user.display_name} 已經是男娘了。", ephemeral=True)
                 return
+            if get_user_data(guild_key, target_id, "dsize_anti_surgery") == str(now):
+                await interaction.response.send_message(f"{target_user.display_name} 使用了抗手術藥物，無法進行手術。", ephemeral=True)
+                return
             removed = await ItemSystem.remove_item_from_user(guild_key, user_id, "rusty_scalpel", 1)
             if not removed:
                 await interaction.response.send_message("你沒有生鏽的手術刀，無法進行手術。", ephemeral=True)
@@ -613,6 +622,17 @@ async def use_rusty_scalpel(interaction: discord.Interaction):
             embed.set_field_at(0, name=f"-1 cm", value=f"8", inline=False)
             await interaction.edit_original_response(content=f"{target_user.mention} 變男娘了。", embed=embed)
     await interaction.response.send_modal(SelectUserModal())
+    
+async def use_anti_surgery(interaction: discord.Interaction):
+    user_id = interaction.user.id
+    guild_key = interaction.guild.id if interaction.guild else None
+    now = (datetime.utcnow() + timedelta(hours=8)).date()
+    removed = await ItemSystem.remove_item_from_user(guild_key, user_id, "anti_surgery", 1)
+    if not removed:
+        await interaction.response.send_message("你沒有抗手術藥物，無法使用。", ephemeral=True)
+        return
+    set_user_data(guild_key, user_id, "dsize_anti_surgery", now)
+    await interaction.response.send_message("你使用了抗手術藥物！\n今天不會被手術。")
 
 if "ItemSystem" in modules:
     items = [
@@ -639,6 +659,12 @@ if "ItemSystem" in modules:
             "name": "生鏽的手術刀",
             "description": "這是一把生鏽的手術刀，可以強制感染進而變成男娘。",
             "callback": use_rusty_scalpel,
+        },
+        {
+            "id": "anti_surgery",
+            "name": "抗手術藥物",
+            "description": "一顆屌型的藥丸。使用後可以防止一天被手術。",
+            "callback": use_anti_surgery,
         }
     ]
     import ItemSystem
