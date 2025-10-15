@@ -183,13 +183,25 @@ async def dsize(interaction: discord.Interaction, global_dsize: int = 0):
             await asyncio.sleep(1)
             await msg.edit(content=".........?")
             await asyncio.sleep(1)
-            if random.randint(1, 2) == 1:
+            rand = random.randint(1, 100)
+            if rand <= 30:
                 await ItemSystem.give_item_to_user(interaction.guild.id, interaction.user.id, "fake_ruler", 1)
                 await msg.edit(content="你撿到了一把自欺欺人尺！\n使用 `/item use fake_ruler` 可能可以讓下次量長度時變長？")
-            else:
-                amount = random.randint(1, 5)
+            elif rand > 30 and rand <= 70:
+                amount = random.randint(1, 10)
                 await ItemSystem.give_item_to_user(interaction.guild.id, interaction.user.id, "grass", amount)
                 await msg.edit(content=f"你撿到了草 x{amount}！\n使用 `/dsize-feedgrass` 可以草飼男娘。")
+            elif rand > 70 and rand <= 98:
+                # give anti surgery item
+                await ItemSystem.give_item_to_user(interaction.guild.id, interaction.user.id, "anti_surgery", 1)
+                await msg.edit(content="你撿到了一顆抗手術藥物！\n使用 `/item use anti_surgery` 可以防止一天被手術。")
+            else:
+                if rand == 99:
+                    await ItemSystem.give_item_to_user(interaction.guild.id, interaction.user.id, "scalpel", 1)
+                    await msg.edit(content="你撿到了一把手術刀！\n使用 `/item use scalpel` 可以進行手術。")
+                else:
+                    await ItemSystem.give_item_to_user(interaction.guild.id, interaction.user.id, "rusty_scalpel", 1)
+                    await msg.edit(content="你撿到了一把生鏽的手術刀！\n使用 `/item use rusty_scalpel` 可以進行手術。")
 
 
 @bot.tree.command(name=app_commands.locale_str("dsize-leaderboard"), description="查看屌長排行榜")
