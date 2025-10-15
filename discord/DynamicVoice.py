@@ -72,6 +72,14 @@ class DynamicVoice(commands.GroupCog, name=app_commands.locale_str("dynamic-voic
                 print(f"[-] Failed to set user limit for channel '{channel.name}': {e}")
         else:
             channel_id = get_server_config(guild_id, "dynamic_voice_channel")
+            if not channel_id:
+                await interaction.followup.send("錯誤：請先設置動態語音頻道。", ephemeral=True)
+                return
+            channel = interaction.guild.get_channel(channel_id)
+            voice_client = discord.utils.get(self.bot.voice_clients, guild=channel.guild)
+            if voice_client and voice_client.is_connected():
+                await voice_client.disconnect()
+                print(f"[+] Disconnected from channel '{channel.name}' in guild {guild_id}")
             try:
                 await channel.edit(user_limit=1)
             except Exception as e:
