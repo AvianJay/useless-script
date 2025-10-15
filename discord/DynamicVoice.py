@@ -123,6 +123,8 @@ class DynamicVoice(commands.GroupCog, name=app_commands.locale_str("dynamic-voic
                         except Exception as e:
                             print(f"[-] Failed to connect to channel '{channel.name}': {e}")
                         return
+        if member.bot:
+            return
 
         # User joins the dynamic voice channel
         if after.channel and after.channel.id == channel_id and (not before.channel or before.channel.id != channel_id):
