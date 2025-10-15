@@ -47,8 +47,13 @@ class DynamicVoice(commands.GroupCog, name=app_commands.locale_str("dynamic-voic
     
     @app_commands.command(name=app_commands.locale_str("play-audio"), description="動態語音頻道切換前先播放音效")
     @app_commands.describe(enable="是否啟用進入頻道前播放音效")
+    @app_commands.choices(enable=[
+        app_commands.Choice(name="啟用", value=1),
+        app_commands.Choice(name="禁用", value=0)
+    ])
     @app_commands.checks.has_permissions(administrator=True)
-    async def play_audio(self, interaction: discord.Interaction, enable: bool):
+    async def play_audio(self, interaction: discord.Interaction, enable: int):
+        enable = bool(enable)
         await interaction.response.defer(ephemeral=True)
         guild_id = interaction.guild.id
         # connect to voice channel and standby to play audio when user joins the dynamic voice channel
