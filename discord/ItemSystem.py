@@ -174,6 +174,10 @@ class ItemSystem(commands.GroupCog, name="item", description="物品系統指令
         receiver_id = user.id
         guild_id = interaction.guild.id if interaction.guild else None
         
+        if giver_id == receiver_id:
+            await interaction.followup.send("你不能給自己物品。")
+            return
+        
         giver_items = await get_user_items(guild_id, giver_id, item_id)
         if not giver_items:
             await interaction.followup.send("你沒有這個物品。")
