@@ -122,9 +122,21 @@ class ItemSystem(commands.GroupCog, name="item", description="物品系統指令
             await interaction.response.send_message("這個物品無法使用。", ephemeral=True)
     
     @app_commands.command(name="drop", description="丟棄一個物品")
-    @app_commands.describe(item_id="你想丟棄的物品ID", amount="你想丟棄的數量")
+    @app_commands.describe(item_id="你想丟棄的物品ID", amount="你想丟棄的數量", can_pickup="其他人可以撿起這個物品嗎？", pickup_duration="物品可以被撿起的時間（秒）", pickup_only_once="物品只能被撿起一次嗎？")
     @app_commands.autocomplete(item_id=get_user_items_autocomplete)
-    async def drop_item(self, interaction: discord.Interaction, item_id: str, amount: int = 1):
+    @app_commands.choices(
+        can_pickup=[
+            app_commands.Choice(name="是", value=1),
+            app_commands.Choice(name="否", value=0)
+        ],
+        pickup_only_once=[
+            app_commands.Choice(name="是", value=1),
+            app_commands.Choice(name="否", value=0)
+        ]
+    )
+    async def drop_item(self, interaction: discord.Interaction, item_id: str, amount: int = 1, can_pickup: int = 1, pickup_duration: int = 60, pickup_only_once: int = 0):
+        can_pickup = bool(can_pickup)
+        pickup_only_once = bool(pickup_only_once)
         user_id = interaction.user.id
         guild_id = interaction.guild.id if interaction.guild else None
         user_items = await get_user_items(guild_id, user_id, item_id)
@@ -134,22 +146,32 @@ class ItemSystem(commands.GroupCog, name="item", description="物品系統指令
             await interaction.response.send_message("你沒有這個物品。", ephemeral=True)
             return
         target_item = next((i for i in items if i["id"] == item_id), None)
+        
+        if can_pickup:
+            if pickup_duration <= 0 or pickup_duration > 86400:
+                await interaction.response.send_message("錯誤：撿起持續時間必須在 1 到 86400 秒之間。", ephemeral=True)
+                return
 
         amount = await remove_item_from_user(guild_id, user_id, item_id, amount)
+        picked_up = set()  # user ids who picked up
         # drop to current channel
         class DropView(discord.ui.View):
             def __init__(self):
-                super().__init__(timeout=60)
+                super().__init__(timeout=pickup_duration)
                 self.interaction = interaction
             
             async def on_timeout(self):
                 for child in self.children:
                     child.disabled = True
-                await self.interaction.edit_original_response(content="物品消失了！", view=self)
+                await self.interaction.edit_original_response(content=f"{self.interaction.user.display_name} 丟棄了 {target_item['name']} x{amount}！\n物品消失了！", view=self)
 
             @discord.ui.button(label="撿起物品", style=discord.ButtonStyle.green, custom_id="pick_up_item")
             async def pick_up(self, interaction: discord.Interaction, button: discord.ui.Button):
                 # print("[DEBUG] user_items before:", user_items)
+                if pickup_only_once and interaction.user.id in picked_up:
+                    await interaction.response.send_message("你已經撿起過這個物品了。\n-# 原物主設定了僅能撿起一次。", ephemeral=True)
+                    return
+                picked_up.add(interaction.user.id)
                 if not user_items:
                     await interaction.response.send_message("物品已經被撿光了！", ephemeral=True)
                     return
@@ -160,11 +182,16 @@ class ItemSystem(commands.GroupCog, name="item", description="物品系統指令
                 set_user_data(guild_id, user_id, "items", other_user_items)
                 await interaction.response.send_message(f"你撿起了 {target_item['name']}。", ephemeral=True)
                 if not user_items:
-                    await self.interaction.edit_original_response(content="物品已經被撿光了！", view=None)
+                    await self.interaction.edit_original_response(content=f"{self.interaction.user.display_name} 丟棄了 {target_item['name']} x{amount}！\n物品已經被撿光了！", view=None)
                     self.stop()
 
-        await interaction.response.send_message(f"{interaction.user.name} 丟棄了 {target_item['name']} x{amount}！", view=DropView())
-    
+        if can_pickup:
+            await interaction.response.send_message(f"{interaction.user.display_name} 丟棄了 {target_item['name']} x{amount}！", view=DropView())
+            print(f"[ItemSystem] {interaction.user} dropped {target_item['name']} x{amount} in guild {guild_id}")
+        else:
+            await interaction.response.send_message(f"{interaction.user.display_name} 丟棄了 {target_item['name']} x{amount}，但是物品馬上不見了。")
+            print(f"[ItemSystem] {interaction.user} dropped {target_item['name']} x{amount} (no pickup) in guild {guild_id}")
+
     @app_commands.command(name="give", description="給予另一個用戶一個物品")
     @app_commands.describe(user="你想給予物品的用戶", item_id="你想給予的物品ID")
     @app_commands.autocomplete(item_id=get_user_items_autocomplete)
