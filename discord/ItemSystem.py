@@ -33,6 +33,7 @@ async def give_item_to_user(guild_id: int, user_id: int, item_id: str, amount: i
     user_items = get_user_data(guild_id, user_id, "items", {})
     user_items[item_id] = user_items.get(item_id, 0) + amount
     set_user_data(guild_id, user_id, "items", user_items)
+    print(f"[ItemSystem] Gave {amount} of {item_id} to user {user_id} in guild {guild_id}")
 
 
 async def get_user_items(guild_id: int, user_id: int, item_id: str):
@@ -52,6 +53,7 @@ async def remove_item_from_user(guild_id: int, user_id: int, item_id: str, amoun
     user_items[item_id] = max(0, original_amount - amount)
     set_user_data(guild_id, user_id, "items", user_items)
 
+    print(f"[ItemSystem] Removed {removed_amount} of {item_id} from user {user_id} in guild {guild_id}")
     return removed_amount
 
 
