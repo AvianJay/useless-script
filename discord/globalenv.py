@@ -163,6 +163,31 @@ translations = {
     "play-audio": "播放音效",
     "bus": "公車",
     "getroute": "查詢路線",
+    "True": "是",
+    "False": "否",
+    "item_id": "物品",
+    "amount": "數量",
+    "target_user": "目標用戶",
+    "reason": "原因",
+    "duration": "持續時間",
+    "can_pickup": "可撿起",
+    "pickup_only_once": "僅能撿起一次",
+    "pickup_duration": "撿起持續時間",
+    "setting": "設定項",
+    "value": "值",
+    "action": "動作",
+    "enable": "啟用",
+    "min": "最小值",
+    "max": "最大值",
+    "channel": "頻道",
+    "channel_category": "頻道類別",
+    "channel_name": "頻道名稱",
+    "global": "全域",
+    "global_dsize": "全域",
+    "global_leaderboard": "全域排行榜",
+    "opponent": "對手",
+    "user": "用戶",
+    "route_key": "路線代碼",
 }
 class CommandNameTranslator(app_commands.Translator):
     async def translate(
@@ -175,7 +200,12 @@ class CommandNameTranslator(app_commands.Translator):
             # print("DEBUG: Translate", type(context.data))
             # print("[DEBUG] Translating command/group:", context.data.name)
             # print("[DEBUG] Translated to:", translations.get(context.data.name, None))
-            allowed_locations = [app_commands.TranslationContextLocation.command_name, app_commands.TranslationContextLocation.group_name, app_commands.TranslationContextLocation.choice_name]
+            allowed_locations = [
+                app_commands.TranslationContextLocation.command_name,
+                app_commands.TranslationContextLocation.group_name,
+                app_commands.TranslationContextLocation.choice_name,
+                app_commands.TranslationContextLocation.parameter_name,
+            ]
             if context.location not in allowed_locations:
                 return None
             try:
