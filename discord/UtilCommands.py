@@ -61,3 +61,7 @@ async def randomuser_command(interaction: discord.Interaction):
 
     selected_user = random.choice(users)
     await interaction.response.send_message(f"隨機選擇的用戶是：{selected_user.mention}！\n-# 抽取用戶總數：{len(users)}")
+
+
+if __name__ == "__main__":
+    start_bot()
