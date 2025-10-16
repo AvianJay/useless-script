@@ -40,6 +40,9 @@ async def dsize(interaction: discord.Interaction, global_dsize: int = 0):
     guild_key = interaction.guild.id if interaction.guild else None
     if global_dsize:
         guild_key = None  # override to global
+    if interaction.is_user_integration():
+        guild_key = None
+        global_dsize = True
     
     if guild_key:
         max_size = get_server_config(guild_key, "dsize_max", 30)
@@ -227,8 +230,12 @@ async def dsize_leaderboard(interaction: discord.Interaction, limit: int = 10, g
     if global_leaderboard:
         guild_id = None  # global
     else:
-        global_leaderboard = False if interaction.guild else True
-        guild_id = interaction.guild.id if interaction.guild else None  # None for global
+        if interaction.is_user_integration():
+            global_leaderboard = True
+            guild_id = None
+        else:
+            global_leaderboard = False if interaction.guild else True
+            guild_id = interaction.guild.id if interaction.guild else None  # None for global
     leaderboard = []
     if limit < 1 or limit > 50:
         await interaction.response.send_message("限制必須在 1 到 50 之間。", ephemeral=True)
