@@ -193,7 +193,7 @@ async def dsize(interaction: discord.Interaction, global_dsize: int = 0):
                 amount = random.randint(1, 10)
                 await ItemSystem.give_item_to_user(interaction.guild.id, interaction.user.id, "grass", amount)
                 grass_command = await get_command_mention("dsize-feedgrass")
-                await msg.edit(content=f"你撿到了草 x{amount}！\n使用 {grass_command} 草 可以草飼男娘。")
+                await msg.edit(content=f"你撿到了草 x{amount}！\n使用 {grass_command} 可以草飼男娘。")
             elif rand > 70 and rand <= 98:
                 # give anti surgery item
                 await ItemSystem.give_item_to_user(interaction.guild.id, interaction.user.id, "anti_surgery", 1)
