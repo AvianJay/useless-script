@@ -105,10 +105,12 @@ def get_all_user_data(guild_id: int, key: str):
     """Get all user-specific data for a specific key in a server"""
     return db.get_all_user_data(guild_id, key)
 
-async def get_command_mention(command_name: str):
+async def get_command_mention(command_name: str, subcommand_name: str = None):
     commands = await bot.tree.fetch_commands()
     for command in commands:
         if command.name == command_name:
+            if subcommand_name:
+                return command.mention.replace(f"/{command_name}", f"/{command_name} {subcommand_name}")
             return command.mention
     return None
 
