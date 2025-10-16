@@ -80,6 +80,7 @@ async def dsize(interaction: discord.Interaction, global_dsize: int = 0):
             fake_size = size + extra_size
             # reset fake ruler usage
             set_user_data(guild_key, user_id, "dsize_fake_ruler_used", False)
+            set_user_data(guild_key, user_id, "dsize_fake_ruler_used_date", now)
             set_user_data(guild_key, user_id, "last_dsize_fake_size", fake_size)
     final_size = fake_size if fake_size is not None else size
 
@@ -192,7 +193,7 @@ async def dsize(interaction: discord.Interaction, global_dsize: int = 0):
                 amount = random.randint(1, 10)
                 await ItemSystem.give_item_to_user(interaction.guild.id, interaction.user.id, "grass", amount)
                 grass_command = await get_command_mention("dsize-feedgrass")
-                await msg.edit(content=f"你撿到了草 x{amount}！\n使用 {grass_command} 可以草飼男娘。")
+                await msg.edit(content=f"你撿到了草 x{amount}！\n使用 {grass_command} 草 可以草飼男娘。")
             elif rand > 70 and rand <= 98:
                 # give anti surgery item
                 await ItemSystem.give_item_to_user(interaction.guild.id, interaction.user.id, "anti_surgery", 1)
@@ -247,6 +248,22 @@ async def dsize_leaderboard(interaction: discord.Interaction, limit: int = 10, g
             continue
         if size is not None:
             leaderboard.append((user_id, size))
+    
+    for user_id, data in all_data_fake.items():
+        size = data.get("last_dsize_fake_size")
+        # check dsize date is today
+        user_date = get_user_data(guild_id, user_id, "dsize_fake_ruler_used_date")
+        if user_date is not None and not isinstance(user_date, datetime):
+            # If user_date is a string (e.g., from JSON), convert to date
+            try:
+                user_date = datetime.fromisoformat(str(user_date)).date()
+            except Exception:
+                user_date = datetime(1970, 1, 1).date()
+        elif isinstance(user_date, datetime):
+            user_date = user_date.date()
+        if user_date is not None and user_date != (datetime.utcnow() + timedelta(hours=8)).date():
+            all_data_fake.pop(user_id)
+            continue
 
     if not leaderboard:
         await interaction.response.send_message("今天還沒有任何人量過屌長。", ephemeral=True)
