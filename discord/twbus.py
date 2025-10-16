@@ -51,7 +51,11 @@ async def on_ready_update_database():
     await bot.wait_until_ready()
     print("[+] 自動更新資料庫任務已啟動")
     while not bot.is_closed():
-        busapi.update_database(info=True)
+        try:
+            busapi.update_database(info=True)
+            print("[+] 公車資料庫更新完畢")
+        except Exception as e:
+            print(f"[!] 更新資料庫時發生錯誤：{e}")
         await asyncio.sleep(3600)  # 每小時更新一次
 on_ready_tasks.append(on_ready_update_database)
 
