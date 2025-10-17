@@ -40,7 +40,7 @@ async def dsize(interaction: discord.Interaction, global_dsize: int = 0):
     guild_key = interaction.guild.id if interaction.guild else None
     if global_dsize:
         guild_key = None  # override to global
-    if interaction.is_user_integration():
+    if not interaction.is_guild_integration():
         guild_key = None
         global_dsize = True
     
@@ -230,7 +230,7 @@ async def dsize_leaderboard(interaction: discord.Interaction, limit: int = 10, g
     if global_leaderboard:
         guild_id = None  # global
     else:
-        if interaction.is_user_integration():
+        if not interaction.is_guild_integration():
             global_leaderboard = True
             guild_id = None
         else:
