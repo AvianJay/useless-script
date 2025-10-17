@@ -313,7 +313,7 @@ async def dsize_leaderboard(interaction: discord.Interaction, limit: int = 10, g
         embed.set_footer(text=interaction.guild.name, icon_url=interaction.guild.icon.url if interaction.guild.icon else None)
     else:
         embed.set_footer(text="全域排行榜")
-    await interaction.response.send_message(embed=embed)
+    await interaction.followup.send(embed=embed)
 
 
 user_using_dsize_battle = set()  # to prevent spamming the command
