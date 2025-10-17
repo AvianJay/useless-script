@@ -188,6 +188,10 @@ translations = {
     "opponent": "對手",
     "user": "用戶",
     "route_key": "路線代碼",
+    "limit": "限制",
+    "tag": "標籤",
+    "tags": "標籤",
+    "pid": "頁數",
 }
 class CommandNameTranslator(app_commands.Translator):
     async def translate(
