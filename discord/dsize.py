@@ -264,6 +264,9 @@ async def dsize_leaderboard(interaction: discord.Interaction, limit: int = 10, g
         size = data.get("last_dsize_fake_size")
         # check dsize date is today
         user_date = get_user_data(guild_id, user_id, "dsize_fake_ruler_used_date")
+        if user_date is None:
+            all_data_fake.pop(user_id)
+            continue
         if user_date is not None and not isinstance(user_date, datetime):
             # If user_date is a string (e.g., from JSON), convert to date
             try:
