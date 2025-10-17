@@ -3,9 +3,9 @@ import random
 import discord
 from discord import app_commands
 from discord.ext import commands
-from globalenv import bot, start_bot, get_user_data, set_user_data
+from globalenv import bot, start_bot, get_user_data, set_user_data, get_command_mention
 
-version = "0.0.2"
+version = "0.0.3"
 try:
     git_commit_hash = os.popen("git rev-parse --short HEAD").read().strip()
 except Exception as e:
@@ -62,6 +62,29 @@ async def randomuser_command(interaction: discord.Interaction):
     selected_user = random.choice(users)
     await interaction.response.send_message(f"隨機選擇的用戶是：{selected_user.mention}！\n-# 抽取用戶總數：{len(users)}")
 
+
+@bot.tree.command(name=app_commands.locale_str("userinfo"), description="顯示用戶資訊")
+@app_commands.describe(user="要查詢的用戶")
+@app_commands.allowed_installs(guilds=True, users=True)
+@app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
+async def userinfo_command(interaction: discord.Interaction, user: discord.User):
+    embed = discord.Embed(title=f"{user.display_name} 的資訊", color=0x00ff00)
+    embed.set_thumbnail(url=user.avatar.url if user.avatar else discord.Embed.Empty)
+    embed.add_field(name="用戶 ID", value=str(user.id), inline=True)
+    embed.add_field(name="加入伺服器時間", value=user.joined_at.strftime("%Y-%m-%d %H:%M:%S"), inline=True)
+    await interaction.response.send_message(embed=embed)
+
+
+@bot.tree.command(name=app_commands.locale_str("get-command-mention"), description="取得指令的提及格式")
+@app_commands.describe(command="指令名稱", subcommand="子指令名稱（可選）")
+@app_commands.allowed_installs(guilds=True, users=True)
+@app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
+async def get_command_mention(interaction: discord.Interaction, command: str, subcommand: str = None):
+    mention = await get_command_mention(command, subcommand)
+    if mention is None:
+        await interaction.response.send_message("找不到指定的指令。", ephemeral=True)
+        return
+    await interaction.response.send_message(f"{mention}")
 
 if __name__ == "__main__":
     start_bot()

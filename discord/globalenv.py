@@ -192,6 +192,10 @@ translations = {
     "tag": "標籤",
     "tags": "標籤",
     "pid": "頁數",
+    "userinfo": "用戶資訊",
+    "get-command-mention": "取得指令提及",
+    "command": "指令",
+    "subcommand": "子指令",
 }
 class CommandNameTranslator(app_commands.Translator):
     async def translate(
