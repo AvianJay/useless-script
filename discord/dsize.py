@@ -195,7 +195,7 @@ async def dsize(interaction: discord.Interaction, global_dsize: int = 0):
             if rand <= 30:
                 await ItemSystem.give_item_to_user(interaction.guild.id, interaction.user.id, "fake_ruler", 1)
                 item_use_command = await get_command_mention("item", "use")
-                await msg.edit(content="你撿到了一把自欺欺人尺！\n使用 {item_use_command} 自欺欺人尺 可能可以讓下次量長度時變長？")
+                await msg.edit(content=f"你撿到了一把自欺欺人尺！\n使用 {item_use_command} 自欺欺人尺 可能可以讓下次量長度時變長？")
             elif rand > 30 and rand <= 70:
                 amount = random.randint(1, 10)
                 await ItemSystem.give_item_to_user(interaction.guild.id, interaction.user.id, "grass", amount)
