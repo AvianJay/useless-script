@@ -228,6 +228,26 @@ async def createtranscript(ctx, channel_id: int, after_message_id: int=None, bef
         await ctx.send(f"創建對話紀錄時發生錯誤：{e}")
 
 
+@bot.command()
+@is_owner()
+async def serverinfo(ctx, guild_id: int):
+    guild = bot.get_guild(guild_id)
+    if guild is None:
+        await ctx.send("找不到該伺服器。")
+        return
+    embed = discord.Embed(
+        title=f"{guild.name} 的資訊",
+        color=discord.Color.blue()
+    )
+    embed.set_thumbnail(url=guild.icon.url if guild.icon else discord.Embed.Empty)
+    embed.add_field(name="伺服器 ID", value=str(guild.id), inline=True)
+    embed.add_field(name="擁有者", value=f"{guild.owner} (ID: {guild.owner_id})", inline=True)
+    embed.add_field(name="成員數", value=str(getattr(guild, "member_count", "未知")), inline=True)
+    embed.add_field(name="頻道數", value=str(len(guild.channels)), inline=True)
+    embed.add_field(name="建立時間", value=guild.created_at.strftime("%Y-%m-%d %H:%M:%S"), inline=True)
+    await ctx.send(embed=embed)
+
+
 @bot.event
 async def on_guild_join(guild):
     print(f"Joined guild: {guild.name} (ID: {guild.id})")
