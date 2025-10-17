@@ -260,7 +260,7 @@ async def dsize_leaderboard(interaction: discord.Interaction, limit: int = 10, g
         if size is not None:
             leaderboard.append((user_id, size))
     
-    for user_id, data in all_data_fake.items():
+    for user_id, data in all_data_fake.copy().items():
         size = data.get("last_dsize_fake_size")
         # check dsize date is today
         user_date = get_user_data(guild_id, user_id, "dsize_fake_ruler_used_date")
