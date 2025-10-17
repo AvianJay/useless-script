@@ -240,6 +240,7 @@ async def dsize_leaderboard(interaction: discord.Interaction, limit: int = 10, g
     if limit < 1 or limit > 50:
         await interaction.response.send_message("限制必須在 1 到 50 之間。", ephemeral=True)
         return
+    await interaction.response.defer()
 
     all_data = get_all_user_data(guild_id, "last_dsize_size")
     all_data_fake = get_all_user_data(guild_id, "last_dsize_fake_size")
@@ -280,7 +281,7 @@ async def dsize_leaderboard(interaction: discord.Interaction, limit: int = 10, g
             continue
 
     if not leaderboard:
-        await interaction.response.send_message("今天還沒有任何人量過屌長。", ephemeral=True)
+        await interaction.followup.send("今天還沒有任何人量過屌長。")
         return
 
     # 按照大小排序並取前limit名
