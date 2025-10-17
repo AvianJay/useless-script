@@ -182,6 +182,7 @@ class ItemSystem(commands.GroupCog, name="item", description="物品系統指令
                 user_items.pop(0)  # remove one item
                 other_user_items[item_id] = other_user_items.get(item_id, 0) + 1
                 set_user_data(guild_id, user_id, "items", other_user_items)
+                print(f"[ItemSystem] {interaction.user} picked up {target_item['id']} in guild {guild_id}")
                 await interaction.response.send_message(f"你撿起了 {target_item['name']}。", ephemeral=True)
                 if not user_items:
                     await self.interaction.edit_original_response(content=f"{self.interaction.user.display_name} 丟棄了 {target_item['name']} x{amount}！\n物品已經被撿光了！", view=None)
