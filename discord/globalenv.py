@@ -196,6 +196,7 @@ translations = {
     "get-command-mention": "取得指令提及",
     "command": "指令",
     "subcommand": "子指令",
+    "textlength": "文字長度",
 }
 class CommandNameTranslator(app_commands.Translator):
     async def translate(

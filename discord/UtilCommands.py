@@ -86,5 +86,26 @@ async def get_cmd_mention(interaction: discord.Interaction, command: str, subcom
         return
     await interaction.response.send_message(f"{mention}")
 
+
+@bot.tree.command(name=app_commands.locale_str("textlength"), description="計算輸入文字的長度")
+@app_commands.describe(text="要計算長度的文字")
+@app_commands.allowed_installs(guilds=True, users=True)
+@app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
+async def textlength_command(interaction: discord.Interaction, text: str):
+    length = len(text)
+    await interaction.response.send_message(f"{length} 個字。")
+
+
+@bot.command(aliases=["len"])
+async def length(ctx, *, text: str = ""):
+    """計算輸入文字的長度（前綴指令版本）"""
+    # if not text use reply message content
+    if not text and ctx.message.reference:
+        replied_message = await ctx.channel.fetch_message(ctx.message.reference.message_id)
+        text = replied_message.content
+    length = len(text)
+    await ctx.send(f"{length} 個字。")
+
+
 if __name__ == "__main__":
     start_bot()
