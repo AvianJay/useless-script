@@ -231,6 +231,7 @@ async def setup_hook():
 
 bot.setup_hook = setup_hook
 on_ready_tasks = []
+on_close_tasks = set()  # only works on !shutdown
 
 
 @bot.event
