@@ -197,6 +197,9 @@ translations = {
     "command": "指令",
     "subcommand": "子指令",
     "textlength": "文字長度",
+    "text": "文字",
+    "httpcat": "HTTP貓",
+    "status_code": "狀態碼",
 }
 class CommandNameTranslator(app_commands.Translator):
     async def translate(

@@ -107,5 +107,16 @@ async def length(ctx, *, text: str = ""):
     await ctx.send(f"{length} 個字。")
 
 
+@bot.tree.command(name=app_commands.locale_str("httpcat"), description="貓咪好可愛")
+@app_commands.describe(status_code="HTTP 狀態碼（例如 404）")
+@app_commands.allowed_installs(guilds=True, users=True)
+@app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
+async def httpcat_command(interaction: discord.Interaction, status_code: int):
+    url = f"https://http.cat/{status_code}"
+    embed = discord.Embed(title=f"HTTP Cat {status_code}", color=0x00ff00)
+    embed.set_image(url=url)
+    await interaction.response.send_message(embed=embed)
+
+
 if __name__ == "__main__":
     start_bot()
