@@ -71,22 +71,6 @@ def _color_for_ratio(available: int, capacity: int) -> discord.Color:
 def make_youbike_embed(station: dict) -> tuple[discord.Embed, str]:
     """
     將 youbike.getstationbyid 回傳的站點 dict 轉為 discord.Embed。
-    範例（常見 key）：
-      {
-        "sid": "001",
-        "sna": "台北車站",
-        "sna_en": "Taipei Station",
-        "sarea": "中正區",
-        "ar": "重慶南路一段",
-        "tot": "30",   # 總停車格
-        "sbi": "5",    # 可借車數 (available bikes)
-        "bemp": "25",  # 空位數
-        "lat": "25.0478",
-        "lng": "121.5319",
-        "mday": "2023-10-01 12:34:56",
-        "act": "1",    # 0 為停用, 1 為啟用
-        "img": "/images/station/001.jpg"
-      }
     """
     # 可能的欄位名稱映射（根據不同 youbike API 版本）
     name = station.get("sna") or station.get("name_tw") or station.get("name") or station.get("name_en") or "Unknown Station"
@@ -189,6 +173,101 @@ def make_youbike_embed(station: dict) -> tuple[discord.Embed, str]:
     return embed, map_url if lat_f is not None and lng_f is not None else None
 
 
+def make_bus_embed(payload: dict) -> tuple[discord.Embed, Optional[str]]:
+    """
+    將公車到站資料（例如 taiwanbus searchstop 回傳的單筆資料）轉為 discord.Embed。
+    回傳 (embed, map_url_or_None)
+    """
+    route_name = payload.get("route_name") or payload.get("route") or "Unknown Route"
+    path_name = payload.get("path_name") or payload.get("path") or ""
+    stop_name = payload.get("stop_name") or payload.get("stop") or "Unknown Stop"
+
+    title = f"{route_name}"
+    if path_name:
+        title = f"{title} — {path_name}"
+
+    # sec: 0 = approaching, <0 show msg, >0 seconds? depends on API
+    sec = payload.get("sec")
+    msg = payload.get("msg")
+
+    # 解析 upcoming times 字串（例如 "5,10"）
+    sec = payload.get("sec")
+    if sec < 0:
+        time_str = None
+    elif sec < 60 and sec > 0:
+        time_str = f"{sec}秒"
+    else:
+        time_str = f"{sec // 60}分 {sec % 60}秒"
+
+    # bus list
+    buses = payload.get("bus") or []
+    bus_lines = []
+    any_full = False
+    for b in buses:
+        bid = b.get("id") or b.get("plate") or "?"
+
+        full = int(b.get("full") or 0)
+        any_full = any_full or (full == 1)
+        status = "已滿" if full == 1 else "可上車"
+        bus_lines.append(f"`{bid}`: {status}")
+
+    # 決定顏色：若進站中 (sec == 0) -> 綠；若全部已滿 -> 紅；若 sec < 0 則用金色顯示 msg；預設綠色
+    try:
+        if sec == 0:
+            color = discord.Color.green()
+        elif any_full and not time_str:
+            color = discord.Color.red()
+        elif sec is not None and isinstance(sec, (int, float)) and sec < 0:
+            color = discord.Color.gold()
+        else:
+            color = discord.Color.green()
+    except Exception:
+        color = discord.Color.greyple()
+
+    embed = discord.Embed(title=title, color=color)
+    embed.description = stop_name
+
+    # 顯示靠近狀態或時間訊息
+    if not msg and sec <= 0:
+        embed.add_field(name="到站狀態", value="進站中", inline=True)
+    elif sec is not None and isinstance(sec, (int, float)) and sec < 0 and msg:
+        # check msg is **:**
+        if isinstance(msg, str) and ":" in msg:
+            embed.add_field(name="預計到站", value=str(msg), inline=True)
+        else:
+            embed.add_field(name="訊息", value=str(msg), inline=True)
+    elif time_str:
+        embed.add_field(name="預估到站", value=time_str, inline=True)
+
+    # 其他欄位
+    sequence = payload.get("sequence")
+    if sequence is not None:
+        embed.add_field(name="站序", value=str(sequence), inline=True)
+
+    # 加入到站資訊
+    if bus_lines:
+        embed.add_field(name="車輛狀態", value="\n".join(bus_lines), inline=False)
+
+    stop_id = payload.get("stop_id")
+    if stop_id:
+        embed.set_footer(text=f"站牌ID: {stop_id}")
+
+    # 座標與地圖連結
+    lat = payload.get("lat")
+    lon = payload.get("lon") or payload.get("lng")
+    map_url = None
+    try:
+        if lat is not None and lon is not None:
+            lat_f = float(lat)
+            lon_f = float(lon)
+            map_url = f"https://www.google.com/maps/search/?api=1&query={lat_f},{lon_f}"
+            embed.add_field(name="座標", value=f"[{lat_f:.6f}, {lon_f:.6f}]({map_url})", inline=False)
+    except Exception:
+        map_url = None
+
+    return embed, map_url
+
+
 @app_commands.guild_only()
 @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
 @app_commands.allowed_installs(guilds=True, users=True)
@@ -227,17 +306,34 @@ class TWBus(commands.GroupCog, name=app_commands.locale_str("bus")):
         print(f"[TWBus] {interaction.user} 查詢路線 {route_key} 的站牌 {stop_id}")
         route_key = int(route_key)
         stop_id = int(stop_id)
+        paths = busapi.fetch_paths(int(route_key))
         try:
             info = busapi.get_complete_bus_info(route_key)
             route = busapi.fetch_route(route_key)[0]
             if not info:
                 await interaction.followup.send("找不到該路線的公車到站資訊。", ephemeral=True)
                 return
-            formated = busapi.format_bus_info(info)
+            stop_info = {}
+            for path_id, path_data in info.items():
+                for stop in path_data["stops"]:
+                    if stop["stop_id"] == stop_id:
+                        stop_info.update(stop)
+                        stop_info["route_name"] = route["route_name"]
+                        path = next((p for p in paths if p["path_id"] == path_id), None)
+                        if path:
+                            stop_info["path_name"] = path["path_name"]
 
-            embed = discord.Embed(title=f"{route['route_name']} ({route['description']})", description=formated, color=0x00ff00)
+            if not stop_info:
+                await interaction.followup.send("找不到該站牌的到站資訊。", ephemeral=True)
+                return
 
-            await interaction.followup.send(embed=embed)
+            embed, map_url = make_bus_embed(stop_info)
+            class OpenMapView(discord.ui.View):
+                def __init__(self, url: str):
+                    super().__init__()
+                    self.add_item(discord.ui.Button(label="在地圖上開啟", url=url))
+
+            await interaction.followup.send(embed=embed, view=OpenMapView(map_url) if map_url else None)
         except Exception as e:
             await interaction.followup.send(f"發生錯誤：{e}", ephemeral=True)
             traceback.print_exc()
