@@ -198,8 +198,12 @@ translations = {
     "subcommand": "子指令",
     "textlength": "文字長度",
     "text": "文字",
-    "httpcat": "HTTP貓",
+    # "httpcat": "網路貓咪",
     "status_code": "狀態碼",
+    # "youbike": "YouBike",
+    "getstop": "查詢站點",
+    "stop_id": "站點代碼",
+    "station_name": "站點名稱",
 }
 class CommandNameTranslator(app_commands.Translator):
     async def translate(
