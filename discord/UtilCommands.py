@@ -79,7 +79,7 @@ async def userinfo_command(interaction: discord.Interaction, user: discord.User)
 @app_commands.describe(command="指令名稱", subcommand="子指令名稱（可選）")
 @app_commands.allowed_installs(guilds=True, users=True)
 @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
-async def get_command_mention(interaction: discord.Interaction, command: str, subcommand: str = None):
+async def get_cmd_mention(interaction: discord.Interaction, command: str, subcommand: str = None):
     mention = await get_command_mention(command, subcommand)
     if mention is None:
         await interaction.response.send_message("找不到指定的指令。", ephemeral=True)
