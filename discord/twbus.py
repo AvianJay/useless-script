@@ -8,6 +8,8 @@ import traceback
 import youbike
 from datetime import datetime
 from typing import Optional
+from datetime import timezone, timedelta
+from zoneinfo import ZoneInfo  # Python 3.9+
 
 
 async def bus_route_autocomplete(interaction: discord.Interaction, current: str):
@@ -49,7 +51,12 @@ def _parse_time(value: Optional[str]) -> Optional[datetime | str]:
     # 嘗試解析常見時間格式，若解析失敗就回傳原字串
     for fmt in ("%Y-%m-%d %H:%M:%S", "%Y/%m/%d %H:%M:%S", "%Y-%m-%dT%H:%M:%S"):
         try:
+            try:
+                tz = ZoneInfo("Asia/Taipei")
+            except Exception:
+                tz = timezone(timedelta(hours=8))
             dt = datetime.strptime(value, fmt)
+            dt = dt.replace(tzinfo=tz)
             return dt
         except Exception:
             continue
@@ -262,9 +269,11 @@ def make_bus_embed(payload: dict) -> tuple[discord.Embed, Optional[str]]:
     if bus_lines:
         embed.add_field(name="車輛狀態", value="\n".join(bus_lines), inline=False)
 
-    stop_id = payload.get("stop_id")
-    if stop_id:
-        embed.set_footer(text=f"站牌ID: {stop_id}")
+    # stop_id = payload.get("stop_id")
+    # if stop_id:
+    #     embed.set_footer(text=f"站牌ID: {stop_id}")
+    embed.set_footer(text="上次更新")
+    embed.timestamp = datetime.now(timezone.utc)
 
     # 座標與地圖連結
     lat = payload.get("lat")
