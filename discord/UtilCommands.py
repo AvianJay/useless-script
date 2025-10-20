@@ -4,8 +4,9 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 from globalenv import bot, start_bot, get_user_data, set_user_data, get_command_mention
+from typing import Union
 
-version = "0.0.5"
+version = "0.1.0"
 try:
     git_commit_hash = os.popen("git rev-parse --short HEAD").read().strip()
 except Exception as e:
@@ -67,11 +68,17 @@ async def randomuser_command(interaction: discord.Interaction):
 @app_commands.describe(user="要查詢的用戶")
 @app_commands.allowed_installs(guilds=True, users=True)
 @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
-async def userinfo_command(interaction: discord.Interaction, user: discord.User):
+async def userinfo_command(interaction: discord.Interaction, user: Union[discord.User, discord.Member]):
     embed = discord.Embed(title=f"{user.display_name} 的資訊", color=0x00ff00)
     embed.set_thumbnail(url=user.avatar.url if user.avatar else discord.Embed.Empty)
     embed.add_field(name="用戶 ID", value=str(user.id), inline=True)
-    embed.add_field(name="加入伺服器時間", value=user.joined_at.strftime("%Y-%m-%d %H:%M:%S"), inline=True)
+    embed.add_field(name="帳號創建時間", value=user.created_at.strftime("%Y-%m-%d %H:%M:%S"), inline=True)
+    if isinstance(user, discord.Member):
+        embed.add_field(name="伺服器暱稱", value=user.nick or "無", inline=True)
+        embed.add_field(name="加入伺服器時間", value=user.joined_at.strftime("%Y-%m-%d %H:%M:%S"), inline=True)
+        # pfp
+        if user.display_avatar:
+            embed.set_image(url=user.display_avatar.url if user.display_avatar.url != user.avatar.url else None)
     await interaction.response.send_message(embed=embed)
 
 
