@@ -1,7 +1,7 @@
 import discord
 from discord import app_commands
 from discord.ext import commands
-from globalenv import bot, start_bot, on_ready_tasks
+from globalenv import bot, start_bot, on_ready_tasks, get_user_data, set_user_data
 from taiwanbus import api as busapi
 import asyncio
 import traceback
@@ -281,6 +281,14 @@ class TWBus(commands.GroupCog, name=app_commands.locale_str("bus")):
     @app_commands.autocomplete(route_key=bus_route_autocomplete)
     async def get_route(self, interaction: discord.Interaction, route_key: str):
         await interaction.response.defer()
+        user_last_used = get_user_data(0, str(interaction.user.id), "rate_limit_last", None)
+        if user_last_used:
+            last_time = datetime.fromisoformat(user_last_used)
+            now = datetime.utcnow()
+            delta = (now - last_time).total_seconds()
+            if delta < 10:
+                await interaction.followup.send("你操作得太快了，請稍後再試。", ephemeral=True)
+                return
         print(f"[TWBus] {interaction.user} 查詢路線 {route_key}")
         route_key = int(route_key)
         try:
@@ -303,6 +311,15 @@ class TWBus(commands.GroupCog, name=app_commands.locale_str("bus")):
     @app_commands.autocomplete(route_key=bus_route_autocomplete, stop_id=get_stop_autocomplete)
     async def get_stop(self, interaction: discord.Interaction, route_key: str, stop_id: str):
         await interaction.response.defer()
+        user_last_used = get_user_data(0, str(interaction.user.id), "rate_limit_last", None)
+        if user_last_used:
+            last_time = datetime.fromisoformat(user_last_used)
+            now = datetime.utcnow()
+            delta = (now - last_time).total_seconds()
+            if delta < 10:
+                await interaction.followup.send("你操作得太快了，請稍後再試。", ephemeral=True)
+                return
+        set_user_data(0, str(interaction.user.id), "rate_limit_last", datetime.utcnow().isoformat())
         print(f"[TWBus] {interaction.user} 查詢路線 {route_key} 的站牌 {stop_id}")
         route_key = int(route_key)
         stop_id = int(stop_id)
@@ -328,12 +345,46 @@ class TWBus(commands.GroupCog, name=app_commands.locale_str("bus")):
                 return
 
             embed, map_url = make_bus_embed(stop_info)
-            class OpenMapView(discord.ui.View):
-                def __init__(self, url: str):
+            class ActionsView(discord.ui.View):
+                def __init__(self, interaction: discord.Interaction, url: str):
                     super().__init__()
-                    self.add_item(discord.ui.Button(label="在地圖上開啟", url=url))
+                    self.interaction = interaction
+                    self.add_item(discord.ui.Button(emoji="🗺️", url=url))
+                
+                # refresh button
+                @discord.ui.button(emoji="🔄", style=discord.ButtonStyle.primary)
+                async def refresh_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+                    if interaction.user != self.interaction.user:
+                        await interaction.response.send_message("你無權限使用此按鈕。", ephemeral=True)
+                        return
+                    user_last_used = get_user_data(0, str(interaction.user.id), "rate_limit_last", None)
+                    if user_last_used:
+                        last_time = datetime.fromisoformat(user_last_used)
+                        now = datetime.utcnow()
+                        delta = (now - last_time).total_seconds()
+                        if delta < 10:
+                            await interaction.followup.send("你操作得太快了，請稍後再試。", ephemeral=True)
+                            return
+                    set_user_data(0, str(interaction.user.id), "rate_limit_last", datetime.utcnow().isoformat())
+                    print(f"[TWBus] {interaction.user} 重新整理路線 {route_key} 的站牌 {stop_id}")
+                    try:
+                        info = busapi.get_complete_bus_info(route_key)
+                        stop_info = {}
+                        for path_id, path_data in info.items():
+                            for stop in path_data["stops"]:
+                                if stop["stop_id"] == stop_id:
+                                    stop_info.update(stop)
+                                    stop_info["route_name"] = route["route_name"]
+                                    path = next((p for p in paths if p["path_id"] == path_id), None)
+                                    if path:
+                                        stop_info["path_name"] = path["path_name"]
+                        embed, map_url = make_bus_embed(stop_info)
+                        await interaction.response.edit_message(embed=embed, view=self)
+                    except Exception as e:
+                        await interaction.followup.send(f"重新整理時發生錯誤：{e}", ephemeral=True)
+                        traceback.print_exc()
 
-            await interaction.followup.send(embed=embed, view=OpenMapView(map_url) if map_url else None)
+            await interaction.followup.send(embed=embed, view=ActionsView(interaction, map_url) if map_url else None)
         except Exception as e:
             await interaction.followup.send(f"發生錯誤：{e}", ephemeral=True)
             traceback.print_exc()
@@ -343,6 +394,15 @@ class TWBus(commands.GroupCog, name=app_commands.locale_str("bus")):
     @app_commands.autocomplete(station_name=youbike_station_autocomplete)
     async def youbike(self, interaction: discord.Interaction, station_name: str):
         await interaction.response.defer()
+        user_last_used = get_user_data(0, str(interaction.user.id), "rate_limit_last", None)
+        if user_last_used:
+            last_time = datetime.fromisoformat(user_last_used)
+            now = datetime.utcnow()
+            delta = (now - last_time).total_seconds()
+            if delta < 10:
+                await interaction.followup.send("你操作得太快了，請稍後再試。", ephemeral=True)
+                return
+        set_user_data(0, str(interaction.user.id), "rate_limit_last", datetime.utcnow().isoformat())
         print(f"[TWBus] {interaction.user} 查詢YouBike站點 {station_name}")
         try:
             info = youbike.getstationbyid(station_name)
@@ -351,13 +411,37 @@ class TWBus(commands.GroupCog, name=app_commands.locale_str("bus")):
                 return
 
             embed, map_url = make_youbike_embed(info)
-            
-            class OpenMapView(discord.ui.View):
-                def __init__(self, url: str):
-                    super().__init__()
-                    self.add_item(discord.ui.Button(label="在地圖上開啟", url=url))
 
-            await interaction.followup.send(embed=embed, view=OpenMapView(map_url) if map_url else None)
+            class ActionsView(discord.ui.View):
+                def __init__(self, interaction: discord.Interaction, url: str):
+                    super().__init__()
+                    self.interaction = interaction
+                    self.add_item(discord.ui.Button(emoji="🗺️", url=url))
+                
+                @discord.ui.button(emoji="🔄", style=discord.ButtonStyle.primary)
+                async def refresh_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+                    if interaction.user != self.interaction.user:
+                        await interaction.response.send_message("你無權限使用此按鈕。", ephemeral=True)
+                        return
+                    user_last_used = get_user_data(0, str(interaction.user.id), "rate_limit_last", None)
+                    if user_last_used:
+                        last_time = datetime.fromisoformat(user_last_used)
+                        now = datetime.utcnow()
+                        delta = (now - last_time).total_seconds()
+                        if delta < 10:
+                            await interaction.followup.send("你操作得太快了，請稍後再試。", ephemeral=True)
+                            return
+                    set_user_data(0, str(interaction.user.id), "rate_limit_last", datetime.utcnow().isoformat())
+                    print(f"[TWBus] {interaction.user} 重新整理YouBike站點 {station_name}")
+                    try:
+                        info = youbike.getstationbyid(station_name)
+                        embed, map_url = make_youbike_embed(info)
+                        await interaction.response.edit_message(embed=embed, view=self)
+                    except Exception as e:
+                        await interaction.followup.send(f"重新整理時發生錯誤：{e}", ephemeral=True)
+                        traceback.print_exc()
+
+            await interaction.followup.send(embed=embed, view=ActionsView(interaction, map_url) if map_url else None)
         except Exception as e:
             await interaction.followup.send(f"發生錯誤：{e}", ephemeral=True)
             traceback.print_exc()
