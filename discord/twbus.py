@@ -173,6 +173,20 @@ def make_youbike_embed(station: dict) -> tuple[discord.Embed, str]:
     return embed, map_url if lat_f is not None and lng_f is not None else None
 
 
+def make_youbike_text(station: dict) -> tuple[str]:
+    """
+    將 youbike.getstationbyid 回傳的站點 dict 轉為純文字描述。 (標題, 內容)
+    """
+    name = station.get("name_tw") or "未知位置"
+    total = station.get("parking_spaces") or 0
+    available = station.get("available_spaces") or 0
+    empty = station.get("empty_spaces") or None
+
+    title = f"YouBike/{name}"
+    content = f"可借/可停/總格\n{available} / {empty} / {total}"
+    return title, content
+
+
 def make_bus_embed(payload: dict) -> tuple[discord.Embed, Optional[str]]:
     """
     將公車到站資料（例如 taiwanbus searchstop 回傳的單筆資料）轉為 discord.Embed。
@@ -266,6 +280,35 @@ def make_bus_embed(payload: dict) -> tuple[discord.Embed, Optional[str]]:
         map_url = None
 
     return embed, map_url
+
+
+def make_bus_text(payload: dict) -> tuple[str]:
+    """
+    將公車到站資料（例如 taiwanbus searchstop 回傳的單筆資料）轉為純文字描述。
+    僅到站時間。
+    """
+    title = f"公車/{payload.get('route_name', 'Unknown Route')}[{payload.get('path_name', 'Unknown Path')}] - {payload.get('stop_name', 'Unknown Stop')}"
+    text = ""
+    if payload.get("msg"):
+        text = payload["msg"]
+    elif payload.get("sec") and int(payload["sec"]) >= 0:
+        sec = int(payload["sec"])
+        if sec < 60:
+            text = f"{sec}秒"
+        else:
+            text = f"還有 {sec // 60} 分 {sec % 60} 秒"
+    else:
+        text = "進站中"
+    
+    if payload.get("bus"):
+        bus_lines = []
+        for b in payload["bus"]:
+            bid = b.get("id") or b.get("plate") or "?"
+            full = int(b.get("full") or 0)
+            status = "已滿" if full == 1 else "可上車"
+            bus_lines.append(f"`{bid}`: {status}")
+        text += "\n車輛狀態：\n" + "\n".join(bus_lines)
+    return title, text
 
 
 @app_commands.guild_only()
@@ -386,6 +429,27 @@ class TWBus(commands.GroupCog, name=app_commands.locale_str("bus")):
                     except Exception as e:
                         await interaction.response.send_message(f"重新整理時發生錯誤：{e}", ephemeral=True)
                         traceback.print_exc()
+                        
+                @discord.ui.button(emoji="❤️", style=discord.ButtonStyle.primary)
+                async def favorite_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+                    if interaction.user != self.interaction.user:
+                        await interaction.response.send_message("你無權限使用此按鈕。", ephemeral=True)
+                        return
+                    user_id = str(interaction.user.id)
+                    fav_stops = get_user_data(0, user_id, "favorite_stops", [])
+                    stop_identifier = f"{route_key}:{stop_id}"
+                    # limit to 2 favorites
+                    if stop_identifier not in fav_stops and len(fav_stops) >= 2:
+                        await interaction.response.send_message("你最多只能有兩個最愛站牌。", ephemeral=True)
+                        return
+                    if stop_identifier in fav_stops:
+                        fav_stops.remove(stop_identifier)
+                        action = "已從最愛移除"
+                    else:
+                        fav_stops.append(stop_identifier)
+                        action = "已加入最愛"
+                    set_user_data(0, user_id, "favorite_stops", fav_stops)
+                    await interaction.response.send_message(f"{action} 站牌：{stop_info.get('stop_name', 'Unknown Stop')}", ephemeral=True)
 
             await interaction.followup.send(embed=embed, view=ActionsView(interaction, map_url) if map_url else None)
         except Exception as e:
@@ -445,8 +509,87 @@ class TWBus(commands.GroupCog, name=app_commands.locale_str("bus")):
                     except Exception as e:
                         await interaction.response.send_message(f"重新整理時發生錯誤：{e}", ephemeral=True)
                         traceback.print_exc()
+                
+                @discord.ui.button(emoji="❤️", style=discord.ButtonStyle.primary)
+                async def favorite_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+                    if interaction.user != self.interaction.user:
+                        await interaction.response.send_message("你無權限使用此按鈕。", ephemeral=True)
+                        return
+                    user_id = str(interaction.user.id)
+                    fav_youbike = get_user_data(0, user_id, "favorite_youbike", [])
+                    # limit to 2 favorites
+                    if station_name not in fav_youbike and len(fav_youbike) >= 2:
+                        await interaction.response.send_message("你最多只能有兩個最愛 YouBike 站點。", ephemeral=True)
+                        return
+                    if station_name in fav_youbike:
+                        fav_youbike.remove(station_name)
+                        action = "已從最愛移除"
+                    else:
+                        fav_youbike.append(station_name)
+                        action = "已加入最愛"
+                    set_user_data(0, user_id, "favorite_youbike", fav_youbike)
+                    await interaction.response.send_message(f"{action} YouBike 站點：{station_name}", ephemeral=True)
 
             await interaction.followup.send(embed=embed, view=ActionsView(interaction, map_url) if map_url else None)
+        except Exception as e:
+            await interaction.followup.send(f"發生錯誤：{e}", ephemeral=True)
+            traceback.print_exc()
+    
+    @app_commands.command(name=app_commands.locale_str("favorites"), description="你的最愛站牌與YouBike站點")
+    async def favorites(self, interaction: discord.Interaction):
+        await interaction.response.defer()
+        user_last_used = get_user_data(0, str(interaction.user.id), "rate_limit_last", None)
+        if user_last_used:
+            last_time = datetime.fromisoformat(user_last_used)
+            now = datetime.utcnow()
+            delta = (now - last_time).total_seconds()
+            if delta < 10:
+                print(f"[TWBus] {interaction.user} 查詢最愛站牌與YouBike站點被限速")
+                await interaction.followup.send("你操作的太快了，請稍後再試。", ephemeral=True)
+                return
+        print(f"[TWBus] {interaction.user} 查詢最愛站牌與YouBike站點")
+        try:
+            user_id = str(interaction.user.id)
+            fav_stops = get_user_data(0, user_id, "favorite_stops", [])
+            fav_youbike = get_user_data(0, user_id, "favorite_youbike", [])
+
+            if not fav_stops and not fav_youbike:
+                await interaction.followup.send("你還沒有設定任何最愛站牌或YouBike站點。", ephemeral=True)
+                return
+
+            embed = discord.Embed(title="我的最愛", color=0x00ff00)
+
+            # 處理最愛站牌
+            for stop_identifier in fav_stops:
+                route_key, stop_id = stop_identifier.split(":")
+                route_key_int = int(route_key)
+                stop_id_int = int(stop_id)
+                paths = busapi.fetch_paths(int(route_key_int))
+                info = busapi.get_complete_bus_info(route_key_int)
+                route = busapi.fetch_route(route_key_int)[0]
+                stop_info = {}
+                for path_id, path_data in info.items():
+                    for stop in path_data["stops"]:
+                        if stop["stop_id"] == stop_id_int:
+                            stop_info.update(stop)
+                            stop_info["route_name"] = route["route_name"]
+                            path = next((p for p in paths if p["path_id"] == path_id), None)
+                            if path:
+                                stop_info["path_name"] = path["path_name"]
+                if stop_info:
+                    title, text = make_bus_text(stop_info)
+                    embed.add_field(name=title, value=text, inline=False)
+
+            # 處理最愛YouBike站點
+            global youbike_data
+            for station_name in fav_youbike:
+                info = youbike.getstationbyid(station_name)
+                if info:
+                    title, text = make_youbike_text(info)
+                    embed.add_field(name=title, value=text, inline=False)
+
+            await interaction.followup.send(embed=embed)
+
         except Exception as e:
             await interaction.followup.send(f"發生錯誤：{e}", ephemeral=True)
             traceback.print_exc()

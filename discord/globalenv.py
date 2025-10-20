@@ -204,6 +204,7 @@ translations = {
     "getstop": "查詢站點",
     "stop_id": "站點代碼",
     "station_name": "站點名稱",
+    "favorites": "最愛",
 }
 class CommandNameTranslator(app_commands.Translator):
     async def translate(
