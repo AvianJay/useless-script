@@ -72,7 +72,7 @@ async def do_action_str(action: str, guild: Optional[discord.Guild] = None, user
                 duration_seconds = Moderate.timestr_to_seconds(cmd[1]) if cmd[1] != "0" else 0
                 logs.append(f"禁言用戶，原因: {cmd[2]}，持續秒數: {duration_seconds}秒")
                 if user:
-                    await user.timeout(until=datetime.now(timezone.utc) + timedelta(seconds=duration_seconds), reason=cmd[2])
+                    await user.timeout(datetime.now(timezone.utc) + timedelta(seconds=duration_seconds), reason=cmd[2])
             else:
                 print("[!] Moderate module not loaded, cannot mute user.")
                 raise Exception("Moderate module not loaded")
