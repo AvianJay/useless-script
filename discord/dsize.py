@@ -675,7 +675,7 @@ async def use_rusty_scalpel(interaction: discord.Interaction):
                 d_string_new = "💥" * orig_size
                 embed.set_field_at(0, name=f"{orig_size} cm", value=f"8{d_string_new}", inline=False)
                 await interaction.edit_original_response(embed=embed)
-                await asyncio.sleep(1)
+                await asyncio.sleep(0.2)
                 orig_size -= min(random.randint(2, 5), orig_size)
             embed.set_field_at(0, name=f"-1 cm", value=f"8", inline=False)
             await interaction.edit_original_response(content=f"{target_user.mention} 變男娘了。", embed=embed)
