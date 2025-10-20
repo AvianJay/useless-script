@@ -287,7 +287,8 @@ class TWBus(commands.GroupCog, name=app_commands.locale_str("bus")):
             now = datetime.utcnow()
             delta = (now - last_time).total_seconds()
             if delta < 10:
-                await interaction.followup.send("你操作得太快了，請稍後再試。", ephemeral=True)
+                print(f"[TWBus] {interaction.user} 查詢路線 {route_key} 被限速")
+                await interaction.followup.send("你操作的太快了，請稍後再試。", ephemeral=True)
                 return
         print(f"[TWBus] {interaction.user} 查詢路線 {route_key}")
         route_key = int(route_key)
@@ -317,7 +318,8 @@ class TWBus(commands.GroupCog, name=app_commands.locale_str("bus")):
             now = datetime.utcnow()
             delta = (now - last_time).total_seconds()
             if delta < 10:
-                await interaction.followup.send("你操作得太快了，請稍後再試。", ephemeral=True)
+                print(f"[TWBus] {interaction.user} 查詢路線 {route_key} 的站牌 {stop_id} 被限速")
+                await interaction.followup.send("你操作的太快了，請稍後再試。", ephemeral=True)
                 return
         set_user_data(0, str(interaction.user.id), "rate_limit_last", datetime.utcnow().isoformat())
         print(f"[TWBus] {interaction.user} 查詢路線 {route_key} 的站牌 {stop_id}")
@@ -363,7 +365,8 @@ class TWBus(commands.GroupCog, name=app_commands.locale_str("bus")):
                         now = datetime.utcnow()
                         delta = (now - last_time).total_seconds()
                         if delta < 10:
-                            await interaction.followup.send("你操作得太快了，請稍後再試。", ephemeral=True)
+                            print(f"[TWBus] {interaction.user} 重新整理路線 {route_key} 的站牌 {stop_id} 被限速")
+                            await interaction.response.send_message("你操作的太快了，請稍後再試。", ephemeral=True)
                             return
                     set_user_data(0, str(interaction.user.id), "rate_limit_last", datetime.utcnow().isoformat())
                     print(f"[TWBus] {interaction.user} 重新整理路線 {route_key} 的站牌 {stop_id}")
@@ -381,7 +384,7 @@ class TWBus(commands.GroupCog, name=app_commands.locale_str("bus")):
                         embed, map_url = make_bus_embed(stop_info)
                         await interaction.response.edit_message(embed=embed, view=self)
                     except Exception as e:
-                        await interaction.followup.send(f"重新整理時發生錯誤：{e}", ephemeral=True)
+                        await interaction.response.send_message(f"重新整理時發生錯誤：{e}", ephemeral=True)
                         traceback.print_exc()
 
             await interaction.followup.send(embed=embed, view=ActionsView(interaction, map_url) if map_url else None)
@@ -400,7 +403,8 @@ class TWBus(commands.GroupCog, name=app_commands.locale_str("bus")):
             now = datetime.utcnow()
             delta = (now - last_time).total_seconds()
             if delta < 10:
-                await interaction.followup.send("你操作得太快了，請稍後再試。", ephemeral=True)
+                print(f"[TWBus] {interaction.user} 查詢YouBike站點 {station_name} 被限速")
+                await interaction.followup.send("你操作的太快了，請稍後再試。", ephemeral=True)
                 return
         set_user_data(0, str(interaction.user.id), "rate_limit_last", datetime.utcnow().isoformat())
         print(f"[TWBus] {interaction.user} 查詢YouBike站點 {station_name}")
@@ -429,7 +433,8 @@ class TWBus(commands.GroupCog, name=app_commands.locale_str("bus")):
                         now = datetime.utcnow()
                         delta = (now - last_time).total_seconds()
                         if delta < 10:
-                            await interaction.followup.send("你操作得太快了，請稍後再試。", ephemeral=True)
+                            print(f"[TWBus] {interaction.user} 重新整理YouBike站點 {station_name} 被限速")
+                            await interaction.response.send_message("你操作的太快了，請稍後再試。", ephemeral=True)
                             return
                     set_user_data(0, str(interaction.user.id), "rate_limit_last", datetime.utcnow().isoformat())
                     print(f"[TWBus] {interaction.user} 重新整理YouBike站點 {station_name}")
@@ -438,7 +443,7 @@ class TWBus(commands.GroupCog, name=app_commands.locale_str("bus")):
                         embed, map_url = make_youbike_embed(info)
                         await interaction.response.edit_message(embed=embed, view=self)
                     except Exception as e:
-                        await interaction.followup.send(f"重新整理時發生錯誤：{e}", ephemeral=True)
+                        await interaction.response.send_message(f"重新整理時發生錯誤：{e}", ephemeral=True)
                         traceback.print_exc()
 
             await interaction.followup.send(embed=embed, view=ActionsView(interaction, map_url) if map_url else None)
