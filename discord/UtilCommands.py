@@ -44,7 +44,7 @@ async def randomnumber_command(interaction: discord.Interaction, min: int = 1, m
 
 
 @bot.tree.command(name=app_commands.locale_str("randomuser"), description="從在目前頻道的發言者中隨機選擇一人")
-@app_commands.allowed_installs(guilds=True, users=True)
+@app_commands.allowed_installs(guilds=True, users=False)
 @app_commands.allowed_contexts(guilds=True, dms=False, private_channels=False)
 async def randomuser_command(interaction: discord.Interaction):
     if interaction.guild is None or interaction.channel is None:
