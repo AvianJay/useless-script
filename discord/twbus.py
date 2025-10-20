@@ -396,6 +396,14 @@ class TWBus(commands.GroupCog, name=app_commands.locale_str("bus")):
                     self.interaction = interaction
                     self.add_item(discord.ui.Button(emoji="🗺️", url=url))
                 
+                async def on_timeout(self):
+                    for item in self.children:
+                        item.disabled = True
+                    try:
+                        await self.interaction.edit_original_response(view=self)
+                    except Exception:
+                        pass
+                
                 # refresh button
                 @discord.ui.button(emoji="🔄", style=discord.ButtonStyle.primary)
                 async def refresh_button(self, interaction: discord.Interaction, button: discord.ui.Button):
@@ -485,6 +493,14 @@ class TWBus(commands.GroupCog, name=app_commands.locale_str("bus")):
                     super().__init__()
                     self.interaction = interaction
                     self.add_item(discord.ui.Button(emoji="🗺️", url=url))
+                
+                async def on_timeout(self):
+                    for item in self.children:
+                        item.disabled = True
+                    try:
+                        await self.interaction.edit_original_response(view=self)
+                    except Exception:
+                        pass
                 
                 @discord.ui.button(emoji="🔄", style=discord.ButtonStyle.primary)
                 async def refresh_button(self, interaction: discord.Interaction, button: discord.ui.Button):
