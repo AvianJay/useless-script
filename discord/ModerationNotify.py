@@ -55,6 +55,8 @@ async def notify_user(user: discord.User, guild: discord.Guild, action: str, rea
 
 @bot.event
 async def on_member_remove(member):
+    if member.bot:
+        return
     if member.id in ignore:
         return
     guild = member.guild
@@ -81,6 +83,8 @@ async def on_member_remove(member):
 # timeout
 @bot.event
 async def on_member_update(before, after):
+    if after.bot:
+        return
     if not get_server_config(after.guild.id, "notify_user_on_mute", True):
         return
     if before.timed_out_until != after.timed_out_until and after.timed_out_until is not None:

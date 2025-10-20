@@ -4,3 +4,4 @@ pillow~=11.3.0
 emoji~=2.15.0
 g4f[all]
 taiwanbus==0.1.0
+YouBikePython==0.1.0

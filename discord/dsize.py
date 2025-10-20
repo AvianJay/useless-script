@@ -5,7 +5,7 @@ import asyncio
 from discord.ext import commands
 from discord import app_commands
 from datetime import datetime, timedelta, timezone
-from globalenv import bot, start_bot, get_user_data, set_user_data, get_all_user_data, get_server_config, set_server_config, modules
+from globalenv import bot, start_bot, get_user_data, set_user_data, get_all_user_data, get_server_config, set_server_config, modules, get_command_mention
 from PIL import Image, ImageDraw
 from io import BytesIO
 
@@ -40,6 +40,9 @@ async def dsize(interaction: discord.Interaction, global_dsize: int = 0):
     guild_key = interaction.guild.id if interaction.guild else None
     if global_dsize:
         guild_key = None  # override to global
+    if not interaction.is_guild_integration():
+        guild_key = None
+        global_dsize = True
     
     if guild_key:
         max_size = get_server_config(guild_key, "dsize_max", 30)
@@ -80,6 +83,7 @@ async def dsize(interaction: discord.Interaction, global_dsize: int = 0):
             fake_size = size + extra_size
             # reset fake ruler usage
             set_user_data(guild_key, user_id, "dsize_fake_ruler_used", False)
+            set_user_data(guild_key, user_id, "dsize_fake_ruler_used_date", now)
             set_user_data(guild_key, user_id, "last_dsize_fake_size", fake_size)
     final_size = fake_size if fake_size is not None else size
 
@@ -103,6 +107,7 @@ async def dsize(interaction: discord.Interaction, global_dsize: int = 0):
 
     # 更新使用時間 — 存到對應的 guild_key（若為 user-install 則是 None）
     set_user_data(guild_key, user_id, "last_dsize_size", size)
+    print(f"[DSize] {interaction.user} measured {size} cm in guild {guild_key if guild_key else 'DM/Global'}")
 
     surgery_percent = get_server_config(guild_key, "dsize_surgery_percent", 10)
     drop_item_chance = get_server_config(guild_key, "dsize_drop_item_chance", 5)
@@ -111,6 +116,7 @@ async def dsize(interaction: discord.Interaction, global_dsize: int = 0):
         if get_user_data(guild_key, user_id, "dsize_anti_surgery") == str(now):
             await interaction.followup.send("由於你使用了抗手術藥物，你無法進行手術。")
             return
+        print(f"[DSize] {interaction.user} got surgery chance")
         fail_chance = random.randint(1, 100)
         class dsize_SurgeryView(discord.ui.View):
             def __init__(self):
@@ -138,6 +144,7 @@ async def dsize(interaction: discord.Interaction, global_dsize: int = 0):
                 new_size = random.randint(1, get_server_config(guild_key, "dsize_surgery_max", 10))
                 will_fail = percent_random(fail_chance)
                 on_fail_size = random.randint(1, new_size) if will_fail else 0
+                print(f"[DSize] {interaction.user} surgery: +{new_size} cm, fail chance: {fail_chance}%, will_fail: {will_fail}, on_fail_size: {on_fail_size}")
                 embed = discord.Embed(title=f"{interaction.user.display_name} 的新長度：", color=0xff0000)
                 embed.add_field(name=f"{size} cm", value=f"8{d_string}D", inline=False)
                 await interaction.response.edit_message(embed=embed, view=None)
@@ -177,6 +184,7 @@ async def dsize(interaction: discord.Interaction, global_dsize: int = 0):
         surgery_msg = await interaction.followup.send(f"你獲得了一次做手術的機會。\n請問你是否同意手術？\n-# 失敗機率：{fail_chance}%", view=dsize_SurgeryView())
     if interaction.guild:
         if ItemSystem and percent_random(drop_item_chance):
+            print(f"[DSize] {interaction.user} got item drop chance")
             msg = await interaction.followup.send("...?")
             await asyncio.sleep(1)
             await msg.edit(content="......?")
@@ -186,22 +194,27 @@ async def dsize(interaction: discord.Interaction, global_dsize: int = 0):
             rand = random.randint(1, 100)
             if rand <= 30:
                 await ItemSystem.give_item_to_user(interaction.guild.id, interaction.user.id, "fake_ruler", 1)
-                await msg.edit(content="你撿到了一把自欺欺人尺！\n使用 `/item use fake_ruler` 可能可以讓下次量長度時變長？")
+                item_use_command = await get_command_mention("item", "use")
+                await msg.edit(content=f"你撿到了一把自欺欺人尺！\n使用 {item_use_command} 自欺欺人尺 可能可以讓下次量長度時變長？")
             elif rand > 30 and rand <= 70:
                 amount = random.randint(1, 10)
                 await ItemSystem.give_item_to_user(interaction.guild.id, interaction.user.id, "grass", amount)
-                await msg.edit(content=f"你撿到了草 x{amount}！\n使用 `/dsize-feedgrass` 可以草飼男娘。")
+                grass_command = await get_command_mention("dsize-feedgrass")
+                await msg.edit(content=f"你撿到了草 x{amount}！\n使用 {grass_command} 可以草飼男娘。")
             elif rand > 70 and rand <= 98:
                 # give anti surgery item
                 await ItemSystem.give_item_to_user(interaction.guild.id, interaction.user.id, "anti_surgery", 1)
-                await msg.edit(content="你撿到了一顆抗手術藥物！\n使用 `/item use anti_surgery` 可以防止一天被手術。")
+                item_use_command = await get_command_mention("item", "use")
+                await msg.edit(content=f"你撿到了一顆抗手術藥物！\n使用 {item_use_command} 抗手術藥物 可以防止一天被手術。")
             else:
                 if rand == 99:
                     await ItemSystem.give_item_to_user(interaction.guild.id, interaction.user.id, "scalpel", 1)
-                    await msg.edit(content="你撿到了一把手術刀！\n使用 `/item use scalpel` 可以進行手術。")
+                    item_use_command = await get_command_mention("item", "use")
+                    await msg.edit(content=f"你撿到了一把手術刀！\n使用 {item_use_command} 手術刀 可以進行手術。")
                 else:
                     await ItemSystem.give_item_to_user(interaction.guild.id, interaction.user.id, "rusty_scalpel", 1)
-                    await msg.edit(content="你撿到了一把生鏽的手術刀！\n使用 `/item use rusty_scalpel` 可以進行手術。")
+                    item_use_command = await get_command_mention("item", "use")
+                    await msg.edit(content=f"你撿到了一把生鏽的手術刀！\n使用 {item_use_command} 生鏽的手術刀 可以進行手術。")
 
 
 @bot.tree.command(name=app_commands.locale_str("dsize-leaderboard"), description="查看屌長排行榜")
@@ -217,12 +230,17 @@ async def dsize_leaderboard(interaction: discord.Interaction, limit: int = 10, g
     if global_leaderboard:
         guild_id = None  # global
     else:
-        global_leaderboard = False if interaction.guild else True
-        guild_id = interaction.guild.id if interaction.guild else None  # None for global
+        if not interaction.is_guild_integration():
+            global_leaderboard = True
+            guild_id = None
+        else:
+            global_leaderboard = False if interaction.guild else True
+            guild_id = interaction.guild.id if interaction.guild else None  # None for global
     leaderboard = []
     if limit < 1 or limit > 50:
         await interaction.response.send_message("限制必須在 1 到 50 之間。", ephemeral=True)
         return
+    await interaction.response.defer()
 
     all_data = get_all_user_data(guild_id, "last_dsize_size")
     all_data_fake = get_all_user_data(guild_id, "last_dsize_fake_size")
@@ -242,9 +260,28 @@ async def dsize_leaderboard(interaction: discord.Interaction, limit: int = 10, g
             continue
         if size is not None:
             leaderboard.append((user_id, size))
+    
+    for user_id, data in all_data_fake.copy().items():
+        size = data.get("last_dsize_fake_size")
+        # check dsize date is today
+        user_date = get_user_data(guild_id, user_id, "dsize_fake_ruler_used_date")
+        if user_date is None:
+            all_data_fake.pop(user_id)
+            continue
+        if user_date is not None and not isinstance(user_date, datetime):
+            # If user_date is a string (e.g., from JSON), convert to date
+            try:
+                user_date = datetime.fromisoformat(str(user_date)).date()
+            except Exception:
+                user_date = datetime(1970, 1, 1).date()
+        elif isinstance(user_date, datetime):
+            user_date = user_date.date()
+        if user_date is not None and user_date != (datetime.utcnow() + timedelta(hours=8)).date():
+            all_data_fake.pop(user_id)
+            continue
 
     if not leaderboard:
-        await interaction.response.send_message("今天還沒有任何人量過屌長。", ephemeral=True)
+        await interaction.followup.send("今天還沒有任何人量過屌長。")
         return
 
     # 按照大小排序並取前limit名
@@ -276,7 +313,7 @@ async def dsize_leaderboard(interaction: discord.Interaction, limit: int = 10, g
         embed.set_footer(text=interaction.guild.name, icon_url=interaction.guild.icon.url if interaction.guild.icon else None)
     else:
         embed.set_footer(text="全域排行榜")
-    await interaction.response.send_message(embed=embed)
+    await interaction.followup.send(embed=embed)
 
 
 user_using_dsize_battle = set()  # to prevent spamming the command
@@ -334,6 +371,8 @@ async def dsize_battle(interaction: discord.Interaction, opponent: discord.Membe
         await interaction.response.send_message(f"{opponent.display_name} 正在進行一場對決，請稍後再試。", ephemeral=True)
         return
     
+    print(f"[DSize] {interaction.user} is challenging {opponent} to a dsize battle in guild {interaction.guild.id}")
+    
     user_using_dsize_battle.add(user_id)
     user_using_dsize_battle.add(opponent_id)
     
@@ -362,6 +401,7 @@ async def dsize_battle(interaction: discord.Interaction, opponent: discord.Membe
             await interaction.response.edit_message(content="開始對決。", view=None)
             size_user = random.randint(1, max_size)
             size_opponent = random.randint(1, max_size)
+            print(f"[DSize] {interaction.user} vs {opponent} - {size_user} cm vs {size_opponent} cm")
             speed = max(size_user, size_opponent) // 50 + 1
 
             # 取得訊息物件
@@ -415,6 +455,7 @@ async def dsize_battle(interaction: discord.Interaction, opponent: discord.Membe
             await interaction.response.edit_message(content="已拒絕對決邀請。", view=None)
             user_using_dsize_battle.discard(user_id)
             user_using_dsize_battle.discard(opponent_id)
+            print(f"[DSize] {interaction.user} canceled the dsize battle")
 
     # 徵求對方同意
     await interaction.response.send_message(f"{opponent.mention}，{interaction.user.name} 想跟你比長度。\n請在 30 秒內按下 ✅ 同意 或 ❌ 拒絕。", ephemeral=False, view=dsize_Confirm())
@@ -462,6 +503,7 @@ async def dsize_settings(interaction: discord.Interaction, setting: str, value: 
         await interaction.response.send_message(f"已設定撿到物品機率為 {str(int(value))}%。")
     else:
         await interaction.response.send_message("未知的設定項目。")
+    print(f"[DSize] {interaction.user} set {setting} to {value} in guild {guild_key}")
 
 
 @bot.tree.command(name=app_commands.locale_str("dsize-feedgrass"), description="草飼男娘")
@@ -488,6 +530,7 @@ async def dsize_feedgrass(interaction: discord.Interaction, user: discord.Member
     embed.set_image(url="attachment://feed_grass.png")
     embed.timestamp = datetime.utcnow()
     await interaction.followup.send(embed=embed, file=discord.File(image_bytes, "feed_grass.png"))
+    print(f"[DSize] {interaction.user} fed grass to {user} in guild {interaction.guild.id}")
 
 
 async def generate_feedgrass_image(feeder: discord.User, target: discord.User):
@@ -528,6 +571,7 @@ async def use_fake_ruler(interaction: discord.Interaction):
     await ItemSystem.remove_item_from_user(interaction.user.id, "fake_ruler", 1)
     set_user_data(guild_key, user_id, "dsize_fake_ruler_used", True)
     await interaction.response.send_message("你使用了自欺欺人尺！\n下次量長度時或許會更長？")
+    print(f"[DSize] {interaction.user} used fake ruler in guild {guild_key}")
 
 async def use_scalpel(interaction: discord.Interaction):
     user_id = interaction.user.id
@@ -568,6 +612,7 @@ async def use_scalpel(interaction: discord.Interaction):
             new_size = random.randint(1, get_server_config(guild_key, "dsize_surgery_max", 10))
             orig_size = get_user_data(guild_key, target_id, "last_dsize_size", 0)
             set_user_data(guild_key, target_id, "last_dsize_size", orig_size + new_size)
+            print(f"[DSize] {interaction.user} performed surgery on {target_user.display_name}, original size: {orig_size} cm, new size: {orig_size + new_size} cm")
             target_name = "自己" if target_id == user_id else " " + target_user.display_name + " "
             embed = discord.Embed(title=f"{interaction.user.display_name} 幫{target_name}動手術！", color=0xff0000)
             embed.add_field(name=f"{orig_size} cm", value=f"8{'=' * (orig_size - 1)}D", inline=False)
@@ -621,6 +666,7 @@ async def use_rusty_scalpel(interaction: discord.Interaction):
                 return
             orig_size = get_user_data(guild_key, target_id, "last_dsize_size", 0)
             set_user_data(guild_key, target_id, "last_dsize_size", -1)
+            print(f"[DSize] {interaction.user} performed rusty surgery on {target_user.display_name}, original size: {orig_size} cm, new size: -1 cm")
             target_name = "自己" if target_id == user_id else " " + target_user.display_name + " "
             embed = discord.Embed(title=f"{interaction.user.display_name} 幫{target_name}動手術！", color=0xff0000)
             embed.add_field(name=f"{orig_size} cm", value=f"8{'💥' * (orig_size - 1)}D", inline=False)
@@ -645,6 +691,7 @@ async def use_anti_surgery(interaction: discord.Interaction):
         return
     set_user_data(guild_key, user_id, "dsize_anti_surgery", now)
     await interaction.response.send_message("你使用了抗手術藥物！\n今天不會被手術。")
+    print(f"[DSize] {interaction.user} used anti-surgery drug in guild {guild_key}")
 
 if "ItemSystem" in modules:
     items = [

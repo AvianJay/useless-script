@@ -1,7 +1,7 @@
 import io
 import json
 import discord
-from globalenv import bot, start_bot, get_user_data, set_user_data, config, get_server_config, set_server_config, _config, default_config, get_all_user_data, db
+from globalenv import bot, start_bot, get_user_data, set_user_data, config, get_server_config, set_server_config, _config, default_config, get_all_user_data, db, on_close_tasks
 from discord.ext import commands
 from typing import Callable
 
@@ -10,7 +10,7 @@ def is_owner() -> Callable:
         return ctx.author.id in config("owners", [])
     return commands.check(predicate)
 
-@bot.command()
+@bot.command(aliases=["set", "cfg"])
 @is_owner()
 async def settings(ctx, key: str=None, value: str=None):
     if key is None:
@@ -53,14 +53,26 @@ async def settings(ctx, key: str=None, value: str=None):
         await ctx.send(f"已更新 {key} 為 {str(value)}。")
 
 
-@bot.command()
+@bot.command(aliases=["off", "exit", "q", "bye"])
 @is_owner()
 async def shutdown(ctx):
     await ctx.send("機器人正在關閉...")
+    print("Shutting down...")
+    if on_close_tasks:
+        print("Running on_close tasks...")
+        await ctx.send(f"正在執行關閉前任務...共 {len(on_close_tasks)} 項。")
+        for task in on_close_tasks:
+            print(f"Running on_close task: {task.__name__}...")
+            await ctx.send(f"正在執行關閉前任務：{task.__name__}...")
+            try:
+                await task()
+            except Exception as e:
+                print(f"Error running on_close task: {e}")
+                await ctx.send(f"關閉前任務發生錯誤：{e}")
     await bot.close()
 
 
-@bot.command()
+@bot.command(aliases=["user", "u"])
 @is_owner()
 async def userdata(ctx, guild_id: int=None, user_id: int=None, key: str=None, value: str=None):
     if guild_id is None or user_id is None:
@@ -81,7 +93,7 @@ async def userdata(ctx, guild_id: int=None, user_id: int=None, key: str=None, va
         await ctx.send(f"已更新用戶 {user_id} 的 {key} 為 {value}。")
 
 
-@bot.command()
+@bot.command(aliases=["server", "sc"])
 @is_owner()
 async def serverconfig(ctx, guild_id: int=None, key: str=None, value: str=None):
     if guild_id is None:
@@ -102,7 +114,7 @@ async def serverconfig(ctx, guild_id: int=None, key: str=None, value: str=None):
         await ctx.send(f"已更新伺服器 {guild_id} 的 {key} 為 {value}。")
 
 
-@bot.command()
+@bot.command(aliases=["leave", "l"])
 @is_owner()
 async def leaveserver(ctx, guild_id: int):
     guild = bot.get_guild(guild_id)
@@ -111,9 +123,9 @@ async def leaveserver(ctx, guild_id: int):
         return
     await guild.leave()
     await ctx.send(f"已離開伺服器 {guild.name} (ID: `{guild.id}`) 。")
-    
-    
-@bot.command()
+
+
+@bot.command(aliases=["invite", "inv"])
 @is_owner()
 async def getinvite(ctx, guild_id: int, create_if_none: bool=False):
     guild = bot.get_guild(guild_id)
@@ -174,7 +186,7 @@ async def getinvite(ctx, guild_id: int, create_if_none: bool=False):
     await ctx.send(f"伺服器 {guild.name} 的邀請連結：{invite.url}")
 
 
-@bot.command()
+@bot.command(aliases=["servers", "ls"])
 @is_owner()
 async def listservers(ctx):
     guilds = bot.guilds
@@ -185,7 +197,7 @@ async def listservers(ctx):
     await ctx.send(f"機器人目前加入的伺服器：\n{description}")
 
 
-@bot.command()
+@bot.command(aliases=["send", "s", "msg"])
 @is_owner()
 async def sendmessage(ctx, channel_id: int, *, message: str):
     channel = bot.get_channel(channel_id)
@@ -201,7 +213,7 @@ async def sendmessage(ctx, channel_id: int, *, message: str):
         await ctx.send(f"發送訊息時發生錯誤：{e}")
 
 
-@bot.command()
+@bot.command(aliases=["transcript", "ct"])
 @is_owner()
 async def createtranscript(ctx, channel_id: int, after_message_id: int=None, before_message_id: int=None, limit: int=500):
     channel = bot.get_channel(channel_id)
@@ -226,6 +238,26 @@ async def createtranscript(ctx, channel_id: int, after_message_id: int=None, bef
         await ctx.send("無法讀取該頻道的歷史訊息，機器人缺少權限。")
     except Exception as e:
         await ctx.send(f"創建對話紀錄時發生錯誤：{e}")
+
+
+@bot.command(aliases=["info", "i"])
+@is_owner()
+async def serverinfo(ctx, guild_id: int):
+    guild = bot.get_guild(guild_id)
+    if guild is None:
+        await ctx.send("找不到該伺服器。")
+        return
+    embed = discord.Embed(
+        title=f"{guild.name} 的資訊",
+        color=discord.Color.blue()
+    )
+    embed.set_thumbnail(url=guild.icon.url if guild.icon else discord.Embed.Empty)
+    embed.add_field(name="伺服器 ID", value=str(guild.id), inline=True)
+    embed.add_field(name="擁有者", value=f"{guild.owner} (ID: {guild.owner_id})", inline=True)
+    embed.add_field(name="成員數", value=str(getattr(guild, "member_count", "未知")), inline=True)
+    embed.add_field(name="頻道數", value=str(len(guild.channels)), inline=True)
+    embed.add_field(name="建立時間", value=guild.created_at.strftime("%Y-%m-%d %H:%M:%S"), inline=True)
+    await ctx.send(embed=embed)
 
 
 @bot.event

@@ -103,7 +103,7 @@ async def do_action_str(action: str, guild: Optional[discord.Guild] = None, user
             if cmd[0] == "warn_dm" and user:
                 await user.send(warn_message)
             elif message:
-                await message.channel.send(warn_message)
+                await message.reply(warn_message)
     return logs
 
 
@@ -233,6 +233,9 @@ class AutoModerate(commands.GroupCog, name=app_commands.locale_str("automod")):
             for line in split_lines:
                 line = line.lstrip()
                 if line.startswith("# "):
+                    # find custom emoji and replace with single character
+                    while re.search(r'<a?:\w+:\d+>', line):
+                        line = re.sub(r'<a?:\w+:\d+>', 'E', line, count=1)
                     line = line[2:]
                     h1_count += len(line)
             if h1_count > max_length:
