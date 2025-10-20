@@ -143,7 +143,7 @@ class DynamicVoice(commands.GroupCog, name=app_commands.locale_str("dynamic-voic
                     voice_client = discord.utils.get(self.bot.voice_clients, guild=member.guild)
                     if voice_client and voice_client.is_connected():
                         voice_client.stop()  # Stop any existing audio
-                        id = random.randint(1, 5)
+                        id = random.randint(1, 7)
                         audio_source = discord.FFmpegPCMAudio(f"assets/dynamic_voice_join_{id}.mp3")
                         if not voice_client.is_playing():
                             print(f"[+] Playing join audio for user {member} in guild {guild_id}")
