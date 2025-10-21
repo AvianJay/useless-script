@@ -182,7 +182,7 @@ async def dsize(interaction: discord.Interaction, global_dsize: int = 0):
                 await interaction.edit_original_response(content="手術成功。", embed=embed)
                 set_user_data(guild_key, user_id, "last_dsize_size", new_size + size)
         surgery_msg = await interaction.followup.send(f"你獲得了一次做手術的機會。\n請問你是否同意手術？\n-# 失敗機率：{fail_chance}%", view=dsize_SurgeryView())
-    if interaction.guild:
+    if not global_dsize:
         if ItemSystem and percent_random(drop_item_chance):
             print(f"[DSize] {interaction.user} got item drop chance")
             msg = await interaction.followup.send("...?")
