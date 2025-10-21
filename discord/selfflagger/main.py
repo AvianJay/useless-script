@@ -199,7 +199,7 @@ async def on_presence_update(before, after):
 
 # commands
 @bot.command()
-@bot.is_owner()
+@commands.is_owner()
 async def ping(ctx):
     try:
         latency = bot.latency * 1000  # Convert to milliseconds
@@ -208,13 +208,13 @@ async def ping(ctx):
     await ctx.send('Pong! Latency: {:.2f} ms'.format(latency))
 
 @bot.command()
-@bot.is_owner()
+@commands.is_owner()
 async def shutdown(ctx):
     await ctx.send('Shutting down...')
     await bot.close()
 
 @bot.command()
-@bot.is_owner()
+@commands.is_owner()
 async def updateflags(ctx):
     await ctx.send('Updating flagged users...')
     tta, ttaf = await update_flagged_users()
