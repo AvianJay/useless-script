@@ -5,11 +5,12 @@ import json
 import database
 import asyncio
 
-config_version = 2
+config_version = 3
 config_path = 'config.json'
 default_config = {
     "prefix": ">",
     "token": "",
+    "owner_id": 0,
     "scan_guilds": [
         {
             "id": 0,
@@ -65,7 +66,7 @@ def config(key, value=None, mode="r"):
     else:
         raise ValueError(f"Invalid mode: {mode}")
 
-bot = commands.Bot(command_prefix=config("prefix", "!"), self_bot=True)
+bot = commands.Bot(command_prefix=config("prefix", "!"), self_bot=True, owner_id=config("owner_id", 0))
 database.init_db()
 conn = database.get_db_connection()
 
@@ -195,6 +196,29 @@ async def on_presence_update(before, after):
     if before_flagged != after_flagged:
         database.add_flagged_user(conn, after.id, after.guild.id, after_flagged)
         print(f"[+] Updated flagged status for user {after} (ID: {after.id}) in guild {after.guild.name} (ID: {after.guild.id}): {'Flagged' if after_flagged else 'Not Flagged'}")
+
+# commands
+@bot.command()
+@bot.is_owner()
+async def ping(ctx):
+    try:
+        latency = bot.latency * 1000  # Convert to milliseconds
+    except OverflowError:
+        latency = float('NaN')
+    await ctx.send('Pong! Latency: {:.2f} ms'.format(latency))
+
+@bot.command()
+@bot.is_owner()
+async def shutdown(ctx):
+    await ctx.send('Shutting down...')
+    await bot.close()
+
+@bot.command()
+@bot.is_owner()
+async def updateflags(ctx):
+    await ctx.send('Updating flagged users...')
+    tta, ttaf = await update_flagged_users()
+    await ctx.send(f'Flagged users update complete. Added: {tta}, +Flagged: {ttaf}')
 
 @bot.event
 async def on_ready():
