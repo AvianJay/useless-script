@@ -223,6 +223,10 @@ class AutoModerate(commands.GroupCog, name=app_commands.locale_str("automod")):
             return
         guild_id = message.guild.id
         automod_settings = get_server_config(guild_id, "automod", {})
+        if message.author.bot:
+            return
+        if message.author.guild_permissions.administrator:
+            return
         
         # 標題過多檢查
         if automod_settings.get("too_many_h1", {}).get("enabled", False):
