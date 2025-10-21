@@ -205,6 +205,20 @@ translations = {
     "stop_id": "站點代碼",
     "station_name": "站點名稱",
     "favorites": "最愛",
+    "autoreply": "自動回覆",
+    "add": "新增",
+    "contains": "包含",
+    "equals": "完全匹配",
+    "starts_with": "開始於",
+    "ends_with": "結束於",
+    "trigger": "觸發字串",
+    "response": "回覆內容",
+    "mode": "模式",
+    "edit": "編輯",
+    "new_mode": "新模式",
+    "new_trigger": "新觸發字串",
+    "new_response": "新回覆內容",
+    "clear": "清除",
 }
 class CommandNameTranslator(app_commands.Translator):
     async def translate(
