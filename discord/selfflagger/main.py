@@ -238,6 +238,6 @@ async def on_ready():
         print('[+] Starting flagged users update...')
         tta, ttaf = await update_flagged_users()
         print(f'[+] Flagged users update complete. Added: {tta}, +Flagged: {ttaf}')
-        await asyncio.wait(300)
+        await asyncio.sleep(300)
 
 bot.run(config("token"))
