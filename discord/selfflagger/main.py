@@ -234,8 +234,10 @@ async def on_ready():
             continue
         await guild.subscribe()
         print(f'[+] Subscribed to guild: {guild.name} (ID: {guild.id})')
-    print('[+] Starting flagged users update...')
-    tta, ttaf = await update_flagged_users()
-    print(f'[+] Flagged users update complete. Added: {tta}, +Flagged: {ttaf}')
+    while True:
+        print('[+] Starting flagged users update...')
+        tta, ttaf = await update_flagged_users()
+        print(f'[+] Flagged users update complete. Added: {tta}, +Flagged: {ttaf}')
+        asyncio.wait(300)
 
 bot.run(config("token"))
