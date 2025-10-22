@@ -1,12 +1,14 @@
 import discord
 from discord.ext import commands
 from discord import app_commands
-from globalenv import bot, start_bot, get_user_data, set_user_data, get_all_user_data, get_server_config, set_server_config, modules
+from globalenv import bot, start_bot, get_user_data, set_user_data, get_all_user_data, get_server_config, set_server_config, modules, config
 from datetime import datetime, timezone, timedelta
 import asyncio
 from typing import Optional
 import re
 import emoji
+import sqlite3
+import io
 
 if "Moderate" in modules:
     import Moderate
@@ -183,6 +185,58 @@ class AutoModerate(commands.GroupCog, name=app_commands.locale_str("automod")):
         actions_str = "\n".join(actions) if actions else "無動作"
         msg = f"指令有效，解析出的動作:\n{actions_str}"
         await interaction.response.send_message(content=msg)
+
+    @app_commands.command(name=app_commands.locale_str("scan-flagged-users"), description="掃描並更新伺服器中的標記用戶")
+    @app_commands.default_permissions(administrator=True)
+    @app_commands.describe(user="要掃描的用戶，若不指定則掃描所有用戶")
+    async def scan_flagged_users(self, interaction: discord.Interaction, user: discord.User = None):
+        await interaction.response.send_message("開始掃描標記用戶...")
+        database_file = config("flagged_database_path", "flagged_data.db")
+        conn = sqlite3.connect(database_file)
+        cursor = conn.cursor()
+        flagged_user = {}
+        if user:
+            cursor.execute('SELECT user_id, guild_id, flagged_at, flagged_role FROM flagged_users WHERE user_id = ?', (user.id,))
+            results = cursor.fetchall()
+            results = [dict(zip([column[0] for column in cursor.description], row)) for row in results]
+            if results:
+                for result in results:
+                    cursor.execute('SELECT name FROM guilds WHERE id = ?', (result['guild_id'],))
+                    guild_info = cursor.fetchone()
+                    result['guild_name'] = guild_info[0] if guild_info else "未知伺服器"
+                flagged_user[result['user_id']] = result
+        else:
+            for member in interaction.guild.members:
+                cursor.execute('SELECT user_id, guild_id, flagged_at, flagged_role FROM flagged_users WHERE user_id = ?', (member.id,))
+                results = cursor.fetchall()
+                # convert to dict
+                results = [dict(zip([column[0] for column in cursor.description], row)) for row in results]
+                # get server info
+                if results:
+                    for result in results:
+                        cursor.execute('SELECT name FROM guilds WHERE id = ?', (result['guild_id'],))
+                        guild_info = cursor.fetchone()
+                        result["user_name"] = member.name
+                        result['guild_name'] = guild_info[0] if guild_info else "未知伺服器"
+                    flagged_user[member.id] = results
+        conn.close()
+        if flagged_user:
+            msg_lines = []
+            for user_id, fu in flagged_user.items():
+                member = interaction.guild.get_member(user_id)
+                user_name = member.name if member else "未知用戶"
+                msg_lines.append(f"用戶: {user_name} (ID: {user_id})")
+                for entry in fu:
+                    guild_name = entry.get('guild_name', '未知伺服器')
+                    flagged_at = entry.get('flagged_at', '未知時間')
+                    flagged_role = entry.get('flagged_role', 0)
+                    msg_lines.append(f" - 伺服器: {guild_name}, 標記時間: {flagged_at}, 標記角色: {'是' if flagged_role else '否'}")
+                msg_lines.append("")  # 空行分隔不同用戶
+            msg = "\n".join(msg_lines)
+            file = discord.File(io.StringIO(msg), filename="flagged_users.txt")
+            await interaction.followup.send(file=file)
+        else:
+            await interaction.followup.send("掃描完成！未找到任何標記用戶。")
 
     @commands.Cog.listener()
     async def on_member_update(self, before: discord.Member, after: discord.Member):

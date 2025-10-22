@@ -10,7 +10,7 @@ import traceback
 
 
 # Global configuration for backward compatibility (mainly for TOKEN)
-config_version = 6
+config_version = 7
 config_path = 'config.json'
 
 default_config = {
@@ -25,6 +25,7 @@ default_config = {
     "prefix": "!",  # 指令前綴
     "r34_user_id": "",
     "r34_api_key": "",
+    "flagged_database_path": "flagged_data.db",
 }
 _config = None
 
