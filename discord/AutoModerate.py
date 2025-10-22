@@ -204,7 +204,7 @@ class AutoModerate(commands.GroupCog, name=app_commands.locale_str("automod")):
                     cursor.execute('SELECT name FROM guilds WHERE id = ?', (result['guild_id'],))
                     guild_info = cursor.fetchone()
                     result['guild_name'] = guild_info[0] if guild_info else "未知伺服器"
-                flagged_user[result['user_id']] = result
+                flagged_user[result['user_id']] = results
         else:
             for member in interaction.guild.members:
                 cursor.execute('SELECT user_id, guild_id, flagged_at, flagged_role FROM flagged_users WHERE user_id = ?', (member.id,))

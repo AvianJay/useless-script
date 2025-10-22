@@ -220,6 +220,7 @@ translations = {
     "new_trigger": "新觸發字串",
     "new_response": "新回覆內容",
     "clear": "清除",
+    "scan-flagged-users": "掃描標記用戶",
 }
 class CommandNameTranslator(app_commands.Translator):
     async def translate(
