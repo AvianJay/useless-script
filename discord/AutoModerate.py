@@ -230,7 +230,7 @@ class AutoModerate(commands.GroupCog, name=app_commands.locale_str("automod")):
                     guild_name = entry.get('guild_name', '未知伺服器')
                     flagged_at = entry.get('flagged_at', '未知時間')
                     flagged_role = entry.get('flagged_role', 0)
-                    msg_lines.append(f" - 伺服器: {guild_name}, 標記時間: {flagged_at}, 標記角色: {'是' if flagged_role else '否'}")
+                    msg_lines.append(f" - 伺服器: {guild_name}, 標記時間: {flagged_at}{', 擁有被標記的身份組' if flagged_role else ''}")
                 msg_lines.append("")  # 空行分隔不同用戶
             msg = "\n".join(msg_lines)
             file = discord.File(io.StringIO(msg), filename="flagged_users.txt")
