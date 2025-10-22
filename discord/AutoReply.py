@@ -164,7 +164,7 @@ class AutoReply(commands.GroupCog, name="autoreply"):
                         users = list(set(msg.author for msg in messages if not msg.author.bot))
                         if users:
                             selected_user = random.choice(users)
-                            response = response.replace("{random_user}", selected_user.mention)
+                            response = response.replace("{random_user}", selected_user.display_name)
                         else:
                             response = response.replace("{random_user}", "沒有人")
                     await message.channel.send(response)
