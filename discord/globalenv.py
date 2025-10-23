@@ -268,7 +268,7 @@ async def on_ready():
         # 防止重複建立相同的 background task（例如 reconnect）
         if not getattr(bot, "_on_ready_tasks_started", False):
             for task_coro_func in on_ready_tasks:
-                # task_coro_func 應該是 coroutine function，不是 coroutine object
+                # task_coro_func 應該是 coroutine function，不是 coroutine object，啥ai東西啊
                 bot.loop.create_task(task_coro_func())
             bot._on_ready_tasks_started = True
 
