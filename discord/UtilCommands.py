@@ -3,10 +3,10 @@ import random
 import discord
 from discord import app_commands
 from discord.ext import commands
-from globalenv import bot, start_bot, get_user_data, set_user_data, get_command_mention
+from globalenv import bot, start_bot, get_user_data, set_user_data, get_command_mention, modules
 from typing import Union
 
-version = "0.2.4"
+version = "0.2.5"
 try:
     git_commit_hash = os.popen("git rev-parse --short HEAD").read().strip()
 except Exception as e:
@@ -31,6 +31,7 @@ async def info_command(interaction: discord.Interaction):
     embed.add_field(name="伺服器數量", value=server_count)
     embed.add_field(name="用戶總數量", value=user_count)
     embed.add_field(name="機器人延遲", value=f"{bot_latency}ms")
+    embed.add_field(name=f"已載入模組({len(modules)})", value="\n".join(modules) if modules else "無")
     embed.set_thumbnail(url=bot.user.avatar.url if bot.user.avatar else None)
     await interaction.followup.send(content="-# 提示：如果你指令用到一半停住或沒辦法用了那很有可能是那個傻逼開發者||尼摳||又再重開機器人了||不然就是機器人又當機了||", embed=embed)
 
