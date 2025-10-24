@@ -6,7 +6,7 @@ from discord.ext import commands
 from globalenv import bot, start_bot, get_user_data, set_user_data, get_command_mention
 from typing import Union
 
-version = "0.2.3"
+version = "0.2.4"
 try:
     git_commit_hash = os.popen("git rev-parse --short HEAD").read().strip()
 except Exception as e:
@@ -49,7 +49,13 @@ async def randomnumber_command(interaction: discord.Interaction, min: int = 1, m
 @bot.tree.command(name=app_commands.locale_str("randomuser"), description="從在目前頻道的發言者中隨機選擇一人")
 @app_commands.allowed_installs(guilds=True, users=False)
 @app_commands.allowed_contexts(guilds=True, dms=False, private_channels=False)
-async def randomuser_command(interaction: discord.Interaction):
+@app_commands.describe(mention="是否提及該用戶")
+@app_commands.choices(mention=[
+    app_commands.Choice(name="是", value=1),
+    app_commands.Choice(name="否", value=0),
+])
+async def randomuser_command(interaction: discord.Interaction, mention: int = 0):
+    mention = bool(mention)
     if interaction.guild is None or interaction.channel is None:
         await interaction.response.send_message("此指令只能在伺服器頻道中使用。", ephemeral=True)
         return
@@ -63,7 +69,7 @@ async def randomuser_command(interaction: discord.Interaction):
         return
 
     selected_user = random.choice(users)
-    await interaction.response.send_message(f"隨機選擇的用戶是：{selected_user.mention}！\n-# 抽取用戶總數：{len(users)}")
+    await interaction.response.send_message(f"隨機選擇的用戶是：{selected_user.mention if mention else selected_user.display_name}！\n-# 抽取用戶總數：{len(users)}")
 
 
 @bot.tree.command(name=app_commands.locale_str("userinfo"), description="顯示用戶資訊")
