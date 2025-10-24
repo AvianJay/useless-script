@@ -238,6 +238,38 @@ class AutoModerate(commands.GroupCog, name=app_commands.locale_str("automod")):
         else:
             await interaction.followup.send("掃描完成！未找到任何標記用戶。")
 
+    @app_commands.command(name=app_commands.locale_str("flagged-user-alert-channel"), description="設置用戶加入伺服器時的通知頻道")
+    @app_commands.describe(channel="用於接收用戶加入通知的頻道")
+    async def set_flagged_user_onjoin_channel(self, interaction: discord.Interaction, channel: discord.TextChannel):
+        set_server_config(interaction.guild.id, "flagged_user_onjoin_channel", channel.id)
+        await interaction.response.send_message(f"已將用戶加入通知頻道設置為 {channel.mention}。")
+    
+    @commands.Cog.listener()
+    async def on_member_join(self, member: discord.Member):
+        guild_id = member.guild.id
+        channel_id = get_server_config(guild_id, "flagged_user_onjoin_channel")
+        if not channel_id:
+            return
+        database_file = config("flagged_database_path", "flagged_data.db")
+        conn = sqlite3.connect(database_file)
+        cursor = conn.cursor()
+        cursor.execute('SELECT user_id, guild_id, flagged_at, flagged_role FROM flagged_users WHERE user_id = ? AND guild_id = ?', (member.id, guild_id))
+        results = cursor.fetchall()
+        results = [dict(zip([column[0] for column in cursor.description], row)) for row in results]
+        if results:
+            channel = member.guild.get_channel(channel_id)
+            if channel:
+                embed = discord.Embed(title="標記用戶加入伺服器", color=0xff0000)
+                embed.add_field(name="用戶", value=f"{member.mention} (ID: {member.id})", inline=False)
+                for result in results:
+                    cursor.execute('SELECT name FROM guilds WHERE id = ?', (result['guild_id'],))
+                    guild_info = cursor.fetchone()
+                    guild_name = guild_info[0] if guild_info else "未知伺服器"
+                    flagged_at = result.get('flagged_at', '未知時間')
+                    embed.add_field(name=guild_name, value=f"標記時間: {flagged_at}{', 擁有被標記的身份組' if result.get('flagged_role', 0) else ''}", inline=False)
+        conn.close()
+                
+
     @commands.Cog.listener()
     async def on_member_update(self, before: discord.Member, after: discord.Member):
         if not after.guild:

@@ -229,6 +229,7 @@ translations = {
     "blacklist": "黑名單",
     "whitelist": "白名單",
     "all": "全部",
+    "flagged-user-alert-channel": "標記用戶警報頻道",
 }
 class CommandNameTranslator(app_commands.Translator):
     async def translate(
