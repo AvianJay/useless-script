@@ -456,7 +456,7 @@ class TWBus(commands.GroupCog, name=app_commands.locale_str("bus")):
                     fav_stops = get_user_data(0, user_id, "favorite_stops", [])
                     stop_identifier = f"{route_key}:{stop_id}"
                     # limit favorites
-                    fav_limit = get_user_data(0, user_id, "favorite_stops_limit", config.get("default_favorite_stops_limit", 2))
+                    fav_limit = get_user_data(0, user_id, "favorite_stops_limit", config("default_favorite_stops_limit", 2))
                     if stop_identifier not in fav_stops and len(fav_stops) >= fav_limit:
                         await interaction.response.send_message(f"你最多只能有 {fav_limit} 個最愛站牌。", ephemeral=True)
                         return
@@ -544,7 +544,7 @@ class TWBus(commands.GroupCog, name=app_commands.locale_str("bus")):
                     user_id = str(interaction.user.id)
                     fav_youbike = get_user_data(0, user_id, "favorite_youbike", [])
                     # limit favorites
-                    fav_limit = get_user_data(0, user_id, "favorite_youbike_limit", config.get("default_favorite_youbike_limit", 2))
+                    fav_limit = get_user_data(0, user_id, "favorite_youbike_limit", config("default_favorite_youbike_limit", 2))
                     if station_name not in fav_youbike and len(fav_youbike) >= fav_limit:
                         await interaction.response.send_message(f"你最多只能有 {fav_limit} 個最愛 YouBike 站點。", ephemeral=True)
                         return
