@@ -9,8 +9,8 @@ from database import db
 import traceback
 
 
-# Global configuration for backward compatibility (mainly for TOKEN)
-config_version = 7
+# Global configuration for backward compatibility
+config_version = 8
 config_path = 'config.json'
 
 default_config = {
@@ -26,6 +26,8 @@ default_config = {
     "r34_user_id": "",
     "r34_api_key": "",
     "flagged_database_path": "flagged_data.db",
+    "default_favorite_stops_limit": 2,
+    "default_favorite_youbike_limit": 2,
 }
 _config = None
 
@@ -221,6 +223,12 @@ translations = {
     "new_response": "新回覆內容",
     "clear": "清除",
     "scan-flagged-users": "掃描標記用戶",
+    "reply": "回覆",
+    "channel_mode": "頻道模式",
+    "channels": "頻道",
+    "blacklist": "黑名單",
+    "whitelist": "白名單",
+    "all": "全部",
 }
 class CommandNameTranslator(app_commands.Translator):
     async def translate(

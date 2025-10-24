@@ -6,7 +6,7 @@ from discord.ext import commands
 from globalenv import bot, start_bot, get_user_data, set_user_data, get_command_mention
 from typing import Union
 
-version = "0.2.1"
+version = "0.2.2"
 try:
     git_commit_hash = os.popen("git rev-parse --short HEAD").read().strip()
 except Exception as e:
@@ -104,7 +104,7 @@ async def textlength_command(interaction: discord.Interaction, text: str):
 
 
 @bot.command(aliases=["len"])
-async def length(ctx, *, text: str = ""):
+async def length(ctx: commands.Context, *, text: str = ""):
     """計算輸入文字的長度（前綴指令版本）"""
     # if not text use reply message content
     if not text and ctx.message.reference:

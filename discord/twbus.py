@@ -1,7 +1,7 @@
 import discord
 from discord import app_commands
 from discord.ext import commands
-from globalenv import bot, start_bot, on_ready_tasks, get_user_data, set_user_data
+from globalenv import bot, start_bot, on_ready_tasks, get_user_data, set_user_data, config
 from taiwanbus import api as busapi
 import asyncio
 import traceback
@@ -455,9 +455,10 @@ class TWBus(commands.GroupCog, name=app_commands.locale_str("bus")):
                     user_id = str(interaction.user.id)
                     fav_stops = get_user_data(0, user_id, "favorite_stops", [])
                     stop_identifier = f"{route_key}:{stop_id}"
-                    # limit to 2 favorites
-                    if stop_identifier not in fav_stops and len(fav_stops) >= 2:
-                        await interaction.response.send_message("你最多只能有兩個最愛站牌。", ephemeral=True)
+                    # limit favorites
+                    fav_limit = get_user_data(0, user_id, "favorite_stops_limit", config.get("default_favorite_stops_limit", 2))
+                    if stop_identifier not in fav_stops and len(fav_stops) >= fav_limit:
+                        await interaction.response.send_message(f"你最多只能有 {fav_limit} 個最愛站牌。", ephemeral=True)
                         return
                     if stop_identifier in fav_stops:
                         fav_stops.remove(stop_identifier)
@@ -542,9 +543,10 @@ class TWBus(commands.GroupCog, name=app_commands.locale_str("bus")):
                         return
                     user_id = str(interaction.user.id)
                     fav_youbike = get_user_data(0, user_id, "favorite_youbike", [])
-                    # limit to 2 favorites
-                    if station_name not in fav_youbike and len(fav_youbike) >= 2:
-                        await interaction.response.send_message("你最多只能有兩個最愛 YouBike 站點。", ephemeral=True)
+                    # limit favorites
+                    fav_limit = get_user_data(0, user_id, "favorite_youbike_limit", config.get("default_favorite_youbike_limit", 2))
+                    if station_name not in fav_youbike and len(fav_youbike) >= fav_limit:
+                        await interaction.response.send_message(f"你最多只能有 {fav_limit} 個最愛 YouBike 站點。", ephemeral=True)
                         return
                     if station_name in fav_youbike:
                         fav_youbike.remove(station_name)
@@ -586,32 +588,46 @@ class TWBus(commands.GroupCog, name=app_commands.locale_str("bus")):
 
             # 處理最愛站牌
             for stop_identifier in fav_stops:
-                route_key, stop_id = stop_identifier.split(":")
-                route_key_int = int(route_key)
-                stop_id_int = int(stop_id)
-                paths = busapi.fetch_paths(int(route_key_int))
-                info = busapi.get_complete_bus_info(route_key_int)
-                route = busapi.fetch_route(route_key_int)[0]
-                stop_info = {}
-                for path_id, path_data in info.items():
-                    for stop in path_data["stops"]:
-                        if stop["stop_id"] == stop_id_int:
-                            stop_info.update(stop)
-                            stop_info["route_name"] = route["route_name"]
-                            path = next((p for p in paths if p["path_id"] == path_id), None)
-                            if path:
-                                stop_info["path_name"] = path["path_name"]
-                if stop_info:
-                    title, text = make_bus_text(stop_info)
-                    embed.add_field(name=title, value=text, inline=False)
+                try:
+                    route_key, stop_id = stop_identifier.split(":")
+                    route_key_int = int(route_key)
+                    stop_id_int = int(stop_id)
+                    paths = busapi.fetch_paths(int(route_key_int))
+                    info = busapi.get_complete_bus_info(route_key_int)
+                    route = busapi.fetch_route(route_key_int)[0]
+                    stop_info = {}
+                    for path_id, path_data in info.items():
+                        for stop in path_data["stops"]:
+                            if stop["stop_id"] == stop_id_int:
+                                stop_info.update(stop)
+                                stop_info["route_name"] = route["route_name"]
+                                path = next((p for p in paths if p["path_id"] == path_id), None)
+                                if path:
+                                    stop_info["path_name"] = path["path_name"]
+                    if stop_info:
+                        title, text = make_bus_text(stop_info)
+                        embed.add_field(name=title, value=text, inline=False)
+                    else:
+                        raise ValueError("找不到該站牌的到站資訊。")
+                except Exception as e:
+                    print(f"[TWBus] 處理最愛站牌 {stop_identifier} 時發生錯誤：{e}")
+                    traceback.print_exc()
+                    embed.add_field(name=f"[未知站牌]{stop_identifier}", value=f"無法取得站牌資訊：\n{str(e)}", inline=False)
 
             # 處理最愛YouBike站點
             global youbike_data
             for station_name in fav_youbike:
-                info = youbike.getstationbyid(station_name)
-                if info:
-                    title, text = make_youbike_text(info)
-                    embed.add_field(name=title, value=text, inline=False)
+                try:
+                    info = youbike.getstationbyid(station_name)
+                    if info:
+                        title, text = make_youbike_text(info)
+                        embed.add_field(name=title, value=text, inline=False)
+                    else:
+                        raise ValueError("找不到該YouBike站點的資訊。")
+                except Exception as e:
+                    print(f"[TWBus] 處理最愛YouBike站點 {station_name} 時發生錯誤：{e}")
+                    traceback.print_exc()
+                    embed.add_field(name=f"[未知YouBike站點]{station_name}", value=f"無法取得站點資訊：\n{str(e)}", inline=False)
 
             await interaction.followup.send(embed=embed)
 
