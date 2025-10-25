@@ -240,7 +240,7 @@ async def createtranscript(ctx, channel_id: int, after_message_id: int=None, bef
         await ctx.send(f"創建對話紀錄時發生錯誤：{e}")
 
 
-@bot.command(aliases=["info", "i"])
+@bot.command(aliases=["si"])
 @is_owner()
 async def serverinfo(ctx, guild_id: int):
     guild = bot.get_guild(guild_id)
