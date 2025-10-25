@@ -22,16 +22,22 @@ class DynamicVoice(commands.GroupCog, name=app_commands.locale_str("dynamic-voic
         await interaction.response.defer(ephemeral=True)
         guild_id = interaction.guild.id
         # set channel limit to 1
+        warn = ""
         try:
             await channel.edit(user_limit=1)
         except Exception as e:
             print(f"[-] Failed to set user limit for channel '{channel.name}': {e}")
+            warn = f"警告：無法將頻道 '{channel.name}' 的使用者上限設置為 1，請確保機器人有管理頻道的權限。\n"
+        # check bot permissions
+        if not channel.guild.me.guild_permissions.manage_channels or not channel.guild.me.guild_permissions.move_members:
+            await interaction.followup.send(f"錯誤：機器人需要管理頻道和移動成員的權限才能設置動態語音頻道。\n- {warn}", ephemeral=True)
+            return
         # Save configuration to database
         set_server_config(guild_id, "dynamic_voice_channel", channel.id)
         set_server_config(guild_id, "dynamic_voice_channel_category", channel_category.id)
         set_server_config(guild_id, "dynamic_voice_channel_name", channel_name)
         print(f"[+] Set up dynamic voice channel in guild {guild_id}, channel {channel.id}, category {channel_category.id}, name {channel_name}")
-        await interaction.followup.send(f"動態語音頻道已設置在 '{channel.mention}' 下，將自動創建頻道於 '{channel_category.name}' 中。", ephemeral=True)
+        await interaction.followup.send(f"動態語音頻道已設置在 '{channel.mention}' 下，將自動創建頻道於 '{channel_category.name}' 中。\n- {warn}", ephemeral=True)
 
     @app_commands.command(name=app_commands.locale_str("disable"), description="禁用動態語音頻道")
     @app_commands.checks.has_permissions(administrator=True)
@@ -66,10 +72,16 @@ class DynamicVoice(commands.GroupCog, name=app_commands.locale_str("dynamic-voic
             if not channel:
                 await interaction.followup.send("錯誤：找不到設置的動態語音頻道。", ephemeral=True)
                 return
+            # check bot permissions
+            if not channel.guild.me.guild_permissions.connect or not channel.guild.me.guild_permissions.speak:
+                await interaction.followup.send("錯誤：機器人需要連接和說話權限才能播放音效。", ephemeral=True)
+                return
             try:
                 await channel.connect()
             except Exception as e:
                 print(f"[-] Failed to connect to channel '{channel.name}': {e}")
+                await interaction.followup.send(f"錯誤：無法連接到語音頻道 '{channel.name}'。", ephemeral=True)
+                return
             # set voice channel limit members to 2
             try:
                 await channel.edit(user_limit=2)
