@@ -274,7 +274,11 @@ async def on_guild_join(guild):
                     description=f"{guild.name} (ID: `{guild.id}`)",
                     color=discord.Color.blurple()
                 )
+                embed.add_field(name="擁有者", value=f"{guild.owner} (ID: {guild.owner_id})", inline=True)
+                embed.add_field(name="伺服器 ID", value=str(guild.id), inline=True)
+                embed.add_field(name="頻道數", value=str(len(guild.channels)), inline=True)
                 embed.add_field(name="成員數", value=str(getattr(guild, "member_count", "未知")), inline=True)
+                embed.add_field(name="建立時間", value=guild.created_at.strftime("%Y-%m-%d %H:%M:%S"), inline=True)
 
                 # try to get icon URL (works for discord.py v1.x and v2.x)
                 icon_url = None
