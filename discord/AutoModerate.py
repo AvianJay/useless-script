@@ -40,20 +40,20 @@ async def do_action_str(action: str, guild: Optional[discord.Guild] = None, user
     for a in actions:
         cmd = a.split(" ")
         if cmd[0] == "ban":
-            # ban <duration> <reason> <delete_messages>
+            # ban <reason> <delete_messages> <duration>
             if len(cmd) == 1:
-                cmd.append("0s")
-            if len(cmd) == 2:
                 cmd.append("自動管理執行")
+            if len(cmd) == 2:
+                cmd.append("0s")
             if len(cmd) == 3:
                 cmd.append("0s")
 
             if Moderate:
-                duration_seconds = Moderate.timestr_to_seconds(cmd[1]) if cmd[1] != "0" else 0
+                duration_seconds = Moderate.timestr_to_seconds(cmd[2]) if cmd[2] != "0" else 0
                 delete_messages = Moderate.timestr_to_seconds(cmd[3]) if cmd[3] != "0" else 0
-                logs.append(f"封禁用戶，原因: {cmd[2]}，持續秒數: {duration_seconds}秒，刪除訊息時間: {delete_messages}秒")
+                logs.append(f"封禁用戶，原因: {cmd[1]}，持續秒數: {duration_seconds}秒，刪除訊息時間: {delete_messages}秒")
                 if user:
-                    await Moderate.ban_user(guild, user, reason=cmd[2], duration=duration_seconds, delete_message_seconds=delete_messages)
+                    await Moderate.ban_user(guild, user, reason=cmd[1], duration=duration_seconds, delete_message_seconds=delete_messages)
             else:
                 print("[!] Moderate module not loaded, cannot ban user.")
                 raise Exception("Moderate module not loaded")

@@ -6,7 +6,7 @@ import json
 import asyncio
 import aiohttp
 from datetime import datetime, timedelta, timezone
-from typing import Union
+from typing import Union, Optional
 import ModerationNotify
 
 
@@ -140,6 +140,75 @@ async def check_unban():
 on_ready_tasks.append(check_unban)
 
 
+async def do_action_str(action: str, guild: Optional[discord.Guild] = None, user: Optional[discord.Member] = None, message: Optional[discord.Message] = None):
+    # if user is none just check if action is valid
+    actions = action.split(",")
+    actions = [a.strip() for a in actions]
+    logs = []
+    for a in actions:
+        cmd = a.split(" ")
+        if cmd[0] == "ban":
+            # ban <reason> <delete_messages> <duration>
+            if len(cmd) == 1:
+                cmd.append("管理執行")
+            if len(cmd) == 2:
+                cmd.append("0s")
+            if len(cmd) == 3:
+                cmd.append("0s")
+
+            duration_seconds = timestr_to_seconds(cmd[2]) if cmd[2] != "0" else 0
+            delete_messages = timestr_to_seconds(cmd[3]) if cmd[3] != "0" else 0
+            logs.append(f"封禁用戶，原因: {cmd[1]}，持續秒數: {duration_seconds}秒，刪除訊息時間: {delete_messages}秒")
+            if user:
+                await ban_user(guild, user, reason=cmd[1], duration=duration_seconds, delete_message_seconds=delete_messages)
+        elif cmd[0] == "kick":
+            # kick <reason>
+            if len(cmd) == 1:
+                cmd.append("管理執行")
+            logs.append(f"踢出用戶，原因: {cmd[1]}")
+            if user:
+                await user.kick(reason=cmd[1])
+        elif cmd[0] == "mute" or cmd[0] == "timeout":
+            # mute <duration> <reason>
+            if len(cmd) == 1:
+                cmd.append("10m")
+            if len(cmd) == 2:
+                cmd.append("管理執行")
+            duration_seconds = timestr_to_seconds(cmd[1]) if cmd[1] != "0" else 0
+            logs.append(f"禁言用戶，原因: {cmd[2]}，持續秒數: {duration_seconds}秒")
+            if user:
+                await user.timeout(datetime.now(timezone.utc) + timedelta(seconds=duration_seconds), reason=cmd[2])
+        elif cmd[0] == "delete" or cmd[0] == "delete_dm":
+            # delete <warn_message>
+            logs.append("刪除訊息")
+            if message:
+                await message.delete()
+            if len(cmd) > 1:
+                msg = cmd.copy()
+                msg.pop(0)
+                warn_message = " ".join(msg)
+                warn_message = warn_message.replace("{user}", user.mention if user else "用戶")
+                logs.append(f"並警告: {warn_message}")
+                if cmd[0] == "delete_dm" and user:
+                    await user.send(warn_message)
+                elif message:
+                    await message.channel.send(warn_message)
+        elif cmd[0] == "warn" or cmd[0] == "warn_dm":
+            # warn <warn_message>
+            if len(cmd) == 1:
+                cmd.append(f"{user.mention if user else '用戶'}，請注意你的行為。")
+            msg = cmd.copy()
+            msg.pop(0)
+            warn_message = " ".join(msg)
+            warn_message = warn_message.replace("{user}", user.mention if user else "用戶")
+            logs.append(f"傳送警告訊息: {warn_message}")
+            if cmd[0] == "warn_dm" and user:
+                await user.send(warn_message)
+            elif message:
+                await message.reply(warn_message)
+    return logs
+
+
 async def moderation_message_settings(interaction: discord.Interaction, user: discord.Member, moderator: discord.Member, actions: list):
     # generate message
     action_texts = []
@@ -254,6 +323,12 @@ class Moderate(commands.GroupCog, group_name=app_commands.locale_str("admin")):
         if guild is None:
             await interaction.response.send_message("此指令只能在伺服器中使用。", ephemeral=True)
             return
+        
+        # check bot permissions
+        if not guild.me.guild_permissions.administrator:
+            await interaction.response.send_message("機器人需要管理員權限才能執行此操作。", ephemeral=True)
+            return
+        
         actions = []  # {"action": "mute/kick/ban/add_role/remove_role", "reason": "reason", "duration": minutes, "role": role_id}
         def actions_to_str(actions):
             if not actions:
@@ -452,6 +527,11 @@ class Moderate(commands.GroupCog, group_name=app_commands.locale_str("admin")):
             await interaction.followup.send("此指令只能在伺服器中使用。")
             return
         
+        # check bot permissions
+        if not guild.me.guild_permissions.ban_members:
+            await interaction.followup.send("機器人沒有封鎖成員的權限，請確認機器人擁有「封鎖成員」的權限。")
+            return
+        
         if user.startswith("<@") and user.endswith(">"):
             user = user[2:-1]
             if user.startswith("!"):
@@ -506,6 +586,11 @@ class Moderate(commands.GroupCog, group_name=app_commands.locale_str("admin")):
             await interaction.followup.send("此指令只能在伺服器中使用。")
             return
         
+        # check bot permissions
+        if not guild.me.guild_permissions.ban_members:
+            await interaction.followup.send("機器人沒有解封成員的權限，請確認機器人擁有「解除封鎖成員」的權限。")
+            return
+        
         if user.startswith("<@") and user.endswith(">"):
             user = user[2:-1]
             if user.startswith("!"):
@@ -539,7 +624,12 @@ class Moderate(commands.GroupCog, group_name=app_commands.locale_str("admin")):
         if guild is None:
             await interaction.followup.send("此指令只能在伺服器中使用。")
             return
-        
+
+        # check bot permissions
+        if not guild.me.guild_permissions.kick_members:
+            await interaction.followup.send("機器人沒有踢出成員的權限，請確認機器人擁有「踢出成員」的權限。")
+            return
+
         if user.startswith("<@") and user.endswith(">"):
             user = user[2:-1]
             if user.startswith("!"):
@@ -589,6 +679,11 @@ class Moderate(commands.GroupCog, group_name=app_commands.locale_str("admin")):
         if guild is None:
             await interaction.followup.send("此指令只能在伺服器中使用。")
             return
+        
+        # check bot permissions
+        if not guild.me.guild_permissions.moderate_members:
+            await interaction.followup.send("機器人沒有禁言的權限，請確認機器人擁有「管理成員」的權限。")
+            return
 
         if user.startswith("<@") and user.endswith(">"):
             user = user[2:-1]
@@ -636,6 +731,11 @@ class Moderate(commands.GroupCog, group_name=app_commands.locale_str("admin")):
         if guild is None:
             await interaction.followup.send("此指令只能在伺服器中使用。")
             return
+        
+        # check bot permissions
+        if not guild.me.guild_permissions.moderate_members:
+            await interaction.followup.send("機器人沒有解除禁言的權限，請確認機器人擁有「管理成員」的權限。")
+            return
 
         if user.startswith("<@") and user.endswith(">"):
             user = user[2:-1]
@@ -678,6 +778,67 @@ class Moderate(commands.GroupCog, group_name=app_commands.locale_str("admin")):
             return
         set_server_config(interaction.guild.id, "MODERATION_MESSAGE_CHANNEL_ID", channel.id)
         await interaction.followup.send(f"已設定懲處公告頻道為 {channel.mention}。")
+    
+    @commands.command(aliases=["mod", "m"])
+    @commands.has_permissions(administrator=True)
+    async def moderate(self, ctx: commands.Context, user: discord.Member = None, *, commands_str: str = ""):
+        """對用戶進行多重管理操作。
+        
+        用法：!moderate <用戶> <指令1> , <指令2> , ...
+        
+        指令格式：
+        - ban <reason> <duration> <delete_messages>
+        - kick <reason>
+        - timeout|mute <duration> <reason>
+        - delete <warn_message>
+        - delete_dm <warn_message>
+        - warn <warn_message>
+        - warn_dm <warn_message>
+        
+        範例：
+        !moderate @User ban 違規 1d 3600 , mute 30m 注意行為 , delete 請注意你的言論
+        """
+        # check bot permissions
+        if not ctx.guild.me.guild_permissions.ban_members or not ctx.guild.me.guild_permissions.kick_members or not ctx.guild.me.guild_permissions.manage_messages or not ctx.guild.me.guild_permissions.manage_roles or not ctx.guild.me.guild_permissions.moderate_members:
+            await ctx.send("機器人缺少必要的權限，請確認機器人擁有封禁、踢出、管理訊息、管理身分組及禁言權限。")
+            return
+        logs = await do_action_str(commands_str, ctx.guild, user, message=None)
+        await ctx.send("操作完成：\n- " + "\n- ".join(logs))
+    
+    @commands.command(aliases=["mr", "mod_reply"])
+    @commands.has_permissions(administrator=True)
+    async def moderate_reply(self, ctx: commands.Context, *, commands_str: str = ""):
+        """對訊息發送者進行多重管理操作。
+        
+        用法：!moderate_reply <指令1> , <指令2> , ...
+        
+        指令格式：
+        - ban <reason> <duration> <delete_messages>
+        - kick <reason>
+        - timeout|mute <duration> <reason>
+        - delete <warn_message>
+        - delete_dm <warn_message>
+        - warn <warn_message>
+        - warn_dm <warn_message>
+        
+        範例：
+        !moderate_reply ban 違規 1d 3600 , mute 30m 注意行為 , delete 請注意你的言論
+        """
+        # check bot permissions
+        if not ctx.guild.me.guild_permissions.ban_members or not ctx.guild.me.guild_permissions.kick_members or not ctx.guild.me.guild_permissions.manage_messages or not ctx.guild.me.guild_permissions.manage_roles or not ctx.guild.me.guild_permissions.moderate_members:
+            await ctx.send("機器人缺少必要的權限，請確認機器人擁有封禁、踢出、管理訊息、管理身分組及禁言權限。")
+            return
+        if ctx.message.reference is None:
+            await ctx.send("請在回覆的訊息中使用此指令。")
+            return
+        try:
+            referenced_message = await ctx.channel.fetch_message(ctx.message.reference.message_id)
+        except Exception:
+            await ctx.send("無法取得被回覆的訊息。")
+            return
+        user = referenced_message.author if isinstance(referenced_message.author, discord.Member) else None
+        logs = await do_action_str(commands_str, ctx.guild, user, message=referenced_message)
+        await ctx.send("操作完成：\n- " + "\n- ".join(logs))
 
 
 asyncio.run(bot.add_cog(Moderate(bot)))
