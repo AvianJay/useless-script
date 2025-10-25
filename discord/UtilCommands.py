@@ -74,6 +74,7 @@ async def randomnumber_command(interaction: discord.Interaction, min: int = 1, m
 
 @bot.command(aliases=["rn"])
 async def randomnumber(ctx: commands.Context, min: int = 1, max: int = 100):
+    """生成一個隨機數字"""
     if min >= max:
         await ctx.send("錯誤：最小值必須小於最大值。")
         return
