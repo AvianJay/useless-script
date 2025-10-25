@@ -492,7 +492,7 @@ class Moderate(commands.GroupCog, group_name=app_commands.locale_str("admin")):
             return
 
         mention = user_obj.mention if user_obj else f"<@{user_id}>"
-        await interaction.followup.send(f"已將 {mention} 封禁。")
+        await interaction.followup.send(f"已將 {mention} 封禁。{'\n- 原因：' + reason if reason != "無" else ''}{'\n- 封禁時間：' + get_time_text(duration_seconds) if unban_time else ''}{'\n- 刪除訊息時間：' + get_time_text(delete_message_seconds) if delete_message_seconds > 0 else ''}")
 
 
     @app_commands.command(name=app_commands.locale_str("unban"), description="解封用戶")
@@ -574,7 +574,7 @@ class Moderate(commands.GroupCog, group_name=app_commands.locale_str("admin")):
             await interaction.followup.send(f"踢出時發生錯誤：{e}")
             return
 
-        await interaction.followup.send(f"已將 {member.mention} 踢出伺服器。")
+        await interaction.followup.send(f"已將 {member.mention} 踢出伺服器。{'\n- 原因：' + reason if reason != "無" else ''}")
 
 
     @app_commands.command(name=app_commands.locale_str("timeout"), description="禁言用戶")
@@ -624,7 +624,7 @@ class Moderate(commands.GroupCog, group_name=app_commands.locale_str("admin")):
             return
 
         # 使用 followup 送出最終訊息
-        await interaction.followup.send(f"已對 {member.mention} 禁言 {get_time_text(duration_seconds)}。")
+        await interaction.followup.send(f"已對 {member.mention} 禁言 {get_time_text(duration_seconds)}。{'\n- 原因：' + reason if reason != "無" else ''}")
         
     @app_commands.command(name=app_commands.locale_str("untimeout"), description="解除用戶禁言")
     @app_commands.describe(user="選擇用戶（@或ID）")
