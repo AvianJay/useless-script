@@ -727,7 +727,8 @@ class Moderate(commands.GroupCog, group_name=app_commands.locale_str("admin")):
             return
 
         # 使用 followup 送出最終訊息
-        await interaction.followup.send(f"已對 {member.mention} 禁言 {get_time_text(duration_seconds)}。{'\n- 原因：' + reason if reason != "無" else ''}")
+        suffix = f"\n- 原因：{reason}" if reason != "無" else ""
+        await interaction.followup.send(f"已對 {member.mention} 禁言 {get_time_text(duration_seconds)}。{suffix}")
         
     @app_commands.command(name=app_commands.locale_str("untimeout"), description="解除用戶禁言")
     @app_commands.describe(user="選擇用戶（@或ID）")
