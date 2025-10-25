@@ -29,6 +29,10 @@ class AutoPublish(commands.GroupCog, name=app_commands.locale_str("autopublish")
     @app_commands.allowed_contexts(guilds=True, dms=False, private_channels=False)
     async def set_autopublish(self, interaction: discord.Interaction, enable: bool):
         guild_id = interaction.guild.id if interaction.guild else None
+        # check bot permissions
+        if not interaction.guild.me.guild_permissions.manage_messages:
+            await interaction.response.send_message("機器人需要管理訊息權限才能設定自動發布。", ephemeral=True)
+            return
         set_server_config(guild_id, "autopublish", {"enabled": enable})
         await interaction.response.send_message(f"自動發布已{'啟用' if enable else '停用'}。", ephemeral=True)
         return
@@ -50,7 +54,7 @@ class AutoPublish(commands.GroupCog, name=app_commands.locale_str("autopublish")
                 await message.publish()
                 print(f"[+] Auto-published message ID {message.id} in guild {guild.id}")
             except Exception as e:
-                print(f"Error auto-publishing message: {e}")
+                print(f"[-] Error auto-publishing message: {e}")
 
 asyncio.run(bot.add_cog(AutoPublish(bot)))
 
