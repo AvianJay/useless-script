@@ -572,7 +572,14 @@ class Moderate(commands.GroupCog, group_name=app_commands.locale_str("admin")):
             return
 
         mention = user_obj.mention if user_obj else f"<@{user_id}>"
-        await interaction.followup.send(f"已將 {mention} 封禁。{'\n- 原因：' + reason if reason != "無" else ''}{'\n- 封禁時間：' + get_time_text(duration_seconds) if unban_time else ''}{'\n- 刪除訊息時間：' + get_time_text(delete_message_seconds) if delete_message_seconds > 0 else ''}")
+        parts = [f"已將 {mention} 封禁。"]
+        if reason != "無":
+            parts.append(f"- 原因：{reason}")
+        if unban_time:
+            parts.append(f"- 封禁時間：{get_time_text(duration_seconds)}")
+        if delete_message_seconds > 0:
+            parts.append(f"- 刪除訊息時間：{get_time_text(delete_message_seconds)}")
+        await interaction.followup.send("\n".join(parts))
 
 
     @app_commands.command(name=app_commands.locale_str("unban"), description="解封用戶")
