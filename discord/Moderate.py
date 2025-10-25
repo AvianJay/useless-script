@@ -671,7 +671,8 @@ class Moderate(commands.GroupCog, group_name=app_commands.locale_str("admin")):
             await interaction.followup.send(f"踢出時發生錯誤：{e}")
             return
 
-        await interaction.followup.send(f"已將 {member.mention} 踢出伺服器。{'\n- 原因：' + reason if reason != "無" else ''}")
+        suffix = f"\n- 原因：{reason}" if reason != "無" else ""
+        await interaction.followup.send(f"已將 {member.mention} 踢出伺服器。{suffix}")
 
 
     @app_commands.command(name=app_commands.locale_str("timeout"), description="禁言用戶")
