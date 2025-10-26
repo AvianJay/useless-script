@@ -231,6 +231,7 @@ translations = {
     "all": "全部",
     "flagged-user-alert-channel": "標記用戶警報頻道",
     "mention": "提及",
+    "query": "關鍵字",
 }
 class CommandNameTranslator(app_commands.Translator):
     async def translate(
