@@ -534,7 +534,7 @@ async def dsize_feedgrass(interaction: discord.Interaction, user: discord.Member
 
 
 async def generate_feedgrass_image(feeder: discord.User, target: discord.User):
-    image = Image.open("assets/feed_grass.png").convert("RGBA")
+    image = Image.open("assets/feed_grass_1.png").convert("RGBA")
     # width, height = image.size
     # fetch avatars
     feeder_avatar_asset = feeder.display_avatar.with_size(128).with_static_format('png')
