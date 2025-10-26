@@ -525,16 +525,76 @@ async def dsize_feedgrass(interaction: discord.Interaction, user: discord.Member
         await interaction.response.send_message("你沒有草，無法草飼。", ephemeral=True)
         return
     await interaction.response.defer()
-    image_bytes = await generate_feedgrass_image(interaction.user, user)
+    # get random users from last 10 messages
+    random_users = set()
+    async for msg in interaction.channel.history(limit=10):
+        if msg.author.id != interaction.user.id and msg.author.id != user.id:
+            random_users.add(msg.author)
+    random_users = list(random_users)
+    image_bytes = await generate_feedgrass_image(interaction.user, user, random_users)
     embed = discord.Embed(title=f"{interaction.user.display_name} 草飼了 {user.display_name}！", color=0x00ff00)
     embed.set_image(url="attachment://feed_grass.png")
     embed.timestamp = datetime.utcnow()
     await interaction.followup.send(embed=embed, file=discord.File(image_bytes, "feed_grass.png"))
     print(f"[DSize] {interaction.user} fed grass to {user} in guild {interaction.guild.id}")
+    
+
+feedgrass_images = [
+    {
+        "path": "assets/feed_grass_1.png",
+        "feeder": {
+            "position": (400, 150),
+            "size": (200, 200)
+        },
+        "target": {
+            "position": (533, 646),
+            "size": (200, 200)
+        },
+        "extras": []
+    },
+    {
+        "path": "assets/feed_grass_2.jpg",
+        "feeder": {
+            "position": (1171, 299),
+            "size": (300, 300)
+        },
+        "target": {
+            "position": (257, 241),
+            "size": (300, 300)
+        },
+        "extras": []
+    },
+    {
+        "path": "assets/feed_grass_3.jpg",
+        "feeder": {
+            "position": (709, 216),
+            "size": (200, 200)
+        },
+        "target": {
+            "position": (70, 518),
+            "size": (200, 200)
+        },
+        "extras": [
+            {
+                "position": (340, 411),
+                "size": (100, 100)
+            },
+            {
+                "position": (551, 408),
+                "size": (107, 107)
+            },
+            {
+                "position": (473, 113),
+                "size": (100, 100)
+            },
+        ]
+    }
+]
 
 
-async def generate_feedgrass_image(feeder: discord.User, target: discord.User):
-    image = Image.open("assets/feed_grass_1.png").convert("RGBA")
+async def generate_feedgrass_image(feeder: discord.User, target: discord.User, random_users: list[discord.User] = []):
+    img = random.choice(feedgrass_images)
+    image = Image.open(img["path"]).convert("RGBA")
     # width, height = image.size
     # fetch avatars
     feeder_avatar_asset = feeder.display_avatar.with_size(128).with_static_format('png')
@@ -542,18 +602,33 @@ async def generate_feedgrass_image(feeder: discord.User, target: discord.User):
     # to circle
     feeder_avatar_bytes = await feeder_avatar_asset.read()
     target_avatar_bytes = await target_avatar_asset.read()
-    feeder_avatar = Image.open(BytesIO(feeder_avatar_bytes)).convert("RGBA").resize((200, 200))
-    target_avatar = Image.open(BytesIO(target_avatar_bytes)).convert("RGBA").resize((200, 200))
-    mask_feeder = Image.new("L", (200, 200), 0)
-    mask_target = Image.new("L", (200, 200), 0)
+    feeder_avatar = Image.open(BytesIO(feeder_avatar_bytes)).convert("RGBA").resize(img["feeder"]["size"])
+    target_avatar = Image.open(BytesIO(target_avatar_bytes)).convert("RGBA").resize(img["target"]["size"])
+    mask_feeder = Image.new("L", img["feeder"]["size"], 0)
+    mask_target = Image.new("L", img["target"]["size"], 0)
     draw_feeder = ImageDraw.Draw(mask_feeder)
     draw_target = ImageDraw.Draw(mask_target)
-    draw_feeder.ellipse((0, 0, 200, 200), fill=255)
-    draw_target.ellipse((0, 0, 200, 200), fill=255)
+    draw_feeder.ellipse((0, 0, img["feeder"]["size"][0], img["feeder"]["size"][1]), fill=255)
+    draw_target.ellipse((0, 0, img["target"]["size"][0], img["target"]["size"][1]), fill=255)
     feeder_avatar.putalpha(mask_feeder)
     target_avatar.putalpha(mask_target)
-    image.paste(feeder_avatar, (400, 150), feeder_avatar)
-    image.paste(target_avatar, (533, 646), target_avatar)
+    image.paste(feeder_avatar, img["feeder"]["position"], feeder_avatar)
+    image.paste(target_avatar, img["target"]["position"], target_avatar)
+    print(random_users)
+    if img.get("extras"):
+        for extra in img["extras"]:
+            if not random_users:
+                break
+            extra_user = random.choice(random_users)
+            random_users.remove(extra_user)
+            extra_avatar_asset = extra_user.display_avatar.with_size(128).with_static_format('png')
+            extra_avatar_bytes = await extra_avatar_asset.read()
+            extra_avatar = Image.open(BytesIO(extra_avatar_bytes)).convert("RGBA").resize(extra["size"])
+            mask_extra = Image.new("L", extra["size"], 0)
+            draw_extra = ImageDraw.Draw(mask_extra)
+            draw_extra.ellipse((0, 0, extra["size"][0], extra["size"][1]), fill=255)
+            extra_avatar.putalpha(mask_extra)
+            image.paste(extra_avatar, extra["position"], extra_avatar)
     # save to bytes
     byte_io = BytesIO()
     image.save(byte_io, 'PNG')
