@@ -91,6 +91,8 @@ async def dsize(interaction: discord.Interaction, global_dsize: int = 0):
     embed = discord.Embed(title=f"{interaction.user.display_name} 的長度：", color=0x00ff00)
     embed.add_field(name="1 cm", value=f"8D", inline=False)
     embed.timestamp = datetime.now(timezone.utc)
+    if not guild_key:
+        embed.set_footer(text="此次量測為全域紀錄。")
 
     await interaction.response.send_message(embed=embed)
     # animate to size
