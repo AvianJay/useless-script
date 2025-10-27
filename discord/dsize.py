@@ -526,9 +526,9 @@ async def dsize_feedgrass(interaction: discord.Interaction, user: discord.Member
         await interaction.response.send_message("你沒有草，無法草飼。", ephemeral=True)
         return
     await interaction.response.defer()
-    # get random users from last 10 messages
+    # get random users from last 25 messages
     random_users = set()
-    async for msg in interaction.channel.history(limit=10):
+    async for msg in interaction.channel.history(limit=25):
         if msg.author.id != interaction.user.id and msg.author.id != user.id:
             random_users.add(msg.author)
     random_users = list(random_users)
