@@ -15,24 +15,16 @@ if not "Moderate" in modules:
     raise ImportError("Moderate module is required for ReportToBan module")
 import Moderate
 
-SERVER_RULES = """
-# 地球Online台服玩家交流區新版規則 (摘要)
-
-1. 新進成員請領取身分組 (不重要)
-2. 遵守 Discord 規範
-3. 禁止騷擾、仇恨、不實言論
-4. 禁止粗俗或髒字貶損他人
-5. 禁止色情、血腥或暴力內容
-6. 禁止有害連結、檔案
-7. 禁止散布非本人私人資料
-8. 請依照頻道用途使用
-9. 禁止規避懲處
-10. 禁止惡意誣告檢舉
-11. 其他違反以上規則之行為
+DEFAULT_SERVER_RULES = """
+遵守 Discord 規範
+禁止騷擾、仇恨、不實言論
+禁止粗俗或髒字貶損他人
+禁止色情、血腥或暴力內容
+禁止有害連結、檔案
 """
 
 
-async def check_message_with_ai(text: str, history_messages: str="", reason: str="") -> dict:
+async def check_message_with_ai(text: str, history_messages: str="", reason: str="", server_rules: str="") -> dict:
     """
     使用 g4f + Pollinations 判斷訊息是否違反群規
     回傳格式 JSON: {"level": 違規等級，0到5, "reason": "簡短說明，若違規需指出違反哪一條規則", "suggestion_actions": [{"action": "ban" | "kick" | "mute", "duration": 若禁言，請提供禁言時間，格式如秒數，若非封鎖則為 0 (只能為秒數)}]}, "target": "reporter" | "reported_user" (若是封鎖檢舉人，請填 reporter，若是封鎖被檢舉人，請填 reported_user)
@@ -48,7 +40,7 @@ async def check_message_with_ai(text: str, history_messages: str="", reason: str
     prompt = f"""
 你是 Discord 伺服器的審核助手。
 以下是伺服器規則：
-{SERVER_RULES}
+{server_rules}
 
 請根據規則判斷這則訊息是否違規。
 
@@ -378,7 +370,8 @@ async def report_message(interaction: discord.Interaction, message: discord.Mess
                         break
                 history_messages = "\n".join(messages[:10])
                 # print("[DEBUG] History Messages:", history_messages)
-                verdict = await check_message_with_ai(message.content, history_messages=history_messages, reason=reason)
+                server_rules = get_server_config(guild_id, "SERVER_RULES", DEFAULT_SERVER_RULES)
+                verdict = await check_message_with_ai(message.content, history_messages=history_messages, reason=reason, server_rules=server_rules)
 
                 verdict_text = f"違規等級: {verdict.get('level', 0)}\n原因: {verdict.get('reason', '無')}"
                 actions = verdict.get('suggestion_actions', [])
@@ -631,6 +624,18 @@ class ReportSettings(commands.GroupCog, name=app_commands.locale_str("report")):
                 await interaction.response.send_message(f"✅ 已將 {role.mention} 從檢舉黑名單移除。", ephemeral=True)
             else:
                 await interaction.response.send_message("❌ 設定失敗，請稍後再試。", ephemeral=True)
+    
+    @app_commands.command(name=app_commands.locale_str("set-server-rules"), description="設定伺服器規則內容")
+    @app_commands.describe(
+        rules="伺服器規則內容，多行請用 \\n 來換行"
+    )
+    async def set_server_rules(self, interaction: discord.Interaction, rules: str):
+        guild_id = interaction.guild.id
+        success = set_server_config(guild_id, "SERVER_RULES", rules)
+        if success:
+            await interaction.response.send_message("✅ 伺服器規則已更新", ephemeral=True)
+        else:
+            await interaction.response.send_message("❌ 設定失敗，請稍後再試。", ephemeral=True)
 
 asyncio.run(bot.add_cog(ReportSettings(bot)))
 
