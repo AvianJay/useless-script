@@ -6,6 +6,18 @@ import asyncio
 import random
 
 
+def percent_random(percent: int) -> bool:
+    if percent == 100:
+        return True
+    try:
+        percent = int(percent)
+        if percent <= 0:
+            return False
+        return random.random() < percent / 100
+    except Exception:
+        return False
+
+
 async def list_autoreply_autocomplete(interaction: discord.Interaction, current: str):
     guild_id = interaction.guild.id
     autoreplies = get_server_config(guild_id, "autoreplies", [])
@@ -34,7 +46,8 @@ class AutoReply(commands.GroupCog, name="autoreply"):
         response="回覆內容 (使用 , 分隔多個回覆，隨機選擇一個回覆)",
         reply="回覆原訊息",
         channel_mode="指定頻道模式",
-        channels="指定頻道 ID (使用 , 分隔多個頻道 ID)"
+        channels="指定頻道 ID (使用 , 分隔多個頻道 ID)",
+        random_chance="隨機回覆機率 (1-100)"
     )
     @app_commands.choices(
         mode=[
@@ -53,9 +66,12 @@ class AutoReply(commands.GroupCog, name="autoreply"):
             app_commands.Choice(name="黑名單", value="blacklist"),
         ]
     )
-    async def add_autoreply(self, interaction: discord.Interaction, mode: str, trigger: str, response: str, reply: int = 0, channel_mode: str = "all", channels: str = ""):
+    async def add_autoreply(self, interaction: discord.Interaction, mode: str, trigger: str, response: str, reply: int = 0, channel_mode: str = "all", channels: str = "", random_chance: int = 100):
         guild_id = interaction.guild.id
         reply = bool(reply)
+        if random_chance < 1 or random_chance > 100:
+            await interaction.response.send_message("隨機回覆機率必須在 1 到 100 之間。", ephemeral=True)
+            return
         autoreplies = get_server_config(guild_id, "autoreplies", [])
         trigger = trigger.split(",")  # multiple triggers
         trigger = [t.strip() for t in trigger if t.strip()]  # remove empty triggers
@@ -68,9 +84,9 @@ class AutoReply(commands.GroupCog, name="autoreply"):
         for c in channels:
             if interaction.guild.get_channel(c):
                 valid_channels.append(c)
-        autoreplies.append({"trigger": trigger, "response": response, "mode": mode, "reply": reply, "channel_mode": channel_mode, "channels": valid_channels})
+        autoreplies.append({"trigger": trigger, "response": response, "mode": mode, "reply": reply, "channel_mode": channel_mode, "channels": valid_channels, "random_chance": random_chance})
         set_server_config(guild_id, "autoreplies", autoreplies)
-        await interaction.response.send_message(f"已新增自動回覆：\n- 模式：{mode}\n- 觸發字串：`{', '.join(trigger)}`\n- 回覆內容：`{', '.join(response)}`\n- 回覆原訊息：{'是' if reply else '否'}\n- 指定頻道模式：{channel_mode}\n- 指定頻道：`{', '.join(map(str, valid_channels)) if valid_channels else '無'}`")
+        await interaction.response.send_message(f"已新增自動回覆：\n- 模式：{mode}\n- 觸發字串：`{', '.join(trigger)}`\n- 回覆內容：`{', '.join(response)}`\n- 回覆原訊息：{'是' if reply else '否'}\n- 指定頻道模式：{channel_mode}\n- 指定頻道：`{', '.join(map(str, valid_channels)) if valid_channels else '無'}`\n- 隨機回覆機率：{random_chance}%")
 
     @app_commands.command(name="remove", description="移除自動回覆")
     @app_commands.describe(
@@ -106,7 +122,8 @@ class AutoReply(commands.GroupCog, name="autoreply"):
             ar.setdefault("reply", False)
             ar.setdefault("channel_mode", "all")
             ar.setdefault("channels", [])
-            description += f"**{i}.** 模式：{ar['mode']}，觸發字串：`{triggers}`，回覆內容：`{responses}`，回覆原訊息：{'是' if ar['reply'] else '否'}，指定頻道模式：{ar['channel_mode']}，指定頻道：`{', '.join(map(str, ar['channels'])) if ar['channels'] else '無'}`\n"
+            ar.setdefault("random_chance", 100)
+            description += f"**{i}.** 模式：{ar['mode']}，觸發字串：`{triggers}`，回覆內容：`{responses}`，回覆原訊息：{'是' if ar['reply'] else '否'}，指定頻道模式：{ar['channel_mode']}，指定頻道：`{', '.join(map(str, ar['channels'])) if ar['channels'] else '無'}`，隨機回覆機率：{ar['random_chance']}%\n"
         embed = discord.Embed(title="自動回覆列表", description=description, color=0x00ff00)
         await interaction.response.send_message(embed=embed)
 
@@ -149,7 +166,8 @@ class AutoReply(commands.GroupCog, name="autoreply"):
         new_response="回覆內容",
         reply="是否回覆原訊息",
         channel_mode="指定頻道模式",
-        channels="指定頻道 ID (使用 , 分隔多個頻道 ID)"
+        channels="指定頻道 ID (使用 , 分隔多個頻道 ID)",
+        random_chance="隨機回覆機率 (1-100)"
     )
     @app_commands.choices(
         new_mode=[
@@ -169,10 +187,14 @@ class AutoReply(commands.GroupCog, name="autoreply"):
         ]
     )
     @app_commands.autocomplete(trigger=list_autoreply_autocomplete)
-    async def edit_autoreply(self, interaction: discord.Interaction, trigger: str, new_mode: str = None, new_trigger: str = None, new_response: str = None, reply: int = None, channel_mode: str = None, channels: str = None):
+    async def edit_autoreply(self, interaction: discord.Interaction, trigger: str, new_mode: str = None, new_trigger: str = None, new_response: str = None, reply: int = None, channel_mode: str = None, channels: str = None, random_chance: int = None):
         guild_id = interaction.guild.id
         reply = None if reply is None else (True if reply == 1 else False)
         autoreplies = get_server_config(guild_id, "autoreplies", [])
+        if random_chance is not None:
+            if random_chance < 1 or random_chance > 100:
+                await interaction.response.send_message("隨機回覆機率必須在 1 到 100 之間。", ephemeral=True)
+                return
         for ar in autoreplies:
             det = ", ".join(ar["trigger"])
             if det == trigger:
@@ -188,8 +210,10 @@ class AutoReply(commands.GroupCog, name="autoreply"):
                     ar["channel_mode"] = channel_mode
                 if channels:
                     ar["channels"] = [int(c.strip()) for c in channels.split(",") if c.strip().isdigit()]
+                if random_chance is not None:
+                    ar["random_chance"] = random_chance
                 set_server_config(guild_id, "autoreplies", autoreplies)
-                await interaction.response.send_message(f"已編輯自動回覆：\n- 模式：{ar['mode']}\n- 觸發字串：`{', '.join(ar['trigger'])}`\n- 回覆內容：`{', '.join(ar['response'])}`\n- 回覆原訊息：{'是' if ar['reply'] else '否'}\n- 指定頻道模式：{ar['channel_mode']}\n- 指定頻道：`{', '.join(map(str, ar['channels'])) if ar['channels'] else '無'}`")
+                await interaction.response.send_message(f"已編輯自動回覆：\n- 模式：{ar['mode']}\n- 觸發字串：`{', '.join(ar['trigger'])}`\n- 回覆內容：`{', '.join(ar['response'])}`\n- 回覆原訊息：{'是' if ar['reply'] else '否'}\n- 指定頻道模式：{ar['channel_mode']}\n- 指定頻道：`{', '.join(map(str, ar['channels'])) if ar['channels'] else '無'}`\n- 隨機回覆機率：{ar['random_chance']}%")
                 return
         await interaction.response.send_message(f"找不到觸發字串 `{trigger}` 的自動回覆。")
 
@@ -222,6 +246,8 @@ class AutoReply(commands.GroupCog, name="autoreply"):
                 elif ar["mode"] == "ends_with" and message.content.endswith(trigger):
                     match_found = True
                 if match_found:
+                    if not percent_random(ar.get("random_chance", 100)):
+                        return
                     response = random.choice(ar["response"])
                     response = response.replace("{user}", message.author.mention)
                     response = response.replace("{content}", message.content)
