@@ -6,7 +6,7 @@ from discord.ext import commands
 from globalenv import bot, start_bot, get_user_data, set_user_data, get_command_mention, modules
 from typing import Union
 
-version = "0.4.1"
+version = "0.4.2"
 try:
     git_commit_hash = os.popen("git rev-parse --short HEAD").read().strip()
 except Exception as e:
