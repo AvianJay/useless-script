@@ -72,6 +72,9 @@ async def dsize(interaction: discord.Interaction, global_dsize: int = 0):
         return
 
     set_user_data(guild_key, user_id, "last_dsize", now)
+    statistics = get_user_data(0, user_id, "dsize_statistics", {})
+    statistics["total_uses"] = statistics.get("total_uses", 0) + 1
+    set_user_data(0, user_id, "dsize_statistics", statistics)
 
     # 隨機產生長度
     size = random.randint(1, max_size)
@@ -144,6 +147,9 @@ async def dsize(interaction: discord.Interaction, global_dsize: int = 0):
                     await interaction.response.send_message("這不是你的手術機會。", ephemeral=True)
                     return
                 self.stop()
+                statistics = get_user_data(0, user_id, "dsize_statistics", {})
+                statistics["total_surgeries"] = statistics.get("total_surgeries", 0) + 1
+                set_user_data(0, user_id, "dsize_statistics", statistics)
                 new_size = random.randint(1, get_server_config(guild_key, "dsize_surgery_max", 10))
                 will_fail = percent_random(fail_chance)
                 on_fail_size = random.randint(1, new_size) if will_fail else 0
@@ -173,6 +179,9 @@ async def dsize(interaction: discord.Interaction, global_dsize: int = 0):
                         embed.set_field_at(0, name=f"-1 cm", value=f"8", inline=False)
                         await interaction.edit_original_response(content="手術失敗，你變男娘了。", embed=embed)
                         set_user_data(guild_key, user_id, "last_dsize_size", -1)
+                        statistics["failed_surgeries"] = statistics.get("failed_surgeries", 0) + 1
+                        statistics["mangirl_count"] = statistics.get("mangirl_count", 0) + 1
+                        set_user_data(0, user_id, "dsize_statistics", statistics)
                         return
                     d_string_new = "=" * (size + i - 2)
                     current_size = size + i
@@ -184,10 +193,16 @@ async def dsize(interaction: discord.Interaction, global_dsize: int = 0):
                 embed.add_field(name=f"{size + new_size} cm", value=f"8{'=' * (size + new_size - 2)}D", inline=False)
                 await interaction.edit_original_response(content="手術成功。", embed=embed)
                 set_user_data(guild_key, user_id, "last_dsize_size", new_size + size)
+                # update user statistics
+                statistics["successful_surgeries"] = statistics.get("successful_surgeries", 0) + 1
+                set_user_data(0, user_id, "dsize_statistics", statistics)
         surgery_msg = await interaction.followup.send(f"你獲得了一次做手術的機會。\n請問你是否同意手術？\n-# 失敗機率：{fail_chance}%", view=dsize_SurgeryView())
     if not global_dsize:
         if ItemSystem and percent_random(drop_item_chance):
             print(f"[DSize] {interaction.user} got item drop chance")
+            statistics = get_user_data(0, user_id, "dsize_statistics", {})
+            statistics["total_drops"] = statistics.get("total_drops", 0) + 1
+            set_user_data(0, user_id, "dsize_statistics", statistics)
             msg = await interaction.followup.send("...?")
             await asyncio.sleep(1)
             await msg.edit(content="......?")
@@ -398,6 +413,15 @@ async def dsize_battle(interaction: discord.Interaction, opponent: discord.Membe
                 return
             self.value = True
             self.stop()
+            user_statistics = get_user_data(0, user_id, "dsize_statistics", {})
+            user_statistics["total_battles"] = user_statistics.get("total_battles", 0) + 1
+            user_statistics["total_uses"] = user_statistics.get("total_uses", 0) + 1
+            set_user_data(0, user_id, "dsize_statistics", user_statistics)
+            opponent_statistics = get_user_data(0, opponent_id, "dsize_statistics", {})
+            opponent_statistics["total_battles"] = opponent_statistics.get("total_battles", 0) + 1
+            opponent_statistics["total_uses"] = opponent_statistics.get("total_uses", 0) + 1
+            set_user_data(0, opponent_id, "dsize_statistics", opponent_statistics)
+
             set_user_data(interaction.guild.id, user_id, "last_dsize", now)
             set_user_data(interaction.guild.id, opponent_id, "last_dsize", now)
             
@@ -429,8 +453,16 @@ async def dsize_battle(interaction: discord.Interaction, opponent: discord.Membe
 
             # 最終結果
             if size_user > size_opponent:
+                user_statistics["wins"] = user_statistics.get("wins", 0) + 1
+                set_user_data(0, user_id, "dsize_statistics", user_statistics)
+                opponent_statistics["losses"] = opponent_statistics.get("losses", 0) + 1
+                set_user_data(0, opponent_id, "dsize_statistics", opponent_statistics)
                 result = f"🎉 {original_user.display_name} 勝利！"
             elif size_user < size_opponent:
+                opponent_statistics["wins"] = opponent_statistics.get("wins", 0) + 1
+                set_user_data(0, opponent_id, "dsize_statistics", opponent_statistics)
+                user_statistics["losses"] = user_statistics.get("losses", 0) + 1
+                set_user_data(0, user_id, "dsize_statistics", user_statistics)
                 result = f"🎉 {opponent.display_name} 勝利！"
             else:
                 result = "🤝 平手！"
@@ -509,6 +541,42 @@ async def dsize_settings(interaction: discord.Interaction, setting: str, value: 
     print(f"[DSize] {interaction.user} set {setting} to {value} in guild {guild_key}")
 
 
+@bot.tree.command(name=app_commands.locale_str("dsize-stats"), description="查看你的屌長統計資料")
+@app_commands.allowed_installs(guilds=True, users=True)
+@app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
+async def dsize_stats(interaction: discord.Interaction):
+    print(f"[DSize] {interaction.user} is viewing dsize stats")
+    user_id = interaction.user.id
+    statistics = get_user_data(0, user_id, "dsize_statistics", {})
+    total_uses = statistics.get("total_uses", 0)
+    total_battles = statistics.get("total_battles", 0)
+    wins = statistics.get("wins", 0)
+    losses = statistics.get("losses", 0)
+    total_surgeries = statistics.get("total_surgeries", 0)
+    successful_surgeries = statistics.get("successful_surgeries", 0)
+    failed_surgeries = statistics.get("failed_surgeries", 0)
+    mangirl_count = statistics.get("mangirl_count", 0)
+    total_feedgrass = statistics.get("total_feedgrass", 0)
+    total_been_feedgrass = statistics.get("total_been_feedgrass", 0)
+    total_drops = statistics.get("total_drops", 0)
+
+    embed = discord.Embed(title=f"{interaction.user.display_name} 的 dsize 統計資料", color=0x00ff00)
+    embed.add_field(name="量屌次數", value=str(total_uses), inline=False)
+    embed.add_field(name="對決次數", value=str(total_battles), inline=False)
+    embed.add_field(name="勝利次數", value=str(wins), inline=True)
+    embed.add_field(name="失敗次數", value=str(losses), inline=True)
+    embed.add_field(name="手術次數", value=str(total_surgeries), inline=False)
+    embed.add_field(name="成功手術次數", value=str(successful_surgeries), inline=True)
+    # embed.add_field(name="失敗手術次數", value=str(failed_surgeries), inline=True)
+    embed.add_field(name="變成男娘次數", value=str(mangirl_count), inline=False)
+    embed.add_field(name="草飼次數", value=str(total_feedgrass), inline=True)
+    embed.add_field(name="被草飼次數", value=str(total_been_feedgrass), inline=True)
+    embed.add_field(name="撿到物品次數", value=str(total_drops), inline=False)
+    embed.timestamp = datetime.now(timezone.utc)
+
+    await interaction.response.send_message(embed=embed)
+
+
 @bot.tree.command(name=app_commands.locale_str("dsize-feedgrass"), description="草飼男娘")
 @app_commands.describe(user="要草飼的對象")
 @app_commands.allowed_installs(guilds=True, users=False)
@@ -531,6 +599,13 @@ async def dsize_feedgrass(interaction: discord.Interaction, user: discord.Member
         await interaction.response.send_message("你沒有草，無法草飼。", ephemeral=True)
         return
     await interaction.response.defer()
+    # update user statistics
+    statistics = get_user_data(0, interaction.user.id, "dsize_statistics", {})
+    statistics["total_feedgrass"] = statistics.get("total_feedgrass", 0) + 1
+    set_user_data(0, interaction.user.id, "dsize_statistics", statistics)
+    target_user_statistics = get_user_data(0, user.id, "dsize_statistics", {})
+    target_user_statistics["total_been_feedgrass"] = target_user_statistics.get("total_been_feedgrass", 0) + 1
+    set_user_data(0, user.id, "dsize_statistics", target_user_statistics)
     # get random users from last 25 messages
     random_users = set()
     async for msg in interaction.channel.history(limit=25):
@@ -730,6 +805,15 @@ async def use_scalpel(interaction: discord.Interaction):
             if not removed:
                 await interaction.response.send_message("你沒有手術刀，無法進行手術。", ephemeral=True)
                 return
+            # update user statistics
+            statistics = get_user_data(0, target_id, "dsize_statistics", {})
+            statistics["total_surgeries"] = statistics.get("total_surgeries", 0) + 1
+            statistics["successful_surgeries"] = statistics.get("successful_surgeries", 0) + 1
+            set_user_data(0, target_id, "dsize_statistics", statistics)
+            performer_statistics = get_user_data(0, user_id, "dsize_statistics", {})
+            performer_statistics["total_performed_surgeries"] = performer_statistics.get("total_performed_surgeries", 0) + 1
+            set_user_data(0, user_id, "dsize_statistics", performer_statistics)
+
             new_size = random.randint(1, get_server_config(guild_key, "dsize_surgery_max", 10))
             orig_size = get_user_data(guild_key, target_id, "last_dsize_size", 0)
             set_user_data(guild_key, target_id, "last_dsize_size", orig_size + new_size)
@@ -784,7 +868,15 @@ async def use_rusty_scalpel(interaction: discord.Interaction):
             removed = await ItemSystem.remove_item_from_user(guild_key, user_id, "rusty_scalpel", 1)
             if not removed:
                 await interaction.response.send_message("你沒有生鏽的手術刀，無法進行手術。", ephemeral=True)
-                return
+            # update user statistics
+            statistics = get_user_data(0, target_id, "dsize_statistics", {})
+            statistics["total_surgeries"] = statistics.get("total_surgeries", 0) + 1
+            statistics["failed_surgeries"] = statistics.get("failed_surgeries", 0) + 1
+            statistics["mangirl_count"] = statistics.get("mangirl_count", 0) + 1
+            set_user_data(0, target_id, "dsize_statistics", statistics)
+            performer_statistics = get_user_data(0, user_id, "dsize_statistics", {})
+            performer_statistics["total_performed_surgeries"] = performer_statistics.get("total_performed_surgeries", 0) + 1
+            set_user_data(0, user_id, "dsize_statistics", performer_statistics)
             orig_size = get_user_data(guild_key, target_id, "last_dsize_size", 0)
             set_user_data(guild_key, target_id, "last_dsize_size", -1)
             print(f"[DSize] {interaction.user} performed rusty surgery on {target_user.display_name}, original size: {orig_size} cm, new size: -1 cm")
@@ -810,6 +902,10 @@ async def use_anti_surgery(interaction: discord.Interaction):
     if not removed:
         await interaction.response.send_message("你沒有抗手術藥物，無法使用。", ephemeral=True)
         return
+    # update user statistics
+    statistics = get_user_data(0, user_id, "dsize_statistics", {})
+    statistics["total_anti_surgery_used"] = statistics.get("total_anti_surgery_used", 0) + 1
+    set_user_data(0, user_id, "dsize_statistics", statistics)
     set_user_data(guild_key, user_id, "dsize_anti_surgery", now)
     await interaction.response.send_message("你使用了抗手術藥物！\n今天不會被手術。")
     print(f"[DSize] {interaction.user} used anti-surgery drug in guild {guild_key}")

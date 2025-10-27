@@ -232,6 +232,7 @@ translations = {
     "flagged-user-alert-channel": "標記用戶警報頻道",
     "mention": "提及",
     "query": "關鍵字",
+    "dsize-stats": "dsize-統計資料",
 }
 class CommandNameTranslator(app_commands.Translator):
     async def translate(
