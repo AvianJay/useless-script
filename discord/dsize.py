@@ -90,6 +90,7 @@ async def dsize(interaction: discord.Interaction, global_dsize: int = 0):
     # 建立 Embed 訊息
     embed = discord.Embed(title=f"{interaction.user.display_name} 的長度：", color=0x00ff00)
     embed.add_field(name="1 cm", value=f"8D", inline=False)
+    embed.timestamp = datetime.now(timezone.utc)
 
     await interaction.response.send_message(embed=embed)
     # animate to size
@@ -534,7 +535,7 @@ async def dsize_feedgrass(interaction: discord.Interaction, user: discord.Member
     image_bytes = await generate_feedgrass_image(interaction.user, user, random_users)
     embed = discord.Embed(title=f"{interaction.user.display_name} 草飼了 {user.display_name}！", color=0x00ff00)
     embed.set_image(url="attachment://feed_grass.png")
-    embed.timestamp = datetime.utcnow()
+    embed.timestamp = datetime.now(timezone.utc)
     await interaction.followup.send(embed=embed, file=discord.File(image_bytes, "feed_grass.png"))
     print(f"[DSize] {interaction.user} fed grass to {user} in guild {interaction.guild.id}")
     
