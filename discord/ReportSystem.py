@@ -81,6 +81,7 @@ async def check_message_with_ai(text: str, history_messages: str="", reason: str
     try:
         return json.loads(response)
     except Exception:
+        print("[-][ReportSystem] Failed to parse AI response:", response)
         return {"level": 0, "reason": "無法解析回應", "suggestion_actions": []}
 
 
