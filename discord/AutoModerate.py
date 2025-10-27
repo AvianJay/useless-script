@@ -274,6 +274,8 @@ class AutoModerate(commands.GroupCog, name=app_commands.locale_str("automod")):
     async def on_member_update(self, before: discord.Member, after: discord.Member):
         if not after.guild:
             return
+        if not after.timed_out_until:
+            return
         set_user_data(guild_id=after.guild.id, user_id=after.id, key="communication_disabled_until", value=after.timed_out_until.isoformat() if after.timed_out_until else None)
         
     @commands.Cog.listener()
