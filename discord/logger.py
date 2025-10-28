@@ -91,9 +91,9 @@ class LoggerCog(commands.Cog):
     async def on_app_command_completion(self, interaction: discord.Interaction, application_command: discord.app_commands.Command):
         log(f"應用程式指令被觸發: {application_command.parent.name + ' ' + application_command.name if application_command.parent else application_command.name}", module_name="Logger", level=logging.INFO, user=interaction.user, guild=interaction.guild)
 
-    @commands.Cog.listener()
-    async def on_ready(self):
-        log("機器人已準備就緒。", module_name="Logger", level=logging.INFO)
+    # @commands.Cog.listener()
+    # async def on_ready(self):
+    #     log("機器人已準備就緒。", module_name="Logger", level=logging.INFO)
         
     @commands.Cog.listener()
     async def on_error(self, event_method, *args, **kwargs):
