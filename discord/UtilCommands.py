@@ -5,13 +5,31 @@ from discord import app_commands
 from discord.ext import commands
 from globalenv import bot, start_bot, get_user_data, set_user_data, get_command_mention, modules
 from typing import Union
+from datetime import datetime, timezone
 
+startup_time = datetime.now(timezone.utc)
 version = "0.6.3"
 try:
     git_commit_hash = os.popen("git rev-parse --short HEAD").read().strip()
 except Exception as e:
     git_commit_hash = "unknown"
 full_version = f"{version} ({git_commit_hash})"
+
+
+def get_time_text(seconds: int) -> str:
+    if seconds < 60:
+        return f"{seconds} 秒"
+    elif seconds < 3600:
+        return f"{seconds // 60} 分鐘"
+    elif seconds < 86400:
+        return f"{seconds // 3600} 小時"
+    else:
+        return f"{seconds // 86400} 天"
+
+
+def get_uptime_seconds() -> int:
+    return (datetime.now(timezone.utc) - startup_time).seconds
+
 
 @bot.tree.command(name=app_commands.locale_str("info"), description="顯示機器人資訊")
 @app_commands.allowed_installs(guilds=True, users=True)
@@ -25,12 +43,15 @@ async def info_command(interaction: discord.Interaction):
     except OverflowError:
         bot_latency = "N/A"
 
+    uptime = get_time_text(get_uptime_seconds())
+
     embed = discord.Embed(title="機器人資訊", color=0x00ff00)
     embed.add_field(name="機器人名稱", value=bot.user.name)
     embed.add_field(name="版本", value=full_version)
     embed.add_field(name="伺服器數量", value=server_count)
     embed.add_field(name="用戶總數量", value=user_count)
     embed.add_field(name="機器人延遲", value=f"{bot_latency}ms")
+    embed.add_field(name="運行時間", value=uptime)
     embed.add_field(name=f"已載入模組({len(modules)})", value="\n".join(modules) if modules else "無", inline=False)
     embed.set_thumbnail(url=bot.user.avatar.url if bot.user.avatar else None)
     await interaction.followup.send(content="-# 提示：如果你指令用到一半停住或沒辦法用了那很有可能是那個傻逼開發者||尼摳||又再重開機器人了||不然就是機器人又當機了||", embed=embed)

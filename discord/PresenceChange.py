@@ -38,10 +38,16 @@ def load_config():
             try:
                 bot_latency = round(bot.latency * 1000)  # Convert to milliseconds
                 bot_latency = str(bot_latency) + "ms"
-            except ValueError:
+            except OverflowError:
                 bot_latency = "N/A"
         else:
             bot_latency = "N/A"
+        uptime_str = "N/A"
+        if UtilCommands:
+            try:
+                uptime_str = UtilCommands.get_time_text(UtilCommands.get_uptime_seconds())
+            except Exception:
+                uptime_str = "N/A"
         name = act.get("name")
         name = name.replace("{prefix}", config("prefix", "!"))
         name = name.replace("{bot_name}", bot.user.name if bot.user else "Bot")
@@ -51,6 +57,7 @@ def load_config():
         name = name.replace("{latency_ms}", bot_latency)
         name = name.replace("{random_number_1_100}", str(random.randint(1, 100)))
         name = name.replace("{full_version}", UtilCommands.full_version if UtilCommands else "unknown")
+        name = name.replace("{uptime}", uptime_str)
         type_str = act.get("type", "playing").lower()
         type_enum = activity_type_map.get(type_str, discord.ActivityType.playing)
         if name:
