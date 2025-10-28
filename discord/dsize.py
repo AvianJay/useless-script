@@ -114,7 +114,7 @@ async def dsize(interaction: discord.Interaction, global_dsize: int = 0):
 
     # 更新使用時間 — 存到對應的 guild_key（若為 user-install 則是 None）
     set_user_data(guild_key, user_id, "last_dsize_size", size)
-    print(f"[DSize] {interaction.user} measured {size} cm in guild {guild_key if guild_key else 'DM/Global'}")
+    # print(f"[DSize] {interaction.user} measured {size} cm in guild {guild_key if guild_key else 'DM/Global'}")
     log(f"{interaction.user} measured {size} cm in guild {guild_key if guild_key else 'DM/Global'}", module_name="dsize", user=interaction.user, guild=interaction.guild)
 
     surgery_percent = get_server_config(guild_key, "dsize_surgery_percent", 10)
@@ -433,7 +433,8 @@ async def dsize_battle(interaction: discord.Interaction, opponent: discord.Membe
             await interaction.response.edit_message(content="開始對決。", view=None)
             size_user = random.randint(1, max_size)
             size_opponent = random.randint(1, max_size)
-            print(f"[DSize] {interaction.user} vs {opponent} - {size_user} cm vs {size_opponent} cm")
+            # print(f"[DSize] {interaction.user} vs {opponent} - {size_user} cm vs {size_opponent} cm")
+            log(f"{interaction.user} vs {opponent} - {size_user} cm vs {size_opponent} cm", module_name="dsize", user=interaction.user, guild=interaction.guild)
             speed = max(size_user, size_opponent) // 50 + 1
 
             # 取得訊息物件
@@ -544,7 +545,7 @@ async def dsize_settings(interaction: discord.Interaction, setting: str, value: 
         await interaction.response.send_message(f"已設定撿到物品機率為 {str(int(value))}%。")
     else:
         await interaction.response.send_message("未知的設定項目。")
-    print(f"[DSize] {interaction.user} set {setting} to {value} in guild {guild_key}")
+    log(f"Set {setting} to {value} in guild {guild_key}", module_name="dsize", user=interaction.user, guild=interaction.guild)
 
 
 @bot.tree.command(name=app_commands.locale_str("dsize-stats"), description="查看你的屌長統計資料")
