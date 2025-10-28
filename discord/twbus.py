@@ -646,19 +646,19 @@ asyncio.run(bot.add_cog(TWBus(bot)))
 youbike_data = None
 async def on_ready_update_database():
     await bot.wait_until_ready()
-    log("[+] 自動更新資料庫任務已啟動", module_name="TWBus")
+    log("自動更新資料庫任務已啟動", module_name="TWBus")
     while not bot.is_closed():
         try:
             busapi.update_database(info=True)
-            log("[+] 公車資料庫更新完畢", module_name="TWBus")
+            log("公車資料庫更新完畢", module_name="TWBus")
         except Exception as e:
-            log(f"[!] 更新資料庫時發生錯誤：{e}", level=logging.ERROR, module_name="TWBus")
+            log(f"更新資料庫時發生錯誤：{e}", level=logging.ERROR, module_name="TWBus")
         try:
             global youbike_data
             youbike_data = youbike.getallstations()
-            log("[+] YouBike 資料更新完畢", module_name="TWBus")
+            log("YouBike 資料更新完畢", module_name="TWBus")
         except Exception as e:
-            log(f"[!] 更新 YouBike 資料時發生錯誤：{e}", level=logging.ERROR, module_name="TWBus")
+            log(f"更新 YouBike 資料時發生錯誤：{e}", level=logging.ERROR, module_name="TWBus")
         await asyncio.sleep(3600)  # 每小時更新一次
 on_ready_tasks.append(on_ready_update_database)
 
