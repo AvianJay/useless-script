@@ -6,7 +6,7 @@ from discord.ext import commands
 from globalenv import bot, start_bot, get_user_data, set_user_data, get_command_mention, modules
 from typing import Union
 
-version = "0.6.2"
+version = "0.6.3"
 try:
     git_commit_hash = os.popen("git rev-parse --short HEAD").read().strip()
 except Exception as e:
@@ -115,15 +115,21 @@ async def randomuser_command(interaction: discord.Interaction, mention: int = 0)
 async def userinfo_command(interaction: discord.Interaction, user: Union[discord.User, discord.Member]):
     embed = discord.Embed(title=f"{user.display_name} 的資訊", color=0x00ff00)
     embed.set_thumbnail(url=user.avatar.url if user.avatar else discord.Embed.Empty)
+    view = discord.ui.View()
+    # avatar url button
+    button = discord.ui.Button(label="頭像連結", url=user.avatar.url if user.avatar else "https://discord.com/assets/6debd47ed13483642cf09e832ed0bc1b.png")
+    view.add_item(button)
     embed.add_field(name="用戶 ID", value=str(user.id), inline=True)
     embed.add_field(name="帳號創建時間", value=user.created_at.strftime("%Y-%m-%d %H:%M:%S"), inline=True)
     if isinstance(user, discord.Member):
         embed.add_field(name="伺服器暱稱", value=user.nick or "無", inline=True)
         embed.add_field(name="加入伺服器時間", value=user.joined_at.strftime("%Y-%m-%d %H:%M:%S"), inline=True)
         # pfp
-        if user.display_avatar:
+        if user.display_avatar and user.display_avatar.url != user.avatar.url:
             embed.set_image(url=user.display_avatar.url if user.display_avatar.url != user.avatar.url else None)
-    await interaction.response.send_message(embed=embed)
+            button_serverpfp = discord.ui.Button(label="伺服器頭像連結", url=user.display_avatar.url)
+            view.add_item(button_serverpfp)
+    await interaction.response.send_message(embed=embed, view=view)
 
 
 @bot.command(aliases=["ui"])
@@ -137,15 +143,21 @@ async def userinfo(ctx: commands.Context, user: Union[discord.User, discord.Memb
         user = ctx.author
     embed = discord.Embed(title=f"{user.display_name} 的資訊", color=0x00ff00)
     embed.set_thumbnail(url=user.avatar.url if user.avatar else discord.Embed.Empty)
+    # avatar url button
+    button = discord.ui.Button(label="頭像連結", url=user.avatar.url if user.avatar else "https://discord.com/assets/6debd47ed13483642cf09e832ed0bc1b.png")
+    view = discord.ui.View()
+    view.add_item(button)
     embed.add_field(name="用戶 ID", value=str(user.id), inline=True)
     embed.add_field(name="帳號創建時間", value=user.created_at.strftime("%Y-%m-%d %H:%M:%S"), inline=True)
     if isinstance(user, discord.Member):
         embed.add_field(name="伺服器暱稱", value=user.nick or "無", inline=True)
         embed.add_field(name="加入伺服器時間", value=user.joined_at.strftime("%Y-%m-%d %H:%M:%S"), inline=True)
         # pfp
-        if user.display_avatar:
+        if user.display_avatar and user.display_avatar.url != user.avatar.url:
             embed.set_image(url=user.display_avatar.url if user.display_avatar.url != user.avatar.url else None)
-    await ctx.send(embed=embed)
+            button_serverpfp = discord.ui.Button(label="伺服器頭像連結", url=user.display_avatar.url)
+            view.add_item(button_serverpfp)
+    await ctx.send(embed=embed, view=view)
 
 
 @bot.tree.command(name=app_commands.locale_str("get-command-mention"), description="取得指令的提及格式")
