@@ -89,7 +89,7 @@ class LoggerCog(commands.Cog):
 
     @commands.Cog.listener()
     async def on_app_command_completion(self, interaction: discord.Interaction, application_command: discord.app_commands.Command):
-        log(f"應用程式指令被觸發: {application_command.name} 由 {interaction.user}", module_name="Logger", level=logging.INFO, user=interaction.user, guild=interaction.guild)
+        log(f"應用程式指令被觸發: {application_command.parent.name + ' ' + application_command.name if application_command.parent else application_command.name}", module_name="Logger", level=logging.INFO, user=interaction.user, guild=interaction.guild)
 
     @commands.Cog.listener()
     async def on_ready(self):
