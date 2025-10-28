@@ -5,7 +5,7 @@ import json
 import database
 import asyncio
 
-config_version = 3
+config_version = 4
 config_path = 'config.json'
 default_config = {
     "prefix": ">",
@@ -18,7 +18,8 @@ default_config = {
             "viewable_channels": [0],
             "check_channels": [0]
         }
-    ]
+    ],
+    "ignored_users": []
 }
 _config = None
 
@@ -95,6 +96,8 @@ async def update_flagged_users():
                     continue
             if member.id == bot.user.id:
                 continue
+            if member.id in config("ignored_users", []):
+                continue
             is_flagged = any(role.id in flagged_roles for role in member.roles)
             dt = database.get_flagged_user(conn, member.id, guild_id)
             if not dt:
@@ -119,6 +122,8 @@ async def on_message(message: selfcord.Message):
             return
     if message.guild is None:
         return
+    if message.author.id in config("ignored_users", []):
+        return
     scan_guilds = config("scan_guilds", [])
     guild_info = next((g for g in scan_guilds if g.get("id") == message.guild.id), None)
     if guild_info is None:
@@ -140,6 +145,8 @@ async def on_member_join(member):
         return
     if member.id == bot.user.id:
         return
+    if member.id in config("ignored_users", []):
+        return
     if member.bot:
         # check bot verified
         if member.public_flags.verified_bot:
@@ -160,6 +167,8 @@ async def on_member_update(before, after):
     if guild_info is None:
         return
     if after.id == bot.user.id:
+        return
+    if after.id in config("ignored_users", []):
         return
     if after.bot:
         # check bot verified
@@ -184,6 +193,8 @@ async def on_presence_update(before, after):
         return
     if after.id == bot.user.id:
         return
+    if after.id in config("ignored_users", []):
+        return
     if after.bot:
         # check bot verified
         if after.public_flags.verified_bot:
@@ -197,9 +208,14 @@ async def on_presence_update(before, after):
         database.add_flagged_user(conn, after.id, after.guild.id, after_flagged)
         print(f"[+] Updated flagged status for user {after} (ID: {after.id}) in guild {after.guild.name} (ID: {after.guild.id}): {'Flagged' if after_flagged else 'Not Flagged'}")
 
+def is_owner():
+    async def predicate(ctx):
+        return ctx.author.id == config("owner_id", 0)
+    return commands.check(predicate)
+
 # commands
 @bot.command()
-@commands.is_owner()
+@is_owner()
 async def ping(ctx):
     try:
         latency = bot.latency * 1000  # Convert to milliseconds
@@ -208,13 +224,13 @@ async def ping(ctx):
     await ctx.send('Pong! Latency: {:.2f} ms'.format(latency))
 
 @bot.command()
-@commands.is_owner()
+@is_owner()
 async def shutdown(ctx):
     await ctx.send('Shutting down...')
     await bot.close()
 
 @bot.command()
-@commands.is_owner()
+@is_owner()
 async def updateflags(ctx):
     await ctx.send('Updating flagged users...')
     tta, ttaf = await update_flagged_users()
