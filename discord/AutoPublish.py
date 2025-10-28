@@ -3,6 +3,8 @@ import asyncio
 from discord import app_commands
 from discord.ext import commands
 from globalenv import bot, start_bot, get_server_config, set_server_config
+from logger import log
+import logging
 
 
 @app_commands.guild_only()
@@ -35,6 +37,7 @@ class AutoPublish(commands.GroupCog, name=app_commands.locale_str("autopublish")
             return
         set_server_config(guild_id, "autopublish", {"enabled": enable})
         await interaction.response.send_message(f"自動發布已{'啟用' if enable else '停用'}。", ephemeral=True)
+        log(f"自動發布已{'啟用' if enable else '停用'}。", module_name="AutoPublish", guild=interaction.guild)
         return
     
     @commands.Cog.listener()
@@ -52,9 +55,9 @@ class AutoPublish(commands.GroupCog, name=app_commands.locale_str("autopublish")
         if message.channel.type == discord.ChannelType.news:
             try:
                 await message.publish()
-                print(f"[+] Auto-published message ID {message.id} in guild {guild.id}")
+                log(f"Auto-published message ID {message.id} in guild {guild.id}", module_name="AutoPublish", guild=guild)
             except Exception as e:
-                print(f"[-] Error auto-publishing message: {e}")
+                log(f"Error auto-publishing message: {e}", level=logging.ERROR, module_name="AutoPublish", guild=guild)
 
 asyncio.run(bot.add_cog(AutoPublish(bot)))
 

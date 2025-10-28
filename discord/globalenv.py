@@ -7,10 +7,11 @@ from discord.ext import commands
 from discord import app_commands
 from database import db
 import traceback
+import logging
 
 
 # Global configuration for backward compatibility
-config_version = 8
+config_version = 9
 config_path = 'config.json'
 
 default_config = {
@@ -28,6 +29,7 @@ default_config = {
     "flagged_database_path": "flagged_data.db",
     "default_favorite_stops_limit": 2,
     "default_favorite_youbike_limit": 2,
+    "log_channel_id": 123456789012345678
 }
 _config = None
 
@@ -278,7 +280,7 @@ class CommandNameTranslator(app_commands.Translator):
 
 async def setup_hook():
     await bot.tree.set_translator(CommandNameTranslator())
-    print("[+] Command translator set up.")
+    log("Command translator set up.", module_name="Main")
 
 
 bot.setup_hook = setup_hook
@@ -288,10 +290,10 @@ on_close_tasks = set()  # only works on !shutdown
 
 @bot.event
 async def on_ready():
-    print(f'Logged in as {bot.user}')
+    log(f'Logged in as {bot.user}', module_name="Main")
     try:
         synced = await bot.tree.sync()  # 同步指令
-        print(f"Synced {len(synced)} command(s)")
+        log(f"Synced {len(synced)} command(s)", module_name="Main")
 
         # 防止重複建立相同的 background task（例如 reconnect）
         if not getattr(bot, "_on_ready_tasks_started", False):
@@ -301,9 +303,14 @@ async def on_ready():
             bot._on_ready_tasks_started = True
 
     except Exception as e:
-        print(f"Error syncing commands: {e}")
+        log("Error while syncing commands:", str(e), module_name="Main")
         traceback.print_exc()
 
+def log(*messages, level = logging.INFO, module_name: str = "General", user: discord.User = None, guild: discord.Guild = None):
+    if "logger" in modules:
+        import logger
+        logger.log(*messages, level=level, module_name=module_name, user=user, guild=guild)
 
 def start_bot():
+    log("Bot is starting...", module_name="Main")
     bot.run(config("TOKEN"))

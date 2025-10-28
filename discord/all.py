@@ -20,12 +20,22 @@ try:
 except FileNotFoundError:
     print("[!] modules.json not found. Creating a default one.")
     default_modules = [
-        "ItemSystem",
+        "ReportSystem",
+        "ModerationNotify",
         "dsize",
         "doomcord",
         "PresenceChange",
         "OwnerTools",
-        "Moderate"
+        "Moderate",
+        "ItemSystem",
+        "AutoModerate",
+        "AutoPublish",
+        "UtilCommands",
+        "r34",
+        "DynamicVoice",
+        "twbus",
+        "AutoReply",
+        "logger"
     ]
     with open('modules.json', 'w', encoding='utf-8') as f:
         json.dump(default_modules, f, indent=4)
@@ -35,15 +45,19 @@ except json.JSONDecodeError:
     modules = []
 
 globalenv.modules = modules
-print(f"[+] Loading {len(modules)} module(s)...")
+from logger import log
+# print(f"[+] Loading {len(modules)} module(s)...")
+log(f"Loading {len(modules)} module(s)...", module_name="all")
 
 # Import all modules to register their events and commands
 for module in modules:
     try:
         __import__(module)
-        print(f"[+] Module {module} loaded.")
+        # print(f"[+] Module {module} loaded.")
+        log(f"Module {module} loaded.", module_name="all")
     except Exception as e:
-        print(f"[!] Failed to load module {module}: {e}")
+        # print(f"[!] Failed to load module {module}: {e}")
+        log(f"Failed to load module {module}: {e}", module_name="all")
         traceback.print_exc()
         modules.remove(module)
 

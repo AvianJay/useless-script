@@ -4,6 +4,7 @@ import asyncio
 from globalenv import bot, start_bot, get_user_data, set_user_data
 from discord import app_commands
 from discord.ext import commands
+from logger import log
 
 
 # item example:
@@ -33,7 +34,8 @@ async def give_item_to_user(guild_id: int, user_id: int, item_id: str, amount: i
     user_items = get_user_data(guild_id, user_id, "items", {})
     user_items[item_id] = user_items.get(item_id, 0) + amount
     set_user_data(guild_id, user_id, "items", user_items)
-    print(f"[ItemSystem] Gave {amount} of {item_id} to user {user_id} in guild {guild_id}")
+    # print(f"[ItemSystem] Gave {amount} of {item_id} to user {user_id} in guild {guild_id}")
+    log(f"Gave {amount} of {item_id} to user {user_id} in guild {guild_id}", module_name="ItemSystem")
 
 
 async def get_user_items(guild_id: int, user_id: int, item_id: str):
@@ -53,7 +55,8 @@ async def remove_item_from_user(guild_id: int, user_id: int, item_id: str, amoun
     user_items[item_id] = max(0, original_amount - amount)
     set_user_data(guild_id, user_id, "items", user_items)
 
-    print(f"[ItemSystem] Removed {removed_amount} of {item_id} from user {user_id} in guild {guild_id}")
+    # print(f"[ItemSystem] Removed {removed_amount} of {item_id} from user {user_id} in guild {guild_id}")
+    log(f"Removed {removed_amount} of {item_id} from user {user_id} in guild {guild_id}", module_name="ItemSystem")
     return removed_amount
 
 
@@ -190,10 +193,11 @@ class ItemSystem(commands.GroupCog, name="item", description="物品系統指令
 
         if can_pickup:
             await interaction.response.send_message(f"{interaction.user.display_name} 丟棄了 {target_item['name']} x{amount}！", view=DropView())
-            print(f"[ItemSystem] {interaction.user} dropped {target_item['name']} x{amount} in guild {guild_id}")
+            # print(f"[ItemSystem] {interaction.user} dropped {target_item['name']} x{amount} in guild {guild_id}")
+            log(f"{interaction.user} dropped {target_item['name']} x{amount} in guild {guild_id}", module_name="ItemSystem", user=interaction.user, guild=interaction.guild)
         else:
             await interaction.response.send_message(f"{interaction.user.display_name} 丟棄了 {target_item['name']} x{amount}，但是物品馬上不見了。")
-            print(f"[ItemSystem] {interaction.user} dropped {target_item['name']} x{amount} (no pickup) in guild {guild_id}")
+            log(f"{interaction.user} dropped {target_item['name']} x{amount} (no pickup) in guild {guild_id}", module_name="ItemSystem", user=interaction.user, guild=interaction.guild)
 
     @app_commands.command(name="give", description="給予另一個用戶一個物品")
     @app_commands.describe(user="你想給予物品的用戶", item_id="你想給予的物品ID")

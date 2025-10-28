@@ -7,7 +7,10 @@ from discord import app_commands
 from discord.ext import commands
 import aiohttp
 from database import db
-from globalenv import bot, start_bot, db, get_server_config, set_server_config, modules
+from globalenv import bot, start_bot, db, get_server_config, set_server_config, modules, get_command_mention
+from logger import log
+import logging
+
 last_report_times = {}  # 用戶 ID -> 上次檢舉時間
 reported_messages = []
 
@@ -332,9 +335,11 @@ async def report_message(interaction: discord.Interaction, message: discord.Mess
         # clean old message ids (limit 100)
         if len(reported_messages) > 100:
             reported_messages = reported_messages[-100:]
-            print("[!] 清理舊的檢舉訊息ID")
-        print(f"[+] {interaction.user} 檢舉訊息 {message.id}，原因：{reason}")
-        
+            # print("[!] 清理舊的檢舉訊息ID")
+            log(f"Cleaned old reported message IDs", level=logging.WARNING, module_name="ReportSystem")
+
+        log(f"{interaction.user} 檢舉了訊息 {message.id}, 原因: {reason}", module_name="ReportSystem", user=interaction.user, guild=interaction.guild)
+
         # Get server-specific configuration
         guild_id = interaction.guild.id
         report_channel_id = get_server_config(guild_id, "REPORT_CHANNEL_ID")
@@ -488,7 +493,7 @@ class ReportSettings(commands.GroupCog, name=app_commands.locale_str("report")):
                     inline=False
                 )
             
-            embed.set_footer(text="使用 /設定 [項目] [值] 來修改設定")
+            embed.set_footer(text=f"使用 {await get_command_mention("report", "settings")} 來修改設定")
             await interaction.response.send_message(embed=embed, ephemeral=True)
             return
         

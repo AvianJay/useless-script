@@ -10,6 +10,8 @@ from datetime import datetime
 from typing import Optional
 from datetime import timezone, timedelta
 from zoneinfo import ZoneInfo  # Python 3.9+
+from logger import log
+import logging
 
 
 async def bus_route_autocomplete(interaction: discord.Interaction, current: str):
@@ -339,10 +341,11 @@ class TWBus(commands.GroupCog, name=app_commands.locale_str("bus")):
             now = datetime.utcnow()
             delta = (now - last_time).total_seconds()
             if delta < 10:
-                print(f"[TWBus] {interaction.user} 查詢路線 {route_key} 被限速")
+                log(f"查詢路線 {route_key} 被限速", level=logging.WARNING, module_name="TWBus", user=interaction.user, guild=interaction.guild)
                 await interaction.followup.send("你操作的太快了，請稍後再試。", ephemeral=True)
                 return
-        print(f"[TWBus] {interaction.user} 查詢路線 {route_key}")
+        log(f"查詢路線 {route_key}", module_name="TWBus", user=interaction.user, guild=interaction.guild)
+        set_user_data(0, str(interaction.user.id), "rate_limit_last", datetime.utcnow().isoformat())
         route_key = int(route_key)
         try:
             info = busapi.get_complete_bus_info(route_key)
@@ -370,11 +373,11 @@ class TWBus(commands.GroupCog, name=app_commands.locale_str("bus")):
             now = datetime.utcnow()
             delta = (now - last_time).total_seconds()
             if delta < 10:
-                print(f"[TWBus] {interaction.user} 查詢路線 {route_key} 的站牌 {stop_id} 被限速")
+                log(f"查詢路線 {route_key} 的站牌 {stop_id} 被限速", level=logging.WARNING, module_name="TWBus", user=interaction.user, guild=interaction.guild)
                 await interaction.followup.send("你操作的太快了，請稍後再試。", ephemeral=True)
                 return
         set_user_data(0, str(interaction.user.id), "rate_limit_last", datetime.utcnow().isoformat())
-        print(f"[TWBus] {interaction.user} 查詢路線 {route_key} 的站牌 {stop_id}")
+        log(f"查詢路線 {route_key} 的站牌 {stop_id}", module_name="TWBus", user=interaction.user, guild=interaction.guild)
         route_key = int(route_key)
         stop_id = int(stop_id)
         paths = busapi.fetch_paths(int(route_key))
@@ -425,11 +428,11 @@ class TWBus(commands.GroupCog, name=app_commands.locale_str("bus")):
                         now = datetime.utcnow()
                         delta = (now - last_time).total_seconds()
                         if delta < 10:
-                            print(f"[TWBus] {interaction.user} 重新整理路線 {route_key} 的站牌 {stop_id} 被限速")
+                            log(f"重新整理路線 {route_key} 的站牌 {stop_id} 被限速", level=logging.WARNING, module_name="TWBus", user=interaction.user, guild=interaction.guild)
                             await interaction.response.send_message("你操作的太快了，請稍後再試。", ephemeral=True)
                             return
                     set_user_data(0, str(interaction.user.id), "rate_limit_last", datetime.utcnow().isoformat())
-                    print(f"[TWBus] {interaction.user} 重新整理路線 {route_key} 的站牌 {stop_id}")
+                    log(f"重新整理路線 {route_key} 的站牌 {stop_id}", module_name="TWBus", user=interaction.user, guild=interaction.guild)
                     try:
                         info = busapi.get_complete_bus_info(route_key)
                         stop_info = {}
@@ -445,6 +448,7 @@ class TWBus(commands.GroupCog, name=app_commands.locale_str("bus")):
                         await interaction.response.edit_message(embed=embed, view=self)
                     except Exception as e:
                         await interaction.response.send_message(f"重新整理時發生錯誤：{e}", ephemeral=True)
+                        log(f"重新整理時發生錯誤：{e}", level=logging.ERROR, module_name="TWBus", user=interaction.user, guild=interaction.guild)
                         traceback.print_exc()
                         
                 @discord.ui.button(emoji="❤️", style=discord.ButtonStyle.primary)
@@ -485,11 +489,11 @@ class TWBus(commands.GroupCog, name=app_commands.locale_str("bus")):
             now = datetime.utcnow()
             delta = (now - last_time).total_seconds()
             if delta < 10:
-                print(f"[TWBus] {interaction.user} 查詢YouBike站點 {station_name} 被限速")
+                log(f"查詢YouBike站點 {station_name} 被限速", level=logging.WARNING, module_name="TWBus", user=interaction.user, guild=interaction.guild)
                 await interaction.followup.send("你操作的太快了，請稍後再試。", ephemeral=True)
                 return
         set_user_data(0, str(interaction.user.id), "rate_limit_last", datetime.utcnow().isoformat())
-        print(f"[TWBus] {interaction.user} 查詢YouBike站點 {station_name}")
+        log(f"查詢YouBike站點 {station_name}", module_name="TWBus", user=interaction.user, guild=interaction.guild)
         try:
             info = youbike.getstationbyid(station_name)
             if not info:
@@ -523,17 +527,18 @@ class TWBus(commands.GroupCog, name=app_commands.locale_str("bus")):
                         now = datetime.utcnow()
                         delta = (now - last_time).total_seconds()
                         if delta < 10:
-                            print(f"[TWBus] {interaction.user} 重新整理YouBike站點 {station_name} 被限速")
+                            log(f"{interaction.user} 重新整理YouBike站點 {station_name} 被限速", level=logging.WARNING, module_name="TWBus", user=interaction.user, guild=interaction.guild)
                             await interaction.response.send_message("你操作的太快了，請稍後再試。", ephemeral=True)
                             return
                     set_user_data(0, str(interaction.user.id), "rate_limit_last", datetime.utcnow().isoformat())
-                    print(f"[TWBus] {interaction.user} 重新整理YouBike站點 {station_name}")
+                    log(f"{interaction.user} 重新整理YouBike站點 {station_name}", module_name="TWBus", user=interaction.user, guild=interaction.guild)
                     try:
                         info = youbike.getstationbyid(station_name)
                         embed, map_url = make_youbike_embed(info)
                         await interaction.response.edit_message(embed=embed, view=self)
                     except Exception as e:
                         await interaction.response.send_message(f"重新整理時發生錯誤：{e}", ephemeral=True)
+                        log(f"重新整理時發生錯誤：{e}", level=logging.ERROR, module_name="TWBus", user=interaction.user, guild=interaction.guild)
                         traceback.print_exc()
                 
                 @discord.ui.button(emoji="❤️", style=discord.ButtonStyle.primary)
@@ -571,10 +576,10 @@ class TWBus(commands.GroupCog, name=app_commands.locale_str("bus")):
             now = datetime.utcnow()
             delta = (now - last_time).total_seconds()
             if delta < 10:
-                print(f"[TWBus] {interaction.user} 查詢最愛站牌與YouBike站點被限速")
+                log(f"{interaction.user} 查詢最愛站牌與YouBike站點被限速", level=logging.WARNING, module_name="TWBus", user=interaction.user, guild=interaction.guild)
                 await interaction.followup.send("你操作的太快了，請稍後再試。", ephemeral=True)
                 return
-        print(f"[TWBus] {interaction.user} 查詢最愛站牌與YouBike站點")
+        log(f"{interaction.user} 查詢最愛站牌與YouBike站點", module_name="TWBus", user=interaction.user, guild=interaction.guild)
         try:
             user_id = str(interaction.user.id)
             fav_stops = get_user_data(0, user_id, "favorite_stops", [])
@@ -610,7 +615,7 @@ class TWBus(commands.GroupCog, name=app_commands.locale_str("bus")):
                     else:
                         raise ValueError("找不到該站牌的到站資訊。")
                 except Exception as e:
-                    print(f"[TWBus] 處理最愛站牌 {stop_identifier} 時發生錯誤：{e}")
+                    log(f"處理最愛站牌 {stop_identifier} 時發生錯誤：{e}", level=logging.ERROR, module_name="TWBus", user=interaction.user, guild=interaction.guild)
                     traceback.print_exc()
                     embed.add_field(name=f"[未知站牌]{stop_identifier}", value=f"無法取得站牌資訊：\n{str(e)}", inline=False)
 
@@ -625,13 +630,14 @@ class TWBus(commands.GroupCog, name=app_commands.locale_str("bus")):
                     else:
                         raise ValueError("找不到該YouBike站點的資訊。")
                 except Exception as e:
-                    print(f"[TWBus] 處理最愛YouBike站點 {station_name} 時發生錯誤：{e}")
+                    log(f"處理最愛YouBike站點 {station_name} 時發生錯誤：{e}", level=logging.ERROR, module_name="TWBus", user=interaction.user, guild=interaction.guild)
                     traceback.print_exc()
                     embed.add_field(name=f"[未知YouBike站點]{station_name}", value=f"無法取得站點資訊：\n{str(e)}", inline=False)
 
             await interaction.followup.send(embed=embed)
 
         except Exception as e:
+            log(f"查詢最愛站牌與YouBike站點時發生錯誤：{e}", level=logging.ERROR, module_name="TWBus", user=interaction.user, guild=interaction.guild)
             await interaction.followup.send(f"發生錯誤：{e}", ephemeral=True)
             traceback.print_exc()
 
@@ -640,19 +646,19 @@ asyncio.run(bot.add_cog(TWBus(bot)))
 youbike_data = None
 async def on_ready_update_database():
     await bot.wait_until_ready()
-    print("[+] 自動更新資料庫任務已啟動")
+    log("[+] 自動更新資料庫任務已啟動", module_name="TWBus")
     while not bot.is_closed():
         try:
             busapi.update_database(info=True)
-            print("[+] 公車資料庫更新完畢")
+            log("[+] 公車資料庫更新完畢", module_name="TWBus")
         except Exception as e:
-            print(f"[!] 更新資料庫時發生錯誤：{e}")
+            log(f"[!] 更新資料庫時發生錯誤：{e}", level=logging.ERROR, module_name="TWBus")
         try:
             global youbike_data
             youbike_data = youbike.getallstations()
-            print("[+] YouBike 資料更新完畢")
+            log("[+] YouBike 資料更新完畢", module_name="TWBus")
         except Exception as e:
-            print(f"[!] 更新 YouBike 資料時發生錯誤：{e}")
+            log(f"[!] 更新 YouBike 資料時發生錯誤：{e}", level=logging.ERROR, module_name="TWBus")
         await asyncio.sleep(3600)  # 每小時更新一次
 on_ready_tasks.append(on_ready_update_database)
 

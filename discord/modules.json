@@ -13,5 +13,6 @@
     "r34",
     "DynamicVoice",
     "twbus",
-    "AutoReply"
+    "AutoReply",
+    "logger"
 ]

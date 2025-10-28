@@ -4,6 +4,8 @@ from globalenv import bot, start_bot, set_server_config, get_server_config, on_r
 from discord.ext import commands
 import asyncio
 import random
+from logger import log
+import logging
 
 
 @app_commands.guild_only()
@@ -36,7 +38,8 @@ class DynamicVoice(commands.GroupCog, name=app_commands.locale_str("dynamic-voic
         set_server_config(guild_id, "dynamic_voice_channel", channel.id)
         set_server_config(guild_id, "dynamic_voice_channel_category", channel_category.id)
         set_server_config(guild_id, "dynamic_voice_channel_name", channel_name)
-        print(f"[+] Set up dynamic voice channel in guild {guild_id}, channel {channel.id}, category {channel_category.id}, name {channel_name}")
+        # print(f"[+] Set up dynamic voice channel in guild {guild_id}, channel {channel.id}, category {channel_category.id}, name {channel_name}")
+        log(f"Set up dynamic voice channel in guild {guild_id}, channel {channel.id}, category {channel_category.id}, name {channel_name}", module_name="DynamicVoice", guild=interaction.guild)
         await interaction.followup.send(f"動態語音頻道已設置在 '{channel.mention}' 下，將自動創建頻道於 '{channel_category.name}' 中。\n- {warn}", ephemeral=True)
 
     @app_commands.command(name=app_commands.locale_str("disable"), description="禁用動態語音頻道")
@@ -48,7 +51,7 @@ class DynamicVoice(commands.GroupCog, name=app_commands.locale_str("dynamic-voic
         set_server_config(guild_id, "dynamic_voice_channel", None)
         set_server_config(guild_id, "dynamic_voice_channel_category", None)
         set_server_config(guild_id, "dynamic_voice_channel_name", None)
-        print(f"[+] Disabled dynamic voice channel in guild {guild_id}")
+        log(f"Disabled dynamic voice channel in guild {guild_id}", module_name="DynamicVoice", guild=interaction.guild)
         await interaction.followup.send("動態語音頻道已被禁用。", ephemeral=True)
     
     @app_commands.command(name=app_commands.locale_str("play-audio"), description="動態語音頻道切換前先播放音效")
@@ -79,14 +82,14 @@ class DynamicVoice(commands.GroupCog, name=app_commands.locale_str("dynamic-voic
             try:
                 await channel.connect()
             except Exception as e:
-                print(f"[-] Failed to connect to channel '{channel.name}': {e}")
+                log(f"Failed to connect to channel '{channel.name}': {e}", level=logging.ERROR, module_name="DynamicVoice", guild=interaction.guild)
                 await interaction.followup.send(f"錯誤：無法連接到語音頻道 '{channel.name}'。", ephemeral=True)
                 return
             # set voice channel limit members to 2
             try:
                 await channel.edit(user_limit=2)
             except Exception as e:
-                print(f"[-] Failed to set user limit for channel '{channel.name}': {e}")
+                log(f"Failed to set user limit for channel '{channel.name}': {e}", level=logging.ERROR, module_name="DynamicVoice", guild=interaction.guild)
         else:
             channel_id = get_server_config(guild_id, "dynamic_voice_channel")
             if not channel_id:
@@ -96,13 +99,13 @@ class DynamicVoice(commands.GroupCog, name=app_commands.locale_str("dynamic-voic
             voice_client = discord.utils.get(self.bot.voice_clients, guild=channel.guild)
             if voice_client and voice_client.is_connected():
                 await voice_client.disconnect()
-                print(f"[+] Disconnected from channel '{channel.name}' in guild {guild_id}")
+                log(f"Disconnected from channel '{channel.name}' in guild {guild_id}", module_name="DynamicVoice", guild=interaction.guild)
             try:
                 await channel.edit(user_limit=1)
             except Exception as e:
-                print(f"[-] Failed to set user limit for channel '{channel.name}': {e}")
+                log(f"Failed to set user limit for channel '{channel.name}': {e}", level=logging.ERROR, module_name="DynamicVoice", guild=interaction.guild)
         set_server_config(guild_id, "dynamic_voice_play_audio", enable)
-        print(f"[+] Set dynamic voice play audio to {enable} in guild {guild_id}")
+        log(f"Set dynamic voice play audio to {enable} in guild {guild_id}", module_name="DynamicVoice", guild=interaction.guild)
         await interaction.followup.send(f"動態語音頻道進入前播放音效已{'啟用' if enable else '禁用'}。", ephemeral=True)
     
     @commands.Cog.listener()
@@ -131,9 +134,10 @@ class DynamicVoice(commands.GroupCog, name=app_commands.locale_str("dynamic-voic
                     if channel:
                         try:
                             await channel.connect()
-                            print(f"[+] Connected to dynamic voice channel '{channel.name}' in guild {guild_id}")
+                            # print(f"[+] Connected to dynamic voice channel '{channel.name}' in guild {guild_id}")
+                            log(f"Connected to dynamic voice channel '{channel.name}' in guild {guild_id}", module_name="DynamicVoice", guild=member.guild)
                         except Exception as e:
-                            print(f"[-] Failed to connect to channel '{channel.name}': {e}")
+                            log(f"Failed to connect to channel '{channel.name}': {e}", level=logging.ERROR, module_name="DynamicVoice", guild=member.guild)
                         return
         if member.bot:
             return
@@ -158,7 +162,7 @@ class DynamicVoice(commands.GroupCog, name=app_commands.locale_str("dynamic-voic
                         id = random.randint(1, 7)
                         audio_source = discord.FFmpegPCMAudio(f"assets/dynamic_voice_join_{id}.mp3")
                         if not voice_client.is_playing():
-                            print(f"[+] Playing join audio for user {member} in guild {guild_id}")
+                            log(f"Playing join audio for user {member} in guild {guild_id}", module_name="DynamicVoice", user=member, guild=member.guild)
                             voice_client.play(audio_source)
                             while voice_client.is_playing():
                                 if after.channel.members == 1:
@@ -166,36 +170,36 @@ class DynamicVoice(commands.GroupCog, name=app_commands.locale_str("dynamic-voic
                                     break
                                 await asyncio.sleep(0.1)
                 except Exception as e:
-                    print(f"[-] Failed to play join audio: {e}")
+                    log(f"Failed to play join audio: {e}", level=logging.ERROR, module_name="DynamicVoice", guild=member.guild)
             try:
                 await member.move_to(new_channel)
             except Exception as e:
-                print(f"[-] Failed to move user {member} to channel '{new_channel.name}': {e}")
+                log(f"Failed to move user {member} to channel '{new_channel.name}': {e}", level=logging.ERROR, module_name="DynamicVoice", guild=member.guild)
             await asyncio.sleep(0.5)
             if new_channel and len(new_channel.members) == 0:
                 try:
                     await new_channel.delete()
-                    print(f"[+] Deleted empty dynamic voice channel '{new_channel.name}' for user {member} in guild {guild_id}")
+                    log(f"Deleted empty dynamic voice channel '{new_channel.name}' for user {member} in guild {guild_id}", module_name="DynamicVoice", guild=member.guild)
                     return
                 except Exception as e:
-                    print(f"[-] Failed to delete empty channel '{new_channel.name}': {e}")
+                    log(f"Failed to delete empty channel '{new_channel.name}': {e}", level=logging.ERROR, module_name="DynamicVoice", guild=member.guild)
             else:
                 created_channels = get_server_config(guild_id, "created_dynamic_channels", [])  # refresh list
                 created_channels.append(new_channel.id)
                 set_server_config(guild_id, "created_dynamic_channels", created_channels)
-                print(f"[+] Created dynamic voice channel '{new_channel.name}' for user {member} in guild {guild_id}")
+                log(f"Created dynamic voice channel '{new_channel.name}' for user {member} in guild {guild_id}", module_name="DynamicVoice", guild=member.guild)
         for user_channel_id in created_channels:
             # created_channels = get_server_config(guild_id, "created_dynamic_channels", [])
             try:
                 channel = member.guild.get_channel(user_channel_id)
             except Exception:
                 created_channels.remove(user_channel_id)
-                print(f"[-] Failed to get channel with ID {user_channel_id}, removing from tracking list.")
+                log(f"Failed to get channel with ID {user_channel_id}, removing from tracking list.", level=logging.ERROR, module_name="DynamicVoice", guild=member.guild)
                 set_server_config(guild_id, "created_dynamic_channels", created_channels)
                 continue
             if not channel:
                 created_channels.remove(user_channel_id)
-                print(f"[-] Channel with ID {user_channel_id} not found, removing from tracking list.")
+                log(f"Channel with ID {user_channel_id} not found, removing from tracking list.", level=logging.ERROR, module_name="DynamicVoice", guild=member.guild)
                 set_server_config(guild_id, "created_dynamic_channels", created_channels)
                 continue
             if len(channel.members) == 0:
@@ -203,9 +207,9 @@ class DynamicVoice(commands.GroupCog, name=app_commands.locale_str("dynamic-voic
                 set_server_config(guild_id, "created_dynamic_channels", created_channels)
                 try:
                     await channel.delete()
-                    print(f"[+] Deleted empty dynamic voice channel '{channel.name}' in guild {guild_id}")
+                    log(f"Deleted empty dynamic voice channel '{channel.name}' in guild {guild_id}", module_name="DynamicVoice", guild=member.guild)
                 except Exception as e:
-                    print(f"[-] Failed to delete channel '{channel.name}': {e}")
+                    log(f"Failed to delete channel '{channel.name}': {e}", level=logging.ERROR, module_name="DynamicVoice", guild=member.guild)
 
 asyncio.run(bot.add_cog(DynamicVoice(bot)))
 
@@ -219,9 +223,9 @@ async def on_ready():
             if channel:
                 try:
                     await channel.connect()
-                    print(f"[+] Connected to dynamic voice channel '{channel.name}' in guild {guild_id} on ready.")
+                    log(f"Connected to dynamic voice channel '{channel.name}' in guild {guild_id} on ready.", module_name="DynamicVoice", guild=guild)
                 except Exception as e:
-                    print(f"[-] Failed to connect to channel '{channel.name}' on ready: {e}")
+                    log(f"Failed to connect to channel '{channel.name}' on ready: {e}", level=logging.ERROR, module_name="DynamicVoice", guild=guild)
 on_ready_tasks.append(on_ready)
                     
 

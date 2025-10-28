@@ -3,10 +3,12 @@ import asyncio
 import discord
 import random
 from globalenv import bot, start_bot, config, on_ready_tasks, modules
+from logger import log
+import logging
 if "UtilCommands" in modules:
     import UtilCommands
 else:
-    print("[!] UtilCommands module not found, some features may be missing.")
+    log("UtilCommands module not found, some features may be missing.", level=logging.WARNING, module_name="PresenceChange")
     UtilCommands = None
 
 status_map = {
@@ -56,13 +58,13 @@ def load_config():
 
 async def set_presence():
     await bot.wait_until_ready()
-    print("[+] 狀態更新任務已啟動")
+    log("狀態更新任務已啟動", module_name="PresenceChange")
     # 若你有可能在 reconnect 時重複啟動，請在 on_ready 那裡用 flag 防止重複 create_task
     while not bot.is_closed():
         try:
             load_config()
         except Exception as e:
-            print(f"[!] 重新載入設定時發生錯誤: {e}")
+            log(f"重新載入設定時發生錯誤: {e}", level=logging.ERROR, module_name="PresenceChange")
 
         try:
             loop_time = float(config("presence_loop_time"))
@@ -74,7 +76,7 @@ async def set_presence():
                 await bot.change_presence(status=status, activity=None)
                 # print("[+] Status set to", status)
             except Exception as e:
-                print(f"[!] 無法改變狀態: {e}")
+                log(f"無法改變狀態: {e}", level=logging.ERROR, module_name="PresenceChange")
             await asyncio.sleep(loop_time)
             continue
 
@@ -83,7 +85,7 @@ async def set_presence():
                 await bot.change_presence(status=status, activity=activity)
                 # print(f"[+] Status set to {status}, activity: {activity.type.name} {activity.name}")
             except Exception as e:
-                print(f"[!] 無法改變狀態: {e}")
+                log(f"無法改變狀態: {e}", level=logging.ERROR, module_name="PresenceChange")
             await asyncio.sleep(loop_time)
 
 

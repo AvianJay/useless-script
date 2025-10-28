@@ -8,6 +8,8 @@ import aiohttp
 from datetime import datetime, timedelta, timezone
 from typing import Union, Optional
 import ModerationNotify
+from logger import log
+import logging
 
 
 def timestr_to_seconds(timestr: str) -> int:
@@ -94,16 +96,19 @@ async def ban_user(guild: discord.Guild, user: Union[discord.Member, discord.Use
             await user.ban(reason=reason, delete_message_seconds=delete_message_seconds)
         else:
             await guild.ban(user, reason=reason, delete_message_seconds=delete_message_seconds)
-        print(f"[+] 已封禁用戶 {user}，原因：{reason}，解封時間：{'無' if duration == 0 else unban_time.isoformat()}")
+        # print(f"[+] 已封禁用戶 {user}，原因：{reason}，解封時間：{'無' if duration == 0 else unban_time.isoformat()}")
+        log(f"已封禁用戶 {user}，原因：{reason}，解封時間：{'無' if duration == 0 else unban_time.isoformat()}", module_name="Moderate", guild=guild)
         return True
     except Exception as e:
-        print(f"[!] 無法封禁用戶 {user}：{e}")
+        # print(f"[!] 無法封禁用戶 {user}：{e}")
+        log(f"無法封禁用戶 {user}：{e}", level=logging.ERROR, module_name="Moderate", guild=guild)
         return False
 
 
 async def check_unban():
     await bot.wait_until_ready()
-    print("[+] 自動解封任務已啟動")
+    # print("[+] 自動解封任務已啟動")
+    log("自動解封任務已啟動", module_name="Moderate")
     while not bot.is_closed():
         for guild in bot.guilds:
             guild_id = guild.id
@@ -132,9 +137,9 @@ async def check_unban():
                 try:
                     await guild.unban(user, reason="自動解封")
                     set_user_data(guild_id, user.id, "unban_time", None)
-                    print(f"[+] 已自動解封 {user} 在 {guild.name} 的封禁。")
+                    log(f"已自動解封 {user} 在 {guild.name} 的封禁。", module_name="Moderate", guild=guild)
                 except Exception as e:
-                    print(f"[!] 解封 {user} 時發生錯誤：{e}")
+                    log(f"解封 {user} 時發生錯誤：{e}", level=logging.ERROR, module_name="Moderate", guild=guild)
 
         await asyncio.sleep(60)  # 每分鐘檢查一次
 on_ready_tasks.append(check_unban)
@@ -298,10 +303,13 @@ async def moderation_message_settings(interaction: discord.Interaction, user: di
             try:
                 await channel.send(generate_message())
                 await interaction.response.edit_message(content="公告已發送。", view=None)
+                log(f"已發送公告到 {channel.name} 頻道。", module_name="Moderate", guild=interaction.guild)
             except discord.Forbidden:
                 await interaction.response.send_message("無法在公告頻道發送訊息，機器人缺少權限。", ephemeral=True)
+                log(f"無法在公告頻道發送訊息，機器人缺少權限。", level=logging.ERROR, module_name="Moderate", guild=interaction.guild)
             except Exception as e:
                 await interaction.response.send_message(f"發送公告時發生錯誤：{e}", ephemeral=True)
+                log(f"發送公告時發生錯誤：{e}", level=logging.ERROR, module_name="Moderate", guild=interaction.guild)
     await interaction.response.send_message(embed=embed, view=MessageButtons())
             
 
@@ -813,6 +821,7 @@ class Moderate(commands.GroupCog, group_name=app_commands.locale_str("admin")):
             return
         logs = await do_action_str(commands_str, ctx.guild, user, message=None)
         await ctx.send("操作完成：\n- " + "\n- ".join(logs))
+        log("操作完成：\n- " + "\n- ".join(logs), module_name="Moderate", guild=ctx.guild)
     
     @commands.command(aliases=["mr", "mod_reply"])
     @commands.has_permissions(administrator=True)
@@ -848,6 +857,7 @@ class Moderate(commands.GroupCog, group_name=app_commands.locale_str("admin")):
         user = referenced_message.author if isinstance(referenced_message.author, discord.Member) else None
         logs = await do_action_str(commands_str, ctx.guild, user, message=referenced_message)
         await ctx.send("操作完成：\n- " + "\n- ".join(logs))
+        log("操作完成：\n- " + "\n- ".join(logs), module_name="Moderate", guild=ctx.guild)
 
 
 asyncio.run(bot.add_cog(Moderate(bot)))

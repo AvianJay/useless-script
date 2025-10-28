@@ -4,6 +4,8 @@ import threading
 from discord import app_commands
 from datetime import datetime, timedelta, timezone
 from globalenv import bot, start_bot, get_server_config, set_server_config, get_user_data, set_user_data
+from logger import log
+import logging
 
 
 ignore = []
@@ -49,8 +51,9 @@ async def notify_user(user: discord.User, guild: discord.Guild, action: str, rea
 
     try:
         await user.send(embed=embed)
+        log(f"已發送私訊給 {user}\n- {embed.title}\n- {embed.description}", module_name="ModerationNotify", guild=guild)
     except discord.Forbidden:
-        print(f"無法私訊 {user}")
+        log(f"無法私訊 {user}", level=logging.ERROR, module_name="ModerationNotify", guild=guild)
 
 
 @bot.event
@@ -76,7 +79,8 @@ async def on_member_remove(member):
             else:
                 pass
     except Exception as e:
-        print(f"Error fetching audit logs: {e}")
+        # print(f"Error fetching audit logs: {e}")
+        log(f"Error fetching audit logs: {e}", level=logging.ERROR, module_name="ModerationNotify", guild=guild)
         # await notify_user(member, guild, "移除", "無法取得")
 
 
@@ -102,7 +106,7 @@ async def on_member_update(before, after):
                     end_time = after.timed_out_until.astimezone(timezone(timedelta(hours=8)))  # 台灣時間
                     await notify_user(after, guild, "禁言", reason, end_time)
         except Exception as e:
-            print(f"Error fetching audit logs: {e}")
+            log(f"Error fetching audit logs: {e}", level=logging.ERROR, module_name="ModerationNotify", guild=guild)
             await notify_user(after, guild, "禁言", "無法取得", after.timed_out_until)
 
 
@@ -128,6 +132,7 @@ async def set_moderation_notification(interaction: discord.Interaction, action: 
 
     set_server_config(guild.id, f"notify_user_on_{action}", enable)
     await interaction.response.send_message(f"已將 {action} 通知設定為{'啟用' if enable else '禁用'}。", ephemeral=True)
+    log(f"已將 {action} 通知設定為{'啟用' if enable else '禁用'}。", module_name="ModerationNotify", guild=guild)
 
 
 if __name__ == "__main__":
