@@ -411,6 +411,7 @@ class TWBus(commands.GroupCog, name=app_commands.locale_str("bus")):
                 async def on_timeout(self):
                     for item in self.children:
                         item.disabled = True
+                    self.children[-1].disabled = False  # keep map button enabled
                     try:
                         await self.interaction.edit_original_response(view=self)
                     except Exception:
@@ -511,6 +512,7 @@ class TWBus(commands.GroupCog, name=app_commands.locale_str("bus")):
                 async def on_timeout(self):
                     for item in self.children:
                         item.disabled = True
+                    self.children[-1].disabled = False  # keep map button enabled
                     try:
                         await self.interaction.edit_original_response(view=self)
                     except Exception:
