@@ -83,13 +83,13 @@ def reload_config():
     try:
         if os.path.exists(config_path):
             _config = json.load(open(config_path, "r", encoding="utf-8"))
-            print("[+] Config reloaded successfully.")
+            log("設定檔已重新載入。", module_name="Main")
             return True
         else:
-            print("[!] Config file does not exist.")
+            log("設定檔不存在。", module_name="Main", level=logging.WARNING)
             return False
     except Exception as e:
-        print(f"[!] Error reloading config: {e}")
+        log(f"重新載入設定檔時發生錯誤: {e}", module_name="Main", level=logging.ERROR)
         return False
 
 modules = []
@@ -285,7 +285,7 @@ class CommandNameTranslator(app_commands.Translator):
 
 async def setup_hook():
     await bot.tree.set_translator(CommandNameTranslator())
-    log("Command translator set up.", module_name="Main")
+    log("指令翻譯器已設定。", module_name="Main")
 
 
 bot.setup_hook = setup_hook
@@ -295,10 +295,10 @@ on_close_tasks = set()  # only works on !shutdown
 
 @bot.event
 async def on_ready():
-    log(f'Logged in as {bot.user}', module_name="Main")
+    log(f'已登入為 {bot.user}', module_name="Main")
     try:
         synced = await bot.tree.sync()  # 同步指令
-        log(f"Synced {len(synced)} command(s)", module_name="Main")
+        log(f"已同步 {len(synced)} 個指令", module_name="Main")
 
         # 防止重複建立相同的 background task（例如 reconnect）
         if not getattr(bot, "_on_ready_tasks_started", False):
@@ -308,7 +308,7 @@ async def on_ready():
             bot._on_ready_tasks_started = True
 
     except Exception as e:
-        log("Error while syncing commands:", str(e), module_name="Main")
+        log("同步指令時發生錯誤:", str(e), module_name="Main")
         traceback.print_exc()
 
 def log(*messages, level = logging.INFO, module_name: str = "General", user: discord.User = None, guild: discord.Guild = None):
@@ -317,5 +317,5 @@ def log(*messages, level = logging.INFO, module_name: str = "General", user: dis
         logger.log(*messages, level=level, module_name=module_name, user=user, guild=guild)
 
 def start_bot():
-    log("Bot is starting...", module_name="Main")
+    log("正在啟動機器人...", module_name="Main")
     bot.run(config("TOKEN"))
