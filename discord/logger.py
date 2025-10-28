@@ -62,31 +62,31 @@ class LoggerCog(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
-    @commands.Cog.listener()
-    async def on_message(self, message):
-        if message.author == self.bot.user:
-            return
-        await log(f"收到了訊息 {message.author}: {message.content}", module_name="Logger", level=logging.INFO, user=message.author, guild=message.guild)
+    # @commands.Cog.listener()
+    # async def on_message(self, message):
+    #     if message.author == self.bot.user:
+    #         return
+    #     await log(f"收到了訊息 {message.author}: {message.content}", module_name="Logger", level=logging.INFO, user=message.author, guild=message.guild)
     
     @commands.Cog.listener()
     async def on_command(self, ctx):
-        await log(f"指令被觸發: {ctx.command} 由 {ctx.author}", module_name="Logger", level=logging.INFO, user=ctx.author, guild=ctx.guild)
+        log(f"指令被觸發: {ctx.command} 由 {ctx.author}", module_name="Logger", level=logging.INFO, user=ctx.author, guild=ctx.guild)
 
     @commands.Cog.listener()
     async def on_command_error(self, ctx, error):
-        await log(f"指令 {ctx.command} 由 {ctx.author} 觸發時發生錯誤: {error}", module_name="Logger", level=logging.ERROR, user=ctx.author, guild=ctx.guild)
+        log(f"指令 {ctx.command} 由 {ctx.author} 觸發時發生錯誤: {error}", module_name="Logger", level=logging.ERROR, user=ctx.author, guild=ctx.guild)
 
     @commands.Cog.listener()
     async def on_guild_join(self, guild):
-        await log(f"加入了新的伺服器: {guild.name} (ID: {guild.id})", module_name="Logger", level=logging.INFO)
-    
+        log(f"加入了新的伺服器: {guild.name} (ID: {guild.id})", module_name="Logger", level=logging.INFO)
+
     @commands.Cog.listener()
     async def on_guild_remove(self, guild):
-        await log(f"離開了伺服器: {guild.name} (ID: {guild.id})", module_name="Logger", level=logging.INFO)
-    
+        log(f"離開了伺服器: {guild.name} (ID: {guild.id})", module_name="Logger", level=logging.INFO)
+
     @commands.Cog.listener()
     async def on_app_command_completion(self, interaction: discord.Interaction, application_command: discord.app_commands.Command):
-        await log(f"應用程式指令被觸發: {application_command.name} 由 {interaction.user}", module_name="Logger", level=logging.INFO, user=interaction.user, guild=interaction.guild)
+        log(f"應用程式指令被觸發: {application_command.name} 由 {interaction.user}", module_name="Logger", level=logging.INFO, user=interaction.user, guild=interaction.guild)
 
     @commands.Cog.listener()
     async def on_ready(self):
