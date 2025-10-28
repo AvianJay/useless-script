@@ -251,6 +251,11 @@ translations = {
     "dsize-stats": "dsize-統計資料",
     "set-server-rules": "設定伺服器規則",
     "rules": "規則",
+    "quickadd": "快速新增",
+    "import": "匯入",
+    "export": "匯出",
+    "file": "檔案",
+    "merge": "合併",
 }
 class CommandNameTranslator(app_commands.Translator):
     async def translate(

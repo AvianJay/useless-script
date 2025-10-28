@@ -38,7 +38,7 @@ def load_config():
             try:
                 bot_latency = round(bot.latency * 1000)  # Convert to milliseconds
                 bot_latency = str(bot_latency) + "ms"
-            except OverflowError:
+            except Exception:
                 bot_latency = "N/A"
         else:
             bot_latency = "N/A"
