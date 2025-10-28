@@ -493,7 +493,7 @@ class ReportSettings(commands.GroupCog, name=app_commands.locale_str("report")):
                     inline=False
                 )
             
-            embed.set_footer(text=f"使用 {await get_command_mention("report", "settings")} 來修改設定")
+            embed.set_footer(text=f"使用 /report settings 來修改設定")
             await interaction.response.send_message(embed=embed, ephemeral=True)
             return
         
