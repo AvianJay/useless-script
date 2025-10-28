@@ -74,7 +74,21 @@ def config(key, value=None, mode="r"):
         return True
     else:
         raise ValueError(f"Invalid mode: {mode}")
-    
+
+
+def reload_config():
+    global _config
+    try:
+        if os.path.exists(config_path):
+            _config = json.load(open(config_path, "r", encoding="utf-8"))
+            print("[+] Config reloaded successfully.")
+            return True
+        else:
+            print("[!] Config file does not exist.")
+            return False
+    except Exception as e:
+        print(f"[!] Error reloading config: {e}")
+        return False
 
 modules = []
 
@@ -233,6 +247,8 @@ translations = {
     "mention": "提及",
     "query": "關鍵字",
     "dsize-stats": "dsize-統計資料",
+    "set-server-rules": "設定伺服器規則",
+    "rules": "規則",
 }
 class CommandNameTranslator(app_commands.Translator):
     async def translate(

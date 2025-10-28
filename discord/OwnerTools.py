@@ -1,7 +1,7 @@
 import io
 import json
 import discord
-from globalenv import bot, start_bot, get_user_data, set_user_data, config, get_server_config, set_server_config, _config, default_config, get_all_user_data, db, on_close_tasks
+from globalenv import bot, start_bot, get_user_data, set_user_data, config, get_server_config, set_server_config, _config, default_config, get_all_user_data, db, on_close_tasks, reload_config
 from discord.ext import commands
 from typing import Callable
 
@@ -258,6 +258,15 @@ async def serverinfo(ctx, guild_id: int):
     embed.add_field(name="頻道數", value=str(len(guild.channels)), inline=True)
     embed.add_field(name="建立時間", value=guild.created_at.strftime("%Y-%m-%d %H:%M:%S"), inline=True)
     await ctx.send(embed=embed)
+
+
+@bot.command(aliases=["rc"])
+@is_owner()
+async def reloadconfig(ctx):
+    if reload_config():
+        await ctx.send("配置已重新加載。")
+    else:
+        await ctx.send("重新加載配置時發生錯誤。")
 
 
 @bot.event
