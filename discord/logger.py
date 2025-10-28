@@ -42,9 +42,12 @@ async def _log(*messages, level = logging.INFO, module_name: str = "General", us
                 color = 0x00ff00 if level == logging.INFO else 0xffff00 if level == logging.WARNING else 0xff0000 if level == logging.ERROR else 0x0000ff
                 embed = discord.Embed(title=module_name, description=message, color=color)
                 if user:
-                    embed.add_field(name="使用者", value=f"{user} (ID: `{user.id}`)", inline=False)
+                    embed.add_field(name="使用者ID", value=f"`{user.id}`", inline=False)  # easy to copy user id
+                    to_show_name = f"{user.display_name} ({user.name})" if user.display_name != user.name else user.name
+                    embed.set_author(name=to_show_name, icon_url=user.display_avatar.url if user.display_avatar else None)
                 if guild:
-                    embed.add_field(name="伺服器", value=f"{guild.name} (ID: `{guild.id}`)", inline=False)
+                    embed.add_field(name="伺服器ID", value=f"`{guild.id}`", inline=False)  # easy to copy guild id
+                    embed.set_footer(text=guild.name if guild.name else guild.id, icon_url=guild.icon.url if guild.icon else None)
                 await channel.send(embed=embed)
             except Exception as e:
                 print(f"[!] Error sending log message to Discord channel: {e}")
