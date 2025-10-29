@@ -8,7 +8,7 @@ from typing import Union
 from datetime import datetime, timezone
 
 startup_time = datetime.now(timezone.utc)
-version = "0.7.0"
+version = "0.7.1"
 try:
     git_commit_hash = os.popen("git rev-parse --short HEAD").read().strip()
 except Exception as e:

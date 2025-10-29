@@ -62,15 +62,19 @@ def log(*messages, level = logging.INFO, module_name: str = "General", user: dis
         asyncio.run(_log(*messages, level=level, module_name=module_name, user=user, guild=guild))
 
 class LoggerCog(commands.Cog):
-    def __init__(self, bot):
+    def __init__(self, bot: commands.Bot):
         self.bot = bot
 
-    # @commands.Cog.listener()
-    # async def on_message(self, message):
-    #     if message.author == self.bot.user:
-    #         return
-    #     await log(f"收到了訊息 {message.author}: {message.content}", module_name="Logger", level=logging.INFO, user=message.author, guild=message.guild)
-    
+    @commands.Cog.listener()
+    async def on_message(self, message: discord.Message):
+        if message.author == self.bot.user:
+            return
+        # only log dm messages
+        if isinstance(message.channel, discord.DMChannel):
+            await log(f"收到了私訊 {message.author}: {message.content}", module_name="Logger", level=logging.INFO, user=message.author)
+        # else:
+        #     await log(f"收到了訊息 {message.author}: {message.content}", module_name="Logger", level=logging.INFO, user=message.author, guild=message.guild)
+
     @commands.Cog.listener()
     async def on_command(self, ctx):
         log(f"指令被觸發: {ctx.command} 由 {ctx.author}", module_name="Logger", level=logging.INFO, user=ctx.author, guild=ctx.guild)
