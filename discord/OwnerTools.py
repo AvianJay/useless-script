@@ -202,6 +202,15 @@ async def listservers(ctx):
 async def sendmessage(ctx, channel_id: int, *, message: str):
     channel = bot.get_channel(channel_id)
     if channel is None:
+        # try get user DM
+        user = bot.get_user(channel_id)
+        if user is not None:
+            try:
+                await user.send(message)
+                await ctx.send(f"已在用戶 {user.name} 的私訊中發送訊息。")
+            except discord.Forbidden:
+                await ctx.send("無法在該用戶的私訊中發送訊息，機器人缺少權限。")
+            return
         await ctx.send("找不到該頻道。")
         return
     try:
