@@ -14,5 +14,6 @@
     "DynamicVoice",
     "twbus",
     "AutoReply",
-    "logger"
+    "logger",
+    "BadQuote"
 ]
