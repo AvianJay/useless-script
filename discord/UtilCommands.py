@@ -6,9 +6,10 @@ from discord.ext import commands
 from globalenv import bot, start_bot, get_user_data, set_user_data, get_command_mention, modules
 from typing import Union
 from datetime import datetime, timezone
+import psutil
 
 startup_time = datetime.now(timezone.utc)
-version = "0.7.1"
+version = "0.7.2"
 try:
     git_commit_hash = os.popen("git rev-parse --short HEAD").read().strip()
 except Exception as e:
@@ -51,6 +52,8 @@ async def info_command(interaction: discord.Interaction):
     embed.add_field(name="伺服器數量", value=server_count)
     embed.add_field(name="用戶總數量", value=user_count)
     embed.add_field(name="機器人延遲", value=f"{bot_latency}ms")
+    embed.add_field(name="CPU 使用率", value=f"{psutil.cpu_percent()}%")
+    embed.add_field(name="記憶體使用率", value=f"{psutil.virtual_memory().percent}%")
     embed.add_field(name="運行時間", value=uptime)
     embed.add_field(name=f"已載入模組({len(modules)})", value="\n".join(modules) if modules else "無", inline=False)
     embed.set_thumbnail(url=bot.user.avatar.url if bot.user.avatar else None)
