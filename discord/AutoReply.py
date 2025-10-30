@@ -29,6 +29,7 @@ async def list_autoreply_autocomplete(interaction: discord.Interaction, current:
     choices = []
     for ar in autoreplies:
         text = ", ".join(ar["trigger"])
+        text = text if len(text) <= 100 else text[:97] + "..."
         if current.lower() in text.lower():
             choices.append(app_commands.Choice(name=text, value=text))
     return choices[:25]  # Discord 限制最多 25 個選項
@@ -215,6 +216,7 @@ class AutoReply(commands.GroupCog, name="autoreply"):
                 return
         for ar in autoreplies:
             det = ", ".join(ar["trigger"])
+            det = det if len(det) <= 100 else det[:97] + "..."
             if det == trigger:
                 if new_mode:
                     ar["mode"] = new_mode
@@ -249,6 +251,7 @@ class AutoReply(commands.GroupCog, name="autoreply"):
         autoreplies = get_server_config(guild_id, "autoreplies", [])
         for ar in autoreplies:
             det = ", ".join(ar["trigger"])
+            det = det if len(det) <= 100 else det[:97] + "..."
             if det == trigger:
                 if new_trigger:
                     new_triggers = [t.strip() for t in new_trigger.split(",") if t.strip()]
