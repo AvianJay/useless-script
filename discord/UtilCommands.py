@@ -7,9 +7,12 @@ from globalenv import bot, start_bot, get_user_data, set_user_data, get_command_
 from typing import Union
 from datetime import datetime, timezone
 import psutil
+import base64
+import mimetypes
+import requests
 
 startup_time = datetime.now(timezone.utc)
-version = "0.7.2"
+version = "0.7.3"
 try:
     git_commit_hash = os.popen("git rev-parse --short HEAD").read().strip()
 except Exception as e:
@@ -231,6 +234,29 @@ async def httpcat_command(interaction: discord.Interaction, status_code: int):
     embed = discord.Embed(title=f"HTTP Cat {status_code}", color=0x00ff00)
     embed.set_image(url=url)
     await interaction.response.send_message(embed=embed)
+
+
+@bot.tree.command(name=app_commands.locale_str("changeavatar"), description="更換機器人的頭像")
+@app_commands.describe(image="新的頭像圖片")
+@app_commands.default_permissions(administrator=True)
+@app_commands.allowed_installs(guilds=True, users=False)
+@app_commands.allowed_contexts(guilds=True, dms=False, private_channels=False)
+async def changeavatar_command(interaction: discord.Interaction, image: discord.Attachment):
+    guild_id = interaction.guild.id if interaction.guild else None
+    await interaction.response.defer()
+    try:
+        img_data = await image.read()
+        url = f"https://discord.com/api/v10/guilds/{guild_id}/members/@me"
+        mine = mimetypes.guess_type(image.filename)[0] or "application/octet-stream"
+        b64_data = base64.b64encode(img_data).decode('utf-8')
+        avatar_data = f"data:{mine};base64,{b64_data}"
+        headers = {"Authorization": f"Bot {bot.http.token}"}
+        payload = {"avatar": avatar_data}
+        response = requests.patch(url, json=payload, headers=headers)
+        response.raise_for_status()
+        await interaction.followup.send("頭像更新成功！")
+    except Exception as e:
+        await interaction.followup.send(f"更新頭像時發生錯誤：{e}")
     
 
 @bot.command(aliases=["hc"])

@@ -256,6 +256,7 @@ translations = {
     "export": "匯出",
     "file": "檔案",
     "merge": "合併",
+    "changeavatar": "更改頭像",
 }
 class CommandNameTranslator(app_commands.Translator):
     async def translate(
