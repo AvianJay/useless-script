@@ -257,6 +257,7 @@ translations = {
     "file": "檔案",
     "merge": "合併",
     "changeavatar": "更改頭像",
+    "image": "圖片",
 }
 class CommandNameTranslator(app_commands.Translator):
     async def translate(
