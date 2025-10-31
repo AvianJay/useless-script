@@ -107,7 +107,7 @@ def index():
 
 
 @app.route('/api/leaderboard', methods=['GET'])
-def get_leaderboard():
+def get_leaderboard_route():
     leaderboard = get_leaderboard()
     return jsonify(leaderboard)
 
