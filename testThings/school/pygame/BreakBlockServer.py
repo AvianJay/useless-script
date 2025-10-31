@@ -17,7 +17,7 @@ def init_db():
                   ''')
     c.execute('''CREATE TABLE IF NOT EXISTS leaderboard
                  (id INTEGER PRIMARY KEY AUTOINCREMENT,
-                  user_id INTEGER NOT NULL,
+                  user_id INTEGER NOT NULL UNIQUE,
                   score INTEGER NOT NULL,
                   win BOOLEAN NOT NULL DEFAULT 0,
                   app_version TEXT NOT NULL DEFAULT '1.0')
@@ -35,7 +35,12 @@ def init_db():
 def insert_score(user_id, score, win=False, app_version=app_version):
     conn = sqlite3.connect('breakblock.db')
     c = conn.cursor()
-    c.execute("INSERT INTO leaderboard (user_id, score, win, app_version) VALUES (?, ?, ?, ?)", (user_id, score, win, app_version))
+    c.execute("INSERT INTO history (user_id, score, win, app_version) VALUES (?, ?, ?, ?)", (user_id, score, win, app_version))
+    # get current high score
+    c.execute("SELECT score FROM history WHERE user_id = ? ORDER BY score DESC LIMIT 1", (user_id,))
+    high_score = c.fetchone()
+    if high_score:
+        c.execute("UPDATE leaderboard SET score = ? WHERE user_id = ?", (high_score[0], user_id))
     conn.commit()
     conn.close()
 
