@@ -151,11 +151,13 @@ class Paddle(pygame.sprite.Sprite):
         self.rect = self.image.get_rect()
         self.rect.x = 350
         self.rect.y = 550
+        self.can_move = True
     
     def update(self):
         # move paddle with mouse
-        mouse_x = pygame.mouse.get_pos()[0]
-        self.rect.x = mouse_x - 50
+        if self.can_move:
+            mouse_x = pygame.mouse.get_pos()[0]
+            self.rect.x = mouse_x - 50
 
 class Ball(pygame.sprite.Sprite):
     def __init__(self, x, y, balls_list):
