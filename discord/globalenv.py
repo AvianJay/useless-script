@@ -258,7 +258,9 @@ translations = {
     "merge": "合併",
     "changeavatar": "更改頭像",
     "image": "圖片",
-    "random_chance": "回覆機率"
+    "random_chance": "回覆機率",
+    "changebanner": "更改橫幅",
+    "changebio": "更改人稱代詞",
 }
 class CommandNameTranslator(app_commands.Translator):
     async def translate(

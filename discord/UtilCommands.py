@@ -12,7 +12,7 @@ import mimetypes
 import requests
 
 startup_time = datetime.now(timezone.utc)
-version = "0.7.5"
+version = "0.7.6"
 try:
     git_commit_hash = os.popen("git rev-parse --short HEAD").read().strip()
 except Exception as e:
@@ -260,7 +260,52 @@ async def changeavatar_command(interaction: discord.Interaction, image: discord.
         await interaction.followup.send("頭像更新成功！")
     except Exception as e:
         await interaction.followup.send(f"更新頭像時發生錯誤：{e}")
-    
+
+
+@bot.tree.command(name=app_commands.locale_str("changebanner"), description="更換機器人的橫幅（不指定則恢復預設橫幅）")
+@app_commands.describe(image="新的橫幅圖片")
+@app_commands.default_permissions(administrator=True)
+@app_commands.allowed_installs(guilds=True, users=False)
+@app_commands.allowed_contexts(guilds=True, dms=False, private_channels=False)
+async def changebanner_command(interaction: discord.Interaction, image: discord.Attachment = None):
+    guild_id = interaction.guild.id if interaction.guild else None
+    await interaction.response.defer()
+    try:
+        if image:
+            img_data = await image.read()
+            mine = mimetypes.guess_type(image.filename)[0] or "application/octet-stream"
+            b64_data = base64.b64encode(img_data).decode('utf-8')
+            banner_data = f"data:{mine};base64,{b64_data}"
+        else:
+            banner_data = None  # reset to default
+        url = f"https://discord.com/api/v10/guilds/{guild_id}/members/@me"
+        headers = {"Authorization": f"Bot {bot.http.token}"}
+        payload = {"banner": banner_data}
+        response = requests.patch(url, json=payload, headers=headers)
+        response.raise_for_status()
+        await interaction.followup.send("橫幅更新成功！")
+    except Exception as e:
+        await interaction.followup.send(f"更新橫幅時發生錯誤：{e}")
+
+
+@bot.tree.command(name=app_commands.locale_str("changebio"), description="更改機器人的人稱代詞（不指定則恢復預設）")
+@app_commands.describe(bio="新的自我介紹文字")
+@app_commands.default_permissions(administrator=True)
+async def changebio_command(interaction: discord.Interaction, bio: str = None):
+    guild_id = interaction.guild.id if interaction.guild else None
+    await interaction.response.defer()
+    try:
+        if bio:
+            bio = bio if len(bio) <= 100 else bio[:97] + "..."
+        url = f"https://discord.com/api/v10/guilds/{guild_id}/members/@me"
+        headers = {"Authorization": f"Bot {bot.http.token}"}
+        payload = {"bio": bio}
+        response = requests.patch(url, json=payload, headers=headers)
+        response.raise_for_status()
+        await interaction.followup.send("自我介紹更新成功！")
+    except Exception as e:
+        await interaction.followup.send(f"更新自我介紹時發生錯誤：{e}")
+
 
 @bot.command(aliases=["hc"])
 async def httpcat(ctx: commands.Context, status_code: int):
