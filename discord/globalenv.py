@@ -260,8 +260,8 @@ translations = {
     "image": "圖片",
     "random_chance": "回覆機率",
     "changebanner": "更改橫幅",
-    "changebio": "更改人稱代詞",
-    "bio": "人稱代詞",
+    "changebio": "更改機器人介紹",
+    "bio": "介紹",
 }
 class CommandNameTranslator(app_commands.Translator):
     async def translate(

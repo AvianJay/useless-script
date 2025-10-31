@@ -12,7 +12,7 @@ import mimetypes
 import requests
 
 startup_time = datetime.now(timezone.utc)
-version = "0.7.7"
+version = "0.7.8"
 try:
     git_commit_hash = os.popen("git rev-parse --short HEAD").read().strip()
 except Exception as e:
@@ -288,8 +288,8 @@ async def changebanner_command(interaction: discord.Interaction, image: discord.
         await interaction.followup.send(f"更新橫幅時發生錯誤：{e}")
 
 
-@bot.tree.command(name=app_commands.locale_str("changebio"), description="更改機器人的人稱代詞（不指定則恢復預設）")
-@app_commands.describe(bio="新的人稱代詞（最多 100 字）")
+@bot.tree.command(name=app_commands.locale_str("changebio"), description="更改機器人的關於我（不指定則恢復預設）")
+@app_commands.describe(bio="新的介紹（最多 100 字）")
 @app_commands.default_permissions(administrator=True)
 async def changebio_command(interaction: discord.Interaction, bio: str = None):
     guild_id = interaction.guild.id if interaction.guild else None
@@ -302,9 +302,9 @@ async def changebio_command(interaction: discord.Interaction, bio: str = None):
         payload = {"bio": bio}
         response = requests.patch(url, json=payload, headers=headers)
         response.raise_for_status()
-        await interaction.followup.send("自我介紹更新成功！")
+        await interaction.followup.send("介紹更新成功！")
     except Exception as e:
-        await interaction.followup.send(f"更新自我介紹時發生錯誤：{e}")
+        await interaction.followup.send(f"更新介紹時發生錯誤：{e}")
 
 
 @bot.command(aliases=["hc"])
