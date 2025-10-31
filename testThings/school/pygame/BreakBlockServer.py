@@ -32,10 +32,10 @@ def init_db():
     conn.commit()
     conn.close()
 
-def insert_score(name, score, win=False, app_version=app_version):
+def insert_score(user_id, score, win=False, app_version=app_version):
     conn = sqlite3.connect('breakblock.db')
     c = conn.cursor()
-    c.execute("INSERT INTO leaderboard (name, score, win, app_version) VALUES (?, ?, ?, ?)", (name, score, win, app_version))
+    c.execute("INSERT INTO leaderboard (user_id, score, win, app_version) VALUES (?, ?, ?, ?)", (user_id, score, win, app_version))
     conn.commit()
     conn.close()
 
@@ -125,15 +125,16 @@ def get_leaderboard_route():
 @app.route('/api/submit_score', methods=['POST'])
 def submit_score():
     data = request.json
-    name = data.get('name')
+    token = data.get('token')
+    user = get_user_by_token(token)
     score = data.get('score')
     win = data.get('win')
     app_version = data.get('app_version')
-    if name is None or score is None or win is None:
-        return jsonify({"error": "Missing name or score"}), 400
+    if user is None or score is None or win is None:
+        return jsonify({"error": "Missing user or score"}), 400
     # Here you would normally save the score to your database.
-    insert_score(name, score, win, app_version)
-    print(f"Received score submission: {name} - {score} - {win} - {app_version}")
+    insert_score(user["id"], score, win, app_version)
+    print(f"Received score submission: {user['name']} - {score} - {win} - {app_version}")
     return jsonify({"status": "success"}), 201
 
 @app.route('/api/create_user')
