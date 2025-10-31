@@ -42,10 +42,10 @@ def insert_score(name, score, win=False, app_version=app_version):
 def get_leaderboard():
     conn = sqlite3.connect('breakblock.db')
     c = conn.cursor()
-    c.execute("SELECT name, score, win, app_version FROM leaderboard ORDER BY score DESC LIMIT 10")
+    c.execute("SELECT user_id, score, win, app_version FROM leaderboard ORDER BY score DESC LIMIT 10")
     rows = c.fetchall()
     conn.close()
-    return [{"name": row[0], "score": row[1], "win": row[2], "app_version": row[3]} for row in rows]
+    return [{"user_id": row[0], "name": get_user_by_id(row[0])["name"], "score": row[1], "win": row[2], "app_version": row[3]} for row in rows]
 
 def create_user(name):
     conn = sqlite3.connect('breakblock.db')
@@ -60,6 +60,16 @@ def get_user_by_token(token):
     conn = sqlite3.connect('breakblock.db')
     c = conn.cursor()
     c.execute("SELECT id, name FROM users WHERE token = ?", (token,))
+    row = c.fetchone()
+    conn.close()
+    if row:
+        return {"id": row[0], "name": row[1]}
+    return None
+
+def get_user_by_id(user_id):
+    conn = sqlite3.connect('breakblock.db')
+    c = conn.cursor()
+    c.execute("SELECT id, name FROM users WHERE id = ?", (user_id,))
     row = c.fetchone()
     conn.close()
     if row:
