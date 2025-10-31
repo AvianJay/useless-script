@@ -7,9 +7,10 @@ import requests
 import os
 import json
 import socket
+import threading
 
 app_version = "0.1.0"
-server_url = "http://localhost:5000/"
+server_url = "https://breakblock.avianjay.sbs/"
 ONLINE = False
 god_mode = True if sys.argv[-1] == "god" else False
 if not os.path.exists("user.json"):
@@ -32,12 +33,12 @@ def check_online():
             # create user if no token
             if user["token"] is None:
                 print("Creating user...")
-                response = requests.get(server_url + "api/create_user", params={"name": "Player"})
+                response = requests.get(server_url + "api/create_user", params={"name": socket.gethostname()})
                 if response.status_code == 201:
                     data = response.json()
                     user["token"] = data.get("token")
                     # default name to computer name
-                    user["name"] = socket.gethostname()
+                    user["name"] = data.get("name", "Unknown")
                     with open("user.json", "w") as f:
                         json.dump(user, f)
                     print("User created.")
@@ -49,6 +50,7 @@ def check_online():
                 response = requests.get(server_url + "api/get_user", params={"token": user["token"]})
                 if response.status_code == 200:
                     data = response.json()
+                    data = data.get("user", {})
                     user["name"] = data.get("name")
                 else:
                     print("Invalid token.")
@@ -60,6 +62,53 @@ def check_online():
         print(f"Failed to connect server. Error: {e}")
         ONLINE = False
 check_online()
+
+def submit_score(score, win):
+    if not ONLINE:
+        print("Offline mode: score not submitted.")
+        return False, "Offline mode"
+    try:
+        data = {
+            # "name": user["name"],
+            "score": score,
+            "win": win,
+            "app_version": app_version,
+            "token": user["token"]
+        }
+        response = requests.post(server_url + "api/submit_score", json=data)
+        if response.status_code == 201:
+            print("Score submitted successfully.")
+            return True, "Success"
+        else:
+            print("Failed to submit score.")
+            return False, "Failed to submit score"
+    except Exception as e:
+        print(f"Error submitting score: {e}")
+        return False, str(e)
+
+def change_name(new_name):
+    if not ONLINE:
+        print("Offline mode: name not changed.")
+        return False, "Offline mode"
+    try:
+        data = {
+            "new_name": new_name,
+            "token": user["token"]
+        }
+        response = requests.post(server_url + "api/edit_user_name", json=data)
+        if response.status_code == 200:
+            print("DEBUG: change_name response:", response.json())
+            user["name"] = new_name
+            with open("user.json", "w") as f:
+                json.dump(user, f)
+            print("Name changed successfully.")
+            return True, "Success"
+        else:
+            print("Failed to change name.")
+            return False, "Failed to change name"
+    except Exception as e:
+        print(f"Error changing name: {e}")
+        return False, str(e)
 
 pygame.init()
 # 打磚塊
@@ -98,7 +147,7 @@ class Paddle(pygame.sprite.Sprite):
     def __init__(self):
         pygame.sprite.Sprite.__init__(self)
         self.image = pygame.Surface((100, 10))
-        self.image.fill(Color.GREEN.value)
+        pygame.draw.rect(self.image, Color.GREEN.value, self.image.get_rect(), border_radius=15)
         self.rect = self.image.get_rect()
         self.rect.x = 350
         self.rect.y = 550
@@ -177,7 +226,7 @@ class Button(pygame.sprite.Sprite):
         pygame.sprite.Sprite.__init__(self)
         self.image = pygame.Surface((width, height))
         self.image.fill(Color.BLACK.value)
-        pygame.draw.rect(self.image, Color.GRAY.value, self.image.get_rect(), 5)
+        pygame.draw.rect(self.image, Color.GRAY.value, self.image.get_rect(), 5, 10)
         font = pygame.font.Font(fontpath, 24)
         self.text = text
         self.text_surf = font.render(self.text, True, Color.WHITE.value)
@@ -197,12 +246,59 @@ class Button(pygame.sprite.Sprite):
     def update(self):
         if self.rect.collidepoint(pygame.mouse.get_pos()):
             # to green
-            pygame.draw.rect(self.image, Color.GREEN.value, self.image.get_rect(), 5)
+            pygame.draw.rect(self.image, Color.GREEN.value, self.image.get_rect(), 5, 10)
             if pygame.mouse.get_pressed()[0]:
                 self.callback()
         else:
             # to gray
-            pygame.draw.rect(self.image, Color.BLACK.value, self.image.get_rect(), 5)
+            pygame.draw.rect(self.image, Color.GRAY.value, self.image.get_rect(), 5, 10)
+
+# https://stackoverflow.com/a/46390412
+COLOR_INACTIVE = pygame.Color('lightskyblue3')
+COLOR_ACTIVE = pygame.Color('dodgerblue2')
+FONT = pygame.font.Font(fontpath, 32)
+class InputBox:
+    def __init__(self, x, y, w, h, text='', callback=None):
+        self.rect = pygame.Rect(x, y, w, h)
+        self.color = COLOR_INACTIVE
+        self.text = text
+        self.txt_surface = FONT.render(text, True, self.color)
+        self.active = False
+        self.callback = callback
+
+    def handle_event(self, event):
+        if event.type == pygame.MOUSEBUTTONDOWN:
+            # If the user clicked on the input_box rect.
+            if self.rect.collidepoint(event.pos):
+                # Toggle the active variable.
+                self.active = not self.active
+            else:
+                self.active = False
+            # Change the current color of the input box.
+            self.color = COLOR_ACTIVE if self.active else COLOR_INACTIVE
+        if event.type == pygame.KEYDOWN:
+            if self.active:
+                if event.key == pygame.K_RETURN:
+                    if self.callback:
+                        self.callback(self.text)
+                    self.text = ''
+                elif event.key == pygame.K_BACKSPACE:
+                    self.text = self.text[:-1]
+                else:
+                    self.text += event.unicode
+                # Re-render the text.
+                self.txt_surface = FONT.render(self.text, True, self.color)
+
+    def update(self):
+        # Resize the box if the text is too long.
+        width = max(200, self.txt_surface.get_width()+10)
+        self.rect.w = width
+
+    def draw(self, screen):
+        # Blit the text.
+        screen.blit(self.txt_surface, (self.rect.x+5, self.rect.y+5))
+        # Blit the rect.
+        pygame.draw.rect(screen, self.color, self.rect, 2)
 
 def start_game():
     unbreakable_positions = []
@@ -349,11 +445,44 @@ def title_screen():
     title_surf = title_font.render("Break Block", True, Color.WHITE.value)
     title_rect = title_surf.get_rect(center=(400, 150))
     screen.blit(title_surf, title_rect)
+    high_score = user.get("high_score", 0)
+    high_score_surf = font.render(f"High Score: {high_score}", True, Color.WHITE.value)
+    high_score_rect = high_score_surf.get_rect(center=(400, 220))
+    screen.blit(high_score_surf, high_score_rect)
+    
+    def change_name_prompt():
+        def handle_name_change(new_name):
+            nonlocal success, msg
+            success, msg = change_name(new_name)
+        # center
+        input_box = InputBox(300, 250, 200, 50, text=user["name"], callback=handle_name_change)
+        done = False
+        success, msg = None, None
+        while not done:
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
+                    pygame.quit()
+                    sys.exit()
+                input_box.handle_event(event)
+                if event.type == pygame.KEYDOWN:
+                    if event.key == pygame.K_RETURN:
+                        done = True
+            input_box.update()
+            clear_screen()
+            screen.blit(title_surf, title_rect)
+            input_box.draw(screen)
+            pygame.display.update()
+        if success is not None:
+            print("Name change result:", msg)
+            if success:
+                print()
 
     start_button = Button(350, 300, 100, 50, "Start", start_game)
     quit_button = Button(350, 400, 100, 50, "Quit", lambda: sys.exit())
+    print("DEBUG: user name is", user["name"])
+    change_name_button = Button(325, 500, 150, 50, user["name"], change_name_prompt)
     buttons = pygame.sprite.Group()
-    buttons.add(start_button, quit_button)
+    buttons.add(start_button, quit_button, change_name_button)
 
     while True:
         clock.tick(60)
@@ -364,6 +493,7 @@ def title_screen():
 
         clear_screen()
         screen.blit(title_surf, title_rect)
+        screen.blit(high_score_surf, high_score_rect)
         buttons.draw(screen)
         buttons.update()
         
@@ -409,7 +539,17 @@ def _show_end_animation(message, win, score, color, duration=2500):
     buttons = pygame.sprite.Group()
     buttons.add(restart_button, title_button)
     
+    success, msg = None, None
+    def submit_score_thread():
+        nonlocal success, msg
+        success, msg = submit_score(score, win)
+    threading.Thread(target=submit_score_thread).start()
     
+    # update high score locally
+    if score > user.get("high_score", 0):
+        user["high_score"] = score
+        with open("user.json", "w") as f:
+            json.dump(user, f)
 
     while escape:
         dt = clock.tick(60)
@@ -450,6 +590,19 @@ def _show_end_animation(message, win, score, color, duration=2500):
         sub = font.render(f"Score: {score}", True, (200, 200, 200))
         subr = sub.get_rect(center=(400, 200))
         screen.blit(sub, subr)
+        # submission status
+        status_font = pygame.font.Font(fontpath, 20)
+        if success is not None:
+            status_text = "Score submitted!" if success else f"Score submission failed: {msg}"
+            status_surf = status_font.render(status_text, True, (200, 200, 200))
+            status_rect = status_surf.get_rect()
+            status_rect.topleft = (10, 570)
+            screen.blit(status_surf, status_rect)
+        else:
+            submitting_surf = status_font.render("Submitting score...", True, (200, 200, 200))
+            submitting_rect = submitting_surf.get_rect()
+            submitting_rect.topleft = (10, 570)
+            screen.blit(submitting_surf, submitting_rect)
         # buttons
         buttons.draw(screen)
         buttons.update()
