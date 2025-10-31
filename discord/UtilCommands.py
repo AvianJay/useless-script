@@ -12,7 +12,7 @@ import mimetypes
 import requests
 
 startup_time = datetime.now(timezone.utc)
-version = "0.7.6"
+version = "0.7.7"
 try:
     git_commit_hash = os.popen("git rev-parse --short HEAD").read().strip()
 except Exception as e:
@@ -289,7 +289,7 @@ async def changebanner_command(interaction: discord.Interaction, image: discord.
 
 
 @bot.tree.command(name=app_commands.locale_str("changebio"), description="更改機器人的人稱代詞（不指定則恢復預設）")
-@app_commands.describe(bio="新的自我介紹文字")
+@app_commands.describe(bio="新的人稱代詞（最多 100 字）")
 @app_commands.default_permissions(administrator=True)
 async def changebio_command(interaction: discord.Interaction, bio: str = None):
     guild_id = interaction.guild.id if interaction.guild else None

@@ -261,6 +261,7 @@ translations = {
     "random_chance": "回覆機率",
     "changebanner": "更改橫幅",
     "changebio": "更改人稱代詞",
+    "bio": "人稱代詞",
 }
 class CommandNameTranslator(app_commands.Translator):
     async def translate(
