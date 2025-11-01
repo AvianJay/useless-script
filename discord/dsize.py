@@ -357,7 +357,7 @@ async def dsize_battle(interaction: discord.Interaction, opponent: discord.User)
         await interaction.response.send_message("不能跟自己比屌長。", ephemeral=True)
         return
     
-    guild_key = interaction.guild.id
+    guild_key = interaction.guild.id if interaction.guild else None
     if not interaction.is_guild_integration():
         guild_key = None
         # global_dsize = True
