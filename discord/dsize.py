@@ -440,9 +440,9 @@ async def dsize_battle(interaction: discord.Interaction, opponent: discord.User)
             opponent_statistics["total_uses"] = opponent_statistics.get("total_uses", 0) + 1
             set_user_data(0, opponent_id, "dsize_statistics", opponent_statistics)
 
-            set_user_data(interaction.guild.id, user_id, "last_dsize", now)
-            set_user_data(interaction.guild.id, opponent_id, "last_dsize", now)
-            
+            set_user_data(guild_key, user_id, "last_dsize", now)
+            set_user_data(guild_key, opponent_id, "last_dsize", now)
+
             await interaction.response.edit_message(content="開始對決。", view=None)
             size_user = random.randint(1, max_size)
             size_opponent = random.randint(1, max_size)
