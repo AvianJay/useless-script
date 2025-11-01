@@ -403,7 +403,7 @@ async def dsize_battle(interaction: discord.Interaction, opponent: discord.Membe
         return
     
     # print(f"[DSize] {interaction.user} is challenging {opponent} to a dsize battle in guild {interaction.guild.id}")
-    log(f"{interaction.user} is challenging {opponent} to a dsize battle in guild {interaction.guild.id if guild_key else "Global"}", module_name="dsize", user=interaction.user, guild=interaction.guild)
+    log(f"{interaction.user} is challenging {opponent} to a dsize battle in guild {interaction.guild.id if guild_key else 'Global'}", module_name="dsize", user=interaction.user, guild=interaction.guild)
     
     user_using_dsize_battle.add(user_id)
     user_using_dsize_battle.add(opponent_id)
