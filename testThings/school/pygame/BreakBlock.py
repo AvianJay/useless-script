@@ -116,10 +116,10 @@ pygame.display.set_caption("打磚塊")
 screen = pygame.display.set_mode((800, 600))
 clock = pygame.time.Clock()
 if getattr(sys, 'frozen', False):
-    fontdir = sys._MEIPASS
+    assetsdir = os.path.join(sys._MEIPASS, "assets")
 else:
-    fontdir = "."
-fontpath = os.path.join(fontdir, "notobold.ttf")
+    assetsdir = "assets"
+fontpath = os.path.join(assetsdir, "notobold.ttf")
 if not os.path.exists(fontpath):
     fontpath = None
 font = pygame.font.Font(fontpath, 36)
@@ -158,6 +158,17 @@ class Paddle(pygame.sprite.Sprite):
         if self.can_move:
             mouse_x = pygame.mouse.get_pos()[0]
             self.rect.x = mouse_x - 50
+    
+    def crack(self):
+        # add crack image on paddle
+        self.can_move = False
+        crack_image = pygame.image.load(os.path.join(assetsdir, "crack.png")).convert_alpha()
+        crack_image = pygame.transform.scale(crack_image, (self.rect.width, self.rect.height))
+        # use alpha blending to combine images
+        surf = pygame.Surface((self.rect.width, self.rect.height), pygame.SRCALPHA)
+        surf.blit(self.image, (0, 0))
+        surf.blit(crack_image, (0, 0))
+        self.image = surf
 
 class Ball(pygame.sprite.Sprite):
     def __init__(self, x, y, balls_list):
@@ -226,17 +237,26 @@ class DoubleBallItem(pygame.sprite.Sprite):
 class Button(pygame.sprite.Sprite):
     def __init__(self, x, y, width, height, text, callback):
         pygame.sprite.Sprite.__init__(self)
-        self.image = pygame.Surface((width, height))
-        self.image.fill(Color.BLACK.value)
-        pygame.draw.rect(self.image, Color.GRAY.value, self.image.get_rect(), 5, 10)
         font = pygame.font.Font(fontpath, 24)
         self.text = text
         self.text_surf = font.render(self.text, True, Color.WHITE.value)
-        self.text_rect = self.text_surf.get_rect(center=(width // 2, height // 2))
-        self.image.blit(self.text_surf, self.text_rect)
+
+        # padding and ensure minimum size from provided width/height
+        padding_x, padding_y = 20, 10
+        w = max(width, self.text_surf.get_width() + padding_x)
+        h = max(height, self.text_surf.get_height() + padding_y)
+
+        # create surface sized to fit the text (or the provided minimum)
+        self.image = pygame.Surface((w, h))
+        self.image.fill(Color.BLACK.value)
+        # draw initial border
+        pygame.draw.rect(self.image, Color.GRAY.value, self.image.get_rect(), 5, 10)
+
+        # center text on the surface
+        text_rect = self.text_surf.get_rect(center=(w // 2, h // 2))
+        self.image.blit(self.text_surf, text_rect)
+
         self.rect = self.image.get_rect()
-        self.x = x
-        self.y = y
         self.rect.x = x
         self.rect.y = y
         self.callback = callback
@@ -349,7 +369,7 @@ def start_game():
         # 如果沒有球了，遊戲結束
         # print("[DEBUG] Balls left:", len(balls))
         if not balls:
-            restart = show_game_over_animation(score)
+            restart = show_game_over_animation(score, paddle)
             break
         # if not blocks
         if not blocks:
@@ -380,6 +400,9 @@ def start_game():
                     else:
                         ball.speed[1] = -ball.speed[1]
                     block.kill()
+                    # play pop sound
+                    pop_sound = pygame.mixer.Sound(os.path.join(assetsdir, "pop.mp3"))
+                    pop_sound.play()
                     increase_score()
                     # 20% 機率掉落雙球道具
                     if random.random() < 0.2:
@@ -439,6 +462,10 @@ def start_game():
         if show_score:
             screen.blit(score_text, (10, 10))
         pygame.display.update()
+    # print(restart)
+    if restart:
+        start_game()
+    return
 
 
 def title_screen():
@@ -509,30 +536,31 @@ def _show_end_animation(message, win, score, color, duration=2500):
     particles = []
     now = pygame.time.get_ticks()
     # generate particles across top area
-    for _ in range(80):
-        x = random.randint(50, 750)
-        y = random.randint(50, 250)
-        vel = [random.uniform(-3.0, 3.0), random.uniform(-6.0, -1.0)]
-        col = random.choice([Color.RED.value, Color.GREEN.value, Color.BLUE.value, Color.WHITE.value])
-        life = random.randint(1200, 2200)
-        particles.append({
-            'pos': [x, y],
-            'vel': vel,
-            'col': col,
-            'life': life,
-            'born': now
-        })
+    if win:
+        for _ in range(80):
+            x = random.randint(50, 750)
+            y = random.randint(50, 250)
+            vel = [random.uniform(-3.0, 3.0), random.uniform(-6.0, -1.0)]
+            col = random.choice([Color.RED.value, Color.GREEN.value, Color.BLUE.value, Color.WHITE.value])
+            life = random.randint(1200, 2200)
+            particles.append({
+                'pos': [x, y],
+                'vel': vel,
+                'col': col,
+                'life': life,
+                'born': now
+            })
     
     escape = True
     restart = False
     
     def title_screen():
-        global escape, restart
+        nonlocal escape, restart
         escape = False
         restart = False
     
     def restart_game():
-        global escape, restart
+        nonlocal escape, restart
         escape = False
         restart = True
     
@@ -559,9 +587,6 @@ def _show_end_animation(message, win, score, color, duration=2500):
             if e.type == pygame.QUIT:
                 pygame.quit()
                 sys.exit()
-            # allow skipping animation
-            if e.type == pygame.KEYDOWN or e.type == pygame.MOUSEBUTTONDOWN:
-                return
 
         t = pygame.time.get_ticks() - start
         clear_screen()
@@ -581,12 +606,25 @@ def _show_end_animation(message, win, score, color, duration=2500):
             s.fill((p['col'][0], p['col'][1], p['col'][2], alpha))
             screen.blit(s, (p['pos'][0], p['pos'][1]))
 
-        # pulsing text
-        scale = 1.0 + 0.25 * math.sin(t / 220.0)
-        msg_font = pygame.font.Font(fontpath, max(10, int(64 * scale)))
-        text_surf = msg_font.render(message, True, color)
-        txt_rect = text_surf.get_rect(center=(400, 150))
-        screen.blit(text_surf, txt_rect)
+        if win:
+            # pulsing text
+            scale = 1.0 + 0.25 * math.sin(t / 220.0)
+            msg_font = pygame.font.Font(fontpath, max(10, int(64 * scale)))
+            text_surf = msg_font.render(message, True, color)
+            txt_rect = text_surf.get_rect(center=(400, 150))
+            screen.blit(text_surf, txt_rect)
+        else:
+            # text
+            # transparent with time
+            alpha = max(0, min(255, int((t / duration) * 255)))
+            # print("DEBUG: alpha =", alpha)
+            text_surf = font.render(message, True, color)
+            txt_rect = text_surf.get_rect(center=(400, 150))
+            screen.blit(text_surf, txt_rect)
+            # overlay with alpha
+            overlay = pygame.Surface((text_surf.get_width(), text_surf.get_height()), pygame.SRCALPHA)
+            overlay.fill((0, 0, 0, 255 - alpha))
+            screen.blit(overlay, txt_rect)
 
         # small subtitle with score
         sub = font.render(f"Score: {score}", True, (200, 200, 200))
@@ -613,12 +651,75 @@ def _show_end_animation(message, win, score, color, duration=2500):
 
         # if t >= duration:
         #     break
+    # print(restart)
     return restart
 
 
 
-def show_game_over_animation(score):
+def show_game_over_animation(score, paddle):
+    sound = pygame.mixer.Sound(os.path.join(assetsdir, "gameover-hurt.mp3"))
+    sound.play()
+    paddle.crack()
+    t = pygame.time.get_ticks()
+    while pygame.time.get_ticks() - t < 2000:
+        clock.tick(60)
+        for e in pygame.event.get():
+            if e.type == pygame.QUIT:
+                pygame.quit()
+                sys.exit()
+        clear_screen()
+        all_sprites = pygame.sprite.Group()
+        all_sprites.add(paddle)
+        all_sprites.draw(screen)
+        pygame.display.update()
+    paddle.kill()
+    # generate fragments of paddle
+    fragments = []
+    for _ in range(30):
+        x = paddle.rect.x + random.randint(0, paddle.rect.width)
+        y = paddle.rect.y + random.randint(0, paddle.rect.height)
+        vel = [random.uniform(-3.0, 3.0), random.uniform(-6.0, -1.0)]
+        col = Color.GREEN.value
+        life = random.randint(1000, 2000)
+        fragments.append({
+            'pos': [x, y],
+            'vel': vel,
+            'col': col,
+            'life': life,
+            'born': pygame.time.get_ticks()
+        })
+    sound = pygame.mixer.Sound(os.path.join(assetsdir, "gameover-disappear.mp3"))
+    sound.play()
+    t = pygame.time.get_ticks()
+    while pygame.time.get_ticks() - t < 3000:
+        dt = clock.tick(60)
+        for e in pygame.event.get():
+            if e.type == pygame.QUIT:
+                pygame.quit()
+                sys.exit()
+
+        clear_screen()
+
+        # update & draw fragments
+        cur = pygame.time.get_ticks()
+        for p in fragments:
+            age = cur - p['born']
+            if age > p['life']:
+                continue
+            # simple gravity
+            p['vel'][1] += 0.08
+            p['pos'][0] += p['vel'][0]
+            p['pos'][1] += p['vel'][1]
+            alpha = max(0, 255 - int(age / p['life'] * 255))
+            s = pygame.Surface((6, 6), pygame.SRCALPHA)
+            s.fill((p['col'][0], p['col'][1], p['col'][2], alpha))
+            screen.blit(s, (p['pos'][0], p['pos'][1]))
+
+        pygame.display.update()
+    music = pygame.mixer.Sound(os.path.join(assetsdir, "gameover-music.mp3"))
+    music.play()
     restart = _show_end_animation("Game Over!", False, score, Color.RED.value, duration=2500)
+    pygame.mixer.music.stop()
     return restart
 
 
