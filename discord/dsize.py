@@ -344,8 +344,8 @@ async def dsize_leaderboard(interaction: discord.Interaction, limit: int = 10, g
 
 user_using_dsize_battle = set()  # to prevent spamming the command
 @bot.tree.command(name=app_commands.locale_str("dsize-battle"), description="比屌長(需要雙方今天沒有量過)")
-@app_commands.allowed_installs(guilds=True, users=False)
-@app_commands.allowed_contexts(guilds=True, dms=False, private_channels=False)
+@app_commands.allowed_installs(guilds=True, users=True)
+@app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
 @app_commands.describe(opponent="要比屌長的對象")
 async def dsize_battle(interaction: discord.Interaction, opponent: discord.Member):
     original_user = interaction.user
@@ -357,10 +357,15 @@ async def dsize_battle(interaction: discord.Interaction, opponent: discord.Membe
     if user_id == opponent_id:
         await interaction.response.send_message("不能跟自己比屌長。", ephemeral=True)
         return
-
-    last_user = get_user_data(interaction.guild.id, user_id, "last_dsize")
-    last_opponent = get_user_data(interaction.guild.id, opponent_id, "last_dsize")
     
+    guild_key = interaction.guild.id
+    if not interaction.is_guild_integration():
+        guild_key = None
+        # global_dsize = True
+
+    last_user = get_user_data(guild_key, user_id, "last_dsize")
+    last_opponent = get_user_data(guild_key, opponent_id, "last_dsize")
+
     if last_user is not None and not isinstance(last_user, datetime):
         # If last_user is a string (e.g., from JSON), convert to date
         try:
@@ -398,7 +403,7 @@ async def dsize_battle(interaction: discord.Interaction, opponent: discord.Membe
         return
     
     # print(f"[DSize] {interaction.user} is challenging {opponent} to a dsize battle in guild {interaction.guild.id}")
-    log(f"{interaction.user} is challenging {opponent} to a dsize battle in guild {interaction.guild.id}", module_name="dsize", user=interaction.user, guild=interaction.guild)
+    log(f"{interaction.user} is challenging {opponent} to a dsize battle in guild {interaction.guild.id if guild_key else "Global"}", module_name="dsize", user=interaction.user, guild=interaction.guild)
     
     user_using_dsize_battle.add(user_id)
     user_using_dsize_battle.add(opponent_id)
@@ -443,6 +448,7 @@ async def dsize_battle(interaction: discord.Interaction, opponent: discord.Membe
 
             # 取得訊息物件
             msg = await interaction.original_response()
+            t = datetime.now(timezone.utc)
 
             for i in range(1, max(size_user, size_opponent) - 1, speed):
                 d_string_user = "=" * min(i, size_user - 1)
@@ -458,6 +464,9 @@ async def dsize_battle(interaction: discord.Interaction, opponent: discord.Membe
                     value=f"{size_opponent if i >= size_opponent - 1 else '??'} cm\n8{d_string_opponent}D",
                     inline=False,
                 )
+                embed.timestamp = t
+                if not guild_key:
+                    embed.set_footer(text="此次對決將記錄到全域排行榜。")
                 await msg.edit(embed=embed)
                 await asyncio.sleep(0.1)
 
@@ -483,10 +492,13 @@ async def dsize_battle(interaction: discord.Interaction, opponent: discord.Membe
             embed.add_field(name=f"{original_user.display_name} 的長度：", value=f"{size_user} cm\n8{d_string_user}D", inline=False)
             embed.add_field(name=f"{opponent.display_name} 的長度：", value=f"{size_opponent} cm\n8{d_string_opponent}D", inline=False)
             embed.add_field(name="結果：", value=result, inline=False)
+            embed.timestamp = t
+            if not guild_key:
+                embed.set_footer(text="此次對決將記錄到全域排行榜。")
             await msg.edit(embed=embed)
 
-            set_user_data(interaction.guild.id, user_id, "last_dsize_size", size_user)
-            set_user_data(interaction.guild.id, opponent_id, "last_dsize_size", size_opponent)
+            set_user_data(guild_key, user_id, "last_dsize_size", size_user)
+            set_user_data(guild_key, opponent_id, "last_dsize_size", size_opponent)
             user_using_dsize_battle.discard(user_id)
             user_using_dsize_battle.discard(opponent_id)
 
