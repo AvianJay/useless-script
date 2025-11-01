@@ -447,7 +447,7 @@ async def dsize_battle(interaction: discord.Interaction, opponent: discord.User)
             size_user = random.randint(1, max_size)
             size_opponent = random.randint(1, max_size)
             # print(f"[DSize] {interaction.user} vs {opponent} - {size_user} cm vs {size_opponent} cm")
-            log(f"{interaction.user} vs {opponent} - {size_user} cm vs {size_opponent} cm", module_name="dsize", user=interaction.user, guild=interaction.guild)
+            log(f"{original_user} vs {opponent} - {size_user} cm vs {size_opponent} cm", module_name="dsize", user=interaction.user, guild=interaction.guild)
             speed = max(size_user, size_opponent) // 50 + 1
 
             # 取得訊息物件
