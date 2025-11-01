@@ -347,7 +347,7 @@ user_using_dsize_battle = set()  # to prevent spamming the command
 @app_commands.allowed_installs(guilds=True, users=True)
 @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
 @app_commands.describe(opponent="要比屌長的對象")
-async def dsize_battle(interaction: discord.Interaction, opponent: discord.Member):
+async def dsize_battle(interaction: discord.Interaction, opponent: discord.User):
     original_user = interaction.user
     user_id = interaction.user.id
     opponent_id = opponent.id
@@ -362,6 +362,10 @@ async def dsize_battle(interaction: discord.Interaction, opponent: discord.Membe
     if not interaction.is_guild_integration():
         guild_key = None
         # global_dsize = True
+    else:
+        # convert opponent to guild member if possible
+        if interaction.guild:
+            opponent = interaction.guild.get_member(opponent_id) or opponent
 
     last_user = get_user_data(guild_key, user_id, "last_dsize")
     last_opponent = get_user_data(guild_key, opponent_id, "last_dsize")
