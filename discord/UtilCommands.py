@@ -12,7 +12,7 @@ import mimetypes
 import requests
 
 startup_time = datetime.now(timezone.utc)
-version = "0.7.8"
+version = "0.7.9"
 try:
     git_commit_hash = os.popen("git rev-parse --short HEAD").read().strip()
 except Exception as e:
