@@ -352,7 +352,6 @@ async def dsize_battle(interaction: discord.Interaction, opponent: discord.User)
     user_id = interaction.user.id
     opponent_id = opponent.id
     now = (datetime.utcnow() + timedelta(hours=8)).date()  # 台灣時間
-    max_size = get_server_config(guild_key, "dsize_max", 30)
 
     if user_id == opponent_id:
         await interaction.response.send_message("不能跟自己比屌長。", ephemeral=True)
@@ -366,6 +365,7 @@ async def dsize_battle(interaction: discord.Interaction, opponent: discord.User)
         # convert opponent to guild member if possible
         if interaction.guild:
             opponent = interaction.guild.get_member(opponent_id) or opponent
+    max_size = get_server_config(guild_key, "dsize_max", 30)
 
     last_user = get_user_data(guild_key, user_id, "last_dsize")
     last_opponent = get_user_data(guild_key, opponent_id, "last_dsize")
