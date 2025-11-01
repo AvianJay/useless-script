@@ -223,13 +223,17 @@ async def dsize(interaction: discord.Interaction, global_dsize: int = 0):
                 await ItemSystem.give_item_to_user(interaction.guild.id, interaction.user.id, "grass", amount)
                 grass_command = await get_command_mention("dsize-feedgrass")
                 await msg.edit(content=f"你撿到了草 x{amount}！\n使用 {grass_command} 可以草飼男娘。")
-            elif rand > 70 and rand <= 98:
+            elif rand > 70 and rand <= 97:
                 # give anti surgery item
                 await ItemSystem.give_item_to_user(interaction.guild.id, interaction.user.id, "anti_surgery", 1)
                 item_use_command = await get_command_mention("item", "use")
                 await msg.edit(content=f"你撿到了一顆抗手術藥物！\n使用 {item_use_command} 抗手術藥物 可以防止一天被手術。")
             else:
-                if rand == 99:
+                if rand == 98:
+                    await ItemSystem.give_item_to_user(interaction.guild.id, interaction.user.id, "cloud_ruler", 1)
+                    item_use_command = await get_command_mention("item", "use")
+                    await msg.edit(content=f"你撿到了一把雲端尺！\n使用 {item_use_command} 雲端尺 可以進行手術。")
+                elif rand == 99:
                     await ItemSystem.give_item_to_user(interaction.guild.id, interaction.user.id, "scalpel", 1)
                     item_use_command = await get_command_mention("item", "use")
                     await msg.edit(content=f"你撿到了一把手術刀！\n使用 {item_use_command} 手術刀 可以進行手術。")
@@ -923,6 +927,82 @@ async def use_anti_surgery(interaction: discord.Interaction):
     # print(f"[DSize] {interaction.user} used anti-surgery drug in guild {guild_key}")
     log(f"{interaction.user} used anti-surgery drug in guild {guild_key}", module_name="dsize", user=interaction.user, guild=interaction.guild)
 
+async def use_cloud_ruler(interaction: discord.Interaction):
+    user_id = interaction.user.id
+    guild_key = interaction.guild.id if interaction.guild else None
+    class SelectUserModal(discord.ui.Modal, title="要幫誰量長度？"):
+        target_user = discord.ui.Label(text="選擇用戶", component=discord.ui.UserSelect(placeholder="選擇一個用戶", min_values=1, max_values=1))
+
+        async def on_submit(self, interaction: discord.Interaction):
+            target_user = self.target_user.component.values[0]
+            target_id = target_user.id
+            target_id = int(target_id)
+            now = (datetime.utcnow() + timedelta(hours=8)).date()
+            last = get_user_data(guild_key, target_id, "last_dsize")
+            if last is not None and not isinstance(last, datetime):
+                # If last is a string (e.g., from JSON), convert to date
+                try:
+                    last = datetime.fromisoformat(str(last)).date()
+                except Exception:
+                    last = datetime(1970, 1, 1).date()
+            elif isinstance(last, datetime):
+                last = last.date()
+            if last is None:
+                last = datetime(1970, 1, 1).date()
+            if now == last:
+                await interaction.response.send_message(f"{target_user.display_name} 今天量過屌長了，無法幫他量長度。", ephemeral=True)
+                return
+            # size = get_user_data(guild_key, target_id, "last_dsize_size", 0)
+            # if size == -1:
+            #     await interaction.response.send_message(f"{target_user.display_name} 是男娘，無法幫他量長度。", ephemeral=True)
+            #     return
+            removed = await ItemSystem.remove_item_from_user(guild_key, user_id, "cloud_ruler", 1)
+            if not removed:
+                await interaction.response.send_message("你沒有雲端尺，無法幫他量長度。", ephemeral=True)
+                return
+            # check if user is online
+            if not target_user.status in [discord.Status.online, discord.Status.idle, discord.Status.dnd]:
+                await interaction.response.send_message(f"{target_user.display_name} 不在線上，無法幫他量長度。", ephemeral=True)
+                return
+            max_size = get_server_config(guild_key, "dsize_max", 30)
+            statistics = get_user_data(0, target_id, "dsize_statistics", {})
+            statistics["total_uses"] = statistics.get("total_uses", 0) + 1
+            set_user_data(0, target_id, "dsize_statistics", statistics)
+
+            # 隨機產生長度
+            size = random.randint(1, max_size)
+            fake_size = None
+            if "ItemSystem" in modules:
+                fake_ruler_used = get_user_data(guild_key, target_id, "dsize_fake_ruler_used", "False") == "True"
+                if fake_ruler_used:
+                    extra_size = random.randint(10, 20)
+                    fake_size = size + extra_size
+                    # reset fake ruler usage
+                    set_user_data(guild_key, target_id, "dsize_fake_ruler_used", False)
+                    set_user_data(guild_key, target_id, "dsize_fake_ruler_used_date", now)
+                    set_user_data(guild_key, target_id, "last_dsize_fake_size", fake_size)
+            final_size = fake_size if fake_size is not None else size
+            log(f"Used cloud ruler on {target_user.display_name}, size: {size} cm, final_size: {final_size} cm", module_name="dsize", user=interaction.user, guild=interaction.guild)
+
+            # 建立 Embed 訊息
+            embed = discord.Embed(title=f"{interaction.user.display_name} 幫 {target_user.display_name} 測量長度：", color=0x00ff00)
+            embed.add_field(name="1 cm", value=f"8D", inline=False)
+            embed.timestamp = datetime.now(timezone.utc)
+            await interaction.response.send_message(content=f"{target_user.mention} 被抓去量長度。", embed=embed)
+            # animate to size
+            speed = size // 50 + 1
+            for i in range(1, size + 1, speed):
+                d_string = "=" * (i - 1)
+                current_size = i
+                embed.set_field_at(0, name=f"{current_size} cm", value=f"8{d_string}D", inline=False)
+                await interaction.edit_original_response(content=f"{target_user.mention} 被抓去量長度。", embed=embed)
+                await asyncio.sleep(0.1)
+            # final
+            d_string = "=" * (size - 1)
+            embed.set_field_at(0, name=f"{final_size} cm", value=f"8{d_string}D", inline=False)
+            await interaction.edit_original_response(content=f"{target_user.mention} 被抓去量長度。", embed=embed)
+    await interaction.response.send_modal(SelectUserModal())
+
 if "ItemSystem" in modules:
     items = [
         {
@@ -954,6 +1034,12 @@ if "ItemSystem" in modules:
             "name": "抗手術藥物",
             "description": "一顆屌型的藥丸。使用後可以防止一天被手術。",
             "callback": use_anti_surgery,
+        },
+        {
+            "id": "cloud_ruler",
+            "name": "雲端尺",
+            "description": "這是一把雲端尺，可以幫處於線上的網友量長度。",
+            "callback": use_cloud_ruler,
         }
     ]
     import ItemSystem
