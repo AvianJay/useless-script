@@ -1,0 +1,57 @@
+{
+    "file": "bluearchive.jpg",
+    "feeder": {
+        "position": [
+            709,
+            216
+        ],
+        "size": [
+            200,
+            200
+        ]
+    },
+    "target": {
+        "position": [
+            70,
+            518
+        ],
+        "size": [
+            200,
+            200
+        ]
+    },
+    "extras": [
+        {
+            "position": [
+                340,
+                411
+            ],
+            "size": [
+                100,
+                100
+            ]
+        },
+        {
+            "position": [
+                551,
+                408
+            ],
+            "size": [
+                107,
+                107
+            ]
+        },
+        {
+            "position": [
+                473,
+                113
+            ],
+            "size": [
+                100,
+                100
+            ]
+        }
+    ],
+    "self": false,
+    "nsfw": true
+}

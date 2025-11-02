@@ -1,0 +1,31 @@
+{
+        "file": "5-vs-1.jpg",
+        "target": {
+            "position": [339, 190],
+            "size": [64, 64]
+        },
+        "extras": [
+            {
+                "position": [22, 80],
+                "size": [68, 68]
+            },
+            {
+                "position": [165, 34],
+                "size": [70, 70]
+            },
+            {
+                "position": [293, 57],
+                "size": [70, 70]
+            },
+            {
+                "position": [424, 58],
+                "size": [75, 75]
+            },
+            {
+                "position": [545, 11],
+                "size": [80, 80]
+            }
+        ],
+        "self": true,
+        "nsfw": false
+    }

@@ -1,0 +1,26 @@
+{
+    "file": "minecraft.png",
+    "feeder": {
+        "position": [
+            400,
+            150
+        ],
+        "size": [
+            200,
+            200
+        ]
+    },
+    "target": {
+        "position": [
+            533,
+            646
+        ],
+        "size": [
+            200,
+            200
+        ]
+    },
+    "extras": [],
+    "self": false,
+    "nsfw": false
+}

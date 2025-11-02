@@ -9,6 +9,12 @@ from globalenv import bot, start_bot, get_user_data, set_user_data, get_all_user
 from PIL import Image, ImageDraw
 from io import BytesIO
 from logger import log
+import os
+import json
+if "OwnerTools" in modules:
+    import OwnerTools
+else:
+    OwnerTools = None
 
 
 def percent_random(percent: int) -> bool:
@@ -650,100 +656,61 @@ async def dsize_feedgrass(interaction: discord.Interaction, user: discord.Member
     await interaction.followup.send(embed=embed, file=discord.File(image_bytes, "feed_grass.png"))
     # print(f"[DSize] {interaction.user} fed grass to {user} in guild {interaction.guild.id}")
     log(f"{interaction.user} fed grass to {user} in guild {interaction.guild.id}", module_name="dsize", user=interaction.user, guild=interaction.guild)
-    
-
-feedgrass_images = [
-    {
-        "path": "assets/feed_grass_1.png",
-        "feeder": {
-            "position": (400, 150),
-            "size": (200, 200)
-        },
-        "target": {
-            "position": (533, 646),
-            "size": (200, 200)
-        },
-        "extras": []
-    },
-    {
-        "path": "assets/feed_grass_2.jpg",
-        "feeder": {
-            "position": (1171, 299),
-            "size": (300, 300)
-        },
-        "target": {
-            "position": (257, 241),
-            "size": (300, 300)
-        },
-        "extras": []
-    },
-    {
-        "path": "assets/feed_grass_3.jpg",
-        "feeder": {
-            "position": (709, 216),
-            "size": (200, 200)
-        },
-        "target": {
-            "position": (70, 518),
-            "size": (200, 200)
-        },
-        "extras": [
-            {
-                "position": (340, 411),
-                "size": (100, 100)
-            },
-            {
-                "position": (551, 408),
-                "size": (107, 107)
-            },
-            {
-                "position": (473, 113),
-                "size": (100, 100)
-            },
-        ]
-    }
-]
 
 
-self_feedgrass_images = [
-    {
-        "path": "assets/feed_grass_self_1.jpg",
-        "target": {
-            "position": (339, 190),
-            "size": (64, 64)
-        },
-        "extras": [
-            {
-                "position": (22, 80),
-                "size": (68, 68)
-            },
-            {
-                "position": (165, 34),
-                "size": (70, 70)
-            },
-            {
-                "position": (293, 57),
-                "size": (70, 70)
-            },
-            {
-                "position": (424, 58),
-                "size": (75, 75)
-            },
-            {
-                "position": (545, 11),
-                "size": (80, 80)
-            }
-        ]
-    }
-]
+# from folder
+feedgrass_folder = "dsize-feedgrass-images"
+# scan the folder json files
+feedgrass_images = []
+self_feedgrass_images = []
+
+def load_feedgrass_images():
+    global feedgrass_images
+    global self_feedgrass_images
+    feedgrass_images = []
+    self_feedgrass_images = []
+    loaded = 0
+    for filename in os.listdir(feedgrass_folder):
+        if filename.endswith(".json"):
+            with open(os.path.join(feedgrass_folder, filename), "r", encoding="utf-8") as f:
+                data = json.load(f)
+                image_path = os.path.join(feedgrass_folder, data["file"])
+                if not os.path.isfile(image_path):
+                    continue
+                data["file"] = image_path
+                if data.get("self", False):
+                    self_feedgrass_images.append(data)
+                    loaded += 1
+                else:
+                    feedgrass_images.append(data)
+                    loaded += 1
+    log(f"載入了 {loaded} 張草飼圖片。", module_name="dsize")
+    return loaded
+load_feedgrass_images()
+
+@bot.command(aliases=["reloadfeedgrassimages", "refgi", "rfg"])
+@OwnerTools.is_owner()
+async def reload_feedgrass_images(ctx: commands.Context):
+    loaded = load_feedgrass_images()
+    await ctx.reply(f"已重新載入 {loaded} 張草飼圖片！")
 
 
-async def generate_feedgrass_image(target: discord.User, feeder: discord.User, random_users: list[discord.User] = []):
+async def generate_feedgrass_image(target: discord.User, feeder: discord.User, random_users: list[discord.User] = [], nsfw: bool = False) -> BytesIO:
     if feeder.id != target.id:
-        img = random.choice(feedgrass_images)
+        # check nsfw channel
+        if nsfw:
+            new_feedgrass_images = feedgrass_images.copy()
+        else:
+            new_feedgrass_images = [img for img in feedgrass_images if not img.get("nsfw", False)]
+        img = random.choice(new_feedgrass_images)
     else:
-        img = random.choice(self_feedgrass_images)
-    image = Image.open(img["path"]).convert("RGBA")
+        # check nsfw channel
+        if nsfw:
+            new_self_feedgrass_images = self_feedgrass_images.copy()
+        else:
+            new_self_feedgrass_images = [img for img in self_feedgrass_images if not img.get("nsfw", False)]
+        img = random.choice(new_self_feedgrass_images)
+    image = Image.open(img["file"]).convert("RGBA")
     # width, height = image.size
     # fetch avatars
     target_avatar_asset = target.display_avatar.with_size(128).with_static_format('png')

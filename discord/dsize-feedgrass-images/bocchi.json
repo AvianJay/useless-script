@@ -1,0 +1,26 @@
+{
+    "file": "bocchi.jpg",
+    "feeder": {
+        "position": [
+            1171,
+            299
+        ],
+        "size": [
+            300,
+            300
+        ]
+    },
+    "target": {
+        "position": [
+            257,
+            241
+        ],
+        "size": [
+            300,
+            300
+        ]
+    },
+    "extras": [],
+    "self": false,
+    "nsfw": false
+}
