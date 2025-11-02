@@ -16,5 +16,6 @@
     "AutoReply",
     "logger",
     "BadQuote",
-    "MobileStatus"
+    "MobileStatus",
+    "Feedback"
 ]
