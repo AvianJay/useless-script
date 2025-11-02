@@ -416,7 +416,7 @@ async def report_message(interaction: discord.Interaction, message: discord.Mess
 @app_commands.guild_only()
 @app_commands.allowed_installs(guilds=True, users=False)
 @app_commands.allowed_contexts(guilds=True, dms=False, private_channels=False)
-@app_commands.checks.has_permissions(administrator=True)
+@app_commands.default_permissions(administrator=True)
 class ReportSettings(commands.GroupCog, name=app_commands.locale_str("report")):
     def __init__(self, bot):
         self.bot = bot

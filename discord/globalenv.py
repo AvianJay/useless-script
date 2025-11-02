@@ -258,13 +258,13 @@ translations = {
     "export": "匯出",
     "file": "檔案",
     "merge": "合併",
-    "changeavatar": "更改頭像",
+    "avatar": "頭像",
     "image": "圖片",
     "random_chance": "回覆機率",
-    "changebanner": "更改橫幅",
-    "changebio": "更改機器人介紹",
+    "banner": "橫幅",
     "bio": "介紹",
     "feedback": "回饋箱",
+    "change": "更改"
 }
 class CommandNameTranslator(app_commands.Translator):
     async def translate(

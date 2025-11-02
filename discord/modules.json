@@ -17,5 +17,6 @@
     "logger",
     "BadQuote",
     "MobileStatus",
-    "Feedback"
+    "Feedback",
+    "BotCustomizer"
 ]
