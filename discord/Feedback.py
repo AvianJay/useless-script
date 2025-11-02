@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 
 
 @bot.tree.command(name="feedback", description="提供回饋給機器人開發者")
-async def feedback_command(interaction: discord.Interaction, feedback: str):
+async def feedback_command(interaction: discord.Interaction):
     class FeedbackModal(discord.ui.Modal, title="提供回饋給機器人開發者"):
         feedback_input = discord.ui.TextInput(
             label="請輸入您的回饋內容",

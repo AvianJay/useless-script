@@ -264,7 +264,7 @@ translations = {
     "changebanner": "更改橫幅",
     "changebio": "更改機器人介紹",
     "bio": "介紹",
-    "feedback": "回饋",
+    "feedback": "回饋箱",
 }
 class CommandNameTranslator(app_commands.Translator):
     async def translate(
