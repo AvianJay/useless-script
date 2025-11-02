@@ -6,7 +6,7 @@ import asyncio
 from datetime import datetime, timezone
 
 
-@app_commands.command(name="feedback", description="提供回饋給機器人開發者")
+@bot.tree.command(name="feedback", description="提供回饋給機器人開發者")
 async def feedback_command(interaction: discord.Interaction, feedback: str):
     class FeedbackModal(discord.ui.Modal, title="提供回饋給機器人開發者"):
         feedback_input = discord.ui.TextInput(
