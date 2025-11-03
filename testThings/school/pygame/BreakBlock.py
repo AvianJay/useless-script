@@ -113,7 +113,7 @@ def change_name(new_name):
 pygame.init()
 # 打磚塊
 pygame.display.set_caption("打磚塊")
-screen = pygame.display.set_mode((800, 600))
+screen = pygame.display.set_mode((800, 600), pygame.SCALED | pygame.FULLSCREEN)
 clock = pygame.time.Clock()
 if getattr(sys, 'frozen', False):
     assetsdir = os.path.join(sys._MEIPASS, "assets")
