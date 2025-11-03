@@ -352,13 +352,13 @@ def start_game():
 
     score = 0
     font = pygame.font.Font(fontpath, 15)
-    score_text = font.render("Score: 0", True, (255, 255, 255))
+    score_text = font.render(f"分數: {score}", True, (255, 255, 255))
     # screen.blit(score_text, (10, 10))
     show_score = True
     def increase_score():
         nonlocal score, score_text
         score += len(balls)
-        score_text = font.render(f"Score: {score}", True, (255, 255, 255))
+        score_text = font.render(f"分數: {score}", True, (255, 255, 255))
     restart = None
     while True:
         clock.tick(120)
@@ -471,15 +471,18 @@ def start_game():
 def title_screen():
     clear_screen()
     title_font = pygame.font.Font(fontpath, 72)
-    title_surf = title_font.render("Break Block", True, Color.WHITE.value)
+    title_surf = title_font.render("打磚塊", True, Color.WHITE.value)
     title_rect = title_surf.get_rect(center=(400, 150))
     screen.blit(title_surf, title_rect)
     high_score = user.get("high_score", 0)
-    high_score_surf = font.render(f"High Score: {high_score}", True, Color.WHITE.value)
+    high_score_surf = font.render(f"最高分數: {high_score}", True, Color.WHITE.value)
     high_score_rect = high_score_surf.get_rect(center=(400, 220))
     screen.blit(high_score_surf, high_score_rect)
     
     def change_name_prompt():
+        if not ONLINE:
+            print("Cannot change name in offline mode.")
+            return
         def handle_name_change(new_name):
             nonlocal success, msg
             success, msg = change_name(new_name)
@@ -506,9 +509,11 @@ def title_screen():
             if success:
                 print()
 
-    start_button = Button(350, 300, 100, 50, "Start", start_game)
-    quit_button = Button(350, 400, 100, 50, "Quit", lambda: sys.exit())
-    print("DEBUG: user name is", user["name"])
+    start_button = Button(350, 300, 100, 50, "開始", start_game)
+    quit_button = Button(350, 400, 100, 50, "退出", lambda: sys.exit())
+    # print("DEBUG: user name is", user["name"])
+    if not ONLINE:
+        user["name"] = "已離線"
     change_name_button = Button(325, 500, 150, 50, user["name"], change_name_prompt)
     buttons = pygame.sprite.Group()
     buttons.add(start_button, quit_button, change_name_button)
@@ -563,9 +568,9 @@ def _show_end_animation(message, win, score, color, duration=2500):
         nonlocal escape, restart
         escape = False
         restart = True
-    
-    restart_button = Button(350, 400, 100, 50, "Restart", restart_game)
-    title_button = Button(350, 470, 100, 50, "Title", title_screen)
+
+    restart_button = Button(350, 400, 100, 50, "重新開始", restart_game)
+    title_button = Button(350, 470, 100, 50, "標題", title_screen)
     buttons = pygame.sprite.Group()
     buttons.add(restart_button, title_button)
     
@@ -633,13 +638,13 @@ def _show_end_animation(message, win, score, color, duration=2500):
         # submission status
         status_font = pygame.font.Font(fontpath, 20)
         if success is not None:
-            status_text = "Score submitted!" if success else f"Score submission failed: {msg}"
+            status_text = "分數已提交！" if success else f"分數提交失敗: {msg}"
             status_surf = status_font.render(status_text, True, (200, 200, 200))
             status_rect = status_surf.get_rect()
             status_rect.topleft = (10, 570)
             screen.blit(status_surf, status_rect)
         else:
-            submitting_surf = status_font.render("Submitting score...", True, (200, 200, 200))
+            submitting_surf = status_font.render("提交分數中...", True, (200, 200, 200))
             submitting_rect = submitting_surf.get_rect()
             submitting_rect.topleft = (10, 570)
             screen.blit(submitting_surf, submitting_rect)
@@ -718,13 +723,13 @@ def show_game_over_animation(score, paddle):
         pygame.display.update()
     music = pygame.mixer.Sound(os.path.join(assetsdir, "gameover-music.mp3"))
     music.play()
-    restart = _show_end_animation("Game Over!", False, score, Color.RED.value, duration=2500)
+    restart = _show_end_animation("你輸了！", False, score, Color.RED.value, duration=2500)
     pygame.mixer.music.stop()
     return restart
 
 
 def show_win_animation(score):
-    restart = _show_end_animation("You Win!", True, score, Color.GREEN.value, duration=2500)
+    restart = _show_end_animation("你贏了！", True, score, Color.GREEN.value, duration=2500)
     return restart
 
 if __name__ == "__main__":
