@@ -12,7 +12,7 @@ import threading
 app_version = "0.1.0"
 server_url = "https://breakblock.avianjay.sbs/"
 ONLINE = False
-god_mode = True if sys.argv[-1] == "god" else False
+# god_mode = True if sys.argv[-1] == "god" else False
 if not os.path.exists("user.json"):
     user = {"token": None, "name": None, 'high_score': 0}
     with open("user.json", "w") as f:
@@ -212,12 +212,12 @@ class Ball(pygame.sprite.Sprite):
                 self.rect.y = 600 - self.rect.height
         # kill ball if bottom
         if self.rect.bottom >= 600:
-            if god_mode:
-                self.speed[1] = -self.speed[1]
-                return
-            else:
-                self.kill()
-                self.balls_list.remove(self)
+            # if god_mode:
+            #     self.speed[1] = -self.speed[1]
+            #     return
+            # else:
+            self.kill()
+            self.balls_list.remove(self)
 
 class DoubleBallItem(pygame.sprite.Sprite):
     def __init__(self, x, y):
