@@ -57,6 +57,7 @@ async def info_command(interaction: discord.Interaction):
     embed.add_field(name="運行時間", value=uptime)
     embed.add_field(name=f"已載入模組({len(modules)})", value="\n".join(modules) if modules else "無", inline=False)
     embed.set_thumbnail(url=bot.user.avatar.url if bot.user.avatar else None)
+    embed.set_footer(text="by AvianJay")
     await interaction.followup.send(content="-# 提示：如果你指令用到一半停住或沒辦法用了那很有可能是那個傻逼開發者||尼摳||又再重開機器人了||不然就是機器人又當機了||", embed=embed)
 
 
@@ -72,6 +73,8 @@ async def info(ctx: commands.Context):
         bot_latency = round(bot.latency * 1000)  # Convert to milliseconds
     except OverflowError:
         bot_latency = "N/A"
+    
+    uptime = get_time_text(get_uptime_seconds())
 
     embed = discord.Embed(title="機器人資訊", color=0x00ff00)
     embed.add_field(name="機器人名稱", value=bot.user.name)
@@ -79,8 +82,13 @@ async def info(ctx: commands.Context):
     embed.add_field(name="伺服器數量", value=server_count)
     embed.add_field(name="用戶總數量", value=user_count)
     embed.add_field(name="機器人延遲", value=f"{bot_latency}ms")
+    embed.add_field(name="CPU 使用率", value=f"{psutil.cpu_percent()}%")
+    embed.add_field(name="記憶體使用率", value=f"{psutil.virtual_memory().percent}%")
+    embed.add_field(name="運行時間", value=uptime)
     embed.add_field(name=f"已載入模組({len(modules)})", value="\n".join(modules) if modules else "無", inline=False)
     embed.set_thumbnail(url=bot.user.avatar.url if bot.user.avatar else None)
+    embed.timestamp = datetime.now(timezone.utc)
+    embed.set_footer(text="by AvianJay")
     await ctx.send(content="-# 提示：如果你指令用到一半停住或沒辦法用了那很有可能是那個傻逼開發者||尼摳||又再重開機器人了||不然就是機器人又當機了||", embed=embed)
 
 
