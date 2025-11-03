@@ -632,7 +632,7 @@ def _show_end_animation(message, win, score, color, duration=2500):
             screen.blit(overlay, txt_rect)
 
         # small subtitle with score
-        sub = font.render(f"Score: {score}", True, (200, 200, 200))
+        sub = font.render(f"分數: {score}", True, (200, 200, 200))
         subr = sub.get_rect(center=(400, 200))
         screen.blit(sub, subr)
         # submission status
