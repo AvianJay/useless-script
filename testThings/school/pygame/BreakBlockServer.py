@@ -41,6 +41,8 @@ def insert_score(user_id, score, win=False, app_version=app_version):
     high_score = c.fetchone()
     if high_score:
         c.execute("UPDATE leaderboard SET score = ? WHERE user_id = ?", (high_score[0], user_id))
+    else:
+        c.execute("INSERT INTO leaderboard (user_id, score, win, app_version) VALUES (?, ?, ?, ?)", (user_id, score, win, app_version))
     conn.commit()
     conn.close()
 
