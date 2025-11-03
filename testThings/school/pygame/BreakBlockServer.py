@@ -7,8 +7,19 @@ app = Flask(__name__)
 
 app_version = "0.1.0"
 
+# Global DB connection (shared)
+conn = None
+
+def ensure_conn():
+    """Ensure module-level sqlite3 connection exists and return it."""
+    global conn
+    if conn is None:
+        # check_same_thread False to allow usage across Flask threads in dev
+        conn = sqlite3.connect('breakblock.db', check_same_thread=False)
+    return conn
+
 def init_db():
-    conn = sqlite3.connect('breakblock.db')
+    conn = ensure_conn()
     c = conn.cursor()
     c.execute('''CREATE TABLE IF NOT EXISTS users
                  (id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -30,10 +41,11 @@ def init_db():
                   app_version TEXT NOT NULL DEFAULT '1.0')
                     ''')
     conn.commit()
-    conn.close()
+
+
 
 def insert_score(user_id, score, win=False, app_version=app_version):
-    conn = sqlite3.connect('breakblock.db')
+    conn = ensure_conn()
     c = conn.cursor()
     c.execute("INSERT INTO history (user_id, score, win, app_version) VALUES (?, ?, ?, ?)", (user_id, score, win, app_version))
     # get current high score
@@ -44,58 +56,51 @@ def insert_score(user_id, score, win=False, app_version=app_version):
     else:
         c.execute("INSERT INTO leaderboard (user_id, score, win, app_version) VALUES (?, ?, ?, ?)", (user_id, score, win, app_version))
     conn.commit()
-    conn.close()
 
 def get_leaderboard():
-    conn = sqlite3.connect('breakblock.db')
+    conn = ensure_conn()
     c = conn.cursor()
     c.execute("SELECT user_id, score, win, app_version FROM leaderboard ORDER BY score DESC LIMIT 10")
     rows = c.fetchall()
-    conn.close()
     return [{"user_id": row[0], "name": get_user_by_id(row[0])["name"], "score": row[1], "win": row[2], "app_version": row[3]} for row in rows]
 
 def create_user(name):
-    conn = sqlite3.connect('breakblock.db')
+    conn = ensure_conn()
     c = conn.cursor()
     token = ''.join(random.choices(string.ascii_letters + string.digits, k=16))
     c.execute("INSERT INTO users (name, token) VALUES (?, ?)", (name, token))
     conn.commit()
-    conn.close()
     return token
 
 def get_user_by_token(token):
-    conn = sqlite3.connect('breakblock.db')
+    conn = ensure_conn()
     c = conn.cursor()
     c.execute("SELECT id, name FROM users WHERE token = ?", (token,))
     row = c.fetchone()
-    conn.close()
     if row:
         return {"id": row[0], "name": row[1]}
     return None
 
 def get_user_by_id(user_id):
-    conn = sqlite3.connect('breakblock.db')
+    conn = ensure_conn()
     c = conn.cursor()
     c.execute("SELECT id, name FROM users WHERE id = ?", (user_id,))
     row = c.fetchone()
-    conn.close()
     if row:
         return {"id": row[0], "name": row[1]}
     return None
 
 def delete_user(token):
-    conn = sqlite3.connect('breakblock.db')
+    conn = ensure_conn()
     c = conn.cursor()
     c.execute("DELETE FROM users WHERE token = ?", (token,))
     conn.commit()
-    conn.close()
 
 def edit_user_name(token, new_name):
-    conn = sqlite3.connect('breakblock.db')
+    conn = ensure_conn()
     c = conn.cursor()
     c.execute("UPDATE users SET name = ? WHERE token = ?", (new_name, token))
     conn.commit()
-    conn.close()
 
 @app.route('/')
 def index():
