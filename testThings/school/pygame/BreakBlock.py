@@ -449,7 +449,7 @@ def start_game():
                     # use an existing ball as reference for speed if any exist
                     ref = balls[0] if balls else None
                     if ref:
-                        new_ball.speed = [-ref.speed[0], ref.speed[1]]
+                        new_ball.speed = [-min(ref.speed[0], 2), min(ref.speed[1], 2)]
                     else:
                         # fallback speed
                         new_ball.speed = [0, -2]
