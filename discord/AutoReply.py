@@ -135,6 +135,8 @@ class AutoReply(commands.GroupCog, name="autoreply"):
             ar.setdefault("channel_mode", "all")
             ar.setdefault("channels", [])
             ar.setdefault("random_chance", 100)
+            triggers = triggers if len(triggers) <= 100 else triggers[:97] + "..."
+            responses = responses if len(responses) <= 100 else responses[:97] + "..."
             description += f"**{i}.** 模式：{ar['mode']}，觸發字串：`{triggers}`，回覆內容：`{responses}`，回覆原訊息：{'是' if ar['reply'] else '否'}，指定頻道模式：{ar['channel_mode']}，指定頻道：`{', '.join(map(str, ar['channels'])) if ar['channels'] else '無'}`，隨機回覆機率：{ar['random_chance']}%\n"
         embed = discord.Embed(title="自動回覆列表", description=description, color=0x00ff00)
         await interaction.response.send_message(embed=embed)
@@ -233,7 +235,9 @@ class AutoReply(commands.GroupCog, name="autoreply"):
                 if random_chance is not None:
                     ar["random_chance"] = random_chance
                 set_server_config(guild_id, "autoreplies", autoreplies)
-                await interaction.response.send_message(f"已編輯自動回覆：\n- 模式：{ar['mode']}\n- 觸發字串：`{', '.join(ar['trigger'])}`\n- 回覆內容：`{', '.join(ar['response'])}`\n- 回覆原訊息：{'是' if ar['reply'] else '否'}\n- 指定頻道模式：{ar['channel_mode']}\n- 指定頻道：`{', '.join(map(str, ar['channels'])) if ar['channels'] else '無'}`\n- 隨機回覆機率：{ar['random_chance']}%")
+                trigger_str = ", ".join(ar["trigger"]) if len(ar["trigger"]) <= 100 else ", ".join(ar["trigger"])[:97] + "..."
+                response_str = ", ".join(ar["response"]) if len(ar["response"]) <= 100 else ", ".join(ar["response"])[:97] + "..."
+                await interaction.response.send_message(f"已編輯自動回覆：\n- 模式：{ar['mode']}\n- 觸發字串：`{trigger_str}`\n- 回覆內容：`{response_str}`\n- 回覆原訊息：{'是' if ar['reply'] else '否'}\n- 指定頻道模式：{ar['channel_mode']}\n- 指定頻道：`{', '.join(map(str, ar['channels'])) if ar['channels'] else '無'}`\n- 隨機回覆機率：{ar['random_chance']}%")
                 log(f"自動回覆被編輯：`{det[:10]}{'...' if len(det) > 10 else ''}`。", module_name="AutoReply", level=logging.INFO, user=interaction.user, guild=interaction.guild)
                 return
         await interaction.response.send_message(f"找不到觸發字串 `{trigger}` 的自動回覆。")
@@ -262,7 +266,9 @@ class AutoReply(commands.GroupCog, name="autoreply"):
                     ar["response"].extend(new_responses)
                     ar["response"] = list(set(ar["response"]))  # remove duplicates
                 set_server_config(guild_id, "autoreplies", autoreplies)
-                await interaction.response.send_message(f"已快速新增自動回覆，目前設定：\n- 模式：{ar['mode']}\n- 觸發字串：`{', '.join(ar['trigger'])}`\n- 回覆內容：`{', '.join(ar['response'])}`\n- 回覆原訊息：{'是' if ar['reply'] else '否'}\n- 指定頻道模式：{ar['channel_mode']}\n- 指定頻道：`{', '.join(map(str, ar['channels'])) if ar['channels'] else '無'}`\n- 隨機回覆機率：{ar['random_chance']}%")
+                trigger_str = ", ".join(ar["trigger"]) if len(ar["trigger"]) <= 100 else ", ".join(ar["trigger"])[:97] + "..."
+                response_str = ", ".join(ar["response"]) if len(ar["response"]) <= 100 else ", ".join(ar["response"])[:97] + "..."
+                await interaction.response.send_message(f"已快速新增自動回覆，目前設定：\n- 模式：{ar['mode']}\n- 觸發字串：`{trigger_str}`\n- 回覆內容：`{response_str}`\n- 回覆原訊息：{'是' if ar['reply'] else '否'}\n- 指定頻道模式：{ar['channel_mode']}\n- 指定頻道：`{', '.join(map(str, ar['channels'])) if ar['channels'] else '無'}`\n- 隨機回覆機率：{ar['random_chance']}%")
                 log(f"自動回覆被快速新增：`{det}`。", module_name="AutoReply", level=logging.INFO, user=interaction.user, guild=interaction.guild)
                 return
         await interaction.response.send_message(f"找不到觸發字串 `{trigger}` 的自動回覆。")
