@@ -27,7 +27,7 @@ async def _log(*messages, level = logging.INFO, module_name: str = "General", us
         logger.log(level, message)
 
     # Also print to console
-    print(f"[{module_name}] {message}", "guild=" + (guild.id if guild else "N/A"), "user=" + (user.id if user else "N/A"))
+    print(f"[{module_name}] {message}", f"guild={guild.id}" if guild else "", f"user={user.id}" if user else "")
     
     # try to send to a specific discord channel if configured
     try:
