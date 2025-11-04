@@ -592,6 +592,7 @@ class TWBus(commands.GroupCog, name=app_commands.locale_str("bus")):
                 return
 
             embed = discord.Embed(title="我的最愛", color=0x00ff00)
+            selects = []
 
             # 處理最愛站牌
             for stop_identifier in fav_stops:
@@ -614,6 +615,7 @@ class TWBus(commands.GroupCog, name=app_commands.locale_str("bus")):
                     if stop_info:
                         title, text = make_bus_text(stop_info)
                         embed.add_field(name=title, value=text, inline=False)
+                        selects.append(discord.SelectOption(label=title, value="bus/" + stop_identifier))
                     else:
                         raise ValueError("找不到該站牌的到站資訊。")
                 except Exception as e:
@@ -629,14 +631,67 @@ class TWBus(commands.GroupCog, name=app_commands.locale_str("bus")):
                     if info:
                         title, text = make_youbike_text(info)
                         embed.add_field(name=title, value=text, inline=False)
+                        selects.append(discord.SelectOption(label=title, value="youbike/" + station_name))
                     else:
                         raise ValueError("找不到該YouBike站點的資訊。")
                 except Exception as e:
                     log(f"處理最愛YouBike站點 {station_name} 時發生錯誤：{e}", level=logging.ERROR, module_name="TWBus", user=interaction.user, guild=interaction.guild)
                     traceback.print_exc()
                     embed.add_field(name=f"[未知YouBike站點]{station_name}", value=f"無法取得站點資訊：\n{str(e)}", inline=False)
-
-            await interaction.followup.send(embed=embed)
+            
+            origself = self
+            
+            # select menu for quick access
+            class FavoritesView(discord.ui.View):
+                def __init__(self, interaction: discord.Interaction, options: list[discord.SelectOption]):
+                    super().__init__()
+                    self.interaction = interaction
+                
+                async def on_timeout(self):
+                    for item in self.children:
+                        item.disabled = True
+                    try:
+                        await self.interaction.edit_original_response(view=self)
+                    except Exception:
+                        pass
+                
+                @discord.ui.select(placeholder="快速前往最愛站牌或YouBike站點", options=selects, min_values=1, max_values=1)
+                async def select_favorite(self, interaction: discord.Interaction, select: discord.ui.Select):
+                    if interaction.user != self.interaction.user:
+                        await interaction.response.send_message("你無權限使用此選單。", ephemeral=True)
+                        return
+                    value = select.values[0]
+                    try:
+                        category, identifier = value.split("/", 1)
+                        if category == "bus":
+                            route_key, stop_id = identifier.split(":")
+                            route_key_int = int(route_key)
+                            stop_id_int = int(stop_id)
+                            # await origself.get_stop.callback(origself, interaction, route_key_int, stop_id_int)
+                            paths = busapi.fetch_paths(int(route_key_int))
+                            info = busapi.get_complete_bus_info(route_key_int)
+                            route = busapi.fetch_route(route_key_int)[0]
+                            stop_info = {}
+                            for path_id, path_data in info.items():
+                                for stop in path_data["stops"]:
+                                    if stop["stop_id"] == stop_id_int:
+                                        stop_info.update(stop)
+                                        stop_info["route_name"] = route["route_name"]
+                                        path = next((p for p in paths if p["path_id"] == path_id), None)
+                                        if path:
+                                            stop_info["path_name"] = path["path_name"]
+                            embed, map_url = make_bus_embed(stop_info)
+                            await interaction.response.send_message(embed=embed)
+                        elif category == "youbike":
+                            info = youbike.getstationbyid(identifier)
+                            embed, map_url = make_youbike_embed(info)
+                            await interaction.response.send_message(embed=embed)
+                    except Exception as e:
+                        await interaction.response.send_message(f"載入最愛項目時發生錯誤：{e}", ephemeral=True)
+                        log(f"載入最愛項目時發生錯誤：{e}", level=logging.ERROR, module_name="TWBus", user=interaction.user, guild=interaction.guild)
+                        traceback.print_exc()
+            
+            await interaction.followup.send(embed=embed, view=FavoritesView(interaction, selects) if selects else None)
 
         except Exception as e:
             log(f"查詢最愛站牌與YouBike站點時發生錯誤：{e}", level=logging.ERROR, module_name="TWBus", user=interaction.user, guild=interaction.guild)
