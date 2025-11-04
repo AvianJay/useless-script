@@ -944,7 +944,7 @@ async def use_cloud_ruler(interaction: discord.Interaction):
                 await interaction.response.send_message("你沒有雲端尺，無法幫他量長度。", ephemeral=True)
                 return
             # check if user is online
-            if not target_user.status in [discord.Status.online, discord.Status.idle, discord.Status.dnd]:
+            if target_user.status == discord.Status.offline:
                 await interaction.response.send_message(f"{target_user.display_name} 不在線上，無法幫他量長度。", ephemeral=True)
                 return
             max_size = get_server_config(guild_key, "dsize_max", 30)
