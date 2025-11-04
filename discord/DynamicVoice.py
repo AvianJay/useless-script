@@ -39,7 +39,7 @@ class DynamicVoice(commands.GroupCog, name=app_commands.locale_str("dynamic-voic
         set_server_config(guild_id, "dynamic_voice_channel_category", channel_category.id)
         set_server_config(guild_id, "dynamic_voice_channel_name", channel_name)
         # print(f"[+] Set up dynamic voice channel in guild {guild_id}, channel {channel.id}, category {channel_category.id}, name {channel_name}")
-        log(f"Set up dynamic voice channel in guild {guild_id}, channel {channel.id}, category {channel_category.id}, name {channel_name}", module_name="DynamicVoice", guild=interaction.guild)
+        log(f"已設置動態語音頻道在伺服器 {guild_id}，頻道 {channel.id}，類別 {channel_category.id}，名稱 {channel_name}", module_name="DynamicVoice", guild=interaction.guild)
         await interaction.followup.send(f"動態語音頻道已設置在 '{channel.mention}' 下，將自動創建頻道於 '{channel_category.name}' 中。\n- {warn}", ephemeral=True)
 
     @app_commands.command(name=app_commands.locale_str("disable"), description="禁用動態語音頻道")
@@ -82,14 +82,14 @@ class DynamicVoice(commands.GroupCog, name=app_commands.locale_str("dynamic-voic
             try:
                 await channel.connect()
             except Exception as e:
-                log(f"Failed to connect to channel '{channel.name}': {e}", level=logging.ERROR, module_name="DynamicVoice", guild=interaction.guild)
+                log(f"無法連接到頻道 '{channel.name}': {e}", level=logging.ERROR, module_name="DynamicVoice", guild=interaction.guild)
                 await interaction.followup.send(f"錯誤：無法連接到語音頻道 '{channel.name}'。", ephemeral=True)
                 return
             # set voice channel limit members to 2
             try:
                 await channel.edit(user_limit=2)
             except Exception as e:
-                log(f"Failed to set user limit for channel '{channel.name}': {e}", level=logging.ERROR, module_name="DynamicVoice", guild=interaction.guild)
+                log(f"無法設置頻道 '{channel.name}' 的用戶限制: {e}", level=logging.ERROR, module_name="DynamicVoice", guild=interaction.guild)
         else:
             channel_id = get_server_config(guild_id, "dynamic_voice_channel")
             if not channel_id:
