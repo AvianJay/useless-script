@@ -268,6 +268,7 @@ translations = {
     "blacklist-role": "黑名單身分組",
     "unblacklist-role": "解除黑名單身分組",
     "set-log-channel": "設置日誌頻道",
+    "view-blacklist-roles": "查看黑名單身分組",
 }
 class CommandNameTranslator(app_commands.Translator):
     async def translate(

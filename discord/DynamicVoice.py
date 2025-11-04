@@ -132,6 +132,7 @@ class DynamicVoice(commands.GroupCog, name=app_commands.locale_str("dynamic-voic
     
     @app_commands.command(name=app_commands.locale_str("blacklist-role"), description="設定動態語音頻道黑名單身分組")
     async def blacklist_role(self, interaction: discord.Interaction, role: discord.Role):
+        await interaction.response.defer(ephemeral=True)
         guild_id = interaction.guild.id
         blacklisted_roles = get_server_config(guild_id, "dynamic_voice_blacklist_roles", [])
         if role.id in blacklisted_roles:
@@ -144,6 +145,7 @@ class DynamicVoice(commands.GroupCog, name=app_commands.locale_str("dynamic-voic
     
     @app_commands.command(name=app_commands.locale_str("unblacklist-role"), description="移除動態語音頻道黑名單身分組")
     async def unblacklist_role(self, interaction: discord.Interaction, role: discord.Role):
+        await interaction.response.defer(ephemeral=True)
         guild_id = interaction.guild.id
         blacklisted_roles = get_server_config(guild_id, "dynamic_voice_blacklist_roles", [])
         if role.id not in blacklisted_roles:
@@ -156,10 +158,11 @@ class DynamicVoice(commands.GroupCog, name=app_commands.locale_str("dynamic-voic
     
     @app_commands.command(name=app_commands.locale_str("view-blacklist-roles"), description="查看動態語音頻道黑名單身分組")
     async def view_blacklist_roles(self, interaction: discord.Interaction):
+        await interaction.response.defer(ephemeral=True)
         guild_id = interaction.guild.id
         blacklisted_roles = get_server_config(guild_id, "dynamic_voice_blacklist_roles", [])
         if not blacklisted_roles:
-            await interaction.response.send_message("黑名單身分組為空。", ephemeral=True)
+            await interaction.followup.send("黑名單身分組為空。", ephemeral=True)
             return
         role_mentions = []
         for role_id in blacklisted_roles:
@@ -168,7 +171,7 @@ class DynamicVoice(commands.GroupCog, name=app_commands.locale_str("dynamic-voic
                 role_mentions.append(role.mention)
             else:
                 role_mentions.append(f"已刪除的身分組 (ID: `{role_id}`)")
-        await interaction.response.send_message("黑名單身分組：\n" + "\n".join(role_mentions), ephemeral=True)
+        await interaction.followup.send("黑名單身分組：\n" + "\n".join(role_mentions), ephemeral=True)
 
     @commands.Cog.listener()
     async def on_voice_state_update(self, member: discord.Member, before: discord.VoiceState, after: discord.VoiceState):
