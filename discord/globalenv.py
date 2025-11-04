@@ -264,7 +264,10 @@ translations = {
     "banner": "橫幅",
     "bio": "介紹",
     "feedback": "回饋箱",
-    "change": "更改"
+    "change": "更改",
+    "blacklist-role": "黑名單身分組",
+    "unblacklist-role": "解除黑名單身分組",
+    "set-log-channel": "設置日誌頻道",
 }
 class CommandNameTranslator(app_commands.Translator):
     async def translate(

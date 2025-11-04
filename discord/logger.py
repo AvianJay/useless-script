@@ -1,6 +1,7 @@
 import discord
 from discord.ext import commands
-from globalenv import config, bot, start_bot, modules
+from discord import app_commands
+from globalenv import config, bot, start_bot, modules, get_server_config, set_server_config
 import asyncio
 import logging
 
@@ -26,7 +27,7 @@ async def _log(*messages, level = logging.INFO, module_name: str = "General", us
         logger.log(level, message)
 
     # Also print to console
-    print(f"[{module_name}] {message}")
+    print(f"[{module_name}] {message}", "guild=" + (guild.id if guild else "N/A"), "user=" + (user.id if user else "N/A"))
     
     # try to send to a specific discord channel if configured
     try:
@@ -49,6 +50,12 @@ async def _log(*messages, level = logging.INFO, module_name: str = "General", us
                     embed.add_field(name="伺服器ID", value=f"`{guild.id}`", inline=False)  # easy to copy guild id
                     embed.set_footer(text=guild.name if guild.name else guild.id, icon_url=guild.icon.url if guild.icon else None)
                 await channel.send(embed=embed)
+                if guild:
+                    log_channel_id = get_server_config(guild.id, "log_channel_id")
+                    if log_channel_id and log_channel_id != channel.id:
+                        guild_channel = bot.get_channel(log_channel_id)
+                        if guild_channel:
+                            await guild_channel.send(embed=embed)
             except Exception as e:
                 print(f"[!] Error sending log message to Discord channel: {e}")
 
@@ -61,9 +68,21 @@ def log(*messages, level = logging.INFO, module_name: str = "General", user: dis
     except RuntimeError:
         asyncio.run(_log(*messages, level=level, module_name=module_name, user=user, guild=guild))
 
+@app_commands.guild_only()
+@app_commands.default_permissions(administrator=True)
+@app_commands.allowed_installs(guilds=True, users=False)
+@app_commands.allowed_contexts(guilds=True, dms=False, private_channels=False)
 class LoggerCog(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
+
+    @app_commands.command(name="set-log-channel", description="設置日誌頻道 (若不設置則不發送到頻道)")
+    @app_commands.describe(channel="選擇日誌頻道")
+    async def set_log_channel(self, interaction: discord.Interaction, channel: discord.TextChannel = None):
+        await interaction.response.defer(ephemeral=True)
+        guild_id = interaction.guild.id
+        set_server_config(guild_id, "log_channel_id", channel.id if channel else None)
+        await interaction.followup.send(f"日誌頻道已設置為: {channel.mention}", ephemeral=True)
 
     @commands.Cog.listener()
     async def on_message(self, message: discord.Message):
