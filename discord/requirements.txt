@@ -7,3 +7,4 @@ taiwanbus==0.1.0
 YouBikePython==0.1.0
 psutil~=7.1.2
 git+https://github.com/AvianJay/DiscordChatExporterPy.git@master
+playwright~=1.55.0

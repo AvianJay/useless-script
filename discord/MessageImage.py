@@ -261,7 +261,10 @@ browser = None
 async def setup_browser():
     global browser
     playwright = await async_playwright().start()
-    browser = await playwright.chromium.launch()
+    try:
+        browser = await playwright.chromium.launch()
+    except Exception as e:
+        log(f"啟動瀏覽器失敗: {e}", module_name="MessageImage", level=logging.ERROR)
     log("Playwright 瀏覽器已啟動", module_name="MessageImage")
     while True:
         await asyncio.sleep(60)
