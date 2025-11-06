@@ -119,6 +119,10 @@ async def make_it_a_quote(interaction: discord.Interaction, message: discord.Mes
 
 @bot.command(name="badquote", aliases=["bquote", "bq", "makeitaquote", "miq"])
 async def badquote(ctx: commands.Context):
+    """
+    糟糕的 Make it a Quote。
+    回覆一則訊息以生成糟糕的 Make it a Quote 圖片。
+    """
     # try to get replied message
     if ctx.message.reference:
         ref_msg = await ctx.channel.fetch_message(ctx.message.reference.message_id)
@@ -195,6 +199,10 @@ async def screenshot_generator(interaction: discord.Interaction, message: discor
 
 @bot.command(name="screenshot", aliases=["ss", "sgen", "screenshotgen"])
 async def screenshot_cmd(ctx: commands.Context):
+    """
+    截圖生成器。
+    回覆一則訊息以截圖該訊息。
+    """
     # check browser alive
     global browser
     if browser is None:
