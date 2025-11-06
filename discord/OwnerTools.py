@@ -4,6 +4,7 @@ import discord
 from globalenv import bot, start_bot, get_user_data, set_user_data, config, get_server_config, set_server_config, _config, default_config, get_all_user_data, db, on_close_tasks, reload_config
 from discord.ext import commands
 from typing import Callable
+import chat_exporter
 
 def is_owner() -> Callable:
     async def predicate(ctx):
@@ -232,16 +233,20 @@ async def createtranscript(ctx, channel_id: int, after_message_id: int=None, bef
     try:
         messages = []
         async for msg in channel.history(limit=limit, after=discord.Object(id=after_message_id) if after_message_id else None, before=discord.Object(id=before_message_id) if before_message_id else None, oldest_first=True):
-            timestamp = msg.created_at.strftime("%Y-%m-%d %H:%M:%S")
-            author = f"{msg.author} (ID: {msg.author.id})"
-            content = msg.content
-            attachments = " ".join(att.url for att in msg.attachments)
-            full_message = f"[{timestamp}] {author}: {content} {attachments}".strip()
-            messages.append(full_message)
-        transcript = "\n".join(messages) if messages else "沒有找到符合條件的訊息。"
+            messages.append(msg)
+        messages.reverse()  # chat_exporter needs oldest first
+        
+        transcript = await chat_exporter.raw_export(
+            channel,
+            messages=messages,
+            tz_info="Asia/Taipei",
+            guild=channel.guild,
+            bot=bot
+        )
+
         # send as file
         transcript_file = io.BytesIO(transcript.encode('utf-8'))
-        transcript_file.name = f"transcript_{channel.id}.txt"
+        transcript_file.name = f"transcript_{channel.id}.html"
         await ctx.send("以下是頻道的對話紀錄：", file=discord.File(fp=transcript_file))
     except discord.Forbidden:
         await ctx.send("無法讀取該頻道的歷史訊息，機器人缺少權限。")

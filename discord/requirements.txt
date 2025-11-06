@@ -6,3 +6,4 @@ g4f[all]
 taiwanbus==0.1.0
 YouBikePython==0.1.0
 psutil~=7.1.2
+chat-exporter
