@@ -6,7 +6,13 @@ import discord
 import aiohttp
 from discord.ext import commands
 from discord import app_commands
-from globalenv import bot, start_bot
+from globalenv import bot, start_bot, on_ready_tasks
+from playwright.async_api import async_playwright
+import asyncio
+import chat_exporter
+from logger import log
+import logging
+import traceback
 
 
 if getattr(sys, 'frozen', False):
@@ -125,6 +131,147 @@ async def badquote(ctx: commands.Context):
         return
     output_buffer = await create(message)
     await ctx.reply(file=discord.File(output_buffer, filename="messenger_quote.png"))
+
+
+@bot.tree.context_menu(name="截圖生成器")
+@app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
+@app_commands.allowed_installs(guilds=True, users=True)
+async def screenshot_generator(interaction: discord.Interaction, message: discord.Message):
+    await interaction.response.defer()
+    # check browser alive
+    global browser
+    if browser is None:
+        await interaction.followup.send("瀏覽器尚未啟動，請稍後再試。", ephemeral=True)
+        return
+    if not browser.is_connected():
+        await interaction.followup.send("瀏覽器已關閉，請稍後再試。", ephemeral=True)
+        return
+    # try to get previous message
+    messages = [message]
+    try:
+        if not interaction.message.reference:
+            done = False
+            current_msg = message
+            while not done:
+                current_msg = await current_msg.channel.history(limit=1, before=discord.Object(id=current_msg.id))
+                current_msg = await current_msg.next()
+                if current_msg.author.id == message.author.id:
+                    messages.append(current_msg)
+                    if current_msg.reference:
+                        done = True
+                else:
+                    done = True
+    except Exception:
+        pass
+    messages.reverse()
+    try:
+        html_content = await chat_exporter.raw_export(
+            message.channel,
+            messages=messages,
+            tz_info="Asia/Taipei",
+            guild=message.channel.guild,
+            bot=bot,
+            raise_exceptions=True
+        )
+    except Exception as e:
+        await interaction.followup.send(f"生成 HTML 失敗: {e}", ephemeral=True)
+        log(f"生成 HTML 失敗: {e}", module_name="BadQuote", level=logging.ERROR, user=interaction.user, guild=interaction.guild)
+        traceback.print_exc()
+        return
+    try:
+        page = await browser.new_page()
+        await page.set_content(html_content, wait_until="networkidle")
+        await page.add_style_tag(content=".chatlog__message-group { width: fit-content; }")
+        image_bytes = await page.locator('.chatlog__message-group').screenshot(type="png")
+        await page.close()
+    except Exception as e:
+        await interaction.followup.send(f"截圖失敗: {e}", ephemeral=True)
+        log(f"截圖失敗: {e}", module_name="BadQuote", level=logging.ERROR, user=interaction.user, guild=interaction.guild)
+        traceback.print_exc()
+        return
+    buffer = io.BytesIO(image_bytes)
+    await interaction.followup.send(file=discord.File(buffer, filename="screenshot.png"))
+    log("截圖生成完成", module_name="BadQuote", user=interaction.user, guild=interaction.guild)
+
+@bot.command(name="screenshot", aliases=["ss", "sgen", "screenshotgen"])
+async def screenshot_cmd(ctx: commands.Context):
+    # check browser alive
+    global browser
+    if browser is None:
+        await ctx.reply("瀏覽器尚未啟動，請稍後再試。")
+        return
+    if not browser.is_connected():
+        await ctx.reply("瀏覽器已關閉，請稍後再試。")
+        return
+    # try to get replied message
+    if ctx.message.reference:
+        ref_msg = await ctx.channel.fetch_message(ctx.message.reference.message_id)
+        message = ref_msg
+    if not message:
+        await ctx.send("錯誤：沒有回覆的訊息。", delete_after=10)
+        return
+    # try to get previous message
+    messages = [message]
+    try:
+        if not ctx.message.reference:
+            done = False
+            current_msg = message
+            while not done:
+                current_msg = await current_msg.channel.history(limit=1, before=discord.Object(id=current_msg.id))
+                current_msg = await current_msg.next()
+                if current_msg.author.id == message.author.id:
+                    messages.append(current_msg)
+                    if current_msg.reference:
+                        done = True
+                else:
+                    done = True
+    except Exception:
+        pass
+    messages.reverse()
+    try:
+        html_content = await chat_exporter.raw_export(
+            message.channel,
+            messages=messages,
+            tz_info="Asia/Taipei",
+            guild=message.channel.guild,
+            bot=bot,
+            raise_exceptions=True
+        )
+    except Exception as e:
+        await ctx.reply(f"生成 HTML 失敗: {e}")
+        log(f"生成 HTML 失敗: {e}", module_name="BadQuote", level=logging.ERROR, user=ctx.author, guild=ctx.guild)
+        traceback.print_exc()
+        return
+    try:
+        page = await browser.new_page()
+        await page.set_content(html_content, wait_until="networkidle")
+        await page.add_style_tag(content=".chatlog__message-group { width: fit-content; }")
+        image_bytes = await page.locator('.chatlog__message-group').screenshot(type="png")
+        await page.close()
+    except Exception as e:
+        await ctx.reply(f"截圖失敗: {e}")
+        log(f"截圖失敗: {e}", module_name="BadQuote", level=logging.ERROR, user=ctx.author, guild=ctx.guild)
+        traceback.print_exc()
+        return
+    buffer = io.BytesIO(image_bytes)
+    await ctx.reply(file=discord.File(buffer, filename="screenshot.png"))
+
+browser = None
+
+async def setup_browser():
+    global browser
+    playwright = await async_playwright().start()
+    browser = await playwright.chromium.launch()
+    log("Playwright 瀏覽器已啟動", module_name="BadQuote")
+    while True:
+        await asyncio.sleep(60)
+        if not browser.is_connected():
+            log("Playwright 瀏覽器已關閉，重新啟動中...", module_name="BadQuote", level=logging.WARNING)
+            browser = await playwright.chromium.launch()
+            log("Playwright 瀏覽器已重新啟動", module_name="BadQuote")
+
+on_ready_tasks.append(setup_browser)
+
 
 if __name__ == "__main__":
     start_bot()
