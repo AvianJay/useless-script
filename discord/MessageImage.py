@@ -175,7 +175,7 @@ async def screenshot_generator(interaction: discord.Interaction, message: discor
         )
     except Exception as e:
         await interaction.followup.send(f"生成 HTML 失敗: {e}", ephemeral=True)
-        log(f"生成 HTML 失敗: {e}", module_name="BadQuote", level=logging.ERROR, user=interaction.user, guild=interaction.guild)
+        log(f"生成 HTML 失敗: {e}", module_name="MessageImage", level=logging.ERROR, user=interaction.user, guild=interaction.guild)
         traceback.print_exc()
         return
     try:
@@ -186,12 +186,12 @@ async def screenshot_generator(interaction: discord.Interaction, message: discor
         await page.close()
     except Exception as e:
         await interaction.followup.send(f"截圖失敗: {e}", ephemeral=True)
-        log(f"截圖失敗: {e}", module_name="BadQuote", level=logging.ERROR, user=interaction.user, guild=interaction.guild)
+        log(f"截圖失敗: {e}", module_name="MessageImage", level=logging.ERROR, user=interaction.user, guild=interaction.guild)
         traceback.print_exc()
         return
     buffer = io.BytesIO(image_bytes)
     await interaction.followup.send(file=discord.File(buffer, filename="screenshot.png"))
-    log("截圖生成完成", module_name="BadQuote", user=interaction.user, guild=interaction.guild)
+    log("截圖生成完成", module_name="MessageImage", user=interaction.user, guild=interaction.guild)
 
 @bot.command(name="screenshot", aliases=["ss", "sgen", "screenshotgen"])
 async def screenshot_cmd(ctx: commands.Context):
@@ -239,7 +239,7 @@ async def screenshot_cmd(ctx: commands.Context):
         )
     except Exception as e:
         await ctx.reply(f"生成 HTML 失敗: {e}")
-        log(f"生成 HTML 失敗: {e}", module_name="BadQuote", level=logging.ERROR, user=ctx.author, guild=ctx.guild)
+        log(f"生成 HTML 失敗: {e}", module_name="MessageImage", level=logging.ERROR, user=ctx.author, guild=ctx.guild)
         traceback.print_exc()
         return
     try:
@@ -250,7 +250,7 @@ async def screenshot_cmd(ctx: commands.Context):
         await page.close()
     except Exception as e:
         await ctx.reply(f"截圖失敗: {e}")
-        log(f"截圖失敗: {e}", module_name="BadQuote", level=logging.ERROR, user=ctx.author, guild=ctx.guild)
+        log(f"截圖失敗: {e}", module_name="MessageImage", level=logging.ERROR, user=ctx.author, guild=ctx.guild)
         traceback.print_exc()
         return
     buffer = io.BytesIO(image_bytes)
@@ -262,13 +262,13 @@ async def setup_browser():
     global browser
     playwright = await async_playwright().start()
     browser = await playwright.chromium.launch()
-    log("Playwright 瀏覽器已啟動", module_name="BadQuote")
+    log("Playwright 瀏覽器已啟動", module_name="MessageImage")
     while True:
         await asyncio.sleep(60)
         if not browser.is_connected():
-            log("Playwright 瀏覽器已關閉，重新啟動中...", module_name="BadQuote", level=logging.WARNING)
+            log("Playwright 瀏覽器已關閉，重新啟動中...", module_name="MessageImage", level=logging.WARNING)
             browser = await playwright.chromium.launch()
-            log("Playwright 瀏覽器已重新啟動", module_name="BadQuote")
+            log("Playwright 瀏覽器已重新啟動", module_name="MessageImage")
 
 on_ready_tasks.append(setup_browser)
 
