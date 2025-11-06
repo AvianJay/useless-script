@@ -208,7 +208,7 @@ async def screenshot_cmd(ctx: commands.Context):
         ref_msg = await ctx.channel.fetch_message(ctx.message.reference.message_id)
         message = ref_msg
     if not message:
-        await ctx.send("錯誤：沒有回覆的訊息。", delete_after=10)
+        await ctx.reply("錯誤：沒有回覆的訊息。")
         return
     # try to get previous message
     messages = [message]
