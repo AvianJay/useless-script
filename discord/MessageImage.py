@@ -153,21 +153,16 @@ async def screenshot_generator(interaction: discord.Interaction, message: discor
     # try to get previous message
     messages = [message]
     try:
-        if not interaction.message.reference:
-            done = False
-            current_msg = message
-            while not done:
-                current_msg = await current_msg.channel.history(limit=1, before=discord.Object(id=current_msg.id))
-                current_msg = await current_msg.next()
-                if current_msg.author.id == message.author.id:
-                    messages.append(current_msg)
-                    if current_msg.reference:
-                        done = True
+        if not message.reference:
+            async for msg in message.channel.history(limit=25, before=message.created_at, oldest_first=False):
+                if msg.author.id == message.author.id:
+                    if msg.reference:
+                        break
+                    messages.append(msg)
                 else:
-                    done = True
+                    break
     except Exception:
-        pass
-    messages.reverse()
+        traceback.print_exc()
     try:
         html_content = await chat_exporter.raw_export(
             message.channel,
@@ -190,6 +185,8 @@ async def screenshot_generator(interaction: discord.Interaction, message: discor
         await page.close()
     except Exception as e:
         await interaction.followup.send(f"截圖失敗: {e}", ephemeral=True)
+        # try to upload html file
+        await interaction.followup.send("原 HTML 檔案：", file=discord.File(io.BytesIO(html_content.encode("utf-8")), filename="debug.html"), ephemeral=True)
         log(f"截圖失敗: {e}", module_name="MessageImage", level=logging.ERROR, user=interaction.user, guild=interaction.guild)
         traceback.print_exc()
         return
