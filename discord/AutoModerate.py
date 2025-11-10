@@ -9,6 +9,8 @@ import re
 import emoji
 import sqlite3
 import io
+from logger import log
+import logging
 
 if "Moderate" in modules:
     import Moderate
@@ -257,6 +259,7 @@ class AutoModerate(commands.GroupCog, name=app_commands.locale_str("automod")):
         results = cursor.fetchall()
         results = [dict(zip([column[0] for column in cursor.description], row)) for row in results]
         if results:
+            log(f"被標記的用戶 {member} ({len(results)}) 加入伺服器，發送通知。", module_name="AutoModerate", user=member, guild=member.guild)
             channel = member.guild.get_channel(channel_id)
             if channel:
                 embed = discord.Embed(title="標記用戶加入伺服器", color=0xff0000)
@@ -267,6 +270,7 @@ class AutoModerate(commands.GroupCog, name=app_commands.locale_str("automod")):
                     guild_name = guild_info[0] if guild_info else "未知伺服器"
                     flagged_at = result.get('flagged_at', '未知時間')
                     embed.add_field(name=guild_name, value=f"標記時間: {flagged_at}{', 擁有被標記的身份組' if result.get('flagged_role', 0) else ''}", inline=False)
+                await channel.send(embed=embed)
         conn.close()
                 
 
