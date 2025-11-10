@@ -12,7 +12,7 @@ import logging
 
 
 # Global configuration for backward compatibility
-config_version = 10
+config_version = 11
 config_path = 'config.json'
 
 default_config = {
@@ -31,7 +31,8 @@ default_config = {
     "default_favorite_stops_limit": 2,
     "default_favorite_youbike_limit": 2,
     "log_channel_id": 123456789012345678,
-    "feedback_message_channel_id": 123456789012345678
+    "feedback_message_channel_id": 123456789012345678,
+    "botcustomizer_log_channel_id": 123456789012345678,
 }
 _config = None
 

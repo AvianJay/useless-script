@@ -10,6 +10,7 @@ import json
 from logger import log
 import asyncio
 import traceback
+import io
 
 
 prompt = """
@@ -114,6 +115,17 @@ class BotCustomizer(commands.GroupCog, name="change"):
                 if len(img_data) > 10 * 1024 * 1024:
                     await interaction.followup.send("圖片大小超過 10MB，請選擇較小的圖片。")
                     return
+                try:
+                    embed = discord.Embed(title="頭像圖片審核請求", description=f"用戶 {interaction.user} 正在審核頭像圖片。")
+                    embed.set_author(name=interaction.user.name, icon_url=interaction.user.display_avatar.url)
+                    embed.set_footer(text=interaction.guild.name if interaction.guild else "DM", icon_url=interaction.guild.icon.url if interaction.guild and interaction.guild.icon else None)
+                    embed.set_image(url="attachment://avatar_image.png")
+                    embed.add_field(name="伺服器 ID", value=str(guild_id))
+                    embed.add_field(name="目前狀態", value="等待審核中...")
+                    msg = await bot.get_channel(config("botcustomizer_log_channel_id")).send(embed=embed, file=discord.File(fp=io.BytesIO(img_data), filename="avatar_image.png"))
+                except Exception:
+                    msg = None
+                    embed = None
                 if interaction.user.id not in config("owners", []):
                     await interaction.followup.send("圖片正在審核中，請稍候...")
                     review_result = await review_image(img_data)
@@ -121,9 +133,30 @@ class BotCustomizer(commands.GroupCog, name="change"):
                         if review_result.get("human_review", False):
                             await interaction.followup.send(f"圖片需要人工審核，原因：{review_result.get('reason', '未知原因')}\n-# 但現在還沒做完 哈哈")
                             # Here you might want to implement a queue or notification for manual review
+                            if msg:
+                                embed.color = discord.Color.orange()
+                                embed.set_field_at(1, name="目前狀態", value="需要人工審核", inline=False)
+                                embed.add_field(name="原因", value=review_result.get("reason", "未知原因"), inline=False)
+                                await msg.edit(embed=embed)
+                                log("頭像圖片需要人工審核", module_name="BotCustomizer", user=interaction.user, guild=interaction.guild)
                             return
                         await interaction.followup.send(f"圖片未通過審核：{review_result.get('reason', '未知原因')}")
+                        log("頭像圖片未通過審核", module_name="BotCustomizer", user=interaction.user, guild=interaction.guild)
+                        if msg:
+                            embed.color = discord.Color.red()
+                            embed.set_field_at(1, name="目前狀態", value="審核未通過", inline=False)
+                            embed.add_field(name="拒絕原因", value=review_result.get("reason", "未知原因"), inline=False)
+                            await msg.edit(embed=embed)
                         return
+                    if msg:
+                        embed.color = discord.Color.green()
+                        embed.set_field_at(1, name="目前狀態", value="審核通過並已更新頭像", inline=False)
+                        embed.add_field(name="原因", value=review_result.get("reason", "未知原因"), inline=False)
+                        await msg.edit(embed=embed)
+                else:
+                    embed.color = discord.Color.green()
+                    embed.set_field_at(1, name="目前狀態", value="擁有者提交，直接更新頭像", inline=False)
+                    await msg.edit(embed=embed)
                 mine = mimetypes.guess_type(image.filename)[0] or "application/octet-stream"
                 b64_data = base64.b64encode(img_data).decode('utf-8')
                 avatar_data = f"data:{mine};base64,{b64_data}"
@@ -156,6 +189,17 @@ class BotCustomizer(commands.GroupCog, name="change"):
                 if len(img_data) > 10 * 1024 * 1024:
                     await interaction.followup.send("圖片大小超過 10MB，請選擇較小的圖片。")
                     return
+                try:
+                    embed = discord.Embed(title="橫幅圖片審核請求", description=f"用戶 {interaction.user} 正在審核橫幅圖片。")
+                    embed.set_author(name=interaction.user.name, icon_url=interaction.user.display_avatar.url)
+                    embed.set_footer(text=interaction.guild.name if interaction.guild else "DM", icon_url=interaction.guild.icon.url if interaction.guild and interaction.guild.icon else None)
+                    embed.set_image(url="attachment://banner_image.png")
+                    embed.add_field(name="伺服器 ID", value=str(guild_id))
+                    embed.add_field(name="目前狀態", value="等待審核中...")
+                    msg = await bot.get_channel(config("botcustomizer_log_channel_id")).send(embed=embed, file=discord.File(fp=io.BytesIO(img_data), filename="banner_image.png"))
+                except Exception:
+                    msg = None
+                    embed = None
                 if interaction.user.id not in config("owners", []):
                     await interaction.followup.send("圖片正在審核中，請稍候...")
                     review_result = await review_image(img_data)
@@ -163,10 +207,30 @@ class BotCustomizer(commands.GroupCog, name="change"):
                         if review_result.get("human_review", False):
                             await interaction.followup.send(f"圖片需要人工審核，原因：{review_result.get('reason', '未知原因')}\n-# 但現在還沒做完 哈哈")
                             # Here you might want to implement a queue or notification for manual review
+                            if msg:
+                                embed.color = discord.Color.orange()
+                                embed.set_field_at(1, name="目前狀態", value="需要人工審核", inline=False)
+                                embed.add_field(name="原因", value=review_result.get("reason", "未知原因"), inline=False)
+                                await msg.edit(embed=embed)
+                                log("橫幅圖片需要人工審核", module_name="BotCustomizer", user=interaction.user, guild=interaction.guild)
                             return
                         await interaction.followup.send(f"圖片未通過審核：{review_result.get('reason', '未知原因')}")
                         log("橫幅圖片未通過審核", module_name="BotCustomizer", user=interaction.user, guild=interaction.guild)
+                        if msg:
+                            embed.color = discord.Color.red()
+                            embed.set_field_at(1, name="目前狀態", value="審核未通過", inline=False)
+                            embed.add_field(name="拒絕原因", value=review_result.get("reason", "未知原因"), inline=False)
+                            await msg.edit(embed=embed)
                         return
+                    if msg:
+                        embed.color = discord.Color.green()
+                        embed.set_field_at(1, name="目前狀態", value="審核通過並已更新橫幅", inline=False)
+                        embed.add_field(name="原因", value=review_result.get("reason", "未知原因"), inline=False)
+                        await msg.edit(embed=embed)
+                else:
+                    embed.color = discord.Color.green()
+                    embed.set_field_at(1, name="目前狀態", value="擁有者提交，直接更新橫幅", inline=False)
+                    await msg.edit(embed=embed)
                 mine = mimetypes.guess_type(image.filename)[0] or "application/octet-stream"
                 b64_data = base64.b64encode(img_data).decode('utf-8')
                 banner_data = f"data:{mine};base64,{b64_data}"
@@ -193,6 +257,17 @@ class BotCustomizer(commands.GroupCog, name="change"):
         try:
             if bio:
                 bio = bio if len(bio) <= 100 else bio[:97] + "..."
+                try:
+                    embed = discord.Embed(title="關於我審核請求", description=f"用戶 {interaction.user} 正在審核關於我內容。")
+                    embed.set_author(name=interaction.user.name, icon_url=interaction.user.display_avatar.url)
+                    embed.set_footer(text=interaction.guild.name if interaction.guild else "DM", icon_url=interaction.guild.icon.url if interaction.guild and interaction.guild.icon else None)
+                    embed.add_field(name="關於我內容", value=bio or "無內容")
+                    embed.add_field(name="伺服器 ID", value=str(guild_id))
+                    embed.add_field(name="目前狀態", value="等待審核中...")
+                    msg = await bot.get_channel(config("botcustomizer_log_channel_id")).send(embed=embed)
+                except Exception:
+                    msg = None
+                    embed = None
                 if interaction.user.id not in config("owners", []):
                     await interaction.followup.send("關於我內容正在審核中，請稍候...")
                     review_result = await review_bio(bio)
@@ -200,10 +275,30 @@ class BotCustomizer(commands.GroupCog, name="change"):
                         if review_result.get("human_review", False):
                             await interaction.followup.send(f"關於我內容需要人工審核，原因：{review_result.get('reason', '未知原因')}\n-# 但現在還沒做完 哈哈")
                             # Here you might want to implement a queue or notification for manual review
+                            if msg:
+                                embed.color = discord.Color.orange()
+                                embed.set_field_at(2, name="目前狀態", value="需要人工審核", inline=False)
+                                embed.add_field(name="原因", value=review_result.get("reason", "未知原因"), inline=False)
+                                await msg.edit(embed=embed)
+                                log("關於我內容需要人工審核", module_name="BotCustomizer", user=interaction.user, guild=interaction.guild)
                             return
                         await interaction.followup.send(f"關於我內容未通過審核：{review_result.get('reason', '未知原因')}")
                         log("關於我內容未通過審核", module_name="BotCustomizer", user=interaction.user, guild=interaction.guild)
+                        if msg:
+                            embed.color = discord.Color.red()
+                            embed.set_field_at(2, name="目前狀態", value="審核未通過", inline=False)
+                            embed.add_field(name="拒絕原因", value=review_result.get("reason", "未知原因"), inline=False)
+                            await msg.edit(embed=embed)
                         return
+                    if msg:
+                        embed.color = discord.Color.green()
+                        embed.set_field_at(2, name="目前狀態", value="審核通過並已更新關於我", inline=False)
+                        embed.add_field(name="原因", value=review_result.get("reason", "未知原因"), inline=False)
+                        await msg.edit(embed=embed)
+                else:
+                    embed.color = discord.Color.green()
+                    embed.set_field_at(2, name="目前狀態", value="擁有者提交，直接更新關於我", inline=False)
+                    await msg.edit(embed=embed)
             url = f"https://discord.com/api/v10/guilds/{guild_id}/members/@me"
             headers = {"Authorization": f"Bot {bot.http.token}"}
             payload = {"bio": bio}

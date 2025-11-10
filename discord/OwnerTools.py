@@ -5,6 +5,7 @@ from globalenv import bot, start_bot, get_user_data, set_user_data, config, get_
 from discord.ext import commands
 from typing import Callable
 import chat_exporter
+from logger import log
 
 def is_owner() -> Callable:
     async def predicate(ctx):
@@ -285,7 +286,8 @@ async def reloadconfig(ctx):
 
 @bot.event
 async def on_guild_join(guild):
-    print(f"Joined guild: {guild.name} (ID: {guild.id})")
+    # print(f"Joined guild: {guild.name} (ID: {guild.id})")
+    log(f"加入了伺服器: {guild.name}", module_name="OwnerTools", guild=guild)
     # send to owners
     for owner_id in config("owners", []):
         owner = bot.get_user(owner_id)
@@ -320,7 +322,7 @@ async def on_guild_join(guild):
 
 @bot.event
 async def on_guild_remove(guild):
-    print(f"Removed from guild: {guild.name} (ID: {guild.id})")
+    log(f"離開了伺服器: {guild.name}", module_name="OwnerTools", guild=guild)
     # send to owners
     for owner_id in config("owners", []):
         owner = bot.get_user(owner_id)
