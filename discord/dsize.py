@@ -121,7 +121,7 @@ async def dsize(interaction: discord.Interaction, global_dsize: int = 0):
     # 更新使用時間 — 存到對應的 guild_key（若為 user-install 則是 None）
     set_user_data(guild_key, user_id, "last_dsize_size", size)
     # print(f"[DSize] {interaction.user} measured {size} cm in guild {guild_key if guild_key else 'DM/Global'}")
-    log(f"{interaction.user} measured {size} cm in guild {guild_key if guild_key else 'DM/Global'}", module_name="dsize", user=interaction.user, guild=interaction.guild)
+    log(f"量了 {size} cm, 伺服器: {guild_key if guild_key else '全域'}", module_name="dsize", user=interaction.user, guild=interaction.guild)
 
     surgery_percent = get_server_config(guild_key, "dsize_surgery_percent", 10)
     drop_item_chance = get_server_config(guild_key, "dsize_drop_item_chance", 5)
@@ -130,7 +130,7 @@ async def dsize(interaction: discord.Interaction, global_dsize: int = 0):
         if get_user_data(guild_key, user_id, "dsize_anti_surgery") == str(now):
             await interaction.followup.send("由於你使用了抗手術藥物，你無法進行手術。")
             return
-        log("Got surgery chance", module_name="dsize", user=interaction.user, guild=interaction.guild)
+        log("獲得了手術機會", module_name="dsize", user=interaction.user, guild=interaction.guild)
         fail_chance = random.randint(1, 100)
         class dsize_SurgeryView(discord.ui.View):
             def __init__(self):
@@ -162,7 +162,7 @@ async def dsize(interaction: discord.Interaction, global_dsize: int = 0):
                 will_fail = percent_random(fail_chance)
                 on_fail_size = random.randint(1, new_size) if will_fail else 0
                 # print(f"[DSize] {interaction.user} surgery: +{new_size} cm, fail chance: {fail_chance}%, will_fail: {will_fail}, on_fail_size: {on_fail_size}")
-                log(f"{interaction.user} surgery: +{new_size} cm, fail chance: {fail_chance}%, will_fail: {will_fail}", module_name="dsize", user=interaction.user, guild=interaction.guild)
+                log(f"{interaction.user} 手術: +{new_size} cm, 失敗機率: {fail_chance}%, 是否失敗: {will_fail}", module_name="dsize", user=interaction.user, guild=interaction.guild)
                 embed = discord.Embed(title=f"{interaction.user.display_name} 的新長度：", color=0xff0000)
                 embed.add_field(name=f"{size} cm", value=f"8{d_string}D", inline=False)
                 await interaction.response.edit_message(embed=embed, view=None)
@@ -209,7 +209,7 @@ async def dsize(interaction: discord.Interaction, global_dsize: int = 0):
     if not global_dsize:
         if ItemSystem and percent_random(drop_item_chance):
             # print(f"[DSize] {interaction.user} got item drop chance")
-            log("Got item drop chance", module_name="dsize", user=interaction.user, guild=interaction.guild)
+            log("獲得了物品掉落機會", module_name="dsize", user=interaction.user, guild=interaction.guild)
             statistics = get_user_data(0, user_id, "dsize_statistics", {})
             statistics["total_drops"] = statistics.get("total_drops", 0) + 1
             set_user_data(0, user_id, "dsize_statistics", statistics)
@@ -413,7 +413,7 @@ async def dsize_battle(interaction: discord.Interaction, opponent: discord.User)
         return
     
     # print(f"[DSize] {interaction.user} is challenging {opponent} to a dsize battle in guild {interaction.guild.id}")
-    log(f"{interaction.user} is challenging {opponent} to a dsize battle in guild {interaction.guild.id if guild_key else 'Global'}", module_name="dsize", user=interaction.user, guild=interaction.guild)
+    log(f"{interaction.user} 正在對 {opponent} 進行屌長對決，伺服器: {interaction.guild.id if guild_key else '全域'}", module_name="dsize", user=interaction.user, guild=interaction.guild)
     
     user_using_dsize_battle.add(user_id)
     user_using_dsize_battle.add(opponent_id)
@@ -523,7 +523,7 @@ async def dsize_battle(interaction: discord.Interaction, opponent: discord.User)
             user_using_dsize_battle.discard(user_id)
             user_using_dsize_battle.discard(opponent_id)
             # print(f"[DSize] {interaction.user} canceled the dsize battle")
-            log(f"{interaction.user} canceled the dsize battle", module_name="dsize", user=interaction.user, guild=interaction.guild)
+            log(f"{interaction.user} 取消了屌長對決", module_name="dsize", user=interaction.user, guild=interaction.guild)
 
     # 徵求對方同意
     await interaction.response.send_message(f"{opponent.mention}，{interaction.user.name} 想跟你比長度。\n請在 30 秒內按下 ✅ 同意 或 ❌ 拒絕。", ephemeral=False, view=dsize_Confirm())
@@ -655,7 +655,7 @@ async def dsize_feedgrass(interaction: discord.Interaction, user: discord.Member
     embed.timestamp = datetime.now(timezone.utc)
     await interaction.followup.send(embed=embed, file=discord.File(image_bytes, "feed_grass.png"))
     # print(f"[DSize] {interaction.user} fed grass to {user} in guild {interaction.guild.id}")
-    log(f"{interaction.user} fed grass to {user} in guild {interaction.guild.id}", module_name="dsize", user=interaction.user, guild=interaction.guild)
+    log(f"草飼了 {user}", module_name="dsize", user=interaction.user, guild=interaction.guild)
 
 
 # from folder
@@ -764,7 +764,7 @@ async def use_fake_ruler(interaction: discord.Interaction):
     set_user_data(guild_key, user_id, "dsize_fake_ruler_used", True)
     await interaction.response.send_message("你使用了自欺欺人尺！\n下次量長度時或許會更長？")
     # print(f"[DSize] {interaction.user} used fake ruler in guild {guild_key}")
-    log(f"{interaction.user} used fake ruler in guild {guild_key}", module_name="dsize", user=interaction.user, guild=interaction.guild)
+    log(f"{interaction.user} 使用了自欺欺人尺", module_name="dsize", user=interaction.user, guild=interaction.guild)
 
 async def use_scalpel(interaction: discord.Interaction):
     user_id = interaction.user.id
@@ -908,7 +908,7 @@ async def use_anti_surgery(interaction: discord.Interaction):
     set_user_data(guild_key, user_id, "dsize_anti_surgery", now)
     await interaction.response.send_message("你使用了抗手術藥物！\n今天不會被手術。")
     # print(f"[DSize] {interaction.user} used anti-surgery drug in guild {guild_key}")
-    log(f"{interaction.user} used anti-surgery drug in guild {guild_key}", module_name="dsize", user=interaction.user, guild=interaction.guild)
+    log(f"{interaction.user} 使用了抗手術藥物", module_name="dsize", user=interaction.user, guild=interaction.guild)
 
 async def use_cloud_ruler(interaction: discord.Interaction):
     user_id = interaction.user.id
@@ -965,7 +965,7 @@ async def use_cloud_ruler(interaction: discord.Interaction):
                     set_user_data(guild_key, target_id, "dsize_fake_ruler_used_date", now)
                     set_user_data(guild_key, target_id, "last_dsize_fake_size", fake_size)
             final_size = fake_size if fake_size is not None else size
-            log(f"Used cloud ruler on {target_user.display_name}, size: {size} cm, final_size: {final_size} cm", module_name="dsize", user=interaction.user, guild=interaction.guild)
+            log(f"對 {target_user.display_name} 使用了雲端尺, 長度: {size} cm, 最終長度: {final_size} cm", module_name="dsize", user=interaction.user, guild=interaction.guild)
 
             # 建立 Embed 訊息
             embed = discord.Embed(title=f"{interaction.user.display_name} 幫 {target_user.display_name} 測量長度：", color=0x00ff00)
