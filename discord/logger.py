@@ -4,6 +4,7 @@ from discord import app_commands
 from globalenv import config, bot, start_bot, modules, get_server_config, set_server_config
 import asyncio
 import logging
+import traceback
 
 async def _log(*messages, level = logging.INFO, module_name: str = "General", user: discord.User = None, guild: discord.Guild = None):
     logger = logging.getLogger(module_name)
@@ -49,15 +50,59 @@ async def _log(*messages, level = logging.INFO, module_name: str = "General", us
                 if guild:
                     embed.add_field(name="伺服器ID", value=f"`{guild.id}`", inline=False)  # easy to copy guild id
                     embed.set_footer(text=guild.name if guild.name else guild.id, icon_url=guild.icon.url if guild.icon else None)
-                await channel.send(embed=embed)
+                # get webhook url
+                webhook_url = get_server_config(channel.guild.id, "log_webhook_url") if guild else None
+                if webhook_url:
+                    try:
+                        discord_webhook = discord.SyncWebhook.from_url(webhook_url)
+                    except Exception:
+                        webhooks = await channel.webhooks()
+                        webhooks = webhooks[0] if webhooks else None
+                        if not webhooks:
+                            webhooks = await channel.create_webhook(name=bot.user.name, avatar=await bot.user.default_avatar.read())
+                        webhook_url = webhooks.url
+                        if guild:
+                            set_server_config(channel.guild.id, "log_webhook_url", webhook_url)
+                        discord_webhook = discord.SyncWebhook.from_url(webhook_url)
+                else:
+                    webhooks = await channel.webhooks()
+                    webhooks = webhooks[0] if webhooks else None
+                    if not webhooks:
+                        # create webhook url from channel
+                        webhooks = await channel.create_webhook(name=bot.user.name, avatar=await bot.user.default_avatar.read())
+                    webhook_url = webhooks.url
+                    set_server_config(channel.guild.id, "log_webhook_url", webhook_url)
+                    discord_webhook = discord.SyncWebhook.from_url(webhook_url)
+                discord_webhook.send(embed=embed, username=bot.user.name, avatar_url=bot.user.default_avatar.url)
                 if guild:
                     log_channel_id = get_server_config(guild.id, "log_channel_id")
                     if log_channel_id and log_channel_id != channel.id:
                         guild_channel = bot.get_channel(log_channel_id)
                         if guild_channel:
-                            await guild_channel.send(embed=embed)
+                            guild_webhook = get_server_config(guild.id, "log_webhook_url")
+                            if guild_webhook:
+                                try:
+                                    guild_discord_webhook = discord.SyncWebhook.from_url(guild_webhook)
+                                except Exception:
+                                    webhooks = await guild_channel.webhooks()
+                                    webhooks = webhooks[0] if webhooks else None
+                                    if not webhooks:
+                                        webhooks = await guild_channel.create_webhook(name=bot.user.name, avatar=await bot.user.default_avatar.read())
+                                    guild_webhook = webhooks.url
+                                    set_server_config(guild.id, "log_webhook_url", guild_webhook)
+                                    guild_discord_webhook = discord.SyncWebhook.from_url(guild_webhook)
+                            else:
+                                webhooks = await guild_channel.webhooks()
+                                webhooks = webhooks[0] if webhooks else None
+                                if not webhooks:
+                                    webhooks = await guild_channel.create_webhook(name=bot.user.name, avatar=await bot.user.default_avatar.read())
+                                guild_webhook = webhooks.url
+                                set_server_config(guild.id, "log_webhook_url", guild_webhook)
+                                guild_discord_webhook = discord.SyncWebhook.from_url(guild_webhook)
+                            guild_discord_webhook.send(embed=embed, username=bot.user.name, avatar_url=bot.user.default_avatar.url)
             except Exception as e:
                 print(f"[!] Error sending log message to Discord channel: {e}")
+                traceback.print_exc()
 
 def log(*messages, level = logging.INFO, module_name: str = "General", user: discord.User = None, guild: discord.Guild = None):
     if "logger" not in modules:
