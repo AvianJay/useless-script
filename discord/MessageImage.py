@@ -153,10 +153,10 @@ async def screenshot_generator(interaction: discord.Interaction, message: discor
     # try to get previous message
     messages = [message]
     try:
-        if not message.reference:
+        if not message.reference and not message.interaction:
             async for msg in message.channel.history(limit=25, before=message.created_at, oldest_first=False):
                 if msg.author.id == message.author.id:
-                    if msg.reference:
+                    if msg.reference or msg.interaction:
                         break
                     messages.append(msg)
                 else:
@@ -218,7 +218,7 @@ async def screenshot_cmd(ctx: commands.Context):
     # try to get previous message
     messages = [message]
     try:
-        if not ctx.message.reference:
+        if not ctx.message.reference and not ctx.message.interaction:
             done = False
             current_msg = message
             while not done:
@@ -226,7 +226,7 @@ async def screenshot_cmd(ctx: commands.Context):
                 current_msg = await current_msg.next()
                 if current_msg.author.id == message.author.id:
                     messages.append(current_msg)
-                    if current_msg.reference:
+                    if current_msg.reference or current_msg.interaction:
                         done = True
                 else:
                     done = True
