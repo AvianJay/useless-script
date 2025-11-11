@@ -168,7 +168,7 @@ class nds(commands.GroupCog, description="天然災害停止上班及上課情�
         while not self.bot.is_closed():
             try:
                 data = fetch_and_parse_nds()
-                log("取得資訊成功，檢查是否有更新。", module_name="nds")
+                # log("取得資訊成功，檢查是否有更新。", module_name="nds")
                 if data["update_time"] != (self._last_data.get("update_time") if self._last_data else None):
                     embed = discord.Embed(title="停班停課更新")
                     embed.color = discord.Color.blue()
@@ -186,7 +186,7 @@ class nds(commands.GroupCog, description="天然災害停止上班及上課情�
                         embed.add_field(name=city, value=status or "無資料", inline=False)
                     # check field count
                     if len(embed.fields) != 0:
-                        log("有更新，發送通知中...", module_name="nds")
+                        log("檢測到更新，發送通知中...", module_name="nds")
                         for guild in self.bot.guilds:
                             channel_id = get_server_config(guild.id, "nds_follow_channel_id")
                             if channel_id:
