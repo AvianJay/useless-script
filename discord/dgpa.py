@@ -130,7 +130,7 @@ class nds(commands.GroupCog, description="天然災害停止上班及上課情�
         embed = discord.Embed(title="天災停班停課情形")
         embed.color = discord.Color.blue()
         embed.timestamp = datetime.fromisoformat(result["fetched_at"])
-        embed.footer.text = "上次更新時間"
+        embed.set_footer(text="上次更新")
         for record in result["data"]:
             city = record["city"]
             status = record["status"]
@@ -173,7 +173,7 @@ class nds(commands.GroupCog, description="天然災害停止上班及上課情�
                     embed = discord.Embed(title="停班停課更新")
                     embed.color = discord.Color.blue()
                     embed.timestamp = datetime.fromisoformat(data["fetched_at"])
-                    embed.footer.text = "上次更新時間"
+                    embed.set_footer(text="上次更新時間")
                     for record in data["data"]:
                         # 相同的不重複發送
                         if (self._last_data and
