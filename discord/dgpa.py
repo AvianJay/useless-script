@@ -55,12 +55,13 @@ def parse_nds_html(html: str, source_url: Optional[str] = None) -> Dict[str, Any
 
     # 表格資料
     table = soup.find("table", id="Table")
+    tbody = table.find("tbody")
     records: List[Dict[str, str]] = []
-    if table:
+    if tbody:
         # 只取 tbody 內 tr（過濾說明列 colspan）
-        for tr in table.find_all("tr"):
+        for tr in tbody.find_all("tr"):
             # 跳過備註行（通常有 colspan 或 style 背景色）
-            if tr.find(attrs={"colspan": True}) or tr.get("style"):
+            if tr.find(attrs={"colspan": True}):  # or tr.get("style"):
                 continue
             tds = tr.find_all("td")
             if len(tds) < 2:
