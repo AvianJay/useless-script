@@ -223,12 +223,12 @@ class ItemSystem(commands.GroupCog, name="item", description="物品系統指令
             return
         
         # Remove from giver
-        await remove_item_from_user(guild_id, giver_id, item_id, amount)
+        removed = await remove_item_from_user(guild_id, giver_id, item_id, amount)
         
         # Add to receiver
-        await give_item_to_user(guild_id, receiver_id, item_id, amount)
+        await give_item_to_user(guild_id, receiver_id, item_id, removed)
         
-        await interaction.followup.send(f"你給了 {user.display_name}(`{user.name}`) {amount} 個 {item['name']}。")
+        await interaction.followup.send(f"你給了 {user.display_name}(`{user.name}`) {removed} 個 {item['name']}。")
         # dm the receiver
         try:
             await user.send(f"你從 {interaction.user.display_name}(`{interaction.user.name}`) 那裡收到了 {amount} 個 {item['name']}！\n-# 伺服器: {interaction.guild.name if interaction.guild else '私人訊息'}")
