@@ -66,11 +66,17 @@ def parse_nds_html(html: str, source_url: Optional[str] = None) -> Dict[str, Any
             tds = tr.find_all("td")
             if len(tds) < 2:
                 continue
-            city = tds[0].get_text(" ", strip=True)
+            if "city_Region" in tds[0].get("headers"):
+                cityi = 1
+                statusi = 2
+            else:
+                cityi = 0
+                statusi = 1
+            city = tds[cityi].get_text(" ", strip=True)
             if "無停班停課訊息" in city:
                 records = []  # 清空資料
                 break
-            status = _clean_text_from_cell(tds[1])
+            status = _clean_text_from_cell(tds[statusi])
             # 若 city 看起來像空白，跳過
             if not city:
                 continue
