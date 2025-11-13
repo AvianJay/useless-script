@@ -93,7 +93,10 @@ def download_anime(data, path, session):
     if not data["data"]:
         return False
     try:
-        if data["method"] == "apireq":
+        if data["method"] == "direct":
+            download_file(data["data"], session, data["name"], path)
+            return True
+        elif data["method"] == "apireq":
             mp4_url = get_mp4_url(data["data"], session)
             download_file(mp4_url, session, data["name"], path)
             return True
@@ -115,17 +118,27 @@ def get_info(url, session):
     while True:
         articles = soup.find_all('article')
         for a in articles:
-            name = a.find("h2").find("a").text
-            # a.find("button").get("data-src")
-            if a.find("video"):
-                method = "apireq"
-                data = a.find("video").get("data-apireq") if a.find("video") else None
+            h2_tag = a.find("h2")
+            a_tag = h2_tag.find("a") if h2_tag else None
+            name = a_tag.text if a_tag else "Unknown"
+            method = "unknown"
+            data = None
+            video_tag = a.find("video")
+            if video_tag:
+                if video_tag.get("data-apireq"):
+                    method = "apireq"
+                    data = video_tag.get("data-apireq")
+                elif a.find("source").get("src"):
+                    # print("Found direct video.")
+                    method = "direct"
+                    data = "https:" + a.find("source").get("src")
             elif a.find("button"):
                 method = "p2p"
                 url = a.find("button").get("data-src")
                 res = session.get(url)
                 psoup = BeautifulSoup(res.text, "html.parser")
                 data = psoup.find("source").get("src") if psoup.find("source") else None
+            # print(name, method, data)
             videos.append({"name": name, "method": method, "data": data})
 
         prevbtn = soup.find("div", class_="nav-previous")
@@ -286,11 +299,11 @@ def main(url, gen_agpp):
 if __name__ == "__main__":
     if len(sys.argv) < 2 or len(sys.argv) > 3:
         print("Invalid arguments.")
-        print("Usage:", sys.argv[0], "[anime1.me URL] [gen aGP?]")
+        print("Usage:", sys.argv[0], "[anime1.me/pw URL] [gen aGP?]")
         exit(1)
-    elif not "https://anime1.me" in sys.argv[1]:
+    elif not "https://anime1.me" in sys.argv[1] and not "https://anime1.pw" in sys.argv[1]:
         print("Invalid URL.")
-        print("Usage:", sys.argv[0], "[anime1.me URL] [gen aGP?]")
+        print("Usage:", sys.argv[0], "[anime1.me/pw URL] [gen aGP?]")
         exit(1)
     if len(sys.argv) == 3:
         if sys.argv[2] == "true":
