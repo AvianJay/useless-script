@@ -729,6 +729,8 @@ def show_game_over_animation(score, paddle):
 
 
 def show_win_animation(score):
+    music = pygame.mixer.Sound(os.path.join(assetsdir, "win.mp3"))
+    music.play()
     restart = _show_end_animation("你贏了！", True, score, Color.GREEN.value, duration=2500)
     return restart
 
