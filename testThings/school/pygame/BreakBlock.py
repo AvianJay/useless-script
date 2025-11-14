@@ -418,6 +418,12 @@ def start_game():
                         ball.speed[0] = -ball.speed[0]
                     else:
                         ball.speed[1] = -ball.speed[1]
+                    # move ball out of block
+                    if abs(dx) > abs(dy):
+                        if dx > 0:
+                            ball.rect.x = block.rect.right
+                        else:
+                            ball.rect.x = block.rect.left - ball.rect.width
                     break
         # hit_blocks = pygame.sprite.spritecollide(ball, blocks, True)
         # for block in hit_blocks:
