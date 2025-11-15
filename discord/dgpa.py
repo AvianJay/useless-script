@@ -6,7 +6,7 @@ from datetime import datetime, timezone, timedelta
 import discord
 from discord.ext import commands
 from discord import app_commands
-from globalenv import bot, start_bot, modules, set_server_config, get_server_config
+from globalenv import bot, start_bot, modules, set_server_config, get_server_config, get_all_server_config_key
 import asyncio
 from logger import log
 import logging
@@ -173,6 +173,10 @@ class nds(commands.GroupCog, description="天然災害停止上班及上課情�
     async def _nds_monitor_loop(self):
         await self.bot.wait_until_ready()
         while not self.bot.is_closed():
+            servers_with_follow = get_all_server_config_key("nds_follow_channel_id")
+            if not servers_with_follow:
+                await asyncio.sleep(60)
+                continue  # 沒有伺服器需要追蹤
             try:
                 data = fetch_and_parse_nds()
                 # log("取得資訊成功，檢查是否有更新。", module_name="nds")
@@ -194,12 +198,14 @@ class nds(commands.GroupCog, description="天然災害停止上班及上課情�
                     # check field count
                     if len(embed.fields) != 0:
                         log("檢測到更新，發送通知中...", module_name="nds")
-                        for guild in self.bot.guilds:
-                            channel_id = get_server_config(guild.id, "nds_follow_channel_id")
+                        for guild_id, channel_id in servers_with_follow.items():
+                            channel_id = get_server_config(guild_id, "nds_follow_channel_id")
                             if channel_id:
-                                channel = guild.get_channel(channel_id)
-                                if channel and isinstance(channel, discord.TextChannel):
-                                    await channel.send(embed=embed)
+                                guild = self.bot.get_guild(guild_id)
+                                if guild:
+                                    channel = guild.get_channel(channel_id)
+                                    if channel and isinstance(channel, discord.TextChannel):
+                                        await channel.send(embed=embed)
                     self._last_data = data
                 await asyncio.sleep(60)  # 每 1 分鐘檢查一次
             except Exception as e:

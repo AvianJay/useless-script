@@ -114,6 +114,11 @@ def set_server_config(guild_id: int, key: str, value):
     """Set server-specific configuration"""
     return db.set_server_config(guild_id, key, value)
 
+def get_all_server_config_key(key: str):
+    """Get all server-specific configuration for a specific key"""
+    return db.get_all_server_config_key(key)
+
+
 # User data functions
 def get_user_data(guild_id: int, user_id: int, key: str, default=None):
     """Get user-specific data in a server"""

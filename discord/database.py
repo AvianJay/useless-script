@@ -134,6 +134,30 @@ class Database:
         
         return config
     
+    def get_all_server_config_key(self, key: str) -> Dict[int, Any]:
+        """Get a specific configuration value for all servers"""
+        configs = {}
+        
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                'SELECT guild_id, config_value FROM server_configs WHERE config_key = ?',
+                (key,)
+            )
+            results = cursor.fetchall()
+            
+            for guild_id, value in results:
+                try:
+                    configs[guild_id] = json.loads(value)
+                except (json.JSONDecodeError, TypeError):
+                    # Try to convert to int if it looks like a number
+                    try:
+                        configs[guild_id] = int(value)
+                    except (ValueError, TypeError):
+                        configs[guild_id] = value
+        
+        return configs
+    
     def get_global_config(self, key: str, default: Any = None) -> Any:
         """Get a global configuration value (for backward compatibility)"""
         with sqlite3.connect(self.db_path) as conn:
