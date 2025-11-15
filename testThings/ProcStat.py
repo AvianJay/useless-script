@@ -28,3 +28,5 @@ def get_status(id):
     else:
         return jsonify({"status": "error", "message": "ID not found"}), 404
     return jsonify({"status": "process not found"}), 404
+
+app.run(host='0.0.0.0', port=5013)
