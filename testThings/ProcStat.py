@@ -12,7 +12,7 @@ else:
     config = {}
 # {"id": "cwd path"}
 
-@app.route('<id>')
+@app.route('/<id>')
 def get_status(id):
     if id in config:
         path = config[id]
