@@ -128,7 +128,7 @@ async def dsize(interaction: discord.Interaction, global_dsize: int = 0):
     # check if user got surgery chance
     if percent_random(surgery_percent):
         if get_user_data(guild_key, user_id, "dsize_anti_surgery") == str(now):
-            await interaction.followup.send("由於你使用了抗手術藥物，你無法進行手術。")
+            await interaction.followup.send(f"{interaction.user.mention}\n由於你使用了抗手術藥物，你無法進行手術。")
             return
         log("獲得了手術機會", module_name="dsize", user=interaction.user, guild=interaction.guild)
         fail_chance = random.randint(1, 100)
@@ -205,7 +205,7 @@ async def dsize(interaction: discord.Interaction, global_dsize: int = 0):
                 # update user statistics
                 statistics["successful_surgeries"] = statistics.get("successful_surgeries", 0) + 1
                 set_user_data(0, user_id, "dsize_statistics", statistics)
-        surgery_msg = await interaction.followup.send(f"你獲得了一次做手術的機會。\n請問你是否同意手術？\n-# 失敗機率：{fail_chance}%", view=dsize_SurgeryView())
+        surgery_msg = await interaction.followup.send(f"{interaction.user.mention}\n你獲得了一次做手術的機會。\n請問你是否同意手術？\n-# 失敗機率：{fail_chance}%", view=dsize_SurgeryView())
     if not global_dsize:
         if ItemSystem and percent_random(drop_item_chance):
             # print(f"[DSize] {interaction.user} got item drop chance")
@@ -223,31 +223,30 @@ async def dsize(interaction: discord.Interaction, global_dsize: int = 0):
             if rand <= 30:
                 await ItemSystem.give_item_to_user(interaction.guild.id, interaction.user.id, "fake_ruler", 1)
                 item_use_command = await get_command_mention("item", "use")
-                await msg.edit(content=f"你撿到了一把自欺欺人尺！\n使用 {item_use_command} 自欺欺人尺 可能可以讓下次量長度時變長？")
+                await msg.edit(content=f"{interaction.user.mention}\n你撿到了一把自欺欺人尺！\n使用 {item_use_command} 自欺欺人尺 可能可以讓下次量長度時變長？")
             elif rand > 30 and rand <= 70:
                 amount = random.randint(1, 10)
                 await ItemSystem.give_item_to_user(interaction.guild.id, interaction.user.id, "grass", amount)
                 grass_command = await get_command_mention("dsize-feedgrass")
-                await msg.edit(content=f"你撿到了草 x{amount}！\n使用 {grass_command} 可以草飼男娘。")
+                await msg.edit(content=f"{interaction.user.mention}\n你撿到了草 x{amount}！\n使用 {grass_command} 可以草飼男娘。")
             elif rand > 70 and rand <= 97:
                 # give anti surgery item
                 await ItemSystem.give_item_to_user(interaction.guild.id, interaction.user.id, "anti_surgery", 1)
                 item_use_command = await get_command_mention("item", "use")
-                await msg.edit(content=f"你撿到了一顆抗手術藥物！\n使用 {item_use_command} 抗手術藥物 可以防止一天被手術。")
+                await msg.edit(content=f"{interaction.user.mention}\n你撿到了一顆抗手術藥物！\n使用 {item_use_command} 抗手術藥物 可以防止一天被手術。")
             else:
                 if rand == 98:
                     await ItemSystem.give_item_to_user(interaction.guild.id, interaction.user.id, "cloud_ruler", 1)
                     item_use_command = await get_command_mention("item", "use")
-                    await msg.edit(content=f"你撿到了一把雲端尺！\n使用 {item_use_command} 雲端尺 可以進行手術。")
+                    await msg.edit(content=f"{interaction.user.mention}\n你撿到了一把雲端尺！\n使用 {item_use_command} 雲端尺 可以進行手術。")
                 elif rand == 99:
                     await ItemSystem.give_item_to_user(interaction.guild.id, interaction.user.id, "scalpel", 1)
                     item_use_command = await get_command_mention("item", "use")
-                    await msg.edit(content=f"你撿到了一把手術刀！\n使用 {item_use_command} 手術刀 可以進行手術。")
+                    await msg.edit(content=f"{interaction.user.mention}\n你撿到了一把手術刀！\n使用 {item_use_command} 手術刀 可以進行手術。")
                 else:
                     await ItemSystem.give_item_to_user(interaction.guild.id, interaction.user.id, "rusty_scalpel", 1)
                     item_use_command = await get_command_mention("item", "use")
-                    await msg.edit(content=f"你撿到了一把生鏽的手術刀！\n使用 {item_use_command} 生鏽的手術刀 可以進行手術。")
-
+                    await msg.edit(content=f"{interaction.user.mention}\n你撿到了一把生鏽的手術刀！\n使用 {item_use_command} 生鏽的手術刀 可以進行手術。")
 
 @bot.tree.command(name=app_commands.locale_str("dsize-leaderboard"), description="查看屌長排行榜")
 @app_commands.describe(limit="顯示前幾名 (預設10)", global_leaderboard="顯示全域排行榜 (預設否)")
