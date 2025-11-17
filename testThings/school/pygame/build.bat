@@ -1,0 +1,1 @@
+pyinstaller -w -F --add-data "assets;assets" .\BreakBlock.py -i .\breakblock.ico
