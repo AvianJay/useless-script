@@ -27,6 +27,69 @@ def percent_random(percent: int) -> bool:
         return False
 
 
+async def process_checkin(user_id: int, guild_key: int = None) -> tuple[bool, int, str]:
+    """
+    Process daily check-in for a user.
+    Returns: (is_new_checkin, checkin_streak, rewards_msg)
+    """
+    now = (datetime.utcnow() + timedelta(hours=8)).date()  # 台灣時間
+    
+    # Get last checkin date
+    last_checkin = get_user_data(0, user_id, "last_checkin")
+    if last_checkin is not None and not isinstance(last_checkin, datetime):
+        try:
+            last_checkin = datetime.fromisoformat(str(last_checkin)).date()
+        except Exception:
+            last_checkin = None
+    elif isinstance(last_checkin, datetime):
+        last_checkin = last_checkin.date()
+    
+    # Check if already checked in today
+    if last_checkin == now:
+        # Already checked in today
+        statistics = get_user_data(0, user_id, "dsize_statistics", {})
+        return False, statistics.get("checkin_streak", 0), ""
+    
+    # Calculate streak
+    statistics = get_user_data(0, user_id, "dsize_statistics", {})
+    checkin_streak = statistics.get("checkin_streak", 0)
+    
+    # Check if streak continues (last checkin was yesterday)
+    if last_checkin and last_checkin == now - timedelta(days=1):
+        checkin_streak += 1
+    else:
+        checkin_streak = 1  # Reset streak
+    
+    # Update statistics
+    statistics["total_checkins"] = statistics.get("total_checkins", 0) + 1
+    statistics["checkin_streak"] = checkin_streak
+    set_user_data(0, user_id, "dsize_statistics", statistics)
+    set_user_data(0, user_id, "last_checkin", now)
+    
+    # Calculate rewards based on streak
+    rewards_msg = ""
+    if "ItemSystem" in modules:
+        # Base reward: 1 grass every day
+        await ItemSystem.give_item_to_user(guild_key, user_id, "grass", 1)
+        rewards_msg = "草 x1"
+        
+        # Streak milestone rewards
+        if checkin_streak == 7:
+            await ItemSystem.give_item_to_user(guild_key, user_id, "fake_ruler", 1)
+            rewards_msg += "、自欺欺人尺 x1 (連續7天)"
+        elif checkin_streak == 30:
+            await ItemSystem.give_item_to_user(guild_key, user_id, "anti_surgery", 3)
+            rewards_msg += "、抗手術藥物 x3 (連續30天)"
+        elif checkin_streak == 100:
+            await ItemSystem.give_item_to_user(guild_key, user_id, "cloud_ruler", 1)
+            rewards_msg += "、雲端尺 x1 (連續100天)"
+        elif checkin_streak % 10 == 0:  # Every 10 days
+            await ItemSystem.give_item_to_user(guild_key, user_id, "grass", 5)
+            rewards_msg += f"、草 x5 (連續{checkin_streak}天)"
+    
+    return True, checkin_streak, rewards_msg
+
+
 @bot.tree.command(name="dsize", description="量屌長")
 @app_commands.describe(global_dsize="是否使用全域紀錄 (預設否)")
 @app_commands.choices(global_dsize=[
@@ -82,6 +145,9 @@ async def dsize(interaction: discord.Interaction, global_dsize: int = 0):
     statistics = get_user_data(0, user_id, "dsize_statistics", {})
     statistics["total_uses"] = statistics.get("total_uses", 0) + 1
     set_user_data(0, user_id, "dsize_statistics", statistics)
+    
+    # Process daily check-in
+    is_new_checkin, checkin_streak, rewards_msg = await process_checkin(user_id, guild_key)
 
     # 隨機產生長度
     size = random.randint(1, max_size)
@@ -135,6 +201,14 @@ async def dsize(interaction: discord.Interaction, global_dsize: int = 0):
     
     # print(f"[DSize] {interaction.user} measured {size} cm in guild {guild_key if guild_key else 'DM/Global'}")
     log(f"量了 {size} cm, 伺服器: {guild_key if guild_key else '全域'}", module_name="dsize", user=interaction.user, guild=interaction.guild)
+    
+    # Show check-in rewards if applicable
+    if is_new_checkin and rewards_msg:
+        checkin_embed = discord.Embed(title="✅ 每日簽到成功！", color=0x00ff00)
+        checkin_embed.add_field(name="連續簽到", value=f"🔥 {checkin_streak} 天", inline=False)
+        checkin_embed.add_field(name="獎勵", value=rewards_msg, inline=False)
+        await interaction.followup.send(embed=checkin_embed, ephemeral=True)
+        log(f"簽到成功，連續 {checkin_streak} 天", module_name="dsize", user=interaction.user, guild=interaction.guild)
 
     surgery_percent = get_server_config(guild_key, "dsize_surgery_percent", 10)
     drop_item_chance = get_server_config(guild_key, "dsize_drop_item_chance", 5)
@@ -544,6 +618,25 @@ async def dsize_battle(interaction: discord.Interaction, opponent: discord.User)
             set_user_data(guild_key, user_id, "last_dsize_size", size_user)
             set_user_data(guild_key, opponent_id, "last_dsize_size", size_opponent)
             
+            # Process daily check-in for both users
+            user_is_new_checkin, user_checkin_streak, user_rewards_msg = await process_checkin(user_id, guild_key)
+            opponent_is_new_checkin, opponent_checkin_streak, opponent_rewards_msg = await process_checkin(opponent_id, guild_key)
+            
+            # Show check-in rewards if applicable
+            if user_is_new_checkin and user_rewards_msg:
+                checkin_embed = discord.Embed(title=f"✅ {original_user.display_name} 每日簽到成功！", color=0x00ff00)
+                checkin_embed.add_field(name="連續簽到", value=f"🔥 {user_checkin_streak} 天", inline=False)
+                checkin_embed.add_field(name="獎勵", value=user_rewards_msg, inline=False)
+                await msg.reply(embed=checkin_embed, mention_author=False)
+                log(f"{original_user.display_name} 簽到成功，連續 {user_checkin_streak} 天", module_name="dsize", user=original_user, guild=interaction.guild)
+            
+            if opponent_is_new_checkin and opponent_rewards_msg:
+                checkin_embed = discord.Embed(title=f"✅ {opponent.display_name} 每日簽到成功！", color=0x00ff00)
+                checkin_embed.add_field(name="連續簽到", value=f"🔥 {opponent_checkin_streak} 天", inline=False)
+                checkin_embed.add_field(name="獎勵", value=opponent_rewards_msg, inline=False)
+                await msg.reply(embed=checkin_embed, mention_author=False)
+                log(f"{opponent.display_name} 簽到成功，連續 {opponent_checkin_streak} 天", module_name="dsize", user=opponent, guild=interaction.guild)
+            
             # Save to history for both users
             user_history = get_user_data(guild_key, user_id, "dsize_history", [])
             user_history.append({
@@ -669,79 +762,6 @@ async def dsize_stats(interaction: discord.Interaction):
     embed.timestamp = datetime.now(timezone.utc)
 
     await interaction.response.send_message(embed=embed)
-
-
-@bot.tree.command(name=app_commands.locale_str("dsize-checkin"), description="每日簽到")
-@app_commands.allowed_installs(guilds=True, users=True)
-@app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
-async def dsize_checkin(interaction: discord.Interaction):
-    user_id = interaction.user.id
-    now = (datetime.utcnow() + timedelta(hours=8)).date()  # 台灣時間
-    
-    # Get last checkin date
-    last_checkin = get_user_data(0, user_id, "last_checkin")
-    if last_checkin is not None and not isinstance(last_checkin, datetime):
-        try:
-            last_checkin = datetime.fromisoformat(str(last_checkin)).date()
-        except Exception:
-            last_checkin = None
-    elif isinstance(last_checkin, datetime):
-        last_checkin = last_checkin.date()
-    
-    # Check if already checked in today
-    if last_checkin == now:
-        next_day = datetime.combine(last_checkin + timedelta(days=1), datetime.min.time()).replace(tzinfo=timezone(timedelta(hours=8)))
-        timestamp_next = next_day.astimezone(timezone.utc)
-        ephemeral_flag = True if interaction.guild else False
-        await interaction.response.send_message(f"你今天已經簽到過了。<t:{int(timestamp_next.timestamp())}:R> 才能再次簽到。", ephemeral=ephemeral_flag)
-        return
-    
-    # Calculate streak
-    statistics = get_user_data(0, user_id, "dsize_statistics", {})
-    checkin_streak = statistics.get("checkin_streak", 0)
-    
-    # Check if streak continues (last checkin was yesterday)
-    if last_checkin and last_checkin == now - timedelta(days=1):
-        checkin_streak += 1
-    else:
-        checkin_streak = 1  # Reset streak
-    
-    # Update statistics
-    statistics["total_checkins"] = statistics.get("total_checkins", 0) + 1
-    statistics["checkin_streak"] = checkin_streak
-    set_user_data(0, user_id, "dsize_statistics", statistics)
-    set_user_data(0, user_id, "last_checkin", now)
-    
-    # Calculate rewards based on streak
-    rewards_msg = ""
-    if "ItemSystem" in modules:
-        guild_key = interaction.guild.id if interaction.guild else None
-        # Base reward: 1 grass every day
-        await ItemSystem.give_item_to_user(guild_key, user_id, "grass", 1)
-        rewards_msg = "獲得獎勵：草 x1"
-        
-        # Streak milestone rewards
-        if checkin_streak == 7:
-            await ItemSystem.give_item_to_user(guild_key, user_id, "fake_ruler", 1)
-            rewards_msg += "、自欺欺人尺 x1 (連續7天獎勵)"
-        elif checkin_streak == 30:
-            await ItemSystem.give_item_to_user(guild_key, user_id, "anti_surgery", 3)
-            rewards_msg += "、抗手術藥物 x3 (連續30天獎勵)"
-        elif checkin_streak == 100:
-            await ItemSystem.give_item_to_user(guild_key, user_id, "cloud_ruler", 1)
-            rewards_msg += "、雲端尺 x1 (連續100天獎勵)"
-        elif checkin_streak % 10 == 0:  # Every 10 days
-            await ItemSystem.give_item_to_user(guild_key, user_id, "grass", 5)
-            rewards_msg += f"、草 x5 (連續{checkin_streak}天獎勵)"
-    
-    embed = discord.Embed(title="✅ 簽到成功！", color=0x00ff00)
-    embed.add_field(name="連續簽到天數", value=f"🔥 {checkin_streak} 天", inline=False)
-    if rewards_msg:
-        embed.add_field(name="獎勵", value=rewards_msg, inline=False)
-    embed.timestamp = datetime.now(timezone.utc)
-    
-    await interaction.response.send_message(embed=embed)
-    log(f"簽到成功，連續 {checkin_streak} 天", module_name="dsize", user=interaction.user, guild=interaction.guild)
 
 
 @bot.tree.command(name=app_commands.locale_str("dsize-history"), description="查看歷史紀錄")
