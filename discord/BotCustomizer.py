@@ -174,7 +174,7 @@ class BotCustomizer(commands.GroupCog, name="change"):
             traceback.print_exc()
 
 
-    @bot.tree.command(name=app_commands.locale_str("banner"), description="更換機器人的橫幅（不指定則恢復預設橫幅）")
+    @app_commands.command(name=app_commands.locale_str("banner"), description="更換機器人的橫幅（不指定則恢復預設橫幅）")
     @app_commands.describe(image="新的橫幅圖片")
     @app_commands.default_permissions(administrator=True)
     @app_commands.allowed_installs(guilds=True, users=False)
@@ -248,7 +248,7 @@ class BotCustomizer(commands.GroupCog, name="change"):
             traceback.print_exc()
 
 
-    @bot.tree.command(name=app_commands.locale_str("bio"), description="更改機器人的關於我（不指定則恢復預設）")
+    @app_commands.command(name=app_commands.locale_str("bio"), description="更改機器人的關於我（不指定則恢復預設）")
     @app_commands.describe(bio="新的介紹（最多 100 字）")
     @app_commands.default_permissions(administrator=True)
     async def changebio_command(self, interaction: discord.Interaction, bio: str = None):
