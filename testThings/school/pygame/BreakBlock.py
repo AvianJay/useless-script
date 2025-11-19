@@ -1,6 +1,5 @@
 import pygame
 import sys
-from enum import Enum
 import random
 import math
 import requests
@@ -123,7 +122,7 @@ fontpath = os.path.join(assetsdir, "notobold.ttf")
 if not os.path.exists(fontpath):
     fontpath = None
 font = pygame.font.Font(fontpath, 36)
-class Color(Enum):
+class Color:
     BLACK = (0, 0, 0)
     WHITE = (255, 255, 255)
     RED = (255, 0, 0)
@@ -131,13 +130,13 @@ class Color(Enum):
     BLUE = (0, 0, 255)
     GRAY = (128, 128, 128)
 def clear_screen():
-    screen.fill(Color.BLACK.value)
+    screen.fill(Color.BLACK)
 
 class Block(pygame.sprite.Sprite):
     def __init__(self, x, y, unbreakable=False):
         pygame.sprite.Sprite.__init__(self)
         self.image = pygame.Surface((18, 18))
-        self.image.fill(Color.BLUE.value if not unbreakable else Color.GRAY.value)
+        self.image.fill(Color.BLUE if not unbreakable else Color.GRAY)
         self.rect = self.image.get_rect()
         self.rect.x = x
         self.rect.y = y
@@ -147,7 +146,7 @@ class Paddle(pygame.sprite.Sprite):
     def __init__(self):
         pygame.sprite.Sprite.__init__(self)
         self.image = pygame.Surface((100, 10))
-        pygame.draw.rect(self.image, Color.GREEN.value, self.image.get_rect(), border_radius=15)
+        pygame.draw.rect(self.image, Color.GREEN, self.image.get_rect(), border_radius=15)
         self.rect = self.image.get_rect()
         self.rect.x = 350
         self.rect.y = 550
@@ -175,7 +174,7 @@ class Ball(pygame.sprite.Sprite):
         pygame.sprite.Sprite.__init__(self)
         # circle surface
         self.image = pygame.Surface((15, 15), pygame.SRCALPHA)
-        pygame.draw.circle(self.image, Color.WHITE.value, (7, 7), 7)
+        pygame.draw.circle(self.image, Color.WHITE, (7, 7), 7)
         self.rect = self.image.get_rect()
         self.rect.x = x
         self.rect.y = y
@@ -223,7 +222,7 @@ class DoubleBallItem(pygame.sprite.Sprite):
     def __init__(self, x, y):
         pygame.sprite.Sprite.__init__(self)
         self.image = pygame.Surface((20, 20), pygame.SRCALPHA)
-        pygame.draw.circle(self.image, Color.RED.value, (10, 10), 10)
+        pygame.draw.circle(self.image, Color.RED, (10, 10), 10)
         self.rect = self.image.get_rect()
         self.rect.x = x
         self.rect.y = y
@@ -239,7 +238,7 @@ class Button(pygame.sprite.Sprite):
         pygame.sprite.Sprite.__init__(self)
         font = pygame.font.Font(fontpath, 24)
         self.text = text
-        self.text_surf = font.render(self.text, True, Color.WHITE.value)
+        self.text_surf = font.render(self.text, True, Color.WHITE)
 
         # padding and ensure minimum size from provided width/height
         padding_x, padding_y = 20, 10
@@ -248,9 +247,9 @@ class Button(pygame.sprite.Sprite):
 
         # create surface sized to fit the text (or the provided minimum)
         self.image = pygame.Surface((w, h))
-        self.image.fill(Color.BLACK.value)
+        self.image.fill(Color.BLACK)
         # draw initial border
-        pygame.draw.rect(self.image, Color.GRAY.value, self.image.get_rect(), 5, 10)
+        pygame.draw.rect(self.image, Color.GRAY, self.image.get_rect(), 5, 10)
 
         # center text on the surface
         text_rect = self.text_surf.get_rect(center=(w // 2, h // 2))
@@ -268,12 +267,12 @@ class Button(pygame.sprite.Sprite):
     def update(self):
         if self.rect.collidepoint(pygame.mouse.get_pos()):
             # to green
-            pygame.draw.rect(self.image, Color.GREEN.value, self.image.get_rect(), 5, 10)
+            pygame.draw.rect(self.image, Color.GREEN, self.image.get_rect(), 5, 10)
             if pygame.mouse.get_pressed()[0]:
                 self.callback()
         else:
             # to gray
-            pygame.draw.rect(self.image, Color.GRAY.value, self.image.get_rect(), 5, 10)
+            pygame.draw.rect(self.image, Color.GRAY, self.image.get_rect(), 5, 10)
 
 # https://stackoverflow.com/a/46390412
 COLOR_INACTIVE = pygame.Color('lightskyblue3')
@@ -477,11 +476,11 @@ def start_game():
 def title_screen():
     clear_screen()
     title_font = pygame.font.Font(fontpath, 72)
-    title_surf = title_font.render("打磚塊", True, Color.WHITE.value)
+    title_surf = title_font.render("打磚塊", True, Color.WHITE)
     title_rect = title_surf.get_rect(center=(400, 150))
     screen.blit(title_surf, title_rect)
     high_score = user.get("high_score", 0)
-    high_score_surf = font.render(f"最高分數: {high_score}", True, Color.WHITE.value)
+    high_score_surf = font.render(f"最高分數: {high_score}", True, Color.WHITE)
     high_score_rect = high_score_surf.get_rect(center=(400, 220))
     screen.blit(high_score_surf, high_score_rect)
     
@@ -552,7 +551,7 @@ def _show_end_animation(message, win, score, color, duration=2500):
             x = random.randint(50, 750)
             y = random.randint(50, 250)
             vel = [random.uniform(-3.0, 3.0), random.uniform(-6.0, -1.0)]
-            col = random.choice([Color.RED.value, Color.GREEN.value, Color.BLUE.value, Color.WHITE.value])
+            col = random.choice([Color.RED, Color.GREEN, Color.BLUE, Color.WHITE])
             life = random.randint(1200, 2200)
             particles.append({
                 'pos': [x, y],
@@ -690,7 +689,7 @@ def show_game_over_animation(score, paddle):
         x = paddle.rect.x + random.randint(0, paddle.rect.width)
         y = paddle.rect.y + random.randint(0, paddle.rect.height)
         vel = [random.uniform(-3.0, 3.0), random.uniform(-6.0, -1.0)]
-        col = Color.GREEN.value
+        col = Color.GREEN
         life = random.randint(1000, 2000)
         fragments.append({
             'pos': [x, y],
@@ -729,7 +728,7 @@ def show_game_over_animation(score, paddle):
         pygame.display.update()
     music = pygame.mixer.Sound(os.path.join(assetsdir, "gameover-music.mp3"))
     music.play()
-    restart = _show_end_animation("你輸了！", False, score, Color.RED.value, duration=2500)
+    restart = _show_end_animation("你輸了！", False, score, Color.RED, duration=2500)
     pygame.mixer.music.stop()
     return restart
 
@@ -737,7 +736,7 @@ def show_game_over_animation(score, paddle):
 def show_win_animation(score):
     music = pygame.mixer.Sound(os.path.join(assetsdir, "win.mp3"))
     music.play()
-    restart = _show_end_animation("你贏了！", True, score, Color.GREEN.value, duration=2500)
+    restart = _show_end_animation("你贏了！", True, score, Color.GREEN, duration=2500)
     pygame.mixer.music.stop()
     return restart
 
