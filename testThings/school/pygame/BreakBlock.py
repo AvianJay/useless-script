@@ -11,7 +11,7 @@ import threading
 app_version = "0.1.0"
 server_url = "https://breakblock.avianjay.sbs/"
 ONLINE = False
-# god_mode = True if sys.argv[-1] == "god" else False
+
 if not os.path.exists("user.json"):
     user = {"token": None, "name": None, 'high_score': 0}
     with open("user.json", "w") as f:
@@ -211,10 +211,6 @@ class Ball(pygame.sprite.Sprite):
                 self.rect.y = 600 - self.rect.height
         # kill ball if bottom
         if self.rect.bottom >= 600:
-            # if god_mode:
-            #     self.speed[1] = -self.speed[1]
-            #     return
-            # else:
             self.kill()
             self.balls_list.remove(self)
 
@@ -259,10 +255,6 @@ class Button(pygame.sprite.Sprite):
         self.rect.x = x
         self.rect.y = y
         self.callback = callback
-    
-    # def check_click(self):
-    #     if self.rect.collidepoint(pygame.mouse.get_pos()):
-    #         self.callback()
     
     def update(self):
         if self.rect.collidepoint(pygame.mouse.get_pos()):
@@ -328,8 +320,6 @@ def start_game():
         for j in range(2, 3):
             if random.random() < 0.55:
                 unbreakable_positions.append((i, j))
-                # if len(unbreakable_positions) >= 15:
-                #     break
 
     all_sprites = pygame.sprite.Group()
     blocks = pygame.sprite.Group()
@@ -424,15 +414,6 @@ def start_game():
                         else:
                             ball.rect.x = block.rect.left - ball.rect.width
                     break
-        # hit_blocks = pygame.sprite.spritecollide(ball, blocks, True)
-        # for block in hit_blocks:
-        #     dx = ball.rect.centerx - block.rect.centerx
-        #     dy = ball.rect.centery - block.rect.centery
-        #     # 若水平偏差較大，反轉水平速度，否則反轉垂直速度
-        #     if abs(dx) > abs(dy):
-        #         ball.speed[0] = -ball.speed[0]
-        #     else:
-        #         ball.speed[1] = -ball.speed[1]
 
         # double ball item collection
         for item in [s for s in all_sprites if isinstance(s, DoubleBallItem)]:
