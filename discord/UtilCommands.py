@@ -192,6 +192,90 @@ async def userinfo(ctx: commands.Context, user: Union[discord.User, discord.Memb
     await ctx.send(embed=embed, view=view)
 
 
+@bot.tree.command(name=app_commands.locale_str("avatar"), description="取得用戶頭像")
+@app_commands.describe(user="要查詢的用戶")
+@app_commands.allowed_installs(guilds=True, users=True)
+@app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
+async def avatar_command(interaction: discord.Interaction, user: Union[discord.User, discord.Member] = None):
+    if user is None:
+        user = interaction.user
+    embed = discord.Embed(title=f"{user.display_name} 的頭像", color=0x00ff00)
+    view = discord.ui.View()
+    if user.display_avatar and user.display_avatar.url != user.avatar.url:
+        embed.set_image(url=user.display_avatar.url)
+        embed.set_thumbnail(url=user.avatar.url if user.avatar else None)
+        serverpfp_button = discord.ui.Button(label="伺服器頭像連結", url=user.display_avatar.url)
+        view.add_item(serverpfp_button)
+    else:
+        embed.set_image(url=user.avatar.url if user.avatar else None)
+    button = discord.ui.Button(label="頭像連結", url=user.avatar.url if user.avatar else "https://discord.com/assets/6debd47ed13483642cf09e832ed0bc1b.png")
+    view.add_item(button)
+    await interaction.response.send_message(embed=embed, view=view)
+
+
+@bot.command(aliases=["pfp"])
+async def avatar(ctx: commands.Context, user: Union[discord.User, discord.Member] = None):
+    """取得用戶頭像
+    
+    用法： avatar [用戶]
+    如果不指定用戶，則顯示自己的頭像。
+    """
+    if user is None:
+        user = ctx.author
+    embed = discord.Embed(title=f"{user.display_name} 的頭像", color=0x00ff00)
+    view = discord.ui.View()
+    if user.display_avatar and user.display_avatar.url != user.avatar.url:
+        embed.set_image(url=user.display_avatar.url)
+        embed.set_thumbnail(url=user.avatar.url if user.avatar else None)
+        serverpfp_button = discord.ui.Button(label="伺服器頭像連結", url=user.display_avatar.url)
+        view.add_item(serverpfp_button)
+    else:
+        embed.set_image(url=user.avatar.url if user.avatar else None)
+    button = discord.ui.Button(label="頭像連結", url=user.avatar.url if user.avatar else "https://discord.com/assets/6debd47ed13483642cf09e832ed0bc1b.png")
+    view.add_item(button)
+    await ctx.send(embed=embed, view=view)
+
+
+@bot.tree.command(name=app_commands.locale_str("banner"), description="取得用戶橫幅")
+@app_commands.describe(user="要查詢的用戶")
+@app_commands.allowed_installs(guilds=True, users=True)
+@app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
+async def banner_command(interaction: discord.Interaction, user: Union[discord.User, discord.Member] = None):
+    if user is None:
+        user = interaction.user
+    user = await bot.fetch_user(user.id)  # Fetch to get banner
+    if user.banner is None:
+        await interaction.response.send_message("該用戶沒有設定橫幅。", ephemeral=True)
+        return
+    embed = discord.Embed(title=f"{user.display_name} 的橫幅", color=0x00ff00)
+    embed.set_image(url=user.banner.url)
+    view = discord.ui.View()
+    button = discord.ui.Button(label="橫幅連結", url=user.banner.url)
+    view.add_item(button)
+    await interaction.response.send_message(embed=embed, view=view)
+
+
+@bot.command(aliases=["bnr"])
+async def banner(ctx: commands.Context, user: Union[discord.User, discord.Member] = None):
+    """取得用戶橫幅
+    
+    用法： banner [用戶]
+    如果不指定用戶，則顯示自己的橫幅。
+    """
+    if user is None:
+        user = ctx.author
+    user = await bot.fetch_user(user.id)  # Fetch to get banner
+    if user.banner is None:
+        await ctx.send("該用戶沒有設定橫幅。")
+        return
+    embed = discord.Embed(title=f"{user.display_name} 的橫幅", color=0x00ff00)
+    embed.set_image(url=user.banner.url)
+    view = discord.ui.View()
+    button = discord.ui.Button(label="橫幅連結", url=user.banner.url)
+    view.add_item(button)
+    await ctx.send(embed=embed, view=view)
+
+
 @bot.tree.command(name=app_commands.locale_str("get-command-mention"), description="取得指令的提及格式")
 @app_commands.describe(command="指令名稱", subcommand="子指令名稱（可選）")
 @app_commands.allowed_installs(guilds=True, users=True)
