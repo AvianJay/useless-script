@@ -27,6 +27,175 @@ def percent_random(percent: int) -> bool:
         return False
 
 
+async def process_checkin(user_id: int) -> tuple[bool, int]:
+    """
+    Process daily check-in for a user (always global).
+    Returns: (is_new_checkin, checkin_streak)
+    """
+    now = (datetime.utcnow() + timedelta(hours=8)).date()  # 台灣時間
+    
+    # Get last checkin date (always global - guild_id = 0)
+    last_checkin = get_user_data(0, user_id, "last_checkin")
+    if last_checkin is not None and not isinstance(last_checkin, datetime):
+        try:
+            last_checkin = datetime.fromisoformat(str(last_checkin)).date()
+        except Exception:
+            last_checkin = None
+    elif isinstance(last_checkin, datetime):
+        last_checkin = last_checkin.date()
+    
+    # Check if already checked in today
+    if last_checkin == now:
+        # Already checked in today
+        statistics = get_user_data(0, user_id, "dsize_statistics", {})
+        return False, statistics.get("checkin_streak", 0)
+    
+    # Calculate streak
+    statistics = get_user_data(0, user_id, "dsize_statistics", {})
+    checkin_streak = statistics.get("checkin_streak", 0)
+    
+    # Check if streak continues (last checkin was yesterday)
+    if last_checkin and last_checkin == now - timedelta(days=1):
+        checkin_streak += 1
+    else:
+        checkin_streak = 1  # Reset streak
+    
+    # Update statistics
+    statistics["total_checkins"] = statistics.get("total_checkins", 0) + 1
+    statistics["checkin_streak"] = checkin_streak
+    set_user_data(0, user_id, "dsize_statistics", statistics)
+    set_user_data(0, user_id, "last_checkin", now)
+    
+    return True, checkin_streak
+
+
+async def handle_checkin_rewards(interaction: discord.Interaction, user_id: int, checkin_streak: int, guild_key: int = None):
+    """
+    Handle check-in rewards and goal selection.
+    Shows rewards only on milestone days (7, and user-selected goals).
+    """
+    if checkin_streak < 7:
+        # No rewards shown until day 7
+        return
+    
+    # Get user's current goal
+    current_goal = get_user_data(0, user_id, "checkin_goal")
+    
+    # Check if this is a milestone day
+    is_milestone = False
+    if checkin_streak == 7 or (current_goal and checkin_streak >= current_goal):
+        is_milestone = True
+    
+    if not is_milestone:
+        return
+    
+    # check not global
+    if guild_key is None:
+        await interaction.response.send_message(f"你獲得了簽到獎勵！\n請在伺服器中使用 {get_command_mention('dsize')} 以領取獎勵。", ephemeral=True)
+        return
+    
+    # Give random reward
+    if "ItemSystem" in modules:
+        # Random reward pool
+        # use list instead of tuple to make it mutable
+        level_1_rewards = [
+            ["grass", 5, "草 x5"],
+            ["fake_ruler", 1, "自欺欺人尺 x1"],
+            ["anti_surgery", 1, "抗手術藥物 x1"],
+        ]
+
+        level_2_rewards = [
+            ["grass", 15, "草 x15"],
+            ["fake_ruler", 2, "自欺欺人尺 x2"],
+            ["anti_surgery", 2, "抗手術藥物 x2"],
+        ]
+
+        level_3_rewards = [
+            ["grass", 25, "草 x25"],
+            ["fake_ruler", 3, "自欺欺人尺 x3"],
+            ["anti_surgery", 3, "抗手術藥物 x3"],
+            ["surgery", 1, "手術刀 x1"],
+            ["rusty_surgery", 1, "生鏽的手術刀 x1"],
+        ]
+        
+        if checkin_streak == 7:
+            reward = random.choice(level_1_rewards)
+        else:
+            reward = get_user_data(0, user_id, "checkin_reward")
+        await ItemSystem.give_item_to_user(guild_key, user_id, reward[0], reward[1])
+
+        # Update statistics
+        statistics = get_user_data(0, user_id, "dsize_statistics", {})
+        statistics["total_checkins"] = statistics.get("total_checkins", 0) + 1
+        statistics["checkin_streak"] = checkin_streak
+        set_user_data(0, user_id, "dsize_statistics", statistics)
+        set_user_data(0, user_id, "last_checkin", now)
+        level_1_reward = get_user_data(0, user_id, "level_1_reward")
+        level_2_reward = get_user_data(0, user_id, "level_2_reward")
+        level_3_reward = get_user_data(0, user_id, "level_3_reward")
+        
+        # Create goal selection view
+        class GoalSelectionView(discord.ui.View):
+            def __init__(self):
+                super().__init__(timeout=300)  # 5 minutes
+                self.selected_goal = None
+            
+            @discord.ui.button(label=f"+7 天 ({level_1_reward[2]} x {level_1_reward[1]})", style=discord.ButtonStyle.primary)
+            async def goal_7(self, interaction: discord.Interaction, button: discord.ui.Button):
+                if interaction.user.id != user_id:
+                    await interaction.response.send_message("這不是你的目標選擇。", ephemeral=True)
+                    return
+                self.selected_goal = checkin_streak + 7
+                set_user_data(0, user_id, "checkin_goal", self.selected_goal)
+                set_user_data(0, user_id, "checkin_reward", level_1_reward)
+                await interaction.response.edit_message(
+                    content=f"✅ 已選擇目標：{self.selected_goal} 天！繼續加油！",
+                    view=None
+                )
+                self.stop()
+            
+            @discord.ui.button(label=f"+14 天 ({level_2_reward[2]} x {level_2_reward[1]})", style=discord.ButtonStyle.success)
+            async def goal_14(self, interaction: discord.Interaction, button: discord.ui.Button):
+                if interaction.user.id != user_id:
+                    await interaction.response.send_message("這不是你的目標選擇。", ephemeral=True)
+                    return
+                self.selected_goal = checkin_streak + 14
+                set_user_data(0, user_id, "checkin_goal", self.selected_goal)
+                set_user_data(0, user_id, "checkin_reward", level_2_reward)
+                await interaction.response.edit_message(
+                    content=f"✅ 已選擇目標：{self.selected_goal} 天！繼續加油！",
+                    view=None
+                )
+                self.stop()
+            
+            @discord.ui.button(label=f"+30 天 ({level_3_reward[2]} x {level_3_reward[1]})", style=discord.ButtonStyle.danger)
+            async def goal_30(self, interaction: discord.Interaction, button: discord.ui.Button):
+                if interaction.user.id != user_id:
+                    await interaction.response.send_message("這不是你的目標選擇。", ephemeral=True)
+                    return
+                self.selected_goal = checkin_streak + 30
+                set_user_data(0, user_id, "checkin_goal", self.selected_goal)
+                set_user_data(0, user_id, "checkin_reward", level_3_reward)
+                await interaction.response.edit_message(
+                    content=f"✅ 已選擇目標：{self.selected_goal} 天！繼續加油！",
+                    view=None
+                )
+                self.stop()
+        
+        # Send reward notification with goal selection
+        embed = discord.Embed(
+            title="🎉 簽到獎勵！",
+            description=f"恭喜達成 {checkin_streak} 天連續簽到！\n獲得：{reward[2]} x {reward[1]}！",
+            color=0xffd700
+        )
+        embed.add_field(
+            name="選擇下一個目標",
+            value="請選擇你的下一個簽到目標天數：",
+            inline=False
+        )
+        await interaction.followup.send(embed=embed, view=GoalSelectionView(), ephemeral=True)
+
+
 @bot.tree.command(name="dsize", description="量屌長")
 @app_commands.describe(global_dsize="是否使用全域紀錄 (預設否)")
 @app_commands.choices(global_dsize=[
@@ -82,6 +251,9 @@ async def dsize(interaction: discord.Interaction, global_dsize: int = 0):
     statistics = get_user_data(0, user_id, "dsize_statistics", {})
     statistics["total_uses"] = statistics.get("total_uses", 0) + 1
     set_user_data(0, user_id, "dsize_statistics", statistics)
+    
+    # Process daily check-in (always global)
+    is_new_checkin, checkin_streak = await process_checkin(user_id)
 
     # 隨機產生長度
     size = random.randint(1, max_size)
@@ -101,8 +273,20 @@ async def dsize(interaction: discord.Interaction, global_dsize: int = 0):
     embed = discord.Embed(title=f"{interaction.user.display_name} 的長度：", color=0x00ff00)
     embed.add_field(name="1 cm", value=f"8D", inline=False)
     embed.timestamp = datetime.now(timezone.utc)
-    if not guild_key:
-        embed.set_footer(text="此次量測為全域紀錄。")
+    
+    # Set footer with check-in info
+    if is_new_checkin:
+        footer_text = f"簽到第 {checkin_streak} 天！"
+        if not guild_key:
+            footer_text += " | 此次量測為全域紀錄。"
+    else:
+        if not guild_key:
+            footer_text = "此次量測為全域紀錄。"
+        else:
+            footer_text = None
+    
+    if footer_text:
+        embed.set_footer(text=footer_text)
 
     await interaction.response.send_message(embed=embed)
     # animate to size
@@ -120,8 +304,26 @@ async def dsize(interaction: discord.Interaction, global_dsize: int = 0):
 
     # 更新使用時間 — 存到對應的 guild_key（若為 user-install 則是 None）
     set_user_data(guild_key, user_id, "last_dsize_size", size)
+    
+    # Save to history
+    history = get_user_data(guild_key, user_id, "dsize_history", [])
+    history.append({
+        "date": now.isoformat(),
+        "size": final_size,
+        "type": "測量"
+    })
+    # Keep only last 100 records to avoid database bloat
+    if len(history) > 100:
+        history = history[-100:]
+    set_user_data(guild_key, user_id, "dsize_history", history)
+    
     # print(f"[DSize] {interaction.user} measured {size} cm in guild {guild_key if guild_key else 'DM/Global'}")
     log(f"量了 {size} cm, 伺服器: {guild_key if guild_key else '全域'}", module_name="dsize", user=interaction.user, guild=interaction.guild)
+    
+    # Handle check-in rewards if applicable (milestone days only)
+    if is_new_checkin:
+        await handle_checkin_rewards(interaction, user_id, checkin_streak, guild_key)
+        log(f"簽到成功，連續 {checkin_streak} 天", module_name="dsize", user=interaction.user, guild=interaction.guild)
 
     surgery_percent = get_server_config(guild_key, "dsize_surgery_percent", 10)
     drop_item_chance = get_server_config(guild_key, "dsize_drop_item_chance", 5)
@@ -191,6 +393,17 @@ async def dsize(interaction: discord.Interaction, global_dsize: int = 0):
                         statistics["failed_surgeries"] = statistics.get("failed_surgeries", 0) + 1
                         statistics["mangirl_count"] = statistics.get("mangirl_count", 0) + 1
                         set_user_data(0, user_id, "dsize_statistics", statistics)
+                        
+                        # Save to history
+                        history = get_user_data(guild_key, user_id, "dsize_history", [])
+                        history.append({
+                            "date": now.isoformat(),
+                            "size": -1,
+                            "type": "手術失敗"
+                        })
+                        if len(history) > 100:
+                            history = history[-100:]
+                        set_user_data(guild_key, user_id, "dsize_history", history)
                         return
                     d_string_new = "=" * (size + i - 2)
                     current_size = size + i
@@ -205,6 +418,17 @@ async def dsize(interaction: discord.Interaction, global_dsize: int = 0):
                 # update user statistics
                 statistics["successful_surgeries"] = statistics.get("successful_surgeries", 0) + 1
                 set_user_data(0, user_id, "dsize_statistics", statistics)
+                
+                # Save to history
+                history = get_user_data(guild_key, user_id, "dsize_history", [])
+                history.append({
+                    "date": now.isoformat(),
+                    "size": new_size + size,
+                    "type": "手術成功"
+                })
+                if len(history) > 100:
+                    history = history[-100:]
+                set_user_data(guild_key, user_id, "dsize_history", history)
         surgery_msg = await interaction.followup.send(f"{interaction.user.mention}\n你獲得了一次做手術的機會。\n請問你是否同意手術？\n-# 失敗機率：{fail_chance}%", view=dsize_SurgeryView())
     if not global_dsize:
         if ItemSystem and percent_random(drop_item_chance):
@@ -509,12 +733,63 @@ async def dsize_battle(interaction: discord.Interaction, opponent: discord.User)
             embed.add_field(name=f"{opponent.display_name} 的長度：", value=f"{size_opponent} cm\n8{d_string_opponent}D", inline=False)
             embed.add_field(name="結果：", value=result, inline=False)
             embed.timestamp = t
+            
+            # Process daily check-in for both users (always global)
+            user_is_new_checkin, user_checkin_streak = await process_checkin(user_id)
+            opponent_is_new_checkin, opponent_checkin_streak = await process_checkin(opponent_id)
+            
+            # Set footer with check-in info
+            footer_parts = []
+            if user_is_new_checkin:
+                footer_parts.append(f"{original_user.display_name} 簽到第 {user_checkin_streak} 天！")
+            if opponent_is_new_checkin:
+                footer_parts.append(f"{opponent.display_name} 簽到第 {opponent_checkin_streak} 天！")
+            
             if not guild_key:
-                embed.set_footer(text="此次對決將記錄到全域排行榜。")
+                footer_parts.append("此次對決將記錄到全域排行榜。")
+            
+            if footer_parts:
+                embed.set_footer(text=" | ".join(footer_parts))
+            
             await msg.edit(embed=embed)
 
             set_user_data(guild_key, user_id, "last_dsize_size", size_user)
             set_user_data(guild_key, opponent_id, "last_dsize_size", size_opponent)
+            
+            # Handle check-in rewards if applicable (milestone days only)
+            if user_is_new_checkin:
+                # Create a temporary interaction-like object for user rewards
+                # We'll send it as a followup message
+                await handle_checkin_rewards(interaction, user_id, user_checkin_streak, guild_key)
+                log(f"{original_user.display_name} 簽到成功，連續 {user_checkin_streak} 天", module_name="dsize", user=original_user, guild=interaction.guild)
+            
+            if opponent_is_new_checkin:
+                # For opponent, we need to note this but can't show interactive buttons
+                # since they're not the one who triggered the interaction
+                await handle_checkin_rewards(interaction, opponent_id, opponent_checkin_streak, guild_key)
+                log(f"{opponent.display_name} 簽到成功，連續 {opponent_checkin_streak} 天", module_name="dsize", user=opponent, guild=interaction.guild)
+            
+            # Save to history for both users
+            user_history = get_user_data(guild_key, user_id, "dsize_history", [])
+            user_history.append({
+                "date": now.isoformat(),
+                "size": size_user,
+                "type": "對決"
+            })
+            if len(user_history) > 100:
+                user_history = user_history[-100:]
+            set_user_data(guild_key, user_id, "dsize_history", user_history)
+            
+            opponent_history = get_user_data(guild_key, opponent_id, "dsize_history", [])
+            opponent_history.append({
+                "date": now.isoformat(),
+                "size": size_opponent,
+                "type": "對決"
+            })
+            if len(opponent_history) > 100:
+                opponent_history = opponent_history[-100:]
+            set_user_data(guild_key, opponent_id, "dsize_history", opponent_history)
+            
             user_using_dsize_battle.discard(user_id)
             user_using_dsize_battle.discard(opponent_id)
 
@@ -599,6 +874,8 @@ async def dsize_stats(interaction: discord.Interaction):
     total_feedgrass = statistics.get("total_feedgrass", 0)
     total_been_feedgrass = statistics.get("total_been_feedgrass", 0)
     total_drops = statistics.get("total_drops", 0)
+    total_checkins = statistics.get("total_checkins", 0)
+    checkin_streak = statistics.get("checkin_streak", 0)
 
     embed = discord.Embed(title=f"{interaction.user.display_name} 的 dsize 統計資料", color=0x00ff00)
     embed.add_field(name="量屌次數", value=str(total_uses), inline=False)
@@ -611,10 +888,93 @@ async def dsize_stats(interaction: discord.Interaction):
     embed.add_field(name="變成男娘次數", value=str(mangirl_count), inline=False)
     embed.add_field(name="草飼次數", value=str(total_feedgrass), inline=True)
     embed.add_field(name="被草飼次數", value=str(total_been_feedgrass), inline=True)
-    embed.add_field(name="撿到物品次數", value=str(total_drops), inline=False)
+    embed.add_field(name="撊到物品次數", value=str(total_drops), inline=False)
+    embed.add_field(name="簽到次數", value=str(total_checkins), inline=True)
+    embed.add_field(name="連續簽到天數", value=str(checkin_streak), inline=True)
     embed.timestamp = datetime.now(timezone.utc)
 
     await interaction.response.send_message(embed=embed)
+
+
+@bot.tree.command(name=app_commands.locale_str("dsize-history"), description="查看歷史紀錄")
+@app_commands.describe(
+    user="查看指定用戶的歷史紀錄 (預設為自己)",
+    global_history="是否顯示全域紀錄 (預設否)"
+)
+@app_commands.choices(global_history=[
+    app_commands.Choice(name="否", value=0),
+    app_commands.Choice(name="是", value=1),
+])
+@app_commands.allowed_installs(guilds=True, users=True)
+@app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
+async def dsize_history(interaction: discord.Interaction, user: discord.User = None, global_history: int = 0):
+    global_history = bool(global_history)
+    target_user = user if user else interaction.user
+    user_id = target_user.id
+    
+    # Determine guild_key
+    if global_history:
+        guild_key = None
+    else:
+        if not interaction.is_guild_integration():
+            global_history = True
+            guild_key = None
+        else:
+            guild_key = interaction.guild.id if interaction.guild else None
+    
+    await interaction.response.defer()
+    
+    # Get history from user data
+    history = get_user_data(guild_key, user_id, "dsize_history", [])
+    
+    if not history:
+        scope = "全域" if global_history else "此伺服器"
+        name = target_user.display_name if user else "你"
+        await interaction.followup.send(f"{name}在{scope}還沒有任何紀錄。")
+        return
+    
+    # Sort history by date (most recent first)
+    history_sorted = sorted(history, key=lambda x: x.get("date", ""), reverse=True)
+    
+    # Take only the last 10 records
+    history_display = history_sorted[:10]
+    
+    # Build embed
+    embed = discord.Embed(
+        title=f"{target_user.display_name} 的歷史紀錄",
+        description=f"顯示最近 {len(history_display)} 筆紀錄",
+        color=0x00ff00
+    )
+    
+    for record in history_display:
+        date_str = record.get("date", "未知日期")
+        size = record.get("size", 0)
+        record_type = record.get("type", "測量")
+        
+        # Parse date for display
+        try:
+            date_obj = datetime.fromisoformat(date_str).date()
+            date_display = date_obj.strftime("%Y-%m-%d")
+        except:
+            date_display = date_str
+        
+        if size == -1:
+            size_display = "**男娘！**"
+        else:
+            size_display = f"{size} cm"
+        
+        field_value = f"{size_display} ({record_type})"
+        embed.add_field(name=date_display, value=field_value, inline=True)
+    
+    if not global_history and interaction.guild:
+        embed.set_footer(text=f"伺服器：{interaction.guild.name}")
+    else:
+        embed.set_footer(text="全域紀錄")
+    
+    embed.timestamp = datetime.now(timezone.utc)
+    
+    await interaction.followup.send(embed=embed)
+    log(f"查看了 {target_user.display_name} 的歷史紀錄", module_name="dsize", user=interaction.user, guild=interaction.guild)
 
 
 @bot.tree.command(name=app_commands.locale_str("dsize-feedgrass"), description="草飼男娘")
@@ -835,6 +1195,17 @@ async def use_scalpel(interaction: discord.Interaction):
             embed.set_field_at(0, name=f"{orig_size + new_size} cm", value=f"8{'=' * (orig_size + new_size - 1)}D", inline=False)
             embed.color = 0x00ff00
             await interaction.edit_original_response(content=f"{target_user.mention} 手術成功。", embed=embed)
+            
+            # Save to history
+            history = get_user_data(guild_key, target_id, "dsize_history", [])
+            history.append({
+                "date": now.isoformat(),
+                "size": orig_size + new_size,
+                "type": "手術成功"
+            })
+            if len(history) > 100:
+                history = history[-100:]
+            set_user_data(guild_key, target_id, "dsize_history", history)
     await interaction.response.send_modal(SelectUserModal())
 
 async def use_rusty_scalpel(interaction: discord.Interaction):
@@ -897,6 +1268,17 @@ async def use_rusty_scalpel(interaction: discord.Interaction):
                 orig_size -= min(random.randint(2, 5), orig_size)
             embed.set_field_at(0, name=f"-1 cm", value=f"8", inline=False)
             await interaction.edit_original_response(content=f"{target_user.mention} 變男娘了。", embed=embed)
+            
+            # Save to history
+            history = get_user_data(guild_key, target_id, "dsize_history", [])
+            history.append({
+                "date": now.isoformat(),
+                "size": -1,
+                "type": "手術失敗"
+            })
+            if len(history) > 100:
+                history = history[-100:]
+            set_user_data(guild_key, target_id, "dsize_history", history)
     await interaction.response.send_modal(SelectUserModal())
     
 async def use_anti_surgery(interaction: discord.Interaction):
