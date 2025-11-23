@@ -13,6 +13,7 @@ import chat_exporter
 from logger import log
 import logging
 import traceback
+import random
 
 
 if getattr(sys, 'frozen', False):
@@ -137,32 +138,41 @@ async def badquote(ctx: commands.Context):
     await ctx.reply(file=discord.File(output_buffer, filename="messenger_quote.png"))
 
 
-@bot.tree.context_menu(name="截圖生成器")
-@app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
-@app_commands.allowed_installs(guilds=True, users=True)
-async def screenshot_generator(interaction: discord.Interaction, message: discord.Message):
-    await interaction.response.defer()
+async def screenshot(message: discord.Message):
     # check browser alive
     global browser
     if browser is None:
-        await interaction.followup.send("瀏覽器尚未啟動，請稍後再試。", ephemeral=True)
-        return
+        raise Exception("瀏覽器尚未啟動，請稍後再試。")
     if not browser.is_connected():
-        await interaction.followup.send("瀏覽器已關閉，請稍後再試。", ephemeral=True)
-        return
-    # try to get previous message
+        raise Exception("瀏覽器已關閉，請稍後再試。")
+
+    # try to get previous message (group consecutive messages from same author)
     messages = [message]
     try:
+        # Logic to find previous messages from the same author within reason
+        # This logic was slightly different in the two commands, unifying to the more robust history check
+        # However, the provided snippet for `screenshot_cmd` had a weird while loop with `current_msg.next()` which isn't standard discord.py async iterator usage.
+        # The `screenshot_generator` logic using `async for` is cleaner. Let's use that logic but adapted for a helper.
+        
+        # Note: The original context menu code appended to `messages` then seemingly relied on `chat_exporter` handling order or `messages` being in reverse order?
+        # `chat_exporter` usually expects messages in chronological order.
+        # The context menu code: `messages.append(msg)` inside `history(oldest_first=False)` means `messages` is [target, target-1, target-2].
+        # Then it passes this list to chat_exporter.
+        
         if not message.reference and not message.interaction:
-            async for msg in message.channel.history(limit=25, before=message.created_at, oldest_first=False):
+            async for msg in message.channel.history(limit=10, before=message.created_at, oldest_first=False):
                 if msg.author.id == message.author.id:
+                    messages.append(msg)
                     if msg.reference or msg.interaction:
                         break
-                    messages.append(msg)
                 else:
                     break
     except Exception:
         traceback.print_exc()
+    
+    # chat_exporter expects chronological order usually, so reverse to [target-2, target-1, target]
+    messages.reverse()
+
     try:
         html_content = await chat_exporter.raw_export(
             message.channel,
@@ -173,26 +183,40 @@ async def screenshot_generator(interaction: discord.Interaction, message: discor
             raise_exceptions=True
         )
     except Exception as e:
-        await interaction.followup.send(f"生成 HTML 失敗: {e}", ephemeral=True)
-        log(f"生成 HTML 失敗: {e}", module_name="MessageImage", level=logging.ERROR, user=interaction.user, guild=interaction.guild)
+        log(f"生成 HTML 失敗: {e}", module_name="MessageImage", level=logging.ERROR)
         traceback.print_exc()
-        return
+        raise Exception(f"生成 HTML 失敗: {e}")
+
     try:
         page = await browser.new_page()
         await page.set_content(html_content, wait_until="networkidle")
+        # Force width to fit content so the screenshot isn't full width
         await page.add_style_tag(content=".chatlog__message-group { width: fit-content; }")
+        # Locate the message group container
         image_bytes = await page.locator('.chatlog__message-group').screenshot(type="png")
         await page.close()
     except Exception as e:
-        await interaction.followup.send(f"截圖失敗: {e}", ephemeral=True)
-        # try to upload html file
-        await interaction.followup.send("原 HTML 檔案：", file=discord.File(io.BytesIO(html_content.encode("utf-8")), filename="debug.html"), ephemeral=True)
-        log(f"截圖失敗: {e}", module_name="MessageImage", level=logging.ERROR, user=interaction.user, guild=interaction.guild)
+        log(f"截圖失敗: {e}", module_name="MessageImage", level=logging.ERROR)
         traceback.print_exc()
-        return
-    buffer = io.BytesIO(image_bytes)
-    await interaction.followup.send(file=discord.File(buffer, filename="screenshot.png"))
-    log("截圖生成完成", module_name="MessageImage", user=interaction.user, guild=interaction.guild)
+        # If screenshot fails, maybe we want to return the HTML for debugging? 
+        # The original code did this in one place. For simplicity in a shared function, let's just raise.
+        raise Exception(f"截圖失敗: {e}")
+
+    return io.BytesIO(image_bytes)
+
+
+@bot.tree.context_menu(name="截圖生成器")
+@app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
+@app_commands.allowed_installs(guilds=True, users=True)
+async def screenshot_generator(interaction: discord.Interaction, message: discord.Message):
+    await interaction.response.defer()
+    try:
+        buffer = await screenshot(message)
+        await interaction.followup.send(file=discord.File(buffer, filename="screenshot.png"))
+        log("截圖生成完成", module_name="MessageImage", user=interaction.user, guild=interaction.guild)
+    except Exception as e:
+        await interaction.followup.send(f"截圖失敗: {e}", ephemeral=True)
+
 
 @bot.command(name="screenshot", aliases=["ss", "sgen", "screenshotgen"])
 async def screenshot_cmd(ctx: commands.Context):
@@ -200,66 +224,66 @@ async def screenshot_cmd(ctx: commands.Context):
     截圖生成器。
     回覆一則訊息以截圖該訊息。
     """
-    # check browser alive
-    global browser
-    if browser is None:
-        await ctx.reply("瀏覽器尚未啟動，請稍後再試。")
-        return
-    if not browser.is_connected():
-        await ctx.reply("瀏覽器已關閉，請稍後再試。")
-        return
     # try to get replied message
+    message = None
     if ctx.message.reference:
         ref_msg = await ctx.channel.fetch_message(ctx.message.reference.message_id)
         message = ref_msg
+    
     if not message:
         await ctx.reply("錯誤：沒有回覆的訊息。")
         return
-    # try to get previous message
-    messages = [message]
+
     try:
-        if not ctx.message.reference and not ctx.message.interaction:
-            done = False
-            current_msg = message
-            while not done:
-                current_msg = await current_msg.channel.history(limit=1, before=discord.Object(id=current_msg.id))
-                current_msg = await current_msg.next()
-                if current_msg.author.id == message.author.id:
-                    messages.append(current_msg)
-                    if current_msg.reference or current_msg.interaction:
-                        done = True
-                else:
-                    done = True
-    except Exception:
-        pass
-    messages.reverse()
-    try:
-        html_content = await chat_exporter.raw_export(
-            message.channel,
-            messages=messages,
-            tz_info="Asia/Taipei",
-            guild=message.channel.guild,
-            bot=bot,
-            raise_exceptions=True
-        )
-    except Exception as e:
-        await ctx.reply(f"生成 HTML 失敗: {e}")
-        log(f"生成 HTML 失敗: {e}", module_name="MessageImage", level=logging.ERROR, user=ctx.author, guild=ctx.guild)
-        traceback.print_exc()
-        return
-    try:
-        page = await browser.new_page()
-        await page.set_content(html_content, wait_until="networkidle")
-        await page.add_style_tag(content=".chatlog__message-group { width: fit-content; }")
-        image_bytes = await page.locator('.chatlog__message-group').screenshot(type="png")
-        await page.close()
+        buffer = await screenshot(message)
+        await ctx.reply(file=discord.File(buffer, filename="screenshot.png"))
+        log("截圖生成完成", module_name="MessageImage", user=ctx.author, guild=ctx.guild)
     except Exception as e:
         await ctx.reply(f"截圖失敗: {e}")
-        log(f"截圖失敗: {e}", module_name="MessageImage", level=logging.ERROR, user=ctx.author, guild=ctx.guild)
-        traceback.print_exc()
-        return
-    buffer = io.BytesIO(image_bytes)
-    await ctx.reply(file=discord.File(buffer, filename="screenshot.png"))
+
+whatisthisguytalking_images = []
+
+async def generate_whatisthisguytalking(message: discord.Message):
+    file_path = random.choice(whatisthisguytalking_images)
+    screenshot_buffer = await screenshot(message)
+
+    template_image = Image.open(file_path)
+    screenshot_pil_image = Image.open(screenshot_buffer)
+
+    # Determine target width (use the width of the template image)
+    target_width = template_image.width
+
+    # Resize screenshot image to match the target width, maintaining aspect ratio
+    screenshot_aspect_ratio = screenshot_pil_image.width / screenshot_pil_image.height
+    new_screenshot_height = int(target_width / screenshot_aspect_ratio)
+    resized_screenshot = screenshot_pil_image.resize((target_width, new_screenshot_height), Image.LANCZOS)
+
+    # Create a new blank image with the combined height and target width
+    combined_height = resized_screenshot.height + template_image.height
+    combined_image = Image.new("RGB", (target_width, combined_height))
+
+    # Paste the resized screenshot image at the top
+    combined_image.paste(resized_screenshot, (0, 0))
+    # Paste the template image below the screenshot
+    combined_image.paste(template_image, (0, resized_screenshot.height))
+
+    image_bytes = io.BytesIO()
+    combined_image.save(image_bytes, "PNG")
+    image_bytes.seek(0)
+    return image_bytes
+
+
+@bot.tree.context_menu(name="這傢伙在說什麼呢")
+@app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
+@app_commands.allowed_installs(guilds=True, users=True)
+async def whatisthisguytalking(interaction: discord.Interaction, message: discord.Message):
+    await interaction.response.defer()
+    try:
+        buffer = await generate_whatisthisguytalking(message)
+        await interaction.followup.send(file=discord.File(buffer, filename="whatisthisguytalking.png"))
+        log("引用生成完成", module_name="MessageImage", user=interaction.user, guild=interaction.guild)
+    except Exception as e:
+        await interaction.followup.send(f"引用失敗: {e}", ephemeral=True)
 
 browser = None
 
@@ -279,6 +303,18 @@ async def setup_browser():
             log("Playwright 瀏覽器已重新啟動", module_name="MessageImage")
 
 on_ready_tasks.append(setup_browser)
+
+async def load_whatisthisguytalking_images():
+    global whatisthisguytalking_images
+    try:
+        dir = "./whatisthisguytalking-images"
+        for file in os.listdir(dir):
+            if file.endswith(".png") or file.endswith(".jpg") or file.endswith(".jpeg") or file.endswith(".gif") or file.endswith(".webp"):
+                whatisthisguytalking_images.append(os.path.join(dir, file))
+    except Exception as e:
+        log(f"載入引用圖片失敗: {e}", module_name="MessageImage", level=logging.ERROR)
+
+on_ready_tasks.append(load_whatisthisguytalking_images)
 
 
 if __name__ == "__main__":
