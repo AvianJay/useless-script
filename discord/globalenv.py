@@ -278,6 +278,7 @@ translations = {
     "nds": "停班停課",
     "follow": "追蹤",
     "reverse": "反轉",
+    "spoilers": "暴雷",
 }
 class CommandNameTranslator(app_commands.Translator):
     async def translate(
