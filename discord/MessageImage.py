@@ -326,12 +326,11 @@ on_ready_tasks.append(load_whatisthisguytalking_images)
 @bot.command()
 @OwnerTools.is_owner()
 async def reload_whatisthisguytalking_images(ctx: commands.Context):
-    await ctx.defer()
     count = await load_whatisthisguytalking_images()
     if count == 0:
-        await ctx.followup.send("重新載入「這傢伙在說什麼呢？」的圖片失敗")
+        await ctx.reply("重新載入「這傢伙在說什麼呢？」的圖片失敗")
     else:
-        await ctx.followup.send(f"重新載入「這傢伙在說什麼呢？」的圖片完成，載入了 {count} 張圖片")
+        await ctx.reply(f"重新載入「這傢伙在說什麼呢？」的圖片完成，載入了 {count} 張圖片")
 
 
 if __name__ == "__main__":
