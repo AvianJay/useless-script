@@ -277,6 +277,7 @@ translations = {
     "view-blacklist-roles": "查看黑名單身分組",
     "nds": "停班停課",
     "follow": "追蹤",
+    "reverse": "反轉",
 }
 class CommandNameTranslator(app_commands.Translator):
     async def translate(

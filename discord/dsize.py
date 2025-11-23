@@ -249,15 +249,22 @@ async def dsize(interaction: discord.Interaction, global_dsize: int = 0):
                     await msg.edit(content=f"{interaction.user.mention}\n你撿到了一把生鏽的手術刀！\n使用 {item_use_command} 生鏽的手術刀 可以進行手術。")
 
 @bot.tree.command(name=app_commands.locale_str("dsize-leaderboard"), description="查看屌長排行榜")
-@app_commands.describe(limit="顯示前幾名 (預設10)", global_leaderboard="顯示全域排行榜 (預設否)")
-@app_commands.choices(global_leaderboard=[
-    app_commands.Choice(name="否", value=0),
-    app_commands.Choice(name="是", value=1),
-])
+@app_commands.describe(limit="顯示前幾名 (預設10)", global_leaderboard="顯示全域排行榜 (預設否)", reverse="反轉排行榜 (預設否)")
+@app_commands.choices(
+    global_leaderboard=[
+        app_commands.Choice(name="否", value=0),
+        app_commands.Choice(name="是", value=1),
+    ],
+    reverse=[
+        app_commands.Choice(name="否", value=0),
+        app_commands.Choice(name="是", value=1),
+    ]
+)
 @app_commands.allowed_installs(guilds=True, users=True)
 @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
-async def dsize_leaderboard(interaction: discord.Interaction, limit: int = 10, global_leaderboard: int = 0):
+async def dsize_leaderboard(interaction: discord.Interaction, limit: int = 10, global_leaderboard: int = 0, reverse: int = 0):
     global_leaderboard = bool(global_leaderboard)
+    reverse = bool(reverse)
     if global_leaderboard:
         guild_id = None  # global
     else:
@@ -316,7 +323,7 @@ async def dsize_leaderboard(interaction: discord.Interaction, limit: int = 10, g
         return
 
     # 按照大小排序並取前limit名
-    leaderboard.sort(key=lambda x: x[1], reverse=True)
+    leaderboard.sort(key=lambda x: x[1], reverse=not reverse)
     top_users = leaderboard[:limit]
 
     # 建立排行榜訊息
