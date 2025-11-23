@@ -6,7 +6,7 @@ import discord
 import aiohttp
 from discord.ext import commands
 from discord import app_commands
-from globalenv import bot, start_bot, on_ready_tasks
+from globalenv import bot, start_bot, on_ready_tasks, modules
 from playwright.async_api import async_playwright
 import asyncio
 import chat_exporter
@@ -14,6 +14,8 @@ from logger import log
 import logging
 import traceback
 import random
+if "OwnerTools" in modules:
+    import OwnerTools
 
 
 if getattr(sys, 'frozen', False):
@@ -281,9 +283,9 @@ async def whatisthisguytalking(interaction: discord.Interaction, message: discor
     try:
         buffer = await generate_whatisthisguytalking(message)
         await interaction.followup.send(file=discord.File(buffer, filename="whatisthisguytalking.png"))
-        log("引用生成完成", module_name="MessageImage", user=interaction.user, guild=interaction.guild)
+        log("引用圖片生成完成", module_name="MessageImage", user=interaction.user, guild=interaction.guild)
     except Exception as e:
-        await interaction.followup.send(f"引用失敗: {e}", ephemeral=True)
+        await interaction.followup.send(f"引用圖片生成失敗: {e}", ephemeral=True)
 
 browser = None
 
@@ -308,13 +310,28 @@ async def load_whatisthisguytalking_images():
     global whatisthisguytalking_images
     try:
         dir = "./whatisthisguytalking-images"
+        count    = 0
         for file in os.listdir(dir):
             if file.endswith(".png") or file.endswith(".jpg") or file.endswith(".jpeg") or file.endswith(".gif") or file.endswith(".webp"):
                 whatisthisguytalking_images.append(os.path.join(dir, file))
+                count += 1
+        log(f"載入了 {count} 張「這傢伙在說什麼呢？」的圖片", module_name="MessageImage")
+        return count
     except Exception as e:
-        log(f"載入引用圖片失敗: {e}", module_name="MessageImage", level=logging.ERROR)
+        log(f"載入「這傢伙在說什麼呢？」的圖片失敗: {e}", module_name="MessageImage", level=logging.ERROR)
+        return 0
 
 on_ready_tasks.append(load_whatisthisguytalking_images)
+
+@bot.command()
+@OwnerTools.is_owner()
+async def reload_whatisthisguytalking_images(ctx: commands.Context):
+    await ctx.defer()
+    count = await load_whatisthisguytalking_images()
+    if count == 0:
+        await ctx.followup.send("重新載入「這傢伙在說什麼呢？」的圖片失敗")
+    else:
+        await ctx.followup.send(f"重新載入「這傢伙在說什麼呢？」的圖片完成，載入了 {count} 張圖片")
 
 
 if __name__ == "__main__":
