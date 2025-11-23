@@ -171,7 +171,7 @@ async def screenshot(message: discord.Message):
         traceback.print_exc()
     
     # chat_exporter expects chronological order usually, so reverse to [target-2, target-1, target]
-    messages.reverse()
+    # messages.reverse()
 
     try:
         html_content = await chat_exporter.raw_export(
