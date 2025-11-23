@@ -16,7 +16,9 @@ def is_owner() -> Callable:
 @is_owner()
 async def settings(ctx, key: str=None, value: str=None):
     if key is None:
-        await ctx.send("目前設定：\n" + "\n".join(f"- {k}: {v}" for k, v in _config.items()))
+        safe_config = _config.copy()
+        safe_config["token"] = "<token>"
+        await ctx.send("目前設定：\n" + "\n".join(f"- {k}: {v}" for k, v in safe_config.items()))
     elif value is None:
         await ctx.send(f"{key}: {config(key, '未設定')}")
     elif key in config().keys():
