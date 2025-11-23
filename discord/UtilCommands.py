@@ -18,14 +18,21 @@ full_version = f"{version} ({git_commit_hash})"
 
 
 def get_time_text(seconds: int) -> str:
-    if seconds < 60:
-        return f"{seconds} 秒"
-    elif seconds < 3600:
-        return f"{seconds // 60} 分鐘"
-    elif seconds < 86400:
-        return f"{seconds // 3600} 小時"
-    else:
-        return f"{seconds // 86400} 天"
+    final = ""
+    while seconds != 0:
+        if seconds < 60:
+            final += f" {seconds} 秒"
+            seconds = 0
+        elif seconds < 3600:
+            final += f" {seconds // 60} 分鐘"
+            seconds = seconds % 60
+        elif seconds < 86400:
+            final += f" {seconds // 3600} 小時"
+            seconds = seconds % 3600
+        else:
+            final += f" {seconds // 86400} 天"
+            seconds = seconds % 86400
+    return final.strip()
 
 
 def get_uptime_seconds() -> int:
