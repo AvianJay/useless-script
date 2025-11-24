@@ -347,5 +347,18 @@ async def httpcat(ctx: commands.Context, status_code: int):
     await ctx.send(embed=embed)
 
 
+@bot.tree.command(name=app_commands.locale_str("changelogs"), description="顯示機器人更新日誌")
+@app_commands.allowed_installs(guilds=True, users=True)
+@app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
+async def changelogs_command(interaction: discord.Interaction):
+    # get 10 commit logs
+    try:
+        commit_logs = os.popen("git log -n 10 \"--pretty=format:'%h - %s (%ci)'\"").read().strip().split("\n")
+    except Exception as e:
+        commit_logs = ["無法取得更新日誌。"]
+    embed = discord.Embed(title="機器人更新日誌", description="\n".join(commit_logs), color=0x00ff00)
+    await interaction.response.send_message(embed=embed)
+
+
 if __name__ == "__main__":
     start_bot()
