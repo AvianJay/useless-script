@@ -157,6 +157,7 @@ translations = {
     "dsize-battle": "dsize-對決",
     "dsize-settings": "dsize-設定",
     "dsize-feedgrass": "dsize-草飼",
+    "dsize-history": "dsize-歷史紀錄",
     "item": "物品",
     "list": "列出",
     "use": "使用",
@@ -279,6 +280,8 @@ translations = {
     "follow": "追蹤",
     "reverse": "反轉",
     "spoilers": "暴雷",
+    "changelogs": "更新日誌",
+    "global_history": "全域歷史紀錄",
 }
 class CommandNameTranslator(app_commands.Translator):
     async def translate(
