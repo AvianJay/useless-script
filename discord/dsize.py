@@ -129,7 +129,6 @@ async def handle_checkin_rewards(interaction: discord.Interaction, user_id: int,
         statistics["total_checkins"] = statistics.get("total_checkins", 0) + 1
         statistics["checkin_streak"] = checkin_streak
         set_user_data(0, user_id, "dsize_statistics", statistics)
-        set_user_data(0, user_id, "last_checkin", now)
         level_1_reward = get_user_data(0, user_id, "level_1_reward")
         level_2_reward = get_user_data(0, user_id, "level_2_reward")
         level_3_reward = get_user_data(0, user_id, "level_3_reward")
