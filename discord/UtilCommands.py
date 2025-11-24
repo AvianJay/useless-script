@@ -9,7 +9,7 @@ from datetime import datetime, timezone
 import psutil
 
 startup_time = datetime.now(timezone.utc)
-version = "0.11.4"
+version = "0.11.5"
 try:
     git_commit_hash = os.popen("git rev-parse --short HEAD").read().strip()
 except Exception as e:
@@ -353,7 +353,7 @@ async def httpcat(ctx: commands.Context, status_code: int):
 async def changelogs_command(interaction: discord.Interaction):
     # get 10 commit logs
     try:
-        commit_logs = os.popen("git log -n 10 \"--pretty=format:'%h - %s (%ci)'\"").read().strip().split("\n")
+        commit_logs = os.popen("git log -n 10 \"--pretty=format:%h - %s (%ci)\"").read().strip().split("\n")
     except Exception as e:
         commit_logs = ["無法取得更新日誌。"]
     embed = discord.Embed(title="機器人更新日誌", description="\n".join(commit_logs), color=0x00ff00)
