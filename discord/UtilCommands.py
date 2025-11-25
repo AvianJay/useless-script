@@ -9,7 +9,7 @@ from datetime import datetime, timezone
 import psutil
 
 startup_time = datetime.now(timezone.utc)
-version = "0.11.5"
+version = "0.11.6"
 try:
     git_commit_hash = os.popen("git rev-parse --short HEAD").read().strip()
 except Exception as e:

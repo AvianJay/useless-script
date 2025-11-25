@@ -160,15 +160,12 @@ async def screenshot(message: discord.Message):
         # `chat_exporter` usually expects messages in chronological order.
         # The context menu code: `messages.append(msg)` inside `history(oldest_first=False)` means `messages` is [target, target-1, target-2].
         # Then it passes this list to chat_exporter.
-        
-        if not message.reference and not message.interaction:
-            async for msg in message.channel.history(limit=10, before=message.created_at, oldest_first=False):
-                if msg.author.id == message.author.id:
-                    messages.append(msg)
-                    if msg.reference or msg.interaction:
-                        break
-                else:
-                    break
+
+        async for msg in message.channel.history(limit=10, before=message.created_at, oldest_first=False):
+            if msg.author.id == message.author.id:
+                messages.append(msg)
+            else:
+                break
     except Exception:
         traceback.print_exc()
     
@@ -193,9 +190,9 @@ async def screenshot(message: discord.Message):
         page = await browser.new_page()
         await page.set_content(html_content, wait_until="networkidle")
         # Force width to fit content so the screenshot isn't full width
-        await page.add_style_tag(content=".chatlog__message-group { width: fit-content; }")
+        await page.add_style_tag(content=".chatlog__message-group { width: fit-content; } .chatlog { padding: 0px 1rem 0px 0px !important; border-top: unset !important; width: fit-content; }")
         # Locate the message group container
-        image_bytes = await page.locator('.chatlog__message-group').screenshot(type="png")
+        image_bytes = await page.locator('.chatlog').screenshot(type="png")
         await page.close()
     except Exception as e:
         log(f"截圖失敗: {e}", module_name="MessageImage", level=logging.ERROR)
