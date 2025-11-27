@@ -48,17 +48,26 @@ async def process_checkin(user_id: int) -> tuple[bool, int]:
     if last_checkin == now:
         # Already checked in today
         statistics = get_user_data(0, user_id, "dsize_statistics", {})
-        return False, statistics.get("checkin_streak", 0)
-    
+        return False, statistics.get("checkin_streak", 0), False, None
+
+    # reset claim reward unsuccessful flag
+    set_user_data(0, user_id, "claim_reward_unsuccessful", False)
+
     # Calculate streak
     statistics = get_user_data(0, user_id, "dsize_statistics", {})
     checkin_streak = statistics.get("checkin_streak", 0)
+    broke_streak = False
+    broke_streak_on = None
     
     # Check if streak continues (last checkin was yesterday)
     if last_checkin and last_checkin == now - timedelta(days=1):
         checkin_streak += 1
     else:
-        checkin_streak = 1  # Reset streak
+        # Reset streak
+        if last_checkin and last_checkin < now - timedelta(days=1):
+            broke_streak = True
+            broke_streak_on = checkin_streak
+        checkin_streak = 1  # start new streak
     
     # Update statistics
     statistics["total_checkins"] = statistics.get("total_checkins", 0) + 1
@@ -66,7 +75,7 @@ async def process_checkin(user_id: int) -> tuple[bool, int]:
     set_user_data(0, user_id, "dsize_statistics", statistics)
     set_user_data(0, user_id, "last_checkin", now)
     
-    return True, checkin_streak
+    return True, checkin_streak, broke_streak, broke_streak_on
 
 
 async def handle_checkin_rewards(interaction: discord.Interaction, user_id: int, checkin_streak: int, guild_key: int = None):
@@ -91,8 +100,10 @@ async def handle_checkin_rewards(interaction: discord.Interaction, user_id: int,
     
     # check not global
     if guild_key is None:
-        await interaction.response.send_message(f"你獲得了簽到獎勵！\n請在伺服器中使用 {get_command_mention('dsize')} 以領取獎勵。", ephemeral=True)
+        set_user_data(0, user_id, "claim_reward_unsuccessful", True)
+        await interaction.followup.send(f"{interaction.user.mention}\n你獲得了簽到獎勵！\n請在有此機器人的伺服器中使用 {get_command_mention('dsize')} 以領取獎勵。")
         return
+    set_user_data(0, user_id, "claim_reward_unsuccessful", False)
     
     # Give random reward
     if "ItemSystem" in modules:
@@ -129,9 +140,9 @@ async def handle_checkin_rewards(interaction: discord.Interaction, user_id: int,
         statistics["total_checkins"] = statistics.get("total_checkins", 0) + 1
         statistics["checkin_streak"] = checkin_streak
         set_user_data(0, user_id, "dsize_statistics", statistics)
-        level_1_reward = get_user_data(0, user_id, "level_1_reward")
-        level_2_reward = get_user_data(0, user_id, "level_2_reward")
-        level_3_reward = get_user_data(0, user_id, "level_3_reward")
+        level_1_reward = random.choice(level_1_rewards)
+        level_2_reward = random.choice(level_2_rewards)
+        level_3_reward = random.choice(level_3_rewards)
         
         # Create goal selection view
         class GoalSelectionView(discord.ui.View):
@@ -252,7 +263,7 @@ async def dsize(interaction: discord.Interaction, global_dsize: int = 0):
     set_user_data(0, user_id, "dsize_statistics", statistics)
     
     # Process daily check-in (always global)
-    is_new_checkin, checkin_streak = await process_checkin(user_id)
+    is_new_checkin, checkin_streak, broke_streak, broke_streak_on = await process_checkin(user_id)
 
     # 隨機產生長度
     size = random.randint(1, max_size)
@@ -275,7 +286,10 @@ async def dsize(interaction: discord.Interaction, global_dsize: int = 0):
     
     # Set footer with check-in info
     if is_new_checkin:
-        footer_text = f"簽到第 {checkin_streak} 天！"
+        if broke_streak:
+            footer_text = f"你在第 {broke_streak_on} 天打破了簽到紀錄，重新開始簽到！ | 簽到第 {checkin_streak} 天！"
+        else:
+            footer_text = f"簽到第 {checkin_streak} 天！"
         if not guild_key:
             footer_text += " | 此次量測為全域紀錄。"
     else:
@@ -323,6 +337,12 @@ async def dsize(interaction: discord.Interaction, global_dsize: int = 0):
     if is_new_checkin:
         await handle_checkin_rewards(interaction, user_id, checkin_streak, guild_key)
         log(f"簽到成功，連續 {checkin_streak} 天", module_name="dsize", user=interaction.user, guild=interaction.guild)
+    
+    claimed_unsuccessful = get_user_data(0, user_id, "claim_reward_unsuccessful", False)
+    if claimed_unsuccessful:
+        await handle_checkin_rewards(interaction, user_id, checkin_streak, guild_key)
+        set_user_data(0, user_id, "claim_reward_unsuccessful", False)
+        log(f"簽到成功，連續 {checkin_streak} 天 (補發獎勵)", module_name="dsize", user=interaction.user, guild=interaction.guild)
 
     surgery_percent = get_server_config(guild_key, "dsize_surgery_percent", 10)
     drop_item_chance = get_server_config(guild_key, "dsize_drop_item_chance", 5)
@@ -734,15 +754,21 @@ async def dsize_battle(interaction: discord.Interaction, opponent: discord.User)
             embed.timestamp = t
             
             # Process daily check-in for both users (always global)
-            user_is_new_checkin, user_checkin_streak = await process_checkin(user_id)
-            opponent_is_new_checkin, opponent_checkin_streak = await process_checkin(opponent_id)
+            user_is_new_checkin, user_checkin_streak, user_broke_streak, user_broke_streak_on = await process_checkin(user_id)
+            opponent_is_new_checkin, opponent_checkin_streak, opponent_broke_streak, opponent_broke_streak_on = await process_checkin(opponent_id)
             
             # Set footer with check-in info
             footer_parts = []
             if user_is_new_checkin:
-                footer_parts.append(f"{original_user.display_name} 簽到第 {user_checkin_streak} 天！")
+                if user_broke_streak:
+                    footer_parts.append(f"{original_user.display_name} 在第 {user_broke_streak_on} 天打破了簽到紀錄，重新開始！")
+                else:
+                    footer_parts.append(f"{original_user.display_name} 簽到第 {user_checkin_streak} 天！")
             if opponent_is_new_checkin:
-                footer_parts.append(f"{opponent.display_name} 簽到第 {opponent_checkin_streak} 天！")
+                if opponent_broke_streak:
+                    footer_parts.append(f"{opponent.display_name} 在第 {opponent_broke_streak_on} 天打破了簽到紀錄，重新開始！")
+                else:
+                    footer_parts.append(f"{opponent.display_name} 簽到第 {opponent_checkin_streak} 天！")
             
             if not guild_key:
                 footer_parts.append("此次對決將記錄到全域排行榜。")
