@@ -1357,7 +1357,7 @@ async def use_cloud_ruler(interaction: discord.Interaction):
                 await interaction.response.send_message("你沒有雲端尺，無法幫他量長度。", ephemeral=True)
                 return
             # check if user is online
-            target = await interaction.guild.fetch_member(target_id)
+            target = interaction.guild.get_member(target_id)
             if target.status == discord.Status.offline:
                 await interaction.response.send_message(f"{target_user.display_name} 不在線上，無法幫他量長度。", ephemeral=True)
                 return
