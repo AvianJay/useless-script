@@ -197,7 +197,7 @@ async def screenshot(message: discord.Message):
 
     try:
         page = await browser.new_page()
-        await page.set_content(html_content, wait_until="networkidle")
+        await page.set_content(html_content, wait_until="domcontentloaded")
         # Force width to fit content so the screenshot isn't full width
         await page.add_style_tag(content=".chatlog__message-group { width: fit-content; } .chatlog { padding: 0px 1rem 0px 0px !important; border-top: unset !important; width: fit-content; }")
         # Locate the message group container
