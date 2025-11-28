@@ -14,6 +14,7 @@ from logger import log
 import logging
 import traceback
 import random
+import time
 if "OwnerTools" in modules:
     import OwnerTools
 
@@ -147,6 +148,10 @@ async def screenshot(message: discord.Message):
         raise Exception("瀏覽器尚未啟動，請稍後再試。")
     if not browser.is_connected():
         raise Exception("瀏覽器已關閉，請稍後再試。")
+    
+    # make a stopwatch for debugging
+    times = {"getting_messages": 0, "generating_html": 0, "taking_screenshot": 0}
+    start_time = time.perf_counter()
 
     # try to get previous message (group consecutive messages from same author)
     messages = [message]
@@ -168,6 +173,8 @@ async def screenshot(message: discord.Message):
                 break
     except Exception:
         traceback.print_exc()
+    times["getting_messages"] = time.perf_counter() - start_time
+    start_time = time.perf_counter()
     
     # chat_exporter expects chronological order usually, so reverse to [target-2, target-1, target]
     # messages.reverse()
@@ -185,6 +192,8 @@ async def screenshot(message: discord.Message):
         log(f"生成 HTML 失敗: {e}", module_name="MessageImage", level=logging.ERROR)
         traceback.print_exc()
         raise Exception(f"生成 HTML 失敗: {e}")
+    times["generating_html"] = time.perf_counter() - start_time
+    start_time = time.perf_counter()
 
     try:
         page = await browser.new_page()
@@ -200,6 +209,9 @@ async def screenshot(message: discord.Message):
         # If screenshot fails, maybe we want to return the HTML for debugging? 
         # The original code did this in one place. For simplicity in a shared function, let's just raise.
         raise Exception(f"截圖失敗: {e}")
+    times["taking_screenshot"] = time.perf_counter() - start_time
+    # log the times for debugging
+    log(f"截圖生成成功: 取得訊息時間={times['getting_messages']*1000:.2f}ms, 生成HTML時間={times['generating_html']*1000:.2f}ms, 截圖時間={times['taking_screenshot']*1000:.2f}ms", module_name="MessageImage")
 
     return io.BytesIO(image_bytes)
 
