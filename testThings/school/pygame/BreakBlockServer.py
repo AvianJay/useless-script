@@ -68,6 +68,10 @@ def create_user(name):
     conn = ensure_conn()
     c = conn.cursor()
     token = ''.join(random.choices(string.ascii_letters + string.digits, k=16))
+    # check if name already exists
+    c.execute("SELECT id FROM users WHERE name = ?", (name,))
+    if c.fetchone():
+        name += '_' + ''.join(random.choices(string.digits, k=4))
     c.execute("INSERT INTO users (name, token) VALUES (?, ?)", (name, token))
     conn.commit()
     return token
