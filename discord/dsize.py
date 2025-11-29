@@ -116,17 +116,19 @@ async def handle_checkin_rewards(interaction: discord.Interaction, user_id: int,
         ]
 
         level_2_rewards = [
-            ["grass", 15, "草 x15"],
-            ["fake_ruler", 2, "自欺欺人尺 x2"],
-            ["anti_surgery", 2, "抗手術藥物 x2"],
+            ["grass", 20, "草 x20"],
+            ["fake_ruler", 5, "自欺欺人尺 x5"],
+            ["anti_surgery", 5, "抗手術藥物 x5"],
+            ["surgery", 1, "手術刀 x1"],
+            ["rusty_surgery", 1, "生鏽的手術刀 x1"],
         ]
 
         level_3_rewards = [
-            ["grass", 25, "草 x25"],
-            ["fake_ruler", 3, "自欺欺人尺 x3"],
-            ["anti_surgery", 3, "抗手術藥物 x3"],
-            ["surgery", 1, "手術刀 x1"],
-            ["rusty_surgery", 1, "生鏽的手術刀 x1"],
+            ["grass", 100, "草 x100"],
+            ["fake_ruler", 20, "自欺欺人尺 x20"],
+            ["anti_surgery", 20, "抗手術藥物 x20"],
+            ["surgery", 3, "手術刀 x3"],
+            ["rusty_surgery", 3, "生鏽的手術刀 x3"],
         ]
         
         if checkin_streak == 7:
