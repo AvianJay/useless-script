@@ -101,7 +101,7 @@ async def handle_checkin_rewards(interaction: discord.Interaction, user_id: int,
     # check not global
     if guild_key is None:
         set_user_data(0, user_id, "claim_reward_unsuccessful", True)
-        await interaction.followup.send(f"{interaction.user.mention}\n你獲得了簽到獎勵！\n請在有此機器人的伺服器中使用 {get_command_mention('dsize')} 以領取獎勵。")
+        await interaction.followup.send(f"{interaction.user.mention}\n你獲得了簽到獎勵！\n請在有此機器人的伺服器中使用 {await get_command_mention('dsize')} 以領取獎勵。")
         return
     set_user_data(0, user_id, "claim_reward_unsuccessful", False)
     
@@ -203,7 +203,7 @@ async def handle_checkin_rewards(interaction: discord.Interaction, user_id: int,
             value="請選擇你的下一個簽到目標天數：",
             inline=False
         )
-        await interaction.followup.send(embed=embed, view=GoalSelectionView(), ephemeral=True)
+        await interaction.followup.send(embed=embed, view=GoalSelectionView())
 
 
 @bot.tree.command(name="dsize", description="量屌長")
@@ -334,12 +334,11 @@ async def dsize(interaction: discord.Interaction, global_dsize: int = 0):
     log(f"量了 {size} cm, 伺服器: {guild_key if guild_key else '全域'}", module_name="dsize", user=interaction.user, guild=interaction.guild)
     
     # Handle check-in rewards if applicable (milestone days only)
+    claimed_unsuccessful = get_user_data(0, user_id, "claim_reward_unsuccessful", False)
     if is_new_checkin:
         await handle_checkin_rewards(interaction, user_id, checkin_streak, guild_key)
         log(f"簽到成功，連續 {checkin_streak} 天", module_name="dsize", user=interaction.user, guild=interaction.guild)
-    
-    claimed_unsuccessful = get_user_data(0, user_id, "claim_reward_unsuccessful", False)
-    if claimed_unsuccessful:
+    elif claimed_unsuccessful:
         await handle_checkin_rewards(interaction, user_id, checkin_streak, guild_key)
         set_user_data(0, user_id, "claim_reward_unsuccessful", False)
         log(f"簽到成功，連續 {checkin_streak} 天 (補發獎勵)", module_name="dsize", user=interaction.user, guild=interaction.guild)
