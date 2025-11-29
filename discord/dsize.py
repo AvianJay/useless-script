@@ -198,14 +198,14 @@ async def handle_checkin_rewards(interaction: discord.Interaction, user_id: int,
         embed = discord.Embed(
             title="🎉 簽到獎勵！",
             description=f"恭喜達成 {checkin_streak} 天連續簽到！\n獲得：{reward[2]} x {reward[1]}！",
-            color=0xffd700
+            color=0x00ff00
         )
-        embed.add_field(
-            name="選擇下一個目標",
-            value="請選擇你的下一個簽到目標天數：",
-            inline=False
+        noteEmbed = discord.Embed(
+            title="選擇下一個目標",
+            description="請選擇你的下一個簽到目標天數：",
+            color=0xffa500
         )
-        await interaction.followup.send(embed=embed, view=GoalSelectionView())
+        await interaction.followup.send(embeds=[embed, noteEmbed], view=GoalSelectionView())
 
 
 @bot.tree.command(name="dsize", description="量屌長")
