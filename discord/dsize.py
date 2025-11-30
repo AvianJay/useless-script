@@ -96,6 +96,14 @@ async def handle_checkin_rewards(interaction: discord.Interaction, user: Union[d
     if checkin_streak == 7 or (current_goal and checkin_streak >= current_goal):
         is_milestone = True
     
+    if not current_goal and checkin_streak > 7:
+        # User has no goal set but exceeded day 7, set default goal to 14
+        current_goal = checkin_streak + 7
+        set_user_data(0, user.id, "checkin_goal", current_goal)
+        set_user_data(0, user.id, "checkin_reward", ["grass", 5, "草"])
+        await interaction.followup.send(f"{user.mention}\n由於您上次未選擇目標，系統已自動為您設定目標為 草 x 5。")
+        
+    
     if not is_milestone:
         return
     
@@ -152,6 +160,20 @@ async def handle_checkin_rewards(interaction: discord.Interaction, user: Union[d
             def __init__(self):
                 super().__init__(timeout=300)  # 5 minutes
                 self.selected_goal = None
+            
+            async def on_timeout(self):
+                for child in self.children:
+                    child.disabled = True
+                self.selected_goal = checkin_streak + 7
+                set_user_data(0, user.id, "checkin_goal", self.selected_goal)
+                set_user_data(0, user.id, "checkin_reward", level_1_reward)
+                noteEmbed = discord.Embed(
+                    title="目標設定",
+                    description=f"超過時間未選擇目標，系統已自動為你設定下一個目標：{self.selected_goal} 天！繼續加油！",
+                    color=0x00ff00
+                )
+                await interaction.response.edit_message(embeds=[embed, noteEmbed], view=None)
+                self.stop()
             
             @discord.ui.button(label=f"+7 天 ({level_1_reward[2]} x {level_1_reward[1]})", style=discord.ButtonStyle.primary)
             async def goal_7(self, interaction: discord.Interaction, button: discord.ui.Button):
