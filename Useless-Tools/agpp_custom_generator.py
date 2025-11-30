@@ -13,7 +13,17 @@ if len(sys.argv)>1:
     exp["source"] = sys.argv[1]
 else:
     exp["source"] = input("Source?: ")
-exp["unique_sn"] = str(random.randint(0, 999999)).zfill(6)
+
+# try to get unique sn from existing .aniGamerPlus.json
+if os.path.exists(".aniGamerPlus.json"):
+    try:
+        existing_exp = json.load(open(".aniGamerPlus.json", "r"))
+        exp["unique_sn"] = existing_exp.get("unique_sn", str(random.randint(0, 999999)).zfill(6))
+        print("Found existing unique sn:", exp["unique_sn"])
+    except:
+        pass
+else:
+    exp["unique_sn"] = str(random.randint(0, 999999)).zfill(6)
 print("unique sn:", exp["unique_sn"])
 
 for _, __, files in os.walk("."):
