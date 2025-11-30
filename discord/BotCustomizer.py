@@ -90,8 +90,12 @@ class HumanReviewView(discord.ui.View):
                 submitter = await bot.fetch_user(self.user_id)
                 type_name = {"avatar": "頭像", "banner": "橫幅", "bio": "關於我"}.get(self.review_type, "內容")
                 await submitter.send(f"✅ 你提交的{type_name}已通過人工審核並已更新！")
-            except Exception:
-                pass
+            except discord.Forbidden:
+                log(f"無法發送 DM 通知給用戶 {self.user_id}：用戶已關閉私訊", module_name="BotCustomizer")
+            except discord.NotFound:
+                log(f"無法發送 DM 通知給用戶 {self.user_id}：找不到該用戶", module_name="BotCustomizer")
+            except Exception as e:
+                log(f"發送 DM 通知給用戶 {self.user_id} 時發生錯誤: {e}", module_name="BotCustomizer")
             
             await interaction.followup.send("審核通過，已更新。", ephemeral=True)
         except Exception as e:
@@ -124,8 +128,12 @@ class HumanReviewView(discord.ui.View):
             submitter = await bot.fetch_user(self.user_id)
             type_name = {"avatar": "頭像", "banner": "橫幅", "bio": "關於我"}.get(self.review_type, "內容")
             await submitter.send(f"❌ 你提交的{type_name}未通過人工審核。\n原因：{self.reason}")
-        except Exception:
-            pass
+        except discord.Forbidden:
+            log(f"無法發送 DM 通知給用戶 {self.user_id}：用戶已關閉私訊", module_name="BotCustomizer")
+        except discord.NotFound:
+            log(f"無法發送 DM 通知給用戶 {self.user_id}：找不到該用戶", module_name="BotCustomizer")
+        except Exception as e:
+            log(f"發送 DM 通知給用戶 {self.user_id} 時發生錯誤: {e}", module_name="BotCustomizer")
         
         await interaction.response.send_message("已拒絕此審核請求。", ephemeral=True)
 
