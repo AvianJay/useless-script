@@ -54,9 +54,10 @@ def get_info(url, session):
     title = playlist_div.find('h4').text.strip()
     episode_urls = []
     scroll_div = playlist_div.find('div', id='playlist-scroll')
-    for div in scroll_div.find_all('div', class_='related-watch-wrap multiple-link-wrapper'):
+    for div in scroll_div.find_all('div', recursive=False):
         a_tag = div.find('a')
-        episode_urls.append(a_tag['href'])
+        if a_tag:
+            episode_urls.append(a_tag['href'])
     episode_urls.reverse()  # 反轉順序，從第一集開始下載
     episodes = [{"episode": idx + 1, "url": ep_url} for idx, ep_url in enumerate(episode_urls)]
     return {
