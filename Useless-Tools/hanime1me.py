@@ -1,3 +1,6 @@
+# hanime1.me downloader
+# Author: AvianJay
+
 import os
 import re
 import sys
