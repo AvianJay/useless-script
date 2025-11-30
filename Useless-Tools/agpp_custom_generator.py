@@ -18,6 +18,8 @@ print("unique sn:", exp["unique_sn"])
 
 for _, __, files in os.walk("."):
     for file in files:
+        if not file.lower().endswith(('.mp4', '.mkv', '.avi', '.mov', '.wmv')):
+            continue
         vid = cv2.VideoCapture(file)
         resolution = int(vid.get(cv2.CAP_PROP_FRAME_HEIGHT))
         episode_stage1 = file.split("[")[1].split("]")[0]
