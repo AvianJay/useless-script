@@ -11,6 +11,7 @@ from io import BytesIO
 from logger import log
 import os
 import json
+from typing import Union
 if "OwnerTools" in modules:
     import OwnerTools
 else:
@@ -78,7 +79,7 @@ async def process_checkin(user_id: int) -> tuple[bool, int]:
     return True, checkin_streak, broke_streak, broke_streak_on
 
 
-async def handle_checkin_rewards(interaction: discord.Interaction, user_id: int, checkin_streak: int, guild_key: int = None):
+async def handle_checkin_rewards(interaction: discord.Interaction, user: Union[discord.User, discord.Member], checkin_streak: int, guild_key: int = None):
     """
     Handle check-in rewards and goal selection.
     Shows rewards only on milestone days (7, and user-selected goals).
@@ -88,7 +89,7 @@ async def handle_checkin_rewards(interaction: discord.Interaction, user_id: int,
         return
     
     # Get user's current goal
-    current_goal = get_user_data(0, user_id, "checkin_goal")
+    current_goal = get_user_data(0, user.id, "checkin_goal")
     
     # Check if this is a milestone day
     is_milestone = False
@@ -100,48 +101,48 @@ async def handle_checkin_rewards(interaction: discord.Interaction, user_id: int,
     
     # check not global
     if guild_key is None:
-        set_user_data(0, user_id, "claim_reward_unsuccessful", True)
-        await interaction.followup.send(f"{interaction.user.mention}\n你獲得了簽到獎勵！\n請在有此機器人的伺服器中使用 {await get_command_mention('dsize')} 以領取獎勵。")
+        set_user_data(0, user.id, "claim_reward_unsuccessful", True)
+        await interaction.followup.send(f"{user.mention}\n你獲得了簽到獎勵！\n請在有此機器人的伺服器中使用 {await get_command_mention('dsize')} 以領取獎勵。")
         return
-    set_user_data(0, user_id, "claim_reward_unsuccessful", False)
+    set_user_data(0, user.id, "claim_reward_unsuccessful", False)
     
     # Give random reward
     if "ItemSystem" in modules:
         # Random reward pool
         # use list instead of tuple to make it mutable
         level_1_rewards = [
-            ["grass", 5, "草 x5"],
-            ["fake_ruler", 1, "自欺欺人尺 x1"],
-            ["anti_surgery", 1, "抗手術藥物 x1"],
+            ["grass", 5, "草"],
+            ["fake_ruler", 1, "自欺欺人尺"],
+            ["anti_surgery", 1, "抗手術藥物"],
         ]
 
         level_2_rewards = [
-            ["grass", 20, "草 x20"],
-            ["fake_ruler", 5, "自欺欺人尺 x5"],
-            ["anti_surgery", 5, "抗手術藥物 x5"],
-            ["surgery", 1, "手術刀 x1"],
-            ["rusty_surgery", 1, "生鏽的手術刀 x1"],
+            ["grass", 20, "草"],
+            ["fake_ruler", 5, "自欺欺人尺"],
+            ["anti_surgery", 5, "抗手術藥物"],
+            ["surgery", 1, "手術刀"],
+            ["rusty_surgery", 1, "生鏽的手術刀"],
         ]
 
         level_3_rewards = [
-            ["grass", 100, "草 x100"],
-            ["fake_ruler", 20, "自欺欺人尺 x20"],
-            ["anti_surgery", 20, "抗手術藥物 x20"],
-            ["surgery", 3, "手術刀 x3"],
-            ["rusty_surgery", 3, "生鏽的手術刀 x3"],
+            ["grass", 100, "草"],
+            ["fake_ruler", 20, "自欺欺人尺"],
+            ["anti_surgery", 20, "抗手術藥物"],
+            ["surgery", 3, "手術刀"],
+            ["rusty_surgery", 3, "生鏽的手術刀"],
         ]
         
         if checkin_streak == 7:
             reward = random.choice(level_1_rewards)
         else:
-            reward = get_user_data(0, user_id, "checkin_reward")
-        await ItemSystem.give_item_to_user(guild_key, user_id, reward[0], reward[1])
+            reward = get_user_data(0, user.id, "checkin_reward")
+        await ItemSystem.give_item_to_user(guild_key, user.id, reward[0], reward[1])
 
         # Update statistics
-        statistics = get_user_data(0, user_id, "dsize_statistics", {})
+        statistics = get_user_data(0, user.id, "dsize_statistics", {})
         statistics["total_checkins"] = statistics.get("total_checkins", 0) + 1
         statistics["checkin_streak"] = checkin_streak
-        set_user_data(0, user_id, "dsize_statistics", statistics)
+        set_user_data(0, user.id, "dsize_statistics", statistics)
         level_1_reward = random.choice(level_1_rewards)
         level_2_reward = random.choice(level_2_rewards)
         level_3_reward = random.choice(level_3_rewards)
@@ -154,44 +155,50 @@ async def handle_checkin_rewards(interaction: discord.Interaction, user_id: int,
             
             @discord.ui.button(label=f"+7 天 ({level_1_reward[2]} x {level_1_reward[1]})", style=discord.ButtonStyle.primary)
             async def goal_7(self, interaction: discord.Interaction, button: discord.ui.Button):
-                if interaction.user.id != user_id:
+                if interaction.user.id != user.id:
                     await interaction.response.send_message("這不是你的目標選擇。", ephemeral=True)
                     return
                 self.selected_goal = checkin_streak + 7
-                set_user_data(0, user_id, "checkin_goal", self.selected_goal)
-                set_user_data(0, user_id, "checkin_reward", level_1_reward)
-                await interaction.response.edit_message(
-                    content=f"✅ 已選擇目標：{self.selected_goal} 天！繼續加油！",
-                    view=None
+                set_user_data(0, user.id, "checkin_goal", self.selected_goal)
+                set_user_data(0, user.id, "checkin_reward", level_1_reward)
+                noteEmbed = discord.Embed(
+                    title="目標設定",
+                    description=f"你已選擇下一個目標：{self.selected_goal} 天！繼續加油！",
+                    color=0x00ff00
                 )
+                await interaction.response.edit_message(embeds=[embed, noteEmbed], view=None)
                 self.stop()
             
             @discord.ui.button(label=f"+14 天 ({level_2_reward[2]} x {level_2_reward[1]})", style=discord.ButtonStyle.success)
             async def goal_14(self, interaction: discord.Interaction, button: discord.ui.Button):
-                if interaction.user.id != user_id:
+                if interaction.user.id != user.id:
                     await interaction.response.send_message("這不是你的目標選擇。", ephemeral=True)
                     return
                 self.selected_goal = checkin_streak + 14
-                set_user_data(0, user_id, "checkin_goal", self.selected_goal)
-                set_user_data(0, user_id, "checkin_reward", level_2_reward)
-                await interaction.response.edit_message(
-                    content=f"✅ 已選擇目標：{self.selected_goal} 天！繼續加油！",
-                    view=None
+                set_user_data(0, user.id, "checkin_goal", self.selected_goal)
+                set_user_data(0, user.id, "checkin_reward", level_2_reward)
+                noteEmbed = discord.Embed(
+                    title="目標設定",
+                    description=f"你已選擇下一個目標：{self.selected_goal} 天！繼續加油！",
+                    color=0x00ff00
                 )
+                await interaction.response.edit_message(embeds=[embed, noteEmbed], view=None)
                 self.stop()
             
             @discord.ui.button(label=f"+30 天 ({level_3_reward[2]} x {level_3_reward[1]})", style=discord.ButtonStyle.danger)
             async def goal_30(self, interaction: discord.Interaction, button: discord.ui.Button):
-                if interaction.user.id != user_id:
+                if interaction.user.id != user.id:
                     await interaction.response.send_message("這不是你的目標選擇。", ephemeral=True)
                     return
                 self.selected_goal = checkin_streak + 30
-                set_user_data(0, user_id, "checkin_goal", self.selected_goal)
-                set_user_data(0, user_id, "checkin_reward", level_3_reward)
-                await interaction.response.edit_message(
-                    content=f"✅ 已選擇目標：{self.selected_goal} 天！繼續加油！",
-                    view=None
+                set_user_data(0, user.id, "checkin_goal", self.selected_goal)
+                set_user_data(0, user.id, "checkin_reward", level_3_reward)
+                noteEmbed = discord.Embed(
+                    title="目標設定",
+                    description=f"你已選擇下一個目標：{self.selected_goal} 天！繼續加油！",
+                    color=0x00ff00
                 )
+                await interaction.response.edit_message(embeds=[embed, noteEmbed], view=None)
                 self.stop()
         
         # Send reward notification with goal selection
@@ -205,7 +212,7 @@ async def handle_checkin_rewards(interaction: discord.Interaction, user_id: int,
             description="請選擇你的下一個簽到目標天數：",
             color=0xffa500
         )
-        await interaction.followup.send(embeds=[embed, noteEmbed], view=GoalSelectionView())
+        await interaction.followup.send(user.mention, embeds=[embed, noteEmbed], view=GoalSelectionView())
 
 
 @bot.tree.command(name="dsize", description="量屌長")
@@ -338,10 +345,10 @@ async def dsize(interaction: discord.Interaction, global_dsize: int = 0):
     # Handle check-in rewards if applicable (milestone days only)
     claimed_unsuccessful = get_user_data(0, user_id, "claim_reward_unsuccessful", False)
     if is_new_checkin:
-        await handle_checkin_rewards(interaction, user_id, checkin_streak, guild_key)
+        await handle_checkin_rewards(interaction, interaction.user, checkin_streak, guild_key)
         log(f"簽到成功，連續 {checkin_streak} 天", module_name="dsize", user=interaction.user, guild=interaction.guild)
     elif claimed_unsuccessful:
-        await handle_checkin_rewards(interaction, user_id, checkin_streak, guild_key)
+        await handle_checkin_rewards(interaction, interaction.user, checkin_streak, guild_key)
         set_user_data(0, user_id, "claim_reward_unsuccessful", False)
         log(f"簽到成功，連續 {checkin_streak} 天 (補發獎勵)", module_name="dsize", user=interaction.user, guild=interaction.guild)
 
@@ -786,13 +793,13 @@ async def dsize_battle(interaction: discord.Interaction, opponent: discord.User)
             if user_is_new_checkin:
                 # Create a temporary interaction-like object for user rewards
                 # We'll send it as a followup message
-                await handle_checkin_rewards(interaction, user_id, user_checkin_streak, guild_key)
+                await handle_checkin_rewards(interaction, original_user, user_checkin_streak, guild_key)
                 log(f"{original_user.display_name} 簽到成功，連續 {user_checkin_streak} 天", module_name="dsize", user=original_user, guild=interaction.guild)
             
             if opponent_is_new_checkin:
                 # For opponent, we need to note this but can't show interactive buttons
                 # since they're not the one who triggered the interaction
-                await handle_checkin_rewards(interaction, opponent_id, opponent_checkin_streak, guild_key)
+                await handle_checkin_rewards(interaction, opponent, opponent_checkin_streak, guild_key)
                 log(f"{opponent.display_name} 簽到成功，連續 {opponent_checkin_streak} 天", module_name="dsize", user=opponent, guild=interaction.guild)
             
             # Save to history for both users
