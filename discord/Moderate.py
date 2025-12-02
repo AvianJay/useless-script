@@ -33,8 +33,8 @@ def timestr_to_seconds(timestr: str) -> int:
         elif char in units and num:
             total_seconds += int(num) * units[char]
             num = ''
-    if num:  # 如果字串以數字結尾，則忽略這些數字
-        pass
+    if num:  # 如果字串以數字結尾，則算為秒數
+        total_seconds += int(num)
     return total_seconds
 
 
