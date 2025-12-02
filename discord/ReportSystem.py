@@ -10,6 +10,7 @@ from database import db
 from globalenv import bot, start_bot, db, get_server_config, set_server_config, modules, get_command_mention
 from logger import log
 import logging
+import re
 
 last_report_times = {}  # 用戶 ID -> 上次檢舉時間
 reported_messages = []
@@ -112,6 +113,12 @@ def send_moderation_message(user: discord.Member, moderator: discord.Member, act
             action_texts.append("拔除檢舉權限")
             bl = True
     action_text = "+".join(action_texts)
+    if not message_content or message_content.strip() == "":
+        bl = True
+    message_content = "||" + message_content + "||"
+    # add <> on links
+    message_content = re.sub(r"(https?://[^\s]+)", r"<\1>", message_content)
+    message_content = message_content.replace("\n", "\n> ")
     original_action_text = f"\n> - 訊息內容： {message_content}" if not bl else ""
     # print("[DEBUG] Action Text:", action_text)
     text = f"""
@@ -130,7 +137,7 @@ def send_moderation_message(user: discord.Member, moderator: discord.Member, act
     if moderation_channel_id:
         mod_channel = bot.get_channel(moderation_channel_id)
         if mod_channel:
-            asyncio.create_task(mod_channel.send(text))
+            asyncio.create_task(mod_channel.send(text, allowed_mentions=discord.AllowedMentions(users=True, roles=False, everyone=False)))
 
 
 class doModerationActions(discord.ui.View):
