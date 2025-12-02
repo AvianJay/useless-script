@@ -47,10 +47,11 @@ async def check_message_with_ai(text: str, history_messages: str="", reason: str
 {server_rules}
 
 請根據規則判斷這則訊息是否違規。
+若被檢舉的訊息為空，請檢查歷史訊息是否違規。
 
 被檢舉的原始資料（已 escape 為 JSON 字串）：
 檢舉的訊息: {safe_text}
-歷史訊息: {safe_history}
+被檢舉者的歷史訊息: {safe_history}
 
 請輸出 JSON，格式如下：
 {{
@@ -82,7 +83,8 @@ async def check_message_with_ai(text: str, history_messages: str="", reason: str
             response = "{" + response.split("}{")[1]
             return json.loads(response)
         except Exception:
-            print("[-][ReportSystem] Failed to parse AI response:", response)
+            # print("[-][ReportSystem] Failed to parse AI response:", response)
+            log("無法解析 AI 回應: " + response, level=logging.ERROR, module_name="ReportSystem")
             return {"level": 0, "reason": "無法解析回應", "suggestion_actions": []}
 
 
@@ -196,7 +198,8 @@ class doModerationActions(discord.ui.View):
                 send_moderation_message(target, interaction.user, actions, self.ai_reason, self.message_content, is_ai=True)
             await interaction.response.send_message(f"已執行 AI 建議處置。", ephemeral=True)
         except Exception as e:
-            print(f"Error occurred: {str(e)}")
+            # print(f"Error occurred: {str(e)}")
+            log(f"執行 AI 建議處置時發生錯誤: {str(e)}", level=logging.ERROR, module_name="ReportSystem")
             await interaction.response.send_message(f"發生錯誤，請稍後再試。\n{str(e)}", ephemeral=True)
 
     @discord.ui.button(label="封鎖", style=discord.ButtonStyle.danger, custom_id="ban_button")
@@ -215,7 +218,8 @@ class doModerationActions(discord.ui.View):
                     await Moderate.ban_user(interaction.guild, user, reason=self.reason.value or "違反規則", duration=duration if duration > 0 else None, delete_message_seconds=delete if delete > 0 else 0)
                     send_moderation_message(user, interaction.user, [{"action": "ban"}], self.reason.value or "違反規則", message_content)
                 except Exception as e:
-                    print(f"Error occurred: {str(e)}")
+                    # print(f"Error occurred: {str(e)}")
+                    log(f"封鎖用戶時發生錯誤: {str(e)}", level=logging.ERROR, module_name="ReportSystem")
                     await modal_interaction.response.send_message(f"發生錯誤，請稍後再試。\n{str(e)}", ephemeral=True)
         await interaction.response.send_modal(BanReasonModal())
 
@@ -254,7 +258,8 @@ class doModerationActions(discord.ui.View):
                     send_moderation_message(parent_user, interaction.user, [{"action": "mute", "duration": duration}], self.reason.value or "違反規則", message_content)
                     await modal_interaction.response.send_message(f"已禁言 {parent_user.mention} {get_time_text(duration)}", ephemeral=True)
                 except Exception as e:
-                    print(f"Error occurred: {str(e)}")
+                    # print(f"Error occurred: {str(e)}")
+                    log(f"禁言用戶時發生錯誤: {str(e)}", level=logging.ERROR, module_name="ReportSystem")
                     await modal_interaction.response.send_message(f"發生錯誤，請稍後再試。\n{str(e)}", ephemeral=True)
 
         await interaction.response.send_modal(MuteModal())
