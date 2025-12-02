@@ -152,44 +152,59 @@ async def check_unban():
 on_ready_tasks.append(check_unban)
 
 
-async def do_action_str(action: str, guild: Optional[discord.Guild] = None, user: Optional[discord.Member] = None, message: Optional[discord.Message] = None):
+async def do_action_str(action: str, guild: Optional[discord.Guild] = None, user: Optional[discord.Member] = None, message: Optional[discord.Message] = None, moderator: Optional[discord.Member] = None):
     # if user is none just check if action is valid
     actions = action.split(",")
     actions = [a.strip() for a in actions]
     logs = []
+    last_reason = "管理執行"
+    actions = []
     for a in actions:
         cmd = a.split(" ")
         if cmd[0] == "ban":
             # ban <reason> <delete_messages> <duration>
             if len(cmd) == 1:
-                cmd.append("管理執行")
+                cmd.append("0s")
             if len(cmd) == 2:
                 cmd.append("0s")
             if len(cmd) == 3:
-                cmd.append("0s")
+                cmd.append(last_reason)
 
-            duration_seconds = timestr_to_seconds(cmd[2]) if cmd[2] != "0" else 0
-            delete_messages = timestr_to_seconds(cmd[3]) if cmd[3] != "0" else 0
-            logs.append(f"封禁用戶，原因: {cmd[1]}，持續秒數: {duration_seconds}秒，刪除訊息時間: {delete_messages}秒")
+            duration_seconds = timestr_to_seconds(cmd[1]) if cmd[1] != "0" else 0
+            delete_messages = timestr_to_seconds(cmd[2]) if cmd[2] != "0" else 0
+            cmd.pop(0)  # remove "ban"
+            cmd.pop(0)  # remove duration
+            cmd.pop(0)  # remove delete_messages
+            reason = " ".join(cmd)
+            last_reason = reason
+            logs.append(f"封禁用戶，原因: {reason}，持續秒數: {duration_seconds}秒，刪除訊息時間: {delete_messages}秒")
             if user:
-                await ban_user(guild, user, reason=cmd[1], duration=duration_seconds, delete_message_seconds=delete_messages)
+                await ban_user(guild, user, reason=reason, duration=duration_seconds, delete_message_seconds=delete_messages)
+            actions.append({"action": "ban", "duration": duration_seconds, "reason": reason})
         elif cmd[0] == "kick":
             # kick <reason>
             if len(cmd) == 1:
-                cmd.append("管理執行")
-            logs.append(f"踢出用戶，原因: {cmd[1]}")
+                cmd.append(last_reason)
+            cmd.pop(0)  # remove "kick"
+            reason = " ".join(cmd)
+            logs.append(f"踢出用戶，原因: {reason}")
             if user:
-                await user.kick(reason=cmd[1])
+                await user.kick(reason=reason)
+            actions.append({"action": "kick", "reason": reason})
         elif cmd[0] == "mute" or cmd[0] == "timeout":
             # mute <duration> <reason>
             if len(cmd) == 1:
                 cmd.append("10m")
             if len(cmd) == 2:
-                cmd.append("管理執行")
+                cmd.append(last_reason)
             duration_seconds = timestr_to_seconds(cmd[1]) if cmd[1] != "0" else 0
-            logs.append(f"禁言用戶，原因: {cmd[2]}，持續秒數: {duration_seconds}秒")
+            cmd.pop(0)  # remove "mute" or "timeout"
+            cmd.pop(0)  # remove duration
+            reason = " ".join(cmd) if cmd else last_reason
+            logs.append(f"禁言用戶，原因: {reason}，持續秒數: {duration_seconds}秒")
             if user:
-                await user.timeout(datetime.now(timezone.utc) + timedelta(seconds=duration_seconds), reason=cmd[2])
+                await user.timeout(datetime.now(timezone.utc) + timedelta(seconds=duration_seconds), reason=reason)
+            actions.append({"action": "mute", "duration": duration_seconds, "reason": reason})
         elif cmd[0] == "delete" or cmd[0] == "delete_dm":
             # delete <warn_message>
             logs.append("刪除訊息")
@@ -218,15 +233,26 @@ async def do_action_str(action: str, guild: Optional[discord.Guild] = None, user
                 await user.send(warn_message)
             elif message:
                 await message.reply(warn_message)
+        elif cmd[0] == "send_mod_message" or cmd[0] == "smm":
+            # send_mod_message
+            if len(cmd) == 1:
+                cmd.append("用戶被系統處置。")
+            logs.append("傳送管理訊息")
+            if guild and user and moderator:
+                await moderation_message_settings(None, user, moderator, actions, direct=True)
     return logs
 
 
-async def moderation_message_settings(interaction: discord.Interaction, user: discord.Member, moderator: discord.Member, actions: list):
+async def moderation_message_settings(interaction: Optional[discord.Interaction], user: discord.Member, moderator: discord.Member, actions: list, direct: bool = False):
     # generate message
     action_texts = []
     for action in actions:
         if action["action"] == "ban":
-            action_texts.append("驅逐出境至柬服KK副本||永久停權||")
+            duration_seconds = action.get("duration", 0)
+            if duration_seconds > 0:
+                action_texts.append(f"暫時驅逐出境至柬服KK副本||停權||{get_time_text(duration_seconds)}")
+            else:
+                action_texts.append("驅逐出境至柬服KK副本||永久停權||")
         elif action["action"] == "kick":
             action_texts.append("踢出")
         elif action["action"] == "mute":
@@ -253,6 +279,32 @@ async def moderation_message_settings(interaction: discord.Interaction, user: di
 > - 處分結果：{action_text}
 > - 處分執行： {moderator.mention}
 """
+
+    async def send_message():
+        channel_id = get_server_config(interaction.guild.id, "MODERATION_MESSAGE_CHANNEL_ID")
+        if channel_id is None:
+            if interaction:
+                await interaction.response.send_message("伺服器未設定公告頻道，請先設定後再嘗試。", ephemeral=True)
+            return
+        channel = interaction.guild.get_channel(channel_id)
+        if channel is None:
+            if interaction:
+                await interaction.response.send_message("找不到公告頻道，請確認頻道是否存在。", ephemeral=True)
+            return
+        try:
+            await channel.send(generate_message())
+            if interaction:
+                await interaction.followup.send("已發送公告到公告頻道。", ephemeral=True)
+            log(f"已發送公告到 {channel.name} 頻道。", module_name="Moderate", guild=interaction.guild)
+        except discord.Forbidden:
+            if interaction:
+                await interaction.response.send_message("無法在公告頻道發送訊息，機器人缺少權限。", ephemeral=True)
+            log(f"無法在公告頻道發送訊息，機器人缺少權限。", level=logging.ERROR, module_name="Moderate", guild=interaction.guild)
+        except Exception as e:
+            if interaction:
+                await interaction.response.send_message(f"發送公告時發生錯誤：{e}", ephemeral=True)
+            log(f"發送公告時發生錯誤：{e}", level=logging.ERROR, module_name="Moderate", guild=interaction.guild)
+
     embed = discord.Embed(title="公告設定", color=0xff0000)
     embed.add_field(name="公告內容", value="```\n" + generate_message() + "\n```", inline=False)
     class MessageButtons(discord.ui.View):
@@ -299,25 +351,13 @@ async def moderation_message_settings(interaction: discord.Interaction, user: di
                 return
             self.stop()
             # send message to channel
-            channel_id = get_server_config(interaction.guild.id, "MODERATION_MESSAGE_CHANNEL_ID")
-            if channel_id is None:
-                await interaction.response.send_message("伺服器未設定公告頻道，請先設定後再嘗試。", ephemeral=True)
-                return
-            channel = interaction.guild.get_channel(channel_id)
-            if channel is None:
-                await interaction.response.send_message("找不到公告頻道，請確認頻道是否存在。", ephemeral=True)
-                return
-            try:
-                await channel.send(generate_message())
-                await interaction.response.edit_message(content="公告已發送。", view=None)
-                log(f"已發送公告到 {channel.name} 頻道。", module_name="Moderate", guild=interaction.guild)
-            except discord.Forbidden:
-                await interaction.response.send_message("無法在公告頻道發送訊息，機器人缺少權限。", ephemeral=True)
-                log(f"無法在公告頻道發送訊息，機器人缺少權限。", level=logging.ERROR, module_name="Moderate", guild=interaction.guild)
-            except Exception as e:
-                await interaction.response.send_message(f"發送公告時發生錯誤：{e}", ephemeral=True)
-                log(f"發送公告時發生錯誤：{e}", level=logging.ERROR, module_name="Moderate", guild=interaction.guild)
-    await interaction.response.send_message(embed=embed, view=MessageButtons())
+            await send_message()
+    
+    if direct:
+        await send_message()
+    else:
+        if interaction:
+            await interaction.response.send_message(embed=embed, view=MessageButtons())
             
 
 @app_commands.guild_only()
@@ -811,13 +851,14 @@ class Moderate(commands.GroupCog, group_name=app_commands.locale_str("admin")):
         用法：!moderate <用戶> <指令1> , <指令2> , ...
         
         指令格式：
-        - ban <reason> <duration> <delete_messages>
+        - ban <duration> <delete_messages> <reason>
         - kick <reason>
         - timeout|mute <duration> <reason>
         - delete <warn_message>
         - delete_dm <warn_message>
         - warn <warn_message>
         - warn_dm <warn_message>
+        - send_mod_message|smm
         
         範例：
         !moderate @User ban 違規 1d 3600 , mute 30m 注意行為 , delete 請注意你的言論
@@ -827,8 +868,14 @@ class Moderate(commands.GroupCog, group_name=app_commands.locale_str("admin")):
             await ctx.send("機器人缺少必要的權限，請確認機器人擁有封禁、踢出、管理訊息、管理身分組及禁言權限。")
             return
         logs = await do_action_str(commands_str, ctx.guild, user, message=None)
-        await ctx.send("操作完成：\n- " + "\n- ".join(logs))
-        log("操作完成：\n- " + "\n- ".join(logs), module_name="Moderate", guild=ctx.guild)
+        if len(logs) == 0:
+            msg = "無任何操作被執行。"
+        elif len(logs) == 1:
+            msg = user.name + " 操作完成：" + logs[0]
+        else:
+            msg = user.name + " 操作完成：\n- " + "\n- ".join(logs)
+        await ctx.send(msg)
+        log(msg, module_name="Moderate", guild=ctx.guild)
     
     @commands.command(aliases=["mr", "mod_reply"])
     @commands.has_permissions(administrator=True)
@@ -838,13 +885,14 @@ class Moderate(commands.GroupCog, group_name=app_commands.locale_str("admin")):
         用法：!moderate_reply <指令1> , <指令2> , ...
         
         指令格式：
-        - ban <reason> <duration> <delete_messages>
+        - ban <duration> <delete_messages> <reason>
         - kick <reason>
         - timeout|mute <duration> <reason>
         - delete <warn_message>
         - delete_dm <warn_message>
         - warn <warn_message>
         - warn_dm <warn_message>
+        - send_mod_message|smm
         
         範例：
         !moderate_reply ban 違規 1d 3600 , mute 30m 注意行為 , delete 請注意你的言論
@@ -862,9 +910,15 @@ class Moderate(commands.GroupCog, group_name=app_commands.locale_str("admin")):
             await ctx.send("無法取得被回覆的訊息。")
             return
         user = referenced_message.author if isinstance(referenced_message.author, discord.Member) else None
-        logs = await do_action_str(commands_str, ctx.guild, user, message=referenced_message)
-        await ctx.send("操作完成：\n- " + "\n- ".join(logs))
-        log("操作完成：\n- " + "\n- ".join(logs), module_name="Moderate", guild=ctx.guild)
+        logs = await do_action_str(commands_str, ctx.guild, user, message=None)
+        if len(logs) == 0:
+            msg = "無任何操作被執行。"
+        elif len(logs) == 1:
+            msg = user.name + " 操作完成：" + logs[0]
+        else:
+            msg = user.name + " 操作完成：\n- " + "\n- ".join(logs)
+        await ctx.send(msg)
+        log(msg, module_name="Moderate", guild=ctx.guild)
 
 
 asyncio.run(bot.add_cog(Moderate(bot)))

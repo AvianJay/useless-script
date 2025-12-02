@@ -15,7 +15,7 @@ import logging
 if "Moderate" in modules:
     import Moderate
 else:
-    Moderate = None
+    log("Moderate module not found", level=logging.ERROR, module_name="AutoModerate")
 
 
 all_settings = [
@@ -33,53 +33,60 @@ async def settings_autocomplete(interaction: discord.Interaction, current: str):
         for key in all_settings if current.lower() in key.lower()
     ][:25]  # Discord 限制最多 25 個選項
 
-
 async def do_action_str(action: str, guild: Optional[discord.Guild] = None, user: Optional[discord.Member] = None, message: Optional[discord.Message] = None):
+    moderator = bot.user
     # if user is none just check if action is valid
     actions = action.split(",")
     actions = [a.strip() for a in actions]
     logs = []
+    last_reason = "自動管理執行"
+    actions = []
     for a in actions:
         cmd = a.split(" ")
         if cmd[0] == "ban":
             # ban <reason> <delete_messages> <duration>
             if len(cmd) == 1:
-                cmd.append("自動管理執行")
+                cmd.append("0s")
             if len(cmd) == 2:
                 cmd.append("0s")
             if len(cmd) == 3:
-                cmd.append("0s")
+                cmd.append(last_reason)
 
-            if Moderate:
-                duration_seconds = Moderate.timestr_to_seconds(cmd[2]) if cmd[2] != "0" else 0
-                delete_messages = Moderate.timestr_to_seconds(cmd[3]) if cmd[3] != "0" else 0
-                logs.append(f"封禁用戶，原因: {cmd[1]}，持續秒數: {duration_seconds}秒，刪除訊息時間: {delete_messages}秒")
-                if user:
-                    await Moderate.ban_user(guild, user, reason=cmd[1], duration=duration_seconds, delete_message_seconds=delete_messages)
-            else:
-                print("[!] Moderate module not loaded, cannot ban user.")
-                raise Exception("Moderate module not loaded")
+            duration_seconds = Moderate.timestr_to_seconds(cmd[1]) if cmd[1] != "0" else 0
+            delete_messages = Moderate.timestr_to_seconds(cmd[2]) if cmd[2] != "0" else 0
+            cmd.pop(0)  # remove "ban"
+            cmd.pop(0)  # remove duration
+            cmd.pop(0)  # remove delete_messages
+            reason = " ".join(cmd)
+            last_reason = reason
+            logs.append(f"封禁用戶，原因: {reason}，持續秒數: {duration_seconds}秒，刪除訊息時間: {delete_messages}秒")
+            if user:
+                await Moderate.ban_user(guild, user, reason=reason, duration=duration_seconds, delete_message_seconds=delete_messages)
+            actions.append({"action": "ban", "duration": duration_seconds, "reason": reason})
         elif cmd[0] == "kick":
             # kick <reason>
             if len(cmd) == 1:
-                cmd.append("自動管理執行")
-            logs.append(f"踢出用戶，原因: {cmd[1]}")
+                cmd.append(last_reason)
+            cmd.pop(0)  # remove "kick"
+            reason = " ".join(cmd)
+            logs.append(f"踢出用戶，原因: {reason}")
             if user:
-                await user.kick(reason=cmd[1])
+                await user.kick(reason=reason)
+            actions.append({"action": "kick", "reason": reason})
         elif cmd[0] == "mute" or cmd[0] == "timeout":
             # mute <duration> <reason>
             if len(cmd) == 1:
                 cmd.append("10m")
             if len(cmd) == 2:
-                cmd.append("自動管理執行")
-            if Moderate:
-                duration_seconds = Moderate.timestr_to_seconds(cmd[1]) if cmd[1] != "0" else 0
-                logs.append(f"禁言用戶，原因: {cmd[2]}，持續秒數: {duration_seconds}秒")
-                if user:
-                    await user.timeout(datetime.now(timezone.utc) + timedelta(seconds=duration_seconds), reason=cmd[2])
-            else:
-                print("[!] Moderate module not loaded, cannot mute user.")
-                raise Exception("Moderate module not loaded")
+                cmd.append(last_reason)
+            duration_seconds = Moderate.timestr_to_seconds(cmd[1]) if cmd[1] != "0" else 0
+            cmd.pop(0)  # remove "mute" or "timeout"
+            cmd.pop(0)  # remove duration
+            reason = " ".join(cmd) if cmd else last_reason
+            logs.append(f"禁言用戶，原因: {reason}，持續秒數: {duration_seconds}秒")
+            if user:
+                await user.timeout(datetime.now(timezone.utc) + timedelta(seconds=duration_seconds), reason=reason)
+            actions.append({"action": "mute", "duration": duration_seconds, "reason": reason})
         elif cmd[0] == "delete" or cmd[0] == "delete_dm":
             # delete <warn_message>
             logs.append("刪除訊息")
@@ -108,6 +115,13 @@ async def do_action_str(action: str, guild: Optional[discord.Guild] = None, user
                 await user.send(warn_message)
             elif message:
                 await message.reply(warn_message)
+        elif cmd[0] == "send_mod_message" or cmd[0] == "smm":
+            # send_mod_message
+            if len(cmd) == 1:
+                cmd.append("用戶被系統處置。")
+            logs.append("傳送管理訊息")
+            if guild and user and moderator:
+                await Moderate.moderation_message_settings(None, user, moderator, actions, direct=True)
     return logs
 
 
