@@ -285,23 +285,23 @@ class DynamicVoice(commands.GroupCog, name=app_commands.locale_str("dynamic-voic
                     log(f"已刪除空動態語音頻道 '{channel.name}'", module_name="DynamicVoice", guild=member.guild)
                 except Exception as e:
                     log(f"無法刪除空頻道 '{channel.name}': {e}", level=logging.ERROR, module_name="DynamicVoice", guild=member.guild)
+    
+    @commands.Cog.listener()
+    async def on_ready(self):
+        for guild in self.bot.guilds:
+            guild_id = guild.id
+            play_audio_enabled = get_server_config(guild_id, "dynamic_voice_play_audio", False)
+            channel_id = get_server_config(guild_id, "dynamic_voice_channel")
+            if play_audio_enabled and channel_id:
+                channel = guild.get_channel(channel_id)
+                if channel:
+                    try:
+                        await channel.connect()
+                        log(f"已連接到 '{channel.name}'", module_name="DynamicVoice", guild=guild)
+                    except Exception as e:
+                        log(f"無法連接到頻道 '{channel.name}': {e}", level=logging.ERROR, module_name="DynamicVoice", guild=guild)
 
 asyncio.run(bot.add_cog(DynamicVoice(bot)))
-
-async def on_ready():
-    for guild in bot.guilds:
-        guild_id = guild.id
-        play_audio_enabled = get_server_config(guild_id, "dynamic_voice_play_audio", False)
-        channel_id = get_server_config(guild_id, "dynamic_voice_channel")
-        if play_audio_enabled and channel_id:
-            channel = guild.get_channel(channel_id)
-            if channel:
-                try:
-                    await channel.connect()
-                    log(f"已連接到 '{channel.name}'", module_name="DynamicVoice", guild=guild)
-                except Exception as e:
-                    log(f"無法連接到頻道 '{channel.name}': {e}", level=logging.ERROR, module_name="DynamicVoice", guild=guild)
-on_ready_tasks.append(on_ready)
                     
 
 if __name__ == "__main__":
