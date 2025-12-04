@@ -33,7 +33,15 @@ def api_status():
 
 @app.route('/')
 def index():
-    return render_template('index.html')
+    return render_template('index.html', bot=bot)
+
+@app.route('/privacy-policy')
+def privacy_policy():
+    return render_template('PrivacyPolicy.html', bot=bot)
+
+@app.route('/terms-of-service')
+def terms_of_service():
+    return render_template('TermsofService.html', bot=bot)
 
 def run_webserver():
     host = config("webserver_host")
@@ -49,6 +57,7 @@ def run_webserver():
 
 async def start_webserver():
     thread = threading.Thread(target=run_webserver)
+    thread.setDaemon(True)
     thread.start()
     log("網站伺服器已啟動。", module_name="Website")
 

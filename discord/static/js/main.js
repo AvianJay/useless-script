@@ -19,11 +19,11 @@ function updateUptime() {
 
 let botId = null;
 
-document.addEventListener("DOMContentLoaded", function() {
+document.addEventListener("DOMContentLoaded", function () {
     fetch("/api/status")
         .then(response => response.json())
         .then(data => {
-            document.getElementById("botname").textContent = data.name;
+            document.title = data.name;
             document.getElementById("botavatar").src = data.avatar_url || "";
             document.getElementById("botstatus").innerHTML = `狀態: ${data.status}<br>伺服器數量: ${data.server_count}<br>用戶總數量: ${data.user_count}<br>用戶安裝數量: ${data.user_install_count}<br>版本: ${data.version}<br>延遲: ${data.latency_ms}ms`;
             uptimeSeconds = data.uptime;
