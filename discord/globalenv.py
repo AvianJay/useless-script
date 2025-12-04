@@ -3,7 +3,6 @@ import json
 import discord
 import asyncio
 import threading
-import MobileStatus
 from discord.ext import commands
 from discord import app_commands
 from database import db
