@@ -55,6 +55,7 @@ async def _log(*messages, level = logging.INFO, module_name: str = "General", us
                 if webhook_url:
                     try:
                         discord_webhook = discord.SyncWebhook.from_url(webhook_url)
+                        discord_webhook.fetch()  # test if webhook is valid
                     except Exception:
                         webhooks = await channel.webhooks()
                         webhooks = webhooks[0] if webhooks else None
@@ -83,6 +84,7 @@ async def _log(*messages, level = logging.INFO, module_name: str = "General", us
                             if guild_webhook:
                                 try:
                                     guild_discord_webhook = discord.SyncWebhook.from_url(guild_webhook)
+                                    guild_discord_webhook.fetch()  # test if webhook is valid
                                 except Exception:
                                     webhooks = await guild_channel.webhooks()
                                     webhooks = webhooks[0] if webhooks else None
