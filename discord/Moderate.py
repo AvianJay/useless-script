@@ -158,7 +158,7 @@ async def do_action_str(action: str, guild: Optional[discord.Guild] = None, user
     actions = [a.strip() for a in actions]
     logs = []
     last_reason = "管理執行"
-    actions = []
+    actions_json = []
     for a in actions:
         cmd = a.split(" ")
         if cmd[0] == "ban":
@@ -180,7 +180,7 @@ async def do_action_str(action: str, guild: Optional[discord.Guild] = None, user
             logs.append(f"封禁用戶，原因: {reason}，持續秒數: {duration_seconds}秒，刪除訊息時間: {delete_messages}秒")
             if user:
                 await ban_user(guild, user, reason=reason, duration=duration_seconds, delete_message_seconds=delete_messages)
-            actions.append({"action": "ban", "duration": duration_seconds, "reason": reason})
+            actions_json.append({"action": "ban", "duration": duration_seconds, "reason": reason})
         elif cmd[0] == "kick":
             # kick <reason>
             if len(cmd) == 1:
@@ -190,7 +190,7 @@ async def do_action_str(action: str, guild: Optional[discord.Guild] = None, user
             logs.append(f"踢出用戶，原因: {reason}")
             if user:
                 await user.kick(reason=reason)
-            actions.append({"action": "kick", "reason": reason})
+            actions_json.append({"action": "kick", "reason": reason})
         elif cmd[0] == "mute" or cmd[0] == "timeout":
             # mute <duration> <reason>
             if len(cmd) == 1:
@@ -204,7 +204,7 @@ async def do_action_str(action: str, guild: Optional[discord.Guild] = None, user
             logs.append(f"禁言用戶，原因: {reason}，持續秒數: {duration_seconds}秒")
             if user:
                 await user.timeout(datetime.now(timezone.utc) + timedelta(seconds=duration_seconds), reason=reason)
-            actions.append({"action": "mute", "duration": duration_seconds, "reason": reason})
+            actions_json.append({"action": "mute", "duration": duration_seconds, "reason": reason})
         elif cmd[0] == "delete" or cmd[0] == "delete_dm":
             # delete <warn_message>
             logs.append("刪除訊息")
@@ -239,11 +239,11 @@ async def do_action_str(action: str, guild: Optional[discord.Guild] = None, user
                 cmd.append("用戶被系統處置。")
             logs.append("傳送管理訊息")
             if guild and user and moderator:
-                await moderation_message_settings(None, user, moderator, actions, direct=True)
+                await moderation_message_settings(None, user, moderator, actions_json, direct=True, guild=guild)
     return logs
 
 
-async def moderation_message_settings(interaction: Optional[discord.Interaction], user: discord.Member, moderator: discord.Member, actions: list, direct: bool = False):
+async def moderation_message_settings(interaction: Optional[discord.Interaction], user: discord.Member, moderator: discord.Member, actions: list, direct: bool = False, guild: Optional[discord.Guild] = None):
     # generate message
     action_texts = []
     for action in actions:
@@ -281,12 +281,15 @@ async def moderation_message_settings(interaction: Optional[discord.Interaction]
 """
 
     async def send_message():
-        channel_id = get_server_config(interaction.guild.id, "MODERATION_MESSAGE_CHANNEL_ID")
+        nonlocal guild
+        if interaction:
+            guild = interaction.guild
+        channel_id = get_server_config(guild.id, "MODERATION_MESSAGE_CHANNEL_ID")
         if channel_id is None:
             if interaction:
                 await interaction.response.send_message("伺服器未設定公告頻道，請先設定後再嘗試。", ephemeral=True)
             return
-        channel = interaction.guild.get_channel(channel_id)
+        channel = guild.get_channel(channel_id)
         if channel is None:
             if interaction:
                 await interaction.response.send_message("找不到公告頻道，請確認頻道是否存在。", ephemeral=True)
@@ -918,7 +921,7 @@ class Moderate(commands.GroupCog, group_name=app_commands.locale_str("admin")):
         else:
             msg = user.name + " 操作完成：\n- " + "\n- ".join(logs)
         await ctx.send(msg)
-        log(msg, module_name="Moderate", guild=ctx.guild)
+        log(msg, module_name="Moderate", user=user, guild=ctx.guild)
 
 
 asyncio.run(bot.add_cog(Moderate(bot)))
