@@ -867,7 +867,7 @@ class Moderate(commands.GroupCog, group_name=app_commands.locale_str("admin")):
         if not ctx.guild.me.guild_permissions.ban_members or not ctx.guild.me.guild_permissions.kick_members or not ctx.guild.me.guild_permissions.manage_messages or not ctx.guild.me.guild_permissions.manage_roles or not ctx.guild.me.guild_permissions.moderate_members:
             await ctx.send("機器人缺少必要的權限，請確認機器人擁有封禁、踢出、管理訊息、管理身分組及禁言權限。")
             return
-        logs = await do_action_str(commands_str, ctx.guild, user, message=None)
+        logs = await do_action_str(commands_str, ctx.guild, user, message=None, moderator=ctx.author)
         if len(logs) == 0:
             msg = "無任何操作被執行。"
         elif len(logs) == 1:
@@ -910,7 +910,7 @@ class Moderate(commands.GroupCog, group_name=app_commands.locale_str("admin")):
             await ctx.send("無法取得被回覆的訊息。")
             return
         user = referenced_message.author if isinstance(referenced_message.author, discord.Member) else None
-        logs = await do_action_str(commands_str, ctx.guild, user, message=None)
+        logs = await do_action_str(commands_str, ctx.guild, user, message=referenced_message, moderator=ctx.author)
         if len(logs) == 0:
             msg = "無任何操作被執行。"
         elif len(logs) == 1:
