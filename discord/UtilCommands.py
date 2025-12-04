@@ -9,7 +9,7 @@ from datetime import datetime, timezone
 import psutil
 
 startup_time = datetime.now(timezone.utc)
-version = "0.11.13"
+version = "0.11.14"
 try:
     git_commit_hash = os.popen("git rev-parse --short HEAD").read().strip()
 except Exception as e:
@@ -58,6 +58,7 @@ async def info_command(interaction: discord.Interaction):
     embed.add_field(name="版本", value=full_version)
     embed.add_field(name="伺服器數量", value=server_count)
     embed.add_field(name="用戶總數量", value=user_count)
+    embed.add_field(name="用戶安裝數量", value=bot.application.approximate_user_install_count or "N/A")
     embed.add_field(name="機器人延遲", value=f"{bot_latency}ms")
     embed.add_field(name="CPU 使用率", value=f"{psutil.cpu_percent()}%")
     embed.add_field(name="記憶體使用率", value=f"{psutil.virtual_memory().percent}%")
@@ -88,6 +89,7 @@ async def info(ctx: commands.Context):
     embed.add_field(name="版本", value=full_version)
     embed.add_field(name="伺服器數量", value=server_count)
     embed.add_field(name="用戶總數量", value=user_count)
+    embed.add_field(name="用戶安裝數量", value=bot.application.approximate_user_install_count or "N/A")
     embed.add_field(name="機器人延遲", value=f"{bot_latency}ms")
     embed.add_field(name="CPU 使用率", value=f"{psutil.cpu_percent()}%")
     embed.add_field(name="記憶體使用率", value=f"{psutil.virtual_memory().percent}%")
