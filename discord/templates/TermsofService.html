@@ -4,33 +4,61 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{{ bot.user.name }} 服務條款</title>
-    <!-- <link rel="stylesheet" href="styles.css"> -->
+    <title>{{ bot.user.name }} | 服務條款</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="./static/css/style.css">
+    <script src="./static/js/main.js" defer></script>
 </head>
 
 <body>
-    <h1>{{ bot.user.name }} 服務條款</h1>
-    <p>歡迎使用 {{ bot.user.name }}（以下簡稱「本機器人」）。使用本機器人即表示您同意遵守以下服務條款：</p>
+    <nav class="navbar">
+        <a href="/" class="navbar-brand">
+            <img id="nav-avatar" src="" alt="Logo"
+                style="width: 30px; height: 30px; border-radius: 50%; display: none;">
+            <span id="nav-name">{{ bot.user.name }}</span>
+        </a>
+        <div class="nav-links">
+            <a href="/">首頁</a>
+            <a href="/privacy-policy">隱私政策</a>
+        </div>
+    </nav>
 
-    <h2>1. 服務內容</h2>
-    <p>本機器人提供各種功能以增強 Discord 伺服器的互動性和管理效率。具體功能可能會隨時間變化。</p>
+    <div class="container" style="max-width: 800px; margin-top: 2rem;">
+        <h1 style="margin-bottom: 1.5rem; text-align: center;">{{ bot.user.name }} 服務條款</h1>
+        <div style="background-color: var(--bg-secondary); padding: 2rem; border-radius: 8px;">
+            <p style="margin-bottom: 1rem;">歡迎使用 {{ bot.user.name }}（以下簡稱「本機器人」）。使用本機器人即表示您同意遵守以下服務條款：</p>
 
-    <h2>2. 使用規範</h2>
-    <ul>
-        <li>您必須遵守 Discord 的《服務條款》與《社群準則》。</li>
-        <li>若您未滿 13 歲（或您所在地法律規定的最低年齡），不得使用本機器人。</li>
-        <li>您同意不使用本機器人進行任何非法活動或違反 Discord 社群準則的行為。</li>
-        <li>您不得嘗試干擾或破壞本機器人的正常運作。</li>
-        <li>您應尊重其他用戶的隱私和權利，不得利用本機器人收集或散佈他人個人資訊。</li>
-    </ul>
-    <h2>3. 責任限制</h2>
-    <p>本機器人按「現狀」提供，開發者不對因使用本機器人而產生的任何直接、間接、附帶或衍生的損害負責。</p>
-    <h2>4. 服務變更與終止</h2>
-    <p>開發者保留隨時修改或終止本機器人的權利，恕不另行通知。</p>
-    <h2>5. 條款修改</h2>
-    <p>開發者保留隨時修改本服務條款的權利，修改後的條款將會在本頁面上公布。您應定期查閱本頁面以瞭解最新的服務條款。</p>
-    <h2>6. 聯絡方式</h2>
-    <p>如對本服務條款有任何疑問，請聯絡開發者 (Discord: @{{ bot.application.owner }})。</p>
+            <h2 style="margin-top: 1.5rem; margin-bottom: 0.5rem; color: var(--accent);">1. 服務內容</h2>
+            <p>本機器人提供各種功能以增強 Discord 伺服器的互動性和管理效率。具體功能可能會隨時間變化。</p>
+
+            <h2 style="margin-top: 1.5rem; margin-bottom: 0.5rem; color: var(--accent);">2. 使用規範</h2>
+            <ul style="margin-left: 1.5rem; margin-top: 0.5rem;">
+                <li>您必須遵守 Discord 的《服務條款》與《社群準則》。</li>
+                <li>若您未滿 13 歲（或您所在地法律規定的最低年齡），不得使用本機器人。</li>
+                <li>您同意不使用本機器人進行任何非法活動或違反 Discord 社群準則的行為。</li>
+                <li>您不得嘗試干擾或破壞本機器人的正常運作。</li>
+                <li>您應尊重其他用戶的隱私和權利，不得利用本機器人收集或散佈他人個人資訊。</li>
+            </ul>
+
+            <h2 style="margin-top: 1.5rem; margin-bottom: 0.5rem; color: var(--accent);">3. 責任限制</h2>
+            <p>本機器人按「現狀」提供，開發者不對因使用本機器人而產生的任何直接、間接、附帶或衍生的損害負責。</p>
+
+            <h2 style="margin-top: 1.5rem; margin-bottom: 0.5rem; color: var(--accent);">4. 服務變更與終止</h2>
+            <p>開發者保留隨時修改或終止本機器人的權利，恕不另行通知。</p>
+
+            <h2 style="margin-top: 1.5rem; margin-bottom: 0.5rem; color: var(--accent);">5. 條款修改</h2>
+            <p>開發者保留隨時修改本服務條款的權利，修改後的條款將會在本頁面上公布。您應定期查閱本頁面以瞭解最新的服務條款。</p>
+
+            <h2 style="margin-top: 1.5rem; margin-bottom: 0.5rem; color: var(--accent);">6. 聯絡方式</h2>
+            <p>如對本服務條款有任何疑問，請聯絡開發者 (Discord: @{{ bot.application.owner }})。</p>
+        </div>
+    </div>
+
+    <footer>
+        <p>&copy; 2025 {{ bot.user.name }}. All rights reserved.</p>
+    </footer>
 </body>
 
 </html>

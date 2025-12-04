@@ -4,37 +4,62 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{{ bot.user.name }} 隱私政策</title>
-    <!-- <link rel="stylesheet" href="styles.css"> -->
+    <title>{{ bot.user.name }} | 隱私政策</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="./static/css/style.css">
+    <script src="./static/js/main.js" defer></script>
 </head>
 
 <body>
-    <h1 id="pptitle">{{ bot.user.name }} 隱私政策</h1>
-    <p id="ppdesc">歡迎使用{{ bot.user.name }}（以下簡稱「本機器人」）。我們重視您的隱私，並致力於保護您的個人資訊。請仔細閱讀以下隱私政策，以了解我們如何收集、使用和保護您的資訊。</p>
+    <nav class="navbar">
+        <a href="/" class="navbar-brand">
+            <img id="nav-avatar" src="" alt="Logo"
+                style="width: 30px; height: 30px; border-radius: 50%; display: none;">
+            <span id="nav-name">{{ bot.user.name }}</span>
+        </a>
+        <div class="nav-links">
+            <a href="/" class="active">首頁</a>
+            <a href="/terms-of-service">使用條款</a>
+        </div>
+    </nav>
 
-    <h2>1. 資訊收集</h2>
-    <p>本機器人可能會收集以下類型的資訊：</p>
-    <ul>
-        <li><strong>伺服器資訊：</strong>當您在 Discord 伺服器中使用本機器人時，我們可能會收集伺服器 ID、頻道 ID 以及相關的使用資料。</li>
-        <li><strong>用戶互動資料：</strong>我們可能會記錄您與本機器人的互動，例如指令使用情況和回覆內容，以改善服務品質。</li>
-    </ul>
+    <div class="container" style="max-width: 800px; margin-top: 2rem;">
+        <h1 id="pptitle" style="margin-bottom: 1.5rem; text-align: center;">{{ bot.user.name }} 隱私政策</h1>
+        <div style="background-color: var(--bg-secondary); padding: 2rem; border-radius: 8px;">
+            <p id="ppdesc" style="margin-bottom: 1rem;">歡迎使用{{ bot.user.name
+                }}（以下簡稱「本機器人」）。我們重視您的隱私，並致力於保護您的個人資訊。請仔細閱讀以下隱私政策，以了解我們如何收集、使用和保護您的資訊。</p>
 
-    <h2>2. 資訊使用</h2>
-    <p>我們收集的資訊將用於以下目的：</p>
-    <ul>
-        <li>提供和維護本機器人的功能和服務。</li>
-        <li>分析使用趨勢，以改進本機器人的性能和用戶體驗。</li>
-        <li>回應用戶查詢和支援請求。</li>
-    </ul>
+            <h2 style="margin-top: 1.5rem; margin-bottom: 0.5rem; color: var(--accent);">1. 資訊收集</h2>
+            <p>本機器人可能會收集以下類型的資訊：</p>
+            <ul style="margin-left: 1.5rem; margin-top: 0.5rem;">
+                <li><strong>伺服器資訊：</strong>當您在 Discord 伺服器中使用本機器人時，我們可能會收集伺服器 ID、頻道 ID 以及相關的使用資料。</li>
+                <li><strong>用戶互動資料：</strong>我們可能會記錄您與本機器人的互動，例如指令使用情況和回覆內容，以改善服務品質。</li>
+            </ul>
 
-    <h2>3. 資訊保護</h2>
-    <p>我們採取適當的技術和組織措施來保護您的個人資訊免受未經授權的存取、洩露或破壞。然而，請注意，沒有任何一種傳輸方式或電子儲存方式是百分之百安全的。</p>
+            <h2 style="margin-top: 1.5rem; margin-bottom: 0.5rem; color: var(--accent);">2. 資訊使用</h2>
+            <p>我們收集的資訊將用於以下目的：</p>
+            <ul style="margin-left: 1.5rem; margin-top: 0.5rem;">
+                <li>提供和維護本機器人的功能和服務。</li>
+                <li>分析使用趨勢，以改進本機器人的性能和用戶體驗。</li>
+                <li>回應用戶查詢和支援請求。</li>
+            </ul>
 
-    <h2>4. 資訊分享</h2>
-    <p>我們不會將您的個人資訊出售或出租給第三方。但在以下情況下，我們可能會分享您的資訊：</p>
-    <ul>
-        <li>法律要求：當法律要求或為了保護我們的權利時，我們可能會披露您的資訊。</li>
-    </ul>
+            <h2 style="margin-top: 1.5rem; margin-bottom: 0.5rem; color: var(--accent);">3. 資訊保護</h2>
+            <p>我們採取適當的技術和組織措施來保護您的個人資訊免受未經授權的存取、洩露或破壞。然而，請注意，沒有任何一種傳輸方式或電子儲存方式是百分之百安全的。</p>
+
+            <h2 style="margin-top: 1.5rem; margin-bottom: 0.5rem; color: var(--accent);">4. 資訊分享</h2>
+            <p>我們不會將您的個人資訊出售或出租給第三方。但在以下情況下，我們可能會分享您的資訊：</p>
+            <ul style="margin-left: 1.5rem; margin-top: 0.5rem;">
+                <li>法律要求：當法律要求或為了保護我們的權利時，我們可能會披露您的資訊。</li>
+            </ul>
+        </div>
+    </div>
+
+    <footer>
+        <p>&copy; 2025 {{ bot.user.name }}. All rights reserved.</p>
+    </footer>
 </body>
 
 </html>

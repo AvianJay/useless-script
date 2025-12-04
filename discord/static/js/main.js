@@ -14,7 +14,10 @@ function secondsToDhms(seconds) {
 let uptimeSeconds = 0;
 function updateUptime() {
     uptimeSeconds++;
-    document.getElementById("uptimetext").textContent = `運行時間: ${secondsToDhms(uptimeSeconds)}`;
+    const uptimeEl = document.getElementById("stat-uptime");
+    if (uptimeEl) {
+        uptimeEl.textContent = secondsToDhms(uptimeSeconds);
+    }
 }
 
 let botId = null;
@@ -23,24 +26,65 @@ document.addEventListener("DOMContentLoaded", function () {
     fetch("/api/status")
         .then(response => response.json())
         .then(data => {
-            document.title = data.name;
-            document.getElementById("botavatar").src = data.avatar_url || "";
-            document.getElementById("botstatus").innerHTML = `狀態: ${data.status}<br>伺服器數量: ${data.server_count}<br>用戶總數量: ${data.user_count}<br>用戶安裝數量: ${data.user_install_count}<br>版本: ${data.version}<br>延遲: ${data.latency_ms}ms`;
+            document.title = `${data.name} | Discord 機器人`;
+
+            // Update Hero Section
+            const avatarEl = document.getElementById("botavatar");
+            if (avatarEl) avatarEl.src = data.avatar_url || "";
+
+            const nameEl = document.getElementById("botname");
+            if (nameEl) nameEl.textContent = data.name;
+
+            const statusBadge = document.getElementById("botstatus-badge");
+            if (statusBadge) statusBadge.textContent = `狀態: ${data.status}`;
+
+            // Update Navbar
+            const navAvatar = document.getElementById("nav-avatar");
+            if (navAvatar) {
+                navAvatar.src = data.avatar_url || "";
+                navAvatar.style.display = "inline-block";
+            }
+            const navName = document.getElementById("nav-name");
+            if (navName) navName.textContent = data.name;
+
+            // Update Stats Grid
+            const statServers = document.getElementById("stat-servers");
+            if (statServers) statServers.textContent = data.server_count;
+
+            const statUsers = document.getElementById("stat-users");
+            if (statUsers) statUsers.textContent = data.user_count;
+
+            const statInstall = document.getElementById("stat-install");
+            if (statInstall) statInstall.textContent = data.user_install_count;
+
+            const statPing = document.getElementById("stat-ping");
+            if (statPing) statPing.textContent = `${data.latency_ms}ms`;
+
+            const statVersion = document.getElementById("stat-version");
+            if (statVersion) statVersion.textContent = data.version;
+
             uptimeSeconds = data.uptime;
             updateUptime();
             setInterval(updateUptime, 1000);
+
             botId = data.id;
             if (botId) {
-                document.getElementById("invitebtn").style.display = "inline-block";
+                const inviteBtn = document.getElementById("invitebtn");
+                if (inviteBtn) {
+                    inviteBtn.classList.remove("hidden");
+                    inviteBtn.href = `https://discord.com/oauth2/authorize?client_id=${botId}`;
+                }
             }
         })
         .catch(error => {
             console.error("Error fetching status:", error);
-            document.getElementById("botstatus").textContent = "Error";
+            const statusBadge = document.getElementById("botstatus-badge");
+            if (statusBadge) statusBadge.textContent = "Error";
         });
 });
 
-function inviteBot() {
+function inviteBot(event) {
+    if (event) event.preventDefault();
     if (botId) {
         const inviteUrl = `https://discord.com/oauth2/authorize?client_id=${botId}`;
         window.open(inviteUrl, "_blank");
