@@ -11,7 +11,7 @@ import logging
 
 
 # Global configuration for backward compatibility
-config_version = 11
+config_version = 12
 config_path = 'config.json'
 
 default_config = {
@@ -32,6 +32,9 @@ default_config = {
     "log_channel_id": 123456789012345678,
     "feedback_message_channel_id": 123456789012345678,
     "botcustomizer_log_channel_id": 123456789012345678,
+    "webserver_host": "0.0.0.0",
+    "webserver_port": 8080,
+    "webserver_ssl": False,
 }
 _config = None
 
