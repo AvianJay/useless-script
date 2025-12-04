@@ -102,7 +102,7 @@ intents = discord.Intents.default()
 intents.message_content = True
 intents.members = True
 intents.guilds = True
-bot = commands.Bot(command_prefix=config("prefix", "!"), intents=intents)
+bot = commands.Bot(command_prefix=config("prefix", "!"), intents=intents, chunk_guilds_at_startup=False)
 
 
 # Helper functions for per-server configuration
@@ -331,6 +331,10 @@ async def on_ready():
             for task_coro_func in on_ready_tasks:
                 # task_coro_func 應該是 coroutine function，不是 coroutine object，啥ai東西啊
                 bot.loop.create_task(task_coro_func())
+            for guild in bot.guilds:
+                if not guild.chunked:
+                    await guild.chunk()
+            log(f"成功快取 {len(bot.guilds)} 個伺服器的成員資料。", module_name="Main")
             bot._on_ready_tasks_started = True
 
     except Exception as e:
