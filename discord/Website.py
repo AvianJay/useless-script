@@ -1,6 +1,9 @@
 from flask import Flask, send_from_directory, render_template
 import os
-import threading
+import asyncio
+from hypercorn.config import Config
+from hypercorn.asyncio import serve
+# from hypercorn.middleware import WSGIMiddleware
 from globalenv import bot, modules, config, on_ready_tasks
 from logger import log
 
@@ -43,22 +46,23 @@ def privacy_policy():
 def terms_of_service():
     return render_template('TermsofService.html', bot=bot)
 
-def run_webserver():
+async def start_webserver():
     host = config("webserver_host")
     port = config("webserver_port")
     ssl = config("webserver_ssl")
+    
+    hypercorn_config = Config()
+    hypercorn_config.bind = [f"{host}:{port}"]
+    
     if ssl:
         ssl_path = 'sslkey'
-        ssl_crt = os.path.join(ssl_path, 'server.crt')
-        ssl_key = os.path.join(ssl_path, 'server.key')
-        app.run(host=host, port=port, ssl_context=(ssl_crt, ssl_key))
-    else:
-        app.run(host=host, port=port)
+        hypercorn_config.certfile = os.path.join(ssl_path, 'server.crt')
+        hypercorn_config.keyfile = os.path.join(ssl_path, 'server.key')
 
-async def start_webserver():
-    thread = threading.Thread(target=run_webserver)
-    thread.setDaemon(True)
-    thread.start()
-    log("網站伺服器已啟動。", module_name="Website")
+    # asgi_app = WSGIMiddleware(app)
+    
+    # Run Hypercorn in the background
+    asyncio.create_task(serve(app, hypercorn_config))
+    log(f"網站伺服器已啟動 (Hypercorn) - http{'s' if ssl else ''}://{host}:{port}", module_name="Website")
 
 on_ready_tasks.append(start_webserver)
