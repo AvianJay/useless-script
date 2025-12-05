@@ -3,7 +3,6 @@ import os
 import asyncio
 from hypercorn.config import Config
 from hypercorn.asyncio import serve
-# from hypercorn.middleware import WSGIMiddleware
 from globalenv import bot, modules, config, on_ready_tasks
 from logger import log
 
@@ -58,8 +57,6 @@ async def start_webserver():
         ssl_path = 'sslkey'
         hypercorn_config.certfile = os.path.join(ssl_path, 'server.crt')
         hypercorn_config.keyfile = os.path.join(ssl_path, 'server.key')
-
-    # asgi_app = WSGIMiddleware(app)
     
     # Run Hypercorn in the background
     asyncio.create_task(serve(app, hypercorn_config))
