@@ -8,22 +8,6 @@ async function generateFingerprint() {
     return fingerprint;
 }
 
-async function executereCaptcha(sitekey) {
-    grecaptcha.ready(async function () {
-        grecaptcha.execute(sitekey, { action: 'submit' }).then(async function (token) {
-            try {
-                document.getElementById('captcha-token').value = token;
-                await generateFingerprint();
-                document.getElementById('fingerprint').value = fingerprint;
-                document.getElementById('verify-form').submit();
-            } catch (error) {
-                console.error("Error in executereCaptcha:", error);
-                alert(`發生了一些錯誤。${error.message}`);
-            }
-        });
-    });
-}
-
 async function reCaptchaCallback(token) {
     try {
         document.getElementById('captcha-token').value = token;
