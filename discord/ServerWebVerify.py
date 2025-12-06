@@ -12,6 +12,7 @@ import secrets
 import time
 import uuid
 import asyncio
+import sqlite3
 from urllib.parse import urlencode
 if "Website" in modules:
     from Website import app
@@ -268,7 +269,9 @@ class ServerWebVerify(commands.GroupCog, name="webverify", description="伺服�
         default_config = {
             'enabled': True,
             'captcha_type': 'turnstile',
-            'unverified_role_id': None
+            'unverified_role_id': None,
+            'autorole_enabled': False,
+            'autorole_trigger': 'always'
         }
         set_server_config(guild_id, "webverify_config", default_config)
         await interaction.response.send_message("伺服器的網頁驗證功能已設定完成。請記得設定未驗證成員的角色。")
@@ -398,7 +401,66 @@ class ServerWebVerify(commands.GroupCog, name="webverify", description="伺服�
             
             await interaction.response.send_message(embed=embed, ephemeral=True)
     
+    @app_commands.command(name="autorole", description="設定自動為新成員分配未驗證角色")
+    @app_commands.describe(enable="啟用或停用自動分配未驗證角色", trigger="選擇給予身分組條件")
+    @app_commands.choices(trigger=[
+        app_commands.Choice(name="總是給予", value="always"),
+        app_commands.Choice(name="帳號年齡過小", value="age_check"),
+        app_commands.Choice(name="無驗證紀錄", value="no_history"),
+        app_commands.Choice(name="帳號曾經被標記過", value="has_flagged_history")
+    ])
+    @app_commands.default_permissions(administrator=True)
+    async def autorole(self, interaction: discord.Interaction, enable: bool, trigger: str):
+        guild_id = interaction.guild.id
+        guild_config = get_server_config(guild_id, "webverify_config")
+        if not guild_config:
+            await interaction.response.send_message("伺服器尚未設定網頁驗證功能。")
+            return
+        guild_config['autorole_enabled'] = enable
+        guild_config['autorole_trigger'] = trigger
+        set_server_config(guild_id, "webverify_config", guild_config)
+        status = "已啟用" if enable else "已停用"
+        await interaction.response.send_message(f"自動分配未驗證角色功能{status}，觸發條件：{trigger}。")
     
+    @commands.Cog.listener()
+    async def on_member_join(self, member: discord.Member):
+        guild_config = get_server_config(member.guild.id, "webverify_config")
+        if not guild_config:
+            return
+        if not guild_config.get('autorole_enabled', False):
+            return
+        unverified_role_id = guild_config.get('unverified_role_id')
+        if not unverified_role_id:
+            return
+        trigger = guild_config.get('autorole_trigger', 'always')
+        assign_role = False
+
+        if trigger == 'always':
+            assign_role = True
+        elif trigger == 'age_check':
+            account_age = (discord.utils.utcnow() - member.created_at).total_seconds()
+            if account_age < 604800:  # 7 days in seconds
+                assign_role = True
+        elif trigger == 'no_history':
+            with get_db_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute('SELECT COUNT(*) FROM webverify_history WHERE user_id = ?', (member.id,))
+                count = cursor.fetchone()[0]
+                if count == 0:
+                    assign_role = True
+        elif trigger == 'has_flagged_history':
+            database_file = config("flagged_database_path", "flagged_data.db")
+            conn = sqlite3.connect(database_file)
+            cursor = conn.cursor()
+            cursor.execute('SELECT user_id, guild_id, flagged_at, flagged_role FROM flagged_users WHERE user_id = ?', (member.id,))
+            results = cursor.fetchall()
+            results = [dict(zip([column[0] for column in cursor.description], row)) for row in results]
+            if results:
+                assign_role = True
+            conn.close()
+        
+        if assign_role:
+            await member.add_roles(discord.Object(id=unverified_role_id), reason="自動分配未驗證角色")
 
 init_db()
 
