@@ -252,6 +252,11 @@ def server_verify():
             if member.get_role(guild_config.get('unverified_role_id')):
                 asyncio.run(member.remove_roles(discord.Object(id=guild_config.get('unverified_role_id')), reason="通過網頁驗證"))
             log("用戶通過了網頁驗證", module_name="ServerWebVerify", user=member, guild=guild)
+            # try to dm user
+            try:
+                asyncio.run(member.send(f"您已成功通過 {guild.name} 的網頁驗證，現在可以訪問伺服器了！"))
+            except Exception as e:
+                log(f"無法私訊用戶 {member} 通知其驗證成功：{e}", level=logging.ERROR, module_name="ServerWebVerify", user=member, guild=guild)
             return render_template('ServerVerify.html', error="驗證成功！您現在可以返回伺服器。", bot=bot, site_key_turnstile=config("webverify_turnstile_key"), site_key_recaptcha=config("webverify_recaptcha_key"))
         else:
             error_codes = result.get('error-codes', [])
