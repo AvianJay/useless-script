@@ -249,7 +249,7 @@ def server_verify():
         if result.get('success'):
             add_webverify_history(user_id, guild_id, remoteip, fingerprint)
             if member.has_role(discord.Object(id=guild_config.get('unverified_role_id'))):
-                await member.remove_roles(discord.Object(id=guild_config.get('unverified_role_id')), reason="通過網頁驗證")
+                asyncio.run(member.remove_roles(discord.Object(id=guild_config.get('unverified_role_id')), reason="通過網頁驗證"))
             log("用戶通過了網頁驗證", module_name="ServerWebVerify", user=member, guild=guild)
             return render_template('ServerVerify.html', error="驗證成功！您現在可以返回伺服器。", bot=bot, site_key_turnstile=config("webverify_turnstile_key"), site_key_recaptcha=config("webverify_recaptcha_key"))
         else:
