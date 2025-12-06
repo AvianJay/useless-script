@@ -575,10 +575,10 @@ class Moderate(commands.GroupCog, group_name=app_commands.locale_str("admin")):
 
 
     @app_commands.command(name=app_commands.locale_str("ban"), description="封禁用戶")
-    @app_commands.describe(user="選擇用戶（@或ID）", reason="封禁原因（可選）", duration="封禁時間（可選，預設永久）", delete_message="刪除訊息時間（可選，預設不刪除）")
+    @app_commands.describe(user="選擇用戶", reason="封禁原因（可選）", duration="封禁時間（可選，預設永久）", delete_message="刪除訊息時間（可選，預設不刪除）")
     @app_commands.allowed_installs(guilds=True, users=False)
     @app_commands.default_permissions(ban_members=True)
-    async def ban_user(self, interaction: discord.Interaction, user: str, reason: str = "無", duration: str = "", delete_message: str = ""):
+    async def ban_user(self, interaction: discord.Interaction, user: discord.Member, reason: str = "無", duration: str = "", delete_message: str = ""):
         await interaction.response.defer()
         guild = interaction.guild
         if guild is None:
@@ -589,27 +589,9 @@ class Moderate(commands.GroupCog, group_name=app_commands.locale_str("admin")):
         if not guild.me.guild_permissions.ban_members:
             await interaction.followup.send("機器人沒有封鎖成員的權限，請確認機器人擁有「封鎖成員」的權限。")
             return
-        
-        if user.startswith("<@") and user.endswith(">"):
-            user = user[2:-1]
-            if user.startswith("!"):
-                user = user[1:]
 
-        # 解析目標 user id / 取得 User/Member 物件（若在伺服器內會是 Member）
-        if isinstance(user, discord.Member):
-            user_id = user.id
-            user_obj = user
-        else:
-            try:
-                user_id = int(user)
-            except Exception:
-                await interaction.followup.send("無效的使用者或 ID。")
-                return
-            user_obj = None
-            try:
-                user_obj = await bot.fetch_user(user_id)
-            except Exception:
-                user_obj = None  # 仍可以 id 封禁，但無法直接私訊
+        user_id = user.id
+        user_obj = user
 
         # 解析封禁時間（可選，若提供則記錄 unban_time）
         unban_time = None
@@ -641,10 +623,10 @@ class Moderate(commands.GroupCog, group_name=app_commands.locale_str("admin")):
 
 
     @app_commands.command(name=app_commands.locale_str("unban"), description="解封用戶")
-    @app_commands.describe(user="選擇用戶（@或ID）")
+    @app_commands.describe(user="選擇用戶")
     @app_commands.default_permissions(ban_members=True)
     @app_commands.allowed_installs(guilds=True, users=False)
-    async def unban_user(self, interaction: discord.Interaction, user: str):
+    async def unban_user(self, interaction: discord.Interaction, user: discord.User):
         await interaction.response.defer()
         guild = interaction.guild
         if guild is None:
@@ -655,22 +637,12 @@ class Moderate(commands.GroupCog, group_name=app_commands.locale_str("admin")):
         if not guild.me.guild_permissions.ban_members:
             await interaction.followup.send("機器人沒有解封成員的權限，請確認機器人擁有「解除封鎖成員」的權限。")
             return
-        
-        if user.startswith("<@") and user.endswith(">"):
-            user = user[2:-1]
-            if user.startswith("!"):
-                user = user[1:]
 
-        # 解析目標 user id
-        try:
-            user_id = int(user)
-        except Exception:
-            await interaction.followup.send("無效的使用者或 ID。")
-            return
+        user_id = user.id
 
         # 執行解封
         try:
-            await guild.unban(discord.Object(id=user_id), reason="手動解封")
+            await guild.unban(user, reason="手動解封")
             set_user_data(guild.id, user_id, "unban_time", None)
         except Exception as e:
             await interaction.followup.send(f"解封時發生錯誤：{e}")
@@ -683,7 +655,7 @@ class Moderate(commands.GroupCog, group_name=app_commands.locale_str("admin")):
     @app_commands.describe(user="選擇用戶（@或ID）", reason="踢出原因（可選）")
     @app_commands.default_permissions(kick_members=True)
     @app_commands.allowed_installs(guilds=True, users=False)
-    async def kick_user(self, interaction: discord.Interaction, user: str, reason: str = "無"):
+    async def kick_user(self, interaction: discord.Interaction, user: discord.Member, reason: str = "無"):
         await interaction.response.defer()
         guild = interaction.guild
         if guild is None:
@@ -695,49 +667,32 @@ class Moderate(commands.GroupCog, group_name=app_commands.locale_str("admin")):
             await interaction.followup.send("機器人沒有踢出成員的權限，請確認機器人擁有「踢出成員」的權限。")
             return
 
-        if user.startswith("<@") and user.endswith(">"):
-            user = user[2:-1]
-            if user.startswith("!"):
-                user = user[1:]
-
         # 解析目標 user id / 取得 Member 物件
-        if isinstance(user, discord.Member):
-            user_id = user.id
-            member = user
-        else:
-            try:
-                user_id = int(user)
-            except Exception:
-                await interaction.followup.send("無效的使用者或 ID。")
-                return
-            member = guild.get_member(user_id)
-            if member is None:
-                await interaction.followup.send("該用戶不在伺服器中，無法踢出。")
-                return
+        user_id = user.id
 
         # 通知與忽略
         ModerationNotify.ignore_user(user_id)
         try:
-            await ModerationNotify.notify_user(member, guild, "踢出", reason)
+            await ModerationNotify.notify_user(user, guild, "踢出", reason)
         except Exception:
             pass
 
         # 執行踢出
         try:
-            await member.kick(reason=reason)
+            await user.kick(reason=reason)
         except Exception as e:
             await interaction.followup.send(f"踢出時發生錯誤：{e}")
             return
 
         suffix = f"\n- 原因：{reason}" if reason != "無" else ""
-        await interaction.followup.send(f"已將 {member.mention} 踢出伺服器。{suffix}")
+        await interaction.followup.send(f"已將 {user.mention} 踢出伺服器。{suffix}")
 
 
     @app_commands.command(name=app_commands.locale_str("timeout"), description="禁言用戶")
-    @app_commands.describe(user="選擇用戶（@或ID）", reason="禁言原因（可選）", duration="禁言時間（可選，預設10分鐘）")
+    @app_commands.describe(user="選擇用戶", reason="禁言原因（可選）", duration="禁言時間（可選，預設10分鐘）")
     @app_commands.default_permissions(mute_members=True)
     @app_commands.allowed_installs(guilds=True, users=False)
-    async def timeout_user(self, interaction: discord.Interaction, user: str, reason: str = "無", duration: str = "10m"):
+    async def timeout_user(self, interaction: discord.Interaction, user: discord.Member, reason: str = "無", duration: str = "10m"):
         # 先 defer，避免耗時操作導致 interaction 過期
         await interaction.response.defer()
 
@@ -750,26 +705,8 @@ class Moderate(commands.GroupCog, group_name=app_commands.locale_str("admin")):
         if not guild.me.guild_permissions.moderate_members:
             await interaction.followup.send("機器人沒有禁言的權限，請確認機器人擁有「管理成員」的權限。")
             return
-
-        if user.startswith("<@") and user.endswith(">"):
-            user = user[2:-1]
-            if user.startswith("!"):
-                user = user[1:]
-
         # 解析 target
-        if isinstance(user, discord.Member):
-            user_id = user.id
-            member = user
-        else:
-            try:
-                user_id = int(user)
-            except Exception:
-                await interaction.followup.send("無效的使用者或 ID。")
-                return
-            member = guild.get_member(user_id)
-            if member is None:
-                await interaction.followup.send("該用戶不在伺服器中，無法禁言。")
-                return
+        user_id = user.id
 
         duration_seconds = timestr_to_seconds(duration)
         if duration_seconds <= 0:
@@ -778,20 +715,20 @@ class Moderate(commands.GroupCog, group_name=app_commands.locale_str("admin")):
 
         # 執行禁言（可能耗時）
         try:
-            await member.timeout(timedelta(seconds=duration_seconds), reason=reason)
+            await user.timeout(timedelta(seconds=duration_seconds), reason=reason)
         except Exception as e:
-            print(f"[!] 禁言 {member} 時發生錯誤：{e}")
+            print(f"[!] 禁言 {user} 時發生錯誤：{e}")
             await interaction.followup.send(f"禁言時發生錯誤：{e}")
             return
 
         # 使用 followup 送出最終訊息
         suffix = f"\n- 原因：{reason}" if reason != "無" else ""
-        await interaction.followup.send(f"已對 {member.mention} 禁言 {get_time_text(duration_seconds)}。{suffix}")
+        await interaction.followup.send(f"已對 {user.mention} 禁言 {get_time_text(duration_seconds)}。{suffix}")
         
     @app_commands.command(name=app_commands.locale_str("untimeout"), description="解除用戶禁言")
-    @app_commands.describe(user="選擇用戶（@或ID）")
+    @app_commands.describe(user="選擇用戶")
     @app_commands.default_permissions(mute_members=True)
-    async def untimeout_user(self, interaction: discord.Interaction, user: str):
+    async def untimeout_user(self, interaction: discord.Interaction, user: discord.Member):
         await interaction.response.defer()
 
         guild = interaction.guild
@@ -803,36 +740,18 @@ class Moderate(commands.GroupCog, group_name=app_commands.locale_str("admin")):
         if not guild.me.guild_permissions.moderate_members:
             await interaction.followup.send("機器人沒有解除禁言的權限，請確認機器人擁有「管理成員」的權限。")
             return
-
-        if user.startswith("<@") and user.endswith(">"):
-            user = user[2:-1]
-            if user.startswith("!"):
-                user = user[1:]
-
         # 解析 target
-        if isinstance(user, discord.Member):
-            user_id = user.id
-            member = user
-        else:
-            try:
-                user_id = int(user)
-            except Exception:
-                await interaction.followup.send("無效的使用者或 ID。")
-                return
-            member = guild.get_member(user_id)
-            if member is None:
-                await interaction.followup.send("該用戶不在伺服器中，無法解除禁言。")
-                return
+        user_id = user.id
 
         # 執行解除禁言
         try:
-            await member.timeout(None, reason="解除禁言")
+            await user.timeout(None, reason="解除禁言")
         except Exception as e:
-            print(f"[!] 解除禁言 {member} 時發生錯誤：{e}")
+            print(f"[!] 解除禁言 {user} 時發生錯誤：{e}")
             await interaction.followup.send(f"解除禁言時發生錯誤：{e}")
             return
 
-        await interaction.followup.send(f"已對 {member.mention} 解除禁言。")
+        await interaction.followup.send(f"已對 {user.mention} 解除禁言。")
         
     @app_commands.command(name=app_commands.locale_str("moderation-message-channel"), description="設定懲處公告頻道")
     @app_commands.describe(channel="選擇頻道")
