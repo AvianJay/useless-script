@@ -6,3 +6,4 @@ venv/
 .venv/
 data.db
 *.log
+avatar_temp.ico

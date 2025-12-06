@@ -5,6 +5,8 @@ from hypercorn.config import Config
 from hypercorn.asyncio import serve
 from globalenv import bot, modules, config, on_ready_tasks
 from logger import log
+from PIL import Image
+import requests
 
 if "UtilCommands" in modules:
     import UtilCommands
@@ -44,6 +46,25 @@ def privacy_policy():
 @app.route('/terms-of-service')
 def terms_of_service():
     return render_template('TermsofService.html', bot=bot)
+
+AVATAR_ICO = None
+@app.route('/favicon.ico')
+def favicon():
+    global AVATAR_ICO
+    if AVATAR_ICO is None:
+        avatar_url = str(bot.user.avatar.url) if bot.user.avatar else None
+        if avatar_url:
+            avatar_path = os.path.join('static', 'avatar_temp.ico')
+            try:
+                avatar_image = Image.open(requests.get(avatar_url, stream=True).raw)
+                avatar_image.save(avatar_path, format='ICO', sizes=[(32, 32)])
+                AVATAR_ICO = avatar_path
+            except Exception as e:
+                log(f"無法下載或轉換機器人頭像為 favicon: {e}", module_name="Website")
+                AVATAR_ICO = os.path.join('static', 'favicon.ico')
+        else:
+            AVATAR_ICO = os.path.join('static', 'favicon.ico')
+    return send_from_directory('static', os.path.basename(AVATAR_ICO))
 
 async def start_webserver():
     host = config("webserver_host")
