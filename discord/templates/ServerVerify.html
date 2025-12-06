@@ -8,11 +8,11 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="./static/css/style.css">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
     <script src="https://www.google.com/recaptcha/api.js" async defer></script>
     <script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
-    <script src="https://openfpcdn.io/fingerprintjs/v5/iife.min.js"></script>
-    <script src="./static/js/webverify.js" defer></script>
+    <script src="{{ url_for('static', filename='js/fp.min.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/webverify.js') }}" defer></script>
 </head>
 
 <body>
