@@ -363,7 +363,7 @@ class ServerWebVerify(commands.GroupCog, name="webverify", description="伺服�
             return
         if channel is None:
             channel = interaction.channel
-        verify_url = f"https://discord.com/oauth2/authorize?client_id={bot.application.id}&response_type=code&scope=identify&prompt=none&{urlencode({'redirect_url': config('webverify_url')})}&state={guild_id}"
+        verify_url = f"https://discord.com/oauth2/authorize?client_id={bot.application.id}&response_type=code&scope=identify&prompt=none&{urlencode({'redirect_uri': config('webverify_url')})}&state={guild_id}"
         verify_button = discord.ui.Button(label="前往驗證", url=verify_url)
         view = discord.ui.View()
         view.add_item(verify_button)
