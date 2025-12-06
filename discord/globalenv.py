@@ -11,7 +11,7 @@ import logging
 
 
 # Global configuration for backward compatibility
-config_version = 12
+config_version = 13
 config_path = 'config.json'
 
 default_config = {
@@ -35,6 +35,12 @@ default_config = {
     "webserver_host": "0.0.0.0",
     "webserver_port": 8080,
     "webserver_ssl": False,
+    "webverify_recaptcha_key": "",
+    "webverify_recaptcha_secret": "",
+    "webverify_turnstile_key": "",
+    "webverify_turnstile_secret": "",
+    "webverify_url": "http://localhost:8080/server-verify",
+    "client_secret": "",
 }
 _config = None
 
@@ -133,6 +139,10 @@ def set_user_data(guild_id: int, user_id: int, key: str, value):
 def get_all_user_data(guild_id: int, key: str):
     """Get all user-specific data for a specific key in a server"""
     return db.get_all_user_data(guild_id, key)
+
+def get_db_connection():
+    """Get a new database connection"""
+    return db.get_connection()
 
 async def get_command_mention(command_name: str, subcommand_name: str = None):
     commands = await bot.tree.fetch_commands()

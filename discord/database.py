@@ -274,6 +274,10 @@ class Database:
                     data[user_id][data_key] = data_value
         
         return data
+    
+    def get_connection(self):
+        """Get a new database connection"""
+        return sqlite3.connect(self.db_path)
 
 # Global database instance
 db = Database()
