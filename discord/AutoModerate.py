@@ -269,7 +269,7 @@ class AutoModerate(commands.GroupCog, name=app_commands.locale_str("automod")):
         database_file = config("flagged_database_path", "flagged_data.db")
         conn = sqlite3.connect(database_file)
         cursor = conn.cursor()
-        cursor.execute('SELECT user_id, guild_id, flagged_at, flagged_role FROM flagged_users WHERE user_id = ? AND guild_id = ?', (member.id, guild_id))
+        cursor.execute('SELECT user_id, guild_id, flagged_at, flagged_role FROM flagged_users WHERE user_id = ?', (member.id,))
         results = cursor.fetchall()
         results = [dict(zip([column[0] for column in cursor.description], row)) for row in results]
         if results:
