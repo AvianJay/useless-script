@@ -294,6 +294,16 @@ translations = {
     "spoilers": "暴雷",
     "changelogs": "更新日誌",
     "global_history": "全域歷史紀錄",
+    "webverify": "網頁驗證",
+    "status": "狀態",
+    "set_captcha": "設定人機驗證",
+    "captcha_provider": "人機驗證提供者",
+    "send_verify_message": "發送驗證提示",
+    "title": "標題",
+    "message": "訊息",
+    "set_unverified_role": "設定未驗證身分組",
+    "role": "身分組",
+    "check_relation": "檢查關聯帳號",
 }
 class CommandNameTranslator(app_commands.Translator):
     async def translate(

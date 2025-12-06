@@ -300,26 +300,26 @@ class ServerWebVerify(commands.GroupCog, name="webverify", description="伺服�
         set_server_config(guild_id, "webverify_config", guild_config)
         await interaction.response.send_message("伺服器的網頁驗證功能已啟用。")
     
-    @app_commands.command(name="set_captcha", description="設定網頁驗證使用的 CAPTCHA 類型")
-    @app_commands.describe(captcha_type="選擇 CAPTCHA 類型")
-    @app_commands.choices(captcha_type=[
+    @app_commands.command(name="set_captcha", description="設定網頁驗證使用的 CAPTCHA 提供者")
+    @app_commands.describe(captcha_provider="選擇 CAPTCHA 提供者")
+    @app_commands.choices(captcha_provider=[
         app_commands.Choice(name="無", value="none"),
         app_commands.Choice(name="Cloudflare Turnstile", value="turnstile"),
         app_commands.Choice(name="Google reCAPTCHA", value="recaptcha")
     ])
     @app_commands.default_permissions(administrator=True)
-    async def set_captcha(self, interaction: discord.Interaction, captcha_type: str):
+    async def set_captcha(self, interaction: discord.Interaction, captcha_provider: str):
         guild_id = interaction.guild.id
         guild_config = get_server_config(guild_id, "webverify_config")
         if not guild_config:
             await interaction.response.send_message("伺服器尚未設定網頁驗證功能。")
             return
-        if captcha_type not in ['none', 'turnstile', 'recaptcha']:
-            await interaction.response.send_message("無效的 CAPTCHA 類型。請選擇 'none'、'turnstile' 或 'recaptcha'。")
+        if captcha_provider not in ['none', 'turnstile', 'recaptcha']:
+            await interaction.response.send_message("無效的 CAPTCHA 提供者。請選擇 'none'、'turnstile' 或 'recaptcha'。")
             return
-        guild_config['captcha_type'] = captcha_type
+        guild_config['captcha_type'] = captcha_provider
         set_server_config(guild_id, "webverify_config", guild_config)
-        await interaction.response.send_message(f"網頁驗證的 CAPTCHA 類型已設定為 {captcha_type}。" if captcha_type != 'none' else "已關閉 CAPTCHA 驗證。")
+        await interaction.response.send_message(f"網頁驗證的 CAPTCHA 類型已設定為 {captcha_provider}。" if captcha_provider != 'none' else "已關閉 CAPTCHA 驗證。")
     
     @app_commands.command(name="set_unverified_role", description="設定未驗證成員的角色")
     @app_commands.describe(role="選擇未驗證成員的角色")
