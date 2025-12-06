@@ -9,7 +9,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="./static/css/style.css">
-    <script src="https://www.google.com/recaptcha/api.js" async defer></script>
+    <script src="https://www.google.com/recaptcha/api.js"></script>
     <script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
     <script src="https://openfpcdn.io/fingerprintjs/v5/iife.min.js"></script>
     <script src="./static/js/webverify.js" defer></script>
@@ -44,7 +44,12 @@
             {% if captcha_type == "turnstile" %}
             <div class="cf-turnstile" data-sitekey="{{ site_key_turnstile }}" data-callback="turnstileCallback"></div>
             {% elif captcha_type == "recaptcha" %}
-            <div class="g-recaptcha" data-sitekey="{{ site_key_recaptcha }}" data-callback="reCaptchaCallback"></div>
+            <p>reCAPTCHA 自動驗證中...</p>
+            <script>
+                window.onload = function () {
+                    executereCaptcha("{{ site_key_recaptcha }}");
+                }
+            </script>
             {% else %}
             <p>自動驗證中...</p>
             <script>
