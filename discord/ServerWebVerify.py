@@ -426,10 +426,19 @@ class ServerWebVerify(commands.GroupCog, name="webverify", description="伺服�
             await interaction.response.send_message("伺服器尚未設定網頁驗證功能。")
             return
         guild_config['autorole_enabled'] = enable
-        guild_config['autorole_trigger'] = trigger
+        current_trigger = guild_config.get('autorole_trigger', 'always')
+        if current_trigger == "always":
+            guild_config['autorole_trigger'] = trigger
+        else:
+            triggers = current_trigger.split('+')
+            if guild_config['autorole_trigger'] in triggers:
+                triggers.remove(guild_config['autorole_trigger'])
+            else:
+                triggers.append(trigger)
+            guild_config['autorole_trigger'] = '+'.join(triggers)
         set_server_config(guild_id, "webverify_config", guild_config)
         status = "已啟用" if enable else "已停用"
-        await interaction.response.send_message(f"自動分配未驗證角色功能{status}，觸發條件：{trigger}。")
+        await interaction.response.send_message(f"自動分配未驗證角色功能{status}，觸發條件：{guild_config['autorole_trigger']}。")
     
     @commands.Cog.listener()
     async def on_member_join(self, member: discord.Member):
@@ -441,32 +450,34 @@ class ServerWebVerify(commands.GroupCog, name="webverify", description="伺服�
         unverified_role_id = guild_config.get('unverified_role_id')
         if not unverified_role_id:
             return
-        trigger = guild_config.get('autorole_trigger', 'always')
+        cfg_trigger = guild_config.get('autorole_trigger', 'always')
         assign_role = False
+        triggers = cfg_trigger.split('+')
 
-        if trigger == 'always':
-            assign_role = True
-        elif trigger == 'age_check':
-            account_age = (discord.utils.utcnow() - member.created_at).total_seconds()
-            if account_age < 604800:  # 7 days in seconds
+        for trigger in triggers:
+            if trigger == 'always':
                 assign_role = True
-        elif trigger == 'no_history':
-            with get_db_connection() as conn:
-                cursor = conn.cursor()
-                cursor.execute('SELECT COUNT(*) FROM webverify_history WHERE user_id = ?', (member.id,))
-                count = cursor.fetchone()[0]
-                if count == 0:
+            elif trigger == 'age_check':
+                account_age = (discord.utils.utcnow() - member.created_at).total_seconds()
+                if account_age < 604800:  # 7 days in seconds
                     assign_role = True
-        elif trigger == 'has_flagged_history':
-            database_file = config("flagged_database_path", "flagged_data.db")
-            conn = sqlite3.connect(database_file)
-            cursor = conn.cursor()
-            cursor.execute('SELECT user_id, guild_id, flagged_at, flagged_role FROM flagged_users WHERE user_id = ?', (member.id,))
-            results = cursor.fetchall()
-            results = [dict(zip([column[0] for column in cursor.description], row)) for row in results]
-            if results:
-                assign_role = True
-            conn.close()
+            elif trigger == 'no_history':
+                with get_db_connection() as conn:
+                    cursor = conn.cursor()
+                    cursor.execute('SELECT COUNT(*) FROM webverify_history WHERE user_id = ?', (member.id,))
+                    count = cursor.fetchone()[0]
+                    if count == 0:
+                        assign_role = True
+            elif trigger == 'has_flagged_history':
+                database_file = config("flagged_database_path", "flagged_data.db")
+                conn = sqlite3.connect(database_file)
+                cursor = conn.cursor()
+                cursor.execute('SELECT user_id, guild_id, flagged_at, flagged_role FROM flagged_users WHERE user_id = ?', (member.id,))
+                results = cursor.fetchall()
+                results = [dict(zip([column[0] for column in cursor.description], row)) for row in results]
+                if results:
+                    assign_role = True
+                conn.close()
         
         if assign_role:
             await member.add_roles(discord.Object(id=unverified_role_id), reason="自動分配未驗證角色")
