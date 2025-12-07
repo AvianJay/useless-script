@@ -240,13 +240,13 @@ async def handle_checkin_rewards(interaction: discord.Interaction, user: Union[d
 @bot.tree.command(name="dsize", description="量屌長")
 @app_commands.describe(global_dsize="是否使用全域紀錄 (預設否)")
 @app_commands.choices(global_dsize=[
-    app_commands.Choice(name="否", value=0),
-    app_commands.Choice(name="是", value=1),
+    app_commands.Choice(name="否", value="False"),
+    app_commands.Choice(name="是", value="True"),
 ])
 @app_commands.allowed_installs(guilds=True, users=True)
 @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
-async def dsize(interaction: discord.Interaction, global_dsize: int = 0):
-    global_dsize = bool(global_dsize)
+async def dsize(interaction: discord.Interaction, global_dsize: str = "False"):
+    global_dsize = (global_dsize == "True")
     user_id = interaction.user.id
     # Use timezone-aware UTC and convert to Taiwan time (UTC+8)
     # ew broken
@@ -525,19 +525,19 @@ async def dsize(interaction: discord.Interaction, global_dsize: int = 0):
 @app_commands.describe(limit="顯示前幾名 (預設10)", global_leaderboard="顯示全域排行榜 (預設否)", reverse="反轉排行榜 (預設否)")
 @app_commands.choices(
     global_leaderboard=[
-        app_commands.Choice(name="否", value=0),
-        app_commands.Choice(name="是", value=1),
+        app_commands.Choice(name="否", value="False"),
+        app_commands.Choice(name="是", value="True"),
     ],
     reverse=[
-        app_commands.Choice(name="否", value=0),
-        app_commands.Choice(name="是", value=1),
+        app_commands.Choice(name="否", value="False"),
+        app_commands.Choice(name="是", value="True"),
     ]
 )
 @app_commands.allowed_installs(guilds=True, users=True)
 @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
-async def dsize_leaderboard(interaction: discord.Interaction, limit: int = 10, global_leaderboard: int = 0, reverse: int = 0):
-    global_leaderboard = bool(global_leaderboard)
-    reverse = bool(reverse)
+async def dsize_leaderboard(interaction: discord.Interaction, limit: int = 10, global_leaderboard: str = "False", reverse: str = "False"):
+    global_leaderboard = (global_leaderboard == "True")
+    reverse = (reverse == "True")
     if global_leaderboard:
         guild_id = None  # global
     else:
@@ -957,13 +957,13 @@ async def dsize_stats(interaction: discord.Interaction):
     global_history="是否顯示全域紀錄 (預設否)"
 )
 @app_commands.choices(global_history=[
-    app_commands.Choice(name="否", value=0),
-    app_commands.Choice(name="是", value=1),
+    app_commands.Choice(name="否", value="False"),
+    app_commands.Choice(name="是", value="True"),
 ])
 @app_commands.allowed_installs(guilds=True, users=True)
 @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
-async def dsize_history(interaction: discord.Interaction, user: discord.User = None, global_history: int = 0):
-    global_history = bool(global_history)
+async def dsize_history(interaction: discord.Interaction, user: discord.User = None, global_history: str = "False"):
+    global_history = (global_history == "True")
     target_user = user if user else interaction.user
     user_id = target_user.id
     

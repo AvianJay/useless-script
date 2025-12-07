@@ -63,13 +63,13 @@ async def r34_tags_autocomplete(interaction: discord.Interaction, current: str):
 @bot.tree.command(name="r34", description="從rule34.xxx隨機取得一張圖片", nsfw=True)
 @app_commands.describe(tags="標籤", pid="頁數", spoilers="是否標記為暴雷內容")
 @app_commands.choices(spoilers=[
-    app_commands.Choice(name="是", value=1),
-    app_commands.Choice(name="否", value=0),
+    app_commands.Choice(name="是", value="True"),
+    app_commands.Choice(name="否", value="False"),
 ])
 @app_commands.autocomplete(tags=r34_tags_autocomplete)
-async def r34_command(interaction: discord.Interaction, tags: str = None, pid: int = 1, spoilers: int = 0):
+async def r34_command(interaction: discord.Interaction, tags: str = None, pid: int = 1, spoilers: str = "False"):
     await interaction.response.defer()
-    spoilers = bool(spoilers)
+    spoilers = (spoilers == "True")
     img_url = r34(tags, pid)
     if img_url.startswith("錯誤！"):
         await interaction.followup.send(img_url)

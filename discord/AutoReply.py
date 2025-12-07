@@ -63,8 +63,8 @@ class AutoReply(commands.GroupCog, name="autoreply"):
             app_commands.Choice(name="結束於", value="ends_with"),
         ],
         reply=[
-            app_commands.Choice(name="是", value=1),
-            app_commands.Choice(name="否", value=0),
+            app_commands.Choice(name="是", value="True"),
+            app_commands.Choice(name="否", value="False"),
         ],
         channel_mode=[
             app_commands.Choice(name="所有頻道", value="all"),
@@ -73,9 +73,9 @@ class AutoReply(commands.GroupCog, name="autoreply"):
         ]
     )
     @app_commands.default_permissions(administrator=True)
-    async def add_autoreply(self, interaction: discord.Interaction, mode: str, trigger: str, response: str, reply: int = 0, channel_mode: str = "all", channels: str = "", random_chance: int = 100):
+    async def add_autoreply(self, interaction: discord.Interaction, mode: str, trigger: str, response: str, reply: str = "False", channel_mode: str = "all", channels: str = "", random_chance: int = 100):
         guild_id = interaction.guild.id
-        reply = bool(reply)
+        reply = (reply == "True")
         if random_chance < 1 or random_chance > 100:
             await interaction.response.send_message("隨機回覆機率必須在 1 到 100 之間。", ephemeral=True)
             return
@@ -197,8 +197,8 @@ class AutoReply(commands.GroupCog, name="autoreply"):
             app_commands.Choice(name="結束於", value="ends_with"),
         ],
         reply=[
-            app_commands.Choice(name="是", value=1),
-            app_commands.Choice(name="否", value=0),
+            app_commands.Choice(name="是", value="True"),
+            app_commands.Choice(name="否", value="False"),
         ],
         channel_mode=[
             app_commands.Choice(name="所有頻道", value="all"),
@@ -208,9 +208,9 @@ class AutoReply(commands.GroupCog, name="autoreply"):
     )
     @app_commands.autocomplete(trigger=list_autoreply_autocomplete)
     @app_commands.default_permissions(administrator=True)
-    async def edit_autoreply(self, interaction: discord.Interaction, trigger: str, new_mode: str = None, new_trigger: str = None, new_response: str = None, reply: int = None, channel_mode: str = None, channels: str = None, random_chance: int = None):
+    async def edit_autoreply(self, interaction: discord.Interaction, trigger: str, new_mode: str = None, new_trigger: str = None, new_response: str = None, reply: str = None, channel_mode: str = None, channels: str = None, random_chance: int = None):
         guild_id = interaction.guild.id
-        reply = None if reply is None else (True if reply == 1 else False)
+        reply = None if reply is None else (True if reply == "True" else False)
         autoreplies = get_server_config(guild_id, "autoreplies", [])
         if random_chance is not None:
             if random_chance < 1 or random_chance > 100:
@@ -290,13 +290,13 @@ class AutoReply(commands.GroupCog, name="autoreply"):
     @app_commands.describe(file="要匯入的 JSON 檔案", merge="是否與現有設定合併")
     @app_commands.choices(
         merge=[
-            app_commands.Choice(name="是", value=1),
-            app_commands.Choice(name="否", value=0)
+            app_commands.Choice(name="是", value="True"),
+            app_commands.Choice(name="否", value="False")
         ]
     )
     @app_commands.default_permissions(administrator=True)
-    async def import_autoreplies(self, interaction: discord.Interaction, file: discord.Attachment, merge: int = 0):
-        merge = bool(merge)
+    async def import_autoreplies(self, interaction: discord.Interaction, file: discord.Attachment, merge: str = "False"):
+        merge = (merge == "True")
         guild_id = interaction.guild.id
         autoreplies = get_server_config(guild_id, "autoreplies", [])
         # if not autoreplies:

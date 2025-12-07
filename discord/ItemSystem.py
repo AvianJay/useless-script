@@ -131,17 +131,17 @@ class ItemSystem(commands.GroupCog, name="item", description="物品系統指令
     @app_commands.autocomplete(item_id=get_user_items_autocomplete)
     @app_commands.choices(
         can_pickup=[
-            app_commands.Choice(name="是", value=1),
-            app_commands.Choice(name="否", value=0)
+            app_commands.Choice(name="是", value="True"),
+            app_commands.Choice(name="否", value="False")
         ],
         pickup_only_once=[
-            app_commands.Choice(name="是", value=1),
-            app_commands.Choice(name="否", value=0)
+            app_commands.Choice(name="是", value="True"),
+            app_commands.Choice(name="否", value="False")
         ]
     )
-    async def drop_item(self, interaction: discord.Interaction, item_id: str, amount: int = 1, can_pickup: int = 1, pickup_duration: int = 60, pickup_only_once: int = 0):
-        can_pickup = bool(can_pickup)
-        pickup_only_once = bool(pickup_only_once)
+    async def drop_item(self, interaction: discord.Interaction, item_id: str, amount: int = 1, can_pickup: str = "True", pickup_duration: int = 60, pickup_only_once: str = "False"):
+        can_pickup = (can_pickup == "True")
+        pickup_only_once = (pickup_only_once == "True")
         user_id = interaction.user.id
         guild_id = interaction.guild.id if interaction.guild else None
         user_items = await get_user_items(guild_id, user_id, item_id)

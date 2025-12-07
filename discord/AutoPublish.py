@@ -26,18 +26,22 @@ class AutoPublish(commands.GroupCog, name=app_commands.locale_str("autopublish")
 
     @app_commands.command(name=app_commands.locale_str("settings"), description="設定自動發布")
     @app_commands.describe(enable="是否啟用自動發布")
+    @app_commands.choices(enable=[
+        app_commands.Choice(name="啟用", value="True"),
+        app_commands.Choice(name="停用", value="False"),
+    ])
     @app_commands.guild_only()
     @app_commands.default_permissions(administrator=True)
     @app_commands.allowed_contexts(guilds=True, dms=False, private_channels=False)
-    async def set_autopublish(self, interaction: discord.Interaction, enable: bool):
+    async def set_autopublish(self, interaction: discord.Interaction, enable: str):
         guild_id = interaction.guild.id if interaction.guild else None
         # check bot permissions
         if not interaction.guild.me.guild_permissions.manage_messages:
             await interaction.response.send_message("機器人需要管理訊息權限才能設定自動發布。", ephemeral=True)
             return
-        set_server_config(guild_id, "autopublish", {"enabled": enable})
-        await interaction.response.send_message(f"自動發布已{'啟用' if enable else '停用'}。", ephemeral=True)
-        log(f"自動發布已{'啟用' if enable else '停用'}。", module_name="AutoPublish", guild=interaction.guild)
+        set_server_config(guild_id, "autopublish", {"enabled": (enable == "True")})
+        await interaction.response.send_message(f"自動發布已{'啟用' if enable == 'True' else '停用'}。", ephemeral=True)
+        log(f"自動發布已{'啟用' if enable == 'True' else '停用'}。", module_name="AutoPublish", guild=interaction.guild)
         return
     
     @commands.Cog.listener()
