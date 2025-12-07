@@ -81,6 +81,51 @@ document.addEventListener("DOMContentLoaded", function () {
             const statusBadge = document.getElementById("botstatus-badge");
             if (statusBadge) statusBadge.textContent = "Error";
         });
+
+    // Fetch Commit Logs
+    fetch("/api/commit_logs")
+        .then(response => response.json())
+        .then(data => {
+            const logsContainer = document.getElementById("commit-logs");
+            if (logsContainer && data.commit_logs) {
+                if (data.commit_logs.length === 0 || (data.commit_logs.length === 1 && data.commit_logs[0] === "N/A")) {
+                    logsContainer.innerHTML = "<p style='text-align: center; color: #888;'>暫無更新記錄</p>";
+                    return;
+                }
+
+                logsContainer.innerHTML = ""; // Clear loading message
+                data.commit_logs.forEach(logStr => {
+                    const item = document.createElement("div");
+                    item.className = "commit-item";
+                    item.style.cssText = "background: rgba(255,255,255,0.05); padding: 15px; margin-bottom: 10px; border-radius: 8px; border-left: 4px solid var(--primary-color, #5865F2);";
+
+                    // Parse log string: Author: Hash - Message (Relative Date)
+                    // Example: AvianJay: a1b2c3d - Fix bug (2 days ago)
+                    const match = logStr.match(/^(.*?): (.*?) - (.*?) \((.*?)\)$/);
+
+                    if (match) {
+                        const [full, author, hash, message, date] = match;
+                        item.innerHTML = `
+                            <div class="commit-header" style="font-size: 0.9em; color: #bbb; margin-bottom: 4px; display: flex; justify-content: space-between;">
+                                <span><strong style="color: var(--text-primary, #fff);">${author}</strong> <span style="opacity: 0.7;">Submitted ${hash}</span></span>
+                                <span style="opacity: 0.7;">${date}</span>
+                            </div>
+                            <div class="commit-message" style="font-size: 1.1em; color: var(--text-primary, #eee);">${message}</div>
+                        `;
+                    } else {
+                        // Fallback for unexpected format
+                        item.textContent = logStr;
+                        item.style.color = "var(--text-primary, #eee)";
+                    }
+                    logsContainer.appendChild(item);
+                });
+            }
+        })
+        .catch(error => {
+            console.error("Error fetching commit logs:", error);
+            const logsContainer = document.getElementById("commit-logs");
+            if (logsContainer) logsContainer.innerHTML = "<p style='text-align: center; color: #ff5555;'>無法載入更新記錄</p>";
+        });
 });
 
 function inviteBot(event) {

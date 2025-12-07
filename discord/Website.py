@@ -35,6 +35,11 @@ def api_status():
     }
     return status
 
+@app.route('/api/commit_logs')
+def api_commit_logs():
+    logs = UtilCommands.get_commit_logs(10) if UtilCommands else ["N/A"]
+    return {"commit_logs": logs}
+
 @app.route('/')
 def index():
     return render_template('index.html', bot=bot)
