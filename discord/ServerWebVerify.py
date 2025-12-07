@@ -528,7 +528,7 @@ class ServerWebVerify(commands.GroupCog, name="webverify", description="伺服�
                 notify_message = guild_config.get('notify', {}).get('message')
                 embed = discord.Embed(title=notify_title, description=notify_message, color=0x00ff00)
                 embed.set_footer(text=member.guild.name, icon_url=member.guild.icon.url if member.guild.icon else None)
-                verify_url = f"https://discord.com/oauth2/authorize?client_id={bot.application.id}&response_type=code&scope=identify&prompt=none&{urlencode({'redirect_uri': config('webverify_url')})}&state={guild_id}"
+                verify_url = f"https://discord.com/oauth2/authorize?client_id={bot.application.id}&response_type=code&scope=identify&prompt=none&{urlencode({'redirect_uri': config('webverify_url')})}&state={member.guild.id}"
                 verify_button = discord.ui.Button(label="前往驗證", url=verify_url)
                 view = discord.ui.View()
                 view.add_item(verify_button)
