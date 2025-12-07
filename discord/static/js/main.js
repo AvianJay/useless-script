@@ -107,7 +107,7 @@ document.addEventListener("DOMContentLoaded", function () {
                         const [full, author, hash, message, date] = match;
                         item.innerHTML = `
                             <div class="commit-header" style="font-size: 0.9em; color: #bbb; margin-bottom: 4px; display: flex; justify-content: space-between;">
-                                <span><strong style="color: var(--text-primary, #fff);">${author}</strong> <span style="opacity: 0.7;">Submitted ${hash}</span></span>
+                                <span><strong style="color: var(--text-primary, #fff);">${author}</strong> <span style="opacity: 0.7;">提交 ${hash}</span></span>
                                 <span style="opacity: 0.7;">${date}</span>
                             </div>
                             <div class="commit-message" style="font-size: 1.1em; color: var(--text-primary, #eee);">${message}</div>
