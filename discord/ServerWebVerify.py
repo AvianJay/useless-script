@@ -440,6 +440,26 @@ class ServerWebVerify(commands.GroupCog, name="webverify", description="伺服�
         status = "已啟用" if enable else "已停用"
         await interaction.response.send_message(f"自動分配未驗證角色功能{status}，觸發條件：{guild_config['autorole_trigger']}。")
     
+    @app_commands.command(name="create_unverified_role", description="自動建立並設定未驗證成員的身分組")
+    @app_commands.describe(name="未驗證成員身分組名稱")
+    @app_commands.default_permissions(administrator=True)
+    async def create_unverified_role(self, interaction: discord.Interaction, name: str = "未驗證成員"):
+        guild = interaction.guild
+        existing_role = discord.utils.get(guild.roles, name=name)
+        if existing_role:
+            await interaction.response.send_message(f"角色 '{name}' 已存在。請使用其他名稱或直接設定此角色為未驗證成員角色。")
+            return
+        unverified_role = await guild.create_role(name=name, reason="建立未驗證成員身分組")
+        # try to set role permissions to deny send messages in all text channels
+        for channel in guild.text_channels:
+            await channel.set_permissions(unverified_role, send_messages=False, connect=False, create_public_threads=False, reason="設定未驗證成員身分組權限")
+        guild_config = get_server_config(guild.id, "webverify_config")
+        if not guild_config:
+            guild_config = {}
+        guild_config['unverified_role_id'] = unverified_role.id
+        set_server_config(guild.id, "webverify_config", guild_config)
+        await interaction.response.send_message(f"已建立角色 '{name}' 並將所有文字頻道權限關閉且設定為未驗證成員角色。")
+    
     @commands.Cog.listener()
     async def on_member_join(self, member: discord.Member):
         guild_config = get_server_config(member.guild.id, "webverify_config")
