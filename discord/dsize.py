@@ -1022,7 +1022,7 @@ async def dsize_history(interaction: discord.Interaction, user: discord.User = N
         embed.add_field(name=date_display, value=field_value, inline=True)
     
     if not global_history and interaction.guild:
-        embed.set_footer(text=f"伺服器：{interaction.guild.name}")
+        embed.set_footer(text=interaction.guild.name, icon_url=interaction.guild.icon.url if interaction.guild.icon else None)
     else:
         embed.set_footer(text="全域紀錄")
     
