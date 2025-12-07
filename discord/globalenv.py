@@ -305,6 +305,8 @@ translations = {
     "role": "身分組",
     "check_relation": "檢查關聯帳號",
     "autorole": "自動身分組",
+    "create_unverified_role": "建立未驗證身分組",
+    "name": "名稱",
 }
 class CommandNameTranslator(app_commands.Translator):
     async def translate(
