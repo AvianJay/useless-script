@@ -280,7 +280,13 @@ class ServerWebVerify(commands.GroupCog, name="webverify", description="伺服�
             'captcha_type': 'turnstile',
             'unverified_role_id': None,
             'autorole_enabled': False,
-            'autorole_trigger': 'always'
+            'autorole_trigger': 'always',
+            'notify': {
+                'type': 'dm',
+                'channel_id': None,
+                'title': '伺服器網頁驗證',
+                'message': '請點擊下方按鈕進行網頁驗證：'
+            }
         }
         set_server_config(guild_id, "webverify_config", default_config)
         await interaction.response.send_message("伺服器的網頁驗證功能已設定完成。請記得設定未驗證成員的角色。")
@@ -357,10 +363,14 @@ class ServerWebVerify(commands.GroupCog, name="webverify", description="伺服�
         )
         await interaction.response.send_message(status_msg)
     
-    @app_commands.command(name="send_verify_message", description="發送網頁驗證訊息到指定頻道")
-    @app_commands.describe(channel="選擇要發送驗證訊息的頻道", title="自訂 Embed 標題", message="自訂驗證訊息內容")
+    @app_commands.command(name="verify_notify", description="設定驗證通知的方式")
+    @app_commands.describe(type="選擇要如何提示", channel="選擇要發送驗證訊息的頻道", title="自訂 Embed 標題", message="自訂驗證訊息內容")
+    @app_commands.choices(type=[
+        app_commands.Choice(name="在頻道內", value="channel"),
+        app_commands.Choice(name="私訊", value="dm"),
+    ])
     @app_commands.default_permissions(administrator=True)
-    async def send_verify_message(self, interaction: discord.Interaction, channel: discord.TextChannel = None, title: str = "伺服器網頁驗證", message: str = "請點擊下方按鈕進行網頁驗證："):
+    async def verify_notify(self, interaction: discord.Interaction, type: str = "channel", channel: discord.TextChannel = None, title: str = "伺服器網頁驗證", message: str = "請點擊下方按鈕進行網頁驗證："):
         guild_id = interaction.guild.id
         guild_config = get_server_config(guild_id, "webverify_config")
         if not guild_config:
@@ -368,13 +378,23 @@ class ServerWebVerify(commands.GroupCog, name="webverify", description="伺服�
             return
         if channel is None:
             channel = interaction.channel
-        verify_url = f"https://discord.com/oauth2/authorize?client_id={bot.application.id}&response_type=code&scope=identify&prompt=none&{urlencode({'redirect_uri': config('webverify_url')})}&state={guild_id}"
-        verify_button = discord.ui.Button(label="前往驗證", url=verify_url)
-        view = discord.ui.View()
-        view.add_item(verify_button)
-        embed = discord.Embed(title=title, description=message, color=0x00ff00)
-        await channel.send(embed=embed, view=view)
-        await interaction.response.send_message(f"已在 {channel.mention} 發送網頁驗證訊息。")
+        guild_config['notify'] = {
+            'type': type,
+            'channel_id': channel.id if type == "channel" else None,
+            'title': title,
+            'message': message
+        }
+        set_server_config(guild_id, "webverify_config", guild_config)
+        if type == "channel":
+            verify_url = f"https://discord.com/oauth2/authorize?client_id={bot.application.id}&response_type=code&scope=identify&prompt=none&{urlencode({'redirect_uri': config('webverify_url')})}&state={guild_id}"
+            verify_button = discord.ui.Button(label="前往驗證", url=verify_url)
+            view = discord.ui.View()
+            view.add_item(verify_button)
+            embed = discord.Embed(title=title, description=message, color=0x00ff00)
+            await channel.send(embed=embed, view=view)
+            await interaction.response.send_message(f"已在 {channel.mention} 發送網頁驗證訊息。")
+        elif type == "dm":
+            await interaction.response.send_message("已設定驗證通知方式為私訊。")
     
     @app_commands.command(name="check_relation", description="檢查用戶的關聯帳號")
     @app_commands.describe(user="要檢查的用戶")
@@ -449,16 +469,17 @@ class ServerWebVerify(commands.GroupCog, name="webverify", description="伺服�
         if existing_role:
             await interaction.response.send_message(f"角色 '{name}' 已存在。請使用其他名稱或直接設定此角色為未驗證成員角色。")
             return
+        await interaction.response.defer()
         unverified_role = await guild.create_role(name=name, reason="建立未驗證成員身分組")
         # try to set role permissions to deny send messages in all text channels
         for channel in guild.text_channels:
-            await channel.set_permissions(unverified_role, send_messages=False, connect=False, create_public_threads=False, reason="設定未驗證成員身分組權限")
+            await channel.set_permissions(unverified_role, send_messages=False, connect=False, create_public_threads=False, create_private_threads=False, reason="設定未驗證成員身分組權限")
         guild_config = get_server_config(guild.id, "webverify_config")
         if not guild_config:
             guild_config = {}
         guild_config['unverified_role_id'] = unverified_role.id
         set_server_config(guild.id, "webverify_config", guild_config)
-        await interaction.response.send_message(f"已建立角色 '{name}' 並將所有文字頻道權限關閉且設定為未驗證成員角色。")
+        await interaction.followup.send(f"已建立角色 '{name}' 並將所有文字頻道權限關閉且設定為未驗證成員角色。")
     
     @commands.Cog.listener()
     async def on_member_join(self, member: discord.Member):
@@ -501,6 +522,17 @@ class ServerWebVerify(commands.GroupCog, name="webverify", description="伺服�
         
         if assign_role:
             await member.add_roles(discord.Object(id=unverified_role_id), reason="自動分配未驗證角色")
+            notify_type = guild_config.get('notify', {}).get('type', 'dm')
+            if notify_type == 'dm':
+                notify_title = guild_config.get('notify', {}).get('title')
+                notify_message = guild_config.get('notify', {}).get('message')
+                embed = discord.Embed(title=notify_title, description=notify_message, color=0x00ff00)
+                embed.set_footer(text=member.guild.name, icon_url=member.guild.icon.url if member.guild.icon else None)
+                verify_url = f"https://discord.com/oauth2/authorize?client_id={bot.application.id}&response_type=code&scope=identify&prompt=none&{urlencode({'redirect_uri': config('webverify_url')})}&state={guild_id}"
+                verify_button = discord.ui.Button(label="前往驗證", url=verify_url)
+                view = discord.ui.View()
+                view.add_item(verify_button)
+                await member.send(embed=embed, view=view)
 
 init_db()
 
