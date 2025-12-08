@@ -290,6 +290,13 @@ class ServerWebVerify(commands.GroupCog, name="webverify", description="伺服�
         }
         set_server_config(guild_id, "webverify_config", default_config)
         await interaction.response.send_message("伺服器的網頁驗證功能已設定完成。請記得設定未驗證成員的角色。")
+
+    @app_commands.command(name="quick_setup", description="使用互動式精靈快速設定網頁驗證")
+    @app_commands.default_permissions(administrator=True)
+    async def quick_setup(self, interaction: discord.Interaction):
+        view = WebVerifySetupWizard(interaction, self.bot)
+        await interaction.response.send_message(embed=await view.get_embed(), view=view)
+
     
     @app_commands.command(name="disable", description="停用伺服器的網頁驗證功能")
     @app_commands.default_permissions(administrator=True)
@@ -533,6 +540,235 @@ class ServerWebVerify(commands.GroupCog, name="webverify", description="伺服�
                 view = discord.ui.View()
                 view.add_item(verify_button)
                 await member.send(embed=embed, view=view)
+
+class WebVerifySetupWizard(discord.ui.View):
+    def __init__(self, interaction: discord.Interaction, bot: commands.Bot):
+        super().__init__(timeout=300)
+        self.interaction = interaction
+        self.bot = bot
+        self.guild = interaction.guild
+        self.config = get_server_config(self.guild.id, "webverify_config") or {
+            'enabled': True,
+            'captcha_type': 'turnstile',
+            'unverified_role_id': None,
+            'autorole_enabled': False,
+            'autorole_trigger': 'always',
+            'notify': {'type': 'dm', 'channel_id': None, 'title': '伺服器網頁驗證', 'message': '請點擊下方按鈕進行網頁驗證：'}
+        }
+        self.step = 1
+        self.update_components()
+    
+    async def on_timeout(self):
+        await self.interaction.edit_original_response(embed=discord.Embed(title="網頁驗證設定精靈", description="精靈已超時，請重新執行命令。", color=0xff0000), view=None)
+        self.stop()
+
+    def update_components(self):
+        self.clear_items()
+        if self.step == 1:
+            # Step 1: Captcha
+            select = discord.ui.Select(placeholder="選擇 CAPTCHA 驗證方式", options=[
+                discord.SelectOption(label="無 (None)", value="none", description="不使用 CAPTCHA"),
+                discord.SelectOption(label="Cloudflare Turnstile", value="turnstile", description="推薦使用"),
+                discord.SelectOption(label="Google reCAPTCHA", value="recaptcha", description="Google 的驗證服務")
+            ])
+            select.callback = self.on_captcha_select
+            self.add_item(select)
+        
+        elif self.step == 2:
+            # Step 2: Role
+            btn_create = discord.ui.Button(label="自動建立未驗證身分組", style=discord.ButtonStyle.green, custom_id="create_role")
+            btn_create.callback = self.on_create_role
+            self.add_item(btn_create)
+
+            select_role = discord.ui.RoleSelect(placeholder="選擇現有的未驗證身分組", min_values=1, max_values=1)
+            select_role.callback = self.on_select_role
+            self.add_item(select_role)
+
+        elif self.step == 3:
+            # Step 3: Autorole
+            btn_toggle = discord.ui.Button(
+                label=f"自動分配功能: {'已啟用' if self.config.get('autorole_enabled') else '已停用'}",
+                style=discord.ButtonStyle.success if self.config.get('autorole_enabled') else discord.ButtonStyle.danger
+            )
+            btn_toggle.callback = self.on_toggle_autorole
+            self.add_item(btn_toggle)
+
+            if self.config.get('autorole_enabled'):
+                trigger_options = [
+                    discord.SelectOption(label="總是給予 (Always)", value="always"),
+                    discord.SelectOption(label="帳號年齡過小 (Age Check)", value="age_check"),
+                    discord.SelectOption(label="無驗證紀錄 (No History)", value="no_history"),
+                    discord.SelectOption(label="帳號曾經被標記過 (Flagged History)", value="has_flagged_history")
+                ]
+                # Pre-select current triggers
+                current_triggers = self.config.get('autorole_trigger', 'always').split('+')
+                for opt in trigger_options:
+                    if opt.value in current_triggers:
+                        opt.default = True
+                
+                select_trigger = discord.ui.Select(placeholder="選擇自動分配觸發條件 (可多選)", min_values=1, max_values=len(trigger_options), options=trigger_options)
+                select_trigger.callback = self.on_select_trigger
+                self.add_item(select_trigger)
+
+            btn_next = discord.ui.Button(label="下一步", style=discord.ButtonStyle.primary)
+            btn_next.callback = self.on_next_step
+            self.add_item(btn_next)
+
+        elif self.step == 4:
+            # Step 4: Notify
+            select_type = discord.ui.Select(placeholder="選擇通知方式", options=[
+                discord.SelectOption(label="私訊通知 (DM)", value="dm"),
+                discord.SelectOption(label="頻道通知 (Channel)", value="channel")
+            ])
+            # Set default
+            if self.config.get('notify', {}).get('type') == 'dm':
+                select_type.options[0].default = True
+            else:
+                select_type.options[1].default = True
+            
+            select_type.callback = self.on_notify_type_select
+            self.add_item(select_type)
+
+            if self.config.get('notify', {}).get('type') == 'channel':
+                select_channel = discord.ui.ChannelSelect(
+                    placeholder="選擇通知頻道", 
+                    channel_types=[discord.ChannelType.text, discord.ChannelType.news],
+                    min_values=1, max_values=1
+                )
+                select_channel.callback = self.on_channel_select
+                self.add_item(select_channel)
+
+            btn_finish = discord.ui.Button(label="完成設定", style=discord.ButtonStyle.success)
+            btn_finish.callback = self.on_finish
+            self.add_item(btn_finish)
+
+    async def get_embed(self):
+        embed = discord.Embed(title=f"網頁驗證設定精靈 (步驟 {self.step}/4)", color=0x00ff00)
+        if self.step == 1:
+            embed.description = "首先，請選擇要使用的 CAPTCHA 驗證機制。"
+            embed.add_field(name="目前設定", value=self.config.get('captcha_type', '尚未設定'))
+        elif self.step == 2:
+            embed.description = "接著，設定或建立「未驗證成員」的身分組。\n擁有此身分組的成員通常會被限制權限，直到通過驗證。"
+            role_id = self.config.get('unverified_role_id')
+            role = self.guild.get_role(role_id) if role_id else None
+            embed.add_field(name="目前設定", value=role.mention if role else "尚未設定")
+        elif self.step == 3:
+            embed.description = "設定是否在成員加入時自動給予未驗證身分組，以及觸發的條件。"
+            embed.add_field(name="功能狀態", value="啟用" if self.config.get('autorole_enabled') else "停用")
+            embed.add_field(name="觸發條件", value=self.config.get('autorole_trigger', 'always'))
+        elif self.step == 4:
+            embed.description = "最後，設定驗證提示的通知方式。\n如果是頻道通知，將會發送一個永久性的驗證 Embed 到該頻道。"
+            notify = self.config.get('notify', {})
+            embed.add_field(name="通知類型", value=notify.get('type', 'dm'))
+            if notify.get('type') == 'channel':
+                chan = self.guild.get_channel(notify.get('channel_id'))
+                embed.add_field(name="通知頻道", value=chan.mention if chan else "尚未選擇")
+        return embed
+
+    async def on_captcha_select(self, interaction: discord.Interaction, select: discord.ui.Select):
+        self.config['captcha_type'] = select.values[0]
+        self.step = 2
+        self.update_components()
+        await interaction.response.edit_message(embed=await self.get_embed(), view=self)
+
+    async def on_create_role(self, interaction: discord.Interaction):
+        # Use a modal to get role name
+        modal = RoleCreationModal(self)
+        await interaction.response.send_modal(modal)
+
+    async def on_select_role(self, interaction: discord.Interaction, select: discord.ui.RoleSelect):
+        role = select.values[0]
+        self.config['unverified_role_id'] = role.id
+        self.step = 3
+        self.update_components()
+        await interaction.response.edit_message(embed=await self.get_embed(), view=self)
+
+    async def on_toggle_autorole(self, interaction: discord.Interaction):
+        self.config['autorole_enabled'] = not self.config.get('autorole_enabled', False)
+        self.update_components()
+        await interaction.response.edit_message(embed=await self.get_embed(), view=self)
+
+    async def on_select_trigger(self, interaction: discord.Interaction, select: discord.ui.Select):
+        self.config['autorole_trigger'] = "+".join(select.values)
+        self.update_components()
+        await interaction.response.edit_message(embed=await self.get_embed(), view=self)
+
+    async def on_next_step(self, interaction: discord.Interaction):
+        self.step = 4
+        self.update_components()
+        await interaction.response.edit_message(embed=await self.get_embed(), view=self)
+
+    async def on_notify_type_select(self, interaction: discord.Interaction, select: discord.ui.Select):
+        if 'notify' not in self.config: self.config['notify'] = {}
+        self.config['notify']['type'] = select.values[0]
+        self.update_components()
+        await interaction.response.edit_message(embed=await self.get_embed(), view=self)
+
+    async def on_channel_select(self, interaction: discord.Interaction, select: discord.ui.ChannelSelect):
+        if 'notify' not in self.config: self.config['notify'] = {}
+        self.config['notify']['channel_id'] = select.values[0].id
+        self.update_components()
+        await interaction.response.edit_message(embed=await self.get_embed(), view=self)
+
+    async def on_finish(self, interaction: discord.Interaction):
+        # Save config
+        set_server_config(self.guild.id, "webverify_config", self.config)
+        
+        # Send message if channel notify is selected and channel is set
+        msg_extras = ""
+        notify = self.config.get('notify', {})
+        if notify.get('type') == 'channel' and notify.get('channel_id'):
+            channel = self.guild.get_channel(notify.get('channel_id'))
+            if channel:
+                verify_url = f"https://discord.com/oauth2/authorize?client_id={self.bot.application.id}&response_type=code&scope=identify&prompt=none&{urlencode({'redirect_uri': config('webverify_url')})}&state={self.guild.id}"
+                verify_button = discord.ui.Button(label="前往驗證", url=verify_url)
+                view = discord.ui.View()
+                view.add_item(verify_button)
+                embed = discord.Embed(title=notify.get('title', '伺服器網頁驗證'), description=notify.get('message', '請點擊下方按鈕進行網頁驗證：'), color=0x00ff00)
+                try:
+                    await channel.send(embed=embed, view=view)
+                    msg_extras = f"\n驗證訊息已發送至 {channel.mention}。"
+                except Exception as e:
+                    msg_extras = f"\n無法發送驗證訊息至 {channel.mention}: {e}"
+
+        embed = discord.Embed(title="網頁驗證設定完成", color=0x00ff00)
+        embed.description = f"所有設定已儲存。{msg_extras}"
+        embed.add_field(name="CAPTCHA", value=self.config.get('captcha_type'))
+        
+        role = self.guild.get_role(self.config.get('unverified_role_id'))
+        embed.add_field(name="未驗證身分組", value=role.mention if role else "None")
+        
+        embed.add_field(name="自動分配", value=f"{'啟用' if self.config.get('autorole_enabled') else '停用'} ({self.config.get('autorole_trigger')})")
+        embed.add_field(name="通知方式", value=notify.get('type'))
+        
+        await interaction.response.edit_message(embed=embed, view=None)
+
+
+class RoleCreationModal(discord.ui.Modal, title="建立未驗證身分組"):
+    role_name = discord.ui.TextInput(label="身分組名稱", default="未驗證成員", required=True)
+
+    def __init__(self, wizard_view: WebVerifySetupWizard):
+        super().__init__()
+        self.wizard_view = wizard_view
+
+    async def on_submit(self, interaction: discord.Interaction):
+        await interaction.response.defer()
+        guild = interaction.guild
+        name = self.role_name.value
+        
+        # Logic from create_unverified_role
+        unverified_role = await guild.create_role(name=name, reason="網頁驗證設定精靈：建立未驗證身分組")
+        for channel in guild.text_channels:
+            try:
+                await channel.set_permissions(unverified_role, send_messages=False, connect=False, create_public_threads=False, create_private_threads=False, reason="設定未驗證成員身分組權限")
+            except:
+                pass # Ignore errors if bot lacks permission
+        
+        self.wizard_view.config['unverified_role_id'] = unverified_role.id
+        self.wizard_view.step = 3
+        self.wizard_view.update_components()
+        await interaction.followup.edit_message(message_id=interaction.message.id, embed=await self.wizard_view.get_embed(), view=self.wizard_view)
+
 
 init_db()
 
