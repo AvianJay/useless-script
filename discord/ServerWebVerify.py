@@ -556,6 +556,7 @@ class WebVerifySetupWizard(discord.ui.View):
             'notify': {'type': 'dm', 'channel_id': None, 'title': '伺服器網頁驗證', 'message': '請點擊下方按鈕進行網頁驗證：'}
         }
         self.step = 1
+        self.select = None
         self.update_components()
     
     async def on_timeout(self):
@@ -572,6 +573,7 @@ class WebVerifySetupWizard(discord.ui.View):
                 discord.SelectOption(label="Google reCAPTCHA", value="recaptcha", description="Google 的驗證服務")
             ])
             select.callback = self.on_captcha_select
+            self.select = select
             self.add_item(select)
         
         elif self.step == 2:
@@ -582,6 +584,7 @@ class WebVerifySetupWizard(discord.ui.View):
 
             select_role = discord.ui.RoleSelect(placeholder="選擇現有的未驗證身分組", min_values=1, max_values=1)
             select_role.callback = self.on_select_role
+            self.select = select_role
             self.add_item(select_role)
 
         elif self.step == 3:
@@ -608,6 +611,7 @@ class WebVerifySetupWizard(discord.ui.View):
                 
                 select_trigger = discord.ui.Select(placeholder="選擇自動分配觸發條件 (可多選)", min_values=1, max_values=len(trigger_options), options=trigger_options)
                 select_trigger.callback = self.on_select_trigger
+                self.select = select_trigger
                 self.add_item(select_trigger)
 
             btn_next = discord.ui.Button(label="下一步", style=discord.ButtonStyle.primary)
@@ -636,6 +640,7 @@ class WebVerifySetupWizard(discord.ui.View):
                     min_values=1, max_values=1
                 )
                 select_channel.callback = self.on_channel_select
+                self.select = select_channel
                 self.add_item(select_channel)
 
             btn_finish = discord.ui.Button(label="完成設定", style=discord.ButtonStyle.success)
@@ -666,7 +671,7 @@ class WebVerifySetupWizard(discord.ui.View):
         return embed
 
     async def on_captcha_select(self, interaction: discord.Interaction):
-        self.config['captcha_type'] = self.values[0]
+        self.config['captcha_type'] = self.select.values[0]
         self.step = 2
         self.update_components()
         await interaction.response.edit_message(embed=await self.get_embed(), view=self)
@@ -677,7 +682,7 @@ class WebVerifySetupWizard(discord.ui.View):
         await interaction.response.send_modal(modal)
 
     async def on_select_role(self, interaction: discord.Interaction):
-        role = self.values[0]
+        role = self.select.values[0]
         self.config['unverified_role_id'] = role.id
         self.step = 3
         self.update_components()
@@ -689,7 +694,7 @@ class WebVerifySetupWizard(discord.ui.View):
         await interaction.response.edit_message(embed=await self.get_embed(), view=self)
 
     async def on_select_trigger(self, interaction: discord.Interaction):
-        self.config['autorole_trigger'] = "+".join(self.values)
+        self.config['autorole_trigger'] = "+".join(self.select.values)
         self.update_components()
         await interaction.response.edit_message(embed=await self.get_embed(), view=self)
 
@@ -700,13 +705,13 @@ class WebVerifySetupWizard(discord.ui.View):
 
     async def on_notify_type_select(self, interaction: discord.Interaction):
         if 'notify' not in self.config: self.config['notify'] = {}
-        self.config['notify']['type'] = self.values[0]
+        self.config['notify']['type'] = self.select.values[0]
         self.update_components()
         await interaction.response.edit_message(embed=await self.get_embed(), view=self)
 
     async def on_channel_select(self, interaction: discord.Interaction):
         if 'notify' not in self.config: self.config['notify'] = {}
-        self.config['notify']['channel_id'] = self.values[0].id
+        self.config['notify']['channel_id'] = self.select.values[0].id
         self.update_components()
         await interaction.response.edit_message(embed=await self.get_embed(), view=self)
 
