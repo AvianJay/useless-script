@@ -9,7 +9,7 @@ from datetime import datetime, timezone
 import psutil
 
 startup_time = datetime.now(timezone.utc)
-version = "0.13.11"
+version = "0.14.0"
 try:
     git_commit_hash = os.popen("git rev-parse --short HEAD").read().strip()
 except Exception as e:
@@ -136,11 +136,11 @@ async def randomnumber(ctx: commands.Context, min: int = 1, max: int = 100):
 @app_commands.allowed_contexts(guilds=True, dms=False, private_channels=False)
 @app_commands.describe(mention="是否提及該用戶")
 @app_commands.choices(mention=[
-    app_commands.Choice(name="是", value=1),
-    app_commands.Choice(name="否", value=0),
+    app_commands.Choice(name="是", value="True"),
+    app_commands.Choice(name="否", value="False"),
 ])
-async def randomuser_command(interaction: discord.Interaction, mention: int = 0):
-    mention = bool(mention)
+async def randomuser_command(interaction: discord.Interaction, mention: str = "False"):
+    mention = mention == "True"
     if interaction.guild is None or interaction.channel is None:
         await interaction.response.send_message("此指令只能在伺服器頻道中使用。", ephemeral=True)
         return
