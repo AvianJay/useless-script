@@ -44,7 +44,7 @@ class AkinatorGame:
             # Game finished, found a character
             embed = discord.Embed(
                 title="Akinator 的猜測",
-                description=f"我想是... **{self.aki.name}**\n{self.aki.description}",
+                description=f"我猜是... **{self.aki.name}**！\n{self.aki.description}",
                 color=0x00ff00
             )
             if self.aki.photo:
@@ -71,6 +71,12 @@ class AkinatorView(discord.ui.View):
     def __init__(self, game):
         super().__init__(timeout=300)
         self.game = game
+    
+    async def on_timeout(self):
+        for child in self.children:
+            child.disabled = True
+        await self.message.edit(content="遊戲已超時結束。", view=self)
+        self.stop()
 
     async def handle_answer(self, interaction: discord.Interaction, answer: str):
         if interaction.user != self.game.interaction.user:
@@ -92,11 +98,11 @@ class AkinatorView(discord.ui.View):
     async def idk_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         await self.handle_answer(interaction, "idk")
 
-    @discord.ui.button(label="可能是", style=discord.ButtonStyle.blurple)
+    @discord.ui.button(label="應該是", style=discord.ButtonStyle.blurple)
     async def probably_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         await self.handle_answer(interaction, "p")
 
-    @discord.ui.button(label="可能不是", style=discord.ButtonStyle.blurple)
+    @discord.ui.button(label="應該不是", style=discord.ButtonStyle.blurple)
     async def probably_not_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         await self.handle_answer(interaction, "pn")
 
