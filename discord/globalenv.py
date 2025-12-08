@@ -308,6 +308,8 @@ translations = {
     "create_unverified_role": "建立未驗證身分組",
     "name": "名稱",
     "quick_setup": "快速設定",
+    "verify_notify": "驗證通知",
+    "type": "類型",
 }
 class CommandNameTranslator(app_commands.Translator):
     async def translate(
