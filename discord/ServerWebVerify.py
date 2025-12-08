@@ -747,6 +747,7 @@ class WebVerifySetupWizard(discord.ui.View):
         embed.add_field(name="通知方式", value=notify.get('type'))
         
         await interaction.response.edit_message(embed=embed, view=None)
+        self.stop()
 
 
 class RoleCreationModal(discord.ui.Modal, title="建立未驗證身分組"):
