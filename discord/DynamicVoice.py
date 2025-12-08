@@ -213,6 +213,11 @@ class DynamicVoice(commands.GroupCog, name=app_commands.locale_str("dynamic-voic
             blacklisted_roles = get_server_config(guild_id, "dynamic_voice_blacklist_roles", [])
             if any(role.id in blacklisted_roles for role in member.roles):
                 log(f"用戶被黑名單限制，無法創建動態語音頻道。", module_name="DynamicVoice", user=member, guild=member.guild)
+                # disconnect user from the dynamic voice channel
+                try:
+                    await member.move_to(None, reason="用戶在黑名單中，無法使用動態語音頻道。")
+                except Exception as e:
+                    log(f"無法將用戶 {member} 從動態語音頻道中移除: {e}", level=logging.ERROR, module_name="DynamicVoice", guild=member.guild)
                 return
             # Create a new voice channel for the user
             new_channel = await member.guild.create_voice_channel(
@@ -221,12 +226,16 @@ class DynamicVoice(commands.GroupCog, name=app_commands.locale_str("dynamic-voic
                 bitrate=member.guild.bitrate_limit  # maximum bitrate
             )
             # give user permission to manage the channel
-            await new_channel.set_permissions(member, manage_channels=True, create_events=True)
+            await new_channel.set_permissions(member, manage_channels=True, create_events=True, use_embedded_activities=True)
             # disable blacklisted roles from joining the channel
             for role_id in blacklisted_roles:
                 role = member.guild.get_role(role_id)
                 if role:
                     await new_channel.set_permissions(role, connect=False, send_messages=False, create_private_threads=False, create_public_threads=False)
+            # disable everyone role from managing the channel
+            everyone_role = member.guild.default_role
+            await new_channel.set_permissions(everyone_role, manage_channels=False, create_events=False, manage_webhooks=False, mention_everyone=False, use_external_apps=False)
+            
             # Move the user to the new channel
             if play_audio_enabled:
                 await asyncio.sleep(1)  # wait for a moment to ensure the user has joined the new channel
