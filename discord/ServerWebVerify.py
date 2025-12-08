@@ -1,4 +1,4 @@
-from globalenv import bot, config, modules, get_server_config, set_server_config, get_db_connection
+from globalenv import bot, config, modules, get_server_config, set_server_config, get_db_connection, get_command_mention
 import discord
 from discord.ext import commands
 from discord import app_commands
@@ -289,7 +289,7 @@ class ServerWebVerify(commands.GroupCog, name="webverify", description="伺服�
             }
         }
         set_server_config(guild_id, "webverify_config", default_config)
-        await interaction.response.send_message("伺服器的網頁驗證功能已設定完成。請記得設定未驗證成員的角色。")
+        await interaction.response.send_message(f"伺服器的網頁驗證功能已設定完成。請記得設定未驗證成員的角色({get_command_mention('webverify', 'set_unverified_role')})。")
 
     @app_commands.command(name="quick_setup", description="使用互動式精靈快速設定網頁驗證")
     @app_commands.default_permissions(administrator=True)
