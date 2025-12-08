@@ -30,4 +30,8 @@ def get_status(id):
         return jsonify({"status": "error", "message": "ID not found"}), 404
     return jsonify({"status": "process not found"}), 404
 
+@app.route('/')
+def index():
+    return "ProcStat Service is running."
+
 app.run(host='0.0.0.0', port=5013)
