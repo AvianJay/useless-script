@@ -3,6 +3,7 @@ from discord.ext import commands
 from discord import app_commands
 import rynaki
 import asyncio
+from globalenv import bot
 
 @app_commands.allowed_installs(guilds=True, users=True)
 @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
