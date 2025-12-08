@@ -10,16 +10,17 @@ if os.path.exists("config.procstat.json"):
         config = json.load(f)
 else:
     config = {}
-# {"id": "cwd path"}
+# {"id": {"path": "C:/path/to/process", "name": "process_name.exe"}}
 
 @app.route('/<id>')
 def get_status(id):
     if id in config:
-        path = config[id]
+        path = config[id]["path"]
+        name = config[id]["name"]
         try:
             for p in psutil.process_iter(["pid", "name", "cwd"]):
                 try:
-                    if p.info["cwd"] == path:
+                    if p.info["cwd"] == path and p.info["name"] == name:
                         return jsonify({"status": "running", "pid": p.info["pid"], "name": p.info["name"]}), 200
                 except Exception:
                     continue
