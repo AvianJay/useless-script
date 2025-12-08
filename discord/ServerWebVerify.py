@@ -665,8 +665,8 @@ class WebVerifySetupWizard(discord.ui.View):
                 embed.add_field(name="通知頻道", value=chan.mention if chan else "尚未選擇")
         return embed
 
-    async def on_captcha_select(self, interaction: discord.Interaction, select: discord.ui.Select):
-        self.config['captcha_type'] = select.values[0]
+    async def on_captcha_select(self, interaction: discord.Interaction):
+        self.config['captcha_type'] = self.values[0]
         self.step = 2
         self.update_components()
         await interaction.response.edit_message(embed=await self.get_embed(), view=self)
@@ -676,8 +676,8 @@ class WebVerifySetupWizard(discord.ui.View):
         modal = RoleCreationModal(self)
         await interaction.response.send_modal(modal)
 
-    async def on_select_role(self, interaction: discord.Interaction, select: discord.ui.RoleSelect):
-        role = select.values[0]
+    async def on_select_role(self, interaction: discord.Interaction):
+        role = self.values[0]
         self.config['unverified_role_id'] = role.id
         self.step = 3
         self.update_components()
@@ -688,8 +688,8 @@ class WebVerifySetupWizard(discord.ui.View):
         self.update_components()
         await interaction.response.edit_message(embed=await self.get_embed(), view=self)
 
-    async def on_select_trigger(self, interaction: discord.Interaction, select: discord.ui.Select):
-        self.config['autorole_trigger'] = "+".join(select.values)
+    async def on_select_trigger(self, interaction: discord.Interaction):
+        self.config['autorole_trigger'] = "+".join(self.values)
         self.update_components()
         await interaction.response.edit_message(embed=await self.get_embed(), view=self)
 
@@ -698,15 +698,15 @@ class WebVerifySetupWizard(discord.ui.View):
         self.update_components()
         await interaction.response.edit_message(embed=await self.get_embed(), view=self)
 
-    async def on_notify_type_select(self, interaction: discord.Interaction, select: discord.ui.Select):
+    async def on_notify_type_select(self, interaction: discord.Interaction):
         if 'notify' not in self.config: self.config['notify'] = {}
-        self.config['notify']['type'] = select.values[0]
+        self.config['notify']['type'] = self.values[0]
         self.update_components()
         await interaction.response.edit_message(embed=await self.get_embed(), view=self)
 
-    async def on_channel_select(self, interaction: discord.Interaction, select: discord.ui.ChannelSelect):
+    async def on_channel_select(self, interaction: discord.Interaction):
         if 'notify' not in self.config: self.config['notify'] = {}
-        self.config['notify']['channel_id'] = select.values[0].id
+        self.config['notify']['channel_id'] = self.values[0].id
         self.update_components()
         await interaction.response.edit_message(embed=await self.get_embed(), view=self)
 
