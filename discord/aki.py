@@ -1,9 +1,13 @@
 import discord
-from discord.ext import commands
+from discord.ext import commands, tasks
 from discord import app_commands
 import rynaki
 import asyncio
 from globalenv import bot
+from datetime import datetime, timezone, timedelta
+
+in_game_sessions = {}
+last_game_time = {}
 
 @app_commands.allowed_installs(guilds=True, users=True)
 @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
@@ -11,10 +15,32 @@ class Aki(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
+    async def cog_load(self):
+        self.cleanup_task.start()
+
+    async def cog_unload(self):
+        self.cleanup_task.cancel()
+
+    @tasks.loop(minutes=10)
+    async def cleanup_task(self):
+        current_time = datetime.now(timezone.utc)
+        to_remove = [user_id for user_id, time in last_game_time.items() if current_time - time > timedelta(minutes=5)]
+        for user_id in to_remove:
+            last_game_time.pop(user_id, None)
+
+    @app_commands.allowed_installs(guilds=True, users=True)
+    @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
     @app_commands.command(name="aki", description="與 Akinator 進行遊戲")
     async def aki_command(self, interaction: discord.Interaction):
         await interaction.response.defer()
+        if interaction.user.id in in_game_sessions:
+            await interaction.followup.send("你已經有一個進行中的遊戲！請先結束它。", ephemeral=True)
+            return
+        if datetime.now(timezone.utc) - last_game_time.get(interaction.user.id, datetime.min.replace(tzinfo=timezone.utc)) < timedelta(minutes=1):
+            await interaction.followup.send("請稍等 1 分鐘後再開始新的遊戲。", ephemeral=True)
+            return
         try:
+            in_game_sessions[interaction.user.id] = True
             game = AkinatorGame(interaction)
             await game.start()
         except Exception as e:
@@ -22,6 +48,7 @@ class Aki(commands.Cog):
                 await interaction.response.send_message(f"發生錯誤: {e}", ephemeral=True)
             else:
                 await interaction.followup.send(f"發生錯誤: {e}", ephemeral=True)
+            in_game_sessions.pop(interaction.user.id, None)
 
 
 class AkinatorGame:
@@ -55,6 +82,8 @@ class AkinatorGame:
                 child.disabled = True
             
             await self.message.edit(embed=embed, view=self.view)
+            last_game_time[self.interaction.user.id] = datetime.now(timezone.utc)
+            in_game_sessions.pop(self.interaction.user.id, None)
             self.view.stop()
         else:
             # Continue game
@@ -76,6 +105,8 @@ class AkinatorView(discord.ui.View):
         for child in self.children:
             child.disabled = True
         await self.message.edit(content="遊戲已超時結束。", view=self)
+        in_game_sessions.pop(self.game.interaction.user.id, None)
+        last_game_time[self.game.interaction.user.id] = datetime.now(timezone.utc)
         self.stop()
 
     async def handle_answer(self, interaction: discord.Interaction, answer: str):
@@ -84,7 +115,14 @@ class AkinatorView(discord.ui.View):
             return
 
         await interaction.response.defer()
-        await self.game.post_answer(answer)
+        try:
+            await self.game.post_answer(answer)
+        except rynaki.main.AkinatorError:
+            await interaction.followup.send("Akinator 服務暫時無法使用，請稍後再試。", ephemeral=True)
+            in_game_sessions.pop(self.game.interaction.user.id, None)
+            last_game_time[self.game.interaction.user.id] = datetime.now(timezone.utc)
+            await self.message.edit(content="遊戲因錯誤結束。", view=None)
+            self.stop()
 
     @discord.ui.button(label="是", style=discord.ButtonStyle.green)
     async def yes_button(self, interaction: discord.Interaction, button: discord.ui.Button):
@@ -116,6 +154,8 @@ class AkinatorView(discord.ui.View):
         for child in self.children:
             child.disabled = True
         await self.game.message.edit(content="遊戲已由用戶結束。", view=self)
+        in_game_sessions.pop(self.game.interaction.user.id, None)
+        last_game_time[self.game.interaction.user.id] = datetime.now(timezone.utc)
         self.stop()
 
 asyncio.run(bot.add_cog(Aki(bot)))
