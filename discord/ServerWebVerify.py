@@ -464,12 +464,15 @@ class ServerWebVerify(commands.GroupCog, name="webverify", description="伺服�
         if current_trigger == "always":
             guild_config['autorole_trigger'] = trigger
         else:
-            triggers = current_trigger.split('+')
-            if guild_config['autorole_trigger'] in triggers:
-                triggers.remove(guild_config['autorole_trigger'])
+            if trigger == "always":
+                guild_config['autorole_trigger'] = "always"
             else:
-                triggers.append(trigger)
-            guild_config['autorole_trigger'] = '+'.join(triggers)
+                triggers = current_trigger.split('+')
+                if guild_config['autorole_trigger'] in triggers:
+                    triggers.remove(guild_config['autorole_trigger'])
+                else:
+                    triggers.append(trigger)
+                guild_config['autorole_trigger'] = '+'.join(triggers)
         set_server_config(guild_id, "webverify_config", guild_config)
         status = "已啟用" if enable else "已停用"
         await interaction.response.send_message(f"自動分配未驗證角色功能{status}，觸發條件：{guild_config['autorole_trigger']}。")
