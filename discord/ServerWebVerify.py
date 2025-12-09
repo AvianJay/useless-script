@@ -45,11 +45,18 @@ def init_db():
 def add_webverify_history(user_id, guild_id, ip_address, fingerprint):
     with get_db_connection() as conn:
         cursor = conn.cursor()
+        # check theres existing record for this user in this guild with same ip and fingerprint
         cursor.execute('''
-            INSERT INTO webverify_history (user_id, guild_id, ip_address, fingerprint)
-            VALUES (?, ?, ?, ?)
+            SELECT id FROM webverify_history
+            WHERE user_id = ? AND guild_id = ? AND ip_address = ? AND fingerprint = ?
         ''', (user_id, guild_id, ip_address, fingerprint))
-        conn.commit()
+        existing_record = cursor.fetchone()
+        if not existing_record:
+            cursor.execute('''
+                INSERT INTO webverify_history (user_id, guild_id, ip_address, fingerprint)
+                VALUES (?, ?, ?, ?)
+            ''', (user_id, guild_id, ip_address, fingerprint))
+            conn.commit()
 
         # Find all users that share the same IP or fingerprint
         cursor.execute('''
