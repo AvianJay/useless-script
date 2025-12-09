@@ -456,6 +456,73 @@ class ServerWebVerify(commands.GroupCog, name="webverify", description="伺服�
             
             await interaction.response.send_message(embed=embed, ephemeral=True)
     
+    @app_commands.command(name="relation_action", description="對用戶及其關聯帳號進行操作")
+    @app_commands.describe(user="選擇用戶", action="要執行的操作 (格式與 !moderate 相同)")
+    @app_commands.default_permissions(administrator=True)
+    async def relation_action(self, interaction: discord.Interaction, user: discord.Member, action: str):
+        if "Moderate" not in modules:
+            await interaction.response.send_message("Moderate 模組未啟用，無法執行此操作。", ephemeral=True)
+            log("Moderate module not found", level=logging.ERROR, module_name="ServerWebVerify")
+            return
+        
+        import Moderate # checking modules above ensures this is safe-ish, but ideally we rely on the check
+
+        await interaction.response.defer()
+
+        with get_db_connection() as conn:
+            cursor = conn.cursor()
+            # Get relation_id for the user
+            cursor.execute('SELECT relation_id FROM webverify_user_relation WHERE user_id = ?', (user.id,))
+            result = cursor.fetchone()
+            
+            if not result:
+                await interaction.followup.send(f"找不到用戶 {user.mention} 的關聯資料。")
+                return
+            
+            relation_id = result[0]
+            
+            # Get all users with this relation_id
+            cursor.execute('SELECT user_id FROM webverify_user_relation WHERE relation_id = ?', (relation_id,))
+            related_user_ids = [row[0] for row in cursor.fetchall()]
+        
+        results = []
+        for uid in related_user_ids:
+            try:
+                member = interaction.guild.get_member(uid)
+                if not member:
+                    # try to fetch if not in cache (though get_member usually checks cache)
+                    try:
+                        member = await interaction.guild.fetch_member(uid)
+                    except discord.NotFound:
+                        results.append(f"用戶 ID: `{uid}` - 未在伺服器中，跳過。")
+                        continue
+                
+                logs = await Moderate.do_action_str(action, interaction.guild, member, None, moderator=interaction.user)
+                if len(logs) == 0:
+                    results.append(f"{member.mention} - 無操作。")
+                else:
+                    results.append(f"{member.mention} - {'; '.join(logs)}")
+
+            except Exception as e:
+                results.append(f"用戶 ID: `{uid}` - 執行錯誤: {e}")
+        
+        # Split results into chunks to avoid message length limits
+        output = f"**對 {user.mention} 及其關聯帳號的操作結果：**\n"
+        chunks = []
+        current_chunk = ""
+        for line in results:
+            if len(current_chunk) + len(line) + 1 > 1900:
+                chunks.append(current_chunk)
+                current_chunk = ""
+            current_chunk += line + "\n"
+        chunks.append(current_chunk)
+
+        for i, chunk in enumerate(chunks):
+            if i == 0:
+                await interaction.followup.send(output + chunk)
+            else:
+                await interaction.followup.send(chunk)
+    
     @app_commands.command(name="autorole", description="設定自動為新成員分配未驗證角色")
     @app_commands.describe(enable="啟用或停用自動分配未驗證角色", trigger="選擇給予身分組條件")
     @app_commands.choices(trigger=[

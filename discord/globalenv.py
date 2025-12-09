@@ -310,6 +310,7 @@ translations = {
     "quick_setup": "快速設定",
     "verify_notify": "驗證通知",
     "type": "類型",
+    "relation_action": "關聯用戶動作",
 }
 class CommandNameTranslator(app_commands.Translator):
     async def translate(
