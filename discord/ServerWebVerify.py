@@ -202,6 +202,11 @@ def server_verify():
         guild_id = auth_tokens[auth_token]['guild_id']
         guild_config = get_server_config(guild_id, "webverify_config")
         return render_template('ServerVerify.html', bot=bot, site_key_turnstile=config("webverify_turnstile_key"), site_key_recaptcha=config("webverify_recaptcha_key"), captcha_type=guild_config.get('captcha_type'), guild_name=bot.get_guild(guild_id).name)
+    elif request.method == 'GET' and 'error' in request.args:
+        error_message = request.args.get('error')
+        if error_message == "access_denied":
+            error_message = "您拒絕了應用程式存取您的 Discord 帳號資訊的授權。請重新從伺服器中的驗證按鈕進入此頁面並授權應用程式。"
+        return render_template('ServerVerify.html', error=error_message, bot=bot, site_key_turnstile=config("webverify_turnstile_key"), site_key_recaptcha=config("webverify_recaptcha_key"))
     elif request.method == 'GET':
         guild_id = request.args.get('state')
         code = request.args.get('code')
@@ -220,6 +225,13 @@ def server_verify():
         user_id = oauth_code_to_id(code)
         if not user_id:
             return render_template('ServerVerify.html', error="無法取得您的 Discord 帳號資訊。請確保您已授權應用程式存取您的帳號資訊。", bot=bot, site_key_turnstile=config("webverify_turnstile_key"), site_key_recaptcha=config("webverify_recaptcha_key"))
+        
+        member = guild.get_member(int(user_id))
+        if not member:
+            return render_template('ServerVerify.html', error="您不是此伺服器的成員。請先加入伺服器後再進行驗證。", bot=bot, site_key_turnstile=config("webverify_turnstile_key"), site_key_recaptcha=config("webverify_recaptcha_key"))
+        if not member.get_role(guild_config.get('unverified_role_id')):
+            return render_template('ServerVerify.html', error="您已經通過了此伺服器的網頁驗證，無需再次驗證。", bot=bot, site_key_turnstile=config("webverify_turnstile_key"), site_key_recaptcha=config("webverify_recaptcha_key"))
+        
         auth_token = secrets.token_urlsafe(32)
         auth_tokens[auth_token] = {'user_id': user_id, 'guild_id': guild.id, 'timestamp': time.time()}
         return redirect(f"/server-verify?auth_token={auth_token}")
