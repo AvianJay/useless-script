@@ -257,6 +257,9 @@ def server_verify():
             return render_template('ServerVerify.html', error="找不到指定的伺服器。請確認您是從正確的驗證按鈕進入此頁面。", bot=bot, site_key_turnstile=config("webverify_turnstile_key"), site_key_recaptcha=config("webverify_recaptcha_key"))
         member = guild.get_member(int(user_id))
 
+        if method != guild_config.get('captcha_type'):
+            return render_template('ServerVerify.html', error="驗證方法與伺服器設定不符。請重新嘗試。", bot=bot, site_key_turnstile=config("webverify_turnstile_key"), site_key_recaptcha=config("webverify_recaptcha_key"))
+
         if method == 'turnstile':
             result = validate_turnstile(token, remoteip)
         elif method == 'recaptcha':
