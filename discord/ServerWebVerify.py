@@ -13,6 +13,7 @@ import time
 import uuid
 import asyncio
 import sqlite3
+import re
 from urllib.parse import urlencode
 if "Website" in modules:
     from Website import app
@@ -41,6 +42,9 @@ def init_db():
             )
         ''')
         conn.commit()
+
+def is_valid_md5(s: str) -> bool:
+    return bool(re.fullmatch(r"[0-9a-fA-F]{32}", s))
 
 def add_webverify_history(user_id, guild_id, ip_address, fingerprint):
     with get_db_connection() as conn:
@@ -259,6 +263,9 @@ def server_verify():
 
         if method != guild_config.get('captcha_type'):
             return render_template('ServerVerify.html', error="驗證方法與伺服器設定不符。請重新嘗試。", bot=bot, site_key_turnstile=config("webverify_turnstile_key"), site_key_recaptcha=config("webverify_recaptcha_key"))
+        
+        if not is_valid_md5(fingerprint):
+            return render_template('ServerVerify.html', error="錯誤的瀏覽器指紋。", bot=bot, site_key_turnstile=config("webverify_turnstile_key"), site_key_recaptcha=config("webverify_recaptcha_key"))
 
         if method == 'turnstile':
             result = validate_turnstile(token, remoteip)
