@@ -11,7 +11,7 @@ import logging
 
 
 # Global configuration for backward compatibility
-config_version = 13
+config_version = 14
 config_path = 'config.json'
 
 default_config = {
@@ -41,6 +41,10 @@ default_config = {
     "webverify_turnstile_secret": "",
     "webverify_url": "http://localhost:8080/server-verify",
     "client_secret": "",
+    "process_monitor_channel_id": 0,
+    "process_monitor_alert_channel_id": 0,
+    "cpu_usage_threshold": 80,
+    "memory_usage_threshold": 80,
 }
 _config = None
 
