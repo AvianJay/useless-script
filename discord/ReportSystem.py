@@ -146,7 +146,7 @@ def send_moderation_message(user: discord.Member, moderator: discord.Member, act
     if moderation_channel_id:
         mod_channel = bot.get_channel(moderation_channel_id)
         if mod_channel:
-            asyncio.create_task(mod_channel.send(text, allowed_mentions=discord.AllowedMentions(users=True, roles=False, everyone=False)))
+            asyncio.run_coroutine_threadsafe(mod_channel.send(text, allowed_mentions=discord.AllowedMentions(users=True, roles=False, everyone=False)), bot.loop)
 
 
 class doModerationActions(discord.ui.View):
