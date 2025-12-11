@@ -76,8 +76,8 @@ class PetPetCommand(commands.Cog):
     
     @app_commands.command(name="petpet-stats", description="查看你使用 petpet 指令的次數")
     async def petpet_stats(self, interaction: discord.Interaction):
-        petpet_count = get_user_data(interaction.user.id, None, "petpet_count", 0)
-        get_petpet_count = get_user_data(interaction.user.id, None, "get_petpet_count", 0)
+        petpet_count = get_user_data(None, interaction.user.id, "petpet_count", 0)
+        get_petpet_count = get_user_data(None, interaction.user.id, "get_petpet_count", 0)
 
         embed = discord.Embed(title="PetPet 統計", color=0x00ff00)
         embed.add_field(name="你 PetPet 了多少次？", value=str(petpet_count), inline=False)
