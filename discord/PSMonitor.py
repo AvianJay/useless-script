@@ -1,7 +1,7 @@
 import discord
 from discord.ext import commands, tasks
 import psutil
-from globalenv import bot, config
+from globalenv import bot, config, start_bot
 import asyncio
 
 class PSMonitor(commands.Cog):
@@ -9,9 +9,11 @@ class PSMonitor(commands.Cog):
         self.bot = bot
         self.cpu_history = []
         self.memory_history = []
+        
+    async def cog_load(self):
         self.monitor_processes.start()
 
-    def cog_unload(self):
+    async def cog_unload(self):
         self.monitor_processes.cancel()
 
     @tasks.loop(minutes=5)
@@ -67,8 +69,7 @@ class PSMonitor(commands.Cog):
             embed.add_field(name="最高記憶體佔用程序", value=f"{memory_highest_process.info['name']} (PID: {memory_highest_process.info['pid']}) - {memory_highest_process.info['memory_percent']}%", inline=False)
         await channel.send(embed=embed)
 
-    @monitor_processes.before_loop
-    async def before_monitor_processes(self):
-        await self.bot.wait_until_ready()
-
 asyncio.run(bot.add_cog(PSMonitor(bot)))
+
+if __name__ == "__main__":
+    start_bot()
