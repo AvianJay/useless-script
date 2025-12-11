@@ -138,7 +138,7 @@ def send_moderation_message(user: discord.Member, moderator: discord.Member, act
 > - 處分執行： {moderator.mention}
 """
     if is_ai:
-        text += "\n-# 此處分由 AI 建議的處分"
+        text += "\n-# 此處分為 AI 建議的處分。"
     
     # Get server-specific moderation channel
     guild_id = user.guild.id
