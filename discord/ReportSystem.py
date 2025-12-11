@@ -179,30 +179,19 @@ class doModerationActions(discord.ui.View):
                     duration = action.get("duration", 0)
                     if duration > 0:
                         await interaction.guild.get_member(target.id).timeout(discord.utils.utcnow() + timedelta(seconds=duration), reason=self.ai_reason)
-                elif action.get("action") == "blacklist_reporter" and target_str == "reporter":
-                    # 封鎖檢舉人
-                    if self.reporter:
-                        guild_id = interaction.guild.id
-                        report_blacklist = get_server_config(guild_id, "REPORT_BLACKLIST", [])
-                        for role_id in report_blacklist:
-                            role = interaction.guild.get_role(role_id)
-                            if role and role not in self.reporter.roles:
-                                await self.reporter.add_roles(role, reason=self.ai_reason)
-            # actions 按人分類
-            actions_by_target = {
-                "reported_user": [],
-                "reporter": []
-            }
-            for action in self.ai_suggestions:
-                target_str = action.get("target")
-                if target_str in actions_by_target:
-                    actions_by_target[target_str].append(action)
-            for target_str, actions in actions_by_target.items():
-                if not actions:
-                    continue
-                target_str = action.get("target")
-                target = self.user if target_str == "reported_user" else (self.interaction.guild.get_member(self.reporter.id) if self.reporter else None)
-                send_moderation_message(target, interaction.user, actions, self.ai_reason, self.message_content, is_ai=True)
+                # elif action.get("action") == "blacklist_reporter":
+                #     # 封鎖檢舉人
+                #     if self.reporter:
+                #         guild_id = interaction.guild.id
+                #         report_blacklist = get_server_config(guild_id, "REPORT_BLACKLIST", [])
+                #         for role_id in report_blacklist:
+                #             role = interaction.guild.get_role(role_id)
+                #             if role and role not in self.reporter.roles:
+                #                 await self.reporter.add_roles(role, reason=self.ai_reason)
+
+
+            target = self.user
+            send_moderation_message(target, interaction.user, self.ai_suggestions, self.ai_reason, self.message_content, is_ai=True)
             await interaction.response.send_message(f"已執行 AI 建議處置。", ephemeral=True)
         except Exception as e:
             # print(f"Error occurred: {str(e)}")
