@@ -17,7 +17,7 @@ def is_owner() -> Callable:
 async def settings(ctx, key: str=None, value: str=None):
     if key is None:
         safe_config = _config.copy()
-        safe_config["token"] = "<token>"
+        safe_config["TOKEN"] = "<token>"
         await ctx.send("目前設定：\n" + "\n".join(f"- {k}: {v}" for k, v in safe_config.items()))
     elif value is None:
         await ctx.send(f"{key}: {config(key, '未設定')}")
@@ -49,7 +49,7 @@ async def settings(ctx, key: str=None, value: str=None):
                     await ctx.send(f"無法將 {value} 轉換為字典：請使用有效的 JSON 格式。")
                     return
             else:
-                value = original_type(value)
+                pass
         except Exception as e:
             await ctx.send(f"無法將 {value} 轉換為 {original_type.__name__}：{e}")
             return
