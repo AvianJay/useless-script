@@ -5,6 +5,7 @@ from globalenv import config, bot, start_bot, modules, get_server_config, set_se
 import asyncio
 import logging
 import traceback
+from datetime import datetime, timezone
 
 async def _log(*messages, level = logging.INFO, module_name: str = "General", user: discord.User = None, guild: discord.Guild = None):
     logger = logging.getLogger(module_name)
@@ -43,6 +44,7 @@ async def _log(*messages, level = logging.INFO, module_name: str = "General", us
                 # embed message
                 color = 0x00ff00 if level == logging.INFO else 0xffff00 if level == logging.WARNING else 0xff0000 if level == logging.ERROR else 0x0000ff
                 embed = discord.Embed(title=module_name, description=message, color=color)
+                embed.timestamp = datetime.now(timezone.utc)
                 if user:
                     embed.add_field(name="使用者ID", value=f"`{user.id}`", inline=False)  # easy to copy user id
                     to_show_name = f"{user.display_name} ({user.name})" if user.display_name != user.name else user.name
