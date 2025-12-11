@@ -557,8 +557,8 @@ class ServerWebVerify(commands.GroupCog, name="webverify", description="伺服�
                 guild_config['autorole_trigger'] = "always"
             else:
                 triggers = current_trigger.split('+')
-                if guild_config['autorole_trigger'] in triggers:
-                    triggers.remove(guild_config['autorole_trigger'])
+                if trigger in triggers:
+                    triggers.remove(trigger)
                 else:
                     triggers.append(trigger)
                 guild_config['autorole_trigger'] = '+'.join(triggers)
