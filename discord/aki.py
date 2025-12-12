@@ -57,6 +57,7 @@ class AkinatorGame:
         self.aki = rynaki.Akinator(lang="cn", theme="characters")
         self.view = AkinatorView(self)
         self.message = None
+        self.counter = 0
 
     async def start(self):
         # Start game in thread to avoid blocking
@@ -66,6 +67,7 @@ class AkinatorGame:
 
     async def post_answer(self, answer):
         await asyncio.to_thread(self.aki.post_answer, answer)
+        self.counter += 1
         
         if self.aki.name:
             # Game finished, found a character
@@ -76,6 +78,7 @@ class AkinatorGame:
             )
             if self.aki.photo:
                 embed.set_image(url=self.aki.photo)
+            embed.set_footer(text=f"共問了 {self.counter} 個問題。")
             
             # Disable all buttons
             for child in self.view.children:
