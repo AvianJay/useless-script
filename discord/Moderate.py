@@ -1,4 +1,4 @@
-from globalenv import bot, start_bot, get_server_config, set_server_config, get_user_data, set_user_data, on_ready_tasks
+from globalenv import bot, start_bot, get_server_config, set_server_config, get_user_data, set_user_data, on_ready_tasks, config
 import discord
 from discord import app_commands
 from discord.ext import commands
@@ -766,8 +766,7 @@ class Moderate(commands.GroupCog, group_name=app_commands.locale_str("admin")):
         await interaction.followup.send(f"已設定懲處公告頻道為 {channel.mention}。")
     
     @commands.command(aliases=["mod", "m"])
-    @commands.has_permissions(administrator=True)
-    async def moderate(self, ctx: commands.Context, user: discord.Member = None, *, commands_str: str = ""):
+    async def moderate(self, ctx: commands.Context, user: Union[discord.Member, discord.User, None] = None, *, commands_str: str = ""):
         """對用戶進行多重管理操作。
         
         用法：!moderate <用戶> <指令1> , <指令2> , ...
@@ -789,6 +788,12 @@ class Moderate(commands.GroupCog, group_name=app_commands.locale_str("admin")):
         if not ctx.guild.me.guild_permissions.ban_members or not ctx.guild.me.guild_permissions.kick_members or not ctx.guild.me.guild_permissions.manage_messages or not ctx.guild.me.guild_permissions.manage_roles or not ctx.guild.me.guild_permissions.moderate_members:
             await ctx.send("機器人缺少必要的權限，請確認機器人擁有封禁、踢出、管理訊息、管理身分組及禁言權限。")
             return
+        if user is None:
+            await ctx.send("請指定要管理的用戶。")
+            return
+        if ctx.author.guild_permissions.ban_members is False and ctx.author.guild_permissions.kick_members is False and ctx.author.guild_permissions.moderate_members is False and ctx.author.guild_permissions.manage_messages is False:
+            await ctx.send(f"你沒有權限執行此操作。{'\n-# 就算你是機器人擁有者也不行喔！' if ctx.author.id in config('owners') else ''}")
+            return
         logs = await do_action_str(commands_str, ctx.guild, user, message=None, moderator=ctx.author)
         if len(logs) == 0:
             msg = "無任何操作被執行。"
@@ -800,7 +805,6 @@ class Moderate(commands.GroupCog, group_name=app_commands.locale_str("admin")):
         log(msg, module_name="Moderate", guild=ctx.guild)
     
     @commands.command(aliases=["mr", "mod_reply"])
-    @commands.has_permissions(administrator=True)
     async def moderate_reply(self, ctx: commands.Context, *, commands_str: str = ""):
         """對訊息發送者進行多重管理操作。
         
@@ -822,6 +826,9 @@ class Moderate(commands.GroupCog, group_name=app_commands.locale_str("admin")):
         # check bot permissions
         if not ctx.guild.me.guild_permissions.ban_members or not ctx.guild.me.guild_permissions.kick_members or not ctx.guild.me.guild_permissions.manage_messages or not ctx.guild.me.guild_permissions.manage_roles or not ctx.guild.me.guild_permissions.moderate_members:
             await ctx.send("機器人缺少必要的權限，請確認機器人擁有封禁、踢出、管理訊息、管理身分組及禁言權限。")
+            return
+        if ctx.author.guild_permissions.ban_members is False and ctx.author.guild_permissions.kick_members is False and ctx.author.guild_permissions.moderate_members is False and ctx.author.guild_permissions.manage_messages is False:
+            await ctx.send(f"你沒有權限執行此操作。{'\n-# 就算你是機器人擁有者也不行喔！' if ctx.author.id in config('owners') else ''}")
             return
         if ctx.message.reference is None:
             await ctx.send("請在回覆的訊息中使用此指令。")
