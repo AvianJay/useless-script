@@ -785,8 +785,8 @@ class Moderate(commands.GroupCog, group_name=app_commands.locale_str("admin")):
         !moderate @User ban 違規 1d 3600 , mute 30m 注意行為 , delete 請注意你的言論
         """
         # check bot permissions
-        if not ctx.guild.me.guild_permissions.ban_members or not ctx.guild.me.guild_permissions.kick_members or not ctx.guild.me.guild_permissions.manage_messages or not ctx.guild.me.guild_permissions.manage_roles or not ctx.guild.me.guild_permissions.moderate_members:
-            await ctx.send("機器人缺少必要的權限，請確認機器人擁有封禁、踢出、管理訊息、管理身分組及禁言權限。")
+        if not ctx.guild.me.guild_permissions.ban_members or not ctx.guild.me.guild_permissions.kick_members or not ctx.guild.me.guild_permissions.manage_messages or not ctx.guild.me.guild_permissions.moderate_members:
+            await ctx.send("機器人缺少必要的權限，請確認機器人擁有封禁、踢出、管理訊息及禁言權限。")
             return
         if user is None:
             await ctx.send("請指定要管理的用戶。")
@@ -824,8 +824,8 @@ class Moderate(commands.GroupCog, group_name=app_commands.locale_str("admin")):
         !moderate_reply ban 違規 1d 3600 , mute 30m 注意行為 , delete 請注意你的言論
         """
         # check bot permissions
-        if not ctx.guild.me.guild_permissions.ban_members or not ctx.guild.me.guild_permissions.kick_members or not ctx.guild.me.guild_permissions.manage_messages or not ctx.guild.me.guild_permissions.manage_roles or not ctx.guild.me.guild_permissions.moderate_members:
-            await ctx.send("機器人缺少必要的權限，請確認機器人擁有封禁、踢出、管理訊息、管理身分組及禁言權限。")
+        if not ctx.guild.me.guild_permissions.ban_members or not ctx.guild.me.guild_permissions.kick_members or not ctx.guild.me.guild_permissions.manage_messages or not ctx.guild.me.guild_permissions.moderate_members:
+            await ctx.send("機器人缺少必要的權限，請確認機器人擁有封禁、踢出、管理訊息及禁言權限。")
             return
         if ctx.author.guild_permissions.ban_members is False and ctx.author.guild_permissions.kick_members is False and ctx.author.guild_permissions.moderate_members is False and ctx.author.guild_permissions.manage_messages is False:
             await ctx.send(f"你沒有權限執行此操作。{'\n-# 就算你是機器人擁有者也不行喔！' if ctx.author.id in config('owners') else ''}")
