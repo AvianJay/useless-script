@@ -197,8 +197,10 @@ async def listservers(ctx):
     if not guilds:
         await ctx.send("機器人目前沒有加入任何伺服器。")
         return
-    description = "\n".join(f"- {g.name} (ID: `{g.id}`)" for g in guilds)
-    await ctx.send(f"機器人目前加入的伺服器：\n{description}")
+    servers_info = [f"- {g.name} (ID: `{g.id}`)" for g in guilds]
+    await ctx.send(f"機器人目前加入的伺服器： 共 {len(servers_info)} 個。")
+    for i in range(0, len(servers_info), 50):
+        await ctx.send("\n".join(servers_info[i:i+50]))
 
 
 @bot.command(aliases=["send", "s", "msg"])
