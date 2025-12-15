@@ -53,7 +53,7 @@ async def settings(ctx, key: str=None, value: str=None):
         except Exception as e:
             await ctx.send(f"無法將 {value} 轉換為 {original_type.__name__}：{e}")
             return
-        config(key, value, mode="w")
+        config(key=key, value=value, mode="w")
         await ctx.send(f"已更新 {key} 為 {str(value)}。")
 
 
@@ -289,9 +289,15 @@ async def reloadconfig(ctx):
 
 
 @bot.event
-async def on_guild_join(guild):
+async def on_guild_join(guild: discord.Guild):
     # print(f"Joined guild: {guild.name} (ID: {guild.id})")
-    log(f"加入了伺服器: {guild.name}", module_name="OwnerTools", guild=guild)
+    log(f"加入了伺服器: {guild.name}，正在快取伺服器資料", module_name="OwnerTools", guild=guild)
+    # try to chunk guild data
+    try:
+        await guild.chunk(cache=True)
+        log(f"已快取伺服器資料: {guild.name}", module_name="OwnerTools", guild=guild)
+    except Exception as e:
+        log(f"無法快取伺服器資料: {e}", module_name="OwnerTools", guild=guild)
     # send to owners
     for owner_id in config("owners", []):
         owner = bot.get_user(owner_id)
