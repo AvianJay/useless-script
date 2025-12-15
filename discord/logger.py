@@ -150,6 +150,7 @@ class LoggerCog(commands.Cog):
     @commands.Cog.listener()
     async def on_command_error(self, ctx, error):
         log(f"指令 {ctx.command} 由 {ctx.author} 觸發時發生錯誤: {error}", module_name="Logger", level=logging.ERROR, user=ctx.author, guild=ctx.guild)
+        await ctx.send(f"糟糕！發生了一些錯誤: {error}")
 
     @commands.Cog.listener()
     async def on_guild_join(self, guild):
