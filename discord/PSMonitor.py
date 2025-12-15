@@ -45,6 +45,7 @@ class PSMonitor(commands.Cog):
                     p_info = proc.info
                     p_cpu = p_info['cpu_percent']
                     p_mem = p_info['memory_percent']
+                    p_mem_mb = proc.memory_info().rss / 1024 / 1024
 
                     # psutil.process_iter cpu_percent might be 0 on first call or instant
                     # But for now we stick to what was there, maybe users are fine with it or it works due to internal state.
@@ -55,7 +56,7 @@ class PSMonitor(commands.Cog):
                         _alerts.append(f"偵測到高 CPU 佔用程序: {p_info['name']} (PID: {p_info['pid']}) - {p_cpu}%")
 
                     if p_mem is not None and p_mem > mem_threshold:
-                        _alerts.append(f"偵測到高記憶體佔用程序: {p_info['name']} (PID: {p_info['pid']}) - {p_mem}%")
+                        _alerts.append(f"偵測到高記憶體佔用程序: {p_info['name']} (PID: {p_info['pid']}) - {p_mem_mb:.2f}MB ({p_mem}%)")
                     
                     if (not _cpu_highest) or (p_cpu is not None and (_cpu_highest['cpu_percent'] is None or p_cpu > _cpu_highest['cpu_percent'])):
                         _cpu_highest = p_info
@@ -78,6 +79,10 @@ class PSMonitor(commands.Cog):
         # virtual_memory is fast (reading /proc/meminfo), usually fine to run in main thread, but being safe
         memory_info = psutil.virtual_memory().percent
         
+        # memory usage in mb
+        memory_usage = psutil.virtual_memory().used / 1024 / 1024
+        memory_total = psutil.virtual_memory().total / 1024 / 1024
+        
         self.cpu_history.append(cpu_usage)
         self.memory_history.append(memory_info)
         self.cpu_history = self.cpu_history[-12:]
@@ -87,6 +92,7 @@ class PSMonitor(commands.Cog):
         embed = discord.Embed(title="系統資源佔用", color=0x00ff00)
         embed.add_field(name="CPU 佔用 (%)", value=", ".join(map(str, self.cpu_history)), inline=False)
         embed.add_field(name="記憶體佔用 (%)", value=", ".join(map(str, self.memory_history)), inline=False)
+        embed.add_field(name="記憶體使用量 (MB)", value=f"{memory_usage:.2f} / {memory_total:.2f}", inline=False)
         if cpu_highest_process_info:
             embed.add_field(name="最高 CPU 佔用程序", value=f"{cpu_highest_process_info['name']} (PID: {cpu_highest_process_info['pid']}) - {cpu_highest_process_info['cpu_percent']}%", inline=False)
         if memory_highest_process_info:
