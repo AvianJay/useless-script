@@ -432,10 +432,10 @@ async def dsize(interaction: discord.Interaction, global_dsize: str = "False"):
                         ori = size + i - 2
                         while ori > 0:
                             d_string_new = "💥" * ori
-                            embed.set_field_at(0, name=f"{size + i} cm", value=f"8{d_string_new}", inline=False)
+                            embed.set_field_at(0, name=f"{ori + 1} cm", value=f"8{d_string_new}", inline=False)
                             await interaction.edit_original_response(content="正在手術中...💥", embed=embed)
                             await discord.utils.sleep_until(datetime.utcnow() + timedelta(seconds=1))
-                            ori -= min(random.randint(2, 5), ori)
+                            ori -= min(random.randint(2, 10), ori)
                         embed.set_field_at(0, name=f"-1 cm", value=f"8", inline=False)
                         await interaction.edit_original_response(content="手術失敗，你變男娘了。", embed=embed)
                         set_user_data(guild_key, user_id, "last_dsize_size", -1)
@@ -1320,7 +1320,7 @@ async def use_rusty_scalpel(interaction: discord.Interaction):
                 embed.set_field_at(0, name=f"{orig_size} cm", value=f"8{d_string_new}", inline=False)
                 await interaction.edit_original_response(embed=embed)
                 await asyncio.sleep(0.2)
-                orig_size -= min(random.randint(2, 5), orig_size)
+                orig_size -= min(random.randint(2, 10), orig_size)
             embed.set_field_at(0, name=f"-1 cm", value=f"8", inline=False)
             await interaction.edit_original_response(content=f"{target_user.mention} 變男娘了。", embed=embed)
             
