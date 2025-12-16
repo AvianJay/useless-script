@@ -20,14 +20,179 @@ if "OwnerTools" in modules:
 
 
 if getattr(sys, 'frozen', False):
-    fontdir = sys._MEIPASS
+    fontdir = os.path.join(sys._MEIPASS, 'assets')
 else:
-    fontdir = "."
+    fontdir = os.path.join(os.path.dirname(__file__), 'assets')
+
+import re
+import emoji
+
+def resolve_mentions(text, message):
+    guild = message.guild
+    if not guild:
+         return text
+    
+    def replace_user(match):
+        uid = int(match.group(1))
+        member = guild.get_member(uid)
+        return f"@{member.display_name}" if member else match.group(0)
+
+    def replace_role(match):
+        rid = int(match.group(1))
+        role = guild.get_role(rid)
+        return f"@{role.name}" if role else match.group(0)
+
+    def replace_channel(match):
+        cid = int(match.group(1))
+        channel = guild.get_channel(cid)
+        return f"#{channel.name}" if channel else match.group(0)
+
+    text = re.sub(r'<@!?(\d+)>', replace_user, text)
+    text = re.sub(r'<@&(\d+)>', replace_role, text)
+    text = re.sub(r'<#(\d+)>', replace_channel, text)
+    return text
+
+class Segment:
+    def __init__(self, type, content, url=None):
+        self.type = type # 'text' or 'emoji'
+        self.content = content
+        self.url = url
+        self.width = 0
+        self.height = 0
+        self.image = None
+
+async def prepare_segments(text, font):
+    segments = []
+    # Split by custom emojis <a:name:id> or <:name:id>
+    pattern = r'<(a?):(\w+):(\d+)>'
+    last_pos = 0
+    temp_segments = []
+    
+    for match in re.finditer(pattern, text):
+        if match.start() > last_pos:
+            temp_segments.append(Segment('text', text[last_pos:match.start()]))
+        
+        is_animated = match.group(1) == 'a'
+        name = match.group(2)
+        emoji_id = match.group(3)
+        ext = 'gif' if is_animated else 'png'
+        url = f"https://cdn.discordapp.com/emojis/{emoji_id}.{ext}"
+        
+        temp_segments.append(Segment('emoji', name, url))
+        last_pos = match.end()
+    
+    if last_pos < len(text):
+        temp_segments.append(Segment('text', text[last_pos:]))
+    
+    # Now process text segments for Unicode Emojis
+    final_segments = []
+    for seg in temp_segments:
+        if seg.type == 'text':
+             last_idx = 0
+             # emoji.analyze yields Token objects
+             for match in emoji.analyze(seg.content, non_emoji=False):
+                 start = match.value.start
+                 end = match.value.end
+                 char = match.chars
+                 
+                 if start > last_idx:
+                     final_segments.append(Segment('text', seg.content[last_idx:start]))
+                 
+                 final_segments.append(Segment('unicode_emoji', char))
+                 last_idx = end
+             
+             if last_idx < len(seg.content):
+                 final_segments.append(Segment('text', seg.content[last_idx:]))
+        else:
+             final_segments.append(seg)
+    
+    return final_segments
+
+def get_text_size(text, font):
+    bbox = font.getmask(text).getbbox()
+    if not bbox:
+        return 0, 0
+    return bbox[2] - bbox[0], bbox[3] - bbox[1]
+
+async def load_emojis(segments, size):
+    async with aiohttp.ClientSession() as session:
+        for seg in segments:
+            if seg.type == 'emoji' and seg.url:
+                try:
+                    async with session.get(seg.url) as resp:
+                        if resp.status == 200:
+                            data = await resp.read()
+                            img = Image.open(io.BytesIO(data)).convert("RGBA")
+                            img = img.resize((size, size), Image.Resampling.LANCZOS)
+                            seg.image = img
+                            seg.width = size
+                            seg.height = size
+                except Exception as e:
+                    print(f"Failed to load emoji {seg.url}: {e}")
+                    # Fallback to text representation
+                    seg.type = 'text'
+                    seg.content = f":{seg.content}:"
+
+def layout_segments(segments, font, max_width, emoji_size, emoji_font=None):
+    lines = []
+    current_line = []
+    current_width = 0
+    
+    space_width, _ = get_text_size(" ", font) # Measure space once
+
+    for seg in segments:
+        if seg.type == 'emoji':
+             seg.width = emoji_size
+             seg.height = emoji_size
+        elif seg.type == 'unicode_emoji':
+             # Use emoji font if available
+             use_font = emoji_font if emoji_font else font
+             w, h = get_text_size(seg.content, use_font)
+             # Emojis in fonts can be weirdly sized. 
+             # If twemoji is used, it might be consistent.
+             # fallback to emoji_size if 0? or just use measured.
+             if w == 0: w = epsilon = 10 # failsafe
+             seg.width = w
+             seg.height = h
+        else: # text
+             pass # width calculated below
+
+        if seg.type == 'text':
+            # Split text logic
+            words = re.split(r'(\s+)', seg.content) 
+            for word in words:
+                word_w, word_h = get_text_size(word, font)
+                if current_width + word_w > max_width and current_line:
+                     lines.append(current_line)
+                     current_line = []
+                     current_width = 0
+                
+                word_seg = Segment('text', word)
+                word_seg.width = word_w
+                word_seg.height = word_h
+                current_line.append(word_seg)
+                current_width += word_w
+        else:
+             # Emoji or Unicode Emoji
+             if current_width + seg.width > max_width and current_line:
+                 lines.append(current_line)
+                 current_line = []
+                 current_width = 0
+             current_line.append(seg)
+             current_width += seg.width
+                
+    if current_line:
+        lines.append(current_line)
+    return lines
 
 async def create(message: discord.Message):
     name = message.author.display_name
     avatar_url = message.author.display_avatar.url if message.author.display_avatar else None
-    message = message.content.strip()
+    content = message.content.strip()
+    
+    # Resolve mentions
+    content = resolve_mentions(content, message)
+
     # load avatar
     async with aiohttp.ClientSession() as session:
         async with session.get(avatar_url) as resp:
@@ -53,44 +218,99 @@ async def create(message: discord.Message):
 
     draw.rectangle([540, 0, 700, 300], fill="black")
 
-    # font
-    font_msg = ImageFont.truetype(os.path.join(fontdir, "notobold.ttf"), 55)
-    font_name = ImageFont.truetype(os.path.join(fontdir, "notolight.ttf"), 25)
-
-    # msg
-    # message = "好。"
-    display_name = f" - {name}"
-
-    # area
+    # Area constraints
     x_min, x_max = 560, 1150
     y_min, y_max = 50, 580
+    max_w = x_max - x_min
+    max_h = y_max - y_min
 
-    # get size
-    def get_text_size(text, font):
-        bbox = font.getmask(text).getbbox()
-        width = bbox[2] - bbox[0]
-        height = bbox[3] - bbox[1]
-        return width, height
+    # Font handling with auto-shrink
+    font_size = 55
+    min_font_size = 20
+    final_lines = []
+    final_font = None
+    final_emoji_font = None
 
-    msg_w, msg_h = get_text_size(message, font_msg)
-    name_w, name_h = get_text_size(display_name, font_name)
+    base_segments = await prepare_segments(content, None) 
+    
+    while font_size >= min_font_size:
+        font_msg = ImageFont.truetype(os.path.join(fontdir, "notobold.ttf"), font_size)
+        try:
+            # Try to load Twemoji font at the same size
+            # Note: Some color fonts require specific sizes or standard sizes.
+            # We'll assume it scales like a TTF.
+            emoji_font_obj = ImageFont.truetype(os.path.join(fontdir, "twemoji.ttf"), font_size)
+        except Exception:
+            # Fallback if not found or failed, use main font (might show boxes)
+            emoji_font_obj = font_msg
 
-    # center
+        ascent, descent = font_msg.getmetrics()
+        line_height = ascent + descent + 10 # spacing
+        emoji_size = ascent + descent
+        
+        lines = layout_segments(base_segments, font_msg, max_w, emoji_size, emoji_font=emoji_font_obj)
+        total_height = len(lines) * line_height
+        
+        if total_height <= max_h or font_size == min_font_size:
+            final_lines = lines
+            final_font = font_msg
+            final_emoji_font = emoji_font_obj
+            break
+        
+        font_size -= 2 # Decrease font size
+
+    # Load custom emojis
+    ascent, descent = final_font.getmetrics()
+    emoji_size = ascent + descent
+    await load_emojis(base_segments, emoji_size)
+
+    # Calculate vertical position
+    total_text_height = len(final_lines) * (emoji_size + 10) 
+    
+    font_name = ImageFont.truetype(os.path.join(fontdir, "notolight.ttf"), 25)
+    name_w, name_h = get_text_size(f" - {name}", font_name)
+    
+    total_content_height = total_text_height + 20 + name_h
+    start_y = y_min + (max_h - total_content_height) // 2
+    
+    current_y = start_y
     center_x = (x_min + x_max) // 2
-    msg_x = center_x - msg_w // 2
+
+    # Draw Text and Emojis
+    for line in final_lines:
+        line_width = 0
+        for seg in line:
+            line_width += seg.width
+        
+        start_x = center_x - line_width // 2
+        cursor_x = start_x
+        
+        for seg in line:
+            if seg.type == 'emoji' and seg.image:
+                img.paste(seg.image, (int(cursor_x), int(current_y)), seg.image)
+            elif seg.type == 'unicode_emoji':
+                # Use standard draw, but with emoji font.
+                # Note: Pillow might not render color standardly without libraqm/specific support.
+                # using embedded color? 'fill="white"' might override if it's a monochrome glyph.
+                # If it's CBDT/CBLC, it should just work?
+                # We try drawing with white fill, if it's color font it might ignore fill.
+                draw.text((cursor_x, current_y), seg.content, font=final_emoji_font, fill="white", embedded_color=True) 
+            else:
+                draw.text((cursor_x, current_y), seg.content, font=final_font, fill="white")
+            
+            cursor_x += seg.width
+        
+        current_y += emoji_size + 10
+
+    # Draw Name
+    name_y = current_y + 20
+    display_name = f" - {name}"
     name_x = center_x - name_w // 2
 
-    total_text_height = msg_h + 20 + name_h
-    start_y = y_min + (y_max - y_min - total_text_height) // 2
-    msg_y = start_y
-    name_y = start_y + msg_h + 40
-
-    # 繪製文字
-    draw.text((msg_x, msg_y), message, font=font_msg, fill="white")
     # draw.text((name_x, name_y), display_name, font=font_name, fill="white")
 
-    # 建立透明文字圖層
-    text_img = Image.new("RGBA", (400, 100), (0, 0, 0, 0))
+    # 建立透明文字圖層 (Reflect effect)
+    text_img = Image.new("RGBA", (int(name_w) + 20, int(name_h) + 20), (0, 0, 0, 0))
     text_draw = ImageDraw.Draw(text_img)
     text_draw.text((0, 0), display_name, font=font_name, fill="white")
 
@@ -101,7 +321,7 @@ async def create(message: discord.Message):
         (1, 0.2, 0, 0, 1, 0),  # X 傾斜 0.3 的效果
         resample=Image.BICUBIC,
     )
-    img.paste(sheared, (name_x, name_y), sheared)
+    img.paste(sheared, (name_x, int(name_y)), sheared)
 
     # save to bytes
     output_buffer = io.BytesIO()
