@@ -25,7 +25,7 @@ def api_status():
         "status": "online" if bot.is_ready() else "offline",
         "name": bot.user.name,
         "avatar_url": str(bot.user.avatar.url) if bot.user.avatar else None,
-        "id": bot.user.id,
+        "id": str(bot.user.id),
         "uptime": UtilCommands.get_uptime_seconds() if UtilCommands else None,
         "server_count": len(bot.guilds),
         "user_count": sum(guild.member_count for guild in bot.guilds),
@@ -42,16 +42,15 @@ def api_commit_logs():
 
 @app.route('/')
 def index():
-    return render_template('index.html', bot=bot)
+    return render_template('index.html', bot=bot, gtag=config("website_gtag", ""))
 
 @app.route('/privacy-policy')
 def privacy_policy():
-    return render_template('PrivacyPolicy.html', bot=bot, contact_email=config("support_email", "support@example.com"), support_server_invite=config("support_server_invite", ""))
+    return render_template('PrivacyPolicy.html', bot=bot, contact_email=config("support_email", "support@example.com"), support_server_invite=config("support_server_invite", ""), gtag=config("website_gtag", ""))
 
 @app.route('/terms-of-service')
 def terms_of_service():
-    return render_template('TermsofService.html', bot=bot)
-
+    return render_template('TermsofService.html', bot=bot, gtag=config("website_gtag", ""))
 AVATAR_ICO = None
 @app.route('/favicon.ico')
 def favicon():

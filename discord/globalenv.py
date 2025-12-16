@@ -11,7 +11,7 @@ import logging
 
 
 # Global configuration for backward compatibility
-config_version = 15
+config_version = 16
 config_path = 'config.json'
 
 default_config = {
@@ -47,6 +47,8 @@ default_config = {
     "memory_usage_threshold": 80,
     "support_server_invite": "https://discord.gg/your-invite-link",
     "support_email": "support@example.com",
+    "website_url": "http://localhost:8080",
+    "website_gtag": "",
 }
 _config = None
 

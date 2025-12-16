@@ -129,6 +129,10 @@ document.addEventListener("DOMContentLoaded", function () {
 });
 
 function inviteBot(event) {
+    gtag('event', 'invite_bot', {
+        'event_category': 'engagement',
+        'event_label': 'Invite Bot Button Clicked'
+    });
     if (event) event.preventDefault();
     if (botId) {
         const inviteUrl = `https://discord.com/oauth2/authorize?client_id=${botId}`;

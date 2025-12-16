@@ -198,43 +198,43 @@ def server_verify():
     cleanup_tokens()
     if request.method == 'GET' and 'auth_token' in request.args:
         if 'auth_token' not in request.args:
-            return render_template('ServerVerify.html', error="缺少驗證令牌。請重新從伺服器中的驗證按鈕進入此頁面。", bot=bot, site_key_turnstile=config("webverify_turnstile_key"), site_key_recaptcha=config("webverify_recaptcha_key"))
+            return render_template('ServerVerify.html', error="缺少驗證令牌。請重新從伺服器中的驗證按鈕進入此頁面。", bot=bot, site_key_turnstile=config("webverify_turnstile_key"), site_key_recaptcha=config("webverify_recaptcha_key"), gtag=config("website_gtag", ""))
         auth_token = request.args.get('auth_token')
         if auth_token not in auth_tokens:
-            return render_template('ServerVerify.html', error="無效的驗證令牌。請重新從伺服器中的驗證按鈕進入此頁面。", bot=bot, site_key_turnstile=config("webverify_turnstile_key"), site_key_recaptcha=config("webverify_recaptcha_key"))
+            return render_template('ServerVerify.html', error="無效的驗證令牌。請重新從伺服器中的驗證按鈕進入此頁面。", bot=bot, site_key_turnstile=config("webverify_turnstile_key"), site_key_recaptcha=config("webverify_recaptcha_key"), gtag=config("website_gtag", ""))
         user_id = auth_tokens[auth_token]['user_id']
         guild_id = auth_tokens[auth_token]['guild_id']
         guild_config = get_server_config(guild_id, "webverify_config")
-        return render_template('ServerVerify.html', bot=bot, site_key_turnstile=config("webverify_turnstile_key"), site_key_recaptcha=config("webverify_recaptcha_key"), captcha_type=guild_config.get('captcha_type'), guild_name=bot.get_guild(guild_id).name)
+        return render_template('ServerVerify.html', bot=bot, site_key_turnstile=config("webverify_turnstile_key"), site_key_recaptcha=config("webverify_recaptcha_key"), captcha_type=guild_config.get('captcha_type'), guild_name=bot.get_guild(guild_id).name, gtag=config("website_gtag", ""))
     elif request.method == 'GET' and 'error' in request.args:
         error_message = request.args.get('error')
         if error_message == "access_denied":
             error_message = "您拒絕了應用程式存取您的 Discord 帳號資訊的授權。請重新從伺服器中的驗證按鈕進入此頁面並授權應用程式。"
-        return render_template('ServerVerify.html', error=error_message, bot=bot, site_key_turnstile=config("webverify_turnstile_key"), site_key_recaptcha=config("webverify_recaptcha_key"))
+        return render_template('ServerVerify.html', error=error_message, bot=bot, site_key_turnstile=config("webverify_turnstile_key"), site_key_recaptcha=config("webverify_recaptcha_key"), gtag=config("website_gtag", ""))
     elif request.method == 'GET':
         guild_id = request.args.get('state')
         code = request.args.get('code')
         if not guild_id or not code:
-            return render_template('ServerVerify.html', error="缺少參數。請從伺服器中的驗證按鈕進入此頁面。", bot=bot, site_key_turnstile=config("webverify_turnstile_key"), site_key_recaptcha=config("webverify_recaptcha_key"))
+            return render_template('ServerVerify.html', error="缺少參數。請從伺服器中的驗證按鈕進入此頁面。", bot=bot, site_key_turnstile=config("webverify_turnstile_key"), site_key_recaptcha=config("webverify_recaptcha_key"), gtag=config("website_gtag", ""))
         guild = bot.get_guild(int(guild_id))
         if not guild:
-            return render_template('ServerVerify.html', error="找不到指定的伺服器。請確認您是從正確的驗證按鈕進入此頁面。", bot=bot, site_key_turnstile=config("webverify_turnstile_key"), site_key_recaptcha=config("webverify_recaptcha_key"))
+            return render_template('ServerVerify.html', error="找不到指定的伺服器。請確認您是從正確的驗證按鈕進入此頁面。", bot=bot, site_key_turnstile=config("webverify_turnstile_key"), site_key_recaptcha=config("webverify_recaptcha_key"), gtag=config("website_gtag", ""))
         
         guild_config = get_server_config(guild.id, "webverify_config")
         if not guild_config:
-            return render_template('ServerVerify.html', error="此伺服器未設定網頁驗證。請聯絡伺服器管理員。", bot=bot, site_key_turnstile=config("webverify_turnstile_key"), site_key_recaptcha=config("webverify_recaptcha_key"))
+            return render_template('ServerVerify.html', error="此伺服器未設定網頁驗證。請聯絡伺服器管理員。", bot=bot, site_key_turnstile=config("webverify_turnstile_key"), site_key_recaptcha=config("webverify_recaptcha_key"), gtag=config("website_gtag", ""))
         if not guild_config.get('enabled', False):
-            return render_template('ServerVerify.html', error="此伺服器的網頁驗證功能已停用。請聯絡伺服器管理員。", bot=bot, site_key_turnstile=config("webverify_turnstile_key"), site_key_recaptcha=config("webverify_recaptcha_key"))
+            return render_template('ServerVerify.html', error="此伺服器的網頁驗證功能已停用。請聯絡伺服器管理員。", bot=bot, site_key_turnstile=config("webverify_turnstile_key"), site_key_recaptcha=config("webverify_recaptcha_key"), gtag=config("website_gtag", ""))
         
         user_id = oauth_code_to_id(code)
         if not user_id:
-            return render_template('ServerVerify.html', error="無法取得您的 Discord 帳號資訊。請確保您已授權應用程式存取您的帳號資訊。", bot=bot, site_key_turnstile=config("webverify_turnstile_key"), site_key_recaptcha=config("webverify_recaptcha_key"))
+            return render_template('ServerVerify.html', error="無法取得您的 Discord 帳號資訊。請確保您已授權應用程式存取您的帳號資訊。", bot=bot, site_key_turnstile=config("webverify_turnstile_key"), site_key_recaptcha=config("webverify_recaptcha_key"), gtag=config("website_gtag", ""))
         
         member = guild.get_member(int(user_id))
         if not member:
-            return render_template('ServerVerify.html', error="您不是此伺服器的成員。請先加入伺服器後再進行驗證。", bot=bot, site_key_turnstile=config("webverify_turnstile_key"), site_key_recaptcha=config("webverify_recaptcha_key"))
+            return render_template('ServerVerify.html', error="您不是此伺服器的成員。請先加入伺服器後再進行驗證。", bot=bot, site_key_turnstile=config("webverify_turnstile_key"), site_key_recaptcha=config("webverify_recaptcha_key"), gtag=config("website_gtag", ""))
         if not member.get_role(guild_config.get('unverified_role_id')):
-            return render_template('ServerVerify.html', error="您已經通過了此伺服器的網頁驗證，無需再次驗證。", bot=bot, site_key_turnstile=config("webverify_turnstile_key"), site_key_recaptcha=config("webverify_recaptcha_key"))
+            return render_template('ServerVerify.html', error="您已經通過了此伺服器的網頁驗證，無需再次驗證。", bot=bot, site_key_turnstile=config("webverify_turnstile_key"), site_key_recaptcha=config("webverify_recaptcha_key"), gtag=config("website_gtag", ""))
         
         auth_token = secrets.token_urlsafe(32)
         auth_tokens[auth_token] = {'user_id': user_id, 'guild_id': guild.id, 'timestamp': time.time()}
@@ -250,22 +250,22 @@ def server_verify():
         guild_id = auth_tokens[auth_token]['guild_id']
         guild_config = get_server_config(guild_id, "webverify_config")
         if not guild_config:
-            return render_template('ServerVerify.html', error="此伺服器未設定網頁驗證。請聯絡伺服器管理員。", bot=bot, site_key_turnstile=config("webverify_turnstile_key"), site_key_recaptcha=config("webverify_recaptcha_key"))
+            return render_template('ServerVerify.html', error="此伺服器未設定網頁驗證。請聯絡伺服器管理員。", bot=bot, site_key_turnstile=config("webverify_turnstile_key"), site_key_recaptcha=config("webverify_recaptcha_key"), gtag=config("website_gtag", ""))
         if not guild_config.get('enabled', False):
-            return render_template('ServerVerify.html', error="此伺服器的網頁驗證功能已停用。請聯絡伺服器管理員。", bot=bot, site_key_turnstile=config("webverify_turnstile_key"), site_key_recaptcha=config("webverify_recaptcha_key"))
+            return render_template('ServerVerify.html', error="此伺服器的網頁驗證功能已停用。請聯絡伺服器管理員。", bot=bot, site_key_turnstile=config("webverify_turnstile_key"), site_key_recaptcha=config("webverify_recaptcha_key"), gtag=config("website_gtag", ""))
         remoteip = request.headers.get('CF-Connecting-IP') or \
                request.headers.get('X-Forwarded-For') or \
                request.remote_addr
         guild = bot.get_guild(guild_id)
         if not guild:
-            return render_template('ServerVerify.html', error="找不到指定的伺服器。請確認您是從正確的驗證按鈕進入此頁面。", bot=bot, site_key_turnstile=config("webverify_turnstile_key"), site_key_recaptcha=config("webverify_recaptcha_key"))
+            return render_template('ServerVerify.html', error="找不到指定的伺服器。請確認您是從正確的驗證按鈕進入此頁面。", bot=bot, site_key_turnstile=config("webverify_turnstile_key"), site_key_recaptcha=config("webverify_recaptcha_key"), gtag=config("website_gtag", ""))
         member = guild.get_member(int(user_id))
 
         if method != guild_config.get('captcha_type'):
-            return render_template('ServerVerify.html', error="驗證方法與伺服器設定不符。請重新嘗試。", bot=bot, site_key_turnstile=config("webverify_turnstile_key"), site_key_recaptcha=config("webverify_recaptcha_key"))
+            return render_template('ServerVerify.html', error="驗證方法與伺服器設定不符。請重新嘗試。", bot=bot, site_key_turnstile=config("webverify_turnstile_key"), site_key_recaptcha=config("webverify_recaptcha_key"), gtag=config("website_gtag", ""))
         
         if not is_valid_md5(fingerprint):
-            return render_template('ServerVerify.html', error="錯誤的瀏覽器指紋。", bot=bot, site_key_turnstile=config("webverify_turnstile_key"), site_key_recaptcha=config("webverify_recaptcha_key"))
+            return render_template('ServerVerify.html', error="錯誤的瀏覽器指紋。", bot=bot, site_key_turnstile=config("webverify_turnstile_key"), site_key_recaptcha=config("webverify_recaptcha_key"), gtag=config("website_gtag", ""))
 
         if method == 'turnstile':
             result = validate_turnstile(token, remoteip)
@@ -273,7 +273,7 @@ def server_verify():
             result = validate_recaptcha(token, remoteip)
         else:
             if guild_config.get('captcha_type') != 'none':
-                return render_template('ServerVerify.html', error="無效的驗證方法。", bot=bot, site_key_turnstile=config("webverify_turnstile_key"), site_key_recaptcha=config("webverify_recaptcha_key"))
+                return render_template('ServerVerify.html', error="無效的驗證方法。", bot=bot, site_key_turnstile=config("webverify_turnstile_key"), site_key_recaptcha=config("webverify_recaptcha_key"), gtag=config("website_gtag", ""))
             result = {'success': True}
 
         if result.get('success'):
@@ -286,12 +286,11 @@ def server_verify():
                 asyncio.run_coroutine_threadsafe(member.send(f"您已成功通過 {guild.name} 的網頁驗證，現在可以訪問伺服器了！"), bot.loop)
             except Exception as e:
                 log(f"無法私訊用戶 {member} 通知其驗證成功：{e}", level=logging.ERROR, module_name="ServerWebVerify", user=member, guild=guild)
-            return render_template('ServerVerify.html', error="驗證成功！您現在可以返回伺服器。", bot=bot, site_key_turnstile=config("webverify_turnstile_key"), site_key_recaptcha=config("webverify_recaptcha_key"))
+            return render_template('ServerVerify.html', error="驗證成功！您現在可以返回伺服器。", bot=bot, site_key_turnstile=config("webverify_turnstile_key"), site_key_recaptcha=config("webverify_recaptcha_key"), gtag=config("website_gtag", ""))
         else:
             error_codes = result.get('error-codes', [])
             log(f"用戶未能通過網頁驗證，錯誤代碼：{error_codes}", module_name="ServerWebVerify", user=member, guild=guild)
-            return render_template('ServerVerify.html', error=f"驗證失敗。錯誤代碼：{', '.join(error_codes)}", bot=bot, site_key_turnstile=config("webverify_turnstile_key"), site_key_recaptcha=config("webverify_recaptcha_key"))
-
+            return render_template('ServerVerify.html', error=f"驗證失敗。錯誤代碼：{', '.join(error_codes)}", bot=bot, site_key_turnstile=config("webverify_turnstile_key"), site_key_recaptcha=config("webverify_recaptcha_key"), gtag=config("website_gtag", ""))
 @app_commands.guild_only()
 @app_commands.default_permissions(administrator=True)
 @app_commands.allowed_installs(guilds=True, users=False)

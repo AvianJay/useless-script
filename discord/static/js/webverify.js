@@ -1,6 +1,12 @@
 var fpPromise = FingerprintJS.load()
 let fingerprint;
 
+function trackEvent(name, params = {}) {
+    if (typeof gtag === 'function') {
+        gtag('event', name, params);
+    }
+}
+
 async function generateFingerprint() {
     const fp = await fpPromise;
     const result = await fp.get();
@@ -8,10 +14,22 @@ async function generateFingerprint() {
     return fingerprint;
 }
 
+async function generateFingerprintWithTimeout(timeout = 2000) {
+    return Promise.race([
+        generateFingerprint(),
+        new Promise((_, reject) =>
+            setTimeout(() => reject(new Error('Fingerprint timeout')), timeout)
+        )
+    ]);
+}
+
 async function reCaptchaCallback(token) {
     try {
+        trackEvent('captcha_verified', {
+            captcha_type: 'recaptcha'
+        });
         document.getElementById('captcha-token').value = token;
-        await generateFingerprint();
+        await generateFingerprintWithTimeout();
         document.getElementById('fingerprint').value = fingerprint;
         document.getElementById('verify-form').submit();
     } catch (error) {
@@ -22,8 +40,11 @@ async function reCaptchaCallback(token) {
 
 async function turnstileCallback(token) {
     try {
+        trackEvent('captcha_verified', {
+            captcha_type: 'turnstile'
+        });
         document.getElementById('captcha-token').value = token;
-        await generateFingerprint();
+        await generateFingerprintWithTimeout();
         document.getElementById('fingerprint').value = fingerprint;
         document.getElementById('verify-form').submit();
     } catch (error) {
@@ -34,7 +55,10 @@ async function turnstileCallback(token) {
 
 async function directVerify() {
     try {
-        await generateFingerprint();
+        trackEvent('captcha_verified', {
+            captcha_type: 'direct'
+        });
+        await generateFingerprintWithTimeout();
         document.getElementById('fingerprint').value = fingerprint;
         document.getElementById('verify-form').submit();
     } catch (error) {
