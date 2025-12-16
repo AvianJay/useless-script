@@ -46,7 +46,7 @@ def index():
 
 @app.route('/privacy-policy')
 def privacy_policy():
-    return render_template('PrivacyPolicy.html', bot=bot)
+    return render_template('PrivacyPolicy.html', bot=bot, contact_email=config("support_email", "support@example.com"), support_server_invite=config("support_server_invite", ""))
 
 @app.route('/terms-of-service')
 def terms_of_service():

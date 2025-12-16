@@ -11,7 +11,7 @@ import logging
 
 
 # Global configuration for backward compatibility
-config_version = 14
+config_version = 15
 config_path = 'config.json'
 
 default_config = {
@@ -45,6 +45,8 @@ default_config = {
     "process_monitor_alert_channel_id": 0,
     "cpu_usage_threshold": 80,
     "memory_usage_threshold": 80,
+    "support_server_invite": "https://discord.gg/your-invite-link",
+    "support_email": "support@example.com",
 }
 _config = None
 
