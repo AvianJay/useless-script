@@ -792,7 +792,7 @@ class Moderate(commands.GroupCog, group_name=app_commands.locale_str("admin")):
             await ctx.send("請指定要管理的用戶。")
             return
         if ctx.author.guild_permissions.ban_members is False and ctx.author.guild_permissions.kick_members is False and ctx.author.guild_permissions.moderate_members is False and ctx.author.guild_permissions.manage_messages is False:
-            await ctx.send(f"你沒有權限執行此操作。{'\n-# 就算你是機器人擁有者也不行喔！' if ctx.author.id in config('owners') else ''}")
+            await ctx.send("你沒有權限執行此操作。" + ('\n-# 就算你是機器人擁有者也不行喔！' if ctx.author.id in config('owners') else ''))
             return
         logs = await do_action_str(commands_str, ctx.guild, user, message=None, moderator=ctx.author)
         if len(logs) == 0:
@@ -828,7 +828,7 @@ class Moderate(commands.GroupCog, group_name=app_commands.locale_str("admin")):
             await ctx.send("機器人缺少必要的權限，請確認機器人擁有封禁、踢出、管理訊息及禁言權限。")
             return
         if ctx.author.guild_permissions.ban_members is False and ctx.author.guild_permissions.kick_members is False and ctx.author.guild_permissions.moderate_members is False and ctx.author.guild_permissions.manage_messages is False:
-            await ctx.send(f"你沒有權限執行此操作。{'\n-# 就算你是機器人擁有者也不行喔！' if ctx.author.id in config('owners') else ''}")
+            await ctx.send("你沒有權限執行此操作。" + ('\n-# 就算你是機器人擁有者也不行喔！' if ctx.author.id in config('owners') else ''))
             return
         if ctx.message.reference is None:
             await ctx.send("請在回覆的訊息中使用此指令。")
