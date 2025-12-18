@@ -15,7 +15,7 @@ class FakeUser(commands.Cog):
     @app_commands.allowed_installs(guilds=True, users=False)
     @app_commands.allowed_contexts(guilds=True, dms=False, private_channels=False)
     @app_commands.default_permissions(manage_guild=True)
-    @app_commands.command(name="fake-logs", description="設置假冒用戶紀錄的頻道")
+    @app_commands.command(name="fake-log-channel", description="設置假冒用戶紀錄的頻道")
     @app_commands.describe(channel="要設置的假冒用戶紀錄頻道，留空以查看當前頻道")
     async def fakeuser(self, interaction: discord.Interaction, channel: discord.TextChannel = None):
         guild_id = str(interaction.guild.id) if interaction.guild else None

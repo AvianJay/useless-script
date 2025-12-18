@@ -319,6 +319,9 @@ translations = {
     "verify_notify": "驗證通知",
     "type": "類型",
     "relation_action": "關聯用戶動作",
+    "delete_message": "刪除訊息",
+    "fake": "假冒",
+    "fake-log-channel": "假冒日誌頻道",
 }
 class CommandNameTranslator(app_commands.Translator):
     async def translate(
