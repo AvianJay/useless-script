@@ -298,16 +298,15 @@ async def moderation_message_settings(interaction: Optional[discord.Interaction]
             await channel.send(generate_message())
             if interaction:
                 await interaction.followup.send("已發送公告到公告頻道。", ephemeral=True)
-            log(f"已發送公告到 {channel.name} 頻道。", module_name="Moderate", guild=interaction.guild)
+            log(f"已發送公告到 {channel.name} 頻道。", module_name="Moderate", guild=guild)
         except discord.Forbidden:
             if interaction:
                 await interaction.response.send_message("無法在公告頻道發送訊息，機器人缺少權限。", ephemeral=True)
-            log(f"無法在公告頻道發送訊息，機器人缺少權限。", level=logging.ERROR, module_name="Moderate", guild=interaction.guild)
+            log(f"無法在公告頻道發送訊息，機器人缺少權限。", level=logging.ERROR, module_name="Moderate", guild=guild)
         except Exception as e:
             if interaction:
                 await interaction.response.send_message(f"發送公告時發生錯誤：{e}", ephemeral=True)
-            log(f"發送公告時發生錯誤：{e}", level=logging.ERROR, module_name="Moderate", guild=interaction.guild)
-
+            log(f"發送公告時發生錯誤：{e}", level=logging.ERROR, module_name="Moderate", guild=guild)
     embed = discord.Embed(title="公告設定", color=0xff0000)
     embed.add_field(name="公告內容", value="```\n" + generate_message() + "\n```", inline=False)
     class MessageButtons(discord.ui.View):
