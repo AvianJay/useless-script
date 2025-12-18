@@ -57,6 +57,7 @@ class FakeUser(commands.Cog):
             log(f"假冒了用戶 {user} 發送訊息：{message}", module_name="FakeUser", user=interaction.user, guild=interaction.guild)
             if log_channel:
                 embed = discord.Embed(title="假冒用戶操作紀錄", description=f"用戶 {interaction.user.mention} 假冒 {user.mention} 發送了訊息：{message}", color=discord.Color.red())
+                embed.timestamp = datetime.now(timezone.utc)
                 await log_channel.send(embed=embed)
         finally:
             await webhook.delete()
