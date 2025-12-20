@@ -100,16 +100,16 @@ class AkinatorGame:
 
 
 class AkinatorView(discord.ui.View):
-    def __init__(self, game):
+    def __init__(self, game: AkinatorGame):
         super().__init__(timeout=300)
         self.game = game
     
     async def on_timeout(self):
         for child in self.children:
             child.disabled = True
-        await self.message.edit(content="遊戲已超時結束。", view=self)
         in_game_sessions.pop(self.game.interaction.user.id, None)
         last_game_time[self.game.interaction.user.id] = datetime.now(timezone.utc)
+        await self.game.message.edit(content="遊戲已超時結束。", view=self)
         self.stop()
 
     async def handle_answer(self, interaction: discord.Interaction, answer: str):
@@ -121,10 +121,10 @@ class AkinatorView(discord.ui.View):
         try:
             await self.game.post_answer(answer)
         except rynaki.main.AkinatorError:
-            await interaction.followup.send("Akinator 服務暫時無法使用，請稍後再試。", ephemeral=True)
             in_game_sessions.pop(self.game.interaction.user.id, None)
             last_game_time[self.game.interaction.user.id] = datetime.now(timezone.utc)
-            await self.message.edit(content="遊戲因錯誤結束。", view=None)
+            await interaction.followup.send("Akinator 服務暫時無法使用，請稍後再試。", ephemeral=True)
+            await self.game.message.edit(content="遊戲因錯誤結束。", view=None)
             self.stop()
 
     @discord.ui.button(label="是", style=discord.ButtonStyle.green)
@@ -156,9 +156,9 @@ class AkinatorView(discord.ui.View):
         await interaction.response.defer()
         for child in self.children:
             child.disabled = True
-        await self.game.message.edit(content="遊戲已由用戶結束。", view=self)
         in_game_sessions.pop(self.game.interaction.user.id, None)
         last_game_time[self.game.interaction.user.id] = datetime.now(timezone.utc)
+        await self.game.message.edit(content="遊戲已由用戶結束。", view=self)
         self.stop()
 
 asyncio.run(bot.add_cog(Aki(bot)))
