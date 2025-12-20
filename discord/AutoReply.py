@@ -36,7 +36,7 @@ async def list_autoreply_autocomplete(interaction: discord.Interaction, current:
 
 
 @app_commands.guild_only()
-@app_commands.default_permissions(administrator=True)
+@app_commands.default_permissions(manage_guild=True)
 @app_commands.allowed_installs(guilds=True, users=False)
 @app_commands.allowed_contexts(guilds=True, dms=False, private_channels=False)
 class AutoReply(commands.GroupCog, name="autoreply"):
@@ -72,7 +72,7 @@ class AutoReply(commands.GroupCog, name="autoreply"):
             app_commands.Choice(name="黑名單", value="blacklist"),
         ]
     )
-    @app_commands.default_permissions(administrator=True)
+    @app_commands.default_permissions(manage_guild=True)
     async def add_autoreply(self, interaction: discord.Interaction, mode: str, trigger: str, response: str, reply: str = "False", channel_mode: str = "all", channels: str = "", random_chance: int = 100):
         guild_id = interaction.guild.id
         reply = (reply == "True")
@@ -102,7 +102,7 @@ class AutoReply(commands.GroupCog, name="autoreply"):
         trigger="觸發字串"
     )
     @app_commands.autocomplete(trigger=list_autoreply_autocomplete)
-    @app_commands.default_permissions(administrator=True)
+    @app_commands.default_permissions(manage_guild=True)
     async def remove_autoreply(self, interaction: discord.Interaction, trigger: str):
         guild_id = interaction.guild.id
         autoreplies = get_server_config(guild_id, "autoreplies", [])
@@ -117,7 +117,7 @@ class AutoReply(commands.GroupCog, name="autoreply"):
         await interaction.response.send_message(f"找不到觸發字串 `{trigger}` 的自動回覆。")
     
     @app_commands.command(name="list", description="列出所有自動回覆")
-    @app_commands.default_permissions(administrator=True)
+    @app_commands.default_permissions(manage_guild=True)
     async def list_autoreplies(self, interaction: discord.Interaction):
         guild_id = interaction.guild.id
         autoreplies = get_server_config(guild_id, "autoreplies", [])
@@ -142,7 +142,7 @@ class AutoReply(commands.GroupCog, name="autoreply"):
         await interaction.response.send_message(embed=embed)
 
     @app_commands.command(name="clear", description="清除所有自動回覆")
-    @app_commands.default_permissions(administrator=True)
+    @app_commands.default_permissions(manage_guild=True)
     async def clear_autoreplies(self, interaction: discord.Interaction):
         guild_id = interaction.guild.id
         autoreplies = get_server_config(guild_id, "autoreplies", [])
@@ -207,7 +207,7 @@ class AutoReply(commands.GroupCog, name="autoreply"):
         ]
     )
     @app_commands.autocomplete(trigger=list_autoreply_autocomplete)
-    @app_commands.default_permissions(administrator=True)
+    @app_commands.default_permissions(manage_guild=True)
     async def edit_autoreply(self, interaction: discord.Interaction, trigger: str, new_mode: str = None, new_trigger: str = None, new_response: str = None, reply: str = None, channel_mode: str = None, channels: str = None, random_chance: int = None):
         guild_id = interaction.guild.id
         reply = None if reply is None else (True if reply == "True" else False)
@@ -249,7 +249,7 @@ class AutoReply(commands.GroupCog, name="autoreply"):
         new_response="新的回覆內容"
     )
     @app_commands.autocomplete(trigger=list_autoreply_autocomplete)
-    @app_commands.default_permissions(administrator=True)
+    @app_commands.default_permissions(manage_guild=True)
     async def quick_add_autoreply(self, interaction: discord.Interaction, trigger: str, new_trigger: str = "", new_response: str = ""):
         guild_id = interaction.guild.id
         autoreplies = get_server_config(guild_id, "autoreplies", [])
@@ -266,9 +266,19 @@ class AutoReply(commands.GroupCog, name="autoreply"):
                     ar["response"].extend(new_responses)
                     ar["response"] = list(set(ar["response"]))  # remove duplicates
                 set_server_config(guild_id, "autoreplies", autoreplies)
-                trigger_str = ", ".join(ar["trigger"]) if len(ar["trigger"]) <= 100 else ", ".join(ar["trigger"])[:97] + "..."
-                response_str = ", ".join(ar["response"]) if len(ar["response"]) <= 100 else ", ".join(ar["response"])[:97] + "..."
-                await interaction.response.send_message(f"已快速新增自動回覆，目前設定：\n- 模式：{ar['mode']}\n- 觸發字串：`{trigger_str}`\n- 回覆內容：`{response_str}`\n- 回覆原訊息：{'是' if ar['reply'] else '否'}\n- 指定頻道模式：{ar['channel_mode']}\n- 指定頻道：`{', '.join(map(str, ar['channels'])) if ar['channels'] else '無'}`\n- 隨機回覆機率：{ar['random_chance']}%")
+                trigger_str = ", ".join(ar["trigger"])
+                trigger_str = trigger_str if len(trigger_str) <= 100 else trigger_str[:97] + "..."
+                response_str = ", ".join(ar["response"])
+                response_str = response_str if len(response_str) <= 100 else response_str[:97] + "..."
+                embed = discord.Embed(title="快速新增自動回覆成功", color=0x00ff00)
+                embed.add_field(name="模式", value=ar["mode"])
+                embed.add_field(name="觸發字串", value=f"`{trigger_str}`")
+                embed.add_field(name="回覆內容", value=f"`{response_str}`")
+                embed.add_field(name="回覆原訊息", value="是" if ar["reply"] else "否")
+                embed.add_field(name="指定頻道模式", value=ar["channel_mode"])
+                embed.add_field(name="指定頻道", value=f"`{', '.join(map(str, ar['channels'])) if ar['channels'] else '無'}`")
+                embed.add_field(name="隨機回覆機率", value=f"{ar['random_chance']}%")
+                await interaction.response.send_message(embed=embed)
                 log(f"自動回覆被快速新增：`{det}`。", module_name="AutoReply", level=logging.INFO, user=interaction.user, guild=interaction.guild)
                 return
         await interaction.response.send_message(f"找不到觸發字串 `{trigger}` 的自動回覆。")
