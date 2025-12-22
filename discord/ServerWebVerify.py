@@ -309,6 +309,7 @@ class ServerWebVerify(commands.GroupCog, name="webverify", description="伺服�
             'unverified_role_id': None,
             'autorole_enabled': False,
             'autorole_trigger': 'always',
+            'min_age': 7,
             'notify': {
                 'type': 'dm',
                 'channel_id': None,
@@ -586,6 +587,17 @@ class ServerWebVerify(commands.GroupCog, name="webverify", description="伺服�
         set_server_config(guild.id, "webverify_config", guild_config)
         await interaction.followup.send(f"已建立角色 '{name}' 並將所有文字頻道權限關閉且設定為未驗證成員角色。")
     
+    @app_commands.command(name="minage", description="定義最小帳號年齡")
+    @app_commands.describe(min_age="最小帳號年齡（天）")
+    @app_commands.default_permissions(administrator=True)
+    async def minage(self, interaction: discord.Interaction, min_age: int):
+        guild_config = get_server_config(interaction.guild.id, "webverify_config")
+        if not guild_config:
+            guild_config = {}
+        guild_config['min_age'] = min_age
+        set_server_config(interaction.guild.id, "webverify_config", guild_config)
+        await interaction.response.send_message(f"最小帳號年齡已設定為 {min_age} 天。")
+    
     @commands.Cog.listener()
     async def on_member_join(self, member: discord.Member):
         guild_config = get_server_config(member.guild.id, "webverify_config")
@@ -605,7 +617,7 @@ class ServerWebVerify(commands.GroupCog, name="webverify", description="伺服�
                 assign_role = True
             elif trigger == 'age_check':
                 account_age = (discord.utils.utcnow() - member.created_at).total_seconds()
-                if account_age < 604800:  # 7 days in seconds
+                if account_age < guild_config.get('min_age', 7) * 86400:
                     assign_role = True
             elif trigger == 'no_history':
                 with get_db_connection() as conn:
@@ -652,6 +664,7 @@ class WebVerifySetupWizard(discord.ui.View):
             'unverified_role_id': None,
             'autorole_enabled': False,
             'autorole_trigger': 'always',
+            'min_age': 7,
             'notify': {'type': 'dm', 'channel_id': None, 'title': '伺服器網頁驗證', 'message': '請點擊下方按鈕進行網頁驗證：'}
         }
         self.step = 1
