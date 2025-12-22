@@ -17,6 +17,7 @@ import json
 import os
 import io
 from urllib.parse import urlencode
+import asyncio
 
 def oauth_code_to_id(code, redirect_uri=None):
     url = 'https://discord.com/api/oauth2/token'
@@ -280,3 +281,6 @@ class Contribute(commands.GroupCog, description="投稿圖片"):
         view = ContributionView("whatisthisguytalking")
         await contribute_channel.send(embed=embed, file=file, view=view)
         await interaction.response.send_message("感謝您的投稿！我們會盡快審核您的圖片。", ephemeral=True)
+
+
+asyncio.run(bot.add_cog(Contribute(bot)))
