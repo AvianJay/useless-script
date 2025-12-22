@@ -4,6 +4,7 @@ import os
 import json
 import database
 import asyncio
+import random
 
 config_version = 4
 config_path = 'config.json'
@@ -73,6 +74,7 @@ conn = database.get_db_connection()
 
 async def update_flagged_users():
     scan_guilds = config("scan_guilds", [])
+    scan_guilds = random.sample(scan_guilds, len(scan_guilds))
     this_time_added_count = 0
     this_time_added_and_flagged_count = 0
     for guild_info in scan_guilds:
@@ -86,29 +88,35 @@ async def update_flagged_users():
         count = 0
         count_flagged = 0
         print(f"[+] Fetching members for guild {guild.name}...")
-        viewable_channels_id = guild_info.get("viewable_channels", [])
-        viewable_channels = [guild.get_channel(cid) for cid in viewable_channels_id if guild.get_channel(cid) is not None]
-        members = await guild.fetch_members(channels=viewable_channels)
-        for member in members:
-            if member.bot:
-                # check bot verified
-                if member.public_flags.verified_bot:
+        try:
+            viewable_channels_id = guild_info.get("viewable_channels", [])
+            viewable_channels = [guild.get_channel(cid) for cid in viewable_channels_id if guild.get_channel(cid) is not None]
+            members = await guild.fetch_members(channels=viewable_channels)
+            for member in members:
+                if member.bot:
+                    # check bot verified
+                    if member.public_flags.verified_bot:
+                        continue
+                if member.id == bot.user.id:
                     continue
-            if member.id == bot.user.id:
-                continue
-            if member.id in config("ignored_users", []):
-                continue
-            is_flagged = any(role.id in flagged_roles for role in member.roles)
-            dt = database.get_flagged_user(conn, member.id, guild_id)
-            if not dt:
-                this_time_added_count += 1
+                if member.id in config("ignored_users", []):
+                    continue
+                is_flagged = any(role.id in flagged_roles for role in member.roles)
+                dt = database.get_flagged_user(conn, member.id, guild_id)
+                if not dt:
+                    this_time_added_count += 1
+                    if is_flagged:
+                        this_time_added_and_flagged_count += 1
+                database.add_flagged_user(conn, member.id, guild_id, is_flagged)
+                count += 1
                 if is_flagged:
-                    this_time_added_and_flagged_count += 1
-            database.add_flagged_user(conn, member.id, guild_id, is_flagged)
-            count += 1
-            if is_flagged:
-                count_flagged += 1
+                    count_flagged += 1
+        except Exception as e:
+            print(f"[!] Error fetching members for guild {guild.name} (ID: {guild_id}): {e}")
+            continue
         print(f"[+] Updated flagged users for guild {guild_id}: {count_flagged}/{count} users flagged.")
+        print("[!] Cooldown for 10 seconds to avoid rate limits...")
+        await asyncio.sleep(10)
     return this_time_added_count, this_time_added_and_flagged_count
 
 # other event to add flagged users
@@ -184,29 +192,35 @@ async def on_member_update(before, after):
         print(f"[+] Updated flagged status for user {after} (ID: {after.id}) in guild {after.guild.name} (ID: {after.guild.id}): {'Flagged' if after_flagged else 'Not Flagged'}")
 
 @bot.event
-async def on_presence_update(before, after):
-    if before.guild is None:
+async def on_presence_update(before: selfcord.Relationship, after: selfcord.Member):
+    # get same guilds
+    user = after if isinstance(after, selfcord.Member) else after.user
+    profile = await user.profile()
+    mutual_guilds = profile.mutual_guilds
+    if not mutual_guilds:
         return
     scan_guilds = config("scan_guilds", [])
-    guild_info = next((g for g in scan_guilds if g.get("id") == before.guild.id), None)
-    if guild_info is None:
-        return
-    if after.id == bot.user.id:
-        return
-    if after.id in config("ignored_users", []):
-        return
-    if after.bot:
-        # check bot verified
-        if after.public_flags.verified_bot:
+    for mutual_guild in mutual_guilds:
+        guild_info = next((g for g in scan_guilds if g.get("id") == mutual_guild.id), None)
+        if guild_info is None:
             return
-    # if database.get_flagged_user(conn, after.id, after.guild.id):
-    #     return
-    flagged_roles = guild_info.get("flagged_roles", [])
-    before_flagged = any(role.id in flagged_roles for role in before.roles)
-    after_flagged = any(role.id in flagged_roles for role in after.roles)
-    if before_flagged != after_flagged:
-        database.add_flagged_user(conn, after.id, after.guild.id, after_flagged)
-        print(f"[+] Updated flagged status for user {after} (ID: {after.id}) in guild {after.guild.name} (ID: {after.guild.id}): {'Flagged' if after_flagged else 'Not Flagged'}")
+        if user.id == bot.user.id:
+            return
+        if user.id in config("ignored_users", []):
+            return
+        if user.bot:
+            # check bot verified
+            if user.public_flags.verified_bot:
+                return
+        # if database.get_flagged_user(conn, after.id, after.guild.id):
+        #     return
+        flagged_roles = guild_info.get("flagged_roles", [])
+        member = mutual_guild.guild.get_member(user.id)
+        if member is None:
+            return
+        flagged = any(role.id in flagged_roles for role in member.roles)
+        database.add_flagged_user(conn, member.id, mutual_guild.id, flagged)
+        print(f"[+] Updated flagged status for user {member} (ID: {member.id}) in guild {mutual_guild.guild.name} (ID: {mutual_guild.id}): {'Flagged' if flagged else 'Not Flagged'}")
 
 def is_owner():
     async def predicate(ctx):
