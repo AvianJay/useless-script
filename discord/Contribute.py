@@ -260,7 +260,11 @@ class Contribute(commands.GroupCog, description="投稿圖片"):
     async def contribute_feed_grass(self, interaction: discord.Interaction):
         redirect_uri = config('website_url') + "/contribute-feed-grass"
         url = f"https://discord.com/oauth2/authorize?client_id={self.bot.application.id}&response_type=code&scope=identify&prompt=none&{urlencode({'redirect_uri': redirect_uri})}"
-        await interaction.response.send_message(f"請點擊以下連結進行投稿：\n[點我投稿]({url})", ephemeral=True)
+        embed = discord.Embed(title="草飼圖投稿", description="請點擊以下連結進行投稿", color=discord.Color.blue())
+        link_btn = discord.ui.Button(label="前往投稿", url=url, emoji="🔗")
+        view = discord.ui.View()
+        view.add_item(link_btn)
+        await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
     
     @app_commands.command(name="what-is-this-guy-talking-about", description="投稿「這傢伙在說什麼呢」圖片")
     async def what_is_this_guy_talking_about(self, interaction: discord.Interaction, image: discord.Attachment):
