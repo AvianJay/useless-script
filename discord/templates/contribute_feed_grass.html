@@ -673,6 +673,9 @@
         }));
       }
 
+      // remove result.file
+      delete result.file;
+
       // Get base64
       const reader = new FileReader();
       reader.readAsDataURL(bgFile.files[0]);
