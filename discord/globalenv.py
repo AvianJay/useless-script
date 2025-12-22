@@ -326,6 +326,7 @@ translations = {
     "contribute": "投稿",
     "feedgrass": "草飼",
     "what-is-this-guy-talking-about": "這傢伙在說什麼呢",
+    "minage": "最小帳號年齡",
 }
 class CommandNameTranslator(app_commands.Translator):
     async def translate(
