@@ -155,8 +155,8 @@ class ContributionView(discord.ui.View):
             child.disabled = True
         await interaction.response.edit_message(embed=embed, view=self)
 
-@app.route("/contribute-feed-gress", methods=["GET", "POST"])
-def contribute_feed_gress():
+@app.route("/contribute-feed-grass", methods=["GET", "POST"])
+def contribute_feed_grass():
     cleanup_tokens()
     if request.method == "GET":
         if request.args.get("code"):
@@ -168,12 +168,12 @@ def contribute_feed_gress():
             # generate a temporary token
             temp_token = f"token_{int(time.time())}_{user_id}"
             auth_tokens[temp_token] = {"user_id": user_id, "timestamp": time.time()}
-            return redirect(f"/contribute-feed-gress?token={temp_token}")
+            return redirect(f"/contribute-feed-grass?token={temp_token}")
         elif request.args.get("token"):
             token = request.args.get("token")
             if token in auth_tokens:
                 user_id = auth_tokens[token]["user_id"]
-                return render_template("contribute_feed_gress.html", bot=bot, user_id=user_id, gtag=config("website_gtag"))
+                return render_template("contribute_feed_grass.html", bot=bot, user_id=user_id, gtag=config("website_gtag"))
             else:
                 return "無效或過期的驗證令牌，請重試。"
         else:
