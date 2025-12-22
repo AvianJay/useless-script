@@ -115,25 +115,30 @@ class ContributionView(discord.ui.View):
 
             elif self.ctype == "whatisthisguytalking":
                 # Attachment 0: Image
-                if len(interaction.message.attachments) < 1:
+                embed = interaction.message.embeds[0]
+                if not embed.image:
                     await interaction.followup.send("錯誤：找不到附件。", ephemeral=True)
                     return
                 
-                img_att = interaction.message.attachments[0]
+                img_att = embed.image.url
                 
                 if not os.path.exists("whatisthisguytalking-images"):
                     os.makedirs("whatisthisguytalking-images")
                 
-                await img_att.save(os.path.join("whatisthisguytalking-images", img_att.filename))
+                path = os.path.join("whatisthisguytalking-images", uuid.uuid4().hex + ".png")
+                # download
+                response = requests.get(img_att)
+                with open(path, "wb") as f:
+                    f.write(response.content)
                 await interaction.followup.send("已保存並批准投稿！", ephemeral=True)
                 
-                 # Update message
+                # Update message
                 embed = interaction.message.embeds[0]
                 embed.color = discord.Color.green()
                 embed.title += " [已批准]"
                 for child in self.children:
                     child.disabled = True
-                await interaction.edit_original_response(embed=embed, view=self)
+                await interaction.edit_original_response(embed=embed, view=self, attachments=None)
 
                 try:
                     from MessageImage import load_whatisthisguytalking_images
