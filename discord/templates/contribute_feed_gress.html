@@ -1,0 +1,734 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{{ bot.user.name }} - 草飼圖投稿</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+  <style>
+    /* Editor specific overrides */
+    body {
+      height: 100vh;
+      overflow: hidden;
+      background-color: var(--bg-primary);
+    }
+
+    .navbar {
+      flex-shrink: 0;
+      z-index: 10;
+    }
+
+    .editor-container {
+      display: flex;
+      flex: 1;
+      height: calc(100vh - 70px);
+      /* rough navbar height */
+      overflow: hidden;
+    }
+
+    /* Left Panel */
+    .sidebar {
+      width: 400px;
+      background-color: var(--bg-secondary);
+      border-right: 1px solid #333;
+      display: flex;
+      flex-direction: column;
+      padding: 1rem;
+      overflow-y: auto;
+      flex-shrink: 0;
+    }
+
+    .sidebar h2 {
+      margin-bottom: 1rem;
+      font-size: 1.2rem;
+      color: var(--text-primary);
+    }
+
+    .control-group {
+      margin-bottom: 1.5rem;
+      background: rgba(0, 0, 0, 0.2);
+      padding: 1rem;
+      border-radius: 8px;
+    }
+
+    .control-label {
+      display: block;
+      margin-bottom: 0.5rem;
+      font-weight: 600;
+      color: var(--text-secondary);
+    }
+
+    /* Inputs */
+    input[type="file"] {
+      width: 100%;
+      padding: 0.5rem;
+      background: var(--bg-primary);
+      border: 1px solid #444;
+      border-radius: 4px;
+      color: var(--text-primary);
+      cursor: pointer;
+    }
+
+    input[type="range"] {
+      width: 100%;
+      margin-top: 0.5rem;
+      accent-color: var(--accent);
+    }
+
+    input[type="checkbox"] {
+      accent-color: var(--accent);
+      transform: scale(1.2);
+    }
+
+    /* Layers */
+    .layer-item {
+      background: var(--bg-primary);
+      padding: 0.8rem;
+      border-radius: 6px;
+      margin-bottom: 0.8rem;
+      border: 1px solid #444;
+    }
+
+    .layer-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 0.5rem;
+    }
+
+    .layer-title {
+      font-weight: bold;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .badge {
+      font-size: 0.75rem;
+      padding: 2px 6px;
+      border-radius: 4px;
+      background: #444;
+      color: #ccc;
+    }
+
+    /* Canvas Area */
+    .canvas-area {
+      flex: 1;
+      background-color: #1a1a1a;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      position: relative;
+      overflow: auto;
+      background-image: radial-gradient(#333 1px, transparent 1px);
+      background-size: 20px 20px;
+    }
+
+    canvas {
+      box-shadow: 0 0 20px rgba(0, 0, 0, 0.5);
+      background: white;
+      /* default bg for transparent images */
+    }
+
+    /* Buttons */
+    .btn {
+      padding: 10px 16px;
+      border-radius: 6px;
+      border: none;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+      font-family: inherit;
+    }
+
+    .btn-primary {
+      background-color: var(--accent);
+      color: white;
+      width: 100%;
+    }
+
+    .btn-primary:hover {
+      background-color: var(--accent-hover);
+    }
+
+    .btn-secondary {
+      background-color: #4f545c;
+      color: white;
+    }
+
+    .btn-secondary:hover {
+      background-color: #5d6269;
+    }
+
+    .btn-danger {
+      background-color: #ed4245;
+      color: white;
+      padding: 4px 8px;
+      font-size: 0.8rem;
+    }
+
+    .action-bar {
+      margin-top: auto;
+      padding-top: 1rem;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .json-preview {
+      width: 100%;
+      height: 100px;
+      background: #111;
+      color: #0f0;
+      border: 1px solid #333;
+      padding: 0.5rem;
+      font-family: monospace;
+      font-size: 0.8rem;
+      resize: none;
+    }
+
+    /* Message area */
+    #messageArea {
+      margin-top: 10px;
+      padding: 10px;
+      border-radius: 4px;
+      display: none;
+      text-align: center;
+    }
+
+    .msg-success {
+      background: rgba(87, 242, 135, 0.2);
+      color: #57f287;
+      border: 1px solid #57f287;
+    }
+
+    .msg-error {
+      background: rgba(237, 66, 69, 0.2);
+      color: #ed4245;
+      border: 1px solid #ed4245;
+    }
+  </style>
+  <script async src="https://www.googletagmanager.com/gtag/js?id={{ gtag }}"></script>
+  <script>
+    window.dataLayer = window.dataLayer || [];
+    function gtag() { dataLayer.push(arguments); }
+    gtag('js', new Date());
+    gtag('config', '{{ gtag }}');
+  </script>
+</head>
+
+<body>
+  <nav class="navbar">
+    <a href="/" class="navbar-brand">
+      <span>{{ bot.user.name }}</span>
+    </a>
+    <div class="nav-links">
+      <span style="color: var(--text-secondary);">草飼圖投稿</span>
+    </div>
+  </nav>
+
+  <div class="editor-container">
+    <div class="sidebar">
+      <div class="control-group">
+        <label class="control-label">1. 上傳背景圖片</label>
+        <input id="bgFile" type="file" accept="image/*" />
+      </div>
+
+      <div class="layer-item">
+        <div class="layer-header">
+          <div class="layer-title"><span class="badge">TARGET</span> 被草飼人</div>
+          <span id="targetSizeVal" style="font-size: 0.8rem; color: #aaa;">80px</span>
+        </div>
+        <input id="targetFile" type="file" accept="image/*" style="margin-bottom: 8px;" />
+        <label style="font-size: 0.8rem; color: #aaa;">大小調整</label>
+        <input id="targetSize" type="range" min="20" max="1000" value="80" />
+      </div>
+
+      <div class="layer-item">
+        <div class="layer-header">
+          <div class="layer-title"><span class="badge">FEEDER</span> 草飼人</div>
+          <span id="feederSizeVal" style="font-size: 0.8rem; color: #aaa;">82px</span>
+        </div>
+        <input id="feederFile" type="file" accept="image/*" style="margin-bottom: 8px;" />
+        <label style="font-size: 0.8rem; color: #aaa;">大小調整</label>
+        <input id="feederSize" type="range" min="20" max="1000" value="82" />
+      </div>
+
+      <div class="control-group">
+        <div class="layer-header">
+          <div class="control-label" style="margin:0;">旁觀者 (Extras)</div>
+          <button id="addExtraBtn" class="btn btn-secondary" style="padding: 4px 8px; font-size: 0.8rem;">+ 新增</button>
+        </div>
+        <div id="extrasList" style="margin-top: 10px;"></div>
+      </div>
+
+      <div class="control-group">
+        <label class="control-label">選項</label>
+        <div class="row">
+          <input id="selfCheck" type="checkbox" />
+          <label for="selfCheck">自己草飼自己 (Feeder = Target)</label>
+        </div>
+        <div class="row" style="margin-top: 8px;">
+          <input id="nsfwCheck" type="checkbox" />
+          <label for="nsfwCheck">NSFW (包含成人內容)</label>
+        </div>
+      </div>
+
+      <div class="action-bar">
+        <div id="messageArea"></div>
+        <!-- <textarea id="jsonOut" class="json-preview" readonly></textarea> -->
+        <button id="submitBtn" class="btn btn-primary">送出投稿</button>
+        <div style="display: flex; gap: 10px;">
+          <button id="downloadPng" class="btn btn-secondary" style="flex:1;">預覽 PNG</button>
+          <!-- <button id="copyJson" class="btn btn-secondary" style="flex:1;">複製 JSON</button> -->
+        </div>
+      </div>
+    </div>
+
+    <div class="canvas-area">
+      <canvas id="canvas"></canvas>
+      <div
+        style="position: absolute; bottom: 20px; right: 20px; background: rgba(0,0,0,0.7); padding: 5px 10px; border-radius: 4px; font-size: 0.8rem; color: #aaa; pointer-events: none;">
+        拖曳圓圈可移動位置
+      </div>
+    </div>
+  </div>
+
+  <script>
+    /* Logic */
+    const state = {
+      bg: { img: null, name: "" },
+      target: { img: null, position: [100, 100], size: [80, 80], name: "" },
+      feeder: { img: null, position: [206, 112], size: [82, 82], name: "" },
+      extras: [],
+      self: false,
+      nsfw: false
+    };
+
+    const canvas = document.getElementById('canvas');
+    const ctx = canvas.getContext('2d');
+
+    function setCanvasSize(w, h) {
+      canvas.width = w;
+      canvas.height = h;
+      canvas.style.width = w + 'px';
+      canvas.style.height = h + 'px';
+      render();
+    }
+
+    function drawAvatar(obj) {
+      if (!obj) return;
+      if (!obj.img) {
+        // Placeholder if no image is uploaded for avatars (visual guide)
+        const [w, h] = obj.size;
+        const [x, y] = obj.position;
+        ctx.save();
+        ctx.beginPath();
+        const cx = x + w / 2;
+        const cy = y + h / 2;
+        const r = Math.min(w, h) / 2;
+        ctx.arc(cx, cy, r, 0, Math.PI * 2);
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
+        ctx.fill();
+        ctx.lineWidth = 2;
+        ctx.strokeStyle = '#fff';
+        ctx.stroke();
+        ctx.fillStyle = '#000';
+        ctx.font = "12px Inter";
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillText("Avatar", cx, cy);
+        ctx.restore();
+        return;
+      };
+      const [w, h] = obj.size;
+      const [x, y] = obj.position;
+      ctx.save();
+      ctx.beginPath();
+      const cx = x + w / 2;
+      const cy = y + h / 2;
+      const r = Math.min(w, h) / 2;
+      ctx.arc(cx, cy, r, 0, Math.PI * 2);
+      ctx.closePath();
+      ctx.clip();
+      ctx.drawImage(obj.img, x, y, w, h);
+      ctx.restore();
+      // border
+      ctx.beginPath();
+      ctx.arc(cx, cy, r, 0, Math.PI * 2);
+      ctx.strokeStyle = 'rgba(0,0,0,0.2)';
+      ctx.stroke();
+    }
+
+    function render() {
+      if (!state.bg.img) {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.fillStyle = '#2c2f33';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.fillStyle = '#99aab5';
+        ctx.font = '20px Inter';
+        ctx.textAlign = 'center';
+        ctx.fillText('請從左側上傳背景圖片', canvas.width / 2, canvas.height / 2);
+        return;
+      }
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.drawImage(state.bg.img, 0, 0, canvas.width, canvas.height);
+
+      // Draw extras
+      state.extras.forEach(extra => drawAvatar(extra));
+
+      // Draw target
+      drawAvatar(state.target);
+
+      // Draw feeder
+      if (!state.self) {
+        drawAvatar(state.feeder);
+      }
+    }
+
+    function fileToImage(file, cb) {
+      const url = URL.createObjectURL(file);
+      const img = new Image();
+      img.onload = () => {
+        URL.revokeObjectURL(url);
+        cb(img);
+      };
+      img.src = url;
+    }
+
+    // Init Interactions
+    const bgFile = document.getElementById('bgFile');
+    bgFile.addEventListener('change', e => {
+      const f = e.target.files[0];
+      if (!f) return;
+      fileToImage(f, img => {
+        state.bg.img = img;
+        state.bg.name = f.name;
+        setCanvasSize(img.naturalWidth, img.naturalHeight);
+      });
+    });
+
+    const targetFile = document.getElementById('targetFile');
+    const targetSize = document.getElementById('targetSize');
+    targetFile.addEventListener('change', e => {
+      const f = e.target.files[0];
+      if (!f) return;
+      fileToImage(f, img => {
+        state.target.img = img;
+        state.target.name = f.name;
+        render();
+      });
+    });
+    targetSize.addEventListener('input', e => {
+      const v = parseInt(e.target.value);
+      state.target.size = [v, v];
+      document.getElementById('targetSizeVal').textContent = v + 'px';
+      render();
+    });
+
+    const feederFile = document.getElementById('feederFile');
+    const feederSize = document.getElementById('feederSize');
+    feederFile.addEventListener('change', e => {
+      const f = e.target.files[0];
+      if (!f) return;
+      fileToImage(f, img => {
+        state.feeder.img = img;
+        state.feeder.name = f.name;
+        render();
+      });
+    });
+    feederSize.addEventListener('input', e => {
+      const v = parseInt(e.target.value);
+      state.feeder.size = [v, v];
+      document.getElementById('feederSizeVal').textContent = v + 'px';
+      render();
+    });
+
+    // Extras
+    const extrasList = document.getElementById('extrasList');
+    document.getElementById('addExtraBtn').addEventListener('click', () => {
+      const extra = { img: null, position: [50 + 20 * state.extras.length, 50], size: [45, 45], name: "" };
+      state.extras.push(extra);
+      renderExtrasUI();
+      render();
+    });
+
+    function renderExtrasUI() {
+      extrasList.innerHTML = "";
+      state.extras.forEach((extra, idx) => {
+        const div = document.createElement('div');
+        div.className = 'layer-item';
+        div.style.marginBottom = '5px';
+
+        const topRow = document.createElement('div');
+        topRow.className = 'layer-header';
+        topRow.innerHTML = `<div class="layer-title"><span class="badge">EXTRA #${idx + 1}</span></div>`;
+
+        const removeBtn = document.createElement('button');
+        removeBtn.textContent = '移除';
+        removeBtn.className = 'btn btn-danger';
+        removeBtn.onclick = () => {
+          state.extras.splice(idx, 1);
+          renderExtrasUI();
+          render();
+        };
+        topRow.appendChild(removeBtn);
+
+        const controlsDiv = document.createElement('div');
+
+        // File input
+        const fileInput = document.createElement('input');
+        fileInput.type = 'file';
+        fileInput.accept = 'image/*';
+        fileInput.style.marginBottom = '5px';
+        fileInput.onchange = (e) => {
+          const f = e.target.files[0];
+          if (!f) return;
+          fileToImage(f, img => {
+            extra.img = img;
+            extra.name = f.name;
+            render();
+          });
+        };
+
+        // Size input
+        const sizeRow = document.createElement('div');
+        sizeRow.className = 'row';
+        const sizeLabel = document.createElement('label');
+        sizeLabel.textContent = '大小: ' + extra.size[0] + 'px';
+        sizeLabel.style.fontSize = '0.8rem';
+        sizeLabel.style.color = '#aaa';
+
+        const sizeRange = document.createElement('input');
+        sizeRange.type = 'range';
+        sizeRange.min = 20; sizeRange.max = 1000;
+        sizeRange.value = extra.size[0];
+        sizeRange.oninput = (e) => {
+          const v = parseInt(e.target.value);
+          extra.size = [v, v];
+          sizeLabel.textContent = '大小: ' + v + 'px';
+          render();
+        };
+
+        sizeRow.appendChild(sizeRange);
+
+        controlsDiv.appendChild(fileInput);
+        controlsDiv.appendChild(sizeLabel);
+        controlsDiv.appendChild(sizeRow);
+
+        div.appendChild(topRow);
+        div.appendChild(controlsDiv);
+        extrasList.appendChild(div);
+      });
+    }
+
+    document.getElementById('selfCheck').addEventListener('change', e => {
+      state.self = e.target.checked;
+      render();
+    });
+    document.getElementById('nsfwCheck').addEventListener('change', e => {
+      state.nsfw = e.target.checked;
+    });
+
+    // Dragging
+    let dragging = null;
+    let dragOffset = [0, 0];
+
+    function hitTest(x, y) {
+      // Check top most first (extras reverse, then feeder/target)
+      // But visually, draw order is Bg -> Extras -> Target -> Feeder
+      // So top most is Feeder
+
+      // Feeder
+      if (!state.self && state.feeder) {
+        const [w, h] = state.feeder.size; const [px, py] = state.feeder.position;
+        if (x >= px && x <= px + w && y >= py && y <= py + h) return { type: 'feeder' };
+      }
+      // Target
+      if (state.target) {
+        const [w, h] = state.target.size; const [px, py] = state.target.position;
+        if (x >= px && x <= px + w && y >= py && y <= py + h) return { type: 'target' };
+      }
+      // Extras
+      for (let i = state.extras.length - 1; i >= 0; i--) {
+        const e = state.extras[i];
+        const [w, h] = e.size; const [px, py] = e.position;
+        if (x >= px && x <= px + w && y >= py && y <= py + h) return { type: 'extra', idx: i };
+      }
+      return null;
+    }
+
+    canvas.addEventListener('mousedown', e => {
+      const rect = canvas.getBoundingClientRect();
+      const x = (e.clientX - rect.left) * (canvas.width / rect.width);
+      const y = (e.clientY - rect.top) * (canvas.height / rect.height);
+      const hit = hitTest(x, y);
+      if (hit) {
+        dragging = hit;
+        let obj;
+        if (hit.type === 'target') obj = state.target;
+        else if (hit.type === 'feeder') obj = state.feeder;
+        else obj = state.extras[hit.idx];
+        dragOffset = [x - obj.position[0], y - obj.position[1]];
+      }
+    });
+    canvas.addEventListener('mousemove', e => {
+      const rect = canvas.getBoundingClientRect();
+      const x = (e.clientX - rect.left) * (canvas.width / rect.width);
+      const y = (e.clientY - rect.top) * (canvas.height / rect.height);
+      if (dragging) {
+        let obj;
+        if (dragging.type === 'target') obj = state.target;
+        else if (dragging.type === 'feeder') obj = state.feeder;
+        else obj = state.extras[dragging.idx];
+        obj.position = [Math.round(x - dragOffset[0]), Math.round(y - dragOffset[1])];
+        render();
+      } else {
+        canvas.style.cursor = hitTest(x, y) ? 'grab' : 'default';
+      }
+    });
+    canvas.addEventListener('mouseup', () => dragging = null);
+    canvas.addEventListener('mouseleave', () => dragging = null);
+
+    // Touch events
+    canvas.addEventListener('touchstart', e => {
+      const rect = canvas.getBoundingClientRect();
+      const touch = e.touches[0];
+      const x = (touch.clientX - rect.left) * (canvas.width / rect.width);
+      const y = (touch.clientY - rect.top) * (canvas.height / rect.height);
+      const hit = hitTest(x, y);
+      if (hit) {
+        dragging = hit;
+        let obj;
+        if (hit.type === 'target') obj = state.target;
+        else if (hit.type === 'feeder') obj = state.feeder;
+        else obj = state.extras[hit.idx];
+        dragOffset = [x - obj.position[0], y - obj.position[1]];
+        e.preventDefault();
+      }
+    }, { passive: false });
+
+    canvas.addEventListener('touchmove', e => {
+      if (dragging) {
+        const rect = canvas.getBoundingClientRect();
+        const touch = e.touches[0];
+        const x = (touch.clientX - rect.left) * (canvas.width / rect.width);
+        const y = (touch.clientY - rect.top) * (canvas.height / rect.height);
+        let obj;
+        if (dragging.type === 'target') obj = state.target;
+        else if (dragging.type === 'feeder') obj = state.feeder;
+        else obj = state.extras[dragging.idx];
+        obj.position = [Math.round(x - dragOffset[0]), Math.round(y - dragOffset[1])];
+        render();
+        e.preventDefault();
+      }
+    }, { passive: false });
+
+    canvas.addEventListener('touchend', e => {
+      dragging = null;
+    });
+
+    // Submit Logic
+    document.getElementById('submitBtn').addEventListener('click', async () => {
+      const msgArea = document.getElementById('messageArea');
+      msgArea.style.display = 'none';
+
+      if (!state.bg.img) {
+        msgArea.innerText = "請先上傳背景圖片！";
+        msgArea.className = "msg-error";
+        msgArea.style.display = 'block';
+        return;
+      }
+
+      // Build Payload
+      const result = {
+        file: state.bg.name || "background.png", // will be ignored by server logic usually, as it replaces it with base64
+        self: !!state.self,
+        nsfw: !!state.nsfw,
+        target: {
+          position: [Math.round(state.target.position[0]), Math.round(state.target.position[1])],
+          size: [Math.round(state.target.size[0]), Math.round(state.target.size[1])]
+        }
+      };
+      if (!state.self) {
+        result.feeder = {
+          position: [Math.round(state.feeder.position[0]), Math.round(state.feeder.position[1])],
+          size: [Math.round(state.feeder.size[0]), Math.round(state.feeder.size[1])]
+        };
+      }
+      if (state.extras.length) {
+        result.extras = state.extras.map(e => ({
+          position: [Math.round(e.position[0]), Math.round(e.position[1])],
+          size: [Math.round(e.size[0]), Math.round(e.size[1])]
+        }));
+      }
+
+      // Get base64
+      const reader = new FileReader();
+      reader.readAsDataURL(bgFile.files[0]);
+      reader.onload = async () => {
+        const base64Content = reader.result.split(',')[1];
+        const payload = {
+          token: new URLSearchParams(window.location.search).get("token"),
+          file: base64Content,
+          ...result
+        };
+
+        // Send
+        document.getElementById('submitBtn').disabled = true;
+        document.getElementById('submitBtn').innerText = "提交中...";
+
+        try {
+          const resp = await fetch('/contribute-feed-gress', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+          });
+          const resText = await resp.text();
+          if (resp.ok) {
+            msgArea.innerText = "投稿成功！" + resText;
+            msgArea.className = "msg-success";
+            msgArea.style.display = 'block';
+          } else {
+            msgArea.innerText = "投稿失敗：" + resText;
+            msgArea.className = "msg-error";
+            msgArea.style.display = 'block';
+          }
+        } catch (e) {
+          msgArea.innerText = "發生錯誤：" + e;
+          msgArea.className = "msg-error";
+          msgArea.style.display = 'block';
+        } finally {
+          document.getElementById('submitBtn').disabled = false;
+          document.getElementById('submitBtn').innerText = "送出投稿";
+        }
+      };
+    });
+
+    document.getElementById('downloadPng').addEventListener('click', () => {
+      if (!state.bg.img) return alert("沒有內容！");
+      const url = canvas.toDataURL('image/png');
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'preview.png';
+      a.click();
+    });
+
+    // Initial setup
+    setCanvasSize(800, 600);
+    render();
+
+  </script>
+</body>
+
+</html>

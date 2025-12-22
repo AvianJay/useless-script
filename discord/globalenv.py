@@ -11,7 +11,7 @@ import logging
 
 
 # Global configuration for backward compatibility
-config_version = 16
+config_version = 17
 config_path = 'config.json'
 
 default_config = {
@@ -49,6 +49,7 @@ default_config = {
     "support_email": "support@example.com",
     "website_url": "http://localhost:8080",
     "website_gtag": "",
+    "contribute_channel_id": 0,
 }
 _config = None
 
@@ -322,6 +323,9 @@ translations = {
     "delete_message": "刪除訊息",
     "fake": "假冒",
     "fake-log-channel": "假冒日誌頻道",
+    "contribute": "投稿",
+    "feedgrass": "草飼",
+    "what-is-this-guy-talking-about": "這傢伙在說什麼呢",
 }
 class CommandNameTranslator(app_commands.Translator):
     async def translate(
