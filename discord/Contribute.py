@@ -54,6 +54,7 @@ def oauth_code_to_id(code, redirect_uri=None):
         return None
 
 auth_tokens = {}
+contribution_cooldowns = {} # user_id: timestamp
 
 def cleanup_tokens():
     current_time = time.time()
@@ -193,6 +194,14 @@ def contribute_feed_grass():
              return "無效的令牌", 401
         
         user_id = auth_tokens[token]["user_id"]
+
+        # Rate Limit Check
+        current_time = time.time()
+        if user_id in contribution_cooldowns:
+            last_time = contribution_cooldowns[user_id]
+            if current_time - last_time < 300: # 5 minutes
+                remaining = int(300 - (current_time - last_time))
+                return f"投稿過於頻繁，請等待 {remaining} 秒後再試。", 429
         
         # Prepare Data
         try:
@@ -234,6 +243,7 @@ def contribute_feed_grass():
                 await channel.send(embed=embed, files=[img_file, json_file], view=view)
 
             bot.loop.create_task(send_contribution())
+            contribution_cooldowns[user_id] = time.time()
             return "投稿已送出！"
 
         except Exception as e:
@@ -253,7 +263,17 @@ class Contribute(commands.GroupCog, description="投稿圖片"):
         await interaction.response.send_message(f"請點擊以下連結進行投稿：\n[點我投稿]({url})", ephemeral=True)
     
     @app_commands.command(name="what-is-this-guy-talking-about", description="投稿「這傢伙在說什麼呢」圖片")
-    async def what_is_this_guy_talking_about(self, interaction: discord.interactions, image: discord.Attachment):
+    async def what_is_this_guy_talking_about(self, interaction: discord.Interaction, image: discord.Attachment):
+        # Rate Limit Check
+        current_time = time.time()
+        user_id = interaction.user.id
+        if user_id in contribution_cooldowns:
+            last_time = contribution_cooldowns[user_id]
+            if current_time - last_time < 300:
+                remaining = int(300 - (current_time - last_time))
+                await interaction.response.send_message(f"投稿過於頻繁，請等待 {remaining} 秒後再試。", ephemeral=True)
+                return
+
         if not image.content_type or not image.content_type.startswith("image/"):
             await interaction.response.send_message("請上傳一個圖片檔案。", ephemeral=True)
             return
@@ -285,6 +305,7 @@ class Contribute(commands.GroupCog, description="投稿圖片"):
         
         view = ContributionView("whatisthisguytalking")
         await contribute_channel.send(embed=embed, file=file, view=view)
+        contribution_cooldowns[user_id] = time.time()
         await interaction.response.send_message("感謝您的投稿！我們會盡快審核您的圖片。", ephemeral=True)
 
 
