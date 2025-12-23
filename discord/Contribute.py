@@ -18,6 +18,7 @@ import os
 import io
 from urllib.parse import urlencode
 import asyncio
+import traceback
 
 def oauth_code_to_id(code, redirect_uri=None):
     url = 'https://discord.com/api/oauth2/token'
@@ -150,6 +151,7 @@ class ContributionView(discord.ui.View):
 
         except Exception as e:
             await interaction.followup.send(f"批准失敗: {e}", ephemeral=True)
+            traceback.print_exc()
             log(f"Contribution Approve Error: {e}", module_name="Contribute", level=logging.ERROR)
 
     @discord.ui.button(label="拒絕", style=discord.ButtonStyle.red, custom_id="contribution_reject")
