@@ -5,7 +5,7 @@ import asyncio
 from discord.ext import commands
 from discord import app_commands
 from datetime import datetime, timedelta, timezone
-from globalenv import bot, start_bot, get_user_data, set_user_data, get_all_user_data, get_server_config, set_server_config, modules, get_command_mention
+from globalenv import bot, start_bot, get_user_data, set_user_data, get_all_user_data, get_server_config, set_server_config, modules, get_command_mention, config
 from PIL import Image, ImageDraw
 from io import BytesIO
 from logger import log
@@ -1075,6 +1075,7 @@ async def dsize_feedgrass(interaction: discord.Interaction, user: discord.Member
         embed = discord.Embed(title=f"{interaction.user.display_name} 草飼了自己！", color=0x00ff00)
     embed.set_image(url="attachment://feed_grass.png")
     embed.timestamp = datetime.now(timezone.utc)
+    redirect_uri = config('website_url') + "/contribute-feed-grass"
     url = f"https://discord.com/oauth2/authorize?client_id={bot.application.id}&response_type=code&scope=identify&prompt=none&{urlencode({'redirect_uri': redirect_uri})}"
     btn = discord.ui.Button(label="現正開放投稿！", url=url, emoji="🔗")
     view = discord.ui.View()
