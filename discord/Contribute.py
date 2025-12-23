@@ -251,7 +251,8 @@ def contribute_feed_grass():
             return f"發生錯誤: {e}", 500
         
 
-
+@app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
+@app_commands.allowed_installs(guilds=True, users=True)
 class Contribute(commands.GroupCog, description="投稿圖片"):
     def __init__(self, bot):
         self.bot = bot
