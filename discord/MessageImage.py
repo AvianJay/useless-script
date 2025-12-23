@@ -511,7 +511,7 @@ async def whatisthisguytalking(interaction: discord.Interaction, message: discor
     await interaction.response.defer()
     try:
         buffer = await generate_whatisthisguytalking(message)
-        msg = f"現正開放投稿！\n-# {get_command_mention("contribute", "what-is-this-guy-talking-about")}"
+        msg = f"現正開放投稿！\n-# {get_command_mention('contribute', 'what-is-this-guy-talking-about')}"
         await interaction.followup.send(file=discord.File(buffer, filename="whatisthisguytalking.png"), content=msg)
         log("引用圖片生成完成", module_name="MessageImage", user=interaction.user, guild=interaction.guild)
     except Exception as e:
