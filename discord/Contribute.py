@@ -115,6 +115,11 @@ class ContributionView(discord.ui.View):
                 except ImportError:
                     pass
 
+                # try to send dm
+                user_id = interaction.message.embeds[0].fields[0].value
+                user = await bot.fetch_user(int(user_id))
+                await user.send("你的投稿已被批准！")
+
             elif self.ctype == "whatisthisguytalking":
                 # Attachment 0: Image
                 embed = interaction.message.embeds[0]
@@ -148,6 +153,11 @@ class ContributionView(discord.ui.View):
                     await interaction.followup.send(f"已重新載入 {count} 張圖片。", ephemeral=True)
                 except Exception as e:
                     await interaction.followup.send(f"重新載入失敗: {e}", ephemeral=True)
+                
+                # try to send dm
+                user_id = interaction.message.embeds[0].fields[0].value
+                user = await bot.fetch_user(int(user_id))
+                await user.send("你的投稿已被批准！")
 
         except Exception as e:
             await interaction.followup.send(f"批准失敗: {e}", ephemeral=True)
@@ -232,6 +242,7 @@ def contribute_feed_grass():
                 user = await bot.fetch_user(user_id)
                 embed = discord.Embed(title="新的「草飼圖」投稿", color=discord.Color.blue())
                 embed.set_author(name=f"{user.name} ({user.id})", icon_url=user.display_avatar.url)
+                embed.add_field(name="使用者 ID", value=user.id)
                 embed.add_field(name="NSFW", value=str(json_payload.get("nsfw", False)))
                 embed.timestamp = datetime.now(timezone.utc)
                 
@@ -295,6 +306,7 @@ class Contribute(commands.GroupCog, description="投稿圖片"):
         embed = discord.Embed(title="新的「這傢伙在說什麼呢」圖片投稿", color=discord.Color.green())
         embed.set_author(name=f"{interaction.user.name} ({interaction.user.id})", icon_url=interaction.user.display_avatar.url if interaction.user.display_avatar else None)
         embed.timestamp = datetime.now(timezone.utc)
+        embed.add_field(name="使用者 ID", value=interaction.user.id)
         
         # We need to re-upload the file to the channel? Or just use the url?
         # Using url is fine for display, but for "Approval" we need to download it.
