@@ -140,7 +140,7 @@ class ContributionView(discord.ui.View):
                 embed.title += " [已批准]"
                 for child in self.children:
                     child.disabled = True
-                await interaction.edit_original_response(embed=embed, view=self, attachments=None)
+                await interaction.edit_original_response(embed=embed, view=self, attachments=[])
 
                 try:
                     from MessageImage import load_whatisthisguytalking_images
