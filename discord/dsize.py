@@ -1402,6 +1402,8 @@ async def use_cloud_ruler(interaction: discord.Interaction):
 
             # 隨機產生長度
             size = random.randint(1, max_size)
+            set_user_data(guild_key, target_id, "last_dsize_size", size)
+            set_user_data(guild_key, target_id, "last_dsize", now)
             fake_size = None
             if "ItemSystem" in modules:
                 fake_ruler_used = get_user_data(guild_key, target_id, "dsize_fake_ruler_used", "False") == "True"
