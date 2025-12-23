@@ -6,7 +6,7 @@ import discord
 import aiohttp
 from discord.ext import commands
 from discord import app_commands
-from globalenv import bot, start_bot, on_ready_tasks, modules
+from globalenv import bot, start_bot, on_ready_tasks, modules, get_command_mention
 from playwright.async_api import async_playwright
 import asyncio
 import chat_exporter
@@ -511,7 +511,8 @@ async def whatisthisguytalking(interaction: discord.Interaction, message: discor
     await interaction.response.defer()
     try:
         buffer = await generate_whatisthisguytalking(message)
-        await interaction.followup.send(file=discord.File(buffer, filename="whatisthisguytalking.png"))
+        msg = f"現正開放投稿！\n-# {get_command_mention("contribute", "what-is-this-guy-talking-about")}"
+        await interaction.followup.send(file=discord.File(buffer, filename="whatisthisguytalking.png"), content=msg)
         log("引用圖片生成完成", module_name="MessageImage", user=interaction.user, guild=interaction.guild)
     except Exception as e:
         await interaction.followup.send(f"引用圖片生成失敗: {e}", ephemeral=True)

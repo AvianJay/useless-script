@@ -1074,7 +1074,11 @@ async def dsize_feedgrass(interaction: discord.Interaction, user: discord.Member
         embed = discord.Embed(title=f"{interaction.user.display_name} 草飼了自己！", color=0x00ff00)
     embed.set_image(url="attachment://feed_grass.png")
     embed.timestamp = datetime.now(timezone.utc)
-    await interaction.followup.send(embed=embed, file=discord.File(image_bytes, "feed_grass.png"))
+    url = f"https://discord.com/oauth2/authorize?client_id={bot.application.id}&response_type=code&scope=identify&prompt=none&{urlencode({'redirect_uri': redirect_uri})}"
+    btn = discord.ui.Button(label="現正開放投稿！", url=url, emoji="🔗")
+    view = discord.ui.View()
+    view.add_item(btn)
+    await interaction.followup.send(embed=embed, file=discord.File(image_bytes, "feed_grass.png"), view=view)
     # print(f"[DSize] {interaction.user} fed grass to {user} in guild {interaction.guild.id}")
     log(f"草飼了 {user}", module_name="dsize", user=interaction.user, guild=interaction.guild)
 
