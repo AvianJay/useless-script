@@ -217,6 +217,54 @@
       color: #ed4245;
       border: 1px solid #ed4245;
     }
+
+    /* Mobile Responsive */
+    @media (max-width: 768px) {
+      body {
+        height: auto;
+        overflow-y: auto;
+      }
+
+      .editor-container {
+        flex-direction: column-reverse;
+        /* Canvas on top (or actually maybe controls on top is better? No, canvas is preview) */
+        /* Let's put Canvas on TOP so user sees what they are doing immediately? 
+               But if they need to upload file first... 
+               Actually standard usage: Upload -> See.
+               Let's keep column order (Sidebar first)? No, on mobile sidebar is huge.
+               Let's make them stack: Canvas at the top (sticky?), Controls below.
+             */
+        flex-direction: column;
+        height: auto;
+        overflow: visible;
+      }
+
+      .sidebar {
+        width: 100%;
+        height: auto;
+        border-right: none;
+        border-bottom: 1px solid #333;
+        order: 2;
+        /* Controls below canvas */
+      }
+
+      .canvas-area {
+        height: 50vh;
+        /* Fixed height for canvas on mobile */
+        width: 100%;
+        flex: none;
+        order: 1;
+        /* Canvas on top */
+        border-bottom: 1px solid #444;
+      }
+
+      canvas {
+        max-width: 100%;
+        max-height: 100%;
+        /* fit contained */
+        object-fit: contain;
+      }
+    }
   </style>
   <script async src="https://www.googletagmanager.com/gtag/js?id={{ gtag }}"></script>
   <script>
@@ -324,10 +372,33 @@
     function setCanvasSize(w, h) {
       canvas.width = w;
       canvas.height = h;
-      canvas.style.width = w + 'px';
-      canvas.style.height = h + 'px';
+      // On desktop we might want fixed pixel size, but on mobile we want it to fit.
+      // We can rely on CSS max-width/max-height for display, 
+      // but the logical size should be w/h.
+      // We explicitly set style width/height for desktop behavior, 
+      // but we should override this for mobile or just use CSS.
+
+      if (window.innerWidth > 768) {
+        canvas.style.width = w + 'px';
+        canvas.style.height = h + 'px';
+      } else {
+        // Mobile: let CSS handle scaling (max-width: 100%)
+        canvas.style.width = 'auto';
+        canvas.style.height = 'auto';
+        canvas.style.maxWidth = '100%';
+        canvas.style.maxHeight = '100%';
+      }
       render();
     }
+
+    // Add resize listener to adjust canvas style style if switching modes
+    window.addEventListener('resize', () => {
+      if (state.bg.img) {
+        setCanvasSize(state.bg.img.naturalWidth, state.bg.img.naturalHeight);
+      } else {
+        setCanvasSize(800, 600);
+      }
+    });
 
     function drawAvatar(obj) {
       if (!obj) return;
