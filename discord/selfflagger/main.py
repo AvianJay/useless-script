@@ -5,6 +5,7 @@ import json
 import database
 import asyncio
 import random
+from datetime import datetime, timezone
 
 config_version = 4
 config_path = 'config.json'
@@ -191,10 +192,22 @@ async def on_member_update(before, after):
         database.add_flagged_user(conn, after.id, after.guild.id, after_flagged)
         print(f"[+] Updated flagged status for user {after} (ID: {after.id}) in guild {after.guild.name} (ID: {after.guild.id}): {'Flagged' if after_flagged else 'Not Flagged'}")
 
+last_update_users = {}
+
+def clean_up_last_update_users():
+    for user_id in list(last_update_users.keys()):
+        if (datetime.now(timezone.utc) - last_update_users[user_id]).total_seconds() > 60:
+            del last_update_users[user_id]
+
 @bot.event
 async def on_presence_update(before: selfcord.Relationship, after: selfcord.Member):
     # get same guilds
     user = after if isinstance(after, selfcord.Member) else after.user
+    clean_up_last_update_users()
+    if user.id in last_update_users:
+        if (datetime.now(timezone.utc) - last_update_users[user.id]).total_seconds() < 60:
+            return
+    last_update_users[user.id] = datetime.now(timezone.utc)
     profile = await user.profile()
     mutual_guilds = profile.mutual_guilds
     if not mutual_guilds:
