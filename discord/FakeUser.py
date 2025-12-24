@@ -20,6 +20,9 @@ class FakeUser(commands.Cog):
     async def fakeuser(self, interaction: discord.Interaction, channel: discord.TextChannel = None):
         guild_id = str(interaction.guild.id) if interaction.guild else None
         if channel:
+            if channel.permissions_for(interaction.guild.me).send_messages is False:
+                await interaction.response.send_message("機器人沒有在該頻道發送訊息的權限，請選擇其他頻道。", ephemeral=True)
+                return
             set_server_config(guild_id, "fake_user_log_channel", channel.id)
             await interaction.response.send_message(f"假冒用戶紀錄頻道已設置為：{channel.mention}", ephemeral=True)
             log(f"設置假冒用戶紀錄頻道為 {channel} ({channel.id})", module_name="FakeUser", user=interaction.user, guild=interaction.guild)
@@ -34,26 +37,30 @@ class FakeUser(commands.Cog):
     @app_commands.command(name="fake", description="假冒用戶說話")
     @app_commands.describe(user="要假冒的用戶", message="要發送的訊息內容")
     async def fake(self, interaction: discord.Interaction, user: Union[discord.User, discord.Member], message: str):
+        await interaction.response.defer(ephemeral=True)
+        if interaction.channel.permissions_for(interaction.guild.me).manage_webhooks is False:
+            await interaction.followup.send("機器人沒有管理 Webhook 的權限，無法使用假冒用戶功能。", ephemeral=True)
+            return
         user_last_used = get_user_data(0, str(interaction.user.id), "fake_rate_limit_last", None)
         if user_last_used:
             last_time = datetime.fromisoformat(user_last_used)
             if (datetime.now(timezone.utc) - last_time).total_seconds() < 30:
                 log("假冒用戶速率限制觸發", module_name="FakeUser", user=interaction.user, guild=interaction.guild)
-                await interaction.response.send_message("你正在頻繁使用假冒用戶功能，請稍後再試。", ephemeral=True)
+                await interaction.followup.send("你正在頻繁使用假冒用戶功能，請稍後再試。", ephemeral=True)
                 return
         set_user_data(0, str(interaction.user.id), "fake_rate_limit_last", datetime.now(timezone.utc).isoformat())
         guild_id = str(interaction.guild.id) if interaction.guild else None
         log_channel_id = get_server_config(guild_id, "fake_user_log_channel")
         log_channel = interaction.guild.get_channel(log_channel_id) if interaction.guild and log_channel_id else None
         if not log_channel:
-            await interaction.response.send_message("假冒用戶功能未啟用，請聯繫管理員設置假冒用戶功能。", ephemeral=True)
+            await interaction.followup.send("假冒用戶功能未啟用，請聯繫管理員設置假冒用戶功能。", ephemeral=True)
             return
 
-        webhook = await interaction.channel.create_webhook(name=user.name)
+        webhook = await interaction.channel.create_webhook(name=user.name, reason=f"用戶 {interaction.user} 假冒 {user} 發送訊息")
         try:
             avatar_url = user.display_avatar or user.avatar or user.default_avatar
             await webhook.send(content=message, username=user.display_name, avatar_url=avatar_url.url, allowed_mentions=discord.AllowedMentions(everyone=False, users=True, roles=False))
-            await interaction.response.send_message("訊息已發送。", ephemeral=True)
+            await interaction.followup.send("訊息已發送。", ephemeral=True)
             log(f"假冒了用戶 {user} 發送訊息：{message}", module_name="FakeUser", user=interaction.user, guild=interaction.guild)
             if log_channel:
                 embed = discord.Embed(title="假冒用戶操作紀錄", description=f"用戶 {interaction.user.mention} 假冒 {user.mention} 發送了訊息：{message}", color=discord.Color.red())
