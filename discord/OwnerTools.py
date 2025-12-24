@@ -270,7 +270,8 @@ async def serverinfo(ctx, guild_id: int):
         title=f"{guild.name} 的資訊",
         color=discord.Color.blue()
     )
-    embed.set_thumbnail(url=guild.icon.url if guild.icon else discord.Embed.Empty)
+    # 傻逼微軟再改成 discord.Embed.Empty 我他媽草飼你
+    embed.set_thumbnail(url=guild.icon.url if guild.icon else None)
     embed.add_field(name="伺服器 ID", value=str(guild.id), inline=True)
     embed.add_field(name="擁有者", value=f"{guild.owner} (ID: {guild.owner_id})", inline=True)
     embed.add_field(name="成員數", value=str(getattr(guild, "member_count", "未知")), inline=True)
