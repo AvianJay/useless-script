@@ -633,7 +633,7 @@ user_using_dsize_battle = set()  # to prevent spamming the command
 @app_commands.allowed_installs(guilds=True, users=True)
 @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
 @app_commands.describe(opponent="要比屌長的對象")
-async def dsize_battle(interaction: discord.Interaction, opponent: discord.User):
+async def dsize_battle(interaction: discord.Interaction, opponent: Union[discord.User, discord.Member]):
     original_user = interaction.user
     user_id = interaction.user.id
     opponent_id = opponent.id
@@ -641,6 +641,10 @@ async def dsize_battle(interaction: discord.Interaction, opponent: discord.User)
 
     if user_id == opponent_id:
         await interaction.response.send_message("不能跟自己比屌長。", ephemeral=True)
+        return
+    
+    if opponent.bot:
+        await interaction.response.send_message("不能跟機器人比屌長。", ephemeral=True)
         return
     
     guild_key = interaction.guild.id if interaction.guild else None

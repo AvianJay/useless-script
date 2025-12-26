@@ -211,6 +211,10 @@ class ItemSystem(commands.GroupCog, name="item", description="物品系統指令
         if giver_id == receiver_id:
             await interaction.followup.send("你不能給自己物品。")
             return
+
+        if user.bot:
+            await interaction.followup.send("你不能給機器人物品。")
+            return
         
         giver_items = await get_user_items(guild_id, giver_id, item_id)
         if not giver_items:
@@ -240,7 +244,7 @@ asyncio.run(bot.add_cog(ItemSystem()))
 
 # admin cheating
 @app_commands.guild_only()
-@app_commands.default_permissions(administrator=True)
+@app_commands.default_permissions(manage_guild=True)
 @app_commands.allowed_installs(guilds=True, users=False)
 @app_commands.allowed_contexts(guilds=True, dms=False, private_channels=False)
 class ItemModerate(commands.GroupCog, name="itemmod", description="物品系統管理指令"):
@@ -252,8 +256,9 @@ class ItemModerate(commands.GroupCog, name="itemmod", description="物品系統�
     @app_commands.autocomplete(item_id=all_items_autocomplete)
     async def admin_give_item(self, interaction: discord.Interaction, user: discord.User, item_id: str, amount: int = 1):
         await interaction.response.defer()
-        if not interaction.user.guild_permissions.administrator:
-            await interaction.followup.send("你沒有權限使用這個指令。")
+        
+        if user.bot:
+            await interaction.followup.send("你不能給機器人物品。")
             return
         
         receiver_id = user.id
@@ -272,10 +277,11 @@ class ItemModerate(commands.GroupCog, name="itemmod", description="物品系統�
     @app_commands.describe(user="你想移除物品的用戶", item_id="你想移除的物品ID", amount="你想移除的數量")
     @app_commands.autocomplete(item_id=all_items_autocomplete)
     async def admin_remove_item(self, interaction: discord.Interaction, user: discord.User, item_id: str, amount: int):
-        if not interaction.user.guild_permissions.administrator:
-            await interaction.response.send_message("你沒有權限使用這個指令。", ephemeral=True)
-            return
         
+        if user.bot:
+            await interaction.response.send_message("你不能移除機器人物品。", ephemeral=True)
+            return
+
         receiver_id = user.id
         guild_id = interaction.guild.id if interaction.guild else None
         
@@ -291,10 +297,6 @@ class ItemModerate(commands.GroupCog, name="itemmod", description="物品系統�
 
     @app_commands.command(name="list", description="列出所有可用的物品")
     async def admin_list_items(self, interaction: discord.Interaction):
-        if not interaction.user.guild_permissions.administrator:
-            await interaction.response.send_message("你沒有權限使用這個指令。", ephemeral=True)
-            return
-        
         if not items:
             await interaction.response.send_message("目前沒有任何物品。", ephemeral=True)
             return
@@ -309,8 +311,8 @@ class ItemModerate(commands.GroupCog, name="itemmod", description="物品系統�
     @app_commands.command(name="listuser", description="列出用戶擁有的物品")
     @app_commands.describe(user="你想查詢的用戶")
     async def admin_list_user_items(self, interaction: discord.Interaction, user: discord.User):
-        if not interaction.user.guild_permissions.administrator:
-            await interaction.response.send_message("你沒有權限使用這個指令。", ephemeral=True)
+        if user.bot:
+            await interaction.response.send_message("機器人沒有物品。", ephemeral=True)
             return
 
         guild_id = interaction.guild.id if interaction.guild else None
