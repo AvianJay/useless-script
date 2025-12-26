@@ -6,6 +6,7 @@ from discord.ext import commands
 from typing import Callable
 import chat_exporter
 from logger import log
+from typing import Union
 
 def is_owner() -> Callable:
     async def predicate(ctx):
@@ -287,6 +288,38 @@ async def reloadconfig(ctx):
         await ctx.send("配置已重新加載。")
     else:
         await ctx.send("重新加載配置時發生錯誤。")
+
+
+@bot.command(aliases=["ou"])
+@is_owner()
+async def owner_userinfo(ctx, user: Union[discord.User, discord.Member] = None):
+    """顯示用戶資訊，比起基本的可以顯示更多資訊。
+    
+    用法： owner_userinfo [用戶]
+    如果不指定用戶，則顯示自己的資訊。
+    """
+    if user is None:
+        user = ctx.author
+    embed = discord.Embed(title=f"{user.display_name} 的資訊", color=0x00ff00)
+    embed.set_thumbnail(url=user.avatar.url if user.avatar else discord.Embed.Empty)
+    # avatar url button
+    button = discord.ui.Button(label="頭像連結", url=user.avatar.url if user.avatar else "https://discord.com/assets/6debd47ed13483642cf09e832ed0bc1b.png")
+    view = discord.ui.View()
+    view.add_item(button)
+    embed.add_field(name="用戶 ID", value=str(user.id), inline=True)
+    embed.add_field(name="帳號創建時間", value=user.created_at.strftime("%Y-%m-%d %H:%M:%S"), inline=True)
+    if isinstance(user, discord.Member):
+        embed.add_field(name="伺服器暱稱", value=user.nick or "無", inline=True)
+        embed.add_field(name="加入伺服器時間", value=user.joined_at.strftime("%Y-%m-%d %H:%M:%S"), inline=True)
+        # pfp
+        if user.display_avatar and user.display_avatar.url != user.avatar.url:
+            embed.set_image(url=user.display_avatar.url if user.display_avatar.url != user.avatar.url else None)
+            button_serverpfp = discord.ui.Button(label="伺服器頭像連結", url=user.display_avatar.url)
+            view.add_item(button_serverpfp)
+    # get mutual guilds
+    mutual_guilds = [g for g in bot.guilds if g.get_member(user.id)]
+    embed.add_field(name="共同伺服器", value="\n".join(g.name for g in mutual_guilds) or "無", inline=False)
+    await ctx.send(embed=embed, view=view)
 
 
 @bot.event
