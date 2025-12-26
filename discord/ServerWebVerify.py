@@ -45,10 +45,10 @@ def init_db():
         ''')
         
         cursor.execute('''
-            CREATE INDEX IF NOT EXISTS webverify_ip_location (
+            CREATE TABLE IF NOT EXISTS webverify_ip_location (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
-                ip_address TEXT,
-                location TEXT,
+                ip_address TEXT NOT NULL,
+                location TEXT NOT NULL,
                 timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
             )
         ''')
