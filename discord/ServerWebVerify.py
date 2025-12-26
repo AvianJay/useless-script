@@ -14,6 +14,8 @@ import uuid
 import asyncio
 import sqlite3
 import re
+import json
+from datetime import datetime, timezone
 from urllib.parse import urlencode
 if "Website" in modules:
     from Website import app
@@ -39,6 +41,15 @@ def init_db():
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 user_id INTEGER NOT NULL,
                 relation_id TEXT NOT NULL
+            )
+        ''')
+        
+        cursor.execute('''
+            CREATE INDEX IF NOT EXISTS webverify_ip_location (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                ip_address TEXT,
+                location TEXT,
+                timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
             )
         ''')
         conn.commit()
@@ -185,6 +196,45 @@ def oauth_code_to_id(code):
         log(f"OAuth code exchange error: {e}", module_name="ServerWebVerify", level=logging.ERROR)
         return None
 
+def get_ip_location(ip_address):
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute('''
+            SELECT location FROM webverify_ip_location
+            WHERE ip_address = ?
+            ORDER BY timestamp DESC
+            LIMIT 1
+        ''', (ip_address,))
+        row = cursor.fetchone()
+        if row:
+            try:
+                return json.loads(row[0])
+            except json.JSONDecodeError:
+                return row[0]
+
+    try:
+        response = requests.get(f'https://ipinfo.io/{ip_address}/json', timeout=10)
+        response.raise_for_status()
+        data = response.json()
+        location = {
+            'city': data.get('city', ''),
+            'region': data.get('region', ''),
+            'country': data.get('country', '')
+        }
+        
+        with get_db_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute('''
+                INSERT INTO webverify_ip_location (ip_address, location)
+                VALUES (?, ?)
+            ''', (ip_address, json.dumps(location)))
+            conn.commit()
+        
+        return location
+    except requests.RequestException as e:
+        log(f"IP location fetch error: {e}", module_name="ServerWebVerify", level=logging.ERROR)
+        return "Unknown"
+
 auth_tokens = {}
 
 def cleanup_tokens():
@@ -248,7 +298,8 @@ def server_verify():
         fingerprint = request.form.get('fingerprint')
         user_id = auth_tokens[auth_token]['user_id']
         guild_id = auth_tokens[auth_token]['guild_id']
-        guild_config = get_server_config(guild_id, "webverify_config")
+        guild_config = get_server_config(guild_id, "webverify_config", {})
+        guild_country_config = get_server_config(guild_id, "webverify_country_alert", {})
         if not guild_config:
             return render_template('ServerVerify.html', error="此伺服器未設定網頁驗證。請聯絡伺服器管理員。", bot=bot, site_key_turnstile=config("webverify_turnstile_key"), site_key_recaptcha=config("webverify_recaptcha_key"), gtag=config("website_gtag", ""))
         if not guild_config.get('enabled', False):
@@ -281,6 +332,26 @@ def server_verify():
             if member.get_role(guild_config.get('unverified_role_id')):
                 asyncio.run_coroutine_threadsafe(member.remove_roles(discord.Object(id=guild_config.get('unverified_role_id')), reason="通過網頁驗證"), bot.loop)
             log("用戶通過了網頁驗證", module_name="ServerWebVerify", user=member, guild=guild)
+            try:
+                if guild_country_config.get('enabled', False):
+                    mode = guild_country_config.get('mode', 'blacklist')
+                    location = get_ip_location(remoteip)
+                    country = location.get('country', 'Unknown') if isinstance(location, dict) else 'Unknown'
+                    alert_countries = guild_country_config.get('countries', [])
+                    if (mode == 'blacklist' and country in alert_countries) or (mode == 'whitelist' and country not in alert_countries):
+                        alert_channel_id = guild_country_config.get('alert_channel_id')
+                        alert_channel = guild.get_channel(alert_channel_id) if alert_channel_id else None
+                        if alert_channel:
+                            embed = discord.Embed(title="網頁驗證異常地理位置警報", color=0xFF0000)
+                            embed.set_author(name=str(member), icon_url=member.display_avatar.url if member.display_avatar else None)
+                            embed.add_field(name="用戶 ID", value=str(member.id), inline=False)
+                            embed.add_field(name="地區", value=location.get('region', 'Unknown'))
+                            embed.add_field(name="城市", value=location.get('city', 'Unknown'))
+                            embed.add_field(name="國家代碼", value=country)
+                            embed.timestamp = datetime.now(timezone.utc)
+                            asyncio.run_coroutine_threadsafe(alert_channel.send(embed=embed), bot.loop)
+            except Exception as e:
+                log(f"發送地理位置警報失敗：{e}", level=logging.ERROR, module_name="ServerWebVerify", guild=guild)
             # try to dm user
             try:
                 asyncio.run_coroutine_threadsafe(member.send(f"您已成功通過 {guild.name} 的網頁驗證，現在可以訪問伺服器了！"), bot.loop)
@@ -597,6 +668,85 @@ class ServerWebVerify(commands.GroupCog, name="webverify", description="伺服�
         guild_config['min_age'] = min_age
         set_server_config(interaction.guild.id, "webverify_config", guild_config)
         await interaction.response.send_message(f"最小帳號年齡已設定為 {min_age} 天。")
+    
+    @app_commands.command(name="country-alert", description="設定驗證地區警示")
+    @app_commands.describe(
+        enable="啟用或停用地區警示功能",
+        mode="選擇警示模式",
+        countries="輸入國家代碼，使用逗號分隔 (例如: US,CN,RU)",
+        channel="選擇接收警示的頻道"
+    )
+    @app_commands.choices(mode=[
+        app_commands.Choice(name="封鎖清單模式", value="blocklist"),
+        app_commands.Choice(name="允許清單模式", value="allowlist")
+    ])
+    @app_commands.default_permissions(administrator=True)
+    async def country_alert(self, interaction: discord.Interaction, enable: bool, mode: str, countries: str, channel: discord.TextChannel):
+        guild_config = get_server_config(interaction.guild.id, "webverify_config")
+        if not guild_config:
+            guild_config = {}
+        country_list = [code.strip().upper() for code in countries.split(',') if code.strip()]
+        guild_config['webverify_country_alert'] = {
+            'enabled': enable,
+            'mode': mode,
+            'countries': country_list,
+            'channel_id': channel.id
+        }
+        set_server_config(interaction.guild.id, "webverify_config", guild_config)
+        status = "已啟用" if enable else "已停用"
+        await interaction.response.send_message(f"地區警示功能{status}。模式：{mode}，國家代碼：{', '.join(country_list)}，警示頻道：{channel.mention}。")
+    
+    @app_commands.command(name="manual-check-country", description="手動檢查用戶的地理位置")
+    @app_commands.describe(user="選擇用戶")
+    @app_commands.default_permissions(administrator=True)
+    async def manual_check_country(self, interaction: discord.Interaction, user: discord.Member = None):
+        await interaction.response.defer()
+        guild_config = get_server_config(interaction.guild.id, "webverify_country_alert")
+        if not guild_config or not guild_config.get('enabled', False):
+            await interaction.followup.send("此伺服器未啟用地理位置警示功能。")
+            return
+        await interaction.followup.send("請稍候...")
+        user_ips = []
+        if user:
+            with get_db_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute('SELECT remote_ip, timestamp FROM webverify_history WHERE user_id = ? AND guild_id = ? ORDER BY timestamp DESC LIMIT 1', (user.id, interaction.guild.id))
+                row = cursor.fetchone()
+                if row:
+                    user_ips.append({'user_id': user.id, 'ip': row[0], 'timestamp': row[1]})
+        else:
+            got_users = set()
+            with get_db_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute('SELECT user_id, remote_ip, timestamp FROM webverify_history WHERE guild_id = ? ORDER BY timestamp DESC', (interaction.guild.id,))
+                rows = cursor.fetchall()
+                for row in rows:
+                    if row[0] not in got_users:
+                        user_ips.append({'user_id': row[0], 'ip': row[1], 'timestamp': row[2]})
+                        got_users.add(row[0])
+        if not user_ips:
+            await interaction.followup.send("找不到用戶的驗證紀錄。")
+            return
+        report_lines = []
+        for entry in user_ips:
+            location = get_ip_location(entry['ip'])
+            country = location.get('country', 'Unknown') if isinstance(location, dict) else 'Unknown'
+            country_list = guild_config.get('countries', [])
+            mode = guild_config.get('mode', 'blacklist')
+            if (mode == 'blacklist' and country in country_list) or (mode == 'whitelist' and country not in country_list):
+                try:
+                    u = await bot.fetch_user(entry['user_id'])
+                    user_mention = f"{u.name} ({u.id})"
+                except:
+                    user_mention = f"Unknown User (`{entry['user_id']}`)"
+                timestamp = datetime.fromtimestamp(entry['timestamp'], tz=timezone.utc).strftime('%Y-%m-%d %H:%M:%S UTC')
+                report_lines.append(f"用戶: {user_mention} | 國家代碼: {country} | 時間: {timestamp}")
+        if not report_lines:
+            await interaction.followup.send("所有用戶的地理位置均符合設定的清單條件，無異常紀錄。")
+            return
+        for i in range(0, len(report_lines), 20):
+            chunk = report_lines[i:i+20]
+            await interaction.followup.send("```" + "\n".join(chunk) + "```")
     
     @commands.Cog.listener()
     async def on_member_join(self, member: discord.Member):
