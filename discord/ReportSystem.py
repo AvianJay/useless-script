@@ -295,6 +295,28 @@ class doModerationActions(discord.ui.View):
                 await modal_interaction.response.send_message(f"已拔除 {member.mention} 的檢舉權限。", ephemeral=True)
                 send_moderation_message(member, interaction.user, [{"action": "blacklist_reporter"}], reason or "惡意檢舉", "(無內容)")
         await interaction.response.send_modal(ReasonModal())
+    
+    @discord.ui.button(label="拒絕檢舉", style=discord.ButtonStyle.secondary, custom_id="reject_report_button")
+    async def reject_report_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        member = interaction.guild.get_member(self.reporter.id) if self.reporter else None
+        class ReasonModal(discord.ui.Modal, title="拒絕檢舉原因"):
+            reason = discord.ui.TextInput(label="原因", placeholder="請輸入拒絕檢舉的原因 (將會傳送私訊至檢舉人)", required=True, max_length=200)
+
+            async def on_submit(self, modal_interaction: discord.Interaction):
+                embed = discord.Embed(
+                    title="您的檢舉已被拒絕",
+                    description=f"您檢舉的訊息內容為：\n||{self.message_content}||\n\n拒絕原因：{self.reason.value}",
+                    color=discord.Color.red()
+                )
+                embed.set_footer(text=interaction.guild.name, icon_url=interaction.guild.icon.url if interaction.guild.icon else None)
+                embed.timestamp = datetime.utcnow()
+                if member:
+                    try:
+                        await member.send(embed=embed)
+                    except Exception as e:
+                        await modal_interaction.response.send_message(f"無法傳送私訊給檢舉人: {e}", ephemeral=True)
+                await modal_interaction.response.send_message("已拒絕此檢舉並通知檢舉人。", ephemeral=True)
+        await interaction.response.send_modal(ReasonModal())
 
 
 @bot.tree.context_menu(name="檢舉訊息")
