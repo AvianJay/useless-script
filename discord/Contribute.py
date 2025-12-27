@@ -171,7 +171,7 @@ class ContributionView(discord.ui.View):
         embed.title += " [已拒絕]"
         for child in self.children:
             child.disabled = True
-        await interaction.response.edit_message(embed=embed, view=self)
+        await interaction.response.edit_message(embed=embed, view=self, attachments=[])
 
 @app.route("/contribute-feed-grass", methods=["GET", "POST"])
 def contribute_feed_grass():
