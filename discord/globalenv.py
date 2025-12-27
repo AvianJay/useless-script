@@ -327,6 +327,9 @@ translations = {
     "feedgrass": "草飼",
     "what-is-this-guy-talking-about": "這傢伙在說什麼呢",
     "minage": "最小帳號年齡",
+    "country-alert": "地區警示設定",
+    "manual-check-country": "手動檢查地區",
+    "countries": "國家列表",
 }
 class CommandNameTranslator(app_commands.Translator):
     async def translate(
