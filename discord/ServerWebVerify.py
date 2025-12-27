@@ -299,7 +299,7 @@ def server_verify():
         user_id = auth_tokens[auth_token]['user_id']
         guild_id = auth_tokens[auth_token]['guild_id']
         guild_config = get_server_config(guild_id, "webverify_config", {})
-        guild_country_config = get_server_config(guild_id, "webverify_country_alert", {})
+        guild_country_config = guild_config.get('webverify_country_alert', {}) if guild_config else {}
         if not guild_config:
             return render_template('ServerVerify.html', error="此伺服器未設定網頁驗證。請聯絡伺服器管理員。", bot=bot, site_key_turnstile=config("webverify_turnstile_key"), site_key_recaptcha=config("webverify_recaptcha_key"), gtag=config("website_gtag", ""))
         if not guild_config.get('enabled', False):
@@ -701,7 +701,8 @@ class ServerWebVerify(commands.GroupCog, name="webverify", description="伺服�
     @app_commands.default_permissions(administrator=True)
     async def manual_check_country(self, interaction: discord.Interaction, user: discord.Member = None):
         await interaction.response.defer()
-        guild_config = get_server_config(interaction.guild.id, "webverify_country_alert")
+        guild_config = get_server_config(interaction.guild.id, "webverify_config")
+        guild_config = guild_config.get('webverify_country_alert') if guild_config else None
         if not guild_config or not guild_config.get('enabled', False):
             await interaction.followup.send("此伺服器未啟用地理位置警示功能。")
             return
