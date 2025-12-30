@@ -1,4 +1,3 @@
-from globalenv import bot, config, on_ready_tasks
 from discord.app_commands.commands import GroupT, P, T, validate_name
 from discord._types import ClientT
 from discord.app_commands import CommandTree
