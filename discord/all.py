@@ -44,7 +44,10 @@ except json.JSONDecodeError:
     print("[!] modules.json is not a valid JSON file. Please check its contents.")
     modules = []
 
+failed_modules = []
+
 globalenv.modules = modules
+globalenv.failed_modules = failed_modules
 from logger import log
 # print(f"[+] Loading {len(modules)} module(s)...")
 log(f"Loading {len(modules)} module(s)...", module_name="all")
@@ -60,6 +63,7 @@ for module in modules:
         log(f"Failed to load module {module}: {e}", module_name="all")
         traceback.print_exc()
         modules.remove(module)
+        failed_modules.append(module)
 
 if __name__ == "__main__":
     start_bot()

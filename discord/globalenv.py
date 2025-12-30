@@ -113,6 +113,7 @@ def reload_config():
         return False
 
 modules = []
+failed_modules = []
 
 
 intents = discord.Intents.default()

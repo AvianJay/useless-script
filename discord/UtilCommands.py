@@ -3,7 +3,7 @@ import random
 import discord
 from discord import app_commands
 from discord.ext import commands
-from globalenv import bot, start_bot, get_user_data, set_user_data, get_command_mention, modules, config
+from globalenv import bot, start_bot, get_user_data, set_user_data, get_command_mention, modules, failed_modules, config
 from typing import Union
 from datetime import datetime, timezone
 import psutil
@@ -72,6 +72,8 @@ async def info_command(interaction: discord.Interaction):
     embed.add_field(name="記憶體使用率", value=f"{psutil.virtual_memory().percent}%")
     embed.add_field(name="運行時間", value=uptime)
     embed.add_field(name=f"已載入模組({len(modules)})", value="\n".join(modules) if modules else "無", inline=False)
+    if failed_modules:
+        embed.add_field(name=f"載入失敗的模組({len(failed_modules)})", value="\n".join(failed_modules), inline=False)
     embed.add_field(name="相關連結", value=f"* [機器人網站]({config('website_url')})\n* [支援伺服器]({config('support_server_invite')})\n* [隱私政策]({config('website_url')}/privacy-policy)\n* [服務條款]({config('website_url')}/terms-of-service)\n* [邀請機器人](https://discord.com/oauth2/authorize?client_id={str(bot.user.id)})", inline=False)
     embed.set_thumbnail(url=bot.user.avatar.url if bot.user.avatar else None)
     embed.set_footer(text="by AvianJay")
@@ -104,6 +106,8 @@ async def info(ctx: commands.Context):
     embed.add_field(name="記憶體使用率", value=f"{psutil.virtual_memory().percent}%")
     embed.add_field(name="運行時間", value=uptime)
     embed.add_field(name=f"已載入模組({len(modules)})", value="\n".join(modules) if modules else "無", inline=False)
+    if failed_modules:
+        embed.add_field(name=f"載入失敗的模組({len(failed_modules)})", value="\n".join(failed_modules), inline=False)
     embed.add_field(name="相關連結", value=f"* [機器人網站]({config('website_url')})\n* [支援伺服器]({config('support_server_invite')})\n* [隱私政策]({config('website_url')}/privacy-policy)\n* [服務條款]({config('website_url')}/terms-of-service)\n* [邀請機器人](https://discord.com/oauth2/authorize?client_id={str(bot.user.id)})", inline=False)
     embed.set_thumbnail(url=bot.user.avatar.url if bot.user.avatar else None)
     embed.timestamp = datetime.now(timezone.utc)
