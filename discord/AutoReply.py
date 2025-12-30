@@ -93,7 +93,19 @@ class AutoReply(commands.GroupCog, name="autoreply"):
                 valid_channels.append(c)
         autoreplies.append({"trigger": trigger, "response": response, "mode": mode, "reply": reply, "channel_mode": channel_mode, "channels": valid_channels, "random_chance": random_chance})
         set_server_config(guild_id, "autoreplies", autoreplies)
-        await interaction.response.send_message(f"已新增自動回覆：\n- 模式：{mode}\n- 觸發字串：`{', '.join(trigger)}`\n- 回覆內容：`{', '.join(response)}`\n- 回覆原訊息：{'是' if reply else '否'}\n- 指定頻道模式：{channel_mode}\n- 指定頻道：`{', '.join(map(str, valid_channels)) if valid_channels else '無'}`\n- 隨機回覆機率：{random_chance}%")
+        trigger_str = ", ".join(trigger)
+        trigger_str = trigger_str if len(trigger_str) <= 100 else trigger_str[:97] + "..."
+        response_str = ", ".join(response)
+        response_str = response_str if len(response_str) <= 100 else response_str[:97] + "..."
+        embed = discord.Embed(title="新增自動回覆成功", color=0x00ff00)
+        embed.add_field(name="模式", value=mode)
+        embed.add_field(name="觸發字串", value=f"`{trigger_str}`")
+        embed.add_field(name="回覆內容", value=f"`{response_str}`")
+        embed.add_field(name="回覆原訊息", value="是" if reply else "否")
+        embed.add_field(name="指定頻道模式", value=channel_mode)
+        embed.add_field(name="指定頻道", value=f"`{', '.join(map(str, valid_channels)) if valid_channels else '無'}`")
+        embed.add_field(name="隨機回覆機率", value=f"{random_chance}%")
+        await interaction.response.send_message(embed=embed)
         trigger_str = ", ".join(trigger)
         log(f"自動回覆被新增：`{trigger_str[:10]}{'...' if len(trigger_str) > 10 else ''}`。", module_name="AutoReply", level=logging.INFO, user=interaction.user, guild=interaction.guild)
 
@@ -235,9 +247,19 @@ class AutoReply(commands.GroupCog, name="autoreply"):
                 if random_chance is not None:
                     ar["random_chance"] = random_chance
                 set_server_config(guild_id, "autoreplies", autoreplies)
-                trigger_str = ", ".join(ar["trigger"]) if len(ar["trigger"]) <= 100 else ", ".join(ar["trigger"])[:97] + "..."
-                response_str = ", ".join(ar["response"]) if len(ar["response"]) <= 100 else ", ".join(ar["response"])[:97] + "..."
-                await interaction.response.send_message(f"已編輯自動回覆：\n- 模式：{ar['mode']}\n- 觸發字串：`{trigger_str}`\n- 回覆內容：`{response_str}`\n- 回覆原訊息：{'是' if ar['reply'] else '否'}\n- 指定頻道模式：{ar['channel_mode']}\n- 指定頻道：`{', '.join(map(str, ar['channels'])) if ar['channels'] else '無'}`\n- 隨機回覆機率：{ar['random_chance']}%")
+                trigger_str = ", ".join(ar["trigger"])
+                trigger_str = trigger_str if len(trigger_str) <= 100 else trigger_str[:97] + "..."
+                response_str = ", ".join(ar["response"])
+                response_str = response_str if len(response_str) <= 100 else response_str[:97] + "..."
+                embed = discord.Embed(title="編輯自動回覆成功", color=0x00ff00)
+                embed.add_field(name="模式", value=ar["mode"])
+                embed.add_field(name="觸發字串", value=f"`{trigger_str}`")
+                embed.add_field(name="回覆內容", value=f"`{response_str}`")
+                embed.add_field(name="回覆原訊息", value="是" if ar["reply"] else "否")
+                embed.add_field(name="指定頻道模式", value=ar["channel_mode"])
+                embed.add_field(name="指定頻道", value=f"`{', '.join(map(str, ar['channels'])) if ar['channels'] else '無'}`")
+                embed.add_field(name="隨機回覆機率", value=f"{ar['random_chance']}%")
+                await interaction.response.send_message(embed=embed)
                 log(f"自動回覆被編輯：`{det[:10]}{'...' if len(det) > 10 else ''}`。", module_name="AutoReply", level=logging.INFO, user=interaction.user, guild=interaction.guild)
                 return
         await interaction.response.send_message(f"找不到觸發字串 `{trigger}` 的自動回覆。")
