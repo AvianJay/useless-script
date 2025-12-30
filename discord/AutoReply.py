@@ -9,6 +9,7 @@ import io
 import aiohttp
 from logger import log
 import logging
+import re
 
 
 def percent_random(percent: int) -> bool:
@@ -61,6 +62,7 @@ class AutoReply(commands.GroupCog, name="autoreply"):
             app_commands.Choice(name="完全匹配", value="equals"),
             app_commands.Choice(name="開始於", value="starts_with"),
             app_commands.Choice(name="結束於", value="ends_with"),
+            app_commands.Choice(name="正規表達式", value="regex"),
         ],
         reply=[
             app_commands.Choice(name="是", value="True"),
@@ -207,6 +209,7 @@ class AutoReply(commands.GroupCog, name="autoreply"):
             app_commands.Choice(name="完全匹配", value="equals"),
             app_commands.Choice(name="開始於", value="starts_with"),
             app_commands.Choice(name="結束於", value="ends_with"),
+            app_commands.Choice(name="正規表達式", value="regex"),
         ],
         reply=[
             app_commands.Choice(name="是", value="True"),
@@ -383,6 +386,12 @@ class AutoReply(commands.GroupCog, name="autoreply"):
                     match_found = True
                 elif ar["mode"] == "ends_with" and message.content.endswith(trigger):
                     match_found = True
+                elif ar["mode"] == "regex":
+                    try:
+                        if re.search(trigger, message.content):
+                            match_found = True
+                    except re.error:
+                        pass  # invalid regex, skip
                 if match_found:
                     if not percent_random(ar.get("random_chance", 100)):
                         return
