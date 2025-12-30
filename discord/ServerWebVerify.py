@@ -762,6 +762,8 @@ class ServerWebVerify(commands.GroupCog, name="webverify", description="伺服�
         cfg_trigger = guild_config.get('autorole_trigger', 'always')
         assign_role = False
         triggers = cfg_trigger.split('+')
+        if member.bot:
+            return
 
         for trigger in triggers:
             if trigger == 'always':
