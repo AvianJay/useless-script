@@ -358,87 +358,149 @@ class AutoReply(commands.GroupCog, name="autoreply"):
         await interaction.followup.send("已匯入自動回覆設定。")
         log(f"自動回覆設定被匯入。", module_name="AutoReply", level=logging.INFO, user=interaction.user, guild=interaction.guild)
 
+    async def _process_response(self, response: str, message: discord.Message) -> str:
+        """處理回覆內容中的變數替換"""
+        guild = message.guild
+        author = message.author
+        channel = message.channel
+
+        # 基本變數替換
+        replacements = {
+            "{user}": author.mention,
+            "{content}": message.content,
+            "{guild}": guild.name,
+            "{server}": guild.name,
+            "{channel}": channel.name,
+            "{author}": author.name,
+            "{member}": author.name,
+            "{role}": author.top_role.name,
+            "{id}": str(author.id),
+            "\\n": "\n",
+            "\\t": "\t"
+        }
+        
+        for key, value in replacements.items():
+            response = response.replace(key, value)
+
+        # {random}
+        if "{random}" in response:
+            response = response.replace("{random}", str(random.randint(1, 100)))
+
+        # {randint:min-max}
+        # 使用 regex 尋找所有 {randint:min-max} 格式
+        # 非貪婪匹配，並捕捉 min 和 max
+        randint_pattern = re.compile(r"\{randint:(\d+)-(\d+)\}")
+        
+        def randint_replacer(match):
+            try:
+                min_val = int(match.group(1))
+                max_val = int(match.group(2))
+                if min_val > max_val:
+                    min_val, max_val = max_val, min_val
+                return str(random.randint(min_val, max_val))
+            except (ValueError, IndexError):
+                return match.group(0) # 發生錯誤則不替換
+
+        response = randint_pattern.sub(randint_replacer, response)
+
+        # {random_user}
+        if "{random_user}" in response:
+            try:
+                users = set()
+                # 限制讀取歷史訊息數量以避免效能問題
+                async for msg in channel.history(limit=50):
+                     if not msg.author.bot:
+                        users.add(msg.author)
+                
+                if users:
+                    selected_user = random.choice(list(users))
+                    response = response.replace("{random_user}", selected_user.display_name)
+                else:
+                    response = response.replace("{random_user}", "沒有人")
+            except Exception as e:
+                log(f"處理 {{random_user}} 時發生錯誤: {e}", module_name="AutoReply", level=logging.ERROR)
+                response = response.replace("{random_user}", "未知使用者")
+
+        return response
+
     @commands.Cog.listener()
     async def on_message(self, message: discord.Message):
-        if message.author.bot:
+        if message.author.bot or message.guild is None:
             return
-        guild = message.guild
-        if guild is None:
-            return
-        guild_id = guild.id
+
+        guild_id = message.guild.id
         autoreplies = get_server_config(guild_id, "autoreplies", [])
+        
+        # 預先取得 channel_id 避免在迴圈中重複存取
+        channel_id = message.channel.id
+        content = message.content
+
         for ar in autoreplies:
-            for trigger in ar["trigger"]:
-                # check channel mode
-                channel_mode = ar.get("channel_mode", "all")
-                if channel_mode == "whitelist":
-                    if message.channel.id not in ar["channels"]:
-                        continue
-                elif channel_mode == "blacklist":
-                    if message.channel.id in ar["channels"]:
-                        continue
-                match_found = False
-                if ar["mode"] == "contains" and trigger in message.content:
-                    match_found = True
-                elif ar["mode"] == "equals" and trigger == message.content:
-                    match_found = True
-                elif ar["mode"] == "starts_with" and message.content.startswith(trigger):
-                    match_found = True
-                elif ar["mode"] == "ends_with" and message.content.endswith(trigger):
-                    match_found = True
-                elif ar["mode"] == "regex":
+            # check channel mode
+            channel_mode = ar.get("channel_mode", "all")
+            # 確保 ar['channels'] 存在，避免 KeyError
+            channels = ar.get("channels", [])
+            
+            if channel_mode == "whitelist" and channel_id not in channels:
+                continue
+            elif channel_mode == "blacklist" and channel_id in channels:
+                continue
+
+            match_found = False
+            mode = ar.get("mode")
+            triggers = ar.get("trigger", [])
+            
+            # 優化：根據模式選擇匹配邏輯
+            if mode == "regex":
+                for trigger in triggers:
                     try:
-                        if re.search(trigger, message.content):
+                        if re.search(trigger, content):
                             match_found = True
+                            break
                     except re.error:
-                        pass  # invalid regex, skip
-                if match_found:
-                    if not percent_random(ar.get("random_chance", 100)):
-                        return
-                    response = random.choice(ar["response"])
-                    response = response.replace("{user}", message.author.mention)
-                    response = response.replace("{content}", message.content)
-                    response = response.replace("{guild}", guild.name)
-                    response = response.replace("{server}", guild.name)
-                    response = response.replace("{channel}", message.channel.name)
-                    response = response.replace("{author}", message.author.name)
-                    response = response.replace("{member}", message.author.name)
-                    response = response.replace("{role}", message.author.top_role.name)
-                    response = response.replace("{id}", str(message.author.id))
-                    response = response.replace("\\n", "\n")
-                    response = response.replace("\\t", "\t")
-                    if "{random}" in response:
-                        random_number = random.randint(1, 100)
-                        response = response.replace("{random}", str(random_number))
-                    try:
-                        if "{randint:" in response:
-                            while "{randint:" in response:
-                                start_index = response.index("{randint:")
-                                end_index = response.index("}", start_index)
-                                range_str = response[start_index + 9:end_index]
-                                try:
-                                    min_val, max_val = map(int, range_str.split("-"))
-                                    rand_value = random.randint(min_val, max_val)
-                                    response = response[:start_index] + str(rand_value) + response[end_index + 1:]
-                                except:
-                                    response = response[:start_index] + "0" + response[end_index + 1:]
-                    except:
-                        pass
-                    if "{random_user}" in response:
-                        channel = message.channel
-                        messages = [msg async for msg in channel.history(limit=50)]
-                        users = list(set(msg.author for msg in messages if not msg.author.bot))
-                        if users:
-                            selected_user = random.choice(users)
-                            response = response.replace("{random_user}", selected_user.display_name)
-                        else:
-                            response = response.replace("{random_user}", "沒有人")
-                    if ar.get("reply", False):
-                        await message.reply(response)
-                    else:
-                        await message.channel.send(response)
-                    log(f"自動回覆觸發：`{trigger[:10]}{'...' if len(trigger) > 10 else ''}` 回覆內容：`{response[:10]}{'...' if len(response) > 10 else ''}`。", module_name="AutoReply", level=logging.INFO, user=message.author, guild=message.guild)
+                        continue
+            else:
+                 # 對於字串比對，可以使用 any 提早結束
+                if mode == "contains":
+                    match_found = any(trigger in content for trigger in triggers)
+                elif mode == "equals":
+                    match_found = any(trigger == content for trigger in triggers)
+                elif mode == "starts_with":
+                    match_found = any(content.startswith(trigger) for trigger in triggers)
+                elif mode == "ends_with":
+                    match_found = any(content.endswith(trigger) for trigger in triggers)
+            
+            if match_found:
+                if not percent_random(ar.get("random_chance", 100)):
+                    # 雖然匹配但隨機機率未中，繼續檢查下一個設定嗎？
+                    # 原始邏輯是 return，表示同一個訊息只會有一次自動回覆機會(或該次判定結束)
+                    # 依照原始邏輯保留 return
                     return
+
+                responses = ar.get("response", [])
+                if not responses:
+                    return
+
+                raw_response = random.choice(responses)
+                
+                # 使用新的處理方法
+                final_response = await self._process_response(raw_response, message)
+                
+                try:
+                    if ar.get("reply", False):
+                        await message.reply(final_response)
+                    else:
+                        await message.channel.send(final_response)
+                    
+                    # 記錄日誌
+                    # 避免 trigger 太長
+                    trigger_used = triggers[0] if triggers else "unknown" 
+                    log(f"自動回覆觸發：`{trigger_used[:10]}...` 回覆內容：`{final_response[:10]}...`。", 
+                        module_name="AutoReply", level=logging.INFO, user=message.author, guild=message.guild)
+                except discord.HTTPException as e:
+                    log(f"自動回覆發送失敗: {e}", module_name="AutoReply", level=logging.ERROR)
+                
+                return
 
 
 asyncio.run(bot.add_cog(AutoReply(bot)))
