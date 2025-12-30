@@ -369,12 +369,5 @@ async def changelogs_command(interaction: discord.Interaction):
     await interaction.response.send_message(embed=embed)
 
 
-@bot.tree.command(name=app_commands.locale_str("launch"), description="啟動機器人活動")
-@app_commands.allowed_installs(guilds=True, users=True)
-@app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
-async def activity_command(interaction: discord.Interaction):
-    await interaction.response.launch_activity()
-
-
 if __name__ == "__main__":
     start_bot()
