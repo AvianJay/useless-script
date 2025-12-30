@@ -55,6 +55,12 @@ class FakeUser(commands.Cog):
         if not log_channel:
             await interaction.followup.send("假冒用戶功能未啟用，請聯繫管理員設置假冒用戶功能。", ephemeral=True)
             return
+        
+        user_blacklist = get_user_data(interaction.guild.id if interaction.guild else 0, user.id, "fake_user_blacklist", [])
+        if str(interaction.user.id) in user_blacklist:
+            await interaction.followup.send(f"看起來 {user} 不想要被你假冒，換一個人試試吧。", ephemeral=True)
+            log(f"嘗試假冒被黑名單的用戶 {user}", module_name="FakeUser", user=interaction.user, guild=interaction.guild)
+            return
 
         webhook = await interaction.channel.create_webhook(name=user.name, reason=f"用戶 {interaction.user} 假冒 {user} 發送訊息")
         try:
@@ -68,6 +74,23 @@ class FakeUser(commands.Cog):
                 await log_channel.send(embed=embed)
         finally:
             await webhook.delete()
+    
+    @app_commands.allowed_installs(guilds=True, users=False)
+    @app_commands.allowed_contexts(guilds=True, dms=False, private_channels=False)
+    @app_commands.command(name="fake-blacklist", description="假冒用戶黑名單管理")
+    @app_commands.describe(user="要加入或移除黑名單的用戶")
+    async def fake_blacklist(self, interaction: discord.Interaction, user: Union[discord.User, discord.Member]):
+        guild_id = interaction.guild.id if interaction.guild else None
+        blacklist = get_user_data(guild_id, interaction.user.id, "fake_user_blacklist", [])
+        if str(user.id) in blacklist:
+            blacklist.remove(str(user.id))
+            action = "移除"
+        else:
+            blacklist.append(str(user.id))
+            action = "加入"
+        set_user_data(guild_id, interaction.user.id, "fake_user_blacklist", blacklist)
+        await interaction.response.send_message(f"用戶 {user.mention} 已被{action}你的假冒用戶黑名單。", ephemeral=True)
+        log(f"{action}用戶 {user} ({user.id}) 至假冒用戶黑名單", module_name="FakeUser", user=interaction.user, guild=interaction.guild)
 
 
 asyncio.run(bot.add_cog(FakeUser(bot)))
