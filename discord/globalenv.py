@@ -375,15 +375,17 @@ async def on_ready():
         synced = await bot.tree.sync()  # 同步指令
         log(f"已同步 {len(synced)} 個指令", module_name="Main")
 
+        # 快取所有伺服器的成員資料
+        for guild in bot.guilds:
+            if not guild.chunked:
+                await guild.chunk()
+        log(f"成功快取 {len(bot.guilds)} 個伺服器的成員資料。", module_name="Main")
+
         # 防止重複建立相同的 background task（例如 reconnect）
         if not getattr(bot, "_on_ready_tasks_started", False):
             for task_coro_func in on_ready_tasks:
                 # task_coro_func 應該是 coroutine function，不是 coroutine object，啥ai東西啊
                 bot.loop.create_task(task_coro_func())
-            for guild in bot.guilds:
-                if not guild.chunked:
-                    await guild.chunk()
-            log(f"成功快取 {len(bot.guilds)} 個伺服器的成員資料。", module_name="Main")
             bot._on_ready_tasks_started = True
 
     except Exception as e:
