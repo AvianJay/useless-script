@@ -331,6 +331,7 @@ translations = {
     "country-alert": "地區警示設定",
     "manual-check-country": "手動檢查地區",
     "countries": "國家列表",
+    "fake-blacklist": "假冒黑名單",
 }
 class CommandNameTranslator(app_commands.Translator):
     async def translate(
