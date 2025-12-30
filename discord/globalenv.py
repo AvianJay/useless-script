@@ -372,8 +372,13 @@ on_close_tasks = set()  # only works on !shutdown
 async def on_ready():
     log(f'已登入為 {bot.user}', module_name="Main")
     try:
+        if "Activity" in modules:
+            from Activity import activity_entry
+            bot.tree._global_commands["launch"] = activity_entry
         synced = await bot.tree.sync()  # 同步指令
         log(f"已同步 {len(synced)} 個指令", module_name="Main")
+        if "Activity" in modules:
+            del bot.tree._global_commands["launch"]
 
         # 快取所有伺服器的成員資料
         for guild in bot.guilds:
