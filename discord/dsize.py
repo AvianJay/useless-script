@@ -948,7 +948,7 @@ async def dsize_stats(interaction: discord.Interaction):
     embed.add_field(name="變成男娘次數", value=str(mangirl_count), inline=False)
     embed.add_field(name="草飼次數", value=str(total_feedgrass), inline=True)
     embed.add_field(name="被草飼次數", value=str(total_been_feedgrass), inline=True)
-    embed.add_field(name="撊到物品次數", value=str(total_drops), inline=False)
+    embed.add_field(name="撿到物品次數", value=str(total_drops), inline=False)
     embed.add_field(name="簽到次數", value=str(total_checkins), inline=True)
     embed.add_field(name="連續簽到天數", value=str(checkin_streak), inline=True)
     embed.timestamp = datetime.now(timezone.utc)
