@@ -4,6 +4,7 @@ from discord import app_commands
 import random
 import requests
 import json
+import io
 from globalenv import bot, start_bot, config
 if not config("r34_user_id") or not config("r34_api_key"):
     raise ValueError("r34_user_id or r34_api_key is not set in config.json")
@@ -17,10 +18,12 @@ def r34(tags=None, pid=1):
         r = requests.get(f'https://api.rule34.xxx/index.php?page=dapi&s=post&q=index&json=1&pid={pid}&api_key={config("r34_api_key")}&user_id={config("r34_user_id")}')
     try:
         rj = r.json()
+        if not rj:
+            return False, '無搜尋結果'
         selected = random.choice(rj)
-        return selected['file_url']
+        return True, selected
     except:
-        return f'錯誤！{r.text}'
+        return False, f'錯誤！{r.text}'
 
 
 def r34tags(query=None):
@@ -70,14 +73,23 @@ async def r34_tags_autocomplete(interaction: discord.Interaction, current: str):
 async def r34_command(interaction: discord.Interaction, tags: str = None, pid: int = 1, spoilers: str = "False"):
     await interaction.response.defer()
     spoilers = (spoilers == "True")
-    img_url = r34(tags, pid)
-    if img_url.startswith("錯誤！"):
-        await interaction.followup.send(img_url)
+    stat, img_data = r34(tags, pid)
+    if not stat:
+        embed = discord.Embed(title="錯誤", description=img_data, color=0xFF0000)
+        await interaction.followup.send(embed=embed)
     else:
+        embed = discord.Embed(
+            title="Rule34.xxx",
+            url=f"https://rule34.xxx/index.php?page=post&s=view&id={img_data.get('id', 'N/A')}",
+            description=f"標籤: `{img_data.get('tags', 'N/A')}`\nID: `{img_data.get('id', 'N/A')}`",
+            color=0x00FF00
+        )
         if spoilers:
-            await interaction.followup.send(f"|| {img_url} ||")
+            attachment = discord.File(fp=io.BytesIO(requests.get(img_data.get('file_url', '')).content), filename="image.png", spoiler=True)
+            embed.set_image(url="attachment://image.png")
         else:
-            await interaction.followup.send(img_url)
+            embed.set_image(url=img_data.get('file_url', ''))
+        await interaction.followup.send(embed=embed, files=[attachment] if spoilers else [])
 
 
 @bot.tree.command(name="r34tags", description="從rule34.xxx搜尋標籤", nsfw=True)
