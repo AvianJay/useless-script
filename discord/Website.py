@@ -77,6 +77,10 @@ async def start_webserver():
     
     hypercorn_config = Config()
     hypercorn_config.bind = [f"{host}:{port}"]
+    # verbose request
+    # hypercorn_config.loglevel = "debug"
+    # hypercorn_config.accesslog = "-"
+    # hypercorn_config.errorlog = "-"
     
     if ssl:
         ssl_path = 'sslkey'
@@ -84,7 +88,15 @@ async def start_webserver():
         hypercorn_config.keyfile = os.path.join(ssl_path, 'server.key')
     
     # Run Hypercorn in the background
-    asyncio.create_task(serve(app, hypercorn_config))
+    # Prefer ASGI app (real WebSocket Socket.IO) if Explore provides it.
+    web_app = app
+    try:
+        from Explore import asgi_app as web_app  # type: ignore
+        log("使用 Explore.asgi_app (ASGIApp) 啟動網站伺服器", module_name="Website")
+    except Exception as e:
+        log(f"Explore.asgi_app 未啟用，改用 Flask WSGI：{e}", module_name="Website")
+
+    asyncio.create_task(serve(web_app, hypercorn_config))
     log(f"網站伺服器已啟動 (Hypercorn) - http{'s' if ssl else ''}://{host}:{port}", module_name="Website")
 
 on_ready_tasks.append(start_webserver)

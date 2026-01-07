@@ -335,6 +335,10 @@ translations = {
     "ping": "延遲",
     "explore space": "探索空間",
     "explore": "探索",
+    "explore-settings": "探索設定",
+    "privacy": "隱私",
+    "enabled": "啟用",
+    "public": "公開",
 }
 class CommandNameTranslator(app_commands.Translator):
     async def translate(
@@ -376,12 +380,12 @@ on_close_tasks = set()  # only works on !shutdown
 async def on_ready():
     log(f'已登入為 {bot.user}', module_name="Main")
     try:
-        if "Activity" in modules:
-            from Activity import activity_entry
+        if "Explore" in modules:
+            from Explore import activity_entry
             bot.tree._global_commands["launch"] = activity_entry
         synced = await bot.tree.sync()  # 同步指令
         log(f"已同步 {len(synced)} 個指令", module_name="Main")
-        if "Activity" in modules:
+        if "Explore" in modules:
             del bot.tree._global_commands["launch"]
 
         # 快取所有伺服器的成員資料

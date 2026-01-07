@@ -1,0 +1,3 @@
+[submodule "discord/Explore"]
+	path = discord/Explore
+	url = https://github.com/AvianJay/Discord-Bot-Explore-Game.git

@@ -8,7 +8,7 @@ from typing import Generic, Dict, Any, Optional
 class ActivityEntry(Generic[GroupT, P, T]):
     def __init__(self, name: str, description: str):
         name, locale = (name.message, name) if isinstance(name, locale_str) else (name, None)
-        self.name: str = validate_name(name)
+        self.name: str = name
         self._locale_name: Optional[locale_str] = locale
         description, locale = (
             (description.message, description) if isinstance(description, locale_str) else (description, None)
@@ -45,6 +45,7 @@ class ActivityEntry(Generic[GroupT, P, T]):
             "name": self.name,
             "description": self.description,
             "type": 4,
+            "handler": 2,
+            "integration_types": [0, 1],
+            "contexts": [0, 1, 2]
         }
-
-activity_entry = ActivityEntry(name="launch", description="啟動活動")
