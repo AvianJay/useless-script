@@ -398,5 +398,25 @@ async def ping_command(interaction: discord.Interaction):
     await interaction.followup.send(embed=embed)
 
 
+@bot.command(aliases=["pg"])
+async def ping(ctx: commands.Context):
+    """檢查機器人延遲
+    
+    用法： ping
+    """
+    try:
+        bot_latency = round(bot.latency * 1000, 2)  # Convert to milliseconds
+    except OverflowError:
+        bot_latency = "N/A"
+    s = time.perf_counter()
+    await ctx.trigger_typing()
+    e = time.perf_counter()
+    rest_latency = round((e - s) * 1000, 2)  # in milliseconds
+    embed = discord.Embed(title="機器人延遲", color=0x00ff00)
+    embed.add_field(name="Websocket 延遲", value=f"{bot_latency}ms")
+    embed.add_field(name="REST API 延遲", value=f"{rest_latency}ms")
+    await ctx.send(embed=embed)
+
+
 if __name__ == "__main__":
     start_bot()
