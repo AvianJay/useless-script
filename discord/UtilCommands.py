@@ -7,6 +7,7 @@ from globalenv import bot, start_bot, get_user_data, set_user_data, get_command_
 from typing import Union
 from datetime import datetime, timezone
 import psutil
+import time
 
 startup_time = datetime.now(timezone.utc)
 version = "0.16.3"
@@ -377,6 +378,24 @@ async def changelogs_command(interaction: discord.Interaction):
     commit_logs = get_commit_logs(10)
     embed = discord.Embed(title="機器人更新日誌", description="\n".join(commit_logs), color=0x00ff00)
     await interaction.response.send_message(embed=embed)
+
+
+@bot.tree.command(name=app_commands.locale_str("ping"), description="檢查機器人延遲")
+@app_commands.allowed_installs(guilds=True, users=True)
+@app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
+async def ping_command(interaction: discord.Interaction):
+    try:
+        bot_latency = round(bot.latency * 1000, 2)  # Convert to milliseconds
+    except OverflowError:
+        bot_latency = "N/A"
+    s = time.perf_counter()
+    await interaction.response.defer()
+    e = time.perf_counter()
+    rest_latency = round((e - s) * 1000, 2)  # in milliseconds
+    embed = discord.Embed(title="機器人延遲", color=0x00ff00)
+    embed.add_field(name="Websocket 延遲", value=f"{bot_latency}ms")
+    embed.add_field(name="REST API 延遲", value=f"{rest_latency}ms")
+    await interaction.followup.send(embed=embed)
 
 
 if __name__ == "__main__":

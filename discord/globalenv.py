@@ -332,6 +332,9 @@ translations = {
     "manual-check-country": "手動檢查地區",
     "countries": "國家列表",
     "fake-blacklist": "假冒黑名單",
+    "ping": "延遲",
+    "explore space": "探索空間",
+    "explore": "探索",
 }
 class CommandNameTranslator(app_commands.Translator):
     async def translate(
