@@ -60,10 +60,13 @@ async def info_command(interaction: discord.Interaction):
         bot_latency = "N/A"
 
     uptime = get_time_text(get_uptime_seconds())
+    
+    commands_count = len(bot.commands) + sum(len(c.commands) for c in bot.commands if isinstance(c, commands.Group))
 
     embed = discord.Embed(title="機器人資訊", color=0x00ff00)
     embed.add_field(name="機器人名稱", value=bot.user.name)
     embed.add_field(name="版本", value=full_version)
+    embed.add_field(name="指令數量", value=commands_count)
     embed.add_field(name="伺服器數量", value=server_count)
     embed.add_field(name="用戶總數量", value=user_count)
     embed.add_field(name="用戶安裝數量", value=bot.application.approximate_user_install_count or "N/A")
@@ -94,10 +97,13 @@ async def info(ctx: commands.Context):
         bot_latency = "N/A"
     
     uptime = get_time_text(get_uptime_seconds())
+    
+    commands_count = len(bot.commands) + sum(len(c.commands) for c in bot.commands if isinstance(c, commands.Group))
 
     embed = discord.Embed(title="機器人資訊", color=0x00ff00)
     embed.add_field(name="機器人名稱", value=bot.user.name)
     embed.add_field(name="版本", value=full_version)
+    embed.add_field(name="指令數量", value=commands_count)
     embed.add_field(name="伺服器數量", value=server_count)
     embed.add_field(name="用戶總數量", value=user_count)
     embed.add_field(name="用戶安裝數量", value=bot.application.approximate_user_install_count or "N/A")
