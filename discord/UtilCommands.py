@@ -454,9 +454,11 @@ class NitroLinkModal(discord.ui.Modal, title="發送 Nitro 禮物"):
                     # 準備顯示用的資訊
                     gift_name = data.get("subscription_plan", {}).get("name", "Discord Nitro")
                     expires_raw = data.get("expires_at")
+                    gifter = bot.get_user(int(data.get("user", {}).get("id", 0)))
                     
                     embed = discord.Embed(title=f"{gift_name}", color=0xFF73FA)
                     embed.description = "有人送出了一份禮物！點擊下方按鈕領取。"
+                    embed.set_author(name=gifter.display_name if gifter else "未知用戶", icon_url=gifter.display_avatar.url if gifter else None)
                     embed.set_footer(text="啊我就不想要被Selfbot幹走尼戳")
                     
                     if expires_raw:
