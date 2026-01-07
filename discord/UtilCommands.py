@@ -8,6 +8,7 @@ from typing import Union
 from datetime import datetime, timezone
 import psutil
 import time
+import aiohttp
 
 startup_time = datetime.now(timezone.utc)
 version = "0.16.3"
@@ -416,6 +417,91 @@ async def ping(ctx: commands.Context):
     embed.add_field(name="Websocket 延遲", value=f"{bot_latency}ms")
     embed.add_field(name="REST API 延遲", value=f"{rest_latency}ms")
     await ctx.send(embed=embed)
+
+
+class NitroLinkModal(discord.ui.Modal, title="發送 Nitro 禮物"):
+    nitro_link = discord.ui.TextInput(
+        label="Nitro 連結", 
+        placeholder="https://discord.gift/...", 
+        style=discord.TextStyle.short, 
+        required=True
+    )
+
+    async def on_submit(self, interaction: discord.Interaction):
+        link = self.nitro_link.value.strip()
+        
+        if not link.startswith("https://discord.gift/"):
+            await interaction.response.send_message("❌ 錯誤：這不是有效的 Nitro 連結格式。", ephemeral=True)
+            return
+
+        # 延遲回應，避免 API 請求超時
+        await interaction.response.defer()
+
+        code = link.split('/')[-1]
+        api_url = f"https://discord.com/api/v9/entitlements/gift-codes/{code}?with_application=false&with_subscription_plan=true"
+
+        async with aiohttp.ClientSession() as session:
+            async with session.get(api_url) as response:
+                if response.status == 200:
+                    data = await response.json()
+                    
+                    # 檢查是否已被領取
+                    is_redeemed = data.get("uses", 0) >= data.get("max_uses", 1)
+                    if is_redeemed:
+                        await interaction.followup.send("⚠️ 此連結已被使用過。", ephemeral=True)
+                        return
+
+                    # 準備顯示用的資訊
+                    gift_name = data.get("subscription_plan", {}).get("name", "Discord Nitro")
+                    expires_raw = data.get("expires_at")
+                    
+                    embed = discord.Embed(title=f"{gift_name}", color=0xFF73FA)
+                    embed.description = "有人送出了一份禮物！點擊下方按鈕領取。"
+                    embed.set_footer(text="啊我就不想要被Selfbot幹走尼戳")
+                    
+                    if expires_raw:
+                        expires_at = datetime.fromisoformat(expires_raw.replace("Z", "+00:00"))
+                        embed.add_field(name="到期時間", value=f"<t:{int(expires_at.timestamp())}:R>")
+
+                    # 建立按鈕 View 並把連結傳進去
+                    view = NitroClaimView(link, gift_name)
+                    
+                    # 在頻道發送公開訊息（非 ephemeral），讓大家搶
+                    await interaction.followup.send(embed=embed, view=view)
+                    await interaction.followup.send("✅ 禮物已成功發送至頻道！", ephemeral=True)
+                else:
+                    await interaction.followup.send("❌ 無法驗證此連結，請檢查是否輸入正確。", ephemeral=True)
+
+class NitroClaimView(discord.ui.View):
+    def __init__(self, link: str, gift_name: str):
+        super().__init__(timeout=None) # 永不到期或自訂時間
+        self.link = link
+        self.gift_name = gift_name
+
+    @discord.ui.button(label="領取", style=discord.ButtonStyle.primary, emoji="🎉")
+    async def claim_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        # 禁用所有按鈕防止重複點擊
+        for child in self.children:
+            child.disabled = True
+        
+        # 更新原訊息
+        embed = interaction.message.embeds[0]
+        embed.title = f"{self.gift_name} [已領取]"
+        embed.color = discord.Color.light_grey()
+        embed.set_footer(text=f"領取者: {interaction.user.display_name}", icon_url=interaction.user.display_avatar.url)
+        
+        await interaction.message.edit(embed=embed, view=self)
+        
+        # 私訊領取者連結
+        await interaction.response.send_message(f"🎊 這是你的 Nitro 連結：\n{self.link}", ephemeral=True)
+        self.stop()
+
+
+@bot.tree.command(name=app_commands.locale_str("nitro"), description="我不想要被機器人幹走尼戳")
+@app_commands.allowed_installs(guilds=True, users=True)
+@app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
+async def nitro_command(interaction: discord.Interaction):
+    await interaction.response.send_modal(NitroLinkModal())
 
 
 if __name__ == "__main__":
