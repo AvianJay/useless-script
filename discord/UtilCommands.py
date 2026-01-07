@@ -479,9 +479,14 @@ class NitroClaimView(discord.ui.View):
         super().__init__(timeout=None) # 永不到期或自訂時間
         self.link = link
         self.gift_name = gift_name
+        self.claimed = False
 
     @discord.ui.button(label="領取", style=discord.ButtonStyle.primary, emoji="🎉")
     async def claim_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if self.claimed:  # avoid edit message delay
+            await interaction.response.send_message("⚠️ 此禮物已被領取。", ephemeral=True)
+            return
+        self.claimed = True
         # 禁用所有按鈕防止重複點擊
         for child in self.children:
             child.disabled = True
