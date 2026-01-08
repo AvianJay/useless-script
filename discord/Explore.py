@@ -481,7 +481,6 @@ def explore_save_skin():
     return jsonify({"success": True})
 
 @app.route("/api/explore/icon/guild/<guild_id>", methods=["GET"])
-@_require_explore_auth
 def explore_guild_icon(guild_id):
     # Proxy guild icon
     guild = bot.get_guild(int(guild_id))
