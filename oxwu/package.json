@@ -1,0 +1,9 @@
+{
+  "name": "oxwu-api-patch",
+  "private": true,
+  "version": "0.0.0",
+  "description": "OXWU API patch helper (optional deps for main.js)",
+  "dependencies": {
+    "socket.io": "^4.7.5"
+  }
+}
