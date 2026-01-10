@@ -392,7 +392,7 @@ class BotCustomizer(commands.GroupCog, name="change"):
 
 
     @app_commands.command(name=app_commands.locale_str("bio"), description="更改機器人的關於我（不指定則恢復預設）")
-    @app_commands.describe(bio="新的介紹（最多 100 字）")
+    @app_commands.describe(bio="新的介紹（\\n 代表換行）（最多 100 字）")
     @app_commands.default_permissions(administrator=True)
     async def changebio_command(self, interaction: discord.Interaction, bio: str = None):
         guild_id = interaction.guild.id if interaction.guild else None
@@ -400,6 +400,7 @@ class BotCustomizer(commands.GroupCog, name="change"):
         try:
             if bio:
                 bio = bio if len(bio) <= 100 else bio[:97] + "..."
+                bio = bio.replace("\\n", "\n")
                 try:
                     embed = discord.Embed(title="關於我審核請求", description=f"用戶 {interaction.user} 正在審核關於我內容。")
                     embed.set_author(name=interaction.user.name, icon_url=interaction.user.display_avatar.url)
