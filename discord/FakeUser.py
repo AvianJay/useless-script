@@ -61,6 +61,10 @@ class FakeUser(commands.Cog):
             await interaction.followup.send(f"看起來 {user} 不想要被你假冒，換一個人試試吧。", ephemeral=True)
             log(f"嘗試假冒被黑名單的用戶 {user}", module_name="FakeUser", user=interaction.user, guild=interaction.guild)
             return
+        elif self.bot.user.id in user_blacklist:
+            await interaction.followup.send(f"看起來 {user} 不想要被你假冒，換一個人試試吧。", ephemeral=True)
+            log(f"嘗試假冒被黑名單的用戶 {user}", module_name="FakeUser", user=interaction.user, guild=interaction.guild)
+            return
 
         webhook = await interaction.channel.create_webhook(name=user.name, reason=f"用戶 {interaction.user} 假冒 {user} 發送訊息")
         try:
@@ -78,7 +82,7 @@ class FakeUser(commands.Cog):
     @app_commands.allowed_installs(guilds=True, users=False)
     @app_commands.allowed_contexts(guilds=True, dms=False, private_channels=False)
     @app_commands.command(name="fake-blacklist", description="假冒用戶黑名單管理")
-    @app_commands.describe(user="要加入或移除黑名單的用戶")
+    @app_commands.describe(user="要加入或移除黑名單的用戶 (若指定本機器人代表所有人)")
     async def fake_blacklist(self, interaction: discord.Interaction, user: Union[discord.User, discord.Member]):
         guild_id = interaction.guild.id if interaction.guild else None
         blacklist = get_user_data(guild_id, interaction.user.id, "fake_user_blacklist", [])
@@ -89,7 +93,10 @@ class FakeUser(commands.Cog):
             blacklist.append(str(user.id))
             action = "加入"
         set_user_data(guild_id, interaction.user.id, "fake_user_blacklist", blacklist)
-        await interaction.response.send_message(f"用戶 {user.mention} 已被{action}你的假冒用戶黑名單。", ephemeral=True)
+        if user.id == self.bot.user.id:
+            await interaction.response.send_message(f"所有人已被{action}你的假冒用戶黑名單。", ephemeral=True)
+        else:
+            await interaction.response.send_message(f"用戶 {user.mention} 已被{action}你的假冒用戶黑名單。", ephemeral=True)
         log(f"{action}用戶 {user} ({user.id}) 至假冒用戶黑名單", module_name="FakeUser", user=interaction.user, guild=interaction.guild)
 
 
