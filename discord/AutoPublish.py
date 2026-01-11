@@ -5,6 +5,7 @@ from discord.ext import commands
 from globalenv import bot, start_bot, get_server_config, set_server_config
 from logger import log
 import logging
+from datetime import datetime, timezone
 
 
 @app_commands.guild_only()
@@ -61,6 +62,23 @@ class AutoPublish(commands.GroupCog, name=app_commands.locale_str("autopublish")
             return
         if not message.channel.permissions_for(guild.me).send_messages:
             return
+        
+        # check time
+        # date + hour
+        now = datetime.now(timezone.utc)
+        outstr = now.strftime("%Y-%m-%d %H")
+        last_published = autopublish_settings.get("last_publish", "")
+        if outstr != last_published:
+            # New hour: reset counter and update last_publish within autopublish settings
+            autopublish_settings["hour_published"] = 0
+            autopublish_settings["last_publish"] = outstr
+            set_server_config(guild.id, "autopublish", autopublish_settings)
+        hour_published = autopublish_settings.get("hour_published", 0)
+        if hour_published >= 10:
+            return  # limit to 10 publishes per hour
+        hour_published += 1
+        autopublish_settings["hour_published"] = hour_published
+        set_server_config(guild.id, "autopublish", autopublish_settings)
         
         if message.channel.type == discord.ChannelType.news:
             if message.reference:
