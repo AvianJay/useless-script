@@ -56,7 +56,15 @@ class AutoPublish(commands.GroupCog, name=app_commands.locale_str("autopublish")
         if not autopublish_settings.get("enabled", False):
             return
         
+        # check permissions
+        if not guild.me.guild_permissions.manage_messages:
+            return
+        if not message.channel.permissions_for(guild.me).send_messages:
+            return
+        
         if message.channel.type == discord.ChannelType.news:
+            if message.reference:
+                return  # Ignore replies
             try:
                 await message.publish()
                 log(f"Auto-published message ID {message.id} in guild {guild.id}", module_name="AutoPublish", guild=guild)
