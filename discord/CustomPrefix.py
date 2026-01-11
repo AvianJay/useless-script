@@ -1,7 +1,7 @@
 from globalenv import bot, get_server_config, set_server_config, config
 from typing import Optional
 from logger import log
-from discord import app_commands, commands
+from discord import app_commands
 from discord.ext import commands
 import asyncio
 
