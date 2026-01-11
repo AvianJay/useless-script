@@ -281,14 +281,16 @@ class Database:
         with sqlite3.connect(self.db_path) as conn:
             cursor = conn.cursor()
             cursor.execute('SELECT COUNT(*) FROM server_configs')
-            total += cursor.fetchone()[0]
             server_config_count = cursor.fetchone()[0]
+            total += server_config_count
+
             cursor.execute('SELECT COUNT(*) FROM global_config')
-            total += cursor.fetchone()[0]
             global_config_count = cursor.fetchone()[0]
+            total += global_config_count
+
             cursor.execute('SELECT COUNT(*) FROM user_data')
-            total += cursor.fetchone()[0]
             user_data_count = cursor.fetchone()[0]
+            total += user_data_count
         return {
             "total": total,
             "server_configs": server_config_count,
