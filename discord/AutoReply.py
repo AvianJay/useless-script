@@ -427,6 +427,10 @@ class AutoReply(commands.GroupCog, name="autoreply"):
     async def on_message(self, message: discord.Message):
         if message.author.bot or message.guild is None:
             return
+        
+        # check permissions
+        if not message.channel.permissions_for(message.guild.me).send_messages:
+            return
 
         guild_id = message.guild.id
         autoreplies = get_server_config(guild_id, "autoreplies", [])
