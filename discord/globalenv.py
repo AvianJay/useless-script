@@ -341,6 +341,7 @@ translations = {
     "enabled": "啟用",
     "public": "公開",
     "serverinfo": "伺服器資訊",
+    "help": "幫助",
 }
 class CommandNameTranslator(app_commands.Translator):
     async def translate(

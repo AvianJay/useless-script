@@ -1,5 +1,5 @@
 import discord
-from globalenv import bot, start_bot, set_server_config, get_server_config, config
+from globalenv import bot, start_bot, set_server_config, get_server_config, config, get_command_mention
 from discord.ext import commands
 from discord import app_commands
 import asyncio
@@ -357,6 +357,109 @@ class AutoReply(commands.GroupCog, name="autoreply"):
         set_server_config(guild_id, "autoreplies", autoreplies)
         await interaction.followup.send("已匯入自動回覆設定。")
         log(f"自動回覆設定被匯入。", module_name="AutoReply", level=logging.INFO, user=interaction.user, guild=interaction.guild)
+    
+    @app_commands.command(name="test", description="測試自動回覆內容的變數替換")
+    @app_commands.describe(response="要測試的回覆內容")
+    @app_commands.default_permissions(manage_guild=True)
+    async def test_autoreply_response(self, interaction: discord.Interaction, response: str):
+        guild = interaction.guild
+        author = interaction.user
+        channel = interaction.channel
+
+        # 建立一個模擬的訊息物件
+        class MockMessage:
+            def __init__(self, guild, author, channel, content):
+                self.guild = guild
+                self.author = author
+                self.channel = channel
+                self.content = content
+
+        mock_message = MockMessage(guild, author, channel, "這是一則測試訊息內容。")
+
+        final_response = await self._process_response(response, mock_message)
+        await interaction.response.send_message(f"測試結果：\n{final_response}")
+    
+    @app_commands.command(name="help", description="顯示自動回覆的使用說明")
+    async def autoreply_help(self, interaction: discord.Interaction):
+        # vibe coding is fun lol
+        embed = discord.Embed(
+            title="自動回覆使用說明",
+            description="您可以使用以下設定，讓回覆更加靈活。",
+            color=0x00FF00,
+        )
+        
+        embed.add_field(
+            name="指令說明",
+            value=(
+                f"使用 {await get_command_mention('autoreply', 'add')} 指令新增自動回覆，"
+                f"使用 {await get_command_mention('autoreply', 'quickadd')} 指令可以快速新增自動回覆到一個現有的自動回覆裡。"
+                f"使用 {await get_command_mention('autoreply', 'list')} 指令可以列出目前所有的自動回覆。"
+                f"使用 {await get_command_mention('autoreply', 'remove')} 指令可以移除指定的自動回覆。"
+                f"使用 {await get_command_mention('autoreply', 'edit')} 指令可以編輯指定的自動回覆。"
+                f"使用 {await get_command_mention('autoreply', 'clear')} 指令可以清除所有自動回覆。"
+                f"使用 {await get_command_mention('autoreply', 'export')} 指令可以匯出自動回覆設定為 JSON 檔案。"
+                f"使用 {await get_command_mention('autoreply', 'import')} 指令可以從 JSON 檔案匯入自動回覆設定。"
+                f"使用 {await get_command_mention('autoreply', 'test')} 指令可以測試自動回覆內容的變數替換效果。"
+            ),
+            inline=False,
+        )
+
+        embed.add_field(
+            name="基本變數",
+            value=(
+                "您可以在自動回覆的回覆內容中使用以下變數，讓回覆更靈活。\n"
+                "- `{user}`：提及觸發者\n"
+                "- `{content}`：觸發訊息內容\n"
+                "- `{guild}` / `{server}`：伺服器名稱\n"
+                "- `{channel}`：頻道名稱\n"
+                "- `{author}` / `{member}`：觸發者名稱\n"
+                "- `{role}`：觸發者最高角色名稱\n"
+                "- `{id}`：觸發者 ID\n"
+                "- `\\n`：換行\n"
+                "- `\\t`：制表符"
+            ),
+            inline=False,
+        )
+
+        embed.add_field(
+            name="隨機 / 進階",
+            value=(
+                "- `{random}`：隨機產生 1 到 100 的整數\n"
+                "- `{randint:min-max}`：隨機產生 min~max（例：`{randint:10-50}`）\n"
+                "- `{random_user}`：從最近 50 則訊息中隨機選一位非機器人使用者顯示名稱"
+            ),
+            inline=False,
+        )
+
+        embed.add_field(
+            name="快速範例",
+            value=(
+                "- `你好 {user}，你剛剛說：{content}`\n"
+                "- `今天的幸運數字是 {randint:1-99}`"
+            ),
+            inline=False,
+        )
+
+        class HelpView(discord.ui.View):
+            def __init__(self):
+                super().__init__(timeout=60)
+
+            @discord.ui.button(label="顯示更多範例", style=discord.ButtonStyle.primary)
+            async def examples(self, i: discord.Interaction, _: discord.ui.Button):
+                ex = discord.Embed(title="自動回覆範例", color=0x00FF00)
+                ex.description = (
+                    "1) `歡迎 {user} 來到 {guild}！`\n"
+                    "2) `你在 #{channel} 發了：{content}`\n"
+                    "3) `抽獎號碼：{randint:1000-9999}`\n"
+                    "4) `剛剛聊天室隨機點名：{random_user}`"
+                )
+                await i.response.send_message(embed=ex, ephemeral=True)
+
+            @discord.ui.button(label="提示：測試替換", style=discord.ButtonStyle.secondary)
+            async def hint(self, i: discord.Interaction, _: discord.ui.Button):
+                await i.response.send_message(f"可用 `{await get_command_mention('autoreply', 'test')}` 測試變數替換結果。", ephemeral=True)
+
+        await interaction.response.send_message(embed=embed, view=HelpView())
 
     async def _process_response(self, response: str, message: discord.Message) -> str:
         """處理回覆內容中的變數替換"""
