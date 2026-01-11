@@ -430,7 +430,7 @@ async def dsize(interaction: discord.Interaction, global_dsize: str = "False"):
                         embed.set_field_at(0, name=f"{size + i} cm", value=f"8{d_string_new}D", inline=False)
                         await interaction.edit_original_response(content="正在手術中...💥", embed=embed)
                         await asyncio.sleep(1)
-                        ori = size + i - 2
+                        ori = min(size + i - 2, 200)  # limit animation length to 200 because discord message length limit
                         while ori > 0:
                             d_string_new = "💥" * ori
                             embed.set_field_at(0, name=f"{ori + 1} cm", value=f"8{d_string_new}", inline=False)
@@ -1318,6 +1318,7 @@ async def use_rusty_scalpel(interaction: discord.Interaction):
             performer_statistics["total_performed_surgeries"] = performer_statistics.get("total_performed_surgeries", 0) + 1
             set_user_data(0, user_id, "dsize_statistics", performer_statistics)
             orig_size = get_user_data(guild_key, target_id, "last_dsize_size", 0)
+            orig_size = min(orig_size, 200)  # limit length because discord limit
             set_user_data(guild_key, target_id, "last_dsize_size", -1)
             # print(f"[DSize] {interaction.user} performed rusty surgery on {target_user.display_name}, original size: {orig_size} cm, new size: -1 cm")
             log(f"{interaction.user} performed rusty surgery on {target_user.display_name}, original size: {orig_size} cm, new size: -1 cm", module_name="dsize", user=interaction.user, guild=interaction.guild)
