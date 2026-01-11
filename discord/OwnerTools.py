@@ -260,25 +260,57 @@ async def createtranscript(ctx, channel_id: int, after_message_id: int=None, bef
         await ctx.send(f"創建對話紀錄時發生錯誤：{e}")
 
 
-@bot.command(aliases=["si"])
-@is_owner()
-async def serverinfo(ctx, guild_id: int):
-    guild = bot.get_guild(guild_id)
+@bot.command(aliases=["dsi"])
+async def devserverinfo(ctx: commands.Context, guild_id: int=None):
+    """顯示指定伺服器資訊
+    
+    用法： devserverinfo [伺服器ID]
+    """
+    guild = bot.get_guild(guild_id) if guild_id else ctx.guild
     if guild is None:
         await ctx.send("找不到該伺服器。")
         return
-    embed = discord.Embed(
-        title=f"{guild.name} 的資訊",
-        color=discord.Color.blue()
-    )
-    # 傻逼微軟再改成 discord.Embed.Empty 我他媽草飼你
-    embed.set_thumbnail(url=guild.icon.url if guild.icon else None)
+
+    embed = discord.Embed(title=f"{guild.name} 的資訊", color=0x00ff00)
+    view = discord.ui.View()
+    if guild.icon:
+        embed.set_thumbnail(url=guild.icon.url if guild.icon else None)
+        iconbutton = discord.ui.Button(label="伺服器圖標連結", url=guild.icon.url)
+        view.add_item(iconbutton)
+    if guild.banner:
+        embed.set_image(url=guild.banner.url if guild.banner else None)
+        bannerbutton = discord.ui.Button(label="伺服器橫幅連結", url=guild.banner.url)
+        view.add_item(bannerbutton)
     embed.add_field(name="伺服器 ID", value=str(guild.id), inline=True)
-    embed.add_field(name="擁有者", value=f"{guild.owner} (ID: {guild.owner_id})", inline=True)
-    embed.add_field(name="成員數", value=str(getattr(guild, "member_count", "未知")), inline=True)
-    embed.add_field(name="頻道數", value=str(len(guild.channels)), inline=True)
-    embed.add_field(name="建立時間", value=guild.created_at.strftime("%Y-%m-%d %H:%M:%S"), inline=True)
-    await ctx.send(embed=embed)
+    embed.add_field(name="創建時間", value=f"<t:{int(guild.created_at.timestamp())}:F>", inline=True)
+    embed.add_field(name="擁有者", value=guild.owner.mention if guild.owner else "未知", inline=True)
+    embed.add_field(name="加成", value=f"{guild.premium_subscription_count} (等級{guild.premium_tier})", inline=True)
+    embed.add_field(
+        name="驗證等級",
+        value={
+            "none": "無",
+            "low": "低",
+            "medium": "中等",
+            "high": "高",
+            "highest": "最高"
+        }
+        .get(
+                guild.verification_level.name.lower(), "none"
+            ),
+        inline=True
+    )
+    embed.add_field(name="地區", value=str(guild.preferred_locale), inline=True)
+    embed.add_field(name="成員數量", value=str(guild.member_count), inline=True)
+    embed.add_field(name="頻道數量", value=str(len(guild.channels)), inline=True)
+    embed.add_field(name="角色數量", value=str(len(guild.roles)), inline=True)
+    
+    # database info
+    server_config = db.get_all_server_config(guild.id)
+    embed.add_field(name="資料庫設定項目數", value=str(len(server_config)), inline=True)
+    user_data = db.get_all_user_data(guild.id)
+    embed.add_field(name="資料庫用戶數", value=str(len(user_data)), inline=True)
+    
+    await ctx.send(embed=embed, view=view)
 
 
 @bot.command(aliases=["rc"])

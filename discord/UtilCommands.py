@@ -225,6 +225,94 @@ async def userinfo(ctx: commands.Context, user: Union[discord.User, discord.Memb
     await ctx.send(embed=embed, view=view)
 
 
+@bot.tree.command(name=app_commands.locale_str("serverinfo"), description="顯示目前所在伺服器資訊")
+@app_commands.allowed_installs(guilds=True, users=False)
+@app_commands.allowed_contexts(guilds=True, dms=False, private_channels=False)
+async def serverinfo_command(interaction: discord.Interaction):
+    guild = interaction.guild
+    if guild is None:
+        await interaction.response.send_message("此指令只能在伺服器中使用。", ephemeral=True)
+        return
+
+    embed = discord.Embed(title=f"{guild.name} 的資訊", color=0x00ff00)
+    view = discord.ui.View()
+    if guild.icon:
+        embed.set_thumbnail(url=guild.icon.url if guild.icon else None)
+        iconbutton = discord.ui.Button(label="伺服器圖標連結", url=guild.icon.url)
+        view.add_item(iconbutton)
+    if guild.banner:
+        embed.set_image(url=guild.banner.url if guild.banner else None)
+        bannerbutton = discord.ui.Button(label="伺服器橫幅連結", url=guild.banner.url)
+        view.add_item(bannerbutton)
+    embed.add_field(name="伺服器 ID", value=str(guild.id), inline=True)
+    embed.add_field(name="創建時間", value=f"<t:{int(guild.created_at.timestamp())}:F>", inline=True)
+    embed.add_field(name="擁有者", value=guild.owner.mention if guild.owner else "未知", inline=True)
+    embed.add_field(name="加成", value=f"{guild.premium_subscription_count} (等級{guild.premium_tier})", inline=True)
+    embed.add_field(
+        name="驗證等級",
+        value={
+            "none": "無",
+            "low": "低",
+            "medium": "中等",
+            "high": "高",
+            "highest": "最高"
+        }
+        .get(
+                guild.verification_level.name.lower(), "none"
+            ),
+        inline=True
+    )
+    embed.add_field(name="地區", value=str(guild.preferred_locale), inline=True)
+    embed.add_field(name="成員數量", value=str(guild.member_count), inline=True)
+    embed.add_field(name="頻道數量", value=str(len(guild.channels)), inline=True)
+    embed.add_field(name="角色數量", value=str(len(guild.roles)), inline=True)
+    await interaction.response.send_message(embed=embed, view=view)
+
+@bot.command(aliases=["si"])
+async def serverinfo(ctx: commands.Context):
+    """顯示目前所在伺服器資訊
+    
+    用法： serverinfo
+    """
+    guild = ctx.guild
+    if guild is None:
+        await ctx.send("此指令只能在伺服器中使用。")
+        return
+
+    embed = discord.Embed(title=f"{guild.name} 的資訊", color=0x00ff00)
+    view = discord.ui.View()
+    if guild.icon:
+        embed.set_thumbnail(url=guild.icon.url if guild.icon else None)
+        iconbutton = discord.ui.Button(label="伺服器圖標連結", url=guild.icon.url)
+        view.add_item(iconbutton)
+    if guild.banner:
+        embed.set_image(url=guild.banner.url if guild.banner else None)
+        bannerbutton = discord.ui.Button(label="伺服器橫幅連結", url=guild.banner.url)
+        view.add_item(bannerbutton)
+    embed.add_field(name="伺服器 ID", value=str(guild.id), inline=True)
+    embed.add_field(name="創建時間", value=f"<t:{int(guild.created_at.timestamp())}:F>", inline=True)
+    embed.add_field(name="擁有者", value=guild.owner.mention if guild.owner else "未知", inline=True)
+    embed.add_field(name="加成", value=f"{guild.premium_subscription_count} (等級{guild.premium_tier})", inline=True)
+    embed.add_field(
+        name="驗證等級",
+        value={
+            "none": "無",
+            "low": "低",
+            "medium": "中等",
+            "high": "高",
+            "highest": "最高"
+        }
+        .get(
+                guild.verification_level.name.lower(), "none"
+            ),
+        inline=True
+    )
+    embed.add_field(name="地區", value=str(guild.preferred_locale), inline=True)
+    embed.add_field(name="成員數量", value=str(guild.member_count), inline=True)
+    embed.add_field(name="頻道數量", value=str(len(guild.channels)), inline=True)
+    embed.add_field(name="角色數量", value=str(len(guild.roles)), inline=True)
+    await ctx.send(embed=embed, view=view)
+
 @bot.tree.command(name=app_commands.locale_str("avatar"), description="取得用戶頭像")
 @app_commands.describe(user="要查詢的用戶")
 @app_commands.allowed_installs(guilds=True, users=True)
