@@ -41,4 +41,4 @@ class CustomPrefix(commands.Cog):
             await ctx.send(f"已將前綴設置為：`{prefix}`")
             log(f"設置伺服器 {ctx.guild} ({guild_id}) 的前綴為 `{prefix}`", module_name="CustomPrefix", user=ctx.author, guild=ctx.guild)
 
-asyncio.run_coroutine_threadsafe(bot.add_cog(CustomPrefix(bot)), bot.loop)
+asyncio.run(bot.add_cog(CustomPrefix(bot)))
