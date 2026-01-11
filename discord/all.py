@@ -9,7 +9,7 @@ import aiohttp
 import os
 import random
 from database import db
-from globalenv import bot, start_bot
+from globalenv import bot, start_bot, config
 import globalenv
 import traceback
 
@@ -43,6 +43,10 @@ except FileNotFoundError:
 except json.JSONDecodeError:
     print("[!] modules.json is not a valid JSON file. Please check its contents.")
     modules = []
+
+for disabled_module in config("disable_modules", []):
+    if disabled_module in modules:
+        modules.remove(disabled_module)
 
 failed_modules = []
 

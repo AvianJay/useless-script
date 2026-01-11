@@ -11,7 +11,7 @@ import logging
 
 
 # Global configuration for backward compatibility
-config_version = 17
+config_version = 18
 config_path = 'config.json'
 
 default_config = {
@@ -50,6 +50,7 @@ default_config = {
     "website_url": "http://localhost:8080",
     "website_gtag": "",
     "contribute_channel_id": 0,
+    "disable_modules": []
 }
 _config = None
 
