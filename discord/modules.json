@@ -27,5 +27,6 @@
     "PSMonitor",
     "FakeUser",
     "Contribute",
-    "Explore"
+    "Explore",
+    "CustomPrefix"
 ]
