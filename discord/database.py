@@ -275,6 +275,27 @@ class Database:
         
         return data
     
+    def get_database_count(self) -> dict:
+        """Get the total number of entries in the database"""
+        total = 0
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.cursor()
+            cursor.execute('SELECT COUNT(*) FROM server_configs')
+            total += cursor.fetchone()[0]
+            server_config_count = cursor.fetchone()[0]
+            cursor.execute('SELECT COUNT(*) FROM global_config')
+            total += cursor.fetchone()[0]
+            global_config_count = cursor.fetchone()[0]
+            cursor.execute('SELECT COUNT(*) FROM user_data')
+            total += cursor.fetchone()[0]
+            user_data_count = cursor.fetchone()[0]
+        return {
+            "total": total,
+            "server_configs": server_config_count,
+            "global_config": global_config_count,
+            "user_data": user_data_count
+        }
+    
     def get_connection(self):
         """Get a new database connection"""
         return sqlite3.connect(self.db_path)

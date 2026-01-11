@@ -9,6 +9,7 @@ from datetime import datetime, timezone
 import psutil
 import time
 import aiohttp
+from database import db
 
 startup_time = datetime.now(timezone.utc)
 version = "0.16.4"
@@ -64,6 +65,7 @@ async def info_command(interaction: discord.Interaction):
     uptime = get_time_text(get_uptime_seconds())
     
     commands_count = len(bot.commands) + sum(len(c.commands) for c in bot.commands if isinstance(c, commands.Group))
+    dbcount = db.get_database_count()
 
     embed = discord.Embed(title="機器人資訊", color=0x00ff00)
     embed.add_field(name="機器人名稱", value=bot.user.name)
@@ -76,7 +78,10 @@ async def info_command(interaction: discord.Interaction):
     embed.add_field(name="CPU 使用率", value=f"{psutil.cpu_percent()}%")
     embed.add_field(name="記憶體使用率", value=f"{psutil.virtual_memory().percent}%")
     embed.add_field(name="運行時間", value=uptime)
+    embed.add_field(name="資料庫資訊", value=f"總筆數: {dbcount['total']}\n伺服器筆數: {dbcount['server_configs']}\n用戶資料筆數: {dbcount['user_data']}", inline=True)
     embed.add_field(name=f"已載入模組({len(modules)})", value="\n".join(modules) if modules else "無", inline=False)
+    if config("disable_modules", []):
+        embed.add_field(name=f"已禁用模組({len(config('disable_modules', []))})", value="\n".join(config("disable_modules", [])), inline=False)
     if failed_modules:
         embed.add_field(name=f"載入失敗的模組({len(failed_modules)})", value="\n".join(failed_modules), inline=False)
     embed.add_field(name="相關連結", value=f"* [機器人網站]({config('website_url')})\n* [支援伺服器]({config('support_server_invite')})\n* [隱私政策]({config('website_url')}/privacy-policy)\n* [服務條款]({config('website_url')}/terms-of-service)\n* [邀請機器人](https://discord.com/oauth2/authorize?client_id={str(bot.user.id)})", inline=False)
@@ -101,6 +106,7 @@ async def info(ctx: commands.Context):
     uptime = get_time_text(get_uptime_seconds())
     
     commands_count = len(bot.commands) + sum(len(c.commands) for c in bot.commands if isinstance(c, commands.Group))
+    dbcount = db.get_database_count()
 
     embed = discord.Embed(title="機器人資訊", color=0x00ff00)
     embed.add_field(name="機器人名稱", value=bot.user.name)
@@ -113,6 +119,7 @@ async def info(ctx: commands.Context):
     embed.add_field(name="CPU 使用率", value=f"{psutil.cpu_percent()}%")
     embed.add_field(name="記憶體使用率", value=f"{psutil.virtual_memory().percent}%")
     embed.add_field(name="運行時間", value=uptime)
+    embed.add_field(name="資料庫資訊", value=f"總筆數: {dbcount['total']}\n伺服器筆數: {dbcount['server_configs']}\n用戶資料筆數: {dbcount['user_data']}", inline=True)
     embed.add_field(name=f"已載入模組({len(modules)})", value="\n".join(modules) if modules else "無", inline=False)
     if config("disable_modules", []):
         embed.add_field(name=f"已禁用模組({len(config('disable_modules', []))})", value="\n".join(config("disable_modules", [])), inline=False)
