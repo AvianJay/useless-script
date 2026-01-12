@@ -382,6 +382,7 @@ class AutoReply(commands.GroupCog, name="autoreply"):
     @app_commands.command(name="help", description="顯示自動回覆的使用說明")
     async def autoreply_help(self, interaction: discord.Interaction):
         # vibe coding is fun lol
+        await interaction.response.defer()
         embed = discord.Embed(
             title="自動回覆使用說明",
             description="您可以使用以下設定，讓回覆更加靈活。",
@@ -391,14 +392,14 @@ class AutoReply(commands.GroupCog, name="autoreply"):
         embed.add_field(
             name="指令說明",
             value=(
-                f"使用 {await get_command_mention('autoreply', 'add')} 指令新增自動回覆，"
-                f"使用 {await get_command_mention('autoreply', 'quickadd')} 指令可以快速新增自動回覆到一個現有的自動回覆裡。"
-                f"使用 {await get_command_mention('autoreply', 'list')} 指令可以列出目前所有的自動回覆。"
-                f"使用 {await get_command_mention('autoreply', 'remove')} 指令可以移除指定的自動回覆。"
-                f"使用 {await get_command_mention('autoreply', 'edit')} 指令可以編輯指定的自動回覆。"
-                f"使用 {await get_command_mention('autoreply', 'clear')} 指令可以清除所有自動回覆。"
-                f"使用 {await get_command_mention('autoreply', 'export')} 指令可以匯出自動回覆設定為 JSON 檔案。"
-                f"使用 {await get_command_mention('autoreply', 'import')} 指令可以從 JSON 檔案匯入自動回覆設定。"
+                f"使用 {await get_command_mention('autoreply', 'add')} 指令新增自動回覆。\n"
+                f"使用 {await get_command_mention('autoreply', 'quickadd')} 指令可以快速新增自動回覆到一個現有的自動回覆裡。\n"
+                f"使用 {await get_command_mention('autoreply', 'list')} 指令可以列出目前所有的自動回覆。\n"
+                f"使用 {await get_command_mention('autoreply', 'remove')} 指令可以移除指定的自動回覆。\n"
+                f"使用 {await get_command_mention('autoreply', 'edit')} 指令可以編輯指定的自動回覆。\n"
+                f"使用 {await get_command_mention('autoreply', 'clear')} 指令可以清除所有自動回覆。\n"
+                f"使用 {await get_command_mention('autoreply', 'export')} 指令可以匯出自動回覆設定為 JSON 檔案。\n"
+                f"使用 {await get_command_mention('autoreply', 'import')} 指令可以從 JSON 檔案匯入自動回覆設定。\n"
                 f"使用 {await get_command_mention('autoreply', 'test')} 指令可以測試自動回覆內容的變數替換效果。"
             ),
             inline=False,
@@ -443,6 +444,12 @@ class AutoReply(commands.GroupCog, name="autoreply"):
         class HelpView(discord.ui.View):
             def __init__(self):
                 super().__init__(timeout=60)
+            
+            async def on_timeout(self):
+                for child in self.children:
+                    child.disabled = True
+                await interaction.edit_original_response(view=self)
+                self.stop()
 
             @discord.ui.button(label="顯示更多範例", style=discord.ButtonStyle.primary)
             async def examples(self, i: discord.Interaction, _: discord.ui.Button):
@@ -459,7 +466,7 @@ class AutoReply(commands.GroupCog, name="autoreply"):
             async def hint(self, i: discord.Interaction, _: discord.ui.Button):
                 await i.response.send_message(f"可用 `{await get_command_mention('autoreply', 'test')}` 測試變數替換結果。", ephemeral=True)
 
-        await interaction.response.send_message(embed=embed, view=HelpView())
+        await interaction.followup.send(embed=embed, view=HelpView())
 
     async def _process_response(self, response: str, message: discord.Message) -> str:
         """處理回覆內容中的變數替換"""
