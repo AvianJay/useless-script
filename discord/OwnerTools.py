@@ -193,15 +193,19 @@ async def getinvite(ctx, guild_id: int, create_if_none: bool=False):
 
 @bot.command(aliases=["servers", "ls"])
 @is_owner()
-async def listservers(ctx):
+async def listservers(ctx, query: str = None):
     guilds = bot.guilds
     if not guilds:
         await ctx.send("機器人目前沒有加入任何伺服器。")
         return
-    servers_info = [f"- {g.name} (ID: `{g.id}`)" for g in guilds]
+    servers_info = []
+    for guild in guilds:
+        if query and query.lower() not in guild.name.lower() and query not in str(guild.id):
+            continue
+        servers_info.append(f"- {guild.name} ({guild.member_count} 人) (ID: `{guild.id}`)")
     await ctx.send(f"機器人目前加入的伺服器： 共 {len(servers_info)} 個。")
-    for i in range(0, len(servers_info), 50):
-        await ctx.send("\n".join(servers_info[i:i+50]))
+    for i in range(0, len(servers_info), 30):
+        await ctx.send("\n".join(servers_info[i:i+30]))
 
 
 @bot.command(aliases=["send", "s", "msg"])
