@@ -261,6 +261,7 @@ async def createtranscript(ctx, channel_id: int, after_message_id: int=None, bef
 
 
 @bot.command(aliases=["dsi"])
+@is_owner()
 async def devserverinfo(ctx: commands.Context, guild_id: int=None):
     """顯示指定伺服器資訊
     
