@@ -6,6 +6,7 @@ from discord.ext import commands
 from typing import Callable
 import chat_exporter
 from logger import log
+import logging
 from typing import Union
 
 def is_owner() -> Callable:
@@ -369,62 +370,60 @@ async def on_guild_join(guild: discord.Guild):
         log(f"已快取伺服器資料: {guild.name}", module_name="OwnerTools", guild=guild)
     except Exception as e:
         log(f"無法快取伺服器資料: {e}", module_name="OwnerTools", guild=guild)
-    # send to owners
-    for owner_id in config("owners", []):
-        owner = bot.get_user(owner_id)
-        if owner:
+    # send to channel
+    channel = bot.get_channel(config("join_leave_log_channel_id"))
+    try:
+        # build embed with server icon and member count
+        embed = discord.Embed(
+            title="已加入新伺服器",
+            description=f"{guild.name} (ID: `{guild.id}`)",
+            color=discord.Color.blurple()
+        )
+        embed.add_field(name="擁有者", value=f"{guild.owner} (ID: {guild.owner_id})", inline=True)
+        embed.add_field(name="伺服器 ID", value=str(guild.id), inline=True)
+        embed.add_field(name="頻道數", value=str(len(guild.channels)), inline=True)
+        embed.add_field(name="成員數", value=str(getattr(guild, "member_count", "未知")), inline=True)
+        embed.add_field(name="身分組數", value=str(len(guild.roles)), inline=True)
+        embed.add_field(name="加成等級", value=f"等級 {guild.premium_tier} ({guild.premium_subscription_count} 個加成)", inline=True)
+        embed.add_field(name="建立時間", value=guild.created_at.strftime("%Y-%m-%d %H:%M:%S"), inline=True)
+
+        # try to get icon URL (works for discord.py v1.x and v2.x)
+        icon_url = None
+        if getattr(guild, "icon", None):
             try:
-                # build embed with server icon and member count
-                embed = discord.Embed(
-                    title="已加入新伺服器",
-                    description=f"{guild.name} (ID: `{guild.id}`)",
-                    color=discord.Color.blurple()
-                )
-                embed.add_field(name="擁有者", value=f"{guild.owner} (ID: {guild.owner_id})", inline=True)
-                embed.add_field(name="伺服器 ID", value=str(guild.id), inline=True)
-                embed.add_field(name="頻道數", value=str(len(guild.channels)), inline=True)
-                embed.add_field(name="成員數", value=str(getattr(guild, "member_count", "未知")), inline=True)
-                embed.add_field(name="建立時間", value=guild.created_at.strftime("%Y-%m-%d %H:%M:%S"), inline=True)
+                icon_url = guild.icon.url  # v2.x
+            except Exception:
+                icon_url = getattr(guild, "icon_url", None)  # v1.x fallback
+        if icon_url:
+            embed.set_thumbnail(url=icon_url)
 
-                # try to get icon URL (works for discord.py v1.x and v2.x)
-                icon_url = None
-                if getattr(guild, "icon", None):
-                    try:
-                        icon_url = guild.icon.url  # v2.x
-                    except Exception:
-                        icon_url = getattr(guild, "icon_url", None)  # v1.x fallback
-                if icon_url:
-                    embed.set_thumbnail(url=icon_url)
-
-                await owner.send(embed=embed)
-            except discord.Forbidden:
-                print(f"無法私訊擁有者 {owner_id}")
+        await channel.send(embed=embed)
+    except discord.Forbidden:
+        log(f"無法在設定的頻道發送加入伺服器訊息", level=logging.ERROR, module_name="OwnerTools")
                 
 
 @bot.event
 async def on_guild_remove(guild):
     log(f"離開了伺服器: {guild.name}", module_name="OwnerTools", guild=guild)
-    # send to owners
-    for owner_id in config("owners", []):
-        owner = bot.get_user(owner_id)
-        if owner:
+    # send to channel
+    channel = bot.get_channel(config("join_leave_log_channel_id"))
+    try:
+        embed = discord.Embed(
+            title="已離開伺服器",
+            description=f"{guild.name} (ID: `{guild.id}`)",
+            color=discord.Color.red()
+        )
+        icon_url = None
+        if getattr(guild, "icon", None):
             try:
-                embed = discord.Embed(
-                    title="已離開伺服器",
-                    description=f"{guild.name} (ID: `{guild.id}`)",
-                    color=discord.Color.red()
-                )
-                icon_url = None
-                if getattr(guild, "icon", None):
-                    try:
-                        icon_url = guild.icon.url  # v2.x
-                    except Exception:
-                        icon_url = getattr(guild, "icon_url", None)  # v1.x fallback
-                if icon_url:
-                    embed.set_thumbnail(url=icon_url)
-                await owner.send(embed=embed)
-            except discord.Forbidden:
-                print(f"無法私訊擁有者 {owner_id}")
+                icon_url = guild.icon.url  # v2.x
+            except Exception:
+                icon_url = getattr(guild, "icon_url", None)  # v1.x fallback
+        if icon_url:
+            embed.set_thumbnail(url=icon_url)
+        await channel.send(embed=embed)
+    except discord.Forbidden:
+        log(f"無法在設定的頻道發送離開伺服器訊息", level=logging.ERROR, module_name="OwnerTools")
 
 
 if __name__ == "__main__":

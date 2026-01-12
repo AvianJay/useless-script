@@ -50,7 +50,8 @@ default_config = {
     "website_url": "http://localhost:8080",
     "website_gtag": "",
     "contribute_channel_id": 0,
-    "disable_modules": []
+    "disable_modules": [],
+    "join_leave_log_channel_id": 0,
 }
 _config = None
 
