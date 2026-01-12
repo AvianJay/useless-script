@@ -272,7 +272,7 @@ async def serverinfo_command(interaction: discord.Interaction):
     embed.add_field(name="地區", value=str(guild.preferred_locale), inline=True)
     embed.add_field(name="成員數量", value=str(guild.member_count), inline=True)
     embed.add_field(name="頻道數量", value=str(len(guild.channels)), inline=True)
-    embed.add_field(name="角色數量", value=str(len(guild.roles)), inline=True)
+    embed.add_field(name="身分組數量", value=str(len(guild.roles)), inline=True)
     await interaction.response.send_message(embed=embed, view=view)
 
 @bot.command(aliases=["si"])
@@ -317,7 +317,7 @@ async def serverinfo(ctx: commands.Context):
     embed.add_field(name="地區", value=str(guild.preferred_locale), inline=True)
     embed.add_field(name="成員數量", value=str(guild.member_count), inline=True)
     embed.add_field(name="頻道數量", value=str(len(guild.channels)), inline=True)
-    embed.add_field(name="角色數量", value=str(len(guild.roles)), inline=True)
+    embed.add_field(name="身分組數量", value=str(len(guild.roles)), inline=True)
     await ctx.send(embed=embed, view=view)
 
 @bot.tree.command(name=app_commands.locale_str("avatar"), description="取得用戶頭像")

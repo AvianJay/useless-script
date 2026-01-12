@@ -307,13 +307,13 @@ async def devserverinfo(ctx: commands.Context, guild_id: int=None):
     embed.add_field(name="地區", value=str(guild.preferred_locale), inline=True)
     embed.add_field(name="成員數量", value=str(guild.member_count), inline=True)
     embed.add_field(name="頻道數量", value=str(len(guild.channels)), inline=True)
-    embed.add_field(name="角色數量", value=str(len(guild.roles)), inline=True)
+    embed.add_field(name="身分組數量", value=str(len(guild.roles)), inline=True)
     
     # database info
     server_config = db.get_all_server_config(guild.id)
-    embed.add_field(name="資料庫設定項目數", value=str(len(server_config)), inline=True)
+    embed.add_field(name="資料庫設定項目數量", value=str(len(server_config)), inline=True)
     user_data = db.get_all_user_data(guild.id)
-    embed.add_field(name="資料庫用戶數", value=str(len(user_data)), inline=True)
+    embed.add_field(name="資料庫用戶資料數量", value=str(len(user_data)), inline=True)
     
     await ctx.send(embed=embed, view=view)
 
