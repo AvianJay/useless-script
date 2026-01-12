@@ -41,5 +41,13 @@ class CustomPrefix(commands.Cog):
             set_server_config(guild_id, "custom_prefix", prefix)
             await ctx.send(f"已將前綴設置為：`{prefix}`")
             log(f"設置伺服器 {ctx.guild} ({guild_id}) 的前綴為 `{prefix}`", module_name="CustomPrefix", user=ctx.author, guild=ctx.guild)
+    
+    @commands.Cog.listener()
+    async def on_message(self, message):
+        if message.author.bot:
+            return
+        if message.content == bot.user.mention:
+            prefix = await determine_prefix(self.bot, message)
+            await message.channel.send(f"你在找我嗎:O\n我的前綴是：`{prefix}`！")
 
 asyncio.run(bot.add_cog(CustomPrefix(bot)))
