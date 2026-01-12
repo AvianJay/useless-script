@@ -29,25 +29,24 @@ def get_commit_logs(limit=10) -> str:
 
 
 def get_time_text(seconds: int) -> str:
-    final = ""
-    while seconds != 0:
-        if seconds < 60:
-            final += f" {seconds} 秒"
-            seconds = 0
-        elif seconds < 3600:
-            final += f" {seconds // 60} 分鐘"
-            seconds = seconds % 60
-        elif seconds < 86400:
-            final += f" {seconds // 3600} 小時"
-            seconds = seconds % 3600
-        else:
-            final += f" {seconds // 86400} 天"
-            seconds = seconds % 86400
-    return final.strip()
+    if seconds == 0:
+        return "0 秒"
+    
+    days, seconds = divmod(seconds, 86400)
+    hours, seconds = divmod(seconds, 3600)
+    minutes, seconds = divmod(seconds, 60)
+    
+    parts = []
+    if days: parts.append(f"{days} 天")
+    if hours: parts.append(f"{hours} 小時")
+    if minutes: parts.append(f"{minutes} 分鐘")
+    if seconds: parts.append(f"{seconds} 秒")
+    
+    return " ".join(parts)
 
 
 def get_uptime_seconds() -> int:
-    return (datetime.now(timezone.utc) - startup_time).seconds
+    return int((datetime.now(timezone.utc) - startup_time).total_seconds())
 
 
 @bot.tree.command(name=app_commands.locale_str("info"), description="顯示機器人資訊")
