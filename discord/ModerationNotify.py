@@ -50,8 +50,9 @@ async def notify_user(user: discord.User, guild: discord.Guild, action: str, rea
     embed.set_footer(text=f"{guild.name}")
 
     try:
-        await user.send(embed=embed)
+        msg = await user.send(embed=embed)
         log(f"已發送私訊給 {user}\n- {embed.title}\n- {embed.description}", module_name="ModerationNotify", guild=guild)
+        return msg
     except discord.Forbidden:
         log(f"無法私訊 {user}", level=logging.ERROR, module_name="ModerationNotify", guild=guild)
 

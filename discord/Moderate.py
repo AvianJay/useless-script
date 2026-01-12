@@ -90,13 +90,14 @@ def guess_role(guild: discord.Guild, role_name: str):
 
 
 async def ban_user(guild: discord.Guild, user: Union[discord.Member, discord.User], reason: str, duration: int = 0, delete_message_seconds: int = 0):
+    notifymsg = None
     try:
         if duration > 0:
             unban_time = datetime.now(timezone.utc) + timedelta(seconds=duration)
             set_user_data(guild.id, user.id, "unban_time", unban_time.isoformat())
         ModerationNotify.ignore_user(user.id)  # 避免重複通知
         try:
-            await ModerationNotify.notify_user(user, guild, "封禁", reason, end_time=unban_time if duration > 0 else None)
+            notifymsg = await ModerationNotify.notify_user(user, guild, "封禁", reason, end_time=unban_time if duration > 0 else None)
         except Exception:
             pass
         if isinstance(user, discord.Member):
@@ -109,6 +110,8 @@ async def ban_user(guild: discord.Guild, user: Union[discord.Member, discord.Use
     except Exception as e:
         # print(f"[!] 無法封禁用戶 {user}：{e}")
         log(f"無法封禁用戶 {user}：{e}", level=logging.ERROR, module_name="Moderate", guild=guild)
+        if notifymsg:
+            await notifymsg.delete()
         return False
 
 
@@ -177,9 +180,13 @@ async def do_action_str(action: str, guild: Optional[discord.Guild] = None, user
             cmd.pop(0)  # remove delete_messages
             reason = " ".join(cmd)
             last_reason = reason
-            logs.append(f"封禁用戶，原因: {reason}，持續秒數: {duration_seconds}秒，刪除訊息時間: {delete_messages}秒")
+            success = True
             if user:
-                await ban_user(guild, user, reason=reason, duration=duration_seconds, delete_message_seconds=delete_messages)
+                success = await ban_user(guild, user, reason=reason, duration=duration_seconds, delete_message_seconds=delete_messages)
+            if success:
+                logs.append(f"封禁用戶，原因: {reason}，持續秒數: {duration_seconds}秒，刪除訊息時間: {delete_messages}秒")
+            else:
+                logs.append(f"封禁用戶失敗。")
             actions_json.append({"action": "ban", "duration": duration_seconds, "reason": reason})
         elif cmd[0] == "kick":
             # kick <reason>
@@ -257,7 +264,7 @@ async def moderation_message_settings(interaction: Optional[discord.Interaction]
             action_texts.append("踢出")
         elif action["action"] == "mute":
             time_text = action.get("duration", 0)
-            action_texts.append(f"羈押禁見||禁言||{get_time_text(time_text * 60)}")
+            action_texts.append(f"羈押禁見||禁言||{get_time_text(time_text)}")
         elif action["action"] == "add_role":
             action_texts.append(f"給予身分組 {action['role']}")
         elif action["action"] == "remove_role":
@@ -791,7 +798,7 @@ class Moderate(commands.GroupCog, group_name=app_commands.locale_str("admin")):
             await ctx.send("請指定要管理的用戶。")
             return
         if ctx.author.guild_permissions.ban_members is False and ctx.author.guild_permissions.kick_members is False and ctx.author.guild_permissions.moderate_members is False and ctx.author.guild_permissions.manage_messages is False:
-            await ctx.send("你沒有權限執行此操作。" + ('\n-# 就算你是機器人擁有者也不行喔！' if ctx.author.id in config('owners') else ''))
+            await ctx.send("你沒有權限執行此操作。" + ('\n-# 你傻逼吧你以為你是開發者你就可以濫權？' if ctx.author.id in config('owners') else ''))
             return
         logs = await do_action_str(commands_str, ctx.guild, user, message=None, moderator=ctx.author)
         if len(logs) == 0:
@@ -827,7 +834,7 @@ class Moderate(commands.GroupCog, group_name=app_commands.locale_str("admin")):
             await ctx.send("機器人缺少必要的權限，請確認機器人擁有封禁、踢出、管理訊息及禁言權限。")
             return
         if ctx.author.guild_permissions.ban_members is False and ctx.author.guild_permissions.kick_members is False and ctx.author.guild_permissions.moderate_members is False and ctx.author.guild_permissions.manage_messages is False:
-            await ctx.send("你沒有權限執行此操作。" + ('\n-# 就算你是機器人擁有者也不行喔！' if ctx.author.id in config('owners') else ''))
+            await ctx.send("你沒有權限執行此操作。" + ('\n-# 你傻逼吧你以為你是開發者你就可以濫權？' if ctx.author.id in config('owners') else ''))
             return
         if ctx.message.reference is None:
             await ctx.send("請在回覆的訊息中使用此指令。")
