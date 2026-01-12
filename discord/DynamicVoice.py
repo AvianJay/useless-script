@@ -9,7 +9,7 @@ import logging
 
 
 @app_commands.guild_only()
-@app_commands.default_permissions(administrator=True)
+@app_commands.default_permissions(manage_guild=True)
 @app_commands.checks.bot_has_permissions(manage_channels=True, move_members=True)
 @app_commands.allowed_installs(guilds=True, users=False)
 @app_commands.allowed_contexts(guilds=True, dms=False, private_channels=False)
@@ -23,13 +23,14 @@ class DynamicVoice(commands.GroupCog, name=app_commands.locale_str("dynamic-voic
     async def setup(self, interaction: discord.Interaction, channel: discord.VoiceChannel, channel_category: discord.CategoryChannel, channel_name: str = "{user} 的頻道"):
         await interaction.response.defer(ephemeral=True)
         guild_id = interaction.guild.id
-        # set channel limit to 1
+        # set channel limit
+        play_audio_enabled = get_server_config(guild_id, "dynamic_voice_play_audio", False)
         warn = ""
         try:
-            await channel.edit(user_limit=1)
+            await channel.edit(user_limit=2 if play_audio_enabled else 1)
         except Exception as e:
             log(f"無法將頻道 '{channel.name}' 的使用者上限設置為 1: {e}", level=logging.WARNING, module_name="DynamicVoice", guild=interaction.guild)
-            warn = f"警告：無法將頻道 '{channel.name}' 的使用者上限設置為 1，請確保機器人有管理頻道的權限。\n"
+            warn = f"警告：無法設置頻道 '{channel.name}' 的使用者上限，請確保機器人有管理頻道的權限。\n"
         # check bot permissions
         if not channel.guild.me.guild_permissions.manage_channels or not channel.guild.me.guild_permissions.move_members:
             await interaction.followup.send(f"錯誤：機器人需要管理頻道和移動成員的權限才能設置動態語音頻道。\n- {warn}", ephemeral=True)
