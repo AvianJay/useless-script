@@ -22,7 +22,7 @@ class CustomPrefix(commands.Cog):
 
     @commands.command(name="setprefix", help="設置自定義前綴", usage="<prefix>")
     @commands.guild_only()
-    @commands.has_permissions(administrator=True)
+    @commands.has_permissions(manage_guild=True)
     async def setprefix(self, ctx, prefix: Optional[str] = None):
         """
         設置伺服器的自定義前綴。如果不提供前綴，則重置為預設值。

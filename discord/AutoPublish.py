@@ -9,7 +9,7 @@ from datetime import datetime, timezone
 
 
 @app_commands.guild_only()
-@app_commands.default_permissions(administrator=True)
+@app_commands.default_permissions(manage_guild=True)
 @app_commands.allowed_installs(guilds=True, users=False)
 @app_commands.allowed_contexts(guilds=True, dms=False, private_channels=False)
 class AutoPublish(commands.GroupCog, name=app_commands.locale_str("autopublish")):

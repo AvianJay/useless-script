@@ -879,7 +879,7 @@ async def dsize_battle(interaction: discord.Interaction, opponent: Union[discord
     app_commands.Choice(name="手術最大長度", value="dsize_surgery_max"),
     app_commands.Choice(name="撿到物品機率(%)", value="dsize_drop_item_chance"),
 ])
-@app_commands.default_permissions(administrator=True)
+@app_commands.default_permissions(manage_guild=True)
 @app_commands.allowed_installs(guilds=True, users=False)
 @app_commands.allowed_contexts(guilds=True, dms=False, private_channels=False)
 async def dsize_settings(interaction: discord.Interaction, setting: str, value: str):

@@ -122,7 +122,7 @@ async def on_member_update(before, after):
     app_commands.Choice(name="禁言", value="mute"),
 ])
 @app_commands.guild_only()
-@app_commands.default_permissions(administrator=True)
+@app_commands.default_permissions(manage_guild=True)
 @app_commands.allowed_installs(guilds=True, users=False)
 @app_commands.allowed_contexts(guilds=True, dms=False, private_channels=False)
 async def set_moderation_notification(interaction: discord.Interaction, action: str, enable: bool):
