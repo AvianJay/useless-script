@@ -339,7 +339,7 @@ async def owner_userinfo(ctx, user: Union[discord.User, discord.Member] = None):
     if user is None:
         user = ctx.author
     embed = discord.Embed(title=f"{user.display_name} 的資訊", color=0x00ff00)
-    embed.set_thumbnail(url=user.avatar.url if user.avatar else discord.Embed.Empty)
+    embed.set_thumbnail(url=user.avatar.url if user.avatar else None)
     # avatar url button
     button = discord.ui.Button(label="頭像連結", url=user.avatar.url if user.avatar else "https://discord.com/assets/6debd47ed13483642cf09e832ed0bc1b.png")
     view = discord.ui.View()
