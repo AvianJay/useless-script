@@ -28,7 +28,7 @@ def api_status():
         "id": str(bot.user.id),
         "uptime": UtilCommands.get_uptime_seconds() if UtilCommands else None,
         "server_count": len(bot.guilds),
-        "user_count": sum(guild.member_count for guild in bot.guilds),
+        "user_count": len(set(bot.get_all_members())),
         "user_install_count": bot.application.approximate_user_install_count if bot.application else None,
         "latency_ms": bot_latency,
         "version": UtilCommands.full_version if UtilCommands else "N/A"
