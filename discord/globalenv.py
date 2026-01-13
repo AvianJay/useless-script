@@ -11,7 +11,7 @@ import logging
 
 
 # Global configuration for backward compatibility
-config_version = 18
+config_version = 19
 config_path = 'config.json'
 
 default_config = {
