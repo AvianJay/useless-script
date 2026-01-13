@@ -46,11 +46,13 @@ def cache_request(tags=None, pid=1, expire_seconds=300):
         raise Exception(f'錯誤！{r.text}')
 
 
-def r34(tags=None, pid=1):
+def r34(tags=None, pid=1, exclude_tags=None):
     try:
         rj = cache_request(tags, pid)
         if not rj:
             return False, '無搜尋結果'
+        if exclude_tags:
+            rj = [item for item in rj if not any(ex_tag in item.get('tags', '') for ex_tag in exclude_tags)]
         selected = random.choice(rj)
         return True, selected
     except Exception as e:
@@ -95,16 +97,23 @@ async def r34_tags_autocomplete(interaction: discord.Interaction, current: str):
 
 
 @bot.tree.command(name="r34", description="從rule34.xxx隨機取得一張圖片", nsfw=True)
-@app_commands.describe(tags="標籤", pid="頁數", spoilers="是否標記為暴雷內容")
-@app_commands.choices(spoilers=[
-    app_commands.Choice(name="是", value="True"),
-    app_commands.Choice(name="否", value="False"),
-])
+@app_commands.describe(tags="標籤", pid="頁數", spoilers="是否標記為暴雷內容", ai="是否包含AI生成的圖片")
+@app_commands.choices(
+    spoilers=[
+        app_commands.Choice(name="是", value="True"),
+        app_commands.Choice(name="否", value="False"),
+    ],
+    ai=[
+        app_commands.Choice(name="是", value="True"),
+        app_commands.Choice(name="否", value="False"),
+    ]
+)
 @app_commands.autocomplete(tags=r34_tags_autocomplete)
-async def r34_command(interaction: discord.Interaction, tags: str = None, pid: int = 1, spoilers: str = "False"):
+async def r34_command(interaction: discord.Interaction, tags: str = None, pid: int = 1, spoilers: str = "False", ai: str = "False"):
     await interaction.response.defer()
     spoilers = (spoilers == "True")
-    stat, img_data = r34(tags, pid)
+    ai = (ai == "True")
+    stat, img_data = r34(tags, pid, exclude_tags=["ai_generated"] if not ai else None)
     if not stat:
         embed = discord.Embed(title="錯誤", description=img_data, color=0xFF0000)
         await interaction.followup.send(embed=embed)
