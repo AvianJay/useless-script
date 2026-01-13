@@ -17,26 +17,76 @@ def owoify_chinese(text):
     ]
 
     # 2. 中文語氣替換
-    replacements = {"了": "惹", "的": "噠", "我": "偶", "你": "泥", "妳": "妮", "您": "尼", "嗎": "喵？", "吧": "喵~", "！": "！ >w<"}
-    for old, new in replacements.items():
-        text = text.replace(old, new)
+    replacements = {
+        "了": [
+            "惹",
+            "ㄌ",
+            "惹喵"
+        ],
+        "的": ["噠", "ㄉ"],
+        "我": ["偶"],
+        "你": ["泥"],
+        "妳": ["妮"],
+        "您": ["尼"],
+        "嗎": ["喵？", "咩？"],
+        "吧": ["喵~"],
+        "！": [
+            "！ >w<",
+            "！ (≧◡≦)",
+            "喵！"
+        ],
+        "不要": [
+            "別要喵",
+            "補藥"
+        ],
+        "謝謝": [
+            "謝謝喵",
+            "謝謝泥喵",
+            "謝、謝謝泥"
+        ],
+        "真的很": [
+            "超、超超級...的",
+        ],
+        "是不是": [
+            "係咪",
+            "是咪",
+            "4不4",
+            "是不是呀"
+        ],
+        "所以": [
+            "所、所以說",
+            "所、所以喵"
+        ],
+        "因為": [
+            "因、因為",
+            "因、因為喵"
+        ],
+        "知道": [
+            "知、知道喵",
+            "知道惹",
+            "知道ㄌ",
+            "造惹"
+        ],
+        "這樣": [
+            "這樣子喵",
+            "醬"
+        ]
+    }
+    for old, candidates in replacements.items():
+        if old in text:
+            # 這裡我們用正則或簡單 replace，隨機選一個
+            text = text.replace(old, random.choice(candidates))
 
-    # 3. 10% 機率口吃
-    words = text.split()
-    for word in words:
-        if len(word) < 2:
-            continue
-        if random.random() < 0.10:
-            word = f"{word[0]}-{word}"
+    # 口吃邏輯 (針對中文，split() 可能會切不開，建議直接對字串處理)
+    if random.random() < 0.20:
+        if len(text) > 2:
+            idx = random.randint(0, len(text)-1)
+            text = text[:idx] + f"{text[idx]}-{text[idx]}" + text[idx+1:]
 
-    # 4. 10% 機率增加前綴
-    if random.random() < 0.10:
+    if random.random() < 0.40:
         text = f"{random.choice(prefixes)} {text}"
-
-    # 5. 10% 機率增加後綴
-    if random.random() < 0.10:
+    if random.random() < 0.40:
         text = f"{text} {random.choice(suffixes)}"
-
     return text
 
 
