@@ -109,7 +109,7 @@ async def r34_tags_autocomplete(interaction: discord.Interaction, current: str):
     ]
 )
 @app_commands.autocomplete(tags=r34_tags_autocomplete)
-async def r34_command(interaction: discord.Interaction, tags: str = None, pid: int = 1, spoilers: str = "False", ai: str = "False"):
+async def r34_command(interaction: discord.Interaction, tags: str = None, pid: int = 1, spoilers: str = "False", ai: str = "True"):
     await interaction.response.defer()
     spoilers = (spoilers == "True")
     ai = (ai == "True")
