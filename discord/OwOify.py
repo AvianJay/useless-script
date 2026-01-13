@@ -21,7 +21,7 @@ def owoify_chinese(text):
         "了": [
             "惹",
             "ㄌ",
-            "惹喵"
+            # "惹喵"  # 了喵 會讓句尾重複出現喵，先拿掉
         ],
         "的": ["噠", "ㄉ"],
         "我": ["偶"],
@@ -99,6 +99,8 @@ class OwOify(commands.Cog):
         )
         bot.tree.add_command(self.ctx_menu)
 
+    @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
+    @app_commands.allowed_installs(guilds=True, users=True)
     @app_commands.command(name="owoify", description="文字也能變可愛！")
     @app_commands.describe(text="要變可愛的文字", english="是否英文版？")
     async def owoify(self, interaction: discord.Interaction, text: str, english: bool = False):
@@ -146,6 +148,8 @@ class OwOify(commands.Cog):
         await ctx.reply(embed=embed)
         
     # content menu
+    @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
+    @app_commands.allowed_installs(guilds=True, users=True)
     async def owoify_context_menu(self, interaction: discord.Interaction, message: discord.Message):
         if not message.content:
             await interaction.response.send_message("該訊息沒有內容可供 OwOify。", ephemeral=True)
