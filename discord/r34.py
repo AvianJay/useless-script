@@ -5,12 +5,33 @@ import random
 import requests
 import json
 import io
+import time
 from globalenv import bot, start_bot, config
+from logger import log
+import logging
 if not config("r34_user_id") or not config("r34_api_key"):
     raise ValueError("r34_user_id or r34_api_key is not set in config.json")
 
+caches = {}
 
-def r34(tags=None, pid=1):
+def cache(key, value=None, expire_seconds=300):
+    current_time = time.time()
+    if value is not None:
+        caches[key] = (value, current_time + expire_seconds)
+    else:
+        if key in caches:
+            val, expire_time = caches[key]
+            if current_time < expire_time:
+                return val
+            else:
+                del caches[key]
+        return None
+
+def cache_request(tags=None, pid=1, expire_seconds=300):
+    key = f"r34_{tags}_{pid}"
+    cached = cache(key)
+    if cached is not None:
+        return cached
     if tags:
         tags = tags.replace(' ', '%20')
         r = requests.get(f'https://api.rule34.xxx/index.php?page=dapi&s=post&q=index&json=1&tags={tags}&pid={pid}&api_key={config("r34_api_key")}&user_id={config("r34_user_id")}')
@@ -18,12 +39,22 @@ def r34(tags=None, pid=1):
         r = requests.get(f'https://api.rule34.xxx/index.php?page=dapi&s=post&q=index&json=1&pid={pid}&api_key={config("r34_api_key")}&user_id={config("r34_user_id")}')
     try:
         rj = r.json()
+        cache(key, rj, expire_seconds)
+        return rj
+    except:
+        log(f"Error fetching r34 data: {r.text}", module_name="r34", level=logging.ERROR)
+        raise Exception(f'錯誤！{r.text}')
+
+
+def r34(tags=None, pid=1):
+    try:
+        rj = cache_request(tags, pid)
         if not rj:
             return False, '無搜尋結果'
         selected = random.choice(rj)
         return True, selected
-    except:
-        return False, f'錯誤！{r.text}'
+    except Exception as e:
+        return False, f'錯誤！{str(e)}'
 
 
 def r34tags(query=None):
@@ -53,8 +84,8 @@ def r34tags(query=None):
 
 
 async def r34_tags_autocomplete(interaction: discord.Interaction, current: str):
-    if not current:
-        return []
+    # if not current:
+    #     return []
     al = current.split()
     curr = al[-1]
     res = requests.get(f"https://api.rule34.xxx/autocomplete.php?q={curr}")
