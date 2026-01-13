@@ -464,7 +464,7 @@ class AutoReply(commands.GroupCog, name="autoreply"):
 
             @discord.ui.button(label="提示：測試替換", style=discord.ButtonStyle.secondary)
             async def hint(self, i: discord.Interaction, _: discord.ui.Button):
-                await i.response.send_message(f"可用 `{await get_command_mention('autoreply', 'test')}` 測試變數替換結果。", ephemeral=True)
+                await i.response.send_message(f"可用 {await get_command_mention('autoreply', 'test')} 測試變數替換結果。", ephemeral=True)
 
         await interaction.followup.send(embed=embed, view=HelpView())
 
