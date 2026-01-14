@@ -469,7 +469,33 @@ class AutoReply(commands.GroupCog, name="autoreply"):
         await interaction.followup.send(embed=embed, view=HelpView())
 
     async def _process_response(self, response: str, message: discord.Message) -> str:
-        """處理回覆內容中的變數替換"""
+        """處理回覆內容中的變數替換或檢測給予訊息反應"""
+        
+        # 訊息反應
+        # response 可能包含多個反應，以空格分隔
+        # {react:emoji} 格式 (unicode emoji 或自訂 emoji ID)
+        react_pattern = re.compile(r"\{react:([^\}]+)\}")
+        def react_replacer(match):
+            emoji_str = match.group(1).strip()
+            try:
+                if emoji_str.isdigit():
+                    # 自訂表情符號 ID
+                    emoji = message.guild.emojis.get(int(emoji_str))
+                    if emoji:
+                        asyncio.create_task(message.add_reaction(emoji))
+                else:
+                    # Unicode 表情符號
+                    asyncio.create_task(message.add_reaction(emoji_str))
+            except Exception as e:
+                log(f"處理 {{react:{emoji_str}}} 時發生錯誤: {e}", module_name="AutoReply", level=logging.ERROR)
+            return ""  # 移除反應標記
+        response = react_pattern.sub(react_replacer, response)
+        response = response.strip()
+        if not response:
+            return ""  # 如果回覆內容在處理後為空，則不回覆
+
+        # 取得基本資訊
+        
         guild = message.guild
         author = message.author
         channel = message.channel
@@ -599,6 +625,9 @@ class AutoReply(commands.GroupCog, name="autoreply"):
                 
                 # 使用新的處理方法
                 final_response = await self._process_response(raw_response, message)
+                
+                if not final_response:
+                    return
                 
                 try:
                     if ar.get("reply", False):
