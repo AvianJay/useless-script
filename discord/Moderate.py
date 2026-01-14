@@ -159,6 +159,8 @@ async def do_action_str(action: str, guild: Optional[discord.Guild] = None, user
     # if user is none just check if action is valid
     actions = action.split(",")
     actions = [a.strip() for a in actions]
+    if len(actions) > 5:
+        return ["錯誤：一次只能執行最多5個動作。"]
     logs = []
     last_reason = "管理執行"
     actions_json = []
@@ -506,6 +508,9 @@ class Moderate(commands.GroupCog, group_name=app_commands.locale_str("admin")):
                     return
                 if not actions:
                     await interaction.response.send_message("請先選擇至少一個操作。", ephemeral=True)
+                    return
+                if len(actions) > 5:
+                    await interaction.response.send_message("一次只能執行最多5個動作。", ephemeral=True)
                     return
                 self.stop()
                 # execute actions
