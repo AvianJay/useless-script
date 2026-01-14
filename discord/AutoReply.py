@@ -486,6 +486,7 @@ class AutoReply(commands.GroupCog, name="autoreply"):
                 else:
                     # Unicode 表情符號
                     asyncio.create_task(message.add_reaction(emoji_str))
+                log(f"自動回覆觸發，對訊息添加反應：{emoji_str}", module_name="AutoReply", level=logging.INFO)
             except Exception as e:
                 log(f"處理 {{react:{emoji_str}}} 時發生錯誤: {e}", module_name="AutoReply", level=logging.ERROR)
             return ""  # 移除反應標記
