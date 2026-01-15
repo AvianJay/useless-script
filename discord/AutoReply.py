@@ -427,7 +427,8 @@ class AutoReply(commands.GroupCog, name="autoreply"):
             value=(
                 "- `{random}`：隨機產生 1 到 100 的整數\n"
                 "- `{randint:min-max}`：隨機產生 min~max（例：`{randint:10-50}`）\n"
-                "- `{random_user}`：從最近 50 則訊息中隨機選一位非機器人使用者顯示名稱"
+                "- `{random_user}`：從最近 50 則訊息中隨機選一位非機器人使用者顯示名稱\n"
+                "- `{react:emoji}`：給予該訊息表情符號（例：`{react:↖️}`）"
             ),
             inline=False,
         )
