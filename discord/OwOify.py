@@ -112,7 +112,7 @@ class OwOify(commands.Cog):
         embed.set_author(name=f"{interaction.user.display_name}", icon_url=interaction.user.display_avatar.url)
         await interaction.response.send_message(embed=embed)
     
-    @commands.command(name="owoify", help="文字也能變可愛！", usage="[--english] <text>", aliases=["owo"])
+    @commands.command(name="owoify", help="文字也能變可愛！", aliases=["owo"])
     async def owoify_command(self, ctx: commands.Context, *, text: str = ""):
         """把文字變可愛！
         用法: owoify [--english] <text> 或回覆一則訊息使用 owoify [--english]
