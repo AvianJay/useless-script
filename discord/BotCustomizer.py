@@ -171,7 +171,7 @@ async def review_image(image_data: bytes) -> dict:
     try:
         response = await asyncio.to_thread(
             g4f.ChatCompletion.create,
-            model="gemini",
+            model="openai-fast",
             provider=g4f.Provider.PollinationsAI,
             messages=[
                 {"role": "system", "content": prompt},
