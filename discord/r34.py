@@ -121,7 +121,7 @@ async def r34_command(interaction: discord.Interaction, tags: str = None, pid: i
         embed = discord.Embed(
             title="Rule34.xxx",
             url=f"https://rule34.xxx/index.php?page=post&s=view&id={img_data.get('id', 'N/A')}",
-            description=f"標籤: `{img_data.get('tags', 'N/A')}`\nID: `{img_data.get('id', 'N/A')}`",
+            description=f"ID: `{img_data.get('id', 'N/A')}`",
             color=0x00FF00
         )
         if spoilers:
