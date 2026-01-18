@@ -124,6 +124,8 @@ def send_moderation_message(user: discord.Member, moderator: discord.Member, act
     action_text = "+".join(action_texts)
     if not message_content or message_content.strip() == "":
         bl = True
+    if message_content.splitlines() > 1:
+        message_content = message_content.split("\n")[0] + " ..."
     message_content = "||" + message_content + "||"
     # add <> on links
     message_content = re.sub(r"(https?://[^\s]+)", r"<\1>", message_content)
