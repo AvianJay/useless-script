@@ -1424,9 +1424,21 @@ async def use_cloud_ruler(interaction: discord.Interaction):
             final_size = fake_size if fake_size is not None else size
             log(f"對 {target_user.display_name} 使用了雲端尺, 長度: {size} cm, 最終長度: {final_size} cm", module_name="dsize", user=interaction.user, guild=interaction.guild)
 
+            user_is_new_checkin, user_checkin_streak, user_broke_streak, user_broke_streak_on = await process_checkin(target_id)
+            
+            if user_is_new_checkin:
+                if user_broke_streak:
+                    footer_text = f"你在第 {user_broke_streak_on} 天打破了簽到紀錄，重新開始簽到！ | 簽到第 {user_checkin_streak} 天！"
+                else:
+                    footer_text = f"簽到第 {user_checkin_streak} 天！"
+            else:
+                footer_text = None
+            
+
             # 建立 Embed 訊息
             embed = discord.Embed(title=f"{interaction.user.display_name} 幫 {target_user.display_name} 測量長度：", color=0x00ff00)
             embed.add_field(name="1 cm", value=f"8D", inline=False)
+            embed.set_footer(text=footer_text)
             embed.timestamp = datetime.now(timezone.utc)
             await interaction.response.send_message(content=f"{target_user.mention} 被抓去量長度。", embed=embed)
             # animate to size
@@ -1441,6 +1453,24 @@ async def use_cloud_ruler(interaction: discord.Interaction):
             d_string = "=" * (size - 1)
             embed.set_field_at(0, name=f"{final_size} cm", value=f"8{d_string}D", inline=False)
             await interaction.edit_original_response(content=f"{target_user.mention} 被抓去量長度。", embed=embed)
+            history = get_user_data(guild_key, target_id, "dsize_history", [])
+            history.append({
+                "date": now.isoformat(),
+                "size": final_size,
+                "type": "雲端尺"
+            })
+            if len(history) > 100:
+                history = history[-100:]
+            set_user_data(guild_key, target_id, "dsize_history", history)
+            # Handle check-in rewards if applicable (milestone days only)
+            claimed_unsuccessful = get_user_data(0, target_id, "claim_reward_unsuccessful", False)
+            if user_is_new_checkin:
+                await handle_checkin_rewards(interaction, target_user, user_checkin_streak, guild_key)
+                log(f"簽到成功，連續 {user_checkin_streak} 天", module_name="dsize", user=target_user, guild=interaction.guild)
+            elif claimed_unsuccessful:
+                await handle_checkin_rewards(interaction, target_user, user_checkin_streak, guild_key)
+                set_user_data(0, target_id, "claim_reward_unsuccessful", False)
+                log(f"簽到成功，連續 {user_checkin_streak} 天 (補發獎勵)", module_name="dsize", user=target_user, guild=interaction.guild)
     await interaction.response.send_modal(SelectUserModal())
 
 if "ItemSystem" in modules:
