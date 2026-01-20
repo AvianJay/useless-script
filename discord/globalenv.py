@@ -11,7 +11,7 @@ import logging
 
 
 # Global configuration for backward compatibility
-config_version = 19
+config_version = 20
 config_path = 'config.json'
 
 default_config = {
@@ -52,6 +52,7 @@ default_config = {
     "contribute_channel_id": 0,
     "disable_modules": [],
     "join_leave_log_channel_id": 0,
+    "offline_interaction_endpoint": "",
 }
 _config = None
 
