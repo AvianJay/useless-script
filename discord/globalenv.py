@@ -153,6 +153,12 @@ def get_all_user_data(guild_id: int, key: str):
     """Get all user-specific data for a specific key in a server"""
     return db.get_all_user_data(guild_id, key)
 
+def get_global_config(key: str, default=None):
+    return db.get_global_config(key, default)
+
+def set_global_config(key: str, value):
+    return db.set_global_config(key, value)
+
 def get_db_connection():
     """Get a new database connection"""
     return db.get_connection()
@@ -344,6 +350,7 @@ translations = {
     "public": "公開",
     "serverinfo": "伺服器資訊",
     "help": "幫助",
+    "stats": "統計資料",
 }
 class CommandNameTranslator(app_commands.Translator):
     async def translate(
