@@ -1,7 +1,7 @@
 import discord
 from discord.ext import commands
 from discord import app_commands
-from globalenv import bot, start_bot, get_user_data, set_user_data, get_all_user_data, get_server_config, set_server_config, modules, config
+from globalenv import bot, start_bot, get_user_data, set_user_data, get_all_user_data, get_server_config, set_server_config, modules, config, get_command_mention
 from datetime import datetime, timezone, timedelta
 import asyncio
 from typing import Optional
@@ -25,6 +25,8 @@ all_settings = [
     "too_many_h1-action",
     "too_many_emojis-max_emojis",
     "too_many_emojis-action",
+    "scamtrap-channel_id",
+    "scamtrap-action",
 ]
 
 async def settings_autocomplete(interaction: discord.Interaction, current: str):
@@ -183,6 +185,7 @@ class AutoModerate(commands.GroupCog, name=app_commands.locale_str("automod")):
     @app_commands.describe(setting="要啟用或停用的自動管理設定名稱", enable="是否啟用該設定")
     @app_commands.choices(
         setting=[
+            app_commands.Choice(name="詐騙陷阱", value="scamtrap"),
             app_commands.Choice(name="逃避責任懲處", value="escape_punish"),
             app_commands.Choice(name="標題過多", value="too_many_h1"),
             app_commands.Choice(name="表情符號過多", value="too_many_emojis"),
@@ -198,6 +201,13 @@ class AutoModerate(commands.GroupCog, name=app_commands.locale_str("automod")):
         automod_settings.setdefault(setting, {})["enabled"] = (enable == "True")
         set_server_config(guild_id, "automod", automod_settings)
         await interaction.response.send_message(f"已將自動管理設定 '{setting}' 設為 {'啟用' if enable == 'True' else '停用'}。")
+        
+        if setting == "scamtrap" and enable == "True":
+            # settings
+            if "channel_id" not in automod_settings.get("scamtrap", {}):
+                await interaction.followup.send(f"請注意，詐騙陷阱已啟用，但尚未設定頻道ID。請使用 {await get_command_mention('automod', 'settings')} 來設定頻道ID。", ephemeral=True)
+            if "action" not in automod_settings.get("scamtrap", {}):
+                await interaction.followup.send(f"請注意，詐騙陷阱已啟用，但尚未設定動作指令。請使用 {await get_command_mention('automod', 'settings')} 來設定動作指令。", ephemeral=True)
     
     @app_commands.command(name=app_commands.locale_str("settings"), description="設定自動管理選項")
     @app_commands.describe(
@@ -361,6 +371,19 @@ class AutoModerate(commands.GroupCog, name=app_commands.locale_str("automod")):
         if message.author.guild_permissions.administrator:
             return
         
+        # 詐騙陷阱檢查
+        if automod_settings.get("scamtrap", {}).get("enabled", False):
+            scamtrap_channel_id = int(automod_settings["scamtrap"].get("channel_id", 0))
+            action = automod_settings["scamtrap"].get("action", "delete 請不要在此頻道發送訊息。")
+            if scamtrap_channel_id != 0 and message.channel.id == scamtrap_channel_id:
+                try:
+                    await do_action_str(action, guild=message.guild, user=message.author, message=message)
+                    # print(f"[+] 用戶 {message.author} 因進入詐騙陷阱頻道被處理: {action}")
+                    log(f"用戶 {message.author} 因進入詐騙陷阱頻道被處理: {action}", module_name="AutoModerate", user=message.author, guild=message.guild)
+                except Exception as e:
+                    # print(f"[!] 無法對用戶 {message.author} 執行詐騙陷阱的處理: {e}")
+                    log(f"無法對用戶 {message.author} 執行詐騙陷阱的處理: {e}", level=logging.ERROR, module_name="AutoModerate", user=message.author, guild=message.guild)
+        
         # 標題過多檢查
         if automod_settings.get("too_many_h1", {}).get("enabled", False):
             max_length = int(automod_settings["too_many_h1"].get("max_length", 20))
@@ -378,9 +401,11 @@ class AutoModerate(commands.GroupCog, name=app_commands.locale_str("automod")):
             if h1_count > max_length:
                 try:
                     await do_action_str(action, guild=message.guild, user=message.author, message=message)
-                    print(f"[+] 用戶 {message.author} 因標題長度過長被處理: {action}")
+                    # print(f"[+] 用戶 {message.author} 因標題長度過長被處理: {action}")
+                    log(f"用戶 {message.author} 因標題長度過長被處理: {action}", module_name="AutoModerate", user=message.author, guild=message.guild)
                 except Exception as e:
-                    print(f"[!] 無法對用戶 {message.author} 執行標題過多的處理: {e}")
+                    # print(f"[!] 無法對用戶 {message.author} 執行標題過多的處理: {e}")
+                    log(f"無法對用戶 {message.author} 執行標題過多的處理: {e}", level=logging.ERROR, module_name="AutoModerate", user=message.author, guild=message.guild)
         
         # 表情符號過多檢查
         if automod_settings.get("too_many_emojis", {}).get("enabled", False):
@@ -391,9 +416,11 @@ class AutoModerate(commands.GroupCog, name=app_commands.locale_str("automod")):
             if emoji_count > max_emojis:
                 try:
                     await do_action_str(action, guild=message.guild, user=message.author, message=message)
-                    print(f"[+] 用戶 {message.author} 因表情符號過多被處理: {action}")
+                    # print(f"[+] 用戶 {message.author} 因表情符號過多被處理: {action}")
+                    log(f"用戶 {message.author} 因表情符號過多被處理: {action}", module_name="AutoModerate", user=message.author, guild=message.guild)
                 except Exception as e:
-                    print(f"[!] 無法對用戶 {message.author} 執行表情符號過多的處理: {e}")
+                    # print(f"[!] 無法對用戶 {message.author} 執行表情符號過多的處理: {e}")
+                    log(f"無法對用戶 {message.author} 執行表情符號過多的處理: {e}", level=logging.ERROR, module_name="AutoModerate", user=message.author, guild=message.guild)
 
 asyncio.run(bot.add_cog(AutoModerate(bot)))
 
