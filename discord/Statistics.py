@@ -34,7 +34,7 @@ class Statistics(commands.Cog):
         embed.add_field(name="文字指令錯誤次數", value=command_error_stats_str, inline=False)
         embed.add_field(name="應用程式指令使用次數", value=app_command_stats_str, inline=False)
 
-        await interaction.response.send_message(embed=embed, ephemeral=True)
+        await interaction.response.send_message(embed=embed)
     
     @commands.Cog.listener()
     async def on_command(self, ctx):
