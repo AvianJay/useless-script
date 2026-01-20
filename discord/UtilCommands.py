@@ -57,19 +57,20 @@ async def info_command(interaction: discord.Interaction):
     server_count = len(bot.guilds)
     user_count = len(set(bot.get_all_members()))
     try:
-        bot_latency = round(bot.latency * 1000)  # Convert to milliseconds
+        bot_latency = round(bot.latency * 1000, 2)  # Convert to milliseconds
     except OverflowError:
         bot_latency = "N/A"
 
     uptime = get_time_text(get_uptime_seconds())
     
     commands_count = len(bot.commands) + sum(len(c.commands) for c in bot.commands if isinstance(c, commands.Group))
+    app_commands_count = len(bot.tree.get_commands()) + sum(len(c.commands) for c in bot.tree.get_commands() if isinstance(c, app_commands.Group))
     dbcount = db.get_database_count()
 
     embed = discord.Embed(title="機器人資訊", color=0x00ff00)
     embed.add_field(name="機器人名稱", value=bot.user.name)
     embed.add_field(name="版本", value=full_version)
-    embed.add_field(name="指令數量", value=commands_count)
+    embed.add_field(name="指令數量", value=f"{commands_count + app_commands_count} ({commands_count} 文字指令, {app_commands_count} 應用程式指令)")
     embed.add_field(name="伺服器數量", value=server_count)
     embed.add_field(name="用戶總數量", value=user_count)
     embed.add_field(name="用戶安裝數量", value=bot.application.approximate_user_install_count or "N/A")
@@ -98,19 +99,20 @@ async def info(ctx: commands.Context):
     server_count = len(bot.guilds)
     user_count = len(set(bot.get_all_members()))
     try:
-        bot_latency = round(bot.latency * 1000)  # Convert to milliseconds
+        bot_latency = round(bot.latency * 1000, 2)  # Convert to milliseconds
     except OverflowError:
         bot_latency = "N/A"
     
     uptime = get_time_text(get_uptime_seconds())
     
     commands_count = len(bot.commands) + sum(len(c.commands) for c in bot.commands if isinstance(c, commands.Group))
+    app_commands_count = len(bot.tree.get_commands()) + sum(len(c.commands) for c in bot.tree.get_commands() if isinstance(c, app_commands.Group))
     dbcount = db.get_database_count()
 
     embed = discord.Embed(title="機器人資訊", color=0x00ff00)
     embed.add_field(name="機器人名稱", value=bot.user.name)
     embed.add_field(name="版本", value=full_version)
-    embed.add_field(name="指令數量", value=commands_count)
+    embed.add_field(name="指令數量", value=f"{commands_count + app_commands_count} ({commands_count} 文字指令, {app_commands_count} 應用程式指令)")
     embed.add_field(name="伺服器數量", value=server_count)
     embed.add_field(name="用戶總數量", value=user_count)
     embed.add_field(name="用戶安裝數量", value=bot.application.approximate_user_install_count or "N/A")
