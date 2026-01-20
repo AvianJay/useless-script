@@ -89,6 +89,31 @@ async def do_action_str(action: str, guild: Optional[discord.Guild] = None, user
             if user:
                 await user.timeout(datetime.now(timezone.utc) + timedelta(seconds=duration_seconds), reason=reason)
             actions.append({"action": "mute", "duration": duration_seconds, "reason": reason})
+        elif cmd[0] == "unban":
+            # unban <reason>
+            if len(cmd) == 1:
+                cmd.append(last_reason)
+            cmd.pop(0)  # remove "unban"
+            reason = " ".join(cmd)
+            last_reason = reason
+            logs.append(f"解封用戶，原因: {reason}")
+            if guild and user:
+                try:
+                    await guild.unban(user, reason=reason)
+                    set_user_data(guild.id, user.id, "unban_time", None)
+                except Exception as e:
+                    log(f"解封用戶 {user} 時發生錯誤：{e}", level=logging.ERROR, module_name="Moderate", guild=guild)
+            actions.append({"action": "unban", "reason": reason})
+        elif cmd[0] == "unmute" or cmd[0] == "untimeout":
+            # unmute <reason>
+            if len(cmd) == 1:
+                cmd.append(last_reason)
+            cmd.pop(0)  # remove "unmute" or "untimeout"
+            reason = " ".join(cmd)
+            logs.append(f"解除禁言用戶，原因: {reason}")
+            if user:
+                await user.timeout(None, reason=reason)
+            actions.append({"action": "unmute", "reason": reason})
         elif cmd[0] == "delete" or cmd[0] == "delete_dm":
             # delete <warn_message>
             logs.append("刪除訊息")
