@@ -3,7 +3,7 @@ import os
 import asyncio
 from hypercorn.config import Config
 from hypercorn.asyncio import serve
-from globalenv import bot, modules, config, on_ready_tasks
+from globalenv import bot, modules, config, on_ready_tasks, get_global_config
 from logger import log
 from PIL import Image
 import requests
@@ -30,6 +30,7 @@ def api_status():
         "server_count": len(bot.guilds),
         "user_count": len(set(bot.get_all_members())),
         "user_install_count": bot.application.approximate_user_install_count if bot.application else None,
+        "command_stats": sum(get_global_config("command_usage_stats", {}).values()) + sum(get_global_config("app_command_usage_stats", {}).values()),
         "latency_ms": bot_latency,
         "version": UtilCommands.full_version if UtilCommands else "N/A"
     }

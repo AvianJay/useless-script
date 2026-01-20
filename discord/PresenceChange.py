@@ -1,8 +1,9 @@
 import time
 import asyncio
 import discord
+from discord.ext import commands
 import random
-from globalenv import bot, start_bot, config, on_ready_tasks, modules
+from globalenv import bot, start_bot, config, on_ready_tasks, modules, get_global_config
 from logger import log
 import logging
 if "UtilCommands" in modules:
@@ -58,6 +59,7 @@ def load_config():
         name = name.replace("{random_number_1_100}", str(random.randint(1, 100)))
         name = name.replace("{full_version}", UtilCommands.full_version if UtilCommands else "unknown")
         name = name.replace("{uptime}", uptime_str)
+        name = name.replace("{command_stats}", str(sum(get_global_config("command_usage_stats", {}).values()) + sum(get_global_config("app_command_usage_stats", {}).values())))
         type_str = act.get("type", "playing").lower()
         type_enum = activity_type_map.get(type_str, discord.ActivityType.playing)
         if name:
@@ -97,7 +99,17 @@ async def set_presence():
 
 
 load_config()
-on_ready_tasks.append(set_presence)
+# on_ready_tasks.append(set_presence)
+class PresenceChange(commands.Cog):
+    def __init__(self, bot):
+        self.bot = bot
+        self._started = False
+    
+    @commands.Cog.listener()
+    async def on_ready(self):
+        if not self._started:
+            self._started = True
+            bot.loop.create_task(set_presence())
 
 
 if __name__ == "__main__":
