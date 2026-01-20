@@ -8,14 +8,14 @@ import asyncio
 class OfflineInteraction(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
-        self.endpoint = config("offline_interaction_endpoint", "")
         on_close_tasks.add(self.set_offline_interaction_endpoint)
     
     async def set_offline_interaction_endpoint(self):
-        if self.endpoint:
+        endpoint = config("offline_interaction_endpoint", "")
+        if endpoint:
             try:
-                await bot.application.edit(interactions_endpoint_url=self.endpoint)
-                log("已設定 Interactions endpoint URL 為 {}".format(self.endpoint), level=logging.INFO, module_name="OfflineInteraction")
+                await bot.application.edit(interactions_endpoint_url=endpoint)
+                log("已設定 Interactions endpoint URL 為 {}".format(endpoint), level=logging.INFO, module_name="OfflineInteraction")
             except Exception as e:
                 log("設定 interactions endpoint URL 時發生錯誤: {}".format(e), level=logging.ERROR, module_name="OfflineInteraction")
 
