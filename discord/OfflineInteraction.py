@@ -8,7 +8,7 @@ import asyncio
 class OfflineInteraction(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
-        self.endpoint = config.get("offline_interaction_endpoint", "")
+        self.endpoint = config("offline_interaction_endpoint", "")
         on_close_tasks.append(self.set_offline_interaction_endpoint)
     
     async def set_offline_interaction_endpoint(self):
