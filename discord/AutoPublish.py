@@ -68,27 +68,34 @@ class AutoPublish(commands.GroupCog, name=app_commands.locale_str("autopublish")
             if not message.channel.permissions_for(guild.me).send_messages:
                 return
             
+            channel_data = autopublish_settings.get("channels", {})
+            channel_settings = channel_data.get(str(message.channel.id), {})
+            
             # check time
             # date + hour
             now = datetime.now(timezone.utc)
             outstr = now.strftime("%Y-%m-%d %H")
-            last_published = autopublish_settings.get("last_publish", "")
+            last_published = channel_settings.get("last_publish", "")
             if outstr != last_published:
                 # New hour: reset counter and update last_publish within autopublish settings
-                autopublish_settings["hour_published"] = 0
-                autopublish_settings["last_publish"] = outstr
+                channel_settings["hour_published"] = 0
+                channel_settings["last_publish"] = outstr
+                channel_data[str(message.channel.id)] = channel_settings
+                autopublish_settings["channels"] = channel_data
                 set_server_config(guild.id, "autopublish", autopublish_settings)
-            hour_published = autopublish_settings.get("hour_published", 0)
+            hour_published = channel_settings.get("hour_published", 0)
             if hour_published >= 10:
                 return  # limit to 10 publishes per hour
             hour_published += 1
-            autopublish_settings["hour_published"] = hour_published
+            channel_settings["hour_published"] = hour_published
+            channel_data[str(message.channel.id)] = channel_settings
+            autopublish_settings["channels"] = channel_data
             set_server_config(guild.id, "autopublish", autopublish_settings)
             try:
                 await message.publish()
-                log(f"Auto-published message ID {message.id} in guild {guild.id}", module_name="AutoPublish", guild=guild)
+                log(f"已自動發布訊息 ID {message.id} 在伺服器 {guild.id}", module_name="AutoPublish", guild=guild)
             except Exception as e:
-                log(f"Error auto-publishing message: {e}", level=logging.ERROR, module_name="AutoPublish", guild=guild)
+                log(f"發布訊息時發生錯誤: {e}", level=logging.ERROR, module_name="AutoPublish", guild=guild)
 
 asyncio.run(bot.add_cog(AutoPublish(bot)))
 
