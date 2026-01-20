@@ -51,38 +51,39 @@ class AutoPublish(commands.GroupCog, name=app_commands.locale_str("autopublish")
         if guild is None:
             return
         
-        autopublish_settings = get_server_config(guild.id, "autopublish", {})
-        if not autopublish_settings:
-            return
-        if not autopublish_settings.get("enabled", False):
-            return
-        
-        # check permissions
-        if not guild.me.guild_permissions.manage_messages:
-            return
-        if not message.channel.permissions_for(guild.me).send_messages:
-            return
-        
-        # check time
-        # date + hour
-        now = datetime.now(timezone.utc)
-        outstr = now.strftime("%Y-%m-%d %H")
-        last_published = autopublish_settings.get("last_publish", "")
-        if outstr != last_published:
-            # New hour: reset counter and update last_publish within autopublish settings
-            autopublish_settings["hour_published"] = 0
-            autopublish_settings["last_publish"] = outstr
-            set_server_config(guild.id, "autopublish", autopublish_settings)
-        hour_published = autopublish_settings.get("hour_published", 0)
-        if hour_published >= 10:
-            return  # limit to 10 publishes per hour
-        hour_published += 1
-        autopublish_settings["hour_published"] = hour_published
-        set_server_config(guild.id, "autopublish", autopublish_settings)
-        
         if message.channel.type == discord.ChannelType.news:
             if message.reference:
                 return  # Ignore replies
+            if message.interaction:
+                return  # Ignore interaction messages
+            autopublish_settings = get_server_config(guild.id, "autopublish", {})
+            if not autopublish_settings:
+                return
+            if not autopublish_settings.get("enabled", False):
+                return
+            
+            # check permissions
+            if not guild.me.guild_permissions.manage_messages:
+                return
+            if not message.channel.permissions_for(guild.me).send_messages:
+                return
+            
+            # check time
+            # date + hour
+            now = datetime.now(timezone.utc)
+            outstr = now.strftime("%Y-%m-%d %H")
+            last_published = autopublish_settings.get("last_publish", "")
+            if outstr != last_published:
+                # New hour: reset counter and update last_publish within autopublish settings
+                autopublish_settings["hour_published"] = 0
+                autopublish_settings["last_publish"] = outstr
+                set_server_config(guild.id, "autopublish", autopublish_settings)
+            hour_published = autopublish_settings.get("hour_published", 0)
+            if hour_published >= 10:
+                return  # limit to 10 publishes per hour
+            hour_published += 1
+            autopublish_settings["hour_published"] = hour_published
+            set_server_config(guild.id, "autopublish", autopublish_settings)
             try:
                 await message.publish()
                 log(f"Auto-published message ID {message.id} in guild {guild.id}", module_name="AutoPublish", guild=guild)
