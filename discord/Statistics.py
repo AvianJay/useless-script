@@ -12,6 +12,8 @@ class Statistics(commands.Cog):
         self.bot = bot
         super().__init__()
     
+    @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
+    @app_commands.allowed_installs(guilds=True, users=True)
     @app_commands.command(name="stats", description="查看指令使用統計")
     @app_commands.describe(full="是否顯示完整統計數據")
     async def stats(self, interaction: discord.Interaction, full: bool = False):
