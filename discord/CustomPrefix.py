@@ -67,6 +67,8 @@ class CustomPrefix(commands.Cog):
                 await message.channel.send("...")
             elif pingcount == 7:
                 await message.channel.send("好吧，我不理你了。")
+            elif pingcount == 100:
+                await message.channel.send("你還在 ping 我？真是執著啊...")
             else:
                 return
             usercache[message.author.id] = pingcount + 1
