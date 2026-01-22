@@ -49,6 +49,7 @@ class ResponseAppealView(discord.ui.View):
                     timestamp=datetime.now(timezone.utc)
                 )
                 embed.add_field(name="回覆內容", value=self.response.value, inline=False)
+                embed.set_footer(text=f"{modal_interaction.guild.name}", icon_url=modal_interaction.guild.icon.url if modal_interaction.guild.icon else None)
                 try:
                     await user.send(embed=embed)
                     await modal_interaction.response.send_message("你的回覆已發送給用戶。", ephemeral=True)
