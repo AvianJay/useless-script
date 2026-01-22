@@ -556,8 +556,8 @@ class NitroLinkModal(discord.ui.Modal, title="發送 Nitro 禮物"):
                     
                     embed = discord.Embed(title=f"{gift_name}", color=0xFF73FA)
                     embed.description = "有人送出了一份禮物！點擊下方按鈕領取。"
-                    embed.set_author(name=gifter.display_name if gifter else "未知用戶", icon_url=gifter.display_avatar.url if gifter else None)
-                    embed.set_footer(text="啊我就不想要被Selfbot幹走尼戳")
+                    embed.set_author(name=f"{gifter.display_name} ({gifter.name})" if gifter else "未知用戶", icon_url=gifter.display_avatar.url if gifter else None)
+                    embed.set_footer(text="尚未被領取。")
                     
                     if expires_raw:
                         expires_at = datetime.fromisoformat(expires_raw.replace("Z", "+00:00"))
@@ -593,9 +593,9 @@ class NitroClaimView(discord.ui.View):
         embed = interaction.message.embeds[0]
         embed.title = f"{self.gift_name} [已領取]"
         embed.color = discord.Color.light_grey()
-        embed.set_footer(text=f"領取者: {interaction.user.display_name}", icon_url=interaction.user.display_avatar.url)
+        embed.set_footer(text=f"領取者: {interaction.user.display_name} ({interaction.user.name})", icon_url=interaction.user.display_avatar.url)
         
-        await interaction.message.edit(embed=embed, view=self)
+        await interaction.edit_original_response(embed=embed, view=self)
         
         # 私訊領取者連結
         await interaction.response.send_message(f"🎊 這是你的 Nitro 連結：\n{self.link}", ephemeral=True)
