@@ -237,11 +237,15 @@ class ModerationNotify(commands.Cog):
             await interaction.response.send_message("用戶申訴功能已被禁用。", ephemeral=True)
             log("禁用用戶申訴功能", module_name="ModerationNotify", guild=guild)
     
+    @commands.Cog.listener()
+    async def on_ready(self):
+        # 註冊持久化 View，讓機器人重啟後按鈕仍可用
+        bot.add_view(AppealView())
+        bot.add_view(ResponseAppealView())
+    
 asyncio.run(bot.add_cog(ModerationNotify(bot)))
 
-# 註冊持久化 View，讓機器人重啟後按鈕仍可用
-bot.add_view(AppealView())
-bot.add_view(ResponseAppealView())
+
 
 if __name__ == "__main__":
     start_bot()
