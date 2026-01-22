@@ -4,6 +4,9 @@ from logger import log
 from discord import app_commands
 from discord.ext import commands
 import asyncio
+from expiring_dict import ExpiringDict
+
+usercache = ExpiringDict(150)
 
 async def determine_prefix(bot, message):
     guild = message.guild
@@ -47,7 +50,25 @@ class CustomPrefix(commands.Cog):
         if message.author.bot:
             return
         if message.content == bot.user.mention:
-            prefix = await determine_prefix(self.bot, message)
-            await message.channel.send(f"你在找我嗎:O\n我的前綴是：`{prefix}`！")
+            try:
+                pingcount = usercache[message.author.id]
+            except KeyError:
+                pingcount = 0
+            if pingcount < 3:
+                prefix = await determine_prefix(self.bot, message)
+                await message.channel.send(f"你在找我嗎 :O\n我的前綴是：`{prefix}`！")
+            elif pingcount == 3:
+                await message.channel.send("好啦好啦，我知道你在找我 XD")
+            elif pingcount == 4:
+                await message.channel.send("欸欸欸，冷靜點啦！")
+            elif pingcount == 5:
+                await message.channel.send("再 ping 我我就不理你了喔！")
+            elif pingcount == 6:
+                await message.channel.send("...")
+            elif pingcount == 7:
+                await message.channel.send("好吧，我不理你了。")
+            else:
+                return
+            usercache[message.author.id] = pingcount + 1
 
 asyncio.run(bot.add_cog(CustomPrefix(bot)))
