@@ -355,6 +355,7 @@ translations = {
     "help": "幫助",
     "stats": "統計資料",
     "user-appeal-channel": "用戶申訴頻道",
+    "full": "完整"
 }
 class CommandNameTranslator(app_commands.Translator):
     async def translate(
