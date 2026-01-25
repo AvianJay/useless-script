@@ -98,6 +98,9 @@ async def set_presence():
             await asyncio.sleep(loop_time)
 
 
+async def set_starting_presence():
+    await bot.change_presence(status=discord.Status.idle, activity=discord.Activity(type=discord.ActivityType.playing, name="正在啟動..."))
+
 load_config()
 # on_ready_tasks.append(set_presence)
 class PresenceChange(commands.Cog):
@@ -109,7 +112,13 @@ class PresenceChange(commands.Cog):
     async def on_ready(self):
         if not self._started:
             self._started = True
-            bot.loop.create_task(set_presence())
+            bot.loop.create_task(set_starting_presence())
+
+
+asyncio.run(bot.add_cog(PresenceChange(bot)))
+
+
+on_ready_tasks.append(set_presence)
 
 
 if __name__ == "__main__":
