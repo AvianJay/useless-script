@@ -52,7 +52,10 @@ def get_uptime_seconds() -> int:
 @bot.tree.command(name=app_commands.locale_str("info"), description="顯示機器人資訊")
 @app_commands.allowed_installs(guilds=True, users=True)
 @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
-async def info_command(interaction: discord.Interaction):
+@app_commands.describe(
+    full="是否顯示完整模組列表與載入失敗模組"
+)
+async def info_command(interaction: discord.Interaction, full: bool = False):
     await interaction.response.defer()
     server_count = len(bot.guilds)
     user_count = len(set(bot.get_all_members()))
@@ -70,7 +73,7 @@ async def info_command(interaction: discord.Interaction):
     embed = discord.Embed(title="機器人資訊", color=0x00ff00)
     embed.add_field(name="機器人名稱", value=bot.user.name)
     embed.add_field(name="版本", value=full_version)
-    embed.add_field(name="指令數量", value=f"{commands_count + app_commands_count} ({commands_count} 文字指令, {app_commands_count} 應用程式指令)")
+    embed.add_field(name="指令數量", value=f"{commands_count + app_commands_count} ({commands_count} 文字, {app_commands_count} 應用)")
     embed.add_field(name="伺服器數量", value=server_count)
     embed.add_field(name="用戶總數量", value=user_count)
     embed.add_field(name="用戶安裝數量", value=bot.application.approximate_user_install_count or "N/A")
@@ -79,11 +82,18 @@ async def info_command(interaction: discord.Interaction):
     embed.add_field(name="記憶體使用率", value=f"{psutil.virtual_memory().percent}%")
     embed.add_field(name="運行時間", value=uptime)
     embed.add_field(name="資料庫資訊", value=f"總筆數: {dbcount['total']}\n伺服器筆數: {dbcount['server_configs']}\n用戶資料筆數: {dbcount['user_data']}", inline=True)
-    embed.add_field(name=f"已載入模組({len(modules)})", value="\n".join(modules) if modules else "無", inline=False)
-    if config("disable_modules", []):
-        embed.add_field(name=f"已禁用模組({len(config('disable_modules', []))})", value="\n".join(config("disable_modules", [])), inline=False)
-    if failed_modules:
-        embed.add_field(name=f"載入失敗的模組({len(failed_modules)})", value="\n".join(failed_modules), inline=False)
+    if full:
+        embed.add_field(name=f"已載入模組({len(modules)})", value="\n".join(modules) if modules else "無", inline=False)
+        if config("disable_modules", []):
+            embed.add_field(name=f"已禁用模組({len(config('disable_modules', []))})", value="\n".join(config("disable_modules", [])), inline=False)
+        if failed_modules:
+            embed.add_field(name=f"載入失敗的模組({len(failed_modules)})", value="\n".join(failed_modules), inline=False)
+    else:
+        embed.add_field(name=f"已載入模組數量", value=str(len(modules)), inline=False)
+        if config("disable_modules", []):
+            embed.add_field(name=f"已禁用模組數量", value=str(len(config("disable_modules", []))), inline=False)
+        if failed_modules:
+            embed.add_field(name=f"載入失敗的模組數量", value=str(len(failed_modules)), inline=False)
     embed.add_field(name="相關連結", value=f"* [機器人網站]({config('website_url')})\n* [支援伺服器]({config('support_server_invite')})\n* [隱私政策]({config('website_url')}/privacy-policy)\n* [服務條款]({config('website_url')}/terms-of-service)\n* [邀請機器人](https://discord.com/oauth2/authorize?client_id={str(bot.user.id)})", inline=False)
     embed.set_thumbnail(url=bot.user.avatar.url if bot.user.avatar else None)
     embed.set_footer(text="by AvianJay")
@@ -91,10 +101,12 @@ async def info_command(interaction: discord.Interaction):
 
 
 @bot.command(aliases=["botinfo", "bi"])
-async def info(ctx: commands.Context):
+async def info(ctx: commands.Context, full: bool = False):
     """顯示機器人資訊
     
-    用法： info
+    用法： info [full]
+
+    如果指定 full 參數為 True，則顯示完整模組列表與載入失敗模組。
     """
     server_count = len(bot.guilds)
     user_count = len(set(bot.get_all_members()))
@@ -112,7 +124,7 @@ async def info(ctx: commands.Context):
     embed = discord.Embed(title="機器人資訊", color=0x00ff00)
     embed.add_field(name="機器人名稱", value=bot.user.name)
     embed.add_field(name="版本", value=full_version)
-    embed.add_field(name="指令數量", value=f"{commands_count + app_commands_count} ({commands_count} 文字指令, {app_commands_count} 應用程式指令)")
+    embed.add_field(name="指令數量", value=f"{commands_count + app_commands_count} ({commands_count} 文字, {app_commands_count} 應用)")
     embed.add_field(name="伺服器數量", value=server_count)
     embed.add_field(name="用戶總數量", value=user_count)
     embed.add_field(name="用戶安裝數量", value=bot.application.approximate_user_install_count or "N/A")
@@ -121,11 +133,18 @@ async def info(ctx: commands.Context):
     embed.add_field(name="記憶體使用率", value=f"{psutil.virtual_memory().percent}%")
     embed.add_field(name="運行時間", value=uptime)
     embed.add_field(name="資料庫資訊", value=f"總筆數: {dbcount['total']}\n伺服器筆數: {dbcount['server_configs']}\n用戶資料筆數: {dbcount['user_data']}", inline=True)
-    embed.add_field(name=f"已載入模組({len(modules)})", value="\n".join(modules) if modules else "無", inline=False)
-    if config("disable_modules", []):
-        embed.add_field(name=f"已禁用模組({len(config('disable_modules', []))})", value="\n".join(config("disable_modules", [])), inline=False)
-    if failed_modules:
-        embed.add_field(name=f"載入失敗的模組({len(failed_modules)})", value="\n".join(failed_modules), inline=False)
+    if full:
+        embed.add_field(name=f"已載入模組({len(modules)})", value="\n".join(modules) if modules else "無", inline=False)
+        if config("disable_modules", []):
+            embed.add_field(name=f"已禁用模組({len(config('disable_modules', []))})", value="\n".join(config("disable_modules", [])), inline=False)
+        if failed_modules:
+            embed.add_field(name=f"載入失敗的模組({len(failed_modules)})", value="\n".join(failed_modules), inline=False)
+    else:
+        embed.add_field(name=f"已載入模組數量", value=str(len(modules)), inline=False)
+        if config("disable_modules", []):
+            embed.add_field(name=f"已禁用模組數量", value=str(len(config("disable_modules", []))), inline=False)
+        if failed_modules:
+            embed.add_field(name=f"載入失敗的模組數量", value=str(len(failed_modules)), inline=False)
     embed.add_field(name="相關連結", value=f"* [機器人網站]({config('website_url')})\n* [支援伺服器]({config('support_server_invite')})\n* [隱私政策]({config('website_url')}/privacy-policy)\n* [服務條款]({config('website_url')}/terms-of-service)\n* [邀請機器人](https://discord.com/oauth2/authorize?client_id={str(bot.user.id)})", inline=False)
     embed.set_thumbnail(url=bot.user.avatar.url if bot.user.avatar else None)
     embed.timestamp = datetime.now(timezone.utc)
