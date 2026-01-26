@@ -5,6 +5,7 @@ from discord import app_commands
 from discord.ext import commands
 import asyncio
 from expiring_dict import ExpiringDict
+import random
 
 usercache = ExpiringDict(150)
 
@@ -58,17 +59,51 @@ class CustomPrefix(commands.Cog):
                 prefix = await determine_prefix(self.bot, message)
                 await message.channel.send(f"你在找我嗎 :O\n我的前綴是：`{prefix}`！")
             elif pingcount == 3:
-                await message.channel.send("好啦好啦，我知道你在找我 XD")
+                msgs = [
+                    "是有什麼事嗎？",
+                    "需要幫忙嗎？",
+                    "好啦好啦，我知道你在找我 XD",
+                    "有事請說，不要一直 ping 我啦！",
+                ]
+                await message.channel.send(random.choice(msgs))
             elif pingcount == 4:
-                await message.channel.send("欸欸欸，冷靜點啦！")
+                msgs = [
+                    "冷靜一點啦！",
+                    "別這樣一直 ping 我嘛～",
+                    "我會累的欸...",
+                    "欸欸欸，冷靜點啦！"
+                ]
+                await message.channel.send(random.choice(msgs))
             elif pingcount == 5:
-                await message.channel.send("再 ping 我我就不理你了喔！")
+                msgs = [
+                    "你真的很執著耶...",
+                    "再這樣我就要生氣了喔！",
+                    "欸，你這樣不好喔！",
+                    "再 ping 我我就不理你了喔！"
+                ]
+                await message.channel.send(random.choice(msgs))
             elif pingcount == 6:
-                await message.channel.send("...")
+                msgs = [
+                    "我不想在這裡跟你耗時間。",
+                    "你還在 ping 我？",
+                    "...",
+                    f"{message.author.mention} {message.author.mention} {message.author.mention}",
+                ]
+                await message.channel.send(random.choice(msgs))
             elif pingcount == 7:
-                await message.channel.send("好吧，我不理你了。")
+                msgs = [
+                    "好吧，我不理你了。",
+                    "你這樣一直 ping 我真的很煩耶。",
+                    "我累了，我要休息了。",
+                    "再見。"
+                ]
+                await message.channel.send(random.choice(msgs))
             elif pingcount == 100:
-                await message.channel.send("你還在 ping 我？真是執著啊...")
+                msgs = [
+                    "你還在 ping 我？真是執著啊...",
+                    "恭喜你獲得了 3 分鐘內 ping 我 100 次的成就💀",
+                ]
+                await message.channel.send(random.choice(msgs))
             else:
                 return
             usercache[message.author.id] = pingcount + 1
