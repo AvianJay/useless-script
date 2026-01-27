@@ -222,29 +222,31 @@ class DynamicVoice(commands.GroupCog, name=app_commands.locale_str("dynamic-voic
             
             # Move the user to the new channel
             if play_audio_enabled:
-                try:
-                    vp = await after.channel.connect()
-                    await asyncio.sleep(1)  # wait for a moment to ensure the user has joined the new channel
-                    voice_client = discord.utils.get(self.bot.voice_clients, guild=member.guild)
-                    if voice_client and voice_client.is_connected():
-                        voice_client.stop()  # Stop any existing audio
-                        id = random.randint(1, 7)
-                        audio_source = discord.FFmpegPCMAudio(f"assets/dynamic_voice_join_{id}.mp3")
-                        if not voice_client.is_playing():
-                            log(f"正在播放 {member} 的進入音效", module_name="DynamicVoice", user=member, guild=member.guild)
-                            voice_client.play(audio_source)
-                            while voice_client.is_playing():
-                                if after.channel.members == 1:
-                                    voice_client.stop()
-                                    break
-                                await asyncio.sleep(0.1)
-                except Exception as e:
-                    log(f"無法播放進入音效: {e}", level=logging.ERROR, module_name="DynamicVoice", guild=member.guild)
-                finally:
+                voice_client = discord.utils.get(self.bot.voice_clients, guild=member.guild)
+                if not voice_client or not voice_client.is_connected:  # skip if playing music
                     try:
-                        await vp.disconnect()
+                        vp = await after.channel.connect()
+                        await asyncio.sleep(1)  # wait for a moment to ensure the user has joined the new channel
+                        voice_client = discord.utils.get(self.bot.voice_clients, guild=member.guild)
+                        if voice_client and voice_client.is_connected():
+                            voice_client.stop()  # Stop any existing audio
+                            id = random.randint(1, 7)
+                            audio_source = discord.FFmpegPCMAudio(f"assets/dynamic_voice_join_{id}.mp3")
+                            if not voice_client.is_playing():
+                                log(f"正在播放 {member} 的進入音效", module_name="DynamicVoice", user=member, guild=member.guild)
+                                voice_client.play(audio_source)
+                                while voice_client.is_playing():
+                                    if after.channel.members == 1:
+                                        voice_client.stop()
+                                        break
+                                    await asyncio.sleep(0.1)
                     except Exception as e:
-                        log(f"無法斷開語音頻道: {e}", level=logging.ERROR, module_name="DynamicVoice", guild=member.guild)
+                        log(f"無法播放進入音效: {e}", level=logging.ERROR, module_name="DynamicVoice", guild=member.guild)
+                    finally:
+                        try:
+                            await vp.disconnect()
+                        except Exception as e:
+                            log(f"無法斷開語音頻道: {e}", level=logging.ERROR, module_name="DynamicVoice", guild=member.guild)
             try:
                 if after.channel.members != 1:
                     await member.move_to(new_channel)
