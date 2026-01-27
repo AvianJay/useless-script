@@ -55,6 +55,22 @@ class Music(commands.GroupCog, name=app_commands.locale_str("music")):
         self.bot = bot
         self.node = None
     
+    async def _ensure_voice(self, ctx: commands.Context) -> Optional[lava_lyra.Player]:
+        """確保使用者在語音頻道並返回播放器"""
+        if not ctx.author.voice or not ctx.author.voice.channel:
+            await ctx.send("❌ 你必須加入語音頻道才能使用此指令")
+            return None
+        
+        player: lava_lyra.Player = ctx.guild.voice_client
+        if not player:
+            try:
+                player = await ctx.author.voice.channel.connect(cls=lava_lyra.Player)
+                text_channels[ctx.guild.id] = ctx.channel
+            except Exception as e:
+                await ctx.send(f"❌ 無法連接到語音頻道: {e}")
+                return None
+        return player
+    
 
     @commands.Cog.listener()
     async def on_ready(self):
@@ -247,6 +263,7 @@ class Music(commands.GroupCog, name=app_commands.locale_str("music")):
                     description=f"**[{track.title}]({track.uri})**",
                     color=0x2ecc71
                 )
+                embed.set_thumbnail(url=track.thumbnail)
                 if track.author:
                     embed.add_field(name="藝術家", value=track.author, inline=True)
                 embed.add_field(
@@ -361,6 +378,10 @@ class Music(commands.GroupCog, name=app_commands.locale_str("music")):
                 color=0xe74c3c
             )
             await interaction.followup.send(embed=embed)
+            queue = get_queue(interaction.guild.id)
+            next_track = queue.get()
+            if next_track:
+                await player.play(next_track)
         except Exception as e:
             await interaction.followup.send(f"❌ 跳過出錯: {e}", ephemeral=True)
     
@@ -444,6 +465,7 @@ class Music(commands.GroupCog, name=app_commands.locale_str("music")):
             description=f"**[{track.title}]({track.uri})**",
             color=0x3498db
         )
+        embed.set_thumbnail(url=track.thumbnail)
         
         if track.author:
             embed.add_field(name="藝術家", value=track.author, inline=True)
@@ -488,6 +510,255 @@ class Music(commands.GroupCog, name=app_commands.locale_str("music")):
         minutes = seconds // 60
         seconds = seconds % 60
         return f"{minutes}:{seconds:02d}"
+    
+    # ========== 文字指令 ==========
+    
+    @commands.command(name="play", aliases=["p", "播放"])
+    @commands.guild_only()
+    async def text_play(self, ctx: commands.Context, *, query: str):
+        """播放音樂"""
+        player = await self._ensure_voice(ctx)
+        if not player:
+            return
+        
+        guild_id = ctx.guild.id
+        queue = get_queue(guild_id)
+        
+        try:
+            results = await player.get_tracks(query)
+            
+            if not results:
+                await ctx.send(f"❌ 找不到 '{query}' 的結果")
+                return
+            
+            if isinstance(results, lava_lyra.Playlist):
+                tracks = results.tracks
+                embed = discord.Embed(
+                    title="📋 播放列表已添加",
+                    description=f"**{results.name}**",
+                    color=0x2ecc71
+                )
+                embed.set_thumbnail(url=results.thumbnail)
+                embed.add_field(name="歌曲數量", value=len(tracks), inline=True)
+                embed.add_field(name="總時長", value=self._format_duration(sum(t.length for t in tracks)), inline=True)
+                await ctx.send(embed=embed)
+                
+                for track in tracks:
+                    queue.add(track)
+            else:
+                track = results[0]
+                queue.add(track)
+                
+                embed = discord.Embed(
+                    title="✅ 已添加到隊列",
+                    description=f"**[{track.title}]({track.uri})**",
+                    color=0x2ecc71,
+                )
+                embed.set_thumbnail(url=track.thumbnail)
+                if track.author:
+                    embed.add_field(name="藝術家", value=track.author, inline=True)
+                embed.add_field(
+                    name="時長",
+                    value=self._format_duration(track.length),
+                    inline=True
+                )
+                embed.add_field(name="隊列位置", value=len(queue), inline=True)
+                await ctx.send(embed=embed)
+            
+            if not player.is_playing:
+                next_track = queue.get()
+                if next_track:
+                    await player.play(next_track)
+        
+        except Exception as e:
+            log(f"播放出錯: {e}", level=logging.ERROR, module_name="Music")
+            await ctx.send(f"❌ 播放出錯: {e}")
+    
+    @commands.command(name="pause", aliases=["暫停"])
+    @commands.guild_only()
+    async def text_pause(self, ctx: commands.Context):
+        """暫停播放"""
+        player: lava_lyra.Player = ctx.guild.voice_client
+        if not player:
+            await ctx.send("❌ 沒有正在播放的音樂")
+            return
+        
+        if player.is_paused:
+            await ctx.send("❌ 音樂已經暫停")
+            return
+        
+        try:
+            await player.pause()
+            await ctx.send("⏸️ 音樂已暫停")
+        except Exception as e:
+            await ctx.send(f"❌ 暫停出錯: {e}")
+    
+    @commands.command(name="resume", aliases=["繼續"])
+    @commands.guild_only()
+    async def text_resume(self, ctx: commands.Context):
+        """繼續播放"""
+        player: lava_lyra.Player = ctx.guild.voice_client
+        if not player:
+            await ctx.send("❌ 沒有暫停的音樂")
+            return
+        
+        if not player.is_paused:
+            await ctx.send("❌ 音樂未暫停")
+            return
+        
+        try:
+            await player.resume()
+            await ctx.send("▶️ 音樂已繼續播放")
+        except Exception as e:
+            await ctx.send(f"❌ 繼續播放出錯: {e}")
+    
+    @commands.command(name="stop", aliases=["停止", "leave", "離開"])
+    @commands.guild_only()
+    async def text_stop(self, ctx: commands.Context):
+        """停止播放並斷開連接"""
+        player: lava_lyra.Player = ctx.guild.voice_client
+        if not player:
+            await ctx.send("❌ 沒有正在播放的音樂")
+            return
+        
+        try:
+            queue = get_queue(ctx.guild.id)
+            queue.clear()
+            await player.stop()
+            await player.disconnect()
+            music_queues.pop(ctx.guild.id, None)
+            text_channels.pop(ctx.guild.id, None)
+            await ctx.send("⏹️ 已停止播放並斷開連接")
+        except Exception as e:
+            await ctx.send(f"❌ 停止出錯: {e}")
+    
+    @commands.command(name="skip", aliases=["sk", "跳過", "下一首"])
+    @commands.guild_only()
+    async def text_skip(self, ctx: commands.Context):
+        """跳過當前歌曲"""
+        player: lava_lyra.Player = ctx.guild.voice_client
+        if not player or not player.is_playing:
+            await ctx.send("❌ 沒有正在播放的音樂")
+            return
+        
+        try:
+            current_track = player.current
+            await player.stop()
+            
+            embed = discord.Embed(
+                title="⏭️ 已跳過",
+                description=f"**{current_track.title}**",
+                color=0xe74c3c
+            )
+            await ctx.send(embed=embed)
+            queue = get_queue(ctx.guild.id)
+            next_track = queue.get()
+            if next_track:
+                await player.play(next_track)
+        except Exception as e:
+            await ctx.send(f"❌ 跳過出錯: {e}")
+    
+    @commands.command(name="queue", aliases=["qu", "隊列"])
+    @commands.guild_only()
+    async def text_queue(self, ctx: commands.Context):
+        """查看播放隊列"""
+        player: lava_lyra.Player = ctx.guild.voice_client
+        queue = get_queue(ctx.guild.id)
+        
+        if not player:
+            await ctx.send("❌ 沒有正在播放的音樂")
+            return
+        
+        if not player.current and queue.is_empty:
+            await ctx.send("❌ 播放隊列為空")
+            return
+        
+        embed = discord.Embed(title="📋 播放隊列", color=0x3498db)
+        
+        if player.current:
+            embed.description = f"**正在播放:**\n[{player.current.title}]({player.current.uri})"
+        
+        if not queue.is_empty:
+            queue_list = []
+            total_duration = 0
+            
+            for i, track in enumerate(queue, 1):
+                if i <= 10:
+                    queue_list.append(f"{i}. [{track.title}]({track.uri})")
+                total_duration += track.length
+            
+            if queue_list:
+                embed.add_field(
+                    name=f"接下來的歌曲 ({len(queue)} 首)",
+                    value="\n".join(queue_list),
+                    inline=False
+                )
+            
+            if len(queue) > 10:
+                embed.add_field(name="更多歌曲", value=f"還有 {len(queue) - 10} 首歌曲", inline=False)
+            
+            embed.add_field(
+                name="隊列總時長",
+                value=self._format_duration(total_duration),
+                inline=True
+            )
+        
+        embed.set_footer(text=f"隊列中共有 {len(queue)} 首歌曲")
+        await ctx.send(embed=embed)
+    
+    @commands.command(name="nowplaying", aliases=["np", "現正播放"])
+    @commands.guild_only()
+    async def text_now_playing(self, ctx: commands.Context):
+        """查看當前播放的歌曲"""
+        player: lava_lyra.Player = ctx.guild.voice_client
+        if not player or not player.current:
+            await ctx.send("❌ 沒有正在播放的音樂")
+            return
+        
+        track = player.current
+        
+        position = player.position
+        length = track.length
+        progress = int((position / length) * 20) if length > 0 else 0
+        progress_bar = "█" * progress + "░" * (20 - progress)
+        
+        embed = discord.Embed(
+            title="🎵 當前播放",
+            description=f"**[{track.title}]({track.uri})**",
+            color=0x3498db
+        )
+        
+        if track.author:
+            embed.add_field(name="藝術家", value=track.author, inline=True)
+        
+        embed.add_field(
+            name="進度",
+            value=f"`{progress_bar}`\n{self._format_duration(position)} / {self._format_duration(length)}",
+            inline=False
+        )
+        
+        embed.add_field(name="音量", value=f"{player.volume}%", inline=True)
+        
+        await ctx.send(embed=embed)
+    
+    @commands.command(name="volume", aliases=["vol", "音量"])
+    @commands.guild_only()
+    async def text_volume(self, ctx: commands.Context, level: int):
+        """調整音量"""
+        if level < 0 or level > 100:
+            await ctx.send("❌ 音量必須在 0-100 之間")
+            return
+        
+        player: lava_lyra.Player = ctx.guild.voice_client
+        if not player:
+            await ctx.send("❌ 沒有正在播放的音樂")
+            return
+        
+        try:
+            await player.set_volume(level)
+            await ctx.send(f"🔊 音量已設置為 {level}%")
+        except Exception as e:
+            await ctx.send(f"❌ 設置音量出錯: {e}")
 
 
 asyncio.run(bot.add_cog(Music(bot)))
