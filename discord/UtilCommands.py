@@ -28,6 +28,42 @@ def get_commit_logs(limit=10) -> str:
         return ["無法取得提交記錄。"]
 
 
+def parse_changelog() -> list[dict]:
+    """解析 changelog.md 並返回版本列表"""
+    try:
+        changelog_path = os.path.join(os.path.dirname(__file__), "changelog.md")
+        with open(changelog_path, "r", encoding="utf-8") as f:
+            content = f.read()
+    except Exception as e:
+        return []
+    
+    versions = []
+    current_version = None
+    current_content = []
+    
+    for line in content.split("\n"):
+        if line.startswith("## "):
+            # 新版本開始
+            if current_version:
+                versions.append({
+                    "version": current_version,
+                    "content": "\n".join(current_content).strip()
+                })
+            current_version = line[3:].strip()
+            current_content = []
+        elif current_version:
+            current_content.append(line)
+    
+    # 添加最後一個版本
+    if current_version:
+        versions.append({
+            "version": current_version,
+            "content": "\n".join(current_content).strip()
+        })
+    
+    return versions
+
+
 def get_time_text(seconds: int) -> str:
     if seconds == 0:
         return "0 秒"
@@ -424,10 +460,36 @@ async def banner(ctx: commands.Context, user: Union[discord.User, discord.Member
     await ctx.send(embed=embed, view=view)
 
 
+async def command_autocomplete(interaction: discord.Interaction, current: str):
+    commands_list = []
+    for cmd in bot.tree.get_commands():
+        if isinstance(cmd, app_commands.Command):
+            commands_list.append(cmd.name)
+    return [
+        app_commands.Choice(name=cmd, value=cmd)
+        for cmd in commands_list if current.lower() in cmd.lower()
+    ][:25]
+
+
+async def subcommand_autocomplete(interaction: discord.Interaction, current: str):
+    command_name = interaction.namespace.command
+    command = bot.tree.get_command(command_name)
+    subcommands_list = []
+    if command and isinstance(command, app_commands.Group):
+        for subcmd in command.commands:
+            if isinstance(subcmd, app_commands.Command):
+                subcommands_list.append(subcmd.name)
+    return [
+        app_commands.Choice(name=subcmd, value=subcmd)
+        for subcmd in subcommands_list if current.lower() in subcmd.lower()
+    ][:25]
+
+
 @bot.tree.command(name=app_commands.locale_str("get-command-mention"), description="取得指令的提及格式")
 @app_commands.describe(command="指令名稱", subcommand="子指令名稱（可選）")
 @app_commands.allowed_installs(guilds=True, users=True)
 @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
+@app_commands.autocomplete(command=command_autocomplete, subcommand=subcommand_autocomplete)
 async def get_cmd_mention(interaction: discord.Interaction, command: str, subcommand: str = None):
     mention = await get_command_mention(command, subcommand)
     if mention is None:
@@ -488,14 +550,73 @@ async def httpcat(ctx: commands.Context, status_code: int):
     await ctx.send(embed=embed)
 
 
-@bot.tree.command(name=app_commands.locale_str("changelogs"), description="顯示機器人更新日誌")
+@bot.tree.command(name=app_commands.locale_str("git-commits"), description="顯示機器人的 git 提交記錄")
 @app_commands.allowed_installs(guilds=True, users=True)
 @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
 async def changelogs_command(interaction: discord.Interaction):
     # get 10 commit logs
     commit_logs = get_commit_logs(10)
-    embed = discord.Embed(title="機器人更新日誌", description="\n".join(commit_logs), color=0x00ff00)
+    embed = discord.Embed(title="機器人 git 提交記錄", description="\n".join(commit_logs), color=0x00ff00)
     await interaction.response.send_message(embed=embed)
+
+
+class ChangeLogView(discord.ui.View):
+    def __init__(self, versions: list[dict], current_page: int = 0, interaction: discord.Interaction = None):
+        super().__init__(timeout=None)
+        self.versions = versions
+        self.current_page = current_page
+        self.interaction = interaction
+        self.time = datetime.now(timezone.utc)
+        self.update_buttons()
+    
+    async def on_timeout(self):
+        for item in self.children:
+            item.disabled = True
+        # Disable buttons when timeout
+        await self.interaction.edit_original_response(view=self)
+    
+    def update_buttons(self):
+        self.prev_button.disabled = self.current_page <= 0
+        self.next_button.disabled = self.current_page >= len(self.versions) - 1
+    
+    def get_embed(self) -> discord.Embed:
+        if not self.versions:
+            return discord.Embed(title="更新日誌", description="無法取得更新日誌。", color=0xff0000)
+        
+        version_data = self.versions[self.current_page]
+        embed = discord.Embed(
+            title=f"更新日誌 - {version_data['version']}",
+            description=version_data['content'][:4096] if version_data['content'] else "無更新內容。",
+            color=0x00ff00
+        )
+        embed.set_footer(text=f"頁數：{self.current_page + 1}/{len(self.versions)}")
+        embed.timestamp = self.time
+        return embed
+
+    @discord.ui.button(emoji="⬅️", style=discord.ButtonStyle.primary, custom_id="changelog_prev")
+    async def prev_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        self.current_page -= 1
+        self.update_buttons()
+        await interaction.response.edit_message(embed=self.get_embed(), view=self)
+    
+    @discord.ui.button(emoji="➡️", style=discord.ButtonStyle.primary, custom_id="changelog_next")
+    async def next_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        self.current_page += 1
+        self.update_buttons()
+        await interaction.response.edit_message(embed=self.get_embed(), view=self)
+
+
+@bot.tree.command(name=app_commands.locale_str("changelog"), description="顯示機器人更新日誌")
+@app_commands.allowed_installs(guilds=True, users=True)
+@app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
+async def changelog_command(interaction: discord.Interaction):
+    versions = parse_changelog()
+    if not versions:
+        await interaction.response.send_message("無法取得更新日誌。", ephemeral=True)
+        return
+    
+    view = ChangeLogView(versions, interaction=interaction)
+    await interaction.response.send_message(embed=view.get_embed(), view=view)
 
 
 @bot.tree.command(name=app_commands.locale_str("ping"), description="檢查機器人延遲")
@@ -527,7 +648,7 @@ async def ping(ctx: commands.Context):
     except OverflowError:
         bot_latency = "N/A"
     s = time.perf_counter()
-    await ctx.trigger_typing()
+    await ctx.typing()
     e = time.perf_counter()
     rest_latency = round((e - s) * 1000, 2)  # in milliseconds
     embed = discord.Embed(title="機器人延遲", color=0x00ff00)

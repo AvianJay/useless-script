@@ -316,7 +316,7 @@ translations = {
     "follow": "追蹤",
     "reverse": "反轉",
     "spoilers": "暴雷",
-    "changelogs": "更新日誌",
+    "changelog": "更新日誌",
     "global_history": "全域歷史紀錄",
     "webverify": "網頁驗證",
     "status": "狀態",
@@ -369,6 +369,7 @@ translations = {
     "volume": "音量",
     "ai-clear": "ai-清除",
     "ai-history": "ai-歷史紀錄",
+    "git-commits": "git-提交紀錄",
 }
 class CommandNameTranslator(app_commands.Translator):
     async def translate(
