@@ -463,8 +463,7 @@ async def banner(ctx: commands.Context, user: Union[discord.User, discord.Member
 async def command_autocomplete(interaction: discord.Interaction, current: str):
     commands_list = []
     for cmd in bot.tree.get_commands():
-        if isinstance(cmd, app_commands.Command):
-            commands_list.append(cmd.name)
+        commands_list.append(cmd.name)
     return [
         app_commands.Choice(name=cmd, value=cmd)
         for cmd in commands_list if current.lower() in cmd.lower()

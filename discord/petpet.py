@@ -44,7 +44,7 @@ class PetPetCommand(commands.Cog):
             log(f"生成 PetPet GIF 時發生錯誤：{e}", module_name="petpet", level=logging.ERROR, user=interaction.user, guild=interaction.guild)
             traceback.print_exc()
     
-    @commands.command(name="petpet", help="生成 PetPet GIF", aliases=["撫摸", "pet", "p"])
+    @commands.command(name="petpet", help="生成 PetPet GIF", aliases=["撫摸", "pet", "pp"])
     async def petpet_command(self, ctx: commands.Context, user: Union[discord.Member, discord.User] = None):
         try:
             if user is None:

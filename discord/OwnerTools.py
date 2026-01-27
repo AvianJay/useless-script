@@ -120,7 +120,7 @@ async def serverconfig(ctx, guild_id: int=None, key: str=None, value: str=None):
         await ctx.send(f"已更新伺服器 {guild_id} 的 {key} 為 {value}。")
 
 
-@bot.command(aliases=["leave", "l"])
+@bot.command(aliases=["l"])
 @is_owner()
 async def leaveserver(ctx, guild_id: int):
     guild = bot.get_guild(guild_id)
