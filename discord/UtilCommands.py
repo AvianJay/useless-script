@@ -12,7 +12,7 @@ import aiohttp
 from database import db
 
 startup_time = datetime.now(timezone.utc)
-version = "0.16.14"
+version = "0.17.0"
 try:
     git_commit_hash = os.popen("git rev-parse --short HEAD").read().strip()
 except Exception as e:
@@ -22,7 +22,7 @@ full_version = f"{version} ({git_commit_hash})"
 
 def get_commit_logs(limit=10) -> str:
     try:
-        logs = os.popen("git log -n 10 \"--pretty=format:%an: %h - %s (%cr)\"").read().strip().split("\n")
+        logs = os.popen(f"git log -n {limit} \"--pretty=format:%an: %h - %s (%cr)\"").read().strip().split("\n")
         return logs
     except Exception as e:
         return ["無法取得提交記錄。"]

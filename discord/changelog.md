@@ -1,5 +1,25 @@
 # 更新日誌
 
+## 0.17.0
+### 更新內容如下：
+* 新增 /changelog
+  * 可以查看機器人更新日誌。(手寫)
+* /changelogs -> /git-commits
+  * 已改變指令名稱。
+* 新增 /music
+  * 音樂播放系統。
+  * 使用 `y!help Music` 查看指令說明。
+* 新增 /ai
+  * 就... 免費的 AI，別期待什麼了吧...
+* 更新 /dynamic-voice play-audio
+  * 現在不會常駐在語音頻道裡。
+* 更新 /get-command-mention
+  * 新增指令自動完成。
+* 更新日誌系統
+  * 移除了不必要的 Codeblock 標記。
+* 因 Discord 限制移除離線訊息。
+* 修復一些 Bug。
+
 ## 0.16.14
 ### 更新內容如下：
 * 修復一些 Bug。
