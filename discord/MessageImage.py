@@ -109,10 +109,37 @@ async def prepare_segments(text, font):
     return final_segments
 
 def get_text_size(text, font):
+    # 使用 getlength 來獲取正確的寬度（包含空格）
+    try:
+        width = font.getlength(text)
+    except AttributeError:
+        # 舊版 Pillow 備用方案
+        bbox = font.getmask(text).getbbox()
+        width = bbox[2] - bbox[0] if bbox else 0
+    
+    # 高度使用 getbbox 或 getmetrics
     bbox = font.getmask(text).getbbox()
-    if not bbox:
-        return 0, 0
-    return bbox[2] - bbox[0], bbox[3] - bbox[1]
+    if bbox:
+        height = bbox[3] - bbox[1]
+    else:
+        # 對於純空格，使用字體的 metrics
+        ascent, descent = font.getmetrics()
+        height = ascent + descent
+    
+    return int(width), height
+
+def get_twemoji_url(emoji_char):
+    """將 Unicode emoji 轉換為 Twemoji CDN URL"""
+    # 將 emoji 轉換為 codepoints
+    codepoints = []
+    for char in emoji_char:
+        cp = ord(char)
+        # 跳過變體選擇器 (FE0E, FE0F)
+        if cp not in (0xFE0E, 0xFE0F):
+            codepoints.append(f"{cp:x}")
+    
+    filename = "-".join(codepoints)
+    return f"https://cdn.jsdelivr.net/gh/twitter/twemoji@latest/assets/72x72/{filename}.png"
 
 async def load_emojis(segments, size):
     async with aiohttp.ClientSession() as session:
@@ -132,6 +159,24 @@ async def load_emojis(segments, size):
                     # Fallback to text representation
                     seg.type = 'text'
                     seg.content = f":{seg.content}:"
+            
+            # 處理 Unicode emoji - 從 Twemoji 下載圖片
+            elif seg.type == 'unicode_emoji':
+                url = get_twemoji_url(seg.content)
+                try:
+                    async with session.get(url) as resp:
+                        if resp.status == 200:
+                            data = await resp.read()
+                            img = Image.open(io.BytesIO(data)).convert("RGBA")
+                            img = img.resize((size, size), Image.Resampling.LANCZOS)
+                            seg.image = img
+                            seg.width = size
+                            seg.height = size
+                        else:
+                            # 如果下載失敗，保留為文字
+                            print(f"Failed to load unicode emoji {seg.content}, status: {resp.status}")
+                except Exception as e:
+                    print(f"Failed to load unicode emoji {seg.content}: {e}")
 
 def layout_segments(segments, font, max_width, emoji_size, emoji_font=None):
     lines = []
@@ -145,15 +190,9 @@ def layout_segments(segments, font, max_width, emoji_size, emoji_font=None):
              seg.width = emoji_size
              seg.height = emoji_size
         elif seg.type == 'unicode_emoji':
-             # Use emoji font if available
-             use_font = emoji_font if emoji_font else font
-             w, h = get_text_size(seg.content, use_font)
-             # Emojis in fonts can be weirdly sized. 
-             # If twemoji is used, it might be consistent.
-             # fallback to emoji_size if 0? or just use measured.
-             if w == 0: w = epsilon = 10 # failsafe
-             seg.width = w
-             seg.height = h
+             # Unicode emoji 將會被下載為圖片，使用與自定義 emoji 相同的尺寸
+             seg.width = emoji_size
+             seg.height = emoji_size
         else: # text
              pass # width calculated below
 
@@ -289,12 +328,12 @@ async def create(message: discord.Message):
             if seg.type == 'emoji' and seg.image:
                 img.paste(seg.image, (int(cursor_x), int(current_y)), seg.image)
             elif seg.type == 'unicode_emoji':
-                # Use standard draw, but with emoji font.
-                # Note: Pillow might not render color standardly without libraqm/specific support.
-                # using embedded color? 'fill="white"' might override if it's a monochrome glyph.
-                # If it's CBDT/CBLC, it should just work?
-                # We try drawing with white fill, if it's color font it might ignore fill.
-                draw.text((cursor_x, current_y), seg.content, font=final_emoji_font, fill="white", embedded_color=True) 
+                # 使用下載的圖片繪製 Unicode emoji
+                if seg.image:
+                    img.paste(seg.image, (int(cursor_x), int(current_y)), seg.image)
+                else:
+                    # 如果圖片載入失敗，fallback 用文字繪製
+                    draw.text((cursor_x, current_y), seg.content, font=final_font, fill="white")
             else:
                 draw.text((cursor_x, current_y), seg.content, font=final_font, fill="white")
             
