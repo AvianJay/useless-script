@@ -49,7 +49,7 @@ def get_queue(guild_id: int) -> MusicQueue:
     return music_queues[guild_id]
 
 
-class Music(commands.GroupCog, name=app_commands.locale_str("music")):
+class Music(commands.GroupCog, group_name=app_commands.locale_str("music")):
     def __init__(self, bot):
         super().__init__()
         self.bot = bot
