@@ -66,8 +66,12 @@ for module in modules:
         # print(f"[!] Failed to load module {module}: {e}")
         log(f"Failed to load module {module}: {e}", module_name="all")
         traceback.print_exc()
-        modules.remove(module)
+        # modules.remove(module)
         failed_modules.append(module)
+
+for module in failed_modules:
+    if module in modules:
+        modules.remove(module)
 
 if __name__ == "__main__":
     start_bot()
