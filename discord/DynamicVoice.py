@@ -296,8 +296,9 @@ class DynamicVoice(commands.GroupCog, name=app_commands.locale_str("dynamic-voic
             channel_id = get_server_config(guild_id, "dynamic_voice_channel")
             if play_audio_enabled and channel_id:
                 channel = guild.get_channel(channel_id)
-                if channel.user_limit != 1:
-                    await channel.edit(user_limit=1)
+                if channel:
+                    if channel.user_limit != 1:
+                        await channel.edit(user_limit=1)
                 # if channel:
                 #     try:
                 #         await channel.connect()
