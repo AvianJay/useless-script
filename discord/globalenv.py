@@ -11,7 +11,7 @@ import logging
 
 
 # Global configuration for backward compatibility
-config_version = 20
+config_version = 21
 config_path = 'config.json'
 
 default_config = {
@@ -52,9 +52,9 @@ default_config = {
     "contribute_channel_id": 0,
     "disable_modules": [],
     "join_leave_log_channel_id": 0,
-    "lavalink_host": "",
-    "lavalink_port": "",
-    "lavalink_password": "",
+    "lavalink_host": "localhost",
+    "lavalink_port": 2333,
+    "lavalink_password": "youshallnotpass",
 }
 _config = None
 
@@ -357,7 +357,18 @@ translations = {
     "help": "幫助",
     "stats": "統計資料",
     "user-appeal-channel": "用戶申訴頻道",
-    "full": "完整"
+    "full": "完整",
+    "music": "音樂",
+    "play": "播放",
+    "pause": "暫停",
+    "resume": "繼續",
+    "skip": "跳過",
+    "stop": "停止",
+    "queue": "佇列",
+    "now-playing": "正在播放",
+    "volume": "音量",
+    "ai-clear": "ai-清除",
+    "ai-history": "ai-歷史紀錄",
 }
 class CommandNameTranslator(app_commands.Translator):
     async def translate(

@@ -16,3 +16,4 @@ flask-socketio~=5.5.0
 asgiref~=3.8.1
 owoify-py==2.1.0
 expiring-dict~=1.1.2
+lava-lyra~=1.6.0
