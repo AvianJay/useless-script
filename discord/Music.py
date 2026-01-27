@@ -78,6 +78,51 @@ class Music(commands.GroupCog, name=app_commands.locale_str("music")):
             log(f"無法連接到 Lavalink 伺服器: {e}", level=logging.ERROR, module_name="Music")
     
     @commands.Cog.listener()
+    async def on_voice_state_update(self, member: discord.Member, before: discord.VoiceState, after: discord.VoiceState):
+        """當語音狀態變化時，檢查是否需要離開語音頻道"""
+        # 只處理有人離開頻道的情況
+        if before.channel is None:
+            return
+        
+        # 檢查機器人是否在這個頻道
+        player: lava_lyra.Player = member.guild.voice_client
+        if not player or not player.channel:
+            return
+        
+        # 只處理機器人所在的頻道
+        if before.channel.id != player.channel.id:
+            return
+        
+        # 計算頻道內的真人數量（排除機器人）
+        human_count = sum(1 for m in player.channel.members if not m.bot)
+        
+        if human_count == 0:
+            guild_id = member.guild.id
+            queue = get_queue(guild_id)
+            
+            embed = discord.Embed(
+                title="👋 自動離開",
+                description="語音頻道內已無其他成員，機器人已離開",
+                color=0x95a5a6
+            )
+            try:
+                text_channel = text_channels.get(guild_id)
+                if text_channel:
+                    await text_channel.send(embed=embed)
+            except:
+                pass
+            
+            # 清理並離開
+            try:
+                queue.clear()
+                await player.stop()
+                await player.disconnect()
+                music_queues.pop(guild_id, None)
+                text_channels.pop(guild_id, None)
+            except:
+                pass
+    
+    @commands.Cog.listener()
     async def on_track_start(self, event: lava_lyra.TrackStartEvent):
         """當音樂開始播放時"""
         player = event.player
