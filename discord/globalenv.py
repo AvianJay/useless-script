@@ -52,7 +52,9 @@ default_config = {
     "contribute_channel_id": 0,
     "disable_modules": [],
     "join_leave_log_channel_id": 0,
-    "offline_interaction_endpoint": "",
+    "lavalink_host": "",
+    "lavalink_port": "",
+    "lavalink_password": "",
 }
 _config = None
 
