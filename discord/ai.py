@@ -10,6 +10,9 @@ import time
 from logger import log
 import logging
 
+# 全局允許提及設定（只允許提及用戶，禁止 @everyone 和 @here）
+SAFE_MENTIONS = discord.AllowedMentions(users=True, roles=False, everyone=False)
+
 # ============================================
 # Discord 提及處理
 # ============================================
@@ -648,7 +651,7 @@ class AICommands(commands.Cog):
             view = AIResponseBuilder.create_error_view(
                 "你發送請求太頻繁了！請等待一分鐘後再試。"
             )
-            await interaction.response.send_message(view=view, ephemeral=True)
+            await interaction.response.send_message(view=view, ephemeral=True, allowed_mentions=SAFE_MENTIONS)
             return
         
         # Prompt Injection 檢測
@@ -661,7 +664,7 @@ class AICommands(commands.Cog):
             view = AIResponseBuilder.create_warning_view(
                 "你的訊息包含可疑內容，已被系統過濾。\n請以正常方式與 AI 互動。"
             )
-            await interaction.response.send_message(view=view, ephemeral=True)
+            await interaction.response.send_message(view=view, ephemeral=True, allowed_mentions=SAFE_MENTIONS)
             return
         
         # 清理輸入
@@ -708,14 +711,14 @@ class AICommands(commands.Cog):
                 warning=warning
             )
             
-            await interaction.followup.send(view=view)
+            await interaction.followup.send(view=view, allowed_mentions=SAFE_MENTIONS)
             
         except Exception as e:
             log(f"AI 指令錯誤: {e}", module_name="AI", level=logging.ERROR)
             view = AIResponseBuilder.create_error_view(
                 f"生成回應時發生錯誤：{str(e)[:200]}"
             )
-            await interaction.followup.send(view=view)
+            await interaction.followup.send(view=view, allowed_mentions=SAFE_MENTIONS)
     
     @app_commands.command(name="ai-clear", description="清除你的 AI 對話歷史")
     @app_commands.allowed_installs(guilds=True, users=True)
@@ -727,7 +730,7 @@ class AICommands(commands.Cog):
         guild_id = interaction.guild.id if interaction.guild else None
         
         confirm_view = ClearHistoryView(user.id, guild_id)
-        await interaction.response.send_message(view=confirm_view, ephemeral=True)
+        await interaction.response.send_message(view=confirm_view, ephemeral=True, allowed_mentions=SAFE_MENTIONS)
     
     @app_commands.command(name="ai-history", description="查看你的 AI 對話歷史")
     @app_commands.allowed_installs(guilds=True, users=True)
@@ -742,14 +745,14 @@ class AICommands(commands.Cog):
         
         if not history:
             view = AIResponseBuilder.create_empty_history_view()
-            await interaction.response.send_message(view=view, ephemeral=True)
+            await interaction.response.send_message(view=view, ephemeral=True, allowed_mentions=SAFE_MENTIONS)
             return
         
         # 只顯示最近 10 條
         recent_history = history[-10:]
         view = AIResponseBuilder.create_history_view(recent_history, len(history))
         
-        await interaction.response.send_message(view=view, ephemeral=True)
+        await interaction.response.send_message(view=view, ephemeral=True, allowed_mentions=SAFE_MENTIONS)
     
     # ============================================
     # 文字指令
@@ -764,7 +767,7 @@ class AICommands(commands.Cog):
         別名: !ask, !chat
         """
         if message is None:
-            await ctx.reply("❌ 請輸入訊息！用法: `!ai <你的問題>`")
+            await ctx.reply("❌ 請輸入訊息！用法: `!ai <你的問題>`", allowed_mentions=SAFE_MENTIONS)
             return
         
         user = ctx.author
@@ -773,7 +776,7 @@ class AICommands(commands.Cog):
         
         # 速率限制檢查
         if not self.check_rate_limit(user.id):
-            await ctx.reply("⏳ 你發送請求太頻繁了！請等待一分鐘後再試。")
+            await ctx.reply("⏳ 你發送請求太頻繁了！請等待一分鐘後再試。", allowed_mentions=SAFE_MENTIONS)
             return
         
         # 處理提及文字
@@ -785,7 +788,7 @@ class AICommands(commands.Cog):
         if not is_safe:
             log(f"檢測到可疑輸入 - 用戶: {user.id}, 威脅數: {len(threats)}", 
                 module_name="AI", level=logging.WARNING)
-            await ctx.reply("⚠️ 你的訊息包含可疑內容，已被系統過濾。請以正常方式與 AI 互動。")
+            await ctx.reply("⚠️ 你的訊息包含可疑內容，已被系統過濾。請以正常方式與 AI 互動。", allowed_mentions=SAFE_MENTIONS)
             return
         
         # 清理輸入
@@ -834,47 +837,26 @@ class AICommands(commands.Cog):
                 ConversationManager.add_message(user.id, "user", final_message, guild_id)
                 ConversationManager.add_message(user.id, "assistant", response_text, guild_id)
                 
-                # 建立回應
-                warning = ""
+                # 建立回應（使用 Component V2 避免 @everyone/@here 攻擊）
+                warning = None
                 if minor_threats:
-                    warning = "⚠️ *你的訊息已被輕微修正以確保安全。*\n\n"
+                    warning = "你的訊息已被輕微修正以確保安全。"
                 
-                # 分割長訊息
-                max_length = 1900
-                full_response = f"🤖 **AI 回應**\n\n{warning}{response_text}"
+                view = AIResponseBuilder.create_response_view(
+                    response_text=response_text,
+                    user=user,
+                    model_name="openai",
+                    warning=warning
+                )
                 
-                if len(full_response) <= max_length:
-                    await ctx.reply(full_response)
-                else:
-                    # 分段發送
-                    chunks = []
-                    remaining = full_response
-                    
-                    while remaining:
-                        if len(remaining) <= max_length:
-                            chunks.append(remaining)
-                            break
-                        
-                        # 找到最佳分割點
-                        split_point = remaining.rfind('\n\n', 0, max_length)
-                        if split_point == -1:
-                            split_point = remaining.rfind('\n', 0, max_length)
-                        if split_point == -1:
-                            split_point = remaining.rfind(' ', 0, max_length)
-                        if split_point == -1:
-                            split_point = max_length
-                        
-                        chunks.append(remaining[:split_point])
-                        remaining = remaining[split_point:].lstrip()
-                    
-                    # 發送第一段作為回覆，其餘作為普通訊息
-                    await ctx.reply(chunks[0])
-                    for chunk in chunks[1:]:
-                        await ctx.send(chunk)
+                await ctx.reply(view=view, allowed_mentions=SAFE_MENTIONS)
                 
             except Exception as e:
                 log(f"AI 文字指令錯誤: {e}", module_name="AI", level=logging.ERROR)
-                await ctx.reply(f"❌ 生成回應時發生錯誤：{str(e)[:200]}")
+                view = AIResponseBuilder.create_error_view(
+                    f"生成回應時發生錯誤：{str(e)[:200]}"
+                )
+                await ctx.reply(view=view, allowed_mentions=SAFE_MENTIONS)
     
     @commands.command(name="ai-new", aliases=["ainew", "newchat"])
     async def ai_new_conversation(self, ctx: commands.Context, *, message: str = None):
@@ -891,7 +873,7 @@ class AICommands(commands.Cog):
         ConversationManager.clear_history(user.id, guild_id)
         
         if message is None:
-            await ctx.reply("✅ 對話歷史已清除！你可以開始新的對話。")
+            await ctx.reply("✅ 對話歷史已清除！你可以開始新的對話。", allowed_mentions=SAFE_MENTIONS)
             return
         
         # 如果有訊息，直接調用 ai 指令
@@ -909,7 +891,7 @@ class AICommands(commands.Cog):
         guild_id = ctx.guild.id if ctx.guild else None
         
         ConversationManager.clear_history(user.id, guild_id)
-        await ctx.reply("✅ 對話歷史已清除！")
+        await ctx.reply("✅ 對話歷史已清除！", allowed_mentions=SAFE_MENTIONS)
     
     @commands.command(name="ai-history", aliases=["aihistory", "chathistory"])
     async def ai_history_text(self, ctx: commands.Context):
@@ -925,26 +907,15 @@ class AICommands(commands.Cog):
         history = ConversationManager.get_history(user.id, guild_id)
         
         if not history:
-            await ctx.reply("📜 你還沒有任何對話歷史。使用 `!ai <訊息>` 開始對話！")
+            view = AIResponseBuilder.create_empty_history_view()
+            await ctx.reply(view=view, allowed_mentions=SAFE_MENTIONS)
             return
         
-        # 只顯示最近 5 條（文字版本較精簡）
-        recent_history = history[-5:]
+        # 只顯示最近 10 條
+        recent_history = history[-10:]
+        view = AIResponseBuilder.create_history_view(recent_history, len(history))
         
-        lines = ["📜 **對話歷史** (最近 5 條)\n"]
-        for msg in recent_history:
-            role_emoji = "👤" if msg["role"] == "user" else "🤖"
-            role_name = "你" if msg["role"] == "user" else "AI"
-            
-            content = msg["content"]
-            if len(content) > 100:
-                content = content[:100] + "..."
-            
-            lines.append(f"{role_emoji} **{role_name}**: {content}")
-        
-        lines.append(f"\n-# 共 {len(history)} 條訊息")
-        
-        await ctx.reply("\n".join(lines))
+        await ctx.reply(view=view, allowed_mentions=SAFE_MENTIONS)
 
 
 asyncio.run(bot.add_cog(AICommands(bot)))
