@@ -208,7 +208,7 @@ class AIResponseBuilder:
     def create_response_view(
         response_text: str,
         user: discord.User,
-        model_name: str = "Gemini",
+        model_name: str = "gpt-oss",
         warning: str = None
     ) -> discord.ui.LayoutView:
         """建立 AI 回應的 LayoutView"""
@@ -438,16 +438,16 @@ class AICommands(commands.Cog):
         self.rate_limits[user_id].append(current_time)
         return True
     
-    async def generate_response(self, messages: list, model: str = "gemini") -> str:
+    async def generate_response(self, messages: list, model: str = "openai") -> str:
         """使用 g4f 生成 AI 回應"""
         try:
             response = await asyncio.to_thread(
-                self.client.chat.completions.create,
+                g4f.ChatCompletion.create,
                 model=model,
                 messages=messages,
                 provider=g4f.Provider.PollinationsAI
             )
-            return response.choices[0].message.content
+            return response
         except Exception as e:
             log(f"AI 生成錯誤: {e}", module_name="AI", level=logging.ERROR)
             raise
