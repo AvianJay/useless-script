@@ -681,16 +681,19 @@ class AICommands(commands.Cog):
             
             history = ConversationManager.get_history(user.id, guild_id)
             
-            # 構建訊息列表
-            messages = [{"role": "system", "content": SYSTEM_PROMPT}]
+            # 構建訊息列表（包含用戶名稱）
+            user_context = f"當前與你對話的用戶名稱是：{user.display_name}"
+            system_with_context = f"{SYSTEM_PROMPT}\n\n{user_context}"
+            
+            messages = [{"role": "system", "content": system_with_context}]
             messages.extend(ConversationManager.format_for_api(history))
-            messages.append({"role": "user", "content": sanitized_message})
+            messages.append({"role": "user", "content": resolved_message})
             
             # 生成回應
             response_text = await self.generate_response(messages)
             
             # 儲存對話歷史
-            ConversationManager.add_message(user.id, "user", sanitized_message, guild_id)
+            ConversationManager.add_message(user.id, "user", resolved_message, guild_id)
             ConversationManager.add_message(user.id, "assistant", response_text, guild_id)
             
             # 建立回應
@@ -701,7 +704,7 @@ class AICommands(commands.Cog):
             view = AIResponseBuilder.create_response_view(
                 response_text=response_text,
                 user=user,
-                model_name="Gemini",
+                model_name="openai",
                 warning=warning
             )
             
