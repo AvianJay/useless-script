@@ -370,6 +370,7 @@ translations = {
     "ai-clear": "ai-清除",
     "ai-history": "ai-歷史紀錄",
     "git-commits": "git-提交紀錄",
+    "new_conversation": "新對話",
 }
 class CommandNameTranslator(app_commands.Translator):
     async def translate(
