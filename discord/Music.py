@@ -139,13 +139,11 @@ class Music(commands.GroupCog, group_name=app_commands.locale_str("music")):
                 pass
     
     @commands.Cog.listener()
-    async def on_track_start(self, event: lava_lyra.TrackStartEvent):
+    async def on_lyra_track_start(self, player: lava_lyra.Player, track: lava_lyra.Track):
         """當音樂開始播放時"""
-        player = event.player
         if not player:
             return
         
-        track = event.track
         embed = discord.Embed(
             title="🎵 開始播放",
             description=f"**[{track.title}]({track.uri})**",
@@ -167,40 +165,57 @@ class Music(commands.GroupCog, group_name=app_commands.locale_str("music")):
             log(f"無法發送播放通知: {e}", level=logging.WARNING, module_name="Music")
     
     @commands.Cog.listener()
-    async def on_track_end(self, event: lava_lyra.TrackEndEvent):
+    async def on_lyra_track_end(self, player: lava_lyra.Player, track: lava_lyra.Track, reason: Optional[str]):
         """當音樂結束播放時"""
-        player = event.player
         if not player:
             return
         
         guild_id = player.guild.id
         queue = get_queue(guild_id)
         
-        if event.reason == "FINISHED":
-            # 播放下一首歌
-            next_track = queue.get()
-            if next_track:
+        # 檢查結束原因，可能是字串或枚舉
+        reason_str = str(reason).upper() if reason else ""
+        log(f"Track ended with reason: {reason_str}", module_name="Music")
+        
+        # 只在正常結束時播放下一首
+        # REPLACED: 被新歌曲替換（不需要自動播放）
+        # STOPPED: 手動停止（skip 會自己處理下一首）
+        # LOAD_FAILED: 載入失敗
+        if "REPLACED" in reason_str or "LOAD_FAILED" in reason_str:
+            return
+        
+        # STOPPED 通常是 skip 或 stop 指令觸發的，這些指令會自己處理
+        # 但如果是自然結束 (FINISHED)，需要播放下一首
+        if "STOPPED" in reason_str:
+            return
+        
+        # 播放下一首歌 (FINISHED 的情況)
+        next_track = queue.get()
+        if next_track:
+            try:
                 await player.play(next_track)
-            else:
-                embed = discord.Embed(
-                    title="🎵 播放隊列已清空",
-                    description="沒有更多的歌曲要播放，即將離開語音頻道",
-                    color=0x95a5a6
-                )
-                try:
-                    text_channel = text_channels.get(guild_id)
-                    if text_channel:
-                        await text_channel.send(embed=embed)
-                except:
-                    pass
-                
-                # 離開語音頻道並清理資料
-                try:
-                    await player.disconnect()
-                    music_queues.pop(guild_id, None)
-                    text_channels.pop(guild_id, None)
-                except:
-                    pass
+            except Exception as e:
+                log(f"播放下一首失敗: {e}", level=logging.ERROR, module_name="Music")
+        else:
+            embed = discord.Embed(
+                title="🎵 播放隊列已清空",
+                description="沒有更多的歌曲要播放，即將離開語音頻道",
+                color=0x95a5a6
+            )
+            try:
+                text_channel = text_channels.get(guild_id)
+                if text_channel:
+                    await text_channel.send(embed=embed)
+            except:
+                pass
+            
+            # 離開語音頻道並清理資料
+            try:
+                await player.disconnect()
+                music_queues.pop(guild_id, None)
+                text_channels.pop(guild_id, None)
+            except:
+                pass
     
     @app_commands.command(name=app_commands.locale_str("play"), description="播放音樂")
     @app_commands.describe(query="歌曲名稱或 URL")
@@ -302,7 +317,7 @@ class Music(commands.GroupCog, group_name=app_commands.locale_str("music")):
             return
         
         try:
-            await player.pause()
+            await player.set_pause(True)
             await interaction.followup.send("⏸️ 音樂已暫停")
         except Exception as e:
             await interaction.followup.send(f"❌ 暫停出錯: {e}", ephemeral=True)
@@ -325,7 +340,7 @@ class Music(commands.GroupCog, group_name=app_commands.locale_str("music")):
             return
         
         try:
-            await player.resume()
+            await player.set_pause(False)
             await interaction.followup.send("▶️ 音樂已繼續播放")
         except Exception as e:
             await interaction.followup.send(f"❌ 繼續播放出錯: {e}", ephemeral=True)
@@ -409,6 +424,7 @@ class Music(commands.GroupCog, group_name=app_commands.locale_str("music")):
         # 顯示當前播放的歌曲
         if player.current:
             embed.description = f"**正在播放:**\n[{player.current.title}]({player.current.uri})"
+            embed.set_thumbnail(url=player.current.thumbnail)
         
         # 顯示隊列中的歌曲
         if not queue.is_empty:
@@ -588,7 +604,7 @@ class Music(commands.GroupCog, group_name=app_commands.locale_str("music")):
             return
         
         try:
-            await player.pause()
+            await player.set_pause(True)
             await ctx.send("⏸️ 音樂已暫停")
         except Exception as e:
             await ctx.send(f"❌ 暫停出錯: {e}")
@@ -607,7 +623,7 @@ class Music(commands.GroupCog, group_name=app_commands.locale_str("music")):
             return
         
         try:
-            await player.resume()
+            await player.set_pause(False)
             await ctx.send("▶️ 音樂已繼續播放")
         except Exception as e:
             await ctx.send(f"❌ 繼續播放出錯: {e}")
@@ -727,6 +743,8 @@ class Music(commands.GroupCog, group_name=app_commands.locale_str("music")):
             description=f"**[{track.title}]({track.uri})**",
             color=0x3498db
         )
+        
+        embed.set_thumbnail(url=track.thumbnail)
         
         if track.author:
             embed.add_field(name="藝術家", value=track.author, inline=True)
