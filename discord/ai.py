@@ -534,14 +534,15 @@ class ClearHistoryView(discord.ui.LayoutView):
             label="確認清除",
             style=discord.ButtonStyle.danger,
             emoji="🗑️",
-            custom_id="confirm_clear"
         )
+        confirm_btn.callback = self.confirm_callback
+        
         cancel_btn = discord.ui.Button(
             label="取消",
             style=discord.ButtonStyle.secondary,
             emoji="❌",
-            custom_id="cancel_clear"
         )
+        cancel_btn.callback = self.cancel_callback
         
         action_row.add_item(confirm_btn)
         action_row.add_item(cancel_btn)
@@ -553,8 +554,7 @@ class ClearHistoryView(discord.ui.LayoutView):
             return False
         return True
     
-    @discord.ui.button(custom_id="confirm_clear")
-    async def confirm_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+    async def confirm_callback(self, interaction: discord.Interaction):
         ConversationManager.clear_history(self.user_id, self.guild_id)
         self.confirmed = True
         
@@ -568,8 +568,7 @@ class ClearHistoryView(discord.ui.LayoutView):
         await interaction.response.edit_message(view=view)
         self.stop()
     
-    @discord.ui.button(custom_id="cancel_clear")
-    async def cancel_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+    async def cancel_callback(self, interaction: discord.Interaction):
         # 建立取消訊息
         view = discord.ui.LayoutView()
         container = discord.ui.Container(accent_colour=discord.Colour.greyple())
