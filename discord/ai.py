@@ -11,6 +11,180 @@ from logger import log
 import logging
 
 # ============================================
+# Discord 提及處理
+# ============================================
+
+class MentionResolver:
+    """處理 Discord 提及文字，將其轉換為可讀格式"""
+    
+    # 提及模式
+    USER_MENTION = re.compile(r'<@!?(\d+)>')
+    CHANNEL_MENTION = re.compile(r'<#(\d+)>')
+    ROLE_MENTION = re.compile(r'<@&(\d+)>')
+    EMOJI_MENTION = re.compile(r'<(a?):(\w+):(\d+)>')
+    TIMESTAMP_MENTION = re.compile(r'<t:(\d+)(?::([tTdDfFR]))?>')
+    SLASH_COMMAND_MENTION = re.compile(r'</(\w+):(\d+)>')
+    
+    @classmethod
+    async def resolve_mentions(cls, text: str, guild: discord.Guild = None, bot: commands.Bot = None) -> str:
+        """
+        將 Discord 提及轉換為可讀文字
+        
+        Args:
+            text: 包含提及的原始文字
+            guild: Discord 伺服器（用於解析角色和頻道）
+            bot: Bot 實例（用於解析用戶）
+        
+        Returns:
+            轉換後的可讀文字
+        """
+        result = text
+        
+        # 處理用戶提及 <@123456789> 或 <@!123456789>
+        for match in cls.USER_MENTION.finditer(text):
+            user_id = int(match.group(1))
+            user_name = await cls._get_user_name(user_id, guild, bot)
+            result = result.replace(match.group(0), f"@{user_name}")
+        
+        # 處理頻道提及 <#123456789>
+        for match in cls.CHANNEL_MENTION.finditer(text):
+            channel_id = int(match.group(1))
+            channel_name = cls._get_channel_name(channel_id, guild, bot)
+            result = result.replace(match.group(0), f"#{channel_name}")
+        
+        # 處理角色提及 <@&123456789>
+        for match in cls.ROLE_MENTION.finditer(text):
+            role_id = int(match.group(1))
+            role_name = cls._get_role_name(role_id, guild)
+            result = result.replace(match.group(0), f"@{role_name}")
+        
+        # 處理自定義表情 <:name:123456789> 或 <a:name:123456789>
+        for match in cls.EMOJI_MENTION.finditer(text):
+            emoji_name = match.group(2)
+            result = result.replace(match.group(0), f":{emoji_name}:")
+        
+        # 處理時間戳 <t:1234567890:R>
+        for match in cls.TIMESTAMP_MENTION.finditer(text):
+            timestamp = int(match.group(1))
+            format_type = match.group(2) or 'f'
+            time_str = cls._format_timestamp(timestamp, format_type)
+            result = result.replace(match.group(0), time_str)
+        
+        # 處理斜線指令提及 </command:123456789>
+        for match in cls.SLASH_COMMAND_MENTION.finditer(text):
+            command_name = match.group(1)
+            result = result.replace(match.group(0), f"/{command_name}")
+        
+        return result
+    
+    @classmethod
+    async def _get_user_name(cls, user_id: int, guild: discord.Guild = None, bot: commands.Bot = None) -> str:
+        """獲取用戶名稱"""
+        # 先從伺服器成員中查找
+        if guild:
+            member = guild.get_member(user_id)
+            if member:
+                return member.display_name
+        
+        # 從 bot 快取中查找
+        if bot:
+            user = bot.get_user(user_id)
+            if user:
+                return user.display_name
+            
+            # 嘗試從 API 獲取
+            try:
+                user = await bot.fetch_user(user_id)
+                return user.display_name
+            except:
+                pass
+        
+        return f"用戶{user_id}"
+    
+    @classmethod
+    def _get_channel_name(cls, channel_id: int, guild: discord.Guild = None, bot: commands.Bot = None) -> str:
+        """獲取頻道名稱"""
+        if guild:
+            channel = guild.get_channel(channel_id)
+            if channel:
+                return channel.name
+        
+        if bot:
+            channel = bot.get_channel(channel_id)
+            if channel:
+                return getattr(channel, 'name', f'頻道{channel_id}')
+        
+        return f"頻道{channel_id}"
+    
+    @classmethod
+    def _get_role_name(cls, role_id: int, guild: discord.Guild = None) -> str:
+        """獲取角色名稱"""
+        if guild:
+            role = guild.get_role(role_id)
+            if role:
+                return role.name
+        
+        return f"角色{role_id}"
+    
+    @classmethod
+    def _format_timestamp(cls, timestamp: int, format_type: str = 'f') -> str:
+        """格式化時間戳"""
+        from datetime import datetime
+        
+        try:
+            dt = datetime.fromtimestamp(timestamp)
+            
+            formats = {
+                't': dt.strftime('%H:%M'),                    # 短時間
+                'T': dt.strftime('%H:%M:%S'),                 # 長時間
+                'd': dt.strftime('%Y/%m/%d'),                 # 短日期
+                'D': dt.strftime('%Y年%m月%d日'),              # 長日期
+                'f': dt.strftime('%Y年%m月%d日 %H:%M'),        # 短日期時間
+                'F': dt.strftime('%Y年%m月%d日 %A %H:%M'),     # 長日期時間
+                'R': cls._relative_time(dt),                  # 相對時間
+            }
+            
+            return formats.get(format_type, formats['f'])
+        except:
+            return f"時間戳{timestamp}"
+    
+    @classmethod
+    def _relative_time(cls, dt) -> str:
+        """計算相對時間"""
+        from datetime import datetime
+        
+        now = datetime.now()
+        diff = now - dt
+        
+        seconds = abs(diff.total_seconds())
+        is_past = diff.total_seconds() > 0
+        
+        if seconds < 60:
+            unit = "秒"
+            value = int(seconds)
+        elif seconds < 3600:
+            unit = "分鐘"
+            value = int(seconds / 60)
+        elif seconds < 86400:
+            unit = "小時"
+            value = int(seconds / 3600)
+        elif seconds < 2592000:
+            unit = "天"
+            value = int(seconds / 86400)
+        elif seconds < 31536000:
+            unit = "個月"
+            value = int(seconds / 2592000)
+        else:
+            unit = "年"
+            value = int(seconds / 31536000)
+        
+        if is_past:
+            return f"{value} {unit}前"
+        else:
+            return f"{value} {unit}後"
+
+
+# ============================================
 # 防 Prompt Injection 保護系統
 # ============================================
 
@@ -493,6 +667,10 @@ class AICommands(commands.Cog):
         
         # 清理輸入
         sanitized_message, minor_threats = PromptGuard.sanitize_input(message)
+        
+        # 處理提及文字
+        guild = interaction.guild
+        resolved_message = await MentionResolver.resolve_mentions(sanitized_message, guild, self.bot)
         
         # 延遲回應（因為 AI 生成可能需要時間）
         await interaction.response.defer()
