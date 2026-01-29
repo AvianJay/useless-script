@@ -16,7 +16,7 @@ import logging
 class DynamicVoice(commands.GroupCog, name=app_commands.locale_str("dynamic-voice")):
     def __init__(self, bot):
         self.bot = bot
-
+        self.playing_voice_guilds = set()
     @app_commands.command(name=app_commands.locale_str("setup"), description="設置動態語音頻道")
     @app_commands.describe(channel="選擇頻道", channel_category="選擇頻道類別", channel_name="選擇頻道名稱模板 (使用 {user} 代表用戶名稱)")
     @app_commands.checks.has_permissions(administrator=True)
@@ -176,8 +176,8 @@ class DynamicVoice(commands.GroupCog, name=app_commands.locale_str("dynamic-voic
 
     @commands.Cog.listener()
     async def on_voice_state_update(self, member: discord.Member, before: discord.VoiceState, after: discord.VoiceState):
-        if member.bot and member != bot.user:
-            return  # Ignore bot users
+        # if member.bot and member != bot.user:
+        #     return  # Ignore bot users
         guild_id = member.guild.id
         channel_id = get_server_config(guild_id, "dynamic_voice_channel")
         channel_category_id = get_server_config(guild_id, "dynamic_voice_channel_category")
@@ -188,8 +188,11 @@ class DynamicVoice(commands.GroupCog, name=app_commands.locale_str("dynamic-voic
             return  # Dynamic voice feature not set up for this guild
         channel_category = member.guild.get_channel(channel_category_id) if channel_category_id else None
 
-        if member.bot:
-            return
+        # if member.bot:
+        #     return
+        
+        if guild_id in self.playing_voice_guilds:
+            return  # Already playing audio in this guild
 
         # User joins the dynamic voice channel
         if after.channel and after.channel.id == channel_id and (not before.channel or before.channel.id != channel_id):
@@ -225,6 +228,7 @@ class DynamicVoice(commands.GroupCog, name=app_commands.locale_str("dynamic-voic
                 voice_client = discord.utils.get(self.bot.voice_clients, guild=member.guild)
                 if not voice_client or not voice_client.is_connected:  # skip if playing music
                     try:
+                        self.playing_voice_guilds.add(guild_id)
                         vp = await after.channel.connect()
                         await asyncio.sleep(1)  # wait for a moment to ensure the user has joined the new channel
                         voice_client = discord.utils.get(self.bot.voice_clients, guild=member.guild)
@@ -247,6 +251,8 @@ class DynamicVoice(commands.GroupCog, name=app_commands.locale_str("dynamic-voic
                             await vp.disconnect()
                         except Exception as e:
                             log(f"無法斷開語音頻道: {e}", level=logging.ERROR, module_name="DynamicVoice", guild=member.guild)
+                        finally:
+                            self.playing_voice_guilds.discard(guild_id)
             try:
                 if after.channel.members != 1:
                     await member.move_to(new_channel)
