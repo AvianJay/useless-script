@@ -149,6 +149,7 @@ class Music(commands.GroupCog, group_name=app_commands.locale_str("music")):
             description=f"**[{track.title}]({track.uri})**",
             color=0x3498db
         )
+        embed.set_thumbnail(url=track.thumbnail)
         if track.author:
             embed.add_field(name="藝術家", value=track.author, inline=True)
         embed.add_field(
