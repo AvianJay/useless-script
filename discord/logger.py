@@ -46,11 +46,11 @@ async def _log(*messages, level = logging.INFO, module_name: str = "General", us
                 embed = discord.Embed(title=module_name, description=message, color=color)
                 embed.timestamp = datetime.now(timezone.utc)
                 if user:
-                    embed.add_field(name="使用者ID", value={user.id}, inline=False)  # easy to copy user id
+                    embed.add_field(name="使用者ID", value=user.id, inline=False)  # easy to copy user id
                     to_show_name = f"{user.display_name} ({user.name})" if user.display_name != user.name else user.name
                     embed.set_author(name=to_show_name, icon_url=user.display_avatar.url if user.display_avatar else None)
                 if guild:
-                    embed.add_field(name="伺服器ID", value={guild.id}, inline=False)  # easy to copy guild id
+                    embed.add_field(name="伺服器ID", value=guild.id, inline=False)  # easy to copy guild id
                     embed.set_footer(text=guild.name if guild.name else guild.id, icon_url=guild.icon.url if guild.icon else None)
                 # get webhook url
                 webhook_url = get_server_config(channel.guild.id, "log_webhook_url") if guild else None
