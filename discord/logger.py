@@ -165,6 +165,8 @@ class LoggerCog(commands.Cog):
         # maybe it is command or context menu
         if isinstance(application_command, discord.app_commands.ContextMenu):
             log(f"應用程式選單被觸發: {application_command.qualified_name}", module_name="Logger", level=logging.INFO, user=interaction.user, guild=interaction.guild)
+        else:
+            log(f"應用程式指令被觸發: {application_command.qualified_name}", module_name="Logger", level=logging.INFO, user=interaction.user, guild=interaction.guild)
 
     # @commands.Cog.listener()
     # async def on_ready(self):
