@@ -13,7 +13,7 @@ import logging
 
 @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
 @app_commands.allowed_installs(guilds=True, users=True)
-class OXWU(commands.GroupCog, name="oxwu", description="OXWU 地震監測系統"):
+class OXWU(commands.GroupCog, name="earthquake", description="OXWU 地震監測系統"):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
         self.api_url = config("oxwu_api") or "http://127.0.0.1:10281"
@@ -264,24 +264,25 @@ class OXWU(commands.GroupCog, name="oxwu", description="OXWU 地震監測系統"
             channel_id = get_server_config(guild.id, config_key)
             if channel_id:
                 channel = self.bot.get_channel(int(channel_id))
+                text_to_add = get_server_config(guild.id, f"{config_key}_text", "")
                 if channel:
-                    tasks.append((guild.name, channel))
+                    tasks.append((guild.name, channel, text_to_add))
         
         # 批次發送，每批 5 個，間隔 0.5 秒
         batch_size = 5
         for i in range(0, len(tasks), batch_size):
             batch = tasks[i:i + batch_size]
-            for guild_name, channel in batch:
-                await self._send_with_retry(channel, embed, guild_name)
+            for guild_name, channel, text_to_add in batch:
+                await self._send_with_retry(channel, embed, guild_name, text_to_add)
             # 批次間延遲
             if i + batch_size < len(tasks):
                 await asyncio.sleep(0.5)
     
-    async def _send_with_retry(self, channel, embed: discord.Embed, guild_name: str, max_retries: int = 3):
+    async def _send_with_retry(self, channel, embed: discord.Embed, guild_name: str, text_to_add: str = "", max_retries: int = 3):
         """發送訊息並在遇到 429 時重試"""
         for attempt in range(max_retries):
             try:
-                await channel.send(embed=embed)
+                await channel.send(content=text_to_add, embed=embed)
                 return
             except discord.HTTPException as e:
                 if e.status == 429:
@@ -327,11 +328,11 @@ class OXWU(commands.GroupCog, name="oxwu", description="OXWU 地震監測系統"
     
     # Slash Commands
     @app_commands.command(name="set-alert-channel", description="設定接收地震速報的頻道")
-    @app_commands.describe(channel="要接收速報的頻道")
+    @app_commands.describe(channel="要接收速報的頻道", text="可選的附加文字訊息")
     @app_commands.default_permissions(manage_guild=True)
     @app_commands.allowed_contexts(guilds=True, dms=False, private_channels=False)
     @app_commands.allowed_installs(guilds=True, users=False)
-    async def set_warning_channel(self, interaction: discord.Interaction, channel: discord.TextChannel):
+    async def set_warning_channel(self, interaction: discord.Interaction, channel: discord.TextChannel, text: str = ""):
         if not interaction.is_guild_integration():
             await interaction.response.send_message("❌ 此指令只能在伺服器中使用", ephemeral=True)
             return
@@ -339,14 +340,15 @@ class OXWU(commands.GroupCog, name="oxwu", description="OXWU 地震監測系統"
             await interaction.response.send_message("❌ 你沒有權限使用此指令（需要管理伺服器權限）", ephemeral=True)
             return
         set_server_config(interaction.guild_id, "oxwu_warning_channel", str(channel.id))
+        set_server_config(interaction.guild_id, "oxwu_warning_channel_text", text)
         await interaction.response.send_message(f"✅ 已設定速報頻道為 {channel.mention}", ephemeral=True)
     
     @app_commands.command(name="set-report-channel", description="設定接收地震報告的頻道")
-    @app_commands.describe(channel="要接收報告的頻道")
+    @app_commands.describe(channel="要接收報告的頻道", text="可選的附加文字訊息")
     @app_commands.default_permissions(manage_guild=True)
     @app_commands.allowed_contexts(guilds=True, dms=False, private_channels=False)
     @app_commands.allowed_installs(guilds=True, users=False)
-    async def set_report_channel(self, interaction: discord.Interaction, channel: discord.TextChannel):
+    async def set_report_channel(self, interaction: discord.Interaction, channel: discord.TextChannel, text: str = ""):
         if not interaction.is_guild_integration():
             await interaction.response.send_message("❌ 此指令只能在伺服器中使用", ephemeral=True)
             return
@@ -354,6 +356,7 @@ class OXWU(commands.GroupCog, name="oxwu", description="OXWU 地震監測系統"
             await interaction.response.send_message("❌ 你沒有權限使用此指令（需要管理伺服器權限）", ephemeral=True)
             return
         set_server_config(interaction.guild_id, "oxwu_report_channel", str(channel.id))
+        set_server_config(interaction.guild_id, "oxwu_report_channel_text", text)
         await interaction.response.send_message(f"✅ 已設定報告頻道為 {channel.mention}", ephemeral=True)
     
     @app_commands.command(name="query-report", description="查詢最近一次的地震報告")

@@ -378,7 +378,7 @@ translations = {
     "query-report": "查詢報告",
     "query-warning": "查詢速報",
     "screenshot": "截圖",
-    
+    "earthquake": "地震",
 }
 class CommandNameTranslator(app_commands.Translator):
     async def translate(
