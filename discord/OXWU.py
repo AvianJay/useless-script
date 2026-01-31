@@ -243,13 +243,13 @@ class OXWU(commands.GroupCog, name="earthquake", description="OXWU 地震監測�
         
         # 各地震度 (只顯示前幾個避免太長)
         if report.get("intensities"):
-            intensity_text = []
-            for area in report["intensities"][:10]:
-                intensity_text.append(f"**{area.get('area', '未知')}**: {area.get('maxIntensity', '?')}")
-            if intensity_text:
-                embed.add_field(name="🗺️ 各地震度", value="\n".join(intensity_text), inline=False)
-            if len(report["intensities"]) > 10:
-                embed.add_field(name="", value=f"...還有 {len(report['intensities']) - 10} 個地區", inline=False)
+            for area in report["intensities"]:
+                stations_texts = []
+                for station in area["stations"]:
+                    names = "、".join(station["names"])
+                    stations_texts.append(f'{station["level"]}級: {names}')
+                stations_info = "\n".join(stations_texts)
+                embed.add_field(name=f"📍 {area['area']} ({area['maxIntensity']})", value=stations_info, inline=False)
         
         if screenshot_url:
             embed.set_image(url=screenshot_url)
