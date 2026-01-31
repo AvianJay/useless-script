@@ -14,8 +14,8 @@ async def determine_prefix(bot, message):
     if guild:
         guild_id = str(guild.id)
         prefix = get_server_config(guild_id, "custom_prefix", config("prefix", "!"))
-        return prefix
-    return config("prefix", "!")
+        return str(prefix)
+    return str(config("prefix", "!"))
 
 
 class CustomPrefix(commands.Cog):
