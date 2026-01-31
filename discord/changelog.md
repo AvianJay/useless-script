@@ -3,10 +3,10 @@
 ## 0.17.2
 ### 更新內容如下：
 * 新增 /earthquake（OXWU 地震監測系統）
-  * `/earthquake set-warning-channel`：設定地震速報通知頻道
+  * `/earthquake set-alert-channel`：設定地震速報通知頻道
   * `/earthquake set-report-channel`：設定地震報告通知頻道
-  * `/earthquake warning`：手動取得最新地震速報
-  * `/earthquake report`：手動取得最新地震報告
+  * `/earthquake query-warning`：手動取得最新地震速報
+  * `/earthquake query-report`：手動取得最新地震報告
   * 支援自動推送地震速報與報告。
 * 更新 /music
   * 新增影片縮圖顯示。
