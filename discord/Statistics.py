@@ -27,6 +27,11 @@ class Statistics(commands.Cog):
             command_stats_str = "\n".join([f"{cmd}: {count}" for cmd, count in command_stats.items()]) or "無數據"
             command_error_stats_str = "\n".join([f"{cmd}: {count}" for cmd, count in command_error_stats.items()]) or "無數據"
             app_command_stats_str = "\n".join([f"{cmd}: {count}" for cmd, count in app_command_stats.items()]) or "無數據"
+            
+            # anti 400
+            command_stats_str = command_stats_str[:1021] + "..." if len(command_stats_str) > 1024 else command_stats_str
+            command_error_stats_str = command_error_stats_str[:1021] + "..." if len(command_error_stats_str) > 1024 else command_error_stats_str
+            app_command_stats_str = app_command_stats_str[:1021] + "..." if len(app_command_stats_str) > 1024 else app_command_stats_str
         else:
             command_stats_str = f"總計 {sum(command_stats.values())} 次使用"
             command_error_stats_str = f"總計 {sum(command_error_stats.values())} 次錯誤"
