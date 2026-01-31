@@ -11,7 +11,7 @@ import logging
 
 
 # Global configuration for backward compatibility
-config_version = 21
+config_version = 22
 config_path = 'config.json'
 
 default_config = {
@@ -55,6 +55,8 @@ default_config = {
     "lavalink_host": "localhost",
     "lavalink_port": 2333,
     "lavalink_password": "youshallnotpass",
+    "oxwu_api": "http://localhost:10281",
+    "temp_channel_id": 123456789012345678,
 }
 _config = None
 
@@ -371,6 +373,12 @@ translations = {
     "ai-history": "ai-歷史紀錄",
     "git-commits": "git-提交紀錄",
     "new_conversation": "新對話",
+    "set-alert-channel": "設定速報頻道",
+    "set-report-channel": "設定報告頻道",
+    "query-report": "查詢報告",
+    "query-warning": "查詢速報",
+    "screenshot": "截圖",
+    
 }
 class CommandNameTranslator(app_commands.Translator):
     async def translate(
