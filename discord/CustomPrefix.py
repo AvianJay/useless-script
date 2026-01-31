@@ -7,7 +7,7 @@ import asyncio
 from expiring_dict import ExpiringDict
 import random
 
-usercache = ExpiringDict(150)
+usercache = ExpiringDict(180)
 
 async def determine_prefix(bot, message):
     guild = message.guild
