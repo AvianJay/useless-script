@@ -123,7 +123,7 @@ async def r34_command(interaction: discord.Interaction, tags: str = None, pid: i
         embed = discord.Embed(
             title="Rule34.xxx",
             url=f"https://rule34.xxx/index.php?page=post&s=view&id={img_data.get('id', 'N/A')}",
-            description=f"ID: `{img_data.get('id', 'N/A')}`\n共有 {len(img_data.get('tags', '').split())} 個標籤。",
+            description=f"ID: `{img_data.get('id', 'N/A')}`\n共有 {len(img_data.get('tags', '').split())} 個標籤。{'(包含AI生成圖片)' if 'ai_generated' in img_data.get('tags', '') else ''}",
             color=0x00FF00
         )
         if spoilers:
