@@ -3,10 +3,13 @@ import os
 import asyncio
 from hypercorn.config import Config
 from hypercorn.asyncio import serve
-from globalenv import bot, modules, config, on_ready_tasks, get_global_config
+from globalenv import bot, modules, config, on_ready_tasks, get_global_config, on_close_tasks
 from logger import log
 from PIL import Image
 import requests
+
+# Shutdown event for graceful shutdown
+_shutdown_event: asyncio.Event = None
 
 if "UtilCommands" in modules:
     import UtilCommands
@@ -72,6 +75,7 @@ def favicon():
     return send_from_directory('static', os.path.basename(AVATAR_ICO))
 
 async def start_webserver():
+    global _shutdown_event
     host = config("webserver_host")
     port = config("webserver_port")
     ssl = config("webserver_ssl")
@@ -97,7 +101,22 @@ async def start_webserver():
     except Exception as e:
         log(f"Explore.asgi_app 未啟用，改用 Flask WSGI：{e}", module_name="Website")
 
-    asyncio.create_task(serve(web_app, hypercorn_config))
+    # Create shutdown event for graceful shutdown
+    _shutdown_event = asyncio.Event()
+    asyncio.create_task(serve(web_app, hypercorn_config, shutdown_trigger=_shutdown_event.wait))
     log(f"網站伺服器已啟動 (Hypercorn) - http{'s' if ssl else ''}://{host}:{port}", module_name="Website")
+
+
+async def stop_webserver():
+    """Stop the webserver gracefully"""
+    global _shutdown_event
+    if _shutdown_event is not None:
+        log("正在關閉網站伺服器...", module_name="Website")
+        _shutdown_event.set()
+
+
+# Register close handler
+on_close_tasks.add(stop_webserver)
+
 
 on_ready_tasks.append(start_webserver)

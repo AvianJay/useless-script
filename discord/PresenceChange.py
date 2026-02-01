@@ -69,33 +69,38 @@ async def set_presence():
     await bot.wait_until_ready()
     log("狀態更新任務已啟動", module_name="PresenceChange")
     # 若你有可能在 reconnect 時重複啟動，請在 on_ready 那裡用 flag 防止重複 create_task
-    while not bot.is_closed():
-        try:
-            load_config()
-        except Exception as e:
-            log(f"重新載入設定時發生錯誤: {e}", level=logging.ERROR, module_name="PresenceChange")
-
-        try:
-            loop_time = float(config("presence_loop_time"))
-        except Exception:
-            loop_time = 60.0  # 預設
-
-        if not activities:
+    try:
+        while not bot.is_closed():
             try:
-                await bot.change_presence(status=status, activity=None)
-                # print("[+] Status set to", status)
+                load_config()
             except Exception as e:
-                log(f"無法改變狀態: {e}", level=logging.ERROR, module_name="PresenceChange")
-            await asyncio.sleep(loop_time)
-            continue
+                log(f"重新載入設定時發生錯誤: {e}", level=logging.ERROR, module_name="PresenceChange")
 
-        for activity in activities:
             try:
-                await bot.change_presence(status=status, activity=activity)
-                # print(f"[+] Status set to {status}, activity: {activity.type.name} {activity.name}")
-            except Exception as e:
-                log(f"無法改變狀態: {e}", level=logging.ERROR, module_name="PresenceChange")
-            await asyncio.sleep(loop_time)
+                loop_time = float(config("presence_loop_time"))
+            except Exception:
+                loop_time = 60.0  # 預設
+
+            if not activities:
+                try:
+                    await bot.change_presence(status=status, activity=None)
+                    # print("[+] Status set to", status)
+                except Exception as e:
+                    log(f"無法改變狀態: {e}", level=logging.ERROR, module_name="PresenceChange")
+                await asyncio.sleep(loop_time)
+                continue
+
+            for activity in activities:
+                if bot.is_closed():
+                    return
+                try:
+                    await bot.change_presence(status=status, activity=activity)
+                    # print(f"[+] Status set to {status}, activity: {activity.type.name} {activity.name}")
+                except Exception as e:
+                    log(f"無法改變狀態: {e}", level=logging.ERROR, module_name="PresenceChange")
+                await asyncio.sleep(loop_time)
+    except asyncio.CancelledError:
+        log("狀態更新任務已取消", module_name="PresenceChange")
 
 
 async def set_starting_presence():

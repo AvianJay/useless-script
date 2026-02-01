@@ -450,6 +450,39 @@ def log(*messages, level = logging.INFO, module_name: str = "General", user: dis
         import logger
         logger.log(*messages, level=level, module_name=module_name, user=user, guild=guild)
 
+
+async def _run_close_tasks():
+    """執行所有關閉任務"""
+    if on_close_tasks:
+        log("正在執行關閉前任務...", module_name="Main")
+        for task in on_close_tasks:
+            try:
+                log(f"正在執行關閉前任務：{task.__name__}...", module_name="Main")
+                await task()
+            except Exception as e:
+                log(f"關閉前任務發生錯誤：{e}", level=logging.ERROR, module_name="Main")
+
+
+async def _main():
+    """主程式進入點，處理 bot 生命週期"""
+    async with bot:
+        await bot.start(config("TOKEN"))
+
+
 def start_bot():
     log("正在啟動機器人...", module_name="Main")
-    bot.run(config("TOKEN"))
+    try:
+        asyncio.run(_main())
+    except KeyboardInterrupt:
+        log("收到 Ctrl+C，正在關閉機器人...", module_name="Main")
+    finally:
+        # 確保關閉任務被執行
+        try:
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            loop.run_until_complete(_run_close_tasks())
+            if not bot.is_closed():
+                loop.run_until_complete(bot.close())
+            loop.close()
+        except Exception as e:
+            log(f"關閉時發生錯誤：{e}", level=logging.ERROR, module_name="Main")

@@ -304,11 +304,13 @@ class OXWU(commands.GroupCog, name="earthquake", description="OXWU 地震監測�
     
     async def _connect_socketio(self):
         """連接到 Socket.IO 伺服器"""
-        while True:
+        while not self.bot.is_closed():
             try:
                 if not self.sio.connected:
                     await self.sio.connect(self.api_url, transports=["polling"])
                 await asyncio.sleep(5)
+            except asyncio.CancelledError:
+                break
             except Exception as e:
                 # print(f"[OXWU] Socket.IO 連線失敗: {e}")
                 log(f"Socket.IO 連線失敗: {e}", module_name="OXWU", level=logging.ERROR)

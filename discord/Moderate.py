@@ -119,39 +119,44 @@ async def check_unban():
     await bot.wait_until_ready()
     # print("[+] 自動解封任務已啟動")
     log("自動解封任務已啟動", module_name="Moderate")
-    while not bot.is_closed():
-        for guild in bot.guilds:
-            guild_id = guild.id
-            to_unban = []
+    try:
+        while not bot.is_closed():
+            for guild in bot.guilds:
+                if bot.is_closed():
+                    return
+                guild_id = guild.id
+                to_unban = []
 
-            try:
-                # 使用 async for 逐項讀取封鎖列表（memory-friendly）
-                async for entry in guild.bans():
-                    user = entry.user
-                    unban_time_str = get_user_data(guild_id, user.id, "unban_time")
-                    if unban_time_str is None:
-                        continue
-                    try:
-                        unban_time = datetime.fromisoformat(unban_time_str)
-                    except Exception:
-                        continue
-                    if unban_time.tzinfo is None:
-                        unban_time = unban_time.replace(tzinfo=timezone.utc)
-                    if unban_time <= datetime.now(timezone.utc):
-                        to_unban.append(user)
-            except Exception as e:
-                # print(f"[!] 讀取 {guild.name} 的封鎖列表發生錯誤：{e}")
-                continue
-
-            for user in to_unban:
                 try:
-                    await guild.unban(user, reason="自動解封")
-                    set_user_data(guild_id, user.id, "unban_time", None)
-                    log(f"已自動解封 {user} 在 {guild.name} 的封禁。", module_name="Moderate", guild=guild)
+                    # 使用 async for 逐項讀取封鎖列表（memory-friendly）
+                    async for entry in guild.bans():
+                        user = entry.user
+                        unban_time_str = get_user_data(guild_id, user.id, "unban_time")
+                        if unban_time_str is None:
+                            continue
+                        try:
+                            unban_time = datetime.fromisoformat(unban_time_str)
+                        except Exception:
+                            continue
+                        if unban_time.tzinfo is None:
+                            unban_time = unban_time.replace(tzinfo=timezone.utc)
+                        if unban_time <= datetime.now(timezone.utc):
+                            to_unban.append(user)
                 except Exception as e:
-                    log(f"解封 {user} 時發生錯誤：{e}", level=logging.ERROR, module_name="Moderate", guild=guild)
+                    # print(f"[!] 讀取 {guild.name} 的封鎖列表發生錯誤：{e}")
+                    continue
 
-        await asyncio.sleep(60)  # 每分鐘檢查一次
+                for user in to_unban:
+                    try:
+                        await guild.unban(user, reason="自動解封")
+                        set_user_data(guild_id, user.id, "unban_time", None)
+                        log(f"已自動解封 {user} 在 {guild.name} 的封禁。", module_name="Moderate", guild=guild)
+                    except Exception as e:
+                        log(f"解封 {user} 時發生錯誤：{e}", level=logging.ERROR, module_name="Moderate", guild=guild)
+
+            await asyncio.sleep(60)  # 每分鐘檢查一次
+    except asyncio.CancelledError:
+        log("自動解封任務已取消", module_name="Moderate")
 on_ready_tasks.append(check_unban)
 
 
