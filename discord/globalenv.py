@@ -453,14 +453,21 @@ def log(*messages, level = logging.INFO, module_name: str = "General", user: dis
 
 async def _run_close_tasks():
     """執行所有關閉任務"""
+    # 先 flush logs
+    try:
+        from logger import flush_logs
+        await flush_logs()
+    except Exception:
+        pass
+    
     if on_close_tasks:
-        log("正在執行關閉前任務...", module_name="Main")
+        print("[Main] 正在執行關閉前任務...")
         for task in on_close_tasks:
             try:
-                log(f"正在執行關閉前任務：{task.__name__}...", module_name="Main")
+                print(f"[Main] 正在執行關閉前任務：{task.__name__}...")
                 await task()
             except Exception as e:
-                log(f"關閉前任務發生錯誤：{e}", level=logging.ERROR, module_name="Main")
+                print(f"[Main] 關閉前任務發生錯誤：{e}")
 
 
 async def _main():
@@ -474,7 +481,7 @@ def start_bot():
     try:
         asyncio.run(_main())
     except KeyboardInterrupt:
-        log("收到 Ctrl+C，正在關閉機器人...", module_name="Main")
+        print("[Main] 收到 Ctrl+C，正在關閉機器人...")
     finally:
         # 確保關閉任務被執行
         try:
@@ -485,4 +492,4 @@ def start_bot():
                 loop.run_until_complete(bot.close())
             loop.close()
         except Exception as e:
-            log(f"關閉時發生錯誤：{e}", level=logging.ERROR, module_name="Main")
+            print(f"[Main] 關閉時發生錯誤：{e}")

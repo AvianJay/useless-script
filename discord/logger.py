@@ -7,7 +7,12 @@ import logging
 import traceback
 from datetime import datetime, timezone
 
+# Track pending log tasks for graceful shutdown
+_pending_log_tasks: set = set()
+_shutting_down = False
+
 async def _log(*messages, level = logging.INFO, module_name: str = "General", user: discord.User = None, guild: discord.Guild = None):
+    global _shutting_down
     logger = logging.getLogger(module_name)
     if not logger.hasHandlers():
         logger.setLevel(logging.DEBUG)
@@ -31,10 +36,14 @@ async def _log(*messages, level = logging.INFO, module_name: str = "General", us
     # Also print to console
     print(f"[{module_name}] {message}", f"guild={guild.id}" if guild else "", f"user={user.id}" if user else "")
     
+    # 如果正在關閉，不要嘗試發送到 Discord
+    if _shutting_down or bot.is_closed():
+        return
+    
     # try to send to a specific discord channel if configured
     try:
-        await bot.wait_until_ready()
-    except Exception:
+        await asyncio.wait_for(bot.wait_until_ready(), timeout=5.0)
+    except (Exception, asyncio.TimeoutError, asyncio.CancelledError):
         return
     log_channel_id = config("log_channel_id", None)
     if log_channel_id:
@@ -109,13 +118,41 @@ async def _log(*messages, level = logging.INFO, module_name: str = "General", us
                 traceback.print_exc()
 
 def log(*messages, level = logging.INFO, module_name: str = "General", user: discord.User = None, guild: discord.Guild = None):
+    global _shutting_down
     if "logger" not in modules:
+        return
+    # 關閉時只同步輸出到 console，不建立新的 async task
+    if _shutting_down:
+        message = ' '.join(str(m) for m in messages)
+        print(f"[{module_name}] {message}", f"guild={guild.id}" if guild else "", f"user={user.id}" if user else "")
         return
     try:
         loop = asyncio.get_running_loop()
-        loop.create_task(_log(*messages, level=level, module_name=module_name, user=user, guild=guild))
+        task = loop.create_task(_log(*messages, level=level, module_name=module_name, user=user, guild=guild))
+        _pending_log_tasks.add(task)
+        task.add_done_callback(_pending_log_tasks.discard)
     except RuntimeError:
-        asyncio.run(_log(*messages, level=level, module_name=module_name, user=user, guild=guild))
+        # No running loop, just print to console
+        message = ' '.join(str(m) for m in messages)
+        print(f"[{module_name}] {message}", f"guild={guild.id}" if guild else "", f"user={user.id}" if user else "")
+
+
+async def flush_logs():
+    """等待所有待處理的 log 任務完成"""
+    global _shutting_down
+    _shutting_down = True
+    if _pending_log_tasks:
+        # 給每個任務最多 2 秒完成
+        try:
+            await asyncio.wait_for(
+                asyncio.gather(*_pending_log_tasks, return_exceptions=True),
+                timeout=2.0
+            )
+        except asyncio.TimeoutError:
+            # 取消還沒完成的任務
+            for task in _pending_log_tasks:
+                task.cancel()
+        _pending_log_tasks.clear()
 
 @app_commands.guild_only()
 @app_commands.default_permissions(administrator=True)

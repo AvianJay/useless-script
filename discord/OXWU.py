@@ -1,5 +1,5 @@
 # require unoffical oxwu api (https://github.com/AvianJay/useless-script/tree/main/oxwu/)
-from globalenv import bot, set_server_config, get_server_config, config
+from globalenv import bot, set_server_config, get_server_config, config, on_close_tasks
 import discord
 from discord import app_commands
 from discord.ext import commands
@@ -10,6 +10,9 @@ from io import BytesIO
 from typing import Optional
 from logger import log
 import logging
+
+# 用於關閉時的清理
+_oxwu_cog_instance = None
 
 @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
 @app_commands.allowed_installs(guilds=True, users=True)
@@ -433,4 +436,19 @@ class OXWU(commands.GroupCog, name="earthquake", description="OXWU 地震監測�
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
 
-asyncio.run(bot.add_cog(OXWU(bot)))
+async def _cleanup_oxwu():
+    """關閉 OXWU 的 Socket.IO 連線"""
+    global _oxwu_cog_instance
+    if _oxwu_cog_instance is not None:
+        try:
+            if _oxwu_cog_instance.sio.connected:
+                await _oxwu_cog_instance.sio.disconnect()
+                log("已關閉 Socket.IO 連線", module_name="OXWU")
+        except Exception as e:
+            log(f"關閉 Socket.IO 時發生錯誤: {e}", module_name="OXWU", level=logging.WARNING)
+
+
+on_close_tasks.add(_cleanup_oxwu)
+
+_oxwu_cog_instance = OXWU(bot)
+asyncio.run(bot.add_cog(_oxwu_cog_instance))
