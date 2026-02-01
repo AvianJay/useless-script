@@ -38,11 +38,10 @@ async def give_item_to_user(guild_id: int, user_id: int, item_id: str, amount: i
     log(f"Gave {amount} of {item_id} to user {user_id} in guild {guild_id}", module_name="ItemSystem")
 
 
-async def get_user_items(guild_id: int, user_id: int, item_id: str):
+async def get_user_items(guild_id: int, user_id: int, item_id: str) -> int:
+    """返回用戶擁有的指定物品數量"""
     user_items = get_user_data(guild_id, user_id, "items", {})
-    if item_id in user_items:
-        return [item_id] * user_items[item_id]
-    return []
+    return user_items.get(item_id, 0)
 
 
 async def remove_item_from_user(guild_id: int, user_id: int, item_id: str, amount: int = 1):
@@ -144,10 +143,9 @@ class ItemSystem(commands.GroupCog, name="item", description="物品系統指令
         pickup_only_once = (pickup_only_once == "True")
         user_id = interaction.user.id
         guild_id = interaction.guild.id if interaction.guild else None
-        user_items = await get_user_items(guild_id, user_id, item_id)
-        user_items = user_items[:amount]  # limit to amount
+        user_item_count = await get_user_items(guild_id, user_id, item_id)
 
-        if not user_items:
+        if user_item_count <= 0:
             await interaction.response.send_message("你沒有這個物品。", ephemeral=True)
             return
         target_item = next((i for i in items if i["id"] == item_id), None)
@@ -157,7 +155,8 @@ class ItemSystem(commands.GroupCog, name="item", description="物品系統指令
                 await interaction.response.send_message("錯誤：撿起持續時間必須在 1 到 86400 秒之間。", ephemeral=True)
                 return
 
-        amount = await remove_item_from_user(guild_id, user_id, item_id, amount)
+        amount = await remove_item_from_user(guild_id, user_id, item_id, min(amount, user_item_count))
+        remaining_count = amount  # 剩餘可撿起的數量
         picked_up = set()  # user ids who picked up
         # drop to current channel
         class DropView(discord.ui.View):
@@ -172,22 +171,22 @@ class ItemSystem(commands.GroupCog, name="item", description="物品系統指令
 
             @discord.ui.button(label="撿起物品", style=discord.ButtonStyle.green, custom_id="pick_up_item")
             async def pick_up(self, interaction: discord.Interaction, button: discord.ui.Button):
-                # print("[DEBUG] user_items before:", user_items)
+                nonlocal remaining_count
                 if pickup_only_once and interaction.user.id in picked_up:
                     await interaction.response.send_message("你已經撿起過這個物品了。\n-# 原物主設定了僅能撿起一次。", ephemeral=True)
                     return
                 picked_up.add(interaction.user.id)
-                if not user_items:
+                if remaining_count <= 0:
                     await interaction.response.send_message("物品已經被撿光了！", ephemeral=True)
                     return
                 user_id = interaction.user.id
                 other_user_items = get_user_data(guild_id, user_id, "items", {})
-                user_items.pop(0)  # remove one item
+                remaining_count -= 1  # 減少剩餘數量
                 other_user_items[item_id] = other_user_items.get(item_id, 0) + 1
                 set_user_data(guild_id, user_id, "items", other_user_items)
-                print(f"[ItemSystem] {interaction.user} picked up {target_item['id']} in guild {guild_id}")
+                log(f"{interaction.user} picked up {target_item['id']} in guild {guild_id}", module_name="ItemSystem")
                 await interaction.response.send_message(f"你撿起了 {target_item['name']}。", ephemeral=True)
-                if not user_items:
+                if remaining_count <= 0:
                     await self.interaction.edit_original_response(content=f"{self.interaction.user.display_name} 丟棄了 {target_item['name']} x{amount}！\n物品已經被撿光了！", view=None)
                     self.stop()
 
@@ -216,8 +215,8 @@ class ItemSystem(commands.GroupCog, name="item", description="物品系統指令
             await interaction.followup.send("你不能給機器人物品。")
             return
         
-        giver_items = await get_user_items(guild_id, giver_id, item_id)
-        if not giver_items:
+        giver_item_count = await get_user_items(guild_id, giver_id, item_id)
+        if giver_item_count <= 0:
             await interaction.followup.send("你沒有這個物品。")
             return
         
