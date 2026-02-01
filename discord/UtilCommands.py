@@ -748,5 +748,185 @@ async def nitro_command(interaction: discord.Interaction):
     await interaction.response.send_modal(NitroLinkModal())
 
 
+# get sticker context command
+@bot.command(aliases=["stickerinfo", "sticker", "sti"])
+async def sticker_info(ctx: commands.Context):
+    """顯示貼圖資訊
+    用法： sticker_info/<回覆貼圖訊息>
+    """
+    if ctx.message.reference:
+        replied_message = await ctx.channel.fetch_message(ctx.message.reference.message_id)
+        if not replied_message.stickers:
+            await ctx.send("此訊息沒有貼圖。")
+            return
+        sticker = replied_message.stickers[0]
+    elif not ctx.message.stickers:
+        await ctx.send("此訊息沒有貼圖。")
+        return
+    else:
+        sticker = ctx.message.stickers[0]
+    embed = discord.Embed(title=f"貼圖資訊 - {sticker.name}", color=0x00ff00)
+    embed.set_image(url=sticker.url)
+    embed.add_field(name="貼圖 ID", value=str(sticker.id), inline=True)
+    embed.add_field(name="貼圖格式", value=sticker.format.name, inline=True)
+    btn = discord.ui.Button(label="貼圖連結", url=sticker.url)
+    view = discord.ui.View()
+    view.add_item(btn)
+    await ctx.reply(embed=embed, view=view)
+
+
+class PrettyHelpCommand(commands.HelpCommand):
+    """美化版的 Help Command"""
+    
+    def __init__(self):
+        super().__init__(
+            command_attrs={
+                'help': '顯示所有指令或特定指令的幫助訊息',
+                'aliases': ['h', '?', 'commands']
+            }
+        )
+    
+    def get_command_signature(self, command: commands.Command) -> str:
+        """取得指令的使用格式"""
+        return f"{self.context.clean_prefix}{command.qualified_name} {command.signature}"
+    
+    async def send_bot_help(self, mapping):
+        """顯示所有指令的總覽"""
+        embed = discord.Embed(
+            title="📚 指令幫助",
+            description=f"使用 `{self.context.clean_prefix}help <指令>` 查看特定指令的詳細說明",
+            color=0x5865F2
+        )
+        embed.set_thumbnail(url=self.context.bot.user.avatar.url if self.context.bot.user.avatar else None)
+        
+        for cog, cmds in mapping.items():
+            filtered = await self.filter_commands(cmds, sort=True)
+            if filtered:
+                cog_name = cog.qualified_name if cog else "🔧 其他指令"
+                # 加上 emoji
+                if cog:
+                    cog_name = f"📦 {cog_name}"
+                
+                command_list = " ".join([f"`{cmd.name}`" for cmd in filtered])
+                if command_list:
+                    embed.add_field(
+                        name=cog_name,
+                        value=command_list,
+                        inline=False
+                    )
+        
+        embed.set_footer(text=f"共 {len(self.context.bot.commands)} 個文字指令 | by AvianJay")
+        
+        channel = self.get_destination()
+        await channel.send(embed=embed)
+    
+    async def send_cog_help(self, cog: commands.Cog):
+        """顯示特定 Cog 的指令"""
+        embed = discord.Embed(
+            title=f"📦 {cog.qualified_name}",
+            description=cog.description or "無描述",
+            color=0x5865F2
+        )
+        
+        filtered = await self.filter_commands(cog.get_commands(), sort=True)
+        for command in filtered:
+            embed.add_field(
+                name=f"`{self.get_command_signature(command)}`",
+                value=command.short_doc or "無描述",
+                inline=False
+            )
+        
+        embed.set_footer(text=f"使用 {self.context.clean_prefix}help <指令> 查看詳細說明")
+        
+        channel = self.get_destination()
+        await channel.send(embed=embed)
+    
+    async def send_group_help(self, group: commands.Group):
+        """顯示群組指令的幫助"""
+        embed = discord.Embed(
+            title=f"📁 {group.qualified_name}",
+            description=group.help or "無描述",
+            color=0x5865F2
+        )
+        
+        embed.add_field(
+            name="使用方法",
+            value=f"`{self.get_command_signature(group)}`",
+            inline=False
+        )
+        
+        if group.aliases:
+            embed.add_field(
+                name="別名",
+                value=" ".join([f"`{alias}`" for alias in group.aliases]),
+                inline=False
+            )
+        
+        filtered = await self.filter_commands(group.commands, sort=True)
+        if filtered:
+            subcommands = "\n".join([
+                f"`{self.context.clean_prefix}{cmd.qualified_name}` - {cmd.short_doc or '無描述'}"
+                for cmd in filtered
+            ])
+            embed.add_field(
+                name="子指令",
+                value=subcommands,
+                inline=False
+            )
+        
+        channel = self.get_destination()
+        await channel.send(embed=embed)
+    
+    async def send_command_help(self, command: commands.Command):
+        """顯示單一指令的幫助"""
+        embed = discord.Embed(
+            title=f"📝 {command.qualified_name}",
+            description=command.help or "無描述",
+            color=0x5865F2
+        )
+        
+        embed.add_field(
+            name="使用方法",
+            value=f"`{self.get_command_signature(command)}`",
+            inline=False
+        )
+        
+        if command.aliases:
+            embed.add_field(
+                name="別名",
+                value=" ".join([f"`{alias}`" for alias in command.aliases]),
+                inline=True
+            )
+        
+        # 顯示冷卻時間（如果有）
+        if command._buckets and command._buckets._cooldown:
+            cooldown = command._buckets._cooldown
+            embed.add_field(
+                name="冷卻時間",
+                value=f"{cooldown.rate} 次 / {cooldown.per:.0f} 秒",
+                inline=True
+            )
+        
+        embed.set_footer(text=f"<> = 必填參數 | [] = 選填參數")
+        
+        channel = self.get_destination()
+        await channel.send(embed=embed)
+    
+    async def send_error_message(self, error: str):
+        """顯示錯誤訊息"""
+        embed = discord.Embed(
+            title="❌ 找不到指令",
+            description=error,
+            color=0xFF0000
+        )
+        embed.set_footer(text=f"使用 {self.context.clean_prefix}help 查看所有指令")
+        
+        channel = self.get_destination()
+        await channel.send(embed=embed)
+
+
+bot.help_command = PrettyHelpCommand()
+
+
 if __name__ == "__main__":
     start_bot()
