@@ -186,6 +186,30 @@ class LoggerCog(commands.Cog):
 
     @commands.Cog.listener()
     async def on_command_error(self, ctx, error):
+        # 處理未知指令
+        if isinstance(error, commands.CommandNotFound):
+            return  # 忽略未知指令，不回應
+        
+        # 處理權限不足
+        if isinstance(error, commands.MissingPermissions):
+            missing = ', '.join(error.missing_permissions)
+            await ctx.send(f"❌ 你沒有執行此指令的權限！缺少權限: {missing}" + ('\n-# 你傻逼吧你以為你是開發者你就可以濫權？' if ctx.author.id in config('owners') else ''))
+            log(f"指令 {ctx.command} 由 {ctx.author} 觸發時權限不足: {missing}", module_name="Logger", level=logging.WARNING, user=ctx.author, guild=ctx.guild)
+            return
+        
+        if isinstance(error, commands.BotMissingPermissions):
+            missing = ', '.join(error.missing_permissions)
+            await ctx.send(f"❌ 我沒有足夠的權限執行此操作！缺少權限: {missing}")
+            log(f"指令 {ctx.command} 機器人權限不足: {missing}", module_name="Logger", level=logging.WARNING, user=ctx.author, guild=ctx.guild)
+            return
+        
+        # 處理 Check 失敗
+        if isinstance(error, commands.CheckFailure):
+            await ctx.send("❌ 你不符合執行此指令的條件。")
+            log(f"指令 {ctx.command} 由 {ctx.author} 觸發時 Check 失敗: {error}", module_name="Logger", level=logging.WARNING, user=ctx.author, guild=ctx.guild)
+            return
+        
+        # 處理其他錯誤
         log(f"指令 {ctx.command} 由 {ctx.author} 觸發時發生錯誤: {error}", module_name="Logger", level=logging.ERROR, user=ctx.author, guild=ctx.guild)
         await ctx.send(f"糟糕！發生了一些錯誤: {error}")
 
