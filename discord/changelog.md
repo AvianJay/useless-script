@@ -1,5 +1,23 @@
 # 更新日誌
 
+## 0.17.3
+### 更新內容如下：
+* 新增 `y!stickerinfo`
+  * 可以查看貼圖的詳細資訊。
+* 更新自動回覆 | /autoreply
+  * 新增貼圖回覆功能，使用 `{sticker:貼圖ID}` 來回覆貼圖。
+  * 新增 /autoreply ignore：設定全域忽略的頻道（例如公告頻道）。
+* 更新 /r34
+  * 新增 AI 標籤提示。
+* 更新 /stats
+  * 修復可能導致 400 錯誤的問題。
+* 美化 `y!help` 指令顯示。
+* 修復物品系統可能導致 MemoryError 的問題。
+* 修復 Ctrl+C 無法正常關閉機器人的問題。
+* 修復「Task was destroyed but it is pending!」錯誤。
+* 改進日誌系統錯誤處理。
+* 修復一些 Bug。
+
 ## 0.17.2
 ### 更新內容如下：
 * 新增 /earthquake（OXWU 地震監測系統）
