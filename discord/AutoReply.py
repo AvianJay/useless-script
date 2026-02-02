@@ -36,6 +36,13 @@ async def list_autoreply_autocomplete(interaction: discord.Interaction, current:
     return choices[:25]  # Discord 限制最多 25 個選項
 
 
+def parse_channel_mention(mention: str) -> str:
+    match = re.match(r"<#(\d+)>", mention)
+    if match:
+        return match.group(1)
+    return mention
+
+
 @app_commands.guild_only()
 @app_commands.default_permissions(manage_guild=True)
 @app_commands.allowed_installs(guilds=True, users=False)
@@ -358,6 +365,32 @@ class AutoReply(commands.GroupCog, name="autoreply"):
         await interaction.followup.send("已匯入自動回覆設定。")
         log(f"自動回覆設定被匯入。", module_name="AutoReply", level=logging.INFO, user=interaction.user, guild=interaction.guild)
     
+    @app_commands.command(name="ignore", description="設定忽略的頻道")
+    @app_commands.describe(
+        mode="忽略頻道模式",
+        channels="頻道 ID (使用 , 分隔多個頻道 ID)"
+    )
+    @app_commands.choices(
+        mode=[
+            app_commands.Choice(name="忽略清單", value="blacklist"),
+            app_commands.Choice(name="僅限清單", value="whitelist"),
+        ]
+    )
+    @app_commands.default_permissions(manage_guild=True)
+    async def set_ignore_channels(self, interaction: discord.Interaction, mode: str, channels: str):
+        guild_id = interaction.guild.id
+        channels = channels.split(",") if channels else []
+        channels = [int(parse_channel_mention(c.strip())) for c in channels if parse_channel_mention(c.strip()).isdigit()]
+        # verify channels exist in guild
+        valid_channels = []
+        for c in channels:
+            if interaction.guild.get_channel(c):
+                valid_channels.append(c)
+        set_server_config(guild_id, "autoreply_ignore_mode", mode)
+        set_server_config(guild_id, "autoreply_ignore_channels", valid_channels)
+        await interaction.response.send_message(f"已設定忽略頻道模式為 `{mode}`，頻道列表：`{', '.join(map(str, valid_channels)) if valid_channels else '無'}`。")
+        log(f"忽略頻道設定被更新。模式：{mode}，頻道：{valid_channels}", module_name="AutoReply", level=logging.INFO, user=interaction.user, guild=interaction.guild)
+    
     @app_commands.command(name="test", description="測試自動回覆內容的變數替換")
     @app_commands.describe(response="要測試的回覆內容")
     @app_commands.default_permissions(manage_guild=True)
@@ -589,6 +622,13 @@ class AutoReply(commands.GroupCog, name="autoreply"):
         
         # check permissions
         if not message.channel.permissions_for(message.guild.me).send_messages:
+            return
+        
+        ignore_mode = get_server_config(message.guild.id, "autoreply_ignore_mode", "blacklist")
+        ignore_channels = get_server_config(message.guild.id, "autoreply_ignore_channels", [])
+        if ignore_mode == "blacklist" and message.channel.id in ignore_channels:
+            return
+        elif ignore_mode == "whitelist" and message.channel.id not in ignore_channels:
             return
 
         guild_id = message.guild.id
