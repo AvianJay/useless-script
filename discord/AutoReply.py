@@ -428,7 +428,8 @@ class AutoReply(commands.GroupCog, name="autoreply"):
                 "- `{random}`：隨機產生 1 到 100 的整數\n"
                 "- `{randint:min-max}`：隨機產生 min~max（例：`{randint:10-50}`）\n"
                 "- `{random_user}`：從最近 50 則訊息中隨機選一位非機器人使用者顯示名稱\n"
-                "- `{react:emoji}`：給予該訊息表情符號（例：`{react:↖️}`）"
+                "- `{react:emoji}`：給予該訊息表情符號（例：`{react:↖️}`）\n"
+                "- `{sticker:sticker_id}`：傳送貼圖（例：`{sticker:123456789012345678}`）"
             ),
             inline=False,
         )
@@ -469,7 +470,7 @@ class AutoReply(commands.GroupCog, name="autoreply"):
 
         await interaction.followup.send(embed=embed, view=HelpView())
 
-    async def _process_response(self, response: str, message: discord.Message) -> str:
+    async def _process_response(self, response: str, message: discord.Message) -> tuple:
         """處理回覆內容中的變數替換或檢測給予訊息反應"""
         
         # 訊息反應
@@ -494,7 +495,26 @@ class AutoReply(commands.GroupCog, name="autoreply"):
         response = react_pattern.sub(react_replacer, response)
         response = response.strip()
         if not response:
-            return ""  # 如果回覆內容在處理後為空，則不回覆
+            return "", None  # 如果回覆內容在處理後為空，則不回覆
+        
+        # 貼圖傳送
+        # {sticker:sticker_id} 格式
+        sticker = None
+        sticker_pattern = re.compile(r"\{sticker:(\d+)\}")
+        def sticker_replacer(match):
+            sticker_id = int(match.group(1))
+            try:
+                nonlocal sticker
+                sticker = discord.utils.get(message.guild.stickers, id=sticker_id)
+            except Exception as e:
+                log(f"處理 {{sticker:{sticker_id}}} 時發生錯誤: {e}", module_name="AutoReply", level=logging.ERROR)
+            return ""  # 移除貼圖標記
+        response = sticker_pattern.sub(sticker_replacer, response)
+        response = response.strip()
+        if not response and not sticker:
+            return "", None  # 如果回覆內容在處理後為空，且沒有貼圖，則不回覆
+        elif not response and sticker:
+            return "", sticker  # 如果回覆內容在處理後為空，但有貼圖，則只傳送貼圖
 
         # 取得基本資訊
         
@@ -559,7 +579,7 @@ class AutoReply(commands.GroupCog, name="autoreply"):
                 log(f"處理 {{random_user}} 時發生錯誤: {e}", module_name="AutoReply", level=logging.ERROR)
                 response = response.replace("{random_user}", "未知使用者")
 
-        return response
+        return response, sticker
 
     @commands.Cog.listener()
     async def on_message(self, message: discord.Message):
@@ -626,16 +646,16 @@ class AutoReply(commands.GroupCog, name="autoreply"):
                 raw_response = random.choice(responses)
                 
                 # 使用新的處理方法
-                final_response = await self._process_response(raw_response, message)
+                final_response, sticker = await self._process_response(raw_response, message)
                 
-                if not final_response:
+                if not final_response and not sticker:
                     return
                 
                 try:
                     if ar.get("reply", False):
-                        await message.reply(final_response)
+                        await message.reply(final_response, stickers=[sticker] if sticker else [])
                     else:
-                        await message.channel.send(final_response)
+                        await message.channel.send(final_response, stickers=[sticker] if sticker else [])
                     
                     # 記錄日誌
                     # 避免 trigger 太長
