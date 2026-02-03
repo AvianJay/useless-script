@@ -618,7 +618,7 @@ class AICommands(commands.Cog):
         """使用 g4f 生成 AI 回應"""
         try:
             response = await asyncio.to_thread(
-                g4f.ChatCompletion.create,
+                self.client.chat.completions.create,
                 model=model,
                 messages=messages,
                 provider=g4f.Provider.PollinationsAI
