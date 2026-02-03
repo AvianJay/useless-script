@@ -1,5 +1,20 @@
 # 更新日誌
 
+## 0.17.4
+### 更新內容如下：
+* 新增 /help 應用指令
+  * 可以查看應用指令及文字指令的說明。
+* 更新 /earthquake
+  * 新增 CWA（中央氣象署）連結和圖片顯示。
+  * 更新 /earthquake set-alert-channel 和 /earthquake set-report-channel
+    * 現在可以不指定頻道來取消設定。
+* 新增動態語音投稿功能
+  * 用戶現在可以透過 /contribute dynamic-voice 投稿自定義語音。
+* 更新 /get-command-mention
+  * 修復避免收到 429 速率限制錯誤的邏輯。
+* 新增相關翻譯。
+* 修復一些 Bug。
+
 ## 0.17.3
 ### 更新內容如下：
 * 新增 `y!stickerinfo`
