@@ -614,7 +614,7 @@ class AICommands(commands.Cog):
         self.rate_limits[user_id].append(current_time)
         return True
     
-    async def generate_response(self, messages: list, model: str = "openai") -> str:
+    async def generate_response(self, messages: list, model: str = "openai-fast") -> str:
         """使用 g4f 生成 AI 回應"""
         try:
             response = await asyncio.to_thread(
@@ -623,7 +623,7 @@ class AICommands(commands.Cog):
                 messages=messages,
                 provider=g4f.Provider.PollinationsAI
             )
-            return response
+            return response.choices[0].message.content.strip(), response.model
         except Exception as e:
             log(f"AI 生成錯誤: {e}", module_name="AI", level=logging.ERROR)
             raise
@@ -693,7 +693,7 @@ class AICommands(commands.Cog):
             messages.append({"role": "user", "content": resolved_message})
             
             # 生成回應
-            response_text = await self.generate_response(messages)
+            response_text, model_name = await self.generate_response(messages)
             
             # 儲存對話歷史
             ConversationManager.add_message(user.id, "user", resolved_message, guild_id)
@@ -707,7 +707,7 @@ class AICommands(commands.Cog):
             view = AIResponseBuilder.create_response_view(
                 response_text=response_text,
                 user=user,
-                model_name="openai",
+                model_name=model_name,
                 warning=warning
             )
             
@@ -831,7 +831,7 @@ class AICommands(commands.Cog):
                 messages.append({"role": "user", "content": final_message})
                 
                 # 生成回應
-                response_text = await self.generate_response(messages)
+                response_text, model_name = await self.generate_response(messages)
                 
                 # 儲存對話歷史
                 ConversationManager.add_message(user.id, "user", final_message, guild_id)
@@ -845,7 +845,7 @@ class AICommands(commands.Cog):
                 view = AIResponseBuilder.create_response_view(
                     response_text=response_text,
                     user=user,
-                    model_name="openai",
+                    model_name=model_name,
                     warning=warning
                 )
                 
