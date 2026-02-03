@@ -383,6 +383,7 @@ translations = {
     "query-warning": "查詢速報",
     "screenshot": "截圖",
     "earthquake": "地震",
+    "dynamic-voice-audio": "動態語音音效",
 }
 class CommandNameTranslator(app_commands.Translator):
     async def translate(
