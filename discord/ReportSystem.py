@@ -161,7 +161,11 @@ async def send_moderation_message(user: discord.Member, moderator: discord.Membe
     bl = False
     for action in actions:
         if action["action"] == "ban":
-            action_texts.append("驅逐出境至柬服KK副本||永久停權||")
+            duration_seconds = action.get("duration", 0)
+            if duration_seconds > 0:
+                action_texts.append(f"國服新疆分流雙程機票||暫時停權||{get_time_text(duration_seconds)}")
+            else:
+                action_texts.append("國服新疆分流單程機票||永久停權||")
         elif action["action"] == "kick":
             action_texts.append("踢出")
         elif action["action"] == "mute":
