@@ -1049,29 +1049,30 @@ async def help_slash_command(interaction: discord.Interaction, command: str = No
                     inline=False
                 )
         
-        # 文字指令
-        text_cmds = []
-        for cmd in bot.commands:
-            if not cmd.hidden:
-                if isinstance(cmd, commands.Group):
-                    for subcmd in cmd.commands:
-                        if await can_run_text_command(subcmd, interaction):
-                            text_cmds.append(f"`{cmd.name} {subcmd.name}`")
-                else:
-                    if await can_run_text_command(cmd, interaction):
-                        text_cmds.append(f"`{cmd.name}`")
-        
-        if text_cmds:
-            chunk_size = 20
-            for i in range(0, len(text_cmds), chunk_size):
-                chunk = text_cmds[i:i + chunk_size]
-                embed.add_field(
-                    name=f"文字指令 ({i + 1}-{min(i + chunk_size, len(text_cmds))})" if len(text_cmds) > chunk_size else f"文字指令 ({len(text_cmds)})",
-                    value=" ".join(chunk),
-                    inline=False
-                )
-        
-        embed.set_footer(text=f"共 {len(app_cmds)} 個斜線指令 | {len(text_cmds)} 個文字指令 | by AvianJay")
+        if interaction.is_guild_integration():
+            # 文字指令
+            text_cmds = []
+            for cmd in bot.commands:
+                if not cmd.hidden:
+                    if isinstance(cmd, commands.Group):
+                        for subcmd in cmd.commands:
+                            if await can_run_text_command(subcmd, interaction):
+                                text_cmds.append(f"`{cmd.name} {subcmd.name}`")
+                    else:
+                        if await can_run_text_command(cmd, interaction):
+                            text_cmds.append(f"`{cmd.name}`")
+            
+            if text_cmds:
+                chunk_size = 20
+                for i in range(0, len(text_cmds), chunk_size):
+                    chunk = text_cmds[i:i + chunk_size]
+                    embed.add_field(
+                        name=f"文字指令 ({i + 1}-{min(i + chunk_size, len(text_cmds))})" if len(text_cmds) > chunk_size else f"文字指令 ({len(text_cmds)})",
+                        value=" ".join(chunk),
+                        inline=False
+                    )
+            
+            embed.set_footer(text=f"共 {len(app_cmds)} 個斜線指令 | {len(text_cmds)} 個文字指令 | by AvianJay")
         await interaction.followup.send(embed=embed)
         return
     
