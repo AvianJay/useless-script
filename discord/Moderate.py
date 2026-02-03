@@ -344,11 +344,11 @@ async def moderation_message_settings(interaction: Optional[discord.Interaction]
     async def generate_message():
         return f"""
 ### ⛔ 違規處分
-> - 被處分者： {user.mention}
+> - 被處分者：{user.mention}
 > - 處分原因：{reason}
 > - 處分結果：{action_text}
-> - 裁判字號： {await get_case_id(guild if guild else interaction.guild)}
-> - 處分執行： {moderator.mention}
+> - 裁判字號：{await get_case_id(guild if guild else interaction.guild)}
+> - 處分執行：{moderator.mention}
 """
 
     async def send_message():
