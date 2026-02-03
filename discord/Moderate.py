@@ -366,7 +366,7 @@ async def moderation_message_settings(interaction: Optional[discord.Interaction]
                 await interaction.response.send_message("找不到公告頻道，請確認頻道是否存在。", ephemeral=True)
             return
         try:
-            await channel.send(generate_message())
+            await channel.send(await generate_message())
             if interaction:
                 await interaction.followup.send("已發送公告到公告頻道。", ephemeral=True)
             log(f"已發送公告到 {channel.name} 頻道。", module_name="Moderate", guild=guild)
@@ -379,7 +379,7 @@ async def moderation_message_settings(interaction: Optional[discord.Interaction]
                 await interaction.response.send_message(f"發送公告時發生錯誤：{e}", ephemeral=True)
             log(f"發送公告時發生錯誤：{e}", level=logging.ERROR, module_name="Moderate", guild=guild)
     embed = discord.Embed(title="公告設定", color=0xff0000)
-    embed.add_field(name="公告內容", value="```\n" + generate_message() + "\n```", inline=False)
+    embed.add_field(name="公告內容", value="```\n" + await generate_message() + "\n```", inline=False)
     class MessageButtons(discord.ui.View):
         def __init__(self):
             super().__init__()
@@ -398,7 +398,7 @@ async def moderation_message_settings(interaction: Optional[discord.Interaction]
                     for action in actions:
                         if 'reason' in action:
                             action['reason'] = reason
-                    embed.set_field_at(0, name="公告內容", value="```\n" + generate_message() + "\n```", inline=False)
+                    embed.set_field_at(0, name="公告內容", value="```\n" + await generate_message() + "\n```", inline=False)
                     await interaction.response.edit_message(embed=embed, view=self.view)
             await interaction.response.send_modal(ReasonModal())
                     
@@ -413,7 +413,7 @@ async def moderation_message_settings(interaction: Optional[discord.Interaction]
                         await interaction.response.send_message("你沒有權限執行此操作。", ephemeral=True)
                         return
                     action_text = self.new_actions.value
-                    embed.set_field_at(0, name="公告內容", value="```\n" + generate_message() + "\n```", inline=False)
+                    embed.set_field_at(0, name="公告內容", value="```\n" + await generate_message() + "\n```", inline=False)
                     await interaction.response.edit_message(embed=embed, view=self.view)
             await interaction.response.send_modal(ActionModal())
         
