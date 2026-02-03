@@ -10,9 +10,67 @@ from io import BytesIO
 from typing import Optional
 from logger import log
 import logging
+from bs4 import BeautifulSoup
+from datetime import datetime
 
 # 用於關閉時的清理
 _oxwu_cog_instance = None
+
+# CWA 快取
+cwa_last_link: Optional[str] = None
+cwa_last_image_url: Optional[str] = None
+
+# CWA SSL context（跳過驗證，因為氣象署證書缺少 Subject Key Identifier）
+import ssl
+_cwa_ssl_context = ssl.create_default_context()
+_cwa_ssl_context.check_hostname = False
+_cwa_ssl_context.verify_mode = ssl.CERT_NONE
+
+async def cwa_get_last_link() -> tuple[str, bool]:
+    """取得最新的 CWA 報告連結，返回 (連結, 是否與上次相同)"""
+    global cwa_last_link
+    BASE_URL = "https://www.cwa.gov.tw"
+    LIST_URL = "https://www.cwa.gov.tw/V8/C/E/MOD/EQ_ROW.html?T=" + str(int(datetime.now().timestamp()))
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.get(LIST_URL, ssl=_cwa_ssl_context) as resp:
+                text = await resp.text()
+                soup = BeautifulSoup(text, "html.parser")
+                latest = soup.select_one("tr.eq-row a")
+                if latest:
+                    link = BASE_URL + latest["href"]
+                    is_same = (link == cwa_last_link)
+                    cwa_last_link = link
+                    if config("debug"):
+                        print(f"[DEBUG] CWA link: {link}, is_same: {is_same}")
+                    return link, is_same
+    except Exception as e:
+        log(f"無法取得 CWA 連結: {e}", module_name="OXWU", level=logging.ERROR)
+    return "", False
+
+async def cwa_get_image_url(report_url: str) -> Optional[str]:
+    """取得 CWA 報告的圖片 URL，並快取結果"""
+    global cwa_last_image_url
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.get(report_url, ssl=_cwa_ssl_context) as resp:
+                text = await resp.text()
+                soup = BeautifulSoup(text, "html.parser")
+                meta = soup.find("meta", property="og:image")
+                if meta and meta.get("content"):
+                    cwa_last_image_url = meta["content"]
+                    return cwa_last_image_url
+    except Exception as e:
+        log(f"無法取得 CWA 圖片 URL: {e}", module_name="OXWU", level=logging.ERROR)
+    return None
+
+def cwa_get_cached_image_url() -> Optional[str]:
+    """取得快取的 CWA 圖片 URL"""
+    return cwa_last_image_url
+
+def cwa_get_cached_link() -> Optional[str]:
+    """取得快取的 CWA 報告連結"""
+    return cwa_last_link
 
 @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
 @app_commands.allowed_installs(guilds=True, users=True)
@@ -91,8 +149,36 @@ class OXWU(commands.GroupCog, name="earthquake", description="OXWU 地震監測�
             # 取得詳細資訊
             report = await self._fetch_report_info()
             if report:
-                embed = self._create_report_embed(report, screenshot_url)
-                await self._send_to_all_servers(embed, "oxwu_report_channel")
+                # 嘗試取得 CWA 圖片 URL（最多 5 次，間隔 5 秒）
+                cwa_image_url = await self._fetch_cwa_image_with_retry()
+                embed = self._create_report_embed(report, screenshot_url, cwa_image_url)
+                # 建立連結按鈕
+                view = None
+                cached_link = cwa_get_cached_link()
+                if cached_link:
+                    view = discord.ui.View()
+                    view.add_item(discord.ui.Button(label="中央氣象署報告", emoji="🌐", url=cached_link, style=discord.ButtonStyle.link))
+                await self._send_to_all_servers(embed, "oxwu_report_channel", view=view)
+    
+    async def _fetch_cwa_image_with_retry(self, max_retries: int = 5, delay: float = 5.0) -> Optional[str]:
+        """嘗試取得 CWA 圖片 URL，直到 is_same 為 False"""
+        for attempt in range(max_retries):
+            try:
+                link, is_same = await cwa_get_last_link()
+                if not is_same and link:
+                    image_url = await cwa_get_image_url(link)
+                    if image_url:
+                        log(f"成功取得 CWA 圖片 (第 {attempt + 1} 次嘗試)", module_name="OXWU", level=logging.INFO)
+                        return image_url
+                if attempt < max_retries - 1:
+                    log(f"CWA 報告尚未更新，{delay} 秒後重試 ({attempt + 1}/{max_retries})", module_name="OXWU", level=logging.INFO)
+                    await asyncio.sleep(delay)
+            except Exception as e:
+                log(f"取得 CWA 圖片失敗: {e}", module_name="OXWU", level=logging.ERROR)
+                if attempt < max_retries - 1:
+                    await asyncio.sleep(delay)
+        log("無法取得 CWA 圖片，已達最大重試次數", module_name="OXWU", level=logging.WARNING)
+        return None
     
     async def _fetch_screenshot(self) -> Optional[bytes]:
         """從 OXWU API 取得截圖"""
@@ -214,7 +300,7 @@ class OXWU(commands.GroupCog, name="earthquake", description="OXWU 地震監測�
         embed.set_footer(text="資料來源：OXWU")
         return embed
     
-    def _create_report_embed(self, report: dict, screenshot_url: Optional[str] = None) -> discord.Embed:
+    def _create_report_embed(self, report: dict, screenshot_url: Optional[str] = None, cwa_image_url: Optional[str] = None) -> discord.Embed:
         """建立報告 Embed"""
         embed = discord.Embed(
             title="📋 地震報告",
@@ -254,13 +340,16 @@ class OXWU(commands.GroupCog, name="earthquake", description="OXWU 地震監測�
                 stations_info = "\n".join(stations_texts)
                 embed.add_field(name=f"📍 {area['area']} ({area['maxIntensity']})", value=stations_info, inline=False)
         
-        if screenshot_url:
+        # 優先使用 CWA 圖片，否則使用截圖
+        if cwa_image_url:
+            embed.set_image(url=cwa_image_url)
+        elif screenshot_url:
             embed.set_image(url=screenshot_url)
         
-        embed.set_footer(text="資料來源：OXWU")
+        embed.set_footer(text="資料來源：OXWU / 中央氣象署")
         return embed
     
-    async def _send_to_all_servers(self, embed: discord.Embed, config_key: str):
+    async def _send_to_all_servers(self, embed: discord.Embed, config_key: str, view: Optional[discord.ui.View] = None):
         """發送訊息到所有已設定的伺服器（含 429 避免機制）"""
         tasks = []
         for guild in self.bot.guilds:
@@ -276,16 +365,16 @@ class OXWU(commands.GroupCog, name="earthquake", description="OXWU 地震監測�
         for i in range(0, len(tasks), batch_size):
             batch = tasks[i:i + batch_size]
             for guild_name, channel, text_to_add in batch:
-                await self._send_with_retry(channel, embed, guild_name, text_to_add)
+                await self._send_with_retry(channel, embed, guild_name, text_to_add, view=view)
             # 批次間延遲
             if i + batch_size < len(tasks):
                 await asyncio.sleep(0.5)
     
-    async def _send_with_retry(self, channel, embed: discord.Embed, guild_name: str, text_to_add: str = "", max_retries: int = 3):
+    async def _send_with_retry(self, channel, embed: discord.Embed, guild_name: str, text_to_add: str = "", view: Optional[discord.ui.View] = None, max_retries: int = 3):
         """發送訊息並在遇到 429 時重試"""
         for attempt in range(max_retries):
             try:
-                await channel.send(content=text_to_add, embed=embed)
+                await channel.send(content=text_to_add, embed=embed, view=view)
                 return
             except discord.HTTPException as e:
                 if e.status == 429:
@@ -394,8 +483,19 @@ class OXWU(commands.GroupCog, name="earthquake", description="OXWU 地震監測�
         # 上傳截圖
         screenshot_url = await self._upload_screenshot_to_temp()
         
-        embed = self._create_report_embed(report, screenshot_url)
-        await interaction.followup.send(embed=embed)
+        # 取得 CWA 圖片（查詢時不需重試，直接取得當前最新的）
+        cached_link = cwa_get_cached_link()
+        cwa_image_url = cwa_get_cached_image_url()
+        
+        embed = self._create_report_embed(report, screenshot_url, cwa_image_url)
+        
+        # 建立連結按鈕
+        view = None
+        if cached_link:
+            view = discord.ui.View()
+            view.add_item(discord.ui.Button(label="中央氣象署報告", emoji="🌐", url=cached_link, style=discord.ButtonStyle.link))
+        
+        await interaction.followup.send(embed=embed, view=view)
     
     @app_commands.command(name="query-warning", description="查詢目前的地震速報狀態")
     async def query_warning(self, interaction: discord.Interaction):
@@ -446,6 +546,11 @@ class OXWU(commands.GroupCog, name="earthquake", description="OXWU 地震監測�
         )
         
         await interaction.response.send_message(embed=embed, ephemeral=True)
+        
+    @commands.Cog.listener()
+    async def on_ready(self):
+        await cwa_get_last_link()  # 啟動時取得一次 CWA 連結
+        await cwa_get_image_url(cwa_last_link)  # 啟動時取得一次 CWA 圖片 URL
 
 
 async def _cleanup_oxwu():
