@@ -10,6 +10,7 @@ from typing import Union, Optional
 import ModerationNotify
 from logger import log
 import logging
+import re
 
 
 def timestr_to_seconds(timestr: str) -> int:
@@ -87,6 +88,36 @@ def guess_role(guild: discord.Guild, role_name: str):
         if role_name in role.name:
             return role.id
     return None
+
+
+async def get_case_id(guild: discord.Guild) -> int:
+    channel_id = get_server_config(guild.id, "MODERATION_MESSAGE_CHANNEL_ID")
+    channel = guild.get_channel(channel_id)
+    if channel is None:
+        return int(f"{current_roc_year()}0001")
+
+    current_year = current_roc_year()
+
+    async for message in channel.history(limit=25):
+        m = re.search(r"裁判字號：\s*(\d{7})", message.content)
+        if not m:
+            continue
+
+        case_id = m.group(1)
+        case_year = int(case_id[:3])
+        case_no = int(case_id[3:])
+
+        if case_year != current_year:
+            return int(f"{current_year}0001")
+
+        return int(f"{current_year}{case_no + 1:04d}")
+
+    # 完全沒找到任何裁判字號
+    return int(f"{current_year}0001")
+
+
+def current_roc_year() -> int:
+    return datetime.now().year - 1911
 
 
 async def ban_user(guild: discord.Guild, user: Union[discord.Member, discord.User], reason: str, duration: int = 0, delete_message_seconds: int = 0):
@@ -310,12 +341,13 @@ async def moderation_message_settings(interaction: Optional[discord.Interaction]
         if 'reason' in action:
             reason = action['reason']
             break
-    def generate_message():
+    async def generate_message():
         return f"""
 ### ⛔ 違規處分
 > - 被處分者： {user.mention}
 > - 處分原因：{reason}
 > - 處分結果：{action_text}
+> - 裁判字號： {await get_case_id(guild if guild else interaction.guild)}
 > - 處分執行： {moderator.mention}
 """
 

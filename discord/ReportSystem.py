@@ -28,10 +28,16 @@ DEFAULT_SERVER_RULES = """
 """
 
 
-async def check_message_with_ai(text: str, history_messages: str="", reason: str="", server_rules: str="", image: bytes=None) -> dict:
+async def check_message_with_ai(text: str, history_messages: str = "", reason: str = "", server_rules: str = "", image: bytes = None) -> dict:
     """
     使用 g4f + Pollinations 判斷訊息是否違反群規
-    回傳格式 JSON: {"level": 違規等級，0到5, "reason": "簡短說明，若違規需指出違反哪一條規則", "suggestion_actions": [{"action": "ban" | "kick" | "mute", "duration": 若禁言，請提供禁言時間，格式如秒數，若非封鎖則為 0 (只能為秒數)}]}, "target": "reporter" | "reported_user" (若是封鎖檢舉人，請填 reporter，若是封鎖被檢舉人，請填 reported_user)
+    
+    Returns:
+        dict: {
+            "level": int (0-5),
+            "reason": str,
+            "suggestion_actions": [{"action": str, "duration": int}]
+        }
     """
 
     if history_messages:
@@ -78,19 +84,60 @@ async def check_message_with_ai(text: str, history_messages: str="", reason: str
     # print("[DEBUG] AI Response:", response)
 
     try:
-        return json.loads(response)
-    except Exception:
+        result = json.loads(response)
+        return _validate_ai_response(result)
+    except json.JSONDecodeError:
         try:
-            # 暴力
-            response = "{" + response.split("}{")[1]
-            return json.loads(response)
+            # 嘗試提取 JSON
+            import re
+            json_match = re.search(r'\{[\s\S]*\}', response)
+            if json_match:
+                result = json.loads(json_match.group())
+                return _validate_ai_response(result)
         except Exception:
-            # print("[-][ReportSystem] Failed to parse AI response:", response)
-            log("無法解析 AI 回應: " + response, level=logging.ERROR, module_name="ReportSystem")
-            return {"level": 0, "reason": "無法解析回應", "suggestion_actions": []}
+            pass
+        log("無法解析 AI 回應: " + response, level=logging.ERROR, module_name="ReportSystem")
+        return {"level": 0, "reason": "無法解析回應", "suggestion_actions": []}
+
+
+def _validate_ai_response(result: dict) -> dict:
+    """驗證並修正 AI 回應格式"""
+    # 確保 level 是整數
+    result["level"] = int(result.get("level", 0))
+    result["reason"] = str(result.get("reason", ""))
+    
+    # 驗證 suggestion_actions
+    actions = result.get("suggestion_actions", [])
+    if not isinstance(actions, list):
+        actions = []
+    
+    validated_actions = []
+    for action in actions:
+        if isinstance(action, dict):
+            validated_action = {
+                "action": str(action.get("action", "")),
+                "duration": int(action.get("duration", 0)) if isinstance(action.get("duration"), (int, float, str)) and str(action.get("duration", "0")).isdigit() else 0
+            }
+            validated_actions.append(validated_action)
+    
+    result["suggestion_actions"] = validated_actions
+    return result
 
 
 def get_time_text(seconds: int) -> str:
+    # 類型安全檢查
+    if isinstance(seconds, list):
+        seconds = seconds[0] if seconds else 0
+    if not isinstance(seconds, (int, float)):
+        try:
+            seconds = int(seconds)
+        except (ValueError, TypeError):
+            return "未知時間"
+    seconds = int(seconds)
+    
+    if seconds <= 0:
+        return "0 秒"
+    
     final = ""
     while seconds != 0:
         if seconds < 60:
@@ -108,7 +155,7 @@ def get_time_text(seconds: int) -> str:
     return final.strip()
 
 
-def send_moderation_message(user: discord.Member, moderator: discord.Member, actions: dict, reason: str, message_content: str, is_ai: bool=False) -> str:
+async def send_moderation_message(user: discord.Member, moderator: discord.Member, actions: list, reason: str, message_content: str, is_ai: bool=False) -> str:
     action_texts = []
     # print("[DEBUG] Actions:", actions)
     bl = False
@@ -118,15 +165,19 @@ def send_moderation_message(user: discord.Member, moderator: discord.Member, act
         elif action["action"] == "kick":
             action_texts.append("踢出")
         elif action["action"] == "mute":
-            time_text = action.get("duration", 0)
-            action_texts.append(f"羈押禁見||禁言||{get_time_text(time_text)}")
+            duration_val = action.get("duration", 0)
+            # 確保 duration 是整數
+            if isinstance(duration_val, list):
+                duration_val = duration_val[0] if duration_val else 0
+            duration_val = int(duration_val) if duration_val else 0
+            action_texts.append(f"羈押禁見||禁言||{get_time_text(duration_val)}")
         elif action["action"] == "blacklist_reporter":
             action_texts.append("拔除檢舉權限")
             bl = True
     action_text = "+".join(action_texts)
     if not message_content or message_content.strip() == "":
         bl = True
-    if message_content.splitlines() > 1:
+    if len(message_content.splitlines()) > 1:
         message_content = message_content.split("\n")[0] + " ..."
     message_content = "||" + message_content + "||"
     # add <> on links
@@ -139,18 +190,19 @@ def send_moderation_message(user: discord.Member, moderator: discord.Member, act
 > - 被處分者： {user.mention}{original_action_text}
 > - 處分原因：{reason}
 > - 處分結果：{action_text}
+> - 裁判字號： {await Moderate.get_case_id(moderator.guild)}
 > - 處分執行： {moderator.mention}
 """
     if is_ai:
         text += "\n-# 此處分為 AI 建議的處分。"
     
     # Get server-specific moderation channel
-    guild_id = user.guild.id
+    guild_id = moderator.guild.id
     moderation_channel_id = get_server_config(guild_id, "MODERATION_MESSAGE_CHANNEL_ID")
     if moderation_channel_id:
         mod_channel = bot.get_channel(moderation_channel_id)
         if mod_channel:
-            asyncio.run_coroutine_threadsafe(mod_channel.send(text, allowed_mentions=discord.AllowedMentions(users=True, roles=False, everyone=False)), bot.loop)
+            await mod_channel.send(text, allowed_mentions=discord.AllowedMentions(users=True, roles=False, everyone=False))
 
 
 class doModerationActions(discord.ui.View):
@@ -181,6 +233,10 @@ class doModerationActions(discord.ui.View):
                     await interaction.guild.kick(target, reason=self.ai_reason)
                 elif action.get("action") == "mute":
                     duration = action.get("duration", 0)
+                    # 確保 duration 是整數
+                    if isinstance(duration, list):
+                        duration = duration[0] if duration else 0
+                    duration = int(duration) if duration else 0
                     if duration > 0:
                         await interaction.guild.get_member(target.id).timeout(discord.utils.utcnow() + timedelta(seconds=duration), reason=self.ai_reason)
                 # elif action.get("action") == "blacklist_reporter":
@@ -195,7 +251,7 @@ class doModerationActions(discord.ui.View):
 
 
             target = self.user
-            send_moderation_message(target, interaction.user, self.ai_suggestions, self.ai_reason, self.message_content, is_ai=True)
+            await send_moderation_message(target, interaction.user, self.ai_suggestions, self.ai_reason, self.message_content, is_ai=True)
             await interaction.response.send_message(f"已執行 AI 建議處置。", ephemeral=True)
         except Exception as e:
             # print(f"Error occurred: {str(e)}")
@@ -216,7 +272,7 @@ class doModerationActions(discord.ui.View):
                     duration = Moderate.timestr_to_seconds(self.duration.value) if self.duration.value else 0
                     delete = Moderate.timestr_to_seconds(self.delete_messages.value) if self.delete_messages.value else 0
                     await Moderate.ban_user(interaction.guild, user, reason=self.reason.value or "違反規則", duration=duration if duration > 0 else None, delete_message_seconds=delete if delete > 0 else 0)
-                    send_moderation_message(user, interaction.user, [{"action": "ban"}], self.reason.value or "違反規則", message_content)
+                    await send_moderation_message(user, interaction.user, [{"action": "ban"}], self.reason.value or "違反規則", message_content)
                 except Exception as e:
                     # print(f"Error occurred: {str(e)}")
                     log(f"封鎖用戶時發生錯誤: {str(e)}", level=logging.ERROR, module_name="ReportSystem")
@@ -233,7 +289,7 @@ class doModerationActions(discord.ui.View):
             async def on_submit(self, modal_interaction: discord.Interaction):
                 try:
                     await interaction.guild.kick(user, reason=self.reason.value or "違反規則")
-                    send_moderation_message(user, interaction.user, [{"action": "kick"}], self.reason.value or "違反規則", message_content)
+                    await send_moderation_message(user, interaction.user, [{"action": "kick"}], self.reason.value or "違反規則", message_content)
                 except Exception as e:
                     print(f"Error occurred: {str(e)}")
                     await modal_interaction.response.send_message(f"發生錯誤，請稍後再試。\n{str(e)}", ephemeral=True)
@@ -245,18 +301,18 @@ class doModerationActions(discord.ui.View):
         message_content = self.message_content
 
         class MuteModal(discord.ui.Modal, title="禁言時間設定"):
-            duration = discord.ui.TextInput(label="禁言時間", placeholder="請輸入禁言時間（d/h/m/s）", required=True)
+            duration_input = discord.ui.TextInput(label="禁言時間", placeholder="請輸入禁言時間（d/h/m/s）", required=True)
             reason = discord.ui.TextInput(label="禁言原因", placeholder="請輸入禁言原因", required=True, max_length=100)
 
             async def on_submit(self, modal_interaction: discord.Interaction):
                 try:
-                    duration = Moderate.timestr_to_seconds(self.duration.value)
-                    if duration <= 0:
-                        await modal_interaction.response.send_message("請輸入正整數分鐘。", ephemeral=True)
+                    mute_duration = Moderate.timestr_to_seconds(self.duration_input.value)
+                    if not isinstance(mute_duration, int) or mute_duration <= 0:
+                        await modal_interaction.response.send_message("請輸入有效的時間格式（例如：30m、1h、1d）。", ephemeral=True)
                         return
-                    await interaction.guild.get_member(parent_user.id).timeout(discord.utils.utcnow() + timedelta(seconds=duration), reason=self.reason.value or "違反規則")
-                    send_moderation_message(parent_user, interaction.user, [{"action": "mute", "duration": duration}], self.reason.value or "違反規則", message_content)
-                    await modal_interaction.response.send_message(f"已禁言 {parent_user.mention} {get_time_text(duration)}", ephemeral=True)
+                    await interaction.guild.get_member(parent_user.id).timeout(discord.utils.utcnow() + timedelta(seconds=mute_duration), reason=self.reason.value or "違反規則")
+                    await send_moderation_message(parent_user, interaction.user, [{"action": "mute", "duration": mute_duration}], self.reason.value or "違反規則", message_content)
+                    await modal_interaction.response.send_message(f"已禁言 {parent_user.mention} {get_time_text(mute_duration)}", ephemeral=True)
                 except Exception as e:
                     # print(f"Error occurred: {str(e)}")
                     log(f"禁言用戶時發生錯誤: {str(e)}", level=logging.ERROR, module_name="ReportSystem")
@@ -297,7 +353,7 @@ class doModerationActions(discord.ui.View):
                     if role and role not in member.roles:
                         await member.add_roles(role, reason=reason or "惡意檢舉")
                 await modal_interaction.response.send_message(f"已拔除 {member.mention} 的檢舉權限。", ephemeral=True)
-                send_moderation_message(member, interaction.user, [{"action": "blacklist_reporter"}], reason or "惡意檢舉", "(無內容)")
+                await send_moderation_message(member, interaction.user, [{"action": "blacklist_reporter"}], reason or "惡意檢舉", "(無內容)")
         await interaction.response.send_modal(ReasonModal())
     
     @discord.ui.button(label="拒絕檢舉", style=discord.ButtonStyle.secondary, custom_id="reject_report_button")
