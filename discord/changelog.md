@@ -1,5 +1,18 @@
 # 更新日誌
 
+## 0.17.6
+### 更新內容如下：
+* 更新 /ai
+  * AI 模型改為使用 `openai-fast` 並從遠端獲取模型。
+  * 改用 `client.chat.completions.create` API。
+  * 從 GitHub 獲取 g4f。
+* 更新 /report
+  * 調整檢舉文字。
+* 更新 /help
+  * 文字指令幫助現在只能在伺服器中使用。
+* 修復多個 DeprecationWarning。
+* 修復一些 Bug。
+
 ## 0.17.5
 ### 更新內容如下：
 * 更新 /moderate 相關發布公告功能
