@@ -54,7 +54,7 @@ class AutoPublish(commands.GroupCog, name=app_commands.locale_str("autopublish")
         if message.channel.type == discord.ChannelType.news:
             if message.reference:
                 return  # Ignore replies
-            if message.interaction:
+            if message.interaction_metadata:
                 return  # Ignore interaction messages
             autopublish_settings = get_server_config(guild.id, "autopublish", {})
             if not autopublish_settings:
