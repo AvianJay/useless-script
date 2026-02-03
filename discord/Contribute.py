@@ -64,9 +64,10 @@ def cleanup_tokens():
         del auth_tokens[token]
 
 class ContributionView(discord.ui.View):
-    def __init__(self, ctype):
+    def __init__(self, ctype, audio_filename=None):
         super().__init__(timeout=None)
         self.ctype = ctype
+        self.audio_filename = audio_filename  # 用於 dynamic_voice_audio
 
     @discord.ui.button(label="同意", style=discord.ButtonStyle.green, custom_id="contribution_approve")
     async def approve(self, interaction: discord.Interaction, button: discord.ui.Button):
@@ -158,6 +159,39 @@ class ContributionView(discord.ui.View):
                 user_id = interaction.message.embeds[0].fields[0].value
                 user = await bot.fetch_user(int(user_id))
                 await user.send("你的投稿已被批准！")
+
+            elif self.ctype == "dynamic_voice_audio":
+                # Attachment 0: Audio file
+                if len(interaction.message.attachments) < 1:
+                    await interaction.followup.send("錯誤：找不到音檔附件。", ephemeral=True)
+                    return
+                
+                audio_att = interaction.message.attachments[0]
+                audio_data = await audio_att.read()
+                
+                # 保存音檔到 assets/dynamic_voice_audio 資料夾
+                audio_folder = os.path.join(os.path.dirname(__file__), "assets", "dynamic_voice_audio")
+                os.makedirs(audio_folder, exist_ok=True)
+                audio_path = os.path.join(audio_folder, self.audio_filename)
+                with open(audio_path, "wb") as f:
+                    f.write(audio_data)
+                
+                await interaction.followup.send(f"已保存並批准音檔投稿！檔名：{self.audio_filename}", ephemeral=True)
+                
+                # Update message
+                embed = interaction.message.embeds[0]
+                embed.color = discord.Color.green()
+                embed.title += " [已批准]"
+                for child in self.children:
+                    child.disabled = True
+                await interaction.edit_original_response(embed=embed, view=self)
+                
+                log(f"音檔已保存為：{self.audio_filename}", module_name="Contribute")
+                
+                # try to send dm
+                user_id = interaction.message.embeds[0].fields[0].value
+                user = await bot.fetch_user(int(user_id))
+                await user.send("你投稿的動態語音音效已被批准！")
 
         except Exception as e:
             await interaction.followup.send(f"批准失敗: {e}", ephemeral=True)
@@ -326,6 +360,59 @@ class Contribute(commands.GroupCog, description="投稿圖片"):
         await contribute_channel.send(embed=embed, file=file, view=view)
         contribution_cooldowns[user_id] = time.time()
         await interaction.response.send_message("感謝您的投稿！我們會盡快審核您的圖片。", ephemeral=True)
+    
+    @app_commands.command(name="dynamic-voice-audio", description="投稿動態語音頻道的進入音效")
+    @app_commands.describe(audio="音檔（MP3、WAV、OGG 格式，最大 5MB，建議 3-10 秒）")
+    async def dynamic_voice_audio(self, interaction: discord.Interaction, audio: discord.Attachment):
+        # Rate Limit Check
+        current_time = time.time()
+        user_id = interaction.user.id
+        if user_id in contribution_cooldowns:
+            last_time = contribution_cooldowns[user_id]
+            if current_time - last_time < 300:
+                remaining = int(300 - (current_time - last_time))
+                await interaction.response.send_message(f"投稿過於頻繁，請等待 {remaining} 秒後再試。", ephemeral=True)
+                return
+        
+        # 檢查檔案類型
+        if not audio.filename.lower().endswith(('.mp3', '.wav', '.ogg')):
+            await interaction.response.send_message("錯誤：只支援 MP3、WAV、OGG 格式的音檔。", ephemeral=True)
+            return
+        
+        # 檢查檔案大小（限制 5MB）
+        if audio.size > 5 * 1024 * 1024:
+            await interaction.response.send_message("錯誤：音檔大小超過 5MB，請選擇較小的音檔。", ephemeral=True)
+            return
+        
+        contribute_channel_id = config("contribute_channel_id", None)
+        if contribute_channel_id is None:
+            await interaction.response.send_message("投稿頻道未設置，請聯繫開發者。", ephemeral=True)
+            return
+        contribute_channel = self.bot.get_channel(int(contribute_channel_id))
+        if contribute_channel is None:
+            await interaction.response.send_message("無法找到投稿頻道，請聯繫開發者。", ephemeral=True)
+            return
+        
+        audio_data = await audio.read()
+        
+        # 使用 UUID 作為檔名
+        file_ext = os.path.splitext(audio.filename)[1].lower() or ".mp3"
+        audio_filename = f"{uuid.uuid4()}{file_ext}"
+        
+        embed = discord.Embed(title="新的「動態語音音效」投稿", color=discord.Color.orange())
+        embed.set_author(name=f"{interaction.user.name} ({interaction.user.id})", icon_url=interaction.user.display_avatar.url if interaction.user.display_avatar else None)
+        embed.timestamp = datetime.now(timezone.utc)
+        embed.add_field(name="使用者 ID", value=str(interaction.user.id))
+        embed.add_field(name="原始檔名", value=audio.filename)
+        embed.add_field(name="檔案大小", value=f"{audio.size / 1024:.2f} KB")
+        embed.add_field(name="預計儲存為", value=audio_filename)
+        
+        file = discord.File(io.BytesIO(audio_data), filename=audio.filename)
+        
+        view = ContributionView("dynamic_voice_audio", audio_filename=audio_filename)
+        await contribute_channel.send(embed=embed, file=file, view=view)
+        contribution_cooldowns[user_id] = time.time()
+        await interaction.response.send_message("感謝您的投稿！我們會盡快審核您的音檔。\n-# 審核通過後會通知你。", ephemeral=True)
 
 
 asyncio.run(bot.add_cog(Contribute(bot)))

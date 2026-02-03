@@ -234,8 +234,16 @@ class DynamicVoice(commands.GroupCog, name=app_commands.locale_str("dynamic-voic
                         voice_client = discord.utils.get(self.bot.voice_clients, guild=member.guild)
                         if voice_client and voice_client.is_connected():
                             voice_client.stop()  # Stop any existing audio
-                            id = random.randint(1, 7)
-                            audio_source = discord.FFmpegPCMAudio(f"assets/dynamic_voice_join_{id}.mp3")
+                            import os
+                            audio_folder = os.path.join(os.path.dirname(__file__), "assets", "dynamic_voice_audio")
+                            audio_files = [f for f in os.listdir(audio_folder) if f.endswith(('.mp3', '.wav', '.ogg'))] if os.path.exists(audio_folder) else []
+                            if audio_files:
+                                selected_audio = random.choice(audio_files)
+                                audio_path = os.path.join(audio_folder, selected_audio)
+                            else:
+                                # fallback to old location if no files in new folder
+                                audio_path = f"assets/dynamic_voice_join_{random.randint(1, 7)}.mp3"
+                            audio_source = discord.FFmpegPCMAudio(audio_path)
                             if not voice_client.is_playing():
                                 log(f"正在播放 {member} 的進入音效", module_name="DynamicVoice", user=member, guild=member.guild)
                                 voice_client.play(audio_source)
