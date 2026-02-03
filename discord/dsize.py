@@ -34,7 +34,7 @@ async def process_checkin(user_id: int) -> tuple[bool, int]:
     Process daily check-in for a user (always global).
     Returns: (is_new_checkin, checkin_streak)
     """
-    now = (datetime.utcnow() + timedelta(hours=8)).date()  # 台灣時間
+    now = (datetime.now(timezone(timedelta(hours=8)))).date()  # 台灣時間
     
     # Get last checkin date (always global - guild_id = 0)
     last_checkin = get_user_data(0, user_id, "last_checkin")
@@ -251,7 +251,7 @@ async def dsize(interaction: discord.Interaction, global_dsize: str = "False"):
     user_id = interaction.user.id
     # Use timezone-aware UTC and convert to Taiwan time (UTC+8)
     # ew broken
-    now = (datetime.utcnow() + timedelta(hours=8)).date()  # 台灣時間
+    now = datetime.now(timezone(timedelta(hours=8))).date()  # 台灣時間
 
     # If invoked in DM (user-installed command), use None as the guild_key.
     # Otherwise use the guild id to keep per-server records.
@@ -435,7 +435,7 @@ async def dsize(interaction: discord.Interaction, global_dsize: str = "False"):
                             d_string_new = "💥" * ori
                             embed.set_field_at(0, name=f"{ori + 1} cm", value=f"8{d_string_new}", inline=False)
                             await interaction.edit_original_response(content="正在手術中...💥", embed=embed)
-                            await discord.utils.sleep_until(datetime.utcnow() + timedelta(seconds=1))
+                            await asyncio.sleep(0.1)
                             ori -= min(random.randint(2, 10), ori)
                         embed.set_field_at(0, name=f"-1 cm", value=f"8", inline=False)
                         await interaction.edit_original_response(content="手術失敗，你變男娘了。", embed=embed)
@@ -568,7 +568,7 @@ async def dsize_leaderboard(interaction: discord.Interaction, limit: int = 10, g
                 user_date = datetime(1970, 1, 1).date()
         elif isinstance(user_date, datetime):
             user_date = user_date.date()
-        if user_date is not None and user_date != (datetime.utcnow() + timedelta(hours=8)).date():
+        if user_date is not None and user_date != (datetime.now(timezone(timedelta(hours=8)))).date():
             continue
         if size is not None:
             leaderboard.append((user_id, size))
@@ -588,7 +588,7 @@ async def dsize_leaderboard(interaction: discord.Interaction, limit: int = 10, g
                 user_date = datetime(1970, 1, 1).date()
         elif isinstance(user_date, datetime):
             user_date = user_date.date()
-        if user_date is not None and user_date != (datetime.utcnow() + timedelta(hours=8)).date():
+        if user_date is not None and user_date != (datetime.now(timezone(timedelta(hours=8)))).date():
             all_data_fake.pop(user_id)
             continue
 
@@ -637,7 +637,7 @@ async def dsize_battle(interaction: discord.Interaction, opponent: Union[discord
     original_user = interaction.user
     user_id = interaction.user.id
     opponent_id = opponent.id
-    now = (datetime.utcnow() + timedelta(hours=8)).date()  # 台灣時間
+    now = (datetime.now(timezone(timedelta(hours=8)))).date()  # 台灣時間
 
     if user_id == opponent_id:
         await interaction.response.send_message("不能跟自己比屌長。", ephemeral=True)
@@ -1208,7 +1208,7 @@ async def use_scalpel(interaction: discord.Interaction):
             target_user = self.target_user.component.values[0]
             target_id = target_user.id
             target_id = int(target_id)
-            now = (datetime.utcnow() + timedelta(hours=8)).date()
+            now = (datetime.now(timezone(timedelta(hours=8)))).date()
             last = get_user_data(guild_key, target_id, "last_dsize")
             if last is not None and not isinstance(last, datetime):
                 # If last is a string (e.g., from JSON), convert to date
@@ -1284,7 +1284,7 @@ async def use_rusty_scalpel(interaction: discord.Interaction):
             target_user = self.target_user.component.values[0]
             target_id = target_user.id
             target_id = int(target_id)
-            now = (datetime.utcnow() + timedelta(hours=8)).date()
+            now = (datetime.now(timezone(timedelta(hours=8)))).date()
             last = get_user_data(guild_key, target_id, "last_dsize")
             if last is not None and not isinstance(last, datetime):
                 # If last is a string (e.g., from JSON), convert to date
@@ -1350,7 +1350,7 @@ async def use_rusty_scalpel(interaction: discord.Interaction):
 async def use_anti_surgery(interaction: discord.Interaction):
     user_id = interaction.user.id
     guild_key = interaction.guild.id if interaction.guild else None
-    now = (datetime.utcnow() + timedelta(hours=8)).date()
+    now = (datetime.now(timezone(timedelta(hours=8)))).date()
     removed = await ItemSystem.remove_item_from_user(guild_key, user_id, "anti_surgery", 1)
     if not removed:
         await interaction.response.send_message("你沒有抗手術藥物，無法使用。", ephemeral=True)
@@ -1374,7 +1374,7 @@ async def use_cloud_ruler(interaction: discord.Interaction):
             target_user = self.target_user.component.values[0]
             target_id = target_user.id
             target_id = int(target_id)
-            now = (datetime.utcnow() + timedelta(hours=8)).date()
+            now = (datetime.now(timezone(timedelta(hours=8)))).date()
             last = get_user_data(guild_key, target_id, "last_dsize")
             if last is not None and not isinstance(last, datetime):
                 # If last is a string (e.g., from JSON), convert to date
