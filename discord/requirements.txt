@@ -2,7 +2,7 @@ discord.py[voice]~=2.6.4
 requests~=2.32.5
 pillow~=11.3.0
 emoji~=2.15.0
-g4f[all]
+g4f[all] @ git+https://github.com/xtekky/gpt4free.git@main
 taiwanbus==0.1.0
 YouBikePython==0.1.2
 psutil~=7.1.2
