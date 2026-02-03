@@ -928,5 +928,331 @@ class PrettyHelpCommand(commands.HelpCommand):
 bot.help_command = PrettyHelpCommand()
 
 
+async def can_run_text_command(command: commands.Command, interaction: discord.Interaction) -> bool:
+    """檢查用戶是否可以執行文字指令"""
+    if command.hidden:
+        return False
+    
+    # 如果沒有檢查，直接返回 True
+    if not command.checks:
+        return True
+    
+    # 創建一個模擬的 Context 來檢查權限
+    class FakeMessage:
+        def __init__(self):
+            self.author = interaction.user
+            self.guild = interaction.guild
+            self.channel = interaction.channel
+            self.content = ""
+            self.id = 0
+    
+    class FakeContext:
+        def __init__(self):
+            self.author = interaction.user
+            self.guild = interaction.guild
+            self.channel = interaction.channel
+            self.bot = bot
+            self.message = FakeMessage()
+            self.command = command
+    
+    fake_ctx = FakeContext()
+    
+    try:
+        # 嘗試運行所有檢查
+        for check in command.checks:
+            result = await discord.utils.maybe_coroutine(check, fake_ctx)
+            if not result:
+                return False
+        return True
+    except Exception:
+        # 如果檢查失敗（例如權限不足），返回 False
+        return False
+
+
+async def help_command_autocomplete(interaction: discord.Interaction, current: str):
+    """自動完成：列出所有可用指令"""
+    commands_list = []
+    
+    # 斜線指令
+    for cmd in bot.tree.get_commands():
+        if isinstance(cmd, app_commands.Group):
+            # 群組指令，加入子指令
+            for subcmd in cmd.commands:
+                commands_list.append({
+                    "name": f"/{cmd.name} {subcmd.name}",
+                    "value": f"app:{cmd.name} {subcmd.name}"
+                })
+        else:
+            commands_list.append({
+                "name": f"/{cmd.name}",
+                "value": f"app:{cmd.name}"
+            })
+    
+    # 文字指令
+    for cmd in bot.commands:
+        if isinstance(cmd, commands.Group):
+            for subcmd in cmd.commands:
+                # 檢查權限
+                if await can_run_text_command(subcmd, interaction):
+                    commands_list.append({
+                        "name": f"!{cmd.name} {subcmd.name}",
+                        "value": f"text:{cmd.name} {subcmd.name}"
+                    })
+        else:
+            # 檢查權限
+            if await can_run_text_command(cmd, interaction):
+                commands_list.append({
+                    "name": f"!{cmd.name}",
+                    "value": f"text:{cmd.name}"
+                })
+    
+    # 過濾並返回結果
+    return [
+        app_commands.Choice(name=cmd["name"], value=cmd["value"])
+        for cmd in commands_list if current.lower() in cmd["name"].lower()
+    ][:25]
+
+
+@bot.tree.command(name=app_commands.locale_str("help"), description="顯示指令幫助與說明")
+@app_commands.describe(command="要查詢的指令名稱")
+@app_commands.allowed_installs(guilds=True, users=True)
+@app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
+@app_commands.autocomplete(command=help_command_autocomplete)
+async def help_slash_command(interaction: discord.Interaction, command: str = None):
+    await interaction.response.defer()
+    if command is None:
+        # 顯示所有指令總覽
+        embed = discord.Embed(
+            title="📚 指令幫助",
+            description=f"使用 {await get_command_mention('help')} <指令> 查看特定指令的詳細說明\n選擇下方的指令可以查看詳細資訊",
+            color=0x5865F2
+        )
+        embed.set_thumbnail(url=bot.user.avatar.url if bot.user.avatar else None)
+        
+        # 斜線指令
+        app_cmds = []
+        for cmd in bot.tree.get_commands():
+            if isinstance(cmd, app_commands.Group):
+                for subcmd in cmd.commands:
+                    app_cmds.append(await get_command_mention(cmd.name, subcmd.name))
+            elif isinstance(cmd, app_commands.Command):
+                app_cmds.append(await get_command_mention(cmd.name))
+        
+        if app_cmds:
+            # 分割成多個 field 避免超過字數限制
+            chunk_size = 20
+            for i in range(0, len(app_cmds), chunk_size):
+                chunk = app_cmds[i:i + chunk_size]
+                embed.add_field(
+                    name=f"斜線指令 ({i + 1}-{min(i + chunk_size, len(app_cmds))})" if len(app_cmds) > chunk_size else f"斜線指令 ({len(app_cmds)})",
+                    value=" ".join(chunk),
+                    inline=False
+                )
+        
+        # 文字指令
+        text_cmds = []
+        for cmd in bot.commands:
+            if not cmd.hidden:
+                if isinstance(cmd, commands.Group):
+                    for subcmd in cmd.commands:
+                        if await can_run_text_command(subcmd, interaction):
+                            text_cmds.append(f"`{cmd.name} {subcmd.name}`")
+                else:
+                    if await can_run_text_command(cmd, interaction):
+                        text_cmds.append(f"`{cmd.name}`")
+        
+        if text_cmds:
+            chunk_size = 20
+            for i in range(0, len(text_cmds), chunk_size):
+                chunk = text_cmds[i:i + chunk_size]
+                embed.add_field(
+                    name=f"文字指令 ({i + 1}-{min(i + chunk_size, len(text_cmds))})" if len(text_cmds) > chunk_size else f"文字指令 ({len(text_cmds)})",
+                    value=" ".join(chunk),
+                    inline=False
+                )
+        
+        embed.set_footer(text=f"共 {len(app_cmds)} 個斜線指令 | {len(text_cmds)} 個文字指令 | by AvianJay")
+        await interaction.followup.send(embed=embed)
+        return
+    
+    # 解析指令類型
+    if command.startswith("app:"):
+        # 斜線指令
+        cmd_parts = command[4:].split(" ", 1)
+        cmd_name = cmd_parts[0]
+        subcmd_name = cmd_parts[1] if len(cmd_parts) > 1 else None
+        
+        target_cmd = bot.tree.get_command(cmd_name)
+        if target_cmd is None:
+            await interaction.followup.send("❌ 找不到此指令。", ephemeral=True)
+            return
+        
+        if subcmd_name and isinstance(target_cmd, app_commands.Group):
+            # 查找子指令
+            for subcmd in target_cmd.commands:
+                if subcmd.name == subcmd_name:
+                    target_cmd = subcmd
+                    break
+            else:
+                await interaction.followup.send("❌ 找不到此子指令。", ephemeral=True)
+                return
+        
+        embed = discord.Embed(
+            title=f"/{target_cmd.qualified_name}",
+            description=target_cmd.description or "無描述",
+            color=0x5865F2
+        )
+        
+        # 顯示參數
+        if hasattr(target_cmd, 'parameters') and target_cmd.parameters:
+            params_text = []
+            for param in target_cmd.parameters:
+                required = "必填" if param.required else "選填"
+                param_desc = param.description or "無描述"
+                params_text.append(f"• `{param.name}` ({required}): {param_desc}")
+            
+            if params_text:
+                embed.add_field(
+                    name="參數",
+                    value="\n".join(params_text),
+                    inline=False
+                )
+        
+        # 如果是群組指令，顯示子指令
+        if isinstance(target_cmd, app_commands.Group):
+            subcmds = [f"`{subcmd.name}` - {subcmd.description or '無描述'}" for subcmd in target_cmd.commands]
+            if subcmds:
+                embed.add_field(
+                    name="子指令",
+                    value="\n".join(subcmds),
+                    inline=False
+                )
+        
+        await interaction.followup.send(embed=embed)
+    
+    elif command.startswith("text:"):
+        # 文字指令
+        cmd_parts = command[5:].split(" ", 1)
+        cmd_name = cmd_parts[0]
+        subcmd_name = cmd_parts[1] if len(cmd_parts) > 1 else None
+        
+        target_cmd = bot.get_command(cmd_name)
+        if target_cmd is None:
+            await interaction.followup.send("❌ 找不到此指令。", ephemeral=True)
+            return
+        
+        if subcmd_name and isinstance(target_cmd, commands.Group):
+            target_cmd = target_cmd.get_command(subcmd_name)
+            if target_cmd is None:
+                await interaction.followup.send("❌ 找不到此子指令。", ephemeral=True)
+                return
+        
+        embed = discord.Embed(
+            title=f"{target_cmd.qualified_name}",
+            description=target_cmd.help or "無描述",
+            color=0x5865F2
+        )
+        
+        # 使用方法
+        embed.add_field(
+            name="使用方法",
+            value=f"`{target_cmd.qualified_name} {target_cmd.signature}`",
+            inline=False
+        )
+        
+        # 別名
+        if target_cmd.aliases:
+            embed.add_field(
+                name="別名",
+                value=" ".join([f"`{alias}`" for alias in target_cmd.aliases]),
+                inline=True
+            )
+        
+        # 如果是群組指令，顯示子指令
+        if isinstance(target_cmd, commands.Group):
+            subcmds = [f"`{subcmd.name}` - {subcmd.short_doc or '無描述'}" for subcmd in target_cmd.commands]
+            if subcmds:
+                embed.add_field(
+                    name="子指令",
+                    value="\n".join(subcmds),
+                    inline=False
+                )
+        
+        await interaction.followup.send(embed=embed)
+    
+    else:
+        # 嘗試搜尋指令
+        # 先搜尋斜線指令
+        target_cmd = bot.tree.get_command(command)
+        if target_cmd:
+            embed = discord.Embed(
+                title=f"/{target_cmd.qualified_name}",
+                description=target_cmd.description or "無描述",
+                color=0x5865F2
+            )
+            
+            if hasattr(target_cmd, 'parameters') and target_cmd.parameters:
+                params_text = []
+                for param in target_cmd.parameters:
+                    required = "必填" if param.required else "選填"
+                    param_desc = param.description or "無描述"
+                    params_text.append(f"• `{param.name}` ({required}): {param_desc}")
+                
+                if params_text:
+                    embed.add_field(
+                        name="參數",
+                        value="\n".join(params_text),
+                        inline=False
+                    )
+            
+            if isinstance(target_cmd, app_commands.Group):
+                subcmds = [f"`{subcmd.name}` - {subcmd.description or '無描述'}" for subcmd in target_cmd.commands]
+                if subcmds:
+                    embed.add_field(
+                        name="子指令",
+                        value="\n".join(subcmds),
+                        inline=False
+                    )
+            
+            await interaction.followup.send(embed=embed)
+            return
+        
+        # 搜尋文字指令
+        target_cmd = bot.get_command(command)
+        if target_cmd:
+            embed = discord.Embed(
+                title=f"{target_cmd.qualified_name}",
+                description=target_cmd.help or "無描述",
+                color=0x5865F2
+            )
+            
+            embed.add_field(
+                name="使用方法",
+                value=f"`{target_cmd.qualified_name} {target_cmd.signature}`",
+                inline=False
+            )
+            
+            if target_cmd.aliases:
+                embed.add_field(
+                    name="別名",
+                    value=" ".join([f"`{alias}`" for alias in target_cmd.aliases]),
+                    inline=True
+                )
+            
+            if isinstance(target_cmd, commands.Group):
+                subcmds = [f"`{subcmd.name}` - {subcmd.short_doc or '無描述'}" for subcmd in target_cmd.commands]
+                if subcmds:
+                    embed.add_field(
+                        name="子指令",
+                        value="\n".join(subcmds),
+                        inline=False
+                    )
+            
+            await interaction.followup.send(embed=embed)
+            return
+        
+        await interaction.followup.send("❌ 找不到此指令。請使用自動完成選擇指令。", ephemeral=True)
+
+
 if __name__ == "__main__":
     start_bot()
