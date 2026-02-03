@@ -167,9 +167,13 @@ def get_db_connection():
     """Get a new database connection"""
     return db.get_connection()
 
+fetched_commands_cache = None
+
 async def get_command_mention(command_name: str, subcommand_name: str = None):
-    commands = await bot.tree.fetch_commands()
-    for command in commands:
+    global fetched_commands_cache
+    if fetched_commands_cache is None:
+        fetched_commands_cache = await bot.tree.fetch_commands()
+    for command in fetched_commands_cache:
         if command.name == command_name:
             if subcommand_name:
                 return command.mention.replace(f"/{command_name}", f"/{command_name} {subcommand_name}")
