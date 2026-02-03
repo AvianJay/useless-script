@@ -337,32 +337,44 @@ class OXWU(commands.GroupCog, name="earthquake", description="OXWU 地震監測�
     @app_commands.default_permissions(manage_guild=True)
     @app_commands.allowed_contexts(guilds=True, dms=False, private_channels=False)
     @app_commands.allowed_installs(guilds=True, users=False)
-    async def set_warning_channel(self, interaction: discord.Interaction, channel: discord.TextChannel, text: str = ""):
+    async def set_warning_channel(self, interaction: discord.Interaction, channel: discord.TextChannel = None, text: str = ""):
         if not interaction.is_guild_integration():
             await interaction.response.send_message("❌ 此指令只能在伺服器中使用", ephemeral=True)
             return
         if interaction.user.guild_permissions.manage_guild is False:
             await interaction.response.send_message("❌ 你沒有權限使用此指令（需要管理伺服器權限）", ephemeral=True)
             return
-        set_server_config(interaction.guild_id, "oxwu_warning_channel", str(channel.id))
-        set_server_config(interaction.guild_id, "oxwu_warning_channel_text", text)
-        await interaction.response.send_message(f"✅ 已設定速報頻道為 {channel.mention}", ephemeral=True)
+        if channel:
+            set_server_config(interaction.guild_id, "oxwu_warning_channel", str(channel.id))
+            set_server_config(interaction.guild_id, "oxwu_warning_channel_text", text)
+            await interaction.response.send_message(f"✅ 已設定速報頻道為 {channel.mention}", ephemeral=True)
+        else:
+            # 移除設定
+            set_server_config(interaction.guild_id, "oxwu_warning_channel", None)
+            set_server_config(interaction.guild_id, "oxwu_warning_channel_text", None)
+            await interaction.response.send_message("✅ 已移除速報頻道設定", ephemeral=True)
     
     @app_commands.command(name="set-report-channel", description="設定接收地震報告的頻道")
     @app_commands.describe(channel="要接收報告的頻道", text="可選的附加文字訊息")
     @app_commands.default_permissions(manage_guild=True)
     @app_commands.allowed_contexts(guilds=True, dms=False, private_channels=False)
     @app_commands.allowed_installs(guilds=True, users=False)
-    async def set_report_channel(self, interaction: discord.Interaction, channel: discord.TextChannel, text: str = ""):
+    async def set_report_channel(self, interaction: discord.Interaction, channel: discord.TextChannel = None, text: str = ""):
         if not interaction.is_guild_integration():
             await interaction.response.send_message("❌ 此指令只能在伺服器中使用", ephemeral=True)
             return
         if interaction.user.guild_permissions.manage_guild is False:
             await interaction.response.send_message("❌ 你沒有權限使用此指令（需要管理伺服器權限）", ephemeral=True)
             return
-        set_server_config(interaction.guild_id, "oxwu_report_channel", str(channel.id))
-        set_server_config(interaction.guild_id, "oxwu_report_channel_text", text)
-        await interaction.response.send_message(f"✅ 已設定報告頻道為 {channel.mention}", ephemeral=True)
+        if channel:
+            set_server_config(interaction.guild_id, "oxwu_report_channel", str(channel.id))
+            set_server_config(interaction.guild_id, "oxwu_report_channel_text", text)
+            await interaction.response.send_message(f"✅ 已設定報告頻道為 {channel.mention}", ephemeral=True)
+        else:
+            # 移除設定
+            set_server_config(interaction.guild_id, "oxwu_report_channel", None)
+            set_server_config(interaction.guild_id, "oxwu_report_channel_text", None)
+            await interaction.response.send_message("✅ 已移除報告頻道設定", ephemeral=True)
     
     @app_commands.command(name="query-report", description="查詢最近一次的地震報告")
     @app_commands.allowed_contexts(guilds=True, dms=False, private_channels=False)
