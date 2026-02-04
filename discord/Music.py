@@ -40,6 +40,8 @@ class MusicQueue:
 # 儲存每個伺服器的隊列和文字頻道
 music_queues: dict[int, MusicQueue] = {}
 text_channels: dict[int, discord.TextChannel] = {}
+# 儲存自動離開的計時器任務
+leave_timers: dict[int, asyncio.Task] = {}
 
 
 def get_queue(guild_id: int) -> MusicQueue:
@@ -93,50 +95,77 @@ class Music(commands.GroupCog, group_name=app_commands.locale_str("music")):
         except Exception as e:
             log(f"無法連接到 Lavalink 伺服器: {e}", level=logging.ERROR, module_name="Music")
     
+    async def _auto_leave_after_timeout(self, guild_id: int, player: lava_lyra.Player):
+        """5 分鐘後自動離開語音頻道"""
+        try:
+            await asyncio.sleep(300)  # 5 分鐘 = 300 秒
+            
+            # 再次確認頻道內沒有真人
+            if player and player.channel:
+                human_count = sum(1 for m in player.channel.members if not m.bot)
+                if human_count == 0:
+                    queue = get_queue(guild_id)
+                    
+                    embed = discord.Embed(
+                        title="👋 自動離開",
+                        description="語音頻道內已 5 分鐘無其他成員，機器人已離開",
+                        color=0x95a5a6
+                    )
+                    try:
+                        text_channel = text_channels.get(guild_id)
+                        if text_channel:
+                            await text_channel.send(embed=embed)
+                    except Exception as e:
+                        log(f"無法發送自動離開通知: {e}", level=logging.WARNING, module_name="Music", guild=player.guild)
+                    
+                    # 清理並離開
+                    try:
+                        queue.clear()
+                        await player.stop()
+                        await player.disconnect()
+                        music_queues.pop(guild_id, None)
+                        text_channels.pop(guild_id, None)
+                    except:
+                        pass
+        except asyncio.CancelledError:
+            pass
+        finally:
+            leave_timers.pop(guild_id, None)
+    
     @commands.Cog.listener()
     async def on_voice_state_update(self, member: discord.Member, before: discord.VoiceState, after: discord.VoiceState):
-        """當語音狀態變化時，檢查是否需要離開語音頻道"""
-        # 只處理有人離開頻道的情況
-        if before.channel is None:
-            return
-        
-        # 檢查機器人是否在這個頻道
+        """當語音狀態變化時，檢查是否需要啟動或取消自動離開計時器"""
+        # 檢查機器人是否在語音頻道
         player: lava_lyra.Player = member.guild.voice_client
         if not player or not player.channel:
             return
         
-        # 只處理機器人所在的頻道
-        if before.channel.id != player.channel.id:
+        guild_id = member.guild.id
+        
+        # 檢查是否是機器人所在頻道的變化
+        is_bot_channel = (
+            (before.channel and before.channel.id == player.channel.id) or
+            (after.channel and after.channel.id == player.channel.id)
+        )
+        if not is_bot_channel:
             return
         
         # 計算頻道內的真人數量（排除機器人）
         human_count = sum(1 for m in player.channel.members if not m.bot)
         
         if human_count == 0:
-            guild_id = member.guild.id
-            queue = get_queue(guild_id)
-            
-            embed = discord.Embed(
-                title="👋 自動離開",
-                description="語音頻道內已無其他成員，機器人已離開",
-                color=0x95a5a6
-            )
-            try:
-                text_channel = text_channels.get(guild_id)
-                if text_channel:
-                    await text_channel.send(embed=embed)
-            except:
-                pass
-            
-            # 清理並離開
-            try:
-                queue.clear()
-                await player.stop()
-                await player.disconnect()
-                music_queues.pop(guild_id, None)
-                text_channels.pop(guild_id, None)
-            except:
-                pass
+            # 沒有真人，啟動 5 分鐘計時器（如果還沒啟動）
+            if guild_id not in leave_timers:
+                leave_timers[guild_id] = asyncio.create_task(
+                    self._auto_leave_after_timeout(guild_id, player)
+                )
+                log(f"已啟動 5 分鐘自動離開計時器", module_name="Music", guild=member.guild)
+        else:
+            # 有真人，取消計時器
+            if guild_id in leave_timers:
+                leave_timers[guild_id].cancel()
+                leave_timers.pop(guild_id, None)
+                log(f"已取消自動離開計時器", module_name="Music", guild=member.guild)
     
     @commands.Cog.listener()
     async def on_lyra_track_start(self, player: lava_lyra.Player, track: lava_lyra.Track):
@@ -532,8 +561,26 @@ class Music(commands.GroupCog, group_name=app_commands.locale_str("music")):
     
     @commands.command(name="play", aliases=["p", "播放"])
     @commands.guild_only()
-    async def text_play(self, ctx: commands.Context, *, query: str):
-        """播放音樂"""
+    async def text_play(self, ctx: commands.Context, *, query: Optional[str] = None):
+        """播放音樂，若無參數則繼續播放"""
+        # 如果沒有給參數，執行 resume
+        if query is None:
+            player: lava_lyra.Player = ctx.guild.voice_client
+            if not player:
+                await ctx.send("❌ 沒有正在播放的音樂，請提供歌曲名稱或 URL")
+                return
+            
+            if not player.is_paused:
+                await ctx.send("❌ 音樂未暫停，請提供歌曲名稱或 URL 來添加新歌曲")
+                return
+            
+            try:
+                await player.set_pause(False)
+                await ctx.send("▶️ 音樂已繼續播放")
+            except Exception as e:
+                await ctx.send(f"❌ 繼續播放出錯: {e}")
+            return
+        
         player = await self._ensure_voice(ctx)
         if not player:
             return
