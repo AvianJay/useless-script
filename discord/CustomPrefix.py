@@ -50,6 +50,18 @@ class CustomPrefix(commands.Cog):
     async def on_message(self, message):
         if message.author.bot:
             return
+        if message.guild is None:
+            return
+        prefix = get_server_config(str(message.guild.id), "custom_prefix", config("prefix", "!"))
+        curr_prefix = config("prefix", "!")
+        if message.content.startswith(curr_prefix) and prefix != curr_prefix:
+            # tip user about custom prefix, but rate-limit per user to avoid spam
+            cache_key = ("prefix_tip", message.author.id)
+            try:
+                _ = usercache[cache_key]
+            except KeyError:
+                await message.channel.send(f"提醒：本伺服器的自定義前綴為：`{prefix}`！")
+                usercache[cache_key] = 0
         if message.content == bot.user.mention:
             try:
                 pingcount = usercache[message.author.id]
