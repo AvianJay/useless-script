@@ -384,6 +384,10 @@ translations = {
     "screenshot": "截圖",
     "earthquake": "地震",
     "dynamic-voice-audio": "動態語音音效",
+    "stickyrole": "黏黏的身份組",
+    "ignore-bots": "忽略機器人",
+    "set-log-channel": "設定日誌頻道",
+    "clear-user": "清除用戶紀錄",
 }
 class CommandNameTranslator(app_commands.Translator):
     async def translate(
