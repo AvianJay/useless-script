@@ -655,7 +655,7 @@ class Music(commands.GroupCog, group_name=app_commands.locale_str("music")):
             name = self.node_names.get(node._identifier, node._identifier)
             status = "✅ 已連接" if node.is_connected else "❌ 未連接"
             if node.is_connected:
-                ping = f"{node.ping}ms" if node.is_connected else "N/A"
+                ping = f"{round(node.ping, 2)}ms" if node.is_connected else "N/A"
                 status += f"\n延遲: {ping}"
                 players = len(node.players)
                 status += f"\n有 {players} 個伺服器正在使用此節點"
