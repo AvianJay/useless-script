@@ -113,6 +113,7 @@ class Music(commands.GroupCog, group_name=app_commands.locale_str("music")):
                     search=True,
                     fallback=True,
                 )
+                node.description = node_config.get("name", node.identifier)
                 self.nodes.append(node)
                 log(f"已創建 Lavalink 節點: {node_config.get('name', node_config.get('id', 'Unknown'))} ({node_config.get('host')}:{node_config.get('port')})", module_name="Music")
             except Exception as e:
@@ -642,6 +643,21 @@ class Music(commands.GroupCog, group_name=app_commands.locale_str("music")):
             await interaction.followup.send("🔀 隊列已隨機打亂")
         except Exception as e:
             await interaction.followup.send(f"❌ 打亂隊列出錯: {e}", ephemeral=True)
+    
+    @app_commands.command(name=app_commands.locale_str("nodes"), description="查看 Lavalink 節點狀態")
+    async def nodes_command(self, interaction: discord.Interaction):
+        """查看 Lavalink 節點狀態"""
+        await interaction.response.defer()
+        embed = discord.Embed(title="🔧 Lavalink 節點狀態", color=0x3498db)
+        for node in self.nodes:
+            status = "✅ 已連接" if node.is_connected else "❌ 未連接"
+            if node.is_connected:
+                ping = f"{node.ping}ms" if node.is_connected else "N/A"
+                status += f"\n延遲: {ping}"
+                players = len(node.players)
+                status += f"\n有 {players} 個伺服器正在使用此節點"
+            embed.add_field(name=node.description, value=status, inline=False)
+        await interaction.followup.send(embed=embed)
     
     def _format_duration(self, milliseconds: int) -> str:
         """將毫秒轉換為 MM:SS 格式"""
