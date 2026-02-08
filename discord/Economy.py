@@ -6,6 +6,7 @@ from logger import log
 import logging
 import asyncio
 import time
+import math
 from ItemSystem import (
     items, give_item_to_user, remove_item_from_user, get_user_items,
     all_items_autocomplete, get_user_items_autocomplete,
@@ -109,18 +110,41 @@ def apply_inflation(guild_id: int, amount: float, weight: float = ADMIN_INJECTIO
     """
     對伺服器貨幣施加通膨效果（匯率下降）
 
-    通膨因素：
-    - 管理員注入金錢/物品（最主要）
-    - 每日獎勵增發
-    - 貨幣過量供給
+    使用「有機經濟基準」+ 對數縮放 + 濫權複利懲罰：
+    - 小額注入（≈每日獎勵）= 幾乎無感
+    - 中額注入（10-100倍每日）= 明顯貶值
+    - 大額注入（1000倍+）= 嚴重貶值
+    - 重複濫權 = 複利懲罰，經濟加速崩潰
     """
     rate = get_exchange_rate(guild_id)
     supply = get_total_supply(guild_id)
+    admin_injected = get_admin_injected(guild_id)
+    daily_amount = get_daily_amount(guild_id)
+
+    # 有機經濟規模 = 總供給 - 管理員注入，至少為 daily*100
+    # 這樣管理員注入不會「稀釋」自己的影響
+    organic = max(supply - admin_injected, daily_amount * 100, 1)
+
+    # 注入相對於有機經濟的比例
+    ratio = abs(amount) / organic
+
+    # 對數縮放：大額注入依然有顯著影響
+    # log2(2)=1, log2(11)=3.46, log2(101)=6.66, log2(10001)=13.3
+    log_impact = math.log2(1 + ratio)
+    base_impact = log_impact * weight
+
+    # 濫權複利懲罰：管理員注入佔總供給越多，每次新注入懲罰越重
     if supply > 0:
-        impact = (abs(amount) / supply) * weight * 10
+        abuse_fraction = admin_injected / supply
     else:
-        impact = weight * 0.5
-    rate *= (1 - min(impact, 0.1))  # 單次事件最多造成 10% 貶值
+        abuse_fraction = 1.0
+    # 10% → 1.08x, 50% → 3x, 80% → 6.1x, 100% → 9x
+    abuse_penalty = 1 + (abuse_fraction ** 2) * 8
+
+    # 最終影響：單次最多 60% 貶值（不再是 10%）
+    impact = min(base_impact * abuse_penalty, 0.6)
+
+    rate *= (1 - impact)
     set_exchange_rate(guild_id, rate)
     return rate
 
@@ -1024,7 +1048,7 @@ class EconomyMod(commands.GroupCog, name="economymod", description="經濟系統
     def __init__(self):
         super().__init__()
 
-    @app_commands.command(name="give", description="給予用戶伺服幣（⚠️ 會導致通膨）")
+    @app_commands.command(name="give", description="給予用戶伺服幣（可能會通膨）")
     @app_commands.describe(user="目標用戶", amount="金額")
     async def give_money(self, interaction: discord.Interaction, user: discord.User, amount: float):
         if amount <= 0:
@@ -1042,8 +1066,7 @@ class EconomyMod(commands.GroupCog, name="economymod", description="經濟系統
         rate = get_exchange_rate(guild_id)
         await interaction.response.send_message(
             f"✅ 已給予 {user.display_name} **{amount:,.2f}** {currency_name}。\n"
-            f"⚠️ 管理員注入導致匯率變動：**{rate:.4f}**",
-            ephemeral=True
+            f"⚠️ 管理員注入導致匯率變動：**{rate:.4f}**"
         )
         log(f"Admin {interaction.user} gave {amount} server currency to {user} in guild {guild_id}",
             module_name="Economy", user=interaction.user, guild=interaction.guild)
@@ -1063,32 +1086,31 @@ class EconomyMod(commands.GroupCog, name="economymod", description="經濟系統
         adjust_supply(guild_id, -removed)
 
         await interaction.response.send_message(
-            f"✅ 已移除 {user.display_name} 的 **{removed:,.2f}** {currency_name}。",
-            ephemeral=True
+            f"✅ 已移除 {user.display_name} 的 **{removed:,.2f}** {currency_name}。"
         )
         log(f"Admin {interaction.user} removed {removed} server currency from {user} in guild {guild_id}",
             module_name="Economy", user=interaction.user, guild=interaction.guild)
 
-    @app_commands.command(name="setrate", description="手動設定匯率")
-    @app_commands.describe(rate="新匯率（1 伺服幣 = X 全域幣）")
-    async def setrate(self, interaction: discord.Interaction, rate: float):
-        if rate < EXCHANGE_RATE_MIN or rate > EXCHANGE_RATE_MAX:
-            await interaction.response.send_message(
-                f"❌ 匯率必須在 {EXCHANGE_RATE_MIN} 到 {EXCHANGE_RATE_MAX} 之間。",
-                ephemeral=True
-            )
-            return
+    # @app_commands.command(name="setrate", description="手動設定匯率")
+    # @app_commands.describe(rate="新匯率（1 伺服幣 = X 全域幣）")
+    # async def setrate(self, interaction: discord.Interaction, rate: float):
+    #     if rate < EXCHANGE_RATE_MIN or rate > EXCHANGE_RATE_MAX:
+    #         await interaction.response.send_message(
+    #             f"❌ 匯率必須在 {EXCHANGE_RATE_MIN} 到 {EXCHANGE_RATE_MAX} 之間。",
+    #             ephemeral=True
+    #         )
+    #         return
 
-        guild_id = interaction.guild.id
-        old_rate = get_exchange_rate(guild_id)
-        set_exchange_rate(guild_id, rate)
+    #     guild_id = interaction.guild.id
+    #     old_rate = get_exchange_rate(guild_id)
+    #     set_exchange_rate(guild_id, rate)
 
-        await interaction.response.send_message(
-            f"✅ 匯率已從 **{old_rate:.4f}** 更改為 **{rate:.4f}**。",
-            ephemeral=True
-        )
-        log(f"Admin {interaction.user} set rate {old_rate} -> {rate} in guild {guild_id}",
-            module_name="Economy", user=interaction.user, guild=interaction.guild)
+    #     await interaction.response.send_message(
+    #         f"✅ 匯率已從 **{old_rate:.4f}** 更改為 **{rate:.4f}**。",
+    #         ephemeral=True
+    #     )
+    #     log(f"Admin {interaction.user} set rate {old_rate} -> {rate} in guild {guild_id}",
+    #         module_name="Economy", user=interaction.user, guild=interaction.guild)
 
     @app_commands.command(name="setname", description="設定伺服器貨幣名稱")
     @app_commands.describe(name="新的貨幣名稱")
@@ -1112,16 +1134,16 @@ class EconomyMod(commands.GroupCog, name="economymod", description="經濟系統
         set_server_config(guild_id, "economy_daily_amount", amount)
         await interaction.response.send_message(f"✅ 每日獎勵已設定為 **{amount:,}**。", ephemeral=True)
 
-    @app_commands.command(name="setsellratio", description="設定物品賣出比率")
-    @app_commands.describe(ratio="賣出比率（0.1-1.0，例如 0.7 = 70%）")
-    async def setsellratio(self, interaction: discord.Interaction, ratio: float):
-        if ratio < 0.1 or ratio > 1.0:
-            await interaction.response.send_message("❌ 比率必須在 0.1 到 1.0 之間。", ephemeral=True)
-            return
+    # @app_commands.command(name="setsellratio", description="設定物品賣出比率")
+    # @app_commands.describe(ratio="賣出比率（0.1-1.0，例如 0.7 = 70%）")
+    # async def setsellratio(self, interaction: discord.Interaction, ratio: float):
+    #     if ratio < 0.1 or ratio > 1.0:
+    #         await interaction.response.send_message("❌ 比率必須在 0.1 到 1.0 之間。", ephemeral=True)
+    #         return
 
-        guild_id = interaction.guild.id
-        set_server_config(guild_id, "economy_sell_ratio", ratio)
-        await interaction.response.send_message(f"✅ 賣出比率已設定為 **{ratio*100:.0f}%**。", ephemeral=True)
+    #     guild_id = interaction.guild.id
+    #     set_server_config(guild_id, "economy_sell_ratio", ratio)
+    #     await interaction.response.send_message(f"✅ 賣出比率已設定為 **{ratio*100:.0f}%**。", ephemeral=True)
 
     @app_commands.command(name="info", description="詳細經濟管理面板")
     async def mod_info(self, interaction: discord.Interaction):
@@ -1156,48 +1178,48 @@ class EconomyMod(commands.GroupCog, name="economymod", description="經濟系統
 
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
-    @app_commands.command(name="reset", description="⚠️ 重置伺服器經濟系統")
-    async def reset(self, interaction: discord.Interaction):
-        guild_id = interaction.guild.id
+    # @app_commands.command(name="reset", description="⚠️ 重置伺服器經濟系統")
+    # async def reset(self, interaction: discord.Interaction):
+    #     guild_id = interaction.guild.id
 
-        class ResetConfirmView(discord.ui.View):
-            def __init__(self):
-                super().__init__(timeout=30)
+    #     class ResetConfirmView(discord.ui.View):
+    #         def __init__(self):
+    #             super().__init__(timeout=30)
 
-            @discord.ui.button(label="確認重置", style=discord.ButtonStyle.danger, emoji="⚠️")
-            async def confirm(self, btn_interaction: discord.Interaction, button: discord.ui.Button):
-                if btn_interaction.user.id != interaction.user.id:
-                    await btn_interaction.response.send_message("❌ 只有發起者才能確認。", ephemeral=True)
-                    return
+    #         @discord.ui.button(label="確認重置", style=discord.ButtonStyle.danger, emoji="⚠️")
+    #         async def confirm(self, btn_interaction: discord.Interaction, button: discord.ui.Button):
+    #             if btn_interaction.user.id != interaction.user.id:
+    #                 await btn_interaction.response.send_message("❌ 只有發起者才能確認。", ephemeral=True)
+    #                 return
 
-                set_server_config(guild_id, "economy_exchange_rate", DEFAULT_EXCHANGE_RATE)
-                set_server_config(guild_id, "economy_total_supply", 0)
-                set_server_config(guild_id, "economy_admin_injected", 0)
-                set_server_config(guild_id, "economy_transaction_count", 0)
+    #             set_server_config(guild_id, "economy_exchange_rate", DEFAULT_EXCHANGE_RATE)
+    #             set_server_config(guild_id, "economy_total_supply", 0)
+    #             set_server_config(guild_id, "economy_admin_injected", 0)
+    #             set_server_config(guild_id, "economy_transaction_count", 0)
 
-                all_users = get_all_user_data(guild_id, "economy_balance")
-                for uid in all_users:
-                    set_user_data(guild_id, uid, "economy_balance", 0)
-                    set_user_data(guild_id, uid, "economy_last_daily", 0)
-                    set_user_data(guild_id, uid, "economy_daily_streak", 0)
+    #             all_users = get_all_user_data(guild_id, "economy_balance")
+    #             for uid in all_users:
+    #                 set_user_data(guild_id, uid, "economy_balance", 0)
+    #                 set_user_data(guild_id, uid, "economy_last_daily", 0)
+    #                 set_user_data(guild_id, uid, "economy_daily_streak", 0)
 
-                for child in self.children:
-                    child.disabled = True
-                await btn_interaction.response.edit_message(content="✅ 經濟系統已重置。", view=self)
-                log(f"Admin {interaction.user} reset economy for guild {guild_id}",
-                    module_name="Economy", user=interaction.user, guild=interaction.guild)
+    #             for child in self.children:
+    #                 child.disabled = True
+    #             await btn_interaction.response.edit_message(content="✅ 經濟系統已重置。", view=self)
+    #             log(f"Admin {interaction.user} reset economy for guild {guild_id}",
+    #                 module_name="Economy", user=interaction.user, guild=interaction.guild)
 
-            @discord.ui.button(label="取消", style=discord.ButtonStyle.secondary)
-            async def cancel(self, btn_interaction: discord.Interaction, button: discord.ui.Button):
-                for child in self.children:
-                    child.disabled = True
-                await btn_interaction.response.edit_message(content="❌ 已取消重置。", view=self)
+    #         @discord.ui.button(label="取消", style=discord.ButtonStyle.secondary)
+    #         async def cancel(self, btn_interaction: discord.Interaction, button: discord.ui.Button):
+    #             for child in self.children:
+    #                 child.disabled = True
+    #             await btn_interaction.response.edit_message(content="❌ 已取消重置。", view=self)
 
-        await interaction.response.send_message(
-            "⚠️ **警告：** 這將重置所有經濟數據，包括所有用戶餘額、匯率等。此操作不可逆！",
-            view=ResetConfirmView(),
-            ephemeral=True
-        )
+    #     await interaction.response.send_message(
+    #         "⚠️ **警告：** 這將重置所有經濟數據，包括所有用戶餘額、匯率等。此操作不可逆！",
+    #         view=ResetConfirmView(),
+    #         ephemeral=True
+    #     )
 
 
 asyncio.run(bot.add_cog(EconomyMod()))
