@@ -37,8 +37,10 @@ class ResponseAppealView(discord.ui.View):
         origself = self
         class ResponseAppealModal(discord.ui.Modal, title="回覆用戶申訴"):
             response = discord.ui.TextInput(label="請輸入你的回覆內容", style=discord.TextStyle.paragraph, required=True, max_length=1000)
+            can_appeal = discord.ui.TextInput(label="是否允許用戶再次申訴？（是/否）", style=discord.TextStyle.short, required=True, max_length=3)
 
             async def on_submit(self, modal_interaction: discord.Interaction):
+                can_appeal = self.can_appeal.value.strip().lower() == "是" or self.can_appeal.value.strip().lower().startswith("y")
                 message = interaction.message  # 直接使用 interaction.message
                 user_id = int(message.embeds[0].fields[0].value)  # 從嵌入訊息中取得用戶 ID (fields[0] 是用戶 ID)
                 user = await bot.fetch_user(user_id)  # 獲取用戶對象
@@ -48,16 +50,29 @@ class ResponseAppealView(discord.ui.View):
                     color=discord.Color.green(),
                     timestamp=datetime.now(timezone.utc)
                 )
+                embed.add_field(name="伺服器 ID", value=modal_interaction.guild.id if modal_interaction.guild else "未知", inline=True)
                 embed.add_field(name="回覆內容", value=self.response.value, inline=False)
+                embed.add_field(name="是否允許再次申訴", value="是" if can_appeal else "否", inline=False)
                 embed.set_footer(text=f"{modal_interaction.guild.name}", icon_url=modal_interaction.guild.icon.url if modal_interaction.guild.icon else None)
+                if can_appeal:
+                    embed.add_field(name="申訴方式", value="你可以點擊下方按鈕提出再次申訴。", inline=False)
+                    view = AppealView()
+                else:
+                    view = None
                 try:
-                    await user.send(embed=embed)
+                    await user.send(embed=embed, view=view)
                     await modal_interaction.response.send_message("你的回覆已發送給用戶。", ephemeral=True)
                 except discord.Forbidden:
                     await modal_interaction.response.send_message("無法發送訊息給該用戶，用戶可能已關閉私訊。", ephemeral=True)
                     return
                 for child in origself.children:
                     child.disabled = True
+                origembed = message.embeds[0]
+                origembed.title += "（已回覆）"
+                origembed.color = discord.Color.green()
+                origembed.add_field(name="管理員回覆", value=self.response.value, inline=False)
+                origembed.add_field(name="是否允許再次申訴", value="是" if can_appeal else "否", inline=False)
+                origembed.set_footer(text=f"{modal_interaction.user.name} - 已回覆", icon_url=modal_interaction.user.display_avatar.url if modal_interaction.user and modal_interaction.user.display_avatar else None)
                 await interaction.edit_original_response(view=origself)
                 origself.stop()
         await interaction.response.send_modal(ResponseAppealModal())
