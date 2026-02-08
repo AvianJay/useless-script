@@ -73,7 +73,7 @@ class ResponseAppealView(discord.ui.View):
                 origembed.add_field(name="管理員回覆", value=self.response.value, inline=False)
                 origembed.add_field(name="是否允許再次申訴", value="是" if can_appeal else "否", inline=False)
                 origembed.set_footer(text=f"{modal_interaction.user.name} - 已回覆", icon_url=modal_interaction.user.display_avatar.url if modal_interaction.user and modal_interaction.user.display_avatar else None)
-                await interaction.edit_original_response(view=origself)
+                await interaction.edit_original_response(embed=origembed, view=origself)
                 origself.stop()
         await interaction.response.send_modal(ResponseAppealModal())
         
