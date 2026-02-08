@@ -11,7 +11,7 @@ import logging
 
 
 # Global configuration for backward compatibility
-config_version = 22
+config_version = 23
 config_path = 'config.json'
 
 default_config = {
@@ -52,11 +52,20 @@ default_config = {
     "contribute_channel_id": 0,
     "disable_modules": [],
     "join_leave_log_channel_id": 0,
-    "lavalink_host": "localhost",
-    "lavalink_port": 2333,
-    "lavalink_password": "youshallnotpass",
+    # "lavalink_host": "localhost",  # decprecated, use lavalink_nodes instead
+    # "lavalink_port": 2333,
+    # "lavalink_password": "youshallnotpass",
     "oxwu_api": "http://localhost:10281",
     "temp_channel_id": 123456789012345678,
+    "lavalink_nodes": [
+        {
+            "id": "MAIN",
+            "host": "localhost",
+            "port": 2333,
+            "password": "youshallnotpass",
+            "name": "Default Node"
+        }
+    ]
 }
 _config = None
 

@@ -55,7 +55,7 @@ class Music(commands.GroupCog, group_name=app_commands.locale_str("music")):
     def __init__(self, bot):
         super().__init__()
         self.bot = bot
-        self.node = None
+        self.nodes: list[lava_lyra.Node] = []
     
     async def _ensure_voice(self, ctx: commands.Context) -> Optional[lava_lyra.Player]:
         """確保使用者在語音頻道並返回播放器"""
@@ -77,23 +77,35 @@ class Music(commands.GroupCog, group_name=app_commands.locale_str("music")):
     @commands.Cog.listener()
     async def on_ready(self):
         """初始化 Lavalink 節點"""
-        if self.node:
+        if self.nodes:
             return
         
-        try:
-            self.node = await lava_lyra.NodePool.create_node(
-                bot=self.bot,
-                host=config("lavalink_host"),
-                port=config("lavalink_port"),
-                password=config("lavalink_password"),
-                identifier="MAIN",
-                lyrics=False,
-                search=True,
-                fallback=True,
-            )
-            log(f"已創建 Lavalink 節點: {self.node}", module_name="Music")
-        except Exception as e:
-            log(f"無法連接到 Lavalink 伺服器: {e}", level=logging.ERROR, module_name="Music")
+        lavalink_nodes = config("lavalink_nodes", [])
+        if not lavalink_nodes:
+            log("未設定任何 Lavalink 節點，請在 config.json 中設定 lavalink_nodes", level=logging.ERROR, module_name="Music")
+            return
+        
+        for node_config in lavalink_nodes:
+            try:
+                node = await lava_lyra.NodePool.create_node(
+                    bot=self.bot,
+                    host=node_config.get("host", "localhost"),
+                    port=node_config.get("port", 2333),
+                    password=node_config.get("password", "youshallnotpass"),
+                    identifier=node_config.get("id", f"NODE_{len(self.nodes)}"),
+                    lyrics=False,
+                    search=True,
+                    fallback=True,
+                )
+                self.nodes.append(node)
+                log(f"已創建 Lavalink 節點: {node_config.get('name', node_config.get('id', 'Unknown'))} ({node_config.get('host')}:{node_config.get('port')})", module_name="Music")
+            except Exception as e:
+                log(f"無法連接到 Lavalink 節點 {node_config.get('name', node_config.get('id', 'Unknown'))}: {e}", level=logging.ERROR, module_name="Music")
+        
+        if not self.nodes:
+            log("所有 Lavalink 節點均無法連接", level=logging.ERROR, module_name="Music")
+        else:
+            log(f"已成功連接 {len(self.nodes)}/{len(lavalink_nodes)} 個 Lavalink 節點", module_name="Music")
     
     async def _auto_leave_after_timeout(self, guild_id: int, player: lava_lyra.Player):
         """5 分鐘後自動離開語音頻道"""
