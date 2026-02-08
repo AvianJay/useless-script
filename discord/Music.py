@@ -8,6 +8,7 @@ import logging
 import asyncio
 from typing import Optional
 from collections import deque
+import random
 
 
 class MusicQueue:
@@ -562,6 +563,35 @@ class Music(commands.GroupCog, group_name=app_commands.locale_str("music")):
         except Exception as e:
             await interaction.followup.send(f"❌ 設置音量出錯: {e}", ephemeral=True)
     
+    @app_commands.command(name=app_commands.locale_str("shuffle"), description="隨機打亂隊列")
+    @app_commands.guild_only()
+    @app_commands.allowed_installs(guilds=True, users=False)
+    @app_commands.allowed_contexts(guilds=True, dms=False, private_channels=False)
+    async def shuffle(self, interaction: discord.Interaction):
+        """隨機打亂隊列"""
+        await interaction.response.defer()
+        
+        player: lava_lyra.Player = interaction.guild.voice_client
+        queue = get_queue(interaction.guild.id)
+        
+        if not player:
+            await interaction.followup.send("❌ 沒有正在播放的音樂", ephemeral=True)
+            return
+        
+        if queue.is_empty:
+            await interaction.followup.send("❌ 播放隊列為空", ephemeral=True)
+            return
+        
+        try:
+            tracks = list(queue)
+            random.shuffle(tracks)
+            queue.clear()
+            for track in tracks:
+                queue.add(track)
+            await interaction.followup.send("🔀 隊列已隨機打亂")
+        except Exception as e:
+            await interaction.followup.send(f"❌ 打亂隊列出錯: {e}", ephemeral=True)
+    
     def _format_duration(self, milliseconds: int) -> str:
         """將毫秒轉換為 MM:SS 格式"""
         seconds = milliseconds // 1000
@@ -837,6 +867,31 @@ class Music(commands.GroupCog, group_name=app_commands.locale_str("music")):
             await ctx.send(f"🔊 音量已設置為 {level}%")
         except Exception as e:
             await ctx.send(f"❌ 設置音量出錯: {e}")
+    
+    @commands.command(name="shuffle", aliases=["sh", "隨機"])
+    @commands.guild_only()
+    async def text_shuffle(self, ctx: commands.Context):
+        """隨機打亂隊列"""
+        player: lava_lyra.Player = ctx.guild.voice_client
+        queue = get_queue(ctx.guild.id)
+        
+        if not player:
+            await ctx.send("❌ 沒有正在播放的音樂")
+            return
+        
+        if queue.is_empty:
+            await ctx.send("❌ 播放隊列為空")
+            return
+        
+        try:
+            tracks = list(queue)
+            random.shuffle(tracks)
+            queue.clear()
+            for track in tracks:
+                queue.add(track)
+            await ctx.send("🔀 隊列已隨機打亂")
+        except Exception as e:
+            await ctx.send(f"❌ 打亂隊列出錯: {e}")
 
 
 asyncio.run(bot.add_cog(Music(bot)))
