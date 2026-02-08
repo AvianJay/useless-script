@@ -1187,7 +1187,7 @@ async def generate_feedgrass_image(target: discord.User, feeder: discord.User, r
 # setup items
 async def use_fake_ruler(interaction: discord.Interaction):
     user_id = interaction.user.id
-    guild_key = interaction.guild.id if interaction.guild else None
+    guild_key = getattr(interaction, 'item_guild_key', interaction.guild.id if interaction.guild else None)
     if get_user_data(guild_key, user_id, "dsize_fake_ruler_used", "False") == "True":
         await interaction.response.send_message("你今天已經使用過自欺欺人尺了。", ephemeral=True)
         return
@@ -1199,7 +1199,7 @@ async def use_fake_ruler(interaction: discord.Interaction):
 
 async def use_scalpel(interaction: discord.Interaction):
     user_id = interaction.user.id
-    guild_key = interaction.guild.id if interaction.guild else None
+    guild_key = getattr(interaction, 'item_guild_key', interaction.guild.id if interaction.guild else None)
     
     class SelectUserModal(discord.ui.Modal, title="要幫誰手術？"):
         target_user = discord.ui.Label(text="選擇用戶", component=discord.ui.UserSelect(placeholder="選擇一個用戶", min_values=1, max_values=1))
@@ -1275,7 +1275,7 @@ async def use_scalpel(interaction: discord.Interaction):
 
 async def use_rusty_scalpel(interaction: discord.Interaction):
     user_id = interaction.user.id
-    guild_key = interaction.guild.id if interaction.guild else None
+    guild_key = getattr(interaction, 'item_guild_key', interaction.guild.id if interaction.guild else None)
     
     class SelectUserModal(discord.ui.Modal, title="要幫誰手術？"):
         target_user = discord.ui.Label(text="選擇用戶", component=discord.ui.UserSelect(placeholder="選擇一個用戶", min_values=1, max_values=1))
@@ -1349,7 +1349,7 @@ async def use_rusty_scalpel(interaction: discord.Interaction):
     
 async def use_anti_surgery(interaction: discord.Interaction):
     user_id = interaction.user.id
-    guild_key = interaction.guild.id if interaction.guild else None
+    guild_key = getattr(interaction, 'item_guild_key', interaction.guild.id if interaction.guild else None)
     now = (datetime.now(timezone(timedelta(hours=8)))).date()
     removed = await ItemSystem.remove_item_from_user(guild_key, user_id, "anti_surgery", 1)
     if not removed:
@@ -1366,7 +1366,7 @@ async def use_anti_surgery(interaction: discord.Interaction):
 
 async def use_cloud_ruler(interaction: discord.Interaction):
     user_id = interaction.user.id
-    guild_key = interaction.guild.id if interaction.guild else None
+    guild_key = getattr(interaction, 'item_guild_key', interaction.guild.id if interaction.guild else None)
     class SelectUserModal(discord.ui.Modal, title="要幫誰量長度？"):
         target_user = discord.ui.Label(text="選擇用戶", component=discord.ui.UserSelect(placeholder="選擇一個用戶", min_values=1, max_values=1))
 
@@ -1480,36 +1480,42 @@ if "ItemSystem" in modules:
             "name": "自欺欺人尺",
             "description": "使用後下次量長度時或許會更長？",
             "callback": use_fake_ruler,
+            "worth": 25,
         },
         {
             "id": "grass",
             "name": "草",
             "description": "這是一把草，可以用來草飼男娘。使用 `/dsize-feedgrass`。",
             "callback": None,
+            "worth": 5,
         },
         {
             "id": "scalpel",
             "name": "手術刀",
             "description": "這是一把手術刀，可以用來進行手術，必定成功。",
             "callback": use_scalpel,
+            "worth": 200,
         },
         {
             "id": "rusty_scalpel",
             "name": "生鏽的手術刀",
             "description": "這是一把生鏽的手術刀，可以強制感染進而變成男娘。",
             "callback": use_rusty_scalpel,
+            "worth": 150,
         },
         {
             "id": "anti_surgery",
             "name": "抗手術藥物",
             "description": "一顆屌型的藥丸。使用後可以防止一天被手術。",
             "callback": use_anti_surgery,
+            "worth": 20,
         },
         {
             "id": "cloud_ruler",
             "name": "雲端尺",
             "description": "這是一把雲端尺，可以幫處於線上的網友量長度。",
             "callback": use_cloud_ruler,
+            "worth": 100,
         }
     ]
     import ItemSystem
