@@ -65,6 +65,11 @@ class Music(commands.GroupCog, group_name=app_commands.locale_str("music")):
             return None
         
         player: lava_lyra.Player = ctx.guild.voice_client
+        if player and player.channel:
+            if ctx.author.voice.channel.id != player.channel.id:
+                await ctx.send("❌ 你必須與機器人在同一語音頻道才能使用此指令")
+                return None
+        
         if not player:
             try:
                 player = await ctx.author.voice.channel.connect(cls=lava_lyra.Player)
@@ -73,6 +78,16 @@ class Music(commands.GroupCog, group_name=app_commands.locale_str("music")):
                 await ctx.send(f"❌ 無法連接到語音頻道: {e}")
                 return None
         return player
+    
+    def _check_voice_channel(self, user: discord.Member, guild: discord.Guild) -> Optional[str]:
+        """檢查用戶是否與機器人在同一語音頻道，返回錯誤訊息或 None"""
+        player: lava_lyra.Player = guild.voice_client
+        if player and player.channel:
+            if not user.voice or not user.voice.channel:
+                return "❌ 你必須加入語音頻道才能使用此指令"
+            if user.voice.channel.id != player.channel.id:
+                return "❌ 你必須與機器人在同一語音頻道才能使用此指令"
+        return None
     
 
     @commands.Cog.listener()
@@ -275,6 +290,12 @@ class Music(commands.GroupCog, group_name=app_commands.locale_str("music")):
             await interaction.followup.send("❌ 你必須加入語音頻道才能播放音樂", ephemeral=True)
             return
         
+        # 檢查是否與機器人在同一語音頻道
+        error_msg = self._check_voice_channel(interaction.user, interaction.guild)
+        if error_msg:
+            await interaction.followup.send(error_msg, ephemeral=True)
+            return
+        
         # 獲取或創建播放器
         player: lava_lyra.Player = interaction.guild.voice_client
         
@@ -350,6 +371,11 @@ class Music(commands.GroupCog, group_name=app_commands.locale_str("music")):
         """暫停播放"""
         await interaction.response.defer()
         
+        error_msg = self._check_voice_channel(interaction.user, interaction.guild)
+        if error_msg:
+            await interaction.followup.send(error_msg, ephemeral=True)
+            return
+        
         player: lava_lyra.Player = interaction.guild.voice_client
         if not player:
             await interaction.followup.send("❌ 沒有正在播放的音樂", ephemeral=True)
@@ -373,6 +399,11 @@ class Music(commands.GroupCog, group_name=app_commands.locale_str("music")):
         """繼續播放"""
         await interaction.response.defer()
         
+        error_msg = self._check_voice_channel(interaction.user, interaction.guild)
+        if error_msg:
+            await interaction.followup.send(error_msg, ephemeral=True)
+            return
+        
         player: lava_lyra.Player = interaction.guild.voice_client
         if not player:
             await interaction.followup.send("❌ 沒有暫停的音樂", ephemeral=True)
@@ -395,6 +426,11 @@ class Music(commands.GroupCog, group_name=app_commands.locale_str("music")):
     async def stop(self, interaction: discord.Interaction):
         """停止播放"""
         await interaction.response.defer()
+        
+        error_msg = self._check_voice_channel(interaction.user, interaction.guild)
+        if error_msg:
+            await interaction.followup.send(error_msg, ephemeral=True)
+            return
         
         player: lava_lyra.Player = interaction.guild.voice_client
         if not player:
@@ -420,6 +456,11 @@ class Music(commands.GroupCog, group_name=app_commands.locale_str("music")):
     async def skip(self, interaction: discord.Interaction):
         """跳過當前歌曲"""
         await interaction.response.defer()
+        
+        error_msg = self._check_voice_channel(interaction.user, interaction.guild)
+        if error_msg:
+            await interaction.followup.send(error_msg, ephemeral=True)
+            return
         
         player: lava_lyra.Player = interaction.guild.voice_client
         if not player or not player.is_playing:
@@ -548,6 +589,11 @@ class Music(commands.GroupCog, group_name=app_commands.locale_str("music")):
         """調整音量"""
         await interaction.response.defer()
         
+        error_msg = self._check_voice_channel(interaction.user, interaction.guild)
+        if error_msg:
+            await interaction.followup.send(error_msg, ephemeral=True)
+            return
+        
         if level < 0 or level > 100:
             await interaction.followup.send("❌ 音量必須在 0-100 之間", ephemeral=True)
             return
@@ -570,6 +616,11 @@ class Music(commands.GroupCog, group_name=app_commands.locale_str("music")):
     async def shuffle(self, interaction: discord.Interaction):
         """隨機打亂隊列"""
         await interaction.response.defer()
+        
+        error_msg = self._check_voice_channel(interaction.user, interaction.guild)
+        if error_msg:
+            await interaction.followup.send(error_msg, ephemeral=True)
+            return
         
         player: lava_lyra.Player = interaction.guild.voice_client
         queue = get_queue(interaction.guild.id)
@@ -605,6 +656,11 @@ class Music(commands.GroupCog, group_name=app_commands.locale_str("music")):
     @commands.guild_only()
     async def text_play(self, ctx: commands.Context, *, query: Optional[str] = None):
         """播放音樂，若無參數則繼續播放"""
+        error_msg = self._check_voice_channel(ctx.author, ctx.guild)
+        if error_msg:
+            await ctx.send(error_msg)
+            return
+        
         # 如果沒有給參數，執行 resume
         if query is None:
             player: lava_lyra.Player = ctx.guild.voice_client
@@ -684,6 +740,11 @@ class Music(commands.GroupCog, group_name=app_commands.locale_str("music")):
     @commands.guild_only()
     async def text_pause(self, ctx: commands.Context):
         """暫停播放"""
+        error_msg = self._check_voice_channel(ctx.author, ctx.guild)
+        if error_msg:
+            await ctx.send(error_msg)
+            return
+        
         player: lava_lyra.Player = ctx.guild.voice_client
         if not player:
             await ctx.send("❌ 沒有正在播放的音樂")
@@ -703,6 +764,11 @@ class Music(commands.GroupCog, group_name=app_commands.locale_str("music")):
     @commands.guild_only()
     async def text_resume(self, ctx: commands.Context):
         """繼續播放"""
+        error_msg = self._check_voice_channel(ctx.author, ctx.guild)
+        if error_msg:
+            await ctx.send(error_msg)
+            return
+        
         player: lava_lyra.Player = ctx.guild.voice_client
         if not player:
             await ctx.send("❌ 沒有暫停的音樂")
@@ -722,6 +788,11 @@ class Music(commands.GroupCog, group_name=app_commands.locale_str("music")):
     @commands.guild_only()
     async def text_stop(self, ctx: commands.Context):
         """停止播放並斷開連接"""
+        error_msg = self._check_voice_channel(ctx.author, ctx.guild)
+        if error_msg:
+            await ctx.send(error_msg)
+            return
+        
         player: lava_lyra.Player = ctx.guild.voice_client
         if not player:
             await ctx.send("❌ 沒有正在播放的音樂")
@@ -742,6 +813,11 @@ class Music(commands.GroupCog, group_name=app_commands.locale_str("music")):
     @commands.guild_only()
     async def text_skip(self, ctx: commands.Context):
         """跳過當前歌曲"""
+        error_msg = self._check_voice_channel(ctx.author, ctx.guild)
+        if error_msg:
+            await ctx.send(error_msg)
+            return
+        
         player: lava_lyra.Player = ctx.guild.voice_client
         if not player or not player.is_playing:
             await ctx.send("❌ 沒有正在播放的音樂")
@@ -853,6 +929,11 @@ class Music(commands.GroupCog, group_name=app_commands.locale_str("music")):
     @commands.guild_only()
     async def text_volume(self, ctx: commands.Context, level: int):
         """調整音量"""
+        error_msg = self._check_voice_channel(ctx.author, ctx.guild)
+        if error_msg:
+            await ctx.send(error_msg)
+            return
+        
         if level < 0 or level > 100:
             await ctx.send("❌ 音量必須在 0-100 之間")
             return
@@ -872,6 +953,11 @@ class Music(commands.GroupCog, group_name=app_commands.locale_str("music")):
     @commands.guild_only()
     async def text_shuffle(self, ctx: commands.Context):
         """隨機打亂隊列"""
+        error_msg = self._check_voice_channel(ctx.author, ctx.guild)
+        if error_msg:
+            await ctx.send(error_msg)
+            return
+        
         player: lava_lyra.Player = ctx.guild.voice_client
         queue = get_queue(ctx.guild.id)
         
