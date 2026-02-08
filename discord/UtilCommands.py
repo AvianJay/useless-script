@@ -12,7 +12,7 @@ import aiohttp
 from database import db
 
 startup_time = datetime.now(timezone.utc)
-version = "0.17.7"
+version = "0.18.0"
 try:
     git_commit_hash = os.popen("git rev-parse --short HEAD").read().strip()
 except Exception as e:
