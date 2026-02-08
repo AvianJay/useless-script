@@ -427,6 +427,7 @@ translations = {
     "to-server": "轉到伺服器",
     "rate": "匯率",
     "ratio": "比率",
+    "nodes": "節點",
 }
 class CommandNameTranslator(app_commands.Translator):
     async def translate(
