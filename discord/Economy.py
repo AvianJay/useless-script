@@ -673,9 +673,9 @@ class Economy(commands.GroupCog, name="economy", description="經濟系統指令
     @app_commands.autocomplete(offer_item=get_user_items_autocomplete, request_item=all_items_autocomplete)
     async def trade(self, interaction: discord.Interaction, user: discord.User,
                     offer_item: str = None, offer_item_amount: int = 1,
-                    offer_money: float = 0,
+                    offer_money: float = 0.0,
                     request_item: str = None, request_item_amount: int = 1,
-                    request_money: float = 0):
+                    request_money: float = 0.0):
         if user.id == interaction.user.id:
             await interaction.response.send_message("❌ 你不能跟自己交易。", ephemeral=True)
             return
