@@ -113,7 +113,7 @@ class Music(commands.GroupCog, group_name=app_commands.locale_str("music")):
                     search=True,
                     fallback=True,
                 )
-                node.description = node_config.get("name", node.identifier)
+                node.description = node_config.get("name", node_config.get("id", f"NODE_{len(self.nodes)}"))
                 self.nodes.append(node)
                 log(f"已創建 Lavalink 節點: {node_config.get('name', node_config.get('id', 'Unknown'))} ({node_config.get('host')}:{node_config.get('port')})", module_name="Music")
             except Exception as e:
