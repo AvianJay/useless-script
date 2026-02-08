@@ -57,6 +57,7 @@ class Music(commands.GroupCog, group_name=app_commands.locale_str("music")):
         super().__init__()
         self.bot = bot
         self.nodes: list[lava_lyra.Node] = []
+        self.node_names: dict[str, str] = {}  # identifier -> display name
     
     async def _ensure_voice(self, ctx: commands.Context) -> Optional[lava_lyra.Player]:
         """確保使用者在語音頻道並返回播放器"""
@@ -113,7 +114,8 @@ class Music(commands.GroupCog, group_name=app_commands.locale_str("music")):
                     search=True,
                     fallback=True,
                 )
-                node.description = node_config.get("name", node_config.get("id", f"NODE_{len(self.nodes)}"))
+                identifier = node_config.get("id", f"NODE_{len(self.nodes)}")
+                self.node_names[identifier] = node_config.get("name", identifier)
                 self.nodes.append(node)
                 log(f"已創建 Lavalink 節點: {node_config.get('name', node_config.get('id', 'Unknown'))} ({node_config.get('host')}:{node_config.get('port')})", module_name="Music")
             except Exception as e:
@@ -650,13 +652,14 @@ class Music(commands.GroupCog, group_name=app_commands.locale_str("music")):
         await interaction.response.defer()
         embed = discord.Embed(title="🔧 Lavalink 節點狀態", color=0x3498db)
         for node in self.nodes:
+            name = self.node_names.get(node._identifier, node._identifier)
             status = "✅ 已連接" if node.is_connected else "❌ 未連接"
             if node.is_connected:
                 ping = f"{node.ping}ms" if node.is_connected else "N/A"
                 status += f"\n延遲: {ping}"
                 players = len(node.players)
                 status += f"\n有 {players} 個伺服器正在使用此節點"
-            embed.add_field(name=node.description, value=status, inline=False)
+            embed.add_field(name=name, value=status, inline=False)
         await interaction.followup.send(embed=embed)
     
     def _format_duration(self, milliseconds: int) -> str:
