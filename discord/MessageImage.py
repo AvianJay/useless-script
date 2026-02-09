@@ -375,30 +375,32 @@ class UpvoteView(discord.ui.View):
         self.upvotes = 0
         self.on_board_message = None  # 用於追蹤已經被放上看板的訊息
         self.upvoted_users = set()  # 用於追蹤已經點過讚的用戶
+        self._lock = asyncio.Lock()  # 序列化按鈕點擊以避免競態條件
 
     @discord.ui.button(label="有料", style=discord.ButtonStyle.green)
     async def upvote(self, interaction: discord.Interaction, button: discord.ui.Button):
-        if interaction.user.id in self.upvoted_users:
-            await interaction.response.send_message("你已經點過了！", ephemeral=True)
-            return
-        self.upvotes += 1
-        self.upvoted_users.add(interaction.user.id)
-        button.label = f"{self.upvotes} 人覺得有料"
-        if self.upvotes >= 5:
-            channel = bot.get_channel(config("upvote_board_channel_id"))
-            message = interaction.message
-            image = message.attachments[0] if message.attachments else None
-            if channel and image:
-                if self.on_board_message is None:  # 確保同一則訊息不會被重複放上看板
-                    sent_message = await channel.send(content=f"⬆️ | {self.upvotes} 人", file=await image.to_file())
-                    self.on_board_message = sent_message
-                else:
-                    # 如果已經在看板上了，更新看板訊息的內容
-                    try:
-                        await self.on_board_message.edit(content=f"⬆️ | {self.upvotes} 人")
-                    except Exception as e:
-                        log(f"更新看板訊息失敗: {e}", module_name="MessageImage", level=logging.ERROR)
-        await interaction.response.edit_message(view=self)
+        async with self._lock:
+            if interaction.user.id in self.upvoted_users:
+                await interaction.response.send_message("你已經點過了！", ephemeral=True)
+                return
+            self.upvotes += 1
+            self.upvoted_users.add(interaction.user.id)
+            button.label = f"{self.upvotes} 人覺得有料"
+            if self.upvotes >= 5:
+                channel = bot.get_channel(config("upvote_board_channel_id"))
+                message = interaction.message
+                image = message.attachments[0] if message.attachments else None
+                if channel and image:
+                    if self.on_board_message is None:  # 確保同一則訊息不會被重複放上看板
+                        sent_message = await channel.send(content=f"⬆️ | {self.upvotes} 人", file=await image.to_file())
+                        self.on_board_message = sent_message
+                    else:
+                        # 如果已經在看板上了，更新看板訊息的內容
+                        try:
+                            await self.on_board_message.edit(content=f"⬆️ | {self.upvotes} 人")
+                        except Exception as e:
+                            log(f"更新看板訊息失敗: {e}", module_name="MessageImage", level=logging.ERROR)
+            await interaction.response.edit_message(view=self)
 
 
 @bot.tree.context_menu(name="糟糕的Make it a Quote")
