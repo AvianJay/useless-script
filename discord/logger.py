@@ -68,21 +68,14 @@ async def _log(*messages, level = logging.INFO, module_name: str = "General", us
                         discord_webhook = discord.SyncWebhook.from_url(webhook_url)
                         discord_webhook.fetch()  # test if webhook is valid
                     except Exception:
-                        webhooks = await channel.webhooks()
-                        webhooks = webhooks[0] if webhooks else None
-                        if not webhooks:
-                            webhooks = await channel.create_webhook(name=bot.user.name, avatar=await bot.user.default_avatar.read())
-                        webhook_url = webhooks.url
+                        webhook = await channel.create_webhook(name=bot.user.name, avatar=await bot.user.default_avatar.read())
+                        webhook_url = webhook.url
                         if guild:
                             set_server_config(channel.guild.id, "log_webhook_url", webhook_url)
                         discord_webhook = discord.SyncWebhook.from_url(webhook_url)
                 else:
-                    webhooks = await channel.webhooks()
-                    webhooks = webhooks[0] if webhooks else None
-                    if not webhooks:
-                        # create webhook url from channel
-                        webhooks = await channel.create_webhook(name=bot.user.name, avatar=await bot.user.default_avatar.read())
-                    webhook_url = webhooks.url
+                    webhook = await channel.create_webhook(name=bot.user.name, avatar=await bot.user.default_avatar.read())
+                    webhook_url = webhook.url
                     set_server_config(channel.guild.id, "log_webhook_url", webhook_url)
                     discord_webhook = discord.SyncWebhook.from_url(webhook_url)
                 discord_webhook.send(embed=embed, username=bot.user.name, avatar_url=bot.user.default_avatar.url)
@@ -97,19 +90,13 @@ async def _log(*messages, level = logging.INFO, module_name: str = "General", us
                                     guild_discord_webhook = discord.SyncWebhook.from_url(guild_webhook)
                                     guild_discord_webhook.fetch()  # test if webhook is valid
                                 except Exception:
-                                    webhooks = await guild_channel.webhooks()
-                                    webhooks = webhooks[0] if webhooks else None
-                                    if not webhooks:
-                                        webhooks = await guild_channel.create_webhook(name=bot.user.name, avatar=await bot.user.default_avatar.read())
-                                    guild_webhook = webhooks.url
+                                    webhook = await guild_channel.create_webhook(name=bot.user.name, avatar=await bot.user.default_avatar.read())
+                                    guild_webhook = webhook.url
                                     set_server_config(guild.id, "log_webhook_url", guild_webhook)
                                     guild_discord_webhook = discord.SyncWebhook.from_url(guild_webhook)
                             else:
-                                webhooks = await guild_channel.webhooks()
-                                webhooks = webhooks[0] if webhooks else None
-                                if not webhooks:
-                                    webhooks = await guild_channel.create_webhook(name=bot.user.name, avatar=await bot.user.default_avatar.read())
-                                guild_webhook = webhooks.url
+                                webhook = await guild_channel.create_webhook(name=bot.user.name, avatar=await bot.user.default_avatar.read())
+                                guild_webhook = webhook.url
                                 set_server_config(guild.id, "log_webhook_url", guild_webhook)
                                 guild_discord_webhook = discord.SyncWebhook.from_url(guild_webhook)
                             guild_discord_webhook.send(embed=embed, username=bot.user.name, avatar_url=bot.user.default_avatar.url)
