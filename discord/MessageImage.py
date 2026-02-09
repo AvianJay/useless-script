@@ -374,10 +374,15 @@ class UpvoteView(discord.ui.View):
         super().__init__()
         self.upvotes = 0
         self.on_board_message = None  # 用於追蹤已經被放上看板的訊息
+        self.upvoted_users = set()  # 用於追蹤已經點過讚的用戶
 
     @discord.ui.button(label="有料", style=discord.ButtonStyle.green)
     async def upvote(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if interaction.user.id in self.upvoted_users:
+            await interaction.response.send_message("你已經點過了！", ephemeral=True)
+            return
         self.upvotes += 1
+        self.upvoted_users.add(interaction.user.id)
         button.label = f"{self.upvotes} 人覺得有料"
         if self.upvotes >= 5:
             channel = bot.get_channel(config("upvote_board_channel_id"))
