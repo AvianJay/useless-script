@@ -38,14 +38,14 @@ async def settings_autocomplete(interaction: discord.Interaction, current: str):
 async def do_action_str(action: str, guild: Optional[discord.Guild] = None, user: Optional[discord.Member] = None, message: Optional[discord.Message] = None):
     moderator = bot.user
     # if user is none just check if action is valid
-    actions = action.split(",")
-    actions = [a.strip() for a in actions]
-    if len(actions) > 5:
+    action_parts = action.split(",")
+    action_parts = [a.strip() for a in action_parts]
+    if len(action_parts) > 5:
         return ["錯誤：一次只能執行最多5個動作。"]
     logs = []
     last_reason = "自動管理執行"
     actions = []
-    for a in actions:
+    for a in action_parts:
         cmd = a.split(" ")
         if cmd[0] == "ban":
             # ban <reason> <delete_messages> <duration>
