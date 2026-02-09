@@ -65,7 +65,8 @@ default_config = {
             "password": "youshallnotpass",
             "name": "Default Node"
         }
-    ]
+    ],
+    "upvote_board_channel_id": 0,
 }
 _config = None
 

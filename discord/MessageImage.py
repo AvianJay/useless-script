@@ -6,7 +6,7 @@ import discord
 import aiohttp
 from discord.ext import commands
 from discord import app_commands
-from globalenv import bot, start_bot, on_ready_tasks, modules, get_command_mention
+from globalenv import bot, start_bot, on_ready_tasks, modules, get_command_mention, config
 from playwright.async_api import async_playwright
 import asyncio
 import chat_exporter
@@ -369,6 +369,33 @@ async def create(message: discord.Message):
     return output_buffer
 
 
+class UpvoteView(discord.ui.View):
+    def __init__(self):
+        super().__init__()
+        self.upvotes = 0
+        self.on_board_message = None  # 用於追蹤已經被放上看板的訊息
+
+    @discord.ui.button(label="有料", style=discord.ButtonStyle.green)
+    async def upvote(self, interaction: discord.Interaction, button: discord.ui.Button):
+        self.upvotes += 1
+        button.label = f"{self.upvotes} 人覺得有料"
+        if self.upvotes >= 5:
+            channel = bot.get_channel(config("upvote_board_channel_id"))
+            message = interaction.message
+            image = message.attachments[0] if message.attachments else None
+            if channel and image:
+                if self.on_board_message is None:  # 確保同一則訊息不會被重複放上看板
+                    sent_message = await channel.send(content=f"⬆️ | {self.upvotes} 人", file=await image.to_file())
+                    self.on_board_message = sent_message
+                else:
+                    # 如果已經在看板上了，更新看板訊息的內容
+                    try:
+                        await self.on_board_message.edit(content=f"⬆️ | {self.upvotes} 人")
+                    except Exception as e:
+                        log(f"更新看板訊息失敗: {e}", module_name="MessageImage", level=logging.ERROR)
+        await interaction.response.edit_message(view=self)
+
+
 @bot.tree.context_menu(name="糟糕的Make it a Quote")
 @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
 @app_commands.allowed_installs(guilds=True, users=True)
@@ -378,7 +405,7 @@ async def make_it_a_quote(interaction: discord.Interaction, message: discord.Mes
         return
     await interaction.response.defer()
     output_buffer = await create(message)
-    await interaction.followup.send(file=discord.File(output_buffer, filename="messenger_quote.png"))
+    await interaction.followup.send(file=discord.File(output_buffer, filename="messenger_quote.png"), view=UpvoteView())
 
 @bot.command(name="badquote", aliases=["bquote", "bq", "makeitaquote", "miq"])
 async def badquote(ctx: commands.Context):
@@ -397,7 +424,7 @@ async def badquote(ctx: commands.Context):
         await ctx.send("錯誤：訊息沒有內容。")
         return
     output_buffer = await create(message)
-    await ctx.reply(file=discord.File(output_buffer, filename="messenger_quote.png"))
+    await ctx.reply(file=discord.File(output_buffer, filename="messenger_quote.png"), view=UpvoteView())
 
 
 async def screenshot(message: discord.Message):
@@ -482,7 +509,7 @@ async def screenshot_generator(interaction: discord.Interaction, message: discor
     await interaction.response.defer()
     try:
         buffer = await screenshot(message)
-        await interaction.followup.send(file=discord.File(buffer, filename="screenshot.png"))
+        await interaction.followup.send(file=discord.File(buffer, filename="screenshot.png"), view=UpvoteView())
         log("截圖生成完成", module_name="MessageImage", user=interaction.user, guild=interaction.guild)
     except Exception as e:
         await interaction.followup.send(f"截圖失敗: {e}", ephemeral=True)
@@ -506,7 +533,7 @@ async def screenshot_cmd(ctx: commands.Context):
 
     try:
         buffer = await screenshot(message)
-        await ctx.reply(file=discord.File(buffer, filename="screenshot.png"))
+        await ctx.reply(file=discord.File(buffer, filename="screenshot.png"), view=UpvoteView())
         log("截圖生成完成", module_name="MessageImage", user=ctx.author, guild=ctx.guild)
     except Exception as e:
         await ctx.reply(f"截圖失敗: {e}")
@@ -550,8 +577,8 @@ async def whatisthisguytalking(interaction: discord.Interaction, message: discor
     await interaction.response.defer()
     try:
         buffer = await generate_whatisthisguytalking(message)
-        msg = f"現正開放投稿！\n-# {await get_command_mention('contribute', 'what-is-this-guy-talking-about')}"
-        await interaction.followup.send(file=discord.File(buffer, filename="whatisthisguytalking.png"), content=msg)
+        # msg = f"現正開放投稿！\n-# {await get_command_mention('contribute', 'what-is-this-guy-talking-about')}"
+        await interaction.followup.send(file=discord.File(buffer, filename="whatisthisguytalking.png"), view=UpvoteView())
         log("引用圖片生成完成", module_name="MessageImage", user=interaction.user, guild=interaction.guild)
     except Exception as e:
         await interaction.followup.send(f"引用圖片生成失敗: {e}", ephemeral=True)
