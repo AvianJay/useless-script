@@ -1038,23 +1038,35 @@ async def dsize_history(interaction: discord.Interaction, user: discord.User = N
 
 
 @bot.tree.command(name=app_commands.locale_str("dsize-feedgrass"), description="草飼男娘")
-@app_commands.describe(user="要草飼的對象")
-@app_commands.allowed_installs(guilds=True, users=False)
-@app_commands.allowed_contexts(guilds=True, dms=False, private_channels=False)
-async def dsize_feedgrass(interaction: discord.Interaction, user: discord.Member = None):
+@app_commands.describe(user="要草飼的對象", global_feedgrass="是否草飼全域排行榜上的男娘 (預設否)")
+@app_commands.choices(global_feedgrass=[
+    app_commands.Choice(name="否", value="False"),
+    app_commands.Choice(name="是", value="True"),
+])
+@app_commands.allowed_installs(guilds=True, users=True)
+@app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
+async def dsize_feedgrass(interaction: discord.Interaction, user: Union[discord.User, discord.Member] = None, global_feedgrass: str = "False"):
     if "ItemSystem" not in modules:
         await interaction.response.send_message("此功能需要 ItemSystem 模組。", ephemeral=True)
         return
     if not user:
         user = interaction.user  # self-feedgrass
+    global_feedgrass_bool = global_feedgrass.lower() == "true"
     # if user.id == interaction.user.id:
         # await interaction.response.send_message("不能草飼自己。", ephemeral=True)
         # return
-    if get_user_data(interaction.guild.id, user.id, "last_dsize_size", 0) != -1:
+    if global_feedgrass_bool:
+        guild_id = None
+    else:
+        if not interaction.is_guild_integration():
+            guild_id = None
+        else:
+            guild_id = interaction.guild.id if interaction.guild else None
+    if get_user_data(guild_id, user.id, "last_dsize_size", 0) != -1:
         name = user.display_name + " " if user.id != interaction.user.id else "你"
         await interaction.response.send_message(f"{name}不是男娘，無法草飼。", ephemeral=True)
         return
-    removed = await ItemSystem.remove_item_from_user(interaction.guild.id, interaction.user.id, "grass", 1)
+    removed = await ItemSystem.remove_item_from_user(guild_id, interaction.user.id, "grass", 1)
     if not removed:
         await interaction.response.send_message("你沒有草，無法草飼。", ephemeral=True)
         return
@@ -1068,9 +1080,10 @@ async def dsize_feedgrass(interaction: discord.Interaction, user: discord.Member
     set_user_data(0, user.id, "dsize_statistics", target_user_statistics)
     # get random users from last 25 messages
     random_users = set()
-    async for msg in interaction.channel.history(limit=25):
-        if msg.author.id != interaction.user.id and msg.author.id != user.id:
-            random_users.add(msg.author)
+    if interaction.is_guild_integration():
+        async for msg in interaction.channel.history(limit=25):
+            if msg.author.id != interaction.user.id and msg.author.id != user.id:
+                random_users.add(msg.author)
     random_users = list(random_users)
     image_bytes = await generate_feedgrass_image(user, interaction.user, random_users)
     if interaction.user.id != user.id:
@@ -1086,7 +1099,7 @@ async def dsize_feedgrass(interaction: discord.Interaction, user: discord.Member
     view.add_item(btn)
     await interaction.followup.send(embed=embed, file=discord.File(image_bytes, "feed_grass.png"), view=view)
     # print(f"[DSize] {interaction.user} fed grass to {user} in guild {interaction.guild.id}")
-    log(f"草飼了 {user}", module_name="dsize", user=interaction.user, guild=interaction.guild)
+    log(f"草飼了 {user}", module_name="dsize", user=interaction.user, guild=interaction.guild if not global_feedgrass_bool else None)
 
 
 # from folder
