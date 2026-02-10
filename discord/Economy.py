@@ -30,7 +30,7 @@ TRADE_HEALTH_WEIGHT = 0.003      # 交易帶來的升值權重
 PURCHASE_HEALTH_WEIGHT = 0.005   # 購買帶來的升值權重
 DAILY_INFLATION_WEIGHT = 0.0005  # 每日獎勵造成的微量通膨
 
-GLOBAL_CURRENCY_NAME = "金幣"
+GLOBAL_CURRENCY_NAME = "全域幣"
 GLOBAL_CURRENCY_EMOJI = "🌐"
 SERVER_CURRENCY_EMOJI = "🏦"
 
@@ -287,9 +287,8 @@ async def sellable_items_autocomplete(interaction: discord.Interaction, current:
 
 # ==================== Economy Cog ====================
 
-@app_commands.guild_only()
-@app_commands.allowed_installs(guilds=True, users=False)
-@app_commands.allowed_contexts(guilds=True, dms=False, private_channels=False)
+@app_commands.allowed_installs(guilds=True, users=True)
+@app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
 class Economy(commands.GroupCog, name="economy", description="經濟系統指令"):
     def __init__(self):
         super().__init__()
@@ -298,42 +297,56 @@ class Economy(commands.GroupCog, name="economy", description="經濟系統指令
     @app_commands.describe(user="查看其他用戶的餘額")
     async def balance(self, interaction: discord.Interaction, user: discord.User = None):
         target = user or interaction.user
-        guild_id = interaction.guild.id
-        server_bal = get_balance(guild_id, target.id)
         global_bal = get_global_balance(target.id)
-        rate = get_exchange_rate(guild_id)
-        currency_name = get_currency_name(guild_id)
-        total_global = global_bal + (server_bal * rate)
 
-        embed = discord.Embed(title=f"💰 {target.display_name} 的錢包", color=0xf1c40f)
-        embed.add_field(
-            name=f"{SERVER_CURRENCY_EMOJI} {currency_name}",
-            value=f"**{server_bal:,.2f}**",
-            inline=True
-        )
-        embed.add_field(
-            name=f"{GLOBAL_CURRENCY_EMOJI} {GLOBAL_CURRENCY_NAME}",
-            value=f"**{global_bal:,.2f}**",
-            inline=True
-        )
-        embed.add_field(
-            name="📊 匯率",
-            value=f"1 {currency_name} = {rate:.4f} {GLOBAL_CURRENCY_NAME}",
-            inline=True
-        )
-        embed.add_field(
-            name="💎 總資產（全域幣計）",
-            value=f"**{total_global:,.2f}** {GLOBAL_CURRENCY_NAME}",
-            inline=False
-        )
+        if interaction.is_guild_integration():
+            # 伺服器上下文：同時顯示伺服幣和全域幣
+            guild_id = interaction.guild.id
+            server_bal = get_balance(guild_id, target.id)
+            rate = get_exchange_rate(guild_id)
+            currency_name = get_currency_name(guild_id)
+            total_global = global_bal + (server_bal * rate)
+
+            embed = discord.Embed(title=f"💰 {target.display_name} 的錢包", color=0xf1c40f)
+            embed.add_field(
+                name=f"{SERVER_CURRENCY_EMOJI} {currency_name}",
+                value=f"**{server_bal:,.2f}**",
+                inline=True
+            )
+            embed.add_field(
+                name=f"{GLOBAL_CURRENCY_EMOJI} {GLOBAL_CURRENCY_NAME}",
+                value=f"**{global_bal:,.2f}**",
+                inline=True
+            )
+            embed.add_field(
+                name="📊 匯率",
+                value=f"1 {currency_name} = {rate:.4f} {GLOBAL_CURRENCY_NAME}",
+                inline=True
+            )
+            embed.add_field(
+                name="💎 總資產（全域幣計）",
+                value=f"**{total_global:,.2f}** {GLOBAL_CURRENCY_NAME}",
+                inline=False
+            )
+            embed.set_footer(
+                text=interaction.guild.name,
+                icon_url=interaction.guild.icon.url if interaction.guild.icon else None
+            )
+        else:
+            # 全域上下文：僅顯示全域幣
+            embed = discord.Embed(title=f"💰 {target.display_name} 的全域錢包", color=0xf1c40f)
+            embed.add_field(
+                name=f"{GLOBAL_CURRENCY_EMOJI} {GLOBAL_CURRENCY_NAME}",
+                value=f"**{global_bal:,.2f}**",
+                inline=False
+            )
+            embed.set_footer(text="全域用戶錢包")
+        
         embed.set_thumbnail(url=target.display_avatar.url)
-        embed.set_footer(
-            text=interaction.guild.name,
-            icon_url=interaction.guild.icon.url if interaction.guild.icon else None
-        )
         await interaction.response.send_message(embed=embed)
 
     @app_commands.command(name="daily", description="領取每日獎勵")
+    @app_commands.guild_only()
     async def daily(self, interaction: discord.Interaction):
         guild_id = interaction.guild.id
         user_id = interaction.user.id
@@ -398,7 +411,10 @@ class Economy(commands.GroupCog, name="economy", description="經濟系統指令
         app_commands.Choice(name="伺服幣", value="server"),
         app_commands.Choice(name="全域幣", value="global"),
     ])
-    async def pay(self, interaction: discord.Interaction, user: discord.User, amount: float, currency: str = "server"):
+    async def pay(self, interaction: discord.Interaction, user: discord.User, amount: float, currency: str = "global"):
+        # 全域安裝時強制使用全域幣
+        if not interaction.is_guild_integration():
+            currency = "global"
         if amount <= 0:
             await interaction.response.send_message("❌ 金額必須大於 0。", ephemeral=True)
             return
@@ -409,14 +425,14 @@ class Economy(commands.GroupCog, name="economy", description="經濟系統指令
             await interaction.response.send_message("❌ 你不能轉帳給機器人。", ephemeral=True)
             return
 
-        guild_id = interaction.guild.id
         sender_id = interaction.user.id
         receiver_id = user.id
 
         fee = round(amount * TRADE_FEE_PERCENT / 100, 2)
         total_deduct = round(amount + fee, 2)
-
-        if currency == "server":
+        
+        if currency == "server" and interaction.is_guild_integration():
+            guild_id = interaction.guild.id
             currency_name = get_currency_name(guild_id)
             sender_bal = get_balance(guild_id, sender_id)
             if sender_bal < total_deduct:
@@ -442,7 +458,8 @@ class Economy(commands.GroupCog, name="economy", description="經濟系統指令
             set_global_balance(sender_id, sender_bal - total_deduct)
             set_global_balance(receiver_id, get_global_balance(receiver_id) + amount)
 
-        record_transaction(guild_id)
+        if interaction.is_guild_integration():
+            record_transaction(interaction.guild.id)
 
         embed = discord.Embed(title="轉帳成功", color=0x2ecc71)
         embed.add_field(name="收款人", value=user.display_name, inline=True)
@@ -460,6 +477,7 @@ class Economy(commands.GroupCog, name="economy", description="經濟系統指令
             pass
 
     @app_commands.command(name="exchange", description="兌換伺服幣和全域幣")
+    @app_commands.guild_only()
     @app_commands.describe(amount="金額", direction="兌換方向")
     @app_commands.choices(direction=[
         app_commands.Choice(name="伺服幣 → 全域幣", value="to_global"),
@@ -468,6 +486,10 @@ class Economy(commands.GroupCog, name="economy", description="經濟系統指令
     async def exchange(self, interaction: discord.Interaction, amount: float, direction: str):
         if amount <= 0:
             await interaction.response.send_message("❌ 金額必須大於 0。", ephemeral=True)
+            return
+        
+        if not interaction.is_guild_integration():
+            await interaction.response.send_message("❌ 這個指令只能在伺服器中使用。", ephemeral=True)
             return
 
         guild_id = interaction.guild.id
@@ -531,6 +553,9 @@ class Economy(commands.GroupCog, name="economy", description="經濟系統指令
         app_commands.Choice(name="全域商店（全域幣）", value="global"),
     ])
     async def buy(self, interaction: discord.Interaction, item_id: str, amount: int = 1, scope: str = "server"):
+        # 全域安裝時強制使用全域商店
+        if not interaction.is_guild_integration():
+            scope = "global"
         if amount <= 0:
             await interaction.response.send_message("❌ 數量必須大於 0。", ephemeral=True)
             return
@@ -577,7 +602,7 @@ class Economy(commands.GroupCog, name="economy", description="經濟系統指令
                 )
                 return
             set_global_balance(user_id, bal - total_price)
-            # 全域商店：物品到全域背包 (guild_id=0)
+            # 全域商店：物品到全域背包 (guild_id=0)v
             await give_item_to_user(0, user_id, item_id, amount)
 
         scope_label = "伺服器" if scope == "server" else "全域"
@@ -594,6 +619,7 @@ class Economy(commands.GroupCog, name="economy", description="經濟系統指令
         await interaction.response.send_message(embed=embed)
 
     @app_commands.command(name="sell", description="賣出物品給商店（獲得伺服幣）")
+    @app_commands.guild_only()
     @app_commands.describe(item_id="要賣出的物品", amount="賣出數量")
     @app_commands.autocomplete(item_id=sellable_items_autocomplete)
     async def sell(self, interaction: discord.Interaction, item_id: str, amount: int = 1):
@@ -646,42 +672,62 @@ class Economy(commands.GroupCog, name="economy", description="經濟系統指令
 
     @app_commands.command(name="shop", description="查看商店")
     async def shop(self, interaction: discord.Interaction):
-        guild_id = interaction.guild.id
-        currency_name = get_currency_name(guild_id)
-        rate = get_exchange_rate(guild_id)
-
         purchasable = [item for item in items if item.get("worth", 0) > 0]
         if not purchasable:
             await interaction.response.send_message("🏪 商店目前沒有任何商品。", ephemeral=True)
             return
 
-        embed = discord.Embed(
-            title="🏪 商店",
-            description=(
-                f"当前匯率: 1 {currency_name} = {rate:.4f} {GLOBAL_CURRENCY_NAME}\n"
-                f"🏦 伺服器商店 = 伺服幣付款，物品到伺服器背包\n"
-                f"🌐 全域商店 = 全域幣付款，物品到全域背包"
-            ),
-            color=0x9b59b6
-        )
-        for item in purchasable:
-            buy_price = get_item_buy_price(item["id"], guild_id)
-            sell_price = get_item_sell_price(item["id"], guild_id)
-            embed.add_field(
-                name=item["name"],
-                value=(
-                    f"{item.get('description', '無描述')}\n"
-                    f"🏦 伺服器商店: **{buy_price:,.2f}** {currency_name}\n"
-                    f"🌐 全域商店: **{item['worth']:,.2f}** {GLOBAL_CURRENCY_NAME}\n"
-                    f"💰 賣出: **{sell_price:,.2f}** {currency_name}"
-                ),
-                inline=False
-            )
+        if interaction.is_guild_integration():
+            # 伺服器：顯示兩個商店
+            guild_id = interaction.guild.id
+            currency_name = get_currency_name(guild_id)
+            rate = get_exchange_rate(guild_id)
 
-        embed.set_footer(
-            text=f"{interaction.guild.name} | 賣出價為買入價的 {get_sell_ratio(guild_id)*100:.0f}%",
-            icon_url=interaction.guild.icon.url if interaction.guild.icon else None
-        )
+            embed = discord.Embed(
+                title="🏪 商店",
+                description=(
+                    f"当前匯率: 1 {currency_name} = {rate:.4f} {GLOBAL_CURRENCY_NAME}\n"
+                    f"🏦 伺服器商店 = 伺服幣付款，物品到伺服器背包\n"
+                    f"🌐 全域商店 = 全域幣付款，物品到全域背包"
+                ),
+                color=0x9b59b6
+            )
+            for item in purchasable:
+                buy_price = get_item_buy_price(item["id"], guild_id)
+                sell_price = get_item_sell_price(item["id"], guild_id)
+                embed.add_field(
+                    name=item["name"],
+                    value=(
+                        f"{item.get('description', '無描述')}\n"
+                        f"🏦 伺服器商店: **{buy_price:,.2f}** {currency_name}\n"
+                        f"🌐 全域商店: **{item['worth']:,.2f}** {GLOBAL_CURRENCY_NAME}\n"
+                        f"💰 賣出: **{sell_price:,.2f}** {currency_name}"
+                    ),
+                    inline=False
+                )
+
+            embed.set_footer(
+                text=f"{interaction.guild.name} | 賣出價為買入價的 {get_sell_ratio(guild_id)*100:.0f}%",
+                icon_url=interaction.guild.icon.url if interaction.guild.icon else None
+            )
+        else:
+            # 全域：只顯示全域商店
+            embed = discord.Embed(
+                title="🏪 全域商店",
+                description=f"🌐 全域商店 = {GLOBAL_CURRENCY_NAME}付款，物品到全域背包",
+                color=0x9b59b6
+            )
+            for item in purchasable:
+                embed.add_field(
+                    name=item["name"],
+                    value=(
+                        f"{item.get('description', '無描述')}\n"
+                        f"💰 價格: **{item['worth']:,.2f}** {GLOBAL_CURRENCY_NAME}"
+                    ),
+                    inline=False
+                )
+            embed.set_footer(text="全域商店")
+        
         await interaction.response.send_message(embed=embed)
 
     @app_commands.command(name="trade", description="與其他用戶交易")
@@ -689,10 +735,10 @@ class Economy(commands.GroupCog, name="economy", description="經濟系統指令
         user="交易對象",
         offer_item="你要提供的物品",
         offer_item_amount="提供的物品數量",
-        offer_money="你要提供的伺服幣金額",
+        offer_money="你要提供的金額",
         request_item="你想要的物品",
         request_item_amount="想要的物品數量",
-        request_money="你想要的伺服幣金額"
+        request_money="你想要的金額"
     )
     @app_commands.autocomplete(offer_item=get_user_items_autocomplete, request_item=all_items_autocomplete)
     async def trade(self, interaction: discord.Interaction, user: discord.User,
@@ -872,6 +918,9 @@ class Economy(commands.GroupCog, name="economy", description="經濟系統指令
         app_commands.Choice(name="總資產", value="total"),
     ])
     async def leaderboard(self, interaction: discord.Interaction, currency: str = "server"):
+        # 全域安裝時強制使用全域幣
+        if not interaction.is_guild_integration():
+            currency = "global"
         await interaction.response.defer()
 
         guild_id = interaction.guild.id
@@ -947,6 +996,7 @@ class Economy(commands.GroupCog, name="economy", description="經濟系統指令
         await interaction.followup.send(embed=embed)
 
     @app_commands.command(name="info", description="查看伺服器經濟資訊")
+    @app_commands.guild_only()
     async def info(self, interaction: discord.Interaction):
         guild_id = interaction.guild.id
         rate = get_exchange_rate(guild_id)
