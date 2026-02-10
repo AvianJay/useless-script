@@ -63,43 +63,92 @@ async def _log(*messages, level = logging.INFO, module_name: str = "General", us
                     embed.set_footer(text=guild.name if guild.name else guild.id, icon_url=guild.icon.url if guild.icon else None)
                 # get webhook url
                 webhook_url = get_server_config(channel.guild.id, "log_webhook_url") if guild else None
+                discord_webhook = None
+                
                 if webhook_url:
                     try:
                         discord_webhook = discord.SyncWebhook.from_url(webhook_url)
                         discord_webhook.fetch()  # test if webhook is valid
                     except Exception:
+                        discord_webhook = None
+                
+                if not discord_webhook:
+                    # 嘗試創建新 webhook，如果失敗則嘗試重用現有的
+                    try:
                         webhook = await channel.create_webhook(name=bot.user.name, avatar=await bot.user.default_avatar.read())
                         webhook_url = webhook.url
                         if guild:
                             set_server_config(channel.guild.id, "log_webhook_url", webhook_url)
                         discord_webhook = discord.SyncWebhook.from_url(webhook_url)
-                else:
-                    webhook = await channel.create_webhook(name=bot.user.name, avatar=await bot.user.default_avatar.read())
-                    webhook_url = webhook.url
-                    set_server_config(channel.guild.id, "log_webhook_url", webhook_url)
-                    discord_webhook = discord.SyncWebhook.from_url(webhook_url)
+                    except discord.HTTPException as e:
+                        if e.code == 30007:  # Maximum number of webhooks reached
+                            # 嘗試重用現有的 webhook
+                            webhooks = await channel.webhooks()
+                            for wh in webhooks:
+                                try:
+                                    discord_webhook = discord.SyncWebhook.from_url(wh.url)
+                                    webhook_url = wh.url
+                                    if guild:
+                                        set_server_config(channel.guild.id, "log_webhook_url", webhook_url)
+                                    break
+                                except Exception:
+                                    continue
+                            if not discord_webhook and webhooks:
+                                # 如果還是沒有可用的，使用第一個
+                                discord_webhook = discord.SyncWebhook.from_url(webhooks[0].url)
+                                webhook_url = webhooks[0].url
+                                if guild:
+                                    set_server_config(channel.guild.id, "log_webhook_url", webhook_url)
+                        else:
+                            raise
+                
+                if not discord_webhook:
+                    return  # 無法獲取 webhook，放棄發送
                 discord_webhook.send(embed=embed, username=bot.user.name, avatar_url=bot.user.default_avatar.url)
                 if guild:
                     log_channel_id = get_server_config(guild.id, "log_channel_id")
                     if log_channel_id and log_channel_id != channel.id:
                         guild_channel = bot.get_channel(log_channel_id)
                         if guild_channel:
-                            guild_webhook = get_server_config(guild.id, "log_webhook_url")
-                            if guild_webhook:
+                            guild_webhook_url = get_server_config(guild.id, "log_webhook_url")
+                            guild_discord_webhook = None
+                            
+                            if guild_webhook_url:
                                 try:
-                                    guild_discord_webhook = discord.SyncWebhook.from_url(guild_webhook)
+                                    guild_discord_webhook = discord.SyncWebhook.from_url(guild_webhook_url)
                                     guild_discord_webhook.fetch()  # test if webhook is valid
                                 except Exception:
+                                    guild_discord_webhook = None
+                            
+                            if not guild_discord_webhook:
+                                # 嘗試創建新 webhook，如果失敗則嘗試重用現有的
+                                try:
                                     webhook = await guild_channel.create_webhook(name=bot.user.name, avatar=await bot.user.default_avatar.read())
-                                    guild_webhook = webhook.url
-                                    set_server_config(guild.id, "log_webhook_url", guild_webhook)
-                                    guild_discord_webhook = discord.SyncWebhook.from_url(guild_webhook)
-                            else:
-                                webhook = await guild_channel.create_webhook(name=bot.user.name, avatar=await bot.user.default_avatar.read())
-                                guild_webhook = webhook.url
-                                set_server_config(guild.id, "log_webhook_url", guild_webhook)
-                                guild_discord_webhook = discord.SyncWebhook.from_url(guild_webhook)
-                            guild_discord_webhook.send(embed=embed, username=bot.user.name, avatar_url=bot.user.default_avatar.url)
+                                    guild_webhook_url = webhook.url
+                                    set_server_config(guild.id, "log_webhook_url", guild_webhook_url)
+                                    guild_discord_webhook = discord.SyncWebhook.from_url(guild_webhook_url)
+                                except discord.HTTPException as e:
+                                    if e.code == 30007:  # Maximum number of webhooks reached
+                                        # 嘗試重用現有的 webhook
+                                        webhooks = await guild_channel.webhooks()
+                                        for wh in webhooks:
+                                            try:
+                                                guild_discord_webhook = discord.SyncWebhook.from_url(wh.url)
+                                                guild_webhook_url = wh.url
+                                                set_server_config(guild.id, "log_webhook_url", guild_webhook_url)
+                                                break
+                                            except Exception:
+                                                continue
+                                        if not guild_discord_webhook and webhooks:
+                                            # 如果還是沒有可用的，使用第一個
+                                            guild_discord_webhook = discord.SyncWebhook.from_url(webhooks[0].url)
+                                            guild_webhook_url = webhooks[0].url
+                                            set_server_config(guild.id, "log_webhook_url", guild_webhook_url)
+                                    else:
+                                        raise
+                            
+                            if guild_discord_webhook:
+                                guild_discord_webhook.send(embed=embed, username=bot.user.name, avatar_url=bot.user.default_avatar.url)
             except Exception as e:
                 print(f"[!] Error sending log message to Discord channel: {e}")
                 traceback.print_exc()
