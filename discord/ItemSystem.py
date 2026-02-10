@@ -181,7 +181,7 @@ class ItemSystem(commands.GroupCog, name="item", description="物品系統指令
             return
         
         # Pass scope to callback via interaction attribute
-        interaction.item_guild_key = guild_id
+        interaction.guild_id = guild_id
         
         # Call the item's callback function
         if "callback" in item and callable(item["callback"]):
