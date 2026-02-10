@@ -429,6 +429,8 @@ translations = {
     "rate": "匯率",
     "ratio": "比率",
     "nodes": "節點",
+    "global_feedgrass": "全域草飼",
+    "shuffle": "隨機",
 }
 class CommandNameTranslator(app_commands.Translator):
     async def translate(
