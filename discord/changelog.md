@@ -4,6 +4,8 @@
 ### 更新內容如下：
 * 更新 /dsize-feedgrass
   * 支援全域草飼。
+* 更新 /economy
+  * 支援使用者安裝。
 * 更新 /music
   * 改為使用 NodePool 管理音樂節點。
   * 移除使用者安裝支援。
