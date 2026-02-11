@@ -509,7 +509,8 @@ class Economy(commands.GroupCog, name="economy", description="經濟系統指令
             value=f"{get_balance(guild_id, user_id):,.2f} {currency_name}",
             inline=False
         )
-        embed.set_footer(text="記得定時簽到領獎勵！")
+        # embed.set_footer(text="AwA")
+        embed.timestamp = now
         await interaction.response.send_message(embed=embed)
 
     @app_commands.command(name="pay", description="轉帳給其他用戶")
