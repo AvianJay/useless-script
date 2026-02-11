@@ -1285,8 +1285,8 @@ class EconomyMod(commands.GroupCog, name="economymod", description="經濟系統
     @app_commands.command(name="setdaily", description="設定每日獎勵金額")
     @app_commands.describe(amount="每日獎勵金額")
     async def setdaily(self, interaction: discord.Interaction, amount: int):
-        if amount < 0 or amount > 1000000:
-            await interaction.response.send_message("❌ 金額必須在 0 到 1,000,000 之間。", ephemeral=True)
+        if amount < 0 or amount > 1000:
+            await interaction.response.send_message("❌ 金額必須在 0 到 1,000 之間。", ephemeral=True)
             return
 
         guild_id = interaction.guild.id
