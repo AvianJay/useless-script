@@ -434,6 +434,7 @@ translations = {
     "hourly": "每小時獎勵",
     "global_daily": "全域每日獎勵",
     "global_hourly": "全域每小時獎勵",
+    "upvoteboard": "有料板子",
 }
 class CommandNameTranslator(app_commands.Translator):
     async def translate(

@@ -6,7 +6,7 @@ import discord
 import aiohttp
 from discord.ext import commands
 from discord import app_commands
-from globalenv import bot, start_bot, on_ready_tasks, modules, get_command_mention, config
+from globalenv import bot, start_bot, on_ready_tasks, modules, get_command_mention, config, get_server_config
 from playwright.async_api import async_playwright
 import asyncio
 import chat_exporter
@@ -374,10 +374,11 @@ class UpvoteView(discord.ui.View):
         super().__init__()
         self.upvotes = 0
         self.on_board_message = None  # 用於追蹤已經被放上看板的訊息
+        self.on_guild_board_message = None  # 用於追蹤已經被放上公會看板的訊息
         self.upvoted_users = set()  # 用於追蹤已經點過讚的用戶
         self._lock = asyncio.Lock()  # 序列化按鈕點擊以避免競態條件
 
-    @discord.ui.button(label="有料", style=discord.ButtonStyle.green)
+    @discord.ui.button(emoji="⬆️", style=discord.ButtonStyle.green)
     async def upvote(self, interaction: discord.Interaction, button: discord.ui.Button):
         async with self._lock:
             if interaction.user.id in self.upvoted_users:
@@ -385,7 +386,7 @@ class UpvoteView(discord.ui.View):
                 return
             self.upvotes += 1
             self.upvoted_users.add(interaction.user.id)
-            button.label = f"{self.upvotes} 人覺得有料"
+            button.label = f" | {self.upvotes} 人"
             if self.upvotes >= 5:
                 channel = bot.get_channel(config("upvote_board_channel_id"))
                 message = interaction.message
@@ -400,7 +401,34 @@ class UpvoteView(discord.ui.View):
                             await self.on_board_message.edit(content=f"⬆️ | {self.upvotes} 人")
                         except Exception as e:
                             log(f"更新看板訊息失敗: {e}", module_name="MessageImage", level=logging.ERROR)
+                guild_channel_id = get_server_config(interaction.guild.id, "guild_board_channel_id")
+                if guild_channel_id:
+                    guild_channel = bot.get_channel(guild_channel_id)
+                    if guild_channel and image:
+                        if self.on_guild_board_message is None:  # 確保同一則訊息不會被重複放上公會看板
+                            sent_message = await guild_channel.send(content=f"⬆️ | {self.upvotes} 人", file=await image.to_file())
+                            self.on_guild_board_message = sent_message
+                        else:
+                            # 如果已經在公會看板上了，更新公會看板訊息的內容
+                            try:
+                                await self.on_guild_board_message.edit(content=f"⬆️ | {self.upvotes} 人")
+                            except Exception as e:
+                                log(f"更新公會看板訊息失敗: {e}", module_name="MessageImage", level=logging.ERROR)
             await interaction.response.edit_message(view=self)
+
+
+@bot.tree.command(name="upvoteboard", description="設定有料板子，當超過 5 個人點擊將會傳送在該頻道。")
+@app_commands.describe(channel="要設置的頻道（若未設置則清除設定）")
+@app_commands.allowed_contexts(guilds=True, dms=False, private_channels=False)
+@app_commands.allowed_installs(guilds=True, users=False)
+@app_commands.default_permissions(manage_guild=True)
+async def set_upvoteboard(interaction: discord.Interaction, channel: discord.TextChannel = None):
+    if channel:
+        config.set("upvote_board_channel_id", channel.id)
+        await interaction.response.send_message(f"已設定有料板子頻道為 {channel.mention}")
+    else:
+        config.set("upvote_board_channel_id", None)
+        await interaction.response.send_message("已清除有料板子頻道設定")
 
 
 @bot.tree.context_menu(name="糟糕的Make it a Quote")
