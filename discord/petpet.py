@@ -16,6 +16,11 @@ import aiohttp
 class PetPetCommand(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
+        self.ctx_menu = app_commands.ContextMenu(
+            name="PetPet",
+            callback=self.petpet_context_menu
+        )
+        bot.tree.add_command(self.ctx_menu)
 
     @app_commands.command(name="petpet", description="生成 PetPet GIF")
     @app_commands.describe(user="要撫摸的使用者 (預設為自己)")
@@ -84,6 +89,31 @@ class PetPetCommand(commands.Cog):
         embed.add_field(name="被別人 PetPet 了多少次？", value=str(get_petpet_count), inline=False)
 
         await interaction.response.send_message(embed=embed)
+    
+    async def petpet_context_menu(self, interaction: discord.Interaction, user: Union[discord.User, discord.Member]):
+        try:
+            if user is None:
+                user = interaction.user
+
+            log(f"生成 petpet GIF 給 {user}", module_name="petpet", user=interaction.user, guild=interaction.guild)
+            avatar_url = user.display_avatar.with_size(128).with_static_format("png").url
+            async with aiohttp.ClientSession() as session:
+                async with session.get(avatar_url) as resp:
+                    avatar = io.BytesIO(await resp.read())
+            gif_bytes = io.BytesIO()
+            petpet.make(avatar, gif_bytes)
+            gif_bytes.seek(0)
+
+            file = discord.File(fp=gif_bytes, filename="petpet.gif")
+            await interaction.response.send_message(file=file)
+            t = get_user_data(0, interaction.user.id, "petpet_count", 0)
+            set_user_data(0, interaction.user.id, "petpet_count", t + 1)
+            ut = get_user_data(0, user.id, "get_petpet_count", 0)
+            set_user_data(0, user.id, "get_petpet_count", ut + 1)
+        except Exception as e:
+            await interaction.response.send_message(f"生成 PetPet GIF 時發生錯誤：{e}")
+            log(f"生成 PetPet GIF 時發生錯誤：{e}", module_name="petpet", level=logging.ERROR, user=interaction.user, guild=interaction.guild)
+            traceback.print_exc()
 
 asyncio.run(bot.add_cog(PetPetCommand(bot)))
 
