@@ -441,6 +441,7 @@ class Economy(commands.GroupCog, name="economy", description="經濟系統指令
             inline=False
         )
         embed.set_footer(text=f"連續登入：{streak} 天")
+        embed.timestamp = datetime.now(timezone(timedelta(hours=8)))
         await interaction.response.send_message(embed=embed)
 
     @app_commands.command(name="hourly", description="領取每小時獎勵")
