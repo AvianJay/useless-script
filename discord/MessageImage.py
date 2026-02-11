@@ -448,6 +448,7 @@ async def screenshot(message: discord.Message):
 
     # try to get previous message (group consecutive messages from same author)
     messages = [message]
+    message_time = message.created_at
     try:
         # Logic to find previous messages from the same author within reason
         # This logic was slightly different in the two commands, unifying to the more robust history check
@@ -460,12 +461,13 @@ async def screenshot(message: discord.Message):
         # Then it passes this list to chat_exporter.
 
         async for msg in message.channel.history(limit=10, before=message.created_at, oldest_first=False):
-            if msg.author.id == message.author.id:
+            if msg.author.id == message.author.id and (message_time - msg.created_at).total_seconds() < 300:  # 5 minutes threshold
                 messages.append(msg)
             else:
                 break
     except Exception:
-        traceback.print_exc()
+        # traceback.print_exc()
+        pass
     times["getting_messages"] = time.perf_counter() - start_time
     start_time = time.perf_counter()
     
@@ -489,16 +491,25 @@ async def screenshot(message: discord.Message):
     start_time = time.perf_counter()
 
     try:
-        page = await browser.new_page()
+        page = await browser.new_page(viewport={"width": 1920, "height": 1080})
         await page.set_content(html_content, wait_until="load")
         # Force width to fit content so the screenshot isn't full width
         await page.add_style_tag(content=".chatlog__message-group { width: fit-content; } .chatlog { padding: 0px 1rem 0px 0px !important; border-top: unset !important; width: fit-content; }")
+        # Remove spoiler hidden class
+        await page.evaluate("() => { document.querySelectorAll('.spoiler--hidden').forEach(el => el.classList.remove('spoiler--hidden')); }")
+        # Resize viewport to fit the actual content size so nothing gets clipped
+        chatlog = page.locator('.chatlog')
+        bounding_box = await chatlog.bounding_box()
+        if bounding_box:
+            new_width = max(int(bounding_box['width'] + bounding_box['x']) + 50, 800)
+            new_height = max(int(bounding_box['height'] + bounding_box['y']) + 50, 600)
+            await page.set_viewport_size({"width": new_width, "height": new_height})
         # Locate the message group container
-        image_bytes = await page.locator('.chatlog').screenshot(type="png")
+        image_bytes = await chatlog.screenshot(type="png")
         await page.close()
     except Exception as e:
         log(f"截圖失敗: {e}", module_name="MessageImage", level=logging.ERROR)
-        traceback.print_exc()
+        # traceback.print_exc()
         # If screenshot fails, maybe we want to return the HTML for debugging? 
         # The original code did this in one place. For simplicity in a shared function, let's just raise.
         raise Exception(f"截圖失敗: {e}")
