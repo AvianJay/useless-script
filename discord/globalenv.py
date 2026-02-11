@@ -431,6 +431,7 @@ translations = {
     "nodes": "節點",
     "global_feedgrass": "全域草飼",
     "shuffle": "隨機",
+    "hourly": "每小時獎勵",
 }
 class CommandNameTranslator(app_commands.Translator):
     async def translate(

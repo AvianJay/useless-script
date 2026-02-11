@@ -18,6 +18,7 @@ from ItemSystem import (
 GLOBAL_GUILD_ID = 0
 DEFAULT_EXCHANGE_RATE = 1.0
 DEFAULT_DAILY_AMOUNT = 100
+DEFAULT_HOURLY_AMOUNT = 10
 DEFAULT_SELL_RATIO = 0.7   # 賣出價為買入價的 70%
 EXCHANGE_FEE_PERCENT = 5   # 兌換手續費 5%
 TRADE_FEE_PERCENT = 3      # 轉帳手續費 3%
@@ -29,6 +30,7 @@ ADMIN_INJECTION_WEIGHT = 0.015   # 管理員注入造成的貶值權重
 TRADE_HEALTH_WEIGHT = 0.003      # 交易帶來的升值權重
 PURCHASE_HEALTH_WEIGHT = 0.005   # 購買帶來的升值權重
 DAILY_INFLATION_WEIGHT = 0.0005  # 每日獎勵造成的微量通膨
+HOURLY_INFLATION_WEIGHT = 0.00005  # 每小時獎勵造成的極小通膨
 
 GLOBAL_CURRENCY_NAME = "全域幣"
 GLOBAL_CURRENCY_EMOJI = "🌐"
@@ -70,12 +72,25 @@ def set_exchange_rate(guild_id: int, rate: float):
 
 def get_currency_name(guild_id: int) -> str:
     """取得伺服器的貨幣名稱"""
+    if not guild_id:
+        return GLOBAL_CURRENCY_NAME
     return get_server_config(guild_id, "economy_currency_name", "伺服幣")
 
 
 def get_daily_amount(guild_id: int) -> int:
     """取得每日獎勵金額"""
+    if guild_id == GLOBAL_GUILD_ID:
+        # 全域獎勵可能不同，暫時用相同金額
+        return DEFAULT_DAILY_AMOUNT
     return get_server_config(guild_id, "economy_daily_amount", DEFAULT_DAILY_AMOUNT)
+
+
+def get_hourly_amount(guild_id: int) -> int:
+    """取得每小時獎勵金額"""
+    if guild_id == GLOBAL_GUILD_ID:
+        # 全域獎勵可能不同，暫時用相同金額
+        return DEFAULT_HOURLY_AMOUNT
+    return get_server_config(guild_id, "economy_hourly_amount", DEFAULT_HOURLY_AMOUNT)
 
 
 def get_sell_ratio(guild_id: int) -> float:
@@ -346,19 +361,40 @@ class Economy(commands.GroupCog, name="economy", description="經濟系統指令
         await interaction.response.send_message(embed=embed)
 
     @app_commands.command(name="daily", description="領取每日獎勵")
-    @app_commands.guild_only()
-    async def daily(self, interaction: discord.Interaction):
-        guild_id = interaction.guild.id
+    @app_commands.describe(global_daily="是否領取全域獎勵")
+    async def daily(self, interaction: discord.Interaction, global_daily: bool = False):
+        from datetime import datetime, timezone, timedelta
+        
         user_id = interaction.user.id
+        
+        if global_daily or not interaction.is_guild_integration():
+            # 全域簽到
+            guild_id = GLOBAL_GUILD_ID
+        else:
+            # 伺服器簽到
+            guild_id = interaction.guild.id
 
-        last_daily = get_user_data(guild_id, user_id, "economy_last_daily", 0)
-        now = int(time.time())
-        if now - last_daily < 86400:
-            remaining = 86400 - (now - last_daily)
-            hours = remaining // 3600
-            minutes = (remaining % 3600) // 60
+        # 使用日期檢測（台灣時間）
+        now = datetime.now(timezone(timedelta(hours=8))).date()
+        
+        last_daily = get_user_data(guild_id, user_id, "economy_last_daily")
+        if last_daily is not None and not isinstance(last_daily, datetime):
+            try:
+                last_daily = datetime.fromisoformat(str(last_daily)).date()
+            except Exception:
+                last_daily = None
+        elif isinstance(last_daily, datetime):
+            last_daily = last_daily.date()
+        
+        # 檢查是否今天已簽到
+        if last_daily == now:
+            # 計算明天的時間
+            tomorrow = now + timedelta(days=1)
+            next_checkin = datetime.combine(tomorrow, datetime.min.time()).replace(tzinfo=timezone(timedelta(hours=8)))
+            next_checkin_utc = next_checkin.astimezone(timezone.utc)
+            timestamp_next = int(next_checkin_utc.timestamp())
             await interaction.response.send_message(
-                f"⏰ 你已經領取過每日獎勵了！請在 **{hours}小時 {minutes}分鐘** 後再來。",
+                f"⏰ 你已經領取過每日獎勵了！請在 <t:{timestamp_next}:R> 再來。",
                 ephemeral=True
             )
             return
@@ -368,14 +404,15 @@ class Economy(commands.GroupCog, name="economy", description="經濟系統指令
 
         # 發放獎勵
         add_balance(guild_id, user_id, daily_amount)
-        set_user_data(guild_id, user_id, "economy_last_daily", now)
+        set_user_data(guild_id, user_id, "economy_last_daily", now.isoformat())
 
-        # 每日獎勵造成的微量通膨
-        apply_inflation(guild_id, daily_amount, DAILY_INFLATION_WEIGHT)
+        # 每日獎勵造成的微量通膨（全域不需要通膨計算）
+        if guild_id != GLOBAL_GUILD_ID:
+            apply_inflation(guild_id, daily_amount, DAILY_INFLATION_WEIGHT)
 
         # 連續登入
         streak = get_user_data(guild_id, user_id, "economy_daily_streak", 0)
-        if last_daily > 0 and now - last_daily < 172800:  # 48 小時內 = 連續
+        if last_daily is not None and last_daily == now - timedelta(days=1):  # 昨天簽到 = 連續
             streak += 1
         else:
             streak = 1
@@ -386,8 +423,9 @@ class Economy(commands.GroupCog, name="economy", description="經濟系統指令
             bonus = int(daily_amount * 0.5)
             add_balance(guild_id, user_id, bonus)
 
+        scope_label = "全域" if guild_id == GLOBAL_GUILD_ID else "伺服器"
         embed = discord.Embed(
-            title="📅 每日獎勵",
+            title=f"📅 每日獎勵（{scope_label}）",
             description=f"你獲得了 **{daily_amount:,.0f}** {currency_name}！",
             color=0x2ecc71
         )
@@ -403,6 +441,75 @@ class Economy(commands.GroupCog, name="economy", description="經濟系統指令
             inline=False
         )
         embed.set_footer(text=f"連續登入：{streak} 天")
+        await interaction.response.send_message(embed=embed)
+
+    @app_commands.command(name="hourly", description="領取每小時獎勵")
+    @app_commands.describe(global_hourly="是否領取全域獎勵")
+    async def hourly(self, interaction: discord.Interaction, global_hourly: bool = False):
+        from datetime import datetime, timezone, timedelta
+        
+        user_id = interaction.user.id
+        
+        if global_hourly or not interaction.is_guild_integration():
+            # 全域簽到
+            guild_id = GLOBAL_GUILD_ID
+        else:
+            # 伺服器簽到
+            guild_id = interaction.guild.id
+
+        # 使用小時檢測（台灣時間）
+        now = datetime.now(timezone(timedelta(hours=8)))
+        current_hour = now.replace(minute=0, second=0, microsecond=0)
+        
+        last_hourly = get_user_data(guild_id, user_id, "economy_last_hourly")
+        if last_hourly is not None and not isinstance(last_hourly, datetime):
+            try:
+                last_hourly = datetime.fromisoformat(str(last_hourly))
+            except Exception:
+                last_hourly = None
+        elif isinstance(last_hourly, str):
+            try:
+                last_hourly = datetime.fromisoformat(last_hourly)
+            except Exception:
+                last_hourly = None
+        
+        # 檢查是否同一小時已簽到
+        if last_hourly is not None:
+            last_hourly_hour = last_hourly.replace(minute=0, second=0, microsecond=0) if isinstance(last_hourly, datetime) else None
+            if last_hourly_hour == current_hour:
+                # 計算下一小時的時間
+                next_hour = current_hour + timedelta(hours=1)
+                next_hour_utc = next_hour.astimezone(timezone.utc)
+                timestamp_next = int(next_hour_utc.timestamp())
+                await interaction.response.send_message(
+                    f"⏰ 你已經領取過每小時獎勵了！請在 <t:{timestamp_next}:R> 再來。",
+                    ephemeral=True
+                )
+                return
+
+        hourly_amount = get_hourly_amount(guild_id)
+        currency_name = get_currency_name(guild_id)
+
+        # 發放獎勵
+        add_balance(guild_id, user_id, hourly_amount)
+        set_user_data(guild_id, user_id, "economy_last_hourly", current_hour.isoformat())
+
+        # 每小時獎勵造成的極小通膨（全域不需要通膨計算）
+        if guild_id != GLOBAL_GUILD_ID:
+            apply_inflation(guild_id, hourly_amount, HOURLY_INFLATION_WEIGHT)
+
+        scope_label = "全域" if guild_id == GLOBAL_GUILD_ID else "伺服器"
+        embed = discord.Embed(
+            title=f"⏱️ 每小時獎勵（{scope_label}）",
+            description=f"你獲得了 **{hourly_amount:,.0f}** {currency_name}！",
+            color=0x3498db
+        )
+        embed.add_field(
+            name="📊 目前餘額",
+            value=f"{get_balance(guild_id, user_id):,.2f} {currency_name}",
+            inline=False
+        )
+        embed.set_footer(text="記得定時簽到領獎勵！")
         await interaction.response.send_message(embed=embed)
 
     @app_commands.command(name="pay", description="轉帳給其他用戶")
