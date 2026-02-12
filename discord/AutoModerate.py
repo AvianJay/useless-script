@@ -27,7 +27,14 @@ all_settings = [
     "too_many_emojis-action",
     "scamtrap-channel_id",
     "scamtrap-action",
+    "anti_uispam-max_count",
+    "anti_uispam-time_window",
+    "anti_uispam-action",
 ]
+
+# 用於追蹤 user install spam 的記憶體字典
+# 結構: {guild_id: {user_id: [timestamp1, timestamp2, ...]}}
+_uispam_tracker: dict[int, dict[int, list[datetime]]] = {}
 
 async def settings_autocomplete(interaction: discord.Interaction, current: str):
     return [
@@ -204,6 +211,7 @@ class AutoModerate(commands.GroupCog, name=app_commands.locale_str("automod")):
             app_commands.Choice(name="逃避責任懲處", value="escape_punish"),
             app_commands.Choice(name="標題過多", value="too_many_h1"),
             app_commands.Choice(name="表情符號過多", value="too_many_emojis"),
+            app_commands.Choice(name="用戶安裝應用程式濫用", value="anti_uispam"),
         ],
         enable=[
             app_commands.Choice(name="啟用", value="True"),
@@ -378,10 +386,46 @@ class AutoModerate(commands.GroupCog, name=app_commands.locale_str("automod")):
         
     @commands.Cog.listener()
     async def on_message(self, message: discord.Message):
-        if not message.guild or message.author.bot:
+        if not message.guild:
             return
         guild_id = message.guild.id
         automod_settings = get_server_config(guild_id, "automod", {})
+        
+        # 用戶安裝應用程式濫用檢查（需在 bot 訊息過濾之前，因為 user install 的訊息作者是 bot）
+        is_user_install_message = (
+            message.interaction_metadata is not None 
+            and message.interaction_metadata.is_user_integration()
+            and not message.interaction_metadata.is_guild_integration()
+        )
+        
+        if is_user_install_message and automod_settings.get("anti_uispam", {}).get("enabled", False):
+            triggering_user = message.interaction_metadata.user
+            member = message.guild.get_member(triggering_user.id)
+            if member and not member.guild_permissions.administrator:
+                max_count = int(automod_settings["anti_uispam"].get("max_count", 5))
+                time_window = int(automod_settings["anti_uispam"].get("time_window", 60))
+                action = automod_settings["anti_uispam"].get("action", "delete {user}，請勿濫用用戶安裝的應用程式指令。")
+                
+                now = datetime.now(timezone.utc)
+                guild_tracker = _uispam_tracker.setdefault(guild_id, {})
+                user_timestamps = guild_tracker.setdefault(triggering_user.id, [])
+                
+                # 清除過期的時間戳
+                user_timestamps[:] = [ts for ts in user_timestamps if (now - ts).total_seconds() < time_window]
+                
+                # 記錄本次觸發
+                user_timestamps.append(now)
+                
+                if len(user_timestamps) > max_count:
+                    try:
+                        target_member = member or triggering_user
+                        await do_action_str(action, guild=message.guild, user=target_member, message=message)
+                        log(f"用戶 {triggering_user} 因濫用用戶安裝應用程式被處理 (在 {time_window}秒內觸發 {len(user_timestamps)} 次): {action}", module_name="AutoModerate", user=triggering_user, guild=message.guild)
+                        # 重置計數器避免重複處罰
+                        user_timestamps.clear()
+                    except Exception as e:
+                        log(f"無法對用戶 {triggering_user} 執行用戶安裝應用程式濫用的處理: {e}", level=logging.ERROR, module_name="AutoModerate", user=triggering_user, guild=message.guild)
+        
         if message.author.bot:
             return
         if message.author.guild_permissions.administrator:
