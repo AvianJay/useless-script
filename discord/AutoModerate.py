@@ -154,6 +154,21 @@ async def do_action_str(action: str, guild: Optional[discord.Guild] = None, user
     return logs
 
 
+def parse_mention_to_id(mention: str) -> str:
+    # 解析用戶、頻道或角色的提及格式，返回ID
+    match = re.match(r"<@!?(\d+)>", mention)  # 用戶提及
+    if match:
+        return match.group(1)
+    match = re.match(r"<#(\d+)>", mention)  # 頻道提及
+    if match:
+        return match.group(1)
+    match = re.match(r"<@&(\d+)>", mention)  # 角色提及
+    if match:
+        return match.group(1)
+    return mention  # 如果不是提及格式，直接返回原字符串
+    
+
+
 @app_commands.guild_only()
 @app_commands.default_permissions(administrator=True)
 @app_commands.allowed_installs(guilds=True, users=False)
@@ -222,6 +237,7 @@ class AutoModerate(commands.GroupCog, name=app_commands.locale_str("automod")):
         setting_key = setting.split("-")[1] if len(setting.split("-")) > 1 else None
         if setting_base not in automod_settings:
             automod_settings[setting_base] = {}
+        value = parse_mention_to_id(value) if setting_key in ["channel_id"] else value
         automod_settings[setting_base][setting_key] = value
         set_server_config(guild_id, "automod", automod_settings)
         await interaction.response.send_message(f"已將自動管理設定 '{setting}' 設為 {value}。")
