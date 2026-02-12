@@ -650,6 +650,68 @@ class Music(commands.GroupCog, group_name=app_commands.locale_str("music")):
         except Exception as e:
             await interaction.followup.send(f"❌ 打亂隊列出錯: {e}", ephemeral=True)
     
+    @app_commands.command(name=app_commands.locale_str("recommend"), description="根據當前播放的歌曲推薦相似歌曲")
+    @app_commands.describe(count="要添加的推薦歌曲數量 (1-10，預設 5)")
+    @app_commands.guild_only()
+    @app_commands.allowed_installs(guilds=True, users=False)
+    @app_commands.allowed_contexts(guilds=True, dms=False, private_channels=False)
+    async def recommend(self, interaction: discord.Interaction, count: Optional[int] = 5):
+        """根據當前播放的歌曲推薦相似歌曲並加入隊列"""
+        await interaction.response.defer()
+        
+        error_msg = self._check_voice_channel(interaction.user, interaction.guild)
+        if error_msg:
+            await interaction.followup.send(error_msg, ephemeral=True)
+            return
+        
+        player: lava_lyra.Player = interaction.guild.voice_client
+        if not player or not player.current:
+            await interaction.followup.send("❌ 沒有正在播放的音樂", ephemeral=True)
+            return
+        
+        count = max(1, min(count, 10))
+        
+        try:
+            results = await player.get_recommendations(track=player.current)
+            
+            if not results:
+                await interaction.followup.send("❌ 找不到相似的推薦歌曲", ephemeral=True)
+                return
+            
+            tracks = results.tracks if isinstance(results, lava_lyra.Playlist) else results
+            tracks = tracks[:count]
+            
+            queue = get_queue(interaction.guild.id)
+            for track in tracks:
+                queue.add(track)
+            
+            track_list = "\n".join(
+                f"{i}. [{t.title}]({t.uri})" for i, t in enumerate(tracks, 1)
+            )
+            
+            embed = discord.Embed(
+                title="🎯 已添加推薦歌曲",
+                description=f"根據 **{player.current.title}** 推薦：\n\n{track_list}",
+                color=0x9b59b6
+            )
+            embed.set_thumbnail(url=player.current.thumbnail)
+            embed.add_field(name="已添加", value=f"{len(tracks)} 首歌曲", inline=True)
+            embed.add_field(
+                name="總時長",
+                value=self._format_duration(sum(t.length for t in tracks)),
+                inline=True
+            )
+            await interaction.followup.send(embed=embed)
+            
+            if not player.is_playing:
+                next_track = queue.get()
+                if next_track:
+                    await player.play(next_track)
+        
+        except Exception as e:
+            log(f"推薦歌曲出錯: {e}", level=logging.ERROR, module_name="Music")
+            await interaction.followup.send(f"❌ 推薦歌曲出錯: {e}", ephemeral=True)
+    
     @app_commands.command(name=app_commands.locale_str("nodes"), description="查看 Lavalink 節點狀態")
     async def nodes_command(self, interaction: discord.Interaction):
         """查看 Lavalink 節點狀態"""
@@ -1001,6 +1063,63 @@ class Music(commands.GroupCog, group_name=app_commands.locale_str("music")):
             await ctx.send("🔀 隊列已隨機打亂")
         except Exception as e:
             await ctx.send(f"❌ 打亂隊列出錯: {e}")
+    
+    @commands.command(name="recommend", aliases=["rec", "推薦"])
+    @commands.guild_only()
+    async def text_recommend(self, ctx: commands.Context, count: int = 5):
+        """根據當前播放的歌曲推薦相似歌曲"""
+        error_msg = self._check_voice_channel(ctx.author, ctx.guild)
+        if error_msg:
+            await ctx.send(error_msg)
+            return
+        
+        player: lava_lyra.Player = ctx.guild.voice_client
+        if not player or not player.current:
+            await ctx.send("❌ 沒有正在播放的音樂")
+            return
+        
+        count = max(1, min(count, 10))
+        
+        try:
+            results = await player.get_recommendations(track=player.current)
+            
+            if not results:
+                await ctx.send("❌ 找不到相似的推薦歌曲")
+                return
+            
+            tracks = results.tracks if isinstance(results, lava_lyra.Playlist) else results
+            tracks = tracks[:count]
+            
+            queue = get_queue(ctx.guild.id)
+            for track in tracks:
+                queue.add(track)
+            
+            track_list = "\n".join(
+                f"{i}. [{t.title}]({t.uri})" for i, t in enumerate(tracks, 1)
+            )
+            
+            embed = discord.Embed(
+                title="🎯 已添加推薦歌曲",
+                description=f"根據 **{player.current.title}** 推薦：\n\n{track_list}",
+                color=0x9b59b6
+            )
+            embed.set_thumbnail(url=player.current.thumbnail)
+            embed.add_field(name="已添加", value=f"{len(tracks)} 首歌曲", inline=True)
+            embed.add_field(
+                name="總時長",
+                value=self._format_duration(sum(t.length for t in tracks)),
+                inline=True
+            )
+            await ctx.send(embed=embed)
+            
+            if not player.is_playing:
+                next_track = queue.get()
+                if next_track:
+                    await player.play(next_track)
+        
+        except Exception as e:
+            log(f"推薦歌曲出錯: {e}", level=logging.ERROR, module_name="Music")
+            await ctx.send(f"❌ 推薦歌曲出錯: {e}")
 
 
 asyncio.run(bot.add_cog(Music(bot)))
