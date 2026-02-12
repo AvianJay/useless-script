@@ -1,6 +1,6 @@
 import lava_lyra
 import discord
-from globalenv import bot, config
+from globalenv import bot, config, set_user_data, get_user_data
 from discord.ext import commands
 from discord import app_commands
 from logger import log
@@ -9,6 +9,10 @@ import asyncio
 from typing import Optional
 from collections import deque
 import random
+import aiohttp
+import time
+import urllib.parse
+import requests
 
 
 class MusicQueue:
@@ -43,6 +47,74 @@ music_queues: dict[int, MusicQueue] = {}
 text_channels: dict[int, discord.TextChannel] = {}
 # 儲存自動離開的計時器任務
 leave_timers: dict[int, asyncio.Task] = {}
+# 儲存 headless session token: user_id -> session_token
+headless_sessions: dict[int, str] = {}
+
+# 嘗試載入 Website 模組以註冊 OAuth 回呼路由
+HAS_WEBSITE = False
+try:
+    from Website import app as flask_app
+    from flask import request as flask_request, render_template
+    HAS_WEBSITE = True
+except Exception:
+    pass
+
+if HAS_WEBSITE:
+    @flask_app.route('/music-presence')
+    def music_presence_callback():
+        """處理音樂動態狀態的 OAuth2 回呼"""
+        code = flask_request.args.get('code')
+        error = flask_request.args.get('error')
+
+        if error:
+            return render_template('MusicPresence.html', success=False, message=f"授權被拒絕: {error}", bot=bot, gtag=config("website_gtag", ""))
+
+        if not code:
+            return render_template('MusicPresence.html', success=False, message="缺少授權碼", bot=bot, gtag=config("website_gtag", ""))
+
+        redirect_uri = config("website_url", "http://localhost:8080").rstrip("/") + "/music-presence"
+
+        # 交換授權碼取得 token
+        try:
+            resp = requests.post('https://discord.com/api/oauth2/token', data={
+                'client_id': str(bot.application.id),
+                'client_secret': config("client_secret"),
+                'grant_type': 'authorization_code',
+                'code': code,
+                'redirect_uri': redirect_uri,
+            }, timeout=10)
+            resp.raise_for_status()
+            token_info = resp.json()
+        except Exception as e:
+            log(f"Music presence token exchange error: {e}", level=logging.ERROR, module_name="Music")
+            return render_template('MusicPresence.html', success=False, message="Token 交換失敗，請重試", bot=bot, gtag=config("website_gtag", ""))
+
+        access_token = token_info.get('access_token')
+        refresh_token = token_info.get('refresh_token')
+        expires_in = token_info.get('expires_in', 604800)
+
+        if not access_token:
+            return render_template('MusicPresence.html', success=False, message="無法取得 access token", bot=bot, gtag=config("website_gtag", ""))
+
+        # 透過 identify scope 取得用戶 ID
+        try:
+            user_resp = requests.get('https://discord.com/api/users/@me',
+                headers={'Authorization': f'Bearer {access_token}'}, timeout=10)
+            user_resp.raise_for_status()
+            user_id = int(user_resp.json()['id'])
+        except Exception as e:
+            log(f"Music presence user fetch error: {e}", level=logging.ERROR, module_name="Music")
+            return render_template('MusicPresence.html', success=False, message="無法驗證用戶身份", bot=bot, gtag=config("website_gtag", ""))
+
+        # 儲存 token
+        set_user_data(0, user_id, "music_presence_token", {
+            "access_token": access_token,
+            "refresh_token": refresh_token,
+            "expires_at": time.time() + expires_in
+        })
+
+        log(f"用戶 {user_id} 已授權音樂動態狀態", module_name="Music")
+        return render_template('MusicPresence.html', success=True, message="授權成功！播放音樂時你的 Discord 狀態將自動更新。", bot=bot, gtag=config("website_gtag", ""))
 
 
 def get_queue(guild_id: int) -> MusicQueue:
@@ -153,6 +225,8 @@ class Music(commands.GroupCog, group_name=app_commands.locale_str("music")):
                     except Exception as e:
                         log(f"無法發送自動離開通知: {e}", level=logging.WARNING, module_name="Music", guild=player.guild)
                     
+                    # 清除所有用戶的音樂動態狀態
+                    await self._clear_all_presences(player)
                     # 清理並離開
                     try:
                         queue.clear()
@@ -228,6 +302,9 @@ class Music(commands.GroupCog, group_name=app_commands.locale_str("music")):
                 await text_channel.send(embed=embed)
         except Exception as e:
             log(f"無法發送播放通知: {e}", level=logging.WARNING, module_name="Music")
+        
+        # 更新已授權用戶的音樂動態狀態
+        await self._update_all_presences(player, track)
     
     @commands.Cog.listener()
     async def on_lyra_track_end(self, player: lava_lyra.Player, track: lava_lyra.Track, reason: Optional[str]):
@@ -274,6 +351,8 @@ class Music(commands.GroupCog, group_name=app_commands.locale_str("music")):
             except:
                 pass
             
+            # 清除所有用戶的音樂動態狀態
+            await self._clear_all_presences(player)
             # 離開語音頻道並清理資料
             try:
                 await player.disconnect()
@@ -447,6 +526,7 @@ class Music(commands.GroupCog, group_name=app_commands.locale_str("music")):
         try:
             queue = get_queue(interaction.guild.id)
             queue.clear()
+            await self._clear_all_presences(player)
             await player.stop()
             await player.disconnect()
             # 清理資料
@@ -728,12 +808,239 @@ class Music(commands.GroupCog, group_name=app_commands.locale_str("music")):
             embed.add_field(name=name, value=status, inline=False)
         await interaction.followup.send(embed=embed)
     
+    @app_commands.command(name=app_commands.locale_str("presence"), description="管理音樂播放動態狀態")
+    @app_commands.describe(action="選擇操作")
+    @app_commands.choices(action=[
+        app_commands.Choice(name="啟用 (授權)", value="enable"),
+        app_commands.Choice(name="停用 (取消授權)", value="disable"),
+        app_commands.Choice(name="查看狀態", value="status"),
+    ])
+    @app_commands.guild_only()
+    @app_commands.allowed_installs(guilds=True, users=False)
+    @app_commands.allowed_contexts(guilds=True, dms=False, private_channels=False)
+    async def presence(self, interaction: discord.Interaction, action: str = "status"):
+        """管理音樂播放動態狀態 (授權後播放音樂時自動更新 Discord 狀態)"""
+        await interaction.response.defer(ephemeral=True)
+        
+        user_id = interaction.user.id
+        
+        if action == "enable":
+            if not HAS_WEBSITE:
+                await interaction.followup.send("❌ 網站模組未啟用，無法使用此功能", ephemeral=True)
+                return
+            
+            redirect_uri = config("website_url", "http://localhost:8080").rstrip("/") + "/music-presence"
+            oauth_url = (
+                f"https://discord.com/oauth2/authorize"
+                f"?client_id={self.bot.application.id}"
+                f"&response_type=code"
+                f"&redirect_uri={urllib.parse.quote(redirect_uri, safe='')}"
+                f"&scope=activities.write%20identify"
+            )
+            
+            embed = discord.Embed(
+                title="🎵 音樂動態狀態",
+                description=(
+                    "點擊下方按鈕授權後，當你在語音頻道收聽音樂時，\n"
+                    "你的 Discord 狀態會自動顯示正在收聽的歌曲。\n\n"
+                    "*需要授權 `activities.write` 和 `identify` 權限*"
+                ),
+                color=0x5865F2
+            )
+            
+            view = discord.ui.View()
+            view.add_item(discord.ui.Button(label="授權", url=oauth_url, style=discord.ButtonStyle.link))
+            
+            await interaction.followup.send(embed=embed, view=view, ephemeral=True)
+        
+        elif action == "disable":
+            await self._clear_presence(user_id)
+            set_user_data(0, user_id, "music_presence_token", None)
+            await interaction.followup.send("✅ 音樂動態狀態已停用，已清除授權資訊", ephemeral=True)
+        
+        elif action == "status":
+            token_data = get_user_data(0, user_id, "music_presence_token")
+            if token_data and token_data.get("access_token"):
+                is_active = user_id in headless_sessions
+                expired = token_data.get("expires_at", 0) < time.time()
+                
+                status_text = "✅ 已授權"
+                if expired:
+                    status_text += " (Token 已過期，將在下次播放時自動刷新)"
+                if is_active:
+                    status_text += "\n🎵 動態狀態啟用中"
+                
+                await interaction.followup.send(status_text, ephemeral=True)
+            else:
+                await interaction.followup.send("❌ 尚未授權，請使用 `啟用` 選項進行授權", ephemeral=True)
+    
     def _format_duration(self, milliseconds: int) -> str:
         """將毫秒轉換為 MM:SS 格式"""
         seconds = milliseconds // 1000
         minutes = seconds // 60
         seconds = seconds % 60
         return f"{minutes}:{seconds:02d}"
+    
+    # ========== 音樂動態狀態 (Headless Sessions) ==========
+    
+    async def _refresh_presence_token(self, user_id: int, token_data: dict) -> bool:
+        """刷新過期的 OAuth token"""
+        refresh_token = token_data.get("refresh_token")
+        if not refresh_token:
+            set_user_data(0, user_id, "music_presence_token", None)
+            return False
+        
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.post(
+                    'https://discord.com/api/oauth2/token',
+                    data={
+                        'client_id': str(self.bot.application.id),
+                        'client_secret': config("client_secret"),
+                        'grant_type': 'refresh_token',
+                        'refresh_token': refresh_token,
+                    },
+                    headers={'Content-Type': 'application/x-www-form-urlencoded'}
+                ) as resp:
+                    if resp.status == 200:
+                        new_token = await resp.json()
+                        set_user_data(0, user_id, "music_presence_token", {
+                            "access_token": new_token["access_token"],
+                            "refresh_token": new_token.get("refresh_token", refresh_token),
+                            "expires_at": time.time() + new_token.get("expires_in", 604800)
+                        })
+                        return True
+                    else:
+                        log(f"Token refresh failed ({resp.status}) for user {user_id}", level=logging.WARNING, module_name="Music")
+                        set_user_data(0, user_id, "music_presence_token", None)
+                        return False
+        except Exception as e:
+            log(f"Token refresh error for user {user_id}: {e}", level=logging.WARNING, module_name="Music")
+            return False
+    
+    async def _update_presence(self, user_id: int, track: lava_lyra.Track):
+        """為用戶建立或更新 headless session"""
+        token_data = get_user_data(0, user_id, "music_presence_token")
+        if not token_data or not token_data.get("access_token"):
+            return
+        
+        # 檢查 token 是否過期，嘗試刷新
+        if token_data.get("expires_at", 0) < time.time():
+            if not await self._refresh_presence_token(user_id, token_data):
+                return
+            token_data = get_user_data(0, user_id, "music_presence_token")
+        
+        # 刪除舊的 session
+        await self._clear_presence(user_id)
+        
+        # 建立新的 headless session
+        payload = {
+            "activities": [{
+                "application_id": str(self.bot.application.id),
+                "name": track.title or "Music",
+                "platform": "desktop",
+                "type": 2,  # LISTENING
+                "details": track.title,
+                "state": track.author or "",
+                "assets": {
+                    "large_image": track.thumbnail or ""
+                },
+                "timestamps": {
+                    "start": int(time.time() * 1000)
+                }
+            }]
+        }
+        
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.post(
+                    'https://discord.com/api/v10/users/@me/headless-sessions',
+                    headers={
+                        'Authorization': f'Bearer {token_data["access_token"]}',
+                        'User-Agent': 'DiscordBot'
+                    },
+                    json=payload
+                ) as resp:
+                    if resp.status == 200:
+                        data = await resp.json()
+                        headless_sessions[user_id] = data.get("token")
+                    elif resp.status == 401:
+                        # Token 無效，嘗試刷新後重試一次
+                        if await self._refresh_presence_token(user_id, token_data):
+                            new_token_data = get_user_data(0, user_id, "music_presence_token")
+                            async with session.post(
+                                'https://discord.com/api/v10/users/@me/headless-sessions',
+                                headers={
+                                    'Authorization': f'Bearer {new_token_data["access_token"]}',
+                                    'User-Agent': 'DiscordBot'
+                                },
+                                json=payload
+                            ) as retry_resp:
+                                if retry_resp.status == 200:
+                                    data = await retry_resp.json()
+                                    headless_sessions[user_id] = data.get("token")
+                                else:
+                                    log(f"Headless session retry failed ({retry_resp.status})", level=logging.WARNING, module_name="Music")
+                        else:
+                            log(f"Token invalid and refresh failed for user {user_id}", level=logging.WARNING, module_name="Music")
+                    else:
+                        body = await resp.text()
+                        log(f"Headless session creation failed ({resp.status}): {body}", level=logging.WARNING, module_name="Music")
+        except Exception as e:
+            log(f"Headless session error for user {user_id}: {e}", level=logging.WARNING, module_name="Music")
+    
+    async def _clear_presence(self, user_id: int):
+        """刪除用戶的 headless session"""
+        session_token = headless_sessions.pop(user_id, None)
+        if not session_token:
+            return
+        
+        token_data = get_user_data(0, user_id, "music_presence_token")
+        if not token_data or not token_data.get("access_token"):
+            return
+        
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.post(
+                    'https://discord.com/api/v10/users/@me/headless-sessions/delete',
+                    headers={
+                        'Authorization': f'Bearer {token_data["access_token"]}',
+                        'User-Agent': 'DiscordBot'
+                    },
+                    json={"token": session_token}
+                ) as resp:
+                    if resp.status not in (204, 200):
+                        log(f"Headless session deletion failed ({resp.status})", level=logging.WARNING, module_name="Music")
+        except Exception as e:
+            log(f"Headless session deletion error for user {user_id}: {e}", level=logging.WARNING, module_name="Music")
+    
+    async def _update_all_presences(self, player: lava_lyra.Player, track: lava_lyra.Track):
+        """更新語音頻道內所有已授權用戶的動態狀態"""
+        if not player or not player.channel:
+            return
+        
+        tasks = []
+        for member in player.channel.members:
+            if member.bot:
+                continue
+            # 只為有 token 的用戶建立 session
+            token_data = get_user_data(0, member.id, "music_presence_token")
+            if token_data and token_data.get("access_token"):
+                tasks.append(self._update_presence(member.id, track))
+        
+        if tasks:
+            await asyncio.gather(*tasks, return_exceptions=True)
+    
+    async def _clear_all_presences(self, player: lava_lyra.Player):
+        """清除所有相關用戶的動態狀態"""
+        if player and player.channel:
+            user_ids = [m.id for m in player.channel.members if not m.bot and m.id in headless_sessions]
+        else:
+            user_ids = list(headless_sessions.keys())
+        
+        if user_ids:
+            tasks = [self._clear_presence(uid) for uid in user_ids]
+            await asyncio.gather(*tasks, return_exceptions=True)
     
     # ========== 文字指令 ==========
     
@@ -886,6 +1193,7 @@ class Music(commands.GroupCog, group_name=app_commands.locale_str("music")):
         try:
             queue = get_queue(ctx.guild.id)
             queue.clear()
+            await self._clear_all_presences(player)
             await player.stop()
             await player.disconnect()
             music_queues.pop(ctx.guild.id, None)
@@ -1120,6 +1428,62 @@ class Music(commands.GroupCog, group_name=app_commands.locale_str("music")):
         except Exception as e:
             log(f"推薦歌曲出錯: {e}", level=logging.ERROR, module_name="Music")
             await ctx.send(f"❌ 推薦歌曲出錯: {e}")
+    
+    @commands.command(name="presence", aliases=["rp", "動態狀態"])
+    @commands.guild_only()
+    async def text_presence(self, ctx: commands.Context, action: str = "status"):
+        """管理音樂播放動態狀態 (enable/disable/status)"""
+        user_id = ctx.author.id
+        
+        if action in ("enable", "啟用"):
+            if not HAS_WEBSITE:
+                await ctx.send("❌ 網站模組未啟用，無法使用此功能")
+                return
+            
+            redirect_uri = config("website_url", "http://localhost:8080").rstrip("/") + "/music-presence"
+            oauth_url = (
+                f"https://discord.com/oauth2/authorize"
+                f"?client_id={self.bot.application.id}"
+                f"&response_type=code"
+                f"&redirect_uri={urllib.parse.quote(redirect_uri, safe='')}"
+                f"&scope=activities.write%20identify"
+            )
+            
+            embed = discord.Embed(
+                title="🎵 音樂動態狀態",
+                description=(
+                    "點擊下方按鈕授權後，當你在語音頻道收聽音樂時，\n"
+                    "你的 Discord 狀態會自動顯示正在收聯的歌曲。\n\n"
+                    "*需要授權 `activities.write` 和 `identify` 權限*"
+                ),
+                color=0x5865F2
+            )
+            
+            view = discord.ui.View()
+            view.add_item(discord.ui.Button(label="授權", url=oauth_url, style=discord.ButtonStyle.link))
+            
+            await ctx.send(embed=embed, view=view)
+        
+        elif action in ("disable", "停用"):
+            await self._clear_presence(user_id)
+            set_user_data(0, user_id, "music_presence_token", None)
+            await ctx.send("✅ 音樂動態狀態已停用，已清除授權資訊")
+        
+        else:  # status
+            token_data = get_user_data(0, user_id, "music_presence_token")
+            if token_data and token_data.get("access_token"):
+                is_active = user_id in headless_sessions
+                expired = token_data.get("expires_at", 0) < time.time()
+                
+                status_text = "✅ 已授權"
+                if expired:
+                    status_text += " (Token 已過期，將在下次播放時自動刷新)"
+                if is_active:
+                    status_text += "\n🎵 動態狀態啟用中"
+                
+                await ctx.send(status_text)
+            else:
+                await ctx.send("❌ 尚未授權，請使用 `presence enable` 進行授權")
 
 
 asyncio.run(bot.add_cog(Music(bot)))

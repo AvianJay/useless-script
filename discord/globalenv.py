@@ -436,6 +436,7 @@ translations = {
     "global_hourly": "全域每小時獎勵",
     "upvoteboard": "有料板子",
     "recommend": "推薦",
+    "presence": "動態狀態",
     "anti_uispam-max_count": "反用戶安裝垃圾訊息-最大數量",
     "anti_uispam-time_window": "反用戶安裝垃圾訊息-時間窗口",
     "anti_uispam-action": "反用戶安裝垃圾訊息-執行動作",
