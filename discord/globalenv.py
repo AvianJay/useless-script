@@ -471,6 +471,7 @@ translations = {
     "anti_uispam-time_window": "反用戶安裝垃圾訊息-時間窗口",
     "anti_uispam-action": "反用戶安裝垃圾訊息-執行動作",
     "tutorial": "使用教學",
+    "panel": "面板",
 }
 class CommandNameTranslator(app_commands.Translator):
     async def translate(
