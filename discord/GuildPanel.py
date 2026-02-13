@@ -456,9 +456,7 @@ def _register_all():
 
     if "Economy" in modules:
         register_settings("Economy", "經濟系統", [
-            {"display": "匯率", "description": "伺服幣對全域幣的匯率", "database_key": "economy_exchange_rate", "type": "float", "default": 1.0, "min": 0},
             {"display": "貨幣名稱", "database_key": "economy_currency_name", "type": "string", "default": "伺服幣"},
-            {"display": "賣出比率", "description": "賣出物品時獲得的金額比率", "database_key": "economy_sell_ratio", "type": "float", "default": 0.7, "min": 0, "max": 1},
         ], description="管理伺服器經濟參數", icon="💰")
 
     if "AutoReply" in modules:
