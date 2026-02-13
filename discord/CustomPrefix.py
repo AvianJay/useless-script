@@ -1,6 +1,7 @@
 from globalenv import bot, get_server_config, set_server_config, config
 from typing import Optional
 from logger import log
+import discord
 from discord import app_commands
 from discord.ext import commands
 import asyncio
@@ -8,6 +9,12 @@ from expiring_dict import ExpiringDict
 import random
 
 usercache = ExpiringDict(180)
+
+def get_prefix(guild: Optional[discord.Guild]) -> str:
+    if guild is None:
+        return config("prefix", "!")
+    guild_id = str(guild.id)
+    return get_server_config(guild_id, "custom_prefix", config("prefix", "!"))
 
 async def determine_prefix(bot, message):
     guild = message.guild
