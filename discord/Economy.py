@@ -7,6 +7,7 @@ import logging
 import asyncio
 import time
 import math
+from datetime import datetime, timezone
 from ItemSystem import (
     items, give_item_to_user, remove_item_from_user, get_user_items,
     all_items_autocomplete, get_user_items_autocomplete,
@@ -598,7 +599,7 @@ class Economy(commands.GroupCog, name="economy", description="經濟系統指令
             return
         
         if not interaction.is_guild_integration():
-            await interaction.response.send_message("❌ 這個指令只能在伺服器中使用。", ephemeral=True)
+            await interaction.response.send_message("❌ 這個指令只能在**有邀請此機器人的伺服器**中使用。", ephemeral=True)
             return
 
         guild_id = interaction.guild.id
@@ -665,11 +666,13 @@ class Economy(commands.GroupCog, name="economy", description="經濟系統指令
         # 全域安裝時強制使用全域商店
         if not interaction.is_guild_integration():
             scope = "global"
+            guild_id = GLOBAL_GUILD_ID
+        else:
+            guild_id = interaction.guild.id
         if amount <= 0:
             await interaction.response.send_message("❌ 數量必須大於 0。", ephemeral=True)
             return
 
-        guild_id = interaction.guild.id
         user_id = interaction.user.id
 
         item = get_item_by_id(item_id)
@@ -727,16 +730,23 @@ class Economy(commands.GroupCog, name="economy", description="經濟系統指令
         embed.set_footer(text=f"剩餘餘額：{remaining:,.2f} {currency_name} | 物品已放入{dest}")
         await interaction.response.send_message(embed=embed)
 
-    @app_commands.command(name="sell", description="賣出物品給商店（獲得伺服幣）")
-    @app_commands.guild_only()
-    @app_commands.describe(item_id="要賣出的物品", amount="賣出數量")
+    @app_commands.command(name="sell", description="賣出物品給商店")
+    @app_commands.describe(item_id="要賣出的物品", amount="賣出數量", scope="商店類型")
+    @app_commands.choices(scope=[
+        app_commands.Choice(name="伺服器商店（伺服幣）", value="server"),
+        app_commands.Choice(name="全域商店（全域幣）", value="global"),
+    ])
     @app_commands.autocomplete(item_id=sellable_items_autocomplete)
-    async def sell(self, interaction: discord.Interaction, item_id: str, amount: int = 1):
+    async def sell(self, interaction: discord.Interaction, item_id: str, amount: int = 1, scope: str = "server"):
         if amount <= 0:
             await interaction.response.send_message("❌ 數量必須大於 0。", ephemeral=True)
             return
 
-        guild_id = interaction.guild.id
+        if not interaction.is_guild_integration() and scope == "server":
+            scope = "global"
+            guild_id = GLOBAL_GUILD_ID
+        else:
+            guild_id = interaction.guild.id
         user_id = interaction.user.id
 
         item = get_item_by_id(item_id)
@@ -759,10 +769,13 @@ class Economy(commands.GroupCog, name="economy", description="經濟系統指令
 
         removed = await remove_item_from_user(guild_id, user_id, item_id, amount)
 
-        currency_name = get_currency_name(guild_id)
-        price_per = get_item_sell_price(item_id, guild_id)
+        currency_name = get_currency_name(guild_id) if scope == "server" else GLOBAL_CURRENCY_NAME
+        price_per = get_item_sell_price(item_id, guild_id) if scope == "server" else item.get("worth", 0)
         total_price = round(price_per * removed, 2)
-        add_balance(guild_id, user_id, total_price)
+        if scope == "server":
+            add_balance(guild_id, user_id, total_price)
+        else:
+            set_global_balance(user_id, get_global_balance(user_id) + total_price)
 
         record_transaction(guild_id)
 
@@ -775,8 +788,9 @@ class Economy(commands.GroupCog, name="economy", description="經濟系統指令
         embed.add_field(name="總收入", value=f"{total_price:,.2f} {currency_name}", inline=True)
         buy_price = get_item_buy_price(item_id, guild_id)
         embed.set_footer(
-            text=f"賣出價為買入價的 {get_sell_ratio(guild_id)*100:.0f}%（買入: {buy_price:,.2f}）\n💡 要在全域商店購買？請先用 /economy exchange 將伺服幣轉換為全域幣"
+            text=f"賣出價為買入價的 {get_sell_ratio(guild_id)*100:.0f}%（買入: {buy_price:,.2f}）",
         )
+        embed.timestamp = datetime.now(timezone())
         await interaction.response.send_message(embed=embed)
 
     @app_commands.command(name="shop", description="查看商店")
@@ -1107,6 +1121,9 @@ class Economy(commands.GroupCog, name="economy", description="經濟系統指令
     @app_commands.command(name="info", description="查看伺服器經濟資訊")
     @app_commands.guild_only()
     async def info(self, interaction: discord.Interaction):
+        if not interaction.is_guild_integration():
+            await interaction.response.send_message("❌ 這個指令只能在伺服器中使用。", ephemeral=True)
+            return
         guild_id = interaction.guild.id
         rate = get_exchange_rate(guild_id)
         currency_name = get_currency_name(guild_id)
