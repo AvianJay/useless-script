@@ -5,18 +5,53 @@ from globalenv import config, bot, start_bot, modules, get_server_config, set_se
 import asyncio
 import logging
 import traceback
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
+import os
+from pathlib import Path
 
 # Track pending log tasks for graceful shutdown
 _pending_log_tasks: set = set()
 _shutting_down = False
 
+def cleanup_old_logs(days=7):
+    """清理超過指定天數的舊日誌檔案"""
+    logs_dir = Path("logs")
+    if not logs_dir.exists():
+        logs_dir.mkdir(parents=True)
+        return
+    
+    cutoff_date = datetime.now() - timedelta(days=days)
+    deleted_count = 0
+    
+    for log_file in logs_dir.glob("bot-*.log"):
+        try:
+            # 獲取檔案的修改時間
+            file_time = datetime.fromtimestamp(log_file.stat().st_mtime)
+            if file_time < cutoff_date:
+                log_file.unlink()
+                deleted_count += 1
+                print(f"[Logger] 已刪除舊日誌: {log_file.name}")
+        except Exception as e:
+            print(f"[Logger] 刪除日誌檔案時發生錯誤 {log_file.name}: {e}")
+    
+    if deleted_count > 0:
+        print(f"[Logger] 共刪除 {deleted_count} 個舊日誌檔案")
+
 async def _log(*messages, level = logging.INFO, module_name: str = "General", user: discord.User = None, guild: discord.Guild = None):
     global _shutting_down
+    
+    # 確保 logs 資料夾存在
+    logs_dir = Path("logs")
+    if not logs_dir.exists():
+        logs_dir.mkdir(parents=True)
+    
+    # 使用日期命名日誌檔案
+    log_filename = f"logs/bot-{datetime.now().strftime('%Y-%m-%d')}.log"
+    
     logger = logging.getLogger(module_name)
     if not logger.hasHandlers():
         logger.setLevel(logging.DEBUG)
-        handler = logging.FileHandler('bot.log', encoding='utf-8')
+        handler = logging.FileHandler(log_filename, encoding='utf-8')
         formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
         handler.setFormatter(formatter)
         logger.addHandler(handler)
@@ -197,6 +232,10 @@ async def flush_logs():
 class LoggerCog(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
+        # 設置應用程式指令錯誤處理
+        self.bot.tree.error(self.on_app_command_error)
+        # 清理舊日誌檔案
+        cleanup_old_logs(days=7)
 
     @app_commands.command(name="set-log-channel", description="設置日誌頻道 (若不設置則不發送到頻道)")
     @app_commands.describe(channel="選擇日誌頻道")
@@ -259,11 +298,90 @@ class LoggerCog(commands.Cog):
 
     @commands.Cog.listener()
     async def on_app_command_completion(self, interaction: discord.Interaction, application_command: discord.app_commands.Command):
-        # maybe it is command or context menu
+        # 收集詳細資訊
+        details = []
+        
+        # 基本指令資訊
         if isinstance(application_command, discord.app_commands.ContextMenu):
-            log(f"應用程式選單被觸發: {application_command.qualified_name}", module_name="Logger", level=logging.INFO, user=interaction.user, guild=interaction.guild)
+            details.append(f"類型: 右鍵選單 ({application_command.type.name})")
+            details.append(f"名稱: {application_command.qualified_name}")
         else:
-            log(f"應用程式指令被觸發: {application_command.qualified_name}", module_name="Logger", level=logging.INFO, user=interaction.user, guild=interaction.guild)
+            details.append(f"類型: 斜線指令")
+            details.append(f"名稱: /{application_command.qualified_name}")
+        
+        # 指令參數
+        if hasattr(interaction, 'namespace') and interaction.namespace:
+            params = []
+            for key, value in interaction.namespace.__dict__.items():
+                if not key.startswith('_'):
+                    # 格式化參數值
+                    if isinstance(value, (discord.User, discord.Member)):
+                        params.append(f"{key}=@{value.name} ({value.id})")
+                    elif isinstance(value, (discord.TextChannel, discord.VoiceChannel, discord.Thread)):
+                        params.append(f"{key}=#{value.name} ({value.id})")
+                    elif isinstance(value, discord.Role):
+                        params.append(f"{key}=@{value.name} ({value.id})")
+                    else:
+                        params.append(f"{key}={value}")
+            if params:
+                details.append(f"參數: {', '.join(params)}")
+        
+        # 頻道資訊
+        if interaction.channel:
+            channel_type = type(interaction.channel).__name__
+            if hasattr(interaction.channel, 'name'):
+                details.append(f"頻道: #{interaction.channel.name} ({channel_type}, ID: {interaction.channel.id})")
+            else:
+                details.append(f"頻道: {channel_type} (ID: {interaction.channel.id})")
+        
+        # 組合所有詳細資訊
+        log_message = "應用程式指令執行完成\n" + "\n".join(details)
+        
+        log(log_message, module_name="Logger", level=logging.INFO, user=interaction.user, guild=interaction.guild)
+
+    async def on_app_command_error(self, interaction: discord.Interaction, error: app_commands.AppCommandError):
+        """處理應用程式指令錯誤"""
+        # 取得完整的錯誤堆疊追蹤
+        error_traceback = ''.join(traceback.format_exception(type(error), error, error.__traceback__))
+        
+        # 記錄詳細錯誤
+        log(
+            f"應用程式指令錯誤:\n指令: {interaction.command.name if interaction.command else '未知'}\n"
+            f"錯誤類型: {type(error).__name__}\n"
+            f"錯誤訊息: {str(error)}\n"
+            f"堆疊追蹤:\n{error_traceback}",
+            module_name="Logger",
+            level=logging.ERROR,
+            user=interaction.user,
+            guild=interaction.guild
+        )
+        
+        # 向用戶顯示友善的錯誤訊息
+        error_message = "❌ 執行指令時發生錯誤！"
+        
+        # 根據錯誤類型提供更具體的訊息
+        if isinstance(error, app_commands.MissingPermissions):
+            missing = ', '.join(error.missing_permissions)
+            error_message = f"❌ 你沒有執行此指令的權限！缺少權限: {missing}"
+        elif isinstance(error, app_commands.BotMissingPermissions):
+            missing = ', '.join(error.missing_permissions)
+            error_message = f"❌ 我沒有足夠的權限執行此操作！缺少權限: {missing}"
+        elif isinstance(error, app_commands.CommandOnCooldown):
+            error_message = f"❌ 此指令冷卻中，請在 {error.retry_after:.1f} 秒後再試。"
+        elif isinstance(error, app_commands.CheckFailure):
+            error_message = "❌ 你不符合執行此指令的條件。"
+        else:
+            # 對於其他錯誤，顯示錯誤訊息
+            error_message = f"❌ 發生錯誤: {str(error)}"
+        
+        try:
+            if interaction.response.is_done():
+                await interaction.followup.send(error_message, ephemeral=True)
+            else:
+                await interaction.response.send_message(error_message, ephemeral=True)
+        except Exception as e:
+            # 如果無法發送錯誤訊息，至少記錄下來
+            log(f"無法向用戶發送錯誤訊息: {e}", module_name="Logger", level=logging.ERROR)
 
     # @commands.Cog.listener()
     # async def on_ready(self):
