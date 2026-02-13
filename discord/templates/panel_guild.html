@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ guild.name }} | 伺服器面板</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/panel.css') }}">
+</head>
+<body>
+    <nav class="panel-nav">
+        <a href="/panel/" class="nav-brand">
+            <img src="{{ bot.user.avatar.url if bot.user.avatar else '' }}" alt="{{ bot.user.name }}">
+            <span>{{ bot.user.name }}</span>
+        </a>
+        <div class="nav-right">
+            <a href="/panel/" class="btn-back">← 返回伺服器列表</a>
+            <div class="nav-user">
+                <img class="user-avatar" src="https://cdn.discordapp.com/avatars/{{ user.id }}/{{ user.avatar }}.png?size=64" alt="{{ user.username }}">
+                <span>{{ user.global_name or user.username }}</span>
+                <a href="{{ url_for('panel_logout') }}" class="btn-logout">登出</a>
+            </div>
+        </div>
+    </nav>
+
+    <div class="panel-container">
+        <!-- Guild Header -->
+        <div class="guild-header">
+            {% if guild.icon %}
+            <img class="guild-header-icon" src="{{ guild.icon.url }}" alt="{{ guild.name }}">
+            {% else %}
+            <div class="guild-header-icon guild-icon-placeholder">{{ guild.name[:2] }}</div>
+            {% endif %}
+            <div>
+                <h2 class="guild-header-name">{{ guild.name }}</h2>
+                <p class="guild-header-members">{{ guild.member_count }} 位成員</p>
+            </div>
+        </div>
+
+        <!-- Module Settings -->
+        <div class="settings-wrapper" id="settings-wrapper">
+            <div class="loading-spinner">正在載入設定...</div>
+        </div>
+
+        <!-- Toast -->
+        <div class="toast-container" id="toast-container"></div>
+    </div>
+
+    <script>
+        const GUILD_ID = "{{ guild.id }}";
+        const SETTINGS_SCHEMA = {{ settings_json | safe }};
+    </script>
+    <script src="{{ url_for('static', filename='js/panel.js') }}"></script>
+</body>
+</html>

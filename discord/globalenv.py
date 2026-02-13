@@ -132,6 +132,36 @@ def reload_config():
 modules = []
 failed_modules = []
 
+# ============= Panel Settings Registry =============
+# Allows any module to register its server settings for the web panel.
+# Modules can call register_panel_settings() at import time.
+panel_settings = {}
+
+def register_panel_settings(module_name: str, display_name: str, module_settings: list, description: str = "", icon: str = "⚙️"):
+    """
+    Register settings for the web panel.
+
+    Args:
+        module_name: Internal module name (e.g. "ReportSystem")
+        display_name: Display name (e.g. "檢舉系統")
+        module_settings: List of setting dicts with keys:
+            - display (str): Setting display name
+            - description (str, optional): Help text
+            - database_key (str): Key used in get/set_server_config
+            - type (str): channel | voice_channel | category | role | role_list | boolean | string | number | float | text | select
+            - default: Default value
+            - options (list, optional): For 'select' type, [{"label": str, "value": any}, ...]
+            - min / max (number, optional): For number/float type
+        description: Module description
+        icon: Emoji icon
+    """
+    panel_settings[module_name] = {
+        "display_name": display_name,
+        "description": description,
+        "icon": icon,
+        "settings": module_settings,
+    }
+
 
 intents = discord.Intents.default()
 intents.message_content = True

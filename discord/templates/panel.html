@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ bot.user.name }} | 選擇伺服器</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/panel.css') }}">
+</head>
+<body>
+    <nav class="panel-nav">
+        <a href="/panel/" class="nav-brand">
+            <img src="{{ bot.user.avatar.url if bot.user.avatar else '' }}" alt="{{ bot.user.name }}">
+            <span>{{ bot.user.name }}</span>
+        </a>
+        <div class="nav-user">
+            <img class="user-avatar" src="https://cdn.discordapp.com/avatars/{{ user.id }}/{{ user.avatar }}.png?size=64" alt="{{ user.username }}">
+            <span>{{ user.global_name or user.username }}</span>
+            <a href="{{ url_for('panel_logout') }}" class="btn-logout">登出</a>
+        </div>
+    </nav>
+
+    <div class="panel-container">
+        <h2 class="page-title">選擇伺服器</h2>
+        <p class="page-subtitle">選擇一個你有管理權限且機器人已加入的伺服器</p>
+
+        <div class="guild-grid">
+            {% for g in guilds %}
+            <a href="/panel/guild/{{ g.id }}" class="guild-card">
+                {% if g.icon_url %}
+                <img class="guild-icon" src="{{ g.icon_url }}" alt="{{ g.name }}">
+                {% else %}
+                <div class="guild-icon guild-icon-placeholder">{{ g.name[:2] }}</div>
+                {% endif %}
+                <div class="guild-info">
+                    <div class="guild-name">{{ g.name }}</div>
+                    <div class="guild-members">{{ g.member_count or '?' }} 位成員</div>
+                </div>
+            </a>
+            {% endfor %}
+
+            {% if not guilds %}
+            <div class="empty-state">
+                <p>找不到符合條件的伺服器</p>
+                <p class="empty-hint">確認機器人已加入你管理的伺服器</p>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</body>
+</html>
