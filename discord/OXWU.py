@@ -80,6 +80,9 @@ class OXWU(commands.GroupCog, name="earthquake", description="OXWU 地震監測�
         self.api_url = config("oxwu_api") or "http://127.0.0.1:10281"
         self.temp_channel_id = config("temp_channel_id")
         
+        # 共用 aiohttp session（在 on_ready 初始化）
+        self._session: Optional[aiohttp.ClientSession] = None
+        
         # Socket.IO 客戶端
         self.sio = socketio.AsyncClient()
         
@@ -89,6 +92,12 @@ class OXWU(commands.GroupCog, name="earthquake", description="OXWU 地震監測�
         
         # 註冊 Socket.IO 事件
         self._register_sio_events()
+    
+    async def _get_session(self) -> aiohttp.ClientSession:
+        """取得共用的 aiohttp session"""
+        if self._session is None or self._session.closed:
+            self._session = aiohttp.ClientSession()
+        return self._session
     
     def _register_sio_events(self):
         """註冊 Socket.IO 事件處理器"""
@@ -156,7 +165,7 @@ class OXWU(commands.GroupCog, name="earthquake", description="OXWU 地震監測�
                 view = None
                 cached_link = cwa_get_cached_link()
                 if cached_link:
-                    view = discord.ui.View()
+                    view = discord.ui.View(timeout=None)
                     view.add_item(discord.ui.Button(label="中央氣象署報告", emoji="🌐", url=cached_link, style=discord.ButtonStyle.link))
                 await self._send_to_all_servers(embed, "oxwu_report_channel", view=view)
     
@@ -183,12 +192,11 @@ class OXWU(commands.GroupCog, name="earthquake", description="OXWU 地震監測�
     async def _fetch_screenshot(self) -> Optional[bytes]:
         """從 OXWU API 取得截圖"""
         try:
-            async with aiohttp.ClientSession() as session:
-                async with session.get(f"{self.api_url}/screenshot") as resp:
-                    if resp.status == 200:
-                        return await resp.read()
+            session = await self._get_session()
+            async with session.get(f"{self.api_url}/screenshot") as resp:
+                if resp.status == 200:
+                    return await resp.read()
         except Exception as e:
-            # print(f"[OXWU] 無法取得截圖: {e}")
             log(f"無法取得截圖: {e}", module_name="OXWU", level=logging.ERROR)
         return None
     
@@ -196,17 +204,17 @@ class OXWU(commands.GroupCog, name="earthquake", description="OXWU 地震監測�
         """上傳截圖到臨時頻道並返回 URL"""
         channel_id = config("temp_channel_id")
         if not channel_id:
-            print("[OXWU] 未設定臨時頻道 ID，無法上傳截圖")
+            log("未設定臨時頻道 ID，無法上傳截圖", module_name="OXWU", level=logging.WARNING)
             return None
         
         screenshot = await self._fetch_screenshot()
         if not screenshot:
-            print("[OXWU] 無法取得截圖，無法上傳")
+            log("無法取得截圖，無法上傳", module_name="OXWU", level=logging.WARNING)
             return None
         
-        channel = bot.get_channel(int(channel_id))
+        channel = self.bot.get_channel(int(channel_id))
         if not channel:
-            print("[OXWU] 無法找到臨時頻道，無法上傳截圖")
+            log("無法找到臨時頻道，無法上傳截圖", module_name="OXWU", level=logging.WARNING)
             return None
         
         try:
@@ -215,54 +223,50 @@ class OXWU(commands.GroupCog, name="earthquake", description="OXWU 地震監測�
             if msg.attachments:
                 return msg.attachments[0].url
         except Exception as e:
-            # print(f"[OXWU] 無法上傳截圖: {e}")
             log(f"無法上傳截圖: {e}", module_name="OXWU", level=logging.ERROR)
         return None
     
     async def _fetch_warning_info(self) -> Optional[dict]:
         """取得地震速報資訊"""
         try:
-            async with aiohttp.ClientSession() as session:
-                async with session.get(f"{self.api_url}/getWarningInfo") as resp:
-                    if resp.status == 200:
-                        data = await resp.json()
-                        if data.get("ok"):
-                            return data
+            session = await self._get_session()
+            async with session.get(f"{self.api_url}/getWarningInfo") as resp:
+                if resp.status == 200:
+                    data = await resp.json()
+                    if data.get("ok"):
+                        return data
         except Exception as e:
-            # print(f"[OXWU] 無法取得速報資訊: {e}")
             log(f"無法取得速報資訊: {e}", module_name="OXWU", level=logging.ERROR)
         return None
     
     async def _fetch_report_info(self) -> Optional[dict]:
         """取得地震報告資訊"""
         try:
-            async with aiohttp.ClientSession() as session:
-                async with session.get(f"{self.api_url}/getReportInfo") as resp:
-                    if resp.status == 200:
-                        data = await resp.json()
-                        if data.get("ok"):
-                            return data.get("report")
+            session = await self._get_session()
+            async with session.get(f"{self.api_url}/getReportInfo") as resp:
+                if resp.status == 200:
+                    data = await resp.json()
+                    if data.get("ok"):
+                        return data.get("report")
         except Exception as e:
-            # print(f"[OXWU] 無法取得報告資訊: {e}")
             log(f"無法取得報告資訊: {e}", module_name="OXWU", level=logging.ERROR)
         return None
     
     async def _goto_warning(self):
         """切換到速報頁面"""
         try:
-            async with aiohttp.ClientSession() as session:
-                await session.get(f"{self.api_url}/gotoWarning")
+            session = await self._get_session()
+            await session.get(f"{self.api_url}/gotoWarning")
         except Exception as e:
-            # print(f"[OXWU] 無法切換到速報頁面: {e}")
             log(f"無法切換到速報頁面: {e}", module_name="OXWU", level=logging.ERROR)
     
     async def _goto_report(self):
         """切換到報告頁面"""
         try:
-            async with aiohttp.ClientSession() as session:
-                await session.get(f"{self.api_url}/gotoReport")
-        except:
-            pass
+            session = await self._get_session()
+            await session.get(f"{self.api_url}/gotoReport")
+        except Exception as e:
+            log(f"無法切換到報告頁面: {e}", module_name="OXWU", level=logging.ERROR)
     
     def _create_warning_embed(self, info: dict, screenshot_url: Optional[str] = None) -> discord.Embed:
         """建立速報 Embed"""
@@ -330,7 +334,7 @@ class OXWU(commands.GroupCog, name="earthquake", description="OXWU 地震監測�
         if report.get("maxIntensity"):
             embed.add_field(name="💥 最大震度", value=report["maxIntensity"], inline=True)
         
-        # 各地震度 (只顯示前幾個避免太長)
+        # 各地震度（截斷過長的 field 避免超過 Discord 1024 字元限制）
         if report.get("intensities"):
             for area in report["intensities"]:
                 stations_texts = []
@@ -338,6 +342,8 @@ class OXWU(commands.GroupCog, name="earthquake", description="OXWU 地震監測�
                     names = "、".join(station["names"])
                     stations_texts.append(f'{station["level"]}級: {names}')
                 stations_info = "\n".join(stations_texts)
+                if len(stations_info) > 1024:
+                    stations_info = stations_info[:1021] + "..."
                 embed.add_field(name=f"📍 {area['area']} ({area['maxIntensity']})", value=stations_info, inline=False)
         
         # 優先使用 CWA 圖片，否則使用截圖
@@ -410,15 +416,24 @@ class OXWU(commands.GroupCog, name="earthquake", description="OXWU 地震監測�
     
     @commands.Cog.listener()
     async def on_ready(self):
-        """Bot 準備就緒時啟動 Socket.IO 連線"""
+        """Bot 準備就緒時啟動 Socket.IO 連線與 CWA 初始化"""
         if not hasattr(self, "_task_started"):
             self._task_started = True
             self.bot.loop.create_task(self._connect_socketio())
+            # 啟動時取得一次 CWA 連結和圖片
+            try:
+                await cwa_get_last_link()
+                if cwa_last_link:
+                    await cwa_get_image_url(cwa_last_link)
+            except Exception as e:
+                log(f"CWA 初始化失敗: {e}", module_name="OXWU", level=logging.WARNING)
     
     async def cog_unload(self):
-        """Cog 卸載時斷開 Socket.IO 連線"""
+        """Cog 卸載時清理資源"""
         if self.sio.connected:
             await self.sio.disconnect()
+        if self._session and not self._session.closed:
+            await self._session.close()
     
     # Slash Commands
     @app_commands.command(name="set-alert-channel", description="設定接收地震速報的頻道")
@@ -492,7 +507,7 @@ class OXWU(commands.GroupCog, name="earthquake", description="OXWU 地震監測�
         # 建立連結按鈕
         view = None
         if cached_link:
-            view = discord.ui.View()
+            view = discord.ui.View(timeout=None)
             view.add_item(discord.ui.Button(label="中央氣象署報告", emoji="🌐", url=cached_link, style=discord.ButtonStyle.link))
         
         await interaction.followup.send(embed=embed, view=view)
@@ -531,38 +546,35 @@ class OXWU(commands.GroupCog, name="earthquake", description="OXWU 地震監測�
     @app_commands.command(name="status", description="查看 OXWU 連線狀態")
     async def check_status(self, interaction: discord.Interaction):
         embed = discord.Embed(title="🔌 OXWU 連線狀態", color=discord.Color.blue())
-        # embed.add_field(name="API 位址", value=self.api_url, inline=False)
         embed.add_field(name="Socket.IO", value="✅ 已連線" if self.sio.connected else "❌ 未連線", inline=True)
         embed.add_field(name="最後速報時間", value=self.last_warning_time or "無", inline=True)
         embed.add_field(name="最後報告時間", value=self.last_report_time or "無", inline=True)
         
-        # 檢查頻道設定
-        warning_ch = get_server_config(interaction.guild_id, "oxwu_warning_channel")
-        report_ch = get_server_config(interaction.guild_id, "oxwu_report_channel")
-        embed.add_field(
-            name="本伺服器設定",
-            value=f"速報頻道: {f'<#{warning_ch}>' if warning_ch else '未設定'}\n報告頻道: {f'<#{report_ch}>' if report_ch else '未設定'}",
-            inline=False
-        )
+        # 在伺服器中才顯示頻道設定
+        if interaction.guild_id:
+            warning_ch = get_server_config(interaction.guild_id, "oxwu_warning_channel")
+            report_ch = get_server_config(interaction.guild_id, "oxwu_report_channel")
+            embed.add_field(
+                name="本伺服器設定",
+                value=f"速報頻道: {f'<#{warning_ch}>' if warning_ch else '未設定'}\n報告頻道: {f'<#{report_ch}>' if report_ch else '未設定'}",
+                inline=False
+            )
         
         await interaction.response.send_message(embed=embed, ephemeral=True)
-        
-    @commands.Cog.listener()
-    async def on_ready(self):
-        await cwa_get_last_link()  # 啟動時取得一次 CWA 連結
-        await cwa_get_image_url(cwa_last_link)  # 啟動時取得一次 CWA 圖片 URL
 
 
 async def _cleanup_oxwu():
-    """關閉 OXWU 的 Socket.IO 連線"""
+    """關閉 OXWU 的 Socket.IO 連線和 aiohttp session"""
     global _oxwu_cog_instance
     if _oxwu_cog_instance is not None:
         try:
             if _oxwu_cog_instance.sio.connected:
                 await _oxwu_cog_instance.sio.disconnect()
                 log("已關閉 Socket.IO 連線", module_name="OXWU")
+            if _oxwu_cog_instance._session and not _oxwu_cog_instance._session.closed:
+                await _oxwu_cog_instance._session.close()
         except Exception as e:
-            log(f"關閉 Socket.IO 時發生錯誤: {e}", module_name="OXWU", level=logging.WARNING)
+            log(f"關閉時發生錯誤: {e}", module_name="OXWU", level=logging.WARNING)
 
 
 on_close_tasks.add(_cleanup_oxwu)
