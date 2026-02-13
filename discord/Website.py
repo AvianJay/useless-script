@@ -7,9 +7,12 @@ from globalenv import bot, modules, config, on_ready_tasks, get_global_config, o
 from logger import log
 from PIL import Image
 import requests
+from discord.ext import commands
 
 # Shutdown event for graceful shutdown
 _shutdown_event: asyncio.Event = None
+
+fully_ready = False  # To track if the bot is fully ready (after on_ready tasks)
 
 if "UtilCommands" in modules:
     import UtilCommands
@@ -24,8 +27,15 @@ def api_status():
         bot_latency = round(bot.latency * 1000)  # Convert to milliseconds
     except OverflowError:
         bot_latency = "N/A"
+    if bot.is_ready():
+        if fully_ready:
+            status_text = "online"
+        else:
+            status_text = "starting"
+    else:
+        status_text = "offline"
     status = {
-        "status": "online" if bot.is_ready() else "offline",
+        "status": status_text,
         "name": bot.user.name,
         "avatar_url": str(bot.user.avatar.url) if bot.user.avatar else None,
         "id": str(bot.user.id),
@@ -119,4 +129,22 @@ async def stop_webserver():
 on_close_tasks.add(stop_webserver)
 
 
-on_ready_tasks.append(start_webserver)
+class Website(commands.Cog):
+    def __init__(self, bot):
+        self.bot = bot
+    
+    @commands.Cog.listener()
+    async def on_ready(self):
+        log("正在啟動網站伺服器...", module_name="Website")
+        await start_webserver()
+
+asyncio.run(bot.add_cog(Website(bot)))
+        
+async def is_fully_ready():
+    global fully_ready
+    # Wait a short time to ensure all on_ready tasks have completed
+    await asyncio.sleep(5)
+    fully_ready = True
+    log("機器人已完全啟動，網站狀態為 online。", module_name="Website")
+
+on_ready_tasks.append(is_fully_ready)

@@ -36,7 +36,22 @@ document.addEventListener("DOMContentLoaded", function () {
             if (nameEl) nameEl.textContent = data.name;
 
             const statusBadge = document.getElementById("botstatus-badge");
-            if (statusBadge) statusBadge.textContent = `狀態: ${data.status}`;
+            if (statusBadge) {
+                switch (data.status) {
+                    case "online":
+                        statusBadge.style.backgroundColor = "#43b581";
+                        statusBadge.textContent = "狀態: 在線";
+                        break;
+                    case "starting":
+                        statusBadge.style.backgroundColor = "#faa61a";
+                        statusBadge.textContent = "狀態: 啟動中";
+                        break;
+                    case "offline":
+                        statusBadge.style.backgroundColor = "#f04747";
+                        statusBadge.textContent = "狀態: 離線";
+                        break;
+                }
+            }
 
             // Update Navbar
             const navAvatar = document.getElementById("nav-avatar");
