@@ -442,11 +442,56 @@ class Moderate(commands.GroupCog, group_name=app_commands.locale_str("admin")):
         self.bot = bot
     
     
-    @app_commands.command(name=app_commands.locale_str("multi-moderate"), description="對用戶進行多重操作")
+    @app_commands.command(name=app_commands.locale_str("multi-moderate"), description="對多個用戶進行懲處")
+    @app_commands.describe(users="選擇用戶 (提及或是 ID，使用逗號分隔多個用戶)", action="輸入懲處指令，使用逗號分隔多個指令，例如：ban 1d spamming, mute 10m")
+    @app_commands.default_permissions(administrator=True)
+    @app_commands.allowed_installs(guilds=True, users=False)
+    @app_commands.allowed_contexts(guilds=True, dms=False, private_channels=False)
+    async def multi_moderate(self, interaction: discord.Interaction, users: str, action: str):
+        guild = interaction.guild
+        if guild is None:
+            await interaction.response.send_message("此指令只能在伺服器中使用。", ephemeral=True)
+            return
+        
+        # check bot permissions
+        if not guild.me.guild_permissions.administrator:
+            await interaction.response.send_message("機器人需要管理員權限才能執行此操作。", ephemeral=True)
+            return
+        
+        user_list = [u.strip() for u in users.split(",")]
+        target_users = []
+        for u in user_list:
+            member = None
+            try:
+                user_id = int(u)
+                member = guild.get_member(user_id)
+            except ValueError:
+                pass
+            if member is None and u.startswith("<@") and u.endswith(">"):
+                try:
+                    user_id = int(u[2:-1].replace("!", ""))
+                    member = guild.get_member(user_id)
+                except ValueError:
+                    pass
+            if member is None:
+                await interaction.response.send_message(f"無法找到用戶：{u}，請確認輸入是否正確。", ephemeral=True)
+                return
+            target_users.append(member)
+        
+        logs = []
+        for user in target_users:
+            result_logs = await do_action_str(action, guild=guild, user=user, moderator=interaction.user)
+            logs.append(f"對 {user.mention} 的處置結果：\n" + "\n".join(result_logs))
+        
+        await interaction.response.send_message("\n\n".join(logs), ephemeral=True)
+    
+    
+    @app_commands.command(name=app_commands.locale_str("multi-moderate-action"), description="對用戶進行多重操作")
     @app_commands.describe(user="選擇用戶")
     @app_commands.default_permissions(administrator=True)
     @app_commands.allowed_installs(guilds=True, users=False)
-    async def multi_moderate(self, interaction: discord.Interaction, user: discord.Member):
+    @app_commands.allowed_contexts(guilds=True, dms=False, private_channels=False)
+    async def multi_moderate_action(self, interaction: discord.Interaction, user: discord.Member):
         guild = interaction.guild
         if guild is None:
             await interaction.response.send_message("此指令只能在伺服器中使用。", ephemeral=True)
