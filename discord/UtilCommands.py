@@ -4,12 +4,14 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 from globalenv import bot, start_bot, get_user_data, set_user_data, get_command_mention, modules, failed_modules, config
+from CustomPrefix import get_prefix
 from typing import Union
 from datetime import datetime, timezone
 import psutil
 import time
 import aiohttp
 from database import db
+from CustomPrefix import get_prefix
 
 startup_time = datetime.now(timezone.utc)
 version = "0.18.4"
@@ -1253,6 +1255,331 @@ async def help_slash_command(interaction: discord.Interaction, command: str = No
             return
         
         await interaction.followup.send("❌ 找不到此指令。請使用自動完成選擇指令。", ephemeral=True)
+
+
+# ===== 使用教學指令 =====
+
+async def build_tutorial_pages(guild: discord.Guild = None) -> list[dict]:
+    """動態生成教學頁面，使用 get_command_mention 取得指令提及格式，get_prefix 取得伺服器前綴"""
+    prefix = get_prefix(guild)
+    bot_name = bot.user.name if bot.user else "機器人"
+
+    # 批次取得所有需要的指令提及
+    cmd = {}
+    cmd_names = [
+        "ping", "info", "changelog", "git-commits", "stats",
+        "userinfo", "serverinfo", "avatar", "banner",
+        "randomnumber", "randomuser", "textlength", "httpcat",
+        "nitro", "petpet", "explore", "feedback", "help", "tutorial",
+        "dsize", "dsize-leaderboard", "dsize-battle", "dsize-feedgrass", "dsize-stats",
+        "ai", "ai-clear", "ai-history", "ban", "unban", "kick", "timeout", "untimeout", "multi-moderate",
+    ]
+    # 群組指令：(group_name, subcommand_name)
+    subcmd_names = [
+        ("automod", "view"), ("automod", "toggle"), ("automod", "settings"),
+        ("autopublish", "settings"),
+        ("autoreply", "add"), ("autoreply", "remove"), ("autoreply", "list"),
+        ("autoreply", "edit"), ("autoreply", "quickadd"),
+        ("autoreply", "export"), ("autoreply", "import"), ("autoreply", "test"),
+        ("economy", "balance"), ("economy", "daily"), ("economy", "hourly"),
+        ("economy", "pay"), ("economy", "exchange"), ("economy", "shop"),
+        ("economy", "buy"), ("economy", "sell"), ("economy", "trade"),
+        ("economy", "leaderboard"),
+        ("music", "play"), ("music", "pause"), ("music", "resume"),
+        ("music", "stop"), ("music", "skip"), ("music", "queue"),
+        ("music", "now-playing"), ("music", "shuffle"), ("music", "volume"),
+        ("music", "recommend"),
+        ("report", None),
+        ("dynamic-voice", "setup"),
+        ("change", "avatar"), ("change", "banner"), ("change", "bio"),
+    ]
+
+    for name in cmd_names:
+        mention = await get_command_mention(name)
+        cmd[name] = mention or f"`/{name}`"
+
+    for group, sub in subcmd_names:
+        key = f"{group} {sub}" if sub else group
+        mention = await get_command_mention(group, sub)
+        cmd[key] = mention or f"`/{key}`"
+
+    return [
+        {
+            "title": f"👋 歡迎使用 {bot_name} 機器人！",
+            "description": (
+                "這是一份使用教學，幫助你快速上手本機器人的所有功能。\n\n"
+                "**如何操作：**\n"
+                "使用下方的 ⬅️ ➡️ 按鈕翻頁瀏覽各項功能介紹。\n\n"
+                "**指令類型：**\n"
+                "• **斜線指令** — 輸入 `/` 後從選單選取\n"
+                f"• **文字指令** — 在聊天中輸入前綴（目前為 `{prefix}`）加上指令名稱\n\n"
+                f"**小提示：** 使用 {cmd['help']} 或 `{prefix}help` 可以隨時查看所有指令清單。"
+            ),
+            "color": 0x5865F2,
+        },
+        {
+            "title": "📊 基本資訊指令",
+            "description": (
+                "這些指令讓你快速取得機器人與伺服器的相關資訊。\n\n"
+                f"🏓 {cmd['ping']} — 檢查機器人延遲（Websocket & REST API）\n"
+                f"ℹ️ {cmd['info']} — 顯示機器人版本、伺服器數量、運行時間等詳細資訊\n"
+                f"📋 {cmd['changelog']} — 查看機器人的更新日誌\n"
+                f"📝 {cmd['git-commits']} — 顯示最近的 Git 提交記錄\n"
+                f"📈 {cmd['stats']} — 查看指令使用統計\n"
+            ),
+            "color": 0x3498DB,
+        },
+        {
+            "title": "🔍 查詢指令",
+            "description": (
+                "查詢用戶、伺服器與其他實用資訊。\n\n"
+                f"👤 {cmd['userinfo']} `<用戶>` — 查詢用戶的 ID、創建時間、加入時間等\n"
+                f"🏠 {cmd['serverinfo']} — 查詢目前伺服器的詳細資訊\n"
+                f"🖼️ {cmd['avatar']} `[用戶]` — 取得用戶的頭像圖片\n"
+                f"🎨 {cmd['banner']} `[用戶]` — 取得用戶的橫幅圖片\n"
+                f"🎲 {cmd['randomnumber']} `[min] [max]` — 生成一個隨機數字\n"
+                f"👥 {cmd['randomuser']} — 從頻道的發言者中隨機選一人\n"
+                f"📏 {cmd['textlength']} `<文字>` — 計算文字長度\n"
+                f"🐱 {cmd['httpcat']} `<狀態碼>` — 用 HTTP 狀態碼產生貓咪圖片\n"
+            ),
+            "color": 0x2ECC71,
+        },
+        {
+            "title": "🛡️ 管理工具",
+            "description": (
+                "伺服器管理員專用的懲處與管理功能。\n\n"
+                f"🔨 {cmd['ban']} `<用戶> [原因]` — 封禁用戶\n"
+                f"🔓 {cmd['unban']} `<用戶>` — 解除封禁\n"
+                f"👢 {cmd['kick']} `<用戶> [原因]` — 踢出用戶\n"
+                f"🔇 {cmd['timeout']} `<用戶> <時間>` — 禁言用戶\n"
+                f"🔊 {cmd['untimeout']} `<用戶>` — 解除禁言\n"
+                f"⚡ {cmd['multi-moderate']} — 對多名用戶同時執行懲處\n\n"
+                "-# 需要對應的伺服器管理權限才能使用"
+            ),
+            "color": 0xE74C3C,
+        },
+        {
+            "title": "🤖 自動管理 & 自動發布",
+            "description": (
+                "讓機器人自動幫你管理伺服器。\n\n"
+                "**自動管理 (AutoMod)**\n"
+                f"• {cmd['automod view']} — 查看目前的自動管理設定\n"
+                f"• {cmd['automod toggle']} — 開啟或關閉自動管理功能\n"
+                f"• {cmd['automod settings']} — 調整自動管理的偵測項目\n"
+                "• 可自動偵測：逃避處罰、過多表情、詐騙連結等\n\n"
+                "**自動發布 (AutoPublish)**\n"
+                f"• {cmd['autopublish settings']} — 設定自動發布的頻道\n"
+                "• 機器人會自動將公告頻道的訊息發布給所有追蹤的伺服器\n"
+            ),
+            "color": 0x9B59B6,
+        },
+        {
+            "title": "💬 自動回覆",
+            "description": (
+                "設定關鍵字觸發的自動回覆訊息。\n\n"
+                f"➕ {cmd['autoreply add']} `<關鍵字> <回覆>` — 新增自動回覆\n"
+                f"➖ {cmd['autoreply remove']} `<關鍵字>` — 刪除自動回覆\n"
+                f"📋 {cmd['autoreply list']} — 列出所有自動回覆\n"
+                f"✏️ {cmd['autoreply edit']} — 編輯現有的自動回覆\n"
+                f"⚡ {cmd['autoreply quickadd']} — 快速新增多個回覆\n"
+                f"📤 {cmd['autoreply export']} — 匯出回覆設定為 JSON\n"
+                f"📥 {cmd['autoreply import']} — 從 JSON 匯入回覆設定\n"
+                f"🧪 {cmd['autoreply test']} — 測試自動回覆觸發\n\n"
+                "-# 支援機率觸發與變數替換"
+            ),
+            "color": 0xF39C12,
+        },
+        {
+            "title": "💰 經濟系統",
+            "description": (
+                "完整的虛擬經濟系統，含貨幣、商店與交易。\n\n"
+                f"💵 {cmd['economy balance']} — 查看你的餘額\n"
+                f"📅 {cmd['economy daily']} — 領取每日獎勵\n"
+                f"⏰ {cmd['economy hourly']} — 領取每小時獎勵\n"
+                f"💸 {cmd['economy pay']} `<用戶> <金額>` — 轉帳給其他用戶\n"
+                f"🔄 {cmd['economy exchange']} — 伺服幣與全域幣互換\n"
+                f"🛒 {cmd['economy shop']} — 瀏覽商店\n"
+                f"🛍️ {cmd['economy buy']} / {cmd['economy sell']} — 購買或出售物品\n"
+                f"🤝 {cmd['economy trade']} — 與其他用戶交易\n"
+                f"🏆 {cmd['economy leaderboard']} — 查看財富排行榜\n"
+            ),
+            "color": 0xF1C40F,
+        },
+        {
+            "title": "🎵 音樂播放",
+            "description": (
+                "在語音頻道中播放音樂。\n\n"
+                f"▶️ {cmd['music play']} `<歌曲>` — 播放歌曲或將歌曲加入隊列\n"
+                f"⏸️ {cmd['music pause']} — 暫停播放\n"
+                f"⏯️ {cmd['music resume']} — 繼續播放\n"
+                f"⏹️ {cmd['music stop']} — 停止播放並離開語音頻道\n"
+                f"⏭️ {cmd['music skip']} — 跳過目前歌曲\n"
+                f"📜 {cmd['music queue']} — 查看播放隊列\n"
+                f"🎶 {cmd['music now-playing']} — 顯示正在播放的歌曲\n"
+                f"🔀 {cmd['music shuffle']} — 隨機播放隊列\n"
+                f"🔊 {cmd['music volume']} `<音量>` — 調整音量\n"
+                f"💡 {cmd['music recommend']} — 根據目前歌曲推薦\n"
+            ),
+            "color": 0x1DB954,
+        },
+        {
+            "title": "🤖 AI 聊天 & 其他功能",
+            "description": (
+                "**AI 聊天助手**\n"
+                f"💬 {cmd['ai']} `<訊息>` — 與 AI 對話\n"
+                f"🗑️ {cmd['ai-clear']} — 清除對話歷史\n"
+                f"📜 {cmd['ai-history']} — 查看對話記錄\n\n"
+                "**檢舉系統**\n"
+                f"🚨 {cmd['report']} — 檢舉違規訊息（支援 AI 判定）\n\n"
+                "**動態語音頻道**\n"
+                f"🔊 {cmd['dynamic-voice setup']} — 設定動態語音頻道，加入即自動建立專屬房間\n\n"
+                "**回饋建議**\n"
+                f"📝 {cmd['feedback']} — 向開發者提交回饋\n\n"
+                "**機器人自訂**\n"
+                f"🖼️ {cmd['change avatar']} / {cmd['change banner']} / {cmd['change bio']} — 自訂機器人外觀（需授權）\n"
+            ),
+            "color": 0xE91E63,
+        },
+        {
+            "title": "🎮 娛樂功能",
+            "description": (
+                "各種有趣的娛樂指令。\n\n"
+                f"📏 {cmd['dsize']} — 隨機量測...嗯...你懂的 😏\n"
+                f"🏆 {cmd['dsize-leaderboard']} — 查看排行榜\n"
+                f"⚔️ {cmd['dsize-battle']} — 與其他用戶對戰\n"
+                f"🌿 {cmd['dsize-feedgrass']} — 餵草功能\n"
+                f"📊 {cmd['dsize-stats']} — 查看你的統計數據\n\n"
+                f"🎁 {cmd['nitro']} — Nitro 禮物分享工具\n"
+                f"🐾 {cmd['petpet']} — 生成 petpet GIF\n"
+                f"🌐 {cmd['explore']} — 探索其他伺服器\n"
+            ),
+            "color": 0xFF6B6B,
+        },
+        {
+            "title": "✅ 教學完成！",
+            "description": (
+                "恭喜你完成了機器人的使用教學！🎉\n\n"
+                "**快速回顧：**\n"
+                f"• 使用 {cmd['help']} 查看所有指令\n"
+                f"• 使用 {cmd['help']} `<指令>` 查看特定指令的詳細說明\n"
+                f"• 使用 {cmd['info']} 查看機器人資訊\n"
+                f"• 使用 {cmd['feedback']} 向開發者回饋意見\n\n"
+                "**相關連結：**\n"
+                f"如有任何問題，歡迎加入[支援伺服器]({config('support_server_invite')})尋求協助！\n\n"
+                "-# 祝你使用愉快！— by AvianJay"
+            ),
+            "color": 0x2ECC71,
+        },
+    ]
+
+
+class TutorialView(discord.ui.View):
+    def __init__(self, pages: list[dict], interaction: discord.Interaction):
+        super().__init__(timeout=300)
+        self.pages = pages
+        self.current_page = 0
+        self.original_interaction = interaction
+        self.update_buttons()
+
+    async def on_timeout(self):
+        for child in self.children:
+            child.disabled = True
+        try:
+            await self.original_interaction.edit_original_response(view=self)
+        except Exception:
+            pass
+
+    def update_buttons(self):
+        self.first_button.disabled = self.current_page == 0
+        self.prev_button.disabled = self.current_page == 0
+        self.next_button.disabled = self.current_page >= len(self.pages) - 1
+        self.last_button.disabled = self.current_page >= len(self.pages) - 1
+
+    def get_embed(self) -> discord.Embed:
+        page = self.pages[self.current_page]
+        embed = discord.Embed(
+            title=page["title"],
+            description=page["description"],
+            color=page.get("color", 0x5865F2),
+        )
+        embed.set_footer(text=f"頁面 {self.current_page + 1} / {len(self.pages)} • 使用教學")
+        return embed
+
+    @discord.ui.button(emoji="⏪", style=discord.ButtonStyle.secondary, custom_id="tutorial_first")
+    async def first_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        self.current_page = 0
+        self.update_buttons()
+        await interaction.response.edit_message(embed=self.get_embed(), view=self)
+
+    @discord.ui.button(emoji="⬅️", style=discord.ButtonStyle.primary, custom_id="tutorial_prev")
+    async def prev_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        self.current_page = max(0, self.current_page - 1)
+        self.update_buttons()
+        await interaction.response.edit_message(embed=self.get_embed(), view=self)
+
+    @discord.ui.button(emoji="➡️", style=discord.ButtonStyle.primary, custom_id="tutorial_next")
+    async def next_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        self.current_page = min(len(self.pages) - 1, self.current_page + 1)
+        self.update_buttons()
+        await interaction.response.edit_message(embed=self.get_embed(), view=self)
+
+    @discord.ui.button(emoji="⏩", style=discord.ButtonStyle.secondary, custom_id="tutorial_last")
+    async def last_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        self.current_page = len(self.pages) - 1
+        self.update_buttons()
+        await interaction.response.edit_message(embed=self.get_embed(), view=self)
+
+
+@bot.tree.command(name=app_commands.locale_str("tutorial"), description="機器人使用教學")
+@app_commands.allowed_installs(guilds=True, users=True)
+@app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
+async def tutorial_command(interaction: discord.Interaction):
+    await interaction.response.defer(ephemeral=True)
+    pages = await build_tutorial_pages(guild=interaction.guild)
+    view = TutorialView(pages, interaction=interaction)
+    await interaction.followup.send(embed=view.get_embed(), view=view, ephemeral=True)
+
+
+@bot.command(aliases=["tut", "guide"])
+async def tutorial(ctx: commands.Context):
+    """機器人使用教學
+
+    用法： tutorial
+    顯示一份教學，幫助你了解機器人的所有功能。
+    """
+    prefix = get_prefix(ctx.guild)
+
+    # 取得常用指令提及
+    cmd_help = await get_command_mention("help") or "`/help`"
+    cmd_info = await get_command_mention("info") or "`/info`"
+    cmd_ping = await get_command_mention("ping") or "`/ping`"
+    cmd_changelog = await get_command_mention("changelog") or "`/changelog`"
+    cmd_stats = await get_command_mention("stats") or "`/stats`"
+    cmd_feedback = await get_command_mention("feedback") or "`/feedback`"
+    cmd_tutorial = await get_command_mention("tutorial") or "`/tutorial`"
+
+    embed = discord.Embed(
+        title="📖 機器人使用教學",
+        description=(
+            "歡迎使用本機器人！以下是主要功能分類：\n\n"
+            f"📊 **基本資訊** — {cmd_ping}, {cmd_info}, {cmd_changelog}, {cmd_stats}\n"
+            "🔍 **查詢功能** — `/userinfo`, `/serverinfo`, `/avatar`, `/banner`\n"
+            "🛡️ **管理工具** — `/ban/kick/timeout` 等\n"
+            "🤖 **自動管理** — `/automod`, `/autopublish`\n"
+            "💬 **自動回覆** — `/autoreply add/remove/list`\n"
+            "💰 **經濟系統** — `/economy balance/daily/shop` 等\n"
+            "🎵 **音樂播放** — `/music play/pause/skip` 等\n"
+            "🤖 **AI 聊天** — `/ai`, `/ai-clear`\n"
+            "🎮 **娛樂功能** — `/dsize`, `/petpet`, `/explore`\n"
+            f"📝 **回饋建議** — {cmd_feedback}\n\n"
+            f"使用 `{prefix}help <指令>` 查看特定指令說明\n"
+            f"使用斜線指令 {cmd_tutorial} 可以獲得互動式翻頁教學！"
+        ),
+        color=0x5865F2,
+    )
+    embed.set_thumbnail(url=ctx.bot.user.avatar.url if ctx.bot.user.avatar else None)
+    embed.set_footer(text="by AvianJay")
+    await ctx.send(embed=embed)
 
 
 if __name__ == "__main__":

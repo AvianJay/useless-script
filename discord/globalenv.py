@@ -193,7 +193,8 @@ async def get_command_mention(command_name: str, subcommand_name: str = None):
 translations = {
     "test": "測試",
     "admin": "管理",
-    "multi-moderate": "多重操作",
+    "multi-moderate": "多使用者懲處",
+    "multi-moderate-action": "多重操作",
     "ban": "封禁",
     "unban": "解封",
     "timeout": "禁言",
@@ -439,6 +440,7 @@ translations = {
     "anti_uispam-max_count": "反用戶安裝垃圾訊息-最大數量",
     "anti_uispam-time_window": "反用戶安裝垃圾訊息-時間窗口",
     "anti_uispam-action": "反用戶安裝垃圾訊息-執行動作",
+    "tutorial": "使用教學",
 }
 class CommandNameTranslator(app_commands.Translator):
     async def translate(
