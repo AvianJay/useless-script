@@ -83,7 +83,7 @@ def get_daily_amount(guild_id: int) -> int:
     if guild_id == GLOBAL_GUILD_ID:
         # 全域獎勵可能不同，暫時用相同金額
         return DEFAULT_DAILY_AMOUNT
-    return get_server_config(guild_id, "economy_daily_amount", DEFAULT_DAILY_AMOUNT)
+    return get_exchange_rate(guild_id) * DEFAULT_DAILY_AMOUNT
 
 
 def get_hourly_amount(guild_id: int) -> int:
@@ -91,7 +91,7 @@ def get_hourly_amount(guild_id: int) -> int:
     if guild_id == GLOBAL_GUILD_ID:
         # 全域獎勵可能不同，暫時用相同金額
         return DEFAULT_HOURLY_AMOUNT
-    return get_server_config(guild_id, "economy_hourly_amount", DEFAULT_HOURLY_AMOUNT)
+    return get_exchange_rate(guild_id) * DEFAULT_HOURLY_AMOUNT
 
 
 def get_sell_ratio(guild_id: int) -> float:
@@ -1299,16 +1299,16 @@ class EconomyMod(commands.GroupCog, name="economymod", description="經濟系統
         set_server_config(guild_id, "economy_currency_name", name)
         await interaction.response.send_message(f"✅ 貨幣名稱已更改為 **{name}**。", ephemeral=True)
 
-    @app_commands.command(name="setdaily", description="設定每日獎勵金額")
-    @app_commands.describe(amount="每日獎勵金額")
-    async def setdaily(self, interaction: discord.Interaction, amount: int):
-        if amount < 0 or amount > 1000:
-            await interaction.response.send_message("❌ 金額必須在 0 到 1,000 之間。", ephemeral=True)
-            return
+    # @app_commands.command(name="setdaily", description="設定每日獎勵金額")
+    # @app_commands.describe(amount="每日獎勵金額")
+    # async def setdaily(self, interaction: discord.Interaction, amount: int):
+    #     if amount < 0 or amount > 1000:
+    #         await interaction.response.send_message("❌ 金額必須在 0 到 1,000 之間。", ephemeral=True)
+    #         return
 
-        guild_id = interaction.guild.id
-        set_server_config(guild_id, "economy_daily_amount", amount)
-        await interaction.response.send_message(f"✅ 每日獎勵已設定為 **{amount:,}**。", ephemeral=True)
+    #     guild_id = interaction.guild.id
+    #     set_server_config(guild_id, "economy_daily_amount", amount)
+    #     await interaction.response.send_message(f"✅ 每日獎勵已設定為 **{amount:,}**。", ephemeral=True)
 
     # @app_commands.command(name="setsellratio", description="設定物品賣出比率")
     # @app_commands.describe(ratio="賣出比率（0.1-1.0，例如 0.7 = 70%）")
