@@ -55,7 +55,7 @@ class JoinNotify(commands.Cog):
             try:
                 embed = discord.Embed(
                     title="欸？你好像邀請了我？",
-                    description=f"你好啊，{owner.mention}！好像有人把我邀請進入你的伺服器 {guild.name} 了？但是我沒辦法私訊他 :/\n快速開始：\n- {get_command_mention('help')} 查看指令列表\n- {get_command_mention('tutorial')} 查看使用教學\n- {get_command_mention('panel')} 開啟網頁面板\n如果有任何問題，歡迎加入[支援伺服器]({config('support_server_invite')})尋求幫助！",
+                    description=f"你好啊，{owner.mention}！好像有人把我邀請進入你的伺服器 {guild.name} 了？但是我沒有權限可以知道他是誰 :/\n快速開始：\n- {get_command_mention('help')} 查看指令列表\n- {get_command_mention('tutorial')} 查看使用教學\n- {get_command_mention('panel')} 開啟網頁面板\n如果有任何問題，歡迎加入[支援伺服器]({config('support_server_invite')})尋求幫助！",
                     color=discord.Color.green()
                 )
                 embed.set_footer(text=guild.name, icon_url=guild.icon.url if guild.icon else None)
