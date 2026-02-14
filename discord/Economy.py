@@ -1400,3 +1400,49 @@ class EconomyMod(commands.GroupCog, name="economymod", description="經濟系統
 
 asyncio.run(bot.add_cog(EconomyMod()))
 
+
+def make_cheque_use_callback(item_id: str, worth: int):
+    """產生支票兌現用的 callback，使用後扣除 1 張支票並將 worth 加入餘額（依 scope 加至伺服器或全域）。"""
+
+    async def callback(interaction: discord.Interaction):
+        guild_id = getattr(interaction, "guild_id", 0)
+        user_id = interaction.user.id
+        removed = await remove_item_from_user(guild_id, user_id, item_id, 1)
+        if removed < 1:
+            await interaction.response.send_message("你沒有這張支票。", ephemeral=True)
+            return
+        add_balance(guild_id, user_id, float(worth))
+        currency_name = get_currency_name(guild_id)
+        await interaction.response.send_message(
+            f"你兌現了支票，獲得 **{worth:,.0f}** {currency_name}。",
+            ephemeral=True,
+        )
+
+    return callback
+
+
+economy_items = [
+    {
+        "id": "cheque_100",
+        "name": "100元支票",
+        "description": "這是一張100元支票，可以用來支付給其他用戶。",
+        "worth": 100,
+        "callback": make_cheque_use_callback("cheque_100", 100),
+    },
+    {
+        "id": "cheque_500",
+        "name": "500元支票",
+        "description": "這是一張500元支票，可以用來支付給其他用戶。",
+        "worth": 500,
+        "callback": make_cheque_use_callback("cheque_500", 500),
+    },
+    {
+        "id": "cheque_1000",
+        "name": "1000元支票",
+        "description": "這是一張1000元支票，可以用來支付給其他用戶。",
+        "worth": 1000,
+        "callback": make_cheque_use_callback("cheque_1000", 1000),
+    },
+]
+
+items.extend(economy_items)
