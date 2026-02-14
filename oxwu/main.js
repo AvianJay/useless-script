@@ -192,11 +192,45 @@ function createEngineIoPollingServer() {
 
         if (req.method === "GET") {
             const session = sessions.get(sid);
+
+            // If there is already a held long-poll response, finish it with a
+            // noop so the previous HTTP request does not hang forever.  Also
+            // clear the associated timeout to avoid it firing on the *new*
+            // response later.
+            if (session.pendingRes) {
+                const stale = session.pendingRes;
+                session.pendingRes = null;
+                clearTimeout(session.pendingResTimeout);
+                session.pendingResTimeout = null;
+                try {
+                    stale.writeHead(200, {
+                        "Content-Type": "text/plain; charset=UTF-8",
+                        "Cache-Control": "no-store",
+                        "Access-Control-Allow-Origin": "*",
+                    });
+                    stale.end("6"); // noop
+                } catch (_) { /* already closed */ }
+            }
+
+            // Register the *new* response BEFORE checking the queue so that
+            // flushPoll() can actually write to it.
+            session.pendingRes = res;
+
+            // If the client drops the connection, clear pendingRes so we don't
+            // try to write to a dead socket later.
+            res.on("close", () => {
+                if (session.pendingRes === res) {
+                    session.pendingRes = null;
+                    clearTimeout(session.pendingResTimeout);
+                    session.pendingResTimeout = null;
+                }
+            });
+
             if (session.queue.length) {
                 return flushPoll(sid);
             }
-            // Hold long-poll
-            session.pendingRes = res;
+
+            // Nothing queued – hold the long-poll until data arrives or timeout.
             session.pendingResTimeout = setTimeout(() => {
                 flushPoll(sid);
             }, LONG_POLL_TIMEOUT_MS);
