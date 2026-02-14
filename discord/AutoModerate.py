@@ -5,6 +5,7 @@ from globalenv import bot, start_bot, get_user_data, set_user_data, get_all_user
 from datetime import datetime, timezone, timedelta
 import asyncio
 from typing import Optional
+from difflib import SequenceMatcher
 import re
 import emoji
 import sqlite3
@@ -30,11 +31,32 @@ all_settings = [
     "anti_uispam-max_count",
     "anti_uispam-time_window",
     "anti_uispam-action",
+    "anti_raid-max_joins",
+    "anti_raid-time_window",
+    "anti_raid-action",
+    "anti_spam-max_messages",
+    "anti_spam-time_window",
+    "anti_spam-similarity",
+    "anti_spam-action",
 ]
 
 # 用於追蹤 user install spam 的記憶體字典
 # 結構: {guild_id: {user_id: [timestamp1, timestamp2, ...]}}
 _uispam_tracker: dict[int, dict[int, list[datetime]]] = {}
+
+# 用於追蹤 raid（大量用戶加入）的記憶體字典
+# 結構: {guild_id: [(member, join_time), ...]}
+_raid_tracker: dict[int, list[tuple[discord.Member, datetime]]] = {}
+
+# 用於追蹤用戶刷頻的記憶體字典
+# 結構: {guild_id: {user_id: [(content, timestamp), ...]}}
+_spam_tracker: dict[int, dict[int, list[tuple[str, datetime]]]] = {}
+
+def _text_similarity(a: str, b: str) -> float:
+    """計算兩個字串的相似度 (0.0 ~ 1.0)"""
+    if not a or not b:
+        return 0.0
+    return SequenceMatcher(None, a, b).ratio()
 
 async def settings_autocomplete(interaction: discord.Interaction, current: str):
     return [
@@ -226,6 +248,8 @@ class AutoModerate(commands.GroupCog, name=app_commands.locale_str("automod")):
             app_commands.Choice(name="標題過多", value="too_many_h1"),
             app_commands.Choice(name="表情符號過多", value="too_many_emojis"),
             app_commands.Choice(name="用戶安裝應用程式濫用", value="anti_uispam"),
+            app_commands.Choice(name="防突襲（大量加入偵測）", value="anti_raid"),
+            app_commands.Choice(name="防刷頻", value="anti_spam"),
         ],
         enable=[
             app_commands.Choice(name="啟用", value="True"),
@@ -335,9 +359,102 @@ class AutoModerate(commands.GroupCog, name=app_commands.locale_str("automod")):
         set_server_config(interaction.guild.id, "flagged_user_onjoin_channel", channel.id)
         await interaction.response.send_message(f"已將用戶加入通知頻道設置為 {channel.mention}。")
     
+    @app_commands.command(name=app_commands.locale_str("info"), description="查看自動管理功能介紹")
+    async def automod_info(self, interaction: discord.Interaction):
+        embed = discord.Embed(title="自動管理功能介紹", color=0x5865F2)
+        embed.description = (
+            "自動管理 (AutoModerate) 提供多種自動化保護功能，協助管理員維護伺服器秩序。\n"
+            f"使用 {await get_command_mention('automod', 'toggle')} 啟用或停用功能，"
+            f"使用 {await get_command_mention('automod', 'settings')} 調整參數，"
+            f"使用 {await get_command_mention('automod', 'view')} 查看目前設定。"
+        )
+        embed.add_field(
+            name="🪤 詐騙陷阱 (scamtrap)",
+            value="設定一個蜜罐頻道，任何在該頻道發送訊息的用戶將被自動處置。\n"
+                  "設定項: `channel_id`（頻道）、`action`（處置動作）",
+            inline=False
+        )
+        embed.add_field(
+            name="🏃 逃避責任懲處 (escape_punish)",
+            value="當用戶在禁言期間離開伺服器時，自動執行額外懲處（如封禁）。\n"
+                  "設定項: `punishment`（懲處方式）、`duration`（持續時間）",
+            inline=False
+        )
+        embed.add_field(
+            name="📢 標題過多 (too_many_h1)",
+            value="偵測訊息中 Markdown 大標題 (`# `) 的總字數過長，防止洗版。\n"
+                  "設定項: `max_length`（最大字數，預設20）、`action`",
+            inline=False
+        )
+        embed.add_field(
+            name="😂 表情符號過多 (too_many_emojis)",
+            value="偵測訊息中的表情符號數量（含自訂及 Unicode emoji），超過上限自動處置。\n"
+                  "設定項: `max_emojis`（最大數量，預設10）、`action`",
+            inline=False
+        )
+        embed.add_field(
+            name="📲 用戶安裝應用程式濫用 (anti_uispam)",
+            value="偵測用戶透過 User Install 方式觸發的指令頻率，防止濫用。\n"
+                  "設定項: `max_count`（最大次數，預設5）、`time_window`（秒，預設60）、`action`",
+            inline=False
+        )
+        embed.add_field(
+            name="🚨 防突襲 (anti_raid)",
+            value="偵測短時間內大量用戶加入伺服器，觸發時對所有新加入者執行處置。\n"
+                  "設定項: `max_joins`（最大加入數，預設5）、`time_window`（秒，預設60）、`action`",
+            inline=False
+        )
+        embed.add_field(
+            name="🔁 防刷頻 (anti_spam)",
+            value="偵測用戶短時間內發送相同或高度相似的訊息。\n"
+                  "設定項: `max_messages`（最大訊息數，預設5）、`time_window`（秒，預設30）、`similarity`（相似度閾值 0~100，預設75）、`action`",
+            inline=False
+        )
+        embed.add_field(
+            name="⚙️ 動作指令語法",
+            value="動作可用逗號 `,` 串接，最多5個。可用動作:\n"
+                  "`delete` / `delete_dm` — 刪除訊息（可附帶警告）\n"
+                  "`warn` / `warn_dm` — 發送警告訊息\n"
+                  "`mute <時長>` — 禁言用戶\n"
+                  "`kick` — 踢出用戶\n"
+                  "`ban <時長> <刪除訊息時長>` — 封禁用戶\n"
+                  "`send_mod_message` — 傳送管理通知\n"
+                  f"使用 {await get_command_mention('automod', 'check-action')} 可預覽動作效果。",
+            inline=False
+        )
+        await interaction.response.send_message(embed=embed)
+
     @commands.Cog.listener()
     async def on_member_join(self, member: discord.Member):
         guild_id = member.guild.id
+
+        # 防突襲檢查
+        automod_settings = get_server_config(guild_id, "automod", {})
+        if automod_settings.get("anti_raid", {}).get("enabled", False):
+            max_joins = int(automod_settings["anti_raid"].get("max_joins", 5))
+            time_window = int(automod_settings["anti_raid"].get("time_window", 60))
+            action = automod_settings["anti_raid"].get("action", "kick 突襲偵測自動封禁")
+            
+            now = datetime.now(timezone.utc)
+            join_list = _raid_tracker.setdefault(guild_id, [])
+            join_list.append((member, now))
+            
+            # 清除過期的記錄
+            join_list[:] = [(m, t) for m, t in join_list if (now - t).total_seconds() < time_window]
+            
+            if len(join_list) >= max_joins:
+                # 觸發 raid 偵測，對所有在時間窗口內加入的用戶執行動作
+                raid_members = [m for m, t in join_list]
+                log(f"偵測到突襲！{time_window}秒內有 {len(raid_members)} 個用戶加入，開始處理。", module_name="AutoModerate", guild=member.guild)
+                for raid_member in raid_members:
+                    try:
+                        await do_action_str(action, guild=member.guild, user=raid_member)
+                        log(f"突襲用戶 {raid_member} 已被處理: {action}", module_name="AutoModerate", user=raid_member, guild=member.guild)
+                    except Exception as e:
+                        log(f"無法對突襲用戶 {raid_member} 執行處理: {e}", level=logging.ERROR, module_name="AutoModerate", user=raid_member, guild=member.guild)
+                # 重置追蹤器避免重複處罰
+                join_list.clear()
+
         channel_id = get_server_config(guild_id, "flagged_user_onjoin_channel")
         if not channel_id:
             return
@@ -490,11 +607,45 @@ class AutoModerate(commands.GroupCog, name=app_commands.locale_str("automod")):
             if emoji_count > max_emojis:
                 try:
                     await do_action_str(action, guild=message.guild, user=message.author, message=message)
-                    # print(f"[+] 用戶 {message.author} 因表情符號過多被處理: {action}")
                     log(f"用戶 {message.author} 因表情符號過多被處理: {action}", module_name="AutoModerate", user=message.author, guild=message.guild)
                 except Exception as e:
-                    # print(f"[!] 無法對用戶 {message.author} 執行表情符號過多的處理: {e}")
                     log(f"無法對用戶 {message.author} 執行表情符號過多的處理: {e}", level=logging.ERROR, module_name="AutoModerate", user=message.author, guild=message.guild)
+        
+        # 刷頻偵測檢查
+        if automod_settings.get("anti_spam", {}).get("enabled", False):
+            max_messages = int(automod_settings["anti_spam"].get("max_messages", 5))
+            time_window = int(automod_settings["anti_spam"].get("time_window", 30))
+            similarity_threshold = int(automod_settings["anti_spam"].get("similarity", 75)) / 100.0
+            action = automod_settings["anti_spam"].get("action", "mute 10m 刷頻自動禁言, delete {user}，請勿刷頻。")
+            
+            now = datetime.now(timezone.utc)
+            content = message.content.strip()
+            guild_spam = _spam_tracker.setdefault(guild_id, {})
+            user_history = guild_spam.setdefault(message.author.id, [])
+            
+            # 清除過期的記錄
+            user_history[:] = [(c, t) for c, t in user_history if (now - t).total_seconds() < time_window]
+            
+            # 記錄本次訊息
+            user_history.append((content, now))
+            
+            # 檢查是否有足夠多的相似訊息
+            if len(user_history) >= max_messages:
+                # 計算相似訊息數量：與最新訊息比較
+                similar_count = 0
+                for old_content, _ in user_history[:-1]:
+                    if content == old_content or _text_similarity(content, old_content) >= similarity_threshold:
+                        similar_count += 1
+                
+                # 如果相似訊息數 >= max_messages - 1（加上自身就是 >= max_messages）
+                if similar_count >= max_messages - 1:
+                    try:
+                        await do_action_str(action, guild=message.guild, user=message.author, message=message)
+                        log(f"用戶 {message.author} 因刷頻被處理 (在 {time_window}秒內發送 {similar_count + 1} 條相似訊息): {action}", module_name="AutoModerate", user=message.author, guild=message.guild)
+                        # 重置計數器避免重複處罰
+                        user_history.clear()
+                    except Exception as e:
+                        log(f"無法對用戶 {message.author} 執行刷頻的處理: {e}", level=logging.ERROR, module_name="AutoModerate", user=message.author, guild=message.guild)
 
 asyncio.run(bot.add_cog(AutoModerate(bot)))
 
