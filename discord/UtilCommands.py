@@ -1015,6 +1015,39 @@ async def help_command_autocomplete(interaction: discord.Interaction, current: s
     ][:25]
 
 
+class HelpPageView(discord.ui.View):
+    def __init__(self, pages: list[discord.Embed], interaction: discord.Interaction):
+        super().__init__(timeout=120)
+        self.pages = pages
+        self.current_page = 0
+        self.interaction = interaction
+        self.update_buttons()
+
+    def update_buttons(self):
+        self.prev_button.disabled = self.current_page <= 0
+        self.next_button.disabled = self.current_page >= len(self.pages) - 1
+
+    async def on_timeout(self):
+        for item in self.children:
+            item.disabled = True
+        try:
+            await self.interaction.edit_original_response(view=self)
+        except Exception:
+            pass
+
+    @discord.ui.button(emoji="⬅️", style=discord.ButtonStyle.primary)
+    async def prev_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        self.current_page -= 1
+        self.update_buttons()
+        await interaction.response.edit_message(embed=self.pages[self.current_page], view=self)
+
+    @discord.ui.button(emoji="➡️", style=discord.ButtonStyle.primary)
+    async def next_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        self.current_page += 1
+        self.update_buttons()
+        await interaction.response.edit_message(embed=self.pages[self.current_page], view=self)
+
+
 @bot.tree.command(name=app_commands.locale_str("help"), description="顯示指令幫助與說明")
 @app_commands.describe(command="要查詢的指令名稱")
 @app_commands.allowed_installs(guilds=True, users=True)
@@ -1023,15 +1056,9 @@ async def help_command_autocomplete(interaction: discord.Interaction, current: s
 async def help_slash_command(interaction: discord.Interaction, command: str = None):
     await interaction.response.defer()
     if command is None:
-        # 顯示所有指令總覽
-        embed = discord.Embed(
-            title="📚 指令幫助",
-            description=f"使用 {await get_command_mention('help')} <指令> 查看特定指令的詳細說明\n選擇下方的指令可以查看詳細資訊",
-            color=0x5865F2
-        )
-        embed.set_thumbnail(url=bot.user.avatar.url if bot.user.avatar else None)
+        help_mention = await get_command_mention('help')
         
-        # 斜線指令
+        # 收集斜線指令
         app_cmds = []
         for cmd in bot.tree.get_commands():
             if isinstance(cmd, app_commands.Group):
@@ -1040,20 +1067,9 @@ async def help_slash_command(interaction: discord.Interaction, command: str = No
             elif isinstance(cmd, app_commands.Command):
                 app_cmds.append(await get_command_mention(cmd.name))
         
-        if app_cmds:
-            # 分割成多個 field 避免超過字數限制
-            chunk_size = 20
-            for i in range(0, len(app_cmds), chunk_size):
-                chunk = app_cmds[i:i + chunk_size]
-                embed.add_field(
-                    name=f"斜線指令 ({i + 1}-{min(i + chunk_size, len(app_cmds))})" if len(app_cmds) > chunk_size else f"斜線指令 ({len(app_cmds)})",
-                    value=" ".join(chunk),
-                    inline=False
-                )
-        
+        # 收集文字指令
+        text_cmds = []
         if interaction.is_guild_integration():
-            # 文字指令
-            text_cmds = []
             for cmd in bot.commands:
                 if not cmd.hidden:
                     if isinstance(cmd, commands.Group):
@@ -1063,19 +1079,57 @@ async def help_slash_command(interaction: discord.Interaction, command: str = No
                     else:
                         if await can_run_text_command(cmd, interaction):
                             text_cmds.append(f"`{cmd.name}`")
-            
-            if text_cmds:
-                chunk_size = 20
-                for i in range(0, len(text_cmds), chunk_size):
-                    chunk = text_cmds[i:i + chunk_size]
-                    embed.add_field(
-                        name=f"文字指令 ({i + 1}-{min(i + chunk_size, len(text_cmds))})" if len(text_cmds) > chunk_size else f"文字指令 ({len(text_cmds)})",
-                        value=" ".join(chunk),
-                        inline=False
-                    )
-            
-            embed.set_footer(text=f"共 {len(app_cmds)} 個斜線指令 | {len(text_cmds)} 個文字指令 | by AvianJay")
-        await interaction.followup.send(embed=embed)
+        
+        # 建立分頁
+        pages = []
+        chunk_size = 15
+        
+        # 斜線指令分頁
+        for i in range(0, max(len(app_cmds), 1), chunk_size):
+            chunk = app_cmds[i:i + chunk_size]
+            embed = discord.Embed(
+                title="📚 指令幫助",
+                description=f"使用 {help_mention} `<指令>` 查看特定指令的詳細說明",
+                color=0x5865F2
+            )
+            embed.set_thumbnail(url=bot.user.avatar.url if bot.user.avatar else None)
+            if chunk:
+                embed.add_field(
+                    name=f"⚡ 斜線指令 ({i + 1}-{min(i + chunk_size, len(app_cmds))}/{len(app_cmds)})",
+                    value=" ".join(chunk),
+                    inline=False
+                )
+            pages.append(embed)
+        
+        # 文字指令分頁
+        for i in range(0, max(len(text_cmds), 1), chunk_size):
+            chunk = text_cmds[i:i + chunk_size]
+            if not chunk:
+                continue
+            embed = discord.Embed(
+                title="📚 指令幫助",
+                description=f"使用 {help_mention} `<指令>` 查看特定指令的詳細說明",
+                color=0x5865F2
+            )
+            embed.set_thumbnail(url=bot.user.avatar.url if bot.user.avatar else None)
+            embed.add_field(
+                name=f"📝 文字指令 ({i + 1}-{min(i + chunk_size, len(text_cmds))}/{len(text_cmds)})",
+                value=" ".join(chunk),
+                inline=False
+            )
+            pages.append(embed)
+        
+        # 加上頁碼
+        total_app = len(app_cmds)
+        total_text = len(text_cmds)
+        for idx, page in enumerate(pages):
+            page.set_footer(text=f"頁數：{idx + 1}/{len(pages)} | 共 {total_app} 個斜線指令 | {total_text} 個文字指令 | by AvianJay")
+        
+        if len(pages) == 1:
+            await interaction.followup.send(embed=pages[0])
+        else:
+            view = HelpPageView(pages, interaction)
+            await interaction.followup.send(embed=pages[0], view=view)
         return
     
     # 解析指令類型
