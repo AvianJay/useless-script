@@ -123,6 +123,7 @@ async def handle_checkin_rewards(interaction: discord.Interaction, user: Union[d
             ["grass", 5, "草"],
             ["fake_ruler", 1, "自欺欺人尺"],
             ["anti_surgery", 1, "抗手術藥物"],
+            ["cheque_100", 1, "100元支票"],
         ]
 
         level_2_rewards = [
@@ -131,6 +132,7 @@ async def handle_checkin_rewards(interaction: discord.Interaction, user: Union[d
             ["anti_surgery", 5, "抗手術藥物"],
             ["surgery", 1, "手術刀"],
             ["rusty_surgery", 1, "生鏽的手術刀"],
+            ["cheque_500", 1, "500元支票"],
         ]
 
         level_3_rewards = [
@@ -139,6 +141,7 @@ async def handle_checkin_rewards(interaction: discord.Interaction, user: Union[d
             ["anti_surgery", 20, "抗手術藥物"],
             ["surgery", 3, "手術刀"],
             ["rusty_surgery", 3, "生鏽的手術刀"],
+            ["cheque_1000", 1, "1000元支票"],
         ]
         
         if checkin_streak == 7:
