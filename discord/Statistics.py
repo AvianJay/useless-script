@@ -24,9 +24,10 @@ class Statistics(commands.Cog):
         embed = discord.Embed(title="指令使用統計", color=discord.Color.blue())
         
         if full:
-            command_stats_str = "\n".join([f"{cmd}: {count}" for cmd, count in command_stats.items()]) or "無數據"
-            command_error_stats_str = "\n".join([f"{cmd}: {count}" for cmd, count in command_error_stats.items()]) or "無數據"
-            app_command_stats_str = "\n".join([f"{cmd}: {count}" for cmd, count in app_command_stats.items()]) or "無數據"
+            sort_by_count = lambda items: sorted(items, key=lambda x: x[1], reverse=True)
+            command_stats_str = "\n".join([f"{cmd}: {count}" for cmd, count in sort_by_count(command_stats.items())]) or "無數據"
+            command_error_stats_str = "\n".join([f"{cmd}: {count}" for cmd, count in sort_by_count(command_error_stats.items())]) or "無數據"
+            app_command_stats_str = "\n".join([f"{cmd}: {count}" for cmd, count in sort_by_count(app_command_stats.items())]) or "無數據"
             
             # anti 400
             command_stats_str = command_stats_str[:1021] + "..." if len(command_stats_str) > 1024 else command_stats_str
