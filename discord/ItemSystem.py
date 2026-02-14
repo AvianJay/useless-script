@@ -473,7 +473,7 @@ class ItemModerate(commands.GroupCog, name="itemmod", description="物品系統�
 
         await interaction.response.send_message(embed=embed)
 
-asyncio.run(bot.add_cog(ItemModerate()))
+# asyncio.run(bot.add_cog(ItemModerate()))
 
 
 if __name__ == "__main__":
