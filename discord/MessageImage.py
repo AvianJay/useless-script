@@ -6,7 +6,7 @@ import discord
 import aiohttp
 from discord.ext import commands
 from discord import app_commands
-from globalenv import bot, start_bot, on_ready_tasks, modules, get_command_mention, config, get_server_config
+from globalenv import bot, start_bot, on_ready_tasks, modules, get_command_mention, config, get_server_config, set_server_config
 from playwright.async_api import async_playwright
 import asyncio
 import chat_exporter
@@ -401,7 +401,7 @@ class UpvoteView(discord.ui.View):
                             await self.on_board_message.edit(content=f"⬆️ | {self.upvotes} 人")
                         except Exception as e:
                             log(f"更新看板訊息失敗: {e}", module_name="MessageImage", level=logging.ERROR)
-                guild_channel_id = get_server_config(interaction.guild.id, "guild_board_channel_id")
+                guild_channel_id = get_server_config(interaction.guild.id, "upvote_board_channel_id")
                 if guild_channel_id:
                     guild_channel = bot.get_channel(guild_channel_id)
                     if guild_channel and image:
@@ -424,10 +424,10 @@ class UpvoteView(discord.ui.View):
 @app_commands.default_permissions(manage_guild=True)
 async def set_upvoteboard(interaction: discord.Interaction, channel: discord.TextChannel = None):
     if channel:
-        config.set("upvote_board_channel_id", channel.id)
+        set_server_config(interaction.guild.id, "upvote_board_channel_id", channel.id)
         await interaction.response.send_message(f"已設定有料板子頻道為 {channel.mention}")
     else:
-        config.set("upvote_board_channel_id", None)
+        set_server_config(interaction.guild.id, "upvote_board_channel_id", None)
         await interaction.response.send_message("已清除有料板子頻道設定")
 
 
