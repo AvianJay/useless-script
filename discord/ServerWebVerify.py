@@ -915,10 +915,16 @@ class ServerWebVerify(commands.GroupCog, name="webverify", description="伺服�
                     except Exception as e:
                         log(f"無法私訊用戶 {after} 通知其驗證狀態變更：{e}", level=logging.ERROR, module_name="ServerWebVerify", user=after, guild=after.guild)
     
+    @app_commands.allowed_contexts(guilds=True, dms=False, private_channels=False)
+    @app_commands.allowed_installs(guilds=True, users=False)
+    @app_commands.default_permissions(administrator=True)
     async def force_user_verify_context_menu(self, interaction: discord.Interaction, user: Union[discord.Member, discord.User]):
         success, message = await force_verify_user(interaction, user)
         await interaction.response.send_message(message, ephemeral=True)
     
+    @app_commands.allowed_contexts(guilds=True, dms=False, private_channels=False)
+    @app_commands.allowed_installs(guilds=True, users=False)
+    @app_commands.default_permissions(administrator=True)
     async def manual_verify_user_context_menu(self, interaction: discord.Interaction, user: Union[discord.Member, discord.User]):
         if not isinstance(user, discord.Member):
             await interaction.response.send_message("只能對伺服器成員使用此操作。", ephemeral=True)
