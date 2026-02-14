@@ -636,6 +636,16 @@ user_using_dsize_battle = set()  # to prevent spamming the command
 @app_commands.allowed_installs(guilds=True, users=True)
 @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
 @app_commands.describe(opponent="要比屌長的對象")
+async def dsize_battle_command(interaction: discord.Interaction, opponent: Union[discord.User, discord.Member]):
+    await dsize_battle(interaction, opponent)
+
+@bot.tree.context_menu(name="跟他 dssize 對決")
+@app_commands.allowed_installs(guilds=True, users=True)
+@app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
+async def dsize_battle_context(interaction: discord.Interaction, opponent: Union[discord.User, discord.Member]):
+    await dsize_battle(interaction, opponent)
+
+
 async def dsize_battle(interaction: discord.Interaction, opponent: Union[discord.User, discord.Member]):
     original_user = interaction.user
     user_id = interaction.user.id
