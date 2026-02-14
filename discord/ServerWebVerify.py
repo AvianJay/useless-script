@@ -919,7 +919,7 @@ class ServerWebVerify(commands.GroupCog, name="webverify", description="伺服�
     @app_commands.allowed_installs(guilds=True, users=False)
     @app_commands.default_permissions(administrator=True)
     async def force_user_verify_context_menu(self, interaction: discord.Interaction, user: Union[discord.Member, discord.User]):
-        success, message = await force_verify_user(interaction, user)
+        success, message = await force_verify_user(interaction.guild, user)
         await interaction.response.send_message(message, ephemeral=True)
     
     @app_commands.allowed_contexts(guilds=True, dms=False, private_channels=False)
