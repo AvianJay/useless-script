@@ -1,4 +1,4 @@
-from globalenv import bot, config, modules, get_server_config, set_server_config, get_db_connection, get_command_mention
+from globalenv import bot, config, modules, get_server_config, set_server_config, get_db_connection, get_command_mention, get_user_data, set_user_data
 import discord
 from discord.ext import commands
 from discord import app_commands
@@ -15,6 +15,7 @@ import asyncio
 import sqlite3
 import re
 import json
+from typing import Union
 from datetime import datetime, timezone
 from urllib.parse import urlencode
 if "Website" in modules:
@@ -369,6 +370,10 @@ def server_verify():
 class ServerWebVerify(commands.GroupCog, name="webverify", description="伺服器網頁驗證設定指令"):
     def __init__(self, bot):
         self.bot = bot
+        self.force_ctx_menu = app_commands.ContextMenu(name="強制用戶驗證", callback=self.force_user_verify_context_menu)
+        bot.tree.add_command(self.force_ctx_menu)
+        self.manual_ctx_menu = app_commands.ContextMenu(name="手動驗證用戶", callback=self.manual_verify_user_context_menu)
+        bot.tree.add_command(self.manual_ctx_menu)
     
     @app_commands.command(name="setup", description="設定伺服器的網頁驗證功能")
     @app_commands.default_permissions(administrator=True)
@@ -475,6 +480,7 @@ class ServerWebVerify(commands.GroupCog, name="webverify", description="伺服�
     @app_commands.choices(type=[
         app_commands.Choice(name="在頻道內", value="channel"),
         app_commands.Choice(name="私訊", value="dm"),
+        app_commands.Choice(name="都要", value="both")
     ])
     @app_commands.default_permissions(administrator=True)
     async def verify_notify(self, interaction: discord.Interaction, type: str = "channel", channel: discord.TextChannel = None, title: str = "伺服器網頁驗證", message: str = "請點擊下方按鈕進行網頁驗證："):
@@ -487,12 +493,12 @@ class ServerWebVerify(commands.GroupCog, name="webverify", description="伺服�
             channel = interaction.channel
         guild_config['notify'] = {
             'type': type,
-            'channel_id': channel.id if type == "channel" else None,
+            'channel_id': channel.id if type in ["channel", "both"] else None,
             'title': title,
             'message': message
         }
         set_server_config(guild_id, "webverify_config", guild_config)
-        if type == "channel":
+        if type in ["channel", "both"]:
             verify_url = f"https://discord.com/oauth2/authorize?client_id={bot.application.id}&response_type=code&scope=identify&prompt=none&{urlencode({'redirect_uri': config('webverify_url')})}&state={guild_id}"
             verify_button = discord.ui.Button(label="前往驗證", url=verify_url)
             view = discord.ui.View()
@@ -610,7 +616,8 @@ class ServerWebVerify(commands.GroupCog, name="webverify", description="伺服�
         app_commands.Choice(name="總是給予", value="always"),
         app_commands.Choice(name="帳號年齡過小", value="age_check"),
         app_commands.Choice(name="無驗證紀錄", value="no_history"),
-        app_commands.Choice(name="帳號曾經被標記過", value="has_flagged_history")
+        app_commands.Choice(name="帳號曾經被標記過", value="has_flagged_history"),
+        app_commands.Choice(name="曾經退出過伺服器", value="left_guild_before")
     ])
     @app_commands.default_permissions(administrator=True)
     async def autorole(self, interaction: discord.Interaction, enable: bool, trigger: str):
@@ -711,7 +718,7 @@ class ServerWebVerify(commands.GroupCog, name="webverify", description="伺服�
         if user:
             with get_db_connection() as conn:
                 cursor = conn.cursor()
-                cursor.execute('SELECT remote_ip, timestamp FROM webverify_history WHERE user_id = ? AND guild_id = ? ORDER BY timestamp DESC LIMIT 1', (user.id, interaction.guild.id))
+                cursor.execute('SELECT ip_address, timestamp FROM webverify_history WHERE user_id = ? AND guild_id = ? ORDER BY timestamp DESC LIMIT 1', (user.id, interaction.guild.id))
                 row = cursor.fetchone()
                 if row:
                     user_ips.append({'user_id': user.id, 'ip': row[0], 'timestamp': row[1]})
@@ -719,7 +726,7 @@ class ServerWebVerify(commands.GroupCog, name="webverify", description="伺服�
             got_users = set()
             with get_db_connection() as conn:
                 cursor = conn.cursor()
-                cursor.execute('SELECT user_id, remote_ip, timestamp FROM webverify_history WHERE guild_id = ? ORDER BY timestamp DESC', (interaction.guild.id,))
+                cursor.execute('SELECT user_id, ip_address, timestamp FROM webverify_history WHERE guild_id = ? ORDER BY timestamp DESC', (interaction.guild.id,))
                 rows = cursor.fetchall()
                 for row in rows:
                     if row[0] not in got_users:
@@ -789,12 +796,16 @@ class ServerWebVerify(commands.GroupCog, name="webverify", description="伺服�
                 if results:
                     assign_role = True
                 conn.close()
-        
+            elif trigger == 'left_guild_before':
+                is_left_before = get_user_data(member.guild.id, member.id, "left_guild") == "True"
+                if is_left_before:
+                    assign_role = True
+
         if assign_role:
             await member.add_roles(discord.Object(id=unverified_role_id), reason="自動分配未驗證角色")
             notify_type = guild_config.get('notify', {}).get('type', 'dm')
             log(f"自動為新成員 {member} 分配未驗證角色", module_name="ServerWebVerify", guild=member.guild, user=member)
-            if notify_type == 'dm':
+            if notify_type in ['dm', 'both']:
                 notify_title = guild_config.get('notify', {}).get('title')
                 notify_message = guild_config.get('notify', {}).get('message')
                 embed = discord.Embed(title=notify_title, description=notify_message, color=0x00ff00)
@@ -804,6 +815,79 @@ class ServerWebVerify(commands.GroupCog, name="webverify", description="伺服�
                 view = discord.ui.View()
                 view.add_item(verify_button)
                 await member.send(embed=embed, view=view)
+    
+    @commands.Cog.listener()
+    async def on_member_remove(self, member: discord.Member):
+        set_user_data(member.guild.id, member.id, "left_guild", "True")
+
+    @commands.Cog.listener()
+    async def on_member_update(self, before: discord.Member, after: discord.Member):
+        if before.roles != after.roles:
+            guild_config = get_server_config(before.guild.id, "webverify_config")
+            if not guild_config:
+                return
+            unverified_role_id = guild_config.get('unverified_role_id')
+            if not unverified_role_id:
+                return
+            # had_unverified = any(role.id == unverified_role_id for role in before.roles)
+            has_unverified = any(role.id == unverified_role_id for role in after.roles)
+            if has_unverified:
+                # if dm enabled, send dm
+                notify_type = guild_config.get('notify', {}).get('type', 'dm')
+                if notify_type in ['dm', 'both']:
+                    notify_title = guild_config.get('notify', {}).get('title')
+                    notify_message = guild_config.get('notify', {}).get('message')
+                    embed = discord.Embed(title=notify_title, description=notify_message, color=0x00ff00)
+                    embed.set_footer(text=after.guild.name, icon_url=after.guild.icon.url if after.guild.icon else None)
+                    verify_url = f"https://discord.com/oauth2/authorize?client_id={bot.application.id}&response_type=code&scope=identify&prompt=none&{urlencode({'redirect_uri': config('webverify_url')})}&state={after.guild.id}"
+                    verify_button = discord.ui.Button(label="前往驗證", url=verify_url)
+                    view = discord.ui.View()
+                    view.add_item(verify_button)
+                    try:
+                        await after.send(embed=embed, view=view)
+                    except Exception as e:
+                        log(f"無法私訊用戶 {after} 通知其驗證狀態變更：{e}", level=logging.ERROR, module_name="ServerWebVerify", user=after, guild=after.guild)
+    
+    async def force_user_verify_context_menu(self, interaction: discord.Interaction, user: Union[discord.Member, discord.User]):
+        if not isinstance(user, discord.Member):
+            await interaction.response.send_message("只能對伺服器成員使用此操作。", ephemeral=True)
+            return
+        guild_config = get_server_config(interaction.guild.id, "webverify_config")
+        if not guild_config:
+            await interaction.response.send_message("伺服器尚未設定網頁驗證功能。", ephemeral=True)
+            return
+        unverified_role_id = guild_config.get('unverified_role_id')
+        if not unverified_role_id:
+            await interaction.response.send_message("伺服器尚未設定未驗證成員的角色。", ephemeral=True)
+            return
+        if user.get_role(unverified_role_id):
+            await interaction.response.send_message("該用戶已經是未驗證狀態了。", ephemeral=True)
+            return
+        await user.add_roles(discord.Object(id=unverified_role_id), reason="強制分配未驗證角色")
+        await interaction.response.send_message(f"已強制將 {user.mention} 設為未驗證狀態。", ephemeral=True)
+    
+    async def manual_verify_user_context_menu(self, interaction: discord.Interaction, user: Union[discord.Member, discord.User]):
+        if not isinstance(user, discord.Member):
+            await interaction.response.send_message("只能對伺服器成員使用此操作。", ephemeral=True)
+            return
+        guild_config = get_server_config(interaction.guild.id, "webverify_config")
+        if not guild_config:
+            await interaction.response.send_message("伺服器尚未設定網頁驗證功能。", ephemeral=True)
+            return
+        unverified_role_id = guild_config.get('unverified_role_id')
+        if not unverified_role_id:
+            await interaction.response.send_message("伺服器尚未設定未驗證成員的角色。", ephemeral=True)
+            return
+        if not user.get_role(unverified_role_id):
+            await interaction.response.send_message("該用戶目前不是未驗證狀態。", ephemeral=True)
+            return
+        await user.remove_roles(discord.Object(id=unverified_role_id), reason="手動移除未驗證角色")
+        await interaction.response.send_message(f"已將 {user.mention} 設為已驗證狀態。", ephemeral=True)
+        # try to send
+        try:
+            await user.send(f"你的驗證狀態已被管理員手動設為已驗證。\n-# 伺服器: {user.guild.name}")
+        except Exception as e:
+            log(f"無法私訊用戶 {user} 通知其驗證狀態變更：{e}", level=logging.ERROR, module_name="ServerWebVerify", user=user, guild=user.guild)
 
 class WebVerifySetupWizard(discord.ui.View):
     def __init__(self, interaction: discord.Interaction, bot: commands.Bot):
