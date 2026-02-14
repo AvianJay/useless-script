@@ -28,8 +28,9 @@ EXCHANGE_RATE_MAX = 100.0
 
 # 通膨/通縮權重
 ADMIN_INJECTION_WEIGHT = 0.015   # 管理員注入造成的貶值權重
-TRADE_HEALTH_WEIGHT = 0.003      # 交易帶來的升值權重
-PURCHASE_HEALTH_WEIGHT = 0.005   # 購買帶來的升值權重
+TRADE_HEALTH_WEIGHT = 0.003      # 交易（手續費銷毀）帶來的升值權重
+PURCHASE_DEFLATION_WEIGHT = 0.005  # 購買（貨幣銷毀）帶來的升值權重
+SALE_INFLATION_WEIGHT = 0.003    # 賣出（貨幣新增）造成的通膨權重
 DAILY_INFLATION_WEIGHT = 0.0005  # 每日獎勵造成的微量通膨
 HOURLY_INFLATION_WEIGHT = 0.00005  # 每小時獎勵造成的極小通膨
 
@@ -79,19 +80,13 @@ def get_currency_name(guild_id: int) -> str:
 
 
 def get_daily_amount(guild_id: int) -> int:
-    """取得每日獎勵金額"""
-    if guild_id == GLOBAL_GUILD_ID:
-        # 全域獎勵可能不同，暫時用相同金額
-        return DEFAULT_DAILY_AMOUNT
-    return get_exchange_rate(guild_id) * DEFAULT_DAILY_AMOUNT
+    """取得每日獎勵金額（固定值，不隨匯率變動）"""
+    return DEFAULT_DAILY_AMOUNT
 
 
 def get_hourly_amount(guild_id: int) -> int:
-    """取得每小時獎勵金額"""
-    if guild_id == GLOBAL_GUILD_ID:
-        # 全域獎勵可能不同，暫時用相同金額
-        return DEFAULT_HOURLY_AMOUNT
-    return get_exchange_rate(guild_id) * DEFAULT_HOURLY_AMOUNT
+    """取得每小時獎勵金額（固定值，不隨匯率變動）"""
+    return DEFAULT_HOURLY_AMOUNT
 
 
 def get_sell_ratio(guild_id: int) -> float:
@@ -171,12 +166,44 @@ def apply_deflation(guild_id: int, weight: float = TRADE_HEALTH_WEIGHT):
 
     通縮因素：
     - 玩家間交易（手續費銷毀貨幣）
-    - 購買商店物品（貨幣回收）
     - 兌換貨幣（手續費銷毀）
-    - 活躍的經濟活動
     """
     rate = get_exchange_rate(guild_id)
     rate *= (1 + weight)
+    set_exchange_rate(guild_id, rate)
+    return rate
+
+
+def apply_market_deflation(guild_id: int, amount: float, weight: float = PURCHASE_DEFLATION_WEIGHT):
+    """
+    購買物品導致貨幣離開流通 → 通縮（匯率上升）
+    影響程度與金額相對於供給量的比例成正比
+    """
+    rate = get_exchange_rate(guild_id)
+    supply = get_total_supply(guild_id)
+    if supply <= 0:
+        return rate
+    ratio = abs(amount) / supply
+    impact = math.log2(1 + ratio) * weight
+    impact = min(impact, 0.05)  # 單次最多 5% 升值
+    rate *= (1 + impact)
+    set_exchange_rate(guild_id, rate)
+    return rate
+
+
+def apply_market_inflation(guild_id: int, amount: float, weight: float = SALE_INFLATION_WEIGHT):
+    """
+    賣出物品導致新貨幣進入流通 → 通膨（匯率下降）
+    影響程度與金額相對於供給量的比例成正比
+    """
+    rate = get_exchange_rate(guild_id)
+    supply = get_total_supply(guild_id)
+    if supply <= 0:
+        return rate
+    ratio = abs(amount) / supply
+    impact = math.log2(1 + ratio) * weight
+    impact = min(impact, 0.05)  # 單次最多 5% 貶值
+    rate *= (1 - impact)
     set_exchange_rate(guild_id, rate)
     return rate
 
@@ -190,15 +217,24 @@ def record_admin_injection(guild_id: int, amount: float):
 
 
 def record_transaction(guild_id: int):
-    """記錄一筆交易（改善經濟健康度）"""
+    """記錄一筆交易並增加交易次數（手續費銷毀 → 通縮）"""
     count = get_transaction_count(guild_id)
     set_server_config(guild_id, "economy_transaction_count", count + 1)
     apply_deflation(guild_id, TRADE_HEALTH_WEIGHT)
 
 
 def record_purchase(guild_id: int, amount: float):
-    """記錄一筆購買（貨幣被消費 → 通縮）"""
-    apply_deflation(guild_id, PURCHASE_HEALTH_WEIGHT)
+    """記錄一筆購買（貨幣被銷毀 → 通縮，按金額比例計算）"""
+    count = get_transaction_count(guild_id)
+    set_server_config(guild_id, "economy_transaction_count", count + 1)
+    apply_market_deflation(guild_id, amount, PURCHASE_DEFLATION_WEIGHT)
+
+
+def record_sale(guild_id: int, amount: float):
+    """記錄一筆賣出（貨幣被創造 → 通膨，按金額比例計算）"""
+    count = get_transaction_count(guild_id)
+    set_server_config(guild_id, "economy_transaction_count", count + 1)
+    apply_market_inflation(guild_id, amount, SALE_INFLATION_WEIGHT)
 
 
 def add_balance(guild_id: int, user_id: int, amount: float):
@@ -651,7 +687,6 @@ class Economy(commands.GroupCog, name="economy", description="經濟系統指令
         )
 
         record_transaction(guild_id)
-        apply_deflation(guild_id, TRADE_HEALTH_WEIGHT)
 
         await interaction.response.send_message(embed=embed)
 
@@ -701,7 +736,6 @@ class Economy(commands.GroupCog, name="economy", description="經濟系統指令
             # 伺服器商店：物品到伺服器背包
             await give_item_to_user(guild_id, user_id, item_id, amount)
             record_purchase(guild_id, total_price)
-            record_transaction(guild_id)
         else:
             currency_name = GLOBAL_CURRENCY_NAME
             price_per = worth
@@ -770,14 +804,19 @@ class Economy(commands.GroupCog, name="economy", description="經濟系統指令
         removed = await remove_item_from_user(guild_id, user_id, item_id, amount)
 
         currency_name = get_currency_name(guild_id) if scope == "server" else GLOBAL_CURRENCY_NAME
-        price_per = get_item_sell_price(item_id, guild_id) if scope == "server" else item.get("worth", 0)
+        sell_ratio = get_sell_ratio(guild_id)
+        if scope == "server":
+            price_per = get_item_sell_price(item_id, guild_id)
+        else:
+            # 全域商店也要套用折扣
+            price_per = round(item.get("worth", 0) * sell_ratio, 2)
         total_price = round(price_per * removed, 2)
         if scope == "server":
             add_balance(guild_id, user_id, total_price)
+            # 賣出 = 新貨幣進入流通 → 通膨
+            record_sale(guild_id, total_price)
         else:
             set_global_balance(user_id, get_global_balance(user_id) + total_price)
-
-        record_transaction(guild_id)
 
         embed = discord.Embed(
             title="💰 賣出成功",
@@ -786,11 +825,14 @@ class Economy(commands.GroupCog, name="economy", description="經濟系統指令
         )
         embed.add_field(name="單價", value=f"{price_per:,.2f} {currency_name}", inline=True)
         embed.add_field(name="總收入", value=f"{total_price:,.2f} {currency_name}", inline=True)
-        buy_price = get_item_buy_price(item_id, guild_id)
+        if scope == "server":
+            buy_price = get_item_buy_price(item_id, guild_id)
+        else:
+            buy_price = item.get("worth", 0)
         embed.set_footer(
-            text=f"賣出價為買入價的 {get_sell_ratio(guild_id)*100:.0f}%（買入: {buy_price:,.2f}）",
+            text=f"賣出價為買入價的 {sell_ratio*100:.0f}%（買入: {buy_price:,.2f}）",
         )
-        embed.timestamp = datetime.now(timezone())
+        embed.timestamp = datetime.now(timezone.utc)
         await interaction.response.send_message(embed=embed)
 
     @app_commands.command(name="shop", description="查看商店")
@@ -1193,13 +1235,12 @@ class Economy(commands.GroupCog, name="economy", description="經濟系統指令
                 "**📉 通膨（貶值）因素：**\n"
                 "• 管理員用 `/itemmod give` 送出物品\n"
                 "• 管理員用 `/economymod give` 送出金錢\n"
-                "• 每日獎勵導致貨幣增發\n"
-                "• 經濟活動低迷\n\n"
+                "• 每日/每小時獎勵導致貨幣增發\n"
+                "• 賣出物品給商店（新幣進入流通）\n\n"
                 "**📈 通縮（升值）因素：**\n"
+                "• 從商店購買物品（貨幣被銷毀）\n"
                 "• 玩家間交易（手續費銷毀貨幣）\n"
-                "• 購買商店物品（貨幣回收）\n"
-                "• 兌換貨幣（手續費銷毀）\n"
-                "• 活躍的經濟活動"
+                "• 兌換貨幣（手續費銷毀）"
             ),
             inline=False
         )
