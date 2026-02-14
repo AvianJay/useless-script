@@ -639,7 +639,7 @@ user_using_dsize_battle = set()  # to prevent spamming the command
 async def dsize_battle_command(interaction: discord.Interaction, opponent: Union[discord.User, discord.Member]):
     await dsize_battle(interaction, opponent)
 
-@bot.tree.context_menu(name="跟他 dssize 對決")
+@bot.tree.context_menu(name="跟他 dsize 對決")
 @app_commands.allowed_installs(guilds=True, users=True)
 @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
 async def dsize_battle_context(interaction: discord.Interaction, opponent: Union[discord.User, discord.Member]):
