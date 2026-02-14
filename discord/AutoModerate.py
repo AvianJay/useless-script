@@ -158,6 +158,20 @@ async def do_action_str(action: str, guild: Optional[discord.Guild] = None, user
             logs.append("傳送管理訊息")
             if guild and user and moderator:
                 await Moderate.moderation_message_settings(None, user, moderator, actions, direct=True)
+        elif cmd[0] == "force_verify":
+            # force_verify <duration>
+            if "ServerWebVerify" in modules:
+                from ServerWebVerify import force_verify_user
+                if user:
+                    success, message = await force_verify_user(guild, user)
+                    logs.append(message)
+                if len(cmd) > 1:
+                    duration_seconds = Moderate.timestr_to_seconds(cmd[1]) if cmd[1] != "0" else 0
+                    until_time = datetime.now(timezone.utc) + timedelta(seconds=duration_seconds)
+                    logs.append(f"強制驗證持續秒數: {duration_seconds}秒")
+                    set_server_config(guild.id, "force_verify_until", until_time.timestamp())
+            else:
+                logs.append("無法執行 force_verify，因為 ServerWebVerify 模組未找到")
     return logs
 
 

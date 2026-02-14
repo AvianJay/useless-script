@@ -22,6 +22,14 @@ if "Website" in modules:
     from Website import app
 else:
     raise ModuleNotFoundError("Website module not found")
+if "Moderate" in modules:
+    from Moderate import timestr_to_seconds
+else:
+    raise ModuleNotFoundError("Moderate module not found")
+if "UtilCommands" in modules:
+    from UtilCommands import get_time_text
+else:
+    raise ModuleNotFoundError("UtilCommands module not found")
 
 def init_db():
     with get_db_connection() as conn:
@@ -363,6 +371,39 @@ def server_verify():
             error_codes = result.get('error-codes', [])
             log(f"用戶未能通過網頁驗證，錯誤代碼：{error_codes}", module_name="ServerWebVerify", user=member, guild=guild)
             return render_template('ServerVerify.html', error=f"驗證失敗。錯誤代碼：{', '.join(error_codes)}", bot=bot, site_key_turnstile=config("webverify_turnstile_key"), site_key_recaptcha=config("webverify_recaptcha_key"), gtag=config("website_gtag", ""))
+
+async def force_verify_user(guild: discord.Guild, user: Union[discord.Member, discord.User]):
+    if not isinstance(user, discord.Member):
+        return False, "只能對伺服器成員使用此操作。"
+    guild_config = get_server_config(guild.id, "webverify_config")
+    if not guild_config:
+        return False, "伺服器尚未設定網頁驗證功能。"
+    unverified_role_id = guild_config.get('unverified_role_id')
+    if not unverified_role_id:
+        return False, "伺服器尚未設定未驗證成員的角色。"
+    if user.get_role(unverified_role_id):
+        return False, "該用戶已經是未驗證狀態了。"
+    await user.add_roles(discord.Object(id=unverified_role_id), reason="強制分配未驗證角色")
+    return True, "用戶已成功分配未驗證角色。"
+
+async def check_unlock_force_verify():
+    await bot.wait_until_ready()
+    try:
+        while not bot.is_closed():
+            for guild in bot.guilds:
+                if bot.is_closed():
+                    return
+                until_timestamp = get_server_config(guild.id, "force_verify_until")
+                if not until_timestamp:
+                    continue
+                if datetime.now(timezone.utc).timestamp() > until_timestamp:
+                    set_server_config(guild.id, "force_verify_until", None)
+                    log(f"伺服器 {guild.name} 的強制驗證已解除", module_name="ServerWebVerify")
+            await asyncio.sleep(60) # Check every minute
+    except Exception as e:
+        log(f"檢查強制驗證解鎖狀態時發生錯誤：{e}", level=logging.ERROR, module_name="ServerWebVerify")
+                
+
 @app_commands.guild_only()
 @app_commands.default_permissions(manage_guild=True)
 @app_commands.allowed_installs(guilds=True, users=False)
@@ -756,6 +797,28 @@ class ServerWebVerify(commands.GroupCog, name="webverify", description="伺服�
             chunk = report_lines[i:i+20]
             await interaction.followup.send("```" + "\n".join(chunk) + "```")
     
+    @app_commands.command(name="force-verify", description="強制用戶進行驗證")
+    @app_commands.describe(user="選擇要強制驗證的用戶")
+    @app_commands.default_permissions(administrator=True)
+    async def force_verify(self, interaction: discord.Interaction, user: discord.Member):
+        success, message = await force_verify_user(interaction.guild, user)
+        if success:
+            await interaction.response.send_message(f"{user.mention} 已被強制要求驗證。")
+        else:
+            await interaction.response.send_message(f"無法強制驗證 {user.mention}：{message}")
+    
+    @app_commands.command(name="start-force-verify", description="開始對所有新加入的成員強制驗證")
+    @app_commands.describe(duration="強制驗證持續的時間（?h?m?s...）")
+    @app_commands.default_permissions(administrator=True)
+    async def start_force_verify(self, interaction: discord.Interaction, duration: str):
+        try:
+            seconds = timestr_to_seconds(duration)
+            until_timestamp = datetime.now(timezone.utc).timestamp() + seconds
+            set_server_config(interaction.guild.id, "force_verify_until", until_timestamp)
+            await interaction.response.send_message(f"已開始對所有新加入的成員強制驗證，持續時間：{get_time_text(seconds)}。")
+        except ValueError:
+            await interaction.response.send_message("無效的時間格式。請使用類似 '1h30m' 的格式來表示持續時間。")
+    
     @commands.Cog.listener()
     async def on_member_join(self, member: discord.Member):
         guild_config = get_server_config(member.guild.id, "webverify_config")
@@ -773,6 +836,10 @@ class ServerWebVerify(commands.GroupCog, name="webverify", description="伺服�
             return
 
         for trigger in triggers:
+            until_timestamp = get_server_config(member.guild.id, "force_verify_until")
+            if until_timestamp and datetime.now(timezone.utc).timestamp() < until_timestamp:
+                assign_role = True
+                break
             if trigger == 'always':
                 assign_role = True
             elif trigger == 'age_check':
@@ -849,22 +916,8 @@ class ServerWebVerify(commands.GroupCog, name="webverify", description="伺服�
                         log(f"無法私訊用戶 {after} 通知其驗證狀態變更：{e}", level=logging.ERROR, module_name="ServerWebVerify", user=after, guild=after.guild)
     
     async def force_user_verify_context_menu(self, interaction: discord.Interaction, user: Union[discord.Member, discord.User]):
-        if not isinstance(user, discord.Member):
-            await interaction.response.send_message("只能對伺服器成員使用此操作。", ephemeral=True)
-            return
-        guild_config = get_server_config(interaction.guild.id, "webverify_config")
-        if not guild_config:
-            await interaction.response.send_message("伺服器尚未設定網頁驗證功能。", ephemeral=True)
-            return
-        unverified_role_id = guild_config.get('unverified_role_id')
-        if not unverified_role_id:
-            await interaction.response.send_message("伺服器尚未設定未驗證成員的角色。", ephemeral=True)
-            return
-        if user.get_role(unverified_role_id):
-            await interaction.response.send_message("該用戶已經是未驗證狀態了。", ephemeral=True)
-            return
-        await user.add_roles(discord.Object(id=unverified_role_id), reason="強制分配未驗證角色")
-        await interaction.response.send_message(f"已強制將 {user.mention} 設為未驗證狀態。", ephemeral=True)
+        success, message = await force_verify_user(interaction, user)
+        await interaction.response.send_message(message, ephemeral=True)
     
     async def manual_verify_user_context_menu(self, interaction: discord.Interaction, user: Union[discord.Member, discord.User]):
         if not isinstance(user, discord.Member):
