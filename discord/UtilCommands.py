@@ -1063,9 +1063,11 @@ async def help_slash_command(interaction: discord.Interaction, command: str = No
         for cmd in bot.tree.get_commands():
             if isinstance(cmd, app_commands.Group):
                 for subcmd in cmd.commands:
-                    app_cmds.append(await get_command_mention(cmd.name, subcmd.name))
+                    mention = await get_command_mention(cmd.name, subcmd.name)
+                    app_cmds.append(mention or f"`/{cmd.name} {subcmd.name}`")
             elif isinstance(cmd, app_commands.Command):
-                app_cmds.append(await get_command_mention(cmd.name))
+                mention = await get_command_mention(cmd.name)
+                app_cmds.append(mention or f"`/{cmd.name}`")
         
         # 收集文字指令
         text_cmds = []
