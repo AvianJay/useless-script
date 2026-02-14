@@ -472,6 +472,17 @@ translations = {
     "anti_uispam-action": "反用戶安裝垃圾訊息-執行動作",
     "tutorial": "使用教學",
     "panel": "面板",
+    "joinnotify": "邀請機器人通知",
+    "option": "選項",
+    "force-verify": "強制驗證",
+    "start-force-verify": "開始強制驗證",
+    "anti_raid-max_joins": "防突襲（大量加入偵測）-最大加入數量",
+    "anti_raid-time_window": "防突襲（大量加入偵測）-時間窗口",
+    "anti_raid-action": "防突襲（大量加入偵測）-執行動作",
+    "anti_spam-max_messages": "防刷頻-最大訊息數量",
+    "anti_spam-time_window": "防刷頻-時間窗口",
+    "anti_spam-similarity": "防刷頻-相似度",
+    "anti_spam-action": "防刷頻-執行動作",
 }
 class CommandNameTranslator(app_commands.Translator):
     async def translate(
