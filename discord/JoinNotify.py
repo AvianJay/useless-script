@@ -13,7 +13,7 @@ class JoinNotify(commands.Cog):
         app_commands.Choice(name="好啊", value="enable"),
         app_commands.Choice(name="不要", value="disable")
     ])
-    @app_commands.allowed_contexts(guilds=True, dm=True, private_channels=True)
+    @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
     @app_commands.allowed_installs(guilds=True, users=True)
     async def joinnotify(self, interaction: discord.Interaction, option: str):
         if option == "enable":
