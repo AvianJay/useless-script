@@ -2,7 +2,8 @@
 import discord
 import asyncio
 import logging
-from globalenv import bot, start_bot, get_user_data, set_user_data
+import secrets
+from globalenv import bot, start_bot, get_user_data, set_user_data, get_server_config, set_server_config
 from discord import app_commands
 from discord.ext import commands
 from logger import log
@@ -13,10 +14,78 @@ from logger import log
 items = []
 admin_action_callbacks = []  # Economy module hooks into this
 
+CUSTOM_ITEMS_KEY = "custom_items"
 
-def get_item_by_id(item_id: str):
-    """Get an item definition by its ID"""
-    return next((i for i in items if i["id"] == item_id), None)
+
+def _make_custom_text_callback(item_id: str, content: str):
+    """建立自定義文字物品使用時的回呼函數"""
+
+    async def callback(interaction: discord.Interaction):
+        guild_id = getattr(interaction, "guild_id", interaction.guild.id if interaction.guild else 0)
+        user_id = interaction.user.id
+        removed = await remove_item_from_user(guild_id, user_id, item_id, 1)
+        if removed <= 0:
+            await interaction.response.send_message("你沒有這個物品。", ephemeral=True)
+            return
+        await interaction.response.send_message(content)
+        log(f"Custom item {item_id} used by {interaction.user} in guild {guild_id}", module_name="ItemSystem")
+
+    return callback
+
+
+def get_custom_items(guild_id: int) -> dict:
+    """取得伺服器的自定義物品列表。格式：{item_id: {name, description, content}}"""
+    return get_server_config(guild_id, CUSTOM_ITEMS_KEY, {})
+
+
+def set_custom_items(guild_id: int, custom_items: dict):
+    """設定伺服器的自定義物品列表"""
+    set_server_config(guild_id, CUSTOM_ITEMS_KEY, custom_items)
+
+
+def get_item_by_id(item_id: str, guild_id: int = None):
+    """Get an item definition by its ID. 若提供 guild_id，會一併檢查該伺服器的自定義物品。"""
+    # 先檢查全域物品
+    item = next((i for i in items if i["id"] == item_id), None)
+    if item:
+        return item
+    # 再檢查伺服器自定義物品
+    if guild_id and item_id.startswith("custom_"):
+        custom_items = get_custom_items(guild_id)
+        if item_id in custom_items:
+            data = custom_items[item_id]
+            return {
+                "id": item_id,
+                "name": data["name"],
+                "description": data.get("description", "自定義物品。使用時會傳送儲存的文字內容。"),
+                "callback": _make_custom_text_callback(item_id, data["content"]),
+                "worth": 0,
+            }
+    return None
+
+
+async def custom_items_autocomplete(interaction: discord.Interaction, current: str):
+    """itemmod 自定義物品選擇用 autocomplete"""
+    guild_id = interaction.guild.id if interaction.guild else 0
+    custom_items = get_custom_items(guild_id)
+    choices = []
+    for item_id, data in custom_items.items():
+        if not current or current.lower() in data["name"].lower():
+            choices.append(app_commands.Choice(name=data["name"], value=item_id))
+    return choices[:25]
+
+
+def get_all_items_for_guild(guild_id: int = None) -> list:
+    """取得所有可用的物品（含該伺服器的自定義物品）。用於 autocomplete 等情境。"""
+    result = list(items)
+    if guild_id:
+        for item_id, data in get_custom_items(guild_id).items():
+            result.append({
+                "id": item_id,
+                "name": data["name"],
+                "description": data.get("description", "自定義物品。使用時會傳送儲存的文字內容。"),
+            })
+    return result
 
 
 async def get_user_items_autocomplete(interaction: discord.Interaction, current: str):
@@ -24,21 +93,22 @@ async def get_user_items_autocomplete(interaction: discord.Interaction, current:
     user_id = interaction.user.id
     user_items = get_user_data(guild_id, user_id, "items", {})
     user_items = {item_id: count for item_id, count in user_items.items() if count > 0}
-    choices = [item for item in items if item["id"] in user_items.keys()]
-    # id
-    # choices.extend([item for item in items if item["id"] in user_items and current.lower() in item["id"].lower()])
+    all_items_list = get_all_items_for_guild(guild_id)
+    choices = [item for item in all_items_list if item["id"] in user_items.keys()]
+    if current:
+        choices = [item for item in choices if current.lower() in item["name"].lower()]
     return [app_commands.Choice(name=item["name"], value=item["id"]) for item in choices[:25]]
 
 
 async def all_items_autocomplete(interaction: discord.Interaction, current: str):
-    choices = [item for item in items if current.lower() in item["name"].lower()]
-    # id
-    # choices.extend([item for item in items if current.lower() in item["id"].lower()])
+    guild_id = interaction.guild.id if (interaction.guild and interaction.is_guild_integration()) else None
+    all_items_list = get_all_items_for_guild(guild_id)
+    choices = [item for item in all_items_list if current.lower() in item["name"].lower()]
     return [app_commands.Choice(name=item["name"], value=item["id"]) for item in choices[:25]]
 
 
 async def get_user_global_items_autocomplete(interaction: discord.Interaction, current: str):
-    """全域物品自動完成"""
+    """全域物品自動完成（不包含伺服器自定義物品）"""
     user_id = interaction.user.id
     user_items = get_user_data(0, user_id, "items", {})
     user_items = {item_id: count for item_id, count in user_items.items() if count > 0}
@@ -60,7 +130,8 @@ async def get_user_items_scoped_autocomplete(interaction: discord.Interaction, c
     user_id = interaction.user.id
     user_items = get_user_data(guild_id, user_id, "items", {})
     user_items = {item_id: count for item_id, count in user_items.items() if count > 0}
-    choices = [item for item in items if item["id"] in user_items.keys()]
+    all_items_list = get_all_items_for_guild(guild_id if guild_id else None)
+    choices = [item for item in all_items_list if item["id"] in user_items.keys()]
     if current:
         choices = [item for item in choices if current.lower() in item["name"].lower()]
     scope_label = "🌐" if guild_id == 0 else "🏦"
@@ -146,7 +217,7 @@ class ItemSystem(commands.GroupCog, name="item", description="物品系統指令
         for item_id, amount in user_items.items():
             if amount <= 0:
                 continue
-            item = next((i for i in items if i["id"] == item_id), None)
+            item = get_item_by_id(item_id, guild_id if scope == "server" else None)
             if item:
                 worth_text = f"\n💰 價值: {item['worth']}" if item.get("worth", 0) > 0 else ""
                 embed.add_field(name=f"{item['name']} x{amount}", value=f"{item['description']}{worth_text}", inline=False)
@@ -175,7 +246,7 @@ class ItemSystem(commands.GroupCog, name="item", description="物品系統指令
             await interaction.response.send_message("你沒有這個物品。", ephemeral=True)
             return
         
-        item = next((i for i in items if i["id"] == item_id), None)
+        item = get_item_by_id(item_id, guild_id)
         if not item:
             await interaction.response.send_message("無效的物品ID。", ephemeral=True)
             return
@@ -218,7 +289,7 @@ class ItemSystem(commands.GroupCog, name="item", description="物品系統指令
         if user_item_count <= 0:
             await interaction.response.send_message("你沒有這個物品。", ephemeral=True)
             return
-        target_item = next((i for i in items if i["id"] == item_id), None)
+        target_item = get_item_by_id(item_id, guild_id if guild_id else None)
         
         if can_pickup:
             if pickup_duration <= 0 or pickup_duration > 86400:
@@ -354,11 +425,11 @@ class ItemSystem(commands.GroupCog, name="item", description="物品系統指令
             await interaction.followup.send("你沒有這個物品。")
             return
         
-        item = next((i for i in items if i["id"] == item_id), None)
+        item = get_item_by_id(item_id, guild_id if guild_id else None)
         if not item:
             await interaction.followup.send("無效的物品ID。")
             return
-        
+
         # Remove from giver
         removed = await remove_item_from_user(guild_id, giver_id, item_id, amount)
         
@@ -397,7 +468,7 @@ class ItemModerate(commands.GroupCog, name="itemmod", description="物品系統�
         receiver_id = user.id
         guild_id = interaction.guild.id
         
-        item = next((i for i in items if i["id"] == item_id), None)
+        item = get_item_by_id(item_id, interaction.guild.id)
         if not item:
             await interaction.followup.send("無效的物品ID。")
             return
@@ -430,20 +501,22 @@ class ItemModerate(commands.GroupCog, name="itemmod", description="物品系統�
             await interaction.response.send_message(f"{user.name} 沒有這個物品。", ephemeral=True)
             return
         
-        item = next((i for i in items if i["id"] == item_id), None)
+        item = get_item_by_id(item_id, guild_id)
         item_name = item['name'] if item else "未知物品"
 
         await interaction.response.send_message(f"你移除了 {user.display_name}(`{user.name}`) 的 {removed_count} 個 {item_name}。", ephemeral=True)
 
     @app_commands.command(name="list", description="列出所有可用的物品")
     async def admin_list_items(self, interaction: discord.Interaction):
-        if not items:
+        all_items_list = get_all_items_for_guild(interaction.guild.id)
+        if not all_items_list:
             await interaction.response.send_message("目前沒有任何物品。", ephemeral=True)
             return
         
         embed = discord.Embed(title="所有可用的物品", color=0x0000ff)
-        for item in items:
-            embed.add_field(name=item["name"], value=item["description"], inline=False)
+        for item in all_items_list:
+            custom_tag = " [自定義]" if item["id"].startswith("custom_") else ""
+            embed.add_field(name=f"{item['name']}{custom_tag}", value=item["description"], inline=False)
         embed.set_footer(text=interaction.guild.name, icon_url=interaction.guild.icon.url if interaction.guild.icon else None)
         
         await interaction.response.send_message(embed=embed)
@@ -466,11 +539,81 @@ class ItemModerate(commands.GroupCog, name="itemmod", description="物品系統�
 
         embed = discord.Embed(title=f"{user.name} 擁有的物品（{scope_name}）", color=0x00ff00)
         for item_id, amount in user_items.items():
-            item = next((i for i in items if i["id"] == item_id), None)
+            item = get_item_by_id(item_id, guild_id)
             if item:
                 embed.add_field(name=f"{item['name']} x{amount}", value=item["description"], inline=False)
         embed.set_footer(text=interaction.guild.name, icon_url=interaction.guild.icon.url if interaction.guild.icon else None)
 
+        await interaction.response.send_message(embed=embed)
+
+    @app_commands.command(name="addcustom", description="新增伺服器自定義物品（使用時會傳送文字內容）")
+    @app_commands.describe(
+        name="物品名稱",
+        content="使用物品時要傳送的文字內容",
+        description="物品說明（可選，預設為「自定義物品」）"
+    )
+    async def addcustom(self, interaction: discord.Interaction, name: str, content: str, description: str = None):
+        if not name or len(name.strip()) < 1:
+            await interaction.response.send_message("物品名稱不能為空。", ephemeral=True)
+            return
+        if not content or len(content.strip()) < 1:
+            await interaction.response.send_message("文字內容不能為空。", ephemeral=True)
+            return
+        if len(content) > 2000:
+            await interaction.response.send_message("文字內容不可超過 2000 字元。", ephemeral=True)
+            return
+        if len(name) > 100:
+            await interaction.response.send_message("物品名稱不可超過 100 字元。", ephemeral=True)
+            return
+
+        guild_id = interaction.guild.id
+        custom_items = get_custom_items(guild_id)
+        item_id = f"custom_{secrets.token_hex(4)}"
+        custom_items[item_id] = {
+            "name": name.strip()[:100],
+            "description": (description or "自定義物品。使用時會傳送儲存的文字內容。")[:500],
+            "content": content.strip()[:2000],
+        }
+        set_custom_items(guild_id, custom_items)
+        await interaction.response.send_message(
+            f"✅ 已新增自定義物品 **{name.strip()}**\n"
+            f"ID: `{item_id}`\n"
+            f"使用 `/itemmod give` 可發送給用戶。",
+            ephemeral=True
+        )
+        log(f"Custom item {item_id} ({name}) added in guild {guild_id}", module_name="ItemSystem", user=interaction.user, guild=interaction.guild)
+
+    @app_commands.command(name="removecustom", description="移除伺服器自定義物品")
+    @app_commands.describe(item_id="要移除的自定義物品")
+    @app_commands.autocomplete(item_id=custom_items_autocomplete)
+    async def removecustom(self, interaction: discord.Interaction, item_id: str):
+        guild_id = interaction.guild.id
+        custom_items = get_custom_items(guild_id)
+        if item_id not in custom_items:
+            await interaction.response.send_message("找不到此自定義物品。", ephemeral=True)
+            return
+        item_name = custom_items[item_id]["name"]
+        del custom_items[item_id]
+        set_custom_items(guild_id, custom_items)
+        await interaction.response.send_message(f"✅ 已移除自定義物品 **{item_name}**。", ephemeral=True)
+        log(f"Custom item {item_id} ({item_name}) removed in guild {guild_id}", module_name="ItemSystem", user=interaction.user, guild=interaction.guild)
+
+    @app_commands.command(name="listcustom", description="列出本伺服器的自定義物品")
+    async def listcustom(self, interaction: discord.Interaction):
+        guild_id = interaction.guild.id
+        custom_items = get_custom_items(guild_id)
+        if not custom_items:
+            await interaction.response.send_message("本伺服器目前沒有自定義物品。", ephemeral=True)
+            return
+        embed = discord.Embed(title="伺服器自定義物品", color=0x9b59b6)
+        for item_id, data in custom_items.items():
+            preview = data["content"][:100] + ("..." if len(data["content"]) > 100 else "")
+            embed.add_field(
+                name=f"{data['name']} (`{item_id}`)",
+                value=f"內容預覽: {preview}\n{data.get('description', '')}",
+                inline=False
+            )
+        embed.set_footer(text=interaction.guild.name, icon_url=interaction.guild.icon.url if interaction.guild.icon else None)
         await interaction.response.send_message(embed=embed)
 
 asyncio.run(bot.add_cog(ItemModerate()))
