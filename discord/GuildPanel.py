@@ -457,6 +457,7 @@ def _register_all():
     if "Economy" in modules:
         register_settings("Economy", "經濟系統", [
             {"display": "貨幣名稱", "database_key": "economy_currency_name", "type": "string", "default": "伺服幣"},
+            {"display": "允許全域幣流通", "description": "是否允許伺服幣與全域幣互相流通（兌換、全域商店買賣、支票兌現等）", "database_key": "economy_allow_global_flow", "type": "boolean", "default": True},
         ], description="管理伺服器經濟參數", icon="💰")
 
     if "AutoReply" in modules:
