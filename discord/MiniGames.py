@@ -309,6 +309,51 @@ def beats(prev: Optional[List[Card]], new: List[Card], rules: Ruleset) -> bool:
 
 
 # -----------------------------
+# Tower Game
+# -----------------------------
+
+TOWER_LEVELS = 5
+TOWER_TILES_PER_LEVEL = 3
+TOWER_CACTUS_PER_LEVEL = 1  # 每層 1 個仙人掌
+TOWER_MULTIPLIERS = [1.0, 1.4, 1.8, 2.2, 2.6, 3.0]  # level 0=退還本金, 1~5 對應倍率（頂層 3.0x）
+EMOJI_SAFE = "🟦"
+EMOJI_REVEALED_SAFE = "✅"
+EMOJI_CACTUS = "🌵"
+
+
+@dataclass
+class TowerGame:
+    """Tower 爬塔遊戲狀態"""
+    user_id: int
+    channel_id: int
+    guild_id: int
+    bet: float
+    current_level: int  # 1-based，1~5
+    grid: List[List[int]]  # grid[level][tile_idx] = 0=安全, 1=仙人掌
+    picked_per_level: Dict[int, Tuple[int, bool]] = field(default_factory=dict)  # level -> (tile_idx, is_cactus)
+    awaiting_continue: bool = False  # 選到安全格後等待 繼續/提現
+    game_over_cactus: bool = False  # 踩到仙人掌，仙人掌按鈕變紅
+    game_over_reveal_all: bool = False  # 遊戲結束後揭露全部仙人掌
+    message_id: Optional[int] = None
+    message: Optional[discord.Message] = None
+
+    def safe_level(self) -> int:
+        """目前已安全達到的層數（可提現的倍率層）"""
+        safe_levels = [lv for lv, (_, is_cactus) in self.picked_per_level.items() if not is_cactus]
+        return max(safe_levels) if safe_levels else 0
+
+
+def create_tower_grid() -> List[List[int]]:
+    """建立隨機塔層：每層 3 格，其中 1 格為仙人掌"""
+    grid = []
+    for _ in range(TOWER_LEVELS):
+        row = [0] * (TOWER_TILES_PER_LEVEL - TOWER_CACTUS_PER_LEVEL) + [1] * TOWER_CACTUS_PER_LEVEL
+        random.shuffle(row)
+        grid.append(row)
+    return grid
+
+
+# -----------------------------
 # Discord Views
 # -----------------------------
 
@@ -381,6 +426,126 @@ class LobbyView(discord.ui.View):
         self.cog.games.pop(self.game.channel_id, None)
         await interaction.response.edit_message(content="此桌已取消。", embed=None, view=None)
         self.stop()
+
+
+# -----------------------------
+# Tower Views
+# -----------------------------
+
+class TowerConfirmView(discord.ui.View):
+    """確認開始 Tower 遊戲"""
+
+    def __init__(self, cog: "MiniGamesCog", guild_id: int, bet: float):
+        super().__init__(timeout=60)
+        self.cog = cog
+        self.guild_id = guild_id
+        self.bet = bet
+
+    @discord.ui.button(label="✅ 確認開始", style=discord.ButtonStyle.success)
+    async def confirm_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await self.cog.start_tower(interaction, self.bet)
+
+
+class TowerGameView(discord.ui.View):
+    """Tower 遊戲主介面：5 層按鈕恆顯 + 結束按鈕（第一層右邊）"""
+
+    def __init__(self, cog: "MiniGamesCog", game: TowerGame):
+        super().__init__(timeout=120)
+        self.cog = cog
+        self.game = game
+        self._build_buttons()
+
+    def _build_buttons(self):
+        self.clear_items()
+        g = self.game
+        safe = g.safe_level()
+        current = g.current_level
+        awaiting = g.awaiting_continue
+
+        # 建立 5 層（L5 在上、L1 在下），每層 3 格，L1 右側加結束按鈕
+        for level in range(TOWER_LEVELS, 0, -1):
+            row_idx = TOWER_LEVELS - level
+            for i in range(TOWER_TILES_PER_LEVEL):
+                btn = discord.ui.Button(
+                    label=EMOJI_SAFE,
+                    custom_id=f"tile_{level}_{i}",
+                    style=discord.ButtonStyle.primary,
+                    row=row_idx,
+                )
+                self._set_tile_state(btn, level, i, safe, current, awaiting)
+                self.add_item(btn)
+            if level == 1:
+                end_btn = discord.ui.Button(
+                    label="💰 結束",
+                    custom_id="tower_end",
+                    style=discord.ButtonStyle.success,
+                    row=row_idx,
+                )
+                self.add_item(end_btn)
+
+        self._attach_callbacks()
+
+    def _set_tile_state(self, btn: discord.ui.Button, level: int, tile_idx: int,
+                        safe: int, current: int, awaiting: bool):
+        """依狀態設定 label、style 與 disabled"""
+        g = self.game
+        is_cactus_tile = g.grid[level - 1][tile_idx] == 1
+
+        # 遊戲結束：揭露全部仙人掌
+        if g.game_over_reveal_all:
+            btn.disabled = True
+            if is_cactus_tile:
+                btn.label = EMOJI_CACTUS
+                if g.game_over_cactus:
+                    btn.style = discord.ButtonStyle.danger
+            else:
+                if level in g.picked_per_level:
+                    picked_idx, _ = g.picked_per_level[level]
+                    btn.label = EMOJI_REVEALED_SAFE if tile_idx == picked_idx else EMOJI_SAFE
+                else:
+                    btn.label = EMOJI_SAFE
+            return
+
+        # 已通過的層：揭露仙人掌位置（安全格 ✅、仙人掌 🌵）
+        if level in g.picked_per_level:
+            picked_idx, hit_cactus = g.picked_per_level[level]
+            btn.disabled = True
+            if is_cactus_tile:
+                btn.label = EMOJI_CACTUS
+            elif tile_idx == picked_idx:
+                btn.label = EMOJI_REVEALED_SAFE
+            else:
+                btn.label = EMOJI_REVEALED_SAFE
+            return
+
+        if awaiting:
+            if level == current + 1:
+                btn.label = EMOJI_SAFE
+                btn.disabled = False
+            else:
+                btn.label = EMOJI_SAFE
+                btn.disabled = True
+        else:
+            if level == current:
+                btn.label = EMOJI_SAFE
+                btn.disabled = False
+            else:
+                btn.label = EMOJI_SAFE
+                btn.disabled = True
+
+    def _attach_callbacks(self):
+        async def on_tile_click(interaction: discord.Interaction, button: discord.ui.Button):
+            parts = button.custom_id.split("_")
+            if parts[0] == "tile":
+                level = int(parts[1])
+                tile_idx = int(parts[2])
+                await self.cog.tower_pick_tile(interaction, self.game, level, tile_idx)
+            elif button.custom_id == "tower_end":
+                await self.cog.tower_cashout(interaction, self.game)
+
+        for child in self.children:
+            if isinstance(child, discord.ui.Button):
+                child.callback = lambda i, b=child: on_tile_click(i, b)
 
 
 class TableView(discord.ui.View):
@@ -607,6 +772,7 @@ class MiniGamesCog(commands.GroupCog, group_name="games", description="迷你遊
     def __init__(self, bot: commands.Bot):
         self.bot = bot
         self.games: Dict[int, Game] = {}
+        self.tower_games: Dict[Tuple[int, int], TowerGame] = {}  # (channel_id, user_id) -> TowerGame
 
     @app_commands.command(name="big2", description="建立一桌大老二")
     async def startbig2(self, interaction: discord.Interaction):
@@ -624,6 +790,202 @@ class MiniGamesCog(commands.GroupCog, group_name="games", description="迷你遊
         sent = await interaction.original_response()
         g.lobby_message_id = sent.id
         g.lobby_message = sent  # 存參考，之後都用 .edit() 不 fetch，user-install 才穩
+
+    # -----------------------------
+    # Tower 遊戲
+    # -----------------------------
+
+    @app_commands.command(name="tower", description="爬塔遊戲")
+    @app_commands.describe(bet="賭注金額（50～2000）")
+    async def tower(self, interaction: discord.Interaction, bet: int):
+        if bet < 50 or bet > 2000:
+            return await interaction.response.send_message(
+                "❌ 賭注金額需介於 **50**～**2000** 之間。",
+                ephemeral=True,
+            )
+        bet_val = bet
+        key = (interaction.channel_id, interaction.user.id)
+        if key in self.tower_games:
+            return await interaction.response.send_message("你已經有一局 Tower 遊戲正在進行。", ephemeral=True)
+
+        guild_id = interaction.guild.id if interaction.guild else GLOBAL_GUILD_ID
+        currency = get_currency_name(guild_id)
+        balance = get_balance(guild_id, interaction.user.id)
+
+        # 檢查餘額
+        if balance < bet_val:
+            return await interaction.response.send_message(
+                f"❌ 餘額不足！\n你的餘額：**{balance:,.0f}** {currency}\n所需賭注：**{bet_val:,.0f}** {currency}",
+                ephemeral=True,
+            )
+
+        # 顯示注意事項與確認
+        notices = (
+            "• 每層 3 格中隨機 **2 格 🟦 安全**、**1 格 🌵 仙人掌**\n"
+            "• 踩到仙人掌 = **遊戲結束，失去全部賭注**\n"
+            "• 選到安全格可選擇 **繼續攀登**（倍率更高）或 **提現**（鎖定當前倍率獎金）\n"
+            "• 倍率：L1 x1.4 → L2 x1.8 → L3 x2.2 → L4 x2.6 → L5 x3.0\n"
+            "• 抵達頂層將自動提現"
+        )
+        embed = discord.Embed(
+            title="🗼 爬塔",
+            description=f"賭注：**{bet_val:,.0f}** {currency}\n你的餘額：**{balance:,.0f}** {currency}\n\n**⚠️ 注意事項**\n{notices}",
+            color=discord.Color.blue(),
+        )
+        embed.set_footer(text="確認後將扣除賭注並開始遊戲")
+        view = TowerConfirmView(self, guild_id, float(bet_val))
+        await interaction.response.send_message(embed=embed, view=view)
+
+    async def start_tower(self, interaction: discord.Interaction, bet: float):
+        """選擇賭注後開始遊戲"""
+        guild_id = interaction.guild.id if interaction.guild else GLOBAL_GUILD_ID
+        key = (interaction.channel_id, interaction.user.id)
+        if key in self.tower_games:
+            return await interaction.response.send_message("你已經有一局 Tower 遊戲。", ephemeral=True)
+
+        if get_balance(guild_id, interaction.user.id) < bet:
+            currency = get_currency_name(guild_id)
+            return await interaction.response.send_message(f"餘額不足 {bet:,.0f} {currency}。", ephemeral=True)
+
+        if not remove_balance(guild_id, interaction.user.id, bet):
+            return await interaction.response.send_message("扣除賭注失敗。", ephemeral=True)
+        if guild_id != GLOBAL_GUILD_ID:
+            record_transaction(guild_id)
+
+        game = TowerGame(
+            user_id=interaction.user.id,
+            channel_id=interaction.channel_id,
+            guild_id=guild_id,
+            bet=bet,
+            current_level=1,
+            grid=create_tower_grid(),
+        )
+        self.tower_games[key] = game
+
+        embed = self._tower_embed(game, phase="pick")
+        view = TowerGameView(self, game)
+        msg = await interaction.response.edit_message(embed=embed, view=view)
+        game.message_id = msg.id
+        game.message = msg
+
+    def _tower_embed(self, game: TowerGame, phase: str = "pick") -> discord.Embed:
+        """phase: pick=選格中, result_safe=選到安全可繼續/提現, result_cactus=踩到仙人掌, cashout=提現成功"""
+        currency = get_currency_name(game.guild_id)
+        level = game.current_level
+        safe = game.safe_level()
+        mult = TOWER_MULTIPLIERS[safe] if phase == "cashout" else TOWER_MULTIPLIERS[level]
+
+        if phase == "pick":
+            desc = f"**第 {level}/{TOWER_LEVELS} 層**\n選擇一個格子！\n可隨時點「💰 結束」提現（倍率 x{TOWER_MULTIPLIERS[safe]:.2f}）"
+        elif phase == "result_safe":
+            desc = f"**第 {level}/{TOWER_LEVELS} 層** ✅ 安全！\n點下一層繼續，或點「💰 結束」提現。"
+        elif phase == "result_cactus":
+            desc = f"🌵 踩到仙人掌！遊戲結束，損失 **{game.bet:,.0f}** {currency}"
+        elif phase == "cashout":
+            mult_actual = TOWER_MULTIPLIERS[safe]
+            payout = round(game.bet * mult_actual, 2)
+            profit = round(payout - game.bet, 2)
+            desc = (
+                f"**Cashed Out!**\n"
+                f"達到的關卡：**{safe}/{TOWER_LEVELS}**\n"
+                f"下注：**{game.bet:,.0f}** {currency}｜倍率：**x{mult_actual:.2f}**\n"
+                f"派彩：**{payout:,.0f}** {currency}｜利潤：**+{profit:,.0f}**\n"
+                f"新餘額：**{get_balance(game.guild_id, game.user_id):,.0f}** {currency}"
+            )
+        else:
+            desc = ""
+
+        embed = discord.Embed(
+            title="🗼 爬塔",
+            description=desc,
+            color=discord.Color.green() if phase in ("result_safe", "cashout") else discord.Color.red() if phase == "result_cactus" else discord.Color.blue(),
+        )
+        embed.set_footer(text=f"下注：{game.bet:,.0f} {currency}")
+        return embed
+
+    async def tower_pick_tile(self, interaction: discord.Interaction, game: TowerGame, level: int, tile_idx: int):
+        if interaction.user.id != game.user_id:
+            return await interaction.response.send_message("這不是你的遊戲。", ephemeral=True)
+        key = (game.channel_id, game.user_id)
+        if key not in self.tower_games or self.tower_games[key] is not game:
+            return await interaction.response.send_message("遊戲已結束。", ephemeral=True)
+
+        if level < 1 or level > TOWER_LEVELS or tile_idx < 0 or tile_idx >= TOWER_TILES_PER_LEVEL:
+            return await interaction.response.send_message("無效的選擇。", ephemeral=True)
+
+        if game.awaiting_continue:
+            if level != game.current_level + 1:
+                return await interaction.response.send_message("請點擊下一層或結束。", ephemeral=True)
+            game.awaiting_continue = False
+            game.current_level = level
+        else:
+            if level != game.current_level:
+                return await interaction.response.send_message("請選擇當前層的格子。", ephemeral=True)
+
+        is_cactus = game.grid[level - 1][tile_idx] == 1
+        game.picked_per_level[level] = (tile_idx, is_cactus)
+
+        if is_cactus:
+            game.game_over_cactus = True
+            game.game_over_reveal_all = True
+            self.tower_games.pop(key, None)
+            embed = self._tower_embed(game, phase="result_cactus")
+            view = TowerGameView(self, game)
+            for child in view.children:
+                if isinstance(child, discord.ui.Button):
+                    child.disabled = True
+            await interaction.response.edit_message(embed=embed, view=view)
+            return
+
+        safe = game.safe_level()
+        if level >= TOWER_LEVELS:
+            game.game_over_reveal_all = True
+            mult = TOWER_MULTIPLIERS[TOWER_LEVELS]
+            payout = round(game.bet * mult, 2)
+            add_balance(game.guild_id, game.user_id, payout)
+            if game.guild_id != GLOBAL_GUILD_ID:
+                record_transaction(game.guild_id)
+            self.tower_games.pop(key, None)
+            embed = self._tower_embed(game, phase="cashout")
+            embed.description = (
+                f"**抵達頂層！** 自動提現！\n\n"
+                f"達到的關卡：**{TOWER_LEVELS}/{TOWER_LEVELS}**\n"
+                f"下注：**{game.bet:,.0f}** {get_currency_name(game.guild_id)}\n"
+                f"倍率：**x{mult:.2f}**\n"
+                f"派彩：**{payout:,.0f}** {get_currency_name(game.guild_id)}\n"
+                f"新餘額：**{get_balance(game.guild_id, game.user_id):,.0f}** {get_currency_name(game.guild_id)}"
+            )
+            view = TowerGameView(self, game)
+            for child in view.children:
+                if isinstance(child, discord.ui.Button):
+                    child.disabled = True
+            await interaction.response.edit_message(embed=embed, view=view)
+            return
+
+        game.awaiting_continue = True
+        embed = self._tower_embed(game, phase="result_safe")
+        view = TowerGameView(self, game)
+        await interaction.response.edit_message(embed=embed, view=view)
+
+    async def tower_cashout(self, interaction: discord.Interaction, game: TowerGame):
+        if interaction.user.id != game.user_id:
+            return await interaction.response.send_message("這不是你的遊戲。", ephemeral=True)
+        key = (game.channel_id, game.user_id)
+        if key not in self.tower_games or self.tower_games[key] is not game:
+            return await interaction.response.send_message("遊戲已結束。", ephemeral=True)
+
+        game.game_over_reveal_all = True
+        safe = game.safe_level()
+        mult = TOWER_MULTIPLIERS[safe]
+        payout = round(game.bet * mult, 2)
+        add_balance(game.guild_id, game.user_id, payout)
+        if game.guild_id != GLOBAL_GUILD_ID:
+            record_transaction(game.guild_id)
+        self.tower_games.pop(key, None)
+
+        embed = self._tower_embed(game, phase="cashout")
+        view = TowerGameView(self, game)
+        await interaction.response.edit_message(embed=embed, view=view)
 
     def lobby_embed(self, g: Game) -> discord.Embed:
         rule = "必出3♦" if g.rules.must_start_with_3d else "自由先手"

@@ -485,6 +485,8 @@ translations = {
     "anti_spam-action": "防刷頻-執行動作",
     "games": "遊戲",
     "big2": "大老二",
+    "tower": "爬塔",
+    "bet": "賭注",
 }
 class CommandNameTranslator(app_commands.Translator):
     async def translate(
