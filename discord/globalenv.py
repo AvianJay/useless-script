@@ -483,6 +483,8 @@ translations = {
     "anti_spam-time_window": "防刷頻-時間窗口",
     "anti_spam-similarity": "防刷頻-相似度",
     "anti_spam-action": "防刷頻-執行動作",
+    "games": "遊戲",
+    "big2": "大老二",
 }
 class CommandNameTranslator(app_commands.Translator):
     async def translate(
