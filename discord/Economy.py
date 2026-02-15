@@ -94,6 +94,16 @@ def get_sell_ratio(guild_id: int) -> float:
     return get_server_config(guild_id, "economy_sell_ratio", DEFAULT_SELL_RATIO)
 
 
+def get_allow_global_flow(guild_id: int) -> bool:
+    """取得是否允許伺服幣與全域幣流通（兌換、全域商店等）"""
+    return get_server_config(guild_id, "economy_allow_global_flow", True)
+
+
+def set_allow_global_flow(guild_id: int, allow: bool):
+    """設定是否允許伺服幣與全域幣流通"""
+    set_server_config(guild_id, "economy_allow_global_flow", allow)
+
+
 def get_total_supply(guild_id: int) -> float:
     """取得伺服器的貨幣總供給"""
     return get_server_config(guild_id, "economy_total_supply", 0.0)
@@ -666,6 +676,10 @@ class Economy(commands.GroupCog, name="economy", description="經濟系統指令
             return
 
         guild_id = interaction.guild.id
+        if not get_allow_global_flow(guild_id):
+            await interaction.response.send_message("❌ 此伺服器已關閉伺服幣與全域幣的流通功能。", ephemeral=True)
+            return
+
         user_id = interaction.user.id
         rate = get_exchange_rate(guild_id)
         currency_name = get_currency_name(guild_id)
@@ -738,6 +752,9 @@ class Economy(commands.GroupCog, name="economy", description="經濟系統指令
             guild_id = GLOBAL_GUILD_ID
         else:
             guild_id = interaction.guild.id
+            if scope == "global" and not get_allow_global_flow(guild_id):
+                await interaction.response.send_message("❌ 此伺服器已關閉伺服幣與全域幣的流通功能，無法使用全域商店。", ephemeral=True)
+                return
         if amount <= 0:
             await interaction.response.send_message("❌ 數量必須大於 0。", ephemeral=True)
             return
@@ -817,6 +834,9 @@ class Economy(commands.GroupCog, name="economy", description="經濟系統指令
             guild_id = GLOBAL_GUILD_ID
         else:
             guild_id = interaction.guild.id
+            if scope == "global" and not get_allow_global_flow(guild_id):
+                await interaction.response.send_message("❌ 此伺服器已關閉伺服幣與全域幣的流通功能，無法使用全域商店。", ephemeral=True)
+                return
         user_id = interaction.user.id
 
         item = get_item_by_id(item_id)
@@ -886,26 +906,33 @@ class Economy(commands.GroupCog, name="economy", description="經濟系統指令
             currency_name = get_currency_name(guild_id)
             rate = get_exchange_rate(guild_id)
 
+            allow_flow = get_allow_global_flow(guild_id)
+            flow_label = "\n🔓 全域幣流通：已開啟" if allow_flow else "\n🔒 全域幣流通：已關閉"
+            desc_parts = [
+                f"當前匯率: 1 {currency_name} = {rate:.4f} {GLOBAL_CURRENCY_NAME}",
+                f"🏦 伺服器商店 = 伺服幣付款，物品到伺服器背包",
+            ]
+            if allow_flow:
+                desc_parts.append(f"🌐 全域商店 = 全域幣付款，物品到全域背包")
+            desc_parts.append(flow_label)
             embed = discord.Embed(
                 title="🏪 商店",
-                description=(
-                    f"当前匯率: 1 {currency_name} = {rate:.4f} {GLOBAL_CURRENCY_NAME}\n"
-                    f"🏦 伺服器商店 = 伺服幣付款，物品到伺服器背包\n"
-                    f"🌐 全域商店 = 全域幣付款，物品到全域背包"
-                ),
+                description="\n".join(desc_parts),
                 color=0x9b59b6
             )
             for item in purchasable:
                 buy_price = get_item_buy_price(item["id"], guild_id)
                 sell_price = get_item_sell_price(item["id"], guild_id)
+                item_lines = [
+                    item.get('description', '無描述'),
+                    f"🏦 伺服器商店: **{buy_price:,.2f}** {currency_name}",
+                ]
+                if allow_flow:
+                    item_lines.append(f"🌐 全域商店: **{item['worth']:,.2f}** {GLOBAL_CURRENCY_NAME}")
+                item_lines.append(f"💰 賣出: **{sell_price:,.2f}** {currency_name}")
                 embed.add_field(
                     name=item["name"],
-                    value=(
-                        f"{item.get('description', '無描述')}\n"
-                        f"🏦 伺服器商店: **{buy_price:,.2f}** {currency_name}\n"
-                        f"🌐 全域商店: **{item['worth']:,.2f}** {GLOBAL_CURRENCY_NAME}\n"
-                        f"💰 賣出: **{sell_price:,.2f}** {currency_name}"
-                    ),
+                    value="\n".join(item_lines),
                     inline=False
                 )
 
@@ -1462,6 +1489,25 @@ class EconomyMod(commands.GroupCog, name="economymod", description="經濟系統
     #     log(f"Admin {interaction.user} set rate {old_rate} -> {rate} in guild {guild_id}",
     #         module_name="Economy", user=interaction.user, guild=interaction.guild)
 
+    @app_commands.command(name="toggle_flow", description="切換是否允許伺服幣與全域幣流通（兌換、全域商店等）")
+    async def toggle_flow(self, interaction: discord.Interaction):
+        guild_id = interaction.guild.id
+        current = get_allow_global_flow(guild_id)
+        new_value = not current
+        set_allow_global_flow(guild_id, new_value)
+        status = "🔓 已開啟" if new_value else "🔒 已關閉"
+        desc = (
+            "用戶可以使用兌換、全域商店買賣及支票兌現功能。"
+            if new_value else
+            "用戶無法使用兌換、全域商店買賣及支票兌現功能。"
+        )
+        await interaction.response.send_message(
+            f"✅ 全域幣流通已切換為 **{status}**\n{desc}",
+            ephemeral=True
+        )
+        log(f"Admin {interaction.user} toggled global flow to {new_value} in guild {guild_id}",
+            module_name="Economy", user=interaction.user, guild=interaction.guild)
+
     @app_commands.command(name="setname", description="設定伺服器貨幣名稱")
     @app_commands.describe(name="新的貨幣名稱")
     async def setname(self, interaction: discord.Interaction, name: str):
@@ -1518,6 +1564,8 @@ class EconomyMod(commands.GroupCog, name="economymod", description="經濟系統
         embed.add_field(name="管理員注入", value=f"{admin_injected:,.2f}", inline=True)
         embed.add_field(name="交易次數", value=f"{tx_count:,}", inline=True)
         embed.add_field(name="用戶數", value=f"{len(all_users):,}", inline=True)
+        allow_flow = get_allow_global_flow(guild_id)
+        embed.add_field(name="全域幣流通", value="🔓 已開啟" if allow_flow else "🔒 已關閉", inline=True)
 
         if total_supply > 0:
             embed.add_field(
@@ -1576,19 +1624,29 @@ asyncio.run(bot.add_cog(EconomyMod()))
 
 
 def make_cheque_use_callback(item_id: str, worth: int):
-    """產生支票兌現用的 callback，使用後扣除 1 張支票並將 worth 加入餘額（依 scope 加至伺服器或全域）。"""
+    """產生支票兌現用的 callback，使用後扣除 1 張支票並將 worth 加入餘額（依匯率轉換至伺服幣或直接加全域幣）。"""
 
     async def callback(interaction: discord.Interaction):
         guild_id = getattr(interaction, "guild_id", 0)
         user_id = interaction.user.id
+        # 伺服器背包中兌現支票屬於全域幣流通，需檢查開關
+        if guild_id and guild_id != GLOBAL_GUILD_ID and not get_allow_global_flow(guild_id):
+            await interaction.response.send_message("❌ 此伺服器已關閉伺服幣與全域幣的流通功能，無法兌現支票。", ephemeral=True)
+            return
         removed = await remove_item_from_user(guild_id, user_id, item_id, 1)
         if removed < 1:
             await interaction.response.send_message("你沒有這張支票。", ephemeral=True)
             return
-        add_balance(guild_id, user_id, float(worth))
+        # 支票面額是全域幣，兌現到伺服器時需依匯率轉換，避免套利洗錢
+        if guild_id and guild_id != GLOBAL_GUILD_ID:
+            rate = get_exchange_rate(guild_id)
+            payout = round(worth / rate, 2)
+        else:
+            payout = float(worth)
+        add_balance(guild_id, user_id, payout)
         currency_name = get_currency_name(guild_id)
         await interaction.response.send_message(
-            f"你兌現了支票，獲得 **{worth:,.0f}** {currency_name}。",
+            f"你兌現了支票，獲得 **{payout:,.2f}** {currency_name}。",
             ephemeral=True,
         )
 
