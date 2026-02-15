@@ -237,6 +237,25 @@ def record_sale(guild_id: int, amount: float):
     apply_market_inflation(guild_id, amount, SALE_INFLATION_WEIGHT)
 
 
+# ==================== Transaction Log ====================
+
+def log_transaction(guild_id: int, user_id: int, tx_type: str, amount: float, currency: str, detail: str = ""):
+    """記錄一筆交易到用戶的交易紀錄"""
+    history = get_user_data(guild_id, user_id, "economy_history", [])
+    history.append({
+        "type": tx_type,
+        "amount": amount,
+        "currency": currency,
+        "detail": detail,
+        "time": datetime.now(timezone.utc).isoformat(),
+        "balance_after": get_balance(guild_id, user_id),
+    })
+    # 只保留最近 50 筆
+    if len(history) > 50:
+        history = history[-50:]
+    set_user_data(guild_id, user_id, "economy_history", history)
+
+
 def add_balance(guild_id: int, user_id: int, amount: float):
     """增加用戶餘額並追蹤供給量"""
     current = get_balance(guild_id, user_id)
@@ -479,6 +498,8 @@ class Economy(commands.GroupCog, name="economy", description="經濟系統指令
         )
         embed.set_footer(text=f"連續登入：{streak} 天")
         embed.timestamp = datetime.now(timezone(timedelta(hours=8)))
+        total_earned = daily_amount + bonus
+        log_transaction(guild_id, user_id, "每日簽到", total_earned, currency_name, f"連續 {streak} 天" + (f"，含獎勵 {bonus}" if bonus > 0 else ""))
         await interaction.response.send_message(embed=embed)
 
     @app_commands.command(name="hourly", description="領取每小時獎勵")
@@ -549,6 +570,7 @@ class Economy(commands.GroupCog, name="economy", description="經濟系統指令
         )
         # embed.set_footer(text="AwA")
         embed.timestamp = now
+        log_transaction(guild_id, user_id, "每小時簽到", hourly_amount, currency_name)
         await interaction.response.send_message(embed=embed)
 
     @app_commands.command(name="pay", description="轉帳給其他用戶")
@@ -606,6 +628,11 @@ class Economy(commands.GroupCog, name="economy", description="經濟系統指令
 
         if interaction.is_guild_integration():
             record_transaction(interaction.guild.id)
+
+        # 記錄雙方交易紀錄
+        pay_guild = guild_id if (currency == "server" and interaction.is_guild_integration()) else GLOBAL_GUILD_ID
+        log_transaction(pay_guild, sender_id, "轉帳支出", -(amount + fee), currency_name, f"→ {user.display_name}，手續費 {fee:,.2f}")
+        log_transaction(pay_guild, receiver_id, "轉帳收入", amount, currency_name, f"← {interaction.user.display_name}")
 
         embed = discord.Embed(title="轉帳成功", color=0x2ecc71)
         embed.add_field(name="收款人", value=user.display_name, inline=True)
@@ -688,6 +715,13 @@ class Economy(commands.GroupCog, name="economy", description="經濟系統指令
 
         record_transaction(guild_id)
 
+        if direction == "to_global":
+            log_transaction(guild_id, user_id, "兌換支出", -amount, currency_name, f"→ {received:,.2f} {GLOBAL_CURRENCY_NAME}")
+            log_transaction(GLOBAL_GUILD_ID, user_id, "兌換收入", received, GLOBAL_CURRENCY_NAME, f"← {amount:,.2f} {currency_name}")
+        else:
+            log_transaction(GLOBAL_GUILD_ID, user_id, "兌換支出", -amount, GLOBAL_CURRENCY_NAME, f"→ {received:,.2f} {currency_name}")
+            log_transaction(guild_id, user_id, "兌換收入", received, currency_name, f"← {amount:,.2f} {GLOBAL_CURRENCY_NAME}")
+
         await interaction.response.send_message(embed=embed)
 
     @app_commands.command(name="buy", description="從商店購買物品")
@@ -762,6 +796,8 @@ class Economy(commands.GroupCog, name="economy", description="經濟系統指令
         remaining = get_balance(guild_id, user_id) if scope == "server" else get_global_balance(user_id)
         dest = "伺服器背包" if scope == "server" else "全域背包"
         embed.set_footer(text=f"剩餘餘額：{remaining:,.2f} {currency_name} | 物品已放入{dest}")
+        buy_guild = guild_id if scope == "server" else GLOBAL_GUILD_ID
+        log_transaction(buy_guild, user_id, "購買物品", -total_price, currency_name, f"{item['name']} x{amount}")
         await interaction.response.send_message(embed=embed)
 
     @app_commands.command(name="sell", description="賣出物品給商店")
@@ -833,6 +869,8 @@ class Economy(commands.GroupCog, name="economy", description="經濟系統指令
             text=f"賣出價為買入價的 {sell_ratio*100:.0f}%（買入: {buy_price:,.2f}）",
         )
         embed.timestamp = datetime.now(timezone.utc)
+        sell_guild = guild_id if scope == "server" else GLOBAL_GUILD_ID
+        log_transaction(sell_guild, user_id, "賣出物品", total_price, currency_name, f"{item['name']} x{removed}")
         await interaction.response.send_message(embed=embed)
 
     @app_commands.command(name="shop", description="查看商店")
@@ -1059,6 +1097,31 @@ class Economy(commands.GroupCog, name="economy", description="經濟系統指令
 
                 for child in self.children:
                     child.disabled = True
+                # 記錄交易紀錄
+                trade_currency = get_currency_name(td["guild_id"])
+                offer_parts = []
+                request_parts = []
+                if td["offer_item"]:
+                    oi = get_item_by_id(td["offer_item"])
+                    offer_parts.append(f"{oi['name'] if oi else td['offer_item']} x{td['offer_item_amount']}")
+                if td["offer_money"] > 0:
+                    offer_parts.append(f"{td['offer_money']:,.2f} {trade_currency}")
+                if td["request_item"]:
+                    ri = get_item_by_id(td["request_item"])
+                    request_parts.append(f"{ri['name'] if ri else td['request_item']} x{td['request_item_amount']}")
+                if td["request_money"] > 0:
+                    request_parts.append(f"{td['request_money']:,.2f} {trade_currency}")
+                offer_str = ", ".join(offer_parts) or "無"
+                request_str = ", ".join(request_parts) or "無"
+                if td["offer_money"] > 0:
+                    log_transaction(td["guild_id"], td["initiator_id"], "交易支出", -td["offer_money"], trade_currency, f"提供: {offer_str} → 換取: {request_str}")
+                if td["request_money"] > 0:
+                    log_transaction(td["guild_id"], td["initiator_id"], "交易收入", td["request_money"], trade_currency, f"提供: {offer_str} → 換取: {request_str}")
+                if td["request_money"] > 0:
+                    log_transaction(td["guild_id"], td["target_id"], "交易支出", -td["request_money"], trade_currency, f"提供: {request_str} → 換取: {offer_str}")
+                if td["offer_money"] > 0:
+                    log_transaction(td["guild_id"], td["target_id"], "交易收入", td["offer_money"], trade_currency, f"提供: {request_str} → 換取: {offer_str}")
+
                 await btn_interaction.response.edit_message(content="✅ 交易完成！", view=self)
                 log(f"Trade between {td['initiator_id']} and {td['target_id']} in guild {td['guild_id']}",
                     module_name="Economy")
@@ -1250,6 +1313,76 @@ class Economy(commands.GroupCog, name="economy", description="經濟系統指令
             icon_url=interaction.guild.icon.url if interaction.guild.icon else None
         )
         await interaction.response.send_message(embed=embed)
+
+    @app_commands.command(name="history", description="查看個人交易紀錄")
+    @app_commands.describe(scope="查看範圍", page="頁數")
+    @app_commands.choices(scope=[
+        app_commands.Choice(name="伺服器", value="server"),
+        app_commands.Choice(name="全域", value="global"),
+    ])
+    async def history(self, interaction: discord.Interaction, scope: str = None, page: int = 1):
+        user_id = interaction.user.id
+        if scope is None:
+            scope = "server" if interaction.is_guild_integration() else "global"
+        if scope == "global" or not interaction.is_guild_integration():
+            guild_id = GLOBAL_GUILD_ID
+            scope_name = "全域"
+        else:
+            guild_id = interaction.guild.id
+            scope_name = interaction.guild.name
+
+        history_data = get_user_data(guild_id, user_id, "economy_history", [])
+        if not history_data:
+            await interaction.response.send_message(f"📜 你在 {scope_name} 沒有任何交易紀錄。", ephemeral=True)
+            return
+
+        # 由新到舊排序
+        history_data = list(reversed(history_data))
+        per_page = 10
+        total_pages = max(1, (len(history_data) + per_page - 1) // per_page)
+        page = max(1, min(page, total_pages))
+        start = (page - 1) * per_page
+        end = start + per_page
+        page_data = history_data[start:end]
+
+        embed = discord.Embed(
+            title=f"📜 {interaction.user.display_name} 的交易紀錄（{scope_name}）",
+            color=0x3498db
+        )
+
+        for entry in page_data:
+            tx_type = entry.get("type", "未知")
+            amount = entry.get("amount", 0)
+            currency = entry.get("currency", "")
+            detail = entry.get("detail", "")
+            tx_time = entry.get("time", "")
+
+            # 格式化時間為 Discord 時間戳
+            try:
+                dt = datetime.fromisoformat(tx_time)
+                timestamp = int(dt.timestamp())
+                time_str = f"<t:{timestamp}:R>"
+            except Exception:
+                time_str = tx_time
+
+            # 金額顯示
+            if amount >= 0:
+                amount_str = f"+{amount:,.2f}"
+                emoji = "📈"
+            else:
+                amount_str = f"{amount:,.2f}"
+                emoji = "📉"
+
+            name = f"{emoji} {tx_type}"
+            value = f"{amount_str} {currency}"
+            if detail:
+                value += f"\n{detail}"
+            value += f"\n{time_str}"
+
+            embed.add_field(name=name, value=value, inline=False)
+
+        embed.set_footer(text=f"第 {page}/{total_pages} 頁 · 共 {len(history_data)} 筆紀錄")
+        await interaction.response.send_message(embed=embed, ephemeral=True)
 
 
 asyncio.run(bot.add_cog(Economy()))
