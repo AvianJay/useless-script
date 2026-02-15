@@ -390,6 +390,13 @@ class LobbyView(discord.ui.View):
         self.stake_select.callback = self.on_stake_change
         self.add_item(self.stake_select)
 
+    @discord.ui.button(label="📜 規則玩法", style=discord.ButtonStyle.secondary, row=1)
+    async def rules_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await interaction.response.send_message(
+            embed=self.cog.big2_rules_embed(),
+            ephemeral=True,
+        )
+
     async def on_rule_change(self, interaction: discord.Interaction):
         if interaction.user.id != self.game.owner_id:
             return await interaction.response.send_message("只有房主可以改規則。", ephemeral=True)
@@ -986,6 +993,42 @@ class MiniGamesCog(commands.GroupCog, group_name="games", description="迷你遊
         embed = self._tower_embed(game, phase="cashout")
         view = TowerGameView(self, game)
         await interaction.response.edit_message(embed=embed, view=view)
+
+    def big2_rules_embed(self) -> discord.Embed:
+        """大老二規則玩法說明（給規則按鈕用）"""
+        embed = discord.Embed(
+            title="🎴 大老二 規則玩法",
+            color=discord.Color.blue(),
+            description="2～4 人，每人 13 張牌，先出完者勝。",
+        )
+        embed.add_field(
+            name="牌型大小",
+            value=(
+                "單張、對子、三條、順子、同花、葫蘆、鐵支、同花順。\n"
+                "牌點：3～10、J、Q、K、A、2（2 最大）。\n"
+                "花色：♣ < ♦ < ♥ < ♠（同點數時比花色）。"
+            ),
+            inline=False,
+        )
+        embed.add_field(
+            name="出牌",
+            value=(
+                "輪到你時可出 **1 / 2 / 3 / 5 張** 合法牌型，或 **Pass**。\n"
+                "出的牌必須 **壓過** 上一手（同牌型比大小）；空桌時任意合法牌型皆可領出。\n"
+                "所有人 Pass 則清空桌面，由上一手出牌者重新領出。"
+            ),
+            inline=False,
+        )
+        embed.add_field(
+            name="本桌規則",
+            value=(
+                "**一般規則**：首手必須包含 3♦，2 不可組成順子。\n"
+                "**自由先手**：不強制首手 3♦，房主可在大廳下拉選單切換。"
+            ),
+            inline=False,
+        )
+        embed.set_footer(text="點「我的手牌」以選牌出牌。")
+        return embed
 
     def lobby_embed(self, g: Game) -> discord.Embed:
         rule = "必出3♦" if g.rules.must_start_with_3d else "自由先手"
