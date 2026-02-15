@@ -77,6 +77,9 @@ class Database:
                 try:
                     return json.loads(result[0])
                 except (json.JSONDecodeError, TypeError):
+                    # Try to convert to bool
+                    if result[0].lower() in ('true', 'false'):
+                        return result[0].lower() == 'true'
                     # Try to convert to int if it looks like a number
                     try:
                         return int(result[0])
@@ -94,6 +97,8 @@ class Database:
                 # Convert value to JSON if it's a complex type, otherwise keep as string
                 if isinstance(value, (dict, list)):
                     json_value = json.dumps(value)
+                elif isinstance(value, bool):
+                    json_value = str(value)  # Store booleans as "True" or "False"
                 elif isinstance(value, int):
                     json_value = str(value)  # Store integers as strings for consistency
                 else:
@@ -215,7 +220,14 @@ class Database:
                 try:
                     return json.loads(result[0])
                 except (json.JSONDecodeError, TypeError):
-                    return result[0]
+                    # Try to convert to bool
+                    if result[0].lower() in ('true', 'false'):
+                        return result[0].lower() == 'true'
+                    # Try to convert to int if it looks like a number
+                    try:
+                        return int(result[0])
+                    except (ValueError, TypeError):
+                        return result[0]
             
             return default
     

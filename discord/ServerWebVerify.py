@@ -864,7 +864,7 @@ class ServerWebVerify(commands.GroupCog, name="webverify", description="伺服�
                     assign_role = True
                 conn.close()
             elif trigger == 'left_guild_before':
-                is_left_before = get_user_data(member.guild.id, member.id, "left_guild") == "True"
+                is_left_before = get_user_data(member.guild.id, member.id, "left_guild", False)
                 if is_left_before:
                     assign_role = True
 
