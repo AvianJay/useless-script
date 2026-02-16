@@ -197,6 +197,319 @@ async def do_action_str(action: str, guild: Optional[discord.Guild] = None, user
     return logs
 
 
+# 快速設定的處置預設選項（value 為 __custom__ 時會跳出 Modal 讓使用者輸入）
+ACTION_PRESETS = [
+    ("刪除訊息", "delete"),
+    ("刪除＋警告", "delete {user}，請注意你的行為。"),
+    ("公開警告", "warn {user}，請注意你的行為。"),
+    ("禁言 10 分鐘", "mute 10m 違規"),
+    ("禁言 1 小時", "mute 1h 違規"),
+    ("踢出", "kick 違規"),
+    ("封禁", "ban 0 0 違規"),
+    ("自訂...", "__custom__"),
+]
+
+
+class CustomActionModal(discord.ui.Modal, title="自訂處置動作"):
+    action_input = discord.ui.TextInput(
+        label="處置動作指令",
+        placeholder="例：mute 30m 刷頻, delete {user} 請勿刷頻",
+        required=True,
+        max_length=500,
+        style=discord.TextStyle.paragraph,
+    )
+
+    def __init__(self, view: "QuickSetupView"):
+        super().__init__()
+        self.quick_setup_view = view
+
+    async def on_submit(self, interaction: discord.Interaction):
+        self.quick_setup_view.config["action"] = self.action_input.value.strip()
+        await interaction.response.edit_message(
+            embed=self.quick_setup_view._get_embed(interaction.guild),
+            view=self.quick_setup_view,
+        )
+
+
+class QuickSetupView(discord.ui.View):
+    """互動式快速設定精靈"""
+    def __init__(self, guild_id: int, timeout: float = 300):
+        super().__init__(timeout=timeout)
+        self.guild_id = guild_id
+        self.step = 1
+        self.feature = None
+        self.config = {}
+
+    def _get_embed(self, guild: discord.Guild):
+        embed = discord.Embed(title="⚡ 自動管理快速設定", color=0x5865F2)
+        if self.step == 1:
+            embed.description = "請選擇要設定的功能："
+        elif self.step == 2 and self.feature:
+            feat_names = {
+                "scamtrap": "🪤 詐騙陷阱",
+                "escape_punish": "🏃 逃避責任懲處",
+                "too_many_h1": "📢 標題過多",
+                "too_many_emojis": "😂 表情符號過多",
+                "anti_uispam": "📲 用戶安裝應用程式濫用",
+                "anti_raid": "🚨 防突襲",
+                "anti_spam": "🔁 防刷頻",
+            }
+            embed.description = f"正在設定 **{feat_names.get(self.feature, self.feature)}**\n請完成下方選項後點擊「完成設定」。"
+            if self.config:
+                for k, v in self.config.items():
+                    if k == "channel_id" and v:
+                        ch = guild.get_channel(int(v))
+                        embed.add_field(name="頻道", value=ch.mention if ch else v, inline=False)
+                    elif k == "action":
+                        embed.add_field(name="處置動作", value=f"`{str(v)[:50]}{'...' if len(str(v)) > 50 else ''}`", inline=False)
+                    else:
+                        embed.add_field(name=k, value=str(v), inline=True)
+        return embed
+
+    def _update_components_step1(self):
+        self.clear_items()
+        opts = [
+            discord.SelectOption(label="詐騙陷阱", value="scamtrap", description="蜜罐頻道"),
+            discord.SelectOption(label="逃避責任懲處", value="escape_punish", description="禁言期間離開者"),
+            discord.SelectOption(label="標題過多", value="too_many_h1", description="Markdown 大標題洗版"),
+            discord.SelectOption(label="表情符號過多", value="too_many_emojis", description="過多 emoji"),
+            discord.SelectOption(label="用戶安裝應用程式濫用", value="anti_uispam", description="User Install 濫用"),
+            discord.SelectOption(label="防突襲", value="anti_raid", description="大量加入偵測"),
+            discord.SelectOption(label="防刷頻", value="anti_spam", description="相似訊息刷頻"),
+        ]
+        sel = discord.ui.Select(placeholder="選擇功能", options=opts)
+        sel.callback = self._on_feature_select
+        self.add_item(sel)
+
+    def _update_components_step2(self, guild: discord.Guild):
+        self.clear_items()
+        automod_settings = get_server_config(self.guild_id, "automod", {}).get(self.feature, {})
+        defaults = automod_settings.copy()
+
+        if self.feature == "scamtrap":
+            ch_sel = discord.ui.ChannelSelect(
+                placeholder="選擇陷阱頻道",
+                channel_types=[discord.ChannelType.text, discord.ChannelType.news],
+                min_values=1, max_values=1,
+            )
+            ch_sel.callback = self._on_scamtrap_channel
+            self.add_item(ch_sel)
+        elif self.feature == "escape_punish":
+            punish_sel = discord.ui.Select(placeholder="懲處方式", options=[
+                discord.SelectOption(label="封禁", value="ban", description="永久封禁"),
+            ])
+            punish_sel.callback = self._on_escape_punish_select
+            self.add_item(punish_sel)
+            dur_sel = discord.ui.Select(placeholder="封禁時長", options=[
+                discord.SelectOption(label="永久", value="0"),
+                discord.SelectOption(label="7 天", value="7d"),
+                discord.SelectOption(label="30 天", value="30d"),
+            ])
+            dur_sel.callback = self._on_escape_duration_select
+            self.add_item(dur_sel)
+            # escape_punish 不需 action
+            btn = discord.ui.Button(label="完成設定", style=discord.ButtonStyle.success)
+            btn.callback = self._on_finish
+            self.add_item(btn)
+            return
+        elif self.feature == "too_many_h1":
+            len_sel = discord.ui.Select(placeholder="最大標題字數", options=[
+                discord.SelectOption(label="15", value="15"),
+                discord.SelectOption(label="20", value="20"),
+                discord.SelectOption(label="30", value="30"),
+                discord.SelectOption(label="50", value="50"),
+            ])
+            len_sel.callback = self._on_h1_length_select
+            self.add_item(len_sel)
+        elif self.feature == "too_many_emojis":
+            emoji_sel = discord.ui.Select(placeholder="最大表情符號數", options=[
+                discord.SelectOption(label="5", value="5"),
+                discord.SelectOption(label="10", value="10"),
+                discord.SelectOption(label="15", value="15"),
+                discord.SelectOption(label="20", value="20"),
+            ])
+            emoji_sel.callback = self._on_emojis_select
+            self.add_item(emoji_sel)
+        elif self.feature == "anti_uispam":
+            cnt_sel = discord.ui.Select(placeholder="時間窗口內最大觸發次數", options=[
+                discord.SelectOption(label="3", value="3"),
+                discord.SelectOption(label="5", value="5"),
+                discord.SelectOption(label="10", value="10"),
+            ])
+            cnt_sel.callback = self._on_uispam_count_select
+            self.add_item(cnt_sel)
+            win_sel = discord.ui.Select(placeholder="偵測時間窗口（秒）", options=[
+                discord.SelectOption(label="30 秒", value="30"),
+                discord.SelectOption(label="60 秒", value="60"),
+                discord.SelectOption(label="120 秒", value="120"),
+            ])
+            win_sel.callback = self._on_uispam_window_select
+            self.add_item(win_sel)
+        elif self.feature == "anti_raid":
+            joins_sel = discord.ui.Select(placeholder="時間窗口內最大加入數", options=[
+                discord.SelectOption(label="3", value="3"),
+                discord.SelectOption(label="5", value="5"),
+                discord.SelectOption(label="10", value="10"),
+            ])
+            joins_sel.callback = self._on_raid_joins_select
+            self.add_item(joins_sel)
+            win_sel = discord.ui.Select(placeholder="偵測時間窗口（秒）", options=[
+                discord.SelectOption(label="30 秒", value="30"),
+                discord.SelectOption(label="60 秒", value="60"),
+                discord.SelectOption(label="120 秒", value="120"),
+            ])
+            win_sel.callback = self._on_raid_window_select
+            self.add_item(win_sel)
+        elif self.feature == "anti_spam":
+            msg_sel = discord.ui.Select(placeholder="最大相似訊息數", options=[
+                discord.SelectOption(label="3", value="3"),
+                discord.SelectOption(label="5", value="5"),
+                discord.SelectOption(label="10", value="10"),
+            ])
+            msg_sel.callback = self._on_spam_messages_select
+            self.add_item(msg_sel)
+            win_sel = discord.ui.Select(placeholder="偵測時間窗口（秒）", options=[
+                discord.SelectOption(label="30 秒", value="30"),
+                discord.SelectOption(label="60 秒", value="60"),
+            ])
+            win_sel.callback = self._on_spam_window_select
+            self.add_item(win_sel)
+            sim_sel = discord.ui.Select(placeholder="相似度閾值", options=[
+                discord.SelectOption(label="50%", value="50"),
+                discord.SelectOption(label="75%", value="75"),
+                discord.SelectOption(label="90%", value="90"),
+            ])
+            sim_sel.callback = self._on_spam_similarity_select
+            self.add_item(sim_sel)
+
+        action_opts = [discord.SelectOption(label=l, value=v) for l, v in ACTION_PRESETS]
+        action_sel = discord.ui.Select(placeholder="處置動作（選一個）", options=action_opts)
+        action_sel.callback = self._on_action_select
+        self.add_item(action_sel)
+
+        btn = discord.ui.Button(label="完成設定", style=discord.ButtonStyle.success)
+        btn.callback = self._on_finish
+        self.add_item(btn)
+
+    async def _on_feature_select(self, interaction: discord.Interaction):
+        self.feature = interaction.data["values"][0]
+        self.step = 2
+        self.config = {}
+        feat_defaults = {
+            "too_many_h1": {"max_length": "20"},
+            "too_many_emojis": {"max_emojis": "10"},
+            "anti_uispam": {"max_count": "5", "time_window": "60"},
+            "anti_raid": {"max_joins": "5", "time_window": "60"},
+            "anti_spam": {"max_messages": "5", "time_window": "30", "similarity": "75"},
+            "escape_punish": {"punishment": "ban", "duration": "0"},
+        }
+        self.config = feat_defaults.get(self.feature, {}).copy()
+        self._update_components_step2(interaction.guild)
+        await interaction.response.edit_message(embed=self._get_embed(interaction.guild), view=self)
+
+    async def _on_scamtrap_channel(self, interaction: discord.Interaction):
+        self.config["channel_id"] = str(interaction.data["values"][0])
+        await interaction.response.defer_update()
+        await interaction.message.edit(embed=self._get_embed(interaction.guild), view=self)
+
+    async def _on_escape_punish_select(self, interaction: discord.Interaction):
+        self.config["punishment"] = interaction.data["values"][0]
+        await interaction.response.defer_update()
+        await interaction.message.edit(embed=self._get_embed(interaction.guild), view=self)
+
+    async def _on_escape_duration_select(self, interaction: discord.Interaction):
+        self.config["duration"] = interaction.data["values"][0]
+        await interaction.response.defer_update()
+        await interaction.message.edit(embed=self._get_embed(interaction.guild), view=self)
+
+    async def _on_h1_length_select(self, interaction: discord.Interaction):
+        self.config["max_length"] = interaction.data["values"][0]
+        await interaction.response.defer_update()
+        await interaction.message.edit(embed=self._get_embed(interaction.guild), view=self)
+
+    async def _on_emojis_select(self, interaction: discord.Interaction):
+        self.config["max_emojis"] = interaction.data["values"][0]
+        await interaction.response.defer_update()
+        await interaction.message.edit(embed=self._get_embed(interaction.guild), view=self)
+
+    async def _on_uispam_count_select(self, interaction: discord.Interaction):
+        self.config["max_count"] = interaction.data["values"][0]
+        await interaction.response.defer_update()
+        await interaction.message.edit(embed=self._get_embed(interaction.guild), view=self)
+
+    async def _on_uispam_window_select(self, interaction: discord.Interaction):
+        self.config["time_window"] = interaction.data["values"][0]
+        await interaction.response.defer_update()
+        await interaction.message.edit(embed=self._get_embed(interaction.guild), view=self)
+
+    async def _on_raid_joins_select(self, interaction: discord.Interaction):
+        self.config["max_joins"] = interaction.data["values"][0]
+        await interaction.response.defer_update()
+        await interaction.message.edit(embed=self._get_embed(interaction.guild), view=self)
+
+    async def _on_raid_window_select(self, interaction: discord.Interaction):
+        self.config["time_window"] = interaction.data["values"][0]
+        await interaction.response.defer_update()
+        await interaction.message.edit(embed=self._get_embed(interaction.guild), view=self)
+
+    async def _on_spam_messages_select(self, interaction: discord.Interaction):
+        self.config["max_messages"] = interaction.data["values"][0]
+        await interaction.response.defer_update()
+        await interaction.message.edit(embed=self._get_embed(interaction.guild), view=self)
+
+    async def _on_spam_window_select(self, interaction: discord.Interaction):
+        self.config["time_window"] = interaction.data["values"][0]
+        await interaction.response.defer_update()
+        await interaction.message.edit(embed=self._get_embed(interaction.guild), view=self)
+
+    async def _on_spam_similarity_select(self, interaction: discord.Interaction):
+        self.config["similarity"] = interaction.data["values"][0]
+        await interaction.response.defer_update()
+        await interaction.message.edit(embed=self._get_embed(interaction.guild), view=self)
+
+    async def _on_action_select(self, interaction: discord.Interaction):
+        value = interaction.data["values"][0]
+        if value == "__custom__":
+            modal = CustomActionModal(self)
+            await interaction.response.send_modal(modal)
+            return
+        self.config["action"] = value
+        await interaction.response.defer_update()
+        await interaction.message.edit(embed=self._get_embed(interaction.guild), view=self)
+
+    async def _on_finish(self, interaction: discord.Interaction):
+        if self.feature not in ("scamtrap", "escape_punish", "too_many_h1", "too_many_emojis", "anti_uispam", "anti_raid", "anti_spam"):
+            await interaction.response.send_message("無效的功能。", ephemeral=True)
+            return
+        if self.feature == "scamtrap" and "channel_id" not in self.config:
+            await interaction.response.send_message("詐騙陷阱請先選擇陷阱頻道。", ephemeral=True)
+            return
+        if "action" not in self.config and self.feature in ("scamtrap", "too_many_h1", "too_many_emojis", "anti_uispam", "anti_raid", "anti_spam"):
+            await interaction.response.send_message("請選擇處置動作。", ephemeral=True)
+            return
+
+        automod_settings = get_server_config(self.guild_id, "automod", {})
+        automod_settings.setdefault(self.feature, {})
+        automod_settings[self.feature]["enabled"] = True
+        for k, v in self.config.items():
+            if k and v is not None:
+                automod_settings[self.feature][k] = str(v)
+        set_server_config(self.guild_id, "automod", automod_settings)
+
+        feat_names = {"scamtrap": "詐騙陷阱", "escape_punish": "逃避責任懲處", "too_many_h1": "標題過多",
+                      "too_many_emojis": "表情符號過多", "anti_uispam": "用戶安裝應用程式濫用",
+                      "anti_raid": "防突襲", "anti_spam": "防刷頻"}
+        self.stop()
+        await interaction.response.edit_message(
+            embed=discord.Embed(title="✅ 設定完成", color=0x00ff00,
+                description=f"已完成 **{feat_names.get(self.feature, self.feature)}** 的快速設定並啟用。"),
+            view=None,
+        )
+
+    async def on_timeout(self):
+        self.stop()
+
+
 def parse_mention_to_id(mention: str) -> str:
     # 解析用戶、頻道或角色的提及格式，返回ID
     match = re.match(r"<@!?(\d+)>", mention)  # 用戶提及
@@ -269,7 +582,18 @@ class AutoModerate(commands.GroupCog, name=app_commands.locale_str("automod")):
                 await interaction.followup.send(f"請注意，詐騙陷阱已啟用，但尚未設定頻道ID。請使用 {await get_command_mention('automod', 'settings')} 來設定頻道ID。", ephemeral=True)
             if "action" not in automod_settings.get("scamtrap", {}):
                 await interaction.followup.send(f"請注意，詐騙陷阱已啟用，但尚未設定動作指令。請使用 {await get_command_mention('automod', 'settings')} 來設定動作指令。", ephemeral=True)
-    
+
+    @app_commands.command(name=app_commands.locale_str("quick-setup"), description="互動式快速設定精靈（選單引導）")
+    async def quick_setup_automod(self, interaction: discord.Interaction):
+        guild_id = interaction.guild.id if interaction.guild else 0
+        view = QuickSetupView(guild_id)
+        view._update_components_step1()
+        await interaction.response.send_message(
+            embed=view._get_embed(interaction.guild),
+            view=view,
+            ephemeral=True,
+        )
+
     @app_commands.command(name=app_commands.locale_str("settings"), description="設定自動管理選項")
     @app_commands.describe(
         setting="要設定的自動管理選項",
@@ -300,6 +624,84 @@ class AutoModerate(commands.GroupCog, name=app_commands.locale_str("automod")):
         actions_str = "\n".join(actions) if actions else "無動作"
         msg = f"指令有效，解析出的動作:\n{actions_str}"
         await interaction.response.send_message(content=msg)
+
+    @app_commands.command(name=app_commands.locale_str("action-builder"), description="產生動作指令字串")
+    @app_commands.describe(
+        action_type="動作類型",
+        duration="時長（mute/ban 用），如 10m、7d、0 表示永久",
+        delete_message_duration="ban 專用：刪除該用戶最近多少時間的訊息，如 1d、0 表示不刪",
+        reason="原因（mute/kick/ban 用）",
+        message="警告訊息（delete/warn 用），可用 {user} 代表用戶",
+        prepend="要接在此動作前面的既有指令（用逗號分隔多個動作時）",
+    )
+    @app_commands.choices(
+        action_type=[
+            app_commands.Choice(name="刪除訊息", value="delete"),
+            app_commands.Choice(name="刪除訊息＋私訊警告", value="delete_dm"),
+            app_commands.Choice(name="公開警告", value="warn"),
+            app_commands.Choice(name="私訊警告", value="warn_dm"),
+            app_commands.Choice(name="禁言", value="mute"),
+            app_commands.Choice(name="踢出", value="kick"),
+            app_commands.Choice(name="封禁", value="ban"),
+            app_commands.Choice(name="傳送管理通知", value="send_mod_message"),
+        ],
+    )
+    async def action_builder(
+        self,
+        interaction: discord.Interaction,
+        action_type: str,
+        duration: Optional[str] = None,
+        delete_message_duration: Optional[str] = None,
+        reason: Optional[str] = None,
+        message: Optional[str] = None,
+        prepend: Optional[str] = None,
+    ):
+        parts = []
+        if action_type == "delete":
+            parts = ["delete"]
+            if message:
+                parts.append(message)
+        elif action_type == "delete_dm":
+            parts = ["delete_dm"]
+            if message:
+                parts.append(message)
+        elif action_type == "warn":
+            parts = ["warn"]
+            parts.append(message or "{user}，請注意你的行為。")
+        elif action_type == "warn_dm":
+            parts = ["warn_dm"]
+            parts.append(message or "{user}，請注意你的行為。")
+        elif action_type == "mute":
+            parts = ["mute", duration or "10m"]
+            if reason:
+                parts.append(reason)
+        elif action_type == "kick":
+            parts = ["kick"]
+            if reason:
+                parts.append(reason)
+        elif action_type == "ban":
+            parts = ["ban", duration or "0", delete_message_duration or "0"]
+            if reason:
+                parts.append(reason)
+        elif action_type == "send_mod_message":
+            parts = ["send_mod_message"]
+
+        generated = " ".join(parts)
+        if prepend and prepend.strip():
+            generated = f"{prepend.strip()}, {generated}"
+        if len([a for a in generated.split(",")]) > 5:
+            await interaction.response.send_message("錯誤：動作總數不得超過 5 個。", ephemeral=True)
+            return
+
+        embed = discord.Embed(title="動作指令產生結果", color=0x00ff00)
+        embed.description = f"```\n{generated}\n```"
+        embed.add_field(name="使用方式", value=f"複製上方字串，用於 {await get_command_mention('automod', 'settings')} 的 action 值，或 {await get_command_mention('automod', 'setup')} 的 action 參數。", inline=False)
+        try:
+            preview = await do_action_str(generated)
+            embed.add_field(name="預覽效果", value="\n".join(f"• {a}" for a in preview), inline=False)
+        except Exception:
+            pass
+        await interaction.response.send_message(embed=embed, ephemeral=True)
 
     @app_commands.command(name=app_commands.locale_str("scan-flagged-users"), description="掃描並更新伺服器中的標記用戶")
     @app_commands.default_permissions(administrator=True)
@@ -364,8 +766,10 @@ class AutoModerate(commands.GroupCog, name=app_commands.locale_str("automod")):
         embed = discord.Embed(title="自動管理功能介紹", color=0x5865F2)
         embed.description = (
             "自動管理 (AutoModerate) 提供多種自動化保護功能，協助管理員維護伺服器秩序。\n"
+            f"使用 {await get_command_mention('automod', 'quick-setup')} 互動式快速設定（推薦），"
+            f"使用 {await get_command_mention('automod', 'setup')} 一次設定某功能的所有選項，"
             f"使用 {await get_command_mention('automod', 'toggle')} 啟用或停用功能，"
-            f"使用 {await get_command_mention('automod', 'settings')} 調整參數，"
+            f"使用 {await get_command_mention('automod', 'settings')} 單獨調整參數，"
             f"使用 {await get_command_mention('automod', 'view')} 查看目前設定。"
         )
         embed.add_field(
@@ -419,7 +823,8 @@ class AutoModerate(commands.GroupCog, name=app_commands.locale_str("automod")):
                   "`kick` — 踢出用戶\n"
                   "`ban <時長> <刪除訊息時長>` — 封禁用戶\n"
                   "`send_mod_message` — 傳送管理通知\n"
-                  f"使用 {await get_command_mention('automod', 'check-action')} 可預覽動作效果。",
+                  f"使用 {await get_command_mention('automod', 'action-builder')} 產生動作字串，"
+                  f"或 {await get_command_mention('automod', 'check-action')} 預覽效果。",
             inline=False
         )
         await interaction.response.send_message(embed=embed)

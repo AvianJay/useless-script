@@ -490,6 +490,23 @@ translations = {
     "big2": "大老二",
     "tower": "爬塔",
     "bet": "賭注",
+    # action-builder, automod setup, Moderate 指令與參數
+    "action-builder": "動作產生器",
+    "users": "目標用戶",
+    "action_type": "動作類型",
+    "delete_message_duration": "刪除訊息時長",
+    "prepend": "前置指令",
+    "feature": "功能",
+    "max_length": "最大標題字數",
+    "max_emojis": "最大表情符號數",
+    "max_count": "最大觸發次數",
+    "time_window": "偵測時間窗口",
+    "max_joins": "最大加入數",
+    "max_messages": "最大訊息數",
+    "similarity": "相似度閾值",
+    "punishment": "懲處方式",
+    "moderator": "執行管理員",
+    "quick-setup": "快速設定",
 }
 class CommandNameTranslator(app_commands.Translator):
     async def translate(

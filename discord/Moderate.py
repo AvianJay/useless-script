@@ -1,4 +1,4 @@
-from globalenv import bot, start_bot, get_server_config, set_server_config, get_user_data, set_user_data, on_ready_tasks, config, modules
+from globalenv import bot, start_bot, get_server_config, set_server_config, get_user_data, set_user_data, on_ready_tasks, config, modules, get_command_mention
 import discord
 from discord import app_commands
 from discord.ext import commands
@@ -919,7 +919,89 @@ class Moderate(commands.Cog):
             return
         set_server_config(interaction.guild.id, "MODERATION_MESSAGE_CHANNEL_ID", channel.id)
         await interaction.followup.send(f"已設定懲處公告頻道為 {channel.mention}。")
-    
+
+    @app_commands.command(name=app_commands.locale_str("action-builder"), description="產生懲處動作指令字串")
+    @app_commands.describe(
+        action_type="動作類型",
+        duration="時長（mute/ban 用），如 10m、7d、0 表示永久",
+        delete_message_duration="ban 專用：刪除該用戶最近多少時間的訊息，如 1d、0 表示不刪",
+        reason="原因（mute/kick/ban 用）",
+        message="警告訊息（delete/warn 用），可用 {user} 代表用戶",
+        prepend="要接在此動作前面的既有指令（用逗號分隔多個動作時）",
+    )
+    @app_commands.choices(
+        action_type=[
+            app_commands.Choice(name="刪除訊息", value="delete"),
+            app_commands.Choice(name="刪除訊息＋私訊警告", value="delete_dm"),
+            app_commands.Choice(name="公開警告", value="warn"),
+            app_commands.Choice(name="私訊警告", value="warn_dm"),
+            app_commands.Choice(name="禁言", value="mute"),
+            app_commands.Choice(name="踢出", value="kick"),
+            app_commands.Choice(name="封禁", value="ban"),
+            app_commands.Choice(name="傳送管理通知", value="send_mod_message"),
+        ],
+    )
+    async def action_builder(
+        self,
+        interaction: discord.Interaction,
+        action_type: str,
+        duration: Optional[str] = None,
+        delete_message_duration: Optional[str] = None,
+        reason: Optional[str] = None,
+        message: Optional[str] = None,
+        prepend: Optional[str] = None,
+    ):
+        parts = []
+        if action_type == "delete":
+            parts = ["delete"]
+            if message:
+                parts.append(message)
+        elif action_type == "delete_dm":
+            parts = ["delete_dm"]
+            if message:
+                parts.append(message)
+        elif action_type == "warn":
+            parts = ["warn"]
+            parts.append(message or "{user}，請注意你的行為。")
+        elif action_type == "warn_dm":
+            parts = ["warn_dm"]
+            parts.append(message or "{user}，請注意你的行為。")
+        elif action_type == "mute":
+            parts = ["mute", duration or "10m"]
+            if reason:
+                parts.append(reason)
+        elif action_type == "kick":
+            parts = ["kick"]
+            if reason:
+                parts.append(reason)
+        elif action_type == "ban":
+            parts = ["ban", duration or "0", delete_message_duration or "0"]
+            if reason:
+                parts.append(reason)
+        elif action_type == "send_mod_message":
+            parts = ["send_mod_message"]
+
+        generated = " ".join(parts)
+        if prepend and prepend.strip():
+            generated = f"{prepend.strip()}, {generated}"
+        if len([a for a in generated.split(",")]) > 5:
+            await interaction.response.send_message("錯誤：動作總數不得超過 5 個。", ephemeral=True)
+            return
+
+        embed = discord.Embed(title="動作指令產生結果", color=0x00ff00)
+        embed.description = f"```\n{generated}\n```"
+        embed.add_field(
+            name="使用方式",
+            value=f"複製上方字串，用於 {await get_command_mention('multi-moderate')} 的 action 參數，或 `!moderate @用戶` 指令。",
+            inline=False,
+        )
+        try:
+            preview = await do_action_str(generated, moderator=interaction.user)
+            embed.add_field(name="預覽效果", value="\n".join(f"• {a}" for a in preview), inline=False)
+        except Exception:
+            pass
+        await interaction.response.send_message(embed=embed, ephemeral=True)
+
     @commands.command(aliases=["mod", "m"])
     async def moderate(self, ctx: commands.Context, user: Union[discord.Member, discord.User, None] = None, *, commands_str: str = ""):
         """對用戶進行多重管理操作。
