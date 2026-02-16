@@ -158,19 +158,20 @@ class OXWU(commands.GroupCog, name="earthquake", description="OXWU 地震監測�
             # 取得詳細資訊
             report = await self._fetch_report_info()
             if report:
-                # 嘗試取得 CWA 圖片 URL（最多 5 次，間隔 5 秒）
+                # 嘗試取得 CWA 圖片 URL（最多 5 次，間隔 10 秒）
                 cwa_image_url = await self._fetch_cwa_image_with_retry()
                 embed = self._create_report_embed(report, screenshot_url, cwa_image_url)
                 # 建立連結按鈕
                 view = None
                 cached_link = cwa_get_cached_link()
-                if cached_link:
+                if cached_link and cwa_image_url:
                     view = discord.ui.View(timeout=None)
                     view.add_item(discord.ui.Button(label="中央氣象署報告", emoji="🌐", url=cached_link, style=discord.ButtonStyle.link))
                 await self._send_to_all_servers(embed, "oxwu_report_channel", view=view)
     
-    async def _fetch_cwa_image_with_retry(self, max_retries: int = 5, delay: float = 5.0) -> Optional[str]:
+    async def _fetch_cwa_image_with_retry(self, max_retries: int = 5, delay: float = 10.0) -> Optional[str]:
         """嘗試取得 CWA 圖片 URL，直到 is_same 為 False"""
+        await asyncio.sleep(delay)
         for attempt in range(max_retries):
             try:
                 link, is_same = await cwa_get_last_link()
