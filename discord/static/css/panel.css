@@ -327,6 +327,16 @@ body {
     min-width: 200px;
 }
 
+/* 特定設定改為直向排列，避免 row 導致排版問題（如自動回覆設定清單） */
+.setting-row-column {
+    flex-direction: column;
+    align-items: stretch;
+}
+.setting-row-column .setting-control {
+    min-width: 100%;
+    width: 100%;
+}
+
 /* ============= Form Controls ============= */
 .form-input, .form-select, .form-textarea {
     width: 100%;
@@ -507,6 +517,68 @@ body {
     font-size: 0.82rem;
     font-style: italic;
 }
+
+.role-tags-sm { min-height: 24px; }
+.role-tags-sm .role-tag { font-size: 0.78rem; padding: 2px 6px; }
+
+/* ============= Autoreply List Editor ============= */
+.autoreply-list-editor {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+.autoreply-rule-card {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 0.75rem 1rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.autoreply-rule-row { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; }
+.autoreply-rule-row .form-input { flex: 1; min-width: 120px; }
+
+.autoreply-rule-meta {
+    flex-wrap: wrap;
+    font-size: 0.88rem;
+    color: var(--text-muted);
+}
+.autoreply-rule-meta .form-select { width: auto; min-width: 100px; }
+.autoreply-rule-meta .toggle-wrapper { margin: 0; }
+.autoreply-rule-meta .role-tags { flex: 0 1 auto; }
+.autoreply-rule-meta .form-select:last-of-type { width: auto; min-width: 120px; }
+
+.btn-autoreply-add {
+    background: var(--bg-input);
+    color: var(--text-primary);
+    border: 1px dashed var(--border);
+    border-radius: var(--radius);
+    padding: 8px 14px;
+    font-family: var(--font);
+    font-size: 0.9rem;
+    cursor: pointer;
+    transition: border-color var(--transition), color var(--transition);
+}
+.btn-autoreply-add:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+}
+
+.btn-autoreply-remove {
+    background: var(--danger-bg);
+    color: var(--danger);
+    border: 1px solid var(--danger);
+    border-radius: var(--radius);
+    padding: 4px 10px;
+    font-size: 0.82rem;
+    cursor: pointer;
+    margin-left: auto;
+    transition: opacity var(--transition);
+}
+.btn-autoreply-remove:hover { opacity: 0.9; }
 
 /* ============= Responsive ============= */
 @media (max-width: 640px) {

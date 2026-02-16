@@ -354,10 +354,27 @@ def _serialize(value, stype):
         return None
     if stype in ("channel", "voice_channel", "category", "role"):
         return str(value)
-    if stype == "role_list":
+    if stype in ("role_list", "channel_list"):
         if isinstance(value, list):
             return [str(v) for v in value]
         return []
+    if stype == "autoreply_list":
+        if not isinstance(value, list):
+            return []
+        out = []
+        for item in value:
+            if not isinstance(item, dict):
+                continue
+            out.append({
+                "trigger": list(item.get("trigger", []) or []),
+                "response": list(item.get("response", []) or []),
+                "mode": str(item.get("mode", "contains")),
+                "reply": bool(item.get("reply", False)),
+                "channel_mode": str(item.get("channel_mode", "all")),
+                "channels": [str(c) for c in (item.get("channels") or [])],
+                "random_chance": int(item.get("random_chance", 100)),
+            })
+        return out
     return value
 
 
@@ -374,6 +391,54 @@ def _coerce(value, stype):
         if isinstance(value, list):
             return [int(v) for v in value if v]
         return []
+
+    if stype == "channel_list":
+        if isinstance(value, list):
+            return [int(v) for v in value if v]
+        return []
+
+    if stype == "autoreply_list":
+        if not isinstance(value, list):
+            return []
+        out = []
+        for item in value:
+            if not isinstance(item, dict):
+                continue
+            trigger = item.get("trigger")
+            if isinstance(trigger, str):
+                trigger = [t.strip() for t in trigger.split(",") if t.strip()]
+            else:
+                trigger = [str(x).strip() for x in (trigger or []) if str(x).strip()]
+            response = item.get("response")
+            if isinstance(response, str):
+                response = [r.strip() for r in response.split(",") if r.strip()]
+            else:
+                response = [str(x).strip() for x in (response or []) if str(x).strip()]
+            if not trigger or not response:
+                continue
+            channels_raw = item.get("channels") or []
+            channels = [int(c) for c in channels_raw if c is not None and str(c).strip() and str(c).isdigit()]
+            mode = str(item.get("mode", "contains")).strip() or "contains"
+            if mode not in ("contains", "equals", "starts_with", "ends_with", "regex"):
+                mode = "contains"
+            channel_mode = str(item.get("channel_mode", "all")).strip() or "all"
+            if channel_mode not in ("all", "whitelist", "blacklist"):
+                channel_mode = "all"
+            try:
+                random_chance = int(item.get("random_chance", 100))
+                random_chance = max(1, min(100, random_chance))
+            except (TypeError, ValueError):
+                random_chance = 100
+            out.append({
+                "trigger": trigger,
+                "response": response,
+                "mode": mode,
+                "reply": bool(item.get("reply", False)),
+                "channel_mode": channel_mode,
+                "channels": channels,
+                "random_chance": random_chance,
+            })
+        return out
 
     if stype == "boolean":
         if isinstance(value, bool):
@@ -464,7 +529,14 @@ def _register_all():
         register_settings("AutoReply", "自動回覆", [
             {"display": "忽略模式", "description": "黑名單: 忽略指定頻道 / 白名單: 只在指定頻道生效", "database_key": "autoreply_ignore_mode", "type": "select", "default": "blacklist",
              "options": [{"label": "黑名單", "value": "blacklist"}, {"label": "白名單", "value": "whitelist"}]},
+            {"display": "忽略／僅限頻道", "description": "黑名單時為忽略的頻道，白名單時為僅生效的頻道", "database_key": "autoreply_ignore_channels", "type": "channel_list", "default": []},
+            {"display": "設定清單", "description": "新增、編輯或刪除自動回覆規則；觸發與回覆可用逗號分隔多個", "database_key": "autoreplies", "type": "autoreply_list", "default": []},
         ], description="自動回覆基本設定", icon="💬")
+
+    if "AutoModerate" in modules:
+        register_settings("AutoModerate", "自動管理", [
+            {"display": "標記用戶加入通知頻道", "description": "當被標記的用戶加入伺服器時，於此頻道發送通知", "database_key": "flagged_user_onjoin_channel", "type": "channel", "default": None},
+        ], description="自動管理相關設定；詳細規則請使用 /automod 指令", icon="🛡️")
 
     if "CustomPrefix" in modules:
         register_settings("CustomPrefix", "自訂前綴", [

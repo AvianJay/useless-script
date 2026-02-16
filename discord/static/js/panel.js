@@ -144,6 +144,7 @@ async function render() {
 function buildSettingRow(mod, s, value, channels, roles) {
     const row = document.createElement('div');
     row.className = 'setting-row';
+    if (s.type === 'autoreply_list') row.classList.add('setting-row-column');
 
     const id = `${mod}::${s.database_key}`;
 
@@ -168,6 +169,12 @@ function buildSettingRow(mod, s, value, channels, roles) {
             break;
         case 'role_list':
             ctrl.appendChild(buildRoleListSelect(mod, s, value, roles));
+            break;
+        case 'channel_list':
+            ctrl.appendChild(buildChannelListSelect(mod, s, value, channels));
+            break;
+        case 'autoreply_list':
+            ctrl.appendChild(buildAutoreplyListEditor(mod, s, value, channels));
             break;
         case 'boolean':
             ctrl.appendChild(buildToggle(mod, s, value));
@@ -300,6 +307,313 @@ function buildRoleListSelect(mod, s, value, roles) {
 
     renderTags();
     rebuildOptions();
+    return container;
+}
+
+function buildChannelListSelect(mod, s, value, channels) {
+    const selected = Array.isArray(value) ? value.map(String) : [];
+    const container = document.createElement('div');
+    container.className = 'role-list-container';
+
+    const tagsWrap = document.createElement('div');
+    tagsWrap.className = 'role-tags';
+    container.appendChild(tagsWrap);
+
+    const sel = document.createElement('select');
+    sel.className = 'form-select';
+    sel.innerHTML = '<option value="">➕ 新增頻道...</option>';
+    container.appendChild(sel);
+
+    const allowedTypes = ['text', 'news'];
+    const allowedChannels = channels.filter(ch => allowedTypes.includes(ch.type));
+
+    function renderTags() {
+        tagsWrap.innerHTML = '';
+        if (selected.length === 0) {
+            tagsWrap.innerHTML = '<span class="role-tag-empty">尚未新增任何頻道</span>';
+        }
+        for (const cid of selected) {
+            const ch = channels.find(c => String(c.id) === cid);
+            const tag = document.createElement('span');
+            tag.className = 'role-tag';
+            const prefix = ch && ch.category ? `[${ch.category}] ` : '';
+            const typeIcon = ch && (ch.type === 'voice' || ch.type === 'stage_voice') ? '🔊 ' : '# ';
+            tag.textContent = ch ? `${typeIcon}${prefix}${ch.name}` : `ID: ${cid}`;
+            const removeBtn = document.createElement('button');
+            removeBtn.className = 'role-tag-remove';
+            removeBtn.textContent = '×';
+            removeBtn.addEventListener('click', () => {
+                const idx = selected.indexOf(cid);
+                if (idx > -1) selected.splice(idx, 1);
+                renderTags();
+                rebuildOptions();
+                debounceSave(mod, s.database_key, [...selected], 100);
+            });
+            tag.appendChild(removeBtn);
+            tagsWrap.appendChild(tag);
+        }
+    }
+
+    function rebuildOptions() {
+        sel.innerHTML = '<option value="">➕ 新增頻道...</option>';
+        for (const ch of allowedChannels) {
+            if (selected.includes(String(ch.id))) continue;
+            const prefix = ch.category ? `[${ch.category}] ` : '';
+            const typeIcon = ch.type === 'voice' ? '🔊 ' : ch.type === 'category' ? '📁 ' : '# ';
+            const opt = document.createElement('option');
+            opt.value = ch.id;
+            opt.textContent = `${typeIcon}${prefix}${ch.name}`;
+            sel.appendChild(opt);
+        }
+    }
+
+    sel.addEventListener('change', () => {
+        if (sel.value) {
+            selected.push(sel.value);
+            renderTags();
+            rebuildOptions();
+            debounceSave(mod, s.database_key, [...selected], 100);
+        }
+    });
+
+    renderTags();
+    rebuildOptions();
+    return container;
+}
+
+const AUTOREPLY_MODE_OPTIONS = [
+    { value: 'contains', label: '包含' },
+    { value: 'equals', label: '完全匹配' },
+    { value: 'starts_with', label: '開始於' },
+    { value: 'ends_with', label: '結束於' },
+    { value: 'regex', label: '正規表達式' },
+];
+const AUTOREPLY_CHANNEL_MODE_OPTIONS = [
+    { value: 'all', label: '所有頻道' },
+    { value: 'whitelist', label: '白名單' },
+    { value: 'blacklist', label: '黑名單' },
+];
+
+function buildAutoreplyListEditor(mod, s, value, channels) {
+    const list = Array.isArray(value) ? value.map(r => ({
+        trigger: Array.isArray(r.trigger) ? r.trigger : (r.trigger ? String(r.trigger).split(',') : []),
+        response: Array.isArray(r.response) ? r.response : (r.response ? String(r.response).split(',') : []),
+        mode: r.mode || 'contains',
+        reply: !!r.reply,
+        channel_mode: r.channel_mode || 'all',
+        channels: Array.isArray(r.channels) ? r.channels.map(String) : [],
+        random_chance: Math.max(1, Math.min(100, parseInt(r.random_chance, 10) || 100)),
+    })) : [];
+
+    const container = document.createElement('div');
+    container.className = 'autoreply-list-editor';
+
+    function serializeRule(rule) {
+        return {
+            trigger: rule.trigger,
+            response: rule.response,
+            mode: rule.mode,
+            reply: rule.reply,
+            channel_mode: rule.channel_mode,
+            channels: rule.channels,
+            random_chance: rule.random_chance,
+        };
+    }
+
+    function save() {
+        debounceSave(mod, s.database_key, list.map(serializeRule), 500);
+    }
+
+    function buildRuleCard(rule, index) {
+        const card = document.createElement('div');
+        card.className = 'autoreply-rule-card';
+
+        const triggerInput = document.createElement('input');
+        triggerInput.type = 'text';
+        triggerInput.className = 'form-input';
+        triggerInput.placeholder = '觸發字串，逗號分隔多個';
+        triggerInput.value = (rule.trigger || []).join(', ');
+        triggerInput.addEventListener('input', () => {
+            rule.trigger = triggerInput.value.split(',').map(t => t.trim()).filter(Boolean);
+            save();
+        });
+
+        const responseInput = document.createElement('input');
+        responseInput.type = 'text';
+        responseInput.className = 'form-input';
+        responseInput.placeholder = '回覆內容，逗號分隔多個（隨機選一）';
+        responseInput.value = (rule.response || []).join(', ');
+        responseInput.addEventListener('input', () => {
+            rule.response = responseInput.value.split(',').map(r => r.trim()).filter(Boolean);
+            save();
+        });
+
+        const modeSelect = document.createElement('select');
+        modeSelect.className = 'form-select';
+        AUTOREPLY_MODE_OPTIONS.forEach(opt => {
+            const o = document.createElement('option');
+            o.value = opt.value;
+            o.textContent = opt.label;
+            if (rule.mode === opt.value) o.selected = true;
+            modeSelect.appendChild(o);
+        });
+        modeSelect.addEventListener('change', () => { rule.mode = modeSelect.value; save(); });
+
+        const replyWrap = document.createElement('div');
+        replyWrap.className = 'toggle-wrapper';
+        const replyLabel = document.createElement('label');
+        replyLabel.className = 'toggle';
+        const replyCheck = document.createElement('input');
+        replyCheck.type = 'checkbox';
+        replyCheck.checked = rule.reply;
+        replyCheck.addEventListener('change', () => { rule.reply = replyCheck.checked; save(); });
+        const replySlider = document.createElement('span');
+        replySlider.className = 'toggle-slider';
+        replyLabel.appendChild(replyCheck);
+        replyLabel.appendChild(replySlider);
+        replyWrap.appendChild(replyLabel);
+
+        const channelModeSelect = document.createElement('select');
+        channelModeSelect.className = 'form-select';
+        AUTOREPLY_CHANNEL_MODE_OPTIONS.forEach(opt => {
+            const o = document.createElement('option');
+            o.value = opt.value;
+            o.textContent = opt.label;
+            if (rule.channel_mode === opt.value) o.selected = true;
+            channelModeSelect.appendChild(o);
+        });
+        channelModeSelect.addEventListener('change', () => { rule.channel_mode = channelModeSelect.value; save(); });
+
+        const allowedTypes = ['text', 'news'];
+        const allowedChannels = channels.filter(ch => allowedTypes.includes(ch.type));
+        const channelTagsWrap = document.createElement('div');
+        channelTagsWrap.className = 'role-tags role-tags-sm';
+        const channelSel = document.createElement('select');
+        channelSel.className = 'form-select';
+        channelSel.innerHTML = '<option value="">➕ 指定頻道</option>';
+        allowedChannels.forEach(ch => {
+            if (rule.channels.includes(String(ch.id))) return;
+            const opt = document.createElement('option');
+            opt.value = ch.id;
+            opt.textContent = (ch.category ? `[${ch.category}] ` : '') + ch.name;
+            channelSel.appendChild(opt);
+        });
+        function renderChannelTags() {
+            channelTagsWrap.innerHTML = '';
+            (rule.channels || []).forEach(cid => {
+                const ch = channels.find(c => String(c.id) === cid);
+                const tag = document.createElement('span');
+                tag.className = 'role-tag';
+                tag.textContent = ch ? ch.name : cid;
+                const rm = document.createElement('button');
+                rm.className = 'role-tag-remove';
+                rm.textContent = '×';
+                rm.addEventListener('click', () => {
+                    rule.channels = rule.channels.filter(id => id !== cid);
+                    renderChannelTags();
+                    channelSel.innerHTML = '<option value="">➕ 指定頻道</option>';
+                    allowedChannels.forEach(ch => {
+                        if (rule.channels.includes(String(ch.id))) return;
+                        const o = document.createElement('option');
+                        o.value = ch.id;
+                        o.textContent = (ch.category ? `[${ch.category}] ` : '') + ch.name;
+                        channelSel.appendChild(o);
+                    });
+                    save();
+                });
+                tag.appendChild(rm);
+                channelTagsWrap.appendChild(tag);
+            });
+        }
+        channelSel.addEventListener('change', () => {
+            if (channelSel.value) {
+                rule.channels = rule.channels || [];
+                rule.channels.push(channelSel.value);
+                renderChannelTags();
+                channelSel.innerHTML = '<option value="">➕ 指定頻道</option>';
+                allowedChannels.forEach(ch => {
+                    if (rule.channels.includes(String(ch.id))) return;
+                    const o = document.createElement('option');
+                    o.value = ch.id;
+                    o.textContent = (ch.category ? `[${ch.category}] ` : '') + ch.name;
+                    channelSel.appendChild(o);
+                });
+                save();
+            }
+        });
+        renderChannelTags();
+
+        const chanceInput = document.createElement('input');
+        chanceInput.type = 'number';
+        chanceInput.className = 'form-input';
+        chanceInput.min = 1;
+        chanceInput.max = 100;
+        chanceInput.value = rule.random_chance;
+        chanceInput.style.width = '4rem';
+        chanceInput.addEventListener('input', () => {
+            rule.random_chance = Math.max(1, Math.min(100, parseInt(chanceInput.value, 10) || 100));
+            save();
+        });
+
+        const deleteBtn = document.createElement('button');
+        deleteBtn.type = 'button';
+        deleteBtn.className = 'btn-autoreply-remove';
+        deleteBtn.textContent = '刪除';
+        deleteBtn.addEventListener('click', () => {
+            const i = list.indexOf(rule);
+            if (i > -1) list.splice(i, 1);
+            container.removeChild(card);
+            save();
+        });
+
+        card.innerHTML = '';
+        const row1 = document.createElement('div');
+        row1.className = 'autoreply-rule-row';
+        row1.appendChild(triggerInput);
+        card.appendChild(row1);
+        const row2 = document.createElement('div');
+        row2.className = 'autoreply-rule-row';
+        row2.appendChild(responseInput);
+        card.appendChild(row2);
+        const row3 = document.createElement('div');
+        row3.className = 'autoreply-rule-row autoreply-rule-meta';
+        row3.appendChild(document.createTextNode('模式 '));
+        row3.appendChild(modeSelect);
+        row3.appendChild(document.createTextNode(' 回覆原訊息 '));
+        row3.appendChild(replyWrap);
+        row3.appendChild(document.createTextNode(' 頻道 '));
+        row3.appendChild(channelModeSelect);
+        row3.appendChild(channelTagsWrap);
+        row3.appendChild(channelSel);
+        row3.appendChild(document.createTextNode(' 機率% '));
+        row3.appendChild(chanceInput);
+        row3.appendChild(deleteBtn);
+        card.appendChild(row3);
+        return card;
+    }
+
+    list.forEach(rule => container.appendChild(buildRuleCard(rule)));
+
+    const addBtn = document.createElement('button');
+    addBtn.type = 'button';
+    addBtn.className = 'btn-autoreply-add';
+    addBtn.textContent = '➕ 新增一則';
+    addBtn.addEventListener('click', () => {
+        const newRule = {
+            trigger: [],
+            response: [],
+            mode: 'contains',
+            reply: false,
+            channel_mode: 'all',
+            channels: [],
+            random_chance: 100,
+        };
+        list.push(newRule);
+        container.insertBefore(buildRuleCard(newRule, list.length - 1), addBtn);
+        save();
+    });
+    container.appendChild(addBtn);
+
     return container;
 }
 
