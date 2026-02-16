@@ -18,8 +18,8 @@
 * 新增迷你遊戲 | /games
   * `/games tower`：爬塔遊戲。
   * `/games big2`：大老二。
-* 更新管理功能 | /moderate
-  * 新增 `/moderate action-builder`：產生懲處動作指令字串，方便用於多用戶管理或前綴指令 `!moderate`。
+* 更新管理功能
+  * 新增 `/action-builder`：產生懲處動作指令字串，方便用於多用戶管理或前綴指令 `!moderate`。
 * 更新自動管理功能 | /automod
   * 新增 `/automod quick-setup`：互動式快速設定精靈。
   * 新增一些強制驗證(force_verify)的選項。
