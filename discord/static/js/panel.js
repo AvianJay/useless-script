@@ -144,7 +144,7 @@ async function render() {
 function buildSettingRow(mod, s, value, channels, roles) {
     const row = document.createElement('div');
     row.className = 'setting-row';
-    if (s.type === 'autoreply_list' || s.type === 'automod_config') row.classList.add('setting-row-column');
+    if (s.type === 'autoreply_list' || s.type === 'automod_config' || s.type === 'webverify_config') row.classList.add('setting-row-column');
 
     const id = `${mod}::${s.database_key}`;
 
@@ -178,6 +178,9 @@ function buildSettingRow(mod, s, value, channels, roles) {
             break;
         case 'automod_config':
             ctrl.appendChild(buildAutomodConfigEditor(mod, s, value, channels));
+            break;
+        case 'webverify_config':
+            ctrl.appendChild(buildWebverifyConfigEditor(mod, s, value, channels, roles));
             break;
         case 'boolean':
             ctrl.appendChild(buildToggle(mod, s, value));
@@ -776,6 +779,214 @@ function buildAutomodConfigEditor(mod, s, value, channels) {
         card.appendChild(body);
         container.appendChild(card);
     }
+
+    return container;
+}
+
+function buildWebverifyConfigEditor(mod, s, value, channels, roles) {
+    const config = typeof value === 'object' && value !== null ? { ...value } : {};
+    if (!config.notify) config.notify = { type: 'dm', channel_id: null, title: '伺服器網頁驗證', message: '請點擊下方按鈕進行網頁驗證：' };
+    if (!config.webverify_country_alert) config.webverify_country_alert = { enabled: false, mode: 'blacklist', countries: [], channel_id: null };
+
+    const container = document.createElement('div');
+    container.className = 'webverify-config-editor';
+
+    function save() {
+        const out = {
+            enabled: !!config.enabled,
+            captcha_type: config.captcha_type || 'turnstile',
+            unverified_role_id: config.unverified_role_id || null,
+            autorole_enabled: !!config.autorole_enabled,
+            autorole_trigger: (config.autorole_trigger || 'always').toString().trim(),
+            min_age: Math.max(0, parseInt(config.min_age, 10) || 7),
+            notify: { ...config.notify },
+            webverify_country_alert: { ...config.webverify_country_alert },
+        };
+        debounceSave(mod, s.database_key, out, 500);
+    }
+
+    function addRow(labelText, control) {
+        const row = document.createElement('div');
+        row.className = 'webverify-field-row';
+        const lab = document.createElement('label');
+        lab.className = 'webverify-field-label';
+        lab.textContent = labelText + '：';
+        row.appendChild(lab);
+        row.appendChild(control);
+        return row;
+    }
+
+    const enabledWrap = document.createElement('div');
+    enabledWrap.className = 'toggle-wrapper';
+    const enabledLabel = document.createElement('label');
+    enabledLabel.className = 'toggle';
+    const enabledCheck = document.createElement('input');
+    enabledCheck.type = 'checkbox';
+    enabledCheck.checked = !!config.enabled;
+    enabledCheck.addEventListener('change', () => { config.enabled = enabledCheck.checked; save(); });
+    enabledLabel.appendChild(enabledCheck);
+    const enSpan = document.createElement('span');
+    enSpan.className = 'toggle-slider';
+    enabledLabel.appendChild(enSpan);
+    enabledWrap.appendChild(enabledLabel);
+    container.appendChild(addRow('啟用網頁驗證', enabledWrap));
+
+    const captchaSelect = document.createElement('select');
+    captchaSelect.className = 'form-select';
+    [ { v: 'none', l: '無' }, { v: 'turnstile', l: 'Cloudflare Turnstile' }, { v: 'recaptcha', l: 'Google reCAPTCHA' } ].forEach(o => {
+        const opt = document.createElement('option');
+        opt.value = o.v;
+        opt.textContent = o.l;
+        if ((config.captcha_type || 'turnstile') === o.v) opt.selected = true;
+        captchaSelect.appendChild(opt);
+    });
+    captchaSelect.addEventListener('change', () => { config.captcha_type = captchaSelect.value; save(); });
+    container.appendChild(addRow('CAPTCHA 類型', captchaSelect));
+
+    const roleSelect = document.createElement('select');
+    roleSelect.className = 'form-select';
+    roleSelect.innerHTML = '<option value="">未設定</option>';
+    for (const r of roles) {
+        const opt = document.createElement('option');
+        opt.value = r.id;
+        opt.textContent = '@ ' + r.name;
+        if (String(config.unverified_role_id) === String(r.id)) opt.selected = true;
+        roleSelect.appendChild(opt);
+    }
+    roleSelect.addEventListener('change', () => { config.unverified_role_id = roleSelect.value || null; save(); });
+    container.appendChild(addRow('未驗證成員身分組', roleSelect));
+
+    const autoroleWrap = document.createElement('div');
+    autoroleWrap.className = 'toggle-wrapper';
+    const autoroleLabel = document.createElement('label');
+    autoroleLabel.className = 'toggle';
+    const autoroleCheck = document.createElement('input');
+    autoroleCheck.type = 'checkbox';
+    autoroleCheck.checked = !!config.autorole_enabled;
+    autoroleCheck.addEventListener('change', () => { config.autorole_enabled = autoroleCheck.checked; save(); });
+    autoroleLabel.appendChild(autoroleCheck);
+    const asl = document.createElement('span');
+    asl.className = 'toggle-slider';
+    autoroleLabel.appendChild(asl);
+    autoroleWrap.appendChild(autoroleLabel);
+    container.appendChild(addRow('自動分配未驗證角色', autoroleWrap));
+
+    const triggerInput = document.createElement('input');
+    triggerInput.type = 'text';
+    triggerInput.className = 'form-input';
+    triggerInput.placeholder = 'always 或 age_check+no_history 等';
+    triggerInput.value = (config.autorole_trigger || 'always').toString();
+    triggerInput.addEventListener('input', () => { config.autorole_trigger = triggerInput.value; save(); });
+    container.appendChild(addRow('觸發條件', triggerInput));
+
+    const minAgeInput = document.createElement('input');
+    minAgeInput.type = 'number';
+    minAgeInput.className = 'form-input';
+    minAgeInput.min = 0;
+    minAgeInput.value = config.min_age != null ? config.min_age : 7;
+    minAgeInput.style.width = '5rem';
+    minAgeInput.addEventListener('input', () => { config.min_age = minAgeInput.value; save(); });
+    container.appendChild(addRow('最小帳號年齡 (天)', minAgeInput));
+
+    const notifyTypeSelect = document.createElement('select');
+    notifyTypeSelect.className = 'form-select';
+    [ { v: 'dm', l: '私訊' }, { v: 'channel', l: '頻道' }, { v: 'both', l: '都要' } ].forEach(o => {
+        const opt = document.createElement('option');
+        opt.value = o.v;
+        opt.textContent = o.l;
+        if ((config.notify.type || 'dm') === o.v) opt.selected = true;
+        notifyTypeSelect.appendChild(opt);
+    });
+    notifyTypeSelect.addEventListener('change', () => { config.notify.type = notifyTypeSelect.value; save(); });
+    container.appendChild(addRow('驗證通知方式', notifyTypeSelect));
+
+    const notifyChannelSelect = document.createElement('select');
+    notifyChannelSelect.className = 'form-select';
+    notifyChannelSelect.innerHTML = '<option value="">未設定</option>';
+    const textChannels = channels.filter(ch => ['text', 'news'].includes(ch.type));
+    for (const ch of textChannels) {
+        const opt = document.createElement('option');
+        opt.value = ch.id;
+        opt.textContent = (ch.category ? '[' + ch.category + '] ' : '') + ch.name;
+        if (String(config.notify.channel_id) === String(ch.id)) opt.selected = true;
+        notifyChannelSelect.appendChild(opt);
+    }
+    notifyChannelSelect.addEventListener('change', () => { config.notify.channel_id = notifyChannelSelect.value || null; save(); });
+    container.appendChild(addRow('通知頻道', notifyChannelSelect));
+
+    const notifyTitleInput = document.createElement('input');
+    notifyTitleInput.type = 'text';
+    notifyTitleInput.className = 'form-input';
+    notifyTitleInput.value = (config.notify.title || '伺服器網頁驗證').toString();
+    notifyTitleInput.addEventListener('input', () => { config.notify.title = notifyTitleInput.value; save(); });
+    container.appendChild(addRow('通知標題', notifyTitleInput));
+
+    const notifyMsgInput = document.createElement('textarea');
+    notifyMsgInput.className = 'form-textarea';
+    notifyMsgInput.rows = 2;
+    notifyMsgInput.value = (config.notify.message || '請點擊下方按鈕進行網頁驗證：').toString();
+    notifyMsgInput.addEventListener('input', () => { config.notify.message = notifyMsgInput.value; save(); });
+    container.appendChild(addRow('通知內容', notifyMsgInput));
+
+    const countrySection = document.createElement('div');
+    countrySection.className = 'webverify-country-section';
+    const countryTitle = document.createElement('div');
+    countryTitle.className = 'webverify-section-title';
+    countryTitle.textContent = '地區警示';
+    countrySection.appendChild(countryTitle);
+
+    const countryEnabledWrap = document.createElement('div');
+    countryEnabledWrap.className = 'toggle-wrapper';
+    const countryEnabledLabel = document.createElement('label');
+    countryEnabledLabel.className = 'toggle';
+    const countryEnabledCheck = document.createElement('input');
+    countryEnabledCheck.type = 'checkbox';
+    countryEnabledCheck.checked = !!config.webverify_country_alert.enabled;
+    countryEnabledCheck.addEventListener('change', () => { config.webverify_country_alert.enabled = countryEnabledCheck.checked; save(); });
+    countryEnabledLabel.appendChild(countryEnabledCheck);
+    const coSpan = document.createElement('span');
+    coSpan.className = 'toggle-slider';
+    countryEnabledLabel.appendChild(coSpan);
+    countryEnabledWrap.appendChild(countryEnabledLabel);
+    countrySection.appendChild(addRow('啟用地區警示', countryEnabledWrap));
+
+    const countryModeSelect = document.createElement('select');
+    countryModeSelect.className = 'form-select';
+    [ { v: 'blacklist', l: '黑名單（列出的國家觸發警示）' }, { v: 'whitelist', l: '白名單（未列出的國家觸發警示）' } ].forEach(o => {
+        const opt = document.createElement('option');
+        opt.value = o.v;
+        opt.textContent = o.l;
+        if ((config.webverify_country_alert.mode || 'blacklist') === o.v) opt.selected = true;
+        countryModeSelect.appendChild(opt);
+    });
+    countryModeSelect.addEventListener('change', () => { config.webverify_country_alert.mode = countryModeSelect.value; save(); });
+    countrySection.appendChild(addRow('模式', countryModeSelect));
+
+    const countriesInput = document.createElement('input');
+    countriesInput.type = 'text';
+    countriesInput.className = 'form-input';
+    countriesInput.placeholder = 'US,CN,RU';
+    countriesInput.value = Array.isArray(config.webverify_country_alert.countries) ? config.webverify_country_alert.countries.join(',') : '';
+    countriesInput.addEventListener('input', () => {
+        config.webverify_country_alert.countries = countriesInput.value.split(',').map(c => c.trim().toUpperCase()).filter(Boolean);
+        save();
+    });
+    countrySection.appendChild(addRow('國家代碼 (逗號分隔)', countriesInput));
+
+    const countryChannelSelect = document.createElement('select');
+    countryChannelSelect.className = 'form-select';
+    countryChannelSelect.innerHTML = '<option value="">未設定</option>';
+    for (const ch of textChannels) {
+        const opt = document.createElement('option');
+        opt.value = ch.id;
+        opt.textContent = (ch.category ? '[' + ch.category + '] ' : '') + ch.name;
+        if (String(config.webverify_country_alert.channel_id) === String(ch.id)) opt.selected = true;
+        countryChannelSelect.appendChild(opt);
+    }
+    countryChannelSelect.addEventListener('change', () => { config.webverify_country_alert.channel_id = countryChannelSelect.value || null; save(); });
+    countrySection.appendChild(addRow('警示頻道', countryChannelSelect));
+
+    container.appendChild(countrySection);
 
     return container;
 }

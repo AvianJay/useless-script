@@ -348,7 +348,7 @@ def server_verify():
                     country = location.get('country', 'Unknown') if isinstance(location, dict) else 'Unknown'
                     alert_countries = guild_country_config.get('countries', [])
                     if (mode == 'blacklist' and country in alert_countries) or (mode == 'whitelist' and country not in alert_countries):
-                        alert_channel_id = guild_country_config.get('alert_channel_id')
+                        alert_channel_id = guild_country_config.get('alert_channel_id') or guild_country_config.get('channel_id')
                         alert_channel = guild.get_channel(alert_channel_id) if alert_channel_id else None
                         if alert_channel:
                             embed = discord.Embed(title="網頁驗證異常地理位置警報", color=0xFF0000)

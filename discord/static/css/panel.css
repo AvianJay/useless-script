@@ -641,6 +641,46 @@ body {
 }
 .automod-feature-field .form-input[style*="flex"] { flex: 1; }
 
+/* ============= Webverify Config Editor ============= */
+.webverify-config-editor {
+    display: flex;
+    flex-direction: column;
+    gap: 0.6rem;
+}
+
+.webverify-field-row {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+}
+
+.webverify-field-label {
+    color: var(--text-muted);
+    font-size: 0.88rem;
+    min-width: 10rem;
+}
+
+.webverify-field-row .form-input,
+.webverify-field-row .form-select,
+.webverify-field-row .form-textarea {
+    flex: 1;
+    min-width: 120px;
+}
+
+.webverify-country-section {
+    margin-top: 0.5rem;
+    padding-top: 0.75rem;
+    border-top: 1px solid var(--border);
+}
+
+.webverify-section-title {
+    color: var(--text-white);
+    font-weight: 600;
+    font-size: 0.95rem;
+    margin-bottom: 0.5rem;
+}
+
 /* ============= Responsive ============= */
 @media (max-width: 640px) {
     .panel-nav { flex-wrap: wrap; gap: 0.5rem; }

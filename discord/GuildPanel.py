@@ -461,6 +461,44 @@ def _coerce(value, stype):
             out[feat] = row
         return out
 
+    if stype == "webverify_config":
+        if not isinstance(value, dict):
+            return {}
+        out = {}
+        out["enabled"] = bool(value.get("enabled", False))
+        out["captcha_type"] = str(value.get("captcha_type", "turnstile"))
+        if value.get("unverified_role_id") is not None:
+            out["unverified_role_id"] = str(value["unverified_role_id"])
+        else:
+            out["unverified_role_id"] = None
+        out["autorole_enabled"] = bool(value.get("autorole_enabled", False))
+        out["autorole_trigger"] = str(value.get("autorole_trigger", "always"))
+        try:
+            out["min_age"] = int(value.get("min_age", 7))
+        except (TypeError, ValueError):
+            out["min_age"] = 7
+        notify = value.get("notify")
+        if isinstance(notify, dict):
+            out["notify"] = {
+                "type": str(notify.get("type", "dm")),
+                "channel_id": str(notify["channel_id"]) if notify.get("channel_id") is not None else None,
+                "title": str(notify.get("title", "伺服器網頁驗證")),
+                "message": str(notify.get("message", "請點擊下方按鈕進行網頁驗證：")),
+            }
+        else:
+            out["notify"] = {"type": "dm", "channel_id": None, "title": "伺服器網頁驗證", "message": "請點擊下方按鈕進行網頁驗證："}
+        country = value.get("webverify_country_alert")
+        if isinstance(country, dict):
+            out["webverify_country_alert"] = {
+                "enabled": bool(country.get("enabled", False)),
+                "mode": str(country.get("mode", "blacklist")),
+                "countries": list(country.get("countries") or []),
+                "channel_id": str(country["channel_id"]) if country.get("channel_id") is not None else None,
+            }
+        else:
+            out["webverify_country_alert"] = {"enabled": False, "mode": "blacklist", "countries": [], "channel_id": None}
+        return out
+
     if stype == "boolean":
         if isinstance(value, bool):
             return value
@@ -494,6 +532,63 @@ def _coerce(value, stype):
             if row.get("channel_id"):
                 row["channel_id"] = str(int(row["channel_id"])) if str(row["channel_id"]).isdigit() else str(row["channel_id"])
             out[feat] = row
+        return out
+
+    if stype == "webverify_config":
+        if not isinstance(value, dict):
+            return {}
+        out = {}
+        out["enabled"] = bool(value.get("enabled", False))
+        ct = str(value.get("captcha_type", "turnstile")).strip().lower()
+        if ct not in ("none", "turnstile", "recaptcha"):
+            ct = "turnstile"
+        out["captcha_type"] = ct
+        ur = value.get("unverified_role_id")
+        out["unverified_role_id"] = int(ur) if ur is not None and str(ur).strip() and str(ur).isdigit() else None
+        out["autorole_enabled"] = bool(value.get("autorole_enabled", False))
+        tr = str(value.get("autorole_trigger", "always")).strip() or "always"
+        out["autorole_trigger"] = tr
+        try:
+            out["min_age"] = max(0, int(value.get("min_age", 7)))
+        except (TypeError, ValueError):
+            out["min_age"] = 7
+        notify = value.get("notify")
+        if isinstance(notify, dict):
+            nt = str(notify.get("type", "dm")).strip().lower()
+            if nt not in ("dm", "channel", "both"):
+                nt = "dm"
+            nc = notify.get("channel_id")
+            nc = int(nc) if nc is not None and str(nc).strip() and str(nc).isdigit() else None
+            out["notify"] = {
+                "type": nt,
+                "channel_id": nc,
+                "title": str(notify.get("title", "伺服器網頁驗證")) or "伺服器網頁驗證",
+                "message": str(notify.get("message", "請點擊下方按鈕進行網頁驗證：")) or "請點擊下方按鈕進行網頁驗證：",
+            }
+        else:
+            out["notify"] = {"type": "dm", "channel_id": None, "title": "伺服器網頁驗證", "message": "請點擊下方按鈕進行網頁驗證："}
+        country = value.get("webverify_country_alert")
+        if isinstance(country, dict):
+            cm = str(country.get("mode", "blacklist")).strip().lower()
+            if cm not in ("blacklist", "whitelist"):
+                cm = "blacklist"
+            cc = country.get("countries")
+            if isinstance(cc, str):
+                cc = [c.strip().upper() for c in cc.split(",") if c.strip()]
+            elif isinstance(cc, list):
+                cc = [str(c).strip().upper() for c in cc if str(c).strip()]
+            else:
+                cc = []
+            ch_id = country.get("channel_id")
+            ch_id = int(ch_id) if ch_id is not None and str(ch_id).strip() and str(ch_id).isdigit() else None
+            out["webverify_country_alert"] = {
+                "enabled": bool(country.get("enabled", False)),
+                "mode": cm,
+                "countries": cc,
+                "channel_id": ch_id,
+            }
+        else:
+            out["webverify_country_alert"] = {"enabled": False, "mode": "blacklist", "countries": [], "channel_id": None}
         return out
 
     return value
@@ -613,6 +708,11 @@ def _register_all():
             {"display": "報告通知頻道", "database_key": "oxwu_report_channel", "type": "channel", "default": None},
             {"display": "報告附加文字", "database_key": "oxwu_report_channel_text", "type": "string", "default": None},
         ], description="地震警報/報告推送設定", icon="🌦️")
+
+    if "ServerWebVerify" in modules:
+        register_settings("ServerWebVerify", "網頁驗證", [
+            {"display": "網頁驗證設定", "description": "啟用、CAPTCHA、未驗證角色、自動分配、通知方式與地區警示", "database_key": "webverify_config", "type": "webverify_config", "default": {}},
+        ], description="伺服器網頁驗證（需先以 /webverify setup 或 quick_setup 初始化）", icon="🌐")
 
     if "StickyRole" in modules:
         register_settings("StickyRole", "StickyRole", [
