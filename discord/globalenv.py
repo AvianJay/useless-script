@@ -507,6 +507,7 @@ translations = {
     "punishment": "懲處方式",
     "moderator": "執行管理員",
     "quick-setup": "快速設定",
+    "toggle-flow": "切換流通",
 }
 class CommandNameTranslator(app_commands.Translator):
     async def translate(

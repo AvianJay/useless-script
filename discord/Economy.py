@@ -1489,7 +1489,7 @@ class EconomyMod(commands.GroupCog, name="economymod", description="經濟系統
     #     log(f"Admin {interaction.user} set rate {old_rate} -> {rate} in guild {guild_id}",
     #         module_name="Economy", user=interaction.user, guild=interaction.guild)
 
-    @app_commands.command(name="toggle_flow", description="切換是否允許伺服幣與全域幣流通（兌換、全域商店等）")
+    @app_commands.command(name="toggle-flow", description="切換是否允許伺服幣與全域幣流通（兌換、全域商店等）")
     async def toggle_flow(self, interaction: discord.Interaction):
         guild_id = interaction.guild.id
         current = get_allow_global_flow(guild_id)
