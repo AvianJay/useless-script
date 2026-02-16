@@ -206,6 +206,7 @@ ACTION_PRESETS = [
     ("禁言 1 小時", "mute 1h 違規"),
     ("踢出", "kick 違規"),
     ("封禁", "ban 0 0 違規"),
+    ("強制驗證 1 天", "force_verify 1d"),
     ("自訂...", "__custom__"),
 ]
 
@@ -628,7 +629,7 @@ class AutoModerate(commands.GroupCog, name=app_commands.locale_str("automod")):
     @app_commands.command(name=app_commands.locale_str("action-builder"), description="產生動作指令字串")
     @app_commands.describe(
         action_type="動作類型",
-        duration="時長（mute/ban 用），如 10m、7d、0 表示永久",
+        duration="時長（mute/ban/force_verify 用），如 10m、7d、0 表示永久",
         delete_message_duration="ban 專用：刪除該用戶最近多少時間的訊息，如 1d、0 表示不刪",
         reason="原因（mute/kick/ban 用）",
         message="警告訊息（delete/warn 用），可用 {user} 代表用戶",
@@ -644,6 +645,7 @@ class AutoModerate(commands.GroupCog, name=app_commands.locale_str("automod")):
             app_commands.Choice(name="踢出", value="kick"),
             app_commands.Choice(name="封禁", value="ban"),
             app_commands.Choice(name="傳送管理通知", value="send_mod_message"),
+            app_commands.Choice(name="強制驗證", value="force_verify"),
         ],
     )
     async def action_builder(
@@ -671,6 +673,10 @@ class AutoModerate(commands.GroupCog, name=app_commands.locale_str("automod")):
         elif action_type == "warn_dm":
             parts = ["warn_dm"]
             parts.append(message or "{user}，請注意你的行為。")
+        elif action_type == "force_verify":
+            parts = ["force_verify"]
+            if duration:
+                parts.append(duration)
         elif action_type == "mute":
             parts = ["mute", duration or "10m"]
             if reason:
@@ -823,6 +829,7 @@ class AutoModerate(commands.GroupCog, name=app_commands.locale_str("automod")):
                   "`kick` — 踢出用戶\n"
                   "`ban <時長> <刪除訊息時長>` — 封禁用戶\n"
                   "`send_mod_message` — 傳送管理通知\n"
+                  "`force_verify <時長>` — 強制驗證用戶 (需先啟用網頁驗證) \n"
                   f"使用 {await get_command_mention('automod', 'action-builder')} 產生動作字串，"
                   f"或 {await get_command_mention('automod', 'check-action')} 預覽效果。",
             inline=False
