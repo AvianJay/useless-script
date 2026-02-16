@@ -144,7 +144,7 @@ async function render() {
 function buildSettingRow(mod, s, value, channels, roles) {
     const row = document.createElement('div');
     row.className = 'setting-row';
-    if (s.type === 'autoreply_list') row.classList.add('setting-row-column');
+    if (s.type === 'autoreply_list' || s.type === 'automod_config') row.classList.add('setting-row-column');
 
     const id = `${mod}::${s.database_key}`;
 
@@ -175,6 +175,9 @@ function buildSettingRow(mod, s, value, channels, roles) {
             break;
         case 'autoreply_list':
             ctrl.appendChild(buildAutoreplyListEditor(mod, s, value, channels));
+            break;
+        case 'automod_config':
+            ctrl.appendChild(buildAutomodConfigEditor(mod, s, value, channels));
             break;
         case 'boolean':
             ctrl.appendChild(buildToggle(mod, s, value));
@@ -613,6 +616,166 @@ function buildAutoreplyListEditor(mod, s, value, channels) {
         save();
     });
     container.appendChild(addBtn);
+
+    return container;
+}
+
+const AUTOMOD_FEATURES = [
+    { id: 'scamtrap', label: '🪤 詐騙陷阱', desc: '蜜罐頻道，在該頻道發訊者自動處置', fields: [
+        { key: 'channel_id', label: '陷阱頻道', type: 'channel', default: '' },
+        { key: 'action', label: '處置動作', type: 'string', default: 'delete 請不要在此頻道發送訊息。', placeholder: '例: delete 請勿在此發言' },
+    ]},
+    { id: 'escape_punish', label: '🏃 逃避責任懲處', desc: '禁言期間離開者額外懲處', fields: [
+        { key: 'punishment', label: '懲處方式', type: 'select', options: [{ value: 'ban', label: '封禁' }], default: 'ban' },
+        { key: 'duration', label: '持續時間 (如 0、7d)', type: 'string', default: '0' },
+    ]},
+    { id: 'too_many_h1', label: '📢 標題過多', desc: 'Markdown 大標題總字數上限', fields: [
+        { key: 'max_length', label: '最大字數', type: 'number', default: '20', min: 1 },
+        { key: 'action', label: '處置動作', type: 'string', default: 'warn', placeholder: '例: warn 或 mute 10m' },
+    ]},
+    { id: 'too_many_emojis', label: '😂 表情符號過多', desc: '單則訊息 emoji 數量上限', fields: [
+        { key: 'max_emojis', label: '最大數量', type: 'number', default: '10', min: 1 },
+        { key: 'action', label: '處置動作', type: 'string', default: 'warn' },
+    ]},
+    { id: 'anti_uispam', label: '📲 用戶安裝應用程式濫用', desc: 'User Install 指令觸發頻率', fields: [
+        { key: 'max_count', label: '時間內最大觸發次數', type: 'number', default: '5', min: 1 },
+        { key: 'time_window', label: '時間窗口 (秒)', type: 'number', default: '60', min: 1 },
+        { key: 'action', label: '處置動作', type: 'string', default: 'delete {user}，請勿濫用用戶安裝的應用程式指令。' },
+    ]},
+    { id: 'anti_raid', label: '🚨 防突襲', desc: '短時間內大量加入偵測', fields: [
+        { key: 'max_joins', label: '時間內最大加入數', type: 'number', default: '5', min: 1 },
+        { key: 'time_window', label: '時間窗口 (秒)', type: 'number', default: '60', min: 1 },
+        { key: 'action', label: '處置動作', type: 'string', default: 'kick 突襲偵測自動封禁' },
+    ]},
+    { id: 'anti_spam', label: '🔁 防刷頻', desc: '相似訊息刷頻偵測', fields: [
+        { key: 'max_messages', label: '最大相似訊息數', type: 'number', default: '5', min: 1 },
+        { key: 'time_window', label: '時間窗口 (秒)', type: 'number', default: '30', min: 1 },
+        { key: 'similarity', label: '相似度 (%)', type: 'number', default: '75', min: 1, max: 100 },
+        { key: 'action', label: '處置動作', type: 'string', default: 'mute 10m 刷頻自動禁言, delete {user}，請勿刷頻。' },
+    ]},
+];
+
+function buildAutomodConfigEditor(mod, s, value, channels) {
+    const config = typeof value === 'object' && value !== null ? { ...value } : {};
+    const container = document.createElement('div');
+    container.className = 'automod-config-editor';
+
+    function getFeat(featId) {
+        if (!config[featId]) config[featId] = { enabled: false };
+        return config[featId];
+    }
+
+    function save() {
+        const out = {};
+        for (const k of Object.keys(config)) {
+            out[k] = { ...config[k] };
+        }
+        debounceSave(mod, s.database_key, out, 500);
+    }
+
+    function setFeatValue(featId, key, val) {
+        getFeat(featId)[key] = val;
+        save();
+    }
+
+    for (const feat of AUTOMOD_FEATURES) {
+        const card = document.createElement('div');
+        card.className = 'automod-feature-card';
+        const featData = getFeat(feat.id);
+
+        const header = document.createElement('div');
+        header.className = 'automod-feature-header';
+        const title = document.createElement('span');
+        title.className = 'automod-feature-title';
+        title.textContent = feat.label;
+        const enableWrap = document.createElement('div');
+        enableWrap.className = 'toggle-wrapper';
+        const enableLabel = document.createElement('label');
+        enableLabel.className = 'toggle';
+        const enableCheck = document.createElement('input');
+        enableCheck.type = 'checkbox';
+        enableCheck.checked = !!featData.enabled;
+        enableCheck.addEventListener('change', () => {
+            featData.enabled = enableCheck.checked;
+            save();
+        });
+        const enableSlider = document.createElement('span');
+        enableSlider.className = 'toggle-slider';
+        enableLabel.appendChild(enableCheck);
+        enableLabel.appendChild(enableSlider);
+        enableWrap.appendChild(enableLabel);
+        header.appendChild(title);
+        header.appendChild(enableWrap);
+        card.appendChild(header);
+
+        if (feat.desc) {
+            const descEl = document.createElement('div');
+            descEl.className = 'automod-feature-desc';
+            descEl.textContent = feat.desc;
+            card.appendChild(descEl);
+        }
+
+        const body = document.createElement('div');
+        body.className = 'automod-feature-body';
+        for (const field of feat.fields) {
+            const row = document.createElement('div');
+            row.className = 'automod-feature-field';
+            const lab = document.createElement('label');
+            lab.className = 'automod-feature-field-label';
+            lab.textContent = field.label + '：';
+            row.appendChild(lab);
+            const cur = featData[field.key] != null ? String(featData[field.key]) : (field.default || '');
+            if (field.type === 'channel') {
+                const sel = document.createElement('select');
+                sel.className = 'form-select';
+                sel.innerHTML = '<option value="">未設定</option>';
+                const allowed = channels.filter(ch => ['text', 'news'].includes(ch.type));
+                for (const ch of allowed) {
+                    const opt = document.createElement('option');
+                    opt.value = ch.id;
+                    opt.textContent = (ch.category ? '[' + ch.category + '] ' : '') + ch.name;
+                    if (String(cur) === String(ch.id)) opt.selected = true;
+                    sel.appendChild(opt);
+                }
+                sel.addEventListener('change', () => setFeatValue(feat.id, field.key, sel.value || ''));
+                row.appendChild(sel);
+            } else if (field.type === 'select') {
+                const sel = document.createElement('select');
+                sel.className = 'form-select';
+                for (const o of (field.options || [])) {
+                    const opt = document.createElement('option');
+                    opt.value = o.value;
+                    opt.textContent = o.label;
+                    if (cur === o.value) opt.selected = true;
+                    sel.appendChild(opt);
+                }
+                sel.addEventListener('change', () => setFeatValue(feat.id, field.key, sel.value));
+                row.appendChild(sel);
+            } else if (field.type === 'number') {
+                const input = document.createElement('input');
+                input.type = 'number';
+                input.className = 'form-input';
+                input.value = cur;
+                if (field.min != null) input.min = field.min;
+                if (field.max != null) input.max = field.max;
+                input.style.width = '5rem';
+                input.addEventListener('input', () => setFeatValue(feat.id, field.key, input.value));
+                row.appendChild(input);
+            } else {
+                const input = document.createElement('input');
+                input.type = 'text';
+                input.className = 'form-input';
+                input.value = cur;
+                input.placeholder = field.placeholder || '';
+                input.style.flex = '1';
+                input.addEventListener('input', () => setFeatValue(feat.id, field.key, input.value));
+                row.appendChild(input);
+            }
+            body.appendChild(row);
+        }
+        card.appendChild(body);
+        container.appendChild(card);
+    }
 
     return container;
 }
