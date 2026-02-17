@@ -11,7 +11,7 @@ from datetime import datetime, timezone
 from ItemSystem import (
     items, give_item_to_user, remove_item_from_user, get_user_items,
     all_items_autocomplete, get_user_items_autocomplete,
-    admin_action_callbacks, get_item_by_id
+    admin_action_callbacks, get_item_by_id, get_all_items_for_guild
 )
 
 
@@ -293,7 +293,7 @@ async def on_admin_item_action(guild_id: int, action: str, item_id: str, amount:
     當管理員使用 /itemmod give 時，根據物品價值觸發通膨
     """
     if action == "give" and guild_id:
-        item = get_item_by_id(item_id)
+        item = get_item_by_id(item_id, guild_id)
         worth = item.get("worth", 0) if item else 0
         total_value = worth * amount
         if total_value > 0:
@@ -307,39 +307,54 @@ admin_action_callbacks.append(on_admin_item_action)
 
 # ==================== Item Price Helpers ====================
 
-def get_item_worth(item_id: str) -> float:
-    """取得物品的全域幣價值"""
-    item = get_item_by_id(item_id)
+def get_item_worth(item_id: str, guild_id: int = None) -> float:
+    """取得物品的全域幣價值。自定義物品僅在提供 guild_id 時能取得定價。"""
+    item = get_item_by_id(item_id, guild_id)
     if item:
         return item.get("worth", 0)
     return 0
 
 
 def get_item_buy_price(item_id: str, guild_id: int) -> float:
-    """取得物品在特定伺服器的購買價格（伺服幣）"""
-    worth = get_item_worth(item_id)
+    """取得物品在特定伺服器的購買價格（伺服幣）。自定義物品的 worth 即為伺服幣定價。"""
+    item = get_item_by_id(item_id, guild_id)
+    if not item:
+        return 0
+    worth = item.get("worth", 0)
     if worth <= 0:
         return 0
+    if str(item_id).startswith("custom_"):
+        return round(worth, 2)
     rate = get_exchange_rate(guild_id)
     return round(worth / rate, 2)
 
 
 def get_item_sell_price(item_id: str, guild_id: int) -> float:
-    """取得物品在特定伺服器的賣出價格（伺服幣）"""
-    worth = get_item_worth(item_id)
+    """取得物品在特定伺服器的賣出價格（伺服幣）。自定義物品依定價與賣出比率計算。"""
+    item = get_item_by_id(item_id, guild_id)
+    if not item:
+        return 0
+    worth = item.get("worth", 0)
     if worth <= 0:
         return 0
-    rate = get_exchange_rate(guild_id)
     sell_ratio = get_sell_ratio(guild_id)
+    if str(item_id).startswith("custom_"):
+        return round(worth * sell_ratio, 2)
+    rate = get_exchange_rate(guild_id)
     return round(worth * sell_ratio / rate, 2)
 
 
 # ==================== Autocomplete ====================
 
 async def purchasable_items_autocomplete(interaction: discord.Interaction, current: str):
-    """可購買物品的自動完成"""
+    """可購買物品的自動完成（伺服器商店含自定義物品，全域商店僅全域物品）"""
     guild_id = interaction.guild.id if interaction.guild else None
-    purchasable = [item for item in items if item.get("worth", 0) > 0]
+    scope = getattr(interaction.namespace, "scope", "server")
+    if scope == "global" or not guild_id:
+        purchasable = [item for item in items if item.get("worth", 0) > 0]
+    else:
+        all_items_list = get_all_items_for_guild(guild_id)
+        purchasable = [item for item in all_items_list if item.get("worth", 0) > 0]
     if current:
         purchasable = [i for i in purchasable if current.lower() in i["name"].lower() or current.lower() in i["id"].lower()]
     choices = []
@@ -350,12 +365,16 @@ async def purchasable_items_autocomplete(interaction: discord.Interaction, curre
 
 
 async def sellable_items_autocomplete(interaction: discord.Interaction, current: str):
-    """可賣出物品的自動完成"""
+    """可賣出物品的自動完成（含伺服器自定義物品）"""
     guild_id = interaction.guild.id if interaction.guild else None
     user_id = interaction.user.id
     user_items_data = get_user_data(guild_id, user_id, "items", {})
     owned_ids = {item_id for item_id, count in user_items_data.items() if count > 0}
-    sellable = [item for item in items if item["id"] in owned_ids and item.get("worth", 0) > 0]
+    if guild_id:
+        all_items_list = get_all_items_for_guild(guild_id)
+    else:
+        all_items_list = items
+    sellable = [item for item in all_items_list if item["id"] in owned_ids and item.get("worth", 0) > 0]
     if current:
         sellable = [i for i in sellable if current.lower() in i["name"].lower()]
     choices = []
@@ -761,7 +780,7 @@ class Economy(commands.GroupCog, name="economy", description="經濟系統指令
 
         user_id = interaction.user.id
 
-        item = get_item_by_id(item_id)
+        item = get_item_by_id(item_id, guild_id if scope == "server" else 0)
         if not item:
             await interaction.response.send_message("❌ 無效的物品 ID。", ephemeral=True)
             return
@@ -839,7 +858,7 @@ class Economy(commands.GroupCog, name="economy", description="經濟系統指令
                 return
         user_id = interaction.user.id
 
-        item = get_item_by_id(item_id)
+        item = get_item_by_id(item_id, guild_id if scope == "server" else 0)
         if not item:
             await interaction.response.send_message("❌ 無效的物品 ID。", ephemeral=True)
             return
@@ -895,7 +914,10 @@ class Economy(commands.GroupCog, name="economy", description="經濟系統指令
 
     @app_commands.command(name="shop", description="查看商店")
     async def shop(self, interaction: discord.Interaction):
-        purchasable = [item for item in items if item.get("worth", 0) > 0]
+        if interaction.is_guild_integration():
+            purchasable = [item for item in get_all_items_for_guild(interaction.guild.id) if item.get("worth", 0) > 0]
+        else:
+            purchasable = [item for item in items if item.get("worth", 0) > 0]
         if not purchasable:
             await interaction.response.send_message("🏪 商店目前沒有任何商品。", ephemeral=True)
             return
@@ -927,7 +949,7 @@ class Economy(commands.GroupCog, name="economy", description="經濟系統指令
                     item.get('description', '無描述'),
                     f"🏦 伺服器商店: **{buy_price:,.2f}** {currency_name}",
                 ]
-                if allow_flow:
+                if allow_flow and not str(item["id"]).startswith("custom_"):
                     item_lines.append(f"🌐 全域商店: **{item['worth']:,.2f}** {GLOBAL_CURRENCY_NAME}")
                 item_lines.append(f"💰 賣出: **{sell_price:,.2f}** {currency_name}")
                 embed.add_field(

@@ -59,7 +59,7 @@ def get_item_by_id(item_id: str, guild_id: int = None):
                 "name": data["name"],
                 "description": data.get("description", "自定義物品。使用時會傳送儲存的文字內容。"),
                 "callback": _make_custom_text_callback(item_id, data["content"]),
-                "worth": 0,
+                "worth": float(data.get("worth", 0)) if data.get("worth") is not None else 0,
             }
     return None
 
@@ -84,6 +84,7 @@ def get_all_items_for_guild(guild_id: int = None) -> list:
                 "id": item_id,
                 "name": data["name"],
                 "description": data.get("description", "自定義物品。使用時會傳送儲存的文字內容。"),
+                "worth": float(data.get("worth", 0)) if data.get("worth") is not None else 0,
             })
     return result
 
@@ -546,13 +547,15 @@ class ItemModerate(commands.GroupCog, name="itemmod", description="物品系統�
 
         await interaction.response.send_message(embed=embed)
 
-    @app_commands.command(name="addcustom", description="新增伺服器自定義物品（使用時會傳送文字內容）")
+    @app_commands.command(name="addcustom", description="新增伺服器自定義物品")
     @app_commands.describe(
         name="物品名稱",
         content="使用物品時要傳送的文字內容",
-        description="物品說明（可選，預設為「自定義物品」）"
+        description="物品說明（可選，預設為「自定義物品」）",
+        list_in_shop="是否上架伺服器商店",
+        price="商店定價（伺服幣，僅在「上架商店」為是時有效）"
     )
-    async def addcustom(self, interaction: discord.Interaction, name: str, content: str, description: str = None):
+    async def addcustom(self, interaction: discord.Interaction, name: str, content: str, description: str = None, list_in_shop: bool = False, price: float = None):
         if not name or len(name.strip()) < 1:
             await interaction.response.send_message("物品名稱不能為空。", ephemeral=True)
             return
@@ -565,6 +568,13 @@ class ItemModerate(commands.GroupCog, name="itemmod", description="物品系統�
         if len(name) > 100:
             await interaction.response.send_message("物品名稱不可超過 100 字元。", ephemeral=True)
             return
+        if list_in_shop:
+            if price is None or price <= 0:
+                await interaction.response.send_message("上架商店時請設定大於 0 的定價。", ephemeral=True)
+                return
+            price = round(float(price), 2)
+        else:
+            price = None
 
         guild_id = interaction.guild.id
         custom_items = get_custom_items(guild_id)
@@ -574,13 +584,17 @@ class ItemModerate(commands.GroupCog, name="itemmod", description="物品系統�
             "description": (description or "自定義物品。使用時會傳送儲存的文字內容。")[:500],
             "content": content.strip()[:2000],
         }
+        if list_in_shop and price is not None:
+            custom_items[item_id]["worth"] = price
         set_custom_items(guild_id, custom_items)
-        await interaction.response.send_message(
+        msg = (
             f"✅ 已新增自定義物品 **{name.strip()}**\n"
             f"ID: `{item_id}`\n"
-            f"使用 `/itemmod give` 可發送給用戶。",
-            ephemeral=True
+            f"使用 `/itemmod give` 可發送給用戶。"
         )
+        if list_in_shop:
+            msg += f"\n🏪 已上架伺服器商店，定價 **{price:,.2f}** 伺服幣。"
+        await interaction.response.send_message(msg, ephemeral=True)
         log(f"Custom item {item_id} ({name}) added in guild {guild_id}", module_name="ItemSystem", user=interaction.user, guild=interaction.guild)
 
     @app_commands.command(name="removecustom", description="移除伺服器自定義物品")
@@ -598,6 +612,39 @@ class ItemModerate(commands.GroupCog, name="itemmod", description="物品系統�
         await interaction.response.send_message(f"✅ 已移除自定義物品 **{item_name}**。", ephemeral=True)
         log(f"Custom item {item_id} ({item_name}) removed in guild {guild_id}", module_name="ItemSystem", user=interaction.user, guild=interaction.guild)
 
+    @app_commands.command(name="editcustom", description="編輯自定義物品的商店上架與定價")
+    @app_commands.describe(
+        item_id="要編輯的自定義物品",
+        list_in_shop="是否上架伺服器商店",
+        price="商店定價（伺服幣；若上架為否則會從商店移除）"
+    )
+    @app_commands.autocomplete(item_id=custom_items_autocomplete)
+    async def editcustom(self, interaction: discord.Interaction, item_id: str, list_in_shop: bool = None, price: float = None):
+        guild_id = interaction.guild.id
+        custom_items = get_custom_items(guild_id)
+        if item_id not in custom_items:
+            await interaction.response.send_message("找不到此自定義物品。", ephemeral=True)
+            return
+        data = custom_items[item_id]
+        if list_in_shop is not None:
+            if list_in_shop:
+                p = price if price is not None else data.get("worth")
+                if p is None or p <= 0:
+                    await interaction.response.send_message("上架商店時請設定大於 0 的定價。", ephemeral=True)
+                    return
+                data["worth"] = round(float(p), 2)
+            else:
+                data.pop("worth", None)
+        elif price is not None and data.get("worth") is not None:
+            if price <= 0:
+                await interaction.response.send_message("定價必須大於 0。", ephemeral=True)
+                return
+            data["worth"] = round(float(price), 2)
+        set_custom_items(guild_id, custom_items)
+        worth = data.get("worth")
+        status = f"已上架商店，定價 **{worth:,.2f}** 伺服幣" if worth else "未上架商店"
+        await interaction.response.send_message(f"✅ 已更新 **{data['name']}**：{status}。", ephemeral=True)
+
     @app_commands.command(name="listcustom", description="列出本伺服器的自定義物品")
     async def listcustom(self, interaction: discord.Interaction):
         guild_id = interaction.guild.id
@@ -608,9 +655,11 @@ class ItemModerate(commands.GroupCog, name="itemmod", description="物品系統�
         embed = discord.Embed(title="伺服器自定義物品", color=0x9b59b6)
         for item_id, data in custom_items.items():
             preview = data["content"][:100] + ("..." if len(data["content"]) > 100 else "")
+            worth = data.get("worth")
+            shop_line = f"🏪 商店定價: **{worth:,.2f}** 伺服幣" if worth else "🏪 未上架商店"
             embed.add_field(
                 name=f"{data['name']} (`{item_id}`)",
-                value=f"內容預覽: {preview}\n{data.get('description', '')}",
+                value=f"內容預覽: {preview}\n{data.get('description', '')}\n{shop_line}",
                 inline=False
             )
         embed.set_footer(text=interaction.guild.name, icon_url=interaction.guild.icon.url if interaction.guild.icon else None)
