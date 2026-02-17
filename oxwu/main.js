@@ -299,6 +299,8 @@ function createEngineIoPollingServer() {
 function createDomTimeWatcher({ broadcast }) {
     let lastWarning = null;
     let lastReport = null;
+    let lastWarningBroadcastAt = 0;
+    const WARNING_BROADCAST_COOLDOWN_MS = 10 * 1000;
     let timer = null;
 
     const SCRIPT = `
@@ -346,8 +348,12 @@ function createDomTimeWatcher({ broadcast }) {
             if (!r || !r.ok) return;
 
             if (r.warning?.time && r.warning.time !== lastWarning) {
-                lastWarning = r.warning.time;
-                broadcast("warningTimeChanged", { time: r.warning.time, parts: r.warning.parts, url: r.url });
+                const now = Date.now();
+                if (now - lastWarningBroadcastAt >= WARNING_BROADCAST_COOLDOWN_MS) {
+                    lastWarning = r.warning.time;
+                    lastWarningBroadcastAt = now;
+                    broadcast("warningTimeChanged", { time: r.warning.time, parts: r.warning.parts, url: r.url });
+                }
             }
             if (r.report?.time && r.report.time !== lastReport) {
                 lastReport = r.report.time;
