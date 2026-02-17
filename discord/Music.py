@@ -723,8 +723,13 @@ class Music(commands.GroupCog, group_name=app_commands.locale_str("music")):
             if node.is_connected:
                 ping = f"{round(node.ping, 2)}ms" if node.is_connected else "N/A"
                 status += f"\n延遲: {ping}"
-                players = len(node.players)
+                players = node.player_count
                 status += f"\n有 {players} 個伺服器正在使用此節點"
+                health = round(node.health_score, 2)
+                status += f"\n健康分數: {health:.2f}%"
+                # try to get player and see if current guild is using this node
+                if node.players.get(interaction.guild.id):
+                    name += " ⬅️ 你在這裡"
             embed.add_field(name=name, value=status, inline=False)
         await interaction.followup.send(embed=embed)
     
