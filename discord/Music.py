@@ -240,7 +240,7 @@ class Music(commands.GroupCog, group_name=app_commands.locale_str("music")):
         
         # 檢查結束原因，可能是字串或枚舉
         reason_str = str(reason).upper() if reason else ""
-        log(f"Track ended with reason: {reason_str}", module_name="Music")
+        log(f"Track ended with reason: {reason_str}", module_name="Music", guild=player.guild)
         
         # 只在正常結束時播放下一首
         # REPLACED: 被新歌曲替換（不需要自動播放）
