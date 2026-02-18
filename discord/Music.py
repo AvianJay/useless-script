@@ -724,7 +724,8 @@ class Music(commands.GroupCog, group_name=app_commands.locale_str("music")):
                 ping = f"{round(node.ping, 2)}ms" if node.is_connected else "N/A"
                 status += f"\n延遲: {ping}"
                 players = node.player_count
-                status += f"\n有 {players} 個伺服器正在使用此節點"
+                playing_players = len([player for player in node.players.values() if player._is_connected])
+                status += f"\n有 {playing_players}/{players} 個伺服器正在使用此節點"
                 health = round(node.health_score, 2)
                 status += f"\n健康分數: {health:.2f}%"
                 # try to get player and see if current guild is using this node
