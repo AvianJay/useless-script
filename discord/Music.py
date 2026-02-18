@@ -303,7 +303,7 @@ class Music(commands.GroupCog, group_name=app_commands.locale_str("music")):
                     restore_hint = f"重啟後可使用 {restore_mention or '`/music restore-queue`'} 回復儲存的播放隊列。" if uris else ""
                     embed = discord.Embed(
                         title="🔴 機器人可能將會離開語音頻道",
-                        description=f"機器人被關機或是重啟。{(' ' + restore_hint) if restore_hint else ''}",
+                        description=f"機器人被關機或是重啟。\n{(' ' + restore_hint) if restore_hint else ''}",
                         color=0x95a5a6
                     )
                     await channel.send(embed=embed)
