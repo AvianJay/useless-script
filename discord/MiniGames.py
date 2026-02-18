@@ -434,6 +434,16 @@ class LobbyView(discord.ui.View):
         await interaction.response.edit_message(content="此桌已取消。", embed=None, view=None)
         self.stop()
 
+    async def on_timeout(self):
+        self.cog.games.pop(self.game.channel_id, None)
+        for child in self.children:
+            child.disabled = True
+        if self.message is not None:
+            try:
+                await self.message.edit(content="大廳已逾時。", embed=None, view=self)
+            except (discord.NotFound, discord.HTTPException):
+                pass
+
 
 # -----------------------------
 # Tower Views
@@ -451,6 +461,15 @@ class TowerConfirmView(discord.ui.View):
     @discord.ui.button(label="✅ 確認開始", style=discord.ButtonStyle.success)
     async def confirm_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
         await self.cog.start_tower(interaction, self.bet)
+
+    async def on_timeout(self):
+        for child in self.children:
+            child.disabled = True
+        if self.message is not None:
+            try:
+                await self.message.edit(content="已逾時，請重新下指令開始。", embed=None, view=self)
+            except (discord.NotFound, discord.HTTPException):
+                pass
 
 
 class TowerGameView(discord.ui.View):
@@ -554,10 +573,21 @@ class TowerGameView(discord.ui.View):
             if isinstance(child, discord.ui.Button):
                 child.callback = lambda i, b=child: on_tile_click(i, b)
 
+    async def on_timeout(self):
+        key = (self.game.channel_id, self.game.user_id)
+        self.cog.tower_games.pop(key, None)
+        for child in self.children:
+            child.disabled = True
+        if self.message is not None:
+            try:
+                await self.message.edit(content="遊戲已逾時。", embed=None, view=self)
+            except (discord.NotFound, discord.HTTPException):
+                pass
+
 
 class TableView(discord.ui.View):
     def __init__(self, cog: "MiniGamesCog", game: Game):
-        super().__init__(timeout=None)
+        super().__init__(timeout=600)
         self.cog = cog
         self.game = game
 
@@ -592,6 +622,17 @@ class TableView(discord.ui.View):
         self.cog.games.pop(self.game.channel_id, None)
         await interaction.response.edit_message(content="此局已結束。", embed=None, view=None)
         self.stop()
+
+    async def on_timeout(self):
+        # timeout=None，理論上不會觸發；若將來改為有 timeout 則停用按鈕
+        for child in self.children:
+            child.disabled = True
+        if self.message is not None:
+            try:
+                await self.message.edit(content="遊戲因超時而結束。", view=self)
+                self.cog.games.pop(self.game.channel_id, None)
+            except (discord.NotFound, discord.HTTPException):
+                pass
 
 
 class HandView(discord.ui.View):
@@ -767,6 +808,15 @@ class HandView(discord.ui.View):
             await self._edit_ephemeral_result(interaction, "你選擇 Pass。")
             await self.cog.update_table_message(interaction.channel, self.game)
             self.stop()
+
+    async def on_timeout(self):
+        for child in self.children:
+            child.disabled = True
+        if self.message is not None:
+            try:
+                await self.message.edit(content="選擇已逾時。", view=self)
+            except (discord.NotFound, discord.HTTPException):
+                pass
 
 
 # -----------------------------
