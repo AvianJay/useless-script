@@ -129,7 +129,7 @@ class Music(commands.GroupCog, group_name=app_commands.locale_str("music")):
             log("所有 Lavalink 節點均無法連接", level=logging.ERROR, module_name="Music")
         else:
             log(f"已成功連接 {connected}/{len(lavalink_nodes)} 個 Lavalink 節點", module_name="Music")
-        on_close_tasks.append(self.on_bot_quit)
+        on_close_tasks.add(self.music_quit_task)
     
     async def _auto_leave_after_timeout(self, guild_id: int, player: lava_lyra.Player):
         """5 分鐘後自動離開語音頻道"""
@@ -283,7 +283,7 @@ class Music(commands.GroupCog, group_name=app_commands.locale_str("music")):
             except:
                 pass
     
-    async def on_bot_quit(self):
+    async def music_quit_task(self):
         for guild_id, channel in list(text_channels.items()):
             try:
                 guild = self.bot.get_guild(guild_id)
