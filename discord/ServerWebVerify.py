@@ -1009,7 +1009,8 @@ class WebVerifySetupWizard(discord.ui.View):
                     discord.SelectOption(label="總是給予 (Always)", value="always"),
                     discord.SelectOption(label="帳號年齡過小 (Age Check)", value="age_check"),
                     discord.SelectOption(label="無驗證紀錄 (No History)", value="no_history"),
-                    discord.SelectOption(label="帳號曾經被標記過 (Flagged History)", value="has_flagged_history")
+                    discord.SelectOption(label="帳號曾經被標記過 (Flagged History)", value="has_flagged_history"),
+                    discord.SelectOption(label="曾經退出過伺服器 (Left Guild Before)", value="left_guild_before")
                 ]
                 # Pre-select current triggers
                 current_triggers = self.config.get('autorole_trigger', 'always').split('+')
@@ -1030,13 +1031,18 @@ class WebVerifySetupWizard(discord.ui.View):
             # Step 4: Notify
             select_type = discord.ui.Select(placeholder="選擇通知方式", options=[
                 discord.SelectOption(label="私訊通知 (DM)", value="dm"),
-                discord.SelectOption(label="頻道通知 (Channel)", value="channel")
+                discord.SelectOption(label="頻道通知 (Channel)", value="channel"),
+                discord.SelectOption(label="兩者皆通知 (Both)", value="both")
             ])
             # Set default
             if self.config.get('notify', {}).get('type') == 'dm':
                 select_type.options[0].default = True
-            else:
+            elif self.config.get('notify', {}).get('type') == 'channel':
                 select_type.options[1].default = True
+            elif self.config.get('notify', {}).get('type') == 'both':
+                select_type.options[2].default = True
+            else:
+                select_type.options[0].default = True
             
             select_type.callback = self.on_notify_type_select
             self.add_item(select_type)
