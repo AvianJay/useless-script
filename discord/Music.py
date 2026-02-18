@@ -1,6 +1,6 @@
 import lava_lyra
 import discord
-from globalenv import bot, config
+from globalenv import bot, config, on_close_tasks, get_server_config, set_server_config, get_command_mention
 from discord.ext import commands
 from discord import app_commands
 from logger import log
@@ -129,6 +129,7 @@ class Music(commands.GroupCog, group_name=app_commands.locale_str("music")):
             log("所有 Lavalink 節點均無法連接", level=logging.ERROR, module_name="Music")
         else:
             log(f"已成功連接 {connected}/{len(lavalink_nodes)} 個 Lavalink 節點", module_name="Music")
+        on_close_tasks.append(self.on_bot_quit)
     
     async def _auto_leave_after_timeout(self, guild_id: int, player: lava_lyra.Player):
         """5 分鐘後自動離開語音頻道"""
@@ -280,6 +281,33 @@ class Music(commands.GroupCog, group_name=app_commands.locale_str("music")):
                 music_queues.pop(guild_id, None)
                 text_channels.pop(guild_id, None)
             except:
+                pass
+    
+    async def on_bot_quit(self):
+        for guild_id, channel in list(text_channels.items()):
+            try:
+                guild = self.bot.get_guild(guild_id)
+                if not guild:
+                    continue
+                player: lava_lyra.Player = guild.voice_client
+                if player:
+                    queue = get_queue(guild_id)
+                    uris = []
+                    if player.current:
+                        uris.append(player.current.uri)
+                    for track in queue:
+                        uris.append(track.uri)
+                    if uris:
+                        set_server_config(guild_id, "music_saved_queue", {"uris": uris})
+                    restore_mention = await get_command_mention("music", "restore-queue")
+                    restore_hint = f"重啟後可使用 {restore_mention or '`/music restore-queue`'} 回復儲存的播放隊列。" if uris else ""
+                    embed = discord.Embed(
+                        title="🔴 機器人可能將會離開語音頻道",
+                        description=f"機器人被關機或是重啟。{(' ' + restore_hint) if restore_hint else ''}",
+                        color=0x95a5a6
+                    )
+                    await channel.send(embed=embed)
+            except Exception:
                 pass
     
     @app_commands.command(name=app_commands.locale_str("play"), description="播放音樂")
@@ -546,6 +574,60 @@ class Music(commands.GroupCog, group_name=app_commands.locale_str("music")):
         embed.set_footer(text=f"隊列中共有 {len(queue)} 首歌曲")
         await interaction.followup.send(embed=embed)
     
+    @app_commands.command(name=app_commands.locale_str("restore-queue"), description="回復重啟前儲存的播放隊列")
+    @app_commands.guild_only()
+    @app_commands.allowed_installs(guilds=True, users=False)
+    @app_commands.allowed_contexts(guilds=True, dms=False, private_channels=False)
+    @app_commands.checks.bot_has_permissions(connect=True, speak=True)
+    async def restore_queue(self, interaction: discord.Interaction):
+        """回復重啟前儲存的播放隊列"""
+        await interaction.response.defer()
+        saved = get_server_config(interaction.guild.id, "music_saved_queue")
+        if not saved or not saved.get("uris"):
+            await interaction.followup.send("❌ 沒有儲存的播放隊列可回復。", ephemeral=True)
+            return
+        if not interaction.user.voice or not interaction.user.voice.channel:
+            await interaction.followup.send("❌ 你必須加入語音頻道才能使用此指令", ephemeral=True)
+            return
+        player: lava_lyra.Player = interaction.guild.voice_client
+        if not player:
+            try:
+                player = await interaction.user.voice.channel.connect(cls=lava_lyra.Player)
+                text_channels[interaction.guild.id] = interaction.channel
+            except Exception as e:
+                await interaction.followup.send(f"❌ 無法連接到語音頻道: {e}", ephemeral=True)
+                return
+        elif interaction.user.voice.channel.id != player.channel.id:
+            await interaction.followup.send("❌ 你必須與機器人在同一語音頻道才能使用此指令", ephemeral=True)
+            return
+        guild_id = interaction.guild.id
+        queue = get_queue(guild_id)
+        added = 0
+        failed = 0
+        for uri in saved["uris"]:
+            try:
+                results = await player.get_tracks(uri)
+                if not results:
+                    failed += 1
+                    continue
+                track = results.tracks[0] if isinstance(results, lava_lyra.Playlist) else results[0]
+                queue.add(track)
+                added += 1
+            except Exception:
+                failed += 1
+        set_server_config(guild_id, "music_saved_queue", None)
+        if not player.is_playing and added > 0:
+            next_track = queue.get()
+            if next_track:
+                try:
+                    await player.play(next_track)
+                except Exception as e:
+                    log(f"回復隊列後播放失敗: {e}", level=logging.ERROR, module_name="Music")
+        msg = f"✅ 已回復 {added} 首歌曲到隊列。"
+        if failed:
+            msg += f"（{failed} 首無法載入）"
+        await interaction.followup.send(msg)
+
     @app_commands.command(name=app_commands.locale_str("now-playing"), description="查看當前播放的歌曲")
     @app_commands.guild_only()
     @app_commands.allowed_installs(guilds=True, users=False)

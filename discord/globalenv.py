@@ -512,6 +512,7 @@ translations = {
     "quick-setup": "快速設定",
     "toggle-flow": "切換流通",
     "count": "數量",
+    "restore-queue": "回復播放隊列",
 }
 class CommandNameTranslator(app_commands.Translator):
     async def translate(
