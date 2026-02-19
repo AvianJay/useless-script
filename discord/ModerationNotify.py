@@ -113,7 +113,7 @@ class AppealView(discord.ui.View):
                 origself.stop()
         await interaction.response.send_modal(AppealModal())
 
-async def notify_user(user: discord.User, guild: discord.Guild, action: str, reason: str = "未提供", end_time=None):
+async def notify_user(user: discord.User, guild: discord.Guild, action: str, reason: str = "未提供", end_time=None, moderator: discord.Member = None):
     en_action = ch2en_map.get(action, action.lower())
     if not get_server_config(guild.id, f"notify_user_on_{en_action}", True):
         return
@@ -134,6 +134,12 @@ async def notify_user(user: discord.User, guild: discord.Guild, action: str, rea
     # print("Debug:", end_time)
     if end_time:
         embed.add_field(name="解禁時間", value=f"<t:{str(int(end_time.timestamp()))}:F>", inline=False)
+
+    # fuck you 草薙明音
+    if moderator:
+        # embed.add_field(name="執行者", value=f"{moderator} (`{moderator.id}`)", inline=False)
+        embed.set_author(name=f"{moderator.display_name}({moderator.name})", icon_url=moderator.display_avatar.url if moderator.display_avatar else None)
+    # embed.set_image(url="https://cdn.discordapp.com/attachments/1470761344713228320/1473930929566384168/image.png?ex=699800a5&is=6996af25&hm=3c65405c82a12e51fceadf6e9cf665a73bc694fd34b9efc0698cab3a468a1361&")
 
     embed.set_footer(text=f"{guild.name}")
     if get_server_config(guild.id, "user_appeal_channel"):
@@ -165,11 +171,11 @@ async def on_member_remove(member):
             if entry.action == discord.AuditLogAction.kick:  # kick
                 if not get_server_config(guild.id, "notify_user_on_kick", True):
                     return
-                await notify_user(member, guild, "踢出", entry.reason or "未提供")
+                await notify_user(member, guild, "踢出", entry.reason or "未提供", moderator=entry.user)
             elif entry.action == discord.AuditLogAction.ban:  # ban
                 if not get_server_config(guild.id, "notify_user_on_ban", True):
                     return
-                await notify_user(member, guild, "封禁", entry.reason or "未提供")
+                await notify_user(member, guild, "封禁", entry.reason or "未提供", moderator=entry.user)
             else:
                 pass
     except Exception as e:
@@ -198,7 +204,7 @@ async def on_member_update(before, after):
                 if entry.target.id == after.id:
                     reason = entry.reason or "未提供"
                     end_time = after.timed_out_until.astimezone(timezone(timedelta(hours=8)))  # 台灣時間
-                    await notify_user(after, guild, "禁言", reason, end_time)
+                    await notify_user(after, guild, "禁言", reason, end_time, moderator=entry.user)
         except Exception as e:
             log(f"Error fetching audit logs: {e}", level=logging.ERROR, module_name="ModerationNotify", guild=guild)
             await notify_user(after, guild, "禁言", "無法取得", after.timed_out_until)
