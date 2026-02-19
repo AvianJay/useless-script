@@ -348,7 +348,7 @@ def get_item_sell_price(item_id: str, guild_id: int) -> float:
 
 async def purchasable_items_autocomplete(interaction: discord.Interaction, current: str):
     """可購買物品的自動完成（伺服器商店含自定義物品，全域商店僅全域物品）"""
-    guild_id = interaction.guild.id if interaction.guild else None
+    guild_id = interaction.guild.id if interaction.is_guild_integration() else None
     scope = getattr(interaction.namespace, "scope", "server")
     if scope == "global" or not guild_id:
         purchasable = [item for item in items if item.get("worth", 0) > 0]
@@ -366,7 +366,7 @@ async def purchasable_items_autocomplete(interaction: discord.Interaction, curre
 
 async def sellable_items_autocomplete(interaction: discord.Interaction, current: str):
     """可賣出物品的自動完成（含伺服器自定義物品）"""
-    guild_id = interaction.guild.id if interaction.guild else None
+    guild_id = interaction.guild.id if interaction.is_guild_integration() else None
     user_id = interaction.user.id
     user_items_data = get_user_data(guild_id, user_id, "items", {})
     owned_ids = {item_id for item_id, count in user_items_data.items() if count > 0}
@@ -848,7 +848,7 @@ class Economy(commands.GroupCog, name="economy", description="經濟系統指令
             await interaction.response.send_message("❌ 數量必須大於 0。", ephemeral=True)
             return
 
-        if not interaction.is_guild_integration() and scope == "server":
+        if not interaction.is_guild_integration():
             scope = "global"
             guild_id = GLOBAL_GUILD_ID
         else:
