@@ -347,19 +347,18 @@ def get_item_sell_price(item_id: str, guild_id: int) -> float:
 # ==================== Autocomplete ====================
 
 async def purchasable_items_autocomplete(interaction: discord.Interaction, current: str):
-    """可購買物品的自動完成（伺服器商店含自定義物品，全域商店僅全域物品）"""
-    guild_id = interaction.guild.id if interaction.is_guild_integration() else None
-    scope = getattr(interaction.namespace, "scope", "server")
-    if scope == "global" or not guild_id:
-        purchasable = [item for item in items if item.get("worth", 0) > 0]
-    else:
+    """可購買物品的自動完成（在伺服器內一律顯示含自定義物品的完整清單）"""
+    guild_id = interaction.guild.id if (interaction.guild and interaction.is_guild_integration()) else None
+    if guild_id:
         all_items_list = get_all_items_for_guild(guild_id)
-        purchasable = [item for item in all_items_list if item.get("worth", 0) > 0]
+        purchasable = [i for i in all_items_list if (i.get("worth") or 0) > 0]
+    else:
+        purchasable = [i for i in items if (i.get("worth") or 0) > 0]
     if current:
         purchasable = [i for i in purchasable if current.lower() in i["name"].lower() or current.lower() in i["id"].lower()]
     choices = []
     for item in purchasable[:25]:
-        price = get_item_buy_price(item["id"], guild_id) if guild_id else item.get("worth", 0)
+        price = get_item_buy_price(item["id"], guild_id) if guild_id else (item.get("worth") or 0)
         choices.append(app_commands.Choice(name=f"{item['name']} - 💰{price:,.0f}", value=item["id"]))
     return choices
 
