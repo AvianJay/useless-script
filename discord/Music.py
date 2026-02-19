@@ -158,7 +158,8 @@ class Music(commands.GroupCog, group_name=app_commands.locale_str("music")):
                     try:
                         queue.clear()
                         await player.stop()
-                        await player.disconnect()
+                        # await player.disconnect()
+                        await player.destroy()
                         music_queues.pop(guild_id, None)
                         text_channels.pop(guild_id, None)
                     except:
@@ -277,7 +278,8 @@ class Music(commands.GroupCog, group_name=app_commands.locale_str("music")):
             
             # 離開語音頻道並清理資料
             try:
-                await player.disconnect()
+                # await player.disconnect()
+                await player.destroy()
                 music_queues.pop(guild_id, None)
                 text_channels.pop(guild_id, None)
             except:
@@ -476,7 +478,8 @@ class Music(commands.GroupCog, group_name=app_commands.locale_str("music")):
             queue = get_queue(interaction.guild.id)
             queue.clear()
             await player.stop()
-            await player.disconnect()
+            # await player.disconnect()
+            await player.destroy()
             # 清理資料
             music_queues.pop(interaction.guild.id, None)
             text_channels.pop(interaction.guild.id, None)
@@ -975,7 +978,8 @@ class Music(commands.GroupCog, group_name=app_commands.locale_str("music")):
             queue = get_queue(ctx.guild.id)
             queue.clear()
             await player.stop()
-            await player.disconnect()
+            # await player.disconnect()
+            await player.destroy()
             music_queues.pop(ctx.guild.id, None)
             text_channels.pop(ctx.guild.id, None)
             await ctx.send("⏹️ 已停止播放並斷開連接")
