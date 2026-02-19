@@ -43,6 +43,7 @@ class CustomPrefix(commands.Cog):
         
         :param prefix: 自定義前綴字串，若為 None 則重置為預設前綴。
         """
+        await asyncio.sleep(.5)  # wait for on_message to finish
         guild_id = str(ctx.guild.id)
         if prefix is None:
             set_server_config(guild_id, "custom_prefix", None)
