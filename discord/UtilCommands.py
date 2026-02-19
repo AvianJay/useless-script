@@ -14,7 +14,7 @@ from database import db
 from CustomPrefix import get_prefix
 
 startup_time = datetime.now(timezone.utc)
-version = "0.19.4"
+version = "0.19.5"
 try:
     git_commit_hash = os.popen("git rev-parse --short HEAD").read().strip()
 except Exception as e:
