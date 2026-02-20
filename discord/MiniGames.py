@@ -362,6 +362,7 @@ class LobbyView(discord.ui.View):
         super().__init__(timeout=600)
         self.cog = cog
         self.game = game
+        self.message = None
 
         self.rule_select = discord.ui.Select(
             placeholder="規則（房主可選）",
@@ -438,9 +439,9 @@ class LobbyView(discord.ui.View):
         self.cog.games.pop(self.game.channel_id, None)
         for child in self.children:
             child.disabled = True
-        if self.message is not None:
+        if self.game.lobby_message is not None:
             try:
-                await self.message.edit(content="大廳已逾時。", embed=None, view=self)
+                await self.game.lobby_message.edit(content="大廳已逾時。", embed=None, view=self)
             except (discord.NotFound, discord.HTTPException):
                 pass
 
@@ -457,6 +458,7 @@ class TowerConfirmView(discord.ui.View):
         self.cog = cog
         self.guild_id = guild_id
         self.bet = bet
+        self.message = None
 
     @discord.ui.button(label="✅ 確認開始", style=discord.ButtonStyle.success)
     async def confirm_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
@@ -479,6 +481,7 @@ class TowerGameView(discord.ui.View):
         super().__init__(timeout=120)
         self.cog = cog
         self.game = game
+        self.message = None
         self._build_buttons()
 
     def _build_buttons(self):
@@ -578,9 +581,9 @@ class TowerGameView(discord.ui.View):
         self.cog.tower_games.pop(key, None)
         for child in self.children:
             child.disabled = True
-        if self.message is not None:
+        if self.game.message is not None:
             try:
-                await self.message.edit(content="遊戲已逾時。", embed=None, view=self)
+                await self.game.message.edit(content="遊戲已逾時。", embed=None, view=self)
             except (discord.NotFound, discord.HTTPException):
                 pass
 
@@ -590,6 +593,7 @@ class TableView(discord.ui.View):
         super().__init__(timeout=600)
         self.cog = cog
         self.game = game
+        self.message = None
 
     @discord.ui.button(label="🂠 我的手牌", style=discord.ButtonStyle.primary)
     async def myhand_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
@@ -614,6 +618,8 @@ class TableView(discord.ui.View):
         )
         embed.set_footer(text=f"共 {len(player.hand)} 張｜用下拉選牌後按「出牌」或直接「Pass」。")
         await interaction.response.send_message(embed=embed, ephemeral=True, view=view)
+        sent = await interaction.original_response()
+        view.message = sent
 
     @discord.ui.button(label="🛑 結束（房主）", style=discord.ButtonStyle.danger)
     async def end_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
@@ -627,9 +633,9 @@ class TableView(discord.ui.View):
         # timeout=None，理論上不會觸發；若將來改為有 timeout 則停用按鈕
         for child in self.children:
             child.disabled = True
-        if self.message is not None:
+        if self.game.lobby_message is not None:
             try:
-                await self.message.edit(content="遊戲因超時而結束。", view=self)
+                await self.game.lobby_message.edit(content="遊戲因超時而結束。", view=self)
                 self.cog.games.pop(self.game.channel_id, None)
             except (discord.NotFound, discord.HTTPException):
                 pass
@@ -642,6 +648,7 @@ class HandView(discord.ui.View):
         self.game = game
         self.player_id = player_id
         self.selected: List[str] = []
+        self.message = None
 
         self.select = discord.ui.Select(
             placeholder="選牌（1/2/3/5張，最多 5）",
@@ -847,6 +854,7 @@ class MiniGamesCog(commands.GroupCog, group_name="games", description="迷你遊
         sent = await interaction.original_response()
         g.lobby_message_id = sent.id
         g.lobby_message = sent  # 存參考，之後都用 .edit() 不 fetch，user-install 才穩
+        view.message = sent
 
     # -----------------------------
     # Tower 遊戲
@@ -892,6 +900,8 @@ class MiniGamesCog(commands.GroupCog, group_name="games", description="迷你遊
         embed.set_footer(text="確認後將扣除賭注並開始遊戲")
         view = TowerConfirmView(self, guild_id, float(bet_val))
         await interaction.response.send_message(embed=embed, view=view)
+        sent = await interaction.original_response()
+        view.message = sent
 
     async def start_tower(self, interaction: discord.Interaction, bet: float):
         """選擇賭注後開始遊戲"""
@@ -921,9 +931,11 @@ class MiniGamesCog(commands.GroupCog, group_name="games", description="迷你遊
 
         embed = self._tower_embed(game, phase="pick")
         view = TowerGameView(self, game)
-        msg = await interaction.response.edit_message(embed=embed, view=view)
+        await interaction.response.edit_message(embed=embed, view=view)
+        msg = await interaction.original_response()
         game.message_id = msg.id
         game.message = msg
+        view.message = msg
 
     def _tower_embed(self, game: TowerGame, phase: str = "pick") -> discord.Embed:
         """phase: pick=選格中, result_safe=選到安全可繼續/提現, result_cactus=踩到仙人掌, cashout=提現成功"""
