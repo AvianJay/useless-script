@@ -26,6 +26,7 @@ ch2en_map = {
     "踢出": "kick",
     "封禁": "ban",
     "禁言": "mute",
+    "黑名單": "blacklist",
 }
 
 class ResponseAppealView(discord.ui.View):
@@ -143,8 +144,14 @@ async def notify_user(user: discord.User, guild: discord.Guild, action: str, rea
 
     embed.set_footer(text=f"{guild.name}")
     if get_server_config(guild.id, "user_appeal_channel"):
-        embed.add_field(name="申訴方式", value="你可以點擊下方按鈕提出申訴。", inline=False)
-        view = AppealView()
+        # check if user is in blacklist
+        blacklist = get_server_config(guild.id, "appeal_blacklist", [])
+        if user.id in blacklist:
+            embed.add_field(name="申訴方式", value="你已被加入申訴黑名單，無法提出申訴。", inline=False)
+            view = None
+        else:
+            embed.add_field(name="申訴方式", value="你可以點擊下方按鈕提出申訴。", inline=False)
+            view = AppealView()
     else:
         view = None
 
@@ -259,6 +266,109 @@ class ModerationNotify(commands.Cog):
             await interaction.response.send_message("用戶申訴功能已被禁用。", ephemeral=True)
             log("禁用用戶申訴功能", module_name="ModerationNotify", guild=guild)
     
+    @app_commands.command(name=app_commands.locale_str("user-appeal-blacklist"), description="管理用戶申訴黑名單")
+    @app_commands.describe(
+        user="要加入或移除黑名單的用戶",
+        reason="加入黑名單的理由(選填)"
+    )
+    @app_commands.guild_only()
+    @app_commands.default_permissions(manage_guild=True)
+    @app_commands.allowed_installs(guilds=True, users=False)
+    @app_commands.allowed_contexts(guilds=True, dms=False, private_channels=False)
+    async def blacklist_appeal_user(self, interaction: discord.Interaction, user: discord.User, reason: str = "未提供"):
+        guild = interaction.guild
+
+        # 防止將機器人加入黑名單
+        if user.bot:
+            await interaction.response.send_message("無法將機器人加入申訴黑名單。", ephemeral=True)
+            return
+
+        # 防止將自己加入黑名單
+        if user.id == interaction.user.id:
+            await interaction.response.send_message("你不能將自己加入申訴黑名單。", ephemeral=True)
+            return
+
+        blacklist = get_server_config(guild.id, "appeal_blacklist", [])
+        if user.id in blacklist:
+            class UnblacklistConfirm(discord.ui.View):
+                def __init__(self):
+                    super().__init__(timeout=60)
+
+                async def on_timeout(self):
+                    for child in self.children:
+                        child.disabled = True
+                    try:
+                        await interaction.edit_original_response(view=self)
+                    except:
+                        pass
+
+                @discord.ui.button(label="確認解除", style=discord.ButtonStyle.danger, emoji="✅")
+                async def confirm_unblacklist(self, inter: discord.Interaction, button: discord.ui.Button):
+                    blacklist.remove(user.id)
+                    set_server_config(guild.id, "appeal_blacklist", blacklist)
+                    await inter.response.edit_message(content=f"已將 {user.mention} 從申訴黑名單中移除。", view=None)
+                    log(f"將 {user} ({user.id}) 從申訴黑名單中移除", module_name="ModerationNotify", guild=guild)
+                    self.stop()
+
+                @discord.ui.button(label="取消", style=discord.ButtonStyle.secondary, emoji="❌")
+                async def cancel_unblacklist(self, inter: discord.Interaction, button: discord.ui.Button):
+                    await inter.response.edit_message(content="已取消操作。", view=None)
+                    self.stop()
+
+            await interaction.response.send_message(
+                f"該用戶 {user.mention} 已在申訴黑名單中，是否要解除？",
+                view=UnblacklistConfirm(),
+                ephemeral=True
+            )
+            return
+        blacklist.append(user.id)
+        set_server_config(guild.id, "appeal_blacklist", blacklist)
+        await interaction.response.send_message(f"已將 {user.mention} 加入申訴黑名單。", ephemeral=True)
+
+        try:
+            await notify_user(user, guild, "黑名單", f"你已被加入申訴黑名單{f'，理由：{reason}' if reason != '未提供' else ''}。", moderator=interaction.user)
+        except Exception as e:
+            log(f"無法通知用戶 {user} ({user.id}) 黑名單狀態：{e}", level=logging.WARNING, module_name="ModerationNotify", guild=guild)
+
+        log(f"將 {user} ({user.id}) 加入申訴黑名單，理由：{reason}", module_name="ModerationNotify", guild=guild)
+
+    @app_commands.command(name=app_commands.locale_str("view-appeal-blacklist"), description="查看申訴黑名單")
+    @app_commands.guild_only()
+    @app_commands.default_permissions(manage_guild=True)
+    @app_commands.allowed_installs(guilds=True, users=False)
+    @app_commands.allowed_contexts(guilds=True, dms=False, private_channels=False)
+    async def view_appeal_blacklist(self, interaction: discord.Interaction):
+        guild = interaction.guild
+        blacklist = get_server_config(guild.id, "appeal_blacklist", [])
+
+        if not blacklist:
+            await interaction.response.send_message("目前沒有用戶在申訴黑名單中。", ephemeral=True)
+            return
+
+        embed = discord.Embed(
+            title="申訴黑名單",
+            description=f"共有 {len(blacklist)} 位用戶在黑名單中",
+            color=discord.Color.orange(),
+            timestamp=datetime.now(timezone.utc)
+        )
+
+        # 分批顯示用戶,避免超過 embed 限制
+        user_list = []
+        for user_id in blacklist[:25]:  # 最多顯示 25 個
+            try:
+                user = await bot.fetch_user(user_id)
+                user_list.append(f"• {user.mention} (`{user.id}`)")
+            except:
+                user_list.append(f"• 未知用戶 (`{user_id}`)")
+
+        embed.add_field(name="黑名單用戶", value="\n".join(user_list) if user_list else "無", inline=False)
+
+        if len(blacklist) > 25:
+            embed.set_footer(text=f"僅顯示前 25 位用戶，共 {len(blacklist)} 位")
+
+        await interaction.response.send_message(embed=embed, ephemeral=True)
+        log(f"查看申訴黑名單 (共 {len(blacklist)} 位用戶)", module_name="ModerationNotify", guild=guild)
+
     @commands.Cog.listener()
     async def on_ready(self):
         # 註冊持久化 View，讓機器人重啟後按鈕仍可用
