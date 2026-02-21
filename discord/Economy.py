@@ -384,6 +384,199 @@ async def sellable_items_autocomplete(interaction: discord.Interaction, current:
     return choices
 
 
+# ==================== Shop View ====================
+
+class ShopView(discord.ui.View):
+    def __init__(self, interaction: discord.Interaction, purchasable: list):
+        super().__init__(timeout=180)
+        self.original_interaction = interaction
+        self.purchasable = purchasable
+
+        # 建立 Select 選單
+        options = []
+        for item in purchasable[:25]:  # Discord 限制 25 個選項
+            if interaction.is_guild_integration():
+                guild_id = interaction.guild.id
+                price = get_item_buy_price(item["id"], guild_id)
+                currency = get_currency_name(guild_id)
+            else:
+                price = item.get("worth", 0)
+                currency = GLOBAL_CURRENCY_NAME
+
+            options.append(discord.SelectOption(
+                label=item["name"],
+                value=item["id"],
+                description=f"💰 {price:,.0f} {currency}",
+                emoji="🛒"
+            ))
+
+        if options:
+            self.item_select = discord.ui.Select(
+                placeholder="選擇要購買的商品...",
+                options=options,
+                custom_id="shop_item_select"
+            )
+            self.item_select.callback = self.on_item_select
+            self.add_item(self.item_select)
+
+    async def on_item_select(self, interaction: discord.Interaction):
+        selected_item_id = self.item_select.values[0]
+        item = get_item_by_id(selected_item_id, interaction.guild.id if interaction.is_guild_integration() else 0)
+
+        if not item:
+            await interaction.response.send_message("❌ 無效的物品。", ephemeral=True)
+            return
+
+        # 顯示購買選項（伺服器商店或全域商店）
+        if interaction.is_guild_integration():
+            guild_id = interaction.guild.id
+            allow_flow = get_allow_global_flow(guild_id)
+            is_custom = str(item["id"]).startswith("custom_")
+
+            # 如果是自定義物品或不允許全域流通，只顯示伺服器商店
+            if is_custom or not allow_flow:
+                modal = PurchaseModal(item, "server")
+                await interaction.response.send_modal(modal)
+            else:
+                # 顯示選擇商店類型的按鈕
+                view = ShopTypeView(item)
+                server_price = get_item_buy_price(item["id"], guild_id)
+                global_price = item.get("worth", 0)
+                currency_name = get_currency_name(guild_id)
+
+                embed = discord.Embed(
+                    title=f"🛒 購買 {item['name']}",
+                    description=item.get('description', '無描述'),
+                    color=0x9b59b6
+                )
+                embed.add_field(
+                    name="🏦 伺服器商店",
+                    value=f"**{server_price:,.2f}** {currency_name}\n物品到伺服器背包",
+                    inline=True
+                )
+                embed.add_field(
+                    name="🌐 全域商店",
+                    value=f"**{global_price:,.2f}** {GLOBAL_CURRENCY_NAME}\n物品到全域背包",
+                    inline=True
+                )
+                await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
+        else:
+            # 全域上下文，只能用全域商店
+            modal = PurchaseModal(item, "global")
+            await interaction.response.send_modal(modal)
+
+
+class ShopTypeView(discord.ui.View):
+    def __init__(self, item: dict):
+        super().__init__(timeout=60)
+        self.item = item
+
+    @discord.ui.button(label="伺服器商店", style=discord.ButtonStyle.primary, emoji="🏦")
+    async def server_shop(self, interaction: discord.Interaction, button: discord.ui.Button):
+        modal = PurchaseModal(self.item, "server")
+        await interaction.response.send_modal(modal)
+
+    @discord.ui.button(label="全域商店", style=discord.ButtonStyle.success, emoji="🌐")
+    async def global_shop(self, interaction: discord.Interaction, button: discord.ui.Button):
+        modal = PurchaseModal(self.item, "global")
+        await interaction.response.send_modal(modal)
+
+
+class PurchaseModal(discord.ui.Modal):
+    def __init__(self, item: dict, scope: str):
+        super().__init__(title=f"購買 {item['name']}")
+        self.item = item
+        self.scope = scope
+
+        self.quantity_input = discord.ui.TextInput(
+            label="數量",
+            placeholder="輸入購買數量...",
+            default="1",
+            min_length=1,
+            max_length=10,
+            required=True
+        )
+        self.add_item(self.quantity_input)
+
+    async def on_submit(self, interaction: discord.Interaction):
+        try:
+            amount = int(self.quantity_input.value)
+        except ValueError:
+            await interaction.response.send_message("❌ 請輸入有效的數量。", ephemeral=True)
+            return
+
+        if amount <= 0:
+            await interaction.response.send_message("❌ 數量必須大於 0。", ephemeral=True)
+            return
+
+        # 執行購買邏輯
+        if not interaction.is_guild_integration():
+            scope = "global"
+            guild_id = GLOBAL_GUILD_ID
+        else:
+            guild_id = interaction.guild.id
+            scope = self.scope
+            if scope == "global" and not get_allow_global_flow(guild_id):
+                await interaction.response.send_message("❌ 此伺服器已關閉伺服幣與全域幣的流通功能，無法使用全域商店。", ephemeral=True)
+                return
+
+        user_id = interaction.user.id
+        item = get_item_by_id(self.item["id"], guild_id if scope == "server" else 0)
+
+        if not item:
+            await interaction.response.send_message("❌ 無效的物品 ID。", ephemeral=True)
+            return
+
+        worth = item.get("worth", 0)
+        if worth <= 0:
+            await interaction.response.send_message("❌ 這個物品無法購買。", ephemeral=True)
+            return
+
+        if scope == "server":
+            currency_name = get_currency_name(guild_id)
+            price_per = get_item_buy_price(self.item["id"], guild_id)
+            total_price = round(price_per * amount, 2)
+            bal = get_balance(guild_id, user_id)
+            if bal < total_price:
+                await interaction.response.send_message(
+                    f"❌ 餘額不足。需要 **{total_price:,.2f}** {currency_name}，但只有 **{bal:,.2f}**。",
+                    ephemeral=True
+                )
+                return
+            set_balance(guild_id, user_id, bal - total_price)
+            adjust_supply(guild_id, -total_price)
+            await give_item_to_user(guild_id, user_id, self.item["id"], amount)
+            record_purchase(guild_id, total_price)
+        else:
+            currency_name = GLOBAL_CURRENCY_NAME
+            price_per = worth
+            total_price = round(price_per * amount, 2)
+            bal = get_global_balance(user_id)
+            if bal < total_price:
+                await interaction.response.send_message(
+                    f"❌ 餘額不足。需要 **{total_price:,.2f}** {currency_name}，但只有 **{bal:,.2f}**。",
+                    ephemeral=True
+                )
+                return
+            set_global_balance(user_id, bal - total_price)
+            await give_item_to_user(0, user_id, self.item["id"], amount)
+
+        scope_label = "伺服器" if scope == "server" else "全域"
+        embed = discord.Embed(
+            title=f"🛒 購買成功（{scope_label}）",
+            description=f"你購買了 **{item['name']}** x{amount}！",
+            color=0x2ecc71
+        )
+        embed.add_field(name="單價", value=f"{price_per:,.2f} {currency_name}", inline=True)
+        embed.add_field(name="總價", value=f"{total_price:,.2f} {currency_name}", inline=True)
+        remaining = get_balance(guild_id, user_id) if scope == "server" else get_global_balance(user_id)
+        dest = "伺服器背包" if scope == "server" else "全域背包"
+        embed.set_footer(text=f"剩餘餘額：{remaining:,.2f} {currency_name} | 物品已放入{dest}")
+        buy_guild = guild_id if scope == "server" else GLOBAL_GUILD_ID
+        log_transaction(buy_guild, user_id, "購買物品", -total_price, currency_name, f"{item['name']} x{amount}")
+        await interaction.response.send_message(embed=embed, ephemeral=True)
+
+
 # ==================== Economy Cog ====================
 
 @app_commands.allowed_installs(guilds=True, users=True)
@@ -978,8 +1171,10 @@ class Economy(commands.GroupCog, name="economy", description="經濟系統指令
                     inline=False
                 )
             embed.set_footer(text="全域商店")
-        
-        await interaction.response.send_message(embed=embed)
+
+        # 建立購買 View
+        view = ShopView(interaction, purchasable)
+        await interaction.response.send_message(embed=embed, view=view)
 
     @app_commands.command(name="trade", description="與其他用戶交易")
     @app_commands.describe(
