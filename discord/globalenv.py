@@ -515,6 +515,7 @@ translations = {
     "restore-queue": "回復播放隊列",
     "user-appeal-blacklist": "用戶申訴黑名單",
     "view-appeal-blacklist": "查看用戶申訴黑名單",
+    "search": "搜尋",
 }
 class CommandNameTranslator(app_commands.Translator):
     async def translate(

@@ -357,6 +357,159 @@ class Music(commands.GroupCog, group_name=app_commands.locale_str("music")):
             except Exception as e:
                 log(f"關機清理時出錯: {e}", level=logging.ERROR, module_name="Music")
     
+    async def search_autocomplete(
+        self,
+        interaction: discord.Interaction,
+        current: str,
+    ) -> list[app_commands.Choice[str]]:
+        """搜尋歌曲的自動完成"""
+        if not current or len(current) < 2:
+            return []
+
+        try:
+            # 嘗試獲取現有的 player 或使用任意節點
+            player: lava_lyra.Player = interaction.guild.voice_client
+
+            if not player:
+                # 如果沒有 player，嘗試從 NodePool 獲取節點來搜尋
+                try:
+                    node = lava_lyra.NodePool.get_node()
+                    if not node:
+                        return []
+                    # 使用節點的 get_tracks 方法
+                    results = await node.get_tracks(f"ytsearch:{current}")
+                except:
+                    return []
+            else:
+                results = await player.get_tracks(f"ytsearch:{current}")
+
+            if not results:
+                return []
+
+            # 如果是播放列表，取其中的歌曲
+            tracks = results.tracks if isinstance(results, lava_lyra.Playlist) else results
+
+            # 限制為前 25 個結果（Discord 限制）
+            choices = []
+            for track in tracks[:25]:
+                # 截斷過長的標題
+                title = track.title
+                if len(title) > 100:
+                    title = title[:97] + "..."
+
+                # 添加作者信息
+                if track.author:
+                    display_name = f"{title} - {track.author}"
+                    if len(display_name) > 100:
+                        display_name = display_name[:97] + "..."
+                else:
+                    display_name = title
+
+                choices.append(app_commands.Choice(name=display_name, value=track.uri))
+
+            return choices
+
+        except Exception as e:
+            log(f"自動完成搜尋出錯: {e}", level=logging.WARNING, module_name="Music")
+            return []
+
+    @app_commands.command(name=app_commands.locale_str("search"), description="搜尋並播放音樂")
+    @app_commands.describe(query="搜尋歌曲（支援自動完成）")
+    @app_commands.autocomplete(query=search_autocomplete)
+    @app_commands.guild_only()
+    @app_commands.allowed_installs(guilds=True, users=False)
+    @app_commands.allowed_contexts(guilds=True, dms=False, private_channels=False)
+    @app_commands.checks.bot_has_permissions(connect=True, speak=True)
+    async def search(self, interaction: discord.Interaction, query: str):
+        """搜尋並播放音樂"""
+        await interaction.response.defer()
+
+        # 檢查使用者是否在語音頻道
+        if not interaction.user.voice or not interaction.user.voice.channel:
+            await interaction.followup.send("❌ 你必須加入語音頻道才能播放音樂", ephemeral=True)
+            return
+
+        # 檢查是否與機器人在同一語音頻道
+        error_msg = self._check_voice_channel(interaction.user, interaction.guild)
+        if error_msg:
+            await interaction.followup.send(error_msg, ephemeral=True)
+            return
+
+        # 獲取或創建播放器
+        player: lava_lyra.Player = interaction.guild.voice_client
+
+        if not player:
+            try:
+                player = await interaction.user.voice.channel.connect(cls=lava_lyra.Player)
+                text_channels[interaction.guild.id] = interaction.channel
+            except Exception as e:
+                await interaction.followup.send(f"❌ 無法連接到語音頻道: {e}", ephemeral=True)
+                return
+
+        guild_id = interaction.guild.id
+        queue = get_queue(guild_id)
+
+        # 如果 query 是 URI（從自動完成選擇的），直接使用
+        # 否則進行搜尋
+        try:
+            if query.startswith(("http://", "https://", "ytsearch:", "scsearch:")):
+                results = await player.get_tracks(query)
+            else:
+                results = await player.get_tracks(f"ytsearch:{query}")
+
+            if not results:
+                await interaction.followup.send(f"❌ 找不到 '{query}' 的結果", ephemeral=True)
+                return
+
+            # 如果結果是播放列表
+            if isinstance(results, lava_lyra.Playlist):
+                tracks = results.tracks
+                embed = discord.Embed(
+                    title="📋 播放列表已添加",
+                    description=f"**{results.name}**",
+                    color=0x2ecc71
+                )
+                embed.add_field(name="歌曲數量", value=len(tracks), inline=True)
+                embed.add_field(name="總時長", value=self._format_duration(sum(t.length for t in tracks)), inline=True)
+                await interaction.followup.send(embed=embed)
+
+                for track in tracks:
+                    queue.add(track)
+            else:
+                # 單個搜尋結果
+                track = results[0]
+                queue.add(track)
+
+                embed = discord.Embed(
+                    title="✅ 已添加到隊列",
+                    description=f"**[{track.title}]({track.uri})**",
+                    color=0x2ecc71
+                )
+                embed.set_thumbnail(url=track.thumbnail)
+                if track.author:
+                    embed.add_field(name="藝術家", value=track.author, inline=True)
+                embed.add_field(
+                    name="時長",
+                    value=self._format_duration(track.length),
+                    inline=True
+                )
+                embed.add_field(name="隊列位置", value=len(queue), inline=True)
+                await interaction.followup.send(embed=embed)
+
+            # 開始播放
+            if not player.is_playing:
+                next_track = queue.get()
+                if next_track:
+                    try:
+                        await player.play(next_track)
+                    except Exception as e:
+                        log(f"開始播放失敗: {e}", level=logging.ERROR, module_name="Music", guild=interaction.guild)
+                        await interaction.followup.send(f"⚠️ 歌曲已添加到隊列，但播放失敗: {e}", ephemeral=True)
+
+        except Exception as e:
+            log(f"搜尋播放出錯: {e}", level=logging.ERROR, module_name="Music", guild=interaction.guild)
+            await interaction.followup.send(f"❌ 搜尋播放出錯: {e}", ephemeral=True)
+
     @app_commands.command(name=app_commands.locale_str("play"), description="播放音樂")
     @app_commands.describe(query="歌曲名稱或 URL")
     @app_commands.guild_only()
@@ -1089,6 +1242,80 @@ class Music(commands.GroupCog, group_name=app_commands.locale_str("music")):
         except Exception as e:
             await ctx.send(f"❌ 跳過出錯: {e}")
     
+    @commands.command(name="search", aliases=["s", "搜尋"])
+    @commands.guild_only()
+    async def text_search(self, ctx: commands.Context, *, query: str):
+        """搜尋並播放音樂"""
+        error_msg = self._check_voice_channel(ctx.author, ctx.guild)
+        if error_msg:
+            await ctx.send(error_msg)
+            return
+
+        player = await self._ensure_voice(ctx)
+        if not player:
+            return
+
+        guild_id = ctx.guild.id
+        queue = get_queue(guild_id)
+
+        try:
+            # 使用 YouTube 搜尋
+            if query.startswith(("http://", "https://", "ytsearch:", "scsearch:")):
+                results = await player.get_tracks(query)
+            else:
+                results = await player.get_tracks(f"ytsearch:{query}")
+
+            if not results:
+                await ctx.send(f"❌ 找不到 '{query}' 的結果")
+                return
+
+            if isinstance(results, lava_lyra.Playlist):
+                tracks = results.tracks
+                embed = discord.Embed(
+                    title="📋 播放列表已添加",
+                    description=f"**{results.name}**",
+                    color=0x2ecc71
+                )
+                embed.set_thumbnail(url=results.thumbnail)
+                embed.add_field(name="歌曲數量", value=len(tracks), inline=True)
+                embed.add_field(name="總時長", value=self._format_duration(sum(t.length for t in tracks)), inline=True)
+                await ctx.send(embed=embed)
+
+                for track in tracks:
+                    queue.add(track)
+            else:
+                track = results[0]
+                queue.add(track)
+
+                embed = discord.Embed(
+                    title="✅ 已添加到隊列",
+                    description=f"**[{track.title}]({track.uri})**",
+                    color=0x2ecc71,
+                )
+                embed.set_thumbnail(url=track.thumbnail)
+                if track.author:
+                    embed.add_field(name="藝術家", value=track.author, inline=True)
+                embed.add_field(
+                    name="時長",
+                    value=self._format_duration(track.length),
+                    inline=True
+                )
+                embed.add_field(name="隊列位置", value=len(queue), inline=True)
+                await ctx.send(embed=embed)
+
+            if not player.is_playing:
+                next_track = queue.get()
+                if next_track:
+                    try:
+                        await player.play(next_track)
+                    except Exception as e:
+                        log(f"開始播放失敗: {e}", level=logging.ERROR, module_name="Music", guild=ctx.guild)
+                        await ctx.send(f"⚠️ 歌曲已添加到隊列，但播放失敗: {e}")
+
+        except Exception as e:
+            log(f"搜尋播放出錯: {e}", level=logging.ERROR, module_name="Music", guild=ctx.guild)
+            await ctx.send(f"❌ 搜尋播放出錯: {e}")
+
     @commands.command(name="queue", aliases=["qu", "隊列"])
     @commands.guild_only()
     async def text_queue(self, ctx: commands.Context):
