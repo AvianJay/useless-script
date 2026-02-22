@@ -25,6 +25,7 @@ EXCHANGE_FEE_PERCENT = 5   # 兌換手續費 5%
 TRADE_FEE_PERCENT = 3      # 轉帳手續費 3%
 EXCHANGE_RATE_MIN = 0.01
 EXCHANGE_RATE_MAX = 100.0
+MAX_GLOBAL_BALANCE = 10_000_000.0  # 全域幣上限：1000萬
 
 # 通膨/通縮權重
 ADMIN_INJECTION_WEIGHT = 0.015   # 管理員注入造成的貶值權重
@@ -37,6 +38,15 @@ HOURLY_INFLATION_WEIGHT = 0.00005  # 每小時獎勵造成的極小通膨
 GLOBAL_CURRENCY_NAME = "全域幣"
 GLOBAL_CURRENCY_EMOJI = "🌐"
 SERVER_CURRENCY_EMOJI = "🏦"
+
+# ==================== 防濫用機制說明 ====================
+# 1. 管理員物品追蹤：所有管理員給予的物品都會被標記
+# 2. 嚴重通膨懲罰：賣出管理員物品時使用 ADMIN_INJECTION_WEIGHT 而非 SALE_INFLATION_WEIGHT
+# 3. 全域商店限制：管理員物品無法賣到全域商店（防止洗錢）
+# 4. 支票限制：管理員給予的支票無法兌現
+# 5. 全域幣上限：防止無限刷錢
+# 6. 交易追蹤：交易時會轉移管理員物品標記
+# 7. 移除補償：管理員移除貨幣時會減少 admin_injected 記錄
 
 
 # ==================== Economy Helper Functions ====================
@@ -57,7 +67,11 @@ def get_global_balance(user_id: int) -> float:
 
 
 def set_global_balance(user_id: int, amount: float):
-    """設定用戶的全域幣餘額"""
+    """設定用戶的全域幣餘額（有上限保護）"""
+    if amount > MAX_GLOBAL_BALANCE:
+        log(f"Global balance cap applied for user {user_id}: {amount:.2f} -> {MAX_GLOBAL_BALANCE:.2f}",
+            module_name="Economy", level=logging.WARNING)
+        amount = MAX_GLOBAL_BALANCE
     set_user_data(GLOBAL_GUILD_ID, user_id, "economy_balance", round(amount, 2))
 
 
@@ -240,11 +254,26 @@ def record_purchase(guild_id: int, amount: float):
     apply_market_deflation(guild_id, amount, PURCHASE_DEFLATION_WEIGHT)
 
 
-def record_sale(guild_id: int, amount: float):
-    """記錄一筆賣出（貨幣被創造 → 通膨，按金額比例計算）"""
+def record_sale(guild_id: int, amount: float, is_admin_item: bool = False):
+    """記錄一筆賣出（貨幣被創造 → 通膨，按金額比例計算）
+
+    Args:
+        guild_id: 伺服器 ID
+        amount: 賣出金額
+        is_admin_item: 是否為管理員給予的物品（會觸發更嚴重的通膨）
+    """
     count = get_transaction_count(guild_id)
     set_server_config(guild_id, "economy_transaction_count", count + 1)
-    apply_market_inflation(guild_id, amount, SALE_INFLATION_WEIGHT)
+
+    # 如果是管理員給予的物品被賣出，視為嚴重的經濟漏洞，使用管理員注入的懲罰
+    if is_admin_item:
+        apply_inflation(guild_id, amount, ADMIN_INJECTION_WEIGHT)
+        # 額外記錄為管理員注入（因為這等同於管理員直接給錢）
+        current = get_admin_injected(guild_id)
+        set_server_config(guild_id, "economy_admin_injected", round(current + abs(amount), 2))
+        log(f"Admin-sourced item sold for {amount}, treated as admin injection in guild {guild_id}", module_name="Economy")
+    else:
+        apply_market_inflation(guild_id, amount, SALE_INFLATION_WEIGHT)
 
 
 # ==================== Transaction Log ====================
@@ -269,7 +298,16 @@ def log_transaction(guild_id: int, user_id: int, tx_type: str, amount: float, cu
 def add_balance(guild_id: int, user_id: int, amount: float):
     """增加用戶餘額並追蹤供給量"""
     current = get_balance(guild_id, user_id)
-    set_balance(guild_id, user_id, current + amount)
+    new_balance = current + amount
+
+    # 全域幣上限檢查
+    if guild_id == GLOBAL_GUILD_ID:
+        if new_balance > MAX_GLOBAL_BALANCE:
+            log(f"Global balance cap reached for user {user_id}: {new_balance:.2f} -> {MAX_GLOBAL_BALANCE:.2f}",
+                module_name="Economy", level=logging.WARNING)
+            new_balance = MAX_GLOBAL_BALANCE
+
+    set_balance(guild_id, user_id, new_balance)
     if guild_id != GLOBAL_GUILD_ID:
         adjust_supply(guild_id, amount)
 
@@ -287,18 +325,47 @@ def remove_balance(guild_id: int, user_id: int, amount: float) -> bool:
 
 # ==================== Admin Action Callback ====================
 
-async def on_admin_item_action(guild_id: int, action: str, item_id: str, amount: int):
+def get_admin_item_count(guild_id: int, user_id: int, item_id: str) -> int:
+    """取得用戶擁有的管理員給予物品數量"""
+    admin_items = get_user_data(guild_id, user_id, "admin_items", {})
+    return admin_items.get(item_id, 0)
+
+
+def add_admin_item(guild_id: int, user_id: int, item_id: str, amount: int):
+    """記錄管理員給予的物品"""
+    admin_items = get_user_data(guild_id, user_id, "admin_items", {})
+    admin_items[item_id] = admin_items.get(item_id, 0) + amount
+    set_user_data(guild_id, user_id, "admin_items", admin_items)
+
+
+def remove_admin_item(guild_id: int, user_id: int, item_id: str, amount: int) -> int:
+    """移除管理員給予的物品，返回實際移除數量"""
+    admin_items = get_user_data(guild_id, user_id, "admin_items", {})
+    current = admin_items.get(item_id, 0)
+    removed = min(current, amount)
+    if removed > 0:
+        admin_items[item_id] = current - removed
+        if admin_items[item_id] <= 0:
+            del admin_items[item_id]
+        set_user_data(guild_id, user_id, "admin_items", admin_items)
+    return removed
+
+
+async def on_admin_item_action(guild_id: int, action: str, item_id: str, amount: int, user_id: int = None):
     """
     由 ItemSystem 的管理員操作觸發
-    當管理員使用 /itemmod give 時，根據物品價值觸發通膨
+    當管理員使用 /itemmod give 時，根據物品價值觸發通膨並標記為管理員物品
     """
-    if action == "give" and guild_id:
+    if action == "give" and guild_id and user_id:
         item = get_item_by_id(item_id, guild_id)
         worth = item.get("worth", 0) if item else 0
         total_value = worth * amount
         if total_value > 0:
+            # 標記為管理員給予的物品
+            add_admin_item(guild_id, user_id, item_id, amount)
+            # 觸發通膨
             record_admin_injection(guild_id, total_value)
-            log(f"Admin item injection: {item_id} x{amount} (worth {total_value}) in guild {guild_id}",
+            log(f"Admin item injection: {item_id} x{amount} (worth {total_value}) to user {user_id} in guild {guild_id}",
                 module_name="Economy")
 
 # Register callback
@@ -558,7 +625,12 @@ class PurchaseModal(discord.ui.Modal):
                     ephemeral=True
                 )
                 return
-            set_global_balance(user_id, bal - total_price)
+            # 檢查購買後是否會超過全域幣上限
+            current_global = get_global_balance(user_id)
+            if current_global < total_price:
+                set_global_balance(user_id, current_global - total_price)
+            else:
+                set_global_balance(user_id, 0)
             await give_item_to_user(0, user_id, self.item["id"], amount)
 
         scope_label = "伺服器" if scope == "server" else "全域"
@@ -1009,8 +1081,9 @@ class Economy(commands.GroupCog, name="economy", description="經濟系統指令
                     ephemeral=True
                 )
                 return
-            set_global_balance(user_id, bal - total_price)
-            # 全域商店：物品到全域背包 (guild_id=0)v
+            new_balance = bal - total_price
+            set_global_balance(user_id, new_balance)
+            # 全域商店：物品到全域背包 (guild_id=0)
             await give_item_to_user(0, user_id, item_id, amount)
 
         scope_label = "伺服器" if scope == "server" else "全域"
@@ -1070,6 +1143,12 @@ class Economy(commands.GroupCog, name="economy", description="經濟系統指令
 
         removed = await remove_item_from_user(guild_id, user_id, item_id, amount)
 
+        # 檢查有多少是管理員給予的物品
+        admin_count = get_admin_item_count(guild_id, user_id, item_id)
+        admin_removed = min(admin_count, removed)
+        if admin_removed > 0:
+            remove_admin_item(guild_id, user_id, item_id, admin_removed)
+
         currency_name = get_currency_name(guild_id) if scope == "server" else GLOBAL_CURRENCY_NAME
         sell_ratio = get_sell_ratio(guild_id)
         if scope == "server":
@@ -1078,11 +1157,30 @@ class Economy(commands.GroupCog, name="economy", description="經濟系統指令
             # 全域商店也要套用折扣
             price_per = round(item.get("worth", 0) * sell_ratio, 2)
         total_price = round(price_per * removed, 2)
+
         if scope == "server":
             add_balance(guild_id, user_id, total_price)
-            # 賣出 = 新貨幣進入流通 → 通膨
-            record_sale(guild_id, total_price)
+            # 如果賣出的物品中有管理員給予的，按比例計算並施加嚴重通膨
+            if admin_removed > 0:
+                admin_price = round(price_per * admin_removed, 2)
+                normal_price = total_price - admin_price
+                if admin_price > 0:
+                    record_sale(guild_id, admin_price, is_admin_item=True)
+                if normal_price > 0:
+                    record_sale(guild_id, normal_price, is_admin_item=False)
+            else:
+                record_sale(guild_id, total_price, is_admin_item=False)
         else:
+            # 全域幣賣出：禁止賣出管理員給予的物品到全域商店（防止洗錢）
+            if admin_removed > 0:
+                await interaction.response.send_message(
+                    f"❌ 你不能將管理員給予的物品賣到全域商店。\n"
+                    f"你有 {admin_removed} 個此物品是管理員給予的，請在伺服器商店賣出。",
+                    ephemeral=True
+                )
+                # 退還物品
+                await give_item_to_user(guild_id, user_id, item_id, removed)
+                return
             set_global_balance(user_id, get_global_balance(user_id) + total_price)
 
         embed = discord.Embed(
@@ -1092,6 +1190,15 @@ class Economy(commands.GroupCog, name="economy", description="經濟系統指令
         )
         embed.add_field(name="單價", value=f"{price_per:,.2f} {currency_name}", inline=True)
         embed.add_field(name="總收入", value=f"{total_price:,.2f} {currency_name}", inline=True)
+
+        # 如果有管理員給予的物品被賣出，顯示警告
+        if scope == "server" and admin_removed > 0:
+            embed.add_field(
+                name="⚠️ 管理員物品",
+                value=f"其中 {admin_removed} 個為管理員給予\n已觸發嚴重通膨懲罰",
+                inline=False
+            )
+
         if scope == "server":
             buy_price = get_item_buy_price(item_id, guild_id)
         else:
@@ -1323,6 +1430,12 @@ class Economy(commands.GroupCog, name="economy", description="經濟系統指令
                 if td["offer_item"]:
                     await remove_item_from_user(td["guild_id"], td["initiator_id"], td["offer_item"], td["offer_item_amount"])
                     await give_item_to_user(td["guild_id"], td["target_id"], td["offer_item"], td["offer_item_amount"])
+                    # 轉移管理員物品標記
+                    admin_count = get_admin_item_count(td["guild_id"], td["initiator_id"], td["offer_item"])
+                    if admin_count > 0:
+                        transferred = min(admin_count, td["offer_item_amount"])
+                        remove_admin_item(td["guild_id"], td["initiator_id"], td["offer_item"], transferred)
+                        add_admin_item(td["guild_id"], td["target_id"], td["offer_item"], transferred)
                 if td["offer_money"] > 0:
                     set_balance(td["guild_id"], td["initiator_id"],
                                 get_balance(td["guild_id"], td["initiator_id"]) - td["offer_money"])
@@ -1330,6 +1443,12 @@ class Economy(commands.GroupCog, name="economy", description="經濟系統指令
                 if td["request_item"]:
                     await remove_item_from_user(td["guild_id"], td["target_id"], td["request_item"], td["request_item_amount"])
                     await give_item_to_user(td["guild_id"], td["initiator_id"], td["request_item"], td["request_item_amount"])
+                    # 轉移管理員物品標記
+                    admin_count = get_admin_item_count(td["guild_id"], td["target_id"], td["request_item"])
+                    if admin_count > 0:
+                        transferred = min(admin_count, td["request_item_amount"])
+                        remove_admin_item(td["guild_id"], td["target_id"], td["request_item"], transferred)
+                        add_admin_item(td["guild_id"], td["initiator_id"], td["request_item"], transferred)
                 if td["request_money"] > 0:
                     set_balance(td["guild_id"], td["target_id"],
                                 get_balance(td["guild_id"], td["target_id"]) - td["request_money"])
@@ -1557,6 +1676,59 @@ class Economy(commands.GroupCog, name="economy", description="經濟系統指令
         )
         await interaction.response.send_message(embed=embed)
 
+    @app_commands.command(name="adminitems", description="查看你擁有的管理員給予物品")
+    async def adminitems(self, interaction: discord.Interaction):
+        if not interaction.is_guild_integration():
+            await interaction.response.send_message("❌ 此指令只能在伺服器中使用。", ephemeral=True)
+            return
+
+        guild_id = interaction.guild.id
+        user_id = interaction.user.id
+        admin_items = get_user_data(guild_id, user_id, "admin_items", {})
+
+        if not admin_items:
+            await interaction.response.send_message("✅ 你沒有任何管理員給予的物品。", ephemeral=True)
+            return
+
+        embed = discord.Embed(
+            title="⚠️ 管理員給予的物品",
+            description="這些物品由管理員直接給予，受到以下限制：",
+            color=0xe74c3c
+        )
+
+        total_value = 0
+        for item_id, count in admin_items.items():
+            if count <= 0:
+                continue
+            item = get_item_by_id(item_id, guild_id)
+            if item:
+                worth = item.get("worth", 0)
+                total_value += worth * count
+                embed.add_field(
+                    name=f"{item['name']} x{count}",
+                    value=f"價值: {worth:,.2f} x {count} = {worth * count:,.2f}",
+                    inline=False
+                )
+
+        embed.add_field(
+            name="📊 總價值",
+            value=f"{total_value:,.2f} {get_currency_name(guild_id)}",
+            inline=False
+        )
+
+        embed.add_field(
+            name="🚫 限制說明",
+            value=(
+                "• 賣出時會觸發嚴重通膨懲罰\n"
+                "• 無法賣到全域商店\n"
+                "• 支票無法兌現\n"
+                "• 交易時會轉移管理員標記"
+            ),
+            inline=False
+        )
+
+        await interaction.response.send_message(embed=embed, ephemeral=True)
+
     @app_commands.command(name="history", description="查看個人交易紀錄")
     @app_commands.describe(scope="查看範圍", page="頁數")
     @app_commands.choices(scope=[
@@ -1641,7 +1813,7 @@ class EconomyMod(commands.GroupCog, name="economymod", description="經濟系統
     def __init__(self):
         super().__init__()
 
-    @app_commands.command(name="give", description="給予用戶伺服幣（可能會通膨）")
+    @app_commands.command(name="give", description="給予用戶伺服幣（會嚴重通膨）")
     @app_commands.describe(user="目標用戶", amount="金額")
     async def give_money(self, interaction: discord.Interaction, user: discord.User, amount: float):
         if amount <= 0:
@@ -1653,15 +1825,22 @@ class EconomyMod(commands.GroupCog, name="economymod", description="經濟系統
 
         guild_id = interaction.guild.id
         currency_name = get_currency_name(guild_id)
+
+        # 顯示警告
+        old_rate = get_exchange_rate(guild_id)
         add_balance(guild_id, user.id, amount)
         record_admin_injection(guild_id, amount)
+        new_rate = get_exchange_rate(guild_id)
 
-        rate = get_exchange_rate(guild_id)
+        rate_change_percent = ((new_rate - old_rate) / old_rate * 100) if old_rate > 0 else 0
+
         await interaction.response.send_message(
             f"✅ 已給予 {user.display_name} **{amount:,.2f}** {currency_name}。\n"
-            f"⚠️ 管理員注入導致匯率變動：**{rate:.4f}**"
+            f"⚠️ **警告：管理員注入導致貨幣貶值 {abs(rate_change_percent):.2f}%**\n"
+            f"匯率：{old_rate:.6f} → {new_rate:.6f}\n"
+            f"-# 建議使用每日獎勵或活動系統發放貨幣，而非直接給予"
         )
-        log(f"Admin {interaction.user} gave {amount} server currency to {user} in guild {guild_id}",
+        log(f"Admin {interaction.user} gave {amount} server currency to {user} in guild {guild_id}, rate {old_rate:.6f} -> {new_rate:.6f}",
             module_name="Economy", user=interaction.user, guild=interaction.guild)
 
     @app_commands.command(name="remove", description="移除用戶伺服幣")
@@ -1677,6 +1856,14 @@ class EconomyMod(commands.GroupCog, name="economymod", description="經濟系統
         removed = min(bal, amount)
         set_balance(guild_id, user.id, bal - removed)
         adjust_supply(guild_id, -removed)
+
+        # 移除貨幣時，按比例減少管理員注入記錄（避免懲罰累積）
+        admin_injected = get_admin_injected(guild_id)
+        total_supply = get_total_supply(guild_id)
+        if total_supply > 0 and admin_injected > 0:
+            # 按移除比例減少管理員注入記錄
+            reduction = min(admin_injected, removed)
+            set_server_config(guild_id, "economy_admin_injected", max(0, admin_injected - reduction))
 
         await interaction.response.send_message(
             f"✅ 已移除 {user.display_name} 的 **{removed:,.2f}** {currency_name}。"
@@ -1704,6 +1891,45 @@ class EconomyMod(commands.GroupCog, name="economymod", description="經濟系統
     #     )
     #     log(f"Admin {interaction.user} set rate {old_rate} -> {rate} in guild {guild_id}",
     #         module_name="Economy", user=interaction.user, guild=interaction.guild)
+
+    @app_commands.command(name="clearadmin", description="清除用戶的管理員物品標記（不影響物品本身）")
+    @app_commands.describe(user="目標用戶", item_id="物品ID（留空清除所有）")
+    @app_commands.autocomplete(item_id=all_items_autocomplete)
+    async def clearadmin(self, interaction: discord.Interaction, user: discord.User, item_id: str = None):
+        guild_id = interaction.guild.id
+        admin_items = get_user_data(guild_id, user.id, "admin_items", {})
+
+        if not admin_items:
+            await interaction.response.send_message(f"✅ {user.display_name} 沒有任何管理員物品標記。", ephemeral=True)
+            return
+
+        if item_id:
+            # 清除特定物品的標記
+            if item_id in admin_items:
+                count = admin_items[item_id]
+                del admin_items[item_id]
+                set_user_data(guild_id, user.id, "admin_items", admin_items)
+                item = get_item_by_id(item_id, guild_id)
+                item_name = item['name'] if item else item_id
+                await interaction.response.send_message(
+                    f"✅ 已清除 {user.display_name} 的 **{item_name}** x{count} 的管理員標記。\n"
+                    f"-# 物品本身不受影響，但現在可以正常交易和賣出",
+                    ephemeral=True
+                )
+            else:
+                await interaction.response.send_message(f"❌ {user.display_name} 沒有該物品的管理員標記。", ephemeral=True)
+        else:
+            # 清除所有標記
+            total_items = sum(admin_items.values())
+            set_user_data(guild_id, user.id, "admin_items", {})
+            await interaction.response.send_message(
+                f"✅ 已清除 {user.display_name} 的所有管理員物品標記（共 {total_items} 個物品）。\n"
+                f"-# 物品本身不受影響，但現在可以正常交易和賣出",
+                ephemeral=True
+            )
+
+        log(f"Admin {interaction.user} cleared admin item markers for {user} in guild {guild_id}",
+            module_name="Economy", user=interaction.user, guild=interaction.guild)
 
     @app_commands.command(name="toggle-flow", description="切換是否允許伺服幣與全域幣流通（兌換、全域商店等）")
     async def toggle_flow(self, interaction: discord.Interaction):
@@ -1770,6 +1996,15 @@ class EconomyMod(commands.GroupCog, name="economymod", description="經濟系統
         all_users = get_all_user_data(guild_id, "economy_balance")
         actual_supply = sum(d.get("economy_balance", 0) for d in all_users.values())
 
+        # 計算管理員物品的總價值
+        admin_item_value = 0
+        for uid in all_users.keys():
+            admin_items = get_user_data(guild_id, uid, "admin_items", {})
+            for item_id, count in admin_items.items():
+                item = get_item_by_id(item_id, guild_id)
+                if item:
+                    admin_item_value += item.get("worth", 0) * count
+
         embed = discord.Embed(
             title=f"🔧 {interaction.guild.name} 經濟管理面板",
             color=0xe74c3c
@@ -1777,18 +2012,47 @@ class EconomyMod(commands.GroupCog, name="economymod", description="經濟系統
         embed.add_field(name="匯率", value=f"{rate:.6f}", inline=True)
         embed.add_field(name="追蹤供給量", value=f"{total_supply:,.2f}", inline=True)
         embed.add_field(name="實際供給量", value=f"{actual_supply:,.2f}", inline=True)
-        embed.add_field(name="管理員注入", value=f"{admin_injected:,.2f}", inline=True)
+        embed.add_field(name="管理員注入（貨幣）", value=f"{admin_injected:,.2f}", inline=True)
+        embed.add_field(name="管理員物品價值", value=f"{admin_item_value:,.2f}", inline=True)
         embed.add_field(name="交易次數", value=f"{tx_count:,}", inline=True)
         embed.add_field(name="用戶數", value=f"{len(all_users):,}", inline=True)
         allow_flow = get_allow_global_flow(guild_id)
         embed.add_field(name="全域幣流通", value="🔓 已開啟" if allow_flow else "🔒 已關閉", inline=True)
 
+        # 濫權指標
         if total_supply > 0:
+            admin_ratio = (admin_injected + admin_item_value) / total_supply * 100
+            if admin_ratio > 50:
+                abuse_indicator = "🔴 嚴重濫權"
+            elif admin_ratio > 20:
+                abuse_indicator = "🟠 中度干預"
+            elif admin_ratio > 5:
+                abuse_indicator = "🟡 輕度干預"
+            else:
+                abuse_indicator = "🟢 正常"
+            embed.add_field(
+                name="⚠️ 管理員干預程度",
+                value=f"{admin_ratio:.1f}% - {abuse_indicator}",
+                inline=True
+            )
+
+        if abs(actual_supply - total_supply) > 0.01:
             embed.add_field(
                 name="⚠️ 供給差異",
                 value=f"{actual_supply - total_supply:,.2f}（正常應為 0）",
                 inline=False
             )
+
+        embed.add_field(
+            name="💡 提示",
+            value=(
+                "• 管理員給予的物品/金錢會被追蹤\n"
+                "• 賣出管理員物品會觸發嚴重通膨\n"
+                "• 管理員物品無法兌現為全域幣\n"
+                "• 建議使用活動系統而非直接給予"
+            ),
+            inline=False
+        )
 
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
@@ -1845,14 +2109,27 @@ def make_cheque_use_callback(item_id: str, worth: int):
     async def callback(interaction: discord.Interaction):
         guild_id = getattr(interaction, "guild_id", 0)
         user_id = interaction.user.id
+
+        # 檢查是否為管理員給予的支票
+        admin_count = get_admin_item_count(guild_id, user_id, item_id)
+        if admin_count > 0:
+            await interaction.response.send_message(
+                "❌ 這張支票是管理員給予的，無法兌現。\n"
+                "管理員給予的物品不能轉換為貨幣，以防止經濟系統被濫用。",
+                ephemeral=True
+            )
+            return
+
         # 伺服器背包中兌現支票屬於全域幣流通，需檢查開關
         if guild_id and guild_id != GLOBAL_GUILD_ID and not get_allow_global_flow(guild_id):
             await interaction.response.send_message("❌ 此伺服器已關閉伺服幣與全域幣的流通功能，無法兌現支票。", ephemeral=True)
             return
+
         removed = await remove_item_from_user(guild_id, user_id, item_id, 1)
         if removed < 1:
             await interaction.response.send_message("你沒有這張支票。", ephemeral=True)
             return
+
         # 支票面額是全域幣，兌現到伺服器時需依匯率轉換，避免套利洗錢
         if guild_id and guild_id != GLOBAL_GUILD_ID:
             rate = get_exchange_rate(guild_id)

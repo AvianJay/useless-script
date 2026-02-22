@@ -477,11 +477,11 @@ class ItemModerate(commands.GroupCog, name="itemmod", description="物品系統�
         await give_item_to_user(guild_id, receiver_id, item_id, amount)
 
         # Notify Economy module about admin injection
-        # for callback in admin_action_callbacks:
-        #     try:
-        #         await callback(guild_id, "give", item_id, amount)
-        #     except Exception as e:
-        #         log(f"Error in admin action callback: {e}", module_name="ItemSystem", level=logging.ERROR)
+        for callback in admin_action_callbacks:
+            try:
+                await callback(guild_id, "give", item_id, amount, receiver_id)
+            except Exception as e:
+                log(f"Error in admin action callback: {e}", module_name="ItemSystem", level=logging.ERROR)
 
         await interaction.followup.send(f"你給了 {user.display_name}(`{user.name}`) {amount} 個 {item['name']}。")
 
