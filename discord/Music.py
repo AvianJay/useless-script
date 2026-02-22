@@ -131,39 +131,58 @@ class Music(commands.GroupCog, group_name=app_commands.locale_str("music")):
             log(f"已成功連接 {connected}/{len(lavalink_nodes)} 個 Lavalink 節點", module_name="Music")
         on_close_tasks.add(self.music_quit_task)
     
+    async def _cleanup_player(self, guild_id: int, send_message: bool = False, message: str = None):
+        """統一的清理方法"""
+        try:
+            queue = get_queue(guild_id)
+            queue.clear()
+
+            # 取消自動離開計時器
+            if guild_id in leave_timers:
+                leave_timers[guild_id].cancel()
+                leave_timers.pop(guild_id, None)
+
+            # 發送通知
+            if send_message and message:
+                text_channel = text_channels.get(guild_id)
+                if text_channel:
+                    try:
+                        embed = discord.Embed(
+                            title="👋 已離開語音頻道",
+                            description=message,
+                            color=0x95a5a6
+                        )
+                        await text_channel.send(embed=embed)
+                    except Exception as e:
+                        log(f"無法發送通知: {e}", level=logging.WARNING, module_name="Music")
+
+            # 清理資源
+            music_queues.pop(guild_id, None)
+            text_channels.pop(guild_id, None)
+
+        except Exception as e:
+            log(f"清理播放器時出錯: {e}", level=logging.ERROR, module_name="Music")
+
     async def _auto_leave_after_timeout(self, guild_id: int, player: lava_lyra.Player):
         """5 分鐘後自動離開語音頻道"""
         try:
             await asyncio.sleep(300)  # 5 分鐘 = 300 秒
-            
+
             # 再次確認頻道內沒有真人
             if player and player.channel:
                 human_count = sum(1 for m in player.channel.members if not m.bot)
                 if human_count == 0:
-                    queue = get_queue(guild_id)
-                    
-                    embed = discord.Embed(
-                        title="👋 自動離開",
-                        description="語音頻道內已 5 分鐘無其他成員，機器人已離開",
-                        color=0x95a5a6
-                    )
                     try:
-                        text_channel = text_channels.get(guild_id)
-                        if text_channel:
-                            await text_channel.send(embed=embed)
-                    except Exception as e:
-                        log(f"無法發送自動離開通知: {e}", level=logging.WARNING, module_name="Music", guild=player.guild)
-                    
-                    # 清理並離開
-                    try:
-                        queue.clear()
                         await player.stop()
-                        # await player.disconnect()
                         await player.destroy()
-                        music_queues.pop(guild_id, None)
-                        text_channels.pop(guild_id, None)
                     except:
                         pass
+
+                    await self._cleanup_player(
+                        guild_id,
+                        send_message=True,
+                        message="語音頻道內已 5 分鐘無其他成員，機器人已離開"
+                    )
         except asyncio.CancelledError:
             pass
         finally:
@@ -172,13 +191,31 @@ class Music(commands.GroupCog, group_name=app_commands.locale_str("music")):
     @commands.Cog.listener()
     async def on_voice_state_update(self, member: discord.Member, before: discord.VoiceState, after: discord.VoiceState):
         """當語音狀態變化時，檢查是否需要啟動或取消自動離開計時器"""
+        guild_id = member.guild.id
+
+        # 檢查是否是機器人自己被踢出或離開
+        if member.id == self.bot.user.id:
+            # 機器人離開了語音頻道
+            if before.channel and not after.channel:
+                log(f"機器人已離開語音頻道", module_name="Music", guild=member.guild)
+                player: lava_lyra.Player = member.guild.voice_client
+
+                # 清理播放器
+                if player:
+                    try:
+                        await player.stop()
+                        await player.destroy()
+                    except:
+                        pass
+
+                await self._cleanup_player(guild_id)
+            return
+
         # 檢查機器人是否在語音頻道
         player: lava_lyra.Player = member.guild.voice_client
         if not player or not player.channel:
             return
-        
-        guild_id = member.guild.id
-        
+
         # 檢查是否是機器人所在頻道的變化
         is_bot_channel = (
             (before.channel and before.channel.id == player.channel.id) or
@@ -186,10 +223,10 @@ class Music(commands.GroupCog, group_name=app_commands.locale_str("music")):
         )
         if not is_bot_channel:
             return
-        
+
         # 計算頻道內的真人數量（排除機器人）
         human_count = sum(1 for m in player.channel.members if not m.bot)
-        
+
         if human_count == 0:
             # 沒有真人，啟動 5 分鐘計時器（如果還沒啟動）
             if guild_id not in leave_timers:
@@ -262,55 +299,63 @@ class Music(commands.GroupCog, group_name=app_commands.locale_str("music")):
             try:
                 await player.play(next_track)
             except Exception as e:
-                log(f"播放下一首失敗: {e}", level=logging.ERROR, module_name="Music")
+                log(f"播放下一首失敗: {e}", level=logging.ERROR, module_name="Music", guild=player.guild)
         else:
-            embed = discord.Embed(
-                title="🎵 播放隊列已清空",
-                description="沒有更多的歌曲要播放，即將離開語音頻道",
-                color=0x95a5a6
-            )
-            try:
-                text_channel = text_channels.get(guild_id)
-                if text_channel:
-                    await text_channel.send(embed=embed)
-            except:
-                pass
-            
             # 離開語音頻道並清理資料
             try:
-                # await player.disconnect()
                 await player.destroy()
-                music_queues.pop(guild_id, None)
-                text_channels.pop(guild_id, None)
             except:
                 pass
+
+            await self._cleanup_player(
+                guild_id,
+                send_message=True,
+                message="沒有更多的歌曲要播放，已離開語音頻道"
+            )
     
     async def music_quit_task(self):
+        """機器人關閉時的清理任務"""
         for guild_id, channel in list(text_channels.items()):
             try:
                 guild = self.bot.get_guild(guild_id)
                 if not guild:
                     continue
+
                 player: lava_lyra.Player = guild.voice_client
-                if player:
-                    queue = get_queue(guild_id)
-                    uris = []
-                    if player.current:
-                        uris.append(player.current.uri)
-                    for track in queue:
-                        uris.append(track.uri)
-                    if uris:
-                        set_server_config(guild_id, "music_saved_queue", {"uris": uris})
-                    restore_mention = await get_command_mention("music", "restore-queue")
-                    restore_hint = f"重啟後可使用 {restore_mention or '`/music restore-queue`'} 回復儲存的播放隊列。" if uris else ""
-                    embed = discord.Embed(
-                        title="🔴 機器人可能將會離開語音頻道",
-                        description=f"機器人被關機或是重啟。\n{(' ' + restore_hint) if restore_hint else ''}",
-                        color=0x95a5a6
-                    )
-                    await channel.send(embed=embed)
-            except Exception:
-                pass
+                if not player:
+                    continue
+
+                queue = get_queue(guild_id)
+                uris = []
+
+                # 保存當前播放和隊列
+                if player.current:
+                    uris.append(player.current.uri)
+                for track in queue:
+                    uris.append(track.uri)
+
+                if uris:
+                    set_server_config(guild_id, "music_saved_queue", {"uris": uris})
+
+                restore_mention = await get_command_mention("music", "restore-queue")
+                restore_hint = f"重啟後可使用 {restore_mention or '`/music restore-queue`'} 回復儲存的播放隊列。" if uris else ""
+
+                embed = discord.Embed(
+                    title="🔴 機器人即將離開語音頻道",
+                    description=f"機器人正在關機或重啟。\n{(' ' + restore_hint) if restore_hint else ''}",
+                    color=0x95a5a6
+                )
+                await channel.send(embed=embed)
+
+                # 清理播放器
+                try:
+                    await player.stop()
+                    await player.destroy()
+                except:
+                    pass
+
+            except Exception as e:
+                log(f"關機清理時出錯: {e}", level=logging.ERROR, module_name="Music")
     
     @app_commands.command(name=app_commands.locale_str("play"), description="播放音樂")
     @app_commands.describe(query="歌曲名稱或 URL")
@@ -394,10 +439,14 @@ class Music(commands.GroupCog, group_name=app_commands.locale_str("music")):
             if not player.is_playing:
                 next_track = queue.get()
                 if next_track:
-                    await player.play(next_track)
-        
+                    try:
+                        await player.play(next_track)
+                    except Exception as e:
+                        log(f"開始播放失敗: {e}", level=logging.ERROR, module_name="Music", guild=interaction.guild)
+                        await interaction.followup.send(f"⚠️ 歌曲已添加到隊列，但播放失敗: {e}", ephemeral=True)
+
         except Exception as e:
-            log(f"播放出錯: {e}", level=logging.ERROR, module_name="Music")
+            log(f"播放出錯: {e}", level=logging.ERROR, module_name="Music", guild=interaction.guild)
             await interaction.followup.send(f"❌ 播放出錯: {e}", ephemeral=True)
     
     @app_commands.command(name=app_commands.locale_str("pause"), description="暫停播放")
@@ -475,14 +524,9 @@ class Music(commands.GroupCog, group_name=app_commands.locale_str("music")):
             return
         
         try:
-            queue = get_queue(interaction.guild.id)
-            queue.clear()
             await player.stop()
-            # await player.disconnect()
             await player.destroy()
-            # 清理資料
-            music_queues.pop(interaction.guild.id, None)
-            text_channels.pop(interaction.guild.id, None)
+            await self._cleanup_player(interaction.guild.id)
             await interaction.followup.send("⏹️ 已停止播放並斷開連接")
         except Exception as e:
             await interaction.followup.send(f"❌ 停止出錯: {e}", ephemeral=True)
@@ -508,17 +552,22 @@ class Music(commands.GroupCog, group_name=app_commands.locale_str("music")):
         try:
             current_track = player.current
             await player.stop()
-            
+
             embed = discord.Embed(
                 title="⏭️ 已跳過",
                 description=f"**{current_track.title}**",
                 color=0xe74c3c
             )
             await interaction.followup.send(embed=embed)
+
             queue = get_queue(interaction.guild.id)
             next_track = queue.get()
             if next_track:
-                await player.play(next_track)
+                try:
+                    await player.play(next_track)
+                except Exception as e:
+                    log(f"跳過後播放下一首失敗: {e}", level=logging.ERROR, module_name="Music", guild=interaction.guild)
+                    await interaction.followup.send(f"⚠️ 無法播放下一首歌曲: {e}", ephemeral=True)
         except Exception as e:
             await interaction.followup.send(f"❌ 跳過出錯: {e}", ephemeral=True)
     
@@ -585,13 +634,16 @@ class Music(commands.GroupCog, group_name=app_commands.locale_str("music")):
     async def restore_queue(self, interaction: discord.Interaction):
         """回復重啟前儲存的播放隊列"""
         await interaction.response.defer()
+
         saved = get_server_config(interaction.guild.id, "music_saved_queue")
         if not saved or not saved.get("uris"):
             await interaction.followup.send("❌ 沒有儲存的播放隊列可回復。", ephemeral=True)
             return
+
         if not interaction.user.voice or not interaction.user.voice.channel:
             await interaction.followup.send("❌ 你必須加入語音頻道才能使用此指令", ephemeral=True)
             return
+
         player: lava_lyra.Player = interaction.guild.voice_client
         if not player:
             try:
@@ -603,10 +655,12 @@ class Music(commands.GroupCog, group_name=app_commands.locale_str("music")):
         elif interaction.user.voice.channel.id != player.channel.id:
             await interaction.followup.send("❌ 你必須與機器人在同一語音頻道才能使用此指令", ephemeral=True)
             return
+
         guild_id = interaction.guild.id
         queue = get_queue(guild_id)
         added = 0
         failed = 0
+
         for uri in saved["uris"]:
             try:
                 results = await player.get_tracks(uri)
@@ -616,16 +670,24 @@ class Music(commands.GroupCog, group_name=app_commands.locale_str("music")):
                 track = results.tracks[0] if isinstance(results, lava_lyra.Playlist) else results[0]
                 queue.add(track)
                 added += 1
-            except Exception:
+            except Exception as e:
+                log(f"無法載入歌曲 {uri}: {e}", level=logging.WARNING, module_name="Music", guild=interaction.guild)
                 failed += 1
+
+        # 清除已保存的隊列
         set_server_config(guild_id, "music_saved_queue", None)
+
+        # 開始播放
         if not player.is_playing and added > 0:
             next_track = queue.get()
             if next_track:
                 try:
                     await player.play(next_track)
                 except Exception as e:
-                    log(f"回復隊列後播放失敗: {e}", level=logging.ERROR, module_name="Music")
+                    log(f"回復隊列後播放失敗: {e}", level=logging.ERROR, module_name="Music", guild=interaction.guild)
+                    await interaction.followup.send(f"⚠️ 已回復 {added} 首歌曲，但播放失敗: {e}")
+                    return
+
         msg = f"✅ 已回復 {added} 首歌曲到隊列。"
         if failed:
             msg += f"（{failed} 首無法載入）"
@@ -787,14 +849,18 @@ class Music(commands.GroupCog, group_name=app_commands.locale_str("music")):
                 inline=True
             )
             await interaction.followup.send(embed=embed)
-            
+
             if not player.is_playing:
                 next_track = queue.get()
                 if next_track:
-                    await player.play(next_track)
-        
+                    try:
+                        await player.play(next_track)
+                    except Exception as e:
+                        log(f"推薦後開始播放失敗: {e}", level=logging.ERROR, module_name="Music", guild=interaction.guild)
+                        await interaction.followup.send(f"⚠️ 推薦歌曲已添加，但播放失敗: {e}", ephemeral=True)
+
         except Exception as e:
-            log(f"推薦歌曲出錯: {e}", level=logging.ERROR, module_name="Music")
+            log(f"推薦歌曲出錯: {e}", level=logging.ERROR, module_name="Music", guild=interaction.guild)
             await interaction.followup.send(f"❌ 推薦歌曲出錯: {e}", ephemeral=True)
     
     @app_commands.command(name=app_commands.locale_str("nodes"), description="查看 Lavalink 節點狀態")
@@ -907,10 +973,14 @@ class Music(commands.GroupCog, group_name=app_commands.locale_str("music")):
             if not player.is_playing:
                 next_track = queue.get()
                 if next_track:
-                    await player.play(next_track)
-        
+                    try:
+                        await player.play(next_track)
+                    except Exception as e:
+                        log(f"開始播放失敗: {e}", level=logging.ERROR, module_name="Music", guild=ctx.guild)
+                        await ctx.send(f"⚠️ 歌曲已添加到隊列，但播放失敗: {e}")
+
         except Exception as e:
-            log(f"播放出錯: {e}", level=logging.ERROR, module_name="Music")
+            log(f"播放出錯: {e}", level=logging.ERROR, module_name="Music", guild=ctx.guild)
             await ctx.send(f"❌ 播放出錯: {e}")
     
     @commands.command(name="pause", aliases=["暫停"])
@@ -976,13 +1046,9 @@ class Music(commands.GroupCog, group_name=app_commands.locale_str("music")):
             return
         
         try:
-            queue = get_queue(ctx.guild.id)
-            queue.clear()
             await player.stop()
-            # await player.disconnect()
             await player.destroy()
-            music_queues.pop(ctx.guild.id, None)
-            text_channels.pop(ctx.guild.id, None)
+            await self._cleanup_player(ctx.guild.id)
             await ctx.send("⏹️ 已停止播放並斷開連接")
         except Exception as e:
             await ctx.send(f"❌ 停止出錯: {e}")
@@ -1004,17 +1070,22 @@ class Music(commands.GroupCog, group_name=app_commands.locale_str("music")):
         try:
             current_track = player.current
             await player.stop()
-            
+
             embed = discord.Embed(
                 title="⏭️ 已跳過",
                 description=f"**{current_track.title}**",
                 color=0xe74c3c
             )
             await ctx.send(embed=embed)
+
             queue = get_queue(ctx.guild.id)
             next_track = queue.get()
             if next_track:
-                await player.play(next_track)
+                try:
+                    await player.play(next_track)
+                except Exception as e:
+                    log(f"跳過後播放下一首失敗: {e}", level=logging.ERROR, module_name="Music", guild=ctx.guild)
+                    await ctx.send(f"⚠️ 無法播放下一首歌曲: {e}")
         except Exception as e:
             await ctx.send(f"❌ 跳過出錯: {e}")
     
@@ -1204,14 +1275,18 @@ class Music(commands.GroupCog, group_name=app_commands.locale_str("music")):
                 inline=True
             )
             await ctx.send(embed=embed)
-            
+
             if not player.is_playing:
                 next_track = queue.get()
                 if next_track:
-                    await player.play(next_track)
-        
+                    try:
+                        await player.play(next_track)
+                    except Exception as e:
+                        log(f"推薦後開始播放失敗: {e}", level=logging.ERROR, module_name="Music", guild=ctx.guild)
+                        await ctx.send(f"⚠️ 推薦歌曲已添加，但播放失敗: {e}")
+
         except Exception as e:
-            log(f"推薦歌曲出錯: {e}", level=logging.ERROR, module_name="Music")
+            log(f"推薦歌曲出錯: {e}", level=logging.ERROR, module_name="Music", guild=ctx.guild)
             await ctx.send(f"❌ 推薦歌曲出錯: {e}")
 
 
