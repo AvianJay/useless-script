@@ -1819,6 +1819,9 @@ class EconomyMod(commands.GroupCog, name="economymod", description="經濟系統
         if amount <= 0:
             await interaction.response.send_message("❌ 金額必須大於 0。", ephemeral=True)
             return
+        elif amount > 1_000_000:
+            await interaction.response.send_message("❌ 金額不能超過 1,000,000。", ephemeral=True)
+            return
         if user.bot:
             await interaction.response.send_message("❌ 不能給機器人金錢。", ephemeral=True)
             return
