@@ -76,6 +76,7 @@ try:
         if not isinstance(_config, dict):
             print("[!] Config file is not a valid JSON object, resetting to default config.")
             _config = default_config.copy()
+            os.rename(config_path, config_path + ".backup")
         for key in _config.keys():
             if key in default_config and not isinstance(_config[key], type(default_config[key])):
                 print(f"[!] Config key '{key}' has an invalid type, resetting to default value.")
@@ -87,6 +88,7 @@ try:
         _config = default_config.copy()
         json.dump(_config, open(config_path, "w", encoding="utf-8"), indent=4)
 except ValueError:
+    os.rename(config_path, config_path + ".backup")
     _config = default_config.copy()
     json.dump(_config, open(config_path, "w", encoding="utf-8"), indent=4)
 
