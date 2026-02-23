@@ -4,10 +4,33 @@ from discord.ext import commands
 from discord import app_commands
 import asyncio
 
+class JoinNotifyView(discord.ui.View):
+    @discord.ui.button(label="官方網站", style=discord.ButtonStyle.link, url=config('website_url'))
+    async def website_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        pass
+
+    @discord.ui.button(label="加入支援伺服器", style=discord.ButtonStyle.link, url=config('support_server_invite'))
+    async def support_server_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        pass
+
+    @discord.ui.button(label="停用加入通知", style=discord.ButtonStyle.secondary, custom_id="dont_notify_join")
+    async def dont_notify_join(self, interaction: discord.Interaction, button: discord.ui.Button):
+        embed = discord.Embed(
+            title="好吧",
+            description="我不會再通知你了！如果你改變主意了，可以使用 `/joinnotify` 指令來重新啟用加入通知！",
+            color=discord.Color.green()
+        )
+        await interaction.response.send_message(embed=embed, ephemeral=True)
+        set_user_data(0, interaction.user.id, "join_notify", False)
+
 class JoinNotify(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
-    
+
+    @commands.Cog.listener()
+    async def on_ready(self):
+        bot.add_view(JoinNotifyView())
+
     @app_commands.command(name="joinnotify", description="設定是否在你邀請我加入伺服器時私訊")
     @app_commands.choices(option=[
         app_commands.Choice(name="好啊", value="enable"),
@@ -41,11 +64,7 @@ class JoinNotify(commands.Cog):
                     color=discord.Color.green()
                 )
                 embed.set_footer(text=guild.name, icon_url=guild.icon.url if guild.icon else None)
-                website_button = discord.ui.Button(label="官方網站", url=config('website_url'))
-                support_server_button = discord.ui.Button(label="加入支援伺服器", url=config('support_server_invite'))
-                view = discord.ui.View()
-                view.add_item(website_button)
-                view.add_item(support_server_button)
+                view = JoinNotifyView()
                 await inviter.send(embed=embed, view=view)
             except discord.Forbidden:
                 pass
@@ -61,11 +80,7 @@ class JoinNotify(commands.Cog):
                     color=discord.Color.green()
                 )
                 embed.set_footer(text=guild.name, icon_url=guild.icon.url if guild.icon else None)
-                website_button = discord.ui.Button(label="官方網站", url=config('website_url'))
-                support_server_button = discord.ui.Button(label="加入支援伺服器", url=config('support_server_invite'))
-                view = discord.ui.View()
-                view.add_item(website_button)
-                view.add_item(support_server_button)
+                view = JoinNotifyView()
                 await owner.send(embed=embed, view=view)
             except discord.Forbidden:
                 pass
