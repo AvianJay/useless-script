@@ -5,13 +5,10 @@ from discord import app_commands
 import asyncio
 
 class JoinNotifyView(discord.ui.View):
-    @discord.ui.button(label="官方網站", style=discord.ButtonStyle.link, url=config('website_url'))
-    async def website_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-        pass
-
-    @discord.ui.button(label="加入支援伺服器", style=discord.ButtonStyle.link, url=config('support_server_invite'))
-    async def support_server_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-        pass
+    def __init__(self):
+        super().__init__(timeout=None)
+        self.add_item(discord.ui.Button(label="官方網站", style=discord.ButtonStyle.link, url=config('website_url')))
+        self.add_item(discord.ui.Button(label="加入支援伺服器", style=discord.ButtonStyle.link, url=config('support_server_invite')))
 
     @discord.ui.button(label="停用加入通知", style=discord.ButtonStyle.secondary, custom_id="dont_notify_join")
     async def dont_notify_join(self, interaction: discord.Interaction, button: discord.ui.Button):
