@@ -77,6 +77,28 @@ class ResponseAppealView(discord.ui.View):
                 await interaction.edit_original_response(embed=origembed, view=origself)
                 origself.stop()
         await interaction.response.send_modal(ResponseAppealModal())
+
+    @discord.ui.button(label="加入申訴黑名單", style=discord.ButtonStyle.danger, emoji="⛔", custom_id="blacklist_appeal_button")
+    async def blacklist_appeal_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        message = interaction.message  # 直接使用 interaction.message
+        user_id = int(message.embeds[0].fields[0].value)  # 從嵌入訊息中取得用戶 ID (fields[0] 是用戶 ID)
+        guild_id = int(message.embeds[0].fields[1].value)  # 從嵌入訊息中取得伺服器 ID (fields[1] 是伺服器 ID)
+        blacklist = get_server_config(guild_id, "appeal_blacklist", [])
+        if user_id in blacklist:
+            await interaction.response.send_message("該用戶已在申訴黑名單中。", ephemeral=True)
+            return
+        blacklist.append(user_id)
+        set_server_config(guild_id, "appeal_blacklist", blacklist)
+        await interaction.response.send_message("該用戶已被加入申訴黑名單，將無法再提出申訴。", ephemeral=True)
+        for child in self.children:
+            child.disabled = True
+        origembed = message.embeds[0]
+        origembed.title += "（已加入黑名單）"
+        origembed.color = discord.Color.red()
+        origembed.add_field(name="管理員操作", value="加入申訴黑名單", inline=False)
+        # origembed.set_footer(text=f"{interaction.user.name} - 已加入黑名單", icon_url=interaction.user.display_avatar.url if interaction.user and interaction.user.display_avatar else None)
+        await interaction.edit_original_response(embed=origembed, view=self)
+        self.stop()
         
 
 class AppealView(discord.ui.View):
