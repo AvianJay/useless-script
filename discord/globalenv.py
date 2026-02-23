@@ -521,6 +521,7 @@ translations = {
     "min_age": "最小年齡",
     "audio": "音訊",
     "ignore": "忽略",
+    "description": "描述",
 }
 class CommandNameTranslator(app_commands.Translator):
     async def translate(
