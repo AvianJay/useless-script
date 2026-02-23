@@ -516,6 +516,11 @@ translations = {
     "user-appeal-blacklist": "用戶申訴黑名單",
     "view-appeal-blacklist": "查看用戶申訴黑名單",
     "search": "搜尋",
+    "content": "內容",
+    "history": "歷史紀錄",
+    "min_age": "最小年齡",
+    "audio": "音訊",
+    "ignore": "忽略",
 }
 class CommandNameTranslator(app_commands.Translator):
     async def translate(
