@@ -1,5 +1,6 @@
 config.*.json
 config.json
+config.json.backup
 *.pyc
 __pycache__/
 venv/
