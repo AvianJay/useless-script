@@ -27,7 +27,12 @@ async def determine_prefix(bot, message):
 class DontRemindMeProfixView(discord.ui.View):
     @discord.ui.button(label="不要再提醒了", style=discord.ButtonStyle.secondary, custom_id="dont_remind_prefix")
     async def dont_remind_prefix(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await interaction.response.send_message("好啦我不會提醒了", ephemeral=True)
+        embed = discord.Embed(
+            title="好吧",
+            description="我不會再提醒你了！如果你忘記前綴，可以嘗試提及我來查看目前伺服器的前綴！",
+            color=discord.Color.green()
+        )
+        await interaction.response.send_message(embed=embed, ephemeral=True)
         set_user_data(interaction.guild.id if interaction.guild else 0, interaction.user.id, "dont_remind_prefix", True)
 
 
