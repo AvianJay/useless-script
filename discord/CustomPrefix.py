@@ -1,4 +1,4 @@
-from globalenv import bot, get_server_config, set_server_config, config
+from globalenv import bot, get_server_config, set_server_config, config, get_user_data, set_user_data
 from typing import Optional
 from logger import log
 import discord
@@ -24,12 +24,22 @@ async def determine_prefix(bot, message):
         return str(prefix)
     return str(config("prefix", "!"))
 
+class DontRemindMeProfixView(discord.ui.View):
+    @discord.ui.button(label="不要再提醒了", style=discord.ButtonStyle.secondary, custom_id="dont_remind_prefix")
+    async def dont_remind_prefix(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await interaction.response.send_message("好啦我不會提醒了", ephemeral=True)
+        set_user_data(interaction.guild.id if interaction.guild else 0, interaction.user.id, "dont_remind_prefix", True)
+
 
 class CustomPrefix(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
         bot.command_prefix = determine_prefix
-        log("CustomPrefix cog loaded.", module_name="CustomPrefix")
+        # log("CustomPrefix cog loaded.", module_name="CustomPrefix")
+    
+    @commands.Cog.listener()
+    async def on_ready(self):
+        bot.add_view(DontRemindMeProfixView())
     
 
     @commands.command(name="setprefix", help="設置自定義前綴", usage="<prefix>")
@@ -62,13 +72,15 @@ class CustomPrefix(commands.Cog):
             return
         prefix = get_server_config(str(message.guild.id), "custom_prefix", config("prefix", "!"))
         curr_prefix = config("prefix", "!")
-        if message.content.startswith(curr_prefix) and prefix != curr_prefix:
+        if message.content.startswith(curr_prefix) and prefix != curr_prefix and prefix:
             # tip user about custom prefix, but rate-limit per user to avoid spam
+            if get_user_data(message.guild.id, message.author.id, "dont_remind_prefix", False):
+                return
             cache_key = ("prefix_tip", message.author.id)
             try:
                 _ = usercache[cache_key]
             except KeyError:
-                await message.channel.send(f"提醒：本伺服器的自定義前綴為：`{prefix}`！")
+                await message.channel.send(f"提醒：本伺服器的自定義前綴為：`{prefix}`！", view=DontRemindMeProfixView())
                 usercache[cache_key] = 0
         if message.content == bot.user.mention:
             try:
