@@ -473,6 +473,10 @@ class ItemModerate(commands.GroupCog, name="itemmod", description="物品系統�
         if not item:
             await interaction.followup.send("無效的物品ID。")
             return
+
+        if item.get("worth", 0) == 0:
+            await interaction.followup.send("無法取得此物品。")
+            return
         
         await give_item_to_user(guild_id, receiver_id, item_id, amount)
 
