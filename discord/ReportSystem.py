@@ -187,6 +187,8 @@ async def send_moderation_message(user: discord.Member, moderator: discord.Membe
     # add <> on links
     message_content = re.sub(r"(https?://[^\s]+)", r"<\1>", message_content)
     message_content = message_content.replace("\n", "\n> ")
+    # replace user mentions with blank name to anonymize
+    message_content = re.sub(r"<@!?(\d+)>", r"<@\1>", message_content)
     original_action_text = f"\n> - 訊息內容： {message_content}" if not bl else ""
     # print("[DEBUG] Action Text:", action_text)
     text = f"""
