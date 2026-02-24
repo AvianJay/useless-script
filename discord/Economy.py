@@ -1814,66 +1814,66 @@ class EconomyMod(commands.GroupCog, name="economymod", description="經濟系統
     def __init__(self):
         super().__init__()
 
-    @app_commands.command(name="give", description="給予用戶伺服幣（會嚴重通膨）")
-    @app_commands.describe(user="目標用戶", amount="金額")
-    async def give_money(self, interaction: discord.Interaction, user: discord.User, amount: float):
-        if amount <= 0:
-            await interaction.response.send_message("❌ 金額必須大於 0。", ephemeral=True)
-            return
-        elif amount > 1_000_000:
-            await interaction.response.send_message("❌ 金額不能超過 1,000,000。", ephemeral=True)
-            return
-        if user.bot:
-            await interaction.response.send_message("❌ 不能給機器人金錢。", ephemeral=True)
-            return
+    # @app_commands.command(name="give", description="給予用戶伺服幣（會嚴重通膨）")
+    # @app_commands.describe(user="目標用戶", amount="金額")
+    # async def give_money(self, interaction: discord.Interaction, user: discord.User, amount: float):
+    #     if amount <= 0:
+    #         await interaction.response.send_message("❌ 金額必須大於 0。", ephemeral=True)
+    #         return
+    #     elif amount > 1_000_000:
+    #         await interaction.response.send_message("❌ 金額不能超過 1,000,000。", ephemeral=True)
+    #         return
+    #     if user.bot:
+    #         await interaction.response.send_message("❌ 不能給機器人金錢。", ephemeral=True)
+    #         return
 
-        guild_id = interaction.guild.id
-        currency_name = get_currency_name(guild_id)
+    #     guild_id = interaction.guild.id
+    #     currency_name = get_currency_name(guild_id)
 
-        # 顯示警告
-        old_rate = get_exchange_rate(guild_id)
-        add_balance(guild_id, user.id, amount)
-        record_admin_injection(guild_id, amount)
-        new_rate = get_exchange_rate(guild_id)
+    #     # 顯示警告
+    #     old_rate = get_exchange_rate(guild_id)
+    #     add_balance(guild_id, user.id, amount)
+    #     record_admin_injection(guild_id, amount)
+    #     new_rate = get_exchange_rate(guild_id)
 
-        rate_change_percent = ((new_rate - old_rate) / old_rate * 100) if old_rate > 0 else 0
+    #     rate_change_percent = ((new_rate - old_rate) / old_rate * 100) if old_rate > 0 else 0
 
-        await interaction.response.send_message(
-            f"✅ 已給予 {user.display_name} **{amount:,.2f}** {currency_name}。\n"
-            f"⚠️ **警告：管理員注入導致貨幣貶值 {abs(rate_change_percent):.2f}%**\n"
-            f"匯率：{old_rate:.6f} → {new_rate:.6f}\n"
-            f"-# 建議使用每日獎勵或活動系統發放貨幣，而非直接給予"
-        )
-        log(f"Admin {interaction.user} gave {amount} server currency to {user} in guild {guild_id}, rate {old_rate:.6f} -> {new_rate:.6f}",
-            module_name="Economy", user=interaction.user, guild=interaction.guild)
+    #     await interaction.response.send_message(
+    #         f"✅ 已給予 {user.display_name} **{amount:,.2f}** {currency_name}。\n"
+    #         f"⚠️ **警告：管理員注入導致貨幣貶值 {abs(rate_change_percent):.2f}%**\n"
+    #         f"匯率：{old_rate:.6f} → {new_rate:.6f}\n"
+    #         f"-# 建議使用每日獎勵或活動系統發放貨幣，而非直接給予"
+    #     )
+    #     log(f"Admin {interaction.user} gave {amount} server currency to {user} in guild {guild_id}, rate {old_rate:.6f} -> {new_rate:.6f}",
+    #         module_name="Economy", user=interaction.user, guild=interaction.guild)
 
-    @app_commands.command(name="remove", description="移除用戶伺服幣")
-    @app_commands.describe(user="目標用戶", amount="金額")
-    async def remove_money(self, interaction: discord.Interaction, user: discord.User, amount: float):
-        if amount <= 0:
-            await interaction.response.send_message("❌ 金額必須大於 0。", ephemeral=True)
-            return
+    # @app_commands.command(name="remove", description="移除用戶伺服幣")
+    # @app_commands.describe(user="目標用戶", amount="金額")
+    # async def remove_money(self, interaction: discord.Interaction, user: discord.User, amount: float):
+    #     if amount <= 0:
+    #         await interaction.response.send_message("❌ 金額必須大於 0。", ephemeral=True)
+    #         return
 
-        guild_id = interaction.guild.id
-        currency_name = get_currency_name(guild_id)
-        bal = get_balance(guild_id, user.id)
-        removed = min(bal, amount)
-        set_balance(guild_id, user.id, bal - removed)
-        adjust_supply(guild_id, -removed)
+    #     guild_id = interaction.guild.id
+    #     currency_name = get_currency_name(guild_id)
+    #     bal = get_balance(guild_id, user.id)
+    #     removed = min(bal, amount)
+    #     set_balance(guild_id, user.id, bal - removed)
+    #     adjust_supply(guild_id, -removed)
 
-        # 移除貨幣時，按比例減少管理員注入記錄（避免懲罰累積）
-        admin_injected = get_admin_injected(guild_id)
-        total_supply = get_total_supply(guild_id)
-        if total_supply > 0 and admin_injected > 0:
-            # 按移除比例減少管理員注入記錄
-            reduction = min(admin_injected, removed)
-            set_server_config(guild_id, "economy_admin_injected", max(0, admin_injected - reduction))
+    #     # 移除貨幣時，按比例減少管理員注入記錄（避免懲罰累積）
+    #     admin_injected = get_admin_injected(guild_id)
+    #     total_supply = get_total_supply(guild_id)
+    #     if total_supply > 0 and admin_injected > 0:
+    #         # 按移除比例減少管理員注入記錄
+    #         reduction = min(admin_injected, removed)
+    #         set_server_config(guild_id, "economy_admin_injected", max(0, admin_injected - reduction))
 
-        await interaction.response.send_message(
-            f"✅ 已移除 {user.display_name} 的 **{removed:,.2f}** {currency_name}。"
-        )
-        log(f"Admin {interaction.user} removed {removed} server currency from {user} in guild {guild_id}",
-            module_name="Economy", user=interaction.user, guild=interaction.guild)
+    #     await interaction.response.send_message(
+    #         f"✅ 已移除 {user.display_name} 的 **{removed:,.2f}** {currency_name}。"
+    #     )
+    #     log(f"Admin {interaction.user} removed {removed} server currency from {user} in guild {guild_id}",
+    #         module_name="Economy", user=interaction.user, guild=interaction.guild)
 
     # @app_commands.command(name="setrate", description="手動設定匯率")
     # @app_commands.describe(rate="新匯率（1 伺服幣 = X 全域幣）")
@@ -1896,44 +1896,44 @@ class EconomyMod(commands.GroupCog, name="economymod", description="經濟系統
     #     log(f"Admin {interaction.user} set rate {old_rate} -> {rate} in guild {guild_id}",
     #         module_name="Economy", user=interaction.user, guild=interaction.guild)
 
-    @app_commands.command(name="clearadmin", description="清除用戶的管理員物品標記（不影響物品本身）")
-    @app_commands.describe(user="目標用戶", item_id="物品ID（留空清除所有）")
-    @app_commands.autocomplete(item_id=all_items_autocomplete)
-    async def clearadmin(self, interaction: discord.Interaction, user: discord.User, item_id: str = None):
-        guild_id = interaction.guild.id
-        admin_items = get_user_data(guild_id, user.id, "admin_items", {})
+    # @app_commands.command(name="clearadmin", description="清除用戶的管理員物品標記（不影響物品本身）")
+    # @app_commands.describe(user="目標用戶", item_id="物品ID（留空清除所有）")
+    # @app_commands.autocomplete(item_id=all_items_autocomplete)
+    # async def clearadmin(self, interaction: discord.Interaction, user: discord.User, item_id: str = None):
+    #     guild_id = interaction.guild.id
+    #     admin_items = get_user_data(guild_id, user.id, "admin_items", {})
 
-        if not admin_items:
-            await interaction.response.send_message(f"✅ {user.display_name} 沒有任何管理員物品標記。", ephemeral=True)
-            return
+    #     if not admin_items:
+    #         await interaction.response.send_message(f"✅ {user.display_name} 沒有任何管理員物品標記。", ephemeral=True)
+    #         return
 
-        if item_id:
-            # 清除特定物品的標記
-            if item_id in admin_items:
-                count = admin_items[item_id]
-                del admin_items[item_id]
-                set_user_data(guild_id, user.id, "admin_items", admin_items)
-                item = get_item_by_id(item_id, guild_id)
-                item_name = item['name'] if item else item_id
-                await interaction.response.send_message(
-                    f"✅ 已清除 {user.display_name} 的 **{item_name}** x{count} 的管理員標記。\n"
-                    f"-# 物品本身不受影響，但現在可以正常交易和賣出",
-                    ephemeral=True
-                )
-            else:
-                await interaction.response.send_message(f"❌ {user.display_name} 沒有該物品的管理員標記。", ephemeral=True)
-        else:
-            # 清除所有標記
-            total_items = sum(admin_items.values())
-            set_user_data(guild_id, user.id, "admin_items", {})
-            await interaction.response.send_message(
-                f"✅ 已清除 {user.display_name} 的所有管理員物品標記（共 {total_items} 個物品）。\n"
-                f"-# 物品本身不受影響，但現在可以正常交易和賣出",
-                ephemeral=True
-            )
+    #     if item_id:
+    #         # 清除特定物品的標記
+    #         if item_id in admin_items:
+    #             count = admin_items[item_id]
+    #             del admin_items[item_id]
+    #             set_user_data(guild_id, user.id, "admin_items", admin_items)
+    #             item = get_item_by_id(item_id, guild_id)
+    #             item_name = item['name'] if item else item_id
+    #             await interaction.response.send_message(
+    #                 f"✅ 已清除 {user.display_name} 的 **{item_name}** x{count} 的管理員標記。\n"
+    #                 f"-# 物品本身不受影響，但現在可以正常交易和賣出",
+    #                 ephemeral=True
+    #             )
+    #         else:
+    #             await interaction.response.send_message(f"❌ {user.display_name} 沒有該物品的管理員標記。", ephemeral=True)
+    #     else:
+    #         # 清除所有標記
+    #         total_items = sum(admin_items.values())
+    #         set_user_data(guild_id, user.id, "admin_items", {})
+    #         await interaction.response.send_message(
+    #             f"✅ 已清除 {user.display_name} 的所有管理員物品標記（共 {total_items} 個物品）。\n"
+    #             f"-# 物品本身不受影響，但現在可以正常交易和賣出",
+    #             ephemeral=True
+    #         )
 
-        log(f"Admin {interaction.user} cleared admin item markers for {user} in guild {guild_id}",
-            module_name="Economy", user=interaction.user, guild=interaction.guild)
+    #     log(f"Admin {interaction.user} cleared admin item markers for {user} in guild {guild_id}",
+    #         module_name="Economy", user=interaction.user, guild=interaction.guild)
 
     @app_commands.command(name="toggle-flow", description="切換是否允許伺服幣與全域幣流通（兌換、全域商店等）")
     async def toggle_flow(self, interaction: discord.Interaction):
