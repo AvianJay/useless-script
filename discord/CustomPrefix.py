@@ -61,7 +61,7 @@ class CustomPrefix(commands.Cog):
         await asyncio.sleep(.5)  # wait for on_message to finish
         guild_id = str(ctx.guild.id)
         if prefix is None:
-            set_server_config(guild_id, "custom_prefix", None)
+            set_server_config(guild_id, "custom_prefix", config("prefix", "!"))
             await ctx.send(f"已重置前綴為預設值：`{config('prefix', '!')}`")
             log(f"重置伺服器 {ctx.guild} ({guild_id}) 的前綴為預設值", module_name="CustomPrefix", user=ctx.author, guild=ctx.guild)
         else:
