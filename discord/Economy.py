@@ -13,6 +13,7 @@ from ItemSystem import (
     all_items_autocomplete, get_user_items_autocomplete,
     admin_action_callbacks, get_item_by_id, get_all_items_for_guild
 )
+from OwnerTools import is_owner
 
 
 # ==================== Constants ====================
@@ -2104,6 +2105,193 @@ class EconomyMod(commands.GroupCog, name="economymod", description="經濟系統
 
 
 asyncio.run(bot.add_cog(EconomyMod()))
+
+
+@bot.command(name="dev-economyhistory", description="查看用戶的經濟交易紀錄", aliases=["deh"])
+@is_owner()
+async def dev_economy_history(ctx, user: discord.User, scope: str = "server", server_id: int = None):
+    scope = (scope or "server").lower()
+    if scope == "global":
+        guild_id = GLOBAL_GUILD_ID
+    elif scope == "server":
+        if server_id:
+            guild_id = server_id
+        elif ctx.guild:
+            guild_id = ctx.guild.id
+        else:
+            await ctx.send("❌ 請提供伺服器ID或在伺服器中使用此指令。")
+            return
+    else:
+        await ctx.send("❌ 範圍必須是 'server' 或 'global'。")
+        return
+
+    history_data = get_user_data(guild_id, user.id, "economy_history", [])
+    if not history_data:
+        await ctx.send(f"📜 用戶 {user} 在 {scope} 沒有任何交易紀錄。")
+        return
+
+    history_data = list(reversed(history_data))
+    lines = []
+    for entry in history_data:
+        tx_type = entry.get("type", "未知")
+        amount = entry.get("amount", 0)
+        currency = entry.get("currency", "")
+        detail = entry.get("detail", "")
+        tx_time = entry.get("time", "")
+        lines.append(f"{tx_time} | {tx_type} | {amount} {currency} | {detail}")
+
+    # 分批發送訊息
+    batch_size = 20
+    for i in range(0, len(lines), batch_size):
+        batch = lines[i:i+batch_size]
+        await ctx.send(f"```{chr(10).join(batch)}```")
+
+
+@bot.command(name="dev-economygive", description="開發者直接加錢給用戶", aliases=["deg", "degive"])
+@is_owner()
+async def dev_economy_give(ctx, user: discord.User, amount: float, scope: str = "server", server_id: int = None):
+    if amount <= 0:
+        await ctx.send("❌ 金額必須大於 0。")
+        return
+
+    scope = (scope or "server").lower()
+    if scope == "global":
+        guild_id = GLOBAL_GUILD_ID
+        before = get_global_balance(user.id)
+        set_global_balance(user.id, before + amount)
+        after = get_global_balance(user.id)
+        currency_name = GLOBAL_CURRENCY_NAME
+    elif scope == "server":
+        if server_id:
+            guild_id = server_id
+        elif ctx.guild:
+            guild_id = ctx.guild.id
+        else:
+            await ctx.send("❌ 請提供伺服器ID或在伺服器中使用此指令。")
+            return
+
+        currency_name = get_currency_name(guild_id)
+        before = get_balance(guild_id, user.id)
+        add_balance(guild_id, user.id, amount)
+        after = get_balance(guild_id, user.id)
+    else:
+        await ctx.send("❌ 範圍必須是 'server' 或 'global'。")
+        return
+
+    actual_added = round(after - before, 2)
+    log_transaction(
+        guild_id,
+        user.id,
+        "開發者加錢",
+        actual_added,
+        currency_name,
+        f"操作者: {ctx.author} ({ctx.author.id})"
+    )
+
+    await ctx.send(
+        f"✅ 已為 {user} 增加 **{actual_added:,.2f}** {currency_name}（{scope}）。\n"
+        f"餘額：{before:,.2f} → {after:,.2f}"
+    )
+
+
+@bot.command(name="dev-economyremove", description="開發者直接扣錢給用戶", aliases=["der", "deremove"])
+@is_owner()
+async def dev_economy_remove(ctx, user: discord.User, amount: float, scope: str = "server", server_id: int = None):
+    if amount <= 0:
+        await ctx.send("❌ 金額必須大於 0。")
+        return
+
+    scope = (scope or "server").lower()
+    if scope == "global":
+        guild_id = GLOBAL_GUILD_ID
+        currency_name = GLOBAL_CURRENCY_NAME
+        before = get_global_balance(user.id)
+        removed = min(before, amount)
+        set_global_balance(user.id, before - removed)
+        after = get_global_balance(user.id)
+    elif scope == "server":
+        if server_id:
+            guild_id = server_id
+        elif ctx.guild:
+            guild_id = ctx.guild.id
+        else:
+            await ctx.send("❌ 請提供伺服器ID或在伺服器中使用此指令。")
+            return
+
+        currency_name = get_currency_name(guild_id)
+        before = get_balance(guild_id, user.id)
+        removed = min(before, amount)
+        set_balance(guild_id, user.id, before - removed)
+        adjust_supply(guild_id, -removed)
+        after = get_balance(guild_id, user.id)
+    else:
+        await ctx.send("❌ 範圍必須是 'server' 或 'global'。")
+        return
+
+    if removed > 0:
+        log_transaction(
+            guild_id,
+            user.id,
+            "開發者扣錢",
+            -removed,
+            currency_name,
+            f"操作者: {ctx.author} ({ctx.author.id})"
+        )
+
+    await ctx.send(
+        f"✅ 已從 {user} 扣除 **{removed:,.2f}** {currency_name}（{scope}）。\n"
+        f"餘額：{before:,.2f} → {after:,.2f}"
+    )
+
+
+@bot.command(name="dev-economyset", description="開發者直接設定用戶餘額", aliases=["des", "deset"])
+@is_owner()
+async def dev_economy_set(ctx, user: discord.User, target_amount: float, scope: str = "server", server_id: int = None):
+    if target_amount < 0:
+        await ctx.send("❌ 目標餘額不能小於 0。")
+        return
+
+    scope = (scope or "server").lower()
+    if scope == "global":
+        guild_id = GLOBAL_GUILD_ID
+        currency_name = GLOBAL_CURRENCY_NAME
+        before = get_global_balance(user.id)
+        set_global_balance(user.id, target_amount)
+        after = get_global_balance(user.id)
+    elif scope == "server":
+        if server_id:
+            guild_id = server_id
+        elif ctx.guild:
+            guild_id = ctx.guild.id
+        else:
+            await ctx.send("❌ 請提供伺服器ID或在伺服器中使用此指令。")
+            return
+
+        currency_name = get_currency_name(guild_id)
+        before = get_balance(guild_id, user.id)
+        set_balance(guild_id, user.id, target_amount)
+        adjust_supply(guild_id, target_amount - before)
+        after = get_balance(guild_id, user.id)
+    else:
+        await ctx.send("❌ 範圍必須是 'server' 或 'global'。")
+        return
+
+    delta = round(after - before, 2)
+    if delta != 0:
+        log_transaction(
+            guild_id,
+            user.id,
+            "開發者設置餘額",
+            delta,
+            currency_name,
+            f"操作者: {ctx.author} ({ctx.author.id})"
+        )
+
+    delta_text = f"+{delta:,.2f}" if delta >= 0 else f"{delta:,.2f}"
+    await ctx.send(
+        f"✅ 已將 {user} 的餘額設為 **{after:,.2f}** {currency_name}（{scope}）。\n"
+        f"變動：{delta_text} | 餘額：{before:,.2f} → {after:,.2f}"
+    )
 
 
 def make_cheque_use_callback(item_id: str, worth: int):
