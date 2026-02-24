@@ -19,6 +19,7 @@ import io
 from urllib.parse import urlencode
 import asyncio
 import traceback
+from Economy import log_transaction, GLOBAL_CURRENCY_NAME
 
 def oauth_code_to_id(code, redirect_uri=None):
     url = 'https://discord.com/api/oauth2/token'
@@ -56,12 +57,41 @@ def oauth_code_to_id(code, redirect_uri=None):
 
 auth_tokens = {}
 contribution_cooldowns = {} # user_id: timestamp
+GLOBAL_GUILD_ID = 0
+APPROVAL_REWARD_GLOBAL = 200
 
 def cleanup_tokens():
     current_time = time.time()
     expired_tokens = [token for token, data in auth_tokens.items() if current_time - data['timestamp'] > 600] # 10 minutes
     for token in expired_tokens:
         del auth_tokens[token]
+
+def grant_approval_global_reward_once(user_id: int, message_id: int, ctype: str):
+    reward_records = get_user_data(GLOBAL_GUILD_ID, user_id, "contribution_approval_rewards", {})
+    record_key = str(message_id)
+    if record_key in reward_records:
+        return False, get_user_data(GLOBAL_GUILD_ID, user_id, "economy_balance", 0.0)
+
+    current_balance = float(get_user_data(GLOBAL_GUILD_ID, user_id, "economy_balance", 0.0) or 0.0)
+    new_balance = round(current_balance + APPROVAL_REWARD_GLOBAL, 2)
+    set_user_data(GLOBAL_GUILD_ID, user_id, "economy_balance", new_balance)
+
+    reward_records[record_key] = {
+        "reward": APPROVAL_REWARD_GLOBAL,
+        "type": ctype,
+        "time": datetime.now(timezone.utc).isoformat()
+    }
+    set_user_data(GLOBAL_GUILD_ID, user_id, "contribution_approval_rewards", reward_records)
+
+    log_transaction(
+        GLOBAL_GUILD_ID,
+        user_id,
+        "投稿審核獎勵",
+        APPROVAL_REWARD_GLOBAL,
+        GLOBAL_CURRENCY_NAME,
+        f"投稿類型：{ctype}"
+    )
+    return True, new_balance
 
 class ContributionView(discord.ui.View):
     def __init__(self, ctype, audio_filename=None):
@@ -118,8 +148,21 @@ class ContributionView(discord.ui.View):
 
                 # try to send dm
                 user_id = interaction.message.embeds[0].fields[0].value
-                user = await bot.fetch_user(int(user_id))
-                await user.send("你的投稿已被批准！")
+                user_id_int = int(user_id)
+                rewarded, new_global_balance = grant_approval_global_reward_once(
+                    user_id=user_id_int,
+                    message_id=interaction.message.id,
+                    ctype=self.ctype
+                )
+
+                user = await bot.fetch_user(user_id_int)
+                if rewarded:
+                    await user.send(
+                        f"你的投稿已被批准！你獲得了 **{APPROVAL_REWARD_GLOBAL}** 全域幣獎勵。\n"
+                        f"目前全域幣餘額：**{new_global_balance:,.2f}**"
+                    )
+                else:
+                    await user.send("你的投稿已被批准！")
 
             elif self.ctype == "whatisthisguytalking":
                 # Attachment 0: Image
@@ -157,8 +200,21 @@ class ContributionView(discord.ui.View):
                 
                 # try to send dm
                 user_id = interaction.message.embeds[0].fields[0].value
-                user = await bot.fetch_user(int(user_id))
-                await user.send("你的投稿已被批准！")
+                user_id_int = int(user_id)
+                rewarded, new_global_balance = grant_approval_global_reward_once(
+                    user_id=user_id_int,
+                    message_id=interaction.message.id,
+                    ctype=self.ctype
+                )
+
+                user = await bot.fetch_user(user_id_int)
+                if rewarded:
+                    await user.send(
+                        f"你的投稿已被批准！你獲得了 **{APPROVAL_REWARD_GLOBAL}** 全域幣獎勵。\n"
+                        f"目前全域幣餘額：**{new_global_balance:,.2f}**"
+                    )
+                else:
+                    await user.send("你的投稿已被批准！")
 
             elif self.ctype == "dynamic_voice_audio":
                 # Attachment 0: Audio file
@@ -190,8 +246,21 @@ class ContributionView(discord.ui.View):
                 
                 # try to send dm
                 user_id = interaction.message.embeds[0].fields[0].value
-                user = await bot.fetch_user(int(user_id))
-                await user.send("你投稿的動態語音音效已被批准！")
+                user_id_int = int(user_id)
+                rewarded, new_global_balance = grant_approval_global_reward_once(
+                    user_id=user_id_int,
+                    message_id=interaction.message.id,
+                    ctype=self.ctype
+                )
+
+                user = await bot.fetch_user(user_id_int)
+                if rewarded:
+                    await user.send(
+                        f"你投稿的動態語音音效已被批准！你獲得了 **{APPROVAL_REWARD_GLOBAL}** 全域幣獎勵。\n"
+                        f"目前全域幣餘額：**{new_global_balance:,.2f}**"
+                    )
+                else:
+                    await user.send("你投稿的動態語音音效已被批准！")
 
         except Exception as e:
             await interaction.followup.send(f"批准失敗: {e}", ephemeral=True)
