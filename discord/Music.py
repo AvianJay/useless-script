@@ -118,6 +118,7 @@ class Music(commands.GroupCog, group_name=app_commands.locale_str("music")):
                     lyrics=False,
                     search=True,
                     fallback=True,
+                    secure=node_config.get("secure", False),
                 )
                 self.node_names[identifier] = display_name
                 connected += 1
