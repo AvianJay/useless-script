@@ -563,7 +563,7 @@ async def changelogs_command(interaction: discord.Interaction):
 
 class ChangeLogView(discord.ui.View):
     def __init__(self, versions: list[dict], current_page: int = 0, interaction: discord.Interaction = None):
-        super().__init__(timeout=None)
+        super().__init__(timeout=300)  # 5 minutes timeout
         self.versions = versions
         self.current_page = current_page
         self.interaction = interaction
