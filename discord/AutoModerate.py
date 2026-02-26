@@ -1130,7 +1130,7 @@ class AutoModerate(commands.GroupCog, name=app_commands.locale_str("automod")):
                 if message.interaction_metadata:
                     target = message.interaction_metadata.user
                 else:
-                    message.delete()
+                    await message.delete()
                     return
             if scamtrap_channel_id != 0 and message.channel.id == scamtrap_channel_id:
                 try:
