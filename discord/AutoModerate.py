@@ -969,24 +969,32 @@ class AutoModerate(commands.GroupCog, name=app_commands.locale_str("automod")):
                     except Exception as e:
                         log(f"無法對用戶 {triggering_user} 執行用戶安裝應用程式濫用的處理: {e}", level=logging.ERROR, module_name="AutoModerate", user=triggering_user, guild=message.guild)
         
-        if message.author.bot:
-            return
-        if message.author.guild_permissions.administrator:
-            return
         
         # 詐騙陷阱檢查
         if automod_settings.get("scamtrap", {}).get("enabled", False):
             scamtrap_channel_id = int(automod_settings["scamtrap"].get("channel_id", 0))
             action = automod_settings["scamtrap"].get("action", "delete 請不要在此頻道發送訊息。")
+            target = message.author
+            if message.author.bot:
+                if message.interaction_metadata:
+                    target = message.interaction_metadata.user
+                else:
+                    message.delete()
+                    return
             if scamtrap_channel_id != 0 and message.channel.id == scamtrap_channel_id:
                 try:
-                    await do_action_str(action, guild=message.guild, user=message.author, message=message)
+                    result = await do_action_str(action, guild=message.guild, user=target, message=message)
                     # print(f"[+] 用戶 {message.author} 因進入詐騙陷阱頻道被處理: {action}")
-                    log(f"用戶 {message.author} 因進入詐騙陷阱頻道被處理: {action}", module_name="AutoModerate", user=message.author, guild=message.guild)
+                    log(f"用戶 {target} 因進入詐騙陷阱頻道被處理: {action}\n執行結果: {'\n'.join(result)}", module_name="AutoModerate", user=target, guild=message.guild)
                 except Exception as e:
                     # print(f"[!] 無法對用戶 {message.author} 執行詐騙陷阱的處理: {e}")
-                    log(f"無法對用戶 {message.author} 執行詐騙陷阱的處理: {e}", level=logging.ERROR, module_name="AutoModerate", user=message.author, guild=message.guild)
-        
+                    log(f"無法對用戶 {target} 執行詐騙陷阱的處理: {e}", level=logging.ERROR, module_name="AutoModerate", user=target, guild=message.guild)
+
+        if message.author.bot:
+            return
+        if message.author.guild_permissions.administrator:
+            return
+
         # 標題過多檢查
         if automod_settings.get("too_many_h1", {}).get("enabled", False):
             max_length = int(automod_settings["too_many_h1"].get("max_length", 20))

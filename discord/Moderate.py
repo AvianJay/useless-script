@@ -143,7 +143,7 @@ def current_roc_year() -> int:
     return datetime.now().year - 1911
 
 
-async def ban_user(guild: discord.Guild, user: Union[discord.Member, discord.User], reason: str, duration: int = 0, delete_message_seconds: int = 0):
+async def ban_user(guild: discord.Guild, user: Union[discord.Member, discord.User], reason: str, duration: int = 0, delete_message_seconds: int = 0, moderator: Optional[discord.Member] = None) -> bool:
     notifymsg = None
     try:
         if duration > 0:
@@ -151,7 +151,7 @@ async def ban_user(guild: discord.Guild, user: Union[discord.Member, discord.Use
             set_user_data(guild.id, user.id, "unban_time", unban_time.isoformat())
         ModerationNotify.ignore_user(user.id)  # 避免重複通知
         try:
-            notifymsg = await ModerationNotify.notify_user(user, guild, "封禁", reason, end_time=unban_time if duration > 0 else None)
+            notifymsg = await ModerationNotify.notify_user(user, guild, "封禁", reason, end_time=unban_time if duration > 0 else None, moderator=moderator)
         except Exception:
             pass
         if isinstance(user, discord.Member):
