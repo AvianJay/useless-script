@@ -10,7 +10,7 @@
   * 新增 `automod_detect`（AutoMod 偵測）：偵測 Discord 原生 AutoMod 觸發事件，並可執行自訂懲處或記錄至指定頻道。
   * 快速設定精靈新增 AutoMod 偵測選項。
   * 改進日誌記錄。
-* 更新管理功能 | /moderate
+* 更新管理功能
   * `/send-moderation-message` 新增 `direct` 選項：可直接傳送至指定頻道，不顯示確認介面。
   * 修復 ban 相關問題。
 * 更新意見回饋 | /feedback
