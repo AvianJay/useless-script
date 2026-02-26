@@ -92,9 +92,13 @@ async def do_action_str(action: str, guild: Optional[discord.Guild] = None, user
             cmd.pop(0)  # remove delete_messages
             reason = " ".join(cmd)
             last_reason = reason
-            logs.append(f"封禁用戶，原因: {reason}，持續秒數: {duration_seconds}秒，刪除訊息時間: {delete_messages}秒")
+            result = None
             if user:
-                await Moderate.ban_user(guild, user, reason=reason, duration=duration_seconds, delete_message_seconds=delete_messages)
+                result = await Moderate.ban_user(guild, user, reason=reason, duration=duration_seconds, delete_message_seconds=delete_messages, moderator=None)
+                if not result:
+                    logs.append(f"無法封禁用戶 {user}")
+            if not user or result:
+                logs.append(f"封禁用戶，原因: {reason}，持續秒數: {duration_seconds}秒，刪除訊息時間: {delete_messages}秒")
             actions.append({"action": "ban", "duration": duration_seconds, "reason": reason})
         elif cmd[0] == "kick":
             # kick <reason>
