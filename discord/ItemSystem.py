@@ -17,17 +17,21 @@ admin_action_callbacks = []  # Economy module hooks into this
 CUSTOM_ITEMS_KEY = "custom_items"
 
 
-def _make_custom_text_callback(item_id: str, content: str):
+def _make_custom_text_callback(item_id: str, content: str, remove_after_use: bool = True, ephemeral_response: bool = False):
     """建立自定義文字物品使用時的回呼函數"""
 
     async def callback(interaction: discord.Interaction):
         guild_id = getattr(interaction, "guild_id", interaction.guild.id if interaction.guild else 0)
         user_id = interaction.user.id
+        
         removed = await remove_item_from_user(guild_id, user_id, item_id, 1)
         if removed <= 0:
             await interaction.response.send_message("你沒有這個物品。", ephemeral=True)
             return
-        await interaction.response.send_message(content)
+        if not remove_after_use:
+            # 如果不使用後移除，則補回去
+            await give_item_to_user(guild_id, user_id, item_id, 1)
+        await interaction.response.send_message(content, ephemeral=ephemeral_response)
         log(f"Custom item {item_id} used by {interaction.user} in guild {guild_id}", module_name="ItemSystem")
 
     return callback
@@ -58,7 +62,7 @@ def get_item_by_id(item_id: str, guild_id: int = None):
                 "id": item_id,
                 "name": data["name"],
                 "description": data.get("description", "自定義物品。使用時會傳送儲存的文字內容。"),
-                "callback": _make_custom_text_callback(item_id, data["content"]),
+                "callback": _make_custom_text_callback(item_id, data["content"], remove_after_use=data.get("remove_after_use", True), ephemeral_response=data.get("ephemeral_response", False)),
                 "worth": float(data.get("worth", 0)) if data.get("worth") is not None else 0,
             }
     return None
@@ -85,6 +89,8 @@ def get_all_items_for_guild(guild_id: int = None) -> list:
                 "name": data["name"],
                 "description": data.get("description", "自定義物品。使用時會傳送儲存的文字內容。"),
                 "worth": float(data.get("worth", 0)) if data.get("worth") is not None else 0,
+                "remove_after_use": data.get("remove_after_use", True),
+                "ephemeral_response": data.get("ephemeral_response", False),
             })
     return result
 
@@ -557,9 +563,11 @@ class ItemModerate(commands.GroupCog, name="itemmod", description="物品系統�
         content="使用物品時要傳送的文字內容",
         description="物品說明（可選，預設為「自定義物品」）",
         list_in_shop="是否上架伺服器商店",
-        price="商店定價（伺服幣，僅在「上架商店」為是時有效）"
+        price="商店定價（伺服幣，僅在「上架商店」為是時有效）",
+        remove_after_use="使用後是否自動移除物品",
+        ephemeral_response="是否以隱藏訊息方式回應使用者"
     )
-    async def addcustom(self, interaction: discord.Interaction, name: str, content: str, description: str = None, list_in_shop: bool = False, price: float = None):
+    async def addcustom(self, interaction: discord.Interaction, name: str, content: str, description: str = None, list_in_shop: bool = False, price: float = None, remove_after_use: bool = True, ephemeral_response: bool = False):
         if not name or len(name.strip()) < 1:
             await interaction.response.send_message("物品名稱不能為空。", ephemeral=True)
             return
@@ -587,6 +595,8 @@ class ItemModerate(commands.GroupCog, name="itemmod", description="物品系統�
             "name": name.strip()[:100],
             "description": (description or "自定義物品。使用時會傳送儲存的文字內容。")[:500],
             "content": content.strip()[:2000],
+            "remove_after_use": remove_after_use,
+            "ephemeral_response": ephemeral_response
         }
         if list_in_shop and price is not None:
             custom_items[item_id]["worth"] = price
@@ -619,17 +629,35 @@ class ItemModerate(commands.GroupCog, name="itemmod", description="物品系統�
     @app_commands.command(name="editcustom", description="編輯自定義物品的商店上架與定價")
     @app_commands.describe(
         item_id="要編輯的自定義物品",
+        name="物品名稱",
+        description="物品說明",
+        content="使用物品時要傳送的文字內容",
         list_in_shop="是否上架伺服器商店",
-        price="商店定價（伺服幣；若上架為否則會從商店移除）"
+        price="商店定價（伺服幣；若上架為否則會從商店移除）",
+        remove_after_use="使用後是否自動移除物品",
+        ephemeral_response="是否以隱藏訊息方式回應使用者"
     )
     @app_commands.autocomplete(item_id=custom_items_autocomplete)
-    async def editcustom(self, interaction: discord.Interaction, item_id: str, list_in_shop: bool = None, price: float = None):
+    async def editcustom(self, interaction: discord.Interaction, item_id: str, name: str = None, description: str = None, content: str = None, list_in_shop: bool = None, price: float = None, remove_after_use: bool = None, ephemeral_response: bool = None):
         guild_id = interaction.guild.id
         custom_items = get_custom_items(guild_id)
         if item_id not in custom_items:
             await interaction.response.send_message("找不到此自定義物品。", ephemeral=True)
             return
         data = custom_items[item_id]
+        if name is not None:
+            if len(name.strip()) > 100:
+                await interaction.response.send_message("物品名稱不可超過 100 字元。", ephemeral=True)
+                return
+            data["name"] = name.strip()
+        if description is not None:
+            data["description"] = description.strip()[:500]
+        if content is not None:
+            data["content"] = content.strip()[:2000]
+        if remove_after_use is not None:
+            data["remove_after_use"] = remove_after_use
+        if ephemeral_response is not None:
+            data["ephemeral_response"] = ephemeral_response
         if list_in_shop is not None:
             if list_in_shop:
                 p = price if price is not None else data.get("worth")
