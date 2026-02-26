@@ -143,7 +143,7 @@ async def _log(*messages, level = logging.INFO, module_name: str = "General", us
                 if guild:
                     log_channel_id = get_server_config(guild.id, "log_channel_id")
                     if log_channel_id and log_channel_id != channel.id:
-                        guild_channel = bot.get_channel(log_channel_id)
+                        guild_channel = guild.get_channel(log_channel_id)
                         if guild_channel:
                             guild_webhook_url = get_server_config(guild.id, "log_webhook_url")
                             guild_discord_webhook = None
