@@ -38,6 +38,10 @@ all_settings = [
     "anti_spam-time_window",
     "anti_spam-similarity",
     "anti_spam-action",
+    "automod_detect-log_channel",
+    "automod_detect-action",
+    "automod_detect-filter_rule",
+    "automod_detect-filter_action_type",
 ]
 
 # 用於追蹤 user install spam 的記憶體字典
@@ -258,11 +262,15 @@ class QuickSetupView(discord.ui.View):
                 "anti_uispam": "📲 用戶安裝應用程式濫用",
                 "anti_raid": "🚨 防突襲",
                 "anti_spam": "🔁 防刷頻",
+                "automod_detect": "🛡️ AutoMod 偵測",
             }
             embed.description = f"正在設定 **{feat_names.get(self.feature, self.feature)}**\n請完成下方選項後點擊「完成設定」。"
             if self.config:
                 for k, v in self.config.items():
-                    if k == "channel_id" and v:
+                    if k == "log_channel" and v:
+                        ch = guild.get_channel(int(v))
+                        embed.add_field(name="通知頻道", value=ch.mention if ch else v, inline=False)
+                    elif k == "channel_id" and v:
                         ch = guild.get_channel(int(v))
                         embed.add_field(name="頻道", value=ch.mention if ch else v, inline=False)
                     elif k == "action":
@@ -281,6 +289,7 @@ class QuickSetupView(discord.ui.View):
             discord.SelectOption(label="用戶安裝應用程式濫用", value="anti_uispam", description="User Install 濫用"),
             discord.SelectOption(label="防突襲", value="anti_raid", description="大量加入偵測"),
             discord.SelectOption(label="防刷頻", value="anti_spam", description="相似訊息刷頻"),
+            discord.SelectOption(label="AutoMod 偵測", value="automod_detect", description="偵測 Discord 原生 AutoMod 觸發"),
         ]
         sel = discord.ui.Select(placeholder="選擇功能", options=opts)
         sel.callback = self._on_feature_select
@@ -386,6 +395,14 @@ class QuickSetupView(discord.ui.View):
             ])
             sim_sel.callback = self._on_spam_similarity_select
             self.add_item(sim_sel)
+        elif self.feature == "automod_detect":
+            ch_sel = discord.ui.ChannelSelect(
+                placeholder="選擇通知頻道",
+                channel_types=[discord.ChannelType.text, discord.ChannelType.news],
+                min_values=1, max_values=1,
+            )
+            ch_sel.callback = self._on_automod_detect_channel
+            self.add_item(ch_sel)
 
         action_opts = [discord.SelectOption(label=l, value=v) for l, v in ACTION_PRESETS]
         action_sel = discord.ui.Select(placeholder="處置動作（選一個）", options=action_opts)
@@ -407,6 +424,7 @@ class QuickSetupView(discord.ui.View):
             "anti_raid": {"max_joins": "5", "time_window": "60"},
             "anti_spam": {"max_messages": "5", "time_window": "30", "similarity": "75"},
             "escape_punish": {"punishment": "ban", "duration": "0"},
+            "automod_detect": {},
         }
         self.config = feat_defaults.get(self.feature, {}).copy()
         self._update_components_step2(interaction.guild)
@@ -472,6 +490,11 @@ class QuickSetupView(discord.ui.View):
         await interaction.response.defer_update()
         await interaction.message.edit(embed=self._get_embed(interaction.guild), view=self)
 
+    async def _on_automod_detect_channel(self, interaction: discord.Interaction):
+        self.config["log_channel"] = str(interaction.data["values"][0])
+        await interaction.response.defer_update()
+        await interaction.message.edit(embed=self._get_embed(interaction.guild), view=self)
+
     async def _on_action_select(self, interaction: discord.Interaction):
         value = interaction.data["values"][0]
         if value == "__custom__":
@@ -483,11 +506,14 @@ class QuickSetupView(discord.ui.View):
         await interaction.message.edit(embed=self._get_embed(interaction.guild), view=self)
 
     async def _on_finish(self, interaction: discord.Interaction):
-        if self.feature not in ("scamtrap", "escape_punish", "too_many_h1", "too_many_emojis", "anti_uispam", "anti_raid", "anti_spam"):
+        if self.feature not in ("scamtrap", "escape_punish", "too_many_h1", "too_many_emojis", "anti_uispam", "anti_raid", "anti_spam", "automod_detect"):
             await interaction.response.send_message("無效的功能。", ephemeral=True)
             return
         if self.feature == "scamtrap" and "channel_id" not in self.config:
             await interaction.response.send_message("詐騙陷阱請先選擇陷阱頻道。", ephemeral=True)
+            return
+        if self.feature == "automod_detect" and "log_channel" not in self.config:
+            await interaction.response.send_message("AutoMod 偵測請先選擇通知頻道。", ephemeral=True)
             return
         if "action" not in self.config and self.feature in ("scamtrap", "too_many_h1", "too_many_emojis", "anti_uispam", "anti_raid", "anti_spam"):
             await interaction.response.send_message("請選擇處置動作。", ephemeral=True)
@@ -503,7 +529,7 @@ class QuickSetupView(discord.ui.View):
 
         feat_names = {"scamtrap": "詐騙陷阱", "escape_punish": "逃避責任懲處", "too_many_h1": "標題過多",
                       "too_many_emojis": "表情符號過多", "anti_uispam": "用戶安裝應用程式濫用",
-                      "anti_raid": "防突襲", "anti_spam": "防刷頻"}
+                      "anti_raid": "防突襲", "anti_spam": "防刷頻", "automod_detect": "AutoMod 偵測"}
         self.stop()
         await interaction.response.edit_message(
             embed=discord.Embed(title="✅ 設定完成", color=0x00ff00,
@@ -568,6 +594,7 @@ class AutoModerate(commands.GroupCog, name=app_commands.locale_str("automod")):
             app_commands.Choice(name="用戶安裝應用程式濫用", value="anti_uispam"),
             app_commands.Choice(name="防突襲（大量加入偵測）", value="anti_raid"),
             app_commands.Choice(name="防刷頻", value="anti_spam"),
+            app_commands.Choice(name="AutoMod 偵測（原生 AutoMod 觸發）", value="automod_detect"),
         ],
         enable=[
             app_commands.Choice(name="啟用", value="True"),
@@ -587,6 +614,10 @@ class AutoModerate(commands.GroupCog, name=app_commands.locale_str("automod")):
                 await interaction.followup.send(f"請注意，詐騙陷阱已啟用，但尚未設定頻道ID。請使用 {await get_command_mention('automod', 'settings')} 來設定頻道ID。", ephemeral=True)
             if "action" not in automod_settings.get("scamtrap", {}):
                 await interaction.followup.send(f"請注意，詐騙陷阱已啟用，但尚未設定動作指令。請使用 {await get_command_mention('automod', 'settings')} 來設定動作指令。", ephemeral=True)
+
+        if setting == "automod_detect" and enable == "True":
+            if "log_channel" not in automod_settings.get("automod_detect", {}):
+                await interaction.followup.send(f"請注意，AutoMod 偵測已啟用，但尚未設定通知頻道。請使用 {await get_command_mention('automod', 'settings')} 來設定 `automod_detect-log_channel`。", ephemeral=True)
 
     @app_commands.command(name=app_commands.locale_str("quick-setup"), description="互動式快速設定精靈（選單引導）")
     async def quick_setup_automod(self, interaction: discord.Interaction):
@@ -612,7 +643,7 @@ class AutoModerate(commands.GroupCog, name=app_commands.locale_str("automod")):
         setting_key = setting.split("-")[1] if len(setting.split("-")) > 1 else None
         if setting_base not in automod_settings:
             automod_settings[setting_base] = {}
-        value = parse_mention_to_id(value) if setting_key in ["channel_id"] else value
+        value = parse_mention_to_id(value) if setting_key in ["channel_id", "log_channel"] else value
         automod_settings[setting_base][setting_key] = value
         set_server_config(guild_id, "automod", automod_settings)
         await interaction.response.send_message(f"已將自動管理設定 '{setting}' 設為 {value}。")
@@ -825,6 +856,13 @@ class AutoModerate(commands.GroupCog, name=app_commands.locale_str("automod")):
             inline=False
         )
         embed.add_field(
+            name="🛡️ AutoMod 偵測 (automod_detect)",
+            value="偵測 Discord 原生 AutoMod 規則被觸發時，發送通知到指定頻道，並可選擇執行額外處置動作。\n"
+                  "設定項: `log_channel`（通知頻道）、`action`（額外處置動作，可選）\n"
+                  "過濾條件: `filter_rule`（規則名稱過濾，支援多個用 `|` 分隔）、`filter_action_type`（動作類型過濾: block/alert/timeout/block_interactions，支援多個用 `|` 分隔）",
+            inline=False
+        )
+        embed.add_field(
             name="⚙️ 動作指令語法",
             value="動作可用逗號 `,` 串接，最多5個。可用動作:\n"
                   "`delete` / `delete_dm` — 刪除訊息（可附帶警告）\n"
@@ -839,6 +877,115 @@ class AutoModerate(commands.GroupCog, name=app_commands.locale_str("automod")):
             inline=False
         )
         await interaction.response.send_message(embed=embed)
+
+    @commands.Cog.listener()
+    async def on_automod_action(self, execution: discord.AutoModAction):
+        """偵測 Discord 原生 AutoMod 規則被觸發"""
+        guild = execution.guild
+        if not guild:
+            return
+        guild_id = guild.id
+        automod_settings = get_server_config(guild_id, "automod", {})
+        if not automod_settings.get("automod_detect", {}).get("enabled", False):
+            return
+
+        log_channel_id = automod_settings["automod_detect"].get("log_channel")
+        action = automod_settings["automod_detect"].get("action")
+
+        # 取得觸發規則的用戶
+        member = guild.get_member(execution.user_id)
+        user_mention = member.mention if member else f"<@{execution.user_id}>"
+
+        # 取得規則資訊
+        rule_name = "未知規則"
+        try:
+            rule = await guild.fetch_automod_rule(execution.rule_id)
+            rule_name = rule.name
+        except Exception:
+            pass
+
+        # 觸發類型對應名稱
+        trigger_type_names = {
+            discord.AutoModRuleTriggerType.keyword: "關鍵字",
+            discord.AutoModRuleTriggerType.harmful_link: "有害連結",
+            discord.AutoModRuleTriggerType.spam: "疑似垃圾訊息",
+            discord.AutoModRuleTriggerType.keyword_preset: "預設關鍵字",
+            discord.AutoModRuleTriggerType.mention_spam: "提及濫用",
+            discord.AutoModRuleTriggerType.member_profile: "用戶個人資料",
+        }
+        trigger_type_str = trigger_type_names.get(execution.rule_trigger_type, str(execution.rule_trigger_type))
+
+        # 執行動作類型對應名稱
+        action_type_names = {
+            discord.AutoModRuleActionType.block_message: "封鎖訊息",
+            discord.AutoModRuleActionType.send_alert_message: "傳送警報",
+            discord.AutoModRuleActionType.timeout: "禁言用戶",
+            discord.AutoModRuleActionType.block_member_interactions: "封鎖成員互動",
+        }
+        executed_action_str = action_type_names.get(execution.action.type, str(execution.action.type))
+
+        # 頻道資訊
+        channel_mention = f"<#{execution.channel_id}>" if execution.channel_id else "未知頻道"
+
+        # 建立通知 embed
+        embed = discord.Embed(
+            title="🛡️ AutoMod 規則觸發",
+            color=0xED4245,
+            timestamp=datetime.now(timezone.utc),
+        )
+        embed.add_field(name="用戶", value=f"{user_mention} (ID: {execution.user_id})", inline=True)
+        embed.add_field(name="規則名稱", value=rule_name, inline=True)
+        embed.add_field(name="觸發類型", value=trigger_type_str, inline=True)
+        embed.add_field(name="執行動作", value=executed_action_str, inline=True)
+        embed.add_field(name="頻道", value=channel_mention, inline=True)
+        if execution.matched_keyword:
+            embed.add_field(name="匹配關鍵字", value=f"`{execution.matched_keyword}`", inline=True)
+        if execution.matched_content:
+            embed.add_field(name="匹配內容", value=execution.matched_content[:200], inline=False)
+        if execution.content:
+            embed.add_field(name="訊息內容", value=execution.content[:500], inline=False)
+
+        # 傳送通知到指定頻道
+        if log_channel_id:
+            log_channel = guild.get_channel(int(log_channel_id))
+            if log_channel:
+                try:
+                    await log_channel.send(embed=embed)
+                except Exception as e:
+                    log(f"無法傳送 AutoMod 偵測通知到頻道 {log_channel_id}: {e}", level=logging.ERROR, module_name="AutoModerate", guild=guild)
+
+        log(f"AutoMod 規則 '{rule_name}' 被用戶 {execution.user_id} 觸發 (類型: {trigger_type_str}, 動作: {executed_action_str})", module_name="AutoModerate", guild=guild)
+
+        # 如果有設定額外處置動作，先檢查過濾條件是否符合
+        if action and member:
+            # 規則名稱過濾
+            filter_rule = automod_settings["automod_detect"].get("filter_rule", "")
+            if filter_rule:
+                allowed_rules = [r.strip() for r in filter_rule.split("|") if r.strip()]
+                if allowed_rules and rule_name not in allowed_rules:
+                    log(f"AutoMod 偵測: 規則 '{rule_name}' 不在過濾清單 {allowed_rules} 中，跳過額外處置。", module_name="AutoModerate", guild=guild)
+                    return
+
+            # 動作類型過濾
+            filter_action_type = automod_settings["automod_detect"].get("filter_action_type", "")
+            if filter_action_type:
+                action_type_map = {
+                    "block": discord.AutoModRuleActionType.block_message,
+                    "alert": discord.AutoModRuleActionType.send_alert_message,
+                    "timeout": discord.AutoModRuleActionType.timeout,
+                    "block_interactions": discord.AutoModRuleActionType.block_member_interactions,
+                }
+                allowed_types = [t.strip() for t in filter_action_type.split("|") if t.strip()]
+                matched = any(action_type_map.get(t) == execution.action.type for t in allowed_types)
+                if allowed_types and not matched:
+                    log(f"AutoMod 偵測: 動作類型 '{executed_action_str}' 不在過濾清單 {allowed_types} 中，跳過額外處置。", module_name="AutoModerate", guild=guild)
+                    return
+
+            try:
+                result = await do_action_str(action, guild=guild, user=member)
+                log(f"AutoMod 偵測額外處置: {action}\n執行結果: {'\n'.join(result)}", module_name="AutoModerate", guild=guild)
+            except Exception as e:
+                log(f"無法對用戶 {member} 執行 AutoMod 偵測的額外處置: {e}", level=logging.ERROR, module_name="AutoModerate", guild=guild)
 
     @commands.Cog.listener()
     async def on_member_join(self, member: discord.Member):

@@ -656,6 +656,12 @@ const AUTOMOD_FEATURES = [
         { key: 'similarity', label: '相似度 (%)', type: 'number', default: '75', min: 1, max: 100 },
         { key: 'action', label: '處置動作', type: 'string', default: 'mute 10m 刷頻自動禁言, delete {user}，請勿刷頻。' },
     ]},
+    { id: 'automod_detect', label: '🛡️ AutoMod 偵測', desc: '偵測 Discord 原生 AutoMod 規則觸發，發送通知並可執行額外處置', fields: [
+        { key: 'log_channel', label: '通知頻道', type: 'channel', default: '' },
+        { key: 'action', label: '額外處置動作', type: 'string', default: '', placeholder: '可選，例: mute 10m 違規' },
+        { key: 'filter_rule', label: '規則名稱過濾', type: 'string', default: '', placeholder: '多個用 | 分隔，留空=全部' },
+        { key: 'filter_action_type', label: '動作類型過濾', type: 'string', default: '', placeholder: 'block|alert|timeout|block_interactions' },
+    ]},
 ];
 
 function buildAutomodConfigEditor(mod, s, value, channels) {
