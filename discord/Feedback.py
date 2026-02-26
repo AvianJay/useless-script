@@ -39,7 +39,7 @@ async def feedback_command(interaction: discord.Interaction):
 
             try:
                 await feedback_channel.send(embed=embed)
-                await modal_interaction.response.send_message("已成功送出，感謝您的回饋！", ephemeral=True)
+                await modal_interaction.response.send_message(f"已成功送出，感謝您的回饋！\n建議加入官方支援群來回饋或是回報問題！\n{config('support_server_invite', 'https://discord.gg/your-support-server')}", ephemeral=True)
             except Exception as e:
                 await modal_interaction.response.send_message("無法送出回饋，請稍後再試。", ephemeral=True)
     modal = FeedbackModal()
