@@ -733,7 +733,7 @@ class Moderate(commands.Cog):
     @app_commands.describe(user="選擇用戶", reason="封禁原因（可選）", duration="封禁時間（可選，預設永久）", delete_message="刪除訊息時間（可選，預設不刪除）")
     @app_commands.allowed_installs(guilds=True, users=False)
     @app_commands.default_permissions(ban_members=True)
-    async def ban_user(self, interaction: discord.Interaction, user: discord.Member, reason: str = "無", duration: str = "", delete_message: str = ""):
+    async def ban_user(self, interaction: discord.Interaction, user: Union[discord.Member, discord.User], reason: str = "無", duration: str = "", delete_message: str = ""):
         await interaction.response.defer()
         guild = interaction.guild
         if guild is None:
@@ -744,9 +744,6 @@ class Moderate(commands.Cog):
         if not guild.me.guild_permissions.ban_members:
             await interaction.followup.send("機器人沒有封鎖成員的權限，請確認機器人擁有「封鎖成員」的權限。")
             return
-
-        user_id = user.id
-        user_obj = user
 
         # 解析封禁時間（可選，若提供則記錄 unban_time）
         unban_time = None
@@ -760,13 +757,12 @@ class Moderate(commands.Cog):
         # 解析要刪除訊息的秒數
         delete_message_seconds = timestr_to_seconds(delete_message)
 
-        # 執行封禁：若有 Member 直接用 member.ban，否則用 guild.ban 與 discord.Object(id=...)
-        success = await ban_user(guild, user_obj if user_obj else discord.Object(id=user_id), reason, duration=duration_seconds if unban_time else 0, delete_message_seconds=delete_message_seconds)
+        success = await ban_user(guild, user, reason, duration=duration_seconds if unban_time else 0, delete_message_seconds=delete_message_seconds)
         if not success:
             await interaction.followup.send("封禁時發生錯誤，請確認機器人是否有足夠的權限。")
             return
 
-        mention = user_obj.mention if user_obj else f"<@{user_id}>"
+        mention = user.mention if user else f"<@{user.id}>"
         parts = [f"已將 {mention} 封禁。"]
         if reason != "無":
             parts.append(f"- 原因：{reason}")
@@ -1075,7 +1071,7 @@ class Moderate(commands.Cog):
         except Exception:
             await ctx.send("無法取得被回覆的訊息。")
             return
-        user = referenced_message.author if isinstance(referenced_message.author, discord.Member) else None
+        user = referenced_message.author
         logs = await do_action_str(commands_str, ctx.guild, user, message=referenced_message, moderator=ctx.author)
         if len(logs) == 0:
             msg = "無任何操作被執行。"
