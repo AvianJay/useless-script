@@ -7,6 +7,7 @@ from datetime import datetime, timezone
 
 
 @bot.tree.command(name="feedback", description="提供回饋給機器人開發者")
+@app_commands.checks.cooldown(1, 30, key=lambda i: i.user.id)
 async def feedback_command(interaction: discord.Interaction):
     class FeedbackModal(discord.ui.Modal, title="提供回饋給機器人開發者"):
         feedback_input = discord.ui.TextInput(
@@ -29,7 +30,7 @@ async def feedback_command(interaction: discord.Interaction):
                 return
 
             embed = discord.Embed(title="新的使用者回饋", color=discord.Color.blue())
-            embed.add_field(name="使用者ID", value=f"`{interaction.user.id}`", inline=False)  # easy to copy user id
+            embed.add_field(name="使用者ID", value=interaction.user.id, inline=False)
             embed.add_field(name="回饋內容", value=self.feedback_input.value, inline=False)
             embed.timestamp = datetime.now(timezone.utc)
             to_show_name = f"{interaction.user.display_name} ({interaction.user.name})" if interaction.user.display_name != interaction.user.name else interaction.user.name
