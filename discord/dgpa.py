@@ -105,7 +105,7 @@ def fetch_and_parse_nds(url: str = DEFAULT_URL, timeout: int = 10) -> Dict[str, 
         "User-Agent": f"YeeBot/{version}"
     }
     try:
-        resp = requests.get(url, headers=headers, timeout=timeout)
+        resp = requests.get(url, headers=headers, timeout=timeout, verify=False)
         resp.raise_for_status()
         # 適當設定 encoding（官方通常 UTF-8，但以伺服器回傳或 chardet 為準）
         if not resp.encoding or resp.encoding.lower() in ("iso-8859-1", "ascii"):
