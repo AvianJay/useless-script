@@ -524,6 +524,7 @@ translations = {
     "audio": "音訊",
     "ignore": "忽略",
     "description": "描述",
+    "direct": "直接",
 }
 class CommandNameTranslator(app_commands.Translator):
     async def translate(

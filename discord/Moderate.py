@@ -395,12 +395,12 @@ async def moderation_message_settings(interaction: Optional[discord.Interaction]
         channel_id = get_server_config(guild.id, "MODERATION_MESSAGE_CHANNEL_ID")
         if channel_id is None:
             if interaction:
-                await interaction.response.send_message("伺服器未設定公告頻道，請先設定後再嘗試。", ephemeral=True)
+                await interaction.followup.send("伺服器未設定公告頻道，請先設定後再嘗試。", ephemeral=True)
             return
         channel = guild.get_channel(channel_id)
         if channel is None:
             if interaction:
-                await interaction.response.send_message("找不到公告頻道，請確認頻道是否存在。", ephemeral=True)
+                await interaction.followup.send("找不到公告頻道，請確認頻道是否存在。", ephemeral=True)
             return
         try:
             await channel.send(await generate_message())
@@ -409,11 +409,11 @@ async def moderation_message_settings(interaction: Optional[discord.Interaction]
             log(f"已發送公告到 {channel.name} 頻道。", module_name="Moderate", guild=guild)
         except discord.Forbidden:
             if interaction:
-                await interaction.response.send_message("無法在公告頻道發送訊息，機器人缺少權限。", ephemeral=True)
+                await interaction.followup.send("無法在公告頻道發送訊息，機器人缺少權限。", ephemeral=True)
             log(f"無法在公告頻道發送訊息，機器人缺少權限。", level=logging.ERROR, module_name="Moderate", guild=guild)
         except Exception as e:
             if interaction:
-                await interaction.response.send_message(f"發送公告時發生錯誤：{e}", ephemeral=True)
+                await interaction.followup.send(f"發送公告時發生錯誤：{e}", ephemeral=True)
             log(f"發送公告時發生錯誤：{e}", level=logging.ERROR, module_name="Moderate", guild=guild)
     embed = discord.Embed(title="公告設定", color=0xff0000)
     embed.add_field(name="公告內容", value="```\n" + await generate_message() + "\n```", inline=False)
@@ -467,7 +467,7 @@ async def moderation_message_settings(interaction: Optional[discord.Interaction]
         await send_message()
     else:
         if interaction:
-            await interaction.response.send_message(embed=embed, view=MessageButtons())
+            await interaction.followup.send(embed=embed, view=MessageButtons(), ephemeral=True)
             
 
 @app_commands.guild_only()
@@ -715,18 +715,19 @@ class Moderate(commands.Cog):
 
 
     @app_commands.command(name=app_commands.locale_str("send-moderation-message"), description="手動發送懲處公告")
-    @app_commands.describe(user="選擇用戶", reason="處分原因", action="處分結果", moderator="執行管理員（可選）")
+    @app_commands.describe(user="選擇用戶", reason="處分原因", action="處分結果", moderator="執行管理員（可選）", direct="直接發送到公告頻道而不顯示設定介面")
     @app_commands.default_permissions(administrator=True)
     @app_commands.allowed_installs(guilds=True, users=False)
-    async def send_moderation_message(self, interaction: discord.Interaction, user: discord.Member, reason: str, action: str, moderator: discord.Member=None):
+    async def send_moderation_message(self, interaction: discord.Interaction, user: discord.Member, reason: str, action: str, moderator: discord.Member=None, direct: bool=False):
+        await interaction.response.defer(ephemeral=True)
         guild = interaction.guild
         if guild is None:
-            await interaction.response.send_message("此指令只能在伺服器中使用。", ephemeral=True)
+            await interaction.followup.send("此指令只能在伺服器中使用。", ephemeral=True)
             return
         if moderator is None:
             moderator = interaction.user
         actions = [{"action": "custom", "custom_action": action, "reason": reason}]
-        await moderation_message_settings(interaction, user, moderator, actions)
+        await moderation_message_settings(interaction, user, moderator, actions, direct=direct, guild=guild)
 
 
     @app_commands.command(name=app_commands.locale_str("ban"), description="封禁用戶")
@@ -737,12 +738,12 @@ class Moderate(commands.Cog):
         await interaction.response.defer()
         guild = interaction.guild
         if guild is None:
-            await interaction.followup.send("此指令只能在伺服器中使用。")
+            await interaction.followup.send("此指令只能在伺服器中使用。", ephemeral=True)
             return
         
         # check bot permissions
         if not guild.me.guild_permissions.ban_members:
-            await interaction.followup.send("機器人沒有封鎖成員的權限，請確認機器人擁有「封鎖成員」的權限。")
+            await interaction.followup.send("機器人沒有封鎖成員的權限，請確認機器人擁有「封鎖成員」的權限。", ephemeral=True)
             return
 
         # 解析封禁時間（可選，若提供則記錄 unban_time）
@@ -750,7 +751,7 @@ class Moderate(commands.Cog):
         if duration:
             duration_seconds = timestr_to_seconds(duration)
             if duration_seconds <= 0:
-                await interaction.followup.send("無效的封禁時間，請使用類似 10m、2h、3d 的格式。")
+                await interaction.followup.send("無效的封禁時間，請使用類似 10m、2h、3d 的格式。", ephemeral=True)
                 return
             unban_time = datetime.now(timezone.utc) + timedelta(seconds=duration_seconds)
 
