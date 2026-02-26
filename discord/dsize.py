@@ -9,6 +9,7 @@ from globalenv import bot, start_bot, get_user_data, set_user_data, get_all_user
 from PIL import Image, ImageDraw
 from io import BytesIO
 from logger import log
+import logging
 import os
 import json
 from typing import Union
@@ -1093,10 +1094,15 @@ async def dsize_feedgrass(interaction: discord.Interaction, user: Union[discord.
     set_user_data(0, user.id, "dsize_statistics", target_user_statistics)
     # get random users from last 25 messages
     random_users = set()
+    failed_to_get_history = False
     if interaction.is_guild_integration():
-        async for msg in interaction.channel.history(limit=25):
-            if msg.author.id != interaction.user.id and msg.author.id != user.id:
-                random_users.add(msg.author)
+        try:
+            async for msg in interaction.channel.history(limit=25):
+                if msg.author.id != interaction.user.id and msg.author.id != user.id:
+                    random_users.add(msg.author)
+        except Exception as e:
+            log(f"草飼獲取訊息時發生錯誤: {e}", level=logging.WARNING, module_name="dsize", user=interaction.user, guild=interaction.guild)
+            failed_to_get_history = True
     random_users = list(random_users)
     image_bytes = await generate_feedgrass_image(user, interaction.user, random_users)
     if interaction.user.id != user.id:
@@ -1105,9 +1111,11 @@ async def dsize_feedgrass(interaction: discord.Interaction, user: Union[discord.
         embed = discord.Embed(title=f"{interaction.user.display_name} 草飼了自己！", color=0x00ff00)
     embed.set_image(url="attachment://feed_grass.png")
     embed.timestamp = datetime.now(timezone.utc)
+    if failed_to_get_history:
+        embed.set_footer(text="無法獲取頻道歷史訊息，未能顯示其他用戶的頭像。\n請確保機器人有權限讀取頻道歷史訊息。")
     redirect_uri = config('website_url') + "/contribute-feed-grass"
     url = f"https://discord.com/oauth2/authorize?client_id={bot.application.id}&response_type=code&scope=identify&prompt=none&{urlencode({'redirect_uri': redirect_uri})}"
-    btn = discord.ui.Button(label="現正開放投稿！", url=url, emoji="🔗")
+    btn = discord.ui.Button(label="立即投稿！", url=url, emoji="🔗")
     view = discord.ui.View()
     view.add_item(btn)
     await interaction.followup.send(embed=embed, file=discord.File(image_bytes, "feed_grass.png"), view=view)
