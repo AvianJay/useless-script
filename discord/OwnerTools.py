@@ -8,6 +8,8 @@ import chat_exporter
 from logger import log
 import logging
 from typing import Union
+import time
+import asyncio
 
 def is_owner() -> Callable:
     async def predicate(ctx):
@@ -59,6 +61,38 @@ async def settings(ctx, key: str=None, value: str=None):
         await ctx.send(f"已更新 {key} 為 {str(value)}。")
 
 
+status_map = {
+    "done": "\u2713",
+    "error": "\u2717",
+    "none": "."
+}
+
+pending_ani = [
+    "|",
+    "/",
+    "-",
+    "\\"
+]
+
+
+def create_shutdowntask_message(data: list, tick: int):
+    texts = []
+    for task in data:
+        if task.get("status") == "pending":
+            pr = pending_ani[tick % len(pending_ani)]
+        else:
+            pr = status_map.get(task.get("status"), task.get("status"))
+        if task.get("time"):
+            # 0.00 
+            time_str = f"{task['time']:.2f}s"
+        else:
+            time_str = ""
+        texts.append(f"[{pr}] {task['name']} {time_str} {task.get('error', '')}")
+    
+    return f"```\n{'\n'.join(texts)}\n```"
+    
+
+
 @bot.command(aliases=["off", "exit", "q", "bye"])
 @is_owner()
 async def shutdown(ctx):
@@ -66,15 +100,33 @@ async def shutdown(ctx):
     print("Shutting down...")
     if on_close_tasks:
         print("Running on_close tasks...")
-        await ctx.send(f"正在執行關閉前任務...共 {len(on_close_tasks)} 項。")
+        msg = await ctx.send(f"正在執行關閉前任務...共 {len(on_close_tasks)} 項。")
+        tasks = []
         for task in on_close_tasks:
-            print(f"Running on_close task: {task.__name__}...")
-            await ctx.send(f"正在執行關閉前任務：{task.__name__}...")
+            tasks.append({
+                "name": task.__name__,
+                "func": task,
+                "status": "none",
+                "time": None
+            })
+        tick = 0
+        for task in tasks:
+            task["status"] = "pending"
+            start_time = time.perf_counter()
+            corotask = asyncio.create_task(task["func"]())
+            while not corotask.done():
+                end_time = time.perf_counter()
+                task["time"] = end_time - start_time
+                await msg.edit(content=f"正在執行關閉前任務...共 {len(on_close_tasks)} 項。\n{create_shutdowntask_message(tasks, tick)}")
+                tick += 1
             try:
-                await task()
+                corotask.result()
+                task["status"] = "done"
             except Exception as e:
-                print(f"Error running on_close task: {e}")
-                await ctx.send(f"關閉前任務發生錯誤：{e}")
+                task["status"] = "error"
+                task["error"] = str(e)
+                log(f"執行關閉前任務 {task['name']} 時發生錯誤: {e}", level=logging.ERROR, module_name="OwnerTools")
+            await msg.edit(content=f"正在執行關閉前任務...共 {len(on_close_tasks)} 項。\n{create_shutdowntask_message(tasks, tick)}")
     await bot.close()
 
 
