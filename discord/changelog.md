@@ -1,5 +1,27 @@
 # 更新日誌
 
+## 0.19.8
+### 更新內容如下：
+* 更新 /itemmod
+  * `/itemmod addcustom` 新增 `remove_after_use`：可設定物品使用後是否從背包移除。
+  * `/itemmod addcustom` 新增 `ephemeral_response`：可設定物品使用後的回應是否只有自己可見。
+  * `/itemmod editcustom` 現在支援編輯以上屬性。
+* 更新自動管理 | /automod
+  * 新增 `automod_detect`（AutoMod 偵測）：偵測 Discord 原生 AutoMod 觸發事件，並可執行自訂懲處或記錄至指定頻道。
+  * 快速設定精靈新增 AutoMod 偵測選項。
+  * 改進日誌記錄。
+* 更新管理功能 | /moderate
+  * `/send-moderation-message` 新增 `direct` 選項：可直接傳送至指定頻道，不顯示確認介面。
+  * 修復 ban 相關問題。
+* 更新意見回饋 | /feedback
+  * 新增回覆功能：開發者可在意見回饋訊息中直接回覆用戶，並以私訊通知。
+  * 新增支援伺服器連結。
+  * 新增冷卻時間。
+* 修復日誌系統漏洞。
+* 修復 /dsize-feedgrass 無權限的問題。
+* 把政府網站的證書驗證關掉🥀
+* 修復一些 Bug。
+
 ## 0.19.7
 ### 更新內容如下：
 * 更新 /economymod
