@@ -1660,7 +1660,6 @@ class Economy(commands.GroupCog, name="economy", description="經濟系統指令
             value=(
                 "**📉 通膨（貶值）因素：**\n"
                 "• 管理員用 `/itemmod give` 送出物品\n"
-                "• 管理員用 `/economymod give` 送出金錢\n"
                 "• 每日/每小時獎勵導致貨幣增發\n"
                 "• 賣出物品給商店（新幣進入流通）\n\n"
                 "**📈 通縮（升值）因素：**\n"
