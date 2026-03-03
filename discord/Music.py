@@ -9,6 +9,14 @@ import asyncio
 from typing import Optional
 from collections import deque
 import random
+from enum import Enum
+
+
+class LoopMode(Enum):
+    """循環播放模式"""
+    OFF = 0      # 不循環
+    TRACK = 1    # 單曲循環
+    QUEUE = 2    # 隊列循環
 
 
 class MusicQueue:
@@ -43,6 +51,8 @@ music_queues: dict[int, MusicQueue] = {}
 text_channels: dict[int, discord.TextChannel] = {}
 # 儲存自動離開的計時器任務
 leave_timers: dict[int, asyncio.Task] = {}
+# 儲存每個伺服器的循環模式
+loop_modes: dict[int, LoopMode] = {}
 
 
 def get_queue(guild_id: int) -> MusicQueue:
@@ -160,6 +170,7 @@ class Music(commands.GroupCog, group_name=app_commands.locale_str("music")):
             # 清理資源
             music_queues.pop(guild_id, None)
             text_channels.pop(guild_id, None)
+            loop_modes.pop(guild_id, None)
 
         except Exception as e:
             log(f"清理播放器時出錯: {e}", level=logging.ERROR, module_name="Music")
@@ -293,6 +304,21 @@ class Music(commands.GroupCog, group_name=app_commands.locale_str("music")):
         # 但如果是自然結束 (FINISHED)，需要播放下一首
         if "STOPPED" in reason_str:
             return
+        
+        # 取得循環模式
+        loop_mode = loop_modes.get(guild_id, LoopMode.OFF)
+        
+        # 單曲循環：重新播放同一首歌
+        if loop_mode == LoopMode.TRACK:
+            try:
+                await player.play(track)
+            except Exception as e:
+                log(f"單曲循環播放失敗: {e}", level=logging.ERROR, module_name="Music", guild=player.guild)
+            return
+        
+        # 隊列循環：將剛播完的歌加回隊列尾端
+        if loop_mode == LoopMode.QUEUE:
+            queue.add(track)
         
         # 播放下一首歌 (FINISHED 的情況)
         next_track = queue.get()
@@ -847,6 +873,49 @@ class Music(commands.GroupCog, group_name=app_commands.locale_str("music")):
             msg += f"（{failed} 首無法載入）"
         await interaction.followup.send(msg)
 
+    @app_commands.command(name=app_commands.locale_str("loop"), description="設定循環播放模式")
+    @app_commands.describe(mode="循環模式")
+    @app_commands.choices(mode=[
+        app_commands.Choice(name="關閉循環", value=0),
+        app_commands.Choice(name="單曲循環", value=1),
+        app_commands.Choice(name="隊列循環", value=2),
+    ])
+    @app_commands.guild_only()
+    @app_commands.allowed_installs(guilds=True, users=False)
+    @app_commands.allowed_contexts(guilds=True, dms=False, private_channels=False)
+    async def loop(self, interaction: discord.Interaction, mode: Optional[int] = None):
+        """設定循環播放模式"""
+        await interaction.response.defer()
+
+        error_msg = self._check_voice_channel(interaction.user, interaction.guild)
+        if error_msg:
+            await interaction.followup.send(error_msg, ephemeral=True)
+            return
+
+        player: lava_lyra.Player = interaction.guild.voice_client
+        if not player:
+            await interaction.followup.send("❌ 沒有正在播放的音樂", ephemeral=True)
+            return
+
+        guild_id = interaction.guild.id
+        current_mode = loop_modes.get(guild_id, LoopMode.OFF)
+
+        if mode is None:
+            # 沒有指定模式：循環切換 OFF -> TRACK -> QUEUE -> OFF
+            if current_mode == LoopMode.OFF:
+                new_mode = LoopMode.TRACK
+            elif current_mode == LoopMode.TRACK:
+                new_mode = LoopMode.QUEUE
+            else:
+                new_mode = LoopMode.OFF
+        else:
+            new_mode = LoopMode(mode)
+
+        loop_modes[guild_id] = new_mode
+
+        mode_display = {LoopMode.OFF: "▶️ 關閉循環", LoopMode.TRACK: "🔂 單曲循環", LoopMode.QUEUE: "🔁 隊列循環"}
+        await interaction.followup.send(mode_display[new_mode])
+
     @app_commands.command(name=app_commands.locale_str("now-playing"), description="查看當前播放的歌曲")
     @app_commands.guild_only()
     @app_commands.allowed_installs(guilds=True, users=False)
@@ -885,6 +954,10 @@ class Music(commands.GroupCog, group_name=app_commands.locale_str("music")):
         )
         
         embed.add_field(name="音量", value=f"{player.volume}%", inline=True)
+
+        loop_mode = loop_modes.get(interaction.guild.id, LoopMode.OFF)
+        mode_display = {LoopMode.OFF: "▶️ 關閉", LoopMode.TRACK: "🔂 單曲循環", LoopMode.QUEUE: "🔁 隊列循環"}
+        embed.add_field(name="循環模式", value=mode_display[loop_mode], inline=True)
         
         await interaction.followup.send(embed=embed)
     
@@ -1291,6 +1364,48 @@ class Music(commands.GroupCog, group_name=app_commands.locale_str("music")):
         embed.set_footer(text=f"隊列中共有 {len(queue)} 首歌曲")
         await ctx.send(embed=embed)
     
+    @commands.command(name="loop", aliases=["lp", "循環"])
+    @commands.guild_only()
+    async def text_loop(self, ctx: commands.Context, mode: Optional[str] = None):
+        """設定循環播放模式 (off/track/queue)"""
+        error_msg = self._check_voice_channel(ctx.author, ctx.guild)
+        if error_msg:
+            await ctx.send(error_msg)
+            return
+
+        player: lava_lyra.Player = ctx.guild.voice_client
+        if not player:
+            await ctx.send("❌ 沒有正在播放的音樂")
+            return
+
+        guild_id = ctx.guild.id
+        current_mode = loop_modes.get(guild_id, LoopMode.OFF)
+
+        mode_map = {
+            "off": LoopMode.OFF, "關閉": LoopMode.OFF, "0": LoopMode.OFF,
+            "track": LoopMode.TRACK, "single": LoopMode.TRACK, "單曲": LoopMode.TRACK, "1": LoopMode.TRACK,
+            "queue": LoopMode.QUEUE, "all": LoopMode.QUEUE, "隊列": LoopMode.QUEUE, "全部": LoopMode.QUEUE, "2": LoopMode.QUEUE,
+        }
+
+        if mode is None:
+            # 循環切換 OFF -> TRACK -> QUEUE -> OFF
+            if current_mode == LoopMode.OFF:
+                new_mode = LoopMode.TRACK
+            elif current_mode == LoopMode.TRACK:
+                new_mode = LoopMode.QUEUE
+            else:
+                new_mode = LoopMode.OFF
+        else:
+            new_mode = mode_map.get(mode.lower())
+            if new_mode is None:
+                await ctx.send("❌ 無效的循環模式，請使用 `off`、`track` 或 `queue`")
+                return
+
+        loop_modes[guild_id] = new_mode
+
+        mode_display = {LoopMode.OFF: "▶️ 關閉循環", LoopMode.TRACK: "🔂 單曲循環", LoopMode.QUEUE: "🔁 隊列循環"}
+        await ctx.send(mode_display[new_mode])
+
     @commands.command(name="nowplaying", aliases=["np", "現正播放"])
     @commands.guild_only()
     async def text_now_playing(self, ctx: commands.Context):
@@ -1325,6 +1440,10 @@ class Music(commands.GroupCog, group_name=app_commands.locale_str("music")):
         )
         
         embed.add_field(name="音量", value=f"{player.volume}%", inline=True)
+
+        loop_mode = loop_modes.get(ctx.guild.id, LoopMode.OFF)
+        mode_display = {LoopMode.OFF: "▶️ 關閉", LoopMode.TRACK: "🔂 單曲循環", LoopMode.QUEUE: "🔁 隊列循環"}
+        embed.add_field(name="循環模式", value=mode_display[loop_mode], inline=True)
         
         await ctx.send(embed=embed)
     
