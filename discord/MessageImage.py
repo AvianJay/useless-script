@@ -178,6 +178,40 @@ async def load_emojis(segments, size):
                 except Exception as e:
                     print(f"Failed to load unicode emoji {seg.content}: {e}")
 
+def _is_cjk(char):
+    """判斷字元是否為 CJK（中日韓）字元，用於逐字換行"""
+    cp = ord(char)
+    return (
+        (0x4E00 <= cp <= 0x9FFF) or    # CJK Unified Ideographs
+        (0x3400 <= cp <= 0x4DBF) or    # CJK Unified Ideographs Extension A
+        (0x20000 <= cp <= 0x2A6DF) or  # CJK Unified Ideographs Extension B
+        (0x2A700 <= cp <= 0x2B73F) or  # CJK Unified Ideographs Extension C
+        (0x2B740 <= cp <= 0x2B81F) or  # CJK Unified Ideographs Extension D
+        (0xF900 <= cp <= 0xFAFF) or    # CJK Compatibility Ideographs
+        (0x3000 <= cp <= 0x303F) or    # CJK Symbols and Punctuation
+        (0xFF00 <= cp <= 0xFFEF) or    # Halfwidth and Fullwidth Forms
+        (0x3040 <= cp <= 0x309F) or    # Hiragana
+        (0x30A0 <= cp <= 0x30FF) or    # Katakana
+        (0xAC00 <= cp <= 0xD7AF)       # Hangul Syllables
+    )
+
+def _split_text_for_wrapping(text):
+    """將文字拆分為可換行的單位：CJK 字元逐字拆分，其他按空白分割"""
+    tokens = []
+    buffer = ""
+    for char in text:
+        if _is_cjk(char):
+            if buffer:
+                # 先把累積的非 CJK 文字按空白分割加入
+                tokens.extend(re.split(r'(\s+)', buffer))
+                buffer = ""
+            tokens.append(char)
+        else:
+            buffer += char
+    if buffer:
+        tokens.extend(re.split(r'(\s+)', buffer))
+    return [t for t in tokens if t]  # 過濾空字串
+
 def layout_segments(segments, font, max_width, emoji_size, emoji_font=None):
     lines = []
     current_line = []
@@ -197,8 +231,8 @@ def layout_segments(segments, font, max_width, emoji_size, emoji_font=None):
              pass # width calculated below
 
         if seg.type == 'text':
-            # Split text logic
-            words = re.split(r'(\s+)', seg.content) 
+            # Split text logic - 使用支援 CJK 逐字換行的拆分
+            words = _split_text_for_wrapping(seg.content)
             for word in words:
                 word_w, word_h = get_text_size(word, font)
                 if current_width + word_w > max_width and current_line:
@@ -616,6 +650,24 @@ async def generate_whatisthisguytalking(message: discord.Message):
     return image_bytes
 
 
+class WhatIsThisGuyTalkingView(UpvoteView):
+    def __init__(self, original_message: discord.Message):
+        super().__init__()
+        self.original_message = original_message
+
+    @discord.ui.button(emoji="🔄", style=discord.ButtonStyle.blurple)
+    async def refresh(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await interaction.response.defer()
+        try:
+            buffer = await generate_whatisthisguytalking(self.original_message)
+            await interaction.edit_original_response(
+                attachments=[discord.File(buffer, filename="whatisthisguytalking.png")],
+                view=self
+            )
+        except Exception as e:
+            await interaction.followup.send(f"重新生成失敗: {e}", ephemeral=True)
+
+
 @bot.tree.context_menu(name="這傢伙在說什麼呢")
 @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
 @app_commands.allowed_installs(guilds=True, users=True)
@@ -624,7 +676,7 @@ async def whatisthisguytalking(interaction: discord.Interaction, message: discor
     try:
         buffer = await generate_whatisthisguytalking(message)
         # msg = f"現正開放投稿！\n-# {await get_command_mention('contribute', 'what-is-this-guy-talking-about')}"
-        await interaction.followup.send(file=discord.File(buffer, filename="whatisthisguytalking.png"), view=UpvoteView())
+        await interaction.followup.send(file=discord.File(buffer, filename="whatisthisguytalking.png"), view=WhatIsThisGuyTalkingView(message))
         log("引用圖片生成完成", module_name="MessageImage", user=interaction.user, guild=interaction.guild)
     except Exception as e:
         await interaction.followup.send(f"引用圖片生成失敗: {e}", ephemeral=True)
@@ -665,7 +717,7 @@ async def load_whatisthisguytalking_images():
 
 on_ready_tasks.append(load_whatisthisguytalking_images)
 
-@bot.command()
+@bot.command(aliases=["rwi"])
 @OwnerTools.is_owner()
 async def reload_whatisthisguytalking_images(ctx: commands.Context):
     count = await load_whatisthisguytalking_images()
