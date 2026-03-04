@@ -88,8 +88,9 @@ def create_shutdowntask_message(data: list, tick: int):
         else:
             time_str = ""
         texts.append(f"[{pr}] {task['name']} {time_str} {task.get('error', '')}")
-    
-    return f"```\n{'\n'.join(texts)}\n```"
+
+    t = '\n'.join(texts)
+    return f"```\n{t}\n```"
     
 
 
