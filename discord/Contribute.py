@@ -16,10 +16,12 @@ import uuid
 import json
 import os
 import io
+from io import BytesIO
 from urllib.parse import urlencode
 import asyncio
 import traceback
 from Economy import log_transaction, GLOBAL_CURRENCY_NAME
+from PIL import Image, ImageDraw, ImageFont
 
 def oauth_code_to_id(code, redirect_uri=None):
     url = 'https://discord.com/api/oauth2/token'
@@ -93,24 +95,179 @@ def grant_approval_global_reward_once(user_id: int, message_id: int, ctype: str)
     )
     return True, new_balance
 
+def generate_feedgrass_preview(image_bytes: bytes, json_data: dict) -> BytesIO:
+    """在背景圖上繪製標示圓圈來預覽 target/feeder/extras 的位置"""
+    image = Image.open(BytesIO(image_bytes)).convert("RGBA")
+    overlay = Image.new("RGBA", image.size, (0, 0, 0, 0))
+    draw = ImageDraw.Draw(overlay)
+
+    # 嘗試載入字型
+    try:
+        font = ImageFont.truetype("arial.ttf", 16)
+        font_small = ImageFont.truetype("arial.ttf", 12)
+    except (IOError, OSError):
+        font = ImageFont.load_default()
+        font_small = font
+
+    def draw_circle_label(pos, size, color, label):
+        x, y = pos
+        w, h = size
+        cx, cy = x + w // 2, y + h // 2
+        r = min(w, h) // 2
+        # 半透明填充圓
+        draw.ellipse((cx - r, cy - r, cx + r, cy + r), fill=(*color, 80), outline=(*color, 220), width=3)
+        # 標籤文字
+        bbox = draw.textbbox((0, 0), label, font=font)
+        tw, th = bbox[2] - bbox[0], bbox[3] - bbox[1]
+        # 文字背景
+        draw.rectangle((cx - tw // 2 - 4, cy - th // 2 - 2, cx + tw // 2 + 4, cy + th // 2 + 2), fill=(0, 0, 0, 160))
+        draw.text((cx - tw // 2, cy - th // 2), label, fill=(255, 255, 255, 255), font=font)
+
+    # 繪製 Target (被草飼人) - 綠色
+    if "target" in json_data:
+        t = json_data["target"]
+        draw_circle_label(t["position"], t["size"], (0, 200, 0), "TARGET")
+
+    # 繪製 Feeder (草飼人) - 藍色
+    if "feeder" in json_data and not json_data.get("self", False):
+        f = json_data["feeder"]
+        draw_circle_label(f["position"], f["size"], (0, 100, 255), "FEEDER")
+
+    # 繪製 Extras (旁觀者) - 黃色
+    if "extras" in json_data:
+        for i, extra in enumerate(json_data["extras"]):
+            draw_circle_label(extra["position"], extra["size"], (255, 200, 0), f"EXTRA #{i+1}")
+
+    # 如果是自己草飼自己，標示 self
+    if json_data.get("self", False):
+        draw.text((10, 10), "[SELF MODE]", fill=(255, 100, 100, 255), font=font)
+
+    image = Image.alpha_composite(image, overlay)
+    byte_io = BytesIO()
+    image.save(byte_io, "PNG")
+    byte_io.seek(0)
+    return byte_io
+
+
+class EditJsonModal(discord.ui.Modal, title="編輯 JSON 設定"):
+    json_content = discord.ui.TextInput(
+        label="JSON 內容",
+        style=discord.TextStyle.paragraph,
+        placeholder='{"target": {"position": [x, y], "size": [w, h]}, ...}',
+        required=True,
+        max_length=4000
+    )
+
+    def __init__(self, message: discord.Message):
+        super().__init__()
+        self.target_message = message
+        # 從附件取得目前的 JSON 內容
+        # 這會在按鈕回調中被設定
+        self.original_json = ""
+
+    async def on_submit(self, interaction: discord.Interaction):
+        try:
+            new_json = json.loads(self.json_content.value)
+        except json.JSONDecodeError as e:
+            await interaction.response.send_message(f"JSON 格式錯誤：{e}", ephemeral=True)
+            return
+
+        await interaction.response.defer(ephemeral=True)
+
+        # 驗證必要欄位
+        if "target" not in new_json or "position" not in new_json["target"] or "size" not in new_json["target"]:
+            await interaction.followup.send("JSON 必須包含 target.position 和 target.size", ephemeral=True)
+            return
+
+        if not new_json.get("self", False):
+            if "feeder" not in new_json or "position" not in new_json["feeder"] or "size" not in new_json["feeder"]:
+                await interaction.followup.send("非 self 模式下 JSON 必須包含 feeder.position 和 feeder.size", ephemeral=True)
+                return
+
+        try:
+            # 找到 JSON 附件並取得檔名
+            json_att = None
+            img_att = None
+            for att in self.target_message.attachments:
+                if att.filename.endswith(".json"):
+                    json_att = att
+                elif att.filename.endswith(".png") and att.filename != "preview.png":
+                    img_att = att
+
+            if not json_att:
+                await interaction.followup.send("找不到 JSON 附件", ephemeral=True)
+                return
+
+            json_filename = json_att.filename
+
+            # 保留原始的 file 欄位
+            new_json["file"] = json_filename.replace(".json", ".png")
+
+            # 建立新的 JSON File
+            json_bytes = json.dumps(new_json, indent=4, ensure_ascii=False).encode("utf-8")
+            new_json_file = discord.File(BytesIO(json_bytes), filename=json_filename)
+
+            # 重新生成預覽圖
+            files_to_send = [new_json_file]
+            if img_att:
+                img_data = await img_att.read()
+                preview_bytes = generate_feedgrass_preview(img_data, new_json)
+                preview_file = discord.File(preview_bytes, filename="preview.png")
+                files_to_send.append(preview_file)
+                # 同時重新附加原圖
+                files_to_send.insert(0, discord.File(BytesIO(img_data), filename=img_att.filename))
+
+            # 更新 embed 預覽圖
+            embed = self.target_message.embeds[0]
+            embed.set_image(url="attachment://preview.png")
+
+            # 更新 NSFW 欄位
+            for i, field in enumerate(embed.fields):
+                if field.name == "NSFW":
+                    embed.set_field_at(i, name="NSFW", value=str(new_json.get("nsfw", False)))
+                    break
+
+            await self.target_message.edit(embed=embed, attachments=files_to_send)
+            await interaction.followup.send("JSON 已更新！預覽已重新生成。", ephemeral=True)
+
+        except Exception as e:
+            await interaction.followup.send(f"更新失敗：{e}", ephemeral=True)
+            traceback.print_exc()
+
+
 class ContributionView(discord.ui.View):
     def __init__(self, ctype, audio_filename=None):
         super().__init__(timeout=None)
         self.ctype = ctype
         self.audio_filename = audio_filename  # 用於 dynamic_voice_audio
+        # 只有 feedgrass 類型才加上編輯 JSON 按鈕
+        if ctype == "feedgrass":
+            edit_btn = discord.ui.Button(
+                label="編輯 JSON",
+                style=discord.ButtonStyle.grey,
+                custom_id="contribution_edit_json",
+                emoji="📝"
+            )
+            edit_btn.callback = self.edit_json
+            self.add_item(edit_btn)
 
     @discord.ui.button(label="同意", style=discord.ButtonStyle.green, custom_id="contribution_approve")
     async def approve(self, interaction: discord.Interaction, button: discord.ui.Button):
         await interaction.response.defer()
         try:
             if self.ctype == "feedgrass":
-                # Attachment 0: Image, Attachment 1: JSON
-                if len(interaction.message.attachments) < 2:
+                # Find image and JSON attachments by extension
+                img_att = None
+                json_att = None
+                for att in interaction.message.attachments:
+                    if att.filename.endswith(".json"):
+                        json_att = att
+                    elif att.filename.endswith(".png") and att.filename != "preview.png":
+                        img_att = att
+                
+                if not img_att or not json_att:
                     await interaction.followup.send("錯誤：找不到附件。", ephemeral=True)
                     return
-                
-                img_att = interaction.message.attachments[0]
-                json_att = interaction.message.attachments[1]
                 
                 # Verify dirs
                 if not os.path.exists("dsize-feedgrass-images"):
@@ -267,6 +424,33 @@ class ContributionView(discord.ui.View):
             traceback.print_exc()
             log(f"Contribution Approve Error: {e}", module_name="Contribute", level=logging.ERROR)
 
+    async def edit_json(self, interaction: discord.Interaction):
+        """開啟編輯 JSON 的 Modal"""
+        try:
+            # 找到 JSON 附件
+            json_att = None
+            for att in interaction.message.attachments:
+                if att.filename.endswith(".json"):
+                    json_att = att
+                    break
+
+            if not json_att:
+                await interaction.response.send_message("找不到 JSON 附件", ephemeral=True)
+                return
+
+            # 讀取目前 JSON 內容
+            json_data = await json_att.read()
+            json_str = json_data.decode("utf-8")
+
+            # 建立 Modal
+            modal = EditJsonModal(interaction.message)
+            modal.json_content.default = json_str
+            await interaction.response.send_modal(modal)
+
+        except Exception as e:
+            await interaction.response.send_message(f"開啟編輯器失敗：{e}", ephemeral=True)
+            traceback.print_exc()
+
     @discord.ui.button(label="拒絕", style=discord.ButtonStyle.red, custom_id="contribution_reject")
     async def reject(self, interaction: discord.Interaction, button: discord.ui.Button):
         embed = interaction.message.embeds[0]
@@ -349,6 +533,11 @@ def contribute_feed_grass():
                 embed.add_field(name="NSFW", value=str(json_payload.get("nsfw", False)))
                 embed.timestamp = datetime.now(timezone.utc)
                 
+                # Generate preview image with position markers
+                preview_bytes = generate_feedgrass_preview(file_data, json_payload)
+                preview_file = discord.File(preview_bytes, filename="preview.png")
+                embed.set_image(url="attachment://preview.png")
+                
                 # Create files
                 img_file = discord.File(io.BytesIO(file_data), filename=img_filename)
                 
@@ -356,7 +545,7 @@ def contribute_feed_grass():
                 json_file = discord.File(io.BytesIO(json_bytes), filename=json_filename)
                 
                 view = ContributionView("feedgrass")
-                await channel.send(embed=embed, files=[img_file, json_file], view=view)
+                await channel.send(embed=embed, files=[img_file, json_file, preview_file], view=view)
 
             bot.loop.create_task(send_contribution())
             contribution_cooldowns[user_id] = time.time()
