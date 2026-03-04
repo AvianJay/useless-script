@@ -525,6 +525,7 @@ translations = {
     "ignore": "忽略",
     "description": "描述",
     "direct": "直接",
+    "adminitems": "管理員物品",
 }
 class CommandNameTranslator(app_commands.Translator):
     async def translate(
