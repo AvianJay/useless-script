@@ -225,8 +225,11 @@ class DynamicVoice(commands.GroupCog, name=app_commands.locale_str("dynamic-voic
             
             # Move the user to the new channel
             if play_audio_enabled:
-                voice_client = discord.utils.get(self.bot.voice_clients, guild=member.guild)
-                if not voice_client or not voice_client.is_connected:  # skip if playing music
+                existing_voice_client = member.guild.voice_client
+                if existing_voice_client:
+                    # 已有語音連線（例如音樂播放器），跳過播放進入音效
+                    log(f"已有語音連線，跳過播放進入音效", module_name="DynamicVoice", guild=member.guild)
+                else:
                     try:
                         self.playing_voice_guilds.add(guild_id)
                         vp = await after.channel.connect()
