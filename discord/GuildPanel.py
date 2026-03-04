@@ -142,7 +142,7 @@ def _require_guild(f):
 def panel_login():
     if _current_user():
         return redirect(url_for("panel_index"))
-    return render_template("panel_login.html", bot=bot)
+    return render_template("panel_login.html", bot=bot, gtag=config("website_gtag", ""))
 
 
 @app.route("/panel/auth")
@@ -205,7 +205,7 @@ def panel_index():
                     "member_count": bg.member_count,
                     "icon_url": str(bg.icon.url) if bg.icon else None,
                 })
-    return render_template("panel.html", bot=bot, user=user, guilds=manageable)
+    return render_template("panel.html", bot=bot, user=user, guilds=manageable, gtag=config("website_gtag", ""))
 
 
 @app.route("/panel/guild/<guild_id>")
@@ -239,6 +239,7 @@ def panel_guild_page(guild_id):
         user=user,
         guild=bg,
         settings_json=json.dumps(safe_settings, ensure_ascii=False),
+        gtag=config("website_gtag", ""),
     )
 
 
