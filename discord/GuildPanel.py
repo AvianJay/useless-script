@@ -733,11 +733,9 @@ _register_all()
 class GuildPanel(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
-    
-    @app_commands.guild_only()
-    @app_commands.default_permissions(manage_guild=True)
-    @app_commands.allowed_installs(guilds=True, users=False)
-    @app_commands.allowed_contexts(guilds=True, dms=False, private_channels=False)
+
+    @app_commands.allowed_installs(guilds=True, users=True)
+    @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
     @app_commands.command(name="panel", description="打開伺服器面板")
     async def panel(self, interaction: discord.Interaction):
         button = discord.ui.Button(label="打開面板", style=discord.ButtonStyle.link, url=_get_oauth2_url())
