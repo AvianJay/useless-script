@@ -1,0 +1,801 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ bot.user.name }} | 使用文檔</title>
+    <meta name="description" content="{{ bot.user.name }} Discord 機器人完整使用文檔與指令說明。">
+    <!-- Open Graph / Discord Embed -->
+    <meta property="og:type" content="website">
+    <meta property="og:title" content="{{ bot.user.name }} | 使用文檔">
+    <meta property="og:description" content="{{ bot.user.name }} 機器人完整使用文檔 — 40+ 模組的指令說明與功能介紹。">
+    <meta property="og:url" content="{{ website_url }}/docs">
+    <meta property="og:image" content="{{ avatar_url }}">
+    <meta property="og:site_name" content="{{ bot.user.name }}">
+    <meta name="theme-color" content="#5865F2">
+    <!-- Twitter Card -->
+    <meta name="twitter:card" content="summary">
+    <meta name="twitter:title" content="{{ bot.user.name }} | 使用文檔">
+    <meta name="twitter:description" content="完整的指令與功能說明，涵蓋所有模組。">
+    <meta name="twitter:image" content="{{ avatar_url }}">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <script async src="https://www.googletagmanager.com/gtag/js?id={{ gtag }}"></script>
+    <script>
+        window.dataLayer = window.dataLayer || [];
+        function gtag() { dataLayer.push(arguments); }
+        gtag('js', new Date());
+        gtag('config', '{{ gtag }}');
+    </script>
+    <style>
+        .docs-hero {
+            text-align: center;
+            padding: 3rem 1rem 2rem;
+            background: linear-gradient(180deg, var(--bg-secondary) 0%, var(--bg-primary) 100%);
+        }
+        .docs-hero h1 { font-size: 2.2rem; margin-bottom: 0.5rem; }
+        .docs-hero p { color: var(--text-secondary); font-size: 1.1rem; }
+
+        .docs-layout {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 2rem;
+            display: flex;
+            gap: 2rem;
+        }
+
+        /* Sidebar */
+        .docs-sidebar {
+            width: 260px;
+            flex-shrink: 0;
+            position: sticky;
+            top: 1rem;
+            align-self: flex-start;
+            max-height: calc(100vh - 2rem);
+            overflow-y: auto;
+            background: var(--bg-secondary);
+            border-radius: 10px;
+            padding: 1.5rem;
+        }
+        .docs-sidebar h3 {
+            font-size: 0.8rem;
+            text-transform: uppercase;
+            letter-spacing: 1.5px;
+            color: var(--text-secondary);
+            margin-bottom: 0.75rem;
+            margin-top: 1.25rem;
+        }
+        .docs-sidebar h3:first-child { margin-top: 0; }
+        .docs-sidebar a {
+            display: block;
+            color: var(--text-secondary);
+            text-decoration: none;
+            padding: 0.3rem 0.5rem;
+            border-radius: 4px;
+            font-size: 0.9rem;
+            transition: all 0.2s;
+        }
+        .docs-sidebar a:hover, .docs-sidebar a.active {
+            color: var(--text-primary);
+            background: rgba(88, 101, 242, 0.15);
+        }
+
+        /* Main content */
+        .docs-content {
+            flex: 1;
+            min-width: 0;
+        }
+
+        .doc-section {
+            background: var(--bg-secondary);
+            border-radius: 10px;
+            padding: 2rem;
+            margin-bottom: 2rem;
+        }
+        .doc-section h2 {
+            font-size: 1.5rem;
+            margin-bottom: 0.5rem;
+            color: var(--text-primary);
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        .doc-section h2 .module-icon {
+            font-size: 1.3rem;
+        }
+        .doc-section .module-desc {
+            color: var(--text-secondary);
+            margin-bottom: 1.25rem;
+            line-height: 1.7;
+        }
+
+        .cmd-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 0.75rem;
+        }
+        .cmd-table th {
+            text-align: left;
+            padding: 0.6rem 0.75rem;
+            background: rgba(88, 101, 242, 0.12);
+            color: var(--accent);
+            font-size: 0.85rem;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            border-radius: 4px;
+        }
+        .cmd-table td {
+            padding: 0.6rem 0.75rem;
+            border-bottom: 1px solid rgba(255,255,255,0.05);
+            font-size: 0.92rem;
+            color: var(--text-secondary);
+        }
+        .cmd-table tr:last-child td {
+            border-bottom: none;
+        }
+        .cmd-table code {
+            background: rgba(88, 101, 242, 0.15);
+            color: var(--accent);
+            padding: 0.15rem 0.45rem;
+            border-radius: 4px;
+            font-family: 'Consolas', 'Monaco', monospace;
+            font-size: 0.88rem;
+        }
+
+        .doc-note {
+            background: rgba(88, 101, 242, 0.08);
+            border-left: 3px solid var(--accent);
+            padding: 0.75rem 1rem;
+            border-radius: 0 6px 6px 0;
+            margin-top: 1rem;
+            font-size: 0.9rem;
+            color: var(--text-secondary);
+        }
+        .doc-note strong { color: var(--accent); }
+
+        .doc-tag {
+            display: inline-block;
+            padding: 0.15rem 0.5rem;
+            border-radius: 10px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            margin-left: 0.5rem;
+            vertical-align: middle;
+        }
+        .doc-tag.admin { background: #ed4245; color: #fff; }
+        .doc-tag.owner { background: #faa61a; color: #23272a; }
+        .doc-tag.fun { background: #57f287; color: #23272a; }
+        .doc-tag.auto { background: #5865f2; color: #fff; }
+
+        .back-to-top {
+            position: fixed;
+            bottom: 2rem;
+            right: 2rem;
+            background: var(--accent);
+            color: #fff;
+            width: 44px;
+            height: 44px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            text-decoration: none;
+            font-size: 1.2rem;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+            opacity: 0;
+            transition: opacity 0.3s;
+            z-index: 100;
+        }
+        .back-to-top.visible { opacity: 1; }
+
+        @media (max-width: 900px) {
+            .docs-layout {
+                flex-direction: column;
+            }
+            .docs-sidebar {
+                width: 100%;
+                position: static;
+                max-height: none;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <nav class="navbar">
+        <a href="/" class="navbar-brand">
+            <img id="nav-avatar" src="" alt="Logo"
+                style="width: 30px; height: 30px; border-radius: 50%; display: none;">
+            <span id="nav-name">{{ bot.user.name }}</span>
+        </a>
+        <div class="nav-links">
+            <a href="/">首頁</a>
+            <a href="/docs">使用文檔</a>
+            <a href="/panel/">伺服器面板</a>
+            <a href="/contribute-feed-grass">投稿草飼圖</a>
+            <a href="/privacy-policy">隱私政策</a>
+            <a href="/terms-of-service">使用條款</a>
+        </div>
+    </nav>
+
+    <section class="docs-hero" id="top">
+        <h1>📖 使用文檔</h1>
+        <p>完整的指令與功能說明，幫助你充分發揮機器人的潛力</p>
+    </section>
+
+    <div class="docs-layout">
+        <!-- Sidebar Navigation -->
+        <aside class="docs-sidebar">
+            <h3>快速開始</h3>
+            <a href="#getting-started">🚀 快速入門</a>
+            <a href="#prefix">⌨️ 指令前綴</a>
+
+            <h3>🛡️ 管理與安全</h3>
+            <a href="#Moderate">管理工具</a>
+            <a href="#AutoModerate">自動管理</a>
+            <a href="#ReportSystem">檢舉系統</a>
+            <a href="#ModerationNotify">懲處通知</a>
+            <a href="#ServerWebVerify">網頁驗證</a>
+            <a href="#StickyRole">黏性身份組</a>
+
+            <h3>🎮 娛樂與遊戲</h3>
+            <a href="#MiniGames">迷你遊戲</a>
+            <a href="#dsize">趣味尺寸</a>
+            <a href="#doomcord">DOOM</a>
+            <a href="#aki">Akinator</a>
+            <a href="#petpet">PetPet</a>
+            <a href="#OwOify">OwOify</a>
+
+            <h3>💰 經濟與物品</h3>
+            <a href="#Economy">經濟系統</a>
+            <a href="#ItemSystem">物品系統</a>
+
+            <h3>🎵 媒體</h3>
+            <a href="#Music">音樂播放</a>
+            <a href="#MessageImage">訊息截圖</a>
+
+            <h3>🤖 AI 與聊天</h3>
+            <a href="#ai">AI 聊天</a>
+            <a href="#AutoReply">自動回覆</a>
+
+            <h3>🔧 工具與自動化</h3>
+            <a href="#UtilCommands">實用指令</a>
+            <a href="#AutoPublish">自動發布</a>
+            <a href="#DynamicVoice">動態語音</a>
+            <a href="#CustomPrefix">自定義前綴</a>
+            <a href="#FakeUser">假冒用戶</a>
+            <a href="#Contribute">投稿系統</a>
+            <a href="#Feedback">意見回饋</a>
+            <a href="#Statistics">指令統計</a>
+            <a href="#JoinNotify">加入通知</a>
+
+            <h3>🌐 資訊服務</h3>
+            <a href="#twbus">公車 / YouBike</a>
+            <a href="#OXWU">地震監測</a>
+            <a href="#dgpa">停班停課</a>
+            <!-- <a href="#Explore">太空探索</a> -->
+
+            <h3>⚙️ 系統</h3>
+            <a href="#GuildPanel">網頁面板</a>
+            <a href="#r34">R34 搜尋</a>
+        </aside>
+
+        <!-- Main Documentation Content -->
+        <main class="docs-content">
+
+            <!-- Getting Started -->
+            <div class="doc-section" id="getting-started">
+                <h2>🚀 快速入門</h2>
+                <div class="module-desc">
+                    歡迎使用本機器人！只需幾個簡單步驟即可開始：
+                    <ol style="margin-top: 0.75rem; padding-left: 1.25rem; line-height: 2;">
+                        <li>點擊首頁的 <strong>「邀請機器人」</strong> 按鈕將機器人加入你的伺服器</li>
+                        <li>機器人加入後，使用 <code>/help</code> 查看所有可用指令</li>
+                        <li>使用 <code>/tutorial</code> 查看互動式教學指南</li>
+                        <li>前往 <a href="/panel/" style="color: var(--accent);">伺服器面板</a> 進行進階設定</li>
+                    </ol>
+                </div>
+                <div class="doc-note">
+                    <strong>提示：</strong>本機器人同時支援斜線指令 (<code>/command</code>) 和傳統前綴指令 (<code>a!command</code>)。建議優先使用斜線指令以獲得最佳體驗。
+                </div>
+            </div>
+
+            <div class="doc-section" id="prefix">
+                <h2>⌨️ 指令前綴</h2>
+                <div class="module-desc">
+                    預設前綴為 <code>a!</code>，但部分指令使用 <code>y!</code> 前綴。每個伺服器可以透過 <code>y!setprefix</code> 設定自定義前綴。你也可以透過 <strong>@提及機器人</strong> 來查看目前的前綴設定。
+                </div>
+            </div>
+
+            <!-- ==================== 管理與安全 ==================== -->
+
+            <div class="doc-section" id="Moderate">
+                <h2><span class="module-icon">🛡️</span> Moderate — 管理工具 <span class="doc-tag admin">管理員</span></h2>
+                <div class="module-desc">
+                    核心管理模組，提供完整的使用者管理工具。支援時間字串解析（如 <code>1h</code>、<code>30m</code>、<code>7d</code>），並可一次對多位使用者執行操作。所有懲處動作會自動整合通知系統。
+                </div>
+                <table class="cmd-table">
+                    <tr><th>指令</th><th>說明</th></tr>
+                    <tr><td><code>/moderate</code></td><td>開啟管理選單，可選擇踢出、封禁、禁言、黑名單等動作</td></tr>
+                    <tr><td><code>y!moderate</code></td><td>傳統前綴版管理指令</td></tr>
+                    <tr><td><code>/action-builder</code></td><td>建立自訂的管理動作組合</td></tr>
+                    <tr><td><code>/send-moderation-message</code></td><td>手動發送懲處公告</td></tr>
+                </table>
+                <div class="doc-note">
+                    <strong>時間格式：</strong>支援 <code>1d</code> (天)、<code>2h</code> (小時)、<code>30m</code> (分鐘)、<code>10s</code> (秒)，可組合使用如 <code>1d12h</code>。
+                </div>
+            </div>
+
+            <div class="doc-section" id="AutoModerate">
+                <h2><span class="module-icon">🤖</span> AutoModerate — 自動管理 <span class="doc-tag admin">管理員</span><span class="doc-tag auto">自動化</span></h2>
+                <div class="module-desc">
+                    全自動化的伺服器保護系統，包含反垃圾訊息 (Anti-Spam)、反突襲 (Anti-Raid)、反使用者安裝垃圾訊息、詐騙陷阱、過多表情偵測、逃避懲處偵測等多種自動化管理功能。
+                </div>
+                <table class="cmd-table">
+                    <tr><th>指令</th><th>說明</th></tr>
+                    <tr><td><code>/automod quick-setup</code></td><td>快速設定自動管理規則</td></tr>
+                </table>
+                <div class="doc-note">
+                    <strong>功能清單：</strong>Anti-Spam、Anti-Raid、Anti-UISpam、ScamTrap、過多表情偵測、逃避懲處偵測、AutoMod 事件整合。可透過 <a href="/panel/" style="color: var(--accent);">網頁面板</a> 進行詳細配置。
+                </div>
+            </div>
+
+            <div class="doc-section" id="ReportSystem">
+                <h2><span class="module-icon">🚨</span> ReportSystem — 檢舉系統</h2>
+                <div class="module-desc">
+                    使用者可檢舉違規訊息，系統會透過 AI 自動判斷訊息嚴重程度（0-5 級），並依據伺服器規則建議處分動作。內建冷卻時間防止濫用。
+                </div>
+                <table class="cmd-table">
+                    <tr><th>指令</th><th>說明</th></tr>
+                    <tr><td><code>/report</code></td><td>檢舉指定訊息或使用者</td></tr>
+                </table>
+            </div>
+
+            <div class="doc-section" id="ModerationNotify">
+                <h2><span class="module-icon">📬</span> ModerationNotify — 懲處通知</h2>
+                <div class="module-desc">
+                    當使用者被踢出、封禁、禁言或列入黑名單時，自動發送通知並提供申訴管道。管理員可透過按鈕直接回覆申訴。
+                </div>
+                <table class="cmd-table">
+                    <tr><th>指令</th><th>說明</th></tr>
+                    <tr><td><code>/user-appeal-channel</code></td><td>設定申訴接收頻道</td></tr>
+                    <tr><td><code>/user-appeal-blacklist</code></td><td>管理申訴黑名單</td></tr>
+                </table>
+            </div>
+
+            <div class="doc-section" id="ServerWebVerify">
+                <h2><span class="module-icon">✅</span> ServerWebVerify — 網頁驗證 <span class="doc-tag admin">管理員</span></h2>
+                <div class="module-desc">
+                    透過網頁表單進行伺服器成員驗證，支援 reCAPTCHA 與 Cloudflare Turnstile、指紋偵測、IP 記錄、地區警示等安全機制。可強制要求新成員驗證，有效防止機器人帳號入侵。
+                </div>
+                <table class="cmd-table">
+                    <tr><th>指令</th><th>說明</th></tr>
+                    <tr><td><code>/webverify</code></td><td>設定網頁驗證功能</td></tr>
+                    <tr><td><code>/webverify force-verify</code></td><td>強制指定使用者進行驗證</td></tr>
+                    <tr><td><code>/webverify manual-verify</code></td><td>手動通過使用者的驗證</td></tr>
+                </table>
+            </div>
+
+            <div class="doc-section" id="StickyRole">
+                <h2><span class="module-icon">📌</span> StickyRole — 黏黏的身份組 <span class="doc-tag admin">管理員</span></h2>
+                <div class="module-desc">
+                    當使用者離開伺服器後重新加入時，自動恢復先前擁有的指定身份組。適合用於記住成員驗證狀態或特殊角色。
+                </div>
+                <table class="cmd-table">
+                    <tr><th>指令</th><th>說明</th></tr>
+                    <tr><td><code>/stickyrole toggle</code></td><td>開啟或關閉黏性身份組功能</td></tr>
+                    <tr><td><code>/stickyrole add</code></td><td>新增身份組到黏性清單</td></tr>
+                    <tr><td><code>/stickyrole remove</code></td><td>從黏性清單移除身份組</td></tr>
+                </table>
+            </div>
+
+            <!-- ==================== 娛樂與遊戲 ==================== -->
+
+            <div class="doc-section" id="MiniGames">
+                <h2><span class="module-icon">🃏</span> MiniGames — 迷你遊戲 <span class="doc-tag fun">娛樂</span></h2>
+                <div class="module-desc">
+                    集合多種卡牌與賭博遊戲，整合經濟系統進行下注。包含完整的撲克牌邏輯與花色點數系統。
+                </div>
+                <table class="cmd-table">
+                    <tr><th>指令</th><th>說明</th></tr>
+                    <tr><td><code>/games big2</code></td><td>大老二 — 經典撲克牌遊戲</td></tr>
+                    <tr><td><code>/games tower</code></td><td>爬塔 — 賭博挑戰遊戲</td></tr>
+                </table>
+            </div>
+
+            <div class="doc-section" id="dsize">
+                <h2><span class="module-icon">📏</span> dsize — 趣味尺寸 <span class="doc-tag fun">娛樂</span></h2>
+                <div class="module-desc">
+                    趣味「尺寸」系統，包含每日簽到、尺寸對決、餵草等娛樂功能，支援全域與伺服器範圍，結合經濟系統獎勵。
+                </div>
+                <table class="cmd-table">
+                    <tr><th>指令</th><th>說明</th></tr>
+                    <tr><td><code>/dsize</code></td><td>查看你的尺寸</td></tr>
+                    <tr><td><code>/dsize-battle</code></td><td>與其他使用者進行尺寸對決</td></tr>
+                    <tr><td><code>/dsize-feedgrass</code></td><td>餵草互動</td></tr>
+                </table>
+            </div>
+
+            <div class="doc-section" id="doomcord">
+                <h2><span class="module-icon">👹</span> doomcord — 在 Discord 玩 DOOM <span class="doc-tag fun">娛樂</span></h2>
+                <div class="module-desc">
+                    直接在 Discord 內玩經典 DOOM 遊戲！透過按鈕控制 WASD 移動與操作，支援存檔與讀檔。
+                </div>
+                <table class="cmd-table">
+                    <tr><th>指令</th><th>說明</th></tr>
+                    <tr><td><code>/doom</code></td><td>開啟 DOOM 遊戲</td></tr>
+                </table>
+            </div>
+
+            <div class="doc-section" id="aki">
+                <h2><span class="module-icon">🧞</span> aki — Akinator 猜謎 <span class="doc-tag fun">娛樂</span></h2>
+                <div class="module-desc">
+                    與 Akinator 精靈互動，心裡想一個角色，然後回答問題讓它猜出來！支援會話管理，5 分鐘無操作自動結束，內建 1 分鐘冷卻。
+                </div>
+                <table class="cmd-table">
+                    <tr><th>指令</th><th>說明</th></tr>
+                    <tr><td><code>/aki</code></td><td>開始 Akinator 猜謎遊戲</td></tr>
+                </table>
+            </div>
+
+            <div class="doc-section" id="petpet">
+                <h2><span class="module-icon">🐾</span> petpet — PetPet 動圖 <span class="doc-tag fun">娛樂</span></h2>
+                <div class="module-desc">
+                    將任何使用者的頭像生成撫摸動畫 GIF！支援斜線指令和右鍵選單操作，並記錄撫摸與被撫摸次數。
+                </div>
+                <table class="cmd-table">
+                    <tr><th>指令</th><th>說明</th></tr>
+                    <tr><td><code>/petpet</code></td><td>生成指定使用者的 PetPet 動圖</td></tr>
+                    <tr><td>右鍵 → 應用程式 → <code>PetPet</code></td><td>對使用者直接使用右鍵選單</td></tr>
+                </table>
+            </div>
+
+            <div class="doc-section" id="OwOify">
+                <h2><span class="module-icon">✨</span> OwOify — 可愛化文字 <span class="doc-tag fun">娛樂</span></h2>
+                <div class="module-desc">
+                    OwO UwU
+                </div>
+                <table class="cmd-table">
+                    <tr><th>指令</th><th>說明</th></tr>
+                    <tr><td><code>/owoify</code></td><td>可愛化你輸入的文字</td></tr>
+                    <tr><td><code>y!owoify [文字]</code></td><td>前綴版可愛化指令</td></tr>
+                    <tr><td>右鍵 → 應用程式 → 選單</td><td>可愛化指定訊息</td></tr>
+                </table>
+            </div>
+
+            <!-- ==================== 經濟與物品 ==================== -->
+
+            <div class="doc-section" id="Economy">
+                <h2><span class="module-icon">💰</span> Economy — 經濟系統</h2>
+                <div class="module-desc">
+                    完整的雙幣制虛擬經濟系統。全域幣可跨伺服器使用，伺服幣僅限當前伺服器。包含每日/每小時獎勵、商店買賣、轉帳、匯率機制、通膨/通縮模型、支票系統等。
+                </div>
+                <table class="cmd-table">
+                    <tr><th>指令</th><th>說明</th></tr>
+                    <tr><td><code>/economy daily</code></td><td>領取每日獎勵</td></tr>
+                    <tr><td><code>/economy hourly</code></td><td>領取每小時獎勵</td></tr>
+                    <tr><td><code>/economy balance</code></td><td>查看餘額</td></tr>
+                    <tr><td><code>/economy buy</code></td><td>購買商店物品</td></tr>
+                    <tr><td><code>/economy sell</code></td><td>出售物品</td></tr>
+                    <tr><td><code>/economy trade</code></td><td>與其他使用者交易/轉帳</td></tr>
+                    <tr><td><code>/economy history</code></td><td>查看交易紀錄</td></tr>
+                    <tr><td><code>/economymod</code></td><td>管理員經濟管理工具</td></tr>
+                </table>
+                <div class="doc-note">
+                    <strong>防濫用機制：</strong>系統會追蹤管理員注入的貨幣並設有上限控制，確保經濟平衡。
+                </div>
+            </div>
+
+            <div class="doc-section" id="ItemSystem">
+                <h2><span class="module-icon">🎒</span> ItemSystem — 物品系統 <span class="doc-tag admin">管理員</span></h2>
+                <div class="module-desc">
+                    管理虛擬物品的建立、給予、移除與使用。每個伺服器可建立自定義物品，物品使用時可觸發特定功能（回呼機制）。
+                </div>
+                <table class="cmd-table">
+                    <tr><th>指令</th><th>說明</th></tr>
+                    <tr><td><code>/item use</code></td><td>使用你擁有的物品</td></tr>
+                    <tr><td><code>/itemmod addcustom</code></td><td>建立自定義物品</td></tr>
+                    <tr><td><code>/itemmod give</code></td><td>給予使用者物品</td></tr>
+                    <tr><td><code>/itemmod editcustom</code></td><td>編輯自定義物品</td></tr>
+                </table>
+            </div>
+
+            <!-- ==================== 媒體 ==================== -->
+
+            <div class="doc-section" id="Music">
+                <h2><span class="module-icon">🎵</span> Music — 音樂播放</h2>
+                <div class="module-desc">
+                    透過 Lavalink 節點高品質播放音樂，支援隊列管理、循環播放（單曲/隊列）、隨機播放、搜尋自動完成、推薦歌曲、斷線自動離開、隊列儲存/恢復等功能，並支援多節點備援。
+                </div>
+                <table class="cmd-table">
+                    <tr><th>指令</th><th>說明</th></tr>
+                    <tr><td><code>/music play</code></td><td>播放音樂（支援 URL 或關鍵字搜尋）</td></tr>
+                    <tr><td><code>/music search</code></td><td>搜尋音樂</td></tr>
+                    <tr><td><code>/music skip</code></td><td>跳過當前曲目</td></tr>
+                    <tr><td><code>/music shuffle</code></td><td>隨機播放隊列</td></tr>
+                    <tr><td><code>/music loop</code></td><td>切換循環模式（單曲/隊列/關閉）</td></tr>
+                    <tr><td><code>/music recommend</code></td><td>獲取推薦歌曲</td></tr>
+                    <tr><td><code>/music restore-queue</code></td><td>恢復之前的隊列</td></tr>
+                    <tr><td><code>/music nodes</code></td><td>查看可用的 Lavalink 節點</td></tr>
+                </table>
+            </div>
+
+            <div class="doc-section" id="MessageImage">
+                <h2><span class="module-icon">📸</span> MessageImage — 訊息截圖</h2>
+                <div class="module-desc">
+                    將 Discord 訊息轉換為一些奇怪的圖片(?)。支援 Upvoteboard 功能：當訊息獲得足夠讚數後，自動截圖並發送至指定頻道保存精華。
+                </div>
+                <table class="cmd-table">
+                    <tr><th>指令</th><th>說明</th></tr>
+                    <tr><td><code>/upvoteboard</code></td><td>設定 Upvoteboard 頻道</td></tr>
+                </table>
+            </div>
+
+            <!-- ==================== AI 與聊天 ==================== -->
+
+            <div class="doc-section" id="ai">
+                <h2><span class="module-icon">🤖</span> ai — AI 聊天</h2>
+                <div class="module-desc">
+                    使用免費 AI 模型進行智能對話，支援多輪對話上下文記憶。
+                </div>
+                <table class="cmd-table">
+                    <tr><th>指令</th><th>說明</th></tr>
+                    <tr><td><code>/ai</code></td><td>與 AI 進行對話</td></tr>
+                    <tr><td><code>y!ai [訊息]</code></td><td>前綴版 AI 對話</td></tr>
+                    <tr><td><code>y!ai-new</code></td><td>開啟新的 AI 對話</td></tr>
+                    <tr><td><code>y!ai-clear</code></td><td>清除對話紀錄</td></tr>
+                    <tr><td><code>y!ai-history</code></td><td>查看對話歷史</td></tr>
+                </table>
+            </div>
+
+            <div class="doc-section" id="AutoReply">
+                <h2><span class="module-icon">💬</span> AutoReply — 自動回覆 <span class="doc-tag admin">管理員</span></h2>
+                <div class="module-desc">
+                    管理員可設定關鍵字觸發自動回覆。支援正則表達式、貼圖回覆、表情反應、機率觸發、頻道忽略等進階功能。
+                </div>
+                <table class="cmd-table">
+                    <tr><th>指令</th><th>說明</th></tr>
+                    <tr><td><code>/autoreply add</code></td><td>新增自動回覆規則</td></tr>
+                    <tr><td><code>/autoreply test</code></td><td>測試自動回覆觸發</td></tr>
+                    <tr><td><code>/autoreply help</code></td><td>查看自動回覆語法說明</td></tr>
+                    <tr><td><code>/autoreply ignore</code></td><td>設定忽略的頻道</td></tr>
+                </table>
+                <div class="doc-note">
+                    <strong>特殊語法：</strong><code>{sticker:ID}</code> 發送貼圖、<code>{react:emoji}</code> 添加表情反應。
+                </div>
+            </div>
+
+            <!-- ==================== 工具與自動化 ==================== -->
+
+            <div class="doc-section" id="UtilCommands">
+                <h2><span class="module-icon">🔧</span> UtilCommands — 實用指令</h2>
+                <div class="module-desc">
+                    常用的實用工具指令集，包含機器人資訊、伺服器資訊、延遲測試、更新日誌、教學指南等功能。
+                </div>
+                <table class="cmd-table">
+                    <tr><th>指令</th><th>說明</th></tr>
+                    <tr><td><code>/help</code></td><td>查看所有可用指令</td></tr>
+                    <tr><td><code>/info</code></td><td>查看機器人詳細資訊</td></tr>
+                    <tr><td><code>/ping</code></td><td>測試機器人延遲</td></tr>
+                    <tr><td><code>/serverinfo</code></td><td>查看當前伺服器資訊</td></tr>
+                    <tr><td><code>/changelog</code></td><td>查看更新日誌</td></tr>
+                    <tr><td><code>/git-commits</code></td><td>查看最近的 Git 提交紀錄</td></tr>
+                    <tr><td><code>/tutorial</code></td><td>互動式新手教學</td></tr>
+                    <tr><td><code>/nitro</code></td><td>Nitro 禮物連結防護</td></tr>
+                </table>
+            </div>
+
+            <div class="doc-section" id="AutoPublish">
+                <h2><span class="module-icon">📢</span> AutoPublish — 自動發布 <span class="doc-tag admin">管理員</span><span class="doc-tag auto">自動化</span></h2>
+                <div class="module-desc">
+                    啟用後自動發布公告頻道中的新訊息，省去手動點擊「發布」的麻煩。內建每小時 10 則的速率限制。
+                </div>
+                <table class="cmd-table">
+                    <tr><th>指令</th><th>說明</th></tr>
+                    <tr><td><code>/autopublish view</code></td><td>查看自動發布設定</td></tr>
+                    <tr><td><code>/autopublish settings</code></td><td>修改自動發布設定</td></tr>
+                </table>
+            </div>
+
+            <div class="doc-section" id="DynamicVoice">
+                <h2><span class="module-icon">🔊</span> DynamicVoice — 動態語音 <span class="doc-tag admin">管理員</span><span class="doc-tag auto">自動化</span></h2>
+                <div class="module-desc">
+                    使用者加入指定語音頻道時自動建立專屬臨時頻道，支援自定義名稱模板（例如 <code>{user} 的頻道</code>），離開後自動刪除。
+                </div>
+                <table class="cmd-table">
+                    <tr><th>指令</th><th>說明</th></tr>
+                    <tr><td><code>/dynamic-voice setup</code></td><td>設定動態語音頻道</td></tr>
+                    <tr><td><code>/dynamic-voice disable</code></td><td>停用動態語音功能</td></tr>
+                    <tr><td><code>/dynamic-voice play-audio</code></td><td>在頻道中播放音效</td></tr>
+                </table>
+            </div>
+
+            <div class="doc-section" id="CustomPrefix">
+                <h2><span class="module-icon">⌨️</span> CustomPrefix — 自定義前綴 <span class="doc-tag admin">管理員</span></h2>
+                <div class="module-desc">
+                    每個伺服器可設定獨立的指令前綴，方便與其他機器人區分。支援提及機器人查看當前前綴。
+                </div>
+                <table class="cmd-table">
+                    <tr><th>指令</th><th>說明</th></tr>
+                    <tr><td><code>y!setprefix [前綴]</code></td><td>設定新的指令前綴</td></tr>
+                    <tr><td>@機器人</td><td>提及機器人查看目前前綴</td></tr>
+                </table>
+            </div>
+
+            <div class="doc-section" id="FakeUser">
+                <h2><span class="module-icon">🎭</span> FakeUser — 假冒用戶 <span class="doc-tag fun">娛樂</span></h2>
+                <div class="module-desc">
+                    使用 Webhook 模擬其他使用者發言（娛樂用途），包含 30 秒冷卻時間，管理員可設定黑名單和紀錄頻道。
+                </div>
+                <table class="cmd-table">
+                    <tr><th>指令</th><th>說明</th></tr>
+                    <tr><td><code>/fake</code></td><td>以指定使用者身份發送訊息</td></tr>
+                    <tr><td><code>/fake-log-channel</code></td><td>設定紀錄頻道</td></tr>
+                    <tr><td><code>/fake-blacklist</code></td><td>管理黑名單</td></tr>
+                </table>
+            </div>
+
+            <div class="doc-section" id="Contribute">
+                <h2><span class="module-icon">🖼️</span> Contribute — 投稿系統</h2>
+                <div class="module-desc">
+                    使用者可透過 Discord OAuth2 登入後投稿圖片。投稿被批准後可獲得 200 全域幣獎勵。
+                </div>
+                <table class="cmd-table">
+                    <tr><th>指令</th><th>說明</th></tr>
+                    <tr><td><code>/contribute</code></td><td>開啟投稿頁面</td></tr>
+                    <tr><td><code>/contribute dynamic-voice</code></td><td>投稿動態語音音效</td></tr>
+                </table>
+            </div>
+
+            <div class="doc-section" id="Feedback">
+                <h2><span class="module-icon">📝</span> Feedback — 意見回饋</h2>
+                <div class="module-desc">
+                    使用者可透過 Modal 表單提交回饋給開發者，開發者可能會回覆使用者。內建 30 秒冷卻防止濫用。
+                </div>
+                <table class="cmd-table">
+                    <tr><th>指令</th><th>說明</th></tr>
+                    <tr><td><code>/feedback</code></td><td>提交意見回饋</td></tr>
+                </table>
+            </div>
+
+            <div class="doc-section" id="Statistics">
+                <h2><span class="module-icon">📊</span> Statistics — 指令統計</h2>
+                <div class="module-desc">
+                    記錄並顯示文字指令與應用程式指令的使用次數和錯誤次數，支援完整/摘要兩種顯示模式。
+                </div>
+                <table class="cmd-table">
+                    <tr><th>指令</th><th>說明</th></tr>
+                    <tr><td><code>/stats</code></td><td>查看指令使用統計</td></tr>
+                </table>
+            </div>
+
+            <div class="doc-section" id="JoinNotify">
+                <h2><span class="module-icon">👋</span> JoinNotify — 加入通知 <span class="doc-tag auto">自動化</span></h2>
+                <div class="module-desc">
+                    當使用者邀請機器人加入新伺服器時，自動發送歡迎通知私訊，介紹機器人功能。使用者可隨時停用通知。
+                </div>
+                <table class="cmd-table">
+                    <tr><th>指令</th><th>說明</th></tr>
+                    <tr><td><code>/joinnotify</code></td><td>開啟或關閉加入通知</td></tr>
+                </table>
+            </div>
+
+            <!-- ==================== 資訊服務 ==================== -->
+
+            <div class="doc-section" id="twbus">
+                <h2><span class="module-icon">🚌</span> twbus — 台灣公車 / YouBike</h2>
+                <div class="module-desc">
+                    即時查詢台灣公車到站資訊與路線搜尋，同時整合 YouBike 站點查詢。通勤族的好幫手！內建速率限制裝飾器防止 API 過載。
+                </div>
+                <table class="cmd-table">
+                    <tr><th>指令</th><th>說明</th></tr>
+                    <tr><td><code>/twbus</code></td><td>查詢公車即時到站資訊</td></tr>
+                </table>
+            </div>
+
+            <div class="doc-section" id="OXWU">
+                <h2><span class="module-icon">🌍</span> OXWU — 地震監測 <span class="doc-tag auto">自動化</span></h2>
+                <div class="module-desc">
+                    整合 OXWU API 與中央氣象署 (CWA)，透過 Socket.IO 即時接收地震速報與報告，自動推送至設定的頻道。
+                </div>
+                <table class="cmd-table">
+                    <tr><th>指令</th><th>說明</th></tr>
+                    <tr><td><code>/earthquake set-alert-channel</code></td><td>設定地震速報推送頻道</td></tr>
+                    <tr><td><code>/earthquake set-report-channel</code></td><td>設定地震報告推送頻道</td></tr>
+                    <tr><td><code>/earthquake query-warning</code></td><td>查詢最近的地震速報</td></tr>
+                    <tr><td><code>/earthquake query-report</code></td><td>查詢最近的地震報告</td></tr>
+                </table>
+            </div>
+
+            <div class="doc-section" id="dgpa">
+                <h2><span class="module-icon">🏫</span> dgpa — 停班停課查詢</h2>
+                <div class="module-desc">
+                    從行政院人事行政總處網站爬取停班停課公告資訊，支援設定自動推送頻道，颱風假第一時間通知。
+                </div>
+                <table class="cmd-table">
+                    <tr><th>指令</th><th>說明</th></tr>
+                    <tr><td><code>/earthquake</code> 相關</td><td>停班停課查詢與設定推送頻道</td></tr>
+                </table>
+            </div>
+
+            <!-- <div class="doc-section" id="Explore">
+                <h2><span class="module-icon">🚀</span> Explore — 太空探索 <span class="doc-tag fun">娛樂</span></h2>
+                <div class="module-desc">
+                    基於 Socket.IO 的即時互動太空地圖系統，使用稀疏地圖磁磚技術，透過 ASGI WebSocket 即時通訊，打造沉浸式探索體驗。
+                </div>
+            </div> -->
+
+            <!-- ==================== 系統 ==================== -->
+
+            <div class="doc-section" id="GuildPanel">
+                <h2><span class="module-icon">⚙️</span> GuildPanel — 網頁管理面板 <span class="doc-tag admin">管理員</span></h2>
+                <div class="module-desc">
+                    透過 Discord OAuth2 登入後，在網頁介面上查看和編輯你的伺服器設定。支援網頁驗證、自動管理、自動回覆、經濟系統等模組的配置。其他模組可動態註冊自己的設定項。
+                </div>
+                <table class="cmd-table">
+                    <tr><th>指令</th><th>說明</th></tr>
+                    <tr><td><code>/panel</code></td><td>取得網頁管理面板連結</td></tr>
+                </table>
+            </div>
+
+            <div class="doc-section" id="r34">
+                <h2><span class="module-icon">🔞</span> r34 — R34 搜尋</h2>
+                <div class="module-desc">
+                    從 Rule34 API 搜尋並顯示圖片，包含 5 分鐘快取機制，僅限 NSFW 頻道使用。
+                </div>
+                <table class="cmd-table">
+                    <tr><th>指令</th><th>說明</th></tr>
+                    <tr><td><code>/r34</code></td><td>搜尋 R34 圖片（僅限 NSFW 頻道）</td></tr>
+                </table>
+            </div>
+
+        </main>
+    </div>
+
+    <a href="#top" class="back-to-top" id="backToTop" title="回到頂部">↑</a>
+
+    <footer>
+        <p>&copy; 2025 {{ bot.user.name }}. All rights reserved.</p>
+    </footer>
+
+    <script>
+        // Load bot info for navbar
+        fetch("/api/status")
+            .then(r => r.json())
+            .then(data => {
+                document.title = `${data.name} | 使用文檔`;
+                const navAvatar = document.getElementById("nav-avatar");
+                if (navAvatar && data.avatar_url) {
+                    navAvatar.src = data.avatar_url;
+                    navAvatar.style.display = "inline-block";
+                }
+                const navName = document.getElementById("nav-name");
+                if (navName) navName.textContent = data.name;
+            });
+
+        // Back to top button
+        const backToTop = document.getElementById("backToTop");
+        window.addEventListener("scroll", () => {
+            backToTop.classList.toggle("visible", window.scrollY > 400);
+        });
+
+        // Active sidebar link tracking
+        const sections = document.querySelectorAll(".doc-section");
+        const sidebarLinks = document.querySelectorAll(".docs-sidebar a");
+        const observer = new IntersectionObserver(entries => {
+            entries.forEach(entry => {
+                if (entry.isIntersecting) {
+                    sidebarLinks.forEach(link => link.classList.remove("active"));
+                    const activeLink = document.querySelector(`.docs-sidebar a[href="#${entry.target.id}"]`);
+                    if (activeLink) activeLink.classList.add("active");
+                }
+            });
+        }, { rootMargin: "-20% 0px -70% 0px" });
+        sections.forEach(s => observer.observe(s));
+    </script>
+</body>
+
+</html>

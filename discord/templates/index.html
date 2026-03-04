@@ -5,6 +5,20 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{{ bot.user.name }} | Discord 機器人</title>
+    <meta name="description" content="{{ bot.user.name }} - 功能豐富的抽象 Discord 機器人，提供管理、娛樂、經濟、音樂等 40+ 模組。">
+    <!-- Open Graph / Discord Embed -->
+    <meta property="og:type" content="website">
+    <meta property="og:title" content="{{ bot.user.name }} | Discord 機器人">
+    <meta property="og:description" content="功能豐富的抽象 Discord 機器人，搭載 {{ module_count }}+ 模組 — 管理、娛樂、經濟、音樂、AI 聊天一應俱全。">
+    <meta property="og:url" content="{{ website_url }}">
+    <meta property="og:image" content="{{ avatar_url }}">
+    <meta property="og:site_name" content="{{ bot.user.name }}">
+    <meta name="theme-color" content="#5865F2">
+    <!-- Twitter Card -->
+    <meta name="twitter:card" content="summary">
+    <meta name="twitter:title" content="{{ bot.user.name }} | Discord 機器人">
+    <meta name="twitter:description" content="功能豐富的抽象 Discord 機器人，搭載 {{ module_count }}+ 模組。">
+    <meta name="twitter:image" content="{{ avatar_url }}">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
@@ -29,6 +43,7 @@
         </a>
         <div class="nav-links">
             <a href="/">首頁</a>
+            <a href="/docs">使用文檔</a>
             <a href="/panel/">伺服器面板</a>
             <a href="/contribute-feed-grass">投稿草飼圖</a>
             <a href="/privacy-policy">隱私政策</a>
@@ -39,9 +54,13 @@
     <section class="hero">
         <img id="botavatar" class="bot-avatar" src="" alt="{{ bot.user.name }}">
         <h1 id="botname">{{ bot.user.name }}</h1>
+        <p class="hero-tagline">你的 Discord 伺服器抽象助手</p>
         <div id="botstatus-badge" class="status-badge">載入中...</div>
         <br>
-        <a id="invitebtn" href="#" target="_blank" class="btn-invite hidden" onclick="inviteBot(event)">邀請機器人</a>
+        <div class="hero-buttons">
+            <a id="invitebtn" href="#" target="_blank" class="btn-invite hidden" onclick="inviteBot(event)">邀請機器人</a>
+            <a href="/docs" class="btn-docs">查看文檔</a>
+        </div>
     </section>
 
     <div class="container">
@@ -69,6 +88,137 @@
             <div class="stat-card">
                 <div class="stat-value" id="stat-version">-</div>
                 <div class="stat-label">版本</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Bot Introduction -->
+    <div class="container">
+        <h2 class="section-title">關於機器人</h2>
+        <p class="section-desc">一個由社群驅動的多功能 Discord 機器人，搭載超過 <strong>40 個模組</strong>，涵蓋伺服器管理、自動化、經濟系統、音樂播放、小遊戲、AI 聊天等豐富功能。無論你是想打造一個安全有秩序的社群，還是讓伺服器充滿歡樂互動，這個機器人都能滿足你的需求。</p>
+    </div>
+
+    <!-- Feature Highlights -->
+    <div class="container">
+        <h2 class="section-title">功能亮點</h2>
+        <div class="features-grid">
+            <div class="feature-card">
+                <div class="feature-icon">📏</div>
+                <h3>測量長度</h3>
+                <p>可以跟朋友一起量長度、比長度、甚至草飼他。</p>
+            </div>
+            <div class="feature-card">
+                <div class="feature-icon">🎮</div>
+                <h3>迷你遊戲</h3>
+                <p>大老二、爬塔、Akinator 猜謎、DOOM 等娛樂遊戲，還有趣味 dsize 對決與 PetPet 動圖。</p>
+            </div>
+            <div class="feature-card">
+                <div class="feature-icon">💰</div>
+                <h3>經濟系統</h3>
+                <p>全域幣與伺服幣雙幣制，每日獎勵、商店買賣、轉帳、匯率、通膨模型，打造完整虛擬經濟。</p>
+            </div>
+            <div class="feature-card">
+                <div class="feature-icon">🤖</div>
+                <h3>AI 聊天</h3>
+                <p>整合免費 AI 模型，支援多輪對話、上下文記憶，讓機器人成為你的智能助手。</p>
+            </div>
+            <div class="feature-card">
+                <div class="feature-icon">🎵</div>
+                <h3>音樂播放</h3>
+                <p>透過 Lavalink 高品質播放音樂，支援隊列管理、循環播放、隨機播放、推薦歌曲及多節點備援。</p>
+            </div>
+            <div class="feature-card">
+                <div class="feature-icon">🛡️</div>
+                <h3>伺服器管理</h3>
+                <p>踢出、封禁、禁言、黑名單等完整管理工具，支援批量操作與反垃圾訊息 / 反突襲自動化保護。</p>
+            </div>
+            <div class="feature-card">
+                <div class="feature-icon">🌐</div>
+                <h3>網頁面板</h3>
+                <p>透過 Discord OAuth2 登入管理面板，在網頁上輕鬆配置伺服器設定，所見即所得。</p>
+            </div>
+            <div class="feature-card">
+                <div class="feature-icon">🚌</div>
+                <h3>台灣公車 / YouBike</h3>
+                <p>即時查詢台灣公車到站資訊與 YouBike 站點狀態，通勤族的好幫手。</p>
+            </div>
+            <div class="feature-card">
+                <div class="feature-icon">🌍</div>
+                <h3>地震速報</h3>
+                <p>整合 OXWU 與中央氣象署，即時接收地震速報與報告，第一時間推送至指定頻道。</p>
+            </div>
+            <div class="feature-card">
+                <div class="feature-icon">✅</div>
+                <h3>網頁驗證</h3>
+                <p>支援 reCAPTCHA / Turnstile 的網頁驗證系統，有效防止機器人帳號與突襲入侵。</p>
+            </div>
+        </div>
+        <div style="text-align: center; margin-top: 2rem;">
+            <a href="/docs" class="btn-invite">查看完整功能文檔 →</a>
+        </div>
+    </div>
+
+    <!-- Module Overview -->
+    <div class="container">
+        <h2 class="section-title">模組總覽</h2>
+        <p class="section-desc" style="margin-bottom: 1.5rem;">目前已載入 <strong>{{ module_count }}</strong> 個模組，涵蓋以下類別：</p>
+        <div class="module-categories">
+            <div class="module-cat">
+                <h4>🎮 娛樂與遊戲</h4>
+                <ul>
+                    <li>dsize - 量長度</li>
+                    <li>MiniGames - 迷你遊戲</li>
+                    <li>doomcord - 玩 DOOM</li>
+                    <li>aki - Akinator</li>
+                    <li>petpet - PetPet 動圖</li>
+                    <li>OwOify - 可愛化文字</li>
+                </ul>
+            </div>
+            <div class="module-cat">
+                <h4>💰 經濟與物品</h4>
+                <ul>
+                    <li>Economy - 經濟系統</li>
+                    <li>ItemSystem - 物品系統</li>
+                </ul>
+            </div>
+            <div class="module-cat">
+                <h4>🎵 媒體</h4>
+                <ul>
+                    <li>Music - 音樂播放</li>
+                    <li>MessageImage - 訊息截圖</li>
+                </ul>
+            </div>
+            <div class="module-cat">
+                <h4>🛡️ 管理與安全</h4>
+                <ul>
+                    <li>Moderate - 管理工具</li>
+                    <li>AutoModerate - 自動管理</li>
+                    <li>ReportSystem - 檢舉系統</li>
+                    <li>ModerationNotify - 懲處通知</li>
+                    <li>ServerWebVerify - 網頁驗證</li>
+                    <li>StickyRole - 黏性身份組</li>
+                </ul>
+            </div>
+            <div class="module-cat">
+                <h4>🔧 工具與自動化</h4>
+                <ul>
+                    <li>AutoReply - 自動回覆</li>
+                    <li>AutoPublish - 自動發布</li>
+                    <li>DynamicVoice - 動態語音</li>
+                    <li>CustomPrefix - 自定義前綴</li>
+                    <li>FakeUser - 假冒用戶</li>
+                    <li>Contribute - 投稿系統</li>
+                </ul>
+            </div>
+            <div class="module-cat">
+                <h4>🌐 資訊服務</h4>
+                <ul>
+                    <li>twbus - 公車 / YouBike</li>
+                    <li>OXWU - 地震監測</li>
+                    <li>dgpa - 停班停課查詢</li>
+                    <li>ai - AI 聊天</li>
+                    <li>Explore - 探索</li>
+                </ul>
             </div>
         </div>
     </div>

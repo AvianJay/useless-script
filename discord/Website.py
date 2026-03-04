@@ -54,9 +54,21 @@ def api_commit_logs():
     logs = UtilCommands.get_commit_logs(10) if UtilCommands else ["N/A"]
     return {"commit_logs": logs}
 
+def _get_bot_og_data():
+    """Get common Open Graph data for templates"""
+    avatar_url = str(bot.user.avatar.url) if bot.user.avatar else ""
+    website_url = config("website_url", "")
+    return {"avatar_url": avatar_url, "website_url": website_url}
+
 @app.route('/')
 def index():
-    return render_template('index.html', bot=bot, gtag=config("website_gtag", ""))
+    og = _get_bot_og_data()
+    return render_template('index.html', bot=bot, gtag=config("website_gtag", ""), module_count=len(modules), **og)
+
+@app.route('/docs')
+def docs():
+    og = _get_bot_og_data()
+    return render_template('docs.html', bot=bot, gtag=config("website_gtag", ""), **og)
 
 @app.route('/privacy-policy')
 def privacy_policy():

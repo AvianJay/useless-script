@@ -160,6 +160,130 @@ footer a {
     text-decoration: none;
 }
 
+/* Hero extras */
+.hero-tagline {
+    color: var(--text-secondary);
+    font-size: 1.15rem;
+    margin-bottom: 1rem;
+    max-width: 600px;
+    margin-left: auto;
+    margin-right: auto;
+}
+
+.hero-buttons {
+    display: flex;
+    gap: 1rem;
+    justify-content: center;
+    flex-wrap: wrap;
+}
+
+.btn-docs {
+    background-color: transparent;
+    color: var(--accent);
+    padding: 12px 30px;
+    border-radius: 5px;
+    text-decoration: none;
+    font-weight: 600;
+    border: 2px solid var(--accent);
+    transition: background-color 0.3s, transform 0.2s, color 0.3s;
+    display: inline-block;
+}
+
+.btn-docs:hover {
+    background-color: var(--accent);
+    color: white;
+    transform: translateY(-2px);
+}
+
+/* Section Titles */
+.section-title {
+    text-align: center;
+    font-size: 1.8rem;
+    margin-bottom: 0.75rem;
+    color: var(--text-primary);
+}
+
+.section-desc {
+    text-align: center;
+    color: var(--text-secondary);
+    max-width: 700px;
+    margin: 0 auto 2rem;
+    line-height: 1.7;
+    font-size: 1rem;
+}
+
+/* Features Grid */
+.features-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 1.5rem;
+}
+
+.feature-card {
+    background-color: var(--bg-secondary);
+    padding: 2rem 1.5rem;
+    border-radius: 10px;
+    transition: transform 0.3s, box-shadow 0.3s;
+    box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+}
+
+.feature-card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 8px 20px rgba(0,0,0,0.2);
+}
+
+.feature-icon {
+    font-size: 2.2rem;
+    margin-bottom: 0.75rem;
+}
+
+.feature-card h3 {
+    font-size: 1.15rem;
+    margin-bottom: 0.5rem;
+    color: var(--text-primary);
+}
+
+.feature-card p {
+    color: var(--text-secondary);
+    font-size: 0.92rem;
+    line-height: 1.6;
+}
+
+/* Module Categories */
+.module-categories {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: 1.5rem;
+}
+
+.module-cat {
+    background-color: var(--bg-secondary);
+    padding: 1.5rem;
+    border-radius: 10px;
+}
+
+.module-cat h4 {
+    font-size: 1rem;
+    margin-bottom: 0.75rem;
+    color: var(--accent);
+}
+
+.module-cat ul {
+    list-style: none;
+    padding: 0;
+}
+
+.module-cat li {
+    color: var(--text-secondary);
+    padding: 0.3rem 0;
+    font-size: 0.9rem;
+    border-bottom: 1px solid rgba(255,255,255,0.05);
+}
+
+.module-cat li:last-child {
+    border-bottom: none;
+}
+
 /* Utilities */
 .hidden {
     display: none !important;
