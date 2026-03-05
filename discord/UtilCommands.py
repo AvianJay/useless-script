@@ -132,7 +132,7 @@ async def info_command(interaction: discord.Interaction, full: bool = False):
             embed.add_field(name=f"已禁用模組數量", value=str(len(config("disable_modules", []))), inline=False)
         if failed_modules:
             embed.add_field(name=f"載入失敗的模組數量", value=str(len(failed_modules)), inline=False)
-    embed.add_field(name="相關連結", value=f"* [機器人網站]({config('website_url')})\n* [支援伺服器]({config('support_server_invite')})\n* [隱私政策]({config('website_url')}/privacy-policy)\n* [服務條款]({config('website_url')}/terms-of-service)\n* [邀請機器人](https://discord.com/oauth2/authorize?client_id={str(bot.user.id)})", inline=False)
+    embed.add_field(name="相關連結", value=f"* [機器人網站]({config('website_url')})\n* [使用文檔]({config('website_url')}/docs)\n* [支援伺服器]({config('support_server_invite')})\n* [隱私政策]({config('website_url')}/privacy-policy)\n* [服務條款]({config('website_url')}/terms-of-service)\n* [邀請機器人](https://discord.com/oauth2/authorize?client_id={str(bot.user.id)})", inline=False)
     embed.set_thumbnail(url=bot.user.avatar.url if bot.user.avatar else None)
     embed.set_footer(text="by AvianJay")
     await interaction.followup.send(content="-# 提示：如果你指令用到一半停住或沒辦法用了那很有可能是那個傻逼開發者||尼摳||又再重開機器人了||不然就是機器人又當機了||", embed=embed)
@@ -183,7 +183,7 @@ async def info(ctx: commands.Context, full: bool = False):
             embed.add_field(name=f"已禁用模組數量", value=str(len(config("disable_modules", []))), inline=False)
         if failed_modules:
             embed.add_field(name=f"載入失敗的模組數量", value=str(len(failed_modules)), inline=False)
-    embed.add_field(name="相關連結", value=f"* [機器人網站]({config('website_url')})\n* [支援伺服器]({config('support_server_invite')})\n* [隱私政策]({config('website_url')}/privacy-policy)\n* [服務條款]({config('website_url')}/terms-of-service)\n* [邀請機器人](https://discord.com/oauth2/authorize?client_id={str(bot.user.id)})", inline=False)
+    embed.add_field(name="相關連結", value=f"* [機器人網站]({config('website_url')})\\n* [使用文檔]({config('website_url')}/docs)\\n* [支援伺服器]({config('support_server_invite')})\\n* [隱私政策]({config('website_url')}/privacy-policy)\\n* [服務條款]({config('website_url')}/terms-of-service)\\n* [邀請機器人](https://discord.com/oauth2/authorize?client_id={str(bot.user.id)})", inline=False)
     embed.set_thumbnail(url=bot.user.avatar.url if bot.user.avatar else None)
     embed.timestamp = datetime.now(timezone.utc)
     embed.set_footer(text="by AvianJay")
