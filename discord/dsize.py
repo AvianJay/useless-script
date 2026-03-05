@@ -1059,6 +1059,17 @@ async def dsize_history(interaction: discord.Interaction, user: discord.User = N
 ])
 @app_commands.allowed_installs(guilds=True, users=True)
 @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
+async def dsize_feedgrass_command(interaction: discord.Interaction, user: Union[discord.User, discord.Member] = None, global_feedgrass: str = "False"):
+    await dsize_feedgrass(interaction, user, global_feedgrass)
+
+
+@bot.tree.context_menu(name="草飼他")
+@app_commands.allowed_installs(guilds=True, users=True)
+@app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
+async def dsize_feedgrass_context(interaction: discord.Interaction, user: Union[discord.User, discord.Member]):
+    await dsize_feedgrass(interaction, user, global_feedgrass="False")
+
+
 async def dsize_feedgrass(interaction: discord.Interaction, user: Union[discord.User, discord.Member] = None, global_feedgrass: str = "False"):
     if "ItemSystem" not in modules:
         await interaction.response.send_message("此功能需要 ItemSystem 模組。", ephemeral=True)
