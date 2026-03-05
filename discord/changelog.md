@@ -23,6 +23,10 @@
   * 新增 Open Graph 圖片支援（`/og-image.png`），改善連結預覽顯示效果。
 * 更新動態語音 | /dynamic-voice
   * 修復已有語音連線時（例如音樂播放中）會嘗試播放進入音效的問題。
+* 更新依賴庫
+  * discord.py 2.7.0
+  * lava-lyra 1.7.0
+    * 新增 DAVE 支援
 * 修復 `/userinfo` 無頭像時發生錯誤的問題。
   * 真是謝謝你喔 Copilot
 * 修復 aiohttp Accept-Encoding 問題。
