@@ -620,12 +620,11 @@ async def screenshot_cmd(ctx: commands.Context):
 
 whatisthisguytalking_images = []
 
-async def generate_whatisthisguytalking(message: discord.Message):
+def _composite_whatisthisguytalking(screenshot_bytes: bytes) -> io.BytesIO:
+    """將快取的截圖 bytes 與隨機模板圖片合成"""
     file_path = random.choice(whatisthisguytalking_images)
-    screenshot_buffer = await screenshot(message)
-
     template_image = Image.open(file_path)
-    screenshot_pil_image = Image.open(screenshot_buffer)
+    screenshot_pil_image = Image.open(io.BytesIO(screenshot_bytes))
 
     # Determine target width (use the width of the template image)
     target_width = template_image.width
@@ -649,17 +648,28 @@ async def generate_whatisthisguytalking(message: discord.Message):
     image_bytes.seek(0)
     return image_bytes
 
+async def generate_whatisthisguytalking(message: discord.Message) -> tuple[io.BytesIO, bytes]:
+    """生成圖片，回傳 (合成圖片 buffer, 截圖原始 bytes 用於快取)"""
+    screenshot_buffer = await screenshot(message)
+    screenshot_bytes = screenshot_buffer.getvalue()
+    result = _composite_whatisthisguytalking(screenshot_bytes)
+    return result, screenshot_bytes
+
 
 class WhatIsThisGuyTalkingView(UpvoteView):
-    def __init__(self, original_message: discord.Message):
+    def __init__(self, screenshot_bytes: bytes, user: discord.User = None):
         super().__init__()
-        self.original_message = original_message
+        self.screenshot_bytes = screenshot_bytes  # 快取截圖 bytes，避免重複呼叫 chat_exporter
+        self.user = user
 
     @discord.ui.button(emoji="🔄", style=discord.ButtonStyle.blurple)
     async def refresh(self, interaction: discord.Interaction, button: discord.ui.Button):
         await interaction.response.defer()
+        if self.user and interaction.user.id != self.user.id:
+            await interaction.followup.send("❌只有原始請求者可以重新生成圖片。", ephemeral=True)
+            return
         try:
-            buffer = await generate_whatisthisguytalking(self.original_message)
+            buffer = _composite_whatisthisguytalking(self.screenshot_bytes)
             await interaction.edit_original_response(
                 attachments=[discord.File(buffer, filename="whatisthisguytalking.png")],
                 view=self
@@ -674,9 +684,9 @@ class WhatIsThisGuyTalkingView(UpvoteView):
 async def whatisthisguytalking(interaction: discord.Interaction, message: discord.Message):
     await interaction.response.defer()
     try:
-        buffer = await generate_whatisthisguytalking(message)
+        buffer, screenshot_bytes = await generate_whatisthisguytalking(message)
         # msg = f"現正開放投稿！\n-# {await get_command_mention('contribute', 'what-is-this-guy-talking-about')}"
-        await interaction.followup.send(file=discord.File(buffer, filename="whatisthisguytalking.png"), view=WhatIsThisGuyTalkingView(message))
+        await interaction.followup.send(file=discord.File(buffer, filename="whatisthisguytalking.png"), view=WhatIsThisGuyTalkingView(screenshot_bytes, user=interaction.user))
         log("引用圖片生成完成", module_name="MessageImage", user=interaction.user, guild=interaction.guild)
     except Exception as e:
         await interaction.followup.send(f"引用圖片生成失敗: {e}", ephemeral=True)
