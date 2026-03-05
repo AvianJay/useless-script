@@ -1,4 +1,4 @@
-from flask import Flask, send_from_directory, render_template
+from flask import Flask, send_from_directory, render_template, send_file
 import os
 import asyncio
 from hypercorn.config import Config
@@ -56,8 +56,9 @@ def api_commit_logs():
 
 def _get_bot_og_data():
     """Get common Open Graph data for templates"""
-    avatar_url = str(bot.user.avatar.url) if bot.user.avatar else ""
     website_url = config("website_url", "")
+    # Use our own server to serve the avatar for OG image (Discord can't crawl its own CDN)
+    avatar_url = f"{website_url}/og-image.png" if website_url else ""
     return {"avatar_url": avatar_url, "website_url": website_url}
 
 @app.route('/')
@@ -78,6 +79,30 @@ def privacy_policy():
 def terms_of_service():
     return render_template('TermsofService.html', bot=bot, gtag=config("website_gtag", ""))
 AVATAR_ICO = None
+AVATAR_PNG = None
+
+@app.route('/og-image.png')
+def og_image():
+    """Serve bot avatar as PNG for Open Graph / Discord embed previews"""
+    global AVATAR_PNG
+    if AVATAR_PNG is None:
+        avatar_url = str(bot.user.avatar.url) if bot.user.avatar else None
+        if avatar_url:
+            avatar_path = os.path.join('static', 'og_avatar.png')
+            try:
+                avatar_image = Image.open(requests.get(avatar_url, stream=True).raw)
+                avatar_image = avatar_image.convert('RGBA')
+                avatar_image = avatar_image.resize((512, 512), Image.LANCZOS)
+                avatar_image.save(avatar_path, format='PNG')
+                AVATAR_PNG = avatar_path
+            except Exception as e:
+                log(f"無法下載或轉換機器人頭像為 OG 圖片: {e}", module_name="Website")
+                AVATAR_PNG = None
+                return '', 404
+        else:
+            return '', 404
+    return send_file(AVATAR_PNG, mimetype='image/png')
+
 @app.route('/favicon.ico')
 def favicon():
     global AVATAR_ICO
