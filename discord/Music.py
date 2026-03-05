@@ -10,6 +10,9 @@ from typing import Optional
 from collections import deque
 import random
 from enum import Enum
+import aiohttp
+
+aiohttp.client_reqrep.ClientRequest.DEFAULT_HEADERS["Accept-Encoding"] = "gzip, deflate"
 
 
 class LoopMode(Enum):
