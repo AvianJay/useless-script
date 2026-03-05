@@ -522,7 +522,7 @@
                 </div>
                 <table class="cmd-table">
                     <tr><th>指令</th><th>說明</th></tr>
-                    <tr><td><code>/webverify</code></td><td>設定網頁驗證功能</td></tr>
+                    <tr><td><code>/webverify setup</code></td><td>設定網頁驗證功能</td></tr>
                     <tr><td><code>/webverify force-verify</code></td><td>強制指定使用者進行驗證</td></tr>
                     <tr><td><code>/webverify manual-verify</code></td><td>手動通過使用者的驗證</td></tr>
                 </table>
@@ -556,13 +556,13 @@
             </div>
 
             <div class="doc-section" id="dsize">
-                <h2><span class="module-icon">📏</span> dsize — 趣味尺寸 <span class="doc-tag fun">娛樂</span></h2>
+                <h2><span class="module-icon">📏</span> dsize — 測量長度 <span class="doc-tag fun">娛樂</span></h2>
                 <div class="module-desc">
-                    趣味「尺寸」系統，包含每日簽到、尺寸對決、餵草等娛樂功能，支援全域與伺服器範圍，結合經濟系統獎勵。
+                    量長度，包含每日簽到、尺寸對決、餵草等娛樂功能，支援全域與伺服器範圍，結合經濟系統獎勵。
                 </div>
                 <table class="cmd-table">
                     <tr><th>指令</th><th>說明</th></tr>
-                    <tr><td><code>/dsize</code></td><td>查看你的尺寸</td></tr>
+                    <tr><td><code>/dsize</code></td><td>開始測量長度</td></tr>
                     <tr><td><code>/dsize-battle</code></td><td>與其他使用者進行尺寸對決</td></tr>
                     <tr><td><code>/dsize-feedgrass</code></td><td>草飼男娘</td></tr>
                 </table>
@@ -599,6 +599,7 @@
                     <tr><th>指令</th><th>說明</th></tr>
                     <tr><td><code>/petpet</code></td><td>生成指定使用者的 PetPet 動圖</td></tr>
                     <tr><td>右鍵用戶(長按) → 應用程式 → <code>PetPet</code></td><td>對使用者直接使用右鍵選單</td></tr>
+                    <tr><td><code>/petpet-stats</code></td><td>查看 PetPet 撫摸統計</td></tr>
                 </table>
             </div>
 
@@ -639,17 +640,59 @@
             </div>
 
             <div class="doc-section" id="ItemSystem">
-                <h2><span class="module-icon">🎒</span> ItemSystem — 物品系統 <span class="doc-tag admin">管理員</span></h2>
+                <h2><span class="module-icon">🎒</span> ItemSystem — 物品系統</h2>
                 <div class="module-desc">
-                    管理虛擬物品的建立、給予、移除與使用。每個伺服器可建立自定義物品，物品使用時可觸發特定功能（回呼機制）。
+                    虛擬物品系統，支援伺服器範圍與全域範圍的背包。每個伺服器可建立自定義物品，物品使用時可觸發特定功能。物品可以丟棄讓其他人撿起、贈送給其他用戶等。
                 </div>
+
+                <h3 style="margin-top: 1.5rem; color: var(--text-primary);">一般用戶指令（/item）</h3>
                 <table class="cmd-table">
                     <tr><th>指令</th><th>說明</th></tr>
-                    <tr><td><code>/item use</code></td><td>使用你擁有的物品</td></tr>
-                    <tr><td><code>/itemmod addcustom</code></td><td>建立自定義物品</td></tr>
-                    <tr><td><code>/itemmod give</code></td><td>給予使用者物品</td></tr>
-                    <tr><td><code>/itemmod editcustom</code></td><td>編輯自定義物品</td></tr>
+                    <tr><td><code>/item list</code></td><td>查看你擁有的物品（可選伺服器 / 全域範圍）</td></tr>
+                    <tr><td><code>/item use</code></td><td>使用一個物品，觸發該物品的回呼功能</td></tr>
+                    <tr><td><code>/item drop</code></td><td>丟棄物品到目前頻道，其他人可撿起</td></tr>
+                    <tr><td><code>/item give</code></td><td>將物品贈送給另一位用戶</td></tr>
                 </table>
+
+                <h3 style="margin-top: 1.5rem; color: var(--text-primary);">管理員指令（/itemmod）<span class="doc-tag admin">管理員</span></h3>
+                <table class="cmd-table">
+                    <tr><th>指令</th><th>說明</th></tr>
+                    <tr><td><code>/itemmod give</code></td><td>給予用戶指定物品</td></tr>
+                    <tr><td><code>/itemmod remove</code></td><td>移除用戶的指定物品</td></tr>
+                    <tr><td><code>/itemmod list</code></td><td>列出所有可用的物品（含自定義）</td></tr>
+                    <tr><td><code>/itemmod listuser</code></td><td>查看指定用戶擁有的物品</td></tr>
+                    <tr><td><code>/itemmod addcustom</code></td><td>新增伺服器自定義物品</td></tr>
+                    <tr><td><code>/itemmod removecustom</code></td><td>移除伺服器自定義物品</td></tr>
+                    <tr><td><code>/itemmod editcustom</code></td><td>編輯自定義物品的內容、定價等設定</td></tr>
+                    <tr><td><code>/itemmod listcustom</code></td><td>列出本伺服器所有自定義物品</td></tr>
+                </table>
+
+                <h3 style="margin-top: 1.5rem; color: var(--text-primary);">丟棄與撿起</h3>
+                <div class="doc-note">
+                    <strong>丟棄選項：</strong><code>/item drop</code> 支援以下參數：<br>
+                    • <strong>can_pickup</strong> — 其他人是否可以撿起（預設是）<br>
+                    • <strong>pickup_duration</strong> — 可撿起的時間，1~86400 秒（預設 60 秒）<br>
+                    • <strong>pickup_only_once</strong> — 每位用戶是否只能撿一次（預設否）<br>
+                    • <strong>scope</strong> — 物品來源範圍（伺服器 / 全域）
+                </div>
+
+                <h3 style="margin-top: 1.5rem; color: var(--text-primary);">自定義物品</h3>
+                <div class="module-desc">
+                    管理員可透過 <code>/itemmod addcustom</code> 建立伺服器專屬物品。自定義物品使用時會傳送預設的文字內容。
+                </div>
+                <table class="cmd-table">
+                    <tr><th>參數</th><th>說明</th></tr>
+                    <tr><td><code>name</code></td><td>物品名稱（最長 100 字元）</td></tr>
+                    <tr><td><code>content</code></td><td>使用時傳送的文字內容（最長 2000 字元）</td></tr>
+                    <tr><td><code>description</code></td><td>物品說明（可選）</td></tr>
+                    <tr><td><code>list_in_shop</code></td><td>是否上架到伺服器商店</td></tr>
+                    <tr><td><code>price</code></td><td>商店定價（上架時必填，單位：伺服幣）</td></tr>
+                    <tr><td><code>remove_after_use</code></td><td>使用後是否自動消耗（預設是）</td></tr>
+                    <tr><td><code>ephemeral_response</code></td><td>使用後回應是否只有自己看得到（預設否）</td></tr>
+                </table>
+                <div class="doc-note">
+                    <strong>提示：</strong>自定義物品若設定 <code>list_in_shop = 是</code> 並指定定價，會出現在經濟系統的伺服器商店中，其他用戶可以購買。
+                </div>
             </div>
 
             <!-- ==================== 媒體 ==================== -->
