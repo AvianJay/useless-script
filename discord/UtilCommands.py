@@ -244,7 +244,7 @@ async def randomuser_command(interaction: discord.Interaction, mention: str = "F
 @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
 async def userinfo_command(interaction: discord.Interaction, user: Union[discord.User, discord.Member]):
     embed = discord.Embed(title=f"{user.display_name} 的資訊", color=0x00ff00)
-    embed.set_thumbnail(url=user.avatar.url if user.avatar else discord.Embed.Empty)
+    embed.set_thumbnail(url=user.avatar.url if user.avatar else None)
     view = discord.ui.View()
     # avatar url button
     button = discord.ui.Button(label="頭像連結", url=user.avatar.url if user.avatar else "https://discord.com/assets/6debd47ed13483642cf09e832ed0bc1b.png")
@@ -272,7 +272,7 @@ async def userinfo(ctx: commands.Context, user: Union[discord.User, discord.Memb
     if user is None:
         user = ctx.author
     embed = discord.Embed(title=f"{user.display_name} 的資訊", color=0x00ff00)
-    embed.set_thumbnail(url=user.avatar.url if user.avatar else discord.Embed.Empty)
+    embed.set_thumbnail(url=user.avatar.url if user.avatar else None)
     # avatar url button
     button = discord.ui.Button(label="頭像連結", url=user.avatar.url if user.avatar else "https://discord.com/assets/6debd47ed13483642cf09e832ed0bc1b.png")
     view = discord.ui.View()
