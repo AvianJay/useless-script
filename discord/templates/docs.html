@@ -31,6 +31,10 @@
         gtag('config', '{{ gtag }}');
     </script>
     <style>
+        html, body {
+            overflow-x: hidden;
+        }
+
         .docs-hero {
             text-align: center;
             padding: 3rem 1rem 2rem;
@@ -94,6 +98,7 @@
             border-radius: 10px;
             padding: 2rem;
             margin-bottom: 2rem;
+            overflow-x: auto;
         }
         .doc-section h2 {
             font-size: 1.5rem;
@@ -143,6 +148,15 @@
             border-radius: 4px;
             font-family: 'Consolas', 'Monaco', monospace;
             font-size: 0.88rem;
+            word-break: break-all;
+        }
+
+        .doc-note code {
+            word-break: break-all;
+        }
+
+        .module-desc code {
+            word-break: break-all;
         }
 
         .doc-note {
@@ -268,12 +282,22 @@
                 display: block;
                 overflow-x: auto;
                 -webkit-overflow-scrolling: touch;
+                max-width: 100%;
             }
             .cmd-table th,
             .cmd-table td {
                 padding: 0.5rem 0.6rem;
                 font-size: 0.82rem;
-                white-space: nowrap;
+            }
+            .doc-section {
+                overflow-x: hidden;
+                word-break: break-word;
+            }
+            .doc-note {
+                word-break: break-word;
+            }
+            .module-desc {
+                word-break: break-word;
             }
             .cmd-table code {
                 font-size: 0.78rem;
