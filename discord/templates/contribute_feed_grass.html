@@ -280,7 +280,8 @@
     <a href="/" class="navbar-brand">
       <span>{{ bot.user.name }}</span>
     </a>
-    <div class="nav-links">
+    <button class="nav-toggle" id="navToggle" aria-label="選單">☰</button>
+    <div class="nav-links" id="navLinks">
       <a href="/">首頁</a>
       <a href="/contribute-feed-grass">投稿草飼圖</a>
       <a href="/privacy-policy">隱私政策</a>
@@ -805,6 +806,11 @@
     setCanvasSize(800, 600);
     render();
 
+  </script>
+  <script>
+    document.getElementById("navToggle").addEventListener("click", function() {
+        document.getElementById("navLinks").classList.toggle("open");
+    });
   </script>
 </body>
 

@@ -41,7 +41,8 @@
                 style="width: 30px; height: 30px; border-radius: 50%; display: none;">
             <span id="nav-name">{{ bot.user.name }}</span>
         </a>
-        <div class="nav-links">
+        <button class="nav-toggle" id="navToggle" aria-label="選單">☰</button>
+        <div class="nav-links" id="navLinks">
             <a href="/">首頁</a>
             <a href="/docs">使用文檔</a>
             <a href="/panel/">伺服器面板</a>
@@ -233,6 +234,13 @@
     <footer>
         <p>&copy; 2025 {{ bot.user.name }}. All rights reserved.</p>
     </footer>
+
+    <script>
+        // Navbar hamburger toggle
+        document.getElementById("navToggle").addEventListener("click", function() {
+            document.getElementById("navLinks").classList.toggle("open");
+        });
+    </script>
 </body>
 
 </html>

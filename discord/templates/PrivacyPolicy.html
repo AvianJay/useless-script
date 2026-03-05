@@ -27,7 +27,8 @@
                 style="width: 30px; height: 30px; border-radius: 50%; display: none;">
             <span id="nav-name">{{ bot.user.name }}</span>
         </a>
-        <div class="nav-links">
+        <button class="nav-toggle" id="navToggle" aria-label="選單">☰</button>
+        <div class="nav-links" id="navLinks">
             <a href="/" class="active">首頁</a>
             <a href="/contribute-feed-grass">投稿草飼圖</a>
             <a href="/privacy-policy">隱私政策</a>
@@ -85,6 +86,11 @@
     <footer>
         <p>&copy; 2025 {{ bot.user.name }}. All rights reserved.</p>
     </footer>
+    <script>
+        document.getElementById("navToggle").addEventListener("click", function() {
+            document.getElementById("navLinks").classList.toggle("open");
+        });
+    </script>
 </body>
 
 </html>

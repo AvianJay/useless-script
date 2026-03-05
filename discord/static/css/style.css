@@ -289,20 +289,116 @@ footer a {
     display: none !important;
 }
 
+/* Mobile Nav Toggle */
+.nav-toggle {
+    display: none;
+    background: none;
+    border: none;
+    color: var(--text-primary);
+    font-size: 1.5rem;
+    cursor: pointer;
+    padding: 0.25rem;
+    line-height: 1;
+}
+
 /* Responsive */
 @media (max-width: 768px) {
     .navbar {
+        flex-wrap: wrap;
+        padding: 0.75rem 1rem;
+    }
+
+    .nav-toggle {
+        display: block;
+    }
+
+    .nav-links {
+        display: none;
+        width: 100%;
         flex-direction: column;
+        gap: 0;
+        margin-top: 0.5rem;
+    }
+
+    .nav-links.open {
+        display: flex;
+    }
+
+    .nav-links a {
+        margin: 0;
+        padding: 0.6rem 0;
+        border-top: 1px solid rgba(255,255,255,0.06);
+        text-align: center;
+    }
+
+    .hero {
+        padding: 2.5rem 1rem;
+    }
+
+    .bot-avatar {
+        width: 100px;
+        height: 100px;
+    }
+
+    .hero h1 {
+        font-size: 1.6rem;
+    }
+
+    .hero-tagline {
+        font-size: 0.95rem;
+    }
+
+    .hero-buttons {
+        flex-direction: column;
+        align-items: center;
+    }
+
+    .btn-invite, .btn-docs {
+        width: 100%;
+        max-width: 260px;
+        text-align: center;
+    }
+
+    .container {
+        padding: 1.25rem 0.75rem;
+    }
+
+    .section-title {
+        font-size: 1.35rem;
+    }
+
+    .section-desc {
+        font-size: 0.9rem;
+    }
+
+    .stats-grid {
+        grid-template-columns: repeat(2, 1fr);
+        gap: 0.75rem;
+    }
+
+    .stat-card {
+        padding: 1rem;
+    }
+
+    .stat-value {
+        font-size: 1.4rem;
+    }
+
+    .stat-label {
+        font-size: 0.75rem;
+    }
+
+    .features-grid {
+        grid-template-columns: 1fr;
         gap: 1rem;
     }
-    
-    .nav-links {
-        display: flex;
-        flex-wrap: wrap;
-        justify-content: center;
+
+    .feature-card {
+        padding: 1.25rem 1rem;
     }
-    
-    .nav-links a {
-        margin: 0 10px;
+
+    .module-categories {
+        grid-template-columns: 1fr;
+        gap: 1rem;
     }
 }

@@ -194,11 +194,105 @@
         @media (max-width: 900px) {
             .docs-layout {
                 flex-direction: column;
+                padding: 1rem 0.75rem;
             }
             .docs-sidebar {
                 width: 100%;
                 position: static;
                 max-height: none;
+                padding: 0;
+                background: none;
+            }
+            .docs-sidebar-inner {
+                display: none;
+                background: var(--bg-secondary);
+                border-radius: 10px;
+                padding: 1rem 1.25rem;
+                margin-top: 0.5rem;
+            }
+            .docs-sidebar-inner.open {
+                display: block;
+            }
+            .sidebar-toggle {
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                width: 100%;
+                background: var(--bg-secondary);
+                border: none;
+                color: var(--text-primary);
+                font-size: 1rem;
+                font-weight: 600;
+                padding: 0.85rem 1.25rem;
+                border-radius: 10px;
+                cursor: pointer;
+                font-family: var(--font-main);
+            }
+            .sidebar-toggle::after {
+                content: '▼';
+                font-size: 0.7rem;
+                color: var(--text-secondary);
+                transition: transform 0.2s;
+            }
+            .sidebar-toggle.open::after {
+                transform: rotate(180deg);
+            }
+        }
+        @media (min-width: 901px) {
+            .sidebar-toggle {
+                display: none;
+            }
+        }
+
+        /* Mobile docs adjustments */
+        @media (max-width: 600px) {
+            .docs-hero {
+                padding: 2rem 0.75rem 1.5rem;
+            }
+            .docs-hero h1 {
+                font-size: 1.5rem;
+            }
+            .docs-hero p {
+                font-size: 0.9rem;
+            }
+            .doc-section {
+                padding: 1.25rem 1rem;
+                margin-bottom: 1.25rem;
+            }
+            .doc-section h2 {
+                font-size: 1.15rem;
+                flex-wrap: wrap;
+                gap: 0.35rem;
+            }
+            .cmd-table {
+                display: block;
+                overflow-x: auto;
+                -webkit-overflow-scrolling: touch;
+            }
+            .cmd-table th,
+            .cmd-table td {
+                padding: 0.5rem 0.6rem;
+                font-size: 0.82rem;
+                white-space: nowrap;
+            }
+            .cmd-table code {
+                font-size: 0.78rem;
+                padding: 0.1rem 0.3rem;
+            }
+            .doc-note {
+                font-size: 0.82rem;
+                padding: 0.6rem 0.75rem;
+            }
+            .doc-tag {
+                font-size: 0.65rem;
+                padding: 0.1rem 0.4rem;
+            }
+            .back-to-top {
+                bottom: 1rem;
+                right: 1rem;
+                width: 38px;
+                height: 38px;
+                font-size: 1rem;
             }
         }
     </style>
@@ -211,7 +305,8 @@
                 style="width: 30px; height: 30px; border-radius: 50%; display: none;">
             <span id="nav-name">{{ bot.user.name }}</span>
         </a>
-        <div class="nav-links">
+        <button class="nav-toggle" id="navToggle" aria-label="選單">☰</button>
+        <div class="nav-links" id="navLinks">
             <a href="/">首頁</a>
             <a href="/docs">使用文檔</a>
             <a href="/panel/">伺服器面板</a>
@@ -229,6 +324,8 @@
     <div class="docs-layout">
         <!-- Sidebar Navigation -->
         <aside class="docs-sidebar">
+            <button class="sidebar-toggle" id="sidebarToggle">📋 導覽目錄</button>
+            <div class="docs-sidebar-inner" id="sidebarInner">
             <h3>快速開始</h3>
             <a href="#getting-started">🚀 快速入門</a>
             <a href="#prefix">⌨️ 指令前綴</a>
@@ -281,6 +378,7 @@
             <h3>⚙️ 系統</h3>
             <a href="#GuildPanel">網頁面板</a>
             <a href="#r34">R34 搜尋</a>
+            </div>
         </aside>
 
         <!-- Main Documentation Content -->
@@ -872,6 +970,28 @@
     </footer>
 
     <script>
+        // Navbar hamburger toggle
+        document.getElementById("navToggle").addEventListener("click", function() {
+            document.getElementById("navLinks").classList.toggle("open");
+        });
+
+        // Sidebar toggle (mobile)
+        const sidebarToggle = document.getElementById("sidebarToggle");
+        const sidebarInner = document.getElementById("sidebarInner");
+        sidebarToggle.addEventListener("click", function() {
+            sidebarToggle.classList.toggle("open");
+            sidebarInner.classList.toggle("open");
+        });
+        // Close sidebar when a link is clicked on mobile
+        sidebarInner.querySelectorAll("a").forEach(link => {
+            link.addEventListener("click", () => {
+                if (window.innerWidth <= 900) {
+                    sidebarToggle.classList.remove("open");
+                    sidebarInner.classList.remove("open");
+                }
+            });
+        });
+
         // Load bot info for navbar
         fetch("/api/status")
             .then(r => r.json())
