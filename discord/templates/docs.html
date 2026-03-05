@@ -223,7 +223,7 @@
 
     <section class="docs-hero" id="top">
         <h1>📖 使用文檔</h1>
-        <p>完整的指令與功能說明，幫助你充分發揮機器人的潛力</p>
+        <p>完整的指令與功能說明，幫助你充分發揮機器人的抽象潛力</p>
     </section>
 
     <div class="docs-layout">
@@ -320,12 +320,39 @@
                 <table class="cmd-table">
                     <tr><th>指令</th><th>說明</th></tr>
                     <tr><td><code>/moderate</code></td><td>開啟管理選單，可選擇踢出、封禁、禁言、黑名單等動作</td></tr>
-                    <tr><td><code>y!moderate</code></td><td>傳統前綴版管理指令</td></tr>
+                    <tr><td><code>y!moderate</code> <code>y!m</code></td><td>前綴版管理指令</td></tr>
+                    <tr><td><code>y!moderate_reply</code> <code>y!mr</code></td><td>對被回覆訊息進行管理</td></tr>
                     <tr><td><code>/action-builder</code></td><td>建立自訂的管理動作組合</td></tr>
                     <tr><td><code>/send-moderation-message</code></td><td>手動發送懲處公告</td></tr>
                 </table>
                 <div class="doc-note">
-                    <strong>時間格式：</strong>支援 <code>1d</code> (天)、<code>2h</code> (小時)、<code>30m</code> (分鐘)、<code>10s</code> (秒)，可組合使用如 <code>1d12h</code>。
+                    <strong>時間格式：</strong>支援 <code>s</code> / <code>秒</code>、<code>m</code> / <code>分鐘</code>、<code>h</code> / <code>小時</code>、<code>d</code> / <code>天</code>、<code>w</code> / <code>週</code>、<code>M</code> / <code>月</code>、<code>y</code> / <code>年</code>，可組合使用如 <code>1d12h</code>。
+                </div>
+
+                <h3 style="margin-top: 1.5rem; color: var(--text-primary);">動作指令字串 (Action String)</h3>
+                <div class="module-desc">
+                    <code>y!moderate</code> 和 <code>/multi-moderate</code> 的 <code>action</code> 參數使用動作指令字串格式，可用逗號 <code>,</code> 分隔多個動作（最多 5 個）。也可使用 <code>/action-builder</code> 透過互動介面產生指令字串。
+                </div>
+                <table class="cmd-table">
+                    <tr><th>動作</th><th>格式</th><th>說明</th></tr>
+                    <tr><td><code>ban</code></td><td><code>ban &lt;時長&gt; &lt;刪除訊息時長&gt; &lt;原因&gt;</code></td><td>封禁用戶。時長為 <code>0</code> 表示永久，刪除訊息時長 <code>0</code> 表示不刪除</td></tr>
+                    <tr><td><code>kick</code></td><td><code>kick &lt;原因&gt;</code></td><td>踢出用戶</td></tr>
+                    <tr><td><code>mute</code></td><td><code>mute &lt;時長&gt; &lt;原因&gt;</code></td><td>禁言用戶，預設 10 分鐘。也可使用 <code>timeout</code></td></tr>
+                    <tr><td><code>unban</code></td><td><code>unban &lt;原因&gt;</code></td><td>解封用戶</td></tr>
+                    <tr><td><code>unmute</code></td><td><code>unmute &lt;原因&gt;</code></td><td>解除禁言。也可使用 <code>untimeout</code></td></tr>
+                    <tr><td><code>delete</code></td><td><code>delete &lt;警告訊息&gt;</code></td><td>刪除訊息，可附帶公開警告（<code>{user}</code> 代表用戶）</td></tr>
+                    <tr><td><code>delete_dm</code></td><td><code>delete_dm &lt;警告訊息&gt;</code></td><td>刪除訊息並私訊警告</td></tr>
+                    <tr><td><code>warn</code></td><td><code>warn &lt;警告訊息&gt;</code></td><td>在頻道中發送公開警告</td></tr>
+                    <tr><td><code>warn_dm</code></td><td><code>warn_dm &lt;警告訊息&gt;</code></td><td>私訊用戶警告</td></tr>
+                    <tr><td><code>send_mod_message</code></td><td><code>send_mod_message</code></td><td>發送懲處公告到設定的公告頻道。也可使用 <code>smm</code></td></tr>
+                    <tr><td><code>force_verify</code></td><td><code>force_verify &lt;時長&gt;</code></td><td>強制用戶進行網頁驗證（需啟用 ServerWebVerify）</td></tr>
+                </table>
+                <div class="doc-note">
+                    <strong>範例：</strong><br>
+                    <code>ban 7d 1d 違規發言</code> — 封禁 7 天，刪除最近 1 天的訊息<br>
+                    <code>mute 30m 注意行為, warn {user} 請注意你的發言</code> — 禁言 30 分鐘並公開警告<br>
+                    <code>delete_dm 你的訊息已被刪除, mute 1h 違規內容</code> — 刪除訊息 + 私訊通知 + 禁言 1 小時<br>
+                    <code>ban 0 0 嚴重違規, smm</code> — 永久封禁並發送懲處公告
                 </div>
             </div>
 
@@ -415,7 +442,7 @@
                     <tr><th>指令</th><th>說明</th></tr>
                     <tr><td><code>/dsize</code></td><td>查看你的尺寸</td></tr>
                     <tr><td><code>/dsize-battle</code></td><td>與其他使用者進行尺寸對決</td></tr>
-                    <tr><td><code>/dsize-feedgrass</code></td><td>餵草互動</td></tr>
+                    <tr><td><code>/dsize-feedgrass</code></td><td>草飼男娘</td></tr>
                 </table>
             </div>
 
@@ -449,7 +476,7 @@
                 <table class="cmd-table">
                     <tr><th>指令</th><th>說明</th></tr>
                     <tr><td><code>/petpet</code></td><td>生成指定使用者的 PetPet 動圖</td></tr>
-                    <tr><td>右鍵 → 應用程式 → <code>PetPet</code></td><td>對使用者直接使用右鍵選單</td></tr>
+                    <tr><td>右鍵用戶(長按) → 應用程式 → <code>PetPet</code></td><td>對使用者直接使用右鍵選單</td></tr>
                 </table>
             </div>
 
@@ -462,7 +489,7 @@
                     <tr><th>指令</th><th>說明</th></tr>
                     <tr><td><code>/owoify</code></td><td>可愛化你輸入的文字</td></tr>
                     <tr><td><code>y!owoify [文字]</code></td><td>前綴版可愛化指令</td></tr>
-                    <tr><td>右鍵 → 應用程式 → 選單</td><td>可愛化指定訊息</td></tr>
+                    <tr><td>右鍵訊息(長按) → 應用程式 → <code>OwOify</code></td><td>可愛化指定訊息</td></tr>
                 </table>
             </div>
 
@@ -530,6 +557,10 @@
                 </div>
                 <table class="cmd-table">
                     <tr><th>指令</th><th>說明</th></tr>
+                    <tr><td><code>y!ss (回覆訊息)</code></td><td>截圖指定訊息</td></tr>
+                    <tr><td><code>訊息截圖器(訊息應用程式選單)</code></td><td>截圖指定訊息</td></tr>
+                    <tr><td><code>糟糕的Make it a quote(訊息應用程式選單)</code></td><td>仿Make it a quote圖片，但是比較糟糕。</td></tr>
+                    <tr><td><code>這傢伙在說什麼呢(訊息應用程式選單)</code></td><td>截圖並在下方隨機加入一張對話框圖片。</td></tr>
                     <tr><td><code>/upvoteboard</code></td><td>設定 Upvoteboard 頻道</td></tr>
                 </table>
             </div>
@@ -645,9 +676,16 @@
                 </div>
                 <table class="cmd-table">
                     <tr><th>指令</th><th>說明</th></tr>
-                    <tr><td><code>/contribute</code></td><td>開啟投稿頁面</td></tr>
+                    <tr><td><code>/contribute feedgrass</code></td><td>開啟草飼圖投稿頁面</td></tr>
+                    <tr><td><code>/contribute what-is-this-guy-talking-about</code></td><td>投稿「這傢伙在說什麼呢」圖片（上面有對話框的那種圖）</td></tr>
                     <tr><td><code>/contribute dynamic-voice</code></td><td>投稿動態語音音效</td></tr>
                 </table>
+                <div class="doc-note">
+                    <strong>範例：</strong>「這傢伙在說什麼呢」圖片範例：
+                    <div style="margin-top: 0.75rem; text-align: center;">
+                        <img src="{{ url_for('static', filename='witgta_example.png') }}" alt="這傢伙在說什麼呢 範例圖" style="max-width: 100%; max-height: 400px; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.3);">
+                    </div>
+                </div>
             </div>
 
             <div class="doc-section" id="Feedback">
@@ -717,7 +755,7 @@
                 </div>
                 <table class="cmd-table">
                     <tr><th>指令</th><th>說明</th></tr>
-                    <tr><td><code>/earthquake</code> 相關</td><td>停班停課查詢與設定推送頻道</td></tr>
+                    <tr><td><code>/nds</code> 相關</td><td>停班停課查詢與設定推送頻道</td></tr>
                 </table>
             </div>
 
