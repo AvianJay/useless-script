@@ -590,12 +590,84 @@
                 <table class="cmd-table">
                     <tr><th>指令</th><th>說明</th></tr>
                     <tr><td><code>/autoreply add</code></td><td>新增自動回覆規則</td></tr>
-                    <tr><td><code>/autoreply test</code></td><td>測試自動回覆觸發</td></tr>
-                    <tr><td><code>/autoreply help</code></td><td>查看自動回覆語法說明</td></tr>
-                    <tr><td><code>/autoreply ignore</code></td><td>設定忽略的頻道</td></tr>
+                    <tr><td><code>/autoreply remove</code></td><td>移除自動回覆規則</td></tr>
+                    <tr><td><code>/autoreply edit</code></td><td>編輯現有的自動回覆</td></tr>
+                    <tr><td><code>/autoreply quickadd</code></td><td>快速新增觸發字串或回覆到現有規則</td></tr>
+                    <tr><td><code>/autoreply list</code></td><td>列出所有自動回覆</td></tr>
+                    <tr><td><code>/autoreply clear</code></td><td>清除所有自動回覆</td></tr>
+                    <tr><td><code>/autoreply test</code></td><td>測試回覆內容的變數替換效果</td></tr>
+                    <tr><td><code>/autoreply export</code></td><td>匯出自動回覆設定為 JSON 檔案</td></tr>
+                    <tr><td><code>/autoreply import</code></td><td>從 JSON 檔案匯入自動回覆設定</td></tr>
+                    <tr><td><code>/autoreply ignore</code></td><td>設定忽略/限定的頻道</td></tr>
+                    <tr><td><code>/autoreply help</code></td><td>在 Discord 內查看使用說明</td></tr>
+                </table>
+
+                <h3 style="margin-top: 1.5rem; color: var(--text-primary);">觸發模式</h3>
+                <div class="module-desc">
+                    新增自動回覆時，可選擇以下幾種觸發模式：
+                </div>
+                <table class="cmd-table">
+                    <tr><th>模式</th><th>說明</th><th>範例</th></tr>
+                    <tr><td><code>包含 (contains)</code></td><td>訊息中包含觸發字串即觸發</td><td>觸發 <code>你好</code> → 「你好嗎」「說你好」皆觸發</td></tr>
+                    <tr><td><code>完全匹配 (equals)</code></td><td>訊息必須與觸發字串完全相同</td><td>觸發 <code>你好</code> → 只有「你好」觸發</td></tr>
+                    <tr><td><code>開始於 (starts_with)</code></td><td>訊息以觸發字串開頭</td><td>觸發 <code>早安</code> → 「早安大家」觸發</td></tr>
+                    <tr><td><code>結束於 (ends_with)</code></td><td>訊息以觸發字串結尾</td><td>觸發 <code>晚安</code> → 「大家晚安」觸發</td></tr>
+                    <tr><td><code>正規表達式 (regex)</code></td><td>使用 Python regex 進行匹配</td><td>觸發 <code>你好+</code> → 「你好好好」觸發</td></tr>
                 </table>
                 <div class="doc-note">
-                    <strong>特殊語法：</strong><code>{sticker:ID}</code> 發送貼圖、<code>{react:emoji}</code> 添加表情反應。
+                    <strong>提示：</strong>觸發字串與回覆內容都支援使用逗號 <code>,</code> 分隔多個值。多個觸發字串為「任一即觸發」，多個回覆則「隨機選擇一個」。
+                </div>
+
+                <h3 style="margin-top: 1.5rem; color: var(--text-primary);">回覆內容變數</h3>
+                <div class="module-desc">
+                    可在回覆內容中使用以下變數，機器人會自動替換為對應的值：
+                </div>
+                <table class="cmd-table">
+                    <tr><th>變數</th><th>說明</th></tr>
+                    <tr><td><code>{user}</code></td><td>提及觸發者（@使用者）</td></tr>
+                    <tr><td><code>{content}</code></td><td>觸發訊息的完整內容</td></tr>
+                    <tr><td><code>{guild}</code> / <code>{server}</code></td><td>伺服器名稱</td></tr>
+                    <tr><td><code>{channel}</code></td><td>頻道名稱</td></tr>
+                    <tr><td><code>{author}</code> / <code>{member}</code></td><td>觸發者的使用者名稱</td></tr>
+                    <tr><td><code>{role}</code></td><td>觸發者的最高身份組名稱</td></tr>
+                    <tr><td><code>{id}</code></td><td>觸發者的使用者 ID</td></tr>
+                    <tr><td><code>\n</code></td><td>換行</td></tr>
+                    <tr><td><code>\t</code></td><td>制表符（Tab）</td></tr>
+                </table>
+
+                <h3 style="margin-top: 1.5rem; color: var(--text-primary);">隨機與進階語法</h3>
+                <table class="cmd-table">
+                    <tr><th>語法</th><th>說明</th><th>範例</th></tr>
+                    <tr><td><code>{random}</code></td><td>隨機產生 1~100 的整數</td><td>「你的幸運數字是 {random}」</td></tr>
+                    <tr><td><code>{randint:min-max}</code></td><td>隨機產生 min~max 範圍的整數</td><td><code>{randint:1-999}</code> → 隨機 1~999</td></tr>
+                    <tr><td><code>{random_user}</code></td><td>從最近 50 則訊息中隨機選一位非機器人使用者</td><td>「隨機點名：{random_user}」</td></tr>
+                    <tr><td><code>{react:emoji}</code></td><td>對觸發訊息添加表情反應（不會產生回覆文字）</td><td><code>{react:👍}</code> 或 <code>{react:↖️}</code></td></tr>
+                    <tr><td><code>{sticker:ID}</code></td><td>傳送指定 ID 的伺服器貼圖</td><td><code>{sticker:123456789012345678}</code></td></tr>
+                </table>
+                <div class="doc-note">
+                    <strong>取得貼圖 ID：</strong>可使用 <code>y!sticker</code> 指令取得伺服器貼圖的 ID。
+                </div>
+
+                <h3 style="margin-top: 1.5rem; color: var(--text-primary);">頻道控制</h3>
+                <div class="module-desc">
+                    自動回覆提供兩層頻道控制：
+                </div>
+                <table class="cmd-table">
+                    <tr><th>層級</th><th>設定方式</th><th>說明</th></tr>
+                    <tr><td>全域忽略</td><td><code>/autoreply ignore</code></td><td>設定整個模組在哪些頻道生效或不生效（黑名單 / 白名單）</td></tr>
+                    <tr><td>單條規則</td><td><code>/autoreply add</code> 的 <code>channel_mode</code> 參數</td><td>每條自動回覆可獨立設定頻道白名單或黑名單</td></tr>
+                </table>
+
+                <h3 style="margin-top: 1.5rem; color: var(--text-primary);">組合範例</h3>
+                <div class="doc-note" style="background: rgba(87, 242, 135, 0.08); border-left-color: #57f287;">
+                    <strong>範例 1：</strong>歡迎新人<br>
+                    模式：<code>contains</code>，觸發：<code>大家好, 我是新來的</code>，回覆：<code>歡迎 {user} 來到 {guild}！🎉</code>，回覆原訊息：是<br><br>
+                    <strong>範例 2：</strong>隨機抽獎<br>
+                    模式：<code>equals</code>，觸發：<code>抽獎</code>，回覆：<code>{user} 的抽獎號碼是 {randint:1000-9999}！</code>，機率：100%<br><br>
+                    <strong>範例 3：</strong>表情反應（不發送文字）<br>
+                    模式：<code>contains</code>，觸發：<code>好耶</code>，回覆：<code>{react:🎉}{react:👍}</code><br><br>
+                    <strong>範例 4：</strong>機率觸發<br>
+                    模式：<code>contains</code>，觸發：<code>哈哈</code>，回覆：<code>有什麼好笑的 {user}, 真的好笑嗎</code>，機率：10%
                 </div>
             </div>
 
