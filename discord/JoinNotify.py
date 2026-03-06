@@ -3,6 +3,8 @@ import discord
 from discord.ext import commands
 from discord import app_commands
 import asyncio
+from logger import log
+import logging
 
 class JoinNotifyView(discord.ui.View):
     def __init__(self):
@@ -64,8 +66,9 @@ class JoinNotify(commands.Cog):
                 embed.set_footer(text=guild.name, icon_url=guild.icon.url if guild.icon else None)
                 view = JoinNotifyView()
                 await inviter.send(embed=embed, view=view)
+                log(f"找到了邀請者並私訊成功", module_name="JoinNotify", user=inviter, guild=guild)
             except discord.Forbidden:
-                pass
+                log("無法私訊邀請者，可能是因為他關閉了私訊或封鎖了我", level=logging.WARNING, module_name="JoinNotify", user=inviter, guild=guild)
         else:
             # dm the owner of the guild if we can't find the inviter
             owner = guild.owner
@@ -80,7 +83,8 @@ class JoinNotify(commands.Cog):
                 embed.set_footer(text=guild.name, icon_url=guild.icon.url if guild.icon else None)
                 view = JoinNotifyView()
                 await owner.send(embed=embed, view=view)
+                log(f"找不到邀請者但私訊了伺服器擁有者成功", module_name="JoinNotify", user=owner, guild=guild)
             except discord.Forbidden:
-                pass
+                log("無法私訊伺服器擁有者，可能是因為他關閉了私訊或封鎖了我", level=logging.WARNING, module_name="JoinNotify", user=owner, guild=guild)
 
 asyncio.run(bot.add_cog(JoinNotify(bot)))
