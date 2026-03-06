@@ -1014,12 +1014,48 @@
             <div class="doc-section" id="twbus">
                 <h2><span class="module-icon">🚌</span> twbus — 台灣公車 / YouBike</h2>
                 <div class="module-desc">
-                    即時查詢台灣公車到站資訊與路線搜尋，同時整合 YouBike 站點查詢。通勤族的好幫手！內建速率限制裝飾器防止 API 過載。
+                    即時查詢台灣公車到站資訊、路線總覽、YouBike 站點狀態，並支援收藏站牌。公車資料庫每小時自動更新一次。
                 </div>
                 <table class="cmd-table">
                     <tr><th>指令</th><th>說明</th></tr>
-                    <tr><td><code>/twbus</code></td><td>查詢公車即時到站資訊</td></tr>
+                    <tr><td><code>/bus getroute</code></td><td>查詢指定路線的所有站牌與到站資訊</td></tr>
+                    <tr><td><code>/bus getstop</code></td><td>查詢指定路線下特定站牌的即時到站資訊</td></tr>
+                    <tr><td><code>/bus youbike</code></td><td>查詢指定 YouBike 站點的可借車數與空位</td></tr>
+                    <tr><td><code>/bus favorites</code></td><td>查看並快速存取你收藏的站牌與 YouBike 站點</td></tr>
                 </table>
+
+                <h3 style="margin-top: 1.5rem; color: var(--text-primary);">互動按鈕</h3>
+                <div class="module-desc">查詢結果的嵌入訊息下方附有操作按鈕：</div>
+                <table class="cmd-table">
+                    <tr><th>按鈕</th><th>說明</th></tr>
+                    <tr><td><code>🔄</code></td><td>重新整理到站資訊（10 秒冷卻）</td></tr>
+                    <tr><td><code>❤️</code></td><td>加入 / 移除最愛（收藏上限可由伺服器設定）</td></tr>
+                    <tr><td><code>🗺️</code></td><td>在 Google 地圖上開啟站牌位置（若有座標）</td></tr>
+                </table>
+
+                <h3 style="margin-top: 1.5rem; color: var(--text-primary);">到站資訊說明</h3>
+                <table class="cmd-table">
+                    <tr><th>欄位</th><th>說明</th></tr>
+                    <tr><td>預估到站</td><td>距離到站的分秒數，若顯示「進站中」表示車輛已進站</td></tr>
+                    <tr><td>預計到站</td><td>API 給出的預計時間（時:分格式）</td></tr>
+                    <tr><td>車輛狀態</td><td>列出接近中的車牌號碼及是否已滿</td></tr>
+                    <tr><td>站序</td><td>此站牌在路線中的順序</td></tr>
+                    <tr><td>座標</td><td>點擊可開啟 Google Maps</td></tr>
+                </table>
+
+                <h3 style="margin-top: 1.5rem; color: var(--text-primary);">YouBike 資訊說明</h3>
+                <table class="cmd-table">
+                    <tr><th>欄位</th><th>說明</th></tr>
+                    <tr><td>可借車數</td><td>目前可借走的腳踏車數量</td></tr>
+                    <tr><td>可停空位</td><td>目前可停放的空格數</td></tr>
+                    <tr><td>總停車格</td><td>站點的總容量</td></tr>
+                    <tr><td>狀態</td><td>該站是否正常營運</td></tr>
+                    <tr><td>最後更新</td><td>YouBike 系統回報的資料更新時間</td></tr>
+                </table>
+                <div class="doc-note">
+                    <strong>速率限制：</strong>每位用戶每 10 秒只能查詢一次，重新整理按鈕同樣受此限制。<br>
+                    <strong>最愛上限：</strong>預設每人最多 2 個最愛站牌與 2 個最愛 YouBike 站點，上限可由設定檔調整。
+                </div>
             </div>
 
             <div class="doc-section" id="OXWU">
