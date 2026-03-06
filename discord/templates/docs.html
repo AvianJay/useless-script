@@ -495,12 +495,63 @@
             <div class="doc-section" id="ReportSystem">
                 <h2><span class="module-icon">🚨</span> ReportSystem — 檢舉系統</h2>
                 <div class="module-desc">
-                    使用者可檢舉違規訊息，系統會透過 AI 自動判斷訊息嚴重程度（0-5 級），並依據伺服器規則建議處分動作。內建冷卻時間防止濫用。
+                    使用者可透過右鍵選單檢舉違規訊息，系統會透過 AI 自動判斷訊息嚴重程度（0-5 級），並依據伺服器規則建議處分動作。內建冷卻時間與黑名單機制防止濫用。
                 </div>
+
+                <h3 style="margin-top: 1.5rem; color: var(--text-primary);">使用方式</h3>
+                <div class="doc-note">
+                    <strong>如何檢舉：</strong>在訊息上 <strong>右鍵</strong>（手機長按）→ <strong>應用程式</strong> → <strong>檢舉訊息</strong>，填寫檢舉原因後送出。系統會自動通知管理員並觸發 AI 審核。
+                </div>
+
+                <h3 style="margin-top: 1.5rem; color: var(--text-primary);">管理員設定指令（/report）<span class="doc-tag admin">管理員</span></h3>
                 <table class="cmd-table">
                     <tr><th>指令</th><th>說明</th></tr>
-                    <tr><td><code>/report</code></td><td>檢舉指定訊息或使用者</td></tr>
+                    <tr><td><code>/report settings</code></td><td>查看或修改檢舉系統的各項設定</td></tr>
+                    <tr><td><code>/report blacklist-role</code></td><td>管理檢舉黑名單身分組（新增 / 移除 / 查看）</td></tr>
+                    <tr><td><code>/report set-server-rules</code></td><td>設定 AI 審核所依據的伺服器規則</td></tr>
                 </table>
+
+                <h3 style="margin-top: 1.5rem; color: var(--text-primary);">可設定項目</h3>
+                <table class="cmd-table">
+                    <tr><th>設定項目</th><th>說明</th><th>預設值</th></tr>
+                    <tr><td><code>檢舉通知頻道</code></td><td>檢舉紀錄與 AI 判斷結果的接收頻道</td><td>未設定</td></tr>
+                    <tr><td><code>處分通知頻道</code></td><td>執行處分後公告的頻道</td><td>未設定</td></tr>
+                    <tr><td><code>檢舉回覆訊息</code></td><td>提交檢舉後顯示給檢舉人的確認訊息</td><td>感謝您的檢舉...</td></tr>
+                    <tr><td><code>檢舉頻率限制</code></td><td>同一使用者兩次檢舉之間的冷卻時間（秒）</td><td>300 秒</td></tr>
+                    <tr><td><code>檢舉通知訊息</code></td><td>通知頻道中額外 @提及的角色或內容</td><td>@Admin</td></tr>
+                </table>
+
+                <h3 style="margin-top: 1.5rem; color: var(--text-primary);">AI 審核流程</h3>
+                <div class="module-desc">
+                    當收到檢舉後，系統會自動執行以下流程：
+                </div>
+                <div class="doc-note" style="background: rgba(87, 242, 135, 0.08); border-left-color: #57f287;">
+                    1. 擷取被檢舉訊息的內容與附件<br>
+                    2. 蒐集該用戶最近 10 則歷史訊息作為上下文<br>
+                    3. 根據伺服器規則，由 AI 判斷違規等級（0-5）<br>
+                    4. AI 給出建議處分（禁言 / 踢出 / 封鎖）與理由<br>
+                    5. 管理員可直接點按鈕執行 AI 建議，或手動選擇處分
+                </div>
+
+                <h3 style="margin-top: 1.5rem; color: var(--text-primary);">管理員操作按鈕</h3>
+                <div class="module-desc">
+                    檢舉通知送達檢舉頻道後，管理員可使用以下操作按鈕：
+                </div>
+                <table class="cmd-table">
+                    <tr><th>按鈕</th><th>說明</th></tr>
+                    <tr><td><code>執行 AI 建議處置</code></td><td>一鍵執行 AI 給出的建議處分</td></tr>
+                    <tr><td><code>封鎖</code></td><td>手動封鎖被檢舉的用戶（可設定刪除訊息時間與封鎖時長）</td></tr>
+                    <tr><td><code>踢出</code></td><td>手動踢出被檢舉的用戶</td></tr>
+                    <tr><td><code>禁言</code></td><td>手動禁言被檢舉的用戶（可設定時長）</td></tr>
+                    <tr><td><code>查看前10則訊息</code></td><td>查看被檢舉者在該頻道的歷史訊息</td></tr>
+                    <tr><td><code>拔除檢舉人檢舉權限</code></td><td>惡意檢舉時可撤銷該用戶的檢舉資格</td></tr>
+                    <tr><td><code>拒絕檢舉</code></td><td>拒絕本次檢舉，並發送私訊通知檢舉人</td></tr>
+                </table>
+
+                <h3 style="margin-top: 1.5rem; color: var(--text-primary);">黑名單機制</h3>
+                <div class="doc-note">
+                    <strong>檢舉黑名單：</strong>管理員可透過 <code>/report blacklist-role</code> 設定「檢舉黑名單身分組」。擁有該身分組的成員將無法提交檢舉。適用於防止特定用戶濫用檢舉功能。
+                </div>
             </div>
 
             <div class="doc-section" id="ModerationNotify">
