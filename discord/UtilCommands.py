@@ -235,7 +235,7 @@ async def randomuser_command(interaction: discord.Interaction, mention: str = "F
         return
 
     selected_user = random.choice(users)
-    await interaction.response.send_message(f"隨機選擇的用戶是：{selected_user.mention if mention else selected_user.display_name}！\n-# 抽取用戶總數：{len(users)}")
+    await interaction.response.send_message(f"隨機選擇的用戶是：{selected_user.mention}！\n-# 抽取用戶總數：{len(users)}", allowed_mentions=discord.AllowedMentions(users=mention, roles=False, everyone=False))
 
 
 @bot.tree.command(name=app_commands.locale_str("userinfo"), description="顯示用戶資訊")
@@ -496,7 +496,7 @@ async def get_cmd_mention(interaction: discord.Interaction, command: str, subcom
     if mention is None:
         await interaction.response.send_message("找不到指定的指令。", ephemeral=True)
         return
-    await interaction.response.send_message(f"{mention}")
+    await interaction.response.send_message(f"{mention}", allowed_mentions=discord.AllowedMentions.none())
 
 
 @bot.tree.command(name=app_commands.locale_str("textlength"), description="計算輸入文字的長度")

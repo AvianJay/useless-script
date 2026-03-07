@@ -443,10 +443,10 @@ class ItemSystem(commands.GroupCog, name="item", description="物品系統指令
         # Add to receiver
         await give_item_to_user(guild_id, receiver_id, item_id, removed)
         
-        await interaction.followup.send(f"你給了 {user.display_name}(`{user.name}`) {removed} 個 {item['name']}。")
+        await interaction.followup.send(f"你給了 {user.display_name}(`{user.name}`) {removed} 個 {item['name']}。", allowed_mentions=discord.AllowedMentions.none())
         # dm the receiver
         try:
-            await user.send(f"你從 {interaction.user.display_name}(`{interaction.user.name}`) 那裡收到了 {amount} 個 {item['name']}！\n-# 伺服器: {interaction.guild.name if interaction.is_guild_integration() else '私人訊息'}")
+            await user.send(f"你從 {interaction.user.display_name}(`{interaction.user.name}`) 那裡收到了 {amount} 個 {item['name']}！\n-# 伺服器: {interaction.guild.name if interaction.is_guild_integration() else '私人訊息'}", allowed_mentions=discord.AllowedMentions.none())
         except Exception:
             pass
 
@@ -493,7 +493,7 @@ class ItemModerate(commands.GroupCog, name="itemmod", description="物品系統�
             except Exception as e:
                 log(f"Error in admin action callback: {e}", module_name="ItemSystem", level=logging.ERROR)
 
-        await interaction.followup.send(f"你給了 {user.display_name}(`{user.name}`) {amount} 個 {item['name']}。")
+        await interaction.followup.send(f"你給了 {user.display_name}(`{user.name}`) {amount} 個 {item['name']}。", allowed_mentions=discord.AllowedMentions.none())
 
     @app_commands.command(name="remove", description="移除用戶的一個物品")
     @app_commands.describe(user="你想移除物品的用戶", item_id="你想移除的物品ID", amount="你想移除的數量")
@@ -509,19 +509,19 @@ class ItemModerate(commands.GroupCog, name="itemmod", description="物品系統�
         
         removed_count = await remove_item_from_user(guild_id, receiver_id, item_id, amount)
         if removed_count == 0:
-            await interaction.response.send_message(f"{user.name} 沒有這個物品。", ephemeral=True)
+            await interaction.response.send_message(f"{user.name} 沒有這個物品。", ephemeral=True, allowed_mentions=discord.AllowedMentions.none())
             return
         
         item = get_item_by_id(item_id, guild_id)
         item_name = item['name'] if item else "未知物品"
 
-        await interaction.response.send_message(f"你移除了 {user.display_name}(`{user.name}`) 的 {removed_count} 個 {item_name}。", ephemeral=True)
+        await interaction.response.send_message(f"你移除了 {user.display_name}(`{user.name}`) 的 {removed_count} 個 {item_name}。", ephemeral=True, allowed_mentions=discord.AllowedMentions.none())
 
     @app_commands.command(name="list", description="列出所有可用的物品")
     async def admin_list_items(self, interaction: discord.Interaction):
         all_items_list = get_all_items_for_guild(interaction.guild.id)
         if not all_items_list:
-            await interaction.response.send_message("目前沒有任何物品。", ephemeral=True)
+            await interaction.response.send_message("目前沒有任何物品。", ephemeral=True, allowed_mentions=discord.AllowedMentions.none())
             return
         
         embed = discord.Embed(title="所有可用的物品", color=0x0000ff)

@@ -694,9 +694,9 @@ class AutoReply(commands.GroupCog, name="autoreply"):
                 
                 try:
                     if ar.get("reply", False):
-                        await message.reply(final_response, stickers=[sticker] if sticker else [])
+                        await message.reply(final_response, stickers=[sticker] if sticker else [], allowed_mentions=discord.AllowedMentions(users=True, roles=False, everyone=False))
                     else:
-                        await message.channel.send(final_response, stickers=[sticker] if sticker else [])
+                        await message.channel.send(final_response, stickers=[sticker] if sticker else [], allowed_mentions=discord.AllowedMentions(users=True, roles=False, everyone=False))
                     
                     # 記錄日誌
                     # 避免 trigger 太長

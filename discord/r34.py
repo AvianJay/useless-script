@@ -139,7 +139,7 @@ async def r34_command(interaction: discord.Interaction, tags: str = None, pid: i
 async def r34tags_command(interaction: discord.Interaction, query: str = None):
     await interaction.response.defer()
     tags = r34tags(query)
-    await interaction.followup.send(tags)
+    await interaction.followup.send(tags, allowed_mentions=discord.AllowedMentions.none())
 
 
 if __name__ == "__main__":
