@@ -70,7 +70,9 @@ async def settings_autocomplete(interaction: discord.Interaction, current: str):
 
 async def do_action_str(action: str, guild: Optional[discord.Guild] = None, user: Optional[discord.Member] = None, message: Optional[discord.Message] = None):
     """AutoModerate wrapper：以機器人身份執行動作，委派給 Moderate.do_action_str。"""
-    return await Moderate.do_action_str(action, guild=guild, user=user, message=message, moderator=None)
+    # 以 bot 本身作為 moderator，讓 send_mod_message 能在自動處置中正常運作
+    moderator = guild.me if guild else None
+    return await Moderate.do_action_str(action, guild=guild, user=user, message=message, moderator=moderator)
 
 
 # 快速設定的處置預設選項（value 為 __custom__ 時會跳出 Modal 讓使用者輸入）

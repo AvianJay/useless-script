@@ -450,13 +450,16 @@ async def moderation_message_settings(interaction: Optional[discord.Interaction]
             reason = action['reason']
             break
     async def generate_message():
+        resolved_guild = guild if guild else (interaction.guild if interaction else None)
+        case_id = await get_case_id(resolved_guild) if resolved_guild else f"{current_roc_year()}0001"
+        executor_mention = moderator.mention if moderator else "系統自動"
         return f"""
 ### ⛔ 違規處分
 > - 被處分者：{user.mention}
 > - 處分原因：{reason}
 > - 處分結果：{action_text}
-> - 裁判字號：{await get_case_id(guild if guild else interaction.guild)}
-> - 處分執行：{moderator.mention}
+> - 裁判字號：{case_id}
+> - 處分執行：{executor_mention}
 """
 
     async def send_message():
