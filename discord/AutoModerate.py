@@ -69,140 +69,8 @@ async def settings_autocomplete(interaction: discord.Interaction, current: str):
     ][:25]  # Discord 限制最多 25 個選項
 
 async def do_action_str(action: str, guild: Optional[discord.Guild] = None, user: Optional[discord.Member] = None, message: Optional[discord.Message] = None):
-    moderator = bot.user
-    # if user is none just check if action is valid
-    action_parts = action.split(",")
-    action_parts = [a.strip() for a in action_parts]
-    if len(action_parts) > 5:
-        return ["錯誤：一次只能執行最多5個動作。"]
-    logs = []
-    last_reason = "自動管理執行"
-    actions = []
-    for a in action_parts:
-        cmd = a.split(" ")
-        if cmd[0] == "ban":
-            # ban <reason> <delete_messages> <duration>
-            if len(cmd) == 1:
-                cmd.append("0s")
-            if len(cmd) == 2:
-                cmd.append("0s")
-            if len(cmd) == 3:
-                cmd.append(last_reason)
-
-            duration_seconds = Moderate.timestr_to_seconds(cmd[1]) if cmd[1] != "0" else 0
-            delete_messages = Moderate.timestr_to_seconds(cmd[2]) if cmd[2] != "0" else 0
-            cmd.pop(0)  # remove "ban"
-            cmd.pop(0)  # remove duration
-            cmd.pop(0)  # remove delete_messages
-            reason = " ".join(cmd)
-            last_reason = reason
-            result = None
-            if user:
-                result = await Moderate.ban_user(guild, user, reason=reason, duration=duration_seconds, delete_message_seconds=delete_messages, moderator=None)
-                if not result:
-                    logs.append(f"無法封禁用戶 {user}")
-            if not user or result:
-                logs.append(f"封禁用戶，原因: {reason}，持續秒數: {duration_seconds}秒，刪除訊息時間: {delete_messages}秒")
-            actions.append({"action": "ban", "duration": duration_seconds, "reason": reason})
-        elif cmd[0] == "kick":
-            # kick <reason>
-            if len(cmd) == 1:
-                cmd.append(last_reason)
-            cmd.pop(0)  # remove "kick"
-            reason = " ".join(cmd)
-            logs.append(f"踢出用戶，原因: {reason}")
-            if user:
-                await user.kick(reason=reason)
-            actions.append({"action": "kick", "reason": reason})
-        elif cmd[0] == "mute" or cmd[0] == "timeout":
-            # mute <duration> <reason>
-            if len(cmd) == 1:
-                cmd.append("10m")
-            if len(cmd) == 2:
-                cmd.append(last_reason)
-            duration_seconds = Moderate.timestr_to_seconds(cmd[1]) if cmd[1] != "0" else 0
-            cmd.pop(0)  # remove "mute" or "timeout"
-            cmd.pop(0)  # remove duration
-            reason = " ".join(cmd) if cmd else last_reason
-            logs.append(f"禁言用戶，原因: {reason}，持續秒數: {duration_seconds}秒")
-            if user:
-                await user.timeout(datetime.now(timezone.utc) + timedelta(seconds=duration_seconds), reason=reason)
-            actions.append({"action": "mute", "duration": duration_seconds, "reason": reason})
-        elif cmd[0] == "unban":
-            # unban <reason>
-            if len(cmd) == 1:
-                cmd.append(last_reason)
-            cmd.pop(0)  # remove "unban"
-            reason = " ".join(cmd)
-            last_reason = reason
-            logs.append(f"解封用戶，原因: {reason}")
-            if guild and user:
-                try:
-                    await guild.unban(user, reason=reason)
-                    set_user_data(guild.id, user.id, "unban_time", None)
-                except Exception as e:
-                    log(f"解封用戶 {user} 時發生錯誤：{e}", level=logging.ERROR, module_name="Moderate", guild=guild)
-            actions.append({"action": "unban", "reason": reason})
-        elif cmd[0] == "unmute" or cmd[0] == "untimeout":
-            # unmute <reason>
-            if len(cmd) == 1:
-                cmd.append(last_reason)
-            cmd.pop(0)  # remove "unmute" or "untimeout"
-            reason = " ".join(cmd)
-            logs.append(f"解除禁言用戶，原因: {reason}")
-            if user:
-                await user.timeout(None, reason=reason)
-            actions.append({"action": "unmute", "reason": reason})
-        elif cmd[0] == "delete" or cmd[0] == "delete_dm":
-            # delete <warn_message>
-            logs.append("刪除訊息")
-            if message:
-                await message.delete()
-            if len(cmd) > 1:
-                msg = cmd.copy()
-                msg.pop(0)
-                warn_message = " ".join(msg)
-                warn_message = warn_message.replace("{user}", user.mention if user else "用戶")
-                logs.append(f"並警告: {warn_message}")
-                if cmd[0] == "delete_dm" and user:
-                    await user.send(warn_message)
-                elif message:
-                    await message.channel.send(warn_message)
-        elif cmd[0] == "warn" or cmd[0] == "warn_dm":
-            # warn <warn_message>
-            if len(cmd) == 1:
-                cmd.append(f"{user.mention if user else '用戶'}，請注意你的行為。")
-            msg = cmd.copy()
-            msg.pop(0)
-            warn_message = " ".join(msg)
-            warn_message = warn_message.replace("{user}", user.mention if user else "用戶")
-            logs.append(f"傳送警告訊息: {warn_message}")
-            if cmd[0] == "warn_dm" and user:
-                await user.send(warn_message)
-            elif message:
-                await message.reply(warn_message)
-        elif cmd[0] == "send_mod_message" or cmd[0] == "smm":
-            # send_mod_message
-            if len(cmd) == 1:
-                cmd.append("用戶被系統處置。")
-            logs.append("傳送管理訊息")
-            if guild and user and moderator:
-                await Moderate.moderation_message_settings(None, user, moderator, actions, direct=True)
-        elif cmd[0] == "force_verify":
-            # force_verify <duration>
-            if "ServerWebVerify" in modules:
-                from ServerWebVerify import force_verify_user
-                if user:
-                    success, message = await force_verify_user(guild, user)
-                    logs.append(message)
-                if len(cmd) > 1:
-                    duration_seconds = Moderate.timestr_to_seconds(cmd[1]) if cmd[1] != "0" else 0
-                    until_time = datetime.now(timezone.utc) + timedelta(seconds=duration_seconds)
-                    logs.append(f"強制驗證持續秒數: {duration_seconds}秒")
-                    set_server_config(guild.id, "force_verify_until", until_time.timestamp())
-            else:
-                logs.append("無法執行 force_verify，因為 ServerWebVerify 模組未找到")
-    return logs
+    """AutoModerate wrapper：以機器人身份執行動作，委派給 Moderate.do_action_str。"""
+    return await Moderate.do_action_str(action, guild=guild, user=user, message=message, moderator=None)
 
 
 # 快速設定的處置預設選項（value 為 __custom__ 時會跳出 Modal 讓使用者輸入）
@@ -644,6 +512,19 @@ class AutoModerate(commands.GroupCog, name=app_commands.locale_str("automod")):
         if setting_base not in automod_settings:
             automod_settings[setting_base] = {}
         value = parse_mention_to_id(value) if setting_key in ["channel_id", "log_channel"] else value
+        # 若為頻道設定，驗證頻道存在且機器人有發言權限
+        if setting_key in ["channel_id", "log_channel"] and value:
+            try:
+                channel_obj = interaction.guild.get_channel(int(value))
+            except (ValueError, TypeError):
+                channel_obj = None
+            if channel_obj is None:
+                await interaction.response.send_message(f"⚠️ 找不到頻道（ID: `{value}`），請確認輸入是否正確。", ephemeral=True)
+                return
+            perms = channel_obj.permissions_for(interaction.guild.me)
+            if not (perms.view_channel and perms.send_messages):
+                await interaction.response.send_message(f"⚠️ 機器人在 {channel_obj.mention} 沒有檢視頻道或發送訊息的權限，請先調整後再設定。", ephemeral=True)
+                return
         automod_settings[setting_base][setting_key] = value
         set_server_config(guild_id, "automod", automod_settings)
         await interaction.response.send_message(f"已將自動管理設定 '{setting}' 設為 {value}。")
@@ -799,6 +680,10 @@ class AutoModerate(commands.GroupCog, name=app_commands.locale_str("automod")):
     @app_commands.command(name=app_commands.locale_str("flagged-user-alert-channel"), description="設置用戶加入伺服器時的通知頻道")
     @app_commands.describe(channel="用於接收用戶加入通知的頻道")
     async def set_flagged_user_onjoin_channel(self, interaction: discord.Interaction, channel: discord.TextChannel):
+        perms = channel.permissions_for(interaction.guild.me)
+        if not (perms.view_channel and perms.send_messages):
+            await interaction.response.send_message(f"⚠️ 機器人在 {channel.mention} 沒有檢視頻道或發送訊息的權限，請先調整後再設定。", ephemeral=True)
+            return
         set_server_config(interaction.guild.id, "flagged_user_onjoin_channel", channel.id)
         await interaction.response.send_message(f"已將用戶加入通知頻道設置為 {channel.mention}。")
     

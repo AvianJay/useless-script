@@ -143,6 +143,27 @@ def current_roc_year() -> int:
     return datetime.now().year - 1911
 
 
+def check_member_hierarchy(
+    executor: discord.Member,
+    target: Union[discord.Member, discord.User],
+    bot_member: discord.Member,
+) -> tuple[bool, str]:
+    """檢查執行者是否有權限對目標成員操作（身份組階層檢查）。
+
+    回傳 (True, "") 表示可以執行；(False, 錯誤訊息) 表示無權限。
+    若目標不是 discord.Member（即已被封禁、不在伺服器的 User），跳過階層檢查。
+    """
+    if not isinstance(target, discord.Member):
+        return True, ""
+    if target == target.guild.owner:
+        return False, "無法對伺服器擁有者執行此操作。"
+    if target.top_role >= bot_member.top_role:
+        return False, f"機器人無法對 {target.mention} 執行操作（對方身份組高於或等於機器人）。"
+    if executor != executor.guild.owner and target.top_role >= executor.top_role:
+        return False, f"你無法對 {target.mention} 執行操作（對方身份組高於或等於你）。"
+    return True, ""
+
+
 async def ban_user(guild: discord.Guild, user: Union[discord.Member, discord.User], reason: str, duration: int = 0, delete_message_seconds: int = 0, moderator: Optional[discord.Member] = None) -> bool:
     notifymsg = None
     try:
@@ -214,6 +235,26 @@ async def check_unban():
 on_ready_tasks.append(check_unban)
 
 
+def _bot_action_check(
+    guild: Optional[discord.Guild],
+    user,
+    perm_name: str,
+) -> tuple[bool, str]:
+    """檢查機器人是否有執行指定動作的伺服器權限，以及身份組是否夠高。
+    只在 guild 與 user 都存在時進行完整檢查，否則視為 dry-run 直接放行。"""
+    if not guild:
+        return True, ""
+    bot_member = guild.me
+    if not getattr(bot_member.guild_permissions, perm_name, False):
+        return False, f"機器人缺少 `{perm_name}` 權限，跳過此動作。"
+    if user and isinstance(user, discord.Member):
+        if user == guild.owner:
+            return False, "無法對伺服器擁有者執行操作。"
+        if user.top_role >= bot_member.top_role:
+            return False, f"{user} 的身份組高於或等於機器人，跳過此動作。"
+    return True, ""
+
+
 async def do_action_str(action: str, guild: Optional[discord.Guild] = None, user: Optional[discord.Member] = None, message: Optional[discord.Message] = None, moderator: Optional[discord.Member] = None):
     # if user is none just check if action is valid
     actions = action.split(",")
@@ -243,10 +284,15 @@ async def do_action_str(action: str, guild: Optional[discord.Guild] = None, user
             last_reason = reason
             success = True
             if user:
-                success = await ban_user(guild, user, reason=reason, duration=duration_seconds, delete_message_seconds=delete_messages)
+                ok, msg = _bot_action_check(guild, user, "ban_members")
+                if not ok:
+                    logs.append(f"封禁跳過：{msg}")
+                    success = False
+                else:
+                    success = await ban_user(guild, user, reason=reason, duration=duration_seconds, delete_message_seconds=delete_messages)
             if success:
                 logs.append(f"封禁用戶，原因: {reason}，持續秒數: {duration_seconds}秒，刪除訊息時間: {delete_messages}秒")
-            else:
+            elif user:
                 logs.append(f"封禁用戶失敗。")
             actions_json.append({"action": "ban", "duration": duration_seconds, "reason": reason})
         elif cmd[0] == "kick":
@@ -255,9 +301,15 @@ async def do_action_str(action: str, guild: Optional[discord.Guild] = None, user
                 cmd.append(last_reason)
             cmd.pop(0)  # remove "kick"
             reason = " ".join(cmd)
-            logs.append(f"踢出用戶，原因: {reason}")
             if user:
-                await user.kick(reason=reason)
+                ok, msg = _bot_action_check(guild, user, "kick_members")
+                if not ok:
+                    logs.append(f"踢出跳過：{msg}")
+                else:
+                    await user.kick(reason=reason)
+                    logs.append(f"踢出用戶，原因: {reason}")
+            else:
+                logs.append(f"踢出用戶，原因: {reason}")
             actions_json.append({"action": "kick", "reason": reason})
         elif cmd[0] == "mute" or cmd[0] == "timeout":
             # mute <duration> <reason>
@@ -269,9 +321,15 @@ async def do_action_str(action: str, guild: Optional[discord.Guild] = None, user
             cmd.pop(0)  # remove "mute" or "timeout"
             cmd.pop(0)  # remove duration
             reason = " ".join(cmd) if cmd else last_reason
-            logs.append(f"禁言用戶，原因: {reason}，持續秒數: {duration_seconds}秒")
             if user:
-                await user.timeout(datetime.now(timezone.utc) + timedelta(seconds=duration_seconds), reason=reason)
+                ok, msg = _bot_action_check(guild, user, "moderate_members")
+                if not ok:
+                    logs.append(f"禁言跳過：{msg}")
+                else:
+                    await user.timeout(datetime.now(timezone.utc) + timedelta(seconds=duration_seconds), reason=reason)
+                    logs.append(f"禁言用戶，原因: {reason}，持續秒數: {duration_seconds}秒")
+            else:
+                logs.append(f"禁言用戶，原因: {reason}，持續秒數: {duration_seconds}秒")
             actions_json.append({"action": "mute", "duration": duration_seconds, "reason": reason})
         elif cmd[0] == "unban":
             # unban <reason>
@@ -280,13 +338,20 @@ async def do_action_str(action: str, guild: Optional[discord.Guild] = None, user
             cmd.pop(0)  # remove "unban"
             reason = " ".join(cmd)
             last_reason = reason
-            logs.append(f"解封用戶，原因: {reason}")
             if guild and user:
-                try:
-                    await guild.unban(user, reason=reason)
-                    set_user_data(guild.id, user.id, "unban_time", None)
-                except Exception as e:
-                    log(f"解封用戶 {user} 時發生錯誤：{e}", level=logging.ERROR, module_name="Moderate", guild=guild)
+                ok, msg = _bot_action_check(guild, None, "ban_members")  # unban: no hierarchy concern
+                if not ok:
+                    logs.append(f"解封跳過：{msg}")
+                else:
+                    try:
+                        await guild.unban(user, reason=reason)
+                        set_user_data(guild.id, user.id, "unban_time", None)
+                        logs.append(f"解封用戶，原因: {reason}")
+                    except Exception as e:
+                        logs.append(f"解封用戶失敗：{e}")
+                        log(f"解封用戶 {user} 時發生錯誤：{e}", level=logging.ERROR, module_name="Moderate", guild=guild)
+            else:
+                logs.append(f"解封用戶，原因: {reason}")
             actions_json.append({"action": "unban", "reason": reason})
         elif cmd[0] == "unmute" or cmd[0] == "untimeout":
             # unmute <reason>
@@ -294,9 +359,15 @@ async def do_action_str(action: str, guild: Optional[discord.Guild] = None, user
                 cmd.append(last_reason)
             cmd.pop(0)  # remove "unmute" or "untimeout"
             reason = " ".join(cmd)
-            logs.append(f"解除禁言用戶，原因: {reason}")
             if user:
-                await user.timeout(None, reason=reason)
+                ok, msg = _bot_action_check(guild, user, "moderate_members")
+                if not ok:
+                    logs.append(f"解除禁言跳過：{msg}")
+                else:
+                    await user.timeout(None, reason=reason)
+                    logs.append(f"解除禁言用戶，原因: {reason}")
+            else:
+                logs.append(f"解除禁言用戶，原因: {reason}")
             actions_json.append({"action": "unmute", "reason": reason})
         elif cmd[0] == "delete" or cmd[0] == "delete_dm":
             # delete <warn_message>
@@ -517,6 +588,10 @@ class Moderate(commands.Cog):
         
         logs = []
         for user in target_users:
+            ok, msg = check_member_hierarchy(interaction.user, user, guild.me)
+            if not ok:
+                logs.append(f"對 {user.mention} 跳過：{msg}")
+                continue
             result_logs = await do_action_str(action, guild=guild, user=user, moderator=interaction.user)
             logs.append(f"對 {user.mention} 的處置結果：\n" + "\n".join(result_logs))
         
@@ -746,6 +821,12 @@ class Moderate(commands.Cog):
             await interaction.followup.send("機器人沒有封鎖成員的權限，請確認機器人擁有「封鎖成員」的權限。", ephemeral=True)
             return
 
+        # 檢查身份組階層（ban 的目標可能是不在伺服器的 User，此時跳過）
+        ok, msg = check_member_hierarchy(interaction.user, user, guild.me)
+        if not ok:
+            await interaction.followup.send(msg, ephemeral=True)
+            return
+
         # 解析封禁時間（可選，若提供則記錄 unban_time）
         unban_time = None
         if duration:
@@ -819,6 +900,12 @@ class Moderate(commands.Cog):
             await interaction.followup.send("機器人沒有踢出成員的權限，請確認機器人擁有「踢出成員」的權限。")
             return
 
+        # 檢查身份組階層
+        ok, msg = check_member_hierarchy(interaction.user, user, guild.me)
+        if not ok:
+            await interaction.followup.send(msg, ephemeral=True)
+            return
+
         # 解析目標 user id / 取得 Member 物件
         user_id = user.id
 
@@ -857,6 +944,13 @@ class Moderate(commands.Cog):
         if not guild.me.guild_permissions.moderate_members:
             await interaction.followup.send("機器人沒有禁言的權限，請確認機器人擁有「管理成員」的權限。")
             return
+
+        # 檢查身份組階層
+        ok, msg = check_member_hierarchy(interaction.user, user, guild.me)
+        if not ok:
+            await interaction.followup.send(msg, ephemeral=True)
+            return
+
         # 解析 target
         user_id = user.id
 
@@ -892,6 +986,13 @@ class Moderate(commands.Cog):
         if not guild.me.guild_permissions.moderate_members:
             await interaction.followup.send("機器人沒有解除禁言的權限，請確認機器人擁有「管理成員」的權限。")
             return
+
+        # 檢查身份組階層
+        ok, msg = check_member_hierarchy(interaction.user, user, guild.me)
+        if not ok:
+            await interaction.followup.send(msg, ephemeral=True)
+            return
+
         # 解析 target
         user_id = user.id
 
@@ -1028,6 +1129,11 @@ class Moderate(commands.Cog):
         if ctx.author.guild_permissions.ban_members is False and ctx.author.guild_permissions.kick_members is False and ctx.author.guild_permissions.moderate_members is False and ctx.author.guild_permissions.manage_messages is False:
             await ctx.send("你沒有權限執行此操作。" + ('\n-# 你傻逼吧你以為你是開發者你就可以濫權？' if ctx.author.id in config('owners') else ''))
             return
+        # 檢查身份組階層
+        ok, msg = check_member_hierarchy(ctx.author, user, ctx.guild.me)
+        if not ok:
+            await ctx.send(msg)
+            return
         logs = await do_action_str(commands_str, ctx.guild, user, message=None, moderator=ctx.author)
         if len(logs) == 0:
             msg = "無任何操作被執行。"
@@ -1073,6 +1179,11 @@ class Moderate(commands.Cog):
             await ctx.send("無法取得被回覆的訊息。")
             return
         user = referenced_message.author
+        # 檢查身份組階層
+        ok, msg = check_member_hierarchy(ctx.author, user, ctx.guild.me)
+        if not ok:
+            await ctx.send(msg)
+            return
         logs = await do_action_str(commands_str, ctx.guild, user, message=referenced_message, moderator=ctx.author)
         if len(logs) == 0:
             msg = "無任何操作被執行。"

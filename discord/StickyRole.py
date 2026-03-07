@@ -28,6 +28,9 @@ class StickyRole(commands.GroupCog, group_name=app_commands.locale_str("stickyro
     @app_commands.checks.has_permissions(administrator=True)
     async def toggle(self, interaction: discord.Interaction, enable: str):
         enabled = (enable == "True")
+        if enabled and not interaction.guild.me.guild_permissions.manage_roles:
+            await interaction.response.send_message("⚠️ 機器人缺少「管理身份組」權限，無法啟用 StickyRole 功能。", ephemeral=True)
+            return
         set_server_config(interaction.guild.id, "stickyrole_enabled", enabled)
         status = "啟用" if enabled else "停用"
         log(f"StickyRole 已{status}", module_name="StickyRole", guild=interaction.guild, user=interaction.user)
@@ -125,6 +128,10 @@ class StickyRole(commands.GroupCog, group_name=app_commands.locale_str("stickyro
     async def set_log_channel(self, interaction: discord.Interaction, channel: discord.TextChannel = None):
         guild_id = interaction.guild.id
         if channel:
+            perms = channel.permissions_for(interaction.guild.me)
+            if not (perms.view_channel and perms.send_messages):
+                await interaction.response.send_message(f"⚠️ 機器人在 {channel.mention} 沒有檢視頻道或發送訊息的權限，請先調整後再設定。", ephemeral=True)
+                return
             set_server_config(guild_id, "stickyrole_log_channel", channel.id)
             await interaction.response.send_message(f"✅ StickyRole 日誌頻道已設定為 {channel.mention}。", ephemeral=True)
         else:
