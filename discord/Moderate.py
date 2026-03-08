@@ -554,51 +554,100 @@ class Moderate(commands.Cog):
     
     
     @app_commands.command(name=app_commands.locale_str("multi-moderate"), description="對多個用戶進行懲處")
-    @app_commands.describe(users="選擇用戶 (提及或是 ID，使用逗號分隔多個用戶)", action="輸入懲處指令，使用逗號分隔多個指令，例如：ban 1d spamming, mute 10m")
+    @app_commands.describe(users="選擇用戶 (提及或是 ID，使用逗號、空格或換行分隔多個用戶)", action="輸入懲處指令，使用逗號分隔多個指令，例如：ban 1d spamming, mute 10m")
     @app_commands.default_permissions(administrator=True)
     @app_commands.allowed_installs(guilds=True, users=False)
     @app_commands.allowed_contexts(guilds=True, dms=False, private_channels=False)
     async def multi_moderate(self, interaction: discord.Interaction, users: str, action: str):
+        await interaction.response.defer()
         guild = interaction.guild
         if guild is None:
-            await interaction.response.send_message("此指令只能在伺服器中使用。", ephemeral=True)
+            await interaction.followup.send("此指令只能在伺服器中使用。", ephemeral=True)
             return
         
         # check bot permissions
         if not guild.me.guild_permissions.administrator:
-            await interaction.response.send_message("機器人需要管理員權限才能執行此操作。", ephemeral=True)
+            await interaction.followup.send("機器人需要管理員權限才能執行此操作。", ephemeral=True)
             return
         
-        user_list = [u.strip() for u in users.split(",")]
-        target_users = []
+        # 支援逗號、空格、換行分隔多個用戶
+        user_list = [u.strip() for u in re.split(r'[,\s]+', users) if u.strip()]
+        target_users: list[Union[discord.Member, discord.User]] = []
+        failed_users: list[str] = []  # 無法解析的用戶原始輸入
         for u in user_list:
             member = None
+            user_id = None
+            # 嘗試解析 ID
             try:
                 user_id = int(u)
                 member = guild.get_member(user_id)
             except ValueError:
                 pass
+            # 嘗試解析提及格式
             if member is None and u.startswith("<@") and u.endswith(">"):
                 try:
                     user_id = int(u[2:-1].replace("!", ""))
                     member = guild.get_member(user_id)
                 except ValueError:
                     pass
+            # 若不在伺服器內，嘗試透過 API 取得用戶
+            if member is None and user_id is not None:
+                try:
+                    member = await self.bot.fetch_user(user_id)
+                except discord.NotFound:
+                    log(f"multi-moderate: 跳過不存在的用戶 {u}", module_name="Moderate", guild=guild)
+                    failed_users.append(f"`{u}`（用戶不存在）")
+                    continue
+                except discord.HTTPException:
+                    log(f"multi-moderate: 取得用戶 {u} 時發生錯誤，跳過", level=logging.WARNING, module_name="Moderate", guild=guild)
+                    failed_users.append(f"`{u}`（取得失敗）")
+                    continue
             if member is None:
-                await interaction.response.send_message(f"無法找到用戶：{u}，請確認輸入是否正確。", ephemeral=True)
-                return
+                log(f"multi-moderate: 無法解析用戶 {u}，跳過", module_name="Moderate", guild=guild)
+                failed_users.append(f"`{u}`（無法解析）")
+                continue
             target_users.append(member)
         
-        logs = []
-        for user in target_users:
+        if not target_users:
+            fail_note = "、".join(failed_users) if failed_users else "請確認輸入是否正確"
+            await interaction.followup.send(f"無法找到任何有效的用戶。失敗的用戶：{fail_note}", ephemeral=True)
+            return
+        
+        success_logs: list[str] = []  # (user, [logs])
+        skipped_users: list[str] = []  # 因階層不足跳過的用戶
+        for i, user in enumerate(target_users):
             ok, msg = check_member_hierarchy(interaction.user, user, guild.me)
             if not ok:
-                logs.append(f"對 {user.mention} 跳過：{msg}")
+                skipped_users.append(f"{user.mention}（{msg}）")
                 continue
             result_logs = await do_action_str(action, guild=guild, user=user, moderator=interaction.user)
-            logs.append(f"對 {user.mention} 的處置結果：\n" + "\n".join(result_logs))
+            success_logs.append("\n".join(f"> - {r}" for r in result_logs))
+            # 避免 Discord API 429 速率限制，每處理一個用戶後短暫延遲
+            if i < len(target_users) - 1:
+                await asyncio.sleep(.5)
         
-        await interaction.response.send_message("\n\n".join(logs), ephemeral=True)
+        # 組合輸出訊息
+        output_parts: list[str] = []
+        output_parts.append(f"✅ 成功處理 **{len(success_logs)}** 位用戶，共 {len(target_users)} 位目標。")
+        if success_logs:
+            output_parts.append(success_logs[0])  # 只顯示第一位用戶的操作記錄
+        all_failed = failed_users + skipped_users
+        if all_failed:
+            output_parts.append("❌ 以下用戶處理失敗或跳過：\n" + "\n".join(f"- {f}" for f in all_failed))
+        
+        # 若訊息過長則分段發送
+        async def send_chunked(parts: list[str]):
+            current = ""
+            for part in parts:
+                if len(current) + len(part) + 2 > 1900:
+                    await interaction.followup.send(current, ephemeral=True)
+                    current = part
+                else:
+                    current = current + "\n\n" + part if current else part
+            if current:
+                await interaction.followup.send(current, ephemeral=True)
+        
+        await send_chunked(output_parts)
     
     
     @app_commands.command(name=app_commands.locale_str("multi-moderate-action"), description="對用戶進行多重操作")
