@@ -1292,14 +1292,16 @@ class Economy(commands.GroupCog, name="economy", description="經濟系統指令
         offer_money="你要提供的金額",
         request_item="你想要的物品",
         request_item_amount="想要的物品數量",
-        request_money="你想要的金額"
+        request_money="你想要的金額",
+        global_trade="使用全域幣/全域物品交易（跨伺服器）"
     )
     @app_commands.autocomplete(offer_item=get_user_items_autocomplete, request_item=all_items_autocomplete)
     async def trade(self, interaction: discord.Interaction, user: discord.User,
                     offer_item: str = None, offer_item_amount: int = 1,
                     offer_money: float = 0.0,
                     request_item: str = None, request_item_amount: int = 1,
-                    request_money: float = 0.0):
+                    request_money: float = 0.0,
+                    global_trade: bool = False):
         if user.id == interaction.user.id:
             await interaction.response.send_message("❌ 你不能跟自己交易。", ephemeral=True)
             return
@@ -1310,10 +1312,14 @@ class Economy(commands.GroupCog, name="economy", description="經濟系統指令
             await interaction.response.send_message("❌ 你需要提供或要求至少一樣東西。", ephemeral=True)
             return
 
-        guild_id = interaction.guild.id
+        # 全域安裝時強制使用全域交易
+        if not interaction.is_guild_integration():
+            global_trade = True
+
+        guild_id = GLOBAL_GUILD_ID if global_trade else interaction.guild.id
         initiator_id = interaction.user.id
         target_id = user.id
-        currency_name = get_currency_name(guild_id)
+        currency_name = GLOBAL_CURRENCY_NAME if global_trade else get_currency_name(guild_id)
 
         # 驗證發起者的提供
         offer_item_data = None
@@ -1344,7 +1350,7 @@ class Economy(commands.GroupCog, name="economy", description="經濟系統指令
 
         # 建構交易 Embed
         embed = discord.Embed(
-            title="🤝 交易請求",
+            title="🤝 交易請求" + (f" {GLOBAL_CURRENCY_EMOJI} 全域" if global_trade else ""),
             description=f"{interaction.user.mention} 想和 {user.mention} 交易",
             color=0xf39c12
         )
@@ -1381,6 +1387,7 @@ class Economy(commands.GroupCog, name="economy", description="經濟系統指令
             "request_item": request_item,
             "request_item_amount": request_item_amount,
             "request_money": request_money,
+            "global_trade": global_trade,
         }
 
         class TradeView(discord.ui.View):
@@ -1455,8 +1462,9 @@ class Economy(commands.GroupCog, name="economy", description="經濟系統指令
                                 get_balance(td["guild_id"], td["target_id"]) - td["request_money"])
                     add_balance(td["guild_id"], td["initiator_id"], td["request_money"])
 
-                record_transaction(td["guild_id"])
-                record_transaction(td["guild_id"])  # 兩方交易 = 兩筆經濟活動
+                if td["guild_id"] != GLOBAL_GUILD_ID:
+                    record_transaction(td["guild_id"])
+                    record_transaction(td["guild_id"])  # 兩方交易 = 兩筆經濟活動
 
                 for child in self.children:
                     child.disabled = True
@@ -1486,7 +1494,7 @@ class Economy(commands.GroupCog, name="economy", description="經濟系統指令
                     log_transaction(td["guild_id"], td["target_id"], "交易收入", td["offer_money"], trade_currency, f"提供: {request_str} → 換取: {offer_str}")
 
                 await btn_interaction.response.edit_message(content="✅ 交易完成！", view=self)
-                log(f"Trade between {td['initiator_id']} and {td['target_id']} in guild {td['guild_id']}",
+                log(f"{'Global t' if td.get('global_trade') else 'T'}rade between {td['initiator_id']} and {td['target_id']} in guild {td['guild_id']}",
                     module_name="Economy")
 
             @discord.ui.button(label="拒絕交易", style=discord.ButtonStyle.red, emoji="❌")
@@ -1499,7 +1507,7 @@ class Economy(commands.GroupCog, name="economy", description="經濟系統指令
                 who = "發起者" if btn_interaction.user.id == initiator_id else "對方"
                 await btn_interaction.response.edit_message(content=f"❌ 交易已被{who}取消。", view=self)
 
-        await interaction.response.send_message(content=user.mention, embed=embed, view=TradeView())
+        await interaction.response.send_message(content=user.mention, embed=embed, view=TradeView(), allow_mentions=discord.AllowedMentions(users=True, roles=False, everyone=False))
 
     @app_commands.command(name="leaderboard", description="查看財富排行榜")
     @app_commands.describe(currency="排行類型")
