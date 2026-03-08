@@ -6,12 +6,15 @@ import base64
 import mimetypes
 import requests
 import g4f
+from g4f.client import Client
 import json
 from logger import log
 import asyncio
 import traceback
 import io
 from typing import Optional
+
+client = Client(api_key=config("pollinations_api_key", ""))
 
 
 class HumanReviewView(discord.ui.View):
@@ -170,8 +173,8 @@ bio_prompt = """
 async def review_image(image_data: bytes) -> dict:
     try:
         response = await asyncio.to_thread(
-            g4f.ChatCompletion.create,
-            model="openai-fast",
+            client.chat.completions.create,
+            model="openai",
             provider=g4f.Provider.PollinationsAI,
             messages=[
                 {"role": "system", "content": prompt},
@@ -196,7 +199,7 @@ async def review_image(image_data: bytes) -> dict:
 async def review_bio(bio_text: str) -> dict:
     try:
         response = await asyncio.to_thread(
-            g4f.ChatCompletion.create,
+            client.chat.completions.create,
             model="openai",
             provider=g4f.Provider.PollinationsAI,
             messages=[

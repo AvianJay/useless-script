@@ -67,6 +67,7 @@ default_config = {
         }
     ],
     "upvote_board_channel_id": 0,
+    "pollinations_api_key": "",
 }
 _config = None
 

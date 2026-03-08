@@ -1,4 +1,4 @@
-from globalenv import bot, get_user_data, get_server_config, set_server_config, set_user_data, config
+from globalenv import bot, get_user_data, get_server_config, set_server_config, set_user_data, config, get_command_mention
 import discord
 from discord.ext import commands
 from discord import app_commands
@@ -380,6 +380,7 @@ class AIResponseBuilder:
         response_text: str,
         user: discord.User,
         model_name: str = "gpt-oss",
+        response_time: str = None,
         warning: str = None
     ) -> discord.ui.LayoutView:
         """建立 AI 回應的 LayoutView"""
@@ -390,10 +391,10 @@ class AIResponseBuilder:
         container = discord.ui.Container(accent_colour=discord.Colour.blurple())
         
         # 標題區塊 - 使用 TextDisplay
-        container.add_item(discord.ui.TextDisplay(f"## 🤖 AI 回應\n*模型: {model_name}*"))
+        # container.add_item(discord.ui.TextDisplay(f"## 🤖 AI 回應\n*模型: {model_name}*"))
         
         # 分隔線
-        container.add_item(discord.ui.Separator(spacing=discord.SeparatorSpacing.small))
+        # container.add_item(discord.ui.Separator(spacing=discord.SeparatorSpacing.small))
         
         # 警告區塊（如果有）
         if warning:
@@ -425,7 +426,7 @@ class AIResponseBuilder:
         
         # 底部資訊
         container.add_item(discord.ui.Separator(spacing=discord.SeparatorSpacing.small))
-        container.add_item(discord.ui.TextDisplay(f"-# 💬 回應給 {user.display_name}"))
+        container.add_item(discord.ui.TextDisplay(f"-# {model_name} | {response_time or '未知時間'}"))
         
         view.add_item(container)
         return view
@@ -441,7 +442,7 @@ class AIResponseBuilder:
         container.add_item(discord.ui.Separator(spacing=discord.SeparatorSpacing.small))
         container.add_item(discord.ui.TextDisplay(error_message))
         container.add_item(discord.ui.Separator(spacing=discord.SeparatorSpacing.small))
-        container.add_item(discord.ui.TextDisplay("-# 請稍後再試或聯繫管理員"))
+        container.add_item(discord.ui.TextDisplay("-# 請稍後再試或直接 `/feedback` 反饋問題"))
         
         view.add_item(container)
         return view
@@ -586,7 +587,7 @@ class AICommands(commands.Cog):
     
     def __init__(self, bot):
         self.bot = bot
-        self.client = Client()
+        self.client = Client(api_key=config("pollinations_api_key", ""))
         self.rate_limits = {}  # 簡單的速率限制
     
     def check_rate_limit(self, user_id: int) -> bool:
@@ -608,16 +609,23 @@ class AICommands(commands.Cog):
         self.rate_limits[user_id].append(current_time)
         return True
     
-    async def generate_response(self, messages: list, model: str = "openai-fast") -> str:
+    async def generate_response(self, messages: list, model: str = "openai", image: bytes = None) -> tuple[str, str, str]:
         """使用 g4f 生成 AI 回應"""
         try:
-            response = await asyncio.to_thread(
-                self.client.chat.completions.create,
+            start_time = time.perf_counter()
+            kwargs = dict(
                 model=model,
                 messages=messages,
                 provider=g4f.Provider.PollinationsAI
             )
-            return response.choices[0].message.content.strip(), response.model
+            if image is not None:
+                kwargs["image"] = image
+            response = await asyncio.to_thread(
+                self.client.chat.completions.create,
+                **kwargs
+            )
+            end_time = time.perf_counter()
+            return response.choices[0].message.content.strip(), response.model, f"{end_time - start_time:.2f}s"
         except Exception as e:
             log(f"AI 生成錯誤: {e}", module_name="AI", level=logging.ERROR)
             raise
@@ -625,6 +633,7 @@ class AICommands(commands.Cog):
     @app_commands.command(name="ai", description="與 AI 助手對話")
     @app_commands.describe(
         message="你想問 AI 的問題或訊息",
+        image="傳入圖片讓 AI 分析（選用）",
         new_conversation="是否開始新對話（清除之前的對話歷史）"
     )
     @app_commands.allowed_installs(guilds=True, users=True)
@@ -633,6 +642,7 @@ class AICommands(commands.Cog):
         self, 
         interaction: discord.Interaction, 
         message: str,
+        image: discord.Attachment = None,
         new_conversation: bool = False
     ):
         """與 AI 助手對話"""
@@ -645,6 +655,12 @@ class AICommands(commands.Cog):
             view = AIResponseBuilder.create_error_view(
                 "你發送請求太頻繁了！請等待一分鐘後再試。"
             )
+            await interaction.response.send_message(view=view, ephemeral=True, allowed_mentions=SAFE_MENTIONS)
+            return
+        
+        # 驗證圖片類型（如果有）
+        if image is not None and (not image.content_type or not image.content_type.startswith("image/")):
+            view = AIResponseBuilder.create_error_view("附件必須是圖片格式（JPG、PNG、GIF、WebP 等）。")
             await interaction.response.send_message(view=view, ephemeral=True, allowed_mentions=SAFE_MENTIONS)
             return
         
@@ -705,10 +721,15 @@ class AICommands(commands.Cog):
             messages.extend(ConversationManager.format_for_api(history))
             messages.append({"role": "user", "content": resolved_message})
             
-            # 生成回應
-            response_text, model_name = await self.generate_response(messages)
+            # 下載圖片 bytes（若有）
+            image_bytes = None
+            if image:
+                image_bytes = await image.read()
             
-            # 儲存對話歷史
+            # 生成回應
+            response_text, model_name, response_time = await self.generate_response(messages, image=image_bytes)
+            
+            # 儲存對話歷史（圖片為一次性，不存入歷史）
             ConversationManager.add_message(user.id, "user", resolved_message, guild_id)
             ConversationManager.add_message(user.id, "assistant", response_text, guild_id)
             
@@ -721,6 +742,7 @@ class AICommands(commands.Cog):
                 response_text=response_text,
                 user=user,
                 model_name=model_name,
+                response_time=response_time,
                 warning=warning
             )
             
@@ -779,13 +801,25 @@ class AICommands(commands.Cog):
         用法: !ai <訊息>
         別名: !ask, !chat
         """
-        if message is None:
-            await ctx.reply("❌ 請輸入訊息！用法: `!ai <你的問題>`", allowed_mentions=SAFE_MENTIONS)
-            return
-        
         user = ctx.author
         guild = ctx.guild
         guild_id = guild.id if guild else None
+        
+        # 偵測訊息附件中的圖片
+        image_attachment = None
+        for att in ctx.message.attachments:
+            if att.content_type and att.content_type.startswith("image/"):
+                image_attachment = att
+                break
+        
+        # 若無文字也無圖片則提示用法
+        if message is None and image_attachment is None:
+            await ctx.reply("❌ 請輸入訊息或附上圖片！用法: `!ai <你的問題>`", allowed_mentions=SAFE_MENTIONS)
+            return
+        
+        # 若只有圖片沒有文字，給一個預設提示
+        if message is None:
+            message = "請描述這張圖片"
         
         # 速率限制檢查
         if not self.check_rate_limit(user.id):
@@ -862,10 +896,15 @@ class AICommands(commands.Cog):
                 messages.extend(ConversationManager.format_for_api(history))
                 messages.append({"role": "user", "content": final_message})
                 
-                # 生成回應
-                response_text, model_name = await self.generate_response(messages)
+                # 下載圖片 bytes（若有）
+                image_bytes = None
+                if image_attachment:
+                    image_bytes = await image_attachment.read()
                 
-                # 儲存對話歷史
+                # 生成回應
+                response_text, model_name, response_time = await self.generate_response(messages, image=image_bytes)
+                
+                # 儲存對話歷史（圖片為一次性，不存入歷史）
                 ConversationManager.add_message(user.id, "user", final_message, guild_id)
                 ConversationManager.add_message(user.id, "assistant", response_text, guild_id)
                 
@@ -878,7 +917,8 @@ class AICommands(commands.Cog):
                     response_text=response_text,
                     user=user,
                     model_name=model_name,
-                    warning=warning
+                    warning=warning,
+                    response_time=response_time
                 )
                 
                 await ctx.reply(view=view, allowed_mentions=SAFE_MENTIONS)
