@@ -613,6 +613,8 @@ class Moderate(commands.Cog):
             await interaction.followup.send(f"無法找到任何有效的用戶。失敗的用戶：{fail_note}", ephemeral=True)
             return
         
+        await interaction.followup.send(f"開始對 {len(target_users)} 位用戶執行操作...\n預計需要 {get_time_text(len(target_users) * 2)}。", ephemeral=True)
+        
         success_logs: list[str] = []  # (user, [logs])
         skipped_users: list[str] = []  # 因階層不足跳過的用戶
         for i, user in enumerate(target_users):
