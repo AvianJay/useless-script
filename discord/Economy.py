@@ -626,12 +626,7 @@ class PurchaseModal(discord.ui.Modal):
                     ephemeral=True
                 )
                 return
-            # 檢查購買後是否會超過全域幣上限
-            current_global = get_global_balance(user_id)
-            if current_global < total_price:
-                set_global_balance(user_id, current_global - total_price)
-            else:
-                set_global_balance(user_id, 0)
+            set_global_balance(user_id, bal - total_price)
             await give_item_to_user(0, user_id, self.item["id"], amount)
 
         scope_label = "伺服器" if scope == "server" else "全域"
