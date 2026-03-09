@@ -638,6 +638,7 @@ class AICommands(commands.Cog):
     )
     @app_commands.allowed_installs(guilds=True, users=True)
     @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
+    @app_commands.checks.cooldown(1, 5.0, key=lambda i: i.user.id)
     async def ai_chat(
         self, 
         interaction: discord.Interaction, 
@@ -794,6 +795,7 @@ class AICommands(commands.Cog):
     # ============================================
     
     @commands.command(name="ai", aliases=["ask", "chat"])
+    @commands.cooldown(1, 5.0, commands.BucketType.user)
     async def ai_text_command(self, ctx: commands.Context, *, message: str = None):
         """
         與 AI 助手對話（文字指令版本）
