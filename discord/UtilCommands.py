@@ -1,4 +1,6 @@
 import os
+import re
+import io
 import random
 import discord
 from discord import app_commands
@@ -775,6 +777,103 @@ async def sticker_info(ctx: commands.Context):
     view = discord.ui.View()
     view.add_item(btn)
     await ctx.reply(embed=embed, view=view)
+
+class StealView(discord.ui.View):
+    def __init__(self):
+        super().__init__()
+
+    @discord.ui.button(label="偷", style=discord.ButtonStyle.primary, emoji="💾", custom_id="steal")
+    async def download_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await interaction.response.defer()
+        if not interaction.guild:
+            await interaction.followup.send("此操作只能在伺服器中使用。", ephemeral=True)
+            return
+        if not interaction.user.guild_permissions.manage_emojis_and_stickers:
+            await interaction.followup.send("你需要管理表情和貼圖的權限才能使用此功能。", ephemeral=True)
+            return
+        embed = interaction.message.embeds[0] if interaction.message.embeds else None
+        if embed.author.name == "表情符號資訊":
+            emoji = True
+            target = "表情符號"
+        elif embed.author.name == "貼圖資訊":
+            emoji = False
+            target = "貼圖"
+        if not embed or not embed.image:
+            await interaction.followup.send(f"無法找到{target}圖片。", ephemeral=True)
+            return
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.get(embed.image.url) as resp:
+                    image_bytes = await resp.read()
+            if emoji:
+                await interaction.guild.create_custom_emoji(
+                    name=embed.title,
+                    image=image_bytes,
+                )
+            else:
+                await interaction.guild.create_sticker(
+                    name=embed.title,
+                    emoji=embed.title,
+                    file=discord.File(fp=io.BytesIO(image_bytes), filename=f"{embed.title}.{embed.fields[1].value.lower()}"),
+                )
+            await interaction.followup.send(f"✅ 已成功將{target} '{embed.title}' 加入到伺服器！", ephemeral=True)
+        except discord.HTTPException as e:
+            await interaction.followup.send(f"❌ 無法加入{target}：{e}", ephemeral=True)
+
+_CUSTOM_EMOJI_RE = re.compile(r'<(a?):(\w+):(\d+)>')
+
+def _find_first_custom_emoji(content: str) -> discord.PartialEmoji | None:
+    m = _CUSTOM_EMOJI_RE.search(content or "")
+    if m:
+        return discord.PartialEmoji(animated=m.group(1) == 'a', name=m.group(2), id=int(m.group(3)))
+    return None
+
+@bot.tree.context_menu(name="表情符號資訊")
+async def emoji_info_context(interaction: discord.Interaction, message: discord.Message):
+    emoji = _find_first_custom_emoji(message.content)
+    if emoji is None and message.message_snapshots:
+        for snapshot in message.message_snapshots:
+            emoji = _find_first_custom_emoji(snapshot.content)
+            if emoji:
+                break
+    if emoji is None:
+        await interaction.response.send_message("此訊息沒有表情符號。", ephemeral=True)
+        return
+    embed = discord.Embed(title=f"{emoji.name}", color=0x00ff00)
+    embed.set_author(name=f"表情符號資訊")
+    embed.set_image(url=emoji.url)
+    embed.add_field(name="表情符號 ID", value=str(emoji.id), inline=True)
+    embed.add_field(name="是否為動畫", value=str(emoji.animated), inline=True)
+    if interaction.is_guild_integration():
+        view = StealView()
+    else:
+        view = discord.ui.View()
+    btn = discord.ui.Button(label="表情符號連結", url=emoji.url)
+    view.add_item(btn)
+    await interaction.response.send_message(embed=embed, view=view)
+
+# context menu for sticker info
+@bot.tree.context_menu(name="貼圖資訊")
+async def sticker_info_context(interaction: discord.Interaction, message: discord.Message):
+    if message.stickers:
+        sticker = message.stickers[0]
+    elif message.message_snapshots and message.message_snapshots[0].stickers:
+        sticker = message.message_snapshots[0].stickers[0]
+    else:
+        await interaction.response.send_message("此訊息沒有貼圖。", ephemeral=True)
+        return
+    embed = discord.Embed(title=f"{sticker.name}", color=0x00ff00)
+    embed.set_author(name=f"貼圖資訊")
+    embed.set_image(url=sticker.url)
+    embed.add_field(name="貼圖 ID", value=str(sticker.id), inline=True)
+    embed.add_field(name="貼圖格式", value=sticker.format.name, inline=True)
+    if interaction.is_guild_integration():
+        view = StealView()
+    else:
+        view = discord.ui.View()
+    btn = discord.ui.Button(label="貼圖連結", url=sticker.url)
+    view.add_item(btn)
+    await interaction.response.send_message(embed=embed, view=viewe)
 
 
 class PrettyHelpCommand(commands.HelpCommand):
