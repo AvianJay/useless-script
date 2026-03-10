@@ -527,6 +527,7 @@ translations = {
     "description": "描述",
     "direct": "直接",
     "adminitems": "管理員物品",
+    "loop": "循環",
 }
 class CommandNameTranslator(app_commands.Translator):
     async def translate(
