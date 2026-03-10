@@ -882,6 +882,8 @@ class Economy(commands.GroupCog, name="economy", description="經濟系統指令
             await interaction.response.send_message("❌ 你不能轉帳給機器人。", ephemeral=True)
             return
 
+        await interaction.response.defer()
+
         sender_id = interaction.user.id
         receiver_id = user.id
 
@@ -893,7 +895,7 @@ class Economy(commands.GroupCog, name="economy", description="經濟系統指令
             currency_name = get_currency_name(guild_id)
             sender_bal = get_balance(guild_id, sender_id)
             if sender_bal < total_deduct:
-                await interaction.response.send_message(
+                await interaction.followup.send(
                     f"❌ 餘額不足。需要 **{total_deduct:,.2f}** {currency_name}"
                     f"（含 {TRADE_FEE_PERCENT}% 手續費），但只有 **{sender_bal:,.2f}**。",
                     ephemeral=True
@@ -906,7 +908,7 @@ class Economy(commands.GroupCog, name="economy", description="經濟系統指令
             currency_name = GLOBAL_CURRENCY_NAME
             sender_bal = get_global_balance(sender_id)
             if sender_bal < total_deduct:
-                await interaction.response.send_message(
+                await interaction.followup.send(
                     f"❌ 餘額不足。需要 **{total_deduct:,.2f}** {currency_name}"
                     f"（含 {TRADE_FEE_PERCENT}% 手續費），但只有 **{sender_bal:,.2f}**。",
                     ephemeral=True
@@ -928,12 +930,12 @@ class Economy(commands.GroupCog, name="economy", description="經濟系統指令
         embed.add_field(name="金額", value=f"{amount:,.2f} {currency_name}", inline=True)
         embed.add_field(name="手續費", value=f"{fee:,.2f} {currency_name} ({TRADE_FEE_PERCENT}%)", inline=True)
         embed.set_footer(text=f"交易由 {interaction.user.display_name} 發起")
-        await interaction.response.send_message(embed=embed)
+        await interaction.followup.send(embed=embed)
 
         try:
             await user.send(
                 f"你從 **{interaction.user.display_name}** 收到了 **{amount:,.2f}** {currency_name}！\n"
-                f"-# 伺服器: {interaction.guild.name}"
+                f"-# {'伺服器: ' + interaction.guild.name if pay_guild else '全域經濟系統'}"
             )
         except Exception:
             pass
