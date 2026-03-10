@@ -48,7 +48,7 @@ async def process_checkin(user_id: int) -> tuple[bool, int]:
         last_checkin = last_checkin.date()
     
     # Check if already checked in today
-    if last_checkin == now:
+    if last_checkin is not None and last_checkin >= now:
         # Already checked in today
         statistics = get_user_data(0, user_id, "dsize_statistics", {})
         return False, statistics.get("checkin_streak", 0), False, None
@@ -282,9 +282,18 @@ async def dsize(interaction: discord.Interaction, global_dsize: str = "False"):
         last = last.date()
     if last is None:
         last = datetime(1970, 1, 1).date()  # 如果沒有紀錄，設為很久以前
+    
+    last_anti_surgery = get_user_data(guild_key, user_id, "dsize_anti_surgery")
+    if last_anti_surgery is not None and not isinstance(last_anti_surgery, datetime):
+        try:
+            last_anti_surgery = datetime.fromisoformat(str(last_anti_surgery)).date()
+        except Exception:
+            last_anti_surgery = None
+    elif isinstance(last_anti_surgery, datetime):
+        last_anti_surgery = last_anti_surgery.date()
 
     # 檢查是否已經使用過指令，並且是否已超過一天
-    if now == last:
+    if last >= now:
         # calculate time left
         next_day = datetime.combine(last + timedelta(days=1), datetime.min.time()).replace(tzinfo=timezone(timedelta(hours=8)))
         timestamp_next = next_day.astimezone(timezone.utc)  # Convert to UTC for Discord timestamp
@@ -301,24 +310,38 @@ async def dsize(interaction: discord.Interaction, global_dsize: str = "False"):
     # Process daily check-in (always global)
     is_new_checkin, checkin_streak, broke_streak, broke_streak_on = await process_checkin(user_id)
 
+    message = ""
+
     # 隨機產生長度
     size = random.randint(1, max_size)
-    fake_size = None
-    if "ItemSystem" in modules:
-        fake_ruler_used = get_user_data(guild_key, user_id, "dsize_fake_ruler_used", False)
-        if fake_ruler_used:
-            extra_size = random.randint(10, 20)
-            fake_size = size + extra_size
-            # reset fake ruler usage
-            set_user_data(guild_key, user_id, "dsize_fake_ruler_used", False)
-            set_user_data(guild_key, user_id, "dsize_fake_ruler_used_date", now)
-            set_user_data(guild_key, user_id, "last_dsize_fake_size", fake_size)
-    final_size = fake_size if fake_size is not None else size
+    # check if yesterday used anti-surgery
+    if last_anti_surgery >= now - timedelta(days=1):
+        size = max(-1, size - random.randint(1, max_size // 2))
+        message = "糟糕！有副作用！"
+    size = size if size != 0 else -1
+    if size > 0:
+        fake_size = None
+        if "ItemSystem" in modules:
+            fake_ruler_used = get_user_data(guild_key, user_id, "dsize_fake_ruler_used", False)
+            if fake_ruler_used:
+                extra_size = random.randint(10, 20)
+                fake_size = size + extra_size
+                # reset fake ruler usage
+                set_user_data(guild_key, user_id, "dsize_fake_ruler_used", False)
+                set_user_data(guild_key, user_id, "dsize_fake_ruler_used_date", now)
+                set_user_data(guild_key, user_id, "last_dsize_fake_size", fake_size)
+        final_size = fake_size if fake_size is not None else size
+    else:
+        final_size = size
 
     # 建立 Embed 訊息
     embed = discord.Embed(title=f"{interaction.user.display_name} 的長度：", color=0x00ff00)
     embed.add_field(name="1 cm", value=f"8D", inline=False)
     embed.timestamp = datetime.now(timezone.utc)
+    
+    if size <= 0:
+        embed.fields[0].name = f"{size} cm"
+        message += "\n你變男娘了。"
     
     # Set footer with check-in info
     if is_new_checkin:
@@ -338,18 +361,21 @@ async def dsize(interaction: discord.Interaction, global_dsize: str = "False"):
         embed.set_footer(text=footer_text)
 
     await interaction.response.send_message(embed=embed)
-    # animate to size
-    speed = size // 50 + 1
-    for i in range(1, size + 1, speed):
-        d_string = "=" * (i - 1)
-        current_size = i
-        embed.set_field_at(0, name=f"{current_size} cm", value=f"8{d_string}D", inline=False)
+
+    if size > 0:
+        # animate to size
+        speed = size // 50 + 1
+        for i in range(1, size + 1, speed):
+            d_string = "=" * (i - 1)
+            current_size = i
+            embed.set_field_at(0, name=f"{current_size} cm", value=f"8{d_string}D", inline=False)
+            await interaction.edit_original_response(embed=embed)
+            await asyncio.sleep(0.1)
+        # final
+        d_string = "=" * (size - 1)
+        embed.set_field_at(0, name=f"{final_size} cm", value=f"8{d_string}D", inline=False)
+        await asyncio.sleep(0.5)
         await interaction.edit_original_response(embed=embed)
-        await asyncio.sleep(0.1)
-    # final
-    d_string = "=" * (size - 1)
-    embed.set_field_at(0, name=f"{final_size} cm", value=f"8{d_string}D", inline=False)
-    await interaction.edit_original_response(embed=embed)
 
     # 更新使用時間 — 存到對應的 guild_key（若為 user-install 則是 None）
     set_user_data(guild_key, user_id, "last_dsize_size", size)
@@ -382,8 +408,8 @@ async def dsize(interaction: discord.Interaction, global_dsize: str = "False"):
     surgery_percent = get_server_config(guild_key, "dsize_surgery_percent", 10)
     drop_item_chance = get_server_config(guild_key, "dsize_drop_item_chance", 5)
     # check if user got surgery chance
-    if percent_random(surgery_percent):
-        if get_user_data(guild_key, user_id, "dsize_anti_surgery") == str(now):
+    if percent_random(surgery_percent) and size > 0:
+        if last_anti_surgery is not None and last_anti_surgery >= now:
             await interaction.followup.send(f"{interaction.user.mention}\n由於你使用了抗手術藥物，你無法進行手術。")
             return
         log("獲得了手術機會", module_name="dsize", user=interaction.user, guild=interaction.guild)
@@ -696,10 +722,10 @@ async def dsize_battle(interaction: discord.Interaction, opponent: Union[discord
     if last_opponent is None:
         last_opponent = datetime(1970, 1, 1).date()
 
-    if now == last_user:
+    if last_user >= now:
         await interaction.response.send_message("你今天已經量過屌長了。", ephemeral=True)
         return
-    if now == last_opponent:
+    if last_opponent >= now:
         await interaction.response.send_message(f"{opponent.display_name} 今天已經量過屌長了。", ephemeral=True)
         return
     
@@ -1265,7 +1291,7 @@ async def use_scalpel(interaction: discord.Interaction):
                 last = last.date()
             if last is None:
                 last = datetime(1970, 1, 1).date()
-            if not now == last:
+            if last < now:
                 await interaction.response.send_message(f"{target_user.display_name} 今天還沒有量過屌長，無法進行手術。", ephemeral=True)
                 return
             if get_user_data(guild_key, target_id, "last_dsize_size", 0) == -1:
@@ -1341,7 +1367,7 @@ async def use_rusty_scalpel(interaction: discord.Interaction):
                 last = last.date()
             if last is None:
                 last = datetime(1970, 1, 1).date()
-            if not now == last:
+            if last < now:
                 await interaction.response.send_message(f"{target_user.display_name} 今天還沒有量過屌長，無法進行手術。", ephemeral=True)
                 return
             if get_user_data(guild_key, target_id, "last_dsize_size", 0) == -1:
@@ -1431,7 +1457,7 @@ async def use_cloud_ruler(interaction: discord.Interaction):
                 last = last.date()
             if last is None:
                 last = datetime(1970, 1, 1).date()
-            if now == last:
+            if last >= now:
                 await interaction.response.send_message(f"{target_user.display_name} 今天量過屌長了，無法幫他量長度。", ephemeral=True)
                 return
             # size = get_user_data(guild_key, target_id, "last_dsize_size", 0)
@@ -1551,7 +1577,7 @@ if "ItemSystem" in modules:
         {
             "id": "anti_surgery",
             "name": "抗手術藥物",
-            "description": "一顆屌型的藥丸。使用後可以防止一天被手術。",
+            "description": "一顆屌型的藥丸。使用後可以防止一天被手術。\n使用後兩天內量長度時將會有變短的副作用。",
             "callback": use_anti_surgery,
             "worth": 20,
         },
