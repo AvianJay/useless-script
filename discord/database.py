@@ -256,7 +256,7 @@ class Database:
             print(f"Error setting user data: {e}")
             return False
     
-    def get_all_user_data(self, guild_id: Optional[int] = None, key: Optional[str] = None) -> Dict[int, Dict[str, Any]]:
+    def get_all_user_data(self, guild_id: Optional[int] = None, key: Optional[str] = None, value: Optional[Any] = None) -> Dict[int, Dict[str, Any]]:
         """Get all user data, optionally filtered by guild and/or key"""
         data = {}
         if not guild_id:
@@ -273,7 +273,9 @@ class Database:
             if key is not None:
                 query += ' AND data_key = ?'
                 params.append(key)
-            
+            if value is not None:
+                query += ' AND data_value = ?'
+                params.append(str(value))
             cursor.execute(query, params)
             results = cursor.fetchall()
             

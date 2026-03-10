@@ -617,8 +617,12 @@ async def dsize_leaderboard(interaction: discord.Interaction, limit: int = 10, g
         return
     await interaction.response.defer()
 
-    all_data = get_all_user_data(guild_id, "last_dsize_size")
-    all_data_fake = get_all_user_data(guild_id, "last_dsize_fake_size")
+    today = (datetime.now(timezone(timedelta(hours=8)))).date()  # 台灣時間
+    next_day = today + timedelta(days=1)  # for viagra check
+    all_data = get_all_user_data(guild_id, "last_dsize_size", value=str(today))
+    all_data_next_day = get_all_user_data(guild_id, "last_dsize_size", value=str(next_day))
+    all_data.update(all_data_next_day)  # include users who have measured for the next day (for viagra users)
+    all_data_fake = get_all_user_data(guild_id, "last_dsize_fake_size", value=str(today))
     for user_id, data in all_data.items():
         size = data.get("last_dsize_size")
         # check dsize date is today
@@ -651,7 +655,7 @@ async def dsize_leaderboard(interaction: discord.Interaction, limit: int = 10, g
                 user_date = datetime(1970, 1, 1).date()
         elif isinstance(user_date, datetime):
             user_date = user_date.date()
-        if user_date is not None and user_date != (datetime.now(timezone(timedelta(hours=8)))).date():
+        if user_date is not None and user_date <= (datetime.now(timezone(timedelta(hours=8)))).date():
             all_data_fake.pop(user_id)
             continue
 
@@ -1627,6 +1631,62 @@ async def use_cloud_ruler(interaction: discord.Interaction):
                 log(f"簽到成功，連續 {user_checkin_streak} 天 (補發獎勵)", module_name="dsize", user=target_user, guild=interaction.guild)
     await interaction.response.send_modal(SelectUserModal())
 
+async def use_viagra(interaction: discord.Interaction):
+    user_id = interaction.user.id
+    guild_key = interaction.guild_id if interaction.guild else None
+    now = datetime.now(timezone(timedelta(hours=8))).date()
+    last = get_user_data(guild_key, user_id, "last_dsize")
+    if last is not None and not isinstance(last, datetime):
+        # If last is a string (e.g., from JSON), convert to date
+        try:
+            last = datetime.fromisoformat(str(last)).date()
+        except Exception:
+            last = datetime(1970, 1, 1).date()
+    elif isinstance(last, datetime):
+        last = last.date()
+    if last is None:
+        last = datetime(1970, 1, 1).date()
+    if last < now:
+        await interaction.response.send_message("你今天還沒有量過屌長，無法使用威而鋼。", ephemeral=True)
+        return
+    elif last > now:
+        await interaction.response.send_message("你已經使用過威而鋼了。", ephemeral=True)
+        return
+    removed = await ItemSystem.remove_item_from_user(guild_key, user_id, "viagra", 1)
+    if not removed:
+        await interaction.response.send_message("你沒有威而鋼，無法使用。", ephemeral=True)
+        return
+    # update user statistics
+    statistics = get_user_data(0, user_id, "dsize_statistics", {})
+    statistics["total_viagra_used"] = statistics.get("total_viagra_used", 0) + 1
+    set_user_data(0, user_id, "dsize_statistics", statistics)
+    set_user_data(guild_key, user_id, "last_dsize", now + timedelta(days=1))
+    # check anti surgery
+    last_anti_surgery = get_user_data(guild_key, user_id, "dsize_anti_surgery")
+    if last_anti_surgery is not None and not isinstance(last_anti_surgery, datetime):
+        try:
+            last_anti_surgery = datetime.fromisoformat(str(last_anti_surgery)).date()
+        except Exception:
+            last_anti_surgery = None
+    elif isinstance(last_anti_surgery, datetime):
+        last_anti_surgery = last_anti_surgery.date()
+    if last_anti_surgery == now:
+        set_user_data(guild_key, user_id, "dsize_anti_surgery", (now + timedelta(days=1)).isoformat())
+    # check fake size
+    fake_ruler_used = get_user_data(guild_key, user_id, "dsize_fake_ruler_used_date")
+    if fake_ruler_used_date is not None and not isinstance(fake_ruler_used_date, datetime):
+        try:
+            fake_ruler_used_date = datetime.fromisoformat(str(fake_ruler_used_date)).date()
+        except Exception:
+            fake_ruler_used_date = None
+    elif isinstance(fake_ruler_used_date, datetime):
+        fake_ruler_used_date = fake_ruler_used_date.date()
+    if fake_ruler_used_date == now:
+        set_user_data(guild_key, user_id, "dsize_fake_ruler_used_date", (now + timedelta(days=1)).isoformat())
+    await interaction.response.send_message("你使用了威而鋼！\n今天的狀態將會持續到明天，無論是好是壞。")
+    # print(f"[DSize] {interaction.user} used viagra in guild {guild_key}")
+    log(f"{interaction.user} 使用了威而鋼", module_name="dsize", user=interaction.user, guild=interaction.guild)
+
 if "ItemSystem" in modules:
     items = [
         {
@@ -1677,6 +1737,13 @@ if "ItemSystem" in modules:
             "description": "一個神奇的凍結球，可以使其變成急凍鳥。\n可以抵消一天未簽到，保護你的簽到連續紀錄不被打破。",
             "callback": None,
             "worth": 50,
+        },
+        {
+            "id": "viagra",
+            "name": "威而鋼",
+            "description": "一顆藍色的藥丸，有持久的作用。\n使用後今天的狀態將會持續到明天，無論是好是壞。",
+            "callback": use_viagra,
+            "worth": 200,
         }
     ]
     import ItemSystem
