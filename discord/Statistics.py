@@ -74,9 +74,9 @@ class Statistics(commands.Cog):
             stats[command_name] = stats.get(command_name, 0) + 1
             set_global_config("app_command_usage_stats", stats)
 
-    async def on_app_command_error(self, interaction: discord.Interaction, application_command: discord.app_commands.Command, error):
+    async def on_app_command_error(self, interaction: discord.Interaction, error):
         with semaphore:
-            command_name = application_command.qualified_name if application_command else "unknown"
+            command_name = interaction.command.qualified_name if interaction.command else "unknown"
             stats = get_global_config("app_command_error_stats", {})
             stats[command_name] = stats.get(command_name, 0) + 1
             set_global_config("app_command_error_stats", stats)

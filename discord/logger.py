@@ -346,7 +346,7 @@ class LoggerCog(commands.Cog):
         
         # 記錄詳細錯誤
         log(
-            f"應用程式指令錯誤:\n指令: {interaction.command.name if interaction.command else '未知'}\n"
+            f"應用程式指令錯誤:\n指令: {interaction.command.qualified_name if interaction.command else '未知'}\n"
             f"錯誤類型: {type(error).__name__}\n"
             f"錯誤訊息: {str(error)}\n"
             f"堆疊追蹤:\n{error_traceback}",
