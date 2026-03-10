@@ -1,11 +1,12 @@
 import os
+import sys
 import re
 import io
 import random
 import discord
 from discord import app_commands
 from discord.ext import commands
-from globalenv import bot, start_bot, get_user_data, set_user_data, get_command_mention, modules, failed_modules, config
+from globalenv import bot, start_bot, get_user_data, set_user_data, get_command_mention, modules, failed_modules, config, get_global_config
 from CustomPrefix import get_prefix
 from typing import Union
 from datetime import datetime, timezone
@@ -120,6 +121,9 @@ async def info_command(interaction: discord.Interaction, full: bool = False):
     embed.add_field(name="機器人延遲", value=f"{bot_latency}ms")
     embed.add_field(name="CPU 使用率", value=f"{psutil.cpu_percent()}%")
     embed.add_field(name="記憶體使用率", value=f"{psutil.virtual_memory().percent}%")
+    embed.add_field(name="Discord.py 版本", value=discord.__version__)
+    embed.add_field(name="Python 版本", value=f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}")
+    embed.add_field(name="指令使用次數", value=f"{sum(get_global_config('command_usage_stats', {}).values()) + sum(get_global_config('app_command_usage_stats', {}).values()) + sum(get_global_config('command_error_stats', {}).values()) + sum(get_global_config('app_command_error_stats', {}).values())}", inline=False)
     embed.add_field(name="運行時間", value=uptime)
     embed.add_field(name="資料庫資訊", value=f"總筆數: {dbcount['total']}\n伺服器筆數: {dbcount['server_configs']}\n用戶資料筆數: {dbcount['user_data']}", inline=True)
     if full:
@@ -171,6 +175,9 @@ async def info(ctx: commands.Context, full: bool = False):
     embed.add_field(name="機器人延遲", value=f"{bot_latency}ms")
     embed.add_field(name="CPU 使用率", value=f"{psutil.cpu_percent()}%")
     embed.add_field(name="記憶體使用率", value=f"{psutil.virtual_memory().percent}%")
+    embed.add_field(name="Discord.py 版本", value=discord.__version__)
+    embed.add_field(name="Python 版本", value=f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}")
+    embed.add_field(name="指令使用次數", value=f"{sum(get_global_config('command_usage_stats', {}).values()) + sum(get_global_config('app_command_usage_stats', {}).values()) + sum(get_global_config('command_error_stats', {}).values()) + sum(get_global_config('app_command_error_stats', {}).values())}", inline=False)
     embed.add_field(name="運行時間", value=uptime)
     embed.add_field(name="資料庫資訊", value=f"總筆數: {dbcount['total']}\n伺服器筆數: {dbcount['server_configs']}\n用戶資料筆數: {dbcount['user_data']}", inline=True)
     if full:

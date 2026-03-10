@@ -43,7 +43,7 @@ def api_status():
         "server_count": len(bot.guilds),
         "user_count": len(set(bot.get_all_members())),
         "user_install_count": bot.application.approximate_user_install_count if bot.application else None,
-        "command_stats": sum(get_global_config("command_usage_stats", {}).values()) + sum(get_global_config("app_command_usage_stats", {}).values()),
+        "command_stats": sum(get_global_config("command_usage_stats", {}).values()) + sum(get_global_config("app_command_usage_stats", {}).values()) + sum(get_global_config("command_error_stats", {}).values()) + sum(get_global_config("app_command_error_stats", {}).values()),
         "latency_ms": bot_latency,
         "version": UtilCommands.full_version if UtilCommands else "N/A"
     }

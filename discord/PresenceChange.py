@@ -59,7 +59,7 @@ def load_config():
         name = name.replace("{random_number_1_100}", str(random.randint(1, 100)))
         name = name.replace("{full_version}", UtilCommands.full_version if UtilCommands else "unknown")
         name = name.replace("{uptime}", uptime_str)
-        name = name.replace("{command_stats}", str(sum(get_global_config("command_usage_stats", {}).values()) + sum(get_global_config("app_command_usage_stats", {}).values())))
+        name = name.replace("{command_stats}", str(sum(get_global_config("command_usage_stats", {}).values()) + sum(get_global_config("app_command_usage_stats", {}).values()) + sum(get_global_config("command_error_stats", {}).values()) + sum(get_global_config("app_command_error_stats", {}).values())))
         type_str = act.get("type", "playing").lower()
         type_enum = activity_type_map.get(type_str, discord.ActivityType.playing)
         if name:
