@@ -1668,6 +1668,54 @@ async def use_viagra(interaction: discord.Interaction):
     # print(f"[DSize] {interaction.user} used viagra in guild {guild_key}")
     log(f"{interaction.user} 使用了威而鋼", module_name="dsize", user=interaction.user, guild=interaction.guild)
 
+async def use_random_attack(interaction: discord.Interaction):
+    await interaction.response.defer()
+    guild_key = interaction.guild_id if interaction.guild else None
+    removed = await ItemSystem.remove_item_from_user(guild_key, interaction.user.id, "random_attack", 1)
+    if not removed:
+        await interaction.followup.send("你沒有亂槍打鳥，無法使用。")
+        return
+    leaderboard = []
+    today = (datetime.now(timezone(timedelta(hours=8)))).date()  # 台灣時間
+    next_day = today + timedelta(days=1)  # for viagra check
+    valid_user_ids = (set(get_all_user_data(guild_key, "last_dsize", value=str(today)).keys()) | \
+                     set(get_all_user_data(guild_key, "last_dsize", value=str(next_day)).keys()))
+    for user_id in valid_user_ids:
+        size = get_user_data(guild_key, user_id, "last_dsize_size")
+        if size is not None and size != -1:
+            leaderboard.append((user_id, size))
+
+    target = random.choice(leaderboard) if leaderboard else None
+    if target is None:
+        await interaction.followup.send("目前沒有可攻擊的目標。")
+        await ItemSystem.add_item_to_user(guild_key, interaction.user.id, "random_attack", 1)  # refund
+        return
+    # perform the attack on the target
+    reduced_size = random.randint(1, target[1] // 2 + 1)
+    if reduced_size >= target[1]:
+        await interaction.followup.send("被抽到的目標已經短到不能再短了。\n攻擊失敗，沒有造成任何傷害。")
+        await ItemSystem.add_item_to_user(guild_key, interaction.user.id, "random_attack", 1)  # refund
+        return
+    set_user_data(guild_key, target[0], "last_dsize_size", target[1] - reduced_size)
+    # update statistics
+    statistics = get_user_data(0, target[0], "dsize_statistics", {})
+    statistics["total_random_attacks"] = statistics.get("total_random_attacks", 0) + 1
+    set_user_data(0, target[0], "dsize_statistics", statistics)
+    attacker_statistics = get_user_data(0, interaction.user.id, "dsize_statistics", {})
+    attacker_statistics["total_performed_random_attacks"] = attacker_statistics.get("total_performed_random_attacks", 0) + 1
+    set_user_data(0, interaction.user.id, "dsize_statistics", attacker_statistics)
+    target_user = bot.get_user(target[0]) or await bot.fetch_user(target[0])
+    if target_user.id == interaction.user.id:
+        await interaction.followup.send(f"# {interaction.user.mention} 亂槍打鳥打到自己啦！\n自殘造成了 {reduced_size} cm 的傷害！\n你的屌長從 {target[1]} cm 變成了 {target[1] - reduced_size} cm！", allowed_mentions=discord.AllowedMentions.none())
+        log(f"{interaction.user} used random attack on themselves, reduced size: {reduced_size} cm", module_name="dsize", user=interaction.user, guild=interaction.guild)
+    else:
+        await interaction.followup.send(f"你使用了亂槍打鳥，對 {target_user.display_name}({target_user.name}) 造成了 {reduced_size} cm 的傷害！\n{target_user.display_name} 的屌長從 {target[1]} cm 變成了 {target[1] - reduced_size} cm！", allowed_mentions=discord.AllowedMentions.none())
+        log(f"{interaction.user} used random attack on {target_user.display_name}({target_user.name})({target_user.id}), reduced size: {reduced_size} cm", module_name="dsize", user=interaction.user, guild=interaction.guild)
+        try:
+            await target_user.send(f"你被 {interaction.user.display_name}({interaction.user.name}) 使用了亂槍打鳥，造成了 {reduced_size} cm 的傷害！\n你的屌長從 {target[1]} cm 變成了 {target[1] - reduced_size} cm！\n-# {'伺服器：' + interaction.guild.name if guild_key else '全域 dsize'}", allowed_mentions=discord.AllowedMentions.none())
+        except Exception:
+            pass  # user has DMs disabled
+
 if "ItemSystem" in modules:
     items = [
         {
@@ -1725,6 +1773,13 @@ if "ItemSystem" in modules:
             "description": "一顆藍色的藥丸，有持久的作用。\n使用後今天的狀態將會持續到明天，無論是好是壞。",
             "callback": use_viagra,
             "worth": 200,
+        },
+        {
+            "id": "random_attack",
+            "name": "[技能] 亂槍打鳥",
+            "description": "隨機對一個在排行榜上的非男娘人物造成傷害。",
+            "callback": use_random_attack,
+            "worth": 100,
         }
     ]
     import ItemSystem
