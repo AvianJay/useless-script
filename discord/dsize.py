@@ -315,7 +315,7 @@ async def dsize(interaction: discord.Interaction, global_dsize: str = "False"):
     # 隨機產生長度
     size = random.randint(1, max_size)
     # check if yesterday used anti-surgery
-    if last_anti_surgery >= now - timedelta(days=1):
+    if last_anti_surgery is not None and last_anti_surgery >= now - timedelta(days=1):
         size = max(-1, size - random.randint(1, max_size // 2))
         message = "糟糕！有副作用！"
     size = size if size != 0 else -1
@@ -341,7 +341,9 @@ async def dsize(interaction: discord.Interaction, global_dsize: str = "False"):
     
     if size <= 0:
         embed.fields[0].name = f"{size} cm"
+        embed.fields[0].value = "8"
         message += "\n你變男娘了。"
+        embed.color = 0xff0000
     
     # Set footer with check-in info
     if is_new_checkin:
@@ -776,6 +778,39 @@ async def dsize_battle(interaction: discord.Interaction, opponent: Union[discord
             await interaction.response.edit_message(content="開始對決。", view=None)
             size_user = random.randint(1, max_size)
             size_opponent = random.randint(1, max_size)
+            side_effect_messages = []
+            # check anti-surgery side effect for user
+            user_anti_surgery = get_user_data(guild_key, user_id, "dsize_anti_surgery")
+            if user_anti_surgery is not None and not isinstance(user_anti_surgery, datetime):
+                try:
+                    user_anti_surgery = datetime.fromisoformat(str(user_anti_surgery)).date()
+                except Exception:
+                    user_anti_surgery = None
+            elif isinstance(user_anti_surgery, datetime):
+                user_anti_surgery = user_anti_surgery.date()
+            if user_anti_surgery is not None and user_anti_surgery >= now - timedelta(days=1):
+                size_user = max(-1, size_user - random.randint(1, max_size // 2))
+                size_user = size_user if size_user != 0 else -1
+                if size_user == -1:
+                    side_effect_messages.append(f"{original_user.display_name} 糟糕！有副作用！變男娘了！")
+                else:
+                    side_effect_messages.append(f"{original_user.display_name} 糟糕！有副作用！")
+            # check anti-surgery side effect for opponent
+            opponent_anti_surgery = get_user_data(guild_key, opponent_id, "dsize_anti_surgery")
+            if opponent_anti_surgery is not None and not isinstance(opponent_anti_surgery, datetime):
+                try:
+                    opponent_anti_surgery = datetime.fromisoformat(str(opponent_anti_surgery)).date()
+                except Exception:
+                    opponent_anti_surgery = None
+            elif isinstance(opponent_anti_surgery, datetime):
+                opponent_anti_surgery = opponent_anti_surgery.date()
+            if opponent_anti_surgery is not None and opponent_anti_surgery >= now - timedelta(days=1):
+                size_opponent = max(-1, size_opponent - random.randint(1, max_size // 2))
+                size_opponent = size_opponent if size_opponent != 0 else -1
+                if size_opponent == -1:
+                    side_effect_messages.append(f"{opponent.display_name} 糟糕！有副作用！變男娘了！")
+                else:
+                    side_effect_messages.append(f"{opponent.display_name} 糟糕！有副作用！")
             # print(f"[DSize] {interaction.user} vs {opponent} - {size_user} cm vs {size_opponent} cm")
             log(f"{original_user} vs {opponent} - {size_user} cm vs {size_opponent} cm", module_name="dsize", user=interaction.user, guild=interaction.guild)
             speed = max(size_user, size_opponent) // 50 + 1
@@ -847,6 +882,8 @@ async def dsize_battle(interaction: discord.Interaction, opponent: Union[discord
             
             if not guild_key:
                 footer_parts.append("此次對決將記錄到全域排行榜。")
+            
+            footer_parts.extend(side_effect_messages)
             
             if footer_parts:
                 embed.set_footer(text=" | ".join(footer_parts))
