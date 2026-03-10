@@ -33,7 +33,8 @@ def percent_random(percent: int) -> bool:
 async def process_checkin(user_id: int) -> tuple[bool, int]:
     """
     Process daily check-in for a user (always global).
-    Returns: (is_new_checkin, checkin_streak)
+    Returns: (is_new_checkin, checkin_streak, broke_streak, broke_streak_on, freeze_used)
+    freeze_used: number of checkin_freeze items consumed (0 if none)
     """
     now = (datetime.now(timezone(timedelta(hours=8)))).date()  # 台灣時間
     
@@ -51,7 +52,7 @@ async def process_checkin(user_id: int) -> tuple[bool, int]:
     if last_checkin is not None and last_checkin >= now:
         # Already checked in today
         statistics = get_user_data(0, user_id, "dsize_statistics", {})
-        return False, statistics.get("checkin_streak", 0), False, None
+        return False, statistics.get("checkin_streak", 0), False, None, 0
 
     # reset claim reward unsuccessful flag
     set_user_data(0, user_id, "claim_reward_unsuccessful", False)
@@ -61,6 +62,7 @@ async def process_checkin(user_id: int) -> tuple[bool, int]:
     checkin_streak = statistics.get("checkin_streak", 0)
     broke_streak = False
     broke_streak_on = None
+    freeze_used = 0
     
     # Check if streak continues (last checkin was yesterday)
     if last_checkin and last_checkin == now - timedelta(days=1):
@@ -68,9 +70,33 @@ async def process_checkin(user_id: int) -> tuple[bool, int]:
     else:
         # Reset streak
         if last_checkin and last_checkin < now - timedelta(days=1):
-            broke_streak = True
-            broke_streak_on = checkin_streak
-        checkin_streak = 1  # start new streak
+            missed_days = (now - last_checkin).days - 1  # days without checkin
+            # Check if user has checkin_freeze items
+            if "ItemSystem" in modules:
+                freeze_count = await ItemSystem.get_user_items(0, user_id, "checkin_freeze")
+                if freeze_count > 0:
+                    if freeze_count >= missed_days:
+                        # Enough freeze to cover all missed days — streak continues
+                        freeze_used = missed_days
+                        await ItemSystem.remove_item_from_user(0, user_id, "checkin_freeze", missed_days)
+                        checkin_streak += 1
+                    else:
+                        # Not enough freeze — use all, still break streak
+                        freeze_used = freeze_count
+                        await ItemSystem.remove_item_from_user(0, user_id, "checkin_freeze", freeze_count)
+                        broke_streak = True
+                        broke_streak_on = checkin_streak
+                        checkin_streak = 1
+                else:
+                    broke_streak = True
+                    broke_streak_on = checkin_streak
+                    checkin_streak = 1
+            else:
+                broke_streak = True
+                broke_streak_on = checkin_streak
+                checkin_streak = 1
+        else:
+            checkin_streak = 1  # start new streak (no last_checkin)
     
     # Update statistics
     statistics["total_checkins"] = statistics.get("total_checkins", 0) + 1
@@ -78,7 +104,7 @@ async def process_checkin(user_id: int) -> tuple[bool, int]:
     set_user_data(0, user_id, "dsize_statistics", statistics)
     set_user_data(0, user_id, "last_checkin", now)
     
-    return True, checkin_streak, broke_streak, broke_streak_on
+    return True, checkin_streak, broke_streak, broke_streak_on, freeze_used
 
 
 async def handle_checkin_rewards(interaction: discord.Interaction, user: Union[discord.User, discord.Member], checkin_streak: int, guild_key: int = None):
@@ -308,7 +334,7 @@ async def dsize(interaction: discord.Interaction, global_dsize: str = "False"):
     set_user_data(0, user_id, "dsize_statistics", statistics)
     
     # Process daily check-in (always global)
-    is_new_checkin, checkin_streak, broke_streak, broke_streak_on = await process_checkin(user_id)
+    is_new_checkin, checkin_streak, broke_streak, broke_streak_on, freeze_used = await process_checkin(user_id)
 
     message = ""
 
@@ -348,7 +374,12 @@ async def dsize(interaction: discord.Interaction, global_dsize: str = "False"):
     # Set footer with check-in info
     if is_new_checkin:
         if broke_streak:
-            footer_text = f"你在第 {broke_streak_on} 天打破了簽到紀錄，重新開始簽到！ | 簽到第 {checkin_streak} 天！"
+            if freeze_used > 0:
+                footer_text = f"你在第 {broke_streak_on} 天打破了簽到紀錄，消耗了 {freeze_used} 個凍結球！重新開始簽到！ | 簽到第 {checkin_streak} 天！"
+            else:
+                footer_text = f"你在第 {broke_streak_on} 天打破了簽到紀錄，重新開始簽到！ | 簽到第 {checkin_streak} 天！"
+        elif freeze_used > 0:
+            footer_text = f"簽到第 {checkin_streak} 天！凍結球保護了連續（消耗 {freeze_used} 個）"
         else:
             footer_text = f"簽到第 {checkin_streak} 天！"
         if not guild_key:
@@ -864,19 +895,29 @@ async def dsize_battle(interaction: discord.Interaction, opponent: Union[discord
             embed.timestamp = t
             
             # Process daily check-in for both users (always global)
-            user_is_new_checkin, user_checkin_streak, user_broke_streak, user_broke_streak_on = await process_checkin(user_id)
-            opponent_is_new_checkin, opponent_checkin_streak, opponent_broke_streak, opponent_broke_streak_on = await process_checkin(opponent_id)
+            user_is_new_checkin, user_checkin_streak, user_broke_streak, user_broke_streak_on, user_freeze_used = await process_checkin(user_id)
+            opponent_is_new_checkin, opponent_checkin_streak, opponent_broke_streak, opponent_broke_streak_on, opponent_freeze_used = await process_checkin(opponent_id)
             
             # Set footer with check-in info
             footer_parts = []
             if user_is_new_checkin:
                 if user_broke_streak:
-                    footer_parts.append(f"{original_user.display_name} 在第 {user_broke_streak_on} 天打破了簽到紀錄，重新開始！")
+                    if user_freeze_used > 0:
+                        footer_parts.append(f"{original_user.display_name} 在第 {user_broke_streak_on} 天打破了簽到紀錄，消耗了 {user_freeze_used} 個凍結球！重新開始！")
+                    else:
+                        footer_parts.append(f"{original_user.display_name} 在第 {user_broke_streak_on} 天打破了簽到紀錄，重新開始！")
+                elif user_freeze_used > 0:
+                    footer_parts.append(f"{original_user.display_name} 簽到第 {user_checkin_streak} 天！凍結球保護了連續（消耗 {user_freeze_used} 個）")
                 else:
                     footer_parts.append(f"{original_user.display_name} 簽到第 {user_checkin_streak} 天！")
             if opponent_is_new_checkin:
                 if opponent_broke_streak:
-                    footer_parts.append(f"{opponent.display_name} 在第 {opponent_broke_streak_on} 天打破了簽到紀錄，重新開始！")
+                    if opponent_freeze_used > 0:
+                        footer_parts.append(f"{opponent.display_name} 在第 {opponent_broke_streak_on} 天打破了簽到紀錄，消耗了 {opponent_freeze_used} 個凍結球！重新開始！")
+                    else:
+                        footer_parts.append(f"{opponent.display_name} 在第 {opponent_broke_streak_on} 天打破了簽到紀錄，重新開始！")
+                elif opponent_freeze_used > 0:
+                    footer_parts.append(f"{opponent.display_name} 簽到第 {opponent_checkin_streak} 天！凍結球保護了連續（消耗 {opponent_freeze_used} 個）")
                 else:
                     footer_parts.append(f"{opponent.display_name} 簽到第 {opponent_checkin_streak} 天！")
             
@@ -1532,11 +1573,16 @@ async def use_cloud_ruler(interaction: discord.Interaction):
             final_size = fake_size if fake_size is not None else size
             log(f"對 {target_user.display_name} 使用了雲端尺, 長度: {size} cm, 最終長度: {final_size} cm", module_name="dsize", user=interaction.user, guild=interaction.guild)
 
-            user_is_new_checkin, user_checkin_streak, user_broke_streak, user_broke_streak_on = await process_checkin(target_id)
+            user_is_new_checkin, user_checkin_streak, user_broke_streak, user_broke_streak_on, user_freeze_used = await process_checkin(target_id)
             
             if user_is_new_checkin:
                 if user_broke_streak:
-                    footer_text = f"你在第 {user_broke_streak_on} 天打破了簽到紀錄，重新開始簽到！ | 簽到第 {user_checkin_streak} 天！"
+                    if user_freeze_used > 0:
+                        footer_text = f"你在第 {user_broke_streak_on} 天打破了簽到紀錄，消耗了 {user_freeze_used} 個簽到凍結！重新開始簽到！ | 簽到第 {user_checkin_streak} 天！"
+                    else:
+                        footer_text = f"你在第 {user_broke_streak_on} 天打破了簽到紀錄，重新開始簽到！ | 簽到第 {user_checkin_streak} 天！"
+                elif user_freeze_used > 0:
+                    footer_text = f"簽到第 {user_checkin_streak} 天！簽到凍結保護了連續（消耗 {user_freeze_used} 個）"
                 else:
                     footer_text = f"簽到第 {user_checkin_streak} 天！"
             else:
@@ -1624,6 +1670,13 @@ if "ItemSystem" in modules:
             "description": "這是一把雲端尺，可以幫處於線上的網友量長度。",
             "callback": use_cloud_ruler,
             "worth": 100,
+        },
+        {
+            "id": "checkin_freeze",
+            "name": "凍結球",
+            "description": "一個神奇的凍結球，可以使其變成急凍鳥。\n可以抵消一天未簽到，保護你的簽到連續紀錄不被打破。",
+            "callback": None,
+            "worth": 50,
         }
     ]
     import ItemSystem
