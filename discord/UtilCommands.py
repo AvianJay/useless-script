@@ -873,7 +873,7 @@ async def sticker_info_context(interaction: discord.Interaction, message: discor
         view = discord.ui.View()
     btn = discord.ui.Button(label="貼圖連結", url=sticker.url)
     view.add_item(btn)
-    await interaction.response.send_message(embed=embed, view=viewe)
+    await interaction.response.send_message(embed=embed, view=view)
 
 
 class PrettyHelpCommand(commands.HelpCommand):
