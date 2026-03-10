@@ -629,7 +629,137 @@ class AICommands(commands.Cog):
         except Exception as e:
             log(f"AI 生成錯誤: {e}", module_name="AI", level=logging.ERROR)
             raise
-    
+
+    @staticmethod
+    def _embed_summary(embed: discord.Embed) -> str:
+        """擷取 embed 的簡短文字摘要"""
+        parts = []
+        if embed.title:
+            parts.append(embed.title)
+        if embed.description:
+            desc = embed.description
+            if len(desc) > 80:
+                desc = desc[:80] + "..."
+            parts.append(desc)
+        if not parts and embed.fields:
+            field = embed.fields[0]
+            parts.append(f"{field.name}: {field.value[:60]}" if field.value else field.name)
+        return " | ".join(parts)
+
+    @staticmethod
+    async def _format_msg_for_context(
+        msg: discord.Message,
+        guild: discord.Guild,
+        bot: commands.Bot,
+        skip_id: int = None,
+        self_id: int = None
+    ) -> str | None:
+        """
+        將單則訊息格式化為頻道上下文字串。
+        返回 None 表示此訊息應略過。
+        """
+        if skip_id and msg.id == skip_id:
+            return None
+
+        if msg.author.bot:
+            # ── 本機器人的訊息 ──
+            if self_id and msg.author.id == self_id:
+                parts = []
+                if msg.content:
+                    content = msg.content
+                    if len(content) > 100:
+                        content = content[:100] + "..."
+                    parts.append(content)
+                if msg.embeds:
+                    summary = AICommands._embed_summary(msg.embeds[0])
+                    parts.append(f"[Embed: {summary}]" if summary else "[Embed]")
+                if msg.components:
+                    parts.append("[包含互動元件]")
+                if not parts:
+                    return None
+                body = " ".join(parts)
+                # 加上是誰觸發指令的資訊（若有）
+                meta = getattr(msg, "interaction_metadata", None)
+                trigger = ""
+                if meta:
+                    user_name = "某人"
+                    try:
+                        if meta.user:
+                            user_name = meta.user.display_name
+                    except Exception:
+                        pass
+                    cmd_name = getattr(meta, "name", None) or "指令"
+                    trigger = f" (回應 {user_name} 的 /{cmd_name})"
+                return f"[本機器人{trigger}]: {body}"
+
+            # ── 其他機器人：只保留有互動 metadata 的（斜線指令回應） ──
+            meta = getattr(msg, "interaction_metadata", None)
+            if not meta:
+                return None
+            user_name = "某人"
+            try:
+                if meta.user:
+                    user_name = meta.user.display_name
+            except Exception:
+                pass
+            cmd_name = getattr(meta, "name", None) or "指令"
+            label = f"[{user_name} 使用了 /{cmd_name}]"
+            if msg.embeds:
+                summary = AICommands._embed_summary(msg.embeds[0])
+                if summary:
+                    label += f" → {summary}"
+            return f"{msg.author.display_name}: {label}"
+
+        # ── 一般用戶訊息 ──
+        extra_parts = []   # 非文字內容標籤
+        reply = ""
+
+        # 回覆 / 轉發上下文
+        if msg.reference:
+            if msg.reference.type == discord.MessageReferenceType.forward:
+                if msg.reference.resolved:
+                    fwd = msg.reference.resolved
+                    fwd_content = fwd.content if fwd.content else "[圖片/附件]"
+                    if len(fwd_content) > 100:
+                        fwd_content = fwd_content[:100] + "..."
+                    extra_parts.append(f"[轉發 {fwd.author.display_name} 的訊息: {fwd_content}]")
+                else:
+                    extra_parts.append("[轉發訊息]")
+            elif msg.reference.resolved:
+                ref = msg.reference.resolved
+                ref_content = ref.content if ref.content else "[圖片/附件]"
+                if len(ref_content) > 50:
+                    ref_content = ref_content[:50] + "..."
+                reply = f" (回覆 {ref.author.display_name}: {ref_content})"
+
+        # 附件 / 貼圖
+        if msg.attachments:
+            extra_parts.append("[圖片/附件]")
+        if msg.stickers:
+            extra_parts.append("[貼圖]")
+
+        # Embed 摘要
+        if msg.embeds:
+            summary = AICommands._embed_summary(msg.embeds[0])
+            extra_parts.append(f"[Embed: {summary}]" if summary else "[Embed]")
+
+        # Components（Component V2 / 一般按鈕等）
+        if msg.components:
+            extra_parts.append("[包含互動元件]")
+
+        if not msg.content and not extra_parts:
+            return None
+
+        # 處理文字內容
+        msg_text = ""
+        if msg.content:
+            msg_text = await MentionResolver.resolve_mentions(msg.content, guild, bot)
+            if len(msg_text) > 100:
+                msg_text = msg_text[:100] + "..."
+
+        body = (msg_text + " " + " ".join(extra_parts)).strip() if extra_parts else msg_text
+        return f"{msg.author.display_name}{reply}: {body}"
+
     @app_commands.command(name="ai", description="與 AI 助手對話")
     @app_commands.describe(
         message="你想問 AI 的問題或訊息",
@@ -697,26 +827,38 @@ class AICommands(commands.Cog):
             
             # 構建訊息列表（包含用戶名稱和頻道上下文）
             user_context = f"當前與你對話的用戶是：{user.display_name}"
-            
+
+            # 伺服器資訊（僅限 guild integration）
+            guild_info = ""
+            if interaction.guild:
+                g = interaction.guild
+                owner_name = g.owner.display_name if g.owner else f"ID:{g.owner_id}"
+                channel_name = interaction.channel.name if interaction.channel and hasattr(interaction.channel, 'name') else "未知頻道"
+                guild_info = (
+                    f"\n目前所在伺服器：{g.name}"
+                    f"（成員 {g.member_count} 人，擁有者：{owner_name}，"
+                    f"伺服器加成：Lv{g.premium_tier} / {g.premium_subscription_count} 個，"
+                    f"目前頻道：#{channel_name}）"
+                )
+
             # 獲取頻道最近訊息作為上下文（僅限伺服器）
             channel_context = ""
             if interaction.guild and interaction.channel and interaction.is_guild_integration():
                 try:
                     recent_msgs = []
-                    async for msg in interaction.channel.history(limit=10, before=interaction.created_at):
-                        if msg.author.bot:
-                            continue
-                        msg_content = await MentionResolver.resolve_mentions(msg.content, interaction.guild, self.bot)
-                        if len(msg_content) > 100:
-                            msg_content = msg_content[:100] + "..."
-                        recent_msgs.append(f"{msg.author.display_name}: {msg_content}")
+                    async for msg in interaction.channel.history(limit=30, before=interaction.created_at):
+                        if len(recent_msgs) >= 5:
+                            break
+                        formatted = await self._format_msg_for_context(msg, interaction.guild, self.bot, self_id=self.bot.user.id)
+                        if formatted:
+                            recent_msgs.append(formatted)
                     if recent_msgs:
                         recent_msgs.reverse()
-                        channel_context = f"\n\n[頻道最近對話，僅供參考了解氣氛]:\n" + "\n".join(recent_msgs[-5:])
+                        channel_context = "\n\n[頻道最近對話，僅供參考了解氣氛]:\n" + "\n".join(recent_msgs)
                 except Exception as e:
                     log(f"獲取頻道訊息失敗: {e}", module_name="AI", level=logging.WARNING)
             
-            system_with_context = f"{SYSTEM_PROMPT}\n\n{user_context}{channel_context}"
+            system_with_context = f"{SYSTEM_PROMPT}\n\n{user_context}{guild_info}{channel_context}"
             
             messages = [{"role": "system", "content": system_with_context}]
             messages.extend(ConversationManager.format_for_api(history))
@@ -873,26 +1015,37 @@ class AICommands(commands.Cog):
                 
                 # 構建訊息列表（包含用戶名稱和頻道上下文）
                 user_context = f"當前與你對話的用戶是：{user.display_name}"
-                
+
+                # 伺服器資訊
+                guild_info = ""
+                if guild:
+                    owner_name = guild.owner.display_name if guild.owner else f"ID:{guild.owner_id}"
+                    channel_name = ctx.channel.name if ctx.channel and hasattr(ctx.channel, 'name') else "未知頻道"
+                    guild_info = (
+                        f"\n目前所在伺服器：{guild.name}"
+                        f"（成員 {guild.member_count} 人，擁有者：{owner_name}，"
+                        f"伺服器加成：Lv{guild.premium_tier} / {guild.premium_subscription_count} 個，"
+                        f"目前頻道：#{channel_name}）"
+                    )
+
                 # 獲取頻道最近訊息作為上下文（僅限伺服器）
                 channel_context = ""
                 if guild and ctx.channel:
                     try:
                         recent_msgs = []
-                        async for msg in ctx.channel.history(limit=10, before=ctx.message):
-                            if msg.author.bot or msg.id == ctx.message.id:
-                                continue
-                            msg_content = await MentionResolver.resolve_mentions(msg.content, guild, self.bot)
-                            if len(msg_content) > 100:
-                                msg_content = msg_content[:100] + "..."
-                            recent_msgs.append(f"{msg.author.display_name}: {msg_content}")
+                        async for msg in ctx.channel.history(limit=30, before=ctx.message):
+                            if len(recent_msgs) >= 5:
+                                break
+                            formatted = await self._format_msg_for_context(msg, guild, self.bot, skip_id=ctx.message.id, self_id=self.bot.user.id)
+                            if formatted:
+                                recent_msgs.append(formatted)
                         if recent_msgs:
                             recent_msgs.reverse()
-                            channel_context = f"\n\n[頻道最近對話，僅供參考了解氣氛]:\n" + "\n".join(recent_msgs[-5:])
+                            channel_context = "\n\n[頻道最近對話，僅供參考了解氣氛]:\n" + "\n".join(recent_msgs)
                     except Exception as e:
                         log(f"獲取頻道訊息失敗: {e}", module_name="AI", level=logging.WARNING)
                 
-                system_with_context = f"{SYSTEM_PROMPT}\n\n{user_context}{channel_context}"
+                system_with_context = f"{SYSTEM_PROMPT}\n\n{user_context}{guild_info}{channel_context}"
                 
                 messages = [{"role": "system", "content": system_with_context}]
                 messages.extend(ConversationManager.format_for_api(history))
