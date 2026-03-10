@@ -828,6 +828,8 @@ def _find_first_custom_emoji(content: str) -> discord.PartialEmoji | None:
         return discord.PartialEmoji(animated=m.group(1) == 'a', name=m.group(2), id=int(m.group(3)))
     return None
 
+@app_commands.allowed_installs(guilds=True, users=True)
+@app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
 @bot.tree.context_menu(name="表情符號資訊")
 async def emoji_info_context(interaction: discord.Interaction, message: discord.Message):
     emoji = _find_first_custom_emoji(message.content)
@@ -853,6 +855,8 @@ async def emoji_info_context(interaction: discord.Interaction, message: discord.
     await interaction.response.send_message(embed=embed, view=view)
 
 # context menu for sticker info
+@app_commands.allowed_installs(guilds=True, users=True)
+@app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
 @bot.tree.context_menu(name="貼圖資訊")
 async def sticker_info_context(interaction: discord.Interaction, message: discord.Message):
     if message.stickers:
