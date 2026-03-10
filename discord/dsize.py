@@ -619,46 +619,27 @@ async def dsize_leaderboard(interaction: discord.Interaction, limit: int = 10, g
 
     today = (datetime.now(timezone(timedelta(hours=8)))).date()  # 台灣時間
     next_day = today + timedelta(days=1)  # for viagra check
-    all_data = get_all_user_data(guild_id, "last_dsize_size", value=str(today))
-    all_data_next_day = get_all_user_data(guild_id, "last_dsize_size", value=str(next_day))
-    all_data.update(all_data_next_day)  # include users who have measured for the next day (for viagra users)
-    all_data_fake = get_all_user_data(guild_id, "last_dsize_fake_size", value=str(today))
-    for user_id, data in all_data.items():
-        size = data.get("last_dsize_size")
-        # check dsize date is today
-        user_date = get_user_data(guild_id, user_id, "last_dsize")
-        if user_date is not None and not isinstance(user_date, datetime):
-            # If user_date is a string (e.g., from JSON), convert to date
-            try:
-                user_date = datetime.fromisoformat(str(user_date)).date()
-            except Exception:
-                user_date = datetime(1970, 1, 1).date()
-        elif isinstance(user_date, datetime):
-            user_date = user_date.date()
-        if user_date is not None and user_date != (datetime.now(timezone(timedelta(hours=8)))).date():
-            continue
+    valid_user_ids = set(get_all_user_data(guild_id, "last_dsize", value=str(today)).keys()) | \
+                     set(get_all_user_data(guild_id, "last_dsize", value=str(next_day)).keys())
+    all_data_fake = {}
+    for user_id in valid_user_ids:
+        size = get_user_data(guild_id, user_id, "last_dsize_size")
         if size is not None:
             leaderboard.append((user_id, size))
-    
-    for user_id, data in all_data_fake.copy().items():
-        size = data.get("last_dsize_fake_size")
-        # check dsize date is today
-        user_date = get_user_data(guild_id, user_id, "dsize_fake_ruler_used_date")
-        if user_date is None:
-            all_data_fake.pop(user_id)
-            continue
-        if user_date is not None and not isinstance(user_date, datetime):
-            # If user_date is a string (e.g., from JSON), convert to date
+        fake_ruler_used_date = get_user_data(guild_id, user_id, "dsize_fake_ruler_used_date")
+        if fake_ruler_used_date is not None:
             try:
-                user_date = datetime.fromisoformat(str(user_date)).date()
+                if not isinstance(fake_ruler_used_date, datetime):
+                    fake_ruler_used_date = datetime.fromisoformat(str(fake_ruler_used_date)).date()
+                else:
+                    fake_ruler_used_date = fake_ruler_used_date.date()
             except Exception:
-                user_date = datetime(1970, 1, 1).date()
-        elif isinstance(user_date, datetime):
-            user_date = user_date.date()
-        if user_date is not None and user_date <= (datetime.now(timezone(timedelta(hours=8)))).date():
-            all_data_fake.pop(user_id)
-            continue
-
+                fake_ruler_used_date = None
+            if fake_ruler_used_date == today:
+                fake_size = get_user_data(guild_id, user_id, "last_dsize_fake_size")
+                if fake_size is not None:
+                    all_data_fake[user_id] = {"last_dsize_fake_size": fake_size}
+    
     if not leaderboard:
         await interaction.followup.send("今天還沒有任何人量過屌長。")
         return
@@ -1673,7 +1654,7 @@ async def use_viagra(interaction: discord.Interaction):
     if last_anti_surgery == now:
         set_user_data(guild_key, user_id, "dsize_anti_surgery", (now + timedelta(days=1)).isoformat())
     # check fake size
-    fake_ruler_used = get_user_data(guild_key, user_id, "dsize_fake_ruler_used_date")
+    fake_ruler_used_date = get_user_data(guild_key, user_id, "dsize_fake_ruler_used_date")
     if fake_ruler_used_date is not None and not isinstance(fake_ruler_used_date, datetime):
         try:
             fake_ruler_used_date = datetime.fromisoformat(str(fake_ruler_used_date)).date()

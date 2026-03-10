@@ -196,9 +196,9 @@ def set_user_data(guild_id: int, user_id: int, key: str, value):
     """Set user-specific data in a server"""
     return db.set_user_data(user_id, guild_id, key, value)
 
-def get_all_user_data(guild_id: int, key: str):
+def get_all_user_data(guild_id: int, key: str, value=None):
     """Get all user-specific data for a specific key in a server"""
-    return db.get_all_user_data(guild_id, key)
+    return db.get_all_user_data(guild_id, key, value)
 
 def get_global_config(key: str, default=None):
     return db.get_global_config(key, default)
