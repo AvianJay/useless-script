@@ -1688,13 +1688,13 @@ async def use_random_attack(interaction: discord.Interaction):
     target = random.choice(leaderboard) if leaderboard else None
     if target is None:
         await interaction.followup.send("目前沒有可攻擊的目標。")
-        await ItemSystem.add_item_to_user(guild_key, interaction.user.id, "random_attack", 1)  # refund
+        await ItemSystem.give_item_to_user(guild_key, interaction.user.id, "random_attack", 1)  # refund
         return
     # perform the attack on the target
     reduced_size = random.randint(1, target[1] // 2 + 1)
     if reduced_size >= target[1]:
         await interaction.followup.send("被抽到的目標已經短到不能再短了。\n攻擊失敗，沒有造成任何傷害。")
-        await ItemSystem.add_item_to_user(guild_key, interaction.user.id, "random_attack", 1)  # refund
+        await ItemSystem.give_item_to_user(guild_key, interaction.user.id, "random_attack", 1)  # refund
         return
     set_user_data(guild_key, target[0], "last_dsize_size", target[1] - reduced_size)
     # update statistics
@@ -1723,7 +1723,7 @@ if "ItemSystem" in modules:
             "name": "自欺欺人尺",
             "description": "使用後下次量長度時或許會更長？",
             "callback": use_fake_ruler,
-            "worth": 25,
+            "worth": 50,
         },
         {
             "id": "grass",
@@ -1737,28 +1737,28 @@ if "ItemSystem" in modules:
             "name": "手術刀",
             "description": "這是一把手術刀，可以用來進行手術，必定成功。",
             "callback": use_scalpel,
-            "worth": 200,
+            "worth": 250,
         },
         {
             "id": "rusty_scalpel",
             "name": "生鏽的手術刀",
             "description": "這是一把生鏽的手術刀，可以強制感染進而變成男娘。",
             "callback": use_rusty_scalpel,
-            "worth": 150,
+            "worth": 300,
         },
         {
             "id": "anti_surgery",
             "name": "抗手術藥物",
             "description": "一顆屌型的藥丸。使用後可以防止一天被手術。\n使用後兩天內量長度時將會有變短的副作用。",
             "callback": use_anti_surgery,
-            "worth": 20,
+            "worth": 30,
         },
         {
             "id": "cloud_ruler",
             "name": "雲端尺",
             "description": "這是一把雲端尺，可以幫處於線上的網友量長度。",
             "callback": use_cloud_ruler,
-            "worth": 100,
+            "worth": 200,
         },
         {
             "id": "checkin_freeze",
@@ -1772,14 +1772,14 @@ if "ItemSystem" in modules:
             "name": "威而鋼",
             "description": "一顆藍色的藥丸，有持久的作用。\n使用後今天的狀態將會持續到明天，無論是好是壞。",
             "callback": use_viagra,
-            "worth": 200,
+            "worth": 100,
         },
         {
             "id": "random_attack",
             "name": "[技能] 亂槍打鳥",
             "description": "隨機對一個在排行榜上的非男娘人物造成傷害。",
             "callback": use_random_attack,
-            "worth": 100,
+            "worth": 500,
         }
     ]
     import ItemSystem
