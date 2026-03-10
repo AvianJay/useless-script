@@ -1504,7 +1504,7 @@ class Economy(commands.GroupCog, name="economy", description="經濟系統指令
                 who = "發起者" if btn_interaction.user.id == initiator_id else "對方"
                 await btn_interaction.response.edit_message(content=f"❌ 交易已被{who}取消。", view=self)
 
-        await interaction.response.send_message(content=user.mention, embed=embed, view=TradeView(), allow_mentions=discord.AllowedMentions(users=True, roles=False, everyone=False))
+        await interaction.response.send_message(content=user.mention, embed=embed, view=TradeView(), allowed_mentions=discord.AllowedMentions(users=True, roles=False, everyone=False))
 
     @app_commands.command(name="leaderboard", description="查看財富排行榜")
     @app_commands.describe(currency="排行類型")
