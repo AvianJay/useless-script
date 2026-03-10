@@ -13,6 +13,7 @@ import asyncio
 import traceback
 import io
 from typing import Optional
+import re
 
 client = Client(api_key=config("pollinations_api_key", ""))
 
@@ -172,7 +173,7 @@ bio_prompt = """
 
 async def review_image(image_data: bytes) -> dict:
     try:
-        response = await asyncio.to_thread(
+        chat = await asyncio.to_thread(
             client.chat.completions.create,
             model="openai",
             provider=g4f.Provider.PollinationsAI,
@@ -183,9 +184,12 @@ async def review_image(image_data: bytes) -> dict:
             stream=False,
             image=image_data
         )
+        response = chat.choices[0].message.content.strip()
         # try get json
         try:
-            response = "{" + response.split("}{")[1]
+            json_match = re.search(r'\{[\s\S]*\}', response)
+            if json_match:
+                response = json_match.group(0)
         except Exception:
             pass
         log(f"收到圖片審核回應：{response}", module_name="BotCustomizer")
@@ -198,7 +202,7 @@ async def review_image(image_data: bytes) -> dict:
 
 async def review_bio(bio_text: str) -> dict:
     try:
-        response = await asyncio.to_thread(
+        chat = await asyncio.to_thread(
             client.chat.completions.create,
             model="openai",
             provider=g4f.Provider.PollinationsAI,
@@ -208,8 +212,11 @@ async def review_bio(bio_text: str) -> dict:
             ],
             stream=False
         )
+        response = chat.choices[0].message.content.strip()
         try:
-            response = "{" + response.split("}{")[1]
+            json_match = re.search(r'\{[\s\S]*\}', response)
+            if json_match:
+                response = json_match.group(0)
         except Exception:
             pass
         log(f"收到關於我審核回應：{response}", module_name="BotCustomizer")

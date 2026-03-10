@@ -75,7 +75,7 @@ async def check_message_with_ai(text: str, history_messages: str = "", reason: s
 }}
 """
 
-    response = await asyncio.to_thread(
+    chat = await asyncio.to_thread(
         client.chat.completions.create,
         model="openai",
         provider=g4f.Provider.PollinationsAI,
@@ -84,6 +84,7 @@ async def check_message_with_ai(text: str, history_messages: str = "", reason: s
         image=image
     )
     # print("[DEBUG] AI Response:", response)
+    response = chat.choices[0].message.content.strip()
 
     try:
         result = json.loads(response)
