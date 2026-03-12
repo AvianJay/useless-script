@@ -341,7 +341,7 @@ async def dsize(interaction: discord.Interaction, global_dsize: str = "False"):
     # 隨機產生長度
     size = random.randint(1, max_size)
     # check if yesterday used anti-surgery
-    if last_anti_surgery is not None and last_anti_surgery >= now - timedelta(days=1):
+    if last_anti_surgery is not None and last_anti_surgery >= now - timedelta(days=2):
         size = max(-1, size - random.randint(1, max_size // 2))
         message = "糟糕！有副作用！"
     size = size if size != 0 else -1
@@ -804,7 +804,7 @@ async def dsize_battle(interaction: discord.Interaction, opponent: Union[discord
                     user_anti_surgery = None
             elif isinstance(user_anti_surgery, datetime):
                 user_anti_surgery = user_anti_surgery.date()
-            if user_anti_surgery is not None and user_anti_surgery >= now - timedelta(days=1):
+            if user_anti_surgery is not None and user_anti_surgery >= now - timedelta(days=2):
                 size_user = max(-1, size_user - random.randint(1, max_size // 2))
                 size_user = size_user if size_user != 0 else -1
                 if size_user == -1:
@@ -820,7 +820,7 @@ async def dsize_battle(interaction: discord.Interaction, opponent: Union[discord
                     opponent_anti_surgery = None
             elif isinstance(opponent_anti_surgery, datetime):
                 opponent_anti_surgery = opponent_anti_surgery.date()
-            if opponent_anti_surgery is not None and opponent_anti_surgery >= now - timedelta(days=1):
+            if opponent_anti_surgery is not None and opponent_anti_surgery >= now - timedelta(days=2):
                 size_opponent = max(-1, size_opponent - random.randint(1, max_size // 2))
                 size_opponent = size_opponent if size_opponent != 0 else -1
                 if size_opponent == -1:
@@ -1543,12 +1543,30 @@ async def use_cloud_ruler(interaction: discord.Interaction):
 
             # 隨機產生長度
             size = random.randint(1, max_size)
+            # 抗手術副作用
+            side_effect_message = None
+            last_anti_surgery_data = get_user_data(guild_key, target_id, "dsize_anti_surgery")
+            last_anti_surgery = None
+            if last_anti_surgery_data is not None and not isinstance(last_anti_surgery_data, datetime):
+                try:
+                    last_anti_surgery = datetime.fromisoformat(str(last_anti_surgery_data)).date()
+                except Exception:
+                    last_anti_surgery = None
+            elif isinstance(last_anti_surgery_data, datetime):
+                last_anti_surgery = last_anti_surgery_data.date()
+            if last_anti_surgery is not None and last_anti_surgery >= now - timedelta(days=2):
+                size = max(-1, size - random.randint(1, max_size // 2))
+                size = size if size != 0 else -1
+                if size == -1:
+                    side_effect_message = "糟糕！有副作用！變男娘了！"
+                else:
+                    side_effect_message = "糟糕！有副作用！"
             set_user_data(guild_key, target_id, "last_dsize_size", size)
             set_user_data(guild_key, target_id, "last_dsize", now)
             fake_size = None
             if "ItemSystem" in modules:
                 fake_ruler_used = get_user_data(guild_key, target_id, "dsize_fake_ruler_used", False)
-                if fake_ruler_used:
+                if fake_ruler_used and size != -1:
                     extra_size = random.randint(10, 20)
                     fake_size = size + extra_size
                     # reset fake ruler usage
@@ -1572,7 +1590,8 @@ async def use_cloud_ruler(interaction: discord.Interaction):
                     footer_text = f"簽到第 {user_checkin_streak} 天！"
             else:
                 footer_text = None
-            
+            if side_effect_message:
+                footer_text = (footer_text + " | " + side_effect_message) if footer_text else side_effect_message
 
             # 建立 Embed 訊息
             embed = discord.Embed(title=f"{interaction.user.display_name} 幫 {target_user.display_name} 測量長度：", color=0x00ff00)
@@ -1580,18 +1599,22 @@ async def use_cloud_ruler(interaction: discord.Interaction):
             embed.set_footer(text=footer_text)
             embed.timestamp = datetime.now(timezone.utc)
             await interaction.response.send_message(content=f"{target_user.mention} 被抓去量長度。", embed=embed)
-            # animate to size
-            speed = size // 50 + 1
-            for i in range(1, size + 1, speed):
-                d_string = "=" * (i - 1)
-                current_size = i
-                embed.set_field_at(0, name=f"{current_size} cm", value=f"8{d_string}D", inline=False)
+            if size == -1:
+                embed.set_field_at(0, name="你現在是男娘了！", value="🏳️‍⚧️", inline=False)
                 await interaction.edit_original_response(content=f"{target_user.mention} 被抓去量長度。", embed=embed)
-                await asyncio.sleep(0.1)
-            # final
-            d_string = "=" * (size - 1)
-            embed.set_field_at(0, name=f"{final_size} cm", value=f"8{d_string}D", inline=False)
-            await interaction.edit_original_response(content=f"{target_user.mention} 被抓去量長度。", embed=embed)
+            else:
+                # animate to size
+                speed = size // 50 + 1
+                for i in range(1, size + 1, speed):
+                    d_string = "=" * (i - 1)
+                    current_size = i
+                    embed.set_field_at(0, name=f"{current_size} cm", value=f"8{d_string}D", inline=False)
+                    await interaction.edit_original_response(content=f"{target_user.mention} 被抓去量長度。", embed=embed)
+                    await asyncio.sleep(0.1)
+                # final
+                d_string = "=" * (size - 1)
+                embed.set_field_at(0, name=f"{final_size} cm", value=f"8{d_string}D", inline=False)
+                await interaction.edit_original_response(content=f"{target_user.mention} 被抓去量長度。", embed=embed)
             history = get_user_data(guild_key, target_id, "dsize_history", [])
             history.append({
                 "date": now.isoformat(),
