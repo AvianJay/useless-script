@@ -397,18 +397,38 @@ async def dsize(interaction: discord.Interaction, global_dsize: str = "False"):
 
     if size > 0:
         # animate to size
+        break_counter = 0
+        break_content = None
         speed = size // 50 + 1
         for i in range(1, size + 1, speed):
-            d_string = "=" * (i - 1)
+            if random.random() < 0.1:
+                break_counter += 1
+                if break_content is None:
+                    break_content = "你的ㄐㄐ今天好像怪怪的。"
+            d_chars = list("=" * (i - 1))
+            if break_counter > 0 and len(d_chars) > 0:
+                num_replace = min(break_counter, len(d_chars))
+                for idx in random.sample(range(len(d_chars)), num_replace):
+                    d_chars[idx] = "≈"
+            d_string = "".join(d_chars)
+            if break_counter >= 5:
+                size = -1
+                final_size = -1
+                break_content = "你變成男娘了。"
+                embed.set_field_at(0, name=f"{size} cm", value="8", inline=False)
+                embed.color = 0xff0000
+                await interaction.edit_original_response(content=break_content, embed=embed)
+                break
             current_size = i
             embed.set_field_at(0, name=f"{current_size} cm", value=f"8{d_string}D", inline=False)
-            await interaction.edit_original_response(embed=embed)
+            await interaction.edit_original_response(content=break_content, embed=embed)
             await asyncio.sleep(0.1)
-        # final
-        d_string = "=" * (size - 1)
-        embed.set_field_at(0, name=f"{final_size} cm", value=f"8{d_string}D", inline=False)
-        await asyncio.sleep(0.5)
-        await interaction.edit_original_response(embed=embed)
+        if break_counter < 5:
+            # final
+            d_string = "=" * (size - 1)
+            embed.set_field_at(0, name=f"{final_size} cm", value=f"8{d_string}D", inline=False)
+            await asyncio.sleep(0.5)
+            await interaction.edit_original_response(content=break_content, embed=embed)
 
     # 更新使用時間 — 存到對應的 guild_key（若為 user-install 則是 None）
     set_user_data(guild_key, user_id, "last_dsize_size", size)
@@ -835,24 +855,70 @@ async def dsize_battle(interaction: discord.Interaction, opponent: Union[discord
             msg = await interaction.original_response()
             t = datetime.now(timezone.utc)
 
-            for i in range(1, max(size_user, size_opponent) - 1, speed):
-                d_string_user = "=" * min(i, size_user - 1)
-                d_string_opponent = "=" * min(i, size_opponent - 1)
+            user_break_counter = 0
+            opponent_break_counter = 0
+            user_broke = size_user <= 0
+            opponent_broke = size_opponent <= 0
+            battle_content = "開始對決。"
+            user_break_message = None
+            opponent_break_message = None
+            max_anim = max(size_user if size_user > 0 else 1, size_opponent if size_opponent > 0 else 1)
+            for i in range(1, max_anim, speed):
+                # 10% break check for user
+                if not user_broke and i < size_user and random.random() < 0.1:
+                    user_break_counter += 1
+                    if user_break_counter == 1:
+                        user_break_message = f"{original_user.display_name} 的ㄐㄐ今天好像怪怪的。"
+                    if user_break_counter >= 5:
+                        size_user = -1
+                        user_broke = True
+                        user_break_message = f"{original_user.display_name} 變成男娘了。"
+                # 10% break check for opponent
+                if not opponent_broke and i < size_opponent and random.random() < 0.1:
+                    opponent_break_counter += 1
+                    if opponent_break_counter == 1:
+                        opponent_break_message = f"{opponent.display_name} 的ㄐㄐ今天好像怪怪的。"
+                    if opponent_break_counter >= 5:
+                        size_opponent = -1
+                        opponent_broke = True
+                        opponent_break_message = f"{opponent.display_name} 變成男娘了。"
+                content_lines = ["開始對決。"]
+                if user_break_message:
+                    content_lines.append(user_break_message)
+                if opponent_break_message:
+                    content_lines.append(opponent_break_message)
+                battle_content = "\n".join(content_lines)
+                # Build user display
+                if user_broke:
+                    user_field_name = f"{original_user.display_name} 的長度："
+                    user_field_value = "8"
+                else:
+                    d_chars_user = list("=" * min(i, size_user - 1))
+                    if user_break_counter > 0 and len(d_chars_user) > 0:
+                        num = min(user_break_counter, len(d_chars_user))
+                        for idx in random.sample(range(len(d_chars_user)), num):
+                            d_chars_user[idx] = "≈"
+                    user_field_name = f"{original_user.display_name} 的長度："
+                    user_field_value = f"{size_user if i >= size_user - 1 else '??'} cm\n8{''.join(d_chars_user)}D"
+                # Build opponent display
+                if opponent_broke:
+                    opp_field_name = f"{opponent.display_name} 的長度："
+                    opp_field_value = "8"
+                else:
+                    d_chars_opp = list("=" * min(i, size_opponent - 1))
+                    if opponent_break_counter > 0 and len(d_chars_opp) > 0:
+                        num = min(opponent_break_counter, len(d_chars_opp))
+                        for idx in random.sample(range(len(d_chars_opp)), num):
+                            d_chars_opp[idx] = "≈"
+                    opp_field_name = f"{opponent.display_name} 的長度："
+                    opp_field_value = f"{size_opponent if i >= size_opponent - 1 else '??'} cm\n8{''.join(d_chars_opp)}D"
                 embed = discord.Embed(title="比長度", color=0x00ff00)
-                embed.add_field(
-                    name=f"{original_user.display_name} 的長度：",
-                    value=f"{size_user if i >= size_user - 1 else '??'} cm\n8{d_string_user}D",
-                    inline=False,
-                )
-                embed.add_field(
-                    name=f"{opponent.display_name} 的長度：",
-                    value=f"{size_opponent if i >= size_opponent - 1 else '??'} cm\n8{d_string_opponent}D",
-                    inline=False,
-                )
+                embed.add_field(name=user_field_name, value=user_field_value, inline=False)
+                embed.add_field(name=opp_field_name, value=opp_field_value, inline=False)
                 embed.timestamp = t
                 if not guild_key:
                     embed.set_footer(text="此次對決將記錄到全域排行榜。")
-                await msg.edit(embed=embed)
+                await msg.edit(content=battle_content, embed=embed)
                 await asyncio.sleep(0.1)
 
             # 最終結果
@@ -871,11 +937,23 @@ async def dsize_battle(interaction: discord.Interaction, opponent: Union[discord
             else:
                 result = "🤝 平手！"
 
-            d_string_user = "=" * (size_user - 1)
-            d_string_opponent = "=" * (size_opponent - 1)
+            if size_user == -1:
+                user_final_name = f"{original_user.display_name}：斷掉了！男娘了！"
+                user_final_value = "🏳️‍⚧️"
+            else:
+                d_string_user = "=" * (size_user - 1)
+                user_final_name = f"{original_user.display_name} 的長度："
+                user_final_value = f"{size_user} cm\n8{d_string_user}D"
+            if size_opponent == -1:
+                opp_final_name = f"{opponent.display_name}：斷掉了！男娘了！"
+                opp_final_value = "🏳️‍⚧️"
+            else:
+                d_string_opponent = "=" * (size_opponent - 1)
+                opp_final_name = f"{opponent.display_name} 的長度："
+                opp_final_value = f"{size_opponent} cm\n8{d_string_opponent}D"
             embed = discord.Embed(title="比長度", color=0x00ff00)
-            embed.add_field(name=f"{original_user.display_name} 的長度：", value=f"{size_user} cm\n8{d_string_user}D", inline=False)
-            embed.add_field(name=f"{opponent.display_name} 的長度：", value=f"{size_opponent} cm\n8{d_string_opponent}D", inline=False)
+            embed.add_field(name=user_final_name, value=user_final_value, inline=False)
+            embed.add_field(name=opp_final_name, value=opp_final_value, inline=False)
             embed.add_field(name="結果：", value=result, inline=False)
             embed.timestamp = t
             
@@ -914,7 +992,7 @@ async def dsize_battle(interaction: discord.Interaction, opponent: Union[discord
             if footer_parts:
                 embed.set_footer(text=" | ".join(footer_parts))
             
-            await msg.edit(embed=embed)
+            await msg.edit(content=battle_content, embed=embed)
 
             set_user_data(guild_key, user_id, "last_dsize_size", size_user)
             set_user_data(guild_key, opponent_id, "last_dsize_size", size_opponent)
@@ -1604,17 +1682,38 @@ async def use_cloud_ruler(interaction: discord.Interaction):
                 await interaction.edit_original_response(content=f"{target_user.mention} 被抓去量長度。", embed=embed)
             else:
                 # animate to size
+                break_counter = 0
+                cloud_content = f"{target_user.mention} 被抓去量長度。"
                 speed = size // 50 + 1
                 for i in range(1, size + 1, speed):
-                    d_string = "=" * (i - 1)
+                    if random.random() < 0.1:
+                        break_counter += 1
+                        if break_counter == 1:
+                            cloud_content += f"\n{target_user.display_name} 的ㄐㄐ今天好像怪怪的。"
+                    d_chars = list("=" * (i - 1))
+                    if break_counter > 0 and len(d_chars) > 0:
+                        num_replace = min(break_counter, len(d_chars))
+                        for idx in random.sample(range(len(d_chars)), num_replace):
+                            d_chars[idx] = "≈"
+                    d_string = "".join(d_chars)
+                    if break_counter >= 5:
+                        size = -1
+                        final_size = -1
+                        cloud_content = f"{target_user.mention} 被抓去量長度。\n{target_user.display_name} 變成男娘了。"
+                        set_user_data(guild_key, target_id, "last_dsize_size", -1)
+                        # embed.set_field_at(0, name="斷掉了！男娘了！", value="🏳️‍⚧️", inline=False)
+                        embed.color = 0xff0000
+                        await interaction.edit_original_response(content=cloud_content, embed=embed)
+                        break
                     current_size = i
                     embed.set_field_at(0, name=f"{current_size} cm", value=f"8{d_string}D", inline=False)
-                    await interaction.edit_original_response(content=f"{target_user.mention} 被抓去量長度。", embed=embed)
+                    await interaction.edit_original_response(content=cloud_content, embed=embed)
                     await asyncio.sleep(0.1)
-                # final
-                d_string = "=" * (size - 1)
-                embed.set_field_at(0, name=f"{final_size} cm", value=f"8{d_string}D", inline=False)
-                await interaction.edit_original_response(content=f"{target_user.mention} 被抓去量長度。", embed=embed)
+                if break_counter < 5:
+                    # final
+                    d_string = "=" * (size - 1)
+                    embed.set_field_at(0, name=f"{final_size} cm", value=f"8{d_string}D", inline=False)
+                    await interaction.edit_original_response(content=cloud_content, embed=embed)
             history = get_user_data(guild_key, target_id, "dsize_history", [])
             history.append({
                 "date": now.isoformat(),
