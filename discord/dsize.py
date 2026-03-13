@@ -938,15 +938,15 @@ async def dsize_battle(interaction: discord.Interaction, opponent: Union[discord
                 result = "🤝 平手！"
 
             if size_user == -1:
-                user_final_name = f"{original_user.display_name}：斷掉了！男娘了！"
-                user_final_value = "🏳️‍⚧️"
+                user_final_name = f"{original_user.display_name} 的長度："
+                user_final_value = "-1 cm\n8"
             else:
                 d_string_user = "=" * (size_user - 1)
                 user_final_name = f"{original_user.display_name} 的長度："
                 user_final_value = f"{size_user} cm\n8{d_string_user}D"
             if size_opponent == -1:
-                opp_final_name = f"{opponent.display_name}：斷掉了！男娘了！"
-                opp_final_value = "🏳️‍⚧️"
+                opp_final_name = f"{opponent.display_name} 的長度："
+                opp_final_value = "-1 cm\n8"
             else:
                 d_string_opponent = "=" * (size_opponent - 1)
                 opp_final_name = f"{opponent.display_name} 的長度："
