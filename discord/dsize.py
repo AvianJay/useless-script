@@ -1257,16 +1257,17 @@ async def dsize_feedgrass_command(interaction: discord.Interaction, user: Union[
 ])
 @app_commands.allowed_installs(guilds=True, users=True)
 @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
-async def dsize_feedgrass_command(interaction: discord.Interaction, user: Union[discord.User, discord.Member] = None, global_feedgrass: str = "False"):
+async def dsize_feedgrass_nsfw_command(interaction: discord.Interaction, user: Union[discord.User, discord.Member] = None, global_feedgrass: str = "False"):
     is_allowed_nsfw = get_user_data(0, interaction.user.id, "dsize_allow_nsfw_feedgrass", False)
     if not is_allowed_nsfw:
         await interaction.response.send_message(f"你目前設定為不允許 NSFW 草飼，請先切換設定。\n> 使用 {await get_command_mention('dsize-feedgrass-nsfw-toggle')} 來切換。", ephemeral=True)
         return
-    target_user_is_allow_nsfw = get_user_data(0, user.id, "dsize_allow_nsfw_feedgrass", False)
+    target_user = user if user else interaction.user
+    target_user_is_allow_nsfw = get_user_data(0, target_user.id, "dsize_allow_nsfw_feedgrass", False)
     if not target_user_is_allow_nsfw:
-        await interaction.response.send_message(f"{user.display_name} 設定為不允許 NSFW 草飼，無法草飼。\n> 使用 {await get_command_mention('dsize-feedgrass-nsfw-toggle')} 來切換。", ephemeral=True)
+        await interaction.response.send_message(f"{target_user.display_name} 設定為不允許 NSFW 草飼，無法草飼。\n> 使用 {await get_command_mention('dsize-feedgrass-nsfw-toggle')} 來切換。", ephemeral=True)
         return
-    await dsize_feedgrass(interaction, user, global_feedgrass, nsfw=True)
+    await dsize_feedgrass(interaction, target_user, global_feedgrass, nsfw=True)
 
 
 # option to let user control allow/deny nsfw feedgrass
