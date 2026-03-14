@@ -870,7 +870,8 @@ class AutoModerate(commands.GroupCog, name=app_commands.locale_str("automod")):
 
             try:
                 result = await do_action_str(action, guild=guild, user=member)
-                log(f"AutoMod 偵測額外處置: {action}\n執行結果: {'\n'.join(result)}", module_name="AutoModerate", guild=guild)
+                res = '\n'.join(result)
+                log(f"AutoMod 偵測額外處置: {action}\n執行結果: {res}", module_name="AutoModerate", guild=guild)
             except Exception as e:
                 log(f"無法對用戶 {member} 執行 AutoMod 偵測的額外處置: {e}", level=logging.ERROR, module_name="AutoModerate", guild=guild)
 
