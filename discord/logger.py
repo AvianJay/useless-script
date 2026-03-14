@@ -97,7 +97,7 @@ async def _log(*messages, level = logging.INFO, module_name: str = "General", us
                     embed.add_field(name="伺服器ID", value=guild.id, inline=False)  # easy to copy guild id
                     embed.set_footer(text=guild.name if guild.name else guild.id, icon_url=guild.icon.url if guild.icon else None)
                 # get webhook url
-                webhook_url = get_server_config(channel.guild.id, "log_webhook_url") if guild else None
+                webhook_url = get_server_config(channel.guild.id if guild else channel.guild.id, "log_webhook_url")
                 discord_webhook = None
                 
                 if webhook_url:
