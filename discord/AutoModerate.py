@@ -1019,7 +1019,9 @@ class AutoModerate(commands.GroupCog, name=app_commands.locale_str("automod")):
                     if message.interaction_metadata:
                         target = message.interaction_metadata.user
                     else:
-                        await message.delete()
+                        await asyncio.sleep(.5)  # 等待一秒以防訊息作者資訊尚未更新
+                        if message.id not in Moderate.ignore_message_ids:
+                            await message.delete()
                         return
                 try:
                     result = await do_action_str(action, guild=message.guild, user=target, message=message)

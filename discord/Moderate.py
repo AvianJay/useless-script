@@ -12,6 +12,8 @@ from logger import log
 import logging
 import re
 
+ignore_message_ids = set()  # 用於暫時忽略特定訊息的處理（例如剛剛被刪除的訊息）
+
 
 def timestr_to_seconds(timestr: str) -> int:
     """將時間字串轉換為秒數"""
@@ -373,7 +375,10 @@ async def do_action_str(action: str, guild: Optional[discord.Guild] = None, user
             # delete <warn_message>
             logs.append("刪除訊息")
             if message:
-                await message.delete()
+                try:
+                    await message.delete()
+                except:
+                    logs.append("刪除訊息失敗")
             if len(cmd) > 1:
                 msg = cmd.copy()
                 msg.pop(0)
@@ -385,7 +390,11 @@ async def do_action_str(action: str, guild: Optional[discord.Guild] = None, user
                     embed.set_footer(text=guild.name if guild else None, icon_url=guild.icon.url if guild and guild.icon else None)
                     await user.send(embed=embed)
                 elif message:
-                    await message.channel.send(warn_message)
+                    msg = await message.channel.send(warn_message)
+                    ignore_message_ids.add(msg.id)
+                    # limit 100 ids in memory to prevent memory leak
+                    if len(ignore_message_ids) > 100:
+                        ignore_message_ids.pop()
         elif cmd[0] == "warn" or cmd[0] == "warn_dm":
             # warn <warn_message>
             if len(cmd) == 1:
@@ -400,7 +409,11 @@ async def do_action_str(action: str, guild: Optional[discord.Guild] = None, user
                 embed.set_footer(text=guild.name if guild else None, icon_url=guild.icon.url if guild and guild.icon else None)
                 await user.send(embed=embed)
             elif message:
-                await message.reply(warn_message)
+                msg = await message.reply(warn_message)
+                ignore_message_ids.add(msg.id)
+                # limit 100 ids in memory to prevent memory leak
+                if len(ignore_message_ids) > 100:
+                    ignore_message_ids.pop()
         elif cmd[0] == "send_mod_message" or cmd[0] == "smm":
             # send_mod_message
             if len(cmd) == 1:
