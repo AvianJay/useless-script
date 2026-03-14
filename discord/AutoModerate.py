@@ -985,7 +985,7 @@ class AutoModerate(commands.GroupCog, name=app_commands.locale_str("automod")):
             if member and not member.guild_permissions.administrator:
                 max_count = int(automod_settings["anti_uispam"].get("max_count", 5))
                 time_window = int(automod_settings["anti_uispam"].get("time_window", 60))
-                action = automod_settings["anti_uispam"].get("action", "delete {user}，請勿濫用用戶安裝的應用程式指令。")
+                action = automod_settings["anti_uispam"].get("action", "delete {user}，請勿濫用用戶安裝的應用程式指令。, mute 10m 濫用用戶安裝指令")
                 
                 now = datetime.now(timezone.utc)
                 guild_tracker = _uispam_tracker.setdefault(guild_id, {})
@@ -1011,7 +1011,7 @@ class AutoModerate(commands.GroupCog, name=app_commands.locale_str("automod")):
         # 詐騙陷阱檢查
         if automod_settings.get("scamtrap", {}).get("enabled", False):
             scamtrap_channel_id = int(automod_settings["scamtrap"].get("channel_id", 0))
-            action = automod_settings["scamtrap"].get("action", "delete 請不要在此頻道發送訊息。")
+            action = automod_settings["scamtrap"].get("action", "delete {user} 是最後一個被封禁的帳號，不要在這裡講話！, ban {user} 5s 12h [自動封禁] 疑似被盜帳號")
             if scamtrap_channel_id != 0 and message.channel.id == scamtrap_channel_id:
                 target = message.author
                 if message.author.bot:

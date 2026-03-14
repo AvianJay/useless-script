@@ -626,7 +626,7 @@ function buildAutoreplyListEditor(mod, s, value, channels) {
 const AUTOMOD_FEATURES = [
     { id: 'scamtrap', label: '🪤 詐騙陷阱', desc: '蜜罐頻道，在該頻道發訊者自動處置', fields: [
         { key: 'channel_id', label: '陷阱頻道', type: 'channel', default: '' },
-        { key: 'action', label: '處置動作', type: 'string', default: 'delete 請不要在此頻道發送訊息。', placeholder: '例: delete 請勿在此發言' },
+        { key: 'action', label: '處置動作', type: 'string', default: 'delete {user} 是最後一個被封禁的帳號，不要在這裡講話！, ban {user} 5s 12h [自動封禁] 疑似被盜帳號', placeholder: '例: delete 請勿在此發言' },
     ]},
     { id: 'escape_punish', label: '🏃 逃避責任懲處', desc: '禁言期間離開者額外懲處', fields: [
         { key: 'punishment', label: '懲處方式', type: 'select', options: [{ value: 'ban', label: '封禁' }], default: 'ban' },
@@ -643,12 +643,12 @@ const AUTOMOD_FEATURES = [
     { id: 'anti_uispam', label: '📲 用戶安裝應用程式濫用', desc: 'User Install 指令觸發頻率', fields: [
         { key: 'max_count', label: '時間內最大觸發次數', type: 'number', default: '5', min: 1 },
         { key: 'time_window', label: '時間窗口 (秒)', type: 'number', default: '60', min: 1 },
-        { key: 'action', label: '處置動作', type: 'string', default: 'delete {user}，請勿濫用用戶安裝的應用程式指令。' },
+        { key: 'action', label: '處置動作', type: 'string', default: 'delete {user}，請勿濫用用戶安裝的應用程式指令。, mute 10m 濫用用戶安裝指令' },
     ]},
     { id: 'anti_raid', label: '🚨 防突襲', desc: '短時間內大量加入偵測', fields: [
         { key: 'max_joins', label: '時間內最大加入數', type: 'number', default: '5', min: 1 },
         { key: 'time_window', label: '時間窗口 (秒)', type: 'number', default: '60', min: 1 },
-        { key: 'action', label: '處置動作', type: 'string', default: 'kick 突襲偵測自動封禁' },
+        { key: 'action', label: '處置動作', type: 'string', default: 'kick 突襲偵測自動踢出' },
     ]},
     { id: 'anti_spam', label: '🔁 防刷頻', desc: '相似訊息刷頻偵測', fields: [
         { key: 'max_messages', label: '最大相似訊息數', type: 'number', default: '5', min: 1 },
