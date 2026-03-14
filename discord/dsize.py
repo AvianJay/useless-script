@@ -329,6 +329,7 @@ async def dsize(interaction: discord.Interaction, global_dsize: str = "False"):
         return
 
     set_user_data(guild_key, user_id, "last_dsize", now)
+    set_user_data(0, user_id, "used_dsize", True)
     statistics = get_user_data(0, user_id, "dsize_statistics", {})
     statistics["total_uses"] = statistics.get("total_uses", 0) + 1
     set_user_data(0, user_id, "dsize_statistics", statistics)
@@ -398,13 +399,13 @@ async def dsize(interaction: discord.Interaction, global_dsize: str = "False"):
     if size > 0:
         # animate to size
         break_counter = 0
-        break_content = None
+        break_content = ""
+        will_break = random.random() < 0.05
         speed = size // 50 + 1
         for i in range(1, size + 1, speed):
-            if random.random() < 0.1:
+            if random.random() < 0.1 and will_break:
                 break_counter += 1
-                if break_content is None:
-                    break_content = "你的ㄐㄐ今天好像怪怪的。"
+                break_content = "你的ㄐㄐ今天好像怪怪的。"
             d_chars = list("=" * (i - 1))
             if break_counter > 0 and len(d_chars) > 0:
                 num_replace = min(break_counter, len(d_chars))
@@ -414,7 +415,7 @@ async def dsize(interaction: discord.Interaction, global_dsize: str = "False"):
             if break_counter >= 5:
                 size = -1
                 final_size = -1
-                break_content = "你變成男娘了。"
+                break_content += "\n你變成男娘了。"
                 embed.set_field_at(0, name=f"{size} cm", value="8", inline=False)
                 embed.color = 0xff0000
                 await interaction.edit_original_response(content=break_content, embed=embed)
@@ -818,6 +819,8 @@ async def dsize_battle(interaction: discord.Interaction, opponent: Union[discord
             opponent_statistics["total_battles"] = opponent_statistics.get("total_battles", 0) + 1
             opponent_statistics["total_uses"] = opponent_statistics.get("total_uses", 0) + 1
             set_user_data(0, opponent_id, "dsize_statistics", opponent_statistics)
+            set_user_data(0, user_id, "used_dsize", True)
+            set_user_data(0, opponent_id, "used_dsize", True)
 
             set_user_data(guild_key, user_id, "last_dsize", now)
             set_user_data(guild_key, opponent_id, "last_dsize", now)
@@ -870,29 +873,31 @@ async def dsize_battle(interaction: discord.Interaction, opponent: Union[discord
             opponent_break_counter = 0
             user_broke = size_user <= 0
             opponent_broke = size_opponent <= 0
+            will_user_break = random.random() < 0.05
+            will_opponent_break = random.random() < 0.05
             battle_content = "開始對決。"
-            user_break_message = None
-            opponent_break_message = None
+            user_break_message = ""
+            opponent_break_message = ""
             max_anim = max(size_user if size_user > 0 else 1, size_opponent if size_opponent > 0 else 1)
             for i in range(1, max_anim, speed):
                 # 10% break check for user
-                if not user_broke and i < size_user and random.random() < 0.1:
+                if not user_broke and i < size_user and random.random() < 0.1 and will_user_break:
                     user_break_counter += 1
-                    if user_break_counter == 1:
-                        user_break_message = f"{original_user.display_name} 的ㄐㄐ今天好像怪怪的。"
+                    if user_break_counter >= 1:
+                        user_break_message += f"{original_user.display_name} 的ㄐㄐ今天好像怪怪的。"
                     if user_break_counter >= 5:
                         size_user = -1
                         user_broke = True
-                        user_break_message = f"{original_user.display_name} 變成男娘了。"
+                        user_break_message += f"\n{original_user.display_name} 變成男娘了。"
                 # 10% break check for opponent
-                if not opponent_broke and i < size_opponent and random.random() < 0.1:
+                if not opponent_broke and i < size_opponent and random.random() < 0.1 and will_opponent_break:
                     opponent_break_counter += 1
-                    if opponent_break_counter == 1:
-                        opponent_break_message = f"{opponent.display_name} 的ㄐㄐ今天好像怪怪的。"
+                    if opponent_break_counter >= 1:
+                        opponent_break_message += f"{opponent.display_name} 的ㄐㄐ今天好像怪怪的。"
                     if opponent_break_counter >= 5:
                         size_opponent = -1
                         opponent_broke = True
-                        opponent_break_message = f"{opponent.display_name} 變成男娘了。"
+                        opponent_break_message += f"\n{opponent.display_name} 變成男娘了。"
                 content_lines = ["開始對決。"]
                 if user_break_message:
                     content_lines.append(user_break_message)
@@ -1144,6 +1149,8 @@ async def dsize_stats(interaction: discord.Interaction):
     embed.add_field(name="撿到物品次數", value=str(total_drops), inline=False)
     embed.add_field(name="簽到次數", value=str(total_checkins), inline=True)
     embed.add_field(name="連續簽到天數", value=str(checkin_streak), inline=True)
+    embed.add_field(name="隨機攻擊次數", value=str(statistics.get("total_perform_random_attacks", 0)), inline=False)
+    embed.add_field(name="被隨機攻擊次數", value=str(statistics.get("total_random_attacks", 0)), inline=False)
     embed.timestamp = datetime.now(timezone.utc)
 
     await interaction.response.send_message(embed=embed)
@@ -1239,17 +1246,51 @@ async def dsize_history(interaction: discord.Interaction, user: discord.User = N
 @app_commands.allowed_installs(guilds=True, users=True)
 @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
 async def dsize_feedgrass_command(interaction: discord.Interaction, user: Union[discord.User, discord.Member] = None, global_feedgrass: str = "False"):
-    await dsize_feedgrass(interaction, user, global_feedgrass)
+    await dsize_feedgrass(interaction, user, global_feedgrass, nsfw=False)
+
+
+@bot.tree.command(name=app_commands.locale_str("dsize-feedgrass-nsfw"), description="草飼男娘 (NSFW)", nsfw=True)
+@app_commands.describe(user="要草飼的對象", global_feedgrass="是否草飼全域排行榜上的男娘 (預設否)")
+@app_commands.choices(global_feedgrass=[
+    app_commands.Choice(name="否", value="False"),
+    app_commands.Choice(name="是", value="True"),
+])
+@app_commands.allowed_installs(guilds=True, users=True)
+@app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
+async def dsize_feedgrass_command(interaction: discord.Interaction, user: Union[discord.User, discord.Member] = None, global_feedgrass: str = "False"):
+    is_allowed_nsfw = get_user_data(0, interaction.user.id, "dsize_allow_nsfw_feedgrass", False)
+    if not is_allowed_nsfw:
+        await interaction.response.send_message(f"你目前設定為不允許 NSFW 草飼，請先切換設定。\n> 使用 {await get_command_mention('dsize-feedgrass-nsfw-toggle')} 來切換。", ephemeral=True)
+        return
+    target_user_is_allow_nsfw = get_user_data(0, user.id, "dsize_allow_nsfw_feedgrass", False)
+    if not target_user_is_allow_nsfw:
+        await interaction.response.send_message(f"{user.display_name} 設定為不允許 NSFW 草飼，無法草飼。\n> 使用 {await get_command_mention('dsize-feedgrass-nsfw-toggle')} 來切換。", ephemeral=True)
+        return
+    await dsize_feedgrass(interaction, user, global_feedgrass, nsfw=True)
+
+
+# option to let user control allow/deny nsfw feedgrass
+@bot.tree.command(name=app_commands.locale_str("dsize-feedgrass-nsfw-toggle"), description="切換是否允許 NSFW 草飼")
+@app_commands.allowed_installs(guilds=True, users=True)
+@app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
+async def dsize_feedgrass_nsfw_toggle(interaction: discord.Interaction):
+    user_id = interaction.user.id
+    current_setting = get_user_data(0, user_id, "dsize_allow_nsfw_feedgrass", False)
+    new_setting = not current_setting
+    set_user_data(0, user_id, "dsize_allow_nsfw_feedgrass", new_setting)
+    status = "允許" if new_setting else "拒絕"
+    await interaction.response.send_message(f"已切換 NSFW 草飼設定，目前為：{status}。", ephemeral=True)
+    log(f"切換 NSFW 草飼設定為 {status}", module_name="dsize", user=interaction.user, guild=interaction.guild)
 
 
 @bot.tree.context_menu(name="草飼他")
 @app_commands.allowed_installs(guilds=True, users=True)
 @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
 async def dsize_feedgrass_context(interaction: discord.Interaction, user: Union[discord.User, discord.Member]):
-    await dsize_feedgrass(interaction, user, global_feedgrass="False")
+    await dsize_feedgrass(interaction, user, global_feedgrass="False", nsfw=False)
 
 
-async def dsize_feedgrass(interaction: discord.Interaction, user: Union[discord.User, discord.Member] = None, global_feedgrass: str = "False"):
+async def dsize_feedgrass(interaction: discord.Interaction, user: Union[discord.User, discord.Member] = None, global_feedgrass: str = "False", nsfw: bool = False):
     if "ItemSystem" not in modules:
         await interaction.response.send_message("此功能需要 ItemSystem 模組。", ephemeral=True)
         return
@@ -1465,6 +1506,7 @@ async def use_scalpel(interaction: discord.Interaction):
             performer_statistics = get_user_data(0, user_id, "dsize_statistics", {})
             performer_statistics["total_performed_surgeries"] = performer_statistics.get("total_performed_surgeries", 0) + 1
             set_user_data(0, user_id, "dsize_statistics", performer_statistics)
+            is_used_dsize = get_user_data(guild_key, target_id, "used_dsize", False)
 
             new_size = random.randint(1, get_server_config(guild_key, "dsize_surgery_max", 10))
             orig_size = get_user_data(guild_key, target_id, "last_dsize_size", 0)
@@ -1474,7 +1516,7 @@ async def use_scalpel(interaction: discord.Interaction):
             target_name = "自己" if target_id == user_id else " " + target_user.display_name + " "
             embed = discord.Embed(title=f"{interaction.user.display_name} 幫{target_name}動手術！", color=0xff0000)
             embed.add_field(name=f"{orig_size} cm", value=f"8{'=' * (orig_size - 1)}D", inline=False)
-            await interaction.response.send_message(content=f"{target_user.mention} 被抓去動手術。", embed=embed)
+            await interaction.response.send_message(content=f"{target_user.mention} 被抓去動手術。", embed=embed, allowed_mentions=discord.AllowedMentions(users=is_used_dsize, roles=False, everyone=False))
             for i in range(1, new_size + 1):
                 d_string_new = "=" * (orig_size + i - 1)
                 embed.set_field_at(0, name=f"{orig_size} cm", value=f"8{d_string_new}D", inline=False)
@@ -1544,12 +1586,13 @@ async def use_rusty_scalpel(interaction: discord.Interaction):
             orig_size = get_user_data(guild_key, target_id, "last_dsize_size", 0)
             orig_size = min(orig_size, 200)  # limit length because discord limit
             set_user_data(guild_key, target_id, "last_dsize_size", -1)
+            is_used_dsize = get_user_data(guild_key, target_id, "used_dsize", False)
             # print(f"[DSize] {interaction.user} performed rusty surgery on {target_user.display_name}, original size: {orig_size} cm, new size: -1 cm")
             log(f"{interaction.user} performed rusty surgery on {target_user.display_name}, original size: {orig_size} cm, new size: -1 cm", module_name="dsize", user=interaction.user, guild=interaction.guild)
             target_name = "自己" if target_id == user_id else " " + target_user.display_name + " "
             embed = discord.Embed(title=f"{interaction.user.display_name} 幫{target_name}動手術！", color=0xff0000)
             embed.add_field(name=f"{orig_size} cm", value=f"8{'💥' * (orig_size - 1)}D", inline=False)
-            await interaction.response.send_message(content=f"{target_user.mention} 被抓去動手術。", embed=embed)
+            await interaction.response.send_message(content=f"{target_user.mention} 被抓去動手術。", embed=embed, allowed_mentions=discord.AllowedMentions(users=is_used_dsize, roles=False, everyone=False))
             while orig_size > 0:
                 d_string_new = "💥" * orig_size
                 embed.set_field_at(0, name=f"{orig_size} cm", value=f"8{d_string_new}", inline=False)
@@ -1630,6 +1673,7 @@ async def use_cloud_ruler(interaction: discord.Interaction):
             statistics = get_user_data(0, target_id, "dsize_statistics", {})
             statistics["total_uses"] = statistics.get("total_uses", 0) + 1
             set_user_data(0, target_id, "dsize_statistics", statistics)
+            is_used_dsize = get_user_data(0, target_id, "used_dsize", False)
 
             # 隨機產生長度
             size = random.randint(1, max_size)
@@ -1688,7 +1732,7 @@ async def use_cloud_ruler(interaction: discord.Interaction):
             embed.add_field(name="1 cm", value=f"8D", inline=False)
             embed.set_footer(text=footer_text)
             embed.timestamp = datetime.now(timezone.utc)
-            await interaction.response.send_message(content=f"{target_user.mention} 被抓去量長度。", embed=embed)
+            await interaction.response.send_message(content=f"{target_user.mention} 被抓去量長度。", embed=embed, allowed_mentions=discord.AllowedMentions(users=is_used_dsize, roles=False, everyone=False))
             if size == -1:
                 embed.set_field_at(0, name="你現在是男娘了！", value="🏳️‍⚧️", inline=False)
                 await interaction.edit_original_response(content=f"{target_user.mention} 被抓去量長度。", embed=embed)
@@ -1711,7 +1755,7 @@ async def use_cloud_ruler(interaction: discord.Interaction):
                     if break_counter >= 5:
                         size = -1
                         final_size = -1
-                        cloud_content = f"{target_user.mention} 被抓去量長度。\n{target_user.display_name} 變成男娘了。"
+                        cloud_content += f"\n{target_user.display_name} 變成男娘了。"
                         set_user_data(guild_key, target_id, "last_dsize_size", -1)
                         # embed.set_field_at(0, name="斷掉了！男娘了！", value="🏳️‍⚧️", inline=False)
                         embed.color = 0xff0000
