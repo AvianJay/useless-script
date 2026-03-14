@@ -668,6 +668,11 @@ async def ping(ctx: commands.Context):
 
 
 class NitroLinkModal(discord.ui.Modal, title="發送 Nitro 禮物"):
+    def __init__(self, need_message: bool = False):
+        super().__init__()
+        self.need_message = need_message
+        self.author_ids = None  # 用於存儲有發過訊息的用戶 ID
+
     nitro_link = discord.ui.TextInput(
         label="Nitro 連結", 
         placeholder="https://discord.gift/...", 
@@ -713,20 +718,38 @@ class NitroLinkModal(discord.ui.Modal, title="發送 Nitro 禮物"):
                         expires_at = datetime.fromisoformat(expires_raw.replace("Z", "+00:00"))
                         embed.add_field(name="到期時間", value=f"<t:{int(expires_at.timestamp())}:R>")
 
+                    warn_message = ""
+                    if self.need_message:
+                        if interaction.is_guild_integration():
+                            # try to read recent 50 messages and check if interaction user is in them
+                            channel = interaction.channel
+                            # check bot has permission to read message history
+                            if channel.permissions_for(interaction.guild.me).read_message_history:
+                                messages = [msg async for msg in channel.history(limit=50)]
+                                authors = set(msg.author.id for msg in messages)
+                                self.author_ids = authors
+                                embed.add_field(name="領取限制", value="只有近期在此頻道發過訊息的用戶才能領取。")
+                            else:
+                                warn_message = "\n⚠️ 請注意：機器人沒有讀取訊息歷史的權限，無法驗證用戶是否發過訊息。所有人都可以領取此禮物。"
+                        else:
+                            warn_message = "\n⚠️ 請注意：使用者安裝不支援驗證用戶是否發過訊息。所有人都可以領取此禮物。"
+
                     # 建立按鈕 View 並把連結傳進去
-                    view = NitroClaimView(link, gift_name)
-                    
+                    view = NitroClaimView(link, gift_name, need_message=self.need_message, author_ids=self.author_ids)
+
                     # 在頻道發送公開訊息（非 ephemeral），讓大家搶
                     await interaction.followup.send(embed=embed, view=view)
-                    await interaction.followup.send("✅ 禮物已成功發送至頻道！", ephemeral=True)
+                    await interaction.followup.send(f"✅ 禮物已成功發送至頻道！{warn_message}", ephemeral=True)
                 else:
                     await interaction.followup.send("❌ 無法驗證此連結，請檢查是否輸入正確。", ephemeral=True)
 
 class NitroClaimView(discord.ui.View):
-    def __init__(self, link: str, gift_name: str):
+    def __init__(self, link: str, gift_name: str, need_message: bool = False, author_ids: set[int] = None):
         super().__init__(timeout=None) # 永不到期或自訂時間
         self.link = link
         self.gift_name = gift_name
+        self.need_message = need_message
+        self.author_ids = author_ids
         self.claimed = False
 
     @discord.ui.button(label="領取", style=discord.ButtonStyle.primary, emoji="🎉")
@@ -734,6 +757,10 @@ class NitroClaimView(discord.ui.View):
         if self.claimed:  # avoid edit message delay
             await interaction.response.send_message("⚠️ 此禮物已被領取。", ephemeral=True)
             return
+        if self.need_message and self.author_ids is not None:
+            if interaction.user.id not in self.author_ids:
+                await interaction.response.send_message("❌ 你需要在這個頻道發過訊息才能使用這個禮物。", ephemeral=True)
+                return
         self.claimed = True
         # 禁用所有按鈕防止重複點擊
         for child in self.children:
@@ -745,18 +772,21 @@ class NitroClaimView(discord.ui.View):
         embed.color = discord.Color.light_grey()
         embed.set_footer(text=f"領取者: {interaction.user.display_name} ({interaction.user.name})", icon_url=interaction.user.display_avatar.url)
         
-        await interaction.edit_original_response(embed=embed, view=self)
+        await interaction.response.edit_message(embed=embed, view=self)
         
         # 私訊領取者連結
-        await interaction.response.send_message(f"🎊 這是你的 Nitro 連結：\n{self.link}", ephemeral=True)
+        await interaction.followup.send(f"🎊 這是你的 Nitro 連結：\n{self.link}", ephemeral=True)
         self.stop()
 
 
 @bot.tree.command(name=app_commands.locale_str("nitro"), description="我不想要被機器人幹走尼戳")
+@app_commands.describe(
+    need_message="是否只有近期發過訊息的用戶才能領取（最近 50 條訊息的作者）"
+)
 @app_commands.allowed_installs(guilds=True, users=True)
 @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
-async def nitro_command(interaction: discord.Interaction):
-    await interaction.response.send_modal(NitroLinkModal())
+async def nitro_command(interaction: discord.Interaction, need_message: bool = False):
+    await interaction.response.send_modal(NitroLinkModal(need_message=need_message))
 
 
 # get sticker context command
