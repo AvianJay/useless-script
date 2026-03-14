@@ -381,7 +381,9 @@ async def do_action_str(action: str, guild: Optional[discord.Guild] = None, user
                 warn_message = warn_message.replace("{user}", user.mention if user else "用戶")
                 logs.append(f"並警告: {warn_message}")
                 if cmd[0] == "delete_dm" and user:
-                    await user.send(warn_message)
+                    embed = discord.Embed(title="⚠️ 你被警告了", description=warn_message, color=discord.Color.orange())
+                    embed.set_footer(text=guild.name if guild else None, icon_url=guild.icon.url if guild and guild.icon else None)
+                    await user.send(embed=embed)
                 elif message:
                     await message.channel.send(warn_message)
         elif cmd[0] == "warn" or cmd[0] == "warn_dm":
@@ -394,7 +396,9 @@ async def do_action_str(action: str, guild: Optional[discord.Guild] = None, user
             warn_message = warn_message.replace("{user}", user.mention if user else "用戶")
             logs.append(f"傳送警告訊息: {warn_message}")
             if cmd[0] == "warn_dm" and user:
-                await user.send(warn_message)
+                embed = discord.Embed(title="⚠️ 你被警告了", description=warn_message, color=discord.Color.orange())
+                embed.set_footer(text=guild.name if guild else None, icon_url=guild.icon.url if guild and guild.icon else None)
+                await user.send(embed=embed)
             elif message:
                 await message.reply(warn_message)
         elif cmd[0] == "send_mod_message" or cmd[0] == "smm":
