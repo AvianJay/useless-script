@@ -672,6 +672,17 @@ async def dsize_leaderboard(interaction: discord.Interaction, limit: int = 10, g
     description = ""
     for rank, (user_id, size) in enumerate(top_users, start=1):
         if size == -1:
+            last_japanese_cola_used = get_user_data(guild_id, user_id, "last_dsize_japanese_cola_used")
+            if last_japanese_cola_used is not None and not isinstance(last_japanese_cola_used, datetime):
+                try:
+                    last_japanese_cola_used = datetime.fromisoformat(str(last_japanese_cola_used)).date()
+                except Exception:
+                    last_japanese_cola_used = None
+            elif isinstance(last_japanese_cola_used, datetime):
+                last_japanese_cola_used = last_japanese_cola_used.date()
+            if last_japanese_cola_used == today:
+                japanese_cola_size = get_user_data(guild_id, user_id, "dsize_japanese_cola_used")
+                size = f"有 {japanese_cola_size} cm 的**男娘！**"
             size = "**男娘！**"
         else:
             if all_data_fake.get(user_id) and all_data_fake[user_id].get("last_dsize_fake_size") is not None:
@@ -679,7 +690,7 @@ async def dsize_leaderboard(interaction: discord.Interaction, limit: int = 10, g
             else:
                 size = f"{size} cm"
         if global_leaderboard:
-            user = await bot.fetch_user(user_id)
+            user = bot.get_user(user_id) or await bot.fetch_user(user_id)
         else:
             user = interaction.guild.get_member(user_id) if interaction.guild else await bot.fetch_user(user_id)
         if user:
@@ -887,6 +898,7 @@ async def dsize_battle(interaction: discord.Interaction, opponent: Union[discord
                     content_lines.append(user_break_message)
                 if opponent_break_message:
                     content_lines.append(opponent_break_message)
+                content_lines.extend(side_effect_messages)
                 battle_content = "\n".join(content_lines)
                 # Build user display
                 if user_broke:
@@ -987,7 +999,7 @@ async def dsize_battle(interaction: discord.Interaction, opponent: Union[discord
             if not guild_key:
                 footer_parts.append("此次對決將記錄到全域排行榜。")
             
-            footer_parts.extend(side_effect_messages)
+            # footer_parts.extend(side_effect_messages)
             
             if footer_parts:
                 embed.set_footer(text=" | ".join(footer_parts))
@@ -1790,6 +1802,59 @@ async def use_viagra(interaction: discord.Interaction):
     # print(f"[DSize] {interaction.user} used viagra in guild {guild_key}")
     log(f"{interaction.user} 使用了威而鋼", module_name="dsize", user=interaction.user, guild=interaction.guild)
 
+async def use_japanese_cola(interaction: discord.Interaction):
+    user_id = interaction.user.id
+    guild_key = interaction.guild_id if interaction.guild else None
+    now = datetime.now(timezone(timedelta(hours=8))).date()
+    last = get_user_data(guild_key, user_id, "last_dsize")
+    if last is not None and not isinstance(last, datetime):
+        # If last is a string (e.g., from JSON), convert to date
+        try:
+            last = datetime.fromisoformat(str(last)).date()
+        except Exception:
+            last = datetime(1970, 1, 1).date()
+    elif isinstance(last, datetime):
+        last = last.date()
+    if last is None:
+        last = datetime(1970, 1, 1).date()
+    if last < now:
+        await interaction.response.send_message("你今天還沒有量過屌長，無法使用日本生可樂。", ephemeral=True)
+        return
+    last_size = get_user_data(guild_key, user_id, "last_dsize_size", 0)
+    if last_size != -1:
+        await interaction.response.send_message("你不是男娘，無法使用日本生可樂。", ephemeral=True)
+        return
+    last_used = get_user_data(guild_key, user_id, "last_dsize_japanese_cola_used")
+    if last_used is not None and not isinstance(last_used, datetime):
+        try:
+            last_used = datetime.fromisoformat(str(last_used)).date()
+        except Exception:
+            last_used = None
+    elif isinstance(last_used, datetime):
+        last_used = last_used.date()
+    if last_used == now:
+        await interaction.response.send_message("你今天已經使用過日本生可樂了。", ephemeral=True)
+        return
+    removed = await ItemSystem.remove_item_from_user(guild_key, user_id, "japanese_cola", 1)
+    if not removed:
+        await interaction.response.send_message("你沒有日本生可樂，無法使用。", ephemeral=True)
+        return
+    # update user statistics
+    statistics = get_user_data(0, user_id, "dsize_statistics", {})
+    statistics["total_japanese_cola_used"] = statistics.get("total_japanese_cola_used", 0) + 1
+    set_user_data(0, user_id, "dsize_statistics", statistics)
+    new_size = random.randint(1, 3)
+    set_user_data(guild_key, user_id, "dsize_japanese_cola_used", new_size)
+    set_user_data(guild_key, user_id, "last_dsize_japanese_cola_used", now)
+    embed = discord.Embed(
+        title = f"{interaction.user.display_name} 的新長度：",
+        color = 0x00ff00
+    )
+    embed.add_field(name=f"{new_size} cm", value=f"8{'=' * (new_size - 1)}D", inline=False)
+    await interaction.response.send_message(content=f"{interaction.user.mention} 使用了日本生可樂！\n-# 變成了有幾把的男娘", embed=embed)
+    # print(f"[DSize] {interaction.user} used japanese cola in guild {guild_key}")
+    log(f"{interaction.user} 使用了日本生可樂", module_name="dsize", user=interaction.user, guild=interaction.guild)
+
 async def use_random_attack(interaction: discord.Interaction):
     await interaction.response.defer()
     guild_key = interaction.guild_id if interaction.guild else None
@@ -1895,6 +1960,13 @@ if "ItemSystem" in modules:
             "description": "一顆藍色的藥丸，有持久的作用。\n使用後今天的狀態將會持續到明天，無論是好是壞。",
             "callback": use_viagra,
             "worth": 100,
+        },
+        {
+            "id": "japanese_cola",
+            "name": "日本生可樂",
+            "description": "一罐日本生可樂，可以讓男娘長屌。",
+            "callback": use_japanese_cola,
+            "worth": 30,
         },
         {
             "id": "random_attack",
