@@ -529,6 +529,8 @@ translations = {
     "adminitems": "管理員物品",
     "loop": "循環",
     "need_message": "需要訊息",
+    "dsize-feedgrass-nsfw": "dsize-草飼-nsfw",
+    "dsize-feedgrass-nsfw-toggle": "dsize-草飼-nsfw-切換",
 }
 class CommandNameTranslator(app_commands.Translator):
     async def translate(
