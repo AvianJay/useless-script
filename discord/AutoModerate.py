@@ -1023,8 +1023,9 @@ class AutoModerate(commands.GroupCog, name=app_commands.locale_str("automod")):
                         return
                 try:
                     result = await do_action_str(action, guild=message.guild, user=target, message=message)
+                    res = '\n'.join(result)
                     # print(f"[+] 用戶 {message.author} 因進入詐騙陷阱頻道被處理: {action}")
-                    log(f"用戶 {target} 因進入詐騙陷阱頻道被處理: {action}\n執行結果: {'\n'.join(result)}", module_name="AutoModerate", user=target, guild=message.guild)
+                    log(f"用戶 {target} 因進入詐騙陷阱頻道被處理: {action}\n執行結果: {res}", module_name="AutoModerate", user=target, guild=message.guild)
                 except Exception as e:
                     # print(f"[!] 無法對用戶 {message.author} 執行詐騙陷阱的處理: {e}")
                     log(f"無法對用戶 {target} 執行詐騙陷阱的處理: {e}", level=logging.ERROR, module_name="AutoModerate", user=target, guild=message.guild)
