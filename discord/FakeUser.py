@@ -61,7 +61,7 @@ class FakeUser(commands.Cog):
             await interaction.followup.send(f"看起來 {user} 不想要被你假冒，換一個人試試吧。", ephemeral=True)
             log(f"嘗試假冒被黑名單的用戶 {user}", module_name="FakeUser", user=interaction.user, guild=interaction.guild)
             return
-        elif self.bot.user.id in user_blacklist:
+        elif str(self.bot.user.id) in user_blacklist:
             await interaction.followup.send(f"看起來 {user} 不想要被你假冒，換一個人試試吧。", ephemeral=True)
             log(f"嘗試假冒被黑名單的用戶 {user}", module_name="FakeUser", user=interaction.user, guild=interaction.guild)
             return
