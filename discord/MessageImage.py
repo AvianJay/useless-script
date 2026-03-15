@@ -1,4 +1,4 @@
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image, ImageDraw, ImageFont, ImageSequence
 import io
 import os
 import sys
@@ -266,30 +266,29 @@ async def create(message: discord.Message):
     # Resolve mentions
     content = resolve_mentions(content, message)
 
-    # load avatar
+    # 1. 載入頭像資料
     async with aiohttp.ClientSession() as session:
         async with session.get(avatar_url) as resp:
-            avatar = Image.open(io.BytesIO(await resp.read())).convert("RGBA").resize((630, 630))
+            avatar_data = await resp.read()
+            avatar_img = Image.open(io.BytesIO(avatar_data))
+    
+    # 判斷是否為動態圖片
+    is_animated = getattr(avatar_img, "is_animated", False)
 
-    # new image
     width, height = 1200, 630
-    img = Image.new("RGBA", (width, height), (0, 0, 0, 255))
 
-    # draw
-    draw = ImageDraw.Draw(img)
-    img.paste(avatar, (0, 0), avatar)
+    # --- 2. 建立「前景層」(文字與遮罩) ---
+    # 建立一個完全透明的圖層，我們把所有文字和遮罩畫在這裡，只需畫一次以節省效能
+    foreground = Image.new("RGBA", (width, height), (0, 0, 0, 0))
+    draw_fg = ImageDraw.Draw(foreground)
 
-    overlay = Image.new("RGBA", img.size, (0, 0, 0, 0))
-    drawol = ImageDraw.Draw(overlay)
-
+    # 畫漸層弧形遮罩
     for i in range(51):
-        alpha = min((i+1) * 5, 255)  # 保險起見
-        drawol.arc([-300 + i, -200, 630 + i, 1030], 270, 90, fill=(0, 0, 0, alpha), width=150)
+        alpha = min((i+1) * 5, 255)  
+        draw_fg.arc([-300 + i, -200, 630 + i, 1030], 270, 90, fill=(0, 0, 0, alpha), width=150)
 
-    img = Image.alpha_composite(img, overlay)
-    draw = ImageDraw.Draw(img)
-
-    draw.rectangle([540, 0, 700, 300], fill="black")
+    # 畫右側黑底區塊
+    draw_fg.rectangle([540, 0, 700, 300], fill="black")
 
     # Area constraints
     x_min, x_max = 560, 1150
@@ -309,16 +308,12 @@ async def create(message: discord.Message):
     while font_size >= min_font_size:
         font_msg = ImageFont.truetype(os.path.join(fontdir, "notobold.ttf"), font_size)
         try:
-            # Try to load Twemoji font at the same size
-            # Note: Some color fonts require specific sizes or standard sizes.
-            # We'll assume it scales like a TTF.
             emoji_font_obj = ImageFont.truetype(os.path.join(fontdir, "twemoji.ttf"), font_size)
         except Exception:
-            # Fallback if not found or failed, use main font (might show boxes)
             emoji_font_obj = font_msg
 
         ascent, descent = font_msg.getmetrics()
-        line_height = ascent + descent + 10 # spacing
+        line_height = ascent + descent + 10
         emoji_size = ascent + descent
         
         lines = layout_segments(base_segments, font_msg, max_w, emoji_size, emoji_font=emoji_font_obj)
@@ -330,7 +325,7 @@ async def create(message: discord.Message):
             final_emoji_font = emoji_font_obj
             break
         
-        font_size -= 2 # Decrease font size
+        font_size -= 2 
 
     # Load custom emojis
     ascent, descent = final_font.getmetrics()
@@ -349,58 +344,91 @@ async def create(message: discord.Message):
     current_y = start_y
     center_x = (x_min + x_max) // 2
 
-    # Draw Text and Emojis
+    # Draw Text and Emojis (畫在 foreground 上)
     for line in final_lines:
-        line_width = 0
-        for seg in line:
-            line_width += seg.width
-        
+        line_width = sum(seg.width for seg in line)
         start_x = center_x - line_width // 2
         cursor_x = start_x
         
         for seg in line:
             if seg.type == 'emoji' and seg.image:
-                img.paste(seg.image, (int(cursor_x), int(current_y)), seg.image)
+                foreground.paste(seg.image, (int(cursor_x), int(current_y)), seg.image)
             elif seg.type == 'unicode_emoji':
-                # 使用下載的圖片繪製 Unicode emoji
                 if seg.image:
-                    img.paste(seg.image, (int(cursor_x), int(current_y)), seg.image)
+                    foreground.paste(seg.image, (int(cursor_x), int(current_y)), seg.image)
                 else:
-                    # 如果圖片載入失敗，fallback 用文字繪製
-                    draw.text((cursor_x, current_y), seg.content, font=final_font, fill="white")
+                    draw_fg.text((cursor_x, current_y), seg.content, font=final_font, fill="white")
             else:
-                draw.text((cursor_x, current_y), seg.content, font=final_font, fill="white")
+                draw_fg.text((cursor_x, current_y), seg.content, font=final_font, fill="white")
             
             cursor_x += seg.width
         
         current_y += emoji_size + 10
 
-    # Draw Name
+    # Draw Name (畫在 foreground 上)
     name_y = current_y + 20
     display_name = f" - {name}"
     name_x = center_x - name_w // 2
 
-    # draw.text((name_x, name_y), display_name, font=font_name, fill="white")
-
-    # 建立透明文字圖層 (Reflect effect)
     text_img = Image.new("RGBA", (int(name_w) + 20, int(name_h) + 20), (0, 0, 0, 0))
     text_draw = ImageDraw.Draw(text_img)
     text_draw.text((0, 0), display_name, font=font_name, fill="white")
 
-    # 仿斜體：X 軸傾斜（負值向左斜，正值向右斜）
     sheared = text_img.transform(
         text_img.size,
         Image.AFFINE,
-        (1, 0.2, 0, 0, 1, 0),  # X 傾斜 0.3 的效果
+        (1, 0.2, 0, 0, 1, 0),
         resample=Image.BICUBIC,
     )
-    img.paste(sheared, (name_x, int(name_y)), sheared)
+    foreground.paste(sheared, (name_x, int(name_y)), sheared)
 
-    # save to bytes
+    # --- 3. 合成最終圖片 (處理 GIF 幀數或靜態 PNG) ---
     output_buffer = io.BytesIO()
-    img.save(output_buffer, format="PNG")
+
+    if is_animated:
+        frames = []
+        durations = []
+        
+        for frame in ImageSequence.Iterator(avatar_img):
+            # 取得每一幀的持續時間 (預設 50 毫秒)
+            durations.append(frame.info.get('duration', 50))
+            
+            # 處理單幀背景
+            frame_rgba = frame.convert("RGBA").resize((630, 630), Image.Resampling.LANCZOS)
+            base = Image.new("RGBA", (width, height), (0, 0, 0, 255))
+            base.paste(frame_rgba, (0, 0), frame_rgba)
+            
+            # 將前面準備好的文字前景疊加上去
+            combined = Image.alpha_composite(base, foreground)
+            
+            # 轉換為 RGB 以利 GIF 儲存 (去透明底)
+            frames.append(combined.convert("RGB"))
+            
+        # 儲存為動態 GIF
+        frames[0].save(
+            output_buffer, 
+            format="GIF", 
+            save_all=True, 
+            append_images=frames[1:], 
+            duration=durations, 
+            loop=0,
+            optimize=True
+        )
+        ext = "gif"
+    else:
+        # 靜態 PNG 處理
+        avatar_rgba = avatar_img.convert("RGBA").resize((630, 630), Image.Resampling.LANCZOS)
+        base = Image.new("RGBA", (width, height), (0, 0, 0, 255))
+        base.paste(avatar_rgba, (0, 0), avatar_rgba)
+        
+        combined = Image.alpha_composite(base, foreground)
+        combined.save(output_buffer, format="PNG")
+        ext = "png"
+
     output_buffer.seek(0)
-    return output_buffer
+    
+    # 回傳 buffer 和副檔名，讓外層可以決定檔案名稱
+    return output_buffer, ext
 
 
 class UpvoteView(discord.ui.View):
@@ -473,8 +501,8 @@ async def make_it_a_quote(interaction: discord.Interaction, message: discord.Mes
         await interaction.response.send_message("錯誤：訊息沒有內容。", ephemeral=True)
         return
     await interaction.response.defer()
-    output_buffer = await create(message)
-    await interaction.followup.send(file=discord.File(output_buffer, filename="messenger_quote.png"), view=UpvoteView())
+    output_buffer, ext = await create(message)
+    await interaction.followup.send(file=discord.File(output_buffer, filename=f"message_quote.{ext}"), view=UpvoteView())
 
 @bot.command(name="badquote", aliases=["bquote", "bq", "makeitaquote", "miq"])
 async def badquote(ctx: commands.Context):
@@ -486,14 +514,17 @@ async def badquote(ctx: commands.Context):
     if ctx.message.reference:
         ref_msg = await ctx.channel.fetch_message(ctx.message.reference.message_id)
         message = ref_msg
-    if not message:
+    else:
         await ctx.send("錯誤：沒有回覆的訊息。")
+        return
+    if not message:
+        await ctx.send("錯誤：找不到回覆的訊息。（可能已刪除？）")
         return
     if not message.content or message.content.strip() == "":
         await ctx.send("錯誤：訊息沒有內容。")
         return
-    output_buffer = await create(message)
-    await ctx.reply(file=discord.File(output_buffer, filename="messenger_quote.png"), view=UpvoteView())
+    output_buffer, ext = await create(message)
+    await ctx.reply(file=discord.File(output_buffer, filename=f"message_quote.{ext}"), view=UpvoteView())
 
 
 async def screenshot(message: discord.Message):
