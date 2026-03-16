@@ -507,7 +507,7 @@ class BadQuoteView(UpvoteView):
         animate = button.style == discord.ButtonStyle.gray
         output_buffer, ext = await create(self.original_message, animate_gif=animate)
         button.style = discord.ButtonStyle.primary if not animate else discord.ButtonStyle.gray
-        await interaction.edit_original_response(file=discord.File(output_buffer, filename=f"message_quote.{ext}"), view=self)
+        await interaction.response.edit_message(file=discord.File(output_buffer, filename=f"message_quote.{ext}"), view=self)
 
 
 @bot.tree.context_menu(name="糟糕的Make it a Quote")
