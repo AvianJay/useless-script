@@ -504,9 +504,9 @@ class BadQuoteView(UpvoteView):
             await interaction.response.send_message("錯誤：訊息沒有內容。", ephemeral=True)
             return
         await interaction.response.defer()
-        animate = button.color == discord.ButtonStyle.gray
+        animate = button.style == discord.ButtonStyle.gray
         output_buffer, ext = await create(self.original_message, animate_gif=animate)
-        button.color = discord.ButtonStyle.primary if not animate else discord.ButtonStyle.gray
+        button.style = discord.ButtonStyle.primary if not animate else discord.ButtonStyle.gray
         await interaction.edit_original_response(file=discord.File(output_buffer, filename=f"message_quote.{ext}"), view=self)
 
 
