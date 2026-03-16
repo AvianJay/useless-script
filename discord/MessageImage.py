@@ -258,7 +258,7 @@ def layout_segments(segments, font, max_width, emoji_size, emoji_font=None):
         lines.append(current_line)
     return lines
 
-async def create(message: discord.Message):
+async def create(message: discord.Message, animate_gif=False) -> tuple[io.BytesIO, str]:
     name = message.author.display_name
     avatar_url = message.author.display_avatar.url if message.author.display_avatar else None
     content = message.content.strip()
@@ -385,7 +385,7 @@ async def create(message: discord.Message):
     # --- 3. 合成最終圖片 (處理 GIF 幀數或靜態 PNG) ---
     output_buffer = io.BytesIO()
 
-    if is_animated:
+    if is_animated and animate_gif:
         frames = []
         durations = []
         
@@ -493,6 +493,23 @@ async def set_upvoteboard(interaction: discord.Interaction, channel: discord.Tex
         await interaction.response.send_message("已清除有料板子頻道設定")
 
 
+class BadQuoteView(UpvoteView):
+    def __init__(self, message: discord.Message):
+        super().__init__()
+        self.original_message = message
+
+    @discord.ui.button(label="GIF", style=discord.ButtonStyle.gray)
+    async def toggle_gif(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if not self.original_message.content or self.original_message.content.strip() == "":
+            await interaction.response.send_message("錯誤：訊息沒有內容。", ephemeral=True)
+            return
+        await interaction.response.defer()
+        animate = button.color == discord.ButtonStyle.gray
+        output_buffer, ext = await create(self.original_message, animate_gif=animate)
+        button.color = discord.ButtonStyle.primary if not animate else discord.ButtonStyle.gray
+        await interaction.edit_original_response(file=discord.File(output_buffer, filename=f"message_quote.{ext}"), view=self)
+
+
 @bot.tree.context_menu(name="糟糕的Make it a Quote")
 @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
 @app_commands.allowed_installs(guilds=True, users=True)
@@ -502,7 +519,7 @@ async def make_it_a_quote(interaction: discord.Interaction, message: discord.Mes
         return
     await interaction.response.defer()
     output_buffer, ext = await create(message)
-    await interaction.followup.send(file=discord.File(output_buffer, filename=f"message_quote.{ext}"), view=UpvoteView())
+    await interaction.followup.send(file=discord.File(output_buffer, filename=f"message_quote.{ext}"), view=BadQuoteView(message))
 
 @bot.command(name="badquote", aliases=["bquote", "bq", "makeitaquote", "miq"])
 async def badquote(ctx: commands.Context):
@@ -524,7 +541,7 @@ async def badquote(ctx: commands.Context):
         await ctx.send("錯誤：訊息沒有內容。")
         return
     output_buffer, ext = await create(message)
-    await ctx.reply(file=discord.File(output_buffer, filename=f"message_quote.{ext}"), view=UpvoteView())
+    await ctx.reply(file=discord.File(output_buffer, filename=f"message_quote.{ext}"), view=BadQuoteView(message))
 
 
 async def screenshot(message: discord.Message):
