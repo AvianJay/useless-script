@@ -452,10 +452,13 @@ class UpvoteView(discord.ui.View):
             if self.upvotes >= 5:
                 channel = bot.get_channel(config("upvote_board_channel_id"))
                 message = interaction.message
-                image = message.attachments[0] if message.attachments else None
+                image = message.attachments[0].url if message.attachments else None
                 if channel and image:
                     if self.on_board_message is None:  # 確保同一則訊息不會被重複放上看板
-                        sent_message = await channel.send(content=f"⬆️ | {self.upvotes} 人", file=await image.to_file())
+                        embed = discord.Embed()
+                        embed.set_image(url=image)
+                        embed.set_author(name=message.author.display_name + f"({message.author.name})", icon_url=message.author.display_avatar.url if message.author.display_avatar else None)
+                        sent_message = await channel.send(embed=embed, content=f"⬆️ | {self.upvotes} 人")
                         self.on_board_message = sent_message
                     else:
                         # 如果已經在看板上了，更新看板訊息的內容
@@ -468,7 +471,10 @@ class UpvoteView(discord.ui.View):
                     guild_channel = bot.get_channel(guild_channel_id)
                     if guild_channel and image:
                         if self.on_guild_board_message is None:  # 確保同一則訊息不會被重複放上公會看板
-                            sent_message = await guild_channel.send(content=f"⬆️ | {self.upvotes} 人", file=await image.to_file())
+                            embed = discord.Embed()
+                            embed.set_image(url=image)
+                            embed.set_author(name=message.author.display_name + f"({message.author.name})", icon_url=message.author.display_avatar.url if message.author.display_avatar else None)
+                            sent_message = await guild_channel.send(embed=embed, content=f"⬆️ | {self.upvotes} 人")
                             self.on_guild_board_message = sent_message
                         else:
                             # 如果已經在公會看板上了，更新公會看板訊息的內容
@@ -494,20 +500,28 @@ async def set_upvoteboard(interaction: discord.Interaction, channel: discord.Tex
 
 
 class BadQuoteView(UpvoteView):
-    def __init__(self, message: discord.Message):
+    def __init__(self, message: discord.Message, user: discord.User = None):
         super().__init__()
         self.original_message = message
+        self.user = user
 
     @discord.ui.button(label="GIF", style=discord.ButtonStyle.gray)
     async def toggle_gif(self, interaction: discord.Interaction, button: discord.ui.Button):
         if not self.original_message.content or self.original_message.content.strip() == "":
             await interaction.response.send_message("錯誤：訊息沒有內容。", ephemeral=True)
             return
-        await interaction.response.defer()
+        if self.user.id != interaction.user.id:
+            await interaction.response.send_message("只有原始請求者可以使用這個按鈕。", ephemeral=True)
+            return
+        button.style = discord.ButtonStyle.primary if animate else discord.ButtonStyle.gray
+        button.disabled = True  # 點擊後禁用按鈕，避免重複點擊造成多次生成
+        await interaction.response.edit_message(view=self)
         animate = button.style == discord.ButtonStyle.gray
-        output_buffer, ext = await create(self.original_message, animate_gif=animate)
-        button.style = discord.ButtonStyle.primary if not animate else discord.ButtonStyle.gray
-        await interaction.response.edit_message(file=discord.File(output_buffer, filename=f"message_quote.{ext}"), view=self)
+        try:
+            output_buffer, ext = await create(self.original_message, animate_gif=animate)
+            await interaction.edit_original_response(attachments=[discord.File(output_buffer, filename=f"message_quote.{ext}")], view=self)
+        except discord.HTTPException as e:
+            await interaction.followup.send(f"無法上傳圖片！\n生成的圖片達到了 Discord 上傳大小的限制。", ephemeral=True)
 
 
 @bot.tree.context_menu(name="糟糕的Make it a Quote")
@@ -519,7 +533,8 @@ async def make_it_a_quote(interaction: discord.Interaction, message: discord.Mes
         return
     await interaction.response.defer()
     output_buffer, ext = await create(message)
-    await interaction.followup.send(file=discord.File(output_buffer, filename=f"message_quote.{ext}"), view=BadQuoteView(message))
+    view = BadQuoteView(message, user=interaction.user) if message.author.display_avatar.is_animated() else UpvoteView()
+    await interaction.followup.send(file=discord.File(output_buffer, filename=f"message_quote.{ext}"), view=view)
 
 @bot.command(name="badquote", aliases=["bquote", "bq", "makeitaquote", "miq"])
 async def badquote(ctx: commands.Context):
@@ -541,7 +556,8 @@ async def badquote(ctx: commands.Context):
         await ctx.send("錯誤：訊息沒有內容。")
         return
     output_buffer, ext = await create(message)
-    await ctx.reply(file=discord.File(output_buffer, filename=f"message_quote.{ext}"), view=BadQuoteView(message))
+    view = BadQuoteView(message, user=ctx.author) if message.author.display_avatar.is_animated() else UpvoteView()
+    await ctx.reply(file=discord.File(output_buffer, filename=f"message_quote.{ext}"), view=view)
 
 
 async def screenshot(message: discord.Message):
