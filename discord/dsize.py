@@ -1336,7 +1336,7 @@ async def dsize_feedgrass(interaction: discord.Interaction, user: Union[discord.
             log(f"草飼獲取訊息時發生錯誤: {e}", level=logging.WARNING, module_name="dsize", user=interaction.user, guild=interaction.guild)
             failed_to_get_history = True
     random_users = list(random_users)
-    image_bytes = await generate_feedgrass_image(user, interaction.user, random_users)
+    image_bytes = await generate_feedgrass_image(user, interaction.user, random_users, nsfw=nsfw)
     if interaction.user.id != user.id:
         embed = discord.Embed(title=f"{interaction.user.display_name} 草飼了 {user.display_name}！", color=0x00ff00)
     else:
