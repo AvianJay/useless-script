@@ -1,4 +1,4 @@
-from globalenv import bot, get_server_config, set_server_config, get_user_data, set_user_data, get_all_user_data
+from globalenv import bot, config, get_server_config, set_server_config, get_user_data, set_user_data, get_all_user_data
 import discord
 from discord.ext import commands
 from discord import app_commands
@@ -278,6 +278,207 @@ def record_sale(guild_id: int, amount: float, is_admin_item: bool = False):
 
 
 # ==================== Transaction Log ====================
+
+ECONOMY_WEBHOOK_CONFIG_KEY = "economy_log_webhook_url"
+
+
+def _economy_scope_label(guild_id: int) -> str:
+    return "Global" if guild_id == GLOBAL_GUILD_ID else "Server"
+
+
+def _economy_user_label(user) -> str:
+    if not user:
+        return "N/A"
+    display_name = getattr(user, "display_name", None) or getattr(user, "name", "Unknown")
+    username = getattr(user, "name", display_name)
+    return f"{display_name} ({username}) | {user.id}"
+
+
+async def _get_economy_log_channel():
+    channel_id = config("economy_log_channel_id", 0)
+    if not channel_id:
+        return None
+
+    channel = bot.get_channel(channel_id)
+    if channel is None:
+        try:
+            channel = await bot.fetch_channel(channel_id)
+        except Exception:
+            return None
+
+    if isinstance(channel, discord.TextChannel):
+        return channel
+    return None
+
+
+async def _get_or_create_economy_webhook(channel: discord.TextChannel):
+    webhook_url = get_server_config(channel.guild.id, ECONOMY_WEBHOOK_CONFIG_KEY)
+    webhook = None
+
+    if webhook_url:
+        try:
+            webhook = discord.SyncWebhook.from_url(webhook_url)
+            webhook.fetch()
+        except Exception:
+            webhook = None
+
+    if webhook:
+        return webhook
+
+    try:
+        webhook_obj = await channel.create_webhook(
+            name=f"{bot.user.name}-Economy",
+            avatar=await bot.user.default_avatar.read(),
+        )
+        webhook_url = webhook_obj.url
+        set_server_config(channel.guild.id, ECONOMY_WEBHOOK_CONFIG_KEY, webhook_url)
+        return discord.SyncWebhook.from_url(webhook_url)
+    except discord.HTTPException as e:
+        if e.code != 30007:
+            raise
+
+    webhooks = await channel.webhooks()
+    for existing in webhooks:
+        try:
+            webhook = discord.SyncWebhook.from_url(existing.url)
+            webhook.fetch()
+            set_server_config(channel.guild.id, ECONOMY_WEBHOOK_CONFIG_KEY, existing.url)
+            return webhook
+        except Exception:
+            continue
+    return None
+
+
+async def send_economy_audit_log(
+    action: str,
+    *,
+    guild_id: int,
+    actor=None,
+    target=None,
+    interaction: discord.Interaction = None,
+    ctx = None,
+    currency: str = None,
+    amount: float = None,
+    fee: float = None,
+    balance_before: float = None,
+    balance_after: float = None,
+    target_balance_before: float = None,
+    target_balance_after: float = None,
+    rate_before: float = None,
+    rate_after: float = None,
+    item_name: str = None,
+    item_amount: int = None,
+    detail: str = "",
+    color: int = 0xF1C40F,
+    extra_fields = None,
+):
+    if bot.is_closed():
+        return
+
+    try:
+        await asyncio.wait_for(bot.wait_until_ready(), timeout=5.0)
+    except (Exception, asyncio.TimeoutError, asyncio.CancelledError):
+        return
+
+    channel = await _get_economy_log_channel()
+    if not channel:
+        return
+
+    try:
+        webhook = await _get_or_create_economy_webhook(channel)
+    except Exception as e:
+        log(f"Failed to prepare economy webhook: {e}", module_name="Economy", level=logging.ERROR)
+        return
+
+    if not webhook:
+        return
+
+    source_guild = None
+    if interaction and interaction.guild:
+        source_guild = interaction.guild
+    elif ctx and getattr(ctx, "guild", None):
+        source_guild = ctx.guild
+    elif guild_id not in (None, GLOBAL_GUILD_ID):
+        source_guild = bot.get_guild(guild_id)
+
+    embed = discord.Embed(title=f"Economy Audit | {action}", color=color)
+    embed.timestamp = datetime.now(timezone.utc)
+    embed.description = detail or "No detail provided."
+    embed.add_field(name="Scope", value=_economy_scope_label(guild_id), inline=True)
+    embed.add_field(name="Guild ID", value=str(guild_id), inline=True)
+    embed.add_field(name="Currency", value=currency or "N/A", inline=True)
+
+    if actor:
+        embed.add_field(name="Actor", value=_economy_user_label(actor), inline=False)
+    if target:
+        embed.add_field(name="Target", value=_economy_user_label(target), inline=False)
+    if amount is not None:
+        embed.add_field(name="Amount", value=f"{amount:,.2f}", inline=True)
+    if fee is not None:
+        embed.add_field(name="Fee", value=f"{fee:,.2f}", inline=True)
+    if item_name:
+        embed.add_field(name="Item", value=f"{item_name} x{item_amount or 1}", inline=True)
+
+    if balance_before is not None or balance_after is not None:
+        embed.add_field(
+            name="Actor Balance",
+            value=f"{balance_before if balance_before is not None else 0:,.2f} -> {balance_after if balance_after is not None else 0:,.2f}",
+            inline=False,
+        )
+    if target_balance_before is not None or target_balance_after is not None:
+        embed.add_field(
+            name="Target Balance",
+            value=f"{target_balance_before if target_balance_before is not None else 0:,.2f} -> {target_balance_after if target_balance_after is not None else 0:,.2f}",
+            inline=False,
+        )
+    if rate_before is not None or rate_after is not None:
+        embed.add_field(
+            name="Exchange Rate",
+            value=f"{rate_before if rate_before is not None else 0:,.6f} -> {rate_after if rate_after is not None else 0:,.6f}",
+            inline=False,
+        )
+
+    if source_guild:
+        embed.add_field(name="Source Guild", value=f"{source_guild.name} | {source_guild.id}", inline=False)
+    elif guild_id == GLOBAL_GUILD_ID:
+        embed.add_field(name="Source Guild", value="Global Economy", inline=False)
+
+    if interaction:
+        channel_name = getattr(interaction.channel, "name", type(interaction.channel).__name__) if interaction.channel else "Unknown"
+        command_name = interaction.command.qualified_name if interaction.command else "unknown"
+        embed.add_field(
+            name="Interaction",
+            value=f"User: {interaction.user.id}\nChannel: {channel_name}\nCommand: /{command_name}",
+            inline=False,
+        )
+    elif ctx:
+        channel_name = getattr(ctx.channel, "name", type(ctx.channel).__name__) if ctx.channel else "Unknown"
+        embed.add_field(
+            name="Context",
+            value=f"User: {ctx.author.id}\nChannel: {channel_name}\nCommand: {ctx.message.content[:200]}",
+            inline=False,
+        )
+
+    if guild_id not in (None, GLOBAL_GUILD_ID):
+        embed.add_field(name="Server Supply", value=f"{get_total_supply(guild_id):,.2f}", inline=True)
+        embed.add_field(name="Tx Count", value=str(get_transaction_count(guild_id)), inline=True)
+        embed.add_field(name="Admin Injected", value=f"{get_admin_injected(guild_id):,.2f}", inline=True)
+
+    for field in extra_fields or []:
+        embed.add_field(name=field[0], value=field[1], inline=field[2])
+
+    try:
+        webhook.send(embed=embed, username=bot.user.name, avatar_url=bot.user.default_avatar.url)
+    except Exception as e:
+        log(f"Failed to send economy audit log: {e}", module_name="Economy", level=logging.ERROR)
+
+
+def queue_economy_audit_log(*args, **kwargs):
+    try:
+        loop = asyncio.get_running_loop()
+        loop.create_task(send_economy_audit_log(*args, **kwargs))
+    except RuntimeError:
+        pass
 
 def log_transaction(guild_id: int, user_id: int, tx_type: str, amount: float, currency: str, detail: str = ""):
     """記錄一筆交易到用戶的交易紀錄"""
@@ -642,6 +843,20 @@ class PurchaseModal(discord.ui.Modal):
         embed.set_footer(text=f"剩餘餘額：{remaining:,.2f} {currency_name} | 物品已放入{dest}")
         buy_guild = guild_id if scope == "server" else GLOBAL_GUILD_ID
         log_transaction(buy_guild, user_id, "購買物品", -total_price, currency_name, f"{item['name']} x{amount}")
+        queue_economy_audit_log(
+            "buy_item",
+            guild_id=buy_guild,
+            actor=interaction.user,
+            interaction=interaction,
+            currency=currency_name,
+            amount=total_price,
+            balance_before=remaining + total_price,
+            balance_after=remaining,
+            item_name=item["name"],
+            item_amount=amount,
+            detail=f"Shop modal purchase via {scope} scope.",
+            color=0x27AE60,
+        )
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
 
@@ -789,6 +1004,18 @@ class Economy(commands.GroupCog, name="economy", description="經濟系統指令
         embed.timestamp = datetime.now(timezone(timedelta(hours=8)))
         total_earned = daily_amount + bonus
         log_transaction(guild_id, user_id, "每日簽到", total_earned, currency_name, f"連續 {streak} 天" + (f"，含獎勵 {bonus}" if bonus > 0 else ""))
+        queue_economy_audit_log(
+            "daily",
+            guild_id=guild_id,
+            actor=interaction.user,
+            interaction=interaction,
+            currency=currency_name,
+            amount=total_earned,
+            balance_before=get_balance(guild_id, user_id) - total_earned,
+            balance_after=get_balance(guild_id, user_id),
+            detail=f"Daily reward claimed. Streak={streak}, bonus={bonus:,.2f}",
+            color=0x2ECC71,
+        )
         await interaction.response.send_message(embed=embed)
 
     @app_commands.command(name="hourly", description="領取每小時獎勵")
@@ -860,6 +1087,18 @@ class Economy(commands.GroupCog, name="economy", description="經濟系統指令
         # embed.set_footer(text="AwA")
         embed.timestamp = now
         log_transaction(guild_id, user_id, "每小時簽到", hourly_amount, currency_name)
+        queue_economy_audit_log(
+            "hourly",
+            guild_id=guild_id,
+            actor=interaction.user,
+            interaction=interaction,
+            currency=currency_name,
+            amount=hourly_amount,
+            balance_before=get_balance(guild_id, user_id) - hourly_amount,
+            balance_after=get_balance(guild_id, user_id),
+            detail="Hourly reward claimed.",
+            color=0x3498DB,
+        )
         await interaction.response.send_message(embed=embed)
 
     @app_commands.command(name="pay", description="轉帳給其他用戶")
@@ -930,6 +1169,23 @@ class Economy(commands.GroupCog, name="economy", description="經濟系統指令
         embed.add_field(name="金額", value=f"{amount:,.2f} {currency_name}", inline=True)
         embed.add_field(name="手續費", value=f"{fee:,.2f} {currency_name} ({TRADE_FEE_PERCENT}%)", inline=True)
         embed.set_footer(text=f"交易由 {interaction.user.display_name} 發起")
+        receiver_after = get_balance(pay_guild, receiver_id) if pay_guild != GLOBAL_GUILD_ID else get_global_balance(receiver_id)
+        queue_economy_audit_log(
+            "pay",
+            guild_id=pay_guild,
+            actor=interaction.user,
+            target=user,
+            interaction=interaction,
+            currency=currency_name,
+            amount=amount,
+            fee=fee,
+            balance_before=sender_bal,
+            balance_after=sender_bal - total_deduct,
+            target_balance_before=receiver_after - amount,
+            target_balance_after=receiver_after,
+            detail=f"Transfer completed. Fee rate={TRADE_FEE_PERCENT}%",
+            color=0x2ECC71,
+        )
         await interaction.followup.send(embed=embed)
 
         try:
@@ -1009,6 +1265,42 @@ class Economy(commands.GroupCog, name="economy", description="經濟系統指令
         )
 
         record_transaction(guild_id)
+        if direction == "to_global":
+            queue_economy_audit_log(
+                "exchange_to_global",
+                guild_id=guild_id,
+                actor=interaction.user,
+                interaction=interaction,
+                currency=currency_name,
+                amount=amount,
+                fee=fee,
+                balance_before=server_bal,
+                balance_after=server_bal - amount,
+                target_balance_before=get_global_balance(user_id) - received,
+                target_balance_after=get_global_balance(user_id),
+                rate_before=rate,
+                rate_after=get_exchange_rate(guild_id),
+                detail=f"Server currency exchanged to global. Received {received:,.2f} {GLOBAL_CURRENCY_NAME}.",
+                color=0x3498DB,
+            )
+        else:
+            queue_economy_audit_log(
+                "exchange_to_server",
+                guild_id=guild_id,
+                actor=interaction.user,
+                interaction=interaction,
+                currency=currency_name,
+                amount=received,
+                fee=fee,
+                balance_before=get_balance(guild_id, user_id) - received,
+                balance_after=get_balance(guild_id, user_id),
+                target_balance_before=global_bal,
+                target_balance_after=global_bal - amount,
+                rate_before=rate,
+                rate_after=get_exchange_rate(guild_id),
+                detail=f"Global currency exchanged to server. Spent {amount:,.2f} {GLOBAL_CURRENCY_NAME}.",
+                color=0x3498DB,
+            )
 
         if direction == "to_global":
             log_transaction(guild_id, user_id, "兌換支出", -amount, currency_name, f"→ {received:,.2f} {GLOBAL_CURRENCY_NAME}")
@@ -1097,6 +1389,20 @@ class Economy(commands.GroupCog, name="economy", description="經濟系統指令
         embed.set_footer(text=f"剩餘餘額：{remaining:,.2f} {currency_name} | 物品已放入{dest}")
         buy_guild = guild_id if scope == "server" else GLOBAL_GUILD_ID
         log_transaction(buy_guild, user_id, "購買物品", -total_price, currency_name, f"{item['name']} x{amount}")
+        queue_economy_audit_log(
+            "buy_item",
+            guild_id=buy_guild,
+            actor=interaction.user,
+            interaction=interaction,
+            currency=currency_name,
+            amount=total_price,
+            balance_before=remaining + total_price,
+            balance_after=remaining,
+            item_name=item["name"],
+            item_amount=amount,
+            detail=f"Slash command purchase via {scope} scope.",
+            color=0x27AE60,
+        )
         await interaction.response.send_message(embed=embed)
 
     @app_commands.command(name="sell", description="賣出物品給商店")
@@ -1207,6 +1513,21 @@ class Economy(commands.GroupCog, name="economy", description="經濟系統指令
         embed.timestamp = datetime.now(timezone.utc)
         sell_guild = guild_id if scope == "server" else GLOBAL_GUILD_ID
         log_transaction(sell_guild, user_id, "賣出物品", total_price, currency_name, f"{item['name']} x{removed}")
+        remaining_balance = get_balance(guild_id, user_id) if scope == "server" else get_global_balance(user_id)
+        queue_economy_audit_log(
+            "sell_item",
+            guild_id=sell_guild,
+            actor=interaction.user,
+            interaction=interaction,
+            currency=currency_name,
+            amount=total_price,
+            balance_before=remaining_balance - total_price,
+            balance_after=remaining_balance,
+            item_name=item["name"],
+            item_amount=removed,
+            detail=f"Item sold via {scope} scope. Admin item portion={admin_removed}.",
+            color=0xE67E22,
+        )
         await interaction.response.send_message(embed=embed)
 
     @app_commands.command(name="shop", description="查看商店")
@@ -1491,6 +1812,28 @@ class Economy(commands.GroupCog, name="economy", description="經濟系統指令
                     log_transaction(td["guild_id"], td["target_id"], "交易收入", td["offer_money"], trade_currency, f"提供: {request_str} → 換取: {offer_str}")
 
                 await btn_interaction.response.edit_message(content="✅ 交易完成！", view=self)
+                initiator_after = get_balance(td["guild_id"], td["initiator_id"])
+                target_after = get_balance(td["guild_id"], td["target_id"])
+                queue_economy_audit_log(
+                    "trade_completed",
+                    guild_id=td["guild_id"],
+                    actor=interaction.user,
+                    target=user,
+                    interaction=btn_interaction,
+                    currency=trade_currency,
+                    amount=td["offer_money"] + td["request_money"],
+                    balance_before=initiator_after + td["offer_money"] - td["request_money"],
+                    balance_after=initiator_after,
+                    target_balance_before=target_after - td["offer_money"] + td["request_money"],
+                    target_balance_after=target_after,
+                    detail=f"Trade completed. Offer={offer_str} | Request={request_str}",
+                    color=0xF39C12,
+                    extra_fields=[
+                        ("Offer", offer_str, False),
+                        ("Request", request_str, False),
+                        ("Global Trade", str(td.get("global_trade", False)), True),
+                    ],
+                )
                 log(f"{'Global t' if td.get('global_trade') else 'T'}rade between {td['initiator_id']} and {td['target_id']} in guild {td['guild_id']}",
                     module_name="Economy")
 
@@ -2192,6 +2535,19 @@ async def dev_economy_give(ctx, user: discord.User, amount: float, scope: str = 
         f"操作者: {ctx.author} ({ctx.author.id})"
     )
 
+    queue_economy_audit_log(
+        "dev_give",
+        guild_id=guild_id,
+        actor=ctx.author,
+        target=user,
+        ctx=ctx,
+        currency=currency_name,
+        amount=actual_added,
+        balance_before=before,
+        balance_after=after,
+        detail=f"Developer give in {scope} scope.",
+        color=0x16A085,
+    )
     await ctx.send(
         f"✅ 已為 {user} 增加 **{actual_added:,.2f}** {currency_name}（{scope}）。\n"
         f"餘額：{before:,.2f} → {after:,.2f}"
@@ -2242,6 +2598,19 @@ async def dev_economy_remove(ctx, user: discord.User, amount: float, scope: str 
             f"操作者: {ctx.author} ({ctx.author.id})"
         )
 
+    queue_economy_audit_log(
+        "dev_remove",
+        guild_id=guild_id,
+        actor=ctx.author,
+        target=user,
+        ctx=ctx,
+        currency=currency_name,
+        amount=removed,
+        balance_before=before,
+        balance_after=after,
+        detail=f"Developer remove in {scope} scope.",
+        color=0xC0392B,
+    )
     await ctx.send(
         f"✅ 已從 {user} 扣除 **{removed:,.2f}** {currency_name}（{scope}）。\n"
         f"餘額：{before:,.2f} → {after:,.2f}"
@@ -2292,6 +2661,19 @@ async def dev_economy_set(ctx, user: discord.User, target_amount: float, scope: 
         )
 
     delta_text = f"+{delta:,.2f}" if delta >= 0 else f"{delta:,.2f}"
+    queue_economy_audit_log(
+        "dev_set",
+        guild_id=guild_id,
+        actor=ctx.author,
+        target=user,
+        ctx=ctx,
+        currency=currency_name,
+        amount=delta,
+        balance_before=before,
+        balance_after=after,
+        detail=f"Developer set balance in {scope} scope.",
+        color=0x8E44AD,
+    )
     await ctx.send(
         f"✅ 已將 {user} 的餘額設為 **{after:,.2f}** {currency_name}（{scope}）。\n"
         f"變動：{delta_text} | 餘額：{before:,.2f} → {after:,.2f}"
@@ -2331,8 +2713,25 @@ def make_cheque_use_callback(item_id: str, worth: int):
             payout = round(worth / rate, 2)
         else:
             payout = float(worth)
+        balance_before = get_balance(guild_id, user_id)
         add_balance(guild_id, user_id, payout)
         currency_name = get_currency_name(guild_id)
+        queue_economy_audit_log(
+            "cheque_cashout",
+            guild_id=guild_id,
+            actor=interaction.user,
+            interaction=interaction,
+            currency=currency_name,
+            amount=payout,
+            balance_before=balance_before,
+            balance_after=get_balance(guild_id, user_id),
+            rate_before=(rate if guild_id and guild_id != GLOBAL_GUILD_ID else None),
+            rate_after=(get_exchange_rate(guild_id) if guild_id and guild_id != GLOBAL_GUILD_ID else None),
+            item_name=item_id,
+            item_amount=1,
+            detail=f"Cheque redeemed. Face value={worth}.",
+            color=0x1ABC9C,
+        )
         await interaction.response.send_message(
             f"你兌現了支票，獲得 **{payout:,.2f}** {currency_name}。",
             ephemeral=True,

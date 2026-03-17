@@ -14,7 +14,7 @@ from pathlib import Path
 
 
 # Global configuration for backward compatibility
-config_version = 25
+config_version = 26
 config_path = 'config.json'
 
 default_config = {
@@ -71,6 +71,7 @@ default_config = {
     ],
     "upvote_board_channel_id": 0,
     "pollinations_api_key": "",
+    "economy_log_channel_id": 0,
 }
 _config = None
 _runtime_logging_configured = False
