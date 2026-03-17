@@ -714,6 +714,7 @@ user_using_dsize_battle = set()  # to prevent spamming the command
 def release_dsize_battle_lock(*user_ids: int):
     for locked_user_id in user_ids:
         user_using_dsize_battle.discard(locked_user_id)
+
 @bot.tree.command(name=app_commands.locale_str("dsize-battle"), description="比屌長(需要雙方今天沒有量過)")
 @app_commands.allowed_installs(guilds=True, users=True)
 @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
