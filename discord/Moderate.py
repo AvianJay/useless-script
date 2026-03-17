@@ -371,7 +371,7 @@ async def do_action_str(action: str, guild: Optional[discord.Guild] = None, user
             else:
                 logs.append(f"解除禁言用戶，原因: {reason}")
             actions_json.append({"action": "unmute", "reason": reason})
-        elif cmd[0] == "delete" or cmd[0] == "delete_dm":
+        elif cmd[0] == "delete": # or cmd[0] == "delete_dm":
             # delete <warn_message>
             logs.append("刪除訊息")
             if message:
@@ -395,7 +395,7 @@ async def do_action_str(action: str, guild: Optional[discord.Guild] = None, user
                     # limit 100 ids in memory to prevent memory leak
                     if len(ignore_message_ids) > 100:
                         ignore_message_ids.pop()
-        elif cmd[0] == "warn" or cmd[0] == "warn_dm":
+        elif cmd[0] == "warn": # or cmd[0] == "warn_dm":
             # warn <warn_message>
             if len(cmd) == 1:
                 cmd.append(f"{user.mention if user else '用戶'}，請注意你的行為。")
@@ -1101,9 +1101,9 @@ class Moderate(commands.Cog):
     @app_commands.choices(
         action_type=[
             app_commands.Choice(name="刪除訊息", value="delete"),
-            app_commands.Choice(name="刪除訊息＋私訊警告", value="delete_dm"),
+            # app_commands.Choice(name="刪除訊息＋私訊警告", value="delete_dm"),
             app_commands.Choice(name="公開警告", value="warn"),
-            app_commands.Choice(name="私訊警告", value="warn_dm"),
+            # app_commands.Choice(name="私訊警告", value="warn_dm"),
             app_commands.Choice(name="禁言", value="mute"),
             app_commands.Choice(name="踢出", value="kick"),
             app_commands.Choice(name="封禁", value="ban"),
@@ -1125,16 +1125,16 @@ class Moderate(commands.Cog):
             parts = ["delete"]
             if message:
                 parts.append(message)
-        elif action_type == "delete_dm":
-            parts = ["delete_dm"]
-            if message:
-                parts.append(message)
+        # elif action_type == "delete_dm":
+        #     parts = ["delete_dm"]
+        #     if message:
+        #         parts.append(message)
         elif action_type == "warn":
             parts = ["warn"]
             parts.append(message or "{user}，請注意你的行為。")
-        elif action_type == "warn_dm":
-            parts = ["warn_dm"]
-            parts.append(message or "{user}，請注意你的行為。")
+        # elif action_type == "warn_dm":
+        #     parts = ["warn_dm"]
+        #     parts.append(message or "{user}，請注意你的行為。")
         elif action_type == "mute":
             parts = ["mute", duration or "10m"]
             if reason:
@@ -1182,9 +1182,7 @@ class Moderate(commands.Cog):
         - kick <reason>
         - timeout|mute <duration> <reason>
         - delete <warn_message>
-        - delete_dm <warn_message>
         - warn <warn_message>
-        - warn_dm <warn_message>
         - send_mod_message|smm
         
         範例：
@@ -1226,9 +1224,7 @@ class Moderate(commands.Cog):
         - kick <reason>
         - timeout|mute <duration> <reason>
         - delete <warn_message>
-        - delete_dm <warn_message>
         - warn <warn_message>
-        - warn_dm <warn_message>
         - send_mod_message|smm
         
         範例：
