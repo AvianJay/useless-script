@@ -12,6 +12,7 @@ from pathlib import Path
 # Track pending log tasks for graceful shutdown
 _pending_log_tasks: set = set()
 _shutting_down = False
+_webhook_bridge_installed = False
 
 def cleanup_old_logs(days=7):
     """清理超過指定天數的舊日誌檔案"""
@@ -37,7 +38,7 @@ def cleanup_old_logs(days=7):
     if deleted_count > 0:
         print(f"[Logger] 共刪除 {deleted_count} 個舊日誌檔案")
 
-async def _log(*messages, level = logging.INFO, module_name: str = "General", user: discord.User = None, guild: discord.Guild = None):
+async def _log(*messages, level = logging.INFO, module_name: str = "General", user: discord.User = None, guild: discord.Guild = None, echo_console: bool = True):
     global _shutting_down
     
     # 確保 logs 資料夾存在
@@ -49,12 +50,13 @@ async def _log(*messages, level = logging.INFO, module_name: str = "General", us
     log_filename = f"logs/bot-{datetime.now().strftime('%Y-%m-%d')}.log"
     
     logger = logging.getLogger(module_name)
-    if not logger.hasHandlers():
+    if not logger.handlers:
         logger.setLevel(logging.DEBUG)
         handler = logging.FileHandler(log_filename, encoding='utf-8')
         formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
         handler.setFormatter(formatter)
         logger.addHandler(handler)
+    logger.propagate = False
 
     message = ' '.join(str(m) for m in messages)
     if level == logging.INFO:
@@ -69,7 +71,8 @@ async def _log(*messages, level = logging.INFO, module_name: str = "General", us
         logger.log(level, message)
 
     # Also print to console
-    print(f"[{module_name}] {message}", f"guild={guild.id}" if guild else "", f"user={user.id}" if user else "")
+    if echo_console:
+        print(f"[{module_name}] {message}", f"guild={guild.id}" if guild else "", f"user={user.id}" if user else "")
     
     # 如果正在關閉，不要嘗試發送到 Discord
     if _shutting_down or bot.is_closed():
@@ -206,6 +209,59 @@ def log(*messages, level = logging.INFO, module_name: str = "General", user: dis
         # No running loop, just print to console
         message = ' '.join(str(m) for m in messages)
         print(f"[{module_name}] {message}", f"guild={guild.id}" if guild else "", f"user={user.id}" if user else "")
+
+
+def _enqueue_webhook_log_from_record(record: logging.LogRecord):
+    if _shutting_down or "logger" not in modules:
+        return
+
+    if getattr(record, "_skip_webhook_bridge", False):
+        return
+
+    try:
+        message = record.getMessage()
+    except Exception:
+        message = str(record.msg)
+
+    if record.exc_info:
+        exc_text = ''.join(traceback.format_exception(*record.exc_info)).strip()
+        if exc_text:
+            message = f"{message}\n{exc_text}" if message else exc_text
+    elif record.stack_info:
+        message = f"{message}\n{record.stack_info}" if message else record.stack_info
+
+    module_name = record.name or "General"
+
+    try:
+        loop = asyncio.get_running_loop()
+        task = loop.create_task(_log(message, level=record.levelno, module_name=module_name, echo_console=False))
+        _pending_log_tasks.add(task)
+        task.add_done_callback(_pending_log_tasks.discard)
+    except RuntimeError:
+        print(f"[{module_name}] {message}")
+
+
+class WebhookBridgeHandler(logging.Handler):
+    def emit(self, record: logging.LogRecord):
+        if record.name.startswith("General") and getattr(record, "_skip_webhook_bridge", False):
+            return
+        _enqueue_webhook_log_from_record(record)
+
+
+def install_webhook_bridge():
+    global _webhook_bridge_installed
+    if _webhook_bridge_installed:
+        return
+
+    root_logger = logging.getLogger()
+    for handler in root_logger.handlers:
+        if isinstance(handler, WebhookBridgeHandler):
+            _webhook_bridge_installed = True
+            return
+
+    bridge_handler = WebhookBridgeHandler(level=logging.INFO)
+    root_logger.addHandler(bridge_handler)
+    _webhook_bridge_installed = True
 
 
 async def flush_logs():
@@ -392,6 +448,7 @@ class LoggerCog(commands.Cog):
         log(f"事件 {event_method} 發生錯誤。", module_name="Logger", level=logging.ERROR)
 
 if "logger" in modules:
+    install_webhook_bridge()
     asyncio.run(bot.add_cog(LoggerCog(bot)))
 
 if __name__ == "__main__":

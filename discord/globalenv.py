@@ -3,11 +3,14 @@ import json
 import discord
 import asyncio
 import threading
+import sys
 from discord.ext import commands
 from discord import app_commands
 from database import db
 import traceback
 import logging
+from datetime import datetime
+from pathlib import Path
 
 
 # Global configuration for backward compatibility
@@ -70,6 +73,7 @@ default_config = {
     "pollinations_api_key": "",
 }
 _config = None
+_runtime_logging_configured = False
 
 try:
     if os.path.exists(config_path):
@@ -132,6 +136,67 @@ def reload_config():
         log(f"重新載入設定檔時發生錯誤: {e}", module_name="Main", level=logging.ERROR)
         return False
 
+def configure_runtime_logging():
+    """Configure stdlib logging so discord.py errors are visible."""
+    global _runtime_logging_configured
+    if _runtime_logging_configured:
+        return
+
+    logs_dir = Path("logs")
+    logs_dir.mkdir(parents=True, exist_ok=True)
+    runtime_log_path = logs_dir / f"runtime-{datetime.now().strftime('%Y-%m-%d')}.log"
+
+    formatter = logging.Formatter("%(asctime)s | %(levelname)s | %(name)s | %(message)s")
+    root_logger = logging.getLogger()
+    root_logger.setLevel(logging.INFO)
+
+    has_stream_handler = any(
+        isinstance(handler, logging.StreamHandler) and not isinstance(handler, logging.FileHandler)
+        for handler in root_logger.handlers
+    )
+    has_runtime_file_handler = any(
+        isinstance(handler, logging.FileHandler)
+        and Path(getattr(handler, "baseFilename", "")).name == runtime_log_path.name
+        for handler in root_logger.handlers
+    )
+
+    if not has_stream_handler:
+        stream_handler = logging.StreamHandler()
+        stream_handler.setFormatter(formatter)
+        root_logger.addHandler(stream_handler)
+
+    if not has_runtime_file_handler:
+        file_handler = logging.FileHandler(runtime_log_path, encoding="utf-8")
+        file_handler.setFormatter(formatter)
+        root_logger.addHandler(file_handler)
+
+    logging.getLogger("discord").setLevel(logging.INFO)
+    logging.getLogger("discord.http").setLevel(logging.INFO)
+    logging.getLogger("discord.gateway").setLevel(logging.INFO)
+    logging.getLogger("asyncio").setLevel(logging.WARNING)
+    logging.captureWarnings(True)
+
+    def _log_uncaught_exception(exc_type, exc_value, exc_traceback):
+        if issubclass(exc_type, KeyboardInterrupt):
+            sys.__excepthook__(exc_type, exc_value, exc_traceback)
+            return
+        logging.getLogger("runtime").critical(
+            "Unhandled exception",
+            exc_info=(exc_type, exc_value, exc_traceback),
+        )
+
+    def _log_thread_exception(args):
+        logging.getLogger("runtime").critical(
+            "Unhandled thread exception in %s",
+            args.thread.name if args.thread else "unknown",
+            exc_info=(args.exc_type, args.exc_value, args.exc_traceback),
+        )
+
+    sys.excepthook = _log_uncaught_exception
+    threading.excepthook = _log_thread_exception
+    _runtime_logging_configured = True
+
+
 modules = []
 failed_modules = []
 
@@ -171,6 +236,7 @@ intents.message_content = True
 intents.members = True
 intents.guilds = True
 bot = commands.Bot(command_prefix=config("prefix", "!"), intents=intents, chunk_guilds_at_startup=False)
+configure_runtime_logging()
 
 
 # Helper functions for per-server configuration
@@ -636,10 +702,25 @@ async def _main():
         await bot.start(config("TOKEN"))
 
 
+async def _main_with_runtime_logging():
+    loop = asyncio.get_running_loop()
+
+    def _asyncio_exception_handler(loop, context):
+        exc = context.get("exception")
+        logger = logging.getLogger("asyncio")
+        if exc is not None:
+            logger.error(context.get("message", "Unhandled asyncio exception"), exc_info=exc)
+        else:
+            logger.error("Unhandled asyncio exception: %s", context.get("message", context))
+
+    loop.set_exception_handler(_asyncio_exception_handler)
+    await _main()
+
+
 def start_bot():
     log("正在啟動機器人...", module_name="Main")
     try:
-        asyncio.run(_main())
+        asyncio.run(_main_with_runtime_logging())
     except KeyboardInterrupt:
         print("[Main] 收到 Ctrl+C，正在關閉機器人...")
     finally:
