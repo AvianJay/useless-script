@@ -1396,14 +1396,14 @@ async def generate_feedgrass_image(target: discord.User, feeder: discord.User, r
     if feeder.id != target.id:
         # check nsfw channel
         if nsfw:
-            new_feedgrass_images = feedgrass_images.copy()
+            new_feedgrass_images = [img for img in feedgrass_images if img.get("nsfw", False)]
         else:
             new_feedgrass_images = [img for img in feedgrass_images if not img.get("nsfw", False)]
         img = random.choice(new_feedgrass_images)
     else:
         # check nsfw channel
         if nsfw:
-            new_self_feedgrass_images = self_feedgrass_images.copy()
+            new_self_feedgrass_images = [img for img in self_feedgrass_images if img.get("nsfw", False)]
         else:
             new_self_feedgrass_images = [img for img in self_feedgrass_images if not img.get("nsfw", False)]
         img = random.choice(new_self_feedgrass_images)
