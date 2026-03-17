@@ -538,6 +538,7 @@ translations = {
     "hour": "時",
     "gender": "性別",
     "public": "公開",
+    "model": "模型",
 }
 class CommandNameTranslator(app_commands.Translator):
     async def translate(

@@ -18,6 +18,9 @@ MODEL_RATES = {
     "openai-fast": 0.22,
     "openai": 0.30,
     "openai-seraphyn": 3.80,
+    "gemini-fast": 0.20,
+    "claude-airforce": 0.25,
+    "claude-fast": 0.25,
 }
 
 GLOBAL_GUILD_ID = 0
@@ -849,6 +852,14 @@ class AICommands(commands.Cog):
         body = (msg_text + " " + " ".join(extra_parts)).strip() if extra_parts else msg_text
         return f"{msg.author.display_name}{reply}: {body}"
 
+    async def model_select_autocomplete(self, interaction: discord.Interaction, current: str) -> list[app_commands.Choice[str]]:
+        """模型選擇自動完成"""
+        choices = []
+        for model, rate in MODEL_RATES.items():
+            name = f"{model} @ {rate:.2f}/C"
+            if current.lower() in model.lower() or current.lower() in name.lower():
+                choices.append(app_commands.Choice(name=name, value=model))
+
     @app_commands.command(name="ai", description="與 AI 助手對話")
     @app_commands.describe(
         message="你想問 AI 的問題或訊息",
@@ -856,11 +867,7 @@ class AICommands(commands.Cog):
         new_conversation="是否開始新對話（清除之前的對話歷史）",
         model="選擇 AI 模型（預設 openai）"
     )
-    @app_commands.choices(model=[
-        app_commands.Choice(name="openai-fast", value="openai-fast"),
-        app_commands.Choice(name="openai", value="openai"),
-        app_commands.Choice(name="openai-seraphyn", value="openai-seraphyn"),
-    ])
+    @app_commands.autocomplete(model=model_select_autocomplete)
     @app_commands.allowed_installs(guilds=True, users=True)
     @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
     @app_commands.checks.cooldown(1, 5.0, key=lambda i: i.user.id)
