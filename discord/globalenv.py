@@ -531,6 +531,13 @@ translations = {
     "need_message": "需要訊息",
     "dsize-feedgrass-nsfw": "dsize-草飼-nsfw",
     "dsize-feedgrass-nsfw-toggle": "dsize-草飼-nsfw-切換",
+    "bazi": "八字排盤",
+    "year": "年",
+    "month": "月",
+    "day": "日",
+    "hour": "時",
+    "gender": "性別",
+    "public": "公開",
 }
 class CommandNameTranslator(app_commands.Translator):
     async def translate(
