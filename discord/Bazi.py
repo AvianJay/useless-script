@@ -8,7 +8,7 @@ Discord.py 移植版
 Original https://github.com/Wolke/bazi-mingli/blob/main/scripts/bazi_calc.py
 """
 
-from datetime import datetime, date, timedelta
+from datetime import date
 from typing import Tuple, Dict, List, Optional
 import asyncio
 
@@ -71,6 +71,54 @@ SHISHEN_NAMES = {
     (2, 0): "偏財", (2, 1): "正財",  # 我剋（財星）
     (3, 0): "七殺", (3, 1): "正官",  # 剋我（官殺）
     (4, 0): "偏印", (4, 1): "正印",  # 生我（印星）
+}
+
+SHISHEN_DETAILS = {
+    "日主": "命盤核心，代表自己與整體命局的出發點。",
+    "比肩": "同類助身，重自我、行動力與競爭意識。",
+    "劫財": "同類分財，重義氣、人脈，也較容易有資源拉扯。",
+    "食神": "我生之氣，偏向才華、表達、享受與穩定輸出。",
+    "傷官": "我生之氣但較鋒利，重創意、表現與突破框架。",
+    "偏財": "我所剋者，偏向機會財、交際、靈活經營與資源調度。",
+    "正財": "我所剋者，偏向正財、務實、責任感與穩定累積。",
+    "七殺": "剋我之氣較強，代表壓力、執行力、挑戰與魄力。",
+    "正官": "剋我之氣較正，偏向規範、名聲、紀律與責任。",
+    "偏印": "生我之氣較偏，偏向直覺、學習力、保護與另類思考。",
+    "正印": "生我之氣較正，偏向學業、貴人、包容與支援。",
+}
+
+SHISHEN_ORDER = ["比肩", "劫財", "食神", "傷官", "偏財", "正財", "七殺", "正官", "偏印", "正印", "日主"]
+
+TAOHUA_RULES = {
+    "申": "酉", "子": "酉", "辰": "酉",
+    "寅": "卯", "午": "卯", "戌": "卯",
+    "亥": "子", "卯": "子", "未": "子",
+    "巳": "午", "酉": "午", "丑": "午",
+}
+
+YIMA_RULES = {
+    "申": "寅", "子": "寅", "辰": "寅",
+    "寅": "申", "午": "申", "戌": "申",
+    "亥": "巳", "卯": "巳", "未": "巳",
+    "巳": "亥", "酉": "亥", "丑": "亥",
+}
+
+WENCHANG_RULES = {
+    "甲": "巳", "乙": "午", "丙": "申", "丁": "酉", "戊": "申",
+    "己": "酉", "庚": "亥", "辛": "子", "壬": "寅", "癸": "卯",
+}
+
+TIANYI_RULES = {
+    "甲": {"丑", "未"},
+    "戊": {"丑", "未"},
+    "庚": {"丑", "未"},
+    "乙": {"子", "申"},
+    "己": {"子", "申"},
+    "丙": {"亥", "酉"},
+    "丁": {"亥", "酉"},
+    "壬": {"卯", "巳"},
+    "癸": {"卯", "巳"},
+    "辛": {"寅", "午"},
 }
 
 # ============================================================
@@ -375,6 +423,69 @@ def get_shishen(day_gan: int, target_gan: int) -> str:
     return SHISHEN_NAMES.get((relation, same_yy), "")
 
 
+def get_hidden_stem_shishen(day_gan: int, zhi: int) -> List[Dict[str, str]]:
+    """取得地支藏干與其對應副星（十神）"""
+    hidden_stems = []
+    for hidden_gan in DIZHI_CANGGAN[DIZHI[zhi]]:
+        hidden_gan_idx = TIANGAN.index(hidden_gan)
+        hidden_stems.append({
+            "天干": hidden_gan,
+            "十神": get_shishen(day_gan, hidden_gan_idx),
+        })
+    return hidden_stems
+
+
+def get_pillar_shensha(
+    pillar_branches: Dict[str, int],
+    year_zhi: int,
+    day_gan: int,
+    day_zhi: int,
+) -> Dict[str, List[str]]:
+    """取得常見神煞（簡化版）"""
+    branch_names = {name: DIZHI[zhi] for name, zhi in pillar_branches.items()}
+    shensha_map = {name: [] for name in pillar_branches}
+    year_branch = DIZHI[year_zhi]
+    day_branch = DIZHI[day_zhi]
+    day_gan_name = TIANGAN[day_gan]
+
+    for pillar_name, branch_name in branch_names.items():
+        if branch_name == TAOHUA_RULES.get(year_branch):
+            shensha_map[pillar_name].append("桃花（年支）")
+        if branch_name == TAOHUA_RULES.get(day_branch):
+            shensha_map[pillar_name].append("桃花（日支）")
+
+        if branch_name == YIMA_RULES.get(year_branch):
+            shensha_map[pillar_name].append("驛馬（年支）")
+        if branch_name == YIMA_RULES.get(day_branch):
+            shensha_map[pillar_name].append("驛馬（日支）")
+
+        if branch_name == WENCHANG_RULES.get(day_gan_name):
+            shensha_map[pillar_name].append("文昌（日干）")
+
+        if branch_name in TIANYI_RULES.get(day_gan_name, set()):
+            shensha_map[pillar_name].append("天乙貴人（日干）")
+
+    return shensha_map
+
+
+def collect_shishen_notes(result: Dict) -> List[str]:
+    """整理本命盤中出現的十神註解"""
+    present = []
+
+    for pillar in result["四柱八字"].values():
+        shishen = pillar.get("十神")
+        if shishen and shishen not in present:
+            present.append(shishen)
+
+        for sub_star in pillar.get("副星", []):
+            name = sub_star["十神"]
+            if name and name not in present:
+                present.append(name)
+
+    ordered = [name for name in SHISHEN_ORDER if name in present]
+    return [f"{name}：{SHISHEN_DETAILS[name]}" for name in ordered if name in SHISHEN_DETAILS]
+
+
 def count_wuxing(pillars: List[Tuple[int, int]]) -> Dict[str, int]:
     """統計五行數量"""
     count = {"金": 0, "木": 0, "水": 0, "火": 0, "土": 0}
@@ -529,7 +640,7 @@ def calculate_dayun(year_gan: int, year_zhi: int, gender: str,
     return dayun_list
 
 
-def paipan(year: int, month: int, day: int, hour: int, gender: str = "男") -> Dict:
+def paipan(year: int, month: int, day: int, hour: Optional[int] = None, gender: str = "男") -> Dict:
     """
     八字排盤主函數
     
@@ -537,7 +648,7 @@ def paipan(year: int, month: int, day: int, hour: int, gender: str = "男") -> D
         year: 西曆年份
         month: 西曆月份
         day: 西曆日期
-        hour: 小時 (0-23)
+        hour: 小時 (0-23)，可省略
         gender: "男" 或 "女"
     
     Returns:
@@ -551,14 +662,22 @@ def paipan(year: int, month: int, day: int, hour: int, gender: str = "男") -> D
     
     day_gan, day_zhi = get_day_ganzhi(year, month, day)
     
-    hour_gan, hour_zhi = get_hour_ganzhi(day_gan, hour)
-    
     pillars = [
         (year_gan, year_zhi),
         (month_gan, month_zhi),
         (day_gan, day_zhi),
-        (hour_gan, hour_zhi),
     ]
+
+    pillar_data = [
+        ("年柱", year_gan, year_zhi),
+        ("月柱", month_gan, month_zhi),
+        ("日柱", day_gan, day_zhi),
+    ]
+
+    if hour is not None:
+        hour_gan, hour_zhi = get_hour_ganzhi(day_gan, hour)
+        pillars.append((hour_gan, hour_zhi))
+        pillar_data.append(("時柱", hour_gan, hour_zhi))
     
     # 2. 轉農曆
     try:
@@ -568,12 +687,8 @@ def paipan(year: int, month: int, day: int, hour: int, gender: str = "男") -> D
         lunar_str = "無法轉換"
     
     # 3. 計算十神
-    shishen_list = []
-    for i, (gan, zhi) in enumerate(pillars):
-        if i == 2:  # 日柱
-            shishen_list.append("日主")
-        else:
-            shishen_list.append(get_shishen(day_gan, gan))
+    pillar_branches = {name: zhi for name, _, zhi in pillar_data}
+    shensha_map = get_pillar_shensha(pillar_branches, year_zhi, day_gan, day_zhi)
     
     # 4. 統計五行
     wuxing_count = count_wuxing(pillars)
@@ -590,46 +705,30 @@ def paipan(year: int, month: int, day: int, hour: int, gender: str = "男") -> D
     # 8. 組裝結果
     result = {
         "基本資訊": {
-            "西曆": f"{year}年{month}月{day}日 {hour}時",
+            "西曆": f"{year}年{month}月{day}日" + (f" {hour}時" if hour is not None else ""),
             "農曆": lunar_str,
             "性別": gender,
             "生肖": DIZHI_SHENGXIAO[year_zhi],
+            "時辰": "未知" if hour is None else f"{hour}時",
         },
-        "四柱八字": {
-            "年柱": {
-                "干支": f"{TIANGAN[year_gan]}{DIZHI[year_zhi]}",
-                "天干": f"{TIANGAN[year_gan]}（{TIANGAN_WUXING[year_gan]}）",
-                "地支": f"{DIZHI[year_zhi]}（{DIZHI_WUXING[year_zhi]}）",
-                "藏干": "、".join(DIZHI_CANGGAN[DIZHI[year_zhi]]),
-                "十神": shishen_list[0],
-            },
-            "月柱": {
-                "干支": f"{TIANGAN[month_gan]}{DIZHI[month_zhi]}",
-                "天干": f"{TIANGAN[month_gan]}（{TIANGAN_WUXING[month_gan]}）",
-                "地支": f"{DIZHI[month_zhi]}（{DIZHI_WUXING[month_zhi]}）",
-                "藏干": "、".join(DIZHI_CANGGAN[DIZHI[month_zhi]]),
-                "十神": shishen_list[1],
-            },
-            "日柱": {
-                "干支": f"{TIANGAN[day_gan]}{DIZHI[day_zhi]}",
-                "天干": f"{TIANGAN[day_gan]}（{TIANGAN_WUXING[day_gan]}）【日主】",
-                "地支": f"{DIZHI[day_zhi]}（{DIZHI_WUXING[day_zhi]}）",
-                "藏干": "、".join(DIZHI_CANGGAN[DIZHI[day_zhi]]),
-                "十神": "日主",
-            },
-            "時柱": {
-                "干支": f"{TIANGAN[hour_gan]}{DIZHI[hour_zhi]}",
-                "天干": f"{TIANGAN[hour_gan]}（{TIANGAN_WUXING[hour_gan]}）",
-                "地支": f"{DIZHI[hour_zhi]}（{DIZHI_WUXING[hour_zhi]}）",
-                "藏干": "、".join(DIZHI_CANGGAN[DIZHI[hour_zhi]]),
-                "十神": shishen_list[3],
-            },
-        },
+        "四柱八字": {},
         "五行統計": wuxing_count,
         "日主分析": strength_analysis,
         "用神喜忌": yongshen,
         "大運排列": dayun,
     }
+
+    for pillar_name, gan, zhi in pillar_data:
+        hidden_stems = get_hidden_stem_shishen(day_gan, zhi)
+        result["四柱八字"][pillar_name] = {
+            "干支": f"{TIANGAN[gan]}{DIZHI[zhi]}",
+            "天干": f"{TIANGAN[gan]}（{TIANGAN_WUXING[gan]}）" + ("【日主】" if pillar_name == "日柱" else ""),
+            "地支": f"{DIZHI[zhi]}（{DIZHI_WUXING[zhi]}）",
+            "藏干": "、".join(item["天干"] for item in hidden_stems),
+            "副星": hidden_stems,
+            "十神": "日主" if pillar_name == "日柱" else get_shishen(day_gan, gan),
+            "神煞": shensha_map.get(pillar_name, []),
+        }
     
     return result
 
@@ -668,6 +767,8 @@ def _build_bazi_view(result: Dict) -> discord.ui.LayoutView:
     wuxing = result["五行統計"]
     analysis = result["日主分析"]
     yongshen = result["用神喜忌"]
+    pillar_names = list(pillars.keys())
+    shishen_notes = collect_shishen_notes(result)
 
     container.add_item(discord.ui.TextDisplay("## 🎋 八字排盤結果"))
     container.add_item(
@@ -675,19 +776,37 @@ def _build_bazi_view(result: Dict) -> discord.ui.LayoutView:
             f"西曆：{basic['西曆']}\n"
             f"農曆：{basic['農曆']}\n"
             f"性別：{basic['性別']}\n"
-            f"生肖：{basic['生肖']}"
+            f"生肖：{basic['生肖']}\n"
+            f"時辰：{basic['時辰']}"
         )
     )
     container.add_item(discord.ui.Separator(spacing=discord.SeparatorSpacing.small))
 
-    bazi_table = (
-        "### 四柱\n"
-        f"年柱：{pillars['年柱']['干支']}（{pillars['年柱']['十神']}）\n"
-        f"月柱：{pillars['月柱']['干支']}（{pillars['月柱']['十神']}）\n"
-        f"日柱：{pillars['日柱']['干支']}（日主）\n"
-        f"時柱：{pillars['時柱']['干支']}（{pillars['時柱']['十神']}）"
-    )
-    container.add_item(discord.ui.TextDisplay(bazi_table))
+    summary_lines = [f"### {'四柱' if '時柱' in pillars else '三柱'}"]
+    for pillar_name in pillar_names:
+        pillar = pillars[pillar_name]
+        summary_lines.append(f"{pillar_name}：{pillar['干支']}（{pillar['十神']}）")
+    container.add_item(discord.ui.TextDisplay("\n".join(summary_lines)))
+    container.add_item(discord.ui.Separator(spacing=discord.SeparatorSpacing.small))
+
+    detail_lines = ["### 柱位詳解"]
+    for pillar_name in pillar_names:
+        pillar = pillars[pillar_name]
+        sub_stars = "、".join(f"{item['天干']}({item['十神']})" for item in pillar["副星"]) or "無"
+        shensha = "、".join(pillar["神煞"]) or "無"
+        detail_lines.extend([
+            f"{pillar_name}｜{pillar['干支']}｜{pillar['十神']}",
+            f"天干：{pillar['天干']}",
+            f"地支：{pillar['地支']}",
+            f"藏干：{pillar['藏干']}",
+            f"副星：{sub_stars}",
+            f"神煞：{shensha}",
+            "",
+        ])
+
+    for part in _split_text_for_display("\n".join(detail_lines).strip()):
+        container.add_item(discord.ui.TextDisplay(part))
+
     container.add_item(discord.ui.Separator(spacing=discord.SeparatorSpacing.small))
 
     container.add_item(
@@ -716,6 +835,11 @@ def _build_bazi_view(result: Dict) -> discord.ui.LayoutView:
         )
     )
     container.add_item(discord.ui.Separator(spacing=discord.SeparatorSpacing.small))
+
+    if shishen_notes:
+        for part in _split_text_for_display("### 十神註解\n" + "\n".join(shishen_notes)):
+            container.add_item(discord.ui.TextDisplay(part))
+        container.add_item(discord.ui.Separator(spacing=discord.SeparatorSpacing.small))
 
     dayun_lines = ["### 大運排列"]
     for item in result["大運排列"]:
@@ -765,7 +889,7 @@ class BaziCog(commands.Cog):
         year: app_commands.Range[int, 1900, 2099],
         month: app_commands.Range[int, 1, 12],
         day: app_commands.Range[int, 1, 31],
-        hour: app_commands.Range[int, 0, 23],
+        hour: Optional[app_commands.Range[int, 0, 23]] = None,
         gender: Optional[app_commands.Choice[str]] = None,
         public: bool = False,
     ):
