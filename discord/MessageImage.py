@@ -444,9 +444,9 @@ class UpvoteView(discord.ui.View):
     @discord.ui.button(emoji="⬆️", style=discord.ButtonStyle.green)
     async def upvote(self, interaction: discord.Interaction, button: discord.ui.Button):
         async with self._lock:
-            # if interaction.user.id in self.upvoted_users:
-            #     await interaction.response.send_message("你已經點過了！", ephemeral=True)
-            #     return
+            if interaction.user.id in self.upvoted_users:
+                await interaction.response.send_message("你已經點過了！", ephemeral=True)
+                return
             self.upvotes += 1
             self.upvoted_users.add(interaction.user.id)
             button.label = f" | {self.upvotes} 人"
