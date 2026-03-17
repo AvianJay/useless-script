@@ -239,7 +239,7 @@ on_ready_tasks.append(check_unban)
 
 def _bot_action_check(
     guild: Optional[discord.Guild],
-    user,
+    user: Optional[Union[discord.Member, discord.User]],
     perm_name: str,
 ) -> tuple[bool, str]:
     """檢查機器人是否有執行指定動作的伺服器權限，以及身份組是否夠高。
@@ -253,7 +253,9 @@ def _bot_action_check(
         if user == guild.owner:
             return False, "無法對伺服器擁有者執行操作。"
         if user.top_role >= bot_member.top_role:
-            return False, f"{user} 的身份組高於或等於機器人，跳過此動作。"
+            if getattr(user.guild_permissions, perm_name, False):
+                return False, f"{user} 是管理員且身份組高於或等於機器人，跳過此動作。"
+            # return False, f"{user} 的身份組高於或等於機器人，跳過此動作。"
     return True, ""
 
 
@@ -269,13 +271,17 @@ async def do_action_str(action: str, guild: Optional[discord.Guild] = None, user
     for a in actions:
         cmd = a.split(" ")
         if cmd[0] == "ban":
-            # ban <reason> <delete_messages> <duration>
+            # ban <delete_messages> <duration> <reason>
             if len(cmd) == 1:
                 cmd.append("0s")
             if len(cmd) == 2:
                 cmd.append("0s")
             if len(cmd) == 3:
                 cmd.append(last_reason)
+
+            if not cmd[1][0].isdigit():
+                # cmd[1] is reason
+                cmd[1], cmd[2], cmd[3] = "0s", "0s", cmd[1]
 
             duration_seconds = timestr_to_seconds(cmd[1]) if cmd[1] != "0" else 0
             delete_messages = timestr_to_seconds(cmd[2]) if cmd[2] != "0" else 0
@@ -296,6 +302,7 @@ async def do_action_str(action: str, guild: Optional[discord.Guild] = None, user
                 logs.append(f"封禁用戶，原因: {reason}，持續秒數: {duration_seconds}秒，刪除訊息時間: {delete_messages}秒")
             elif user:
                 logs.append(f"封禁用戶失敗。")
+                break  # failed to ban, stop further actions to prevent confusion
             actions_json.append({"action": "ban", "duration": duration_seconds, "reason": reason})
         elif cmd[0] == "kick":
             # kick <reason>
@@ -316,9 +323,14 @@ async def do_action_str(action: str, guild: Optional[discord.Guild] = None, user
         elif cmd[0] == "mute" or cmd[0] == "timeout":
             # mute <duration> <reason>
             if len(cmd) == 1:
-                cmd.append("10m")
+                cmd.append("1h")
             if len(cmd) == 2:
                 cmd.append(last_reason)
+
+            if not cmd[1][0].isdigit():
+                # cmd[1] is reason
+                cmd[1], cmd[2] = "1h", cmd[1]
+
             duration_seconds = timestr_to_seconds(cmd[1]) if cmd[1] != "0" else 0
             cmd.pop(0)  # remove "mute" or "timeout"
             cmd.pop(0)  # remove duration
@@ -352,6 +364,7 @@ async def do_action_str(action: str, guild: Optional[discord.Guild] = None, user
                     except Exception as e:
                         logs.append(f"解封用戶失敗：{e}")
                         log(f"解封用戶 {user} 時發生錯誤：{e}", level=logging.ERROR, module_name="Moderate", guild=guild)
+                        break  # failed to unban, stop further actions to prevent confusion
             else:
                 logs.append(f"解封用戶，原因: {reason}")
             actions_json.append({"action": "unban", "reason": reason})
