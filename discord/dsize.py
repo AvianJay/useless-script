@@ -709,6 +709,11 @@ async def dsize_leaderboard(interaction: discord.Interaction, limit: int = 10, g
 
 
 user_using_dsize_battle = set()  # to prevent spamming the command
+
+
+def release_dsize_battle_lock(*user_ids: int):
+    for locked_user_id in user_ids:
+        user_using_dsize_battle.discard(locked_user_id)
 @bot.tree.command(name=app_commands.locale_str("dsize-battle"), description="比屌長(需要雙方今天沒有量過)")
 @app_commands.allowed_installs(guilds=True, users=True)
 @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
@@ -798,8 +803,7 @@ async def dsize_battle(interaction: discord.Interaction, opponent: Union[discord
             self.value = None
         
         async def on_timeout(self):
-            user_using_dsize_battle.discard(user_id)
-            user_using_dsize_battle.discard(opponent_id)
+            release_dsize_battle_lock(user_id, opponent_id)
             for child in self.children:
                 child.disabled = True
             await interaction.edit_original_response(content="對決邀請已過期。", view=self)
@@ -809,247 +813,255 @@ async def dsize_battle(interaction: discord.Interaction, opponent: Union[discord
             if interaction.user.id != opponent_id:
                 await interaction.response.send_message("這不是你的對決邀請。", ephemeral=True)
                 return
-            self.value = True
-            self.stop()
-            user_statistics = get_user_data(0, user_id, "dsize_statistics", {})
-            user_statistics["total_battles"] = user_statistics.get("total_battles", 0) + 1
-            user_statistics["total_uses"] = user_statistics.get("total_uses", 0) + 1
-            set_user_data(0, user_id, "dsize_statistics", user_statistics)
-            opponent_statistics = get_user_data(0, opponent_id, "dsize_statistics", {})
-            opponent_statistics["total_battles"] = opponent_statistics.get("total_battles", 0) + 1
-            opponent_statistics["total_uses"] = opponent_statistics.get("total_uses", 0) + 1
-            set_user_data(0, opponent_id, "dsize_statistics", opponent_statistics)
-            set_user_data(0, user_id, "used_dsize", True)
-            set_user_data(0, opponent_id, "used_dsize", True)
+            try:
+                await interaction.response.defer()
+                self.value = True
+                self.stop()
+                user_statistics = get_user_data(0, user_id, "dsize_statistics", {})
+                user_statistics["total_battles"] = user_statistics.get("total_battles", 0) + 1
+                user_statistics["total_uses"] = user_statistics.get("total_uses", 0) + 1
+                set_user_data(0, user_id, "dsize_statistics", user_statistics)
+                opponent_statistics = get_user_data(0, opponent_id, "dsize_statistics", {})
+                opponent_statistics["total_battles"] = opponent_statistics.get("total_battles", 0) + 1
+                opponent_statistics["total_uses"] = opponent_statistics.get("total_uses", 0) + 1
+                set_user_data(0, opponent_id, "dsize_statistics", opponent_statistics)
+                set_user_data(0, user_id, "used_dsize", True)
+                set_user_data(0, opponent_id, "used_dsize", True)
 
-            set_user_data(guild_key, user_id, "last_dsize", now)
-            set_user_data(guild_key, opponent_id, "last_dsize", now)
+                set_user_data(guild_key, user_id, "last_dsize", now)
+                set_user_data(guild_key, opponent_id, "last_dsize", now)
 
-            await interaction.response.edit_message(content="開始對決。", view=None)
-            size_user = random.randint(1, max_size)
-            size_opponent = random.randint(1, max_size)
-            side_effect_messages = []
-            # check anti-surgery side effect for user
-            user_anti_surgery = get_user_data(guild_key, user_id, "dsize_anti_surgery")
-            if user_anti_surgery is not None and not isinstance(user_anti_surgery, datetime):
-                try:
-                    user_anti_surgery = datetime.fromisoformat(str(user_anti_surgery)).date()
-                except Exception:
-                    user_anti_surgery = None
-            elif isinstance(user_anti_surgery, datetime):
-                user_anti_surgery = user_anti_surgery.date()
-            if user_anti_surgery is not None and user_anti_surgery >= now - timedelta(days=2):
-                size_user = max(-1, size_user - random.randint(1, max_size // 2))
-                size_user = size_user if size_user != 0 else -1
+                await interaction.edit_original_response(content="開始對決。", view=None)
+                size_user = random.randint(1, max_size)
+                size_opponent = random.randint(1, max_size)
+                side_effect_messages = []
+                # check anti-surgery side effect for user
+                user_anti_surgery = get_user_data(guild_key, user_id, "dsize_anti_surgery")
+                if user_anti_surgery is not None and not isinstance(user_anti_surgery, datetime):
+                    try:
+                        user_anti_surgery = datetime.fromisoformat(str(user_anti_surgery)).date()
+                    except Exception:
+                        user_anti_surgery = None
+                elif isinstance(user_anti_surgery, datetime):
+                    user_anti_surgery = user_anti_surgery.date()
+                if user_anti_surgery is not None and user_anti_surgery >= now - timedelta(days=2):
+                    size_user = max(-1, size_user - random.randint(1, max_size // 2))
+                    size_user = size_user if size_user != 0 else -1
+                    if size_user == -1:
+                        side_effect_messages.append(f"{original_user.display_name} 糟糕！有副作用！變男娘了！")
+                    else:
+                        side_effect_messages.append(f"{original_user.display_name} 糟糕！有副作用！")
+                # check anti-surgery side effect for opponent
+                opponent_anti_surgery = get_user_data(guild_key, opponent_id, "dsize_anti_surgery")
+                if opponent_anti_surgery is not None and not isinstance(opponent_anti_surgery, datetime):
+                    try:
+                        opponent_anti_surgery = datetime.fromisoformat(str(opponent_anti_surgery)).date()
+                    except Exception:
+                        opponent_anti_surgery = None
+                elif isinstance(opponent_anti_surgery, datetime):
+                    opponent_anti_surgery = opponent_anti_surgery.date()
+                if opponent_anti_surgery is not None and opponent_anti_surgery >= now - timedelta(days=2):
+                    size_opponent = max(-1, size_opponent - random.randint(1, max_size // 2))
+                    size_opponent = size_opponent if size_opponent != 0 else -1
+                    if size_opponent == -1:
+                        side_effect_messages.append(f"{opponent.display_name} 糟糕！有副作用！變男娘了！")
+                    else:
+                        side_effect_messages.append(f"{opponent.display_name} 糟糕！有副作用！")
+                # print(f"[DSize] {interaction.user} vs {opponent} - {size_user} cm vs {size_opponent} cm")
+                log(f"{original_user} vs {opponent} - {size_user} cm vs {size_opponent} cm", module_name="dsize", user=interaction.user, guild=interaction.guild)
+                speed = max(size_user, size_opponent) // 50 + 1
+
+                # 取得訊息物件
+                msg = await interaction.original_response()
+                t = datetime.now(timezone.utc)
+
+                user_break_counter = 0
+                opponent_break_counter = 0
+                user_broke = size_user <= 0
+                opponent_broke = size_opponent <= 0
+                will_user_break = random.random() < 0.05
+                will_opponent_break = random.random() < 0.05
+                battle_content = "開始對決。"
+                user_break_message = ""
+                opponent_break_message = ""
+                max_anim = max(size_user if size_user > 0 else 1, size_opponent if size_opponent > 0 else 1)
+                for i in range(1, max_anim, speed):
+                    # 10% break check for user
+                    if not user_broke and i < size_user and random.random() < 0.1 and will_user_break:
+                        user_break_counter += 1
+                        if user_break_counter >= 1:
+                            user_break_message += f"{original_user.display_name} 的ㄐㄐ今天好像怪怪的。"
+                        if user_break_counter >= 5:
+                            size_user = -1
+                            user_broke = True
+                            user_break_message += f"\n{original_user.display_name} 變成男娘了。"
+                    # 10% break check for opponent
+                    if not opponent_broke and i < size_opponent and random.random() < 0.1 and will_opponent_break:
+                        opponent_break_counter += 1
+                        if opponent_break_counter >= 1:
+                            opponent_break_message += f"{opponent.display_name} 的ㄐㄐ今天好像怪怪的。"
+                        if opponent_break_counter >= 5:
+                            size_opponent = -1
+                            opponent_broke = True
+                            opponent_break_message += f"\n{opponent.display_name} 變成男娘了。"
+                    content_lines = ["開始對決。"]
+                    if user_break_message:
+                        content_lines.append(user_break_message)
+                    if opponent_break_message:
+                        content_lines.append(opponent_break_message)
+                    content_lines.extend(side_effect_messages)
+                    battle_content = "\n".join(content_lines)
+                    # Build user display
+                    if user_broke:
+                        user_field_name = f"{original_user.display_name} 的長度："
+                        user_field_value = "8"
+                    else:
+                        d_chars_user = list("=" * min(i, size_user - 1))
+                        if user_break_counter > 0 and len(d_chars_user) > 0:
+                            num = min(user_break_counter, len(d_chars_user))
+                            for idx in random.sample(range(len(d_chars_user)), num):
+                                d_chars_user[idx] = "≈"
+                        user_field_name = f"{original_user.display_name} 的長度："
+                        user_field_value = f"{size_user if i >= size_user - 1 else '??'} cm\n8{''.join(d_chars_user)}D"
+                    # Build opponent display
+                    if opponent_broke:
+                        opp_field_name = f"{opponent.display_name} 的長度："
+                        opp_field_value = "8"
+                    else:
+                        d_chars_opp = list("=" * min(i, size_opponent - 1))
+                        if opponent_break_counter > 0 and len(d_chars_opp) > 0:
+                            num = min(opponent_break_counter, len(d_chars_opp))
+                            for idx in random.sample(range(len(d_chars_opp)), num):
+                                d_chars_opp[idx] = "≈"
+                        opp_field_name = f"{opponent.display_name} 的長度："
+                        opp_field_value = f"{size_opponent if i >= size_opponent - 1 else '??'} cm\n8{''.join(d_chars_opp)}D"
+                    embed = discord.Embed(title="比長度", color=0x00ff00)
+                    embed.add_field(name=user_field_name, value=user_field_value, inline=False)
+                    embed.add_field(name=opp_field_name, value=opp_field_value, inline=False)
+                    embed.timestamp = t
+                    if not guild_key:
+                        embed.set_footer(text="此次對決將記錄到全域排行榜。")
+                    await msg.edit(content=battle_content, embed=embed)
+                    await asyncio.sleep(0.1)
+
+                # 最終結果
+                if size_user > size_opponent:
+                    user_statistics["wins"] = user_statistics.get("wins", 0) + 1
+                    set_user_data(0, user_id, "dsize_statistics", user_statistics)
+                    opponent_statistics["losses"] = opponent_statistics.get("losses", 0) + 1
+                    set_user_data(0, opponent_id, "dsize_statistics", opponent_statistics)
+                    result = f"🎉 {original_user.display_name} 勝利！"
+                elif size_user < size_opponent:
+                    opponent_statistics["wins"] = opponent_statistics.get("wins", 0) + 1
+                    set_user_data(0, opponent_id, "dsize_statistics", opponent_statistics)
+                    user_statistics["losses"] = user_statistics.get("losses", 0) + 1
+                    set_user_data(0, user_id, "dsize_statistics", user_statistics)
+                    result = f"🎉 {opponent.display_name} 勝利！"
+                else:
+                    result = "🤝 平手！"
+
                 if size_user == -1:
-                    side_effect_messages.append(f"{original_user.display_name} 糟糕！有副作用！變男娘了！")
+                    user_final_name = f"{original_user.display_name} 的長度："
+                    user_final_value = "-1 cm\n8"
                 else:
-                    side_effect_messages.append(f"{original_user.display_name} 糟糕！有副作用！")
-            # check anti-surgery side effect for opponent
-            opponent_anti_surgery = get_user_data(guild_key, opponent_id, "dsize_anti_surgery")
-            if opponent_anti_surgery is not None and not isinstance(opponent_anti_surgery, datetime):
-                try:
-                    opponent_anti_surgery = datetime.fromisoformat(str(opponent_anti_surgery)).date()
-                except Exception:
-                    opponent_anti_surgery = None
-            elif isinstance(opponent_anti_surgery, datetime):
-                opponent_anti_surgery = opponent_anti_surgery.date()
-            if opponent_anti_surgery is not None and opponent_anti_surgery >= now - timedelta(days=2):
-                size_opponent = max(-1, size_opponent - random.randint(1, max_size // 2))
-                size_opponent = size_opponent if size_opponent != 0 else -1
+                    d_string_user = "=" * (size_user - 1)
+                    user_final_name = f"{original_user.display_name} 的長度："
+                    user_final_value = f"{size_user} cm\n8{d_string_user}D"
                 if size_opponent == -1:
-                    side_effect_messages.append(f"{opponent.display_name} 糟糕！有副作用！變男娘了！")
+                    opp_final_name = f"{opponent.display_name} 的長度："
+                    opp_final_value = "-1 cm\n8"
                 else:
-                    side_effect_messages.append(f"{opponent.display_name} 糟糕！有副作用！")
-            # print(f"[DSize] {interaction.user} vs {opponent} - {size_user} cm vs {size_opponent} cm")
-            log(f"{original_user} vs {opponent} - {size_user} cm vs {size_opponent} cm", module_name="dsize", user=interaction.user, guild=interaction.guild)
-            speed = max(size_user, size_opponent) // 50 + 1
-
-            # 取得訊息物件
-            msg = await interaction.original_response()
-            t = datetime.now(timezone.utc)
-
-            user_break_counter = 0
-            opponent_break_counter = 0
-            user_broke = size_user <= 0
-            opponent_broke = size_opponent <= 0
-            will_user_break = random.random() < 0.05
-            will_opponent_break = random.random() < 0.05
-            battle_content = "開始對決。"
-            user_break_message = ""
-            opponent_break_message = ""
-            max_anim = max(size_user if size_user > 0 else 1, size_opponent if size_opponent > 0 else 1)
-            for i in range(1, max_anim, speed):
-                # 10% break check for user
-                if not user_broke and i < size_user and random.random() < 0.1 and will_user_break:
-                    user_break_counter += 1
-                    if user_break_counter >= 1:
-                        user_break_message += f"{original_user.display_name} 的ㄐㄐ今天好像怪怪的。"
-                    if user_break_counter >= 5:
-                        size_user = -1
-                        user_broke = True
-                        user_break_message += f"\n{original_user.display_name} 變成男娘了。"
-                # 10% break check for opponent
-                if not opponent_broke and i < size_opponent and random.random() < 0.1 and will_opponent_break:
-                    opponent_break_counter += 1
-                    if opponent_break_counter >= 1:
-                        opponent_break_message += f"{opponent.display_name} 的ㄐㄐ今天好像怪怪的。"
-                    if opponent_break_counter >= 5:
-                        size_opponent = -1
-                        opponent_broke = True
-                        opponent_break_message += f"\n{opponent.display_name} 變成男娘了。"
-                content_lines = ["開始對決。"]
-                if user_break_message:
-                    content_lines.append(user_break_message)
-                if opponent_break_message:
-                    content_lines.append(opponent_break_message)
-                content_lines.extend(side_effect_messages)
-                battle_content = "\n".join(content_lines)
-                # Build user display
-                if user_broke:
-                    user_field_name = f"{original_user.display_name} 的長度："
-                    user_field_value = "8"
-                else:
-                    d_chars_user = list("=" * min(i, size_user - 1))
-                    if user_break_counter > 0 and len(d_chars_user) > 0:
-                        num = min(user_break_counter, len(d_chars_user))
-                        for idx in random.sample(range(len(d_chars_user)), num):
-                            d_chars_user[idx] = "≈"
-                    user_field_name = f"{original_user.display_name} 的長度："
-                    user_field_value = f"{size_user if i >= size_user - 1 else '??'} cm\n8{''.join(d_chars_user)}D"
-                # Build opponent display
-                if opponent_broke:
-                    opp_field_name = f"{opponent.display_name} 的長度："
-                    opp_field_value = "8"
-                else:
-                    d_chars_opp = list("=" * min(i, size_opponent - 1))
-                    if opponent_break_counter > 0 and len(d_chars_opp) > 0:
-                        num = min(opponent_break_counter, len(d_chars_opp))
-                        for idx in random.sample(range(len(d_chars_opp)), num):
-                            d_chars_opp[idx] = "≈"
-                    opp_field_name = f"{opponent.display_name} 的長度："
-                    opp_field_value = f"{size_opponent if i >= size_opponent - 1 else '??'} cm\n8{''.join(d_chars_opp)}D"
+                    d_string_opponent = "=" * (size_opponent - 1)
+                    opp_final_name = f"{opponent.display_name} 的長度："
+                    opp_final_value = f"{size_opponent} cm\n8{d_string_opponent}D"
                 embed = discord.Embed(title="比長度", color=0x00ff00)
-                embed.add_field(name=user_field_name, value=user_field_value, inline=False)
-                embed.add_field(name=opp_field_name, value=opp_field_value, inline=False)
+                embed.add_field(name=user_final_name, value=user_final_value, inline=False)
+                embed.add_field(name=opp_final_name, value=opp_final_value, inline=False)
+                embed.add_field(name="結果：", value=result, inline=False)
                 embed.timestamp = t
+                
+                # Process daily check-in for both users (always global)
+                user_is_new_checkin, user_checkin_streak, user_broke_streak, user_broke_streak_on, user_freeze_used = await process_checkin(user_id)
+                opponent_is_new_checkin, opponent_checkin_streak, opponent_broke_streak, opponent_broke_streak_on, opponent_freeze_used = await process_checkin(opponent_id)
+                
+                # Set footer with check-in info
+                footer_parts = []
+                if user_is_new_checkin:
+                    if user_broke_streak:
+                        if user_freeze_used > 0:
+                            footer_parts.append(f"{original_user.display_name} 在第 {user_broke_streak_on} 天打破了簽到紀錄，消耗了 {user_freeze_used} 個凍結球！重新開始！")
+                        else:
+                            footer_parts.append(f"{original_user.display_name} 在第 {user_broke_streak_on} 天打破了簽到紀錄，重新開始！")
+                    elif user_freeze_used > 0:
+                        footer_parts.append(f"{original_user.display_name} 簽到第 {user_checkin_streak} 天！凍結球保護了連續（消耗 {user_freeze_used} 個）")
+                    else:
+                        footer_parts.append(f"{original_user.display_name} 簽到第 {user_checkin_streak} 天！")
+                if opponent_is_new_checkin:
+                    if opponent_broke_streak:
+                        if opponent_freeze_used > 0:
+                            footer_parts.append(f"{opponent.display_name} 在第 {opponent_broke_streak_on} 天打破了簽到紀錄，消耗了 {opponent_freeze_used} 個凍結球！重新開始！")
+                        else:
+                            footer_parts.append(f"{opponent.display_name} 在第 {opponent_broke_streak_on} 天打破了簽到紀錄，重新開始！")
+                    elif opponent_freeze_used > 0:
+                        footer_parts.append(f"{opponent.display_name} 簽到第 {opponent_checkin_streak} 天！凍結球保護了連續（消耗 {opponent_freeze_used} 個）")
+                    else:
+                        footer_parts.append(f"{opponent.display_name} 簽到第 {opponent_checkin_streak} 天！")
+                
                 if not guild_key:
-                    embed.set_footer(text="此次對決將記錄到全域排行榜。")
+                    footer_parts.append("此次對決將記錄到全域排行榜。")
+                
+                # footer_parts.extend(side_effect_messages)
+                
+                if footer_parts:
+                    embed.set_footer(text=" | ".join(footer_parts))
+                
                 await msg.edit(content=battle_content, embed=embed)
-                await asyncio.sleep(0.1)
 
-            # 最終結果
-            if size_user > size_opponent:
-                user_statistics["wins"] = user_statistics.get("wins", 0) + 1
-                set_user_data(0, user_id, "dsize_statistics", user_statistics)
-                opponent_statistics["losses"] = opponent_statistics.get("losses", 0) + 1
-                set_user_data(0, opponent_id, "dsize_statistics", opponent_statistics)
-                result = f"🎉 {original_user.display_name} 勝利！"
-            elif size_user < size_opponent:
-                opponent_statistics["wins"] = opponent_statistics.get("wins", 0) + 1
-                set_user_data(0, opponent_id, "dsize_statistics", opponent_statistics)
-                user_statistics["losses"] = user_statistics.get("losses", 0) + 1
-                set_user_data(0, user_id, "dsize_statistics", user_statistics)
-                result = f"🎉 {opponent.display_name} 勝利！"
-            else:
-                result = "🤝 平手！"
-
-            if size_user == -1:
-                user_final_name = f"{original_user.display_name} 的長度："
-                user_final_value = "-1 cm\n8"
-            else:
-                d_string_user = "=" * (size_user - 1)
-                user_final_name = f"{original_user.display_name} 的長度："
-                user_final_value = f"{size_user} cm\n8{d_string_user}D"
-            if size_opponent == -1:
-                opp_final_name = f"{opponent.display_name} 的長度："
-                opp_final_value = "-1 cm\n8"
-            else:
-                d_string_opponent = "=" * (size_opponent - 1)
-                opp_final_name = f"{opponent.display_name} 的長度："
-                opp_final_value = f"{size_opponent} cm\n8{d_string_opponent}D"
-            embed = discord.Embed(title="比長度", color=0x00ff00)
-            embed.add_field(name=user_final_name, value=user_final_value, inline=False)
-            embed.add_field(name=opp_final_name, value=opp_final_value, inline=False)
-            embed.add_field(name="結果：", value=result, inline=False)
-            embed.timestamp = t
-            
-            # Process daily check-in for both users (always global)
-            user_is_new_checkin, user_checkin_streak, user_broke_streak, user_broke_streak_on, user_freeze_used = await process_checkin(user_id)
-            opponent_is_new_checkin, opponent_checkin_streak, opponent_broke_streak, opponent_broke_streak_on, opponent_freeze_used = await process_checkin(opponent_id)
-            
-            # Set footer with check-in info
-            footer_parts = []
-            if user_is_new_checkin:
-                if user_broke_streak:
-                    if user_freeze_used > 0:
-                        footer_parts.append(f"{original_user.display_name} 在第 {user_broke_streak_on} 天打破了簽到紀錄，消耗了 {user_freeze_used} 個凍結球！重新開始！")
-                    else:
-                        footer_parts.append(f"{original_user.display_name} 在第 {user_broke_streak_on} 天打破了簽到紀錄，重新開始！")
-                elif user_freeze_used > 0:
-                    footer_parts.append(f"{original_user.display_name} 簽到第 {user_checkin_streak} 天！凍結球保護了連續（消耗 {user_freeze_used} 個）")
+                set_user_data(guild_key, user_id, "last_dsize_size", size_user)
+                set_user_data(guild_key, opponent_id, "last_dsize_size", size_opponent)
+                
+                # Handle check-in rewards if applicable (milestone days only)
+                if user_is_new_checkin:
+                    # Create a temporary interaction-like object for user rewards
+                    # We'll send it as a followup message
+                    await handle_checkin_rewards(interaction, original_user, user_checkin_streak, guild_key)
+                    log(f"{original_user.display_name} 簽到成功，連續 {user_checkin_streak} 天", module_name="dsize", user=original_user, guild=interaction.guild)
+                
+                if opponent_is_new_checkin:
+                    # For opponent, we need to note this but can't show interactive buttons
+                    # since they're not the one who triggered the interaction
+                    await handle_checkin_rewards(interaction, opponent, opponent_checkin_streak, guild_key)
+                    log(f"{opponent.display_name} 簽到成功，連續 {opponent_checkin_streak} 天", module_name="dsize", user=opponent, guild=interaction.guild)
+                
+                # Save to history for both users
+                user_history = get_user_data(guild_key, user_id, "dsize_history", [])
+                user_history.append({
+                    "date": now.isoformat(),
+                    "size": size_user,
+                    "type": "對決"
+                })
+                if len(user_history) > 100:
+                    user_history = user_history[-100:]
+                set_user_data(guild_key, user_id, "dsize_history", user_history)
+                
+                opponent_history = get_user_data(guild_key, opponent_id, "dsize_history", [])
+                opponent_history.append({
+                    "date": now.isoformat(),
+                    "size": size_opponent,
+                    "type": "對決"
+                })
+                if len(opponent_history) > 100:
+                    opponent_history = opponent_history[-100:]
+                set_user_data(guild_key, opponent_id, "dsize_history", opponent_history)
+            except Exception as e:
+                log(f"Error during dsize battle: {e}", module_name="dsize", user=interaction.user, guild=interaction.guild)
+                if interaction.response.is_done():
+                    await interaction.followup.send("對決過程中發生錯誤。")
                 else:
-                    footer_parts.append(f"{original_user.display_name} 簽到第 {user_checkin_streak} 天！")
-            if opponent_is_new_checkin:
-                if opponent_broke_streak:
-                    if opponent_freeze_used > 0:
-                        footer_parts.append(f"{opponent.display_name} 在第 {opponent_broke_streak_on} 天打破了簽到紀錄，消耗了 {opponent_freeze_used} 個凍結球！重新開始！")
-                    else:
-                        footer_parts.append(f"{opponent.display_name} 在第 {opponent_broke_streak_on} 天打破了簽到紀錄，重新開始！")
-                elif opponent_freeze_used > 0:
-                    footer_parts.append(f"{opponent.display_name} 簽到第 {opponent_checkin_streak} 天！凍結球保護了連續（消耗 {opponent_freeze_used} 個）")
-                else:
-                    footer_parts.append(f"{opponent.display_name} 簽到第 {opponent_checkin_streak} 天！")
-            
-            if not guild_key:
-                footer_parts.append("此次對決將記錄到全域排行榜。")
-            
-            # footer_parts.extend(side_effect_messages)
-            
-            if footer_parts:
-                embed.set_footer(text=" | ".join(footer_parts))
-            
-            await msg.edit(content=battle_content, embed=embed)
-
-            set_user_data(guild_key, user_id, "last_dsize_size", size_user)
-            set_user_data(guild_key, opponent_id, "last_dsize_size", size_opponent)
-            
-            # Handle check-in rewards if applicable (milestone days only)
-            if user_is_new_checkin:
-                # Create a temporary interaction-like object for user rewards
-                # We'll send it as a followup message
-                await handle_checkin_rewards(interaction, original_user, user_checkin_streak, guild_key)
-                log(f"{original_user.display_name} 簽到成功，連續 {user_checkin_streak} 天", module_name="dsize", user=original_user, guild=interaction.guild)
-            
-            if opponent_is_new_checkin:
-                # For opponent, we need to note this but can't show interactive buttons
-                # since they're not the one who triggered the interaction
-                await handle_checkin_rewards(interaction, opponent, opponent_checkin_streak, guild_key)
-                log(f"{opponent.display_name} 簽到成功，連續 {opponent_checkin_streak} 天", module_name="dsize", user=opponent, guild=interaction.guild)
-            
-            # Save to history for both users
-            user_history = get_user_data(guild_key, user_id, "dsize_history", [])
-            user_history.append({
-                "date": now.isoformat(),
-                "size": size_user,
-                "type": "對決"
-            })
-            if len(user_history) > 100:
-                user_history = user_history[-100:]
-            set_user_data(guild_key, user_id, "dsize_history", user_history)
-            
-            opponent_history = get_user_data(guild_key, opponent_id, "dsize_history", [])
-            opponent_history.append({
-                "date": now.isoformat(),
-                "size": size_opponent,
-                "type": "對決"
-            })
-            if len(opponent_history) > 100:
-                opponent_history = opponent_history[-100:]
-            set_user_data(guild_key, opponent_id, "dsize_history", opponent_history)
-            
-            user_using_dsize_battle.discard(user_id)
-            user_using_dsize_battle.discard(opponent_id)
+                    await interaction.edit_original_response(content="對決過程中發生錯誤。", view=None)
+            finally:
+                user_using_dsize_battle.discard(user_id)
+                user_using_dsize_battle.discard(opponent_id)
 
         @discord.ui.button(label="❌ 拒絕", style=discord.ButtonStyle.danger)
         async def cancel(self, interaction: discord.Interaction, button: discord.ui.Button):
