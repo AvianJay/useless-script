@@ -432,9 +432,10 @@ async def create(message: discord.Message, animate_gif=False) -> tuple[io.BytesI
 
 
 class UpvoteView(discord.ui.View):
-    def __init__(self):
+    def __init__(self, original_user: discord.User = None):
         super().__init__()
         self.upvotes = 0
+        self.original_user = original_user
         self.on_board_message = None  # 用於追蹤已經被放上看板的訊息
         self.on_guild_board_message = None  # 用於追蹤已經被放上公會看板的訊息
         self.upvoted_users = set()  # 用於追蹤已經點過讚的用戶
@@ -443,9 +444,9 @@ class UpvoteView(discord.ui.View):
     @discord.ui.button(emoji="⬆️", style=discord.ButtonStyle.green)
     async def upvote(self, interaction: discord.Interaction, button: discord.ui.Button):
         async with self._lock:
-            if interaction.user.id in self.upvoted_users:
-                await interaction.response.send_message("你已經點過了！", ephemeral=True)
-                return
+            # if interaction.user.id in self.upvoted_users:
+            #     await interaction.response.send_message("你已經點過了！", ephemeral=True)
+            #     return
             self.upvotes += 1
             self.upvoted_users.add(interaction.user.id)
             button.label = f" | {self.upvotes} 人"
@@ -457,7 +458,7 @@ class UpvoteView(discord.ui.View):
                     if self.on_board_message is None:  # 確保同一則訊息不會被重複放上看板
                         embed = discord.Embed()
                         embed.set_image(url=image)
-                        embed.set_author(name=message.author.display_name + f"({message.author.name})", icon_url=message.author.display_avatar.url if message.author.display_avatar else None)
+                        embed.set_author(name=self.original_user.display_name + f"({self.original_user.name})", icon_url=self.original_user.display_avatar.url if self.original_user.display_avatar else None)
                         sent_message = await channel.send(embed=embed, content=f"⬆️ | {self.upvotes} 人")
                         self.on_board_message = sent_message
                     else:
@@ -473,7 +474,7 @@ class UpvoteView(discord.ui.View):
                         if self.on_guild_board_message is None:  # 確保同一則訊息不會被重複放上公會看板
                             embed = discord.Embed()
                             embed.set_image(url=image)
-                            embed.set_author(name=message.author.display_name + f"({message.author.name})", icon_url=message.author.display_avatar.url if message.author.display_avatar else None)
+                            embed.set_author(name=self.original_user.display_name + f"({self.original_user.name})", icon_url=self.original_user.display_avatar.url if self.original_user.display_avatar else None)
                             sent_message = await guild_channel.send(embed=embed, content=f"⬆️ | {self.upvotes} 人")
                             self.on_guild_board_message = sent_message
                         else:
@@ -501,7 +502,7 @@ async def set_upvoteboard(interaction: discord.Interaction, channel: discord.Tex
 
 class BadQuoteView(UpvoteView):
     def __init__(self, message: discord.Message, user: discord.User = None):
-        super().__init__()
+        super().__init__(message.author)
         self.original_message = message
         self.user = user
 
@@ -513,12 +514,11 @@ class BadQuoteView(UpvoteView):
         if self.user.id != interaction.user.id:
             await interaction.response.send_message("只有原始請求者可以使用這個按鈕。", ephemeral=True)
             return
-        button.style = discord.ButtonStyle.primary if animate else discord.ButtonStyle.gray
+        button.style = discord.ButtonStyle.primary
         button.disabled = True  # 點擊後禁用按鈕，避免重複點擊造成多次生成
         await interaction.response.edit_message(view=self)
-        animate = button.style == discord.ButtonStyle.gray
         try:
-            output_buffer, ext = await create(self.original_message, animate_gif=animate)
+            output_buffer, ext = await create(self.original_message, animate_gif=True)
             await interaction.edit_original_response(attachments=[discord.File(output_buffer, filename=f"message_quote.{ext}")], view=self)
         except discord.HTTPException as e:
             await interaction.followup.send(f"無法上傳圖片！\n生成的圖片達到了 Discord 上傳大小的限制。", ephemeral=True)
@@ -533,7 +533,7 @@ async def make_it_a_quote(interaction: discord.Interaction, message: discord.Mes
         return
     await interaction.response.defer()
     output_buffer, ext = await create(message)
-    view = BadQuoteView(message, user=interaction.user) if message.author.display_avatar.is_animated() else UpvoteView()
+    view = BadQuoteView(message, user=interaction.user) if message.author.display_avatar.is_animated() else UpvoteView(original_user=message.author)
     await interaction.followup.send(file=discord.File(output_buffer, filename=f"message_quote.{ext}"), view=view)
 
 @bot.command(name="badquote", aliases=["bquote", "bq", "makeitaquote", "miq"])
@@ -556,7 +556,7 @@ async def badquote(ctx: commands.Context):
         await ctx.send("錯誤：訊息沒有內容。")
         return
     output_buffer, ext = await create(message)
-    view = BadQuoteView(message, user=ctx.author) if message.author.display_avatar.is_animated() else UpvoteView()
+    view = BadQuoteView(message, user=ctx.author) if message.author.display_avatar.is_animated() else UpvoteView(original_user=message.author)
     await ctx.reply(file=discord.File(output_buffer, filename=f"message_quote.{ext}"), view=view)
 
 
@@ -653,7 +653,7 @@ async def screenshot_generator(interaction: discord.Interaction, message: discor
     await interaction.response.defer()
     try:
         buffer = await screenshot(message)
-        await interaction.followup.send(file=discord.File(buffer, filename="screenshot.png"), view=UpvoteView())
+        await interaction.followup.send(file=discord.File(buffer, filename="screenshot.png"), view=UpvoteView(message.author))
         log("截圖生成完成", module_name="MessageImage", user=interaction.user, guild=interaction.guild)
     except Exception as e:
         await interaction.followup.send(f"截圖失敗: {e}", ephemeral=True)
@@ -677,7 +677,7 @@ async def screenshot_cmd(ctx: commands.Context):
 
     try:
         buffer = await screenshot(message)
-        await ctx.reply(file=discord.File(buffer, filename="screenshot.png"), view=UpvoteView())
+        await ctx.reply(file=discord.File(buffer, filename="screenshot.png"), view=UpvoteView(message.author))
         log("截圖生成完成", module_name="MessageImage", user=ctx.author, guild=ctx.guild)
     except Exception as e:
         await ctx.reply(f"截圖失敗: {e}")
@@ -721,8 +721,8 @@ async def generate_whatisthisguytalking(message: discord.Message) -> tuple[io.By
 
 
 class WhatIsThisGuyTalkingView(UpvoteView):
-    def __init__(self, screenshot_bytes: bytes, user: discord.User = None):
-        super().__init__()
+    def __init__(self, screenshot_bytes: bytes, user: discord.User = None, original_user: discord.User = None):
+        super().__init__(original_user=original_user)
         self.screenshot_bytes = screenshot_bytes  # 快取截圖 bytes，避免重複呼叫 chat_exporter
         self.user = user
 
@@ -750,7 +750,7 @@ async def whatisthisguytalking(interaction: discord.Interaction, message: discor
     try:
         buffer, screenshot_bytes = await generate_whatisthisguytalking(message)
         # msg = f"現正開放投稿！\n-# {await get_command_mention('contribute', 'what-is-this-guy-talking-about')}"
-        await interaction.followup.send(file=discord.File(buffer, filename="whatisthisguytalking.png"), view=WhatIsThisGuyTalkingView(screenshot_bytes, user=interaction.user))
+        await interaction.followup.send(file=discord.File(buffer, filename="whatisthisguytalking.png"), view=WhatIsThisGuyTalkingView(screenshot_bytes, user=interaction.user, original_user=message.author))
         log("引用圖片生成完成", module_name="MessageImage", user=interaction.user, guild=interaction.guild)
     except Exception as e:
         await interaction.followup.send(f"引用圖片生成失敗: {e}", ephemeral=True)
