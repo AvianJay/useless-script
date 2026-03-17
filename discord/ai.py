@@ -13,6 +13,17 @@ import logging
 # 全局允許提及設定（只允許提及用戶，禁止 @everyone 和 @here）
 SAFE_MENTIONS = discord.AllowedMentions(users=True, roles=False, everyone=False)
 
+# AI 模型費率（全域幣/字）
+MODEL_RATES = {
+    "openai-fast": 0.22,
+    "openai": 0.30,
+    "openai-seraphyn": 3.80,
+}
+
+GLOBAL_GUILD_ID = 0
+GLOBAL_CURRENCY_NAME = "全域幣"
+GLOBAL_BALANCE_KEY = "economy_balance"
+
 # ============================================
 # Discord 提及處理
 # ============================================
@@ -382,7 +393,8 @@ class AIResponseBuilder:
         user: discord.User,
         model_name: str = "gpt-oss",
         response_time: str = None,
-        warning: str = None
+        warning: str = None,
+        billing_info: str = None
     ) -> discord.ui.LayoutView:
         """建立 AI 回應的 LayoutView"""
         
@@ -426,6 +438,10 @@ class AIResponseBuilder:
                 remaining = remaining[split_point:].lstrip()
         
         # 底部資訊
+        if billing_info:
+            container.add_item(discord.ui.Separator(spacing=discord.SeparatorSpacing.small))
+            container.add_item(discord.ui.TextDisplay(f"-# {billing_info}"))
+
         container.add_item(discord.ui.Separator(spacing=discord.SeparatorSpacing.small))
         container.add_item(discord.ui.TextDisplay(f"-# {model_name} | {response_time or '未知時間'}"))
         
@@ -590,6 +606,78 @@ class AICommands(commands.Cog):
         self.bot = bot
         self.client = Client(api_key=config("pollinations_api_key", ""))
         self.rate_limits = {}  # 簡單的速率限制
+
+    @staticmethod
+    def _parse_model_prefix(message: str) -> tuple[str, str]:
+        """從文字指令開頭解析模型名稱，格式：<model> <message>"""
+        stripped = message.lstrip()
+        if not stripped:
+            return "openai", ""
+
+        first_token, sep, rest = stripped.partition(" ")
+        token = first_token.lower().strip()
+        if token in MODEL_RATES:
+            return token, rest.lstrip()
+        return "openai", message
+
+    @staticmethod
+    def _get_global_balance(user_id: int) -> float:
+        """取得使用者全域幣餘額"""
+        return float(get_user_data(GLOBAL_GUILD_ID, user_id, GLOBAL_BALANCE_KEY, 0.0) or 0.0)
+
+    @staticmethod
+    def _set_global_balance(user_id: int, amount: float):
+        """設定使用者全域幣餘額"""
+        set_user_data(GLOBAL_GUILD_ID, user_id, GLOBAL_BALANCE_KEY, round(max(amount, 0.0), 2))
+
+    @classmethod
+    def _charge_global_balance(cls, user_id: int, amount: float) -> tuple[float, float]:
+        """嘗試扣除全域幣，回傳 (實際扣款, 扣款後餘額)"""
+        amount = round(max(amount, 0.0), 2)
+        before = cls._get_global_balance(user_id)
+        charged = min(before, amount)
+        after = round(before - charged, 2)
+        cls._set_global_balance(user_id, after)
+        return charged, after
+
+    @classmethod
+    def _refund_global_balance(cls, user_id: int, amount: float) -> float:
+        """退款全域幣，回傳退款後餘額"""
+        amount = round(max(amount, 0.0), 2)
+        before = cls._get_global_balance(user_id)
+        after = round(before + amount, 2)
+        cls._set_global_balance(user_id, after)
+        return after
+
+    @classmethod
+    def _log_economy_transaction(cls, user_id: int, tx_type: str, amount: float, detail: str = ""):
+        """寫入經濟交易紀錄；優先使用 Economy.log_transaction，失敗時使用同格式備援。"""
+        amount = round(float(amount or 0.0), 2)
+        if amount == 0:
+            return
+
+        try:
+            from Economy import log_transaction
+            log_transaction(GLOBAL_GUILD_ID, user_id, tx_type, amount, GLOBAL_CURRENCY_NAME, detail)
+            return
+        except Exception as e:
+            log(f"AI 交易紀錄寫入 fallback: {e}", module_name="AI", level=logging.WARNING)
+
+        # fallback：與 Economy.log_transaction 相同欄位
+        from datetime import datetime, timezone
+
+        history = get_user_data(GLOBAL_GUILD_ID, user_id, "economy_history", [])
+        history.append({
+            "type": tx_type,
+            "amount": amount,
+            "currency": GLOBAL_CURRENCY_NAME,
+            "detail": detail,
+            "time": datetime.now(timezone.utc).isoformat(),
+            "balance_after": cls._get_global_balance(user_id),
+        })
+        if len(history) > 50:
+            history = history[-50:]
+        set_user_data(GLOBAL_GUILD_ID, user_id, "economy_history", history)
     
     def check_rate_limit(self, user_id: int) -> bool:
         """檢查速率限制 (每分鐘 10 次請求)"""
@@ -765,8 +853,14 @@ class AICommands(commands.Cog):
     @app_commands.describe(
         message="你想問 AI 的問題或訊息",
         image="傳入圖片讓 AI 分析（選用）",
-        new_conversation="是否開始新對話（清除之前的對話歷史）"
+        new_conversation="是否開始新對話（清除之前的對話歷史）",
+        model="選擇 AI 模型（預設 openai）"
     )
+    @app_commands.choices(model=[
+        app_commands.Choice(name="openai-fast", value="openai-fast"),
+        app_commands.Choice(name="openai", value="openai"),
+        app_commands.Choice(name="openai-seraphyn", value="openai-seraphyn"),
+    ])
     @app_commands.allowed_installs(guilds=True, users=True)
     @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
     @app_commands.checks.cooldown(1, 5.0, key=lambda i: i.user.id)
@@ -775,7 +869,8 @@ class AICommands(commands.Cog):
         interaction: discord.Interaction, 
         message: str,
         image: discord.Attachment = None,
-        new_conversation: bool = False
+        new_conversation: bool = False,
+        model: str = "openai"
     ):
         """與 AI 助手對話"""
         
@@ -815,6 +910,33 @@ class AICommands(commands.Cog):
         # 處理提及文字
         guild = interaction.guild
         resolved_message = await MentionResolver.resolve_mentions(sanitized_message, guild, self.bot)
+
+        selected_model = model if model in MODEL_RATES else "openai"
+        rate_per_char = MODEL_RATES[selected_model]
+        input_chars = len(resolved_message)
+        input_cost = round(input_chars * rate_per_char, 2)
+
+        global_balance = self._get_global_balance(user.id)
+        if global_balance < input_cost:
+            view = AIResponseBuilder.create_error_view(
+                f"全域幣不足，無法送出請求。\n"
+                f"本次輸入費用：{input_cost:,.2f} {GLOBAL_CURRENCY_NAME}（{selected_model} @ {rate_per_char:.2f}/字）\n"
+                f"目前餘額：{global_balance:,.2f} {GLOBAL_CURRENCY_NAME}"
+            )
+            await interaction.response.send_message(view=view, ephemeral=True, allowed_mentions=SAFE_MENTIONS)
+            return
+
+        charged_input, _ = self._charge_global_balance(user.id, input_cost)
+        if charged_input < input_cost:
+            view = AIResponseBuilder.create_error_view("扣款失敗，請稍後再試。")
+            await interaction.response.send_message(view=view, ephemeral=True, allowed_mentions=SAFE_MENTIONS)
+            return
+        self._log_economy_transaction(
+            user.id,
+            "AI 輸入扣費",
+            -charged_input,
+            f"模型={selected_model}，輸入={input_chars}字，費率={rate_per_char:.2f}/字"
+        )
         
         # 延遲回應（因為 AI 生成可能需要時間）
         await interaction.response.defer()
@@ -871,7 +993,31 @@ class AICommands(commands.Cog):
                 image_bytes = await image.read()
             
             # 生成回應
-            response_text, model_name, response_time = await self.generate_response(messages, image=image_bytes)
+            response_text, model_name, response_time = await self.generate_response(
+                messages,
+                model=selected_model,
+                image=image_bytes
+            )
+
+            output_chars = len(response_text)
+            output_cost = round(output_chars * rate_per_char, 2)
+            charged_output, final_balance = self._charge_global_balance(user.id, output_cost)
+            self._log_economy_transaction(
+                user.id,
+                "AI 輸出扣費",
+                -charged_output,
+                f"模型={selected_model}，輸出={output_chars}字，費率={rate_per_char:.2f}/字"
+            )
+
+            shortfall = round(max(output_cost - charged_output, 0.0), 2)
+            total_cost = round(input_cost + output_cost, 2)
+            total_charged = round(charged_input + charged_output, 2)
+            billing_info = (
+                f"{rate_per_char:.2f}/C | IN {input_chars}C | "
+                f"OUT {output_chars}C | TC {total_charged:,.2f} | "
+            )
+            # if shortfall > 0:
+            #     billing_info += f" | 餘額不足少扣 {shortfall:,.2f}（原應扣 {total_cost:,.2f}）"
             
             # 儲存對話歷史（圖片為一次性，不存入歷史）
             ConversationManager.add_message(user.id, "user", resolved_message, guild_id)
@@ -887,12 +1033,20 @@ class AICommands(commands.Cog):
                 user=user,
                 model_name=model_name,
                 response_time=response_time,
-                warning=warning
+                warning=warning,
+                billing_info=billing_info
             )
             
             await interaction.followup.send(view=view, allowed_mentions=SAFE_MENTIONS)
             
         except Exception as e:
+            self._refund_global_balance(user.id, charged_input)
+            self._log_economy_transaction(
+                user.id,
+                "AI 退款",
+                charged_input,
+                f"模型={selected_model}，生成失敗，退回輸入扣費"
+            )
             log(f"AI 指令錯誤: {e}", module_name="AI", level=logging.ERROR)
             view = AIResponseBuilder.create_error_view(
                 f"生成回應時發生錯誤：{str(e)[:200]}"
@@ -963,6 +1117,18 @@ class AICommands(commands.Cog):
             return
         
         # 若只有圖片沒有文字，給一個預設提示
+        selected_model = "openai"
+        if message is not None:
+            selected_model, parsed_message = self._parse_model_prefix(message)
+            if parsed_message.strip():
+                message = parsed_message
+            elif image_attachment is None:
+                await ctx.reply(
+                    "❌ 模型名稱後面要接訊息內容，例如：`!ai openai-fast 你今天好嗎`",
+                    allowed_mentions=SAFE_MENTIONS
+                )
+                return
+
         if message is None:
             message = "請描述這張圖片"
         
@@ -985,6 +1151,31 @@ class AICommands(commands.Cog):
         
         # 清理輸入
         sanitized_message, minor_threats = PromptGuard.sanitize_input(resolved_message)
+
+        rate_per_char = MODEL_RATES.get(selected_model, MODEL_RATES["openai"])
+        input_chars = len(sanitized_message)
+        input_cost = round(input_chars * rate_per_char, 2)
+        global_balance = self._get_global_balance(user.id)
+
+        if global_balance < input_cost:
+            await ctx.reply(
+                f"❌ 全域幣不足，無法送出請求。\n"
+                f"本次輸入費用：{input_cost:,.2f} {GLOBAL_CURRENCY_NAME}（{selected_model} @ {rate_per_char:.2f}/字）\n"
+                f"目前餘額：{global_balance:,.2f} {GLOBAL_CURRENCY_NAME}",
+                allowed_mentions=SAFE_MENTIONS
+            )
+            return
+
+        charged_input, _ = self._charge_global_balance(user.id, input_cost)
+        if charged_input < input_cost:
+            await ctx.reply("❌ 扣款失敗，請稍後再試。", allowed_mentions=SAFE_MENTIONS)
+            return
+        self._log_economy_transaction(
+            user.id,
+            "AI 輸入扣費",
+            -charged_input,
+            f"模型={selected_model}，輸入={input_chars}字，費率={rate_per_char:.2f}/字"
+        )
         
         # 處理回覆訊息
         reply_context = ""
@@ -1058,7 +1249,32 @@ class AICommands(commands.Cog):
                     image_bytes = await image_attachment.read()
                 
                 # 生成回應
-                response_text, model_name, response_time = await self.generate_response(messages, image=image_bytes)
+                response_text, model_name, response_time = await self.generate_response(
+                    messages,
+                    model=selected_model,
+                    image=image_bytes
+                )
+
+                output_chars = len(response_text)
+                output_cost = round(output_chars * rate_per_char, 2)
+                charged_output, final_balance = self._charge_global_balance(user.id, output_cost)
+                self._log_economy_transaction(
+                    user.id,
+                    "AI 輸出扣費",
+                    -charged_output,
+                    f"模型={selected_model}，輸出={output_chars}字，費率={rate_per_char:.2f}/字"
+                )
+
+                shortfall = round(max(output_cost - charged_output, 0.0), 2)
+                total_cost = round(input_cost + output_cost, 2)
+                total_charged = round(charged_input + charged_output, 2)
+                billing_info = (
+                    f"費率 {rate_per_char:.2f}/字 | 輸入 {input_chars} 字 {input_cost:,.2f} | "
+                    f"輸出 {output_chars} 字 {output_cost:,.2f} | 扣款 {total_charged:,.2f} {GLOBAL_CURRENCY_NAME} | "
+                    f"餘額 {final_balance:,.2f}"
+                )
+                if shortfall > 0:
+                    billing_info += f" | 餘額不足少扣 {shortfall:,.2f}（原應扣 {total_cost:,.2f}）"
                 
                 # 儲存對話歷史（圖片為一次性，不存入歷史）
                 ConversationManager.add_message(user.id, "user", final_message, guild_id)
@@ -1074,12 +1290,20 @@ class AICommands(commands.Cog):
                     user=user,
                     model_name=model_name,
                     warning=warning,
-                    response_time=response_time
+                    response_time=response_time,
+                    billing_info=billing_info
                 )
                 
                 await ctx.reply(view=view, allowed_mentions=SAFE_MENTIONS)
                 
             except Exception as e:
+                self._refund_global_balance(user.id, charged_input)
+                self._log_economy_transaction(
+                    user.id,
+                    "AI 退款",
+                    charged_input,
+                    f"模型={selected_model}，生成失敗，退回輸入扣費"
+                )
                 log(f"AI 文字指令錯誤: {e}", module_name="AI", level=logging.ERROR)
                 view = AIResponseBuilder.create_error_view(
                     f"生成回應時發生錯誤：{str(e)[:200]}"
