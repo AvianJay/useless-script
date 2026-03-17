@@ -776,7 +776,7 @@ class BaziCog(commands.Cog):
             gender_value = gender.value if gender else "男"
             result = paipan(year, month, day, hour, gender_value)
             view = _build_bazi_view(result)
-            await interaction.response.send_message(view=view, ephemeral=not public)
+            await interaction.response.send_message(view=view, ephemeral=not public, allowed_mentions=discord.AllowedMentions.none())
         except ValueError as e:
             await interaction.response.send_message(view=_build_error_view(str(e)), ephemeral=True)
         except Exception:

@@ -441,11 +441,10 @@ class AIResponseBuilder:
                 remaining = remaining[split_point:].lstrip()
         
         # 底部資訊
+        container.add_item(discord.ui.Separator(spacing=discord.SeparatorSpacing.small))
         if billing_info:
-            container.add_item(discord.ui.Separator(spacing=discord.SeparatorSpacing.small))
             container.add_item(discord.ui.TextDisplay(f"-# {billing_info}"))
 
-        container.add_item(discord.ui.Separator(spacing=discord.SeparatorSpacing.small))
         container.add_item(discord.ui.TextDisplay(f"-# {model_name} | {response_time or '未知時間'}"))
         
         view.add_item(container)
