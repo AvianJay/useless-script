@@ -7,6 +7,9 @@ from datetime import datetime, timezone
 
 
 class ReplyFeedbackView(discord.ui.View):
+    def __init__(self):
+        super().__init__(timeout=None)
+
     @discord.ui.button(label="回覆", style=discord.ButtonStyle.primary, custom_id="reply_feedback")
     async def provide_feedback(self, interaction: discord.Interaction, button: discord.ui.Button):
         class FeedbackReplyModal(discord.ui.Modal, title="回覆使用者回饋"):

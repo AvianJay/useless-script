@@ -25,6 +25,9 @@ async def determine_prefix(bot, message):
     return str(config("prefix", "!"))
 
 class DontRemindMeProfixView(discord.ui.View):
+    def __init__(self):
+        super().__init__(timeout=None)
+
     @discord.ui.button(label="不要再提醒了", style=discord.ButtonStyle.secondary, custom_id="dont_remind_prefix")
     async def dont_remind_prefix(self, interaction: discord.Interaction, button: discord.ui.Button):
         embed = discord.Embed(
