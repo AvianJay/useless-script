@@ -632,6 +632,7 @@ translations = {
     "public": "公開",
     "model": "模型",
     "ai-set-default-model": "ai-設定預設模型",
+    "global-mode": "全域模式",
 }
 class CommandNameTranslator(app_commands.Translator):
     async def translate(
