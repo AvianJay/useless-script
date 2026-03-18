@@ -80,6 +80,8 @@ class Database:
                     # Try to convert to bool
                     if result[0].lower() in ('true', 'false'):
                         return result[0].lower() == 'true'
+                    if result[0].lower() == 'none':
+                        return None
                     # Try to convert to int if it looks like a number
                     try:
                         return int(result[0])
@@ -223,6 +225,8 @@ class Database:
                     # Try to convert to bool
                     if result[0].lower() in ('true', 'false'):
                         return result[0].lower() == 'true'
+                    if result[0].lower() == 'none':
+                        return None
                     # Try to convert to int if it looks like a number
                     try:
                         return int(result[0])
