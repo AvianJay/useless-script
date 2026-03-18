@@ -606,6 +606,7 @@ translations = {
     "gender": "性別",
     "public": "公開",
     "model": "模型",
+    "ai-set-default-model": "ai-設定預設模型",
 }
 class CommandNameTranslator(app_commands.Translator):
     async def translate(

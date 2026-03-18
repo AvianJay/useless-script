@@ -61,7 +61,7 @@ class MentionResolver:
         for match in cls.USER_MENTION.finditer(text):
             user_id = int(match.group(1))
             user_name = await cls._get_user_name(user_id, guild, bot)
-            result = result.replace(match.group(0), f"@{user_name}")
+            result = result.replace(match.group(0), f"@{user_name}(ID:{user_id})")
         
         # 處理頻道提及 <#123456789>
         for match in cls.CHANNEL_MENTION.finditer(text):
@@ -367,6 +367,7 @@ SYSTEM_PROMPT = """你是 Discord 群組裡的搞笑 AI，個性抽象。
 - 不用太正經，聊天室不是寫報告
 - 可以使用 Discord 支援的 Markdown
 - 當在問問題時要看出他到底是在開玩笑的問還是認真的問
+- 可以適量的使用 ID 提及其他用戶 （例如：<@123456789>），但是不要濫用，不要過度提及同一個人，避免造成騷擾
 
 **但還是有底線**:
 - **要遵守 Discord 使用條款和社群準則**，不說違規內容
@@ -774,13 +775,14 @@ class AICommands(commands.Cog):
                 trigger = ""
                 if meta:
                     user_name = "某人"
+                    user_id = getattr(meta, "user_id", None)
                     try:
                         if meta.user:
                             user_name = meta.user.display_name
                     except Exception:
                         pass
                     cmd_name = getattr(meta, "name", None) or "指令"
-                    trigger = f" (回應 {user_name} 的 /{cmd_name})"
+                    trigger = f" (回應 {user_name}(ID:{user_id}) 的 /{cmd_name})"
                 return f"[本機器人{trigger}]: {body}"
 
             # ── 其他機器人：只保留有互動 metadata 的（斜線指令回應） ──
@@ -788,18 +790,19 @@ class AICommands(commands.Cog):
             if not meta:
                 return None
             user_name = "某人"
+            user_id = getattr(meta, "user_id", None)
             try:
                 if meta.user:
                     user_name = meta.user.display_name
             except Exception:
                 pass
             cmd_name = getattr(meta, "name", None) or "指令"
-            label = f"[{user_name} 使用了 /{cmd_name}]"
+            label = f"[{user_name}(ID:{user_id}) 使用了 /{cmd_name}]"
             if msg.embeds:
                 summary = AICommands._embed_summary(msg.embeds[0])
                 if summary:
                     label += f" → {summary}"
-            return f"{msg.author.display_name}: {label}"
+            return f"{msg.author.display_name} (ID: {msg.author.id}): {label}"
 
         # ── 一般用戶訊息 ──
         extra_parts = []   # 非文字內容標籤
@@ -813,7 +816,7 @@ class AICommands(commands.Cog):
                     fwd_content = fwd.content if fwd.content else "[圖片/附件]"
                     if len(fwd_content) > 100:
                         fwd_content = fwd_content[:100] + "..."
-                    extra_parts.append(f"[轉發 {fwd.author.display_name} 的訊息: {fwd_content}]")
+                    extra_parts.append(f"[轉發 {fwd.author.display_name} (ID: {fwd.author.id}) 的訊息: {fwd_content}]")
                 else:
                     extra_parts.append("[轉發訊息]")
             elif msg.reference.resolved:
@@ -821,7 +824,7 @@ class AICommands(commands.Cog):
                 ref_content = ref.content if ref.content else "[圖片/附件]"
                 if len(ref_content) > 50:
                     ref_content = ref_content[:50] + "..."
-                reply = f" (回覆 {ref.author.display_name}: {ref_content})"
+                reply = f" (回覆 {ref.author.display_name} (ID: {ref.author.id}): {ref_content})"
 
         # 附件 / 貼圖
         if msg.attachments:
@@ -849,7 +852,26 @@ class AICommands(commands.Cog):
                 msg_text = msg_text[:100] + "..."
 
         body = (msg_text + " " + " ".join(extra_parts)).strip() if extra_parts else msg_text
-        return f"{msg.author.display_name}{reply}: {body}"
+        return f"{msg.author.display_name} (ID: {msg.author.id}){reply}: {body}"
+
+    @staticmethod
+    async def _set_default_model(
+        user_id: int,
+        model: str
+    ) -> bool:
+        """設定使用者的預設模型，返回是否成功"""
+        if model not in MODEL_RATES:
+            return False
+        set_user_data(GLOBAL_GUILD_ID, user_id, "default_ai_model", model)
+        return True
+
+    @staticmethod
+    async def _get_default_model(user_id: int) -> str:
+        """取得使用者的預設模型，默認為 openai-fast"""
+        model = get_user_data(GLOBAL_GUILD_ID, user_id, "default_ai_model", "openai-fast")
+        if model not in MODEL_RATES:
+            return "openai-fast"
+        return model
 
     async def model_select_autocomplete(
         self,
@@ -879,7 +901,7 @@ class AICommands(commands.Cog):
         message="你想問 AI 的問題或訊息",
         image="傳入圖片讓 AI 分析（選用）",
         new_conversation="是否開始新對話（清除之前的對話歷史）",
-        model="選擇 AI 模型（預設 openai）"
+        model="選擇 AI 模型（預設 openai-fast）"
     )
     @app_commands.autocomplete(model=model_select_autocomplete)
     @app_commands.allowed_installs(guilds=True, users=True)
@@ -891,7 +913,7 @@ class AICommands(commands.Cog):
         message: str,
         image: discord.Attachment = None,
         new_conversation: bool = False,
-        model: str = "openai"
+        model: str = None
     ):
         """與 AI 助手對話"""
         
@@ -932,7 +954,7 @@ class AICommands(commands.Cog):
         guild = interaction.guild
         resolved_message = await MentionResolver.resolve_mentions(sanitized_message, guild, self.bot)
 
-        selected_model = model if model in MODEL_RATES else "openai"
+        selected_model = model if model and model in MODEL_RATES else await self._get_default_model(user.id)
         rate_per_char = MODEL_RATES[selected_model]
         input_chars = len(resolved_message)
         input_cost = round(input_chars * rate_per_char, 2)
@@ -970,13 +992,13 @@ class AICommands(commands.Cog):
             history = ConversationManager.get_history(user.id, guild_id)
             
             # 構建訊息列表（包含用戶名稱和頻道上下文）
-            user_context = f"當前與你對話的用戶是：{user.display_name}"
+            user_context = f"當前與你對話的用戶是：{user.display_name} (ID: {user.id})"
 
             # 伺服器資訊（僅限 guild integration）
             guild_info = "(用戶安裝於伺服器外，無法獲取伺服器資訊/私訊中)"
             if interaction.guild:
                 g = interaction.guild
-                owner_name = g.owner.display_name if g.owner else f"ID:{g.owner_id}"
+                owner_name = g.owner.display_name + f" (ID: {g.owner_id})" if g.owner else f"ID:{g.owner_id}"
                 channel_name = interaction.channel.name if interaction.channel and hasattr(interaction.channel, 'name') else "未知頻道"
                 description = g.description if g.description else "無描述"
                 guild_info = (
@@ -1036,8 +1058,8 @@ class AICommands(commands.Cog):
             total_cost = round(input_cost + output_cost, 2)
             total_charged = round(charged_input + charged_output, 2)
             billing_info = (
-                f"{rate_per_char:.2f}/C | IN {input_chars}C | "
-                f"OUT {output_chars}C | TC {total_charged:,.2f} | "
+                f"{rate_per_char:.2f}/C | I {input_chars}C/{input_cost:,.2f} | "
+                f"O {output_chars}C/{output_cost:,.2f} | TC {total_charged:,.2f}"
             )
             # if shortfall > 0:
             #     billing_info += f" | 餘額不足少扣 {shortfall:,.2f}（原應扣 {total_cost:,.2f}）"
@@ -1109,7 +1131,26 @@ class AICommands(commands.Cog):
         view = AIResponseBuilder.create_history_view(recent_history, len(history))
         
         await interaction.response.send_message(view=view, ephemeral=True, allowed_mentions=SAFE_MENTIONS)
-    
+
+    @app_commands.command(name="ai-set-default-model", description="設定你使用 AI 指令的預設模型")
+    @app_commands.describe(
+        model="選擇預設 AI 模型"
+    )
+    @app_commands.autocomplete(model=model_select_autocomplete)
+    @app_commands.allowed_installs(guilds=True, users=True)
+    @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
+    async def ai_set_default_model(self, interaction: discord.Interaction, model: str):
+        """設定預設模型"""
+        
+        user = interaction.user
+        
+        if model not in MODEL_RATES:
+            await interaction.response.send_message("❌ 無效的模型名稱。", ephemeral=True, allowed_mentions=SAFE_MENTIONS)
+            return
+
+        self._set_default_model(user.id, model)
+        await interaction.response.send_message(f"✅ 已設定預設模型為：{model}", ephemeral=True, allowed_mentions=SAFE_MENTIONS)
+
     # ============================================
     # 文字指令
     # ============================================
@@ -1140,7 +1181,7 @@ class AICommands(commands.Cog):
             return
         
         # 若只有圖片沒有文字，給一個預設提示
-        selected_model = "openai"
+        selected_model = await self._get_default_model(user.id)
         if message is not None:
             selected_model, parsed_message = self._parse_model_prefix(message)
             if parsed_message.strip():
@@ -1241,6 +1282,7 @@ class AICommands(commands.Cog):
                         f"（成員 {guild.member_count} 人，擁有者：{owner_name}，"
                         f"伺服器加成：Lv{guild.premium_tier} / {guild.premium_subscription_count} 個，"
                         f"目前頻道：#{channel_name}）"
+                        f"\n伺服器描述：{guild.description if guild.description else '無描述'}"
                     )
 
                 # 獲取頻道最近訊息作為上下文（僅限伺服器）
@@ -1292,9 +1334,8 @@ class AICommands(commands.Cog):
                 total_cost = round(input_cost + output_cost, 2)
                 total_charged = round(charged_input + charged_output, 2)
                 billing_info = (
-                    f"費率 {rate_per_char:.2f}/字 | 輸入 {input_chars} 字 {input_cost:,.2f} | "
-                    f"輸出 {output_chars} 字 {output_cost:,.2f} | 扣款 {total_charged:,.2f} {GLOBAL_CURRENCY_NAME} | "
-                    f"餘額 {final_balance:,.2f}"
+                    f"{rate_per_char:.2f}/C | I {input_chars}C/{input_cost:,.2f} | "
+                    f"O {output_chars}C/{output_cost:,.2f} | TC {total_charged:,.2f}"
                 )
                 if shortfall > 0:
                     billing_info += f" | 餘額不足少扣 {shortfall:,.2f}（原應扣 {total_cost:,.2f}）"
@@ -1368,13 +1409,13 @@ class AICommands(commands.Cog):
         ConversationManager.clear_history(user.id, guild_id)
         await ctx.reply("✅ 對話歷史已清除！", allowed_mentions=SAFE_MENTIONS)
     
-    @commands.command(name="ai-history", aliases=["aihistory", "chathistory"])
+    @commands.command(name="ai-history", aliases=["aihistory", "chathistory", "aih"])
     async def ai_history_text(self, ctx: commands.Context):
         """
         查看 AI 對話歷史
         
         用法: !ai-history
-        別名: !aihistory, !chathistory
+        別名: !aihistory, !chathistory, !aih
         """
         user = ctx.author
         guild_id = ctx.guild.id if ctx.guild else None
@@ -1383,14 +1424,14 @@ class AICommands(commands.Cog):
         
         if not history:
             view = AIResponseBuilder.create_empty_history_view()
-            await ctx.reply(view=view, allowed_mentions=SAFE_MENTIONS)
+            await ctx.reply(view=view, allowed_mentions=discord.AllowedMentions.none())
             return
         
         # 只顯示最近 10 條
         recent_history = history[-10:]
         view = AIResponseBuilder.create_history_view(recent_history, len(history))
         
-        await ctx.reply(view=view, allowed_mentions=SAFE_MENTIONS)
+        await ctx.reply(view=view, allowed_mentions=discord.AllowedMentions.none())
 
 
 asyncio.run(bot.add_cog(AICommands(bot)))
