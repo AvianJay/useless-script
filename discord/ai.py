@@ -963,11 +963,13 @@ class AICommands(commands.Cog):
                 g = interaction.guild
                 owner_name = g.owner.display_name if g.owner else f"ID:{g.owner_id}"
                 channel_name = interaction.channel.name if interaction.channel and hasattr(interaction.channel, 'name') else "未知頻道"
+                description = g.description if g.description else "無描述"
                 guild_info = (
                     f"\n目前所在伺服器：{g.name}"
                     f"（成員 {g.member_count} 人，擁有者：{owner_name}，"
                     f"伺服器加成：Lv{g.premium_tier} / {g.premium_subscription_count} 個，"
                     f"目前頻道：#{channel_name}）"
+                    f"\n伺服器描述：{description}"
                 )
 
             # 獲取頻道最近訊息作為上下文（僅限伺服器）
