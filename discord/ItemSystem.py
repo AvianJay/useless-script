@@ -3,7 +3,10 @@ import discord
 import asyncio
 import logging
 import secrets
-from globalenv import bot, start_bot, get_user_data, set_user_data, get_server_config, set_server_config
+from globalenv import (
+    bot, start_bot, get_user_data, set_user_data, get_server_config, set_server_config,
+    interaction_uses_guild_scope, get_interaction_scope_guild_id,
+)
 from discord import app_commands
 from discord.ext import commands
 from logger import log
@@ -96,7 +99,7 @@ def get_all_items_for_guild(guild_id: int = None) -> list:
 
 
 async def get_user_items_autocomplete(interaction: discord.Interaction, current: str):
-    guild_id = interaction.guild.id if interaction.is_guild_integration() else None
+    guild_id = interaction.guild.id if interaction_uses_guild_scope(interaction) else None
     user_id = interaction.user.id
     user_items = get_user_data(guild_id, user_id, "items", {})
     user_items = {item_id: count for item_id, count in user_items.items() if count > 0}
@@ -108,7 +111,7 @@ async def get_user_items_autocomplete(interaction: discord.Interaction, current:
 
 
 async def all_items_autocomplete(interaction: discord.Interaction, current: str):
-    guild_id = interaction.guild.id if (interaction.guild and interaction.is_guild_integration()) else None
+    guild_id = interaction.guild.id if interaction_uses_guild_scope(interaction) else None
     all_items_list = get_all_items_for_guild(guild_id)
     choices = [item for item in all_items_list if current.lower() in item["name"].lower()]
     return [app_commands.Choice(name=item["name"], value=item["id"]) for item in choices[:25]]
@@ -131,9 +134,9 @@ async def get_user_items_scoped_autocomplete(interaction: discord.Interaction, c
     if scope == 'global':
         guild_id = 0
     elif scope == 'server':
-        guild_id = interaction.guild.id if interaction.is_guild_integration() else 0
+        guild_id = get_interaction_scope_guild_id(interaction)
     else:
-        guild_id = interaction.guild.id if interaction.is_guild_integration() else 0
+        guild_id = get_interaction_scope_guild_id(interaction)
     user_id = interaction.user.id
     user_items = get_user_data(guild_id, user_id, "items", {})
     user_items = {item_id: count for item_id, count in user_items.items() if count > 0}
@@ -205,12 +208,12 @@ class ItemSystem(commands.GroupCog, name="item", description="物品系統指令
     async def list_items(self, interaction: discord.Interaction, scope: str = None):
         user_id = interaction.user.id
         if scope is None:
-            scope = "server" if (interaction.guild and interaction.is_guild_integration()) else "global"
+            scope = "server" if interaction_uses_guild_scope(interaction) else "global"
         if scope == "global":
             guild_id = 0
             scope_name = "全域"
         else:
-            if not interaction.is_guild_integration():
+            if not interaction_uses_guild_scope(interaction):
                 await interaction.response.send_message("❌ 在私訊中請使用全域範圍。", ephemeral=True)
                 return
             guild_id = interaction.guild.id
@@ -245,8 +248,8 @@ class ItemSystem(commands.GroupCog, name="item", description="物品系統指令
     async def use_item(self, interaction: discord.Interaction, item_id: str, scope: str = None):
         user_id = interaction.user.id
         if scope is None:
-            scope = "server" if (interaction.guild and interaction.is_guild_integration()) else "global"
-        guild_id = 0 if scope == "global" else (interaction.guild.id if interaction.is_guild_integration() else 0)
+            scope = "server" if interaction_uses_guild_scope(interaction) else "global"
+        guild_id = 0 if scope == "global" else get_interaction_scope_guild_id(interaction)
         user_items = get_user_data(guild_id, user_id, "items", {})
         
         if item_id not in user_items.keys() or user_items[item_id] <= 0:
@@ -286,11 +289,11 @@ class ItemSystem(commands.GroupCog, name="item", description="物品系統指令
     )
     async def drop_item(self, interaction: discord.Interaction, item_id: str, amount: int = 1, can_pickup: str = "True", pickup_duration: int = 60, pickup_only_once: str = "False", scope: str = None):
         if scope is None:
-            scope = "server" if (interaction.guild and interaction.is_guild_integration()) else "global"
+            scope = "server" if interaction_uses_guild_scope(interaction) else "global"
         can_pickup = (can_pickup == "True")
         pickup_only_once = (pickup_only_once == "True")
         user_id = interaction.user.id
-        guild_id = 0 if scope == "global" else (interaction.guild.id if interaction.is_guild_integration() else 0)
+        guild_id = 0 if scope == "global" else get_interaction_scope_guild_id(interaction)
         user_item_count = await get_user_items(guild_id, user_id, item_id)
 
         if user_item_count <= 0:
@@ -414,10 +417,10 @@ class ItemSystem(commands.GroupCog, name="item", description="物品系統指令
     async def give_item(self, interaction: discord.Interaction, user: discord.User, item_id: str, amount: int = 1, scope: str = None):
         await interaction.response.defer()
         if scope is None:
-            scope = "server" if (interaction.guild and interaction.is_guild_integration()) else "global"
+            scope = "server" if interaction_uses_guild_scope(interaction) else "global"
         giver_id = interaction.user.id
         receiver_id = user.id
-        guild_id = 0 if scope == "global" else (interaction.guild.id if interaction.is_guild_integration() else 0)
+        guild_id = 0 if scope == "global" else get_interaction_scope_guild_id(interaction)
         
         if giver_id == receiver_id:
             await interaction.followup.send("你不能給自己物品。")
@@ -446,7 +449,8 @@ class ItemSystem(commands.GroupCog, name="item", description="物品系統指令
         await interaction.followup.send(f"你給了 {user.display_name}(`{user.name}`) {removed} 個 {item['name']}。", allowed_mentions=discord.AllowedMentions.none())
         # dm the receiver
         try:
-            await user.send(f"你從 {interaction.user.display_name}(`{interaction.user.name}`) 那裡收到了 {amount} 個 {item['name']}！\n-# 伺服器: {interaction.guild.name if interaction.is_guild_integration() else '私人訊息'}", allowed_mentions=discord.AllowedMentions.none())
+            scope_name = interaction.guild.name if interaction_uses_guild_scope(interaction) and interaction.guild else "私人訊息"
+            await user.send(f"你從 {interaction.user.display_name}(`{interaction.user.name}`) 那裡收到了 {amount} 個 {item['name']}！\n-# 伺服器: {scope_name}", allowed_mentions=discord.AllowedMentions.none())
         except Exception:
             pass
 
@@ -468,6 +472,10 @@ class ItemModerate(commands.GroupCog, name="itemmod", description="物品系統�
     async def admin_give_item(self, interaction: discord.Interaction, user: discord.User, item_id: str, amount: int = 1):
         await interaction.response.defer()
         
+        if not interaction_uses_guild_scope(interaction):
+            await interaction.followup.send("伺服器啟用了全域模式，無法使用此指令。")
+            return
+
         if user.bot:
             await interaction.followup.send("你不能給機器人物品。")
             return
@@ -499,7 +507,9 @@ class ItemModerate(commands.GroupCog, name="itemmod", description="物品系統�
     @app_commands.describe(user="你想移除物品的用戶", item_id="你想移除的物品ID", amount="你想移除的數量")
     @app_commands.autocomplete(item_id=all_items_autocomplete)
     async def admin_remove_item(self, interaction: discord.Interaction, user: discord.User, item_id: str, amount: int):
-        
+        if not interaction_uses_guild_scope(interaction):
+            await interaction.response.send_message("伺服器啟用了全域模式，無法使用此指令。", ephemeral=True)
+            return
         if user.bot:
             await interaction.response.send_message("你不能移除機器人物品。", ephemeral=True)
             return
@@ -523,7 +533,11 @@ class ItemModerate(commands.GroupCog, name="itemmod", description="物品系統�
         if not all_items_list:
             await interaction.response.send_message("目前沒有任何物品。", ephemeral=True, allowed_mentions=discord.AllowedMentions.none())
             return
-        
+
+        if not interaction_uses_guild_scope(interaction):
+            await interaction.response.send_message("伺服器啟用了全域模式，無法使用此指令。", ephemeral=True)
+            return
+
         embed = discord.Embed(title="所有可用的物品", color=0x0000ff)
         for item in all_items_list:
             custom_tag = " [自定義]" if item["id"].startswith("custom_") else ""
@@ -537,6 +551,10 @@ class ItemModerate(commands.GroupCog, name="itemmod", description="物品系統�
     async def admin_list_user_items(self, interaction: discord.Interaction, user: discord.User):
         if user.bot:
             await interaction.response.send_message("機器人沒有物品。", ephemeral=True)
+            return
+
+        if not interaction_uses_guild_scope(interaction):
+            await interaction.response.send_message("伺服器啟用了全域模式，無法使用此指令。", ephemeral=True)
             return
 
         guild_id = interaction.guild.id
@@ -568,6 +586,9 @@ class ItemModerate(commands.GroupCog, name="itemmod", description="物品系統�
         ephemeral_response="是否以隱藏訊息方式回應使用者"
     )
     async def addcustom(self, interaction: discord.Interaction, name: str, content: str, description: str = None, list_in_shop: bool = False, price: float = None, remove_after_use: bool = True, ephemeral_response: bool = False):
+        if not interaction_uses_guild_scope(interaction):
+            await interaction.response.send_message("❌ 伺服器啟用了全域模式，無法使用此指令。", ephemeral=True)
+            return
         if not name or len(name.strip()) < 1:
             await interaction.response.send_message("物品名稱不能為空。", ephemeral=True)
             return
@@ -615,6 +636,9 @@ class ItemModerate(commands.GroupCog, name="itemmod", description="物品系統�
     @app_commands.describe(item_id="要移除的自定義物品")
     @app_commands.autocomplete(item_id=custom_items_autocomplete)
     async def removecustom(self, interaction: discord.Interaction, item_id: str):
+        if not interaction_uses_guild_scope(interaction):
+            await interaction.response.send_message("❌ 伺服器啟用了全域模式，無法使用此指令。", ephemeral=True)
+            return
         guild_id = interaction.guild.id
         custom_items = get_custom_items(guild_id)
         if item_id not in custom_items:
@@ -639,6 +663,9 @@ class ItemModerate(commands.GroupCog, name="itemmod", description="物品系統�
     )
     @app_commands.autocomplete(item_id=custom_items_autocomplete)
     async def editcustom(self, interaction: discord.Interaction, item_id: str, name: str = None, description: str = None, content: str = None, list_in_shop: bool = None, price: float = None, remove_after_use: bool = None, ephemeral_response: bool = None):
+        if not interaction_uses_guild_scope(interaction):
+            await interaction.response.send_message("❌ 伺服器啟用了全域模式，無法使用此指令。", ephemeral=True)
+            return
         guild_id = interaction.guild.id
         custom_items = get_custom_items(guild_id)
         if item_id not in custom_items:
@@ -679,6 +706,9 @@ class ItemModerate(commands.GroupCog, name="itemmod", description="物品系統�
 
     @app_commands.command(name="listcustom", description="列出本伺服器的自定義物品")
     async def listcustom(self, interaction: discord.Interaction):
+        if not interaction_uses_guild_scope(interaction):
+            await interaction.response.send_message("❌ 伺服器啟用了全域模式，無法使用此指令。", ephemeral=True)
+            return
         guild_id = interaction.guild.id
         custom_items = get_custom_items(guild_id)
         if not custom_items:

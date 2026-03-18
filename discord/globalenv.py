@@ -254,6 +254,31 @@ def get_all_server_config_key(key: str):
     return db.get_all_server_config_key(key)
 
 
+ECONOMY_GLOBAL_MODE_CONFIG_KEY = "economy_global_mode"
+
+
+def is_forced_global_mode(guild_id: int | None) -> bool:
+    if not guild_id:
+        return False
+    return bool(get_server_config(guild_id, ECONOMY_GLOBAL_MODE_CONFIG_KEY, False))
+
+
+def interaction_uses_guild_scope(interaction: discord.Interaction) -> bool:
+    guild = getattr(interaction, "guild", None)
+    if not guild:
+        return False
+    if not interaction.is_guild_integration():
+        return False
+    return not is_forced_global_mode(guild.id)
+
+
+def get_interaction_scope_guild_id(interaction: discord.Interaction) -> int:
+    guild = getattr(interaction, "guild", None)
+    if guild and interaction_uses_guild_scope(interaction):
+        return guild.id
+    return 0
+
+
 # User data functions
 def get_user_data(guild_id: int, user_id: int, key: str, default=None):
     """Get user-specific data in a server"""

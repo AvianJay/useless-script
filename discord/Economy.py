@@ -1,4 +1,7 @@
-from globalenv import bot, config, get_server_config, set_server_config, get_user_data, set_user_data, get_all_user_data
+from globalenv import (
+    bot, config, get_server_config, set_server_config, get_user_data, set_user_data,
+    get_all_user_data, interaction_uses_guild_scope, ECONOMY_GLOBAL_MODE_CONFIG_KEY,
+)
 import discord
 from discord.ext import commands
 from discord import app_commands
@@ -286,6 +289,18 @@ def _economy_scope_label(guild_id: int) -> str:
     return "Global" if guild_id == GLOBAL_GUILD_ID else "Server"
 
 
+def is_global_mode_enabled(guild_id: int) -> bool:
+    return bool(get_server_config(guild_id, ECONOMY_GLOBAL_MODE_CONFIG_KEY, False))
+
+
+def set_global_mode_enabled(guild_id: int, enabled: bool):
+    set_server_config(guild_id, ECONOMY_GLOBAL_MODE_CONFIG_KEY, enabled)
+
+
+def interaction_uses_server_scope(interaction: discord.Interaction) -> bool:
+    return interaction_uses_guild_scope(interaction)
+
+
 def _economy_user_label(user) -> str:
     if not user:
         return "N/A"
@@ -480,6 +495,70 @@ def queue_economy_audit_log(*args, **kwargs):
     except RuntimeError:
         pass
 
+
+async def migrate_guild_economy_to_global(guild_id: int) -> dict:
+    user_item_rows = get_all_user_data(guild_id, "items")
+    user_balance_rows = get_all_user_data(guild_id, "economy_balance")
+    affected_user_ids = set(user_item_rows.keys()) | set(user_balance_rows.keys())
+
+    total_server_balance_converted = 0.0
+    total_server_item_value = 0.0
+    total_global_added = 0.0
+    sold_item_units = 0
+    rate = get_exchange_rate(guild_id)
+
+    for user_id in affected_user_ids:
+        user_items = get_user_data(guild_id, user_id, "items", {}) or {}
+        sell_total = 0.0
+        user_sold_units = 0
+
+        for item_id, amount in list(user_items.items()):
+            if amount <= 0:
+                continue
+            sell_price = get_item_sell_price(item_id, guild_id)
+            if sell_price > 0:
+                sell_total += sell_price * amount
+            user_sold_units += amount
+
+        if user_items:
+            set_user_data(guild_id, user_id, "items", {})
+        set_user_data(guild_id, user_id, "admin_items", {})
+
+        server_balance = float(get_balance(guild_id, user_id) or 0.0)
+        if server_balance > 0:
+            set_balance(guild_id, user_id, 0.0)
+
+        total_server_value = round(server_balance + sell_total, 2)
+        if total_server_value > 0:
+            converted_global = round(total_server_value * rate, 2)
+            set_global_balance(user_id, get_global_balance(user_id) + converted_global)
+            log_transaction(
+                GLOBAL_GUILD_ID,
+                user_id,
+                "伺服器轉全域",
+                converted_global,
+                GLOBAL_CURRENCY_NAME,
+                f"From guild {guild_id}, server value {total_server_value:,.2f}",
+            )
+            total_global_added += converted_global
+
+        total_server_balance_converted += server_balance
+        total_server_item_value += round(sell_total, 2)
+        sold_item_units += user_sold_units
+
+    set_server_config(guild_id, "economy_total_supply", 0.0)
+    set_server_config(guild_id, "economy_admin_injected", 0.0)
+    set_server_config(guild_id, "economy_transaction_count", 0)
+
+    return {
+        "affected_users": len(affected_user_ids),
+        "sold_item_units": sold_item_units,
+        "server_balance_converted": round(total_server_balance_converted, 2),
+        "server_item_value": round(total_server_item_value, 2),
+        "global_added": round(total_global_added, 2),
+        "exchange_rate": rate,
+    }
+
 def log_transaction(guild_id: int, user_id: int, tx_type: str, amount: float, currency: str, detail: str = ""):
     """記錄一筆交易到用戶的交易紀錄"""
     history = get_user_data(guild_id, user_id, "economy_history", [])
@@ -617,7 +696,7 @@ def get_item_sell_price(item_id: str, guild_id: int) -> float:
 
 async def purchasable_items_autocomplete(interaction: discord.Interaction, current: str):
     """可購買物品的自動完成（在伺服器內一律顯示含自定義物品的完整清單）"""
-    guild_id = interaction.guild.id if (interaction.guild and interaction.is_guild_integration()) else None
+    guild_id = interaction.guild.id if interaction_uses_server_scope(interaction) else None
     if guild_id:
         all_items_list = get_all_items_for_guild(guild_id)
         purchasable = [i for i in all_items_list if (i.get("worth") or 0) > 0]
@@ -634,7 +713,7 @@ async def purchasable_items_autocomplete(interaction: discord.Interaction, curre
 
 async def sellable_items_autocomplete(interaction: discord.Interaction, current: str):
     """可賣出物品的自動完成（含伺服器自定義物品）"""
-    guild_id = interaction.guild.id if interaction.is_guild_integration() else None
+    guild_id = interaction.guild.id if interaction_uses_server_scope(interaction) else None
     user_id = interaction.user.id
     user_items_data = get_user_data(guild_id, user_id, "items", {})
     owned_ids = {item_id for item_id, count in user_items_data.items() if count > 0}
@@ -664,7 +743,7 @@ class ShopView(discord.ui.View):
         # 建立 Select 選單
         options = []
         for item in purchasable[:25]:  # Discord 限制 25 個選項
-            if interaction.is_guild_integration():
+            if interaction_uses_server_scope(interaction):
                 guild_id = interaction.guild.id
                 price = get_item_buy_price(item["id"], guild_id)
                 currency = get_currency_name(guild_id)
@@ -690,14 +769,14 @@ class ShopView(discord.ui.View):
 
     async def on_item_select(self, interaction: discord.Interaction):
         selected_item_id = self.item_select.values[0]
-        item = get_item_by_id(selected_item_id, interaction.guild.id if interaction.is_guild_integration() else 0)
+        item = get_item_by_id(selected_item_id, interaction.guild.id if interaction_uses_server_scope(interaction) else 0)
 
         if not item:
             await interaction.response.send_message("❌ 無效的物品。", ephemeral=True)
             return
 
         # 顯示購買選項（伺服器商店或全域商店）
-        if interaction.is_guild_integration():
+        if interaction_uses_server_scope(interaction):
             guild_id = interaction.guild.id
             allow_flow = get_allow_global_flow(guild_id)
             is_custom = str(item["id"]).startswith("custom_")
@@ -779,7 +858,7 @@ class PurchaseModal(discord.ui.Modal):
             return
 
         # 執行購買邏輯
-        if not interaction.is_guild_integration():
+        if not interaction_uses_server_scope(interaction):
             scope = "global"
             guild_id = GLOBAL_GUILD_ID
         else:
@@ -874,7 +953,7 @@ class Economy(commands.GroupCog, name="economy", description="經濟系統指令
         target = user or interaction.user
         global_bal = get_global_balance(target.id)
 
-        if interaction.is_guild_integration():
+        if interaction_uses_server_scope(interaction):
             # 伺服器上下文：同時顯示伺服幣和全域幣
             guild_id = interaction.guild.id
             server_bal = get_balance(guild_id, target.id)
@@ -927,7 +1006,7 @@ class Economy(commands.GroupCog, name="economy", description="經濟系統指令
         
         user_id = interaction.user.id
         
-        if global_daily or not interaction.is_guild_integration():
+        if global_daily or not interaction_uses_server_scope(interaction):
             # 全域簽到
             guild_id = GLOBAL_GUILD_ID
         else:
@@ -1025,7 +1104,7 @@ class Economy(commands.GroupCog, name="economy", description="經濟系統指令
         
         user_id = interaction.user.id
         
-        if global_hourly or not interaction.is_guild_integration():
+        if global_hourly or not interaction_uses_server_scope(interaction):
             # 全域簽到
             guild_id = GLOBAL_GUILD_ID
         else:
@@ -1109,7 +1188,7 @@ class Economy(commands.GroupCog, name="economy", description="經濟系統指令
     ])
     async def pay(self, interaction: discord.Interaction, user: discord.User, amount: float, currency: str = "global"):
         # 全域安裝時強制使用全域幣
-        if not interaction.is_guild_integration():
+        if not interaction_uses_server_scope(interaction):
             currency = "global"
         if amount <= 0:
             await interaction.response.send_message("❌ 金額必須大於 0。", ephemeral=True)
@@ -1129,7 +1208,7 @@ class Economy(commands.GroupCog, name="economy", description="經濟系統指令
         fee = round(amount * TRADE_FEE_PERCENT / 100, 2)
         total_deduct = round(amount + fee, 2)
         
-        if currency == "server" and interaction.is_guild_integration():
+        if currency == "server" and interaction_uses_server_scope(interaction):
             guild_id = interaction.guild.id
             currency_name = get_currency_name(guild_id)
             sender_bal = get_balance(guild_id, sender_id)
@@ -1156,11 +1235,11 @@ class Economy(commands.GroupCog, name="economy", description="經濟系統指令
             set_global_balance(sender_id, sender_bal - total_deduct)
             set_global_balance(receiver_id, get_global_balance(receiver_id) + amount)
 
-        if interaction.is_guild_integration():
+        if interaction_uses_server_scope(interaction):
             record_transaction(interaction.guild.id)
 
         # 記錄雙方交易紀錄
-        pay_guild = guild_id if (currency == "server" and interaction.is_guild_integration()) else GLOBAL_GUILD_ID
+        pay_guild = guild_id if (currency == "server" and interaction_uses_server_scope(interaction)) else GLOBAL_GUILD_ID
         log_transaction(pay_guild, sender_id, "轉帳支出", -(amount + fee), currency_name, f"→ {user.display_name}，手續費 {fee:,.2f}")
         log_transaction(pay_guild, receiver_id, "轉帳收入", amount, currency_name, f"← {interaction.user.display_name}")
 
@@ -1208,7 +1287,7 @@ class Economy(commands.GroupCog, name="economy", description="經濟系統指令
             await interaction.response.send_message("❌ 金額必須大於 0。", ephemeral=True)
             return
         
-        if not interaction.is_guild_integration():
+        if not interaction_uses_server_scope(interaction):
             await interaction.response.send_message("❌ 這個指令只能在**有邀請此機器人的伺服器**中使用。", ephemeral=True)
             return
 
@@ -1320,7 +1399,7 @@ class Economy(commands.GroupCog, name="economy", description="經濟系統指令
     ])
     async def buy(self, interaction: discord.Interaction, item_id: str, amount: int = 1, scope: str = "server"):
         # 全域安裝時強制使用全域商店
-        if not interaction.is_guild_integration():
+        if not interaction_uses_server_scope(interaction):
             scope = "global"
             guild_id = GLOBAL_GUILD_ID
         else:
@@ -1417,7 +1496,7 @@ class Economy(commands.GroupCog, name="economy", description="經濟系統指令
             await interaction.response.send_message("❌ 數量必須大於 0。", ephemeral=True)
             return
 
-        if not interaction.is_guild_integration():
+        if not interaction_uses_server_scope(interaction):
             scope = "global"
             guild_id = GLOBAL_GUILD_ID
         else:
@@ -1532,7 +1611,7 @@ class Economy(commands.GroupCog, name="economy", description="經濟系統指令
 
     @app_commands.command(name="shop", description="查看商店")
     async def shop(self, interaction: discord.Interaction):
-        if interaction.is_guild_integration():
+        if interaction_uses_server_scope(interaction):
             purchasable = [item for item in get_all_items_for_guild(interaction.guild.id) if item.get("worth", 0) > 0]
         else:
             purchasable = [item for item in items if item.get("worth", 0) > 0]
@@ -1540,7 +1619,7 @@ class Economy(commands.GroupCog, name="economy", description="經濟系統指令
             await interaction.response.send_message("🏪 商店目前沒有任何商品。", ephemeral=True)
             return
 
-        if interaction.is_guild_integration():
+        if interaction_uses_server_scope(interaction):
             # 伺服器：顯示兩個商店
             guild_id = interaction.guild.id
             currency_name = get_currency_name(guild_id)
@@ -1631,7 +1710,7 @@ class Economy(commands.GroupCog, name="economy", description="經濟系統指令
             return
 
         # 全域安裝時強制使用全域交易
-        if not interaction.is_guild_integration():
+        if not interaction_uses_server_scope(interaction):
             global_trade = True
 
         guild_id = GLOBAL_GUILD_ID if global_trade else interaction.guild.id
@@ -1858,7 +1937,7 @@ class Economy(commands.GroupCog, name="economy", description="經濟系統指令
     ])
     async def leaderboard(self, interaction: discord.Interaction, currency: str = "server"):
         # 全域安裝時強制使用全域幣
-        if not interaction.is_guild_integration():
+        if not interaction_uses_server_scope(interaction):
             currency = "global"
         await interaction.response.defer()
 
@@ -1937,7 +2016,7 @@ class Economy(commands.GroupCog, name="economy", description="經濟系統指令
     @app_commands.command(name="info", description="查看伺服器經濟資訊")
     @app_commands.guild_only()
     async def info(self, interaction: discord.Interaction):
-        if not interaction.is_guild_integration():
+        if not interaction_uses_server_scope(interaction):
             await interaction.response.send_message("❌ 這個指令只能在伺服器中使用。", ephemeral=True)
             return
         guild_id = interaction.guild.id
@@ -2026,7 +2105,7 @@ class Economy(commands.GroupCog, name="economy", description="經濟系統指令
 
     @app_commands.command(name="adminitems", description="查看你擁有的管理員給予物品")
     async def adminitems(self, interaction: discord.Interaction):
-        if not interaction.is_guild_integration():
+        if not interaction_uses_server_scope(interaction):
             await interaction.response.send_message("❌ 此指令只能在伺服器中使用。", ephemeral=True)
             return
 
@@ -2086,8 +2165,8 @@ class Economy(commands.GroupCog, name="economy", description="經濟系統指令
     async def history(self, interaction: discord.Interaction, scope: str = None, page: int = 1):
         user_id = interaction.user.id
         if scope is None:
-            scope = "server" if interaction.is_guild_integration() else "global"
-        if scope == "global" or not interaction.is_guild_integration():
+            scope = "server" if interaction_uses_server_scope(interaction) else "global"
+        if scope == "global" or not interaction_uses_server_scope(interaction):
             guild_id = GLOBAL_GUILD_ID
             scope_name = "全域"
         else:
@@ -2152,6 +2231,75 @@ asyncio.run(bot.add_cog(Economy()))
 
 
 # ==================== Economy Mod Cog ====================
+
+class ConfirmGlobalModeView(discord.ui.View):
+    def __init__(self, guild_id: int, actor_id: int):
+        super().__init__(timeout=180)
+        self.guild_id = guild_id
+        self.actor_id = actor_id
+
+    async def _reject_if_not_actor(self, interaction: discord.Interaction) -> bool:
+        if interaction.user.id != self.actor_id:
+            await interaction.response.send_message("只有發起指令的人可以確認這次切換。", ephemeral=True)
+            return True
+        return False
+
+    async def on_timeout(self):
+        for child in self.children:
+            child.disabled = True
+
+    @discord.ui.button(label="確認改為全域", style=discord.ButtonStyle.danger)
+    async def confirm(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if await self._reject_if_not_actor(interaction):
+            return
+
+        if is_global_mode_enabled(self.guild_id):
+            await interaction.response.send_message("這個伺服器已經是全域模式了。", ephemeral=True)
+            return
+
+        await interaction.response.defer(ephemeral=True, thinking=True)
+        migration = await migrate_guild_economy_to_global(self.guild_id)
+        set_global_mode_enabled(self.guild_id, True)
+
+        queue_economy_audit_log(
+            "global_mode_enabled",
+            guild_id=self.guild_id,
+            actor=interaction.user,
+            interaction=interaction,
+            currency=GLOBAL_CURRENCY_NAME,
+            amount=migration["global_added"],
+            detail=(
+                f"Forced global mode enabled. Users={migration['affected_users']}, "
+                f"sold_items={migration['sold_item_units']}, server_balance={migration['server_balance_converted']:,.2f}, "
+                f"item_value={migration['server_item_value']:,.2f}, rate={migration['exchange_rate']:.6f}"
+            ),
+            color=0xE74C3C,
+        )
+
+        embed = discord.Embed(
+            title="已切換為全域模式",
+            description="這個伺服器之後的經濟、物品、dsize 範圍都會強制走全域。",
+            color=0xE74C3C,
+        )
+        embed.add_field(name="影響人數", value=str(migration["affected_users"]), inline=True)
+        embed.add_field(name="賣出物品數", value=str(migration["sold_item_units"]), inline=True)
+        embed.add_field(name="匯率", value=f"1 伺服幣 = {migration['exchange_rate']:.4f} 全域幣", inline=False)
+        embed.add_field(name="原伺服幣", value=f"{migration['server_balance_converted']:,.2f}", inline=True)
+        embed.add_field(name="物品折現", value=f"{migration['server_item_value']:,.2f}", inline=True)
+        embed.add_field(name="轉入全域幣", value=f"{migration['global_added']:,.2f} {GLOBAL_CURRENCY_NAME}", inline=False)
+        for child in self.children:
+            child.disabled = True
+        await interaction.followup.send(embed=embed, ephemeral=True)
+        self.stop()
+
+    @discord.ui.button(label="取消", style=discord.ButtonStyle.secondary)
+    async def cancel(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if await self._reject_if_not_actor(interaction):
+            return
+        for child in self.children:
+            child.disabled = True
+        await interaction.response.edit_message(content="已取消切換全域模式。", embed=None, view=self)
+        self.stop()
 
 @app_commands.guild_only()
 @app_commands.default_permissions(manage_guild=True)
@@ -2282,6 +2430,49 @@ class EconomyMod(commands.GroupCog, name="economymod", description="經濟系統
     #     log(f"Admin {interaction.user} cleared admin item markers for {user} in guild {guild_id}",
     #         module_name="Economy", user=interaction.user, guild=interaction.guild)
 
+    @app_commands.command(name="global-mode", description="切換這個伺服器是否強制使用全域經濟/物品/dsize")
+    @app_commands.describe(enabled="True = 強制全域，False = 恢復伺服器模式")
+    async def global_mode(self, interaction: discord.Interaction, enabled: bool):
+        guild_id = interaction.guild.id
+        current = is_global_mode_enabled(guild_id)
+
+        if enabled == current:
+            status = "全域模式" if enabled else "伺服器模式"
+            await interaction.response.send_message(f"目前已經是{status}。", ephemeral=True)
+            return
+
+        if not enabled:
+            set_global_mode_enabled(guild_id, False)
+            queue_economy_audit_log(
+                "global_mode_disabled",
+                guild_id=guild_id,
+                actor=interaction.user,
+                interaction=interaction,
+                detail="Forced global mode disabled.",
+                color=0x3498DB,
+            )
+            await interaction.response.send_message(
+                "已關閉全域模式。之後這個伺服器會恢復使用伺服器經濟、物品與 dsize 範圍。",
+                ephemeral=True,
+            )
+            return
+
+        warning = discord.Embed(
+            title="警告：即將改為全域模式",
+            description=(
+                "這會讓這個伺服器後續所有經濟、物品、dsize 的 guild 判斷都強制視為全域。\n"
+                "系統也會自動把目前伺服器內所有使用者的物品賣掉換成伺服幣，再依目前匯率轉成全域幣。"
+            ),
+            color=0xE67E22,
+        )
+        warning.add_field(name="會發生的事", value="伺服器物品清空、伺服幣清空、轉入全域幣", inline=False)
+        warning.add_field(name="不會自動還原", value="切回 False 只會恢復未來判斷，不會把已搬走的資料搬回來", inline=False)
+        await interaction.response.send_message(
+            embed=warning,
+            view=ConfirmGlobalModeView(guild_id, interaction.user.id),
+            ephemeral=True,
+        )
+
     @app_commands.command(name="toggle-flow", description="切換是否允許伺服幣與全域幣流通（兌換、全域商店等）")
     async def toggle_flow(self, interaction: discord.Interaction):
         guild_id = interaction.guild.id
@@ -2369,6 +2560,7 @@ class EconomyMod(commands.GroupCog, name="economymod", description="經濟系統
         embed.add_field(name="用戶數", value=f"{len(all_users):,}", inline=True)
         allow_flow = get_allow_global_flow(guild_id)
         embed.add_field(name="全域幣流通", value="🔓 已開啟" if allow_flow else "🔒 已關閉", inline=True)
+        embed.add_field(name="全域模式", value="🌐 已啟用" if is_global_mode_enabled(guild_id) else "🏦 已關閉", inline=True)
 
         # 濫權指標
         if total_supply > 0:

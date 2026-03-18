@@ -5,7 +5,10 @@ import asyncio
 from discord.ext import commands
 from discord import app_commands
 from datetime import datetime, timedelta, timezone
-from globalenv import bot, start_bot, get_user_data, set_user_data, get_all_user_data, get_server_config, set_server_config, modules, get_command_mention, config
+from globalenv import (
+    bot, start_bot, get_user_data, set_user_data, get_all_user_data, get_server_config,
+    set_server_config, modules, get_command_mention, config, interaction_uses_guild_scope,
+)
 from PIL import Image, ImageDraw
 from io import BytesIO
 from logger import log
@@ -288,7 +291,7 @@ async def dsize(interaction: discord.Interaction, global_dsize: str = "False"):
     guild_key = interaction.guild.id if interaction.guild else None
     if global_dsize:
         guild_key = None  # override to global
-    if not interaction.is_guild_integration():
+    if not interaction_uses_guild_scope(interaction):
         guild_key = None
         global_dsize = True
     
@@ -626,7 +629,7 @@ async def dsize_leaderboard(interaction: discord.Interaction, limit: int = 10, g
     if global_leaderboard:
         guild_id = None  # global
     else:
-        if not interaction.is_guild_integration():
+        if not interaction_uses_guild_scope(interaction):
             global_leaderboard = True
             guild_id = None
         else:
@@ -744,7 +747,7 @@ async def dsize_battle(interaction: discord.Interaction, opponent: Union[discord
         return
     
     guild_key = interaction.guild.id if interaction.guild else None
-    if not interaction.is_guild_integration():
+    if not interaction_uses_guild_scope(interaction):
         guild_key = None
         # global_dsize = True
     else:
@@ -1189,7 +1192,7 @@ async def dsize_history(interaction: discord.Interaction, user: discord.User = N
     if global_history:
         guild_key = None
     else:
-        if not interaction.is_guild_integration():
+        if not interaction_uses_guild_scope(interaction):
             global_history = True
             guild_key = None
         else:
@@ -1317,7 +1320,7 @@ async def dsize_feedgrass(interaction: discord.Interaction, user: Union[discord.
     if global_feedgrass_bool:
         guild_id = None
     else:
-        if not interaction.is_guild_integration():
+        if not interaction_uses_guild_scope(interaction):
             guild_id = None
         else:
             guild_id = interaction.guild.id if interaction.guild else None
@@ -1340,7 +1343,7 @@ async def dsize_feedgrass(interaction: discord.Interaction, user: Union[discord.
     # get random users from last 25 messages
     random_users = set()
     failed_to_get_history = False
-    if interaction.is_guild_integration():
+    if interaction_uses_guild_scope(interaction):
         try:
             async for msg in interaction.channel.history(limit=25):
                 if msg.author.id != interaction.user.id and msg.author.id != user.id:
