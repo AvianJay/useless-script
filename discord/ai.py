@@ -1148,7 +1148,7 @@ class AICommands(commands.Cog):
             await interaction.response.send_message("❌ 無效的模型名稱。", ephemeral=True, allowed_mentions=SAFE_MENTIONS)
             return
 
-        self._set_default_model(user.id, model)
+        await self._set_default_model(user.id, model)
         await interaction.response.send_message(f"✅ 已設定預設模型為：{model}", ephemeral=True, allowed_mentions=SAFE_MENTIONS)
 
     # ============================================
