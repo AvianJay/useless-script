@@ -127,6 +127,10 @@ async def shutdown(ctx):
                 task["status"] = "error"
                 task["error"] = str(e)
                 log(f"執行關閉前任務 {task['name']} 時發生錯誤: {e}", level=logging.ERROR, module_name="OwnerTools")
+            end_time = time.perf_counter()
+            task["time"] = end_time - start_time
+            await msg.edit(content=f"正在執行關閉前任務...共 {len(on_close_tasks)} 項。\n{create_shutdowntask_message(tasks, tick)}")
+            tick += 1
             await msg.edit(content=f"正在執行關閉前任務...共 {len(on_close_tasks)} 項。\n{create_shutdowntask_message(tasks, tick)}")
     await bot.close()
 
@@ -143,13 +147,37 @@ async def userdata(ctx, guild_id: int=None, user_id: int=None, key: str=None, va
         if not user_data:
             await ctx.send("沒有找到該用戶的資料。")
             return
-        await ctx.send(f"用戶 {user_id} 的資料：\n" + "\n".join(f"- {k}: {v}" for k, v in user_data.items()))
+        await ctx.send(f"用戶 {user_id} 的資料：\n")
+        al = "\n".join(f"- {k}: {v}" for k, v in user_data.items())
+        if len(al) > 1900:
+            # send as file
+            data_file = io.StringIO(al)
+            data_file.name = f"user_{user_id}_data.txt"
+            await ctx.send("資料過長，已作為檔案發送：", file=discord.File(fp=data_file))
     elif value is None:
-        data = get_user_data(guild_id, user_id, key)
+        if "." in key:
+            # dict key
+            main_key, sub_key = key.split(".", 1)
+        else:
+            main_key, sub_key = key, None
+        data = get_user_data(guild_id, user_id, main_key)
+        if sub_key and isinstance(data, dict):
+            data = data.get(sub_key)
         await ctx.send(f"用戶 {user_id} 的 {key}: {data if data is not None else '未設定'}")
     else:
-        set_user_data(guild_id, user_id, key, value)
-        await ctx.send(f"已更新用戶 {user_id} 的 {key} 為 {value}。")
+        if "." in key:
+            # dict key
+            main_key, sub_key = key.split(".", 1)
+            data = get_user_data(guild_id, user_id, main_key) or {}
+            if not isinstance(data, dict):
+                await ctx.send(f"用戶 {user_id} 的 {main_key} 不是一個字典，無法設定子鍵。")
+                return
+            data[sub_key] = value
+            set_user_data(guild_id, user_id, main_key, data)
+            await ctx.send(f"已更新用戶 {user_id} 的 {key} 為 {value}。")
+        else:
+            set_user_data(guild_id, user_id, key, value)
+            await ctx.send(f"已更新用戶 {user_id} 的 {key} 為 {value}。")
 
 
 @bot.command(aliases=["server", "sc"])
@@ -164,13 +192,37 @@ async def serverconfig(ctx, guild_id: int=None, key: str=None, value: str=None):
         if not config_data:
             await ctx.send("沒有找到該伺服器的設定。")
             return
-        await ctx.send(f"伺服器 {guild_id} 的設定：\n" + "\n".join(f"- {k}: {v}" for k, v in config_data.items()))
+        await ctx.send(f"伺服器 {guild_id} 的設定：\n")
+        al = "\n".join(f"- {k}: {v}" for k, v in config_data.items())
+        if len(al) > 1900:
+            # send as file
+            config_file = io.StringIO(al)
+            config_file.name = f"server_{guild_id}_config.txt"
+            await ctx.send("設定過長，已作為檔案發送：", file=discord.File(fp=config_file))
     elif value is None:
-        data = get_server_config(guild_id, key)
+        if "." in key:
+            # dict key
+            main_key, sub_key = key.split(".", 1)
+        else:
+            main_key, sub_key = key, None
+        data = get_server_config(guild_id, main_key)
+        if sub_key and isinstance(data, dict):
+            data = data.get(sub_key)
         await ctx.send(f"伺服器 {guild_id} 的 {key}: {data if data is not None else '未設定'}")
     else:
-        set_server_config(guild_id, key, value)
-        await ctx.send(f"已更新伺服器 {guild_id} 的 {key} 為 {value}。")
+        if "." in key:
+            # dict key
+            main_key, sub_key = key.split(".", 1)
+            data = get_server_config(guild_id, main_key) or {}
+            if not isinstance(data, dict):
+                await ctx.send(f"伺服器 {guild_id} 的 {main_key} 不是一個字典，無法設定子鍵。")
+                return
+            data[sub_key] = value
+            set_server_config(guild_id, main_key, data)
+            await ctx.send(f"已更新伺服器 {guild_id} 的 {key} 為 {value}。")
+        else:
+            set_server_config(guild_id, key, value)
+            await ctx.send(f"已更新伺服器 {guild_id} 的 {key} 為 {value}。")
 
 
 @bot.command(aliases=["l"])
