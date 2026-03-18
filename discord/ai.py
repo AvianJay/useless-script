@@ -851,13 +851,28 @@ class AICommands(commands.Cog):
         body = (msg_text + " " + " ".join(extra_parts)).strip() if extra_parts else msg_text
         return f"{msg.author.display_name}{reply}: {body}"
 
-    async def model_select_autocomplete(self, interaction: discord.Interaction, current: str) -> list[app_commands.Choice[str]]:
+    async def model_select_autocomplete(
+        self,
+        interaction: discord.Interaction,
+        current: str
+    ) -> list[app_commands.Choice[str]]:
         """模型選擇自動完成"""
+
+        current_lower = current.lower()
         choices = []
+
         for model, rate in MODEL_RATES.items():
             name = f"{model} @ {rate:.2f}/C"
-            if current.lower() in model.lower() or current.lower() in name.lower():
-                choices.append(app_commands.Choice(name=name, value=model))
+
+            if not current_lower or \
+               current_lower in model.lower() or \
+               current_lower in name.lower():
+
+                choices.append(
+                    app_commands.Choice(name=name, value=model)
+                )
+
+        return choices[:25]
 
     @app_commands.command(name="ai", description="與 AI 助手對話")
     @app_commands.describe(
