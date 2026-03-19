@@ -15,12 +15,12 @@ SAFE_MENTIONS = discord.AllowedMentions(users=True, roles=False, everyone=False)
 
 # AI 模型費率（全域幣/字）
 MODEL_RATES = {
-    "openai-fast": 0.22,
-    "openai": 0.30,
-    "openai-seraphyn": 3.80,
-    "gemini-fast": 0.20,
-    "claude-airforce": 0.25,
-    "claude-fast": 0.25,
+    "openai-fast": 0.05,
+    "openai": 0.10,
+    "openai-seraphyn": 2.60,
+    "gemini-fast": 0.10,
+    "claude-airforce": 0.15,
+    "claude-fast": 0.15,
 }
 
 GLOBAL_GUILD_ID = 0
