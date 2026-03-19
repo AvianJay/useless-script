@@ -1185,6 +1185,7 @@ class Moderate(commands.Cog):
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
     @commands.command(aliases=["mod", "m"])
+    @commands.has_permissions(ban_members=True, kick_members=True, moderate_members=True, manage_messages=True)
     async def moderate(self, ctx: commands.Context, user: Union[discord.Member, discord.User, None] = None, *, commands_str: str = ""):
         """對用戶進行多重管理操作。
         
@@ -1227,6 +1228,7 @@ class Moderate(commands.Cog):
         log(msg, module_name="Moderate", guild=ctx.guild)
     
     @commands.command(aliases=["mr", "mod_reply"])
+    @commands.has_permissions(ban_members=True, kick_members=True, moderate_members=True, manage_messages=True)
     async def moderate_reply(self, ctx: commands.Context, *, commands_str: str = ""):
         """對訊息發送者進行多重管理操作。
         
