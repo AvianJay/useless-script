@@ -633,6 +633,9 @@ translations = {
     "model": "模型",
     "ai-set-default-model": "ai-設定預設模型",
     "global-mode": "全域模式",
+    "remove_after_use": "使用後移除",
+    "ephemeral_response": "隱藏回覆",
+    "revenue_share_user": "收益分成用戶",
 }
 class CommandNameTranslator(app_commands.Translator):
     async def translate(
