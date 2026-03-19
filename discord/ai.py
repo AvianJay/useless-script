@@ -611,17 +611,17 @@ class AICommands(commands.Cog):
         self.rate_limits = {}  # 簡單的速率限制
 
     @staticmethod
-    def _parse_model_prefix(message: str) -> tuple[str, str]:
+    def _parse_model_prefix(message: str, default: str = "openai-fast") -> tuple[str, str]:
         """從文字指令開頭解析模型名稱，格式：<model> <message>"""
         stripped = message.lstrip()
         if not stripped:
-            return "openai", ""
+            return default, ""
 
         first_token, sep, rest = stripped.partition(" ")
         token = first_token.lower().strip()
         if token in MODEL_RATES:
             return token, rest.lstrip()
-        return "openai", message
+        return default, message
 
     @staticmethod
     def _get_global_balance(user_id: int) -> float:
@@ -701,7 +701,7 @@ class AICommands(commands.Cog):
         self.rate_limits[user_id].append(current_time)
         return True
     
-    async def generate_response(self, messages: list, model: str = "openai", image: bytes = None) -> tuple[str, str, str]:
+    async def generate_response(self, messages: list, model: str = "openai-fast", image: bytes = None) -> tuple[str, str, str]:
         """使用 g4f 生成 AI 回應"""
         try:
             start_time = time.perf_counter()
@@ -1183,7 +1183,7 @@ class AICommands(commands.Cog):
         # 若只有圖片沒有文字，給一個預設提示
         selected_model = await self._get_default_model(user.id)
         if message is not None:
-            selected_model, parsed_message = self._parse_model_prefix(message)
+            selected_model, parsed_message = self._parse_model_prefix(message, default=selected_model)
             if parsed_message.strip():
                 message = parsed_message
             elif image_attachment is None:
