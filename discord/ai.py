@@ -10,6 +10,8 @@ import time
 from logger import log
 import logging
 
+from Economy import log_transaction, send_economy_audit_log
+
 # 全局允許提及設定（只允許提及用戶，禁止 @everyone 和 @here）
 SAFE_MENTIONS = discord.AllowedMentions(users=True, roles=False, everyone=False)
 
@@ -660,7 +662,6 @@ class AICommands(commands.Cog):
             return
 
         try:
-            from Economy import log_transaction
             log_transaction(GLOBAL_GUILD_ID, user_id, tx_type, amount, GLOBAL_CURRENCY_NAME, detail)
             return
         except Exception as e:
@@ -681,6 +682,43 @@ class AICommands(commands.Cog):
         if len(history) > 50:
             history = history[-50:]
         set_user_data(GLOBAL_GUILD_ID, user_id, "economy_history", history)
+
+    @classmethod
+    def _queue_economy_audit_log(
+        cls,
+        *,
+        user,
+        action: str,
+        amount: float,
+        detail: str = "",
+        balance_before: float = None,
+        balance_after: float = None,
+        interaction: discord.Interaction = None,
+        ctx: commands.Context = None,
+        color: int = 0xF1C40F,
+    ):
+        amount = round(float(amount or 0.0), 2)
+        if amount == 0 or not user:
+            return
+
+        try:
+            asyncio.get_running_loop().create_task(
+                send_economy_audit_log(
+                    action,
+                    guild_id=GLOBAL_GUILD_ID,
+                    actor=user,
+                    interaction=interaction,
+                    ctx=ctx,
+                    currency=GLOBAL_CURRENCY_NAME,
+                    amount=abs(amount),
+                    balance_before=balance_before,
+                    balance_after=balance_after,
+                    detail=detail,
+                    color=color,
+                )
+            )
+        except RuntimeError:
+            pass
     
     def check_rate_limit(self, user_id: int) -> bool:
         """檢查速率限制 (每分鐘 10 次請求)"""
@@ -969,7 +1007,8 @@ class AICommands(commands.Cog):
             await interaction.response.send_message(view=view, ephemeral=True, allowed_mentions=SAFE_MENTIONS)
             return
 
-        charged_input, _ = self._charge_global_balance(user.id, input_cost)
+        balance_before_input = global_balance
+        charged_input, balance_after_input = self._charge_global_balance(user.id, input_cost)
         if charged_input < input_cost:
             view = AIResponseBuilder.create_error_view("扣款失敗，請稍後再試。")
             await interaction.response.send_message(view=view, ephemeral=True, allowed_mentions=SAFE_MENTIONS)
@@ -979,6 +1018,16 @@ class AICommands(commands.Cog):
             "AI 輸入扣費",
             -charged_input,
             f"模型={selected_model}，輸入={input_chars}字，費率={rate_per_char:.2f}/字"
+        )
+        self._queue_economy_audit_log(
+            user=user,
+            action="ai_input_charge",
+            amount=charged_input,
+            detail=f"model={selected_model} input_chars={input_chars} rate={rate_per_char:.2f}",
+            balance_before=balance_before_input,
+            balance_after=balance_after_input,
+            interaction=interaction,
+            color=0xE67E22,
         )
         
         # 延遲回應（因為 AI 生成可能需要時間）
@@ -1046,6 +1095,7 @@ class AICommands(commands.Cog):
 
             output_chars = len(response_text)
             output_cost = round(output_chars * rate_per_char, 2)
+            balance_before_output = self._get_global_balance(user.id)
             charged_output, final_balance = self._charge_global_balance(user.id, output_cost)
             self._log_economy_transaction(
                 user.id,
@@ -1054,6 +1104,16 @@ class AICommands(commands.Cog):
                 f"模型={selected_model}，輸出={output_chars}字，費率={rate_per_char:.2f}/字"
             )
 
+            self._queue_economy_audit_log(
+                user=user,
+                action="ai_output_charge",
+                amount=charged_output,
+                detail=f"model={selected_model} output_chars={output_chars} rate={rate_per_char:.2f}",
+                balance_before=balance_before_output,
+                balance_after=final_balance,
+                interaction=interaction,
+                color=0xD35400,
+            )
             shortfall = round(max(output_cost - charged_output, 0.0), 2)
             total_cost = round(input_cost + output_cost, 2)
             total_charged = round(charged_input + charged_output, 2)
@@ -1085,7 +1145,8 @@ class AICommands(commands.Cog):
             await interaction.followup.send(view=view, allowed_mentions=SAFE_MENTIONS)
             
         except Exception as e:
-            self._refund_global_balance(user.id, charged_input)
+            balance_before_refund = self._get_global_balance(user.id)
+            balance_after_refund = self._refund_global_balance(user.id, charged_input)
             self._log_economy_transaction(
                 user.id,
                 "AI 退款",
@@ -1093,6 +1154,16 @@ class AICommands(commands.Cog):
                 f"模型={selected_model}，生成失敗，退回輸入扣費"
             )
             log(f"AI 指令錯誤: {e}", module_name="AI", level=logging.ERROR)
+            self._queue_economy_audit_log(
+                user=user,
+                action="ai_refund",
+                amount=charged_input,
+                detail=f"model={selected_model} refunded_input={charged_input:.2f} because_generation_failed",
+                balance_before=balance_before_refund,
+                balance_after=balance_after_refund,
+                interaction=interaction,
+                color=0x27AE60,
+            )
             view = AIResponseBuilder.create_error_view(
                 f"生成回應時發生錯誤：{str(e)[:200]}"
             )
@@ -1230,7 +1301,8 @@ class AICommands(commands.Cog):
             )
             return
 
-        charged_input, _ = self._charge_global_balance(user.id, input_cost)
+        balance_before_input = global_balance
+        charged_input, balance_after_input = self._charge_global_balance(user.id, input_cost)
         if charged_input < input_cost:
             await ctx.reply("❌ 扣款失敗，請稍後再試。", allowed_mentions=SAFE_MENTIONS)
             return
@@ -1242,6 +1314,16 @@ class AICommands(commands.Cog):
         )
         
         # 處理回覆訊息
+        self._queue_economy_audit_log(
+            user=user,
+            action="ai_input_charge",
+            amount=charged_input,
+            detail=f"model={selected_model} input_chars={input_chars} rate={rate_per_char:.2f}",
+            balance_before=balance_before_input,
+            balance_after=balance_after_input,
+            ctx=ctx,
+            color=0xE67E22,
+        )
         reply_context = ""
         if ctx.message.reference:
             try:
@@ -1322,6 +1404,7 @@ class AICommands(commands.Cog):
 
                 output_chars = len(response_text)
                 output_cost = round(output_chars * rate_per_char, 2)
+                balance_before_output = self._get_global_balance(user.id)
                 charged_output, final_balance = self._charge_global_balance(user.id, output_cost)
                 self._log_economy_transaction(
                     user.id,
@@ -1330,6 +1413,16 @@ class AICommands(commands.Cog):
                     f"模型={selected_model}，輸出={output_chars}字，費率={rate_per_char:.2f}/字"
                 )
 
+                self._queue_economy_audit_log(
+                    user=user,
+                    action="ai_output_charge",
+                    amount=charged_output,
+                    detail=f"model={selected_model} output_chars={output_chars} rate={rate_per_char:.2f}",
+                    balance_before=balance_before_output,
+                    balance_after=final_balance,
+                    ctx=ctx,
+                    color=0xD35400,
+                )
                 shortfall = round(max(output_cost - charged_output, 0.0), 2)
                 total_cost = round(input_cost + output_cost, 2)
                 total_charged = round(charged_input + charged_output, 2)
@@ -1361,7 +1454,8 @@ class AICommands(commands.Cog):
                 await ctx.reply(view=view, allowed_mentions=SAFE_MENTIONS)
                 
             except Exception as e:
-                self._refund_global_balance(user.id, charged_input)
+                balance_before_refund = self._get_global_balance(user.id)
+                balance_after_refund = self._refund_global_balance(user.id, charged_input)
                 self._log_economy_transaction(
                     user.id,
                     "AI 退款",
@@ -1369,6 +1463,16 @@ class AICommands(commands.Cog):
                     f"模型={selected_model}，生成失敗，退回輸入扣費"
                 )
                 log(f"AI 文字指令錯誤: {e}", module_name="AI", level=logging.ERROR)
+                self._queue_economy_audit_log(
+                    user=user,
+                    action="ai_refund",
+                    amount=charged_input,
+                    detail=f"model={selected_model} refunded_input={charged_input:.2f} because_generation_failed",
+                    balance_before=balance_before_refund,
+                    balance_after=balance_after_refund,
+                    ctx=ctx,
+                    color=0x27AE60,
+                )
                 view = AIResponseBuilder.create_error_view(
                     f"生成回應時發生錯誤：{str(e)[:200]}"
                 )
