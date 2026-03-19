@@ -186,12 +186,15 @@ async def notify_user(user: discord.User, guild: discord.Guild, action: str, rea
 
 
 @bot.event
-async def on_member_remove(member):
+async def on_member_remove(member: discord.Member):
     if member.bot:
         return
     if member.id in ignore:
         return
     guild = member.guild
+    # check bot permissions
+    if not guild.me.guild_permissions.view_audit_log:
+        return
     try:
         async for entry in guild.audit_logs(limit=1):
             if entry.target.id != member.id:
