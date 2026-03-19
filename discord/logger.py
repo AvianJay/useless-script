@@ -53,6 +53,7 @@ async def _log(*messages, level = logging.INFO, module_name: str = "General", us
     if not logger.handlers:
         logger.setLevel(logging.DEBUG)
         handler = logging.FileHandler(log_filename, encoding='utf-8')
+        handler.setLevel(logging.INFO)
         formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
         handler.setFormatter(formatter)
         logger.addHandler(handler)
