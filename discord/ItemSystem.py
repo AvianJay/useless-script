@@ -20,7 +20,7 @@ admin_action_callbacks = []  # Economy module hooks into this
 CUSTOM_ITEMS_KEY = "custom_items"
 
 
-def _make_custom_text_callback(item_id: str, content: str, remove_after_use: bool = True, ephemeral_response: bool = False):
+def _make_custom_text_callback(item_id: str, content: str, remove_after_use: bool = True, ephemeral_response: bool = False, worth: float = 0, revenue_share_user_id: int = None):
     """建立自定義文字物品使用時的回呼函數"""
 
     async def callback(interaction: discord.Interaction):
@@ -31,7 +31,21 @@ def _make_custom_text_callback(item_id: str, content: str, remove_after_use: boo
         if removed <= 0:
             await interaction.response.send_message("你沒有這個物品。", ephemeral=True)
             return
-        if not remove_after_use:
+        if remove_after_use:
+            # 分潤
+            if worth > 0 and revenue_share_user_id:
+                # 90%
+                from Economy import add_balance, get_balance, get_currency_name, log_transaction, queue_economy_audit_log
+                revenue_amount = round(worth * 0.9, 2)
+                balance_before = get_balance(guild_id, revenue_share_user_id)
+                add_balance(guild_id=guild_id, user_id=revenue_share_user_id, amount=revenue_amount)
+                balance_after = get_balance(guild_id, revenue_share_user_id)
+                log_transaction(guild_id=guild_id, user_id=revenue_share_user_id, amount=revenue_amount, tx_type="item_sale", currency=get_currency_name(guild_id), detail=f"User {interaction.user.id} used item {item_id} worth {worth}")
+                revenue_share_user = interaction.guild.get_member(revenue_share_user_id) if interaction.guild else None
+                if revenue_share_user is None:
+                    revenue_share_user = bot.get_user(revenue_share_user_id)
+                queue_economy_audit_log("item_sale_income", guild_id=guild_id, actor=interaction.user, target=revenue_share_user, interaction=interaction, currency=get_currency_name(guild_id), amount=revenue_amount, target_balance_before=balance_before, target_balance_after=balance_after, item_name=item_id, item_amount=1, detail=f"User {interaction.user.id} used item {item_id} worth {worth}", color=0x2ECC71)
+        else:
             # 如果不使用後移除，則補回去
             await give_item_to_user(guild_id, user_id, item_id, 1)
         await interaction.response.send_message(content, ephemeral=ephemeral_response)
@@ -65,8 +79,18 @@ def get_item_by_id(item_id: str, guild_id: int = None):
                 "id": item_id,
                 "name": data["name"],
                 "description": data.get("description", "自定義物品。使用時會傳送儲存的文字內容。"),
-                "callback": _make_custom_text_callback(item_id, data["content"], remove_after_use=data.get("remove_after_use", True), ephemeral_response=data.get("ephemeral_response", False)),
+                "callback": _make_custom_text_callback(
+                    item_id,
+                    data["content"],
+                    remove_after_use=data.get("remove_after_use", True),
+                    ephemeral_response=data.get("ephemeral_response", False),
+                    worth=float(data.get("worth", 0)) if data.get("worth") is not None else 0,
+                    revenue_share_user_id=data.get("revenue_share_user_id"),
+                ),
                 "worth": float(data.get("worth", 0)) if data.get("worth") is not None else 0,
+                "remove_after_use": data.get("remove_after_use", True),
+                "ephemeral_response": data.get("ephemeral_response", False),
+                "revenue_share_user_id": data.get("revenue_share_user_id"),
             }
     return None
 
@@ -94,6 +118,7 @@ def get_all_items_for_guild(guild_id: int = None) -> list:
                 "worth": float(data.get("worth", 0)) if data.get("worth") is not None else 0,
                 "remove_after_use": data.get("remove_after_use", True),
                 "ephemeral_response": data.get("ephemeral_response", False),
+                "revenue_share_user_id": data.get("revenue_share_user_id"),
             })
     return result
 
@@ -585,7 +610,7 @@ class ItemModerate(commands.GroupCog, name="itemmod", description="物品系統�
         remove_after_use="使用後是否自動移除物品",
         ephemeral_response="是否以隱藏訊息方式回應使用者"
     )
-    async def addcustom(self, interaction: discord.Interaction, name: str, content: str, description: str = None, list_in_shop: bool = False, price: float = None, remove_after_use: bool = True, ephemeral_response: bool = False):
+    async def addcustom(self, interaction: discord.Interaction, name: str, content: str, description: str = None, list_in_shop: bool = False, price: float = None, remove_after_use: bool = True, ephemeral_response: bool = False, revenue_share_user: discord.User = None):
         if not interaction_uses_guild_scope(interaction):
             await interaction.response.send_message("❌ 伺服器啟用了全域模式，無法使用此指令。", ephemeral=True)
             return
@@ -608,6 +633,16 @@ class ItemModerate(commands.GroupCog, name="itemmod", description="物品系統�
             price = round(float(price), 2)
         else:
             price = None
+        if revenue_share_user is not None:
+            if revenue_share_user.bot:
+                await interaction.response.send_message("分潤對象不能是機器人。", ephemeral=True)
+                return
+            if not remove_after_use:
+                await interaction.response.send_message("只有一次性自訂物品才能設定分潤。", ephemeral=True)
+                return
+            if price is None or price <= 0:
+                await interaction.response.send_message("設定分潤的自訂物品必須先上架並有價格，分潤金額會是價格的 90%。", ephemeral=True)
+                return
 
         guild_id = interaction.guild.id
         custom_items = get_custom_items(guild_id)
@@ -621,6 +656,8 @@ class ItemModerate(commands.GroupCog, name="itemmod", description="物品系統�
         }
         if list_in_shop and price is not None:
             custom_items[item_id]["worth"] = price
+        if revenue_share_user is not None:
+            custom_items[item_id]["revenue_share_user_id"] = revenue_share_user.id
         set_custom_items(guild_id, custom_items)
         msg = (
             f"✅ 已新增自定義物品 **{name.strip()}**\n"
@@ -629,6 +666,8 @@ class ItemModerate(commands.GroupCog, name="itemmod", description="物品系統�
         )
         if list_in_shop:
             msg += f"\n🏪 已上架伺服器商店，定價 **{price:,.2f}** 伺服幣。"
+        if revenue_share_user is not None:
+            msg += f"\n💸 分潤用戶: {revenue_share_user.mention} (`{revenue_share_user.id}`) | 90%"
         await interaction.response.send_message(msg, ephemeral=True)
         log(f"Custom item {item_id} ({name}) added in guild {guild_id}", module_name="ItemSystem", user=interaction.user, guild=interaction.guild)
 
@@ -662,7 +701,7 @@ class ItemModerate(commands.GroupCog, name="itemmod", description="物品系統�
         ephemeral_response="是否以隱藏訊息方式回應使用者"
     )
     @app_commands.autocomplete(item_id=custom_items_autocomplete)
-    async def editcustom(self, interaction: discord.Interaction, item_id: str, name: str = None, description: str = None, content: str = None, list_in_shop: bool = None, price: float = None, remove_after_use: bool = None, ephemeral_response: bool = None):
+    async def editcustom(self, interaction: discord.Interaction, item_id: str, name: str = None, description: str = None, content: str = None, list_in_shop: bool = None, price: float = None, remove_after_use: bool = None, ephemeral_response: bool = None, revenue_share_user: discord.User = None):
         if not interaction_uses_guild_scope(interaction):
             await interaction.response.send_message("❌ 伺服器啟用了全域模式，無法使用此指令。", ephemeral=True)
             return
@@ -699,6 +738,19 @@ class ItemModerate(commands.GroupCog, name="itemmod", description="物品系統�
                 await interaction.response.send_message("定價必須大於 0。", ephemeral=True)
                 return
             data["worth"] = round(float(price), 2)
+        if revenue_share_user is not None:
+            if revenue_share_user.bot:
+                await interaction.response.send_message("分潤對象不能是機器人。", ephemeral=True)
+                return
+            if not data.get("remove_after_use", True):
+                await interaction.response.send_message("只有一次性自訂物品才能設定分潤。", ephemeral=True)
+                return
+            if data.get("worth") is None or data.get("worth", 0) <= 0:
+                await interaction.response.send_message("設定分潤的自訂物品必須先上架並有價格，分潤金額會是價格的 90%。", ephemeral=True)
+                return
+            data["revenue_share_user_id"] = revenue_share_user.id
+        if not data.get("remove_after_use", True) or data.get("worth") is None or data.get("worth", 0) <= 0:
+            data.pop("revenue_share_user_id", None)
         set_custom_items(guild_id, custom_items)
         worth = data.get("worth")
         status = f"已上架商店，定價 **{worth:,.2f}** 伺服幣" if worth else "未上架商店"
