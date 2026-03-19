@@ -1,4 +1,4 @@
-import discord
+﻿import discord
 from discord.ext import commands
 from discord import app_commands
 from globalenv import config, bot, start_bot, modules, get_server_config, set_server_config
@@ -8,6 +8,7 @@ import traceback
 from datetime import datetime, timezone, timedelta
 import os
 from pathlib import Path
+from expiring_dict import ExpiringDict
 
 # Track pending log tasks for graceful shutdown
 _pending_log_tasks: set = set()
@@ -293,6 +294,7 @@ class LoggerCog(commands.Cog):
         self.bot.tree.error(self.on_app_command_error)
         # 清理舊日誌檔案
         cleanup_old_logs(days=7)
+        self.error_user_cache = ExpiringDict(ttl=60)  # 用於記錄已經提示過錯誤的用戶，避免重複提示
 
     @app_commands.command(name="set-log-channel", description="設置日誌頻道 (若不設置則不發送到頻道)")
     @app_commands.describe(channel="選擇日誌頻道")
@@ -325,23 +327,32 @@ class LoggerCog(commands.Cog):
         # 處理權限不足
         if isinstance(error, commands.MissingPermissions):
             missing = ', '.join(error.missing_permissions)
-            await ctx.send(f"❌ 你沒有執行此指令的權限！缺少權限: {missing}" + ('\n-# 你傻逼吧你以為你是開發者你就可以濫權？' if ctx.author.id in config('owners') else ''), allowed_mentions=discord.AllowedMentions.none())
+            if ctx.author.id not in self.error_user_cache:
+                await ctx.send(f"❌ 你沒有執行此指令的權限！缺少權限: {missing}" + ('\n-# 你傻逼吧你以為你是開發者你就可以濫權？' if ctx.author.id in config('owners') else ''), allowed_mentions=discord.AllowedMentions.none())
+                self.error_user_cache[ctx.author.id] = True
             log(f"指令 {ctx.command} 由 {ctx.author} 觸發時權限不足: {missing}", module_name="Logger", level=logging.WARNING, user=ctx.author, guild=ctx.guild)
             return
         
         if isinstance(error, commands.BotMissingPermissions):
             missing = ', '.join(error.missing_permissions)
-            await ctx.send(f"❌ 我沒有足夠的權限執行此操作！缺少權限: {missing}", allowed_mentions=discord.AllowedMentions.none())
+            if ctx.author.id not in self.error_user_cache:
+                await ctx.send(f"❌ 我沒有足夠的權限執行此操作！缺少權限: {missing}", allowed_mentions=discord.AllowedMentions.none())
+                self.error_user_cache[ctx.author.id] = True
             log(f"指令 {ctx.command} 機器人權限不足: {missing}", module_name="Logger", level=logging.WARNING, user=ctx.author, guild=ctx.guild)
             return
         
         # 處理 Check 失敗
         if isinstance(error, commands.CheckFailure):
-            await ctx.send("❌ 你不符合執行此指令的條件。", allowed_mentions=discord.AllowedMentions.none())
+            if ctx.author.id not in self.error_user_cache:
+                await ctx.send("❌ 你不符合執行此指令的條件。", allowed_mentions=discord.AllowedMentions.none())
+                self.error_user_cache[ctx.author.id] = True
             log(f"指令 {ctx.command} 由 {ctx.author} 觸發時 Check 失敗: {error}", module_name="Logger", level=logging.WARNING, user=ctx.author, guild=ctx.guild)
             return
         
         # 處理其他錯誤
+        if ctx.author.id not in self.error_user_cache:
+            await ctx.send(f"❌ 執行指令時發生錯誤！", allowed_mentions=discord.AllowedMentions.none())
+            self.error_user_cache[ctx.author.id] = True
         log(f"指令 {ctx.command} 由 {ctx.author} 觸發時發生錯誤: {error}", module_name="Logger", level=logging.ERROR, user=ctx.author, guild=ctx.guild)
         await ctx.send(f"糟糕！發生了一些錯誤: {error}")
 
