@@ -13,6 +13,10 @@ import logging
 import re
 
 ignore_message_ids = set()  # 用於暫時忽略特定訊息的處理（例如剛剛被刪除的訊息）
+BUILTIN_ACTIONS = {
+    "ban", "kick", "mute", "timeout", "unban", "unmute", "untimeout",
+    "delete", "warn", "send_mod_message", "smm", "force_verify"
+}
 
 
 def timestr_to_seconds(timestr: str) -> int:
@@ -259,10 +263,65 @@ def _bot_action_check(
     return True, ""
 
 
+def _load_custom_action_strings(guild_id: Optional[int]) -> dict[str, str]:
+    if not guild_id:
+        return {}
+    raw = get_server_config(guild_id, "custom_action_strings")
+    if not isinstance(raw, dict):
+        return {}
+    cleaned = {}
+    for key, value in raw.items():
+        if not isinstance(key, str) or not isinstance(value, str):
+            continue
+        key = key.strip()
+        value = value.strip()
+        if not key or not value:
+            continue
+        cleaned[key] = value
+    return cleaned
+
+
+def _find_custom_action_key(custom_actions: dict[str, str], name: str) -> Optional[str]:
+    lowered = name.strip().lower()
+    for key in custom_actions.keys():
+        if key.lower() == lowered:
+            return key
+    return None
+
+
+def _split_action_chunks(action: str) -> list[str]:
+    return [a.strip() for a in action.split(",") if a.strip()]
+
+
+def _expand_custom_action_aliases(action: str, custom_actions: dict[str, str]) -> list[str]:
+    alias_map = {k.lower(): v for k, v in custom_actions.items()}
+
+    def expand_chunk(chunk: str, chain: list[str]) -> list[str]:
+        parts = chunk.split(" ", 1)
+        cmd_name = parts[0].strip().lower() if parts else ""
+        # 自訂別名僅在「單獨一個 token」時展開，避免干擾原生指令參數
+        if len(parts) == 1 and cmd_name in alias_map:
+            if cmd_name in chain:
+                raise ValueError(f"自訂指令循環引用：{' -> '.join(chain + [cmd_name])}")
+            expanded = []
+            for sub in _split_action_chunks(alias_map[cmd_name]):
+                expanded.extend(expand_chunk(sub, chain + [cmd_name]))
+            return expanded
+        return [chunk]
+
+    expanded_actions = []
+    for chunk in _split_action_chunks(action):
+        expanded_actions.extend(expand_chunk(chunk, []))
+    return expanded_actions
+
+
 async def do_action_str(action: str, guild: Optional[discord.Guild] = None, user: Optional[discord.Member] = None, message: Optional[discord.Message] = None, moderator: Optional[discord.Member] = None):
     # if user is none just check if action is valid
-    actions = action.split(",")
-    actions = [a.strip() for a in actions]
+    custom_actions = _load_custom_action_strings(guild.id if guild else None)
+    try:
+        actions = _expand_custom_action_aliases(action, custom_actions)
+    except ValueError as e:
+        return [f"錯誤：{e}"]
     if len(actions) > 5:
         return ["錯誤：一次只能執行最多5個動作。"]
     logs = []
@@ -1101,6 +1160,109 @@ class Moderate(commands.Cog):
             return
         set_server_config(interaction.guild.id, "MODERATION_MESSAGE_CHANNEL_ID", channel.id)
         await interaction.followup.send(f"已設定懲處公告頻道為 {channel.mention}。")
+
+    @app_commands.command(name=app_commands.locale_str("custom-action-add"), description="新增或更新伺服器自訂管理動作")
+    @app_commands.describe(name="自訂指令名稱（例如 ad）", action="要執行的動作字串（例如 mute 1h 在非宣傳區宣傳, smm）")
+    @app_commands.default_permissions(administrator=True)
+    @app_commands.allowed_installs(guilds=True, users=False)
+    @app_commands.allowed_contexts(guilds=True, dms=False, private_channels=False)
+    async def custom_action_add(self, interaction: discord.Interaction, name: str, action: str):
+        await interaction.response.defer(ephemeral=True)
+        guild = interaction.guild
+        if guild is None:
+            await interaction.followup.send("此指令只能在伺服器中使用。", ephemeral=True)
+            return
+
+        alias_name = name.strip()
+        action_str = action.strip()
+        if not alias_name or not action_str:
+            await interaction.followup.send("自訂指令名稱與動作內容不得為空。", ephemeral=True)
+            return
+        if "," in alias_name or any(ch.isspace() for ch in alias_name):
+            await interaction.followup.send("自訂指令名稱不可包含空白或逗號。", ephemeral=True)
+            return
+        if len(alias_name) > 32:
+            await interaction.followup.send("自訂指令名稱長度不得超過 32 字。", ephemeral=True)
+            return
+        if alias_name.lower() in BUILTIN_ACTIONS:
+            await interaction.followup.send("此名稱與內建動作衝突，請更換名稱。", ephemeral=True)
+            return
+
+        custom_actions = _load_custom_action_strings(guild.id)
+        existed_key = _find_custom_action_key(custom_actions, alias_name)
+        if existed_key is None and len(custom_actions) >= 10:
+            await interaction.followup.send("每個伺服器最多只能設定 10 個自訂指令。", ephemeral=True)
+            return
+
+        # 預先驗證展開後的動作是否合法（最多 5 個、避免循環）
+        test_actions = dict(custom_actions)
+        if existed_key and existed_key != alias_name:
+            test_actions.pop(existed_key, None)
+        test_actions[alias_name] = action_str
+        try:
+            expanded = _expand_custom_action_aliases(alias_name, test_actions)
+        except ValueError as e:
+            await interaction.followup.send(f"無法儲存自訂指令：{e}", ephemeral=True)
+            return
+        if len(expanded) > 5:
+            await interaction.followup.send("此自訂指令展開後超過 5 個動作，請精簡內容。", ephemeral=True)
+            return
+
+        if existed_key and existed_key != alias_name:
+            custom_actions.pop(existed_key, None)
+        custom_actions[alias_name] = action_str
+        set_server_config(guild.id, "custom_action_strings", custom_actions)
+
+        action_text = "更新" if existed_key is not None else "新增"
+        await interaction.followup.send(
+            f"已{action_text}自訂指令 `{alias_name}`\n- 動作：`{action_str}`\n- 目前數量：{len(custom_actions)}/10",
+            ephemeral=True,
+        )
+
+    @app_commands.command(name=app_commands.locale_str("custom-action-remove"), description="刪除伺服器自訂管理動作")
+    @app_commands.describe(name="要刪除的自訂指令名稱")
+    @app_commands.default_permissions(administrator=True)
+    @app_commands.allowed_installs(guilds=True, users=False)
+    @app_commands.allowed_contexts(guilds=True, dms=False, private_channels=False)
+    async def custom_action_remove(self, interaction: discord.Interaction, name: str):
+        await interaction.response.defer(ephemeral=True)
+        guild = interaction.guild
+        if guild is None:
+            await interaction.followup.send("此指令只能在伺服器中使用。", ephemeral=True)
+            return
+
+        custom_actions = _load_custom_action_strings(guild.id)
+        existed_key = _find_custom_action_key(custom_actions, name)
+        if existed_key is None:
+            await interaction.followup.send("找不到該自訂指令。", ephemeral=True)
+            return
+
+        removed_value = custom_actions.pop(existed_key)
+        set_server_config(guild.id, "custom_action_strings", custom_actions)
+        await interaction.followup.send(
+            f"已刪除自訂指令 `{existed_key}`\n- 原動作：`{removed_value}`\n- 目前數量：{len(custom_actions)}/10",
+            ephemeral=True,
+        )
+
+    @app_commands.command(name=app_commands.locale_str("custom-action-list"), description="查看伺服器自訂管理動作")
+    @app_commands.default_permissions(administrator=True)
+    @app_commands.allowed_installs(guilds=True, users=False)
+    @app_commands.allowed_contexts(guilds=True, dms=False, private_channels=False)
+    async def custom_action_list(self, interaction: discord.Interaction):
+        guild = interaction.guild
+        if guild is None:
+            await interaction.response.send_message("此指令只能在伺服器中使用。", ephemeral=True)
+            return
+
+        custom_actions = _load_custom_action_strings(guild.id)
+        if not custom_actions:
+            await interaction.response.send_message("目前沒有自訂指令。", ephemeral=True)
+            return
+
+        lines = [f"`{k}` -> `{v}`" for k, v in custom_actions.items()]
+        embed = discord.Embed(title=f"自訂管理動作（{len(custom_actions)}/10）", color=0x00b894)
+        embed.description = "\n".join(lines)
+        await interaction.response.send_message(embed=embed, ephemeral=True)
 
     @app_commands.command(name=app_commands.locale_str("action-builder"), description="產生懲處動作指令字串")
     @app_commands.describe(
