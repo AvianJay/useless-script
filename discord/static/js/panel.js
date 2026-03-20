@@ -885,15 +885,15 @@ function buildAutoreplyListEditor(mod, s, value, channels) {
 
         const row3 = document.createElement('div');
         row3.className = 'autoreply-rule-row autoreply-rule-meta';
-        row3.appendChild(document.createTextNode('璅∪? '));
+        row3.appendChild(document.createTextNode('模式 '));
         row3.appendChild(modeSelect);
-        row3.appendChild(document.createTextNode(' ??????'));
+        row3.appendChild(document.createTextNode(' 回覆原訊息 '));
         row3.appendChild(replyWrap);
-        row3.appendChild(document.createTextNode(' ?駁? '));
+        row3.appendChild(document.createTextNode(' 頻道 '));
         row3.appendChild(channelModeSelect);
         row3.appendChild(channelTagsWrap);
         row3.appendChild(channelSel);
-        row3.appendChild(document.createTextNode(' 璈?% '));
+        row3.appendChild(document.createTextNode(' 機率% '));
         row3.appendChild(chanceInput);
         row3.appendChild(deleteBtn);
         card.appendChild(row3);
