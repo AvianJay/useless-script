@@ -1,0 +1,356 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>API Docs | OXWU API</title>
+  <style>
+    :root {
+      --bg: #f7f4ee;
+      --panel: #fffdf9;
+      --ink: #1f1c17;
+      --muted: #655f56;
+      --accent: #155e75;
+      --border: rgba(31, 28, 23, 0.1);
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "Segoe UI", "Noto Sans TC", sans-serif;
+      color: var(--ink);
+      background:
+        radial-gradient(circle at top right, rgba(21, 94, 117, 0.14), transparent 24%),
+        linear-gradient(180deg, #faf7f2, var(--bg));
+      padding: 24px;
+    }
+    .wrap { max-width: 1000px; margin: 0 auto; }
+    .hero, .section {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 24px;
+      padding: 24px;
+      margin-bottom: 20px;
+    }
+    h1, h2, h3 { margin-top: 0; }
+    p, li { color: var(--muted); line-height: 1.7; }
+    code, pre {
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      background: #f2efe8;
+      border-radius: 14px;
+    }
+    code { padding: 2px 7px; }
+    pre {
+      padding: 16px;
+      overflow: auto;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 20px;
+    }
+    .endpoint {
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      padding: 18px;
+      margin-bottom: 16px;
+    }
+    .tester {
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      padding: 18px;
+      background: #fff8ec;
+    }
+    .row {
+      display: grid;
+      grid-template-columns: 1fr 180px;
+      gap: 12px;
+      margin-bottom: 12px;
+    }
+    .row-3 {
+      display: grid;
+      grid-template-columns: 180px 180px 1fr;
+      gap: 12px;
+      margin-bottom: 12px;
+    }
+    .field {
+      width: 100%;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 10px 12px;
+      background: #fff;
+      color: var(--ink);
+      font-size: 15px;
+    }
+    .btn {
+      border: 0;
+      border-radius: 12px;
+      background: #155e75;
+      color: #fff;
+      font-weight: 700;
+      cursor: pointer;
+      padding: 10px 14px;
+    }
+    .btn:disabled {
+      opacity: 0.55;
+      cursor: not-allowed;
+    }
+    .status {
+      margin: 8px 0 0;
+      color: #0c4a6e;
+      font-weight: 600;
+    }
+    .status.error {
+      color: #b91c1c;
+    }
+    .result {
+      margin-top: 14px;
+    }
+    .result img {
+      max-width: 100%;
+      border-radius: 14px;
+      border: 1px solid var(--border);
+      display: block;
+    }
+    .tag {
+      display: inline-block;
+      margin-right: 8px;
+      min-width: 56px;
+      text-align: center;
+      border-radius: 999px;
+      padding: 6px 10px;
+      color: #fff;
+      font-size: 13px;
+      font-weight: 800;
+    }
+    .get { background: #0f766e; }
+    .post { background: #b45309; }
+    a { color: var(--accent); }
+    @media (max-width: 860px) {
+      .grid { grid-template-columns: 1fr; }
+      .row, .row-3 { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <section class="hero">
+      <h1>OXWU API Docs</h1>
+      <p>這份文件涵蓋資料查詢、截圖下載、登入後帳號資訊，以及 WebSocket 代理事件。登入後可以在 dashboard 直接取得與重設 API Key。</p>
+      <p>OpenAPI JSON: <a href="{{ openapi_url }}">{{ openapi_url }}</a></p>
+    </section>
+
+    <section class="section">
+      <h2>Authentication</h2>
+      <p>一般 API 需在 request header 帶入 <code>X-API-Key</code>。帳號管理 API 使用 Discord OAuth2 登入後的 session cookie。</p>
+      <div class="grid">
+        <div>
+          <h3>點數規則</h3>
+          <ul>
+            <li>資料 API: {{ "%.2f"|format(costs.api) }} 點 / 次</li>
+            <li>截圖 API: {{ "%.2f"|format(costs.screenshot) }} 點 / 次</li>
+            <li>WebSocket: {{ "%.4f"|format(costs.ws_per_sec) }} 點 / 秒，5 秒結算一次</li>
+          </ul>
+        </div>
+        <div>
+          <h3>快速測試</h3>
+          <pre>curl -H "X-API-Key: YOUR_API_KEY" \
+{{ request.host_url.rstrip('/') }}/api/data/report</pre>
+        </div>
+      </div>
+    </section>
+
+    <section class="section">
+      <h2>REST Endpoints</h2>
+
+      <div class="endpoint">
+        <div><span class="tag get">GET</span><code>/api/data/&lt;report|warning&gt;</code></div>
+        <p>回傳目前快取的 JSON 資料。</p>
+      </div>
+
+      <div class="endpoint">
+        <div><span class="tag get">GET</span><code>/api/screenshot/&lt;report|warning&gt;</code></div>
+        <p>回傳 PNG 截圖內容。</p>
+      </div>
+
+      <div class="endpoint">
+        <div><span class="tag get">GET</span><code>/api/me</code></div>
+        <p>登入後取得目前帳號資訊、點數與 API Key。</p>
+      </div>
+
+      <div class="endpoint">
+        <div><span class="tag post">POST</span><code>/api/me/reset-key</code></div>
+        <p>登入後重設 API Key，舊 key 立即失效。</p>
+      </div>
+
+      <div class="endpoint">
+        <div><span class="tag get">GET</span><code>/api/docs</code></div>
+        <p>回傳目前這份說明文件（HTML）。</p>
+      </div>
+
+      <div class="endpoint">
+        <div><span class="tag get">GET</span><code>/openapi.json</code></div>
+        <p>回傳 OpenAPI 3.1 規格（JSON）。</p>
+      </div>
+    </section>
+
+    <section class="section">
+      <h2>Upstream Mapping (from main.js)</h2>
+      <p>Proxy 會向上游 Electron HTTP 服務（預設 <code>http://127.0.0.1:10281</code>）抓資料並更新快取，對應如下：</p>
+      <ul>
+        <li><code>report</code> 快取來源: <code>/getReportInfo</code></li>
+        <li><code>warning</code> 快取來源: <code>/getWarningInfo</code></li>
+        <li>截圖流程: 先呼叫 <code>/gotoReport</code> 或 <code>/gotoWarning</code>，再呼叫 <code>/screenshot</code></li>
+      </ul>
+      <p>上游事件 <code>reportTimeChanged</code> / <code>warningTimeChanged</code> 觸發後，proxy 會更新快取並轉發給客戶端：</p>
+      <ul>
+        <li><code>proxy_report_update</code></li>
+        <li><code>proxy_warning_update</code></li>
+      </ul>
+    </section>
+
+    <section class="section">
+      <h2>WebSocket</h2>
+      <p>Socket.IO 連線時，帶入 <code>X-API-Key</code> header 或 query string 的 <code>api_key</code>。伺服器會轉發以下事件：</p>
+      <ul>
+        <li><code>proxy_report_update</code></li>
+        <li><code>proxy_warning_update</code></li>
+      </ul>
+      <pre>const socket = io("{{ request.host_url.rstrip('/') }}", {
+  extraHeaders: { "X-API-Key": "YOUR_API_KEY" }
+});</pre>
+    </section>
+
+    <section class="section">
+      <h2>Try API</h2>
+      <p>輸入你的 API Key 後，可以直接在這頁測試資料與截圖 API。這裡會真的扣點，請留意額度。</p>
+
+      <div class="tester">
+        <div class="row">
+          <input id="apiKeyInput" class="field" type="password" placeholder="貼上你的 API Key" autocomplete="off">
+          <button id="toggleKeyBtn" class="btn" type="button">顯示 Key</button>
+        </div>
+
+        <div class="row-3">
+          <select id="kindInput" class="field">
+            <option value="data">資料 /api/data</option>
+            <option value="screenshot">截圖 /api/screenshot</option>
+          </select>
+          <select id="typeInput" class="field">
+            <option value="report">report</option>
+            <option value="warning">warning</option>
+          </select>
+          <button id="sendBtn" class="btn" type="button">送出測試</button>
+        </div>
+
+        <p id="statusText" class="status">尚未送出請求</p>
+
+        <div class="result">
+          <pre id="jsonOutput">{}</pre>
+          <img id="imageOutput" alt="API screenshot result" style="display:none;">
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <script>
+    (function () {
+      const apiKeyInput = document.getElementById("apiKeyInput");
+      const toggleKeyBtn = document.getElementById("toggleKeyBtn");
+      const kindInput = document.getElementById("kindInput");
+      const typeInput = document.getElementById("typeInput");
+      const sendBtn = document.getElementById("sendBtn");
+      const statusText = document.getElementById("statusText");
+      const jsonOutput = document.getElementById("jsonOutput");
+      const imageOutput = document.getElementById("imageOutput");
+
+      function setStatus(text, isError) {
+        statusText.textContent = text;
+        statusText.classList.toggle("error", Boolean(isError));
+      }
+
+      function showJson(obj) {
+        imageOutput.style.display = "none";
+        imageOutput.removeAttribute("src");
+        jsonOutput.style.display = "block";
+        jsonOutput.textContent = JSON.stringify(obj, null, 2);
+      }
+
+      function showImage(blob) {
+        const url = URL.createObjectURL(blob);
+        imageOutput.src = url;
+        imageOutput.style.display = "block";
+        jsonOutput.style.display = "none";
+      }
+
+      toggleKeyBtn.addEventListener("click", function () {
+        const isPwd = apiKeyInput.type === "password";
+        apiKeyInput.type = isPwd ? "text" : "password";
+        toggleKeyBtn.textContent = isPwd ? "隱藏 Key" : "顯示 Key";
+      });
+
+      sendBtn.addEventListener("click", async function () {
+        const apiKey = apiKeyInput.value.trim();
+        const kind = kindInput.value;
+        const type = typeInput.value;
+
+        if (!apiKey) {
+          setStatus("請先輸入 API Key", true);
+          return;
+        }
+
+        sendBtn.disabled = true;
+        setStatus("請求中...", false);
+
+        try {
+          const endpoint = kind === "data"
+            ? `/api/data/${type}`
+            : `/api/screenshot/${type}`;
+
+          const response = await fetch(endpoint, {
+            method: "GET",
+            headers: {
+              "X-API-Key": apiKey,
+            },
+          });
+
+          const contentType = response.headers.get("content-type") || "";
+          if (!response.ok) {
+            let detail = null;
+            try {
+              detail = await response.json();
+            } catch (_) {
+              detail = { error: await response.text() };
+            }
+            showJson({
+              ok: false,
+              status: response.status,
+              endpoint,
+              detail,
+            });
+            setStatus(`失敗：HTTP ${response.status}`, true);
+            return;
+          }
+
+          if (contentType.includes("image/png")) {
+            const blob = await response.blob();
+            showImage(blob);
+            setStatus(`成功：${endpoint} 回傳 PNG`, false);
+            return;
+          }
+
+          const data = await response.json();
+          showJson({ ok: true, endpoint, data });
+          setStatus(`成功：${endpoint} 回傳 JSON`, false);
+        } catch (err) {
+          showJson({ ok: false, error: String(err) });
+          setStatus("請求失敗，請確認服務是否啟動", true);
+        } finally {
+          sendBtn.disabled = false;
+        }
+      });
+    })();
+  </script>
+</body>
+</html>

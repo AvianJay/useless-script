@@ -721,13 +721,24 @@ async def sellable_items_autocomplete(interaction: discord.Interaction, current:
         all_items_list = get_all_items_for_guild(guild_id)
     else:
         all_items_list = items
-    sellable = [item for item in all_items_list if item["id"] in owned_ids and item.get("worth", 0) > 0]
+    sellable = []
+    for item in all_items_list:
+        if item["id"] not in owned_ids or item.get("worth", 0) <= 0:
+            continue
+        if guild_id:
+            total_count = user_items_data.get(item["id"], 0)
+            admin_count = get_admin_item_count(guild_id, user_id, item["id"])
+            if total_count - admin_count <= 0:
+                continue
+        sellable.append(item)
     if current:
         sellable = [i for i in sellable if current.lower() in i["name"].lower()]
     choices = []
     for item in sellable[:25]:
         price = get_item_sell_price(item["id"], guild_id) if guild_id else round(item.get("worth", 0) * DEFAULT_SELL_RATIO, 2)
         count = user_items_data.get(item["id"], 0)
+        if guild_id:
+            count = max(0, count - get_admin_item_count(guild_id, user_id, item["id"]))
         choices.append(app_commands.Choice(name=f"{item['name']} x{count} - 💰{price:,.0f}/個", value=item["id"]))
     return choices
 
@@ -1517,20 +1528,17 @@ class Economy(commands.GroupCog, name="economy", description="經濟系統指令
             return
 
         user_item_count = await get_user_items(guild_id, user_id, item_id)
-        if user_item_count < amount:
+        sellable_count = user_item_count
+        if scope == "server":
+            sellable_count = max(0, user_item_count - get_admin_item_count(guild_id, user_id, item_id))
+        if sellable_count < amount:
             await interaction.response.send_message(
-                f"❌ 你只有 **{user_item_count}** 個 {item['name']}。",
+                f"❌ 你只有 **{sellable_count}** 個 {item['name']} 可以賣出。\n-# 管理員給予的物品不能賣",
                 ephemeral=True
             )
             return
 
         removed = await remove_item_from_user(guild_id, user_id, item_id, amount)
-
-        # 檢查有多少是管理員給予的物品
-        admin_count = get_admin_item_count(guild_id, user_id, item_id)
-        admin_removed = min(admin_count, removed)
-        if admin_removed > 0:
-            remove_admin_item(guild_id, user_id, item_id, admin_removed)
 
         currency_name = get_currency_name(guild_id) if scope == "server" else GLOBAL_CURRENCY_NAME
         sell_ratio = get_sell_ratio(guild_id)
@@ -1543,27 +1551,8 @@ class Economy(commands.GroupCog, name="economy", description="經濟系統指令
 
         if scope == "server":
             add_balance(guild_id, user_id, total_price)
-            # 如果賣出的物品中有管理員給予的，按比例計算並施加嚴重通膨
-            if admin_removed > 0:
-                admin_price = round(price_per * admin_removed, 2)
-                normal_price = total_price - admin_price
-                if admin_price > 0:
-                    record_sale(guild_id, admin_price, is_admin_item=True)
-                if normal_price > 0:
-                    record_sale(guild_id, normal_price, is_admin_item=False)
-            else:
-                record_sale(guild_id, total_price, is_admin_item=False)
+            record_sale(guild_id, total_price, is_admin_item=False)
         else:
-            # 全域幣賣出：禁止賣出管理員給予的物品到全域商店（防止洗錢）
-            if admin_removed > 0:
-                await interaction.response.send_message(
-                    f"❌ 你不能將管理員給予的物品賣到全域商店。\n"
-                    f"你有 {admin_removed} 個此物品是管理員給予的，請在伺服器商店賣出。",
-                    ephemeral=True
-                )
-                # 退還物品
-                await give_item_to_user(guild_id, user_id, item_id, removed)
-                return
             set_global_balance(user_id, get_global_balance(user_id) + total_price)
 
         embed = discord.Embed(
@@ -1573,14 +1562,6 @@ class Economy(commands.GroupCog, name="economy", description="經濟系統指令
         )
         embed.add_field(name="單價", value=f"{price_per:,.2f} {currency_name}", inline=True)
         embed.add_field(name="總收入", value=f"{total_price:,.2f} {currency_name}", inline=True)
-
-        # 如果有管理員給予的物品被賣出，顯示警告
-        if scope == "server" and admin_removed > 0:
-            embed.add_field(
-                name="⚠️ 管理員物品",
-                value=f"其中 {admin_removed} 個為管理員給予\n已觸發嚴重通膨懲罰",
-                inline=False
-            )
 
         if scope == "server":
             buy_price = get_item_buy_price(item_id, guild_id)
@@ -1604,7 +1585,7 @@ class Economy(commands.GroupCog, name="economy", description="經濟系統指令
             balance_after=remaining_balance,
             item_name=item["name"],
             item_amount=removed,
-            detail=f"Item sold via {scope} scope. Admin item portion={admin_removed}.",
+            detail=f"Item sold via {scope} scope.",
             color=0xE67E22,
         )
         await interaction.response.send_message(embed=embed)

@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>OXWU API Portal</title>
+  <style>
+    :root {
+      --bg: #f5efe4;
+      --panel: rgba(255, 251, 243, 0.92);
+      --ink: #1e1d1a;
+      --muted: #6c665d;
+      --accent: #0f766e;
+      --accent-2: #f59e0b;
+      --border: rgba(30, 29, 26, 0.1);
+      --shadow: 0 18px 60px rgba(24, 24, 20, 0.14);
+    }
+
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "Segoe UI", "Noto Sans TC", sans-serif;
+      color: var(--ink);
+      min-height: 100vh;
+      background:
+        radial-gradient(circle at top left, rgba(245, 158, 11, 0.16), transparent 28%),
+        radial-gradient(circle at bottom right, rgba(15, 118, 110, 0.18), transparent 32%),
+        linear-gradient(135deg, #f9f6ef, var(--bg));
+      display: grid;
+      place-items: center;
+      padding: 24px;
+    }
+
+    .card {
+      width: min(760px, 100%);
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 28px;
+      box-shadow: var(--shadow);
+      padding: 36px;
+      backdrop-filter: blur(10px);
+    }
+
+    .badge {
+      display: inline-block;
+      margin-bottom: 18px;
+      padding: 8px 12px;
+      border-radius: 999px;
+      background: rgba(15, 118, 110, 0.08);
+      color: var(--accent);
+      font-size: 14px;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+    }
+
+    h1 {
+      margin: 0 0 12px;
+      font-size: clamp(34px, 5vw, 56px);
+      line-height: 1;
+    }
+
+    p {
+      margin: 0 0 18px;
+      color: var(--muted);
+      line-height: 1.7;
+      font-size: 17px;
+    }
+
+    .actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      margin-top: 28px;
+    }
+
+    .button {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 48px;
+      padding: 0 18px;
+      border-radius: 14px;
+      text-decoration: none;
+      font-weight: 700;
+      border: 1px solid transparent;
+    }
+
+    .button.primary {
+      background: var(--ink);
+      color: #fff;
+    }
+
+    .button.secondary {
+      color: var(--ink);
+      border-color: var(--border);
+      background: rgba(255, 255, 255, 0.7);
+    }
+
+    .notice {
+      margin-top: 20px;
+      padding: 14px 16px;
+      border-radius: 16px;
+      background: rgba(245, 158, 11, 0.12);
+      color: #8a5b00;
+      font-size: 14px;
+      line-height: 1.6;
+    }
+  </style>
+</head>
+<body>
+  <main class="card">
+    <div class="badge">OXWU API Portal</div>
+    <h1>用 Discord 帳號直接登入你的 API 後台</h1>
+    <p>這個入口頁提供 OAuth2 登入、剩餘點數查詢、API Key 重設，以及完整 API docs。登入後就能直接看到目前可用點數與最新金鑰。</p>
+    <div class="actions">
+      {% if oauth_enabled %}
+      <a class="button primary" href="{{ url_for('login') }}">使用 Discord 登入</a>
+      {% else %}
+      <span class="button primary" style="opacity:.55;cursor:not-allowed;">等待設定 OAuth2</span>
+      {% endif %}
+      <a class="button secondary" href="{{ url_for('api_docs') }}">查看 API Docs</a>
+    </div>
+    {% if not oauth_enabled %}
+    <div class="notice">
+      目前尚未設定 `DISCORD_CLIENT_ID` 與 `DISCORD_CLIENT_SECRET`，所以 OAuth2 登入還不能使用。
+    </div>
+    {% endif %}
+  </main>
+</body>
+</html>

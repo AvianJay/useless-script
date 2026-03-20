@@ -496,7 +496,11 @@ class ItemModerate(commands.GroupCog, name="itemmod", description="物品系統�
     @app_commands.autocomplete(item_id=all_items_autocomplete)
     async def admin_give_item(self, interaction: discord.Interaction, user: discord.User, item_id: str, amount: int = 1):
         await interaction.response.defer()
-        
+
+        if amount <= 0:
+            await interaction.followup.send("數量必須大於 0")
+            return
+
         if not interaction_uses_guild_scope(interaction):
             await interaction.followup.send("伺服器啟用了全域模式，無法使用此指令。")
             return

@@ -1,0 +1,336 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Dashboard | OXWU API</title>
+  <style>
+    :root {
+      --bg: #fffaf2;
+      --panel: rgba(255, 255, 255, 0.88);
+      --panel-strong: #fff;
+      --ink: #1f1d18;
+      --muted: #6f685d;
+      --accent: #115e59;
+      --accent-soft: rgba(17, 94, 89, 0.08);
+      --warm: #c77d1b;
+      --border: rgba(31, 29, 24, 0.1);
+      --shadow: 0 18px 60px rgba(26, 22, 15, 0.12);
+    }
+
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "Segoe UI", "Noto Sans TC", sans-serif;
+      color: var(--ink);
+      background:
+        radial-gradient(circle at top left, rgba(199, 125, 27, 0.16), transparent 24%),
+        radial-gradient(circle at top right, rgba(17, 94, 89, 0.14), transparent 28%),
+        linear-gradient(180deg, #f8f2e8, var(--bg));
+      min-height: 100vh;
+      padding: 24px;
+    }
+
+    .wrap {
+      max-width: 1040px;
+      margin: 0 auto;
+    }
+
+    .topbar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 16px;
+      margin-bottom: 24px;
+    }
+
+    .brand {
+      font-size: 14px;
+      font-weight: 800;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--accent);
+    }
+
+    .logout {
+      border: 1px solid var(--border);
+      background: rgba(255,255,255,0.75);
+      color: var(--ink);
+      border-radius: 14px;
+      min-height: 42px;
+      padding: 0 14px;
+      font-weight: 700;
+      cursor: pointer;
+    }
+
+    .hero, .grid > section {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 26px;
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(10px);
+    }
+
+    .hero {
+      padding: 28px;
+      display: grid;
+      grid-template-columns: 1.2fr 0.8fr;
+      gap: 24px;
+      margin-bottom: 24px;
+    }
+
+    .identity {
+      display: flex;
+      gap: 16px;
+      align-items: center;
+    }
+
+    .avatar {
+      width: 72px;
+      height: 72px;
+      border-radius: 22px;
+      object-fit: cover;
+      background: linear-gradient(135deg, #115e59, #c77d1b);
+    }
+
+    .eyebrow {
+      display: inline-block;
+      margin-bottom: 10px;
+      padding: 7px 11px;
+      border-radius: 999px;
+      background: var(--accent-soft);
+      color: var(--accent);
+      font-size: 13px;
+      font-weight: 700;
+    }
+
+    h1 {
+      margin: 0 0 8px;
+      font-size: clamp(28px, 4vw, 42px);
+    }
+
+    p {
+      margin: 0;
+      color: var(--muted);
+      line-height: 1.7;
+    }
+
+    .stat {
+      background: var(--panel-strong);
+      border: 1px solid var(--border);
+      border-radius: 22px;
+      padding: 22px;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+    }
+
+    .stat-label {
+      color: var(--muted);
+      font-size: 14px;
+      margin-bottom: 10px;
+    }
+
+    .stat-value {
+      font-size: clamp(34px, 4vw, 48px);
+      font-weight: 800;
+      color: var(--accent);
+      line-height: 1;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 24px;
+    }
+
+    .grid > section {
+      padding: 24px;
+    }
+
+    h2 {
+      margin: 0 0 16px;
+      font-size: 22px;
+    }
+
+    .key-box, .cost-list li {
+      border: 1px solid var(--border);
+      background: rgba(255, 255, 255, 0.78);
+      border-radius: 16px;
+    }
+
+    .key-box {
+      padding: 16px;
+      margin-bottom: 14px;
+    }
+
+    code {
+      display: block;
+      overflow-wrap: anywhere;
+      font-size: 14px;
+      color: #0b3b38;
+    }
+
+    .actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+    }
+
+    button, a.button {
+      min-height: 44px;
+      border-radius: 14px;
+      padding: 0 16px;
+      border: 1px solid transparent;
+      font-weight: 700;
+      cursor: pointer;
+      text-decoration: none;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .primary {
+      background: var(--ink);
+      color: #fff;
+    }
+
+    .secondary {
+      background: transparent;
+      border-color: var(--border);
+      color: var(--ink);
+    }
+
+    .message {
+      min-height: 24px;
+      margin-top: 12px;
+      color: var(--warm);
+      font-size: 14px;
+    }
+
+    .cost-list {
+      list-style: none;
+      padding: 0;
+      margin: 0;
+      display: grid;
+      gap: 12px;
+    }
+
+    .cost-list li {
+      padding: 16px;
+    }
+
+    .cost-title {
+      display: block;
+      margin-bottom: 6px;
+      font-weight: 800;
+    }
+
+    @media (max-width: 860px) {
+      .hero, .grid {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="topbar">
+      <div class="brand">OXWU API Dashboard</div>
+      <form action="{{ url_for('logout') }}" method="post">
+        <button class="logout" type="submit">登出</button>
+      </form>
+    </div>
+
+    <section class="hero">
+      <div>
+        <div class="eyebrow">OAuth2 Login Active</div>
+        <div class="identity">
+          {% if profile.avatar_url %}
+          <img class="avatar" src="{{ profile.avatar_url }}" alt="avatar">
+          {% else %}
+          <div class="avatar"></div>
+          {% endif %}
+          <div>
+            <h1>{{ profile.global_name or profile.username or user.discord_id }}</h1>
+            <p>Discord ID: {{ user.discord_id }}</p>
+          </div>
+        </div>
+      </div>
+      <div class="stat">
+        <span class="stat-label">目前剩餘點數</span>
+        <span class="stat-value" id="points">{{ "%.2f"|format(user.points) }}</span>
+      </div>
+    </section>
+
+    <div class="grid">
+      <section>
+        <h2>API Key 管理</h2>
+        <div class="key-box">
+          <div style="margin-bottom:8px;color:#6f685d;font-size:14px;">完整 API Key</div>
+          <code id="api-key">{{ user.api_key }}</code>
+        </div>
+        <div class="actions">
+          <button id="copy-btn" class="primary" type="button">複製 API Key</button>
+          <button id="reset-btn" class="secondary" type="button">重設 API Key</button>
+        </div>
+        <div class="message" id="message"></div>
+      </section>
+
+      <section>
+        <h2>計費說明</h2>
+        <ul class="cost-list">
+          <li>
+            <span class="cost-title">資料 API</span>
+            每次呼叫扣除 {{ "%.2f"|format(costs.api) }} 點
+          </li>
+          <li>
+            <span class="cost-title">截圖 API</span>
+            每次呼叫扣除 {{ "%.2f"|format(costs.screenshot) }} 點
+          </li>
+          <li>
+            <span class="cost-title">WebSocket 連線</span>
+            每秒扣除 {{ "%.4f"|format(costs.ws_per_sec) }} 點，每 5 秒結算
+          </li>
+        </ul>
+        <div class="actions" style="margin-top:16px;">
+          <a class="button secondary" href="{{ url_for('api_docs') }}">查看 API Docs</a>
+        </div>
+      </section>
+    </div>
+  </div>
+
+  <script>
+    const apiKeyEl = document.getElementById("api-key");
+    const pointsEl = document.getElementById("points");
+    const messageEl = document.getElementById("message");
+
+    document.getElementById("copy-btn").addEventListener("click", async () => {
+      await navigator.clipboard.writeText(apiKeyEl.textContent.trim());
+      messageEl.textContent = "API Key 已複製到剪貼簿。";
+    });
+
+    document.getElementById("reset-btn").addEventListener("click", async () => {
+      messageEl.textContent = "正在重設 API Key...";
+      const res = await fetch("{{ url_for('api_reset_key') }}", { method: "POST" });
+      const data = await res.json();
+      if (!res.ok) {
+        messageEl.textContent = data.error || "重設失敗。";
+        return;
+      }
+      apiKeyEl.textContent = data.api_key;
+      messageEl.textContent = "API Key 已更新，舊 Key 現在已失效。";
+      refreshAccount();
+    });
+
+    async function refreshAccount() {
+      const res = await fetch("{{ url_for('api_me') }}");
+      if (!res.ok) {
+        return;
+      }
+      const data = await res.json();
+      pointsEl.textContent = Number(data.points).toFixed(2);
+    }
+  </script>
+</body>
+</html>
