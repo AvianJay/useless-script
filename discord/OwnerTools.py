@@ -25,7 +25,7 @@ async def settings(ctx, key: str=None, value: str=None):
         await ctx.send("目前設定：\n" + "\n".join(f"- {k}: {v}" for k, v in safe_config.items()))
     elif value is None:
         await ctx.send(f"{key}: {config(key, '未設定')}")
-    elif key in config().keys():
+    elif key in _config:
         # check original type
         original_type = type(default_config.get(key))
         try:
@@ -59,6 +59,8 @@ async def settings(ctx, key: str=None, value: str=None):
             return
         config(key=key, value=value, mode="w")
         await ctx.send(f"已更新 {key} 為 {str(value)}。")
+    else:
+        await ctx.send(f"找不到設定鍵：{key}")
 
 
 status_map = {
