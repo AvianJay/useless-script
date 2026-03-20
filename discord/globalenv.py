@@ -636,6 +636,9 @@ translations = {
     "remove_after_use": "使用後移除",
     "ephemeral_response": "隱藏回覆",
     "revenue_share_user": "收益分成用戶",
+    "custom-action-add": "自定義動作-新增",
+    "custom-action-remove": "自定義動作-移除",
+    "custom-action-list": "自定義動作-列出",
 }
 class CommandNameTranslator(app_commands.Translator):
     async def translate(

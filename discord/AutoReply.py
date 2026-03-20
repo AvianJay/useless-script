@@ -11,6 +11,8 @@ from logger import log
 import logging
 import re
 
+MAX_AUTOREPLY_CONFIGS = 50
+
 
 def percent_random(percent: int) -> bool:
     if percent == 100:
@@ -89,6 +91,9 @@ class AutoReply(commands.GroupCog, name="autoreply"):
             await interaction.response.send_message("隨機回覆機率必須在 1 到 100 之間。", ephemeral=True)
             return
         autoreplies = get_server_config(guild_id, "autoreplies", [])
+        if len(autoreplies) >= MAX_AUTOREPLY_CONFIGS:
+            await interaction.response.send_message(f"自動回覆設定最多只能有 {MAX_AUTOREPLY_CONFIGS} 筆。", ephemeral=True)
+            return
         trigger = trigger.split(",")  # multiple triggers
         trigger = [t.strip() for t in trigger if t.strip()]  # remove empty triggers
         response = response.split(",")  # random response
@@ -361,6 +366,9 @@ class AutoReply(commands.GroupCog, name="autoreply"):
             autoreplies.extend(new_autoreplies)
         else:
             autoreplies = new_autoreplies
+        if len(autoreplies) > MAX_AUTOREPLY_CONFIGS:
+            await interaction.followup.send(f"自動回覆設定最多只能有 {MAX_AUTOREPLY_CONFIGS} 筆，這次匯入未套用。")
+            return
         set_server_config(guild_id, "autoreplies", autoreplies)
         await interaction.followup.send("已匯入自動回覆設定。")
         log(f"自動回覆設定被匯入。", module_name="AutoReply", level=logging.INFO, user=interaction.user, guild=interaction.guild)

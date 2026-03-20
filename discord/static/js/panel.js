@@ -623,6 +623,306 @@ function buildAutoreplyListEditor(mod, s, value, channels) {
     return container;
 }
 
+function buildAutoreplyListEditor(mod, s, value, channels) {
+    const MAX_AUTOREPLY_RULES = 50;
+    const list = Array.isArray(value) ? value.map(r => ({
+        trigger: Array.isArray(r.trigger) ? r.trigger.map(v => String(v).trim()).filter(Boolean) : (r.trigger ? String(r.trigger).split(',').map(v => v.trim()).filter(Boolean) : []),
+        response: Array.isArray(r.response) ? r.response.map(v => String(v).trim()).filter(Boolean) : (r.response ? String(r.response).split(',').map(v => v.trim()).filter(Boolean) : []),
+        mode: r.mode || 'contains',
+        reply: !!r.reply,
+        channel_mode: r.channel_mode || 'all',
+        channels: Array.isArray(r.channels) ? r.channels.map(String) : [],
+        random_chance: Math.max(1, Math.min(100, parseInt(r.random_chance, 10) || 100)),
+    })) : [];
+
+    const container = document.createElement('div');
+    container.className = 'autoreply-list-editor';
+
+    const cardsWrap = document.createElement('div');
+    cardsWrap.className = 'autoreply-rule-list';
+    container.appendChild(cardsWrap);
+
+    const limitNote = document.createElement('div');
+    limitNote.className = 'autoreply-limit-note';
+    container.appendChild(limitNote);
+
+    function serializeRule(rule) {
+        return {
+            trigger: (rule.trigger || []).map(v => String(v).trim()).filter(Boolean),
+            response: (rule.response || []).map(v => String(v).trim()).filter(Boolean),
+            mode: rule.mode,
+            reply: rule.reply,
+            channel_mode: rule.channel_mode,
+            channels: rule.channels,
+            random_chance: rule.random_chance,
+        };
+    }
+
+    function save() {
+        debounceSave(mod, s.database_key, list.map(serializeRule), 500);
+    }
+
+    function createMultiValueEditor(items, titleText, placeholderText, addLabel, emptyText, onChange) {
+        const values = Array.isArray(items) ? items : [];
+        const wrap = document.createElement('div');
+        wrap.className = 'autoreply-multi-field';
+
+        const title = document.createElement('div');
+        title.className = 'autoreply-field-title';
+        title.textContent = titleText;
+        wrap.appendChild(title);
+
+        const listWrap = document.createElement('div');
+        listWrap.className = 'autoreply-multi-list';
+        wrap.appendChild(listWrap);
+
+        const addRow = document.createElement('div');
+        addRow.className = 'autoreply-multi-add-row';
+        const addBtn = document.createElement('button');
+        addBtn.type = 'button';
+        addBtn.className = 'btn-autoreply-add btn-autoreply-add-inline';
+        addBtn.textContent = addLabel;
+        addRow.appendChild(addBtn);
+        wrap.appendChild(addRow);
+
+        function publish() {
+            onChange(values.map(v => String(v).trim()).filter(Boolean));
+        }
+
+        function render() {
+            listWrap.innerHTML = '';
+            if (values.length === 0) {
+                const empty = document.createElement('div');
+                empty.className = 'autoreply-multi-empty';
+                empty.textContent = emptyText;
+                listWrap.appendChild(empty);
+            }
+
+            values.forEach((item, index) => {
+                const row = document.createElement('div');
+                row.className = 'autoreply-multi-item';
+
+                const input = document.createElement('input');
+                input.type = 'text';
+                input.className = 'form-input';
+                input.placeholder = placeholderText;
+                input.value = item;
+                input.addEventListener('input', () => {
+                    values[index] = input.value;
+                    publish();
+                });
+
+                const removeBtn = document.createElement('button');
+                removeBtn.type = 'button';
+                removeBtn.className = 'btn-autoreply-remove';
+                removeBtn.textContent = '刪除';
+                removeBtn.addEventListener('click', () => {
+                    values.splice(index, 1);
+                    publish();
+                    render();
+                });
+
+                row.appendChild(input);
+                row.appendChild(removeBtn);
+                listWrap.appendChild(row);
+            });
+        }
+
+        addBtn.addEventListener('click', () => {
+            values.push('');
+            publish();
+            render();
+            const inputs = listWrap.querySelectorAll('input');
+            const lastInput = inputs[inputs.length - 1];
+            if (lastInput) lastInput.focus();
+        });
+
+        render();
+        return wrap;
+    }
+
+    function renderRules() {
+        cardsWrap.innerHTML = '';
+        list.forEach(rule => cardsWrap.appendChild(buildRuleCard(rule)));
+        limitNote.textContent = `已設定 ${list.length} / ${MAX_AUTOREPLY_RULES} 筆規則`;
+        addBtn.disabled = list.length >= MAX_AUTOREPLY_RULES;
+        addBtn.textContent = list.length >= MAX_AUTOREPLY_RULES ? `已達上限 (${MAX_AUTOREPLY_RULES})` : '新增一筆自動回覆';
+    }
+
+    function buildRuleCard(rule) {
+        const card = document.createElement('div');
+        card.className = 'autoreply-rule-card';
+
+        const triggerEditor = createMultiValueEditor(rule.trigger || [], '觸發條件', '輸入一條觸發文字', '新增觸發', '尚未設定觸發條件', next => {
+            rule.trigger = next;
+            save();
+        });
+
+        const responseEditor = createMultiValueEditor(rule.response || [], '回覆內容', '輸入一條回覆內容', '新增回覆', '尚未設定回覆內容', next => {
+            rule.response = next;
+            save();
+        });
+
+        const modeSelect = document.createElement('select');
+        modeSelect.className = 'form-select';
+        AUTOREPLY_MODE_OPTIONS.forEach(opt => {
+            const o = document.createElement('option');
+            o.value = opt.value;
+            o.textContent = opt.label;
+            if (rule.mode === opt.value) o.selected = true;
+            modeSelect.appendChild(o);
+        });
+        modeSelect.addEventListener('change', () => { rule.mode = modeSelect.value; save(); });
+
+        const replyWrap = document.createElement('div');
+        replyWrap.className = 'toggle-wrapper';
+        const replyLabel = document.createElement('label');
+        replyLabel.className = 'toggle';
+        const replyCheck = document.createElement('input');
+        replyCheck.type = 'checkbox';
+        replyCheck.checked = rule.reply;
+        replyCheck.addEventListener('change', () => { rule.reply = replyCheck.checked; save(); });
+        const replySlider = document.createElement('span');
+        replySlider.className = 'toggle-slider';
+        replyLabel.appendChild(replyCheck);
+        replyLabel.appendChild(replySlider);
+        replyWrap.appendChild(replyLabel);
+
+        const channelModeSelect = document.createElement('select');
+        channelModeSelect.className = 'form-select';
+        AUTOREPLY_CHANNEL_MODE_OPTIONS.forEach(opt => {
+            const o = document.createElement('option');
+            o.value = opt.value;
+            o.textContent = opt.label;
+            if (rule.channel_mode === opt.value) o.selected = true;
+            channelModeSelect.appendChild(o);
+        });
+        channelModeSelect.addEventListener('change', () => { rule.channel_mode = channelModeSelect.value; save(); });
+
+        const allowedTypes = ['text', 'news'];
+        const allowedChannels = channels.filter(ch => allowedTypes.includes(ch.type));
+        const channelTagsWrap = document.createElement('div');
+        channelTagsWrap.className = 'role-tags role-tags-sm';
+        const channelSel = document.createElement('select');
+        channelSel.className = 'form-select';
+
+        function rebuildChannelOptions() {
+            channelSel.innerHTML = '<option value="">選擇頻道</option>';
+            allowedChannels.forEach(ch => {
+                if ((rule.channels || []).includes(String(ch.id))) return;
+                const opt = document.createElement('option');
+                opt.value = ch.id;
+                opt.textContent = (ch.category ? `[${ch.category}] ` : '') + ch.name;
+                channelSel.appendChild(opt);
+            });
+        }
+
+        function renderChannelTags() {
+            channelTagsWrap.innerHTML = '';
+            (rule.channels || []).forEach(cid => {
+                const ch = channels.find(c => String(c.id) === cid);
+                const tag = document.createElement('span');
+                tag.className = 'role-tag';
+                tag.textContent = ch ? ch.name : cid;
+                const rm = document.createElement('button');
+                rm.className = 'role-tag-remove';
+                rm.textContent = '?';
+                rm.addEventListener('click', () => {
+                    rule.channels = (rule.channels || []).filter(id => id !== cid);
+                    renderChannelTags();
+                    rebuildChannelOptions();
+                    save();
+                });
+                tag.appendChild(rm);
+                channelTagsWrap.appendChild(tag);
+            });
+        }
+
+        channelSel.addEventListener('change', () => {
+            if (!channelSel.value) return;
+            rule.channels = rule.channels || [];
+            rule.channels.push(channelSel.value);
+            renderChannelTags();
+            rebuildChannelOptions();
+            save();
+        });
+
+        rebuildChannelOptions();
+        renderChannelTags();
+
+        const chanceInput = document.createElement('input');
+        chanceInput.type = 'number';
+        chanceInput.className = 'form-input';
+        chanceInput.min = 1;
+        chanceInput.max = 100;
+        chanceInput.value = rule.random_chance;
+        chanceInput.style.width = '4rem';
+        chanceInput.addEventListener('input', () => {
+            rule.random_chance = Math.max(1, Math.min(100, parseInt(chanceInput.value, 10) || 100));
+            save();
+        });
+
+        const deleteBtn = document.createElement('button');
+        deleteBtn.type = 'button';
+        deleteBtn.className = 'btn-autoreply-remove';
+        deleteBtn.textContent = '刪除';
+        deleteBtn.addEventListener('click', () => {
+            const i = list.indexOf(rule);
+            if (i > -1) list.splice(i, 1);
+            save();
+            renderRules();
+        });
+
+        const row1 = document.createElement('div');
+        row1.className = 'autoreply-rule-row';
+        row1.appendChild(triggerEditor);
+        card.appendChild(row1);
+
+        const row2 = document.createElement('div');
+        row2.className = 'autoreply-rule-row';
+        row2.appendChild(responseEditor);
+        card.appendChild(row2);
+
+        const row3 = document.createElement('div');
+        row3.className = 'autoreply-rule-row autoreply-rule-meta';
+        row3.appendChild(document.createTextNode('璅∪? '));
+        row3.appendChild(modeSelect);
+        row3.appendChild(document.createTextNode(' ??????'));
+        row3.appendChild(replyWrap);
+        row3.appendChild(document.createTextNode(' ?駁? '));
+        row3.appendChild(channelModeSelect);
+        row3.appendChild(channelTagsWrap);
+        row3.appendChild(channelSel);
+        row3.appendChild(document.createTextNode(' 璈?% '));
+        row3.appendChild(chanceInput);
+        row3.appendChild(deleteBtn);
+        card.appendChild(row3);
+        return card;
+    }
+
+    const addBtn = document.createElement('button');
+    addBtn.type = 'button';
+    addBtn.className = 'btn-autoreply-add';
+    addBtn.addEventListener('click', () => {
+        if (list.length >= MAX_AUTOREPLY_RULES) return;
+        list.push({
+            trigger: [],
+            response: [],
+            mode: 'contains',
+            reply: false,
+            channel_mode: 'all',
+            channels: [],
+            random_chance: 100,
+        });
+        save();
+        renderRules();
+    });
+    container.appendChild(addBtn);
+
+    renderRules();
+    return container;
+}
+
 const AUTOMOD_FEATURES = [
     { id: 'scamtrap', label: '🪤 詐騙陷阱', desc: '蜜罐頻道，在該頻道發訊者自動處置', fields: [
         { key: 'channel_id', label: '陷阱頻道', type: 'channel', default: '' },

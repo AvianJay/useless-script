@@ -362,6 +362,8 @@ def _serialize(value, stype):
     if stype == "autoreply_list":
         if not isinstance(value, list):
             return []
+        if len(value) > 50:
+            raise ValueError("AutoReply rules are limited to 50 items.")
         out = []
         for item in value:
             if not isinstance(item, dict):

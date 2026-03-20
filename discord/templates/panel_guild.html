@@ -7,7 +7,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/panel.css') }}?v=1">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/panel.css') }}?v=2">
     <script async src="https://www.googletagmanager.com/gtag/js?id={{ gtag }}"></script>
     <script>
         window.dataLayer = window.dataLayer || [];
@@ -60,6 +60,6 @@
         const GUILD_ID = "{{ guild.id }}";
         const SETTINGS_SCHEMA = {{ settings_json | safe }};
     </script>
-    <script src="{{ url_for('static', filename='js/panel.js') }}?v=2"></script>
+    <script src="{{ url_for('static', filename='js/panel.js') }}?v=3"></script>
 </body>
 </html>
