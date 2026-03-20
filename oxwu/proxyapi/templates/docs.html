@@ -195,6 +195,12 @@
       </div>
     </section>
 
+      <div class="endpoint">
+        <div><span class="tag get">GET</span><code>/api/town-map</code></div>
+        <p>回傳 <code>town_id</code> 對照資料，供客戶端把 ETA 秒數 map 轉成地區名稱或座標。</p>
+      </div>
+    </section>
+
     <section class="section">
       <h2>Upstream Mapping (from main.js)</h2>
       <p>Proxy 會向上游 Electron HTTP 服務（預設 <code>http://127.0.0.1:10281</code>）抓資料並更新快取，對應如下：</p>
@@ -217,6 +223,7 @@
         <li><code>proxy_report_update</code></li>
         <li><code>proxy_warning_update</code></li>
       </ul>
+      <p><code>proxy_warning_update.arrival_times</code> 只會傳送 <code>{ town_id: eta_seconds }</code>。</p>
       <pre>const socket = io("{{ request.host_url.rstrip('/') }}", {
   extraHeaders: { "X-API-Key": "YOUR_API_KEY" }
 });</pre>

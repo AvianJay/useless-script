@@ -1,9 +1,12 @@
 import os
+import json
+import math
 import threading
 import time
 import sqlite3
 from functools import wraps
-from datetime import datetime, timezone
+from pathlib import Path
+from datetime import datetime, timedelta, timezone
 
 import requests
 from flask import (
@@ -41,6 +44,9 @@ APP_PORT = int(os.getenv("APP_PORT", "5000"))
 COST_PER_API = float(os.getenv("COST_PER_API", "1.0"))
 COST_PER_SCREENSHOT = float(os.getenv("COST_PER_SCREENSHOT", "5.0"))
 COST_PER_SEC_WS = float(os.getenv("COST_PER_SEC_WS", "0.01"))
+WARNING_S_WAVE_SPEED_KMPS = float(os.getenv("WARNING_S_WAVE_SPEED_KMPS", "4.0"))
+TOWN_ID_PATH = Path(__file__).resolve().parent.parent / "town_id.json"
+TAIWAN_TZ = timezone(timedelta(hours=8))
 
 UPSTREAM_INFO_ENDPOINTS = {
     "report": "/getReportInfo",
@@ -88,6 +94,31 @@ else:
 
 CACHE = {"report": None, "warning": None}
 CACHE_SCREENSHOT = {"report": None, "warning": None}
+
+
+def load_town_locations():
+    try:
+        with TOWN_ID_PATH.open("r", encoding="utf-8") as fp:
+            raw = json.load(fp)
+    except Exception as exc:
+        print(f"Failed to load town locations: {exc}")
+        return {}
+
+    locations = {}
+    for town_id, info in raw.items():
+        if isinstance(info, str):
+            locations[town_id] = {"name": info}
+            continue
+
+        locations[town_id] = {
+            "name": info.get("name", town_id),
+            "latitude": info.get("latitude"),
+            "longitude": info.get("longitude"),
+        }
+    return locations
+
+
+TOWN_LOCATIONS = load_town_locations()
 
 connected_clients = {}
 connected_clients_lock = threading.Lock()
@@ -259,6 +290,72 @@ def mark_event_status(type_: str, field: str, value):
         system_status["events"][type_][field] = value
 
 
+def parse_warning_origin(time_text: str):
+    if not time_text:
+        return None
+
+    try:
+        return datetime.strptime(time_text, "%Y-%m-%d %H:%M:%S").replace(tzinfo=TAIWAN_TZ)
+    except ValueError:
+        return None
+
+
+def haversine_km(lat1, lon1, lat2, lon2):
+    lat1_rad = math.radians(lat1)
+    lon1_rad = math.radians(lon1)
+    lat2_rad = math.radians(lat2)
+    lon2_rad = math.radians(lon2)
+
+    dlat = lat2_rad - lat1_rad
+    dlon = lon2_rad - lon1_rad
+    a = math.sin(dlat / 2) ** 2 + math.cos(lat1_rad) * math.cos(lat2_rad) * math.sin(dlon / 2) ** 2
+    return 6371.0 * 2 * math.asin(math.sqrt(a))
+
+
+def build_warning_arrival_times(warning_data: dict):
+    if not warning_data:
+        return {}
+
+    try:
+        epicenter_lat = float(warning_data["location"]["latitude"])
+        epicenter_lon = float(warning_data["location"]["longitude"])
+        depth_km = float(warning_data["depth"])
+    except (KeyError, TypeError, ValueError):
+        return {}
+
+    origin = parse_warning_origin(warning_data.get("time"))
+    now = datetime.now(TAIWAN_TZ)
+    elapsed_seconds = max(0.0, (now - origin).total_seconds()) if origin else 0.0
+
+    results = {}
+    for town_id, info in TOWN_LOCATIONS.items():
+        latitude = info.get("latitude")
+        longitude = info.get("longitude")
+        if latitude is None or longitude is None:
+            continue
+
+        horizontal_distance_km = haversine_km(epicenter_lat, epicenter_lon, latitude, longitude)
+        hypocenter_distance_km = math.sqrt(horizontal_distance_km ** 2 + depth_km ** 2)
+        travel_seconds = hypocenter_distance_km / WARNING_S_WAVE_SPEED_KMPS
+        remaining_seconds = max(0, math.ceil(travel_seconds - elapsed_seconds))
+
+        results[town_id] = remaining_seconds
+
+    return results
+
+
+def enrich_warning_payload(payload: dict):
+    if not payload or not payload.get("ok", False):
+        return payload
+
+    enriched = dict(payload)
+    arrival_times = build_warning_arrival_times(enriched)
+    enriched["arrival_times"] = arrival_times
+    enriched["arrival_count"] = len(arrival_times)
+    enriched["arrival_generated_at"] = datetime.now(TAIWAN_TZ).isoformat()
+    return enriched
+
+
 def update_cache(type_: str):
     try:
         endpoint = UPSTREAM_INFO_ENDPOINTS.get(type_)
@@ -272,6 +369,9 @@ def update_cache(type_: str):
             if not payload.get("ok", False):
                 print(f"更新快取失敗 ({type_}): 上游回傳 ok=false")
                 return
+
+            if type_ == "warning":
+                payload = enrich_warning_payload(payload)
 
             CACHE[type_] = payload
             mark_event_status(type_, "last_cache_update_at", utc_now())
@@ -336,6 +436,10 @@ if upstream_sio:
         update_screenshot_cache("warning")
         payload = dict(data or {})
         payload["data"] = CACHE["warning"]
+        if CACHE["warning"]:
+            payload["arrival_times"] = CACHE["warning"].get("arrival_times", {})
+            payload["arrival_count"] = CACHE["warning"].get("arrival_count", 0)
+            payload["arrival_generated_at"] = CACHE["warning"].get("arrival_generated_at")
         socketio.emit("proxy_warning_update", payload)
 
 
@@ -532,6 +636,11 @@ def get_screenshot(type_):
     return Response(image_data, mimetype="image/png")
 
 
+@app.route("/api/town-map", methods=["GET"])
+def get_town_map():
+    return jsonify(TOWN_LOCATIONS)
+
+
 @app.route("/api/docs", methods=["GET"])
 def api_docs():
     return render_template(
@@ -608,6 +717,12 @@ def openapi_spec():
                         },
                     }
                 },
+                "/api/town-map": {
+                    "get": {
+                        "summary": "?? town_id 對照表與座標",
+                        "responses": {"200": {"description": "??"}},
+                    }
+                },
                 "/api/me": {
                     "get": {
                         "summary": "取得目前登入帳號資訊",
@@ -640,6 +755,7 @@ def openapi_spec():
                 "auth": "連線時帶入 X-API-Key header 或 api_key query string。",
                 "billing": f"每秒 {COST_PER_SEC_WS} 點，每 5 秒結算一次。",
                 "events": ["proxy_report_update", "proxy_warning_update"],
+                "warning_arrival_times": "{ town_id: eta_seconds }",
             },
             "x-upstream": {
                 "base_url": UPSTREAM_URL,
