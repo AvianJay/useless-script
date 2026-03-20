@@ -606,6 +606,8 @@ class ClearHistoryView(discord.ui.LayoutView):
 
 class AICommands(commands.Cog):
     """AI 聊天機器人指令"""
+    MAX_EMOJI_CONTEXT_COUNT = 80
+    EMOJI_NAME_PATTERN = re.compile(r'(?<!<):([a-zA-Z0-9_]{2,32}):')
     
     def __init__(self, bot):
         self.bot = bot
@@ -911,6 +913,52 @@ class AICommands(commands.Cog):
             return "openai-fast"
         return model
 
+    @classmethod
+    def _build_guild_emoji_context(cls, guild: discord.Guild) -> tuple[str, dict[str, str]]:
+        """建立可用伺服器自訂表情符號清單與名稱映射。"""
+        if not guild:
+            return "", {}
+
+        emoji_map = {}
+        emoji_names = []
+
+        for emoji in guild.emojis:
+            key = emoji.name.lower()
+            if key in emoji_map:
+                continue
+            emoji_map[key] = str(emoji)
+            emoji_names.append(emoji.name)
+
+        if not emoji_names:
+            return "", emoji_map
+
+        total = len(emoji_names)
+        display_names = emoji_names[:cls.MAX_EMOJI_CONTEXT_COUNT]
+        names_text = ", ".join(f":{name}:" for name in display_names)
+        truncated_note = ""
+        if total > cls.MAX_EMOJI_CONTEXT_COUNT:
+            truncated_note = f"（僅顯示前 {cls.MAX_EMOJI_CONTEXT_COUNT} 個）"
+
+        context = (
+            "\n\n[可用伺服器自訂表情符號]\n"
+            "你可以在回覆中使用以下格式的表情名稱：:表情名稱:\n"
+            "若名稱不在清單中，就不要亂造。\n"
+            f"清單{truncated_note}: {names_text}"
+        )
+        return context, emoji_map
+
+    @classmethod
+    def _resolve_ai_custom_emojis(cls, text: str, emoji_map: dict[str, str]) -> str:
+        """將 AI 輸出的 :emoji_name: 轉為 Discord 自訂表情符號格式。"""
+        if not text or not emoji_map:
+            return text
+
+        def repl(match: re.Match) -> str:
+            name = match.group(1)
+            return emoji_map.get(name.lower(), match.group(0))
+
+        return cls.EMOJI_NAME_PATTERN.sub(repl, text)
+
     async def model_select_autocomplete(
         self,
         interaction: discord.Interaction,
@@ -957,6 +1005,11 @@ class AICommands(commands.Cog):
         
         user = interaction.user
         guild_id = interaction.guild.id if interaction.guild else None
+        emoji_context = ""
+        emoji_map = {}
+
+        if interaction.guild:
+            emoji_context, emoji_map = self._build_guild_emoji_context(interaction.guild)
         
         # 速率限制檢查
         if not self.check_rate_limit(user.id):
@@ -1075,7 +1128,7 @@ class AICommands(commands.Cog):
                 except Exception as e:
                     log(f"獲取頻道訊息失敗: {e}", module_name="AI", level=logging.WARNING)
             
-            system_with_context = f"{SYSTEM_PROMPT}\n\n{user_context}{guild_info}{channel_context}"
+            system_with_context = f"{SYSTEM_PROMPT}\n\n{user_context}{guild_info}{channel_context}{emoji_context}"
             
             messages = [{"role": "system", "content": system_with_context}]
             messages.extend(ConversationManager.format_for_api(history))
@@ -1093,7 +1146,10 @@ class AICommands(commands.Cog):
                 image=image_bytes
             )
 
-            output_chars = len(response_text)
+            raw_output_chars = len(response_text)
+            response_text = self._resolve_ai_custom_emojis(response_text, emoji_map)
+
+            output_chars = raw_output_chars
             output_cost = round(output_chars * rate_per_char, 2)
             balance_before_output = self._get_global_balance(user.id)
             charged_output, final_balance = self._charge_global_balance(user.id, output_cost)
@@ -1238,6 +1294,11 @@ class AICommands(commands.Cog):
         user = ctx.author
         guild = ctx.guild
         guild_id = guild.id if guild else None
+        emoji_context = ""
+        emoji_map = {}
+
+        if guild:
+            emoji_context, emoji_map = self._build_guild_emoji_context(guild)
         
         # 偵測訊息附件中的圖片
         image_attachment = None
@@ -1384,7 +1445,7 @@ class AICommands(commands.Cog):
                     except Exception as e:
                         log(f"獲取頻道訊息失敗: {e}", module_name="AI", level=logging.WARNING)
                 
-                system_with_context = f"{SYSTEM_PROMPT}\n\n{user_context}{guild_info}{channel_context}"
+                system_with_context = f"{SYSTEM_PROMPT}\n\n{user_context}{guild_info}{channel_context}{emoji_context}"
                 
                 messages = [{"role": "system", "content": system_with_context}]
                 messages.extend(ConversationManager.format_for_api(history))
@@ -1402,7 +1463,10 @@ class AICommands(commands.Cog):
                     image=image_bytes
                 )
 
-                output_chars = len(response_text)
+                raw_output_chars = len(response_text)
+                response_text = self._resolve_ai_custom_emojis(response_text, emoji_map)
+
+                output_chars = raw_output_chars
                 output_cost = round(output_chars * rate_per_char, 2)
                 balance_before_output = self._get_global_balance(user.id)
                 charged_output, final_balance = self._charge_global_balance(user.id, output_cost)
