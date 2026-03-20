@@ -1,0 +1,20 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "uooxwu"
+version = "0.1.0"
+description = "Unofficial Python client for the OXWU proxy API"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "requests>=2.31,<3.0",
+    "python-socketio[client]>=5.11,<6.0",
+]
+
+[tool.setuptools]
+packages = ["uooxwu"]
+
+[tool.setuptools.package-data]
+uooxwu = ["data/*.json"]
