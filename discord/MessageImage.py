@@ -141,6 +141,48 @@ def get_twemoji_url(emoji_char):
     filename = "-".join(codepoints)
     return f"https://cdn.jsdelivr.net/gh/twitter/twemoji@latest/assets/72x72/{filename}.png"
 
+def render_sheared_text(text, font_path, font_size, fill="white", shear=0.2, scale=4):
+    """Render italic-like text at a higher resolution, then downsample for sharper output."""
+    hi_font = ImageFont.truetype(font_path, font_size * scale)
+    bbox = hi_font.getbbox(text)
+    text_w = max(bbox[2] - bbox[0], 1)
+    text_h = max(bbox[3] - bbox[1], 1)
+
+    padding = 12 * scale
+    canvas_w = text_w + padding * 2
+    canvas_h = text_h + padding * 2
+
+    text_img = Image.new("RGBA", (canvas_w, canvas_h), (0, 0, 0, 0))
+    text_draw = ImageDraw.Draw(text_img)
+    text_draw.text((padding - bbox[0], padding - bbox[1]), text, font=hi_font, fill=fill)
+
+    sheared = text_img.transform(
+        text_img.size,
+        Image.AFFINE,
+        (1, shear, 0, 0, 1, 0),
+        resample=Image.Resampling.BICUBIC,
+    )
+
+    downsampled = sheared.resize(
+        (max(sheared.width // scale, 1), max(sheared.height // scale, 1)),
+        Image.Resampling.LANCZOS,
+    )
+    cropped_bbox = downsampled.getbbox()
+    return downsampled.crop(cropped_bbox) if cropped_bbox else downsampled
+
+def draw_quote_signature(target_img, center_x, name_y, name):
+    """Draw the author name on the final opaque image to avoid fuzzy edges from later compositing."""
+    sheared_name = render_sheared_text(
+        f" - {name}",
+        os.path.join(fontdir, "notolight.ttf"),
+        25,
+        fill="white",
+        shear=0.2,
+        scale=4,
+    )
+    name_x = center_x - sheared_name.width // 2
+    target_img.paste(sheared_name, (name_x, int(name_y)), sheared_name)
+
 async def load_emojis(segments, size):
     async with aiohttp.ClientSession() as session:
         for seg in segments:
@@ -367,20 +409,6 @@ async def create(message: discord.Message, animate_gif=False) -> tuple[io.BytesI
 
     # Draw Name (畫在 foreground 上)
     name_y = current_y + 20
-    display_name = f" - {name}"
-    name_x = center_x - name_w // 2
-
-    text_img = Image.new("RGBA", (int(name_w) + 20, int(name_h) + 20), (0, 0, 0, 0))
-    text_draw = ImageDraw.Draw(text_img)
-    text_draw.text((0, 0), display_name, font=font_name, fill="white")
-
-    sheared = text_img.transform(
-        text_img.size,
-        Image.AFFINE,
-        (1, 0.2, 0, 0, 1, 0),
-        resample=Image.BICUBIC,
-    )
-    foreground.paste(sheared, (name_x, int(name_y)), sheared)
 
     # --- 3. 合成最終圖片 (處理 GIF 幀數或靜態 PNG) ---
     output_buffer = io.BytesIO()
@@ -400,6 +428,7 @@ async def create(message: discord.Message, animate_gif=False) -> tuple[io.BytesI
             
             # 將前面準備好的文字前景疊加上去
             combined = Image.alpha_composite(base, foreground)
+            draw_quote_signature(combined, center_x, name_y, name)
             
             # 轉換為 RGB 以利 GIF 儲存 (去透明底)
             frames.append(combined.convert("RGB"))
@@ -422,6 +451,7 @@ async def create(message: discord.Message, animate_gif=False) -> tuple[io.BytesI
         base.paste(avatar_rgba, (0, 0), avatar_rgba)
         
         combined = Image.alpha_composite(base, foreground)
+        draw_quote_signature(combined, center_x, name_y, name)
         combined.save(output_buffer, format="PNG")
         ext = "png"
 
