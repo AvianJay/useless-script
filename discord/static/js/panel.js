@@ -4,6 +4,7 @@
 let currentValues = {};
 let channelsCache = null;
 let rolesCache = null;
+let autoreplyLimitCache = null;
 
 // ---- Data fetching ----
 
@@ -31,6 +32,13 @@ async function loadRoles() {
 async function loadSettings() {
     currentValues = await fetchJSON(`/api/panel/guild/${GUILD_ID}/settings`);
     return currentValues;
+}
+
+async function loadAutoreplyLimit() {
+    if (autoreplyLimitCache !== null) return autoreplyLimitCache;
+    const data = await fetchJSON(`/api/panel/guild/${GUILD_ID}/autoreply_limit`);
+    autoreplyLimitCache = parseInt(data && data.limit, 10) || 50;
+    return autoreplyLimitCache;
 }
 
 // ---- Saving ----
@@ -85,10 +93,11 @@ async function render() {
     wrapper.innerHTML = '<div class="loading-spinner">正在載入設定...</div>';
 
     // Load all data in parallel
-    const [settings, channels, roles] = await Promise.all([
+    const [settings, channels, roles, autoreplyLimit] = await Promise.all([
         loadSettings(),
         loadChannels(),
         loadRoles(),
+        loadAutoreplyLimit(),
     ]);
 
     if (!settings) { wrapper.innerHTML = '<div class="loading-spinner">載入失敗</div>'; return; }
@@ -128,7 +137,7 @@ async function render() {
 
         for (const s of schema.settings) {
             const val = settings[mod] ? settings[mod][s.database_key] : s.default;
-            const row = buildSettingRow(mod, s, val, channels, roles);
+            const row = buildSettingRow(mod, s, val, channels, roles, autoreplyLimit);
             body.appendChild(row);
         }
 
@@ -141,7 +150,7 @@ async function render() {
     if (first) first.classList.add('open');
 }
 
-function buildSettingRow(mod, s, value, channels, roles) {
+function buildSettingRow(mod, s, value, channels, roles, autoreplyLimit) {
     const row = document.createElement('div');
     row.className = 'setting-row';
     if (s.type === 'autoreply_list' || s.type === 'automod_config' || s.type === 'webverify_config') row.classList.add('setting-row-column');
@@ -174,7 +183,7 @@ function buildSettingRow(mod, s, value, channels, roles) {
             ctrl.appendChild(buildChannelListSelect(mod, s, value, channels));
             break;
         case 'autoreply_list':
-            ctrl.appendChild(buildAutoreplyListEditor(mod, s, value, channels));
+            ctrl.appendChild(buildAutoreplyListEditor(mod, s, value, channels, autoreplyLimit));
             break;
         case 'automod_config':
             ctrl.appendChild(buildAutomodConfigEditor(mod, s, value, channels));
@@ -400,231 +409,8 @@ const AUTOREPLY_CHANNEL_MODE_OPTIONS = [
     { value: 'blacklist', label: '黑名單' },
 ];
 
-function buildAutoreplyListEditor(mod, s, value, channels) {
-    const list = Array.isArray(value) ? value.map(r => ({
-        trigger: Array.isArray(r.trigger) ? r.trigger : (r.trigger ? String(r.trigger).split(',') : []),
-        response: Array.isArray(r.response) ? r.response : (r.response ? String(r.response).split(',') : []),
-        mode: r.mode || 'contains',
-        reply: !!r.reply,
-        channel_mode: r.channel_mode || 'all',
-        channels: Array.isArray(r.channels) ? r.channels.map(String) : [],
-        random_chance: Math.max(1, Math.min(100, parseInt(r.random_chance, 10) || 100)),
-    })) : [];
-
-    const container = document.createElement('div');
-    container.className = 'autoreply-list-editor';
-
-    function serializeRule(rule) {
-        return {
-            trigger: rule.trigger,
-            response: rule.response,
-            mode: rule.mode,
-            reply: rule.reply,
-            channel_mode: rule.channel_mode,
-            channels: rule.channels,
-            random_chance: rule.random_chance,
-        };
-    }
-
-    function save() {
-        debounceSave(mod, s.database_key, list.map(serializeRule), 500);
-    }
-
-    function buildRuleCard(rule, index) {
-        const card = document.createElement('div');
-        card.className = 'autoreply-rule-card';
-
-        const triggerInput = document.createElement('input');
-        triggerInput.type = 'text';
-        triggerInput.className = 'form-input';
-        triggerInput.placeholder = '觸發字串，逗號分隔多個';
-        triggerInput.value = (rule.trigger || []).join(', ');
-        triggerInput.addEventListener('input', () => {
-            rule.trigger = triggerInput.value.split(',').map(t => t.trim()).filter(Boolean);
-            save();
-        });
-
-        const responseInput = document.createElement('input');
-        responseInput.type = 'text';
-        responseInput.className = 'form-input';
-        responseInput.placeholder = '回覆內容，逗號分隔多個（隨機選一）';
-        responseInput.value = (rule.response || []).join(', ');
-        responseInput.addEventListener('input', () => {
-            rule.response = responseInput.value.split(',').map(r => r.trim()).filter(Boolean);
-            save();
-        });
-
-        const modeSelect = document.createElement('select');
-        modeSelect.className = 'form-select';
-        AUTOREPLY_MODE_OPTIONS.forEach(opt => {
-            const o = document.createElement('option');
-            o.value = opt.value;
-            o.textContent = opt.label;
-            if (rule.mode === opt.value) o.selected = true;
-            modeSelect.appendChild(o);
-        });
-        modeSelect.addEventListener('change', () => { rule.mode = modeSelect.value; save(); });
-
-        const replyWrap = document.createElement('div');
-        replyWrap.className = 'toggle-wrapper';
-        const replyLabel = document.createElement('label');
-        replyLabel.className = 'toggle';
-        const replyCheck = document.createElement('input');
-        replyCheck.type = 'checkbox';
-        replyCheck.checked = rule.reply;
-        replyCheck.addEventListener('change', () => { rule.reply = replyCheck.checked; save(); });
-        const replySlider = document.createElement('span');
-        replySlider.className = 'toggle-slider';
-        replyLabel.appendChild(replyCheck);
-        replyLabel.appendChild(replySlider);
-        replyWrap.appendChild(replyLabel);
-
-        const channelModeSelect = document.createElement('select');
-        channelModeSelect.className = 'form-select';
-        AUTOREPLY_CHANNEL_MODE_OPTIONS.forEach(opt => {
-            const o = document.createElement('option');
-            o.value = opt.value;
-            o.textContent = opt.label;
-            if (rule.channel_mode === opt.value) o.selected = true;
-            channelModeSelect.appendChild(o);
-        });
-        channelModeSelect.addEventListener('change', () => { rule.channel_mode = channelModeSelect.value; save(); });
-
-        const allowedTypes = ['text', 'news'];
-        const allowedChannels = channels.filter(ch => allowedTypes.includes(ch.type));
-        const channelTagsWrap = document.createElement('div');
-        channelTagsWrap.className = 'role-tags role-tags-sm';
-        const channelSel = document.createElement('select');
-        channelSel.className = 'form-select';
-        channelSel.innerHTML = '<option value="">➕ 指定頻道</option>';
-        allowedChannels.forEach(ch => {
-            if (rule.channels.includes(String(ch.id))) return;
-            const opt = document.createElement('option');
-            opt.value = ch.id;
-            opt.textContent = (ch.category ? `[${ch.category}] ` : '') + ch.name;
-            channelSel.appendChild(opt);
-        });
-        function renderChannelTags() {
-            channelTagsWrap.innerHTML = '';
-            (rule.channels || []).forEach(cid => {
-                const ch = channels.find(c => String(c.id) === cid);
-                const tag = document.createElement('span');
-                tag.className = 'role-tag';
-                tag.textContent = ch ? ch.name : cid;
-                const rm = document.createElement('button');
-                rm.className = 'role-tag-remove';
-                rm.textContent = '×';
-                rm.addEventListener('click', () => {
-                    rule.channels = rule.channels.filter(id => id !== cid);
-                    renderChannelTags();
-                    channelSel.innerHTML = '<option value="">➕ 指定頻道</option>';
-                    allowedChannels.forEach(ch => {
-                        if (rule.channels.includes(String(ch.id))) return;
-                        const o = document.createElement('option');
-                        o.value = ch.id;
-                        o.textContent = (ch.category ? `[${ch.category}] ` : '') + ch.name;
-                        channelSel.appendChild(o);
-                    });
-                    save();
-                });
-                tag.appendChild(rm);
-                channelTagsWrap.appendChild(tag);
-            });
-        }
-        channelSel.addEventListener('change', () => {
-            if (channelSel.value) {
-                rule.channels = rule.channels || [];
-                rule.channels.push(channelSel.value);
-                renderChannelTags();
-                channelSel.innerHTML = '<option value="">➕ 指定頻道</option>';
-                allowedChannels.forEach(ch => {
-                    if (rule.channels.includes(String(ch.id))) return;
-                    const o = document.createElement('option');
-                    o.value = ch.id;
-                    o.textContent = (ch.category ? `[${ch.category}] ` : '') + ch.name;
-                    channelSel.appendChild(o);
-                });
-                save();
-            }
-        });
-        renderChannelTags();
-
-        const chanceInput = document.createElement('input');
-        chanceInput.type = 'number';
-        chanceInput.className = 'form-input';
-        chanceInput.min = 1;
-        chanceInput.max = 100;
-        chanceInput.value = rule.random_chance;
-        chanceInput.style.width = '4rem';
-        chanceInput.addEventListener('input', () => {
-            rule.random_chance = Math.max(1, Math.min(100, parseInt(chanceInput.value, 10) || 100));
-            save();
-        });
-
-        const deleteBtn = document.createElement('button');
-        deleteBtn.type = 'button';
-        deleteBtn.className = 'btn-autoreply-remove';
-        deleteBtn.textContent = '刪除';
-        deleteBtn.addEventListener('click', () => {
-            const i = list.indexOf(rule);
-            if (i > -1) list.splice(i, 1);
-            container.removeChild(card);
-            save();
-        });
-
-        card.innerHTML = '';
-        const row1 = document.createElement('div');
-        row1.className = 'autoreply-rule-row';
-        row1.appendChild(triggerInput);
-        card.appendChild(row1);
-        const row2 = document.createElement('div');
-        row2.className = 'autoreply-rule-row';
-        row2.appendChild(responseInput);
-        card.appendChild(row2);
-        const row3 = document.createElement('div');
-        row3.className = 'autoreply-rule-row autoreply-rule-meta';
-        row3.appendChild(document.createTextNode('模式 '));
-        row3.appendChild(modeSelect);
-        row3.appendChild(document.createTextNode(' 回覆原訊息 '));
-        row3.appendChild(replyWrap);
-        row3.appendChild(document.createTextNode(' 頻道 '));
-        row3.appendChild(channelModeSelect);
-        row3.appendChild(channelTagsWrap);
-        row3.appendChild(channelSel);
-        row3.appendChild(document.createTextNode(' 機率% '));
-        row3.appendChild(chanceInput);
-        row3.appendChild(deleteBtn);
-        card.appendChild(row3);
-        return card;
-    }
-
-    list.forEach(rule => container.appendChild(buildRuleCard(rule)));
-
-    const addBtn = document.createElement('button');
-    addBtn.type = 'button';
-    addBtn.className = 'btn-autoreply-add';
-    addBtn.textContent = '➕ 新增一則';
-    addBtn.addEventListener('click', () => {
-        const newRule = {
-            trigger: [],
-            response: [],
-            mode: 'contains',
-            reply: false,
-            channel_mode: 'all',
-            channels: [],
-            random_chance: 100,
-        };
-        list.push(newRule);
-        container.insertBefore(buildRuleCard(newRule, list.length - 1), addBtn);
-        save();
-    });
-    container.appendChild(addBtn);
-
-    return container;
-}
-
-function buildAutoreplyListEditor(mod, s, value, channels) {
-    const MAX_AUTOREPLY_RULES = 50;
+function buildAutoreplyListEditor(mod, s, value, channels, autoreplyLimit = 50) {
+    const MAX_AUTOREPLY_RULES = Math.max(1, parseInt(autoreplyLimit, 10) || 50);
     const list = Array.isArray(value) ? value.map(r => ({
         trigger: Array.isArray(r.trigger) ? r.trigger.map(v => String(v).trim()).filter(Boolean) : (r.trigger ? String(r.trigger).split(',').map(v => v.trim()).filter(Boolean) : []),
         response: Array.isArray(r.response) ? r.response.map(v => String(v).trim()).filter(Boolean) : (r.response ? String(r.response).split(',').map(v => v.trim()).filter(Boolean) : []),

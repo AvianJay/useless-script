@@ -255,7 +255,7 @@ def api_get_settings(guild_id):
         ms = {}
         for s in data["settings"]:
             val = get_server_config(gid, s["database_key"], s.get("default"))
-            ms[s["database_key"]] = _serialize(val, s.get("type", "string"))
+            ms[s["database_key"]] = _serialize(val, s.get("type", "string"), guild_id=gid)
         result[mod] = ms
     return jsonify(result)
 
@@ -286,6 +286,11 @@ def api_set_settings(guild_id):
         value = _coerce(value, setting.get("type", "string"))
     except (ValueError, TypeError) as e:
         return jsonify({"error": str(e)}), 400
+
+    if setting.get("type") == "autoreply_list":
+        autoreply_limit = int(get_server_config(gid, "autoreply_limit", 50) or 50)
+        if len(value or []) > autoreply_limit:
+            return jsonify({"error": f"AutoReply rules are limited to {autoreply_limit} items."}), 400
 
     set_server_config(gid, key, value)
 
@@ -346,10 +351,19 @@ def api_roles(guild_id):
         })
     return jsonify(roles)
 
+# get autoreply limit
+@app.route("/api/panel/guild/<guild_id>/autoreply_limit")
+@_require_auth
+@_require_guild
+def api_autoreply_limit(guild_id):
+    gid = int(guild_id)
+    limit = int(get_server_config(gid, "autoreply_limit", 50) or 50)
+    return jsonify({"limit": limit})
+
 
 # ============= Value serialization =============
 
-def _serialize(value, stype):
+def _serialize(value, stype, guild_id=None):
     """Convert values to JSON-safe types. IDs -> strings to avoid JS precision loss."""
     if value is None:
         return None
@@ -362,8 +376,6 @@ def _serialize(value, stype):
     if stype == "autoreply_list":
         if not isinstance(value, list):
             return []
-        if len(value) > 50:
-            raise ValueError("AutoReply rules are limited to 50 items.")
         out = []
         for item in value:
             if not isinstance(item, dict):
