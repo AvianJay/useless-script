@@ -1,4 +1,4 @@
-from globalenv import (
+﻿from globalenv import (
     bot, config, get_server_config, set_server_config, get_user_data, set_user_data,
     get_all_user_data, interaction_uses_guild_scope, ECONOMY_GLOBAL_MODE_CONFIG_KEY,
 )
@@ -1197,10 +1197,12 @@ class Economy(commands.GroupCog, name="economy", description="經濟系統指令
         app_commands.Choice(name="伺服幣", value="server"),
         app_commands.Choice(name="全域幣", value="global"),
     ])
-    async def pay(self, interaction: discord.Interaction, user: discord.User, amount: float, currency: str = "global"):
-        # 全域安裝時強制使用全域幣
+    async def pay(self, interaction: discord.Interaction, user: discord.User, amount: float, currency: str = None):
+        # 非伺服器上下文時強制全域幣；伺服器上下文未指定時預設伺服幣
         if not interaction_uses_server_scope(interaction):
             currency = "global"
+        elif currency is None:
+            currency = "server"
         if amount <= 0:
             await interaction.response.send_message("❌ 金額必須大於 0。", ephemeral=True)
             return
