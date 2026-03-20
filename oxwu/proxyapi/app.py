@@ -317,22 +317,53 @@ def haversine_km(lat1, lon1, lat2, lon2):
     return 6371.0 * 2 * math.asin(math.sqrt(a))
 
 
+def estimate_intensity_label(magnitude: float, depth_km: float, hypocenter_distance_km: float) -> str:
+    # A rough PGA-based estimate for preview use only, not an official intensity.
+    source_term = 0.58 * magnitude + 0.0038 * depth_km - 1.29
+    attenuation = math.log10(
+        hypocenter_distance_km + 0.0028 * (10 ** (0.5 * magnitude))
+    ) + 0.002 * hypocenter_distance_km
+    pga = 10 ** (source_term - attenuation)
+
+    if pga < 0.8:
+        return "0級"
+    if pga < 2.5:
+        return "1級"
+    if pga < 8.0:
+        return "2級"
+    if pga < 25.0:
+        return "3級"
+    if pga < 80.0:
+        return "4級"
+    if pga < 140.0:
+        return "5弱"
+    if pga < 250.0:
+        return "5強"
+    if pga < 440.0:
+        return "6弱"
+    if pga < 800.0:
+        return "6強"
+    return "7級"
+
+
 def build_warning_arrival_times(warning_data: dict):
     if not warning_data:
-        return {}
+        return {}, {}
 
     try:
         epicenter_lat = float(warning_data["location"]["latitude"])
         epicenter_lon = float(warning_data["location"]["longitude"])
         depth_km = float(warning_data["depth"])
+        magnitude = float(warning_data["magnitude"])
     except (KeyError, TypeError, ValueError):
-        return {}
+        return {}, {}
 
     origin = parse_warning_origin(warning_data.get("time"))
     now = datetime.now(TAIWAN_TZ)
     elapsed_seconds = max(0.0, (now - origin).total_seconds()) if origin else 0.0
 
-    results = {}
+    arrival_times = {}
+    estimated_intensities = {}
     for town_id, info in TOWN_LOCATIONS.items():
         latitude = info.get("latitude")
         longitude = info.get("longitude")
@@ -343,11 +374,13 @@ def build_warning_arrival_times(warning_data: dict):
         hypocenter_distance_km = math.sqrt(horizontal_distance_km ** 2 + depth_km ** 2)
         travel_seconds = hypocenter_distance_km / WARNING_S_WAVE_SPEED_KMPS
         remaining_seconds = max(0, math.ceil(travel_seconds - elapsed_seconds))
+        estimated_level = estimate_intensity_label(magnitude, depth_km, hypocenter_distance_km)
 
         if remaining_seconds > 0:
-            results[town_id] = remaining_seconds
+            arrival_times[town_id] = remaining_seconds
+            estimated_intensities[town_id] = estimated_level
 
-    return results
+    return arrival_times, estimated_intensities
 
 
 def enrich_warning_payload(payload: dict):
@@ -355,8 +388,9 @@ def enrich_warning_payload(payload: dict):
         return payload
 
     enriched = dict(payload)
-    arrival_times = build_warning_arrival_times(enriched)
+    arrival_times, estimated_intensities = build_warning_arrival_times(enriched)
     enriched["arrival_times"] = arrival_times
+    enriched["estimated_intensities"] = estimated_intensities
     enriched["arrival_count"] = len(arrival_times)
     enriched["arrival_generated_at"] = datetime.now(TAIWAN_TZ).isoformat()
     return enriched
@@ -444,6 +478,7 @@ if upstream_sio:
         payload["data"] = CACHE["warning"]
         if CACHE["warning"]:
             payload["arrival_times"] = CACHE["warning"].get("arrival_times", {})
+            payload["estimated_intensities"] = CACHE["warning"].get("estimated_intensities", {})
             payload["arrival_count"] = CACHE["warning"].get("arrival_count", 0)
             payload["arrival_generated_at"] = CACHE["warning"].get("arrival_generated_at")
         socketio.emit("proxy_warning_update", payload)
