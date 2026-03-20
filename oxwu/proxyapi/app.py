@@ -66,7 +66,12 @@ app.config.update(
 )
 
 if SocketIO:
-    socketio = SocketIO(app, async_mode="threading", cors_allowed_origins="*")
+    socketio = SocketIO(
+        app,
+        async_mode="threading",
+        cors_allowed_origins="*",
+        manage_session=False,
+    )
 else:
     class _SocketIOServerShim:
         @staticmethod
@@ -339,7 +344,8 @@ def build_warning_arrival_times(warning_data: dict):
         travel_seconds = hypocenter_distance_km / WARNING_S_WAVE_SPEED_KMPS
         remaining_seconds = max(0, math.ceil(travel_seconds - elapsed_seconds))
 
-        results[town_id] = remaining_seconds
+        if remaining_seconds > 0:
+            results[town_id] = remaining_seconds
 
     return results
 

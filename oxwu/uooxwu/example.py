@@ -17,11 +17,13 @@ def disconnect():
 @client.event()
 def proxy_warning_update(data):
     print("warning update:", data.arrival_times)
+    print("warning update (raw):", data)
 
 
 @client.event()
 def proxy_report_update(data):
     print("report update:", data.time)
+    print("report update (raw):", data)
 
 
 if __name__ == "__main__":

@@ -29,7 +29,7 @@ class Client:
         self.url = url.rstrip("/")
         self.api_key = api_key
         self.timeout = timeout
-        self.socket_transports = socket_transports or ["polling"]
+        self.socket_transports = socket_transports or ["websocket", "polling"]
 
         self._session = requests.Session()
         self._socket: socketio.Client | None = None
