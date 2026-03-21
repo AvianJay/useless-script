@@ -9,6 +9,7 @@ from datetime import datetime, timezone, timedelta
 import os
 from pathlib import Path
 from expiring_dict import ExpiringDict
+import random
 
 # Track pending log tasks for graceful shutdown
 _pending_log_tasks: set = set()
@@ -344,7 +345,14 @@ class LoggerCog(commands.Cog):
         # 處理 Check 失敗
         if isinstance(error, commands.CheckFailure):
             if ctx.author.id not in self.error_user_cache:
-                await ctx.send("❌ 你不符合執行此指令的條件。", allowed_mentions=discord.AllowedMentions.none())
+                messages = [
+                    "❌ 你不符合執行此指令的條件！",
+                    "❌ 請支付你的女裝照來解鎖使用權限。",
+                    "❌ 請交出洋蔥的**新**女裝照來解鎖使用權限。",
+                    "❌ 請交出**小金金的女裝照**來解鎖使用權限。",
+                    "❌ 你在幹嘛？",
+                ]
+                await ctx.send(random.choice(messages), allowed_mentions=discord.AllowedMentions.none())
                 self.error_user_cache[ctx.author.id] = True
             log(f"指令 {ctx.command} 由 {ctx.author} 觸發時 Check 失敗: {error}", module_name="Logger", level=logging.WARNING, user=ctx.author, guild=ctx.guild)
             return
@@ -354,7 +362,7 @@ class LoggerCog(commands.Cog):
             await ctx.send(f"❌ 執行指令時發生錯誤！", allowed_mentions=discord.AllowedMentions.none())
             self.error_user_cache[ctx.author.id] = True
         log(f"指令 {ctx.command} 由 {ctx.author} 觸發時發生錯誤: {error}", module_name="Logger", level=logging.ERROR, user=ctx.author, guild=ctx.guild)
-        await ctx.send(f"糟糕！發生了一些錯誤: {error}")
+        # await ctx.send(f"糟糕！發生了一些錯誤: {error}")
 
     @commands.Cog.listener()
     async def on_guild_join(self, guild):
