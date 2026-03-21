@@ -1,4 +1,4 @@
-# Item System for fun
+﻿# Item System for fun
 import discord
 import asyncio
 import logging
@@ -188,6 +188,9 @@ async def get_user_items(guild_id: int, user_id: int, item_id: str) -> int:
 
 
 async def remove_item_from_user(guild_id: int, user_id: int, item_id: str, amount: int = 1):
+    if amount <= 0:
+        return 0
+
     user_items = get_user_data(guild_id, user_id, "items", {})
     original_amount = user_items.get(item_id, 0)
     if original_amount == 0:
@@ -317,6 +320,9 @@ class ItemSystem(commands.GroupCog, name="item", description="物品系統指令
             scope = "server" if interaction_uses_guild_scope(interaction) else "global"
         can_pickup = (can_pickup == "True")
         pickup_only_once = (pickup_only_once == "True")
+        if amount <= 0:
+            await interaction.response.send_message("數量必須大於 0。", ephemeral=True)
+            return
         user_id = interaction.user.id
         guild_id = 0 if scope == "global" else get_interaction_scope_guild_id(interaction)
         user_item_count = await get_user_items(guild_id, user_id, item_id)
@@ -333,6 +339,14 @@ class ItemSystem(commands.GroupCog, name="item", description="物品系統指令
 
         amount = await remove_item_from_user(guild_id, user_id, item_id, min(amount, user_item_count))
         remaining_count = amount  # 剩餘可撿起的數量
+        remaining_admin_count = 0
+        if guild_id:
+            from Economy import get_admin_item_count, remove_admin_item, add_admin_item
+
+            admin_count = get_admin_item_count(guild_id, user_id, item_id)
+            remaining_admin_count = min(admin_count, amount)
+            if remaining_admin_count > 0:
+                remove_admin_item(guild_id, user_id, item_id, remaining_admin_count)
         picked_up = set()  # user ids who picked up
         # drop to current channel
         class DropView(discord.ui.View):
@@ -347,7 +361,7 @@ class ItemSystem(commands.GroupCog, name="item", description="物品系統指令
 
             @discord.ui.button(label="撿起物品", style=discord.ButtonStyle.green, custom_id="pick_up_item")
             async def pick_up(self, interaction: discord.Interaction, button: discord.ui.Button):
-                nonlocal remaining_count
+                nonlocal remaining_count, remaining_admin_count
                 if pickup_only_once and interaction.user.id in picked_up:
                     await interaction.response.send_message("你已經撿起過這個物品了。\n-# 原物主設定了僅能撿起一次。", ephemeral=True)
                     return
@@ -360,6 +374,9 @@ class ItemSystem(commands.GroupCog, name="item", description="物品系統指令
                 remaining_count -= 1  # 減少剩餘數量
                 other_user_items[item_id] = other_user_items.get(item_id, 0) + 1
                 set_user_data(guild_id, user_id, "items", other_user_items)
+                if guild_id and remaining_admin_count > 0:
+                    add_admin_item(guild_id, user_id, item_id, 1)
+                    remaining_admin_count -= 1
                 log(f"{interaction.user} picked up {target_item['id']} in guild {guild_id}", module_name="ItemSystem")
                 await interaction.response.send_message(f"你撿起了 {target_item['name']}。", ephemeral=True)
                 if remaining_count <= 0:
@@ -443,6 +460,9 @@ class ItemSystem(commands.GroupCog, name="item", description="物品系統指令
         await interaction.response.defer()
         if scope is None:
             scope = "server" if interaction_uses_guild_scope(interaction) else "global"
+        if amount <= 0:
+            await interaction.followup.send("數量必須大於 0。")
+            return
         giver_id = interaction.user.id
         receiver_id = user.id
         guild_id = 0 if scope == "global" else get_interaction_scope_guild_id(interaction)
@@ -470,6 +490,14 @@ class ItemSystem(commands.GroupCog, name="item", description="物品系統指令
         
         # Add to receiver
         await give_item_to_user(guild_id, receiver_id, item_id, removed)
+        if guild_id:
+            from Economy import get_admin_item_count, remove_admin_item, add_admin_item
+
+            admin_count = get_admin_item_count(guild_id, giver_id, item_id)
+            if admin_count > 0:
+                transferred = min(admin_count, removed)
+                remove_admin_item(guild_id, giver_id, item_id, transferred)
+                add_admin_item(guild_id, receiver_id, item_id, transferred)
         
         await interaction.followup.send(f"你給了 {user.display_name}(`{user.name}`) {removed} 個 {item['name']}。", allowed_mentions=discord.AllowedMentions.none())
         # dm the receiver
@@ -538,6 +566,9 @@ class ItemModerate(commands.GroupCog, name="itemmod", description="物品系統�
     async def admin_remove_item(self, interaction: discord.Interaction, user: discord.User, item_id: str, amount: int):
         if not interaction_uses_guild_scope(interaction):
             await interaction.response.send_message("伺服器啟用了全域模式，無法使用此指令。", ephemeral=True)
+            return
+        if amount <= 0:
+            await interaction.response.send_message("數量必須大於 0。", ephemeral=True)
             return
         if user.bot:
             await interaction.response.send_message("你不能移除機器人物品。", ephemeral=True)
@@ -701,13 +732,12 @@ class ItemModerate(commands.GroupCog, name="itemmod", description="物品系統�
         description="物品說明",
         content="使用物品時要傳送的文字內容",
         list_in_shop="是否上架伺服器商店",
-        price="商店定價（伺服幣；若上架為否則會從商店移除）",
         remove_after_use="使用後是否自動移除物品",
         ephemeral_response="是否以隱藏訊息方式回應使用者",
         revenue_share_user="分潤用戶，物品被使用後會獲得 90% 價值",
     )
     @app_commands.autocomplete(item_id=custom_items_autocomplete)
-    async def editcustom(self, interaction: discord.Interaction, item_id: str, name: str = None, description: str = None, content: str = None, list_in_shop: bool = None, price: float = None, remove_after_use: bool = None, ephemeral_response: bool = None, revenue_share_user: discord.User = None):
+    async def editcustom(self, interaction: discord.Interaction, item_id: str, name: str = None, description: str = None, content: str = None, list_in_shop: bool = None, remove_after_use: bool = None, ephemeral_response: bool = None, revenue_share_user: discord.User = None):
         if not interaction_uses_guild_scope(interaction):
             await interaction.response.send_message("❌ 伺服器啟用了全域模式，無法使用此指令。", ephemeral=True)
             return
@@ -732,18 +762,12 @@ class ItemModerate(commands.GroupCog, name="itemmod", description="物品系統�
             data["ephemeral_response"] = ephemeral_response
         if list_in_shop is not None:
             if list_in_shop:
-                p = price if price is not None else data.get("worth")
-                if p is None or p <= 0:
-                    await interaction.response.send_message("上架商店時請設定大於 0 的定價。", ephemeral=True)
+                current_worth = data.get("worth")
+                if current_worth is None or current_worth <= 0:
+                    await interaction.response.send_message("這個指令不能改價格；如果要重新定價，請刪除後重新建立。", ephemeral=True)
                     return
-                data["worth"] = round(float(p), 2)
             else:
                 data.pop("worth", None)
-        elif price is not None and data.get("worth") is not None:
-            if price <= 0:
-                await interaction.response.send_message("定價必須大於 0。", ephemeral=True)
-                return
-            data["worth"] = round(float(price), 2)
         if revenue_share_user is not None:
             if revenue_share_user.bot:
                 await interaction.response.send_message("分潤對象不能是機器人。", ephemeral=True)

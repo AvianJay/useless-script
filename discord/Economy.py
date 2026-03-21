@@ -1,6 +1,6 @@
 ﻿from globalenv import (
     bot, config, get_server_config, set_server_config, get_user_data, set_user_data,
-    get_all_user_data, interaction_uses_guild_scope, ECONOMY_GLOBAL_MODE_CONFIG_KEY,
+    get_all_user_data, interaction_uses_guild_scope, ECONOMY_GLOBAL_MODE_CONFIG_KEY, db,
 )
 import discord
 from discord.ext import commands
@@ -10,6 +10,7 @@ import logging
 import asyncio
 import time
 import math
+import sqlite3
 from datetime import datetime, timezone
 from ItemSystem import (
     items, give_item_to_user, remove_item_from_user, get_user_items,
@@ -509,16 +510,20 @@ async def migrate_guild_economy_to_global(guild_id: int) -> dict:
 
     for user_id in affected_user_ids:
         user_items = get_user_data(guild_id, user_id, "items", {}) or {}
+        admin_items = get_user_data(guild_id, user_id, "admin_items", {}) or {}
         sell_total = 0.0
         user_sold_units = 0
 
         for item_id, amount in list(user_items.items()):
             if amount <= 0:
                 continue
+            normal_amount = max(0, amount - admin_items.get(item_id, 0))
+            if normal_amount <= 0:
+                continue
             sell_price = get_item_sell_price(item_id, guild_id)
             if sell_price > 0:
-                sell_total += sell_price * amount
-            user_sold_units += amount
+                sell_total += sell_price * normal_amount
+            user_sold_units += normal_amount
 
         if user_items:
             set_user_data(guild_id, user_id, "items", {})
@@ -575,6 +580,203 @@ def log_transaction(guild_id: int, user_id: int, tx_type: str, amount: float, cu
         history = history[-50:]
     set_user_data(guild_id, user_id, "economy_history", history)
 
+
+OWNER_ECONOMY_SCOPE_KEYS = ("economy_balance", "economy_history", "items", "admin_items")
+
+
+def _owner_scope_label(guild_id: int) -> str:
+    if guild_id == GLOBAL_GUILD_ID:
+        return f"Global | {GLOBAL_GUILD_ID}"
+    guild = bot.get_guild(guild_id)
+    if guild:
+        return f"{guild.name} | {guild_id}"
+    return f"Unknown Guild | {guild_id}"
+
+
+def _owner_get_user_scope_ids(user_id: int) -> list[int]:
+    with sqlite3.connect(db.db_path) as conn:
+        cursor = conn.cursor()
+        placeholders = ",".join("?" for _ in OWNER_ECONOMY_SCOPE_KEYS)
+        cursor.execute(
+            f"""
+            SELECT DISTINCT guild_id
+            FROM user_data
+            WHERE user_id = ?
+              AND data_key IN ({placeholders})
+            ORDER BY guild_id
+            """,
+            (user_id, *OWNER_ECONOMY_SCOPE_KEYS),
+        )
+        return [int(row[0]) for row in cursor.fetchall()]
+
+
+def _owner_get_scope_snapshot(guild_id: int, user_id: int) -> dict:
+    balance = get_balance(guild_id, user_id)
+    history = get_user_data(guild_id, user_id, "economy_history", []) or []
+    items_data = get_user_data(guild_id, user_id, "items", {}) or {}
+    admin_items = get_user_data(guild_id, user_id, "admin_items", {}) or {}
+    item_units = sum(count for count in items_data.values() if isinstance(count, (int, float)) and count > 0)
+    admin_units = sum(count for count in admin_items.values() if isinstance(count, (int, float)) and count > 0)
+    return {
+        "guild_id": guild_id,
+        "label": _owner_scope_label(guild_id),
+        "balance": float(balance or 0.0),
+        "history": history,
+        "history_count": len(history),
+        "items": items_data,
+        "item_units": int(item_units),
+        "admin_items": admin_items,
+        "admin_units": int(admin_units),
+    }
+
+
+def _owner_resolve_scope(scope: str, ctx, server_id: int = None):
+    scope = (scope or "all").lower()
+    if scope == "all":
+        return scope, None, None
+    if scope == "global":
+        return scope, GLOBAL_GUILD_ID, None
+    if scope == "server":
+        if server_id:
+            return scope, server_id, None
+        if ctx.guild:
+            return scope, ctx.guild.id, None
+        return None, None, "❌ 請提供伺服器ID或在伺服器中使用此指令。"
+    return None, None, "❌ 範圍必須是 'server'、'global' 或 'all'。"
+
+
+async def _owner_send_codeblocks(ctx, title: str, lines: list[str], chunk_size: int = 20):
+    if not lines:
+        await ctx.send(f"{title}\n```No data.```")
+        return
+    for index in range(0, len(lines), chunk_size):
+        chunk = lines[index:index + chunk_size]
+        prefix = f"{title}\n" if index == 0 else ""
+        await ctx.send(f"{prefix}```{chr(10).join(chunk)}```")
+
+
+def _owner_split_text_displays(text: str, max_length: int = 3800) -> list[str]:
+    if not text:
+        return ["沒有資料。"]
+    chunks = []
+    remaining = text
+    while remaining:
+        if len(remaining) <= max_length:
+            chunks.append(remaining)
+            break
+        split_at = remaining.rfind("\n", 0, max_length)
+        if split_at <= 0:
+            split_at = max_length
+        chunks.append(remaining[:split_at])
+        remaining = remaining[split_at:].lstrip()
+    return chunks
+
+
+def _owner_history_lines_for_scope(user_id: int, guild_id: int, limit: int = 20) -> list[str]:
+    history_data = get_user_data(guild_id, user_id, "economy_history", []) or []
+    if not history_data:
+        return []
+    recent_entries = list(reversed(history_data[-limit:]))
+    lines = []
+    for entry in recent_entries:
+        tx_type = entry.get("type", "未知")
+        amount = entry.get("amount", 0)
+        currency = entry.get("currency", "")
+        detail = entry.get("detail", "")
+        tx_time = entry.get("time", "")
+        balance_after = entry.get("balance_after", "N/A")
+        lines.append(f"{tx_time} | {tx_type} | {amount} {currency} | after={balance_after}")
+        if detail:
+            lines.append(f"  {detail}")
+    return lines
+
+
+class OwnerEconomyHistoryScopeSelect(discord.ui.Select):
+    def __init__(self, browser_view: "OwnerEconomyHistoryBrowserView"):
+        self.browser_view = browser_view
+        options = []
+        for guild_id in browser_view.scope_ids[:25]:
+            snap = _owner_get_scope_snapshot(guild_id, browser_view.target_user.id)
+            label = "Global" if guild_id == GLOBAL_GUILD_ID else (_owner_scope_label(guild_id).split(" | ")[0][:80] or str(guild_id))
+            description = (
+                f"history={snap['history_count']} | balance={snap['balance']:,.2f}"
+            )[:100]
+            options.append(
+                discord.SelectOption(
+                    label=label,
+                    value=str(guild_id),
+                    description=description,
+                    default=(guild_id == browser_view.selected_guild_id),
+                )
+            )
+        super().__init__(
+            placeholder="選擇要查看的範圍",
+            min_values=1,
+            max_values=1,
+            options=options,
+        )
+
+    async def callback(self, interaction: discord.Interaction):
+        if interaction.user.id != self.browser_view.actor_id:
+            await interaction.response.send_message("只有發起這個查詢的人可以操作。", ephemeral=True)
+            return
+        self.browser_view.selected_guild_id = int(self.values[0])
+        self.browser_view.rebuild()
+        await interaction.response.edit_message(view=self.browser_view)
+
+
+class OwnerEconomyHistoryBrowserView(discord.ui.LayoutView):
+    def __init__(self, actor_id: int, target_user: discord.User, scope_ids: list[int], limit: int = 20):
+        super().__init__(timeout=600)
+        self.actor_id = actor_id
+        self.target_user = target_user
+        self.scope_ids = scope_ids
+        self.limit = max(1, min(limit, 50))
+        self.selected_guild_id = GLOBAL_GUILD_ID if GLOBAL_GUILD_ID in scope_ids else scope_ids[0]
+        self.rebuild()
+
+    def rebuild(self):
+        self.clear_items()
+        snap = _owner_get_scope_snapshot(self.selected_guild_id, self.target_user.id)
+        currency_name = GLOBAL_CURRENCY_NAME if self.selected_guild_id == GLOBAL_GUILD_ID else get_currency_name(self.selected_guild_id)
+
+        container = discord.ui.Container(accent_colour=discord.Colour.blurple())
+        container.add_item(discord.ui.TextDisplay(
+            f"## Economy Browser\n"
+            f"目標: {self.target_user} ({self.target_user.id})\n"
+            f"目前範圍: {snap['label']}"
+        ))
+        container.add_item(discord.ui.Separator(spacing=discord.SeparatorSpacing.small))
+
+        scope_summary = []
+        for guild_id in self.scope_ids[:25]:
+            summary_snap = _owner_get_scope_snapshot(guild_id, self.target_user.id)
+            prefix = "->" if guild_id == self.selected_guild_id else "  "
+            currency = GLOBAL_CURRENCY_NAME if guild_id == GLOBAL_GUILD_ID else get_currency_name(guild_id)
+            scope_summary.append(
+                f"{prefix} [{guild_id}] {_owner_scope_label(guild_id)} | "
+                f"balance={summary_snap['balance']:,.2f} {currency} | history={summary_snap['history_count']}"
+            )
+        container.add_item(discord.ui.TextDisplay("\n".join(scope_summary)))
+        container.add_item(discord.ui.Separator(spacing=discord.SeparatorSpacing.small))
+
+        header = (
+            f"餘額: {snap['balance']:,.2f} {currency_name}\n"
+            f"交易數: {snap['history_count']} | 物品: {snap['item_units']} | 管理員物品: {snap['admin_units']}\n"
+            f"顯示最近 {self.limit} 筆交易"
+        )
+        container.add_item(discord.ui.TextDisplay(header))
+
+        history_lines = _owner_history_lines_for_scope(self.target_user.id, self.selected_guild_id, self.limit)
+        history_text = "\n".join(history_lines) if history_lines else "這個範圍沒有交易紀錄。"
+        for part in _owner_split_text_displays(history_text):
+            container.add_item(discord.ui.TextDisplay(part))
+
+        self.add_item(container)
+        if self.scope_ids:
+            row = discord.ui.ActionRow()
+            row.add_item(OwnerEconomyHistoryScopeSelect(self))
+            self.add_item(row)
 
 def add_balance(guild_id: int, user_id: int, amount: float):
     """增加用戶餘額並追蹤供給量"""
@@ -2852,6 +3054,161 @@ async def dev_economy_set(ctx, user: discord.User, target_amount: float, scope: 
     await ctx.send(
         f"✅ 已將 {user} 的餘額設為 **{after:,.2f}** {currency_name}（{scope}）。\n"
         f"變動：{delta_text} | 餘額：{before:,.2f} → {after:,.2f}"
+    )
+
+
+@bot.command(name="dev-economyscopes", description="查看用戶有哪些經濟/物品資料範圍", aliases=["descopes", "dewhere"])
+@is_owner()
+async def dev_economy_scopes(ctx, user: discord.User):
+    scope_ids = _owner_get_user_scope_ids(user.id)
+    if not scope_ids:
+        await ctx.send(f"📭 {user} 沒有任何經濟或物品資料。")
+        return
+
+    lines = []
+    for guild_id in scope_ids:
+        snap = _owner_get_scope_snapshot(guild_id, user.id)
+        currency_name = GLOBAL_CURRENCY_NAME if guild_id == GLOBAL_GUILD_ID else get_currency_name(guild_id)
+        lines.append(
+            f"[{guild_id}] {snap['label']} | balance={snap['balance']:,.2f} {currency_name} | "
+            f"history={snap['history_count']} | items={snap['item_units']} | admin_items={snap['admin_units']}"
+        )
+
+    await _owner_send_codeblocks(
+        ctx,
+        f"📦 Economy scopes for {user} ({user.id})",
+        lines,
+    )
+
+
+@bot.command(name="dev-economybrowser", description="用 Components V2 瀏覽用戶各範圍交易紀錄", aliases=["debrowse", "debrowser"])
+@is_owner()
+async def dev_economy_browser(ctx, user: discord.User, limit: int = 20):
+    scope_ids = _owner_get_user_scope_ids(user.id)
+    if not scope_ids:
+        await ctx.send(f"📭 {user} 沒有任何經濟或物品資料。")
+        return
+
+    view = OwnerEconomyHistoryBrowserView(
+        actor_id=ctx.author.id,
+        target_user=user,
+        scope_ids=scope_ids,
+        limit=limit,
+    )
+    await ctx.send(view=view)
+
+
+@bot.command(name="dev-economyinspect", description="查看用戶的經濟詳細資訊", aliases=["dei", "deinfo"])
+@is_owner()
+async def dev_economy_inspect(ctx, user: discord.User, scope: str = "all", server_id: int = None):
+    scope, guild_id, error = _owner_resolve_scope(scope, ctx, server_id)
+    if error:
+        await ctx.send(error)
+        return
+
+    if scope == "all":
+        scope_ids = _owner_get_user_scope_ids(user.id)
+        if not scope_ids:
+            await ctx.send(f"📭 {user} 沒有任何經濟或物品資料。")
+            return
+        lines = []
+        for current_guild_id in scope_ids:
+            snap = _owner_get_scope_snapshot(current_guild_id, user.id)
+            currency_name = GLOBAL_CURRENCY_NAME if current_guild_id == GLOBAL_GUILD_ID else get_currency_name(current_guild_id)
+            lines.append(f"[{current_guild_id}] {snap['label']}")
+            lines.append(f"  balance={snap['balance']:,.2f} {currency_name} | history={snap['history_count']}")
+            lines.append(f"  items={snap['item_units']} | admin_items={snap['admin_units']}")
+            if snap["items"]:
+                item_preview = ", ".join(f"{item_id}:{count}" for item_id, count in list(snap["items"].items())[:8] if count)
+                if item_preview:
+                    lines.append(f"  items_preview={item_preview}")
+            if snap["admin_items"]:
+                admin_preview = ", ".join(f"{item_id}:{count}" for item_id, count in list(snap["admin_items"].items())[:8] if count)
+                if admin_preview:
+                    lines.append(f"  admin_preview={admin_preview}")
+        await _owner_send_codeblocks(
+            ctx,
+            f"🔎 Economy inspect for {user} ({user.id})",
+            lines,
+            chunk_size=16,
+        )
+        return
+
+    snap = _owner_get_scope_snapshot(guild_id, user.id)
+    currency_name = GLOBAL_CURRENCY_NAME if guild_id == GLOBAL_GUILD_ID else get_currency_name(guild_id)
+    lines = [
+        f"user={user} ({user.id})",
+        f"scope={snap['label']}",
+        f"balance={snap['balance']:,.2f} {currency_name}",
+        f"history_count={snap['history_count']}",
+        f"items_total={snap['item_units']}",
+        f"admin_items_total={snap['admin_units']}",
+    ]
+    if snap["items"]:
+        lines.append("items:")
+        lines.extend(
+            f"  {item_id} x{count}" for item_id, count in snap["items"].items() if count
+        )
+    if snap["admin_items"]:
+        lines.append("admin_items:")
+        lines.extend(
+            f"  {item_id} x{count}" for item_id, count in snap["admin_items"].items() if count
+        )
+
+    await _owner_send_codeblocks(
+        ctx,
+        f"🔎 Economy inspect for {user} ({user.id})",
+        lines,
+        chunk_size=20,
+    )
+
+
+@bot.command(name="dev-economyhistoryplus", description="查看用戶交易紀錄，支援 server/global/all", aliases=["deh2", "dehist"])
+@is_owner()
+async def dev_economy_history_plus(ctx, user: discord.User, scope: str = "all", server_id: int = None, limit: int = 20):
+    scope, guild_id, error = _owner_resolve_scope(scope, ctx, server_id)
+    if error:
+        await ctx.send(error)
+        return
+
+    limit = max(1, min(int(limit), 100))
+
+    rows = []
+    if scope == "all":
+        for current_guild_id in _owner_get_user_scope_ids(user.id):
+            history_data = get_user_data(current_guild_id, user.id, "economy_history", []) or []
+            for index, entry in enumerate(history_data):
+                rows.append((entry.get("time", ""), index, current_guild_id, entry))
+        rows.sort(key=lambda item: (item[0], item[1]), reverse=True)
+        rows = rows[:limit]
+    else:
+        history_data = get_user_data(guild_id, user.id, "economy_history", []) or []
+        rows = [(entry.get("time", ""), index, guild_id, entry) for index, entry in enumerate(reversed(history_data[:]))]
+        rows = rows[:limit]
+
+    if not rows:
+        await ctx.send(f"📜 用戶 {user} 在 {scope} 沒有任何交易紀錄。")
+        return
+
+    lines = []
+    for _, _, current_guild_id, entry in rows:
+        tx_type = entry.get("type", "未知")
+        amount = entry.get("amount", 0)
+        currency = entry.get("currency", "")
+        detail = entry.get("detail", "")
+        tx_time = entry.get("time", "")
+        balance_after = entry.get("balance_after", "N/A")
+        scope_label = _owner_scope_label(current_guild_id)
+        lines.append(
+            f"{tx_time} | [{current_guild_id}] {scope_label} | {tx_type} | "
+            f"{amount} {currency} | after={balance_after} | {detail}"
+        )
+
+    await _owner_send_codeblocks(
+        ctx,
+        f"📜 Economy history for {user} ({user.id}) | scope={scope} | limit={limit}",
+        lines,
+        chunk_size=12,
     )
 
 
