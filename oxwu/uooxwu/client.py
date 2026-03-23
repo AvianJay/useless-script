@@ -12,6 +12,7 @@ from .models import ReportUpdateEvent
 from .models import Town
 from .models import Warning
 from .models import WarningUpdateEvent
+from .models import WarningUpdatedEvent
 
 
 EventHandler = Callable[..., Any]
@@ -56,6 +57,8 @@ class Client:
     def _wrap_event_handler(self, event_name: str, handler: EventHandler) -> EventHandler:
         if event_name == "proxy_warning_update":
             return lambda payload: handler(WarningUpdateEvent.from_api(payload or {}))
+        if event_name == "proxy_warning_updated":
+            return lambda payload: handler(WarningUpdatedEvent.from_api(payload or {}))
         if event_name == "proxy_report_update":
             return lambda payload: handler(ReportUpdateEvent.from_api(payload or {}))
         return handler

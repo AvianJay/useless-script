@@ -9,6 +9,7 @@ from .models import Warning
 from .models import WarningLocation
 from .models import WarningRecord
 from .models import WarningUpdateEvent
+from .models import WarningUpdatedEvent
 
 __all__ = [
     "Client",
@@ -17,6 +18,7 @@ __all__ = [
     "WarningLocation",
     "WarningRecord",
     "WarningUpdateEvent",
+    "WarningUpdatedEvent",
     "Report",
     "ReportData",
     "ReportIntensityArea",

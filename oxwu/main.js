@@ -298,9 +298,9 @@ function createEngineIoPollingServer() {
 
 function createDomTimeWatcher({ broadcast }) {
     let lastWarning = null;
+    let lastWarningFingerprint = null;
+    let lastWarningFirstKey = null;
     let lastReport = null;
-    let lastWarningBroadcastAt = 0;
-    const WARNING_BROADCAST_COOLDOWN_MS = 10 * 1000;
     let timer = null;
 
     const SCRIPT = `
@@ -318,7 +318,27 @@ function createDomTimeWatcher({ broadcast }) {
                     const ss = get("warning-second");
                     if (!y || y === "-" || !m || m === "-" || !d || d === "-" || !hh || hh === "-" || !mm || mm === "-" || !ss || ss === "-") return null;
                     const time = y + "-" + pad2(m) + "-" + pad2(d) + " " + pad2(hh) + ":" + pad2(mm) + ":" + pad2(ss);
-                    return { time, parts: { year: y, month: m, date: d, hour: hh, minute: mm, second: ss } };
+
+                    const listBody = document.querySelector("#warning-list .body");
+                    const listRows = listBody
+                        ? Array.from(listBody.querySelectorAll(":scope > div"))
+                            .map((row) => Array.from(row.querySelectorAll(".content"))
+                                .map((node) => node.innerText.trim()))
+                            .filter((cols) => cols.length >= 5)
+                            .map((cols) => cols.slice(0, 5))
+                        : [];
+                    const listKeys = listRows.map((cols) => cols.join("|"));
+                    const listFingerprint = listKeys.join("||");
+                    const listCount = listRows.length;
+                    const listFirstKey = listKeys[0] || null;
+
+                    return {
+                        time,
+                        parts: { year: y, month: m, date: d, hour: hh, minute: mm, second: ss },
+                        listFingerprint,
+                        listCount,
+                        listFirstKey,
+                    };
                 })();
 
                 const report = (() => {
@@ -347,13 +367,41 @@ function createDomTimeWatcher({ broadcast }) {
             const r = await win.webContents.executeJavaScript(SCRIPT);
             if (!r || !r.ok) return;
 
-            if (r.warning?.time && r.warning.time !== lastWarning) {
-                const now = Date.now();
-                if (now - lastWarningBroadcastAt >= WARNING_BROADCAST_COOLDOWN_MS) {
-                    lastWarning = r.warning.time;
-                    lastWarningBroadcastAt = now;
-                    broadcast("warningTimeChanged", { time: r.warning.time, parts: r.warning.parts, url: r.url });
-                }
+            if (
+                r.warning?.time &&
+                r.warning.listFingerprint &&
+                r.warning.listFingerprint !== lastWarningFingerprint
+            ) {
+                const eventName = !lastWarningFingerprint || r.warning.listFirstKey !== lastWarningFirstKey
+                    ? "warningTimeChanged"
+                    : "warningUpdated";
+                lastWarning = r.warning.time;
+                lastWarningFingerprint = r.warning.listFingerprint;
+                lastWarningFirstKey = r.warning.listFirstKey;
+                broadcast(eventName, {
+                    time: r.warning.time,
+                    parts: r.warning.parts,
+                    listFingerprint: r.warning.listFingerprint,
+                    listCount: r.warning.listCount,
+                    listFirstKey: r.warning.listFirstKey,
+                    url: r.url,
+                });
+            } else if (
+                r.warning?.time &&
+                !r.warning.listFingerprint &&
+                r.warning.time !== lastWarning
+            ) {
+                lastWarning = r.warning.time;
+                lastWarningFingerprint = r.warning.listFingerprint;
+                lastWarningFirstKey = r.warning.listFirstKey;
+                broadcast("warningTimeChanged", {
+                    time: r.warning.time,
+                    parts: r.warning.parts,
+                    listFingerprint: r.warning.listFingerprint,
+                    listCount: r.warning.listCount,
+                    listFirstKey: r.warning.listFirstKey,
+                    url: r.url,
+                });
             }
             if (r.report?.time && r.report.time !== lastReport) {
                 lastReport = r.report.time;

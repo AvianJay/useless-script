@@ -227,6 +227,43 @@ class WarningUpdateEvent:
 
 
 @dataclass(slots=True)
+class WarningUpdatedEvent:
+    time: str | None = None
+    parts: EventTimeParts | None = None
+    url: str | None = None
+    warning: Warning | None = None
+    arrival_times: dict[str, int] = field(default_factory=dict)
+    estimated_intensities: dict[str, str] = field(default_factory=dict)
+    arrival_count: int = 0
+    arrival_generated_at: str | None = None
+    raw: dict[str, Any] = field(default_factory=dict, repr=False)
+
+    @classmethod
+    def from_api(cls, payload: dict[str, Any]) -> "WarningUpdatedEvent":
+        warning_payload = payload.get("data") or {}
+        arrival_times = payload.get("arrival_times")
+        if arrival_times is None:
+            arrival_times = warning_payload.get("arrival_times", {})
+        estimated_intensities = payload.get("estimated_intensities")
+        if estimated_intensities is None:
+            estimated_intensities = warning_payload.get("estimated_intensities", {})
+        return cls(
+            time=payload.get("time"),
+            parts=EventTimeParts.from_api(payload.get("parts")),
+            url=payload.get("url"),
+            warning=Warning.from_api(warning_payload) if warning_payload else None,
+            arrival_times={str(k): int(v) for k, v in arrival_times.items()},
+            estimated_intensities={str(k): str(v) for k, v in estimated_intensities.items()},
+            arrival_count=int(payload.get("arrival_count", warning_payload.get("arrival_count", 0)) or 0),
+            arrival_generated_at=payload.get(
+                "arrival_generated_at",
+                warning_payload.get("arrival_generated_at"),
+            ),
+            raw=payload,
+        )
+
+
+@dataclass(slots=True)
 class ReportUpdateEvent:
     time: str | None = None
     parts: EventTimeParts | None = None

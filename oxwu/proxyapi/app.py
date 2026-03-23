@@ -484,6 +484,21 @@ if upstream_sio:
         socketio.emit("proxy_warning_update", payload)
 
 
+    @upstream_sio.on("warningUpdated")
+    def on_warning_updated(data):
+        mark_event_status("warning", "last_event_at", utc_now())
+        update_cache("warning")
+        update_screenshot_cache("warning")
+        payload = dict(data or {})
+        payload["data"] = CACHE["warning"]
+        if CACHE["warning"]:
+            payload["arrival_times"] = CACHE["warning"].get("arrival_times", {})
+            payload["estimated_intensities"] = CACHE["warning"].get("estimated_intensities", {})
+            payload["arrival_count"] = CACHE["warning"].get("arrival_count", 0)
+            payload["arrival_generated_at"] = CACHE["warning"].get("arrival_generated_at")
+        socketio.emit("proxy_warning_updated", payload)
+
+
 def start_upstream_sync():
     if not upstream_sio:
         mark_upstream_status(
@@ -795,7 +810,7 @@ def openapi_spec():
                 "endpoint": f"{server_url.replace('http', 'ws', 1)}/socket.io/",
                 "auth": "連線時帶入 X-API-Key header 或 api_key query string。",
                 "billing": f"每秒 {COST_PER_SEC_WS} 點，每 5 秒結算一次。",
-                "events": ["proxy_report_update", "proxy_warning_update"],
+                "events": ["proxy_report_update", "proxy_warning_update", "proxy_warning_updated"],
                 "warning_arrival_times": "{ town_id: eta_seconds }",
             },
             "x-upstream": {
@@ -809,7 +824,7 @@ def openapi_spec():
                     "warning": f"{UPSTREAM_URL}/gotoWarning",
                 },
                 "screenshot_endpoint": f"{UPSTREAM_URL}/screenshot",
-                "upstream_events": ["reportTimeChanged", "warningTimeChanged"],
+                "upstream_events": ["reportTimeChanged", "warningTimeChanged", "warningUpdated"],
             },
         }
     )
