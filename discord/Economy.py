@@ -722,7 +722,15 @@ class OwnerEconomyHistoryScopeSelect(discord.ui.Select):
             return
         self.browser_view.selected_guild_id = int(self.values[0])
         self.browser_view.rebuild()
-        await interaction.response.edit_message(view=self.browser_view)
+        await interaction.response.defer()
+        await interaction.edit_original_response(view=self.browser_view)
+        await interaction.followup.send(
+            view=_owner_build_history_detail_view(
+                self.browser_view.target_user,
+                self.browser_view.selected_guild_id,
+                self.browser_view.limit,
+            )
+        )
 
 
 class OwnerEconomyHistoryBrowserView(discord.ui.LayoutView):
@@ -737,14 +745,10 @@ class OwnerEconomyHistoryBrowserView(discord.ui.LayoutView):
 
     def rebuild(self):
         self.clear_items()
-        snap = _owner_get_scope_snapshot(self.selected_guild_id, self.target_user.id)
-        currency_name = GLOBAL_CURRENCY_NAME if self.selected_guild_id == GLOBAL_GUILD_ID else get_currency_name(self.selected_guild_id)
-
         container = discord.ui.Container(accent_colour=discord.Colour.blurple())
         container.add_item(discord.ui.TextDisplay(
-            f"## Economy Browser\n"
-            f"目標: {self.target_user} ({self.target_user.id})\n"
-            f"目前範圍: {snap['label']}"
+            f"## Economy Scope Picker\n"
+            f"目標: {self.target_user} ({self.target_user.id})"
         ))
         container.add_item(discord.ui.Separator(spacing=discord.SeparatorSpacing.small))
 
@@ -759,24 +763,41 @@ class OwnerEconomyHistoryBrowserView(discord.ui.LayoutView):
             )
         container.add_item(discord.ui.TextDisplay("\n".join(scope_summary)))
         container.add_item(discord.ui.Separator(spacing=discord.SeparatorSpacing.small))
-
-        header = (
-            f"餘額: {snap['balance']:,.2f} {currency_name}\n"
-            f"交易數: {snap['history_count']} | 物品: {snap['item_units']} | 管理員物品: {snap['admin_units']}\n"
+        container.add_item(discord.ui.TextDisplay(
+            f"目前預設選中: {_owner_scope_label(self.selected_guild_id)}\n"
             f"顯示最近 {self.limit} 筆交易"
-        )
-        container.add_item(discord.ui.TextDisplay(header))
-
-        history_lines = _owner_history_lines_for_scope(self.target_user.id, self.selected_guild_id, self.limit)
-        history_text = "\n".join(history_lines) if history_lines else "這個範圍沒有交易紀錄。"
-        for part in _owner_split_text_displays(history_text):
-            container.add_item(discord.ui.TextDisplay(part))
+        ))
 
         self.add_item(container)
         if self.scope_ids:
             row = discord.ui.ActionRow()
             row.add_item(OwnerEconomyHistoryScopeSelect(self))
             self.add_item(row)
+
+
+def _owner_build_history_detail_view(target_user: discord.User, guild_id: int, limit: int = 20) -> discord.ui.LayoutView:
+    snap = _owner_get_scope_snapshot(guild_id, target_user.id)
+    currency_name = GLOBAL_CURRENCY_NAME if guild_id == GLOBAL_GUILD_ID else get_currency_name(guild_id)
+    history_lines = _owner_history_lines_for_scope(target_user.id, guild_id, limit)
+
+    view = discord.ui.LayoutView()
+    container = discord.ui.Container(accent_colour=discord.Colour.green())
+    container.add_item(discord.ui.TextDisplay(
+        f"## Economy History Detail\n"
+        f"目標: {target_user} ({target_user.id})\n"
+        f"範圍: {snap['label']}"
+    ))
+    container.add_item(discord.ui.Separator(spacing=discord.SeparatorSpacing.small))
+    container.add_item(discord.ui.TextDisplay(
+        f"餘額: {snap['balance']:,.2f} {currency_name}\n"
+        f"交易數: {snap['history_count']} | 物品: {snap['item_units']} | 管理員物品: {snap['admin_units']}\n"
+        f"顯示最近 {max(1, min(limit, 50))} 筆交易"
+    ))
+    history_text = "\n".join(history_lines) if history_lines else "這個範圍沒有交易紀錄。"
+    for part in _owner_split_text_displays(history_text):
+        container.add_item(discord.ui.TextDisplay(part))
+    view.add_item(container)
+    return view
 
 def add_balance(guild_id: int, user_id: int, amount: float):
     """增加用戶餘額並追蹤供給量"""
@@ -3081,7 +3102,7 @@ async def dev_economy_scopes(ctx, user: discord.User):
     )
 
 
-@bot.command(name="dev-economybrowser", description="用 Components V2 瀏覽用戶各範圍交易紀錄", aliases=["debrowse", "debrowser"])
+@bot.command(name="dev-economybrowser", description="用 Components V2 瀏覽用戶各範圍交易紀錄", aliases=["deb", "debrowse", "debrowser"])
 @is_owner()
 async def dev_economy_browser(ctx, user: discord.User, limit: int = 20):
     scope_ids = _owner_get_user_scope_ids(user.id)
@@ -3210,6 +3231,109 @@ async def dev_economy_history_plus(ctx, user: discord.User, scope: str = "all", 
         lines,
         chunk_size=12,
     )
+
+@bot.command(name="dev-economyleaderboard", description="查看經濟排行榜，支援 server/global/total", aliases=["delb", "deleaderboard"])
+@is_owner()
+async def dev_leaderboard(ctx: commands.Context, currency: str = "server", guild_id: int = None):
+    currency = (currency or "server").lower()
+    if currency not in ("server", "global", "total"):
+        await ctx.send("❌ 類型必須是 `server`、`global` 或 `total`。")
+        return
+
+    if currency in ("server", "total"):
+        if guild_id is None:
+            if ctx.guild:
+                guild_id = ctx.guild.id
+            else:
+                await ctx.send("❌ 請提供伺服器 ID，或在伺服器內使用此指令。")
+                return
+        currency_name = get_currency_name(guild_id)
+        rate = get_exchange_rate(guild_id)
+        guild_obj = bot.get_guild(guild_id)
+    else:
+        guild_obj = None
+        currency_name = GLOBAL_CURRENCY_NAME
+        rate = None
+
+    if currency == "server":
+        all_users = get_all_user_data(guild_id, "economy_balance")
+        sorted_users = sorted(
+            all_users.items(),
+            key=lambda x: x[1].get("economy_balance", 0),
+            reverse=True
+        )
+        title = f"🏆 {currency_name} 排行榜"
+        key_name = "economy_balance"
+    elif currency == "global":
+        all_users = get_all_user_data(GLOBAL_GUILD_ID, "economy_balance")
+        sorted_users = sorted(
+            all_users.items(),
+            key=lambda x: x[1].get("economy_balance", 0),
+            reverse=True
+        )
+        title = f"🏆 {GLOBAL_CURRENCY_NAME} 排行榜"
+        key_name = "economy_balance"
+    else:
+        all_server = get_all_user_data(guild_id, "economy_balance")
+        all_global = get_all_user_data(GLOBAL_GUILD_ID, "economy_balance")
+        combined = {}
+        all_ids = set(all_server.keys()) | set(all_global.keys())
+        for uid in all_ids:
+            s_bal = all_server.get(uid, {}).get("economy_balance", 0)
+            g_bal = all_global.get(uid, {}).get("economy_balance", 0)
+            combined[uid] = {"total": s_bal * rate + g_bal}
+        sorted_users = sorted(
+            combined.items(),
+            key=lambda x: x[1].get("total", 0),
+            reverse=True
+        )
+        title = "🏆 總資產排行榜"
+        key_name = "total"
+
+    embed = discord.Embed(title=title, color=0xf1c40f)
+    medals = ["🥇", "🥈", "🥉"]
+
+    displayed = 0
+    for user_id, data in sorted_users[:15]:
+        bal = data.get(key_name, 0)
+        if bal <= 0:
+            continue
+
+        if currency == "server":
+            display = f"{bal:,.2f} {currency_name}"
+        elif currency == "global":
+            display = f"{bal:,.2f} {GLOBAL_CURRENCY_NAME}"
+        else:
+            display = f"{bal:,.2f} {GLOBAL_CURRENCY_NAME}"
+
+        medal = medals[displayed] if displayed < 3 else f"**#{displayed+1}**"
+        try:
+            fetched_user = await bot.fetch_user(user_id)
+            name = getattr(fetched_user, "display_name", None) or fetched_user.name
+        except Exception:
+            name = f"用戶 {user_id}"
+
+        embed.add_field(name=f"{medal} {name}", value=display, inline=False)
+        displayed += 1
+        if displayed >= 10:
+            break
+
+    if displayed == 0:
+        embed.description = "目前沒有任何用戶有餘額。"
+
+    if currency == "server":
+        footer_text = f"Scope: {guild_obj.name} | {guild_id}" if guild_obj else f"Scope: Guild {guild_id}"
+    elif currency == "total":
+        footer_text = (
+            f"Scope: {guild_obj.name} | {guild_id} | rate=1 {currency_name} = {rate:.4f} {GLOBAL_CURRENCY_NAME}"
+            if guild_obj else
+            f"Scope: Guild {guild_id} | rate=1 {currency_name} = {rate:.4f} {GLOBAL_CURRENCY_NAME}"
+        )
+    else:
+        footer_text = "Scope: Global"
+    embed.set_footer(text=footer_text)
+
+    await ctx.send(embed=embed)
 
 
 def make_cheque_use_callback(item_id: str, worth: int):

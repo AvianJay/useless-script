@@ -144,7 +144,7 @@ async def userdata(ctx, guild_id: int=None, user_id: int=None, key: str=None, va
         await ctx.send("請提供 guild_id 和 user_id。")
         return
     if key is None:
-        all_data = get_all_user_data(guild_id, "")
+        all_data = get_all_user_data(guild_id, user_id)
         user_data = all_data.get(str(user_id), {})
         if not user_data:
             await ctx.send("沒有找到該用戶的資料。")
@@ -201,6 +201,7 @@ async def serverconfig(ctx, guild_id: int=None, key: str=None, value: str=None):
             config_file = io.StringIO(al)
             config_file.name = f"server_{guild_id}_config.txt"
             await ctx.send("設定過長，已作為檔案發送：", file=discord.File(fp=config_file))
+        await ctx.send(al)
     elif value is None:
         if "." in key:
             # dict key
