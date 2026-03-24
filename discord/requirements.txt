@@ -19,3 +19,4 @@ aiohttp~=3.13.3
 expiring-dict~=1.1.2
 lava-lyra~=1.7.0
 beautifulsoup4~=4.14.3
+websocket-client~=1.9.0
