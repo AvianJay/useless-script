@@ -51,12 +51,21 @@ class ConfirmMentionsView(discord.ui.View):
         await interaction.response.edit_message(content="你已確認要發送包含提及的訊息。", view=None)
         self.stop()
 
+    @discord.ui.button(label="是的，但我想發送無提及訊息", style=discord.ButtonStyle.secondary)
+    async def send_without_mentions(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if interaction.user != self.user:
+            await interaction.response.send_message("這不是你的確認按鈕！", ephemeral=True)
+            return
+        self.result = False
+        await interaction.response.edit_message(content="你已選擇發送無提及的訊息。", view=None)
+        self.stop()
+
     @discord.ui.button(label="不，我想修改一下訊息", style=discord.ButtonStyle.secondary)
     async def cancel(self, interaction: discord.Interaction, button: discord.ui.Button):
         if interaction.user != self.user:
             await interaction.response.send_message("這不是你的確認按鈕！", ephemeral=True)
             return
-        self.result = False
+        self.result = None
         await interaction.response.edit_message(content="訊息發送已取消。", view=None)
         self.stop()
 
@@ -99,6 +108,8 @@ class FakeUser(commands.Cog):
             log(f"嘗試假冒被黑名單的用戶 {user}", module_name="FakeUser", user=interaction.user, guild=interaction.guild)
             return
 
+        message = message.replace("\\n", "\n")  # 允許使用 \n 來換行
+
         if filter_checker(message, interaction.guild):
             await interaction.followup.send("你的訊息內容觸發了過濾器，請修改後再試。", ephemeral=True)
             if log_channel:
@@ -109,6 +120,15 @@ class FakeUser(commands.Cog):
             log(f"訊息觸發過濾器，拒絕假冒用戶 {user} 發送訊息：{message}", module_name="FakeUser", user=interaction.user, guild=interaction.guild)
             return
 
+        # {n:(seconds)} allow multiple messages
+        # seconds: delay next message (>=0 <=2)
+        # if only {n} no delay
+        # example: hello {t:1}world{t:2}!!! will send "hello " then after 1 second "world" then after 2 seconds "!!!"
+        
+        # limit 3 messages (2 delays) to prevent abuse
+        x = re.split(r"\{t:(\d+)\}", message, maxsplit=2)
+        
+
         mention = False
 
         if check_mentions(message):
@@ -117,10 +137,10 @@ class FakeUser(commands.Cog):
                 view = ConfirmMentionsView(interaction.user, message, interaction)
                 await interaction.followup.send("你的訊息中包含了提及，這可能會通知到很多人。你確定要發送這條訊息嗎？", view=view, ephemeral=True)
                 await view.wait()
-                if not view.result:
+                if view.result is None:
                     # await interaction.followup.send("訊息發送已取消。", ephemeral=True)
                     return
-                mention = True
+                mention = view.result
 
         webhook = await interaction.channel.create_webhook(name=user.name, reason=f"用戶 {interaction.user} 假冒 {user} 發送訊息")
         try:
