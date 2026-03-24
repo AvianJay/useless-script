@@ -647,12 +647,12 @@ def _owner_resolve_scope(scope: str, ctx, server_id: int = None):
 
 async def _owner_send_codeblocks(ctx, title: str, lines: list[str], chunk_size: int = 20):
     if not lines:
-        await ctx.send(f"{title}\n```No data.```")
+        await ctx.send(f"{title}\n```txt\nNo data.\n```")
         return
     for index in range(0, len(lines), chunk_size):
         chunk = lines[index:index + chunk_size]
         prefix = f"{title}\n" if index == 0 else ""
-        await ctx.send(f"{prefix}```{chr(10).join(chunk)}```")
+        await ctx.send(f"{prefix}```txt\n{chr(10).join(chunk)}\n```")
 
 
 def _owner_split_text_displays(text: str, max_length: int = 3800) -> list[str]:
@@ -672,6 +672,46 @@ def _owner_split_text_displays(text: str, max_length: int = 3800) -> list[str]:
     return chunks
 
 
+def _owner_compact_scope_label(guild_id: int) -> str:
+    if guild_id == GLOBAL_GUILD_ID:
+        return "Global"
+    guild = bot.get_guild(guild_id)
+    if guild:
+        return guild.name
+    return f"Guild {guild_id}"
+
+
+def _owner_scope_overview_text(guild_id: int, user_id: int) -> str:
+    snap = _owner_get_scope_snapshot(guild_id, user_id)
+    currency_name = GLOBAL_CURRENCY_NAME if guild_id == GLOBAL_GUILD_ID else get_currency_name(guild_id)
+    return (
+        f"範圍: {snap['label']}\n"
+        f"餘額: {snap['balance']:,.2f} {currency_name}\n"
+        f"交易數: {snap['history_count']}  筆\n"
+        f"物品: {snap['item_units']}  件\n"
+        f"管理員物品: {snap['admin_units']}  件"
+    )
+
+
+def _owner_scope_report_lines(guild_id: int, user_id: int) -> list[str]:
+    snap = _owner_get_scope_snapshot(guild_id, user_id)
+    currency_name = GLOBAL_CURRENCY_NAME if guild_id == GLOBAL_GUILD_ID else get_currency_name(guild_id)
+    return [
+        f"[{guild_id}] {snap['label']}",
+        f"  餘額          {snap['balance']:,.2f} {currency_name}",
+        f"  交易紀錄      {snap['history_count']} 筆",
+        f"  一般物品      {snap['item_units']} 件",
+        f"  管理員物品    {snap['admin_units']} 件",
+    ]
+
+
+def _owner_preview_line(title: str, entries: dict, limit: int = 8) -> str:
+    preview = ", ".join(
+        f"{item_id} x{count}" for item_id, count in list(entries.items())[:limit] if count
+    )
+    return f"{title}  {preview or '無'}"
+
+
 def _owner_history_lines_for_scope(user_id: int, guild_id: int, limit: int = 20) -> list[str]:
     history_data = get_user_data(guild_id, user_id, "economy_history", []) or []
     if not history_data:
@@ -685,9 +725,11 @@ def _owner_history_lines_for_scope(user_id: int, guild_id: int, limit: int = 20)
         detail = entry.get("detail", "")
         tx_time = entry.get("time", "")
         balance_after = entry.get("balance_after", "N/A")
-        lines.append(f"{tx_time} | {tx_type} | {amount} {currency} | after={balance_after}")
+        lines.append(f"{tx_time} | {tx_type}")
+        lines.append(f"  金額          {amount} {currency}")
+        lines.append(f"  交易後餘額    {balance_after}")
         if detail:
-            lines.append(f"  {detail}")
+            lines.append(f"  詳細          {detail}")
     return lines
 
 
@@ -697,9 +739,9 @@ class OwnerEconomyHistoryScopeSelect(discord.ui.Select):
         options = []
         for guild_id in browser_view.scope_ids[:25]:
             snap = _owner_get_scope_snapshot(guild_id, browser_view.target_user.id)
-            label = "Global" if guild_id == GLOBAL_GUILD_ID else (_owner_scope_label(guild_id).split(" | ")[0][:80] or str(guild_id))
+            label = _owner_compact_scope_label(guild_id)[:80]
             description = (
-                f"history={snap['history_count']} | balance={snap['balance']:,.2f}"
+                f"交易 {snap['history_count']} 筆 | 餘額 {snap['balance']:,.2f}"
             )[:100]
             options.append(
                 discord.SelectOption(
@@ -745,30 +787,38 @@ class OwnerEconomyHistoryBrowserView(discord.ui.LayoutView):
 
     def rebuild(self):
         self.clear_items()
-        container = discord.ui.Container(accent_colour=discord.Colour.blurple())
-        container.add_item(discord.ui.TextDisplay(
-            f"## Economy Scope Picker\n"
-            f"目標: {self.target_user} ({self.target_user.id})"
+        header = discord.ui.Container(accent_colour=discord.Colour.dark_blue())
+        header.add_item(discord.ui.TextDisplay(
+            f"## 經濟紀錄瀏覽器\n"
+            f"目標用戶: **{self.target_user}**\n"
+            f"User ID: `{self.target_user.id}`"
         ))
-        container.add_item(discord.ui.Separator(spacing=discord.SeparatorSpacing.small))
+        header.add_item(discord.ui.Separator(spacing=discord.SeparatorSpacing.small))
+        header.add_item(discord.ui.TextDisplay(
+            f"已找到 **{len(self.scope_ids)}** 個範圍資料。\n"
+            f"先從下方選單選擇伺服器或 Global，系統會另外送出詳細交易紀錄。\n"
+            f"目前預設: **{_owner_compact_scope_label(self.selected_guild_id)}** | 最近 **{self.limit}** 筆"
+        ))
+        self.add_item(header)
+
+        summary = discord.ui.Container(accent_colour=discord.Colour.blurple())
+        summary.add_item(discord.ui.TextDisplay("### 目前選中範圍"))
+        summary.add_item(discord.ui.TextDisplay(_owner_scope_overview_text(self.selected_guild_id, self.target_user.id)))
+        summary.add_item(discord.ui.Separator(spacing=discord.SeparatorSpacing.small))
 
         scope_summary = []
         for guild_id in self.scope_ids[:25]:
             summary_snap = _owner_get_scope_snapshot(guild_id, self.target_user.id)
-            prefix = "->" if guild_id == self.selected_guild_id else "  "
+            marker = "●" if guild_id == self.selected_guild_id else "○"
             currency = GLOBAL_CURRENCY_NAME if guild_id == GLOBAL_GUILD_ID else get_currency_name(guild_id)
             scope_summary.append(
-                f"{prefix} [{guild_id}] {_owner_scope_label(guild_id)} | "
-                f"balance={summary_snap['balance']:,.2f} {currency} | history={summary_snap['history_count']}"
+                f"{marker} `{guild_id}` { _owner_compact_scope_label(guild_id) }"
+                f"  |  {summary_snap['balance']:,.2f} {currency}"
+                f"  |  {summary_snap['history_count']} 筆"
             )
-        container.add_item(discord.ui.TextDisplay("\n".join(scope_summary)))
-        container.add_item(discord.ui.Separator(spacing=discord.SeparatorSpacing.small))
-        container.add_item(discord.ui.TextDisplay(
-            f"目前預設選中: {_owner_scope_label(self.selected_guild_id)}\n"
-            f"顯示最近 {self.limit} 筆交易"
-        ))
+        summary.add_item(discord.ui.TextDisplay("### 範圍清單\n" + "\n".join(scope_summary)))
+        self.add_item(summary)
 
-        self.add_item(container)
         if self.scope_ids:
             row = discord.ui.ActionRow()
             row.add_item(OwnerEconomyHistoryScopeSelect(self))
@@ -781,22 +831,40 @@ def _owner_build_history_detail_view(target_user: discord.User, guild_id: int, l
     history_lines = _owner_history_lines_for_scope(target_user.id, guild_id, limit)
 
     view = discord.ui.LayoutView()
-    container = discord.ui.Container(accent_colour=discord.Colour.green())
-    container.add_item(discord.ui.TextDisplay(
-        f"## Economy History Detail\n"
-        f"目標: {target_user} ({target_user.id})\n"
-        f"範圍: {snap['label']}"
+    header = discord.ui.Container(accent_colour=discord.Colour.dark_green())
+    header.add_item(discord.ui.TextDisplay(
+        f"## 交易紀錄詳細資訊\n"
+        f"目標用戶: **{target_user}**\n"
+        f"範圍: **{snap['label']}**"
     ))
-    container.add_item(discord.ui.Separator(spacing=discord.SeparatorSpacing.small))
-    container.add_item(discord.ui.TextDisplay(
-        f"餘額: {snap['balance']:,.2f} {currency_name}\n"
-        f"交易數: {snap['history_count']} | 物品: {snap['item_units']} | 管理員物品: {snap['admin_units']}\n"
-        f"顯示最近 {max(1, min(limit, 50))} 筆交易"
+    header.add_item(discord.ui.Separator(spacing=discord.SeparatorSpacing.small))
+    header.add_item(discord.ui.TextDisplay(
+        f"餘額: **{snap['balance']:,.2f} {currency_name}**\n"
+        f"交易數: **{snap['history_count']}** 筆\n"
+        f"物品: **{snap['item_units']}** 件 | 管理員物品: **{snap['admin_units']}** 件\n"
+        f"顯示最近 **{max(1, min(limit, 50))}** 筆"
     ))
+    view.add_item(header)
+
     history_text = "\n".join(history_lines) if history_lines else "這個範圍沒有交易紀錄。"
-    for part in _owner_split_text_displays(history_text):
-        container.add_item(discord.ui.TextDisplay(part))
-    view.add_item(container)
+    for index, part in enumerate(_owner_split_text_displays(history_text, max_length=3000), start=1):
+        section = discord.ui.Container(accent_colour=discord.Colour.green())
+        title = "### 交易紀錄" if index == 1 else f"### 交易紀錄（續 {index}）"
+        section.add_item(discord.ui.TextDisplay(title))
+        section.add_item(discord.ui.TextDisplay(f"```txt\n{part}\n```"))
+        view.add_item(section)
+
+    if snap["items"] or snap["admin_items"]:
+        asset = discord.ui.Container(accent_colour=discord.Colour.light_grey())
+        asset.add_item(discord.ui.TextDisplay("### 物品摘要"))
+        item_preview = ", ".join(f"{item_id} x{count}" for item_id, count in list(snap["items"].items())[:10] if count) or "無"
+        admin_preview = ", ".join(f"{item_id} x{count}" for item_id, count in list(snap["admin_items"].items())[:10] if count) or "無"
+        asset.add_item(discord.ui.TextDisplay(
+            f"一般物品: {item_preview}\n"
+            f"管理員物品: {admin_preview}"
+        ))
+        view.add_item(asset)
+
     return view
 
 def add_balance(guild_id: int, user_id: int, amount: float):
@@ -3088,17 +3156,14 @@ async def dev_economy_scopes(ctx, user: discord.User):
 
     lines = []
     for guild_id in scope_ids:
-        snap = _owner_get_scope_snapshot(guild_id, user.id)
-        currency_name = GLOBAL_CURRENCY_NAME if guild_id == GLOBAL_GUILD_ID else get_currency_name(guild_id)
-        lines.append(
-            f"[{guild_id}] {snap['label']} | balance={snap['balance']:,.2f} {currency_name} | "
-            f"history={snap['history_count']} | items={snap['item_units']} | admin_items={snap['admin_units']}"
-        )
+        lines.extend(_owner_scope_report_lines(guild_id, user.id))
+        lines.append("")
 
     await _owner_send_codeblocks(
         ctx,
-        f"📦 Economy scopes for {user} ({user.id})",
+        f"📦 經濟資料範圍 | {user} ({user.id})",
         lines,
+        chunk_size=18,
     )
 
 
@@ -3135,50 +3200,43 @@ async def dev_economy_inspect(ctx, user: discord.User, scope: str = "all", serve
         lines = []
         for current_guild_id in scope_ids:
             snap = _owner_get_scope_snapshot(current_guild_id, user.id)
-            currency_name = GLOBAL_CURRENCY_NAME if current_guild_id == GLOBAL_GUILD_ID else get_currency_name(current_guild_id)
-            lines.append(f"[{current_guild_id}] {snap['label']}")
-            lines.append(f"  balance={snap['balance']:,.2f} {currency_name} | history={snap['history_count']}")
-            lines.append(f"  items={snap['item_units']} | admin_items={snap['admin_units']}")
+            lines.extend(_owner_scope_report_lines(current_guild_id, user.id))
             if snap["items"]:
-                item_preview = ", ".join(f"{item_id}:{count}" for item_id, count in list(snap["items"].items())[:8] if count)
-                if item_preview:
-                    lines.append(f"  items_preview={item_preview}")
+                lines.append(_owner_preview_line("  一般物品預覽  ", snap["items"]))
             if snap["admin_items"]:
-                admin_preview = ", ".join(f"{item_id}:{count}" for item_id, count in list(snap["admin_items"].items())[:8] if count)
-                if admin_preview:
-                    lines.append(f"  admin_preview={admin_preview}")
+                lines.append(_owner_preview_line("  管理員物品預覽", snap["admin_items"]))
+            lines.append("")
         await _owner_send_codeblocks(
             ctx,
-            f"🔎 Economy inspect for {user} ({user.id})",
+            f"🔎 經濟詳細資訊 | {user} ({user.id})",
             lines,
             chunk_size=16,
         )
         return
 
     snap = _owner_get_scope_snapshot(guild_id, user.id)
-    currency_name = GLOBAL_CURRENCY_NAME if guild_id == GLOBAL_GUILD_ID else get_currency_name(guild_id)
     lines = [
-        f"user={user} ({user.id})",
-        f"scope={snap['label']}",
-        f"balance={snap['balance']:,.2f} {currency_name}",
-        f"history_count={snap['history_count']}",
-        f"items_total={snap['item_units']}",
-        f"admin_items_total={snap['admin_units']}",
+        f"使用者        {user} ({user.id})",
+        f"查詢範圍      {snap['label']}",
+        "",
     ]
+    lines.extend(_owner_scope_report_lines(guild_id, user.id))
     if snap["items"]:
-        lines.append("items:")
+        lines.append("")
+        lines.append("一般物品明細")
         lines.extend(
             f"  {item_id} x{count}" for item_id, count in snap["items"].items() if count
         )
     if snap["admin_items"]:
-        lines.append("admin_items:")
+        lines.append("")
+        lines.append("管理員物品明細")
         lines.extend(
             f"  {item_id} x{count}" for item_id, count in snap["admin_items"].items() if count
         )
 
     await _owner_send_codeblocks(
         ctx,
-        f"🔎 Economy inspect for {user} ({user.id})",
+        f"🔎 經濟詳細資訊 | {user} ({user.id})",
         lines,
         chunk_size=20,
     )
@@ -3220,14 +3278,17 @@ async def dev_economy_history_plus(ctx, user: discord.User, scope: str = "all", 
         tx_time = entry.get("time", "")
         balance_after = entry.get("balance_after", "N/A")
         scope_label = _owner_scope_label(current_guild_id)
-        lines.append(
-            f"{tx_time} | [{current_guild_id}] {scope_label} | {tx_type} | "
-            f"{amount} {currency} | after={balance_after} | {detail}"
-        )
+        lines.append(f"{tx_time} | [{current_guild_id}] {scope_label}")
+        lines.append(f"  類型          {tx_type}")
+        lines.append(f"  金額          {amount} {currency}")
+        lines.append(f"  交易後餘額    {balance_after}")
+        if detail:
+            lines.append(f"  詳細          {detail}")
+        lines.append("")
 
     await _owner_send_codeblocks(
         ctx,
-        f"📜 Economy history for {user} ({user.id}) | scope={scope} | limit={limit}",
+        f"📜 交易紀錄查詢 | {user} ({user.id}) | scope={scope} | limit={limit}",
         lines,
         chunk_size=12,
     )
