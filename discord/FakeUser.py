@@ -48,7 +48,7 @@ class ConfirmMentionsView(discord.ui.View):
             await interaction.response.send_message("這不是你的確認按鈕！", ephemeral=True)
             return
         self.result = True
-        await interaction.edit_original_response(content="你已確認要發送包含提及的訊息。", view=None)
+        await interaction.response.edit_message(content="你已確認要發送包含提及的訊息。", view=None)
         self.stop()
 
     @discord.ui.button(label="不，我想修改一下訊息", style=discord.ButtonStyle.secondary)
@@ -57,7 +57,7 @@ class ConfirmMentionsView(discord.ui.View):
             await interaction.response.send_message("這不是你的確認按鈕！", ephemeral=True)
             return
         self.result = False
-        await interaction.edit_original_response(content="訊息發送已取消。", view=None)
+        await interaction.response.edit_message(content="訊息發送已取消。", view=None)
         self.stop()
 
 
