@@ -120,13 +120,43 @@ class FakeUser(commands.Cog):
             log(f"訊息觸發過濾器，拒絕假冒用戶 {user} 發送訊息：{message}", module_name="FakeUser", user=interaction.user, guild=interaction.guild)
             return
 
-        # {n:(seconds)} allow multiple messages
-        # seconds: delay next message (>=0 <=2)
-        # if only {n} no delay
+        # {t:n} allow multiple messages
+        # n: delay next message in seconds (>=0 <=2, supports float)
+        # if only {t} then delay is 0
         # example: hello {t:1}world{t:2}!!! will send "hello " then after 1 second "world" then after 2 seconds "!!!"
         
         # limit 3 messages (2 delays) to prevent abuse
-        x = re.split(r"\{t:(\d+)\}", message, maxsplit=2)
+        delay_pattern = r"\{t(?::((?:\d+(?:\.\d+)?)|(?:\.\d+)))?\}"
+        delays = re.findall(delay_pattern, message)
+        if len(delays) > 2:
+            await interaction.followup.send("最多只能使用 2 個延遲標記（共 3 則訊息）。", ephemeral=True)
+            return
+
+        if re.search(r"\{t(?:(?:\d+(?:\.\d+)?)|(?:\.\d+))?\}\s*$", message):
+            await interaction.followup.send("延遲標記後面必須有要發送的訊息內容。", ephemeral=True)
+            return
+
+        x = re.split(delay_pattern, message, maxsplit=2)
+        message_chunks = [x[0]]
+        chunk_delays = []
+        for i in range(1, len(x), 2):
+            delay = float(x[i]) if x[i] else 0.0
+            if delay < 0 or delay > 2:
+                await interaction.followup.send("延遲秒數必須在 0 到 2 之間。", ephemeral=True)
+                return
+            chunk_delays.append(delay)
+            message_chunks.append(x[i + 1])
+
+        send_plan = []
+        for i, chunk in enumerate(message_chunks):
+            if not chunk.strip():
+                continue
+            delay_before_send = 0 if i == 0 else chunk_delays[i - 1]
+            send_plan.append((delay_before_send, chunk))
+
+        if not send_plan:
+            await interaction.followup.send("訊息內容不能為空。", ephemeral=True)
+            return
         
 
         mention = False
@@ -145,8 +175,12 @@ class FakeUser(commands.Cog):
         webhook = await interaction.channel.create_webhook(name=user.name, reason=f"用戶 {interaction.user} 假冒 {user} 發送訊息")
         try:
             avatar_url = user.display_avatar or user.avatar or user.default_avatar
-            await webhook.send(content=message, username=user.display_name, avatar_url=avatar_url.url, allowed_mentions=discord.AllowedMentions(everyone=mention, users=True, roles=mention))
-            await interaction.followup.send("訊息已發送。", ephemeral=True)
+            for delay_before_send, chunk in send_plan:
+                if delay_before_send > 0:
+                    await asyncio.sleep(delay_before_send)
+                await webhook.send(content=chunk, username=user.display_name, avatar_url=avatar_url.url, allowed_mentions=discord.AllowedMentions(everyone=mention, users=True, roles=mention))
+
+            await interaction.followup.send(f"訊息已發送（共 {len(send_plan)} 則）。", ephemeral=True)
             log(f"假冒了用戶 {user} 發送訊息：{message}", module_name="FakeUser", user=interaction.user, guild=interaction.guild)
             if log_channel:
                 embed = discord.Embed(title="假冒用戶操作紀錄", description=f"用戶 {interaction.user.mention} 假冒 {user.mention} 發送了訊息：{message}", color=discord.Color.red())
