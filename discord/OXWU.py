@@ -5,13 +5,22 @@ from discord import app_commands
 from discord.ext import commands
 import aiohttp
 import asyncio
-import socketio
+import sys
 from io import BytesIO
 from typing import Optional
 from logger import log
 import logging
 from bs4 import BeautifulSoup
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
+from pathlib import Path
+
+_LOCAL_OXWU_PACKAGE = Path(__file__).resolve().parent.parent / "oxwu"
+if str(_LOCAL_OXWU_PACKAGE) not in sys.path:
+    sys.path.append(str(_LOCAL_OXWU_PACKAGE))
+
+import uooxwu
+
+TAIWAN_TZ = timezone(timedelta(hours=8))
 
 # 用於關閉時的清理
 _oxwu_cog_instance = None
@@ -77,21 +86,26 @@ def cwa_get_cached_link() -> Optional[str]:
 class OXWU(commands.GroupCog, name="earthquake", description="OXWU 地震監測系統"):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
-        self.api_url = config("oxwu_api") or "http://127.0.0.1:10281"
+        self.api_url = config("oxwu_api") or "http://127.0.0.1:5000"
+        self.api_key = config("oxwu_api_key", "")
         self.temp_channel_id = config("temp_channel_id")
         
         # 共用 aiohttp session（在 on_ready 初始化）
         self._session: Optional[aiohttp.ClientSession] = None
         
         # Socket.IO 客戶端
-        self.sio = socketio.AsyncClient()
+        self.proxy_client = uooxwu.Client(url=self.api_url, api_key=self.api_key)
+        self.town_map = self.proxy_client.load_builtin_town_map()
+        self._socket_task: Optional[asyncio.Task] = None
+        self._socket_started = False
+        self._loop: Optional[asyncio.AbstractEventLoop] = None
         
         # 儲存最後的警報/報告資訊
         self.last_warning_time: Optional[str] = None
         self.last_report_time: Optional[str] = None
         
         # 註冊 Socket.IO 事件
-        self._register_sio_events()
+        self._register_proxy_events()
     
     async def _get_session(self) -> aiohttp.ClientSession:
         """取得共用的 aiohttp session"""
@@ -99,61 +113,82 @@ class OXWU(commands.GroupCog, name="earthquake", description="OXWU 地震監測�
             self._session = aiohttp.ClientSession()
         return self._session
     
-    def _register_sio_events(self):
-        """註冊 Socket.IO 事件處理器"""
-        @self.sio.on("warningTimeChanged")
-        async def on_warning_changed(data):
-            await self._handle_warning_changed(data)
+    def _run_on_loop(self, coroutine):
+        if self._loop is None:
+            return
+        asyncio.run_coroutine_threadsafe(coroutine, self._loop)
+
+    def _register_proxy_events(self):
+        """註冊 proxy websocket 事件處理器"""
+        @self.proxy_client.event()
+        def proxy_warning_update(event: uooxwu.WarningUpdateEvent):
+            self._run_on_loop(self._handle_warning_changed(event))
+
+        @self.proxy_client.event()
+        def proxy_warning_updated(event: uooxwu.WarningUpdatedEvent):
+            self._run_on_loop(self._handle_warning_updated(event))
         
-        @self.sio.on("reportTimeChanged")
-        async def on_report_changed(data):
-            await self._handle_report_changed(data)
+        @self.proxy_client.event()
+        def proxy_report_update(event: uooxwu.ReportUpdateEvent):
+            self._run_on_loop(self._handle_report_changed(event))
         
-        @self.sio.on("connect")
-        async def on_connect():
-            # print("[OXWU] Socket.IO 已連線")
-            log("Socket.IO 已連線", module_name="OXWU", level=logging.INFO)
+        @self.proxy_client.event()
+        def connect():
+            log("Proxy Socket.IO 已連線", module_name="OXWU", level=logging.INFO)
         
-        @self.sio.on("disconnect")
-        async def on_disconnect():
-            # print("[OXWU] Socket.IO 已斷線")
-            log("Socket.IO 已斷線", module_name="OXWU", level=logging.WARNING)
+        @self.proxy_client.event()
+        def disconnect():
+            log("Proxy Socket.IO 已斷線", module_name="OXWU", level=logging.WARNING)
     
     async def _handle_warning_changed(self, data):
         """處理速報更新事件"""
-        new_time = data.get("time")
+        new_time = data.time if hasattr(data, "time") else data.get("time")
         if new_time and new_time != self.last_warning_time:
             self.last_warning_time = new_time
             # print(f"[OXWU] 收到新速報: {new_time}")
             log(f"收到新速報: {new_time}", module_name="OXWU", level=logging.INFO)
-            
-            # 切換到速報頁面並等待一下
-            await self._goto_warning()
-            await asyncio.sleep(1)
-            
+
             # 上傳截圖
-            screenshot_url = await self._upload_screenshot_to_temp()
+            screenshot_url = await self._upload_screenshot_to_temp("warning")
             
             # 取得詳細資訊
-            info = await self._fetch_warning_info()
+            info = self._build_warning_info_from_event(data)
+            if info is not None:
+                fetched_info = await self._fetch_warning_info()
+                info = self._merge_warning_info(info, fetched_info)
+            else:
+                info = await self._fetch_warning_info()
             if info:
                 embed = self._create_warning_embed(info, screenshot_url)
                 await self._send_to_all_servers(embed, "oxwu_warning_channel")
     
+    async def _handle_warning_updated(self, data):
+        info = self._build_warning_info_from_event(data)
+        if info is not None:
+            fetched_info = await self._fetch_warning_info()
+            info = self._merge_warning_info(info, fetched_info)
+        else:
+            info = await self._fetch_warning_info()
+
+        if info:
+            estimated_count = len(info.get("estimated_intensities") or {})
+            arrival_count = len(info.get("arrival_times") or {})
+            log(
+                f"速報更新資料同步完成: arrival_times={arrival_count}, estimated_intensities={estimated_count}",
+                module_name="OXWU",
+                level=logging.INFO,
+            )
+
     async def _handle_report_changed(self, data):
         """處理報告更新事件"""
-        new_time = data.get("time")
+        new_time = data.time if hasattr(data, "time") else data.get("time")
         if new_time and new_time != self.last_report_time:
             self.last_report_time = new_time
             # print(f"[OXWU] 收到新報告: {new_time}")
             log(f"收到新報告: {new_time}", module_name="OXWU", level=logging.INFO)
-            
-            # 切換到報告頁面並等待一下
-            await self._goto_report()
-            await asyncio.sleep(1)
-            
+
             # 上傳截圖
-            screenshot_url = await self._upload_screenshot_to_temp()
+            screenshot_url = await self._upload_screenshot_to_temp("report")
             
             # 取得詳細資訊
             report = await self._fetch_report_info()
@@ -190,25 +225,22 @@ class OXWU(commands.GroupCog, name="earthquake", description="OXWU 地震監測�
         log("無法取得 CWA 圖片，已達最大重試次數", module_name="OXWU", level=logging.WARNING)
         return None
     
-    async def _fetch_screenshot(self) -> Optional[bytes]:
-        """從 OXWU API 取得截圖"""
+    async def _fetch_screenshot(self, type_: str) -> Optional[bytes]:
+        """從 proxy API 取得截圖"""
         try:
-            session = await self._get_session()
-            async with session.get(f"{self.api_url}/screenshot") as resp:
-                if resp.status == 200:
-                    return await resp.read()
+            return await asyncio.to_thread(self.proxy_client.get_screenshot, type_)
         except Exception as e:
             log(f"無法取得截圖: {e}", module_name="OXWU", level=logging.ERROR)
         return None
     
-    async def _upload_screenshot_to_temp(self) -> Optional[str]:
+    async def _upload_screenshot_to_temp(self, type_: str) -> Optional[str]:
         """上傳截圖到臨時頻道並返回 URL"""
         channel_id = config("temp_channel_id")
         if not channel_id:
             log("未設定臨時頻道 ID，無法上傳截圖", module_name="OXWU", level=logging.WARNING)
             return None
         
-        screenshot = await self._fetch_screenshot()
+        screenshot = await self._fetch_screenshot(type_)
         if not screenshot:
             log("無法取得截圖，無法上傳", module_name="OXWU", level=logging.WARNING)
             return None
@@ -230,12 +262,9 @@ class OXWU(commands.GroupCog, name="earthquake", description="OXWU 地震監測�
     async def _fetch_warning_info(self) -> Optional[dict]:
         """取得地震速報資訊"""
         try:
-            session = await self._get_session()
-            async with session.get(f"{self.api_url}/getWarningInfo") as resp:
-                if resp.status == 200:
-                    data = await resp.json()
-                    if data.get("ok"):
-                        return data
+            warning = await asyncio.to_thread(self.proxy_client.get_warning)
+            if warning.ok:
+                return warning.raw
         except Exception as e:
             log(f"無法取得速報資訊: {e}", module_name="OXWU", level=logging.ERROR)
         return None
@@ -243,32 +272,184 @@ class OXWU(commands.GroupCog, name="earthquake", description="OXWU 地震監測�
     async def _fetch_report_info(self) -> Optional[dict]:
         """取得地震報告資訊"""
         try:
-            session = await self._get_session()
-            async with session.get(f"{self.api_url}/getReportInfo") as resp:
-                if resp.status == 200:
-                    data = await resp.json()
-                    if data.get("ok"):
-                        return data.get("report")
+            report = await asyncio.to_thread(self.proxy_client.get_report)
+            if report.ok:
+                return report.raw.get("report")
         except Exception as e:
             log(f"無法取得報告資訊: {e}", module_name="OXWU", level=logging.ERROR)
         return None
     
+    def _build_warning_info_from_event(self, data) -> Optional[dict]:
+        warning = getattr(data, "warning", None)
+        if warning is not None:
+            info = dict(warning.raw or {})
+        elif isinstance(data, dict):
+            info = dict(data.get("data") or {})
+        else:
+            info = {}
+
+        if not info:
+            return None
+
+        event_arrival_times = getattr(data, "arrival_times", None)
+        event_estimated_intensities = getattr(data, "estimated_intensities", None)
+        event_arrival_count = getattr(data, "arrival_count", None)
+        event_arrival_generated_at = getattr(data, "arrival_generated_at", None)
+
+        if isinstance(data, dict):
+            if event_arrival_times is None:
+                event_arrival_times = data.get("arrival_times")
+            if event_estimated_intensities is None:
+                event_estimated_intensities = data.get("estimated_intensities")
+            if event_arrival_count is None:
+                event_arrival_count = data.get("arrival_count")
+            if event_arrival_generated_at is None:
+                event_arrival_generated_at = data.get("arrival_generated_at")
+
+        if event_arrival_times is not None:
+            info["arrival_times"] = {str(k): int(v) for k, v in event_arrival_times.items()}
+        elif warning is not None:
+            info["arrival_times"] = {str(k): int(v) for k, v in warning.arrival_times.items()}
+
+        if event_estimated_intensities is not None:
+            info["estimated_intensities"] = {
+                str(k): str(v) for k, v in event_estimated_intensities.items()
+            }
+        elif warning is not None:
+            info["estimated_intensities"] = {
+                str(k): str(v) for k, v in warning.estimated_intensities.items()
+            }
+
+        if event_arrival_count is not None:
+            info["arrival_count"] = int(event_arrival_count or 0)
+        elif warning is not None:
+            info["arrival_count"] = int(warning.arrival_count or 0)
+
+        if event_arrival_generated_at is not None:
+            info["arrival_generated_at"] = event_arrival_generated_at
+        elif warning is not None and warning.arrival_generated_at:
+            info["arrival_generated_at"] = warning.arrival_generated_at
+
+        return info
+
+    def _merge_warning_info(self, event_info: Optional[dict], fetched_info: Optional[dict]) -> Optional[dict]:
+        if event_info is None:
+            return fetched_info
+        if fetched_info is None:
+            return event_info
+
+        merged = dict(fetched_info)
+        merged.update(event_info)
+
+        if event_info.get("arrival_times"):
+            merged["arrival_times"] = dict(event_info["arrival_times"])
+        elif fetched_info.get("arrival_times"):
+            merged["arrival_times"] = dict(fetched_info["arrival_times"])
+
+        if event_info.get("estimated_intensities"):
+            merged["estimated_intensities"] = dict(event_info["estimated_intensities"])
+        elif fetched_info.get("estimated_intensities"):
+            merged["estimated_intensities"] = dict(fetched_info["estimated_intensities"])
+
+        if event_info.get("arrival_count") is not None:
+            merged["arrival_count"] = event_info["arrival_count"]
+        elif fetched_info.get("arrival_count") is not None:
+            merged["arrival_count"] = fetched_info["arrival_count"]
+
+        if event_info.get("arrival_generated_at"):
+            merged["arrival_generated_at"] = event_info["arrival_generated_at"]
+        elif fetched_info.get("arrival_generated_at"):
+            merged["arrival_generated_at"] = fetched_info["arrival_generated_at"]
+
+        return merged
+
     async def _goto_warning(self):
-        """切換到速報頁面"""
-        try:
-            session = await self._get_session()
-            await session.get(f"{self.api_url}/gotoWarning")
-        except Exception as e:
-            log(f"無法切換到速報頁面: {e}", module_name="OXWU", level=logging.ERROR)
+        """Proxy 模式不需要手動切頁。"""
+        return None
     
     async def _goto_report(self):
-        """切換到報告頁面"""
+        """Proxy 模式不需要手動切頁。"""
+        return None
+
+    def _build_arrival_lines(self, info: dict, limit: int = 10) -> Optional[str]:
+        time_text = info.get("time")
+        arrival_times = info.get("arrival_times") or {}
+        estimated_intensities = info.get("estimated_intensities") or {}
+        if not time_text or not estimated_intensities:
+            return None
+
         try:
-            session = await self._get_session()
-            await session.get(f"{self.api_url}/gotoReport")
-        except Exception as e:
-            log(f"無法切換到報告頁面: {e}", module_name="OXWU", level=logging.ERROR)
-    
+            base_time = datetime.strptime(time_text, "%Y-%m-%d %H:%M:%S").replace(tzinfo=TAIWAN_TZ)
+        except ValueError:
+            return None
+
+        intensity_rank = {
+            "0\u7d1a": 0,
+            "1\u7d1a": 1,
+            "2\u7d1a": 2,
+            "3\u7d1a": 3,
+            "4\u7d1a": 4,
+            "5\u5f31": 5,
+            "5\u5f37": 6,
+            "6\u5f31": 7,
+            "6\u5f37": 8,
+            "7\u7d1a": 9,
+        }
+        county_summary = {}
+        for town_id, intensity in estimated_intensities.items():
+            town = self.town_map.get(str(town_id))
+            town_name = town.name if town else str(town_id)
+            county_name = town_name.split(" ", 1)[0]
+            rank = intensity_rank.get(str(intensity), -1)
+            eta_seconds = arrival_times.get(str(town_id))
+
+            current = county_summary.get(county_name)
+            if current is None:
+                county_summary[county_name] = {
+                    "intensity": intensity,
+                    "rank": rank,
+                    "eta_seconds": eta_seconds,
+                }
+                continue
+
+            current_eta = current["eta_seconds"]
+            should_replace = rank > current["rank"]
+            if not should_replace and rank == current["rank"]:
+                if eta_seconds is not None and (current_eta is None or eta_seconds < current_eta):
+                    should_replace = True
+
+            if should_replace:
+                county_summary[county_name] = {
+                    "intensity": intensity,
+                    "rank": rank,
+                    "eta_seconds": eta_seconds,
+                }
+
+        sorted_items = sorted(
+            county_summary.items(),
+            key=lambda item: (
+                -item[1]["rank"],
+                item[1]["eta_seconds"] if item[1]["eta_seconds"] is not None else 10**9,
+                item[0],
+            ),
+        )
+
+        lines = []
+        for county_name, summary in sorted_items[:limit]:
+            eta_seconds = summary["eta_seconds"]
+            intensity = summary["intensity"]
+            if eta_seconds is not None:
+                arrival_dt = base_time + timedelta(seconds=int(eta_seconds))
+                arrival_ts = int(arrival_dt.timestamp())
+                lines.append(f"{county_name}: <t:{arrival_ts}:R> | \u9810\u4f30 {intensity}")
+            else:
+                lines.append(f"{county_name}: \u5df2\u62b5\u9054 | \u9810\u4f30 {intensity}")
+
+        remaining = len(sorted_items) - limit
+        if remaining > 0:
+            lines.append(f"...\u9084\u6709 {remaining} \u500b\u5730\u5340")
+        return "\n".join(lines)
+
     def _create_warning_embed(self, info: dict, screenshot_url: Optional[str] = None) -> discord.Embed:
         """建立速報 Embed"""
         embed = discord.Embed(
@@ -293,12 +474,10 @@ class OXWU(commands.GroupCog, name="earthquake", description="OXWU 地震監測�
         if info.get("maxIntensity"):
             embed.add_field(name="💥 最大震度", value=info["maxIntensity"], inline=True)
         
-        if info.get("intensity"):
-            embed.add_field(name="📈 預估震度", value=info["intensity"], inline=True)
-        
-        if info.get("eta"):
-            embed.add_field(name="⏱️ 預估抵達", value=f"{info['eta']} 秒", inline=True)
-        
+        arrival_lines = self._build_arrival_lines(info)
+        if arrival_lines:
+            embed.add_field(name="各地到達", value=arrival_lines, inline=False)
+
         if screenshot_url:
             embed.set_image(url=screenshot_url)
         
@@ -402,25 +581,23 @@ class OXWU(commands.GroupCog, name="earthquake", description="OXWU 地震監測�
         log(f"重試次數已達上限，放棄發送到 {guild_name}", module_name="OXWU", level=logging.ERROR)
     
     async def _connect_socketio(self):
-        """連接到 Socket.IO 伺服器"""
+        """連接到 proxy Socket.IO 伺服器"""
         while not self.bot.is_closed():
             try:
-                if not self.sio.connected:
-                    await self.sio.connect(self.api_url, transports=["polling"])
-                await asyncio.sleep(5)
+                await asyncio.to_thread(self.proxy_client.connect, wait=True)
             except asyncio.CancelledError:
                 break
             except Exception as e:
-                # print(f"[OXWU] Socket.IO 連線失敗: {e}")
-                log(f"Socket.IO 連線失敗: {e}", module_name="OXWU", level=logging.ERROR)
+                log(f"Proxy Socket.IO 連線失敗: {e}", module_name="OXWU", level=logging.ERROR)
                 await asyncio.sleep(10)
     
     @commands.Cog.listener()
     async def on_ready(self):
         """Bot 準備就緒時啟動 Socket.IO 連線與 CWA 初始化"""
-        if not hasattr(self, "_task_started"):
-            self._task_started = True
-            self.bot.loop.create_task(self._connect_socketio())
+        if not self._socket_started:
+            self._socket_started = True
+            self._loop = asyncio.get_running_loop()
+            self._socket_task = self.bot.loop.create_task(self._connect_socketio())
             # 啟動時取得一次 CWA 連結和圖片
             try:
                 await cwa_get_last_link()
@@ -431,8 +608,9 @@ class OXWU(commands.GroupCog, name="earthquake", description="OXWU 地震監測�
     
     async def cog_unload(self):
         """Cog 卸載時清理資源"""
-        if self.sio.connected:
-            await self.sio.disconnect()
+        if self._socket_task:
+            self._socket_task.cancel()
+        await asyncio.to_thread(self.proxy_client.close)
         if self._session and not self._session.closed:
             await self._session.close()
     
@@ -495,17 +673,13 @@ class OXWU(commands.GroupCog, name="earthquake", description="OXWU 地震監測�
     async def query_report(self, interaction: discord.Interaction):
         await interaction.response.defer()
         
-        # 切換到報告頁面
-        await self._goto_report()
-        await asyncio.sleep(1)
-        
         report = await self._fetch_report_info()
         if not report:
             await interaction.followup.send("❌ 無法取得地震報告資訊", ephemeral=True)
             return
         
         # 上傳截圖
-        screenshot_url = await self._upload_screenshot_to_temp()
+        screenshot_url = await self._upload_screenshot_to_temp("report")
         
         # 取得 CWA 圖片（查詢時不需重試，直接取得當前最新的）
         cached_link = cwa_get_cached_link()
@@ -525,17 +699,13 @@ class OXWU(commands.GroupCog, name="earthquake", description="OXWU 地震監測�
     async def query_warning(self, interaction: discord.Interaction):
         await interaction.response.defer()
         
-        # 切換到速報頁面
-        await self._goto_warning()
-        await asyncio.sleep(.5)
-        
         info = await self._fetch_warning_info()
         if not info:
             await interaction.followup.send("❌ 無法取得地震速報資訊（可能目前沒有速報）", ephemeral=True)
             return
         
         # 上傳截圖
-        screenshot_url = await self._upload_screenshot_to_temp()
+        screenshot_url = await self._upload_screenshot_to_temp("warning")
         
         embed = self._create_warning_embed(info, screenshot_url)
         await interaction.followup.send(embed=embed)
@@ -544,7 +714,7 @@ class OXWU(commands.GroupCog, name="earthquake", description="OXWU 地震監測�
     async def get_screenshot(self, interaction: discord.Interaction):
         await interaction.response.defer()
         
-        screenshot = await self._fetch_screenshot()
+        screenshot = await self._fetch_screenshot("warning")
         if not screenshot:
             await interaction.followup.send("❌ 無法取得截圖", ephemeral=True)
             return
@@ -555,7 +725,8 @@ class OXWU(commands.GroupCog, name="earthquake", description="OXWU 地震監測�
     @app_commands.command(name="status", description="查看 OXWU 連線狀態")
     async def check_status(self, interaction: discord.Interaction):
         embed = discord.Embed(title="🔌 OXWU 連線狀態", color=discord.Color.blue())
-        embed.add_field(name="Socket.IO", value="✅ 已連線" if self.sio.connected else "❌ 未連線", inline=True)
+        proxy_connected = bool(getattr(self.proxy_client, "_socket", None) and self.proxy_client._socket.connected)
+        embed.add_field(name="Socket.IO", value="✅ 已連線" if proxy_connected else "❌ 未連線", inline=True)
         embed.add_field(name="最後速報時間", value=self.last_warning_time or "無", inline=True)
         embed.add_field(name="最後報告時間", value=self.last_report_time or "無", inline=True)
         
@@ -577,9 +748,8 @@ async def _cleanup_oxwu():
     global _oxwu_cog_instance
     if _oxwu_cog_instance is not None:
         try:
-            if _oxwu_cog_instance.sio.connected:
-                await _oxwu_cog_instance.sio.disconnect()
-                log("已關閉 Socket.IO 連線", module_name="OXWU")
+            await asyncio.to_thread(_oxwu_cog_instance.proxy_client.close)
+            log("已關閉 Proxy Socket.IO 連線", module_name="OXWU")
             if _oxwu_cog_instance._session and not _oxwu_cog_instance._session.closed:
                 await _oxwu_cog_instance._session.close()
         except Exception as e:

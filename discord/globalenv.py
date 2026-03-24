@@ -14,7 +14,7 @@ from pathlib import Path
 
 
 # Global configuration for backward compatibility
-config_version = 26
+config_version = 27
 config_path = 'config.json'
 
 default_config = {
@@ -58,7 +58,8 @@ default_config = {
     # "lavalink_host": "localhost",  # decprecated, use lavalink_nodes instead
     # "lavalink_port": 2333,
     # "lavalink_password": "youshallnotpass",
-    "oxwu_api": "http://localhost:10281",
+    "oxwu_api": "http://localhost:5000",
+    "oxwu_api_key": "",
     "temp_channel_id": 123456789012345678,
     "lavalink_nodes": [
         {

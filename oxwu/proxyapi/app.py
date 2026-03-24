@@ -317,33 +317,113 @@ def haversine_km(lat1, lon1, lat2, lon2):
     return 6371.0 * 2 * math.asin(math.sqrt(a))
 
 
+INTENSITY_LABELS = [
+    "0\u7d1a",
+    "1\u7d1a",
+    "2\u7d1a",
+    "3\u7d1a",
+    "4\u7d1a",
+    "5\u5f31",
+    "5\u5f37",
+    "6\u5f31",
+    "6\u5f37",
+    "7\u7d1a",
+]
+INTENSITY_TO_RANK = {label: rank for rank, label in enumerate(INTENSITY_LABELS)}
+INTENSITY_ALIASES = {
+    "0": "0\u7d1a",
+    "1": "1\u7d1a",
+    "2": "2\u7d1a",
+    "3": "3\u7d1a",
+    "4": "4\u7d1a",
+    "5-": "5\u5f31",
+    "5+": "5\u5f37",
+    "6-": "6\u5f31",
+    "6+": "6\u5f37",
+    "7": "7\u7d1a",
+}
+
+
+def normalize_intensity_label(label):
+    if label is None:
+        return None
+
+    text = str(label).strip()
+    if not text:
+        return None
+    if text in INTENSITY_TO_RANK:
+        return text
+    if text in INTENSITY_ALIASES:
+        return INTENSITY_ALIASES[text]
+
+    compact = text.replace(" ", "")
+    if compact in INTENSITY_TO_RANK:
+        return compact
+    if compact in INTENSITY_ALIASES:
+        return INTENSITY_ALIASES[compact]
+    if compact.endswith("\u7d1a") and compact[:-1].isdigit():
+        return f"{int(compact[:-1])}\u7d1a"
+    if compact.isdigit():
+        return f"{int(compact)}\u7d1a"
+    return None
+
+
+def intensity_rank_to_label(rank: int) -> str:
+    rank = max(0, min(rank, len(INTENSITY_LABELS) - 1))
+    return INTENSITY_LABELS[rank]
+
+
 def estimate_intensity_label(magnitude: float, depth_km: float, hypocenter_distance_km: float) -> str:
-    # A rough PGA-based estimate for preview use only, not an official intensity.
-    source_term = 0.58 * magnitude + 0.0038 * depth_km - 1.29
+    # Preview estimate only. The old version was too conservative for towns near
+    # the epicenter, so this uses a stronger source term before we anchor to the
+    # upstream max intensity.
+    source_term = 0.58 * magnitude + 0.0038 * depth_km - 0.05
     attenuation = math.log10(
         hypocenter_distance_km + 0.0028 * (10 ** (0.5 * magnitude))
     ) + 0.002 * hypocenter_distance_km
     pga = 10 ** (source_term - attenuation)
 
     if pga < 0.8:
-        return "0級"
+        return "0\u7d1a"
     if pga < 2.5:
-        return "1級"
+        return "1\u7d1a"
     if pga < 8.0:
-        return "2級"
+        return "2\u7d1a"
     if pga < 25.0:
-        return "3級"
+        return "3\u7d1a"
     if pga < 80.0:
-        return "4級"
+        return "4\u7d1a"
     if pga < 140.0:
-        return "5弱"
+        return "5\u5f31"
     if pga < 250.0:
-        return "5強"
+        return "5\u5f37"
     if pga < 440.0:
-        return "6弱"
+        return "6\u5f31"
     if pga < 800.0:
-        return "6強"
-    return "7級"
+        return "6\u5f37"
+    return "7\u7d1a"
+
+
+def calibrate_estimated_intensities(estimated_intensities: dict, warning_data: dict) -> dict:
+    official_max_label = normalize_intensity_label(warning_data.get("maxIntensity"))
+    if not official_max_label or not estimated_intensities:
+        return estimated_intensities
+
+    official_max_rank = INTENSITY_TO_RANK[official_max_label]
+    current_max_rank = max(
+        INTENSITY_TO_RANK.get(normalize_intensity_label(label) or "0\u7d1a", 0)
+        for label in estimated_intensities.values()
+    )
+    delta = official_max_rank - current_max_rank
+    if delta <= 0:
+        return estimated_intensities
+
+    adjusted = {}
+    for town_id, label in estimated_intensities.items():
+        normalized = normalize_intensity_label(label) or "0\u7d1a"
+        adjusted_rank = INTENSITY_TO_RANK[normalized] + delta
+        adjusted[town_id] = intensity_rank_to_label(adjusted_rank)
+    return adjusted
 
 
 def build_warning_arrival_times(warning_data: dict):
@@ -363,7 +443,7 @@ def build_warning_arrival_times(warning_data: dict):
     elapsed_seconds = max(0.0, (now - origin).total_seconds()) if origin else 0.0
 
     arrival_times = {}
-    estimated_intensities = {}
+    raw_estimated_intensities = {}
     for town_id, info in TOWN_LOCATIONS.items():
         latitude = info.get("latitude")
         longitude = info.get("longitude")
@@ -374,12 +454,24 @@ def build_warning_arrival_times(warning_data: dict):
         hypocenter_distance_km = math.sqrt(horizontal_distance_km ** 2 + depth_km ** 2)
         travel_seconds = hypocenter_distance_km / WARNING_S_WAVE_SPEED_KMPS
         remaining_seconds = max(0, math.ceil(travel_seconds - elapsed_seconds))
-        estimated_level = estimate_intensity_label(magnitude, depth_km, hypocenter_distance_km)
+        raw_estimated_intensities[town_id] = estimate_intensity_label(
+            magnitude,
+            depth_km,
+            hypocenter_distance_km,
+        )
 
         if remaining_seconds > 0:
             arrival_times[town_id] = remaining_seconds
-            estimated_intensities[town_id] = estimated_level
 
+    calibrated_estimated_intensities = calibrate_estimated_intensities(
+        raw_estimated_intensities,
+        warning_data,
+    )
+    estimated_intensities = {
+        town_id: level
+        for town_id, level in calibrated_estimated_intensities.items()
+        if level != "0\u7d1a"
+    }
     return arrival_times, estimated_intensities
 
 
@@ -461,6 +553,7 @@ if upstream_sio:
 
     @upstream_sio.on("reportTimeChanged")
     def on_report_changed(data):
+        print("[Upstream] reportTimeChanged 事件觸發")
         mark_event_status("report", "last_event_at", utc_now())
         update_cache("report")
         update_screenshot_cache("report")
@@ -471,6 +564,7 @@ if upstream_sio:
 
     @upstream_sio.on("warningTimeChanged")
     def on_warning_changed(data):
+        print("[Upstream] warningTimeChanged 事件觸發")
         mark_event_status("warning", "last_event_at", utc_now())
         update_cache("warning")
         update_screenshot_cache("warning")
@@ -486,6 +580,7 @@ if upstream_sio:
 
     @upstream_sio.on("warningUpdated")
     def on_warning_updated(data):
+        print("[Upstream] warningUpdated 事件觸發")
         mark_event_status("warning", "last_event_at", utc_now())
         update_cache("warning")
         update_screenshot_cache("warning")
