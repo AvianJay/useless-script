@@ -162,7 +162,7 @@ class FakeUser(commands.Cog):
         mention = False
 
         if check_mentions(message):
-            if interaction.channel.permissions_for(interaction.guild.me).mention_everyone:
+            if interaction.channel.permissions_for(interaction.user).mention_everyone and interaction.channel.permissions_for(interaction.guild.me).mention_everyone:
                 # ask user if they really want to send a message with mentions
                 view = ConfirmMentionsView(interaction.user, message, interaction)
                 await interaction.followup.send("你的訊息中包含了提及，這可能會通知到很多人。你確定要發送這條訊息嗎？", view=view, ephemeral=True)
