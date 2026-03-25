@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>API Docs | OXWU API</title>
+  <title>API Docs | Unofficial OXWU API</title>
   <style>
     :root {
       --bg: #f7f4ee;
@@ -11,9 +11,13 @@
       --ink: #1f1c17;
       --muted: #655f56;
       --accent: #155e75;
+      --accent-soft: rgba(21, 94, 117, 0.1);
       --border: rgba(31, 28, 23, 0.1);
+      --code-bg: #f2efe8;
     }
+
     * { box-sizing: border-box; }
+
     body {
       margin: 0;
       font-family: "Segoe UI", "Noto Sans TC", sans-serif;
@@ -23,96 +27,76 @@
         linear-gradient(180deg, #faf7f2, var(--bg));
       padding: 24px;
     }
-    .wrap { max-width: 1000px; margin: 0 auto; }
-    .hero, .section {
+
+    a { color: var(--accent); }
+
+    .wrap {
+      max-width: 1160px;
+      margin: 0 auto;
+    }
+
+    .hero,
+    .section {
       background: var(--panel);
       border: 1px solid var(--border);
       border-radius: 24px;
       padding: 24px;
       margin-bottom: 20px;
+      box-shadow: 0 12px 34px rgba(31, 28, 23, 0.04);
     }
-    h1, h2, h3 { margin-top: 0; }
-    p, li { color: var(--muted); line-height: 1.7; }
+
+    h1, h2, h3 {
+      margin-top: 0;
+      color: var(--ink);
+    }
+
+    p, li {
+      color: var(--muted);
+      line-height: 1.75;
+    }
+
+    ul {
+      margin: 0;
+      padding-left: 20px;
+    }
+
     code, pre {
-      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-      background: #f2efe8;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      background: var(--code-bg);
       border-radius: 14px;
     }
-    code { padding: 2px 7px; }
+
+    code {
+      padding: 2px 7px;
+    }
+
     pre {
       padding: 16px;
       overflow: auto;
       white-space: pre-wrap;
       word-break: break-word;
+      line-height: 1.6;
+      margin: 0;
     }
+
     .grid {
       display: grid;
       grid-template-columns: 1fr 1fr;
       gap: 20px;
     }
+
     .endpoint {
       border: 1px solid var(--border);
       border-radius: 18px;
       padding: 18px;
       margin-bottom: 16px;
-    }
-    .tester {
-      border: 1px solid var(--border);
-      border-radius: 18px;
-      padding: 18px;
-      background: #fff8ec;
-    }
-    .row {
-      display: grid;
-      grid-template-columns: 1fr 180px;
-      gap: 12px;
-      margin-bottom: 12px;
-    }
-    .row-3 {
-      display: grid;
-      grid-template-columns: 180px 180px 1fr;
-      gap: 12px;
-      margin-bottom: 12px;
-    }
-    .field {
-      width: 100%;
-      border: 1px solid var(--border);
-      border-radius: 12px;
-      padding: 10px 12px;
       background: #fff;
-      color: var(--ink);
-      font-size: 15px;
     }
-    .btn {
-      border: 0;
-      border-radius: 12px;
-      background: #155e75;
-      color: #fff;
-      font-weight: 700;
-      cursor: pointer;
-      padding: 10px 14px;
+
+    .endpoint p {
+      margin-bottom: 0;
     }
-    .btn:disabled {
-      opacity: 0.55;
-      cursor: not-allowed;
-    }
-    .status {
-      margin: 8px 0 0;
-      color: #0c4a6e;
-      font-weight: 600;
-    }
-    .status.error {
-      color: #b91c1c;
-    }
-    .result {
-      margin-top: 14px;
-    }
-    .result img {
-      max-width: 100%;
-      border-radius: 14px;
-      border: 1px solid var(--border);
-      display: block;
-    }
+
     .tag {
       display: inline-block;
       margin-right: 8px;
@@ -124,12 +108,136 @@
       font-size: 13px;
       font-weight: 800;
     }
+
     .get { background: #0f766e; }
     .post { background: #b45309; }
-    a { color: var(--accent); }
-    @media (max-width: 860px) {
-      .grid { grid-template-columns: 1fr; }
-      .row, .row-3 { grid-template-columns: 1fr; }
+    .ws { background: #7c3aed; }
+
+    .muted-box {
+      border: 1px dashed var(--border);
+      background: #fff9f0;
+      border-radius: 18px;
+      padding: 16px;
+    }
+
+    .note {
+      background: var(--accent-soft);
+      color: #0c4a6e;
+      border-radius: 18px;
+      padding: 14px 16px;
+      font-weight: 600;
+    }
+
+    .table-wrap {
+      overflow: auto;
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      background: #fff;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      min-width: 560px;
+    }
+
+    th, td {
+      text-align: left;
+      padding: 12px 14px;
+      border-bottom: 1px solid var(--border);
+      vertical-align: top;
+    }
+
+    th {
+      background: #fbf7f0;
+      color: var(--ink);
+      font-size: 14px;
+    }
+
+    tr:last-child td {
+      border-bottom: 0;
+    }
+
+    .pair {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 20px;
+    }
+
+    .tester {
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      padding: 18px;
+      background: #fff8ec;
+    }
+
+    .row {
+      display: grid;
+      grid-template-columns: 1fr 180px;
+      gap: 12px;
+      margin-bottom: 12px;
+    }
+
+    .row-3 {
+      display: grid;
+      grid-template-columns: 180px 180px 1fr;
+      gap: 12px;
+      margin-bottom: 12px;
+    }
+
+    .field {
+      width: 100%;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 10px 12px;
+      background: #fff;
+      color: var(--ink);
+      font-size: 15px;
+    }
+
+    .btn {
+      border: 0;
+      border-radius: 12px;
+      background: var(--accent);
+      color: #fff;
+      font-weight: 700;
+      cursor: pointer;
+      padding: 10px 14px;
+    }
+
+    .btn:disabled {
+      opacity: 0.55;
+      cursor: not-allowed;
+    }
+
+    .status {
+      margin: 8px 0 0;
+      color: #0c4a6e;
+      font-weight: 600;
+    }
+
+    .status.error {
+      color: #b91c1c;
+    }
+
+    .result {
+      margin-top: 14px;
+    }
+
+    .result img {
+      max-width: 100%;
+      border-radius: 14px;
+      border: 1px solid var(--border);
+      display: block;
+    }
+
+    @media (max-width: 980px) {
+      .grid,
+      .pair,
+      .row,
+      .row-3 {
+        grid-template-columns: 1fr;
+      }
     }
   </style>
 </head>
@@ -137,26 +245,29 @@
   <div class="wrap">
     <section class="hero">
       <h1>OXWU API Docs</h1>
-      <p>這份文件涵蓋資料查詢、截圖下載、登入後帳號資訊，以及 WebSocket 代理事件。登入後可以在 dashboard 直接取得與重設 API Key。</p>
+      <p>這份文件整理了 OXWU Proxy API 的 REST 端點、WebSocket 事件、範例 JSON，以及常用欄位說明。你可以直接先看範例格式，再往下對照每個鍵值的用途。</p>
       <p>OpenAPI JSON: <a href="{{ openapi_url }}">{{ openapi_url }}</a></p>
+      <div class="note">如果你是第一次接這個 API，通常先看 <code>/api/data/warning</code>、<code>/api/data/report</code>、<code>/api/town-map</code> 就夠用了。</div>
     </section>
 
     <section class="section">
       <h2>Authentication</h2>
-      <p>一般 API 需在 request header 帶入 <code>X-API-Key</code>。帳號管理 API 使用 Discord OAuth2 登入後的 session cookie。</p>
       <div class="grid">
         <div>
-          <h3>點數規則</h3>
-          <ul>
-            <li>資料 API: {{ "%.2f"|format(costs.api) }} 點 / 次</li>
-            <li>截圖 API: {{ "%.2f"|format(costs.screenshot) }} 點 / 次</li>
-            <li>WebSocket: {{ "%.4f"|format(costs.ws_per_sec) }} 點 / 秒，5 秒結算一次</li>
-          </ul>
+          <p>需要 API Key 的端點，請在 request header 帶入 <code>X-API-Key</code>。和帳號管理有關的頁面則使用 Discord OAuth2 建立的 session cookie。</p>
+          <div class="muted-box">
+            <strong>費用</strong>
+            <ul>
+              <li>一般 JSON API: {{ "%.2f"|format(costs.api) }} 點 / 次</li>
+              <li>截圖 API: {{ "%.2f"|format(costs.screenshot) }} 點 / 次</li>
+              <li>WebSocket: {{ "%.4f"|format(costs.ws_per_sec) }} 點 / 秒，每 5 秒結算一次</li>
+            </ul>
+          </div>
         </div>
         <div>
-          <h3>快速測試</h3>
+          <h3>cURL</h3>
           <pre>curl -H "X-API-Key: YOUR_API_KEY" \
-{{ request.host_url.rstrip('/') }}/api/data/report</pre>
+{{ request.host_url.rstrip('/') }}/api/data/warning</pre>
         </div>
       </div>
     </section>
@@ -166,87 +277,328 @@
 
       <div class="endpoint">
         <div><span class="tag get">GET</span><code>/api/data/&lt;report|warning&gt;</code></div>
-        <p>回傳目前快取的 JSON 資料。</p>
+        <p>取得目前快取中的地震報告或地震速報 JSON。</p>
       </div>
 
       <div class="endpoint">
         <div><span class="tag get">GET</span><code>/api/screenshot/&lt;report|warning&gt;</code></div>
-        <p>回傳 PNG 截圖內容。</p>
+        <p>取得目前畫面的 PNG 截圖。</p>
+      </div>
+
+      <div class="endpoint">
+        <div><span class="tag get">GET</span><code>/api/town-map</code></div>
+        <p>取得 <code>town_id</code> 對照表與座標，可搭配 <code>arrival_times</code> / <code>estimated_intensities</code> 使用。</p>
       </div>
 
       <div class="endpoint">
         <div><span class="tag get">GET</span><code>/api/me</code></div>
-        <p>登入後取得目前帳號資訊、點數與 API Key。</p>
+        <p>取得目前登入帳號資訊、剩餘點數與 API Key。</p>
       </div>
 
       <div class="endpoint">
         <div><span class="tag post">POST</span><code>/api/me/reset-key</code></div>
-        <p>登入後重設 API Key，舊 key 立即失效。</p>
-      </div>
-
-      <div class="endpoint">
-        <div><span class="tag get">GET</span><code>/api/docs</code></div>
-        <p>回傳目前這份說明文件（HTML）。</p>
+        <p>重設目前登入帳號的 API Key。舊的 Key 會立刻失效。</p>
       </div>
 
       <div class="endpoint">
         <div><span class="tag get">GET</span><code>/openapi.json</code></div>
-        <p>回傳 OpenAPI 3.1 規格（JSON）。</p>
-      </div>
-    </section>
-
-      <div class="endpoint">
-        <div><span class="tag get">GET</span><code>/api/town-map</code></div>
-        <p>回傳 <code>town_id</code> 對照資料，供客戶端把 ETA 秒數 map 轉成地區名稱或座標。</p>
+        <p>取得 OpenAPI 3.1 規格。</p>
       </div>
     </section>
 
     <section class="section">
-      <h2>Upstream Mapping (from main.js)</h2>
-      <p>Proxy 會向上游 Electron HTTP 服務（預設 <code>http://127.0.0.1:10281</code>）抓資料並更新快取，對應如下：</p>
-      <ul>
-        <li><code>report</code> 快取來源: <code>/getReportInfo</code></li>
-        <li><code>warning</code> 快取來源: <code>/getWarningInfo</code></li>
-        <li>截圖流程: 先呼叫 <code>/gotoReport</code> 或 <code>/gotoWarning</code>，再呼叫 <code>/screenshot</code></li>
-      </ul>
-      <p>上游事件 <code>reportTimeChanged</code> / <code>warningTimeChanged</code> 觸發後，proxy 會更新快取並轉發給客戶端：</p>
-      <ul>
-        <li><code>proxy_report_update</code></li>
-        <li><code>proxy_warning_update</code></li>
-      </ul>
+      <h2>Warning Example</h2>
+      <div class="pair">
+        <div>
+          <h3>範例 JSON</h3>
+          <pre>{
+  "ok": true,
+  "time": "2026-03-26 09:21:14",
+  "location": {
+    "latitude": "23.87",
+    "longitude": "121.51",
+    "text": "北緯 23.87 / 東經 121.51"
+  },
+  "depth": "20",
+  "magnitude": "4.6",
+  "maxIntensity": "3級",
+  "intensity": "1",
+  "eta": "0",
+  "list": [
+    {
+      "id": "1",
+      "time": "09:21:14",
+      "latlon": "23.87/121.51",
+      "depth": "20",
+      "mag": "4.6"
+    }
+  ],
+  "url": "file:///.../index.htm",
+  "arrival_times": {
+    "1001501": 7,
+    "1001502": 9
+  },
+  "estimated_intensities": {
+    "1001501": "3級",
+    "1001502": "2級"
+  },
+  "arrival_count": 142,
+  "arrival_generated_at": "2026-03-26T09:21:15+08:00"
+}</pre>
+        </div>
+        <div>
+          <h3>鍵值說明</h3>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>鍵</th>
+                  <th>型別</th>
+                  <th>說明</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr><td><code>ok</code></td><td>boolean</td><td>資料是否有效。</td></tr>
+                <tr><td><code>time</code></td><td>string</td><td>這次速報的發生時間，格式為 <code>YYYY-MM-DD HH:mm:ss</code>。</td></tr>
+                <tr><td><code>location</code></td><td>object</td><td>震央座標與文字描述。</td></tr>
+                <tr><td><code>depth</code></td><td>string</td><td>深度，單位公里。</td></tr>
+                <tr><td><code>magnitude</code></td><td>string</td><td>規模。</td></tr>
+                <tr><td><code>maxIntensity</code></td><td>string</td><td>這次速報的最大預估震度。</td></tr>
+                <tr><td><code>intensity</code></td><td>string</td><td>OXWU 所在地的預估震度。</td></tr>
+                <tr><td><code>eta</code></td><td>string</td><td>OXWU 所在地的預估抵達秒數。</td></tr>
+                <tr><td><code>list</code></td><td>array</td><td>同一輪速報內的警報列表歷程，通常後續更新時會持續增加。</td></tr>
+                <tr><td><code>arrival_times</code></td><td>object</td><td><code>{ town_id: eta_seconds }</code>，只保留尚未抵達的地區。</td></tr>
+                <tr><td><code>estimated_intensities</code></td><td>object</td><td><code>{ town_id: intensity_label }</code>，各地預估震度。</td></tr>
+                <tr><td><code>arrival_count</code></td><td>number</td><td>目前 <code>arrival_times</code> 中的地區數。</td></tr>
+                <tr><td><code>arrival_generated_at</code></td><td>string</td><td>這批 ETA / 預估震度的生成時間，ISO 8601。</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
     </section>
 
     <section class="section">
-      <h2>WebSocket</h2>
-      <p>Socket.IO 連線時，帶入 <code>X-API-Key</code> header 或 query string 的 <code>api_key</code>。伺服器會轉發以下事件：</p>
+      <h2>Report Example</h2>
+      <div class="pair">
+        <div>
+          <h3>範例 JSON</h3>
+          <pre>{
+  "ok": true,
+  "report": {
+    "number": "小區域有感地震",
+    "time": "2026-03-26 09:30:27",
+    "latitude": "23.87",
+    "longitude": "121.51",
+    "depth": "20",
+    "magnitude": "4.6",
+    "maxIntensity": "3級",
+    "intensities": [
+      {
+        "area": "花蓮縣",
+        "maxIntensity": "3級",
+        "stations": [
+          {
+            "level": "3級",
+            "names": ["壽豐鄉", "花蓮市"]
+          }
+        ]
+      }
+    ]
+  }
+}</pre>
+        </div>
+        <div>
+          <h3>鍵值說明</h3>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>鍵</th>
+                  <th>型別</th>
+                  <th>說明</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr><td><code>ok</code></td><td>boolean</td><td>資料是否有效。</td></tr>
+                <tr><td><code>report.number</code></td><td>string</td><td>地震編號或描述。</td></tr>
+                <tr><td><code>report.time</code></td><td>string</td><td>發生時間。</td></tr>
+                <tr><td><code>report.latitude</code>/<code>longitude</code></td><td>string</td><td>震央座標。</td></tr>
+                <tr><td><code>report.depth</code></td><td>string</td><td>深度，公里。</td></tr>
+                <tr><td><code>report.magnitude</code></td><td>string</td><td>規模。</td></tr>
+                <tr><td><code>report.maxIntensity</code></td><td>string</td><td>最大震度。</td></tr>
+                <tr><td><code>report.intensities</code></td><td>array</td><td>各縣市震度資訊。</td></tr>
+                <tr><td><code>stations[].level</code></td><td>string</td><td>該組測站的震度。</td></tr>
+                <tr><td><code>stations[].names</code></td><td>array</td><td>同一震度的地區名稱列表。</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section">
+      <h2>Town Map Example</h2>
+      <div class="pair">
+        <div>
+          <h3>範例 JSON</h3>
+          <pre>{
+  "1000201": {
+    "name": "宜蘭縣 宜蘭市",
+    "latitude": 24.758364,
+    "longitude": 121.757261
+  },
+  "6500600": {
+    "name": "新北市 板橋區",
+    "latitude": 25.011409,
+    "longitude": 121.459235
+  }
+}</pre>
+        </div>
+        <div>
+          <h3>鍵值說明</h3>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>鍵</th>
+                  <th>型別</th>
+                  <th>說明</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr><td><code>town_id</code></td><td>string</td><td>行政區代碼，可拿去對照 <code>arrival_times</code> / <code>estimated_intensities</code>。</td></tr>
+                <tr><td><code>name</code></td><td>string</td><td>縣市與鄉鎮市區名稱。</td></tr>
+                <tr><td><code>latitude</code></td><td>number</td><td>緯度。</td></tr>
+                <tr><td><code>longitude</code></td><td>number</td><td>經度。</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section">
+      <h2>WebSocket Events</h2>
+      <p>Socket.IO 連線時可使用 <code>X-API-Key</code> header 或 query string 的 <code>api_key</code>。目前會推送以下事件：</p>
       <ul>
         <li><code>proxy_report_update</code></li>
         <li><code>proxy_warning_update</code></li>
+        <li><code>proxy_warning_updated</code></li>
       </ul>
-      <p><code>proxy_warning_update.arrival_times</code> 只會傳送 <code>{ town_id: eta_seconds }</code>。</p>
+
+      <h3>事件說明</h3>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>事件名稱</th>
+              <th>用途</th>
+              <th>說明</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>proxy_report_update</code></td>
+              <td>地震報告更新</td>
+              <td>當 upstream 偵測到新的地震報告時推送，事件內的 <code>data</code> 會包含完整 report payload。</td>
+            </tr>
+            <tr>
+              <td><code>proxy_warning_update</code></td>
+              <td>新一輪地震速報</td>
+              <td>代表新的速報開始，通常可拿來建立新卡片、新訊息，或重設前端目前追蹤中的 warning 狀態。</td>
+            </tr>
+            <tr>
+              <td><code>proxy_warning_updated</code></td>
+              <td>同一輪速報後續更新</td>
+              <td>代表同一輪 warning 的內容有變化，例如警報列表新增、規模修正、位置修正；適合用來更新既有畫面，而不是當成全新速報。</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="pair">
+        <div>
+          <h3>範例事件</h3>
+          <pre>{
+  "time": "2026-03-26 09:21:14",
+  "parts": {
+    "year": "2026",
+    "month": "03",
+    "date": "26",
+    "hour": "09",
+    "minute": "21",
+    "second": "14"
+  },
+  "url": "file:///.../index.htm",
+  "arrival_times": {
+    "1001501": 7
+  },
+  "estimated_intensities": {
+    "1001501": "3級"
+  },
+  "arrival_count": 142,
+  "arrival_generated_at": "2026-03-26T09:21:15+08:00",
+  "data": {
+    "...": "完整 warning payload"
+  }
+}</pre>
+        </div>
+        <div>
+          <h3>鍵值說明</h3>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>鍵</th>
+                  <th>型別</th>
+                  <th>說明</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr><td><code>time</code></td><td>string</td><td>這次事件對應的時間。</td></tr>
+                <tr><td><code>parts</code></td><td>object</td><td>時間拆分欄位，方便前端少做字串處理。</td></tr>
+                <tr><td><code>arrival_times</code></td><td>object</td><td>各地預估抵達秒數。</td></tr>
+                <tr><td><code>estimated_intensities</code></td><td>object</td><td>各地預估震度。</td></tr>
+                <tr><td><code>data</code></td><td>object</td><td>完整 warning / report payload。</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <h3>前端範例</h3>
       <pre>const socket = io("{{ request.host_url.rstrip('/') }}", {
-  extraHeaders: { "X-API-Key": "YOUR_API_KEY" }
+  extraHeaders: {
+    "X-API-Key": "YOUR_API_KEY"
+  }
+});
+
+socket.on("proxy_warning_update", (payload) => {
+  console.log(payload.arrival_times);
+  console.log(payload.estimated_intensities);
 });</pre>
     </section>
 
     <section class="section">
       <h2>Try API</h2>
-      <p>輸入你的 API Key 後，可以直接在這頁測試資料與截圖 API。這裡會真的扣點，請留意額度。</p>
+      <p>在下方輸入 API Key 後，可以直接測試 JSON 與截圖端點。</p>
 
       <div class="tester">
         <div class="row">
-          <input id="apiKeyInput" class="field" type="password" placeholder="貼上你的 API Key" autocomplete="off">
+          <input id="apiKeyInput" class="field" type="password" placeholder="輸入 API Key" autocomplete="off">
           <button id="toggleKeyBtn" class="btn" type="button">顯示 Key</button>
         </div>
 
         <div class="row-3">
           <select id="kindInput" class="field">
-            <option value="data">資料 /api/data</option>
-            <option value="screenshot">截圖 /api/screenshot</option>
+            <option value="data">JSON /api/data</option>
+            <option value="screenshot">PNG /api/screenshot</option>
+            <option value="town-map">JSON /api/town-map</option>
           </select>
           <select id="typeInput" class="field">
-            <option value="report">report</option>
             <option value="warning">warning</option>
+            <option value="report">report</option>
           </select>
           <button id="sendBtn" class="btn" type="button">送出測試</button>
         </div>
@@ -291,35 +643,50 @@
         jsonOutput.style.display = "none";
       }
 
+      function updateTypeVisibility() {
+        const hideType = kindInput.value === "town-map";
+        typeInput.disabled = hideType;
+        typeInput.style.opacity = hideType ? "0.55" : "1";
+      }
+
       toggleKeyBtn.addEventListener("click", function () {
         const isPwd = apiKeyInput.type === "password";
         apiKeyInput.type = isPwd ? "text" : "password";
         toggleKeyBtn.textContent = isPwd ? "隱藏 Key" : "顯示 Key";
       });
 
+      kindInput.addEventListener("change", updateTypeVisibility);
+      updateTypeVisibility();
+
       sendBtn.addEventListener("click", async function () {
         const apiKey = apiKeyInput.value.trim();
         const kind = kindInput.value;
         const type = typeInput.value;
 
-        if (!apiKey) {
+        if (kind !== "town-map" && !apiKey) {
           setStatus("請先輸入 API Key", true);
           return;
         }
 
         sendBtn.disabled = true;
-        setStatus("請求中...", false);
+        setStatus("請求送出中...", false);
 
         try {
-          const endpoint = kind === "data"
-            ? `/api/data/${type}`
-            : `/api/screenshot/${type}`;
+          let endpoint = "/api/town-map";
+          if (kind === "data") {
+            endpoint = `/api/data/${type}`;
+          } else if (kind === "screenshot") {
+            endpoint = `/api/screenshot/${type}`;
+          }
+
+          const headers = {};
+          if (kind !== "town-map") {
+            headers["X-API-Key"] = apiKey;
+          }
 
           const response = await fetch(endpoint, {
             method: "GET",
-            headers: {
-              "X-API-Key": apiKey,
-            },
+            headers,
           });
 
           const contentType = response.headers.get("content-type") || "";
@@ -336,23 +703,23 @@
               endpoint,
               detail,
             });
-            setStatus(`失敗：HTTP ${response.status}`, true);
+            setStatus(`請求失敗：HTTP ${response.status}`, true);
             return;
           }
 
           if (contentType.includes("image/png")) {
             const blob = await response.blob();
             showImage(blob);
-            setStatus(`成功：${endpoint} 回傳 PNG`, false);
+            setStatus(`成功取得 ${endpoint} PNG`, false);
             return;
           }
 
           const data = await response.json();
           showJson({ ok: true, endpoint, data });
-          setStatus(`成功：${endpoint} 回傳 JSON`, false);
+          setStatus(`成功取得 ${endpoint} JSON`, false);
         } catch (err) {
           showJson({ ok: false, error: String(err) });
-          setStatus("請求失敗，請確認服務是否啟動", true);
+          setStatus("請求發生例外，請確認網路或 API 狀態", true);
         } finally {
           sendBtn.disabled = false;
         }
