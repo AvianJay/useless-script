@@ -481,7 +481,7 @@ class OXWU(commands.GroupCog, name="earthquake", description="OXWU 地震監測�
         if screenshot_url:
             embed.set_image(url=screenshot_url)
         
-        embed.set_footer(text="資料來源：OXWU")
+        # embed.set_footer(text="資料來源：OXWU")  # ahh
         return embed
     
     def _create_report_embed(self, report: dict, screenshot_url: Optional[str] = None, cwa_image_url: Optional[str] = None) -> discord.Embed:
@@ -532,7 +532,7 @@ class OXWU(commands.GroupCog, name="earthquake", description="OXWU 地震監測�
         elif screenshot_url:
             embed.set_image(url=screenshot_url)
         
-        embed.set_footer(text="資料來源：OXWU / 中央氣象署")
+        embed.set_footer(text="資料來源：中央氣象署")  # ahh
         return embed
     
     async def _send_to_all_servers(self, embed: discord.Embed, config_key: str, view: Optional[discord.ui.View] = None):

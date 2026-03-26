@@ -1,6 +1,6 @@
 ﻿from globalenv import (
     bot, config, get_server_config, set_server_config, get_user_data, set_user_data,
-    get_all_user_data, interaction_uses_guild_scope, ECONOMY_GLOBAL_MODE_CONFIG_KEY, db,
+    get_all_user_data, get_all_server_config_key, interaction_uses_guild_scope, ECONOMY_GLOBAL_MODE_CONFIG_KEY, db,
 )
 import discord
 from discord.ext import commands
@@ -43,6 +43,7 @@ HOURLY_INFLATION_WEIGHT = 0.00005  # 每小時獎勵造成的極小通膨
 GLOBAL_CURRENCY_NAME = "全域幣"
 GLOBAL_CURRENCY_EMOJI = "🌐"
 SERVER_CURRENCY_EMOJI = "🏦"
+ECONOMY_FLOW_BLACKLIST_KEY = "economy_flow_blacklist"
 
 # ==================== 防濫用機制說明 ====================
 # 1. 管理員物品追蹤：所有管理員給予的物品都會被標記
@@ -121,6 +122,59 @@ def get_allow_global_flow(guild_id: int) -> bool:
 def set_allow_global_flow(guild_id: int, allow: bool):
     """設定是否允許伺服幣與全域幣流通"""
     set_server_config(guild_id, "economy_allow_global_flow", allow)
+
+
+def get_flow_blacklist_info(guild_id: int) -> dict:
+    data = get_server_config(guild_id, ECONOMY_FLOW_BLACKLIST_KEY, {}) or {}
+    if not isinstance(data, dict):
+        return {}
+    reason = str(data.get("reason", "") or "").strip()
+    if not reason:
+        return {}
+    return {
+        "reason": reason,
+        "set_by": data.get("set_by"),
+        "set_at": data.get("set_at"),
+    }
+
+
+def is_flow_blacklisted(guild_id: int) -> bool:
+    return bool(get_flow_blacklist_info(guild_id))
+
+
+def set_flow_blacklist(guild_id: int, reason: str, actor_id: int | None = None):
+    reason = str(reason or "").strip()
+    if not reason:
+        raise ValueError("reason is required")
+    set_server_config(
+        guild_id,
+        ECONOMY_FLOW_BLACKLIST_KEY,
+        {
+            "reason": reason,
+            "set_by": actor_id,
+            "set_at": datetime.now(timezone.utc).isoformat(),
+        }
+    )
+
+
+def clear_flow_blacklist(guild_id: int):
+    set_server_config(guild_id, ECONOMY_FLOW_BLACKLIST_KEY, None)
+
+
+def build_flow_blacklist_notice(guild_id: int) -> str:
+    info = get_flow_blacklist_info(guild_id)
+    reason = info.get("reason", "未提供")
+    support_invite = str(config("support_server_invite", "") or "").strip()
+    lines = [
+        "## 此伺服器的貨幣流通功能已被強制停用",
+        f"> 原因：{reason}",
+        "",
+    ]
+    if support_invite:
+        lines.append(f"如需申訴，請前往支援伺服器開單：{support_invite}")
+    else:
+        lines.append("如需申訴，請聯繫機器人管理員。")
+    return "\n".join(lines)
 
 
 def get_total_supply(guild_id: int) -> float:
@@ -1596,6 +1650,12 @@ class Economy(commands.GroupCog, name="economy", description="經濟系統指令
             return
 
         guild_id = interaction.guild.id
+        if is_flow_blacklisted(guild_id):
+            await interaction.response.send_message(
+                build_flow_blacklist_notice(guild_id),
+                ephemeral=True,
+            )
+            return
         if not get_allow_global_flow(guild_id):
             await interaction.response.send_message("❌ 此伺服器已關閉伺服幣與全域幣的流通功能。", ephemeral=True)
             return
@@ -2958,6 +3018,101 @@ async def dev_economy_history(ctx, user: discord.User, scope: str = "server", se
     for i in range(0, len(lines), batch_size):
         batch = lines[i:i+batch_size]
         await ctx.send(f"```{chr(10).join(batch)}```")
+
+
+@bot.command(name="dev-economyflowblacklist", description="將伺服器加入貨幣流通黑名單", aliases=["defb", "deflowblock", "deblacklistflow"])
+@is_owner()
+async def dev_economy_flow_blacklist(ctx, guild_id: int, *, reason: str):
+    reason = str(reason or "").strip()
+    if not reason:
+        await ctx.send("❌ 請提供封鎖原因。")
+        return
+
+    set_flow_blacklist(guild_id, reason, actor_id=ctx.author.id)
+    guild = bot.get_guild(guild_id)
+    guild_name = guild.name if guild else "未知伺服器"
+    await ctx.send(
+        f"✅ 已將 **{guild_name}** (`{guild_id}`) 加入貨幣流通黑名單。\n"
+        f"原因：{reason}"
+    )
+
+
+@bot.command(name="dev-economyflowunblacklist", description="將伺服器移出貨幣流通黑名單", aliases=["defub", "deflowunblock", "deunblacklistflow"])
+@is_owner()
+async def dev_economy_flow_unblacklist(ctx, guild_id: int):
+    info = get_flow_blacklist_info(guild_id)
+    if not info:
+        await ctx.send(f"ℹ️ 伺服器 `{guild_id}` 目前不在貨幣流通黑名單中。")
+        return
+
+    clear_flow_blacklist(guild_id)
+    guild = bot.get_guild(guild_id)
+    guild_name = guild.name if guild else "未知伺服器"
+    await ctx.send(
+        f"✅ 已將 **{guild_name}** (`{guild_id}`) 移出貨幣流通黑名單。\n"
+        f"原原因：{info.get('reason', '未提供')}"
+    )
+
+
+@bot.command(name="dev-economyflowblacklistinfo", description="查看伺服器貨幣流通黑名單資訊", aliases=["defbi", "deflowinfo", "deblacklistflowinfo"])
+@is_owner()
+async def dev_economy_flow_blacklist_info(ctx, guild_id: int = None):
+    if guild_id is None:
+        if ctx.guild:
+            guild_id = ctx.guild.id
+        else:
+            await ctx.send("❌ 請提供伺服器 ID，或在伺服器內使用此指令。")
+            return
+
+    info = get_flow_blacklist_info(guild_id)
+    guild = bot.get_guild(guild_id)
+    guild_name = guild.name if guild else "未知伺服器"
+    if not info:
+        await ctx.send(f"ℹ️ **{guild_name}** (`{guild_id}`) 目前未被加入貨幣流通黑名單。")
+        return
+
+    actor_id = info.get("set_by")
+    set_at = info.get("set_at") or "未知時間"
+    actor_text = f"<@{actor_id}> (`{actor_id}`)" if actor_id else "未知"
+    await ctx.send(
+        f"🚫 **{guild_name}** (`{guild_id}`) 目前已停用貨幣流通。\n"
+        f"原因：{info.get('reason', '未提供')}\n"
+        f"設定者：{actor_text}\n"
+        f"設定時間：{set_at}"
+    )
+
+
+@bot.command(name="dev-economyflowblacklistlist", description="列出所有貨幣流通黑名單伺服器", aliases=["defbl", "deflowlst", "deblacklistflowlist"])
+@is_owner()
+async def dev_economy_flow_blacklist_list(ctx):
+    all_data = get_all_server_config_key(ECONOMY_FLOW_BLACKLIST_KEY) or {}
+    lines = []
+    for guild_id, raw in sorted(all_data.items(), key=lambda item: int(item[0]) if str(item[0]).isdigit() else 0):
+        try:
+            parsed_guild_id = int(guild_id)
+        except (TypeError, ValueError):
+            continue
+        info = get_flow_blacklist_info(parsed_guild_id)
+        if not info:
+            continue
+        guild = bot.get_guild(parsed_guild_id)
+        guild_name = guild.name if guild else "未知伺服器"
+        lines.append(f"[{parsed_guild_id}] {guild_name}")
+        lines.append(f"  原因          {info.get('reason', '未提供')}")
+        lines.append(f"  設定者        {info.get('set_by') or '未知'}")
+        lines.append(f"  設定時間      {info.get('set_at') or '未知'}")
+        lines.append("")
+
+    if not lines:
+        await ctx.send("ℹ️ 目前沒有任何貨幣流通黑名單伺服器。")
+        return
+
+    await _owner_send_codeblocks(
+        ctx,
+        "🚫 貨幣流通黑名單伺服器清單",
+        lines,
+        chunk_size=16,
+    )
 
 
 @bot.command(name="dev-economygive", description="開發者直接加錢給用戶", aliases=["deg", "degive"])
