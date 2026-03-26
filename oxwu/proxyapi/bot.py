@@ -243,6 +243,12 @@ async def remove_points(interaction: discord.Interaction, member: discord.Member
 
 @client.tree.command(name="whitelist", description="[管理員] 將指定用戶加入白名單")
 @app_commands.describe(mode="選擇加入或移除或列出白名單", member="要加入或移除白名單的用戶（列出模式可不填）")
+@app_commands.check(is_admin)
+@app_commands.choices(mode=[
+    app_commands.Choice(name="加入", value="加入"),
+    app_commands.Choice(name="移除", value="移除"),
+    app_commands.Choice(name="列出", value="列出")
+])
 async def whitelist(interaction: discord.Interaction, mode: str, member: discord.Member = None):
     if not WHITELIST_ON:
         await interaction.response.send_message("白名單功能未啟用。", ephemeral=True)
