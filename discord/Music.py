@@ -6,11 +6,27 @@ from discord import app_commands
 from logger import log
 import logging
 import asyncio
-from typing import Optional
+from typing import Optional, Any
 from collections import deque
 import random
 from enum import Enum
 import aiohttp
+import html
+import re
+from dataclasses import dataclass
+from urllib.parse import urlparse
+
+ALLOWED_DOMAINS = [
+    "youtube.com",
+    "youtu.be",
+    "spotify.com",
+    "soundcloud.com",
+    "bilibili.com",
+    "b23.tv",
+    "bandcamp.com",
+    "twitch.tv",
+    "vimeo.com",
+]
 
 aiohttp.client_reqrep.ClientRequest.DEFAULT_HEADERS["Accept-Encoding"] = "gzip, deflate"
 
@@ -56,6 +72,37 @@ text_channels: dict[int, discord.TextChannel] = {}
 leave_timers: dict[int, asyncio.Task] = {}
 # 儲存每個伺服器的循環模式
 loop_modes: dict[int, LoopMode] = {}
+radio_modes: dict[int, str] = {}
+
+
+@dataclass(frozen=True)
+class RadioStation:
+    key: str
+    display_name: str
+    stream_url: str
+    source: str
+    image: str
+    website: str
+
+
+RADIO_STATIONS: dict[str, RadioStation] = {
+    "listenmoe": RadioStation(
+        key="listenmoe",
+        display_name="LISTEN.moe",
+        stream_url="https://listen.moe/fallback",
+        source="listen.moe",
+        image="https://listen.moe/images/android-chrome-512x512.png",
+        website="https://listen.moe/",
+    ),
+    "r-a-dio": RadioStation(
+        key="r-a-dio",
+        display_name="R/a/dio",
+        stream_url="https://relay1.r-a-d.io/main.mp3",
+        source="r-a-d.io",
+        image="https://r-a-d.io/assets/images/logo_image_small.png",
+        website="https://r-a-d.io/",
+    ),
+}
 
 
 def get_queue(guild_id: int) -> MusicQueue:
@@ -72,6 +119,14 @@ class Music(commands.GroupCog, group_name=app_commands.locale_str("music")):
         self.bot = bot
         self.node_names: dict[str, str] = {}  # identifier -> display name
         self._nodes_initialized = False
+        self._http_session: Optional[aiohttp.ClientSession] = None
+        self._radio_tasks: dict[str, asyncio.Task] = {}
+        self._latest_radio_info: dict[str, dict[str, Any]] = {}
+        self._radio_info_events: dict[str, asyncio.Event] = {
+            station_key: asyncio.Event() for station_key in RADIO_STATIONS
+        }
+        self._radio_last_announced: dict[int, str] = {}
+        self._notification_tasks: set[asyncio.Task] = set()
     
     async def _ensure_voice(self, ctx: commands.Context) -> Optional[lava_lyra.Player]:
         """確保使用者在語音頻道並返回播放器"""
@@ -104,6 +159,416 @@ class Music(commands.GroupCog, group_name=app_commands.locale_str("music")):
                 return "❌ 你必須與機器人在同一語音頻道才能使用此指令"
         return None
     
+    async def _get_http_session(self) -> aiohttp.ClientSession:
+        if self._http_session is None or self._http_session.closed:
+            timeout = aiohttp.ClientTimeout(
+                total=None,
+                connect=15,
+                sock_connect=15,
+                sock_read=None,
+            )
+            self._http_session = aiohttp.ClientSession(
+                timeout=timeout,
+                headers={"User-Agent": "Mozilla/5.0"},
+            )
+        return self._http_session
+
+    def _start_background_task(self, station_key: str, coro):
+        task = asyncio.create_task(coro)
+        self._radio_tasks[station_key] = task
+
+        def _cleanup(done_task: asyncio.Task):
+            if self._radio_tasks.get(station_key) is done_task:
+                self._radio_tasks.pop(station_key, None)
+
+        task.add_done_callback(_cleanup)
+        return task
+
+    def _get_station(self, station_key: str) -> Optional[RadioStation]:
+        return RADIO_STATIONS.get(station_key)
+
+    def _guild_has_active_radio_station(self, guild: discord.Guild, station_key: str) -> bool:
+        if radio_modes.get(guild.id) != station_key:
+            return False
+
+        player: lava_lyra.Player = guild.voice_client
+        if not player or not player.channel:
+            return False
+
+        return bool(player.is_playing)
+
+    def _has_active_radio_station(self, station_key: str) -> bool:
+        return any(self._guild_has_active_radio_station(guild, station_key) for guild in self.bot.guilds)
+
+    def _ensure_radio_listener(self, station_key: str):
+        if not self._has_active_radio_station(station_key):
+            return
+
+        task = self._radio_tasks.get(station_key)
+        if task and not task.done():
+            return
+
+        loop_map = {
+            "listenmoe": self._listen_moe_loop,
+            "r-a-dio": self._r_a_dio_loop,
+        }
+        loop_factory = loop_map.get(station_key)
+        if loop_factory:
+            self._start_background_task(station_key, loop_factory())
+
+    async def _stop_radio_listener_if_unused(self, station_key: str):
+        if self._has_active_radio_station(station_key):
+            return
+
+        task = self._radio_tasks.pop(station_key, None)
+        if not task:
+            return
+
+        task.cancel()
+        await asyncio.gather(task, return_exceptions=True)
+
+    async def _refresh_radio_listeners(self):
+        for station_key in RADIO_STATIONS:
+            if self._has_active_radio_station(station_key):
+                self._ensure_radio_listener(station_key)
+            else:
+                await self._stop_radio_listener_if_unused(station_key)
+
+    def _spawn_notification_task(self, coro):
+        task = asyncio.create_task(coro)
+        self._notification_tasks.add(task)
+        task.add_done_callback(self._notification_tasks.discard)
+        return task
+
+    def _get_guild_radio_station(self, guild_id: int) -> Optional[RadioStation]:
+        station_key = radio_modes.get(guild_id)
+        if not station_key:
+            return None
+        return self._get_station(station_key)
+
+    def _is_radio_mode(self, guild_id: int) -> bool:
+        return guild_id in radio_modes
+
+    async def _ensure_not_radio_mode(self, target, guild_id: int) -> bool:
+        station = self._get_guild_radio_station(guild_id)
+        if not station:
+            return True
+
+        message = f"目前正在使用 {station.display_name} 電台模式，不能新增歌曲或修改隊列。請先停止播放後再使用。"
+        if isinstance(target, discord.Interaction):
+            await target.followup.send(message, ephemeral=True)
+        else:
+            await target.send(message)
+        return False
+
+    def _set_radio_info(self, station_key: str, info: dict[str, Any]):
+        if not info:
+            return
+
+        previous_signature = self._get_radio_signature(self._latest_radio_info.get(station_key, {}))
+        self._latest_radio_info[station_key] = info
+
+        if not self._is_valid_radio_info(info):
+            return
+
+        self._radio_info_events[station_key].set()
+        signature = self._get_radio_signature(info)
+        if signature and signature != previous_signature:
+            self._spawn_notification_task(self._broadcast_radio_update(station_key, signature))
+
+    def _get_radio_info(self, station_key: str) -> dict[str, Any]:
+        return self._latest_radio_info.get(station_key, {})
+
+    def _is_valid_radio_info(self, info: dict[str, Any]) -> bool:
+        return bool(info.get("title") or info.get("display"))
+
+    def _get_radio_signature(self, info: dict[str, Any]) -> Optional[str]:
+        if not self._is_valid_radio_info(info):
+            return None
+        return f"{info.get('artist', '')}|{info.get('title', '')}|{info.get('display', '')}"
+
+    async def _wait_for_valid_radio_info(self, station_key: str, timeout: float = 10.0) -> Optional[dict[str, Any]]:
+        current = self._get_radio_info(station_key)
+        if self._is_valid_radio_info(current):
+            return current
+
+        event = self._radio_info_events[station_key]
+        event.clear()
+        try:
+            await asyncio.wait_for(event.wait(), timeout=timeout)
+        except asyncio.TimeoutError:
+            return None
+
+        updated = self._get_radio_info(station_key)
+        if self._is_valid_radio_info(updated):
+            return updated
+        return None
+
+    async def _broadcast_radio_update(self, station_key: str, signature: str):
+        station = self._get_station(station_key)
+        if not station:
+            return
+
+        embed = self._build_radio_embed(station)
+        for guild in self.bot.guilds:
+            if not self._guild_has_active_radio_station(guild, station_key):
+                continue
+            if self._radio_last_announced.get(guild.id) == signature:
+                continue
+
+            text_channel = text_channels.get(guild.id)
+            if not text_channel:
+                continue
+
+            try:
+                await text_channel.send(embed=embed)
+                self._radio_last_announced[guild.id] = signature
+            except Exception as e:
+                log(f"發送電台換曲通知失敗: {e}", level=logging.WARNING, module_name="Music", guild=guild)
+
+    def _parse_listen_moe_payload(self, payload: dict[str, Any]) -> Optional[dict[str, Any]]:
+        song = payload.get("song") or {}
+        if not song:
+            return None
+
+        title = song.get("title") or "Unknown Title"
+        artists = song.get("artists") or []
+        artist_names = [artist.get("nameRomaji") or artist.get("name") for artist in artists if artist.get("nameRomaji") or artist.get("name")]
+        artist_text = ", ".join(artist_names) if artist_names else "Unknown Artist"
+        artist_image = artists[0].get("image") if artists else None
+        artist_url = f"https://listen.moe/artists/{artists[0].get('id')}" if artists else None
+
+        sources = song.get("sources") or []
+        source = sources[0] if sources else {}
+        source_name = source.get("nameRomaji") or source.get("name")
+
+        album_image = None
+        albums = song.get("albums") or []
+        album = albums[0] if albums else None
+        album_name = album.get("nameRomaji") or album.get("name") if album else None
+        if album.get("image"):
+            album_image = f"https://cdn.listen.moe/covers/{album.get('image')}"
+
+        duration = song.get("duration") or 0
+
+        return {
+            "title": title,
+            "artist": artist_text,
+            "artist_image": artist_image,
+            "artist_url": artist_url,
+            "display": f"{artist_text} - {title}",
+            "album": album_name,
+            "source_name": source_name,
+            "thumbnail": album_image,
+            "duration": duration * 1000 if duration else 0,
+            "start_time": payload.get("startTime"),
+            "url": "https://listen.moe/",
+            "station": "LISTEN.moe",
+        }
+
+    def _parse_r_a_dio_metadata_html(self, raw_html: str) -> dict[str, Any]:
+        info: dict[str, Any] = {
+            "station": "r-a-d.io",
+            "url": "https://r-a-d.io/",
+        }
+
+        title_match = re.search(r'<div id="metadata"[^>]*>(.*?)</div>', raw_html, re.S)
+        if title_match:
+            display = html.unescape(re.sub(r"<[^>]+>", "", title_match.group(1))).strip()
+            if display:
+                info["display"] = display
+                if " - " in display:
+                    artist, title = display.split(" - ", 1)
+                    info["artist"] = artist.strip()
+                    info["title"] = title.strip()
+                else:
+                    info["title"] = display
+
+        tags_match = re.search(r'<div id="now-playing-tags"[^>]*>(.*?)</div>', raw_html, re.S)
+        if tags_match:
+            # as album
+            album = html.unescape(re.sub(r"<[^>]+>", "", tags_match.group(1))).strip()
+            info["album"] = album
+
+
+        listeners_match = re.search(r'listener-count">(\d+)</span>', raw_html)
+        if listeners_match:
+            info["listeners"] = int(listeners_match.group(1))
+
+        progress_match = re.search(r'<span id="progress-current"[^>]*>(.*?)</span>\s*/\s*<span id="progress-max">(.*?)</span>', raw_html, re.S)
+        if progress_match:
+            info["progress_text"] = f"{html.unescape(progress_match.group(1)).strip()} / {html.unescape(progress_match.group(2)).strip()}"
+
+        return info
+
+    def _build_radio_embed(self, station: RadioStation) -> discord.Embed:
+        info = self._get_radio_info(station.key)
+        display = info.get("display") or "正在抓取電台資訊..."
+
+        embed = discord.Embed(
+            title=f"📻 {info.get('title') or station.display_name}",
+            description=info.get("album") or display,
+            color=0x3498db,
+            url=info.get("url") or station.website
+        )
+        embed.set_author(name=info.get("artist", station.display_name), url=info.get("artist_url"), icon_url=info.get("artist_image"))
+        embed.set_footer(text=station.display_name, icon_url=station.image)
+        # embed.add_field(name="模式", value="電台模式", inline=True)
+        # embed.add_field(name="來源", value=station.source, inline=True)
+
+        # if info.get("artist"):
+        #     embed.add_field(name="歌手", value=info["artist"], inline=True)
+        # if info.get("title"):
+        #     embed.add_field(name="歌曲", value=info["title"], inline=True)
+        # if info.get("source_name"):
+        #     embed.add_field(name="作品", value=info["source_name"], inline=True)
+        if info.get("listeners") is not None:
+            embed.add_field(name="聽眾數量", value=str(info["listeners"]), inline=True)
+        if info.get("progress_text"):
+            embed.add_field(name="進度", value=info["progress_text"], inline=False)
+        if info.get("thumbnail"):
+            embed.set_thumbnail(url=info["thumbnail"])
+        # embed.set_footer(text="電台模式下不能新增歌曲或使用隊列功能")
+        return embed
+
+    async def _play_radio_stream(self, player: lava_lyra.Player, station: RadioStation):
+        results = await player.get_tracks(station.stream_url)
+        if not results:
+            raise RuntimeError(f"無法載入 {station.display_name} 串流")
+
+        track = results.tracks[0] if isinstance(results, lava_lyra.Playlist) else results[0]
+        await player.play(track)
+
+    async def _activate_radio_mode(self, guild: discord.Guild, channel: discord.abc.Messageable, player: lava_lyra.Player, station: RadioStation):
+        guild_id = guild.id
+        previous_station = radio_modes.get(guild_id)
+        get_queue(guild_id).clear()
+        loop_modes[guild_id] = LoopMode.OFF
+        radio_modes[guild_id] = station.key
+        self._radio_last_announced.pop(guild_id, None)
+        text_channels[guild_id] = channel
+        await self._play_radio_stream(player, station)
+        self._ensure_radio_listener(station.key)
+        if previous_station and previous_station != station.key:
+            await self._stop_radio_listener_if_unused(previous_station)
+
+    async def _listen_moe_loop(self):
+        while self._has_active_radio_station("listenmoe"):
+            try:
+                session = await self._get_http_session()
+                async with session.ws_connect("wss://listen.moe/gateway_v2") as ws:
+                    heartbeat_task: Optional[asyncio.Task] = None
+                    try:
+                        async for msg in ws:
+                            if msg.type != aiohttp.WSMsgType.TEXT:
+                                continue
+
+                            data = msg.json()
+                            op = data.get("op")
+                            if op == 0:
+                                if heartbeat_task:
+                                    heartbeat_task.cancel()
+                                interval = max((data.get("d", {}).get("heartbeat") or 35000) / 1000, 5)
+
+                                async def _heartbeat():
+                                    while True:
+                                        await asyncio.sleep(interval)
+                                        await ws.send_json({"op": 9})
+
+                                heartbeat_task = asyncio.create_task(_heartbeat())
+                                await ws.send_json({"op": 9})
+                                continue
+
+                            if op != 1:
+                                continue
+
+                            payload = data.get("d", {})
+                            parsed = self._parse_listen_moe_payload(payload)
+                            if parsed:
+                                self._set_radio_info("listenmoe", parsed)
+                    finally:
+                        if heartbeat_task:
+                            heartbeat_task.cancel()
+            except asyncio.CancelledError:
+                raise
+            except Exception as e:
+                log(
+                    f"LISTEN.moe websocket disconnected: {type(e).__name__}: {e!r}",
+                    level=logging.WARNING,
+                    module_name="Music",
+                )
+                if not self._has_active_radio_station("listenmoe"):
+                    break
+                await asyncio.sleep(5)
+
+    async def _r_a_dio_loop(self):
+        while self._has_active_radio_station("r-a-dio"):
+            try:
+                session = await self._get_http_session()
+                async with session.get(
+                    "https://r-a-d.io/v1/sse?theme=default-dark",
+                    headers={"Accept": "text/event-stream"},
+                ) as response:
+                    event_name = None
+                    data_lines: list[str] = []
+                    async for raw_line in response.content:
+                        line = raw_line.decode("utf-8", errors="replace").rstrip("\r\n")
+                        if line.startswith("event:"):
+                            event_name = line.split(":", 1)[1].strip()
+                            continue
+                        if line.startswith("data:"):
+                            data_lines.append(line.split(":", 1)[1].lstrip())
+                            continue
+                        if line != "":
+                            continue
+
+                        if event_name == "metadata":
+                            parsed = self._parse_r_a_dio_metadata_html("\n".join(data_lines))
+                            self._set_radio_info("r-a-dio", parsed)
+                        elif event_name == "listeners":
+                            match = re.search(r"(\d+)", "\n".join(data_lines))
+                            if match:
+                                current = self._get_radio_info("r-a-dio").copy()
+                                current["listeners"] = int(match.group(1))
+                                self._set_radio_info("r-a-dio", current)
+
+                        event_name = None
+                        data_lines = []
+            except asyncio.CancelledError:
+                raise
+            except Exception as e:
+                log(
+                    f"r-a-d.io eventstream disconnected: {type(e).__name__}: {e!r}",
+                    level=logging.WARNING,
+                    module_name="Music",
+                )
+                if not self._has_active_radio_station("r-a-dio"):
+                    break
+                await asyncio.sleep(5)
+
+    def _check_valid_query(query: str) -> bool:
+        if not query:
+            return False
+
+        # 檢查是否 http(s) 開頭
+        if not (query.startswith("http://") or query.startswith("https://")):
+            return True  # 非 URL 類型的查詢，直接當作搜尋詞使用
+
+        try:
+            parsed = urlparse(query)
+            domain = parsed.netloc.lower()
+
+            # 移除 port (ex: youtube.com:443)
+            domain = domain.split(":")[0]
+
+            # 檢查是否在允許清單內（包含子網域）
+            return any(
+                domain == d or domain.endswith("." + d)
+                for d in ALLOWED_DOMAINS
+            )
+
+        except Exception:
+            return False
 
     @commands.Cog.listener()
     async def on_ready(self):
@@ -144,12 +609,31 @@ class Music(commands.GroupCog, group_name=app_commands.locale_str("music")):
         else:
             log(f"已成功連接 {connected}/{len(lavalink_nodes)} 個 Lavalink 節點", module_name="Music")
         on_close_tasks.add(self.music_quit_task)
+        on_close_tasks.add(self._shutdown_radio_tasks)
+
+    async def _shutdown_radio_tasks(self):
+        for task in list(self._radio_tasks.values()):
+            task.cancel()
+        if self._radio_tasks:
+            await asyncio.gather(*self._radio_tasks.values(), return_exceptions=True)
+        self._radio_tasks.clear()
+
+        for task in list(self._notification_tasks):
+            task.cancel()
+        if self._notification_tasks:
+            await asyncio.gather(*self._notification_tasks, return_exceptions=True)
+        self._notification_tasks.clear()
+
+        if self._http_session and not self._http_session.closed:
+            await self._http_session.close()
+        self._http_session = None
     
     async def _cleanup_player(self, guild_id: int, send_message: bool = False, message: str = None):
         """統一的清理方法"""
         try:
             queue = get_queue(guild_id)
             queue.clear()
+            radio_station = radio_modes.get(guild_id)
 
             # 取消自動離開計時器
             if guild_id in leave_timers:
@@ -174,6 +658,10 @@ class Music(commands.GroupCog, group_name=app_commands.locale_str("music")):
             music_queues.pop(guild_id, None)
             text_channels.pop(guild_id, None)
             loop_modes.pop(guild_id, None)
+            radio_modes.pop(guild_id, None)
+            self._radio_last_announced.pop(guild_id, None)
+            if radio_station:
+                await self._stop_radio_listener_if_unused(radio_station)
 
         except Exception as e:
             log(f"清理播放器時出錯: {e}", level=logging.ERROR, module_name="Music")
@@ -261,6 +749,10 @@ class Music(commands.GroupCog, group_name=app_commands.locale_str("music")):
         """當音樂開始播放時"""
         if not player:
             return
+
+        station = self._get_guild_radio_station(player.guild.id)
+        if station:
+            return
         
         embed = discord.Embed(
             title="🎵 開始播放",
@@ -291,10 +783,19 @@ class Music(commands.GroupCog, group_name=app_commands.locale_str("music")):
         
         guild_id = player.guild.id
         queue = get_queue(guild_id)
+        station = self._get_guild_radio_station(guild_id)
         
         # 檢查結束原因，可能是字串或枚舉
         reason_str = str(reason).upper() if reason else ""
         log(f"Track ended with reason: {reason_str}", module_name="Music", guild=player.guild)
+
+        if station and "STOPPED" not in reason_str and "REPLACED" not in reason_str:
+            try:
+                await asyncio.sleep(1)
+                await self._play_radio_stream(player, station)
+            except Exception as e:
+                log(f"電台串流重新連線失敗: {e}", level=logging.ERROR, module_name="Music", guild=player.guild)
+            return
         
         # 只在正常結束時播放下一首
         # REPLACED: 被新歌曲替換（不需要自動播放）
@@ -357,12 +858,14 @@ class Music(commands.GroupCog, group_name=app_commands.locale_str("music")):
 
                 queue = get_queue(guild_id)
                 uris = []
+                is_radio_mode = self._is_radio_mode(guild_id)
 
                 # 保存當前播放和隊列
-                if player.current:
+                if player.current and not is_radio_mode:
                     uris.append(player.current.uri)
-                for track in queue:
-                    uris.append(track.uri)
+                if not is_radio_mode:
+                    for track in queue:
+                        uris.append(track.uri)
 
                 if uris:
                     set_server_config(guild_id, "music_saved_queue", {"uris": uris})
@@ -454,6 +957,9 @@ class Music(commands.GroupCog, group_name=app_commands.locale_str("music")):
         """搜尋並播放音樂"""
         await interaction.response.defer()
 
+        if not await self._ensure_not_radio_mode(interaction, interaction.guild.id):
+            return
+
         # 檢查使用者是否在語音頻道
         if not interaction.user.voice or not interaction.user.voice.channel:
             await interaction.followup.send("❌ 你必須加入語音頻道才能播放音樂", ephemeral=True)
@@ -482,6 +988,10 @@ class Music(commands.GroupCog, group_name=app_commands.locale_str("music")):
         # 如果 query 是 URI（從自動完成選擇的），直接使用
         # 否則進行搜尋
         try:
+            if not self._check_valid_query(query):
+                await interaction.followup.send("❌ 請提供有效的歌曲名稱或 URL", ephemeral=True)
+                return
+
             if query.startswith(("http://", "https://", "ytsearch:", "scsearch:")):
                 results = await player.get_tracks(query)
             else:
@@ -549,6 +1059,9 @@ class Music(commands.GroupCog, group_name=app_commands.locale_str("music")):
     async def play(self, interaction: discord.Interaction, query: str):
         """播放音樂"""
         await interaction.response.defer()
+
+        if not await self._ensure_not_radio_mode(interaction, interaction.guild.id):
+            return
         
         # 檢查使用者是否在語音頻道
         if not interaction.user.voice or not interaction.user.voice.channel:
@@ -577,6 +1090,10 @@ class Music(commands.GroupCog, group_name=app_commands.locale_str("music")):
         
         # 搜尋歌曲
         try:
+            if not self._check_valid_query(query):
+                await interaction.followup.send("❌ 請提供有效的歌曲名稱或 URL", ephemeral=True)
+                return
+
             results = await player.get_tracks(query)
             
             if not results:
@@ -631,6 +1148,57 @@ class Music(commands.GroupCog, group_name=app_commands.locale_str("music")):
         except Exception as e:
             log(f"播放出錯: {e}", level=logging.ERROR, module_name="Music", guild=interaction.guild)
             await interaction.followup.send(f"❌ 播放出錯: {e}", ephemeral=True)
+
+    @app_commands.command(name="radio", description="切換到電台模式")
+    @app_commands.describe(station="要播放的電台")
+    @app_commands.choices(station=[
+        app_commands.Choice(name="LISTEN.moe", value="listenmoe"),
+        app_commands.Choice(name="R/a/dio", value="r-a-dio"),
+    ])
+    @app_commands.guild_only()
+    @app_commands.allowed_installs(guilds=True, users=False)
+    @app_commands.allowed_contexts(guilds=True, dms=False, private_channels=False)
+    @app_commands.checks.bot_has_permissions(connect=True, speak=True)
+    async def radio(self, interaction: discord.Interaction, station: str):
+        """切換到電台模式"""
+        await interaction.response.defer()
+
+        station_info = self._get_station(station)
+        if not station_info:
+            await interaction.followup.send("❌ 不支援的電台。", ephemeral=True)
+            return
+
+        if not interaction.user.voice or not interaction.user.voice.channel:
+            await interaction.followup.send("❌ 你必須加入語音頻道才能播放電台", ephemeral=True)
+            return
+
+        error_msg = self._check_voice_channel(interaction.user, interaction.guild)
+        if error_msg:
+            await interaction.followup.send(error_msg, ephemeral=True)
+            return
+
+        player: lava_lyra.Player = interaction.guild.voice_client
+        if not player:
+            try:
+                player = await interaction.user.voice.channel.connect(cls=lava_lyra.Player)
+                text_channels[interaction.guild.id] = interaction.channel
+            except Exception as e:
+                await interaction.followup.send(f"❌ 無法連接到語音頻道: {e}", ephemeral=True)
+                return
+
+        try:
+            await self._activate_radio_mode(interaction.guild, interaction.channel, player, station_info)
+            info = await self._wait_for_valid_radio_info(station_info.key)
+            if info:
+                signature = self._get_radio_signature(info)
+                if signature:
+                    self._radio_last_announced[interaction.guild.id] = signature
+                await interaction.followup.send(embed=self._build_radio_embed(station_info))
+            else:
+                await interaction.followup.send(f"📻 已切換到 {station_info.display_name} 電台模式，正在等待電台資料...")
+        except Exception as e:
+            log(f"切換電台模式失敗: {e}", level=logging.ERROR, module_name="Music", guild=interaction.guild)
+            await interaction.followup.send(f"❌ 切換到 {station_info.display_name} 失敗: {e}", ephemeral=True)
     
     @app_commands.command(name=app_commands.locale_str("pause"), description="暫停播放")
     @app_commands.guild_only()
@@ -721,6 +1289,11 @@ class Music(commands.GroupCog, group_name=app_commands.locale_str("music")):
     async def skip(self, interaction: discord.Interaction):
         """跳過當前歌曲"""
         await interaction.response.defer()
+
+        station = self._get_guild_radio_station(interaction.guild.id)
+        if station:
+            await interaction.followup.send(f"❌ {station.display_name} 電台模式不能跳過歌曲。", ephemeral=True)
+            return
         
         error_msg = self._check_voice_channel(interaction.user, interaction.guild)
         if error_msg:
@@ -761,6 +1334,12 @@ class Music(commands.GroupCog, group_name=app_commands.locale_str("music")):
     async def queue(self, interaction: discord.Interaction):
         """查看播放隊列"""
         await interaction.response.defer()
+
+        station = self._get_guild_radio_station(interaction.guild.id)
+        if station:
+            await self._wait_for_valid_radio_info(station.key, timeout=5)
+            await interaction.followup.send(embed=self._build_radio_embed(station))
+            return
         
         player: lava_lyra.Player = interaction.guild.voice_client
         queue = get_queue(interaction.guild.id)
@@ -817,6 +1396,9 @@ class Music(commands.GroupCog, group_name=app_commands.locale_str("music")):
     async def restore_queue(self, interaction: discord.Interaction):
         """回復重啟前儲存的播放隊列"""
         await interaction.response.defer()
+
+        if not await self._ensure_not_radio_mode(interaction, interaction.guild.id):
+            return
 
         saved = get_server_config(interaction.guild.id, "music_saved_queue")
         if not saved or not saved.get("uris"):
@@ -890,6 +1472,11 @@ class Music(commands.GroupCog, group_name=app_commands.locale_str("music")):
         """設定循環播放模式"""
         await interaction.response.defer()
 
+        station = self._get_guild_radio_station(interaction.guild.id)
+        if station:
+            await interaction.followup.send(f"❌ {station.display_name} 電台模式不能設定循環。", ephemeral=True)
+            return
+
         error_msg = self._check_voice_channel(interaction.user, interaction.guild)
         if error_msg:
             await interaction.followup.send(error_msg, ephemeral=True)
@@ -926,6 +1513,12 @@ class Music(commands.GroupCog, group_name=app_commands.locale_str("music")):
     async def now_playing(self, interaction: discord.Interaction):
         """查看當前播放的歌曲"""
         await interaction.response.defer()
+
+        station = self._get_guild_radio_station(interaction.guild.id)
+        if station:
+            await self._wait_for_valid_radio_info(station.key, timeout=5)
+            await interaction.followup.send(embed=self._build_radio_embed(station))
+            return
         
         player: lava_lyra.Player = interaction.guild.voice_client
         if not player or not player.current:
@@ -1000,6 +1593,9 @@ class Music(commands.GroupCog, group_name=app_commands.locale_str("music")):
     async def shuffle(self, interaction: discord.Interaction):
         """隨機打亂隊列"""
         await interaction.response.defer()
+
+        if not await self._ensure_not_radio_mode(interaction, interaction.guild.id):
+            return
         
         error_msg = self._check_voice_channel(interaction.user, interaction.guild)
         if error_msg:
@@ -1035,6 +1631,9 @@ class Music(commands.GroupCog, group_name=app_commands.locale_str("music")):
     async def recommend(self, interaction: discord.Interaction, count: Optional[int] = 5):
         """根據當前播放的歌曲推薦相似歌曲並加入隊列"""
         await interaction.response.defer()
+
+        if not await self._ensure_not_radio_mode(interaction, interaction.guild.id):
+            return
         
         error_msg = self._check_voice_channel(interaction.user, interaction.guild)
         if error_msg:
@@ -1129,6 +1728,9 @@ class Music(commands.GroupCog, group_name=app_commands.locale_str("music")):
     @commands.guild_only()
     async def text_play(self, ctx: commands.Context, *, query: Optional[str] = None):
         """播放音樂，若無參數則繼續播放"""
+        if query is not None and not await self._ensure_not_radio_mode(ctx, ctx.guild.id):
+            return
+
         error_msg = self._check_voice_channel(ctx.author, ctx.guild)
         if error_msg:
             await ctx.send(error_msg)
@@ -1160,6 +1762,9 @@ class Music(commands.GroupCog, group_name=app_commands.locale_str("music")):
         queue = get_queue(guild_id)
         
         try:
+            if not self._check_valid_query(query):
+                await ctx.send("❌ 請提供有效的歌曲名稱或 URL")
+                return
             results = await player.get_tracks(query)
             
             if not results:
@@ -1212,6 +1817,43 @@ class Music(commands.GroupCog, group_name=app_commands.locale_str("music")):
         except Exception as e:
             log(f"播放出錯: {e}", level=logging.ERROR, module_name="Music", guild=ctx.guild)
             await ctx.send(f"❌ 播放出錯: {e}")
+
+    @commands.command(name="radio", aliases=["station", "電台"])
+    @commands.guild_only()
+    async def text_radio(self, ctx: commands.Context, station: str):
+        """切換到電台模式"""
+        station_key = station.strip().lower()
+        station_aliases = {
+            "listenmoe": "listenmoe",
+            "listen.moe": "listenmoe",
+            "listen-moe": "listenmoe",
+            "r-a-dio": "r-a-dio",
+            "radio": "r-a-dio",
+            "r_a_dio": "r-a-dio",
+            "r-a-d.io": "r-a-dio",
+        }
+        station_info = self._get_station(station_aliases.get(station_key, station_key))
+        if not station_info:
+            await ctx.send("❌ 可用電台: `listen.moe`, `r-a-d.io`")
+            return
+
+        player = await self._ensure_voice(ctx)
+        if not player:
+            return
+
+        try:
+            await self._activate_radio_mode(ctx.guild, ctx.channel, player, station_info)
+            info = await self._wait_for_valid_radio_info(station_info.key)
+            if info:
+                signature = self._get_radio_signature(info)
+                if signature:
+                    self._radio_last_announced[ctx.guild.id] = signature
+                await ctx.send(embed=self._build_radio_embed(station_info))
+            else:
+                await ctx.send(f"📻 已切換到 {station_info.display_name} 電台模式，正在等待電台資料...")
+        except Exception as e:
+            log(f"切換電台模式失敗: {e}", level=logging.ERROR, module_name="Music", guild=ctx.guild)
+            await ctx.send(f"❌ 切換到 {station_info.display_name} 失敗: {e}")
     
     @commands.command(name="pause", aliases=["暫停"])
     @commands.guild_only()
@@ -1287,6 +1929,11 @@ class Music(commands.GroupCog, group_name=app_commands.locale_str("music")):
     @commands.guild_only()
     async def text_skip(self, ctx: commands.Context):
         """跳過當前歌曲"""
+        station = self._get_guild_radio_station(ctx.guild.id)
+        if station:
+            await ctx.send(f"❌ {station.display_name} 電台模式不能跳過歌曲。")
+            return
+
         error_msg = self._check_voice_channel(ctx.author, ctx.guild)
         if error_msg:
             await ctx.send(error_msg)
@@ -1323,6 +1970,12 @@ class Music(commands.GroupCog, group_name=app_commands.locale_str("music")):
     @commands.guild_only()
     async def text_queue(self, ctx: commands.Context):
         """查看播放隊列"""
+        station = self._get_guild_radio_station(ctx.guild.id)
+        if station:
+            await self._wait_for_valid_radio_info(station.key, timeout=5)
+            await ctx.send(embed=self._build_radio_embed(station))
+            return
+
         player: lava_lyra.Player = ctx.guild.voice_client
         queue = get_queue(ctx.guild.id)
         
@@ -1371,6 +2024,11 @@ class Music(commands.GroupCog, group_name=app_commands.locale_str("music")):
     @commands.guild_only()
     async def text_loop(self, ctx: commands.Context, mode: Optional[str] = None):
         """設定循環播放模式 (off/track/queue)"""
+        station = self._get_guild_radio_station(ctx.guild.id)
+        if station:
+            await ctx.send(f"❌ {station.display_name} 電台模式不能設定循環。")
+            return
+
         error_msg = self._check_voice_channel(ctx.author, ctx.guild)
         if error_msg:
             await ctx.send(error_msg)
@@ -1413,6 +2071,12 @@ class Music(commands.GroupCog, group_name=app_commands.locale_str("music")):
     @commands.guild_only()
     async def text_now_playing(self, ctx: commands.Context):
         """查看當前播放的歌曲"""
+        station = self._get_guild_radio_station(ctx.guild.id)
+        if station:
+            await self._wait_for_valid_radio_info(station.key, timeout=5)
+            await ctx.send(embed=self._build_radio_embed(station))
+            return
+
         player: lava_lyra.Player = ctx.guild.voice_client
         if not player or not player.current:
             await ctx.send("❌ 沒有正在播放的音樂")
@@ -1478,6 +2142,9 @@ class Music(commands.GroupCog, group_name=app_commands.locale_str("music")):
     @commands.guild_only()
     async def text_shuffle(self, ctx: commands.Context):
         """隨機打亂隊列"""
+        if not await self._ensure_not_radio_mode(ctx, ctx.guild.id):
+            return
+
         error_msg = self._check_voice_channel(ctx.author, ctx.guild)
         if error_msg:
             await ctx.send(error_msg)
@@ -1508,6 +2175,9 @@ class Music(commands.GroupCog, group_name=app_commands.locale_str("music")):
     @commands.guild_only()
     async def text_recommend(self, ctx: commands.Context, count: int = 5):
         """根據當前播放的歌曲推薦相似歌曲"""
+        if not await self._ensure_not_radio_mode(ctx, ctx.guild.id):
+            return
+
         error_msg = self._check_voice_channel(ctx.author, ctx.guild)
         if error_msg:
             await ctx.send(error_msg)

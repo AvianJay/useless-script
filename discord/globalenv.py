@@ -643,6 +643,8 @@ translations = {
     "regex": "正則表達式",
     "filter": "過濾",
     "log-channel": "日誌頻道",
+    "fake-admin": "假冒管理",
+    "radio": "電台",
 }
 class CommandNameTranslator(app_commands.Translator):
     async def translate(
