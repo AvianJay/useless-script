@@ -295,6 +295,7 @@ async def send_api_info_periodically():
 @client.event
 async def on_ready():
     print(f'Bot 已登入為 {client.user}')
+    await client.tree.sync()
     asyncio.create_task(send_api_info_periodically())
 
 class FakeInteraction:
