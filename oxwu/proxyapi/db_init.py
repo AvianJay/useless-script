@@ -4,7 +4,7 @@ import sqlite3
 def init_db(db_path: str = "database.db"):
     conn = sqlite3.connect(db_path)
     cursor = conn.cursor()
-    cursor.execute(
+    cursor.executescript(
         '''
         CREATE TABLE IF NOT EXISTS users (
             discord_id TEXT PRIMARY KEY,
