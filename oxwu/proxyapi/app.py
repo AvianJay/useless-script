@@ -41,6 +41,8 @@ DB_PATH = os.getenv("DB_PATH", "database.db")
 APP_HOST = os.getenv("APP_HOST", "0.0.0.0")
 APP_PORT = int(os.getenv("APP_PORT", "5000"))
 
+WHITELIST_ON = os.getenv("WHITELIST", "false").lower() == "true"
+
 COST_PER_API = float(os.getenv("COST_PER_API", "1.0"))
 COST_PER_SCREENSHOT = float(os.getenv("COST_PER_SCREENSHOT", "5.0"))
 COST_PER_SEC_WS = float(os.getenv("COST_PER_SEC_WS", "0.01"))
@@ -184,8 +186,20 @@ def fetch_user_by_key(api_key: str):
         return None
     return dict(row)
 
+def is_user_whitelisted(discord_id: str) -> bool:
+    if not WHITELIST_ON:
+        return True
+
+    row = get_db().execute(
+        "SELECT 1 FROM whitelist WHERE discord_id = ?",
+        (discord_id,),
+    ).fetchone()
+    return row is not None
+
 
 def create_or_get_user(discord_id: str):
+    if not is_user_whitelisted(discord_id):
+        return None
     user = fetch_user_by_discord_id(discord_id)
     if user:
         return user
@@ -204,6 +218,8 @@ def create_or_get_user(discord_id: str):
 
 
 def reset_user_api_key(discord_id: str):
+    if not is_user_whitelisted(discord_id):
+        return None
     new_api_key = generate_api_key(discord_id)
     db = get_db()
     db.execute(
@@ -239,6 +255,8 @@ def require_api_key(cost: float = COST_PER_API):
             user = fetch_user_by_key(api_key)
             if not user:
                 return jsonify({"error": "Invalid API Key"}), 401
+            if WHITELIST_ON and not is_user_whitelisted(user["discord_id"]):
+                return jsonify({"error": "Unauthorized"}), 403
             if user["points"] < cost:
                 return jsonify({"error": "Insufficient Points"}), 402
             if not deduct_points_by_key(api_key, cost):
@@ -263,6 +281,10 @@ def require_login(func):
             return redirect(url_for("login"))
 
         user = create_or_get_user(discord_id)
+        if not user:
+            if request.path.startswith("/api/"):
+                return jsonify({"error": "Unauthorized"}), 401
+            return "You are not whitelisted to use this service.", 403
         g.session_user = user
         return func(*args, **kwargs)
 
@@ -713,6 +735,8 @@ def discord_callback():
 
     discord_id = str(discord_user["id"])
     user = create_or_get_user(discord_id)
+    if not user:
+        return "您不在白名單中，無法使用此服務。", 403
     session["discord_id"] = discord_id
     session["discord_profile"] = {
         "username": discord_user.get("username"),
@@ -803,6 +827,11 @@ def api_docs():
             "ws_per_sec": COST_PER_SEC_WS,
         },
     )
+
+
+@app.route("/api/docs/uooxwu", methods=["GET"])
+def api_docs_uooxwu():
+    return render_template("uooxwu_docs.html")
 
 
 @app.route("/openapi.json", methods=["GET"])

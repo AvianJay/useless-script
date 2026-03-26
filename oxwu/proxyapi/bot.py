@@ -20,6 +20,8 @@ ADMIN_IDS = [
 API_INFO_CHANNEL_ID = int(os.getenv("DISCORD_API_INFO_CHANNEL_ID", "1484035289998430261"))
 DB_PATH = os.getenv("DB_PATH", "database.db")
 
+WHITELIST_ON = os.getenv("WHITELIST", "false").lower() == "true"
+
 
 def fmt_time(value):
     if not value:
@@ -126,11 +128,24 @@ client = ProxyBot()
 def is_admin(interaction: discord.Interaction) -> bool:
     return interaction.user.id in ADMIN_IDS
 
+def is_user_whitelisted(discord_id: str) -> bool:
+    if not WHITELIST_ON:
+        return True
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    cursor.execute('SELECT 1 FROM whitelist WHERE discord_id = ?', (discord_id,))
+    result = cursor.fetchone()
+    conn.close()
+    return result is not None
+
 # --- 一般用戶指令 ---
 
 @client.tree.command(name="register", description="註冊並獲取你的專屬 API Key")
 async def register(interaction: discord.Interaction):
     discord_id = str(interaction.user.id)
+    if WHITELIST_ON and not is_user_whitelisted(discord_id):
+        await interaction.response.send_message("你不在白名單中，無法使用此服務。", ephemeral=True)
+        return
 
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
@@ -152,6 +167,9 @@ async def register(interaction: discord.Interaction):
 @client.tree.command(name="reset_key", description="重置你的 API Key（舊的 Key 將失效）")
 async def reset_key(interaction: discord.Interaction):
     discord_id = str(interaction.user.id)
+    if WHITELIST_ON and not is_user_whitelisted(discord_id):
+        await interaction.response.send_message("你不在白名單中，無法使用此服務。", ephemeral=True)
+        return
     new_api_key = generate_api_key(discord_id)
     
     conn = sqlite3.connect(DB_PATH)
@@ -182,6 +200,9 @@ async def my_points(interaction: discord.Interaction):
 @app_commands.check(is_admin)
 async def add_points(interaction: discord.Interaction, member: discord.Member, amount: float):
     discord_id = str(member.id)
+    if WHITELIST_ON and not is_user_whitelisted(discord_id):
+        await interaction.response.send_message(f"{member.mention} 不在白名單中，無法修改點數。", ephemeral=True)
+        return
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
     
@@ -199,6 +220,10 @@ async def add_points(interaction: discord.Interaction, member: discord.Member, a
 @app_commands.check(is_admin)
 async def set_points(interaction: discord.Interaction, member: discord.Member, amount: float):
     discord_id = str(member.id)
+    if WHITELIST_ON and not is_user_whitelisted(discord_id):
+        await interaction.response.send_message(f"{member.mention} 不在白名單中，無法修改點數。", ephemeral=True)
+        return
+
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
     
@@ -215,6 +240,36 @@ async def set_points(interaction: discord.Interaction, member: discord.Member, a
 async def remove_points(interaction: discord.Interaction, member: discord.Member, amount: float):
     # 邏輯與 add_points 類似，只是變成扣除
     await add_points.callback(interaction, member, -amount)
+
+@client.tree.command(name="whitelist", description="[管理員] 將指定用戶加入白名單")
+@app_commands.describe(mode="選擇加入或移除或列出白名單", member="要加入或移除白名單的用戶（列出模式可不填）")
+async def whitelist(interaction: discord.Interaction, mode: str, member: discord.Member = None):
+    if not WHITELIST_ON:
+        await interaction.response.send_message("白名單功能未啟用。", ephemeral=True)
+        return
+    discord_id = str(member.id) if member else None
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+
+    if mode == "加入":
+        cursor.execute('INSERT OR IGNORE INTO whitelist (discord_id) VALUES (?)', (discord_id,))
+        await interaction.response.send_message(f"已將 {member.mention} 加入白名單。")
+    elif mode == "移除":
+        cursor.execute('DELETE FROM whitelist WHERE discord_id = ?', (discord_id,))
+        await interaction.response.send_message(f"已將 {member.mention} 移除白名單。")
+    elif mode == "列出":
+        cursor.execute('SELECT discord_id FROM whitelist')
+        whitelisted_users = cursor.fetchall()
+        if whitelisted_users:
+            user_list = "\n".join([f"<@{user[0]}> ({user[0]})" for user in whitelisted_users])
+            await interaction.response.send_message(f"白名單用戶：\n{user_list}")
+        else:
+            await interaction.response.send_message("白名單為空。")
+    else:
+        await interaction.response.send_message("無效的模式。請選擇 '加入'、'移除' 或 '列出'。")
+
+    conn.commit()
+    conn.close()
 
 async def send_api_info_periodically():
     await client.wait_until_ready()

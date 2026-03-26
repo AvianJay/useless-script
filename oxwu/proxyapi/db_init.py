@@ -11,6 +11,9 @@ def init_db(db_path: str = "database.db"):
             api_key TEXT UNIQUE,
             points REAL DEFAULT 0.0,
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE TABLE IF NOT EXISTS whitelist (
+            discord_id TEXT PRIMARY KEY
         )
         '''
     )

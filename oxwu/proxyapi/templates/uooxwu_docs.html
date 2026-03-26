@@ -1,0 +1,422 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>uooxwu Docs | Unofficial OXWU API</title>
+  <style>
+    :root {
+      --bg: #f7f4ee;
+      --panel: #fffdf9;
+      --ink: #1f1c17;
+      --muted: #655f56;
+      --accent: #155e75;
+      --accent-soft: rgba(21, 94, 117, 0.1);
+      --border: rgba(31, 28, 23, 0.1);
+      --code-bg: #f2efe8;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      font-family: "Segoe UI", "Noto Sans TC", sans-serif;
+      color: var(--ink);
+      background:
+        radial-gradient(circle at top right, rgba(21, 94, 117, 0.14), transparent 24%),
+        linear-gradient(180deg, #faf7f2, var(--bg));
+      padding: 24px;
+    }
+
+    a { color: var(--accent); }
+
+    .wrap {
+      max-width: 1100px;
+      margin: 0 auto;
+    }
+
+    .hero,
+    .section {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 24px;
+      padding: 24px;
+      margin-bottom: 20px;
+      box-shadow: 0 12px 34px rgba(31, 28, 23, 0.04);
+    }
+
+    h1, h2, h3 {
+      margin-top: 0;
+    }
+
+    p, li {
+      color: var(--muted);
+      line-height: 1.75;
+    }
+
+    code, pre {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      background: var(--code-bg);
+      border-radius: 14px;
+    }
+
+    code { padding: 2px 7px; }
+
+    pre {
+      padding: 16px;
+      overflow: auto;
+      white-space: pre-wrap;
+      word-break: break-word;
+      line-height: 1.6;
+      margin: 0;
+    }
+
+    .grid,
+    .pair {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 20px;
+    }
+
+    .table-wrap {
+      overflow: auto;
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      background: #fff;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      min-width: 560px;
+    }
+
+    th, td {
+      text-align: left;
+      padding: 12px 14px;
+      border-bottom: 1px solid var(--border);
+      vertical-align: top;
+    }
+
+    th {
+      background: #fbf7f0;
+      color: var(--ink);
+      font-size: 14px;
+    }
+
+    tr:last-child td {
+      border-bottom: 0;
+    }
+
+    .note {
+      background: var(--accent-soft);
+      color: #0c4a6e;
+      border-radius: 18px;
+      padding: 14px 16px;
+      font-weight: 600;
+    }
+
+    .pill {
+      display: inline-block;
+      border-radius: 999px;
+      padding: 6px 10px;
+      background: #0f766e;
+      color: #fff;
+      font-size: 13px;
+      font-weight: 800;
+      margin-right: 8px;
+      margin-bottom: 8px;
+    }
+
+    @media (max-width: 920px) {
+      .grid,
+      .pair {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <section class="hero">
+      <h1>uooxwu Python Client</h1>
+      <p><code>uooxwu</code> 是這個 API 的 Python client，包好了 REST 呼叫、Socket.IO 事件監聽，以及常用的 dataclass model。</p>
+      <div class="note">適合 Python bot、CLI 工具、後端服務直接接 OXWU Proxy API。你不用自己手刻 request header、JSON parsing、或 Socket.IO 事件轉型。</div>
+      <p><a href="/api/docs">回到 REST / WebSocket 文件</a></p>
+    </section>
+
+    <section class="section">
+      <h2>Installation</h2>
+      <div class="pair">
+        <div>
+          <h3>pip 安裝</h3>
+          <pre>pip install "uooxwu @ git+https://github.com/AvianJay/useless-script.git#subdirectory=oxwu"</pre>
+        </div>
+        <div>
+          <h3>requirements.txt</h3>
+          <pre>uooxwu @ git+https://github.com/AvianJay/useless-script.git#subdirectory=oxwu</pre>
+        </div>
+      </div>
+      <p>如果你要鎖版本，建議把 URL 換成 branch、tag 或 commit SHA。</p>
+    </section>
+
+    <section class="section">
+      <h2>Quick Start</h2>
+      <pre>import uooxwu
+
+client = uooxwu.Client(
+    url="https://oxwu.avianjay.sbs",
+    api_key="YOUR_API_KEY",
+)
+
+warning = client.get_warning()
+print(warning.time)
+print(warning.max_intensity)
+print(warning.arrival_times)
+
+town_map = client.get_town_map()
+print(town_map["6500600"].name)
+
+@client.event()
+def proxy_warning_update(event: uooxwu.WarningUpdateEvent):
+    print(event.time)
+    print(event.arrival_times)
+    print(event.estimated_intensities)
+
+client.connect(wait=True)</pre>
+    </section>
+
+    <section class="section">
+      <h2>Client</h2>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>項目</th>
+              <th>型別</th>
+              <th>說明</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>Client(url, api_key=None, timeout=10.0, socket_transports=None)</code></td>
+              <td>class</td>
+              <td>建立 client。預設 Socket.IO transport 為 <code>["websocket", "polling"]</code>。</td>
+            </tr>
+            <tr>
+              <td><code>get_warning()</code></td>
+              <td><code>Warning</code></td>
+              <td>取得目前 warning 快取並轉成 dataclass model。</td>
+            </tr>
+            <tr>
+              <td><code>get_report()</code></td>
+              <td><code>Report</code></td>
+              <td>取得目前 report 快取並轉成 dataclass model。</td>
+            </tr>
+            <tr>
+              <td><code>get_screenshot(type_)</code></td>
+              <td><code>bytes</code></td>
+              <td>取得 <code>report</code> 或 <code>warning</code> PNG。</td>
+            </tr>
+            <tr>
+              <td><code>load_builtin_town_map()</code></td>
+              <td><code>dict[str, Town]</code></td>
+              <td>讀取套件內建的 town map，不需要打 API。</td>
+            </tr>
+            <tr>
+              <td><code>fetch_town_map()</code></td>
+              <td><code>dict[str, Town]</code></td>
+              <td>向 <code>/api/town-map</code> 取得遠端 town map。</td>
+            </tr>
+            <tr>
+              <td><code>get_town_map(source="builtin"|"remote"|"auto")</code></td>
+              <td><code>dict[str, Town]</code></td>
+              <td>整合版介面。<code>auto</code> 會先抓遠端，失敗時 fallback 到內建資料。</td>
+            </tr>
+            <tr>
+              <td><code>event()</code> / <code>on(name)</code></td>
+              <td>decorator</td>
+              <td>註冊 Socket.IO 事件監聽器。</td>
+            </tr>
+            <tr>
+              <td><code>connect(wait=False)</code></td>
+              <td><code>socketio.Client</code></td>
+              <td>建立 Socket.IO 連線。<code>wait=True</code> 會阻塞直到斷線。</td>
+            </tr>
+            <tr>
+              <td><code>wait()</code></td>
+              <td>method</td>
+              <td>等待既有的 Socket.IO 連線。</td>
+            </tr>
+            <tr>
+              <td><code>disconnect()</code></td>
+              <td>method</td>
+              <td>中斷 Socket.IO。</td>
+            </tr>
+            <tr>
+              <td><code>close()</code></td>
+              <td>method</td>
+              <td>關閉 Socket.IO 與底層 HTTP session。</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="section">
+      <h2>Events</h2>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>事件名稱</th>
+              <th>handler 參數</th>
+              <th>說明</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>connect</code></td>
+              <td>無參數</td>
+              <td>Socket.IO 連線成功。</td>
+            </tr>
+            <tr>
+              <td><code>disconnect</code></td>
+              <td>無參數</td>
+              <td>Socket.IO 斷線。</td>
+            </tr>
+            <tr>
+              <td><code>proxy_warning_update</code></td>
+              <td><code>WarningUpdateEvent</code></td>
+              <td>新的 warning 開始。</td>
+            </tr>
+            <tr>
+              <td><code>proxy_warning_updated</code></td>
+              <td><code>WarningUpdatedEvent</code></td>
+              <td>同一輪 warning 的後續更新。</td>
+            </tr>
+            <tr>
+              <td><code>proxy_report_update</code></td>
+              <td><code>ReportUpdateEvent</code></td>
+              <td>新的 report 推送。</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3>事件 decorator 範例</h3>
+      <pre>@client.event()
+def connect():
+    print("connected")
+
+@client.event()
+def proxy_warning_update(event: uooxwu.WarningUpdateEvent):
+    print(event.time)
+    print(event.warning.max_intensity if event.warning else None)
+
+@client.on("proxy_warning_updated")
+def handle_warning_updated(event: uooxwu.WarningUpdatedEvent):
+    print(event.arrival_times)</pre>
+    </section>
+
+    <section class="section">
+      <h2>Models</h2>
+      <p>套件會把常用 payload 轉成 dataclass 物件。你通常只要認這幾個：</p>
+      <div class="grid">
+        <div>
+          <span class="pill">Warning</span>
+          <span class="pill">WarningLocation</span>
+          <span class="pill">WarningRecord</span>
+          <span class="pill">WarningUpdateEvent</span>
+          <span class="pill">WarningUpdatedEvent</span>
+        </div>
+        <div>
+          <span class="pill">Report</span>
+          <span class="pill">ReportData</span>
+          <span class="pill">ReportIntensityArea</span>
+          <span class="pill">ReportStationGroup</span>
+          <span class="pill">Town</span>
+        </div>
+      </div>
+      <div class="table-wrap" style="margin-top: 18px;">
+        <table>
+          <thead>
+            <tr>
+              <th>Model</th>
+              <th>常用屬性</th>
+              <th>說明</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>Warning</code></td>
+              <td><code>time</code>, <code>depth</code>, <code>magnitude</code>, <code>max_intensity</code>, <code>arrival_times</code>, <code>estimated_intensities</code>, <code>raw</code></td>
+              <td>完整 warning payload。</td>
+            </tr>
+            <tr>
+              <td><code>WarningUpdateEvent</code></td>
+              <td><code>time</code>, <code>parts</code>, <code>warning</code>, <code>arrival_times</code></td>
+              <td>對應 <code>proxy_warning_update</code>。</td>
+            </tr>
+            <tr>
+              <td><code>WarningUpdatedEvent</code></td>
+              <td><code>time</code>, <code>warning</code>, <code>arrival_times</code></td>
+              <td>對應 <code>proxy_warning_updated</code>。</td>
+            </tr>
+            <tr>
+              <td><code>Report</code></td>
+              <td><code>ok</code>, <code>report</code>, <code>raw</code></td>
+              <td>完整 report payload。</td>
+            </tr>
+            <tr>
+              <td><code>Town</code></td>
+              <td><code>town_id</code>, <code>name</code>, <code>latitude</code>, <code>longitude</code></td>
+              <td>town map 單筆資料。</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="section">
+      <h2>Town Map</h2>
+      <p><code>uooxwu</code> 內建一份 <code>town_id.json</code>，所以你不一定要每次都打 API 才能把 <code>town_id</code> 轉回地名。</p>
+      <pre>town_map = client.get_town_map()
+print(town_map["6500600"].name)
+
+remote_map = client.get_town_map(source="remote")
+auto_map = client.get_town_map(source="auto")</pre>
+    </section>
+
+    <section class="section">
+      <h2>Example</h2>
+      <pre>import uooxwu
+
+client = uooxwu.Client(
+    url="{{ request.host_url.rstrip('/') }}",
+    api_key="YOUR_API_KEY",
+)
+
+@client.event()
+def connect():
+    print("connected")
+
+@client.event()
+def proxy_warning_update(event: uooxwu.WarningUpdateEvent):
+    print("warning:", event.time)
+    print("arrival:", event.arrival_times)
+    print("estimated:", event.estimated_intensities)
+
+@client.event()
+def proxy_report_update(event: uooxwu.ReportUpdateEvent):
+    print("report:", event.time)
+
+if __name__ == "__main__":
+    warning = client.get_warning()
+    print(warning.time)
+    print(warning.raw)
+    client.connect(wait=True)</pre>
+    </section>
+  </div>
+</body>
+</html>

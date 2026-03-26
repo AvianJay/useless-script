@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Dashboard | OXWU API</title>
+  <title>控制面板 | Unofficial OXWU API</title>
   <style>
     :root {
       --bg: #fffaf2;
@@ -236,7 +236,6 @@
 <body>
   <div class="wrap">
     <div class="topbar">
-      <div class="brand">OXWU API Dashboard</div>
       <form action="{{ url_for('logout') }}" method="post">
         <button class="logout" type="submit">登出</button>
       </form>
@@ -244,7 +243,6 @@
 
     <section class="hero">
       <div>
-        <div class="eyebrow">OAuth2 Login Active</div>
         <div class="identity">
           {% if profile.avatar_url %}
           <img class="avatar" src="{{ profile.avatar_url }}" alt="avatar">
