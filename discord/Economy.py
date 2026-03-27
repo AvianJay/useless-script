@@ -2791,6 +2791,13 @@ class EconomyMod(commands.GroupCog, name="economymod", description="經濟系統
             )
             return
 
+        if is_flow_blacklisted(guild_id):
+            await interaction.response.send_message(
+                build_flow_blacklist_notice(guild_id),
+                ephemeral=True,
+            )
+            return
+
         warning = discord.Embed(
             title="警告：即將改為全域模式",
             description=(
