@@ -337,6 +337,8 @@ class Music(commands.GroupCog, group_name=app_commands.locale_str("music")):
         artist_text = ", ".join(artist_names) if artist_names else "Unknown Artist"
         artist_image = artists[0].get("image") if artists else None
         artist_url = f"https://listen.moe/artists/{artists[0].get('id')}" if artists else None
+        if artist_image:
+            artist_image = f"https://cdn.listen.moe/avatars/{quote(artist_image)}"
 
         sources = song.get("sources") or []
         source = sources[0] if sources else {}
