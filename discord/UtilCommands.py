@@ -99,7 +99,7 @@ def get_uptime_seconds() -> int:
 async def info_command(interaction: discord.Interaction, full: bool = False):
     await interaction.response.defer()
     server_count = len(bot.guilds)
-    user_count = len(set(bot.get_all_members()))
+    user_count = f"{len(bot.users)}/{sum(guild.member_count for guild in bot.guilds)}"
     try:
         bot_latency = round(bot.latency * 1000, 2)  # Convert to milliseconds
     except OverflowError:
