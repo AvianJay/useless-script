@@ -19,9 +19,7 @@ SAFE_MENTIONS = discord.AllowedMentions(users=True, roles=False, everyone=False)
 MODEL_RATES = {
     "openai-fast": 0.05,
     "openai": 0.10,
-    "openai-seraphyn": 2.60,
     "gemini-fast": 0.10,
-    "claude-airforce": 0.15,
     "claude-fast": 0.15,
 }
 
