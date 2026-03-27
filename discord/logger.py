@@ -1,7 +1,7 @@
 ﻿import discord
 from discord.ext import commands
 from discord import app_commands
-from globalenv import config, bot, start_bot, modules, get_server_config, set_server_config
+from globalenv import config, bot, start_bot, modules, get_server_config, set_server_config, add_app_command_error_handler
 import asyncio
 import logging
 import traceback
@@ -15,6 +15,13 @@ import random
 _pending_log_tasks: set = set()
 _shutting_down = False
 _webhook_bridge_installed = False
+_ui_error_bridge_installed = False
+_webhook_cache = {}
+_pending_discord_batches = {}
+_pending_discord_batch_task = None
+
+DISCORD_LOG_BATCH_DELAY = 1.0
+DISCORD_LOG_BATCH_SIZE = 10
 
 def cleanup_old_logs(days=7):
     """清理超過指定天數的舊日誌檔案"""
@@ -39,6 +46,329 @@ def cleanup_old_logs(days=7):
     
     if deleted_count > 0:
         print(f"[Logger] 共刪除 {deleted_count} 個舊日誌檔案")
+
+
+def _unique_guild_ids(*guild_ids):
+    unique_ids = []
+    for guild_id in guild_ids:
+        if not guild_id:
+            continue
+        if guild_id not in unique_ids:
+            unique_ids.append(guild_id)
+    return unique_ids
+
+
+def _get_cached_sync_webhook(webhook_url: str | None):
+    if not webhook_url:
+        return None
+
+    webhook = _webhook_cache.get(webhook_url)
+    if webhook:
+        return webhook
+
+    try:
+        webhook = discord.SyncWebhook.from_url(webhook_url)
+    except Exception:
+        return None
+
+    _webhook_cache[webhook_url] = webhook
+    return webhook
+
+
+def _load_stored_sync_webhook(*storage_guild_ids, config_key: str = "log_webhook_url"):
+    for guild_id in _unique_guild_ids(*storage_guild_ids):
+        webhook_url = get_server_config(guild_id, config_key)
+        webhook = _get_cached_sync_webhook(webhook_url)
+        if webhook:
+            return webhook, webhook_url
+    return None, None
+
+
+def _remember_webhook_url(webhook_url: str, *storage_guild_ids, config_key: str = "log_webhook_url"):
+    for guild_id in _unique_guild_ids(*storage_guild_ids):
+        set_server_config(guild_id, config_key, webhook_url)
+
+
+def _forget_webhook_url(webhook_url: str | None, *storage_guild_ids, config_key: str = "log_webhook_url"):
+    if webhook_url:
+        _webhook_cache.pop(webhook_url, None)
+
+    for guild_id in _unique_guild_ids(*storage_guild_ids):
+        if get_server_config(guild_id, config_key) == webhook_url:
+            set_server_config(guild_id, config_key, None)
+
+
+def _build_log_embed(message: str, level: int, module_name: str, user: discord.User = None, guild: discord.Guild = None):
+    color = 0x00ff00 if level == logging.INFO else 0xffff00 if level == logging.WARNING else 0xff0000 if level == logging.ERROR else 0x0000ff
+    embed = discord.Embed(title=module_name, description=message, color=color)
+    embed.timestamp = datetime.now(timezone.utc)
+    if user:
+        embed.add_field(name="使用者ID", value=user.id, inline=False)
+        to_show_name = f"{user.display_name} ({user.name})" if user.display_name != user.name else user.name
+        embed.set_author(name=to_show_name, icon_url=user.display_avatar.url if user.display_avatar else None)
+    if guild:
+        embed.add_field(name="伺服器ID", value=guild.id, inline=False)
+        embed.set_footer(text=guild.name if guild.name else guild.id, icon_url=guild.icon.url if guild.icon else None)
+    return embed
+
+
+def _create_webhook_send_kwargs(*, embed=None, embeds=None):
+    send_kwargs = {
+        "username": bot.user.name if bot.user else "Logger",
+    }
+    if embed is not None:
+        send_kwargs["embed"] = embed
+    if embeds is not None:
+        send_kwargs["embeds"] = embeds
+    if bot.user:
+        send_kwargs["avatar_url"] = bot.user.default_avatar.url
+    return send_kwargs
+
+
+async def _resolve_sync_webhook(channel_id: int | None, *storage_guild_ids, config_key: str = "log_webhook_url"):
+    candidate_guild_ids = _unique_guild_ids(*storage_guild_ids)
+
+    webhook, webhook_url = _load_stored_sync_webhook(*candidate_guild_ids, config_key=config_key)
+    if webhook:
+        return webhook, webhook_url, tuple(candidate_guild_ids)
+
+    if not channel_id:
+        return None, None, tuple(candidate_guild_ids)
+
+    channel = bot.get_channel(channel_id)
+    if not channel and not bot.is_ready():
+        try:
+            await asyncio.wait_for(bot.wait_until_ready(), timeout=15.0)
+        except (Exception, asyncio.TimeoutError, asyncio.CancelledError):
+            return None, None, tuple(candidate_guild_ids)
+        channel = bot.get_channel(channel_id)
+
+    candidate_guild_ids = _unique_guild_ids(
+        *candidate_guild_ids,
+        channel.guild.id if channel and getattr(channel, "guild", None) else None,
+    )
+
+    webhook, webhook_url = _load_stored_sync_webhook(*candidate_guild_ids, config_key=config_key)
+    if webhook:
+        return webhook, webhook_url, tuple(candidate_guild_ids)
+
+    if not channel or not hasattr(channel, "create_webhook"):
+        return None, None, tuple(candidate_guild_ids)
+
+    try:
+        create_kwargs = {"name": bot.user.name if bot.user else "Logger"}
+        if bot.user:
+            create_kwargs["avatar"] = await bot.user.default_avatar.read()
+        webhook = await channel.create_webhook(**create_kwargs)
+        webhook_url = webhook.url
+        _remember_webhook_url(webhook_url, *candidate_guild_ids, config_key=config_key)
+        return discord.SyncWebhook.from_url(webhook_url), webhook_url, tuple(candidate_guild_ids)
+    except discord.HTTPException as e:
+        if e.code != 30007:  # Maximum number of webhooks reached
+            raise
+
+    webhooks = await channel.webhooks()
+    for existing_webhook in webhooks:
+        existing_url = getattr(existing_webhook, "url", None)
+        candidate = _get_cached_sync_webhook(existing_url)
+        if candidate:
+            _remember_webhook_url(existing_url, *candidate_guild_ids, config_key=config_key)
+            return candidate, existing_url, tuple(candidate_guild_ids)
+
+    if webhooks:
+        existing_url = getattr(webhooks[0], "url", None)
+        if existing_url:
+            _remember_webhook_url(existing_url, *candidate_guild_ids, config_key=config_key)
+            return discord.SyncWebhook.from_url(existing_url), existing_url, tuple(candidate_guild_ids)
+
+    return None, None, tuple(candidate_guild_ids)
+
+
+async def _send_log_embeds(channel_id: int | None, embeds: list[discord.Embed], *storage_guild_ids, config_key: str = "log_webhook_url"):
+    if not channel_id:
+        return False
+
+    candidate_guild_ids = tuple(_unique_guild_ids(*storage_guild_ids))
+    webhook, webhook_url = _load_stored_sync_webhook(*candidate_guild_ids, config_key=config_key)
+    if not webhook:
+        webhook, webhook_url, candidate_guild_ids = await _resolve_sync_webhook(channel_id, *candidate_guild_ids, config_key=config_key)
+    if not webhook:
+        return False
+
+    for index in range(0, len(embeds), DISCORD_LOG_BATCH_SIZE):
+        chunk = embeds[index:index + DISCORD_LOG_BATCH_SIZE]
+        try:
+            await asyncio.to_thread(webhook.send, **_create_webhook_send_kwargs(embeds=chunk))
+        except (discord.NotFound, discord.Forbidden):
+            _forget_webhook_url(webhook_url, *candidate_guild_ids, config_key=config_key)
+            webhook, webhook_url, candidate_guild_ids = await _resolve_sync_webhook(channel_id, *candidate_guild_ids, config_key=config_key)
+            if not webhook:
+                return False
+            await asyncio.to_thread(webhook.send, **_create_webhook_send_kwargs(embeds=chunk))
+    return True
+
+
+def _send_log_embed_now(channel_id: int | None, embed: discord.Embed, *storage_guild_ids, config_key: str = "log_webhook_url"):
+    return _send_log_embeds_now(channel_id, [embed], *storage_guild_ids, config_key=config_key)
+
+
+def _send_log_embeds_now(channel_id: int | None, embeds: list[discord.Embed], *storage_guild_ids, config_key: str = "log_webhook_url"):
+    if not channel_id:
+        return False
+
+    webhook, _ = _load_stored_sync_webhook(*storage_guild_ids, config_key=config_key)
+    if not webhook:
+        return False
+
+    for index in range(0, len(embeds), DISCORD_LOG_BATCH_SIZE):
+        chunk = embeds[index:index + DISCORD_LOG_BATCH_SIZE]
+        webhook.send(**_create_webhook_send_kwargs(embeds=chunk))
+    return True
+
+
+def _track_log_task(task: asyncio.Task):
+    _pending_log_tasks.add(task)
+    task.add_done_callback(_pending_log_tasks.discard)
+
+
+async def _flush_discord_batches():
+    global _pending_discord_batches
+    if not _pending_discord_batches:
+        return
+
+    batches = _pending_discord_batches
+    _pending_discord_batches = {}
+
+    for (channel_id, storage_guild_ids, config_key), embeds in batches.items():
+        try:
+            await _send_log_embeds(channel_id, embeds, *storage_guild_ids, config_key=config_key)
+        except Exception as e:
+            print(f"[!] Error flushing Discord log batch: {e}")
+            traceback.print_exc()
+
+
+async def _discord_batch_worker():
+    global _pending_discord_batch_task
+    try:
+        while _pending_discord_batches:
+            if not _shutting_down:
+                await asyncio.sleep(DISCORD_LOG_BATCH_DELAY)
+            await _flush_discord_batches()
+    finally:
+        _pending_discord_batch_task = None
+        if _pending_discord_batches and not _shutting_down:
+            loop = asyncio.get_running_loop()
+            _pending_discord_batch_task = loop.create_task(_discord_batch_worker())
+            _track_log_task(_pending_discord_batch_task)
+
+
+def _queue_discord_embed(channel_id: int | None, embed: discord.Embed, *storage_guild_ids, config_key: str = "log_webhook_url"):
+    global _pending_discord_batch_task
+    if not channel_id:
+        return
+
+    destination_key = (channel_id, tuple(_unique_guild_ids(*storage_guild_ids)), config_key)
+    _pending_discord_batches.setdefault(destination_key, []).append(embed)
+
+    if _pending_discord_batch_task and not _pending_discord_batch_task.done():
+        return
+
+    loop = asyncio.get_running_loop()
+    _pending_discord_batch_task = loop.create_task(_discord_batch_worker())
+    _track_log_task(_pending_discord_batch_task)
+
+
+def _queue_startup_discord_embed(channel_id: int | None, embed: discord.Embed, *storage_guild_ids, config_key: str = "log_webhook_url"):
+    if not channel_id:
+        return
+
+    destination_key = (channel_id, tuple(_unique_guild_ids(*storage_guild_ids)), config_key)
+    batch = _pending_discord_batches.setdefault(destination_key, [])
+    batch.append(embed)
+
+    if len(batch) < DISCORD_LOG_BATCH_SIZE:
+        return
+
+    if _send_log_embeds_now(channel_id, batch, *storage_guild_ids, config_key=config_key):
+        _pending_discord_batches.pop(destination_key, None)
+
+
+def _unwrap_app_command_error(error: app_commands.AppCommandError):
+    return getattr(error, "original", error)
+
+
+def _format_exception_trace(error: BaseException):
+    return ''.join(traceback.format_exception(type(error), error, error.__traceback__)).strip()
+
+
+def _format_interaction_context(interaction: discord.Interaction):
+    details = []
+
+    interaction_type = getattr(getattr(interaction, "type", None), "name", None)
+    if interaction_type:
+        details.append(f"互動類型: {interaction_type}")
+
+    command = getattr(interaction, "command", None)
+    if command:
+        if isinstance(command, app_commands.ContextMenu):
+            details.append(f"指令: {command.qualified_name} ({command.type.name})")
+        else:
+            details.append(f"指令: /{command.qualified_name}")
+    elif isinstance(getattr(interaction, "data", None), dict):
+        interaction_name = interaction.data.get("name")
+        if interaction_name:
+            details.append(f"互動名稱: {interaction_name}")
+
+    if interaction.channel:
+        channel_name = getattr(interaction.channel, "name", type(interaction.channel).__name__)
+        details.append(f"頻道: {channel_name} ({interaction.channel.id})")
+
+    if hasattr(interaction, "namespace") and interaction.namespace:
+        params = []
+        for key, value in interaction.namespace.__dict__.items():
+            if key.startswith('_'):
+                continue
+            params.append(f"{key}={value}")
+        if params:
+            details.append(f"參數: {', '.join(params)}")
+
+    return "\n".join(details)
+
+
+def _extract_user_and_guild(*context_objects):
+    for obj in context_objects:
+        if isinstance(obj, discord.Interaction):
+            return obj.user, obj.guild
+        if isinstance(obj, commands.Context):
+            return obj.author, obj.guild
+        if isinstance(obj, discord.Message):
+            return obj.author, obj.guild
+    return None, None
+
+
+def _log_interaction_exception(title: str, interaction: discord.Interaction, error: BaseException, *, item=None):
+    details = _format_interaction_context(interaction)
+    if item is not None:
+        item_name = getattr(item, "custom_id", None) or getattr(item, "label", None) or getattr(item, "placeholder", None)
+        item_summary = item.__class__.__name__ if not item_name else f"{item.__class__.__name__} ({item_name})"
+        details = f"{details}\n元件: {item_summary}" if details else f"元件: {item_summary}"
+
+    trace_text = _format_exception_trace(error)
+    message = (
+        f"{title}\n"
+        f"{details}\n"
+        f"錯誤類型: {type(error).__name__}\n"
+        f"錯誤訊息: {error}\n"
+        f"堆疊追蹤:\n{trace_text}"
+    ).strip()
+
+    log(
+        message,
+        module_name="Logger",
+        level=logging.ERROR,
+        user=interaction.user,
+        guild=interaction.guild,
+    )
 
 async def _log(*messages, level = logging.INFO, module_name: str = "General", user: discord.User = None, guild: discord.Guild = None, echo_console: bool = True):
     global _shutting_down
@@ -80,119 +410,21 @@ async def _log(*messages, level = logging.INFO, module_name: str = "General", us
     # 如果正在關閉，不要嘗試發送到 Discord
     if _shutting_down or bot.is_closed():
         return
-    
-    # try to send to a specific discord channel if configured
-    try:
-        await asyncio.wait_for(bot.wait_until_ready(), timeout=5.0)
-    except (Exception, asyncio.TimeoutError, asyncio.CancelledError):
-        return
+
     log_channel_id = config("log_channel_id", None)
     if log_channel_id:
-        channel = bot.get_channel(log_channel_id)
-        if channel:
-            try:
-                # embed message
-                color = 0x00ff00 if level == logging.INFO else 0xffff00 if level == logging.WARNING else 0xff0000 if level == logging.ERROR else 0x0000ff
-                embed = discord.Embed(title=module_name, description=message, color=color)
-                embed.timestamp = datetime.now(timezone.utc)
-                if user:
-                    embed.add_field(name="使用者ID", value=user.id, inline=False)  # easy to copy user id
-                    to_show_name = f"{user.display_name} ({user.name})" if user.display_name != user.name else user.name
-                    embed.set_author(name=to_show_name, icon_url=user.display_avatar.url if user.display_avatar else None)
-                if guild:
-                    embed.add_field(name="伺服器ID", value=guild.id, inline=False)  # easy to copy guild id
-                    embed.set_footer(text=guild.name if guild.name else guild.id, icon_url=guild.icon.url if guild.icon else None)
-                # get webhook url
-                webhook_url = get_server_config(channel.guild.id if guild else channel.guild.id, "log_webhook_url")
-                discord_webhook = None
-                
-                if webhook_url:
-                    try:
-                        discord_webhook = discord.SyncWebhook.from_url(webhook_url)
-                        discord_webhook.fetch()  # test if webhook is valid
-                    except Exception:
-                        discord_webhook = None
-                
-                if not discord_webhook:
-                    # 嘗試創建新 webhook，如果失敗則嘗試重用現有的
-                    try:
-                        webhook = await channel.create_webhook(name=bot.user.name, avatar=await bot.user.default_avatar.read())
-                        webhook_url = webhook.url
-                        if guild:
-                            set_server_config(channel.guild.id, "log_webhook_url", webhook_url)
-                        discord_webhook = discord.SyncWebhook.from_url(webhook_url)
-                    except discord.HTTPException as e:
-                        if e.code == 30007:  # Maximum number of webhooks reached
-                            # 嘗試重用現有的 webhook
-                            webhooks = await channel.webhooks()
-                            for wh in webhooks:
-                                try:
-                                    discord_webhook = discord.SyncWebhook.from_url(wh.url)
-                                    webhook_url = wh.url
-                                    if guild:
-                                        set_server_config(channel.guild.id, "log_webhook_url", webhook_url)
-                                    break
-                                except Exception:
-                                    continue
-                            if not discord_webhook and webhooks:
-                                # 如果還是沒有可用的，使用第一個
-                                discord_webhook = discord.SyncWebhook.from_url(webhooks[0].url)
-                                webhook_url = webhooks[0].url
-                                if guild:
-                                    set_server_config(channel.guild.id, "log_webhook_url", webhook_url)
-                        else:
-                            raise
-                
-                if not discord_webhook:
-                    return  # 無法獲取 webhook，放棄發送
-                discord_webhook.send(embed=embed, username=bot.user.name, avatar_url=bot.user.default_avatar.url)
-                if guild:
-                    log_channel_id = get_server_config(guild.id, "log_channel_id")
-                    if log_channel_id and log_channel_id != channel.id:
-                        guild_channel = guild.get_channel(log_channel_id)
-                        if guild_channel:
-                            guild_webhook_url = get_server_config(guild.id, "log_webhook_url")
-                            guild_discord_webhook = None
-                            
-                            if guild_webhook_url:
-                                try:
-                                    guild_discord_webhook = discord.SyncWebhook.from_url(guild_webhook_url)
-                                    guild_discord_webhook.fetch()  # test if webhook is valid
-                                except Exception:
-                                    guild_discord_webhook = None
-                            
-                            if not guild_discord_webhook:
-                                # 嘗試創建新 webhook，如果失敗則嘗試重用現有的
-                                try:
-                                    webhook = await guild_channel.create_webhook(name=bot.user.name, avatar=await bot.user.default_avatar.read())
-                                    guild_webhook_url = webhook.url
-                                    set_server_config(guild.id, "log_webhook_url", guild_webhook_url)
-                                    guild_discord_webhook = discord.SyncWebhook.from_url(guild_webhook_url)
-                                except discord.HTTPException as e:
-                                    if e.code == 30007:  # Maximum number of webhooks reached
-                                        # 嘗試重用現有的 webhook
-                                        webhooks = await guild_channel.webhooks()
-                                        for wh in webhooks:
-                                            try:
-                                                guild_discord_webhook = discord.SyncWebhook.from_url(wh.url)
-                                                guild_webhook_url = wh.url
-                                                set_server_config(guild.id, "log_webhook_url", guild_webhook_url)
-                                                break
-                                            except Exception:
-                                                continue
-                                        if not guild_discord_webhook and webhooks:
-                                            # 如果還是沒有可用的，使用第一個
-                                            guild_discord_webhook = discord.SyncWebhook.from_url(webhooks[0].url)
-                                            guild_webhook_url = webhooks[0].url
-                                            set_server_config(guild.id, "log_webhook_url", guild_webhook_url)
-                                    else:
-                                        raise
-                            
-                            if guild_discord_webhook:
-                                guild_discord_webhook.send(embed=embed, username=bot.user.name, avatar_url=bot.user.default_avatar.url)
-            except Exception as e:
-                print(f"[!] Error sending log message to Discord channel: {e}")
-                traceback.print_exc()
+        try:
+            embed = _build_log_embed(message, level, module_name, user=user, guild=guild)
+            backend_guild_id = config("backend_guild_id", 0)
+            _queue_discord_embed(log_channel_id, embed, backend_guild_id)
+
+            if guild:
+                guild_log_channel_id = get_server_config(guild.id, "log_channel_id")
+                if guild_log_channel_id and guild_log_channel_id != log_channel_id:
+                    _queue_discord_embed(guild_log_channel_id, embed.copy(), guild.id)
+        except Exception as e:
+            print(f"[!] Error sending log message to Discord channel: {e}")
+            traceback.print_exc()
 
 def log(*messages, level = logging.INFO, module_name: str = "General", user: discord.User = None, guild: discord.Guild = None):
     global _shutting_down
@@ -206,12 +438,27 @@ def log(*messages, level = logging.INFO, module_name: str = "General", user: dis
     try:
         loop = asyncio.get_running_loop()
         task = loop.create_task(_log(*messages, level=level, module_name=module_name, user=user, guild=guild))
-        _pending_log_tasks.add(task)
-        task.add_done_callback(_pending_log_tasks.discard)
+        _track_log_task(task)
     except RuntimeError:
         # No running loop, just print to console
         message = ' '.join(str(m) for m in messages)
         print(f"[{module_name}] {message}", f"guild={guild.id}" if guild else "", f"user={user.id}" if user else "")
+        if _shutting_down or bot.is_closed():
+            return
+
+        try:
+            embed = _build_log_embed(message, level, module_name, user=user, guild=guild)
+            backend_guild_id = config("backend_guild_id", 0)
+            log_channel_id = config("log_channel_id", None)
+            _queue_startup_discord_embed(log_channel_id, embed, backend_guild_id)
+
+            if guild:
+                guild_log_channel_id = get_server_config(guild.id, "log_channel_id")
+                if guild_log_channel_id and guild_log_channel_id != log_channel_id:
+                    _queue_startup_discord_embed(guild_log_channel_id, embed.copy(), guild.id)
+        except Exception as e:
+            print(f"[!] Error sending startup log message to Discord channel: {e}")
+            traceback.print_exc()
 
 
 def _enqueue_webhook_log_from_record(record: logging.LogRecord):
@@ -238,8 +485,7 @@ def _enqueue_webhook_log_from_record(record: logging.LogRecord):
     try:
         loop = asyncio.get_running_loop()
         task = loop.create_task(_log(message, level=record.levelno, module_name=module_name, echo_console=False))
-        _pending_log_tasks.add(task)
-        task.add_done_callback(_pending_log_tasks.discard)
+        _track_log_task(task)
     except RuntimeError:
         print(f"[{module_name}] {message}")
 
@@ -267,10 +513,27 @@ def install_webhook_bridge():
     _webhook_bridge_installed = True
 
 
+def install_ui_error_bridge():
+    global _ui_error_bridge_installed
+    if _ui_error_bridge_installed:
+        return
+
+    async def _view_on_error(self, interaction: discord.Interaction, error: Exception, item):
+        _log_interaction_exception("互動元件發生錯誤", interaction, error, item=item)
+
+    async def _modal_on_error(self, interaction: discord.Interaction, error: Exception):
+        _log_interaction_exception("Modal 互動發生錯誤", interaction, error)
+
+    discord.ui.View.on_error = _view_on_error
+    discord.ui.Modal.on_error = _modal_on_error
+    _ui_error_bridge_installed = True
+
+
 async def flush_logs():
     """等待所有待處理的 log 任務完成"""
     global _shutting_down
     _shutting_down = True
+    await _flush_discord_batches()
     if _pending_log_tasks:
         # 給每個任務最多 2 秒完成
         try:
@@ -292,7 +555,7 @@ class LoggerCog(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
         # 設置應用程式指令錯誤處理
-        self.bot.tree.error(self.on_app_command_error)
+        add_app_command_error_handler(self.on_app_command_error)
         # 清理舊日誌檔案
         cleanup_old_logs(days=7)
         self.error_user_cache = ExpiringDict(ttl=60)  # 用於記錄已經提示過錯誤的用戶，避免重複提示
@@ -311,7 +574,7 @@ class LoggerCog(commands.Cog):
             return
         # only log dm messages
         if isinstance(message.channel, discord.DMChannel):
-            await log(f"收到了私訊 {message.author}: {message.content}", module_name="Logger", level=logging.INFO, user=message.author)
+            log(f"收到了私訊 {message.author}: {message.content}", module_name="Logger", level=logging.INFO, user=message.author)
         # else:
         #     await log(f"收到了訊息 {message.author}: {message.content}", module_name="Logger", level=logging.INFO, user=message.author, guild=message.guild)
 
@@ -417,20 +680,8 @@ class LoggerCog(commands.Cog):
 
     async def on_app_command_error(self, interaction: discord.Interaction, error: app_commands.AppCommandError):
         """處理應用程式指令錯誤"""
-        # 取得完整的錯誤堆疊追蹤
-        error_traceback = ''.join(traceback.format_exception(type(error), error, error.__traceback__))
-        
-        # 記錄詳細錯誤
-        log(
-            f"應用程式指令錯誤:\n指令: {interaction.command.qualified_name if interaction.command else '未知'}\n"
-            f"錯誤類型: {type(error).__name__}\n"
-            f"錯誤訊息: {str(error)}\n"
-            f"堆疊追蹤:\n{error_traceback}",
-            module_name="Logger",
-            level=logging.ERROR,
-            user=interaction.user,
-            guild=interaction.guild
-        )
+        original_error = _unwrap_app_command_error(error)
+        _log_interaction_exception("應用程式指令錯誤", interaction, original_error)
         
         # 向用戶顯示友善的錯誤訊息
         error_message = "❌ 執行指令時發生錯誤！"
@@ -448,7 +699,7 @@ class LoggerCog(commands.Cog):
             error_message = "❌ 你不符合執行此指令的條件。"
         else:
             # 對於其他錯誤，顯示錯誤訊息
-            error_message = f"❌ 發生錯誤: {str(error)}"
+            error_message = f"❌ 發生錯誤: {str(original_error)}"
         
         try:
             if interaction.response.is_done():
@@ -457,7 +708,13 @@ class LoggerCog(commands.Cog):
                 await interaction.response.send_message(error_message, ephemeral=True)
         except Exception as e:
             # 如果無法發送錯誤訊息，至少記錄下來
-            log(f"無法向用戶發送錯誤訊息: {e}", module_name="Logger", level=logging.ERROR)
+            log(
+                f"無法向用戶發送錯誤訊息: {e}\n原始錯誤: {original_error}",
+                module_name="Logger",
+                level=logging.ERROR,
+                user=interaction.user,
+                guild=interaction.guild,
+            )
 
     # @commands.Cog.listener()
     # async def on_ready(self):
@@ -465,10 +722,18 @@ class LoggerCog(commands.Cog):
         
     @commands.Cog.listener()
     async def on_error(self, event_method, *args, **kwargs):
-        log(f"事件 {event_method} 發生錯誤。", module_name="Logger", level=logging.ERROR)
+        user, guild = _extract_user_and_guild(*args, *kwargs.values())
+        log(
+            f"事件 {event_method} 發生錯誤。\n堆疊追蹤:\n{traceback.format_exc().strip()}",
+            module_name="Logger",
+            level=logging.ERROR,
+            user=user,
+            guild=guild,
+        )
 
 if "logger" in modules:
     install_webhook_bridge()
+    install_ui_error_bridge()
     asyncio.run(bot.add_cog(LoggerCog(bot)))
 
 if __name__ == "__main__":

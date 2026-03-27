@@ -1,4 +1,4 @@
-from globalenv import bot, get_global_config, set_global_config
+from globalenv import bot, get_global_config, set_global_config, add_app_command_error_handler
 import discord
 from discord.ext import commands
 from discord import app_commands
@@ -11,7 +11,7 @@ class Statistics(commands.Cog):
     def __init__(self, bot: commands.Bot) -> None:
         self.bot = bot
         super().__init__()
-        self.bot.tree.error(self.on_app_command_error)  # Register global error handler for app commands
+        add_app_command_error_handler(self.on_app_command_error)
     
     @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
     @app_commands.allowed_installs(guilds=True, users=True)

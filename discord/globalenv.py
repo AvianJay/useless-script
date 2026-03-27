@@ -14,7 +14,7 @@ from pathlib import Path
 
 
 # Global configuration for backward compatibility
-config_version = 27
+config_version = 28
 config_path = 'config.json'
 
 default_config = {
@@ -73,9 +73,12 @@ default_config = {
     "upvote_board_channel_id": 0,
     "pollinations_api_key": "",
     "economy_log_channel_id": 0,
+    "backend_guild_id": 0,
 }
 _config = None
 _runtime_logging_configured = False
+_app_command_error_handlers = []
+_app_command_error_dispatcher_installed = False
 
 try:
     if os.path.exists(config_path):
@@ -239,6 +242,33 @@ intents.members = True
 intents.guilds = True
 bot = commands.Bot(command_prefix=config("prefix", "!"), intents=intents, chunk_guilds_at_startup=False)
 configure_runtime_logging()
+
+
+def add_app_command_error_handler(handler):
+    """Register an app command error handler without overwriting others."""
+    global _app_command_error_dispatcher_installed
+
+    if handler in _app_command_error_handlers:
+        return
+
+    _app_command_error_handlers.append(handler)
+
+    if _app_command_error_dispatcher_installed:
+        return
+
+    async def _dispatch_app_command_error(interaction: discord.Interaction, error: app_commands.AppCommandError):
+        for registered_handler in tuple(_app_command_error_handlers):
+            try:
+                await registered_handler(interaction, error)
+            except Exception:
+                command_name = interaction.command.qualified_name if getattr(interaction, "command", None) else "unknown"
+                logging.getLogger("runtime").exception(
+                    "App command error handler failed while handling %s",
+                    command_name,
+                )
+
+    bot.tree.error(_dispatch_app_command_error)
+    _app_command_error_dispatcher_installed = True
 
 
 # Helper functions for per-server configuration
