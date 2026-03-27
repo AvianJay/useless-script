@@ -645,6 +645,8 @@ translations = {
     "log-channel": "日誌頻道",
     "fake-admin": "假冒管理",
     "radio": "電台",
+    "station": "頻道",
+    "level": "等級",
 }
 class CommandNameTranslator(app_commands.Translator):
     async def translate(
