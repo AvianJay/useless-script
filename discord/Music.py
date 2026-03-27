@@ -14,7 +14,7 @@ import aiohttp
 import html
 import re
 from dataclasses import dataclass
-from urllib.parse import urlparse
+from urllib.parse import urlparse, quote
 
 ALLOWED_DOMAINS = [
     "youtube.com",
@@ -347,7 +347,7 @@ class Music(commands.GroupCog, group_name=app_commands.locale_str("music")):
         album = albums[0] if albums else None
         album_name = album.get("nameRomaji") or album.get("name") if album else None
         if album.get("image"):
-            album_image = f"https://cdn.listen.moe/covers/{album.get('image')}"
+            album_image = f"https://cdn.listen.moe/covers/{quote(album.get('image'))}"
 
         duration = song.get("duration") or 0
 
