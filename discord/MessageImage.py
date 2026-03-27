@@ -377,7 +377,7 @@ async def create(message: discord.Message, animate_gif=False) -> tuple[io.BytesI
     # Calculate vertical position
     total_text_height = len(final_lines) * (emoji_size + 10) 
     
-    font_name = ImageFont.truetype(os.path.join(fontdir, "notolight.ttf"), 25)
+    font_name = ImageFont.truetype(os.path.join(fontdir, "notoregular.ttf"), 25)
     name_w, name_h = get_text_size(f" - {name}", font_name)
     
     total_content_height = total_text_height + 20 + name_h
