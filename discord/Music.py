@@ -332,23 +332,25 @@ class Music(commands.GroupCog, group_name=app_commands.locale_str("music")):
             return None
 
         title = song.get("title") or "Unknown Title"
-        artists = song.get("artists") or []
+        artists = [artist for artist in (song.get("artists") or []) if isinstance(artist, dict)]
         artist_names = [artist.get("nameRomaji") or artist.get("name") for artist in artists if artist.get("nameRomaji") or artist.get("name")]
         artist_text = ", ".join(artist_names) if artist_names else "Unknown Artist"
-        artist_image = artists[0].get("image") if artists else None
-        artist_url = f"https://listen.moe/artists/{artists[0].get('id')}" if artists else None
+        primary_artist = artists[0] if artists else None
+        artist_image = primary_artist.get("image") if primary_artist else None
+        artist_id = primary_artist.get("id") if primary_artist else None
+        artist_url = f"https://listen.moe/artists/{artist_id}" if artist_id else None
         if artist_image:
-            artist_image = f"https://cdn.listen.moe/avatars/{quote(artist_image)}"
+            artist_image = f"https://cdn.listen.moe/artists/{quote(artist_image)}"
 
-        sources = song.get("sources") or []
+        sources = [source for source in (song.get("sources") or []) if isinstance(source, dict)]
         source = sources[0] if sources else {}
         source_name = source.get("nameRomaji") or source.get("name")
 
         album_image = None
-        albums = song.get("albums") or []
+        albums = [album for album in (song.get("albums") or []) if isinstance(album, dict)]
         album = albums[0] if albums else None
-        album_name = album.get("nameRomaji") or album.get("name") if album else None
-        if album.get("image"):
+        album_name = (album.get("nameRomaji") or album.get("name")) if album else None
+        if album and album.get("image"):
             album_image = f"https://cdn.listen.moe/covers/{quote(album.get('image'))}"
 
         duration = song.get("duration") or 0
