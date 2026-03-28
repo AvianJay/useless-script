@@ -414,9 +414,9 @@
             <div class="docs-sidebar-inner" id="sidebarInner">
             {% if docs_sidebar_groups %}
             {% for group in docs_sidebar_groups %}
-            <h3>{{ group.title }}</h3>
-            {% for item in group.items %}
-            <a href="#{{ item.id }}">{{ item.label }}</a>
+            <h3>{{ group["title"] }}</h3>
+            {% for item in group["items"] %}
+            <a href="#{{ item["id"] }}">{{ item["label"] }}</a>
             {% endfor %}
             {% endfor %}
             {% else %}
@@ -480,8 +480,8 @@
         <main class="docs-content">
             {% if docs_sections %}
             {% for section in docs_sections %}
-            <div class="doc-section" id="{{ section.id }}">
-                <div class="markdown-doc">{{ section.html | safe }}</div>
+            <div class="doc-section" id="{{ section["id"] }}">
+                <div class="markdown-doc">{{ section["html"] | safe }}</div>
             </div>
             {% endfor %}
             {% else %}
