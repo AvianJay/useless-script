@@ -787,9 +787,10 @@ class AICommands(commands.Cog):
             start_time = time.perf_counter()
             working_messages = [dict(message) for message in messages]
             working_image = image
-            tools = self._build_ai_tools() if tool_context else None
+            active_tool_context = tool_context or {}
+            tools = self._build_ai_tools() if active_tool_context else None
 
-            for _ in range(self.MAX_TOOL_ITERATIONS if tools else 1):
+            for round_index in range(1, (self.MAX_TOOL_ITERATIONS if tools else 1) + 1):
                 response = await self._request_ai_completion(
                     working_messages,
                     model=model,
@@ -804,19 +805,34 @@ class AICommands(commands.Cog):
                     end_time = time.perf_counter()
                     return response_text, getattr(response, "model", model), f"{end_time - start_time:.2f}s"
 
+                self._log_tool_request_batch(
+                    model=getattr(response, "model", model),
+                    tool_calls=tool_calls,
+                    tool_context=active_tool_context,
+                    round_index=round_index,
+                )
                 tool_results = []
                 for tool_call in tool_calls:
                     arguments = self._safe_parse_tool_arguments(tool_call.get("arguments"))
+                    result = await self._execute_ai_tool(
+                        tool_call.get("name"),
+                        arguments,
+                        active_tool_context,
+                    )
+                    self._log_tool_result(
+                        model=getattr(response, "model", model),
+                        tool_name=tool_call.get("name"),
+                        arguments=arguments,
+                        result=result,
+                        tool_context=active_tool_context,
+                        round_index=round_index,
+                    )
                     tool_results.append(
                         {
                             "id": tool_call.get("id"),
                             "name": tool_call.get("name"),
                             "arguments": arguments,
-                            "result": await self._execute_ai_tool(
-                                tool_call.get("name"),
-                                arguments,
-                                tool_context or {},
-                            ),
+                            "result": result,
                         }
                     )
 
@@ -1016,6 +1032,60 @@ class AICommands(commands.Cog):
             "truncated": True,
             "preview": serialized[: max_len - 15] + "...",
         }
+
+    def _tool_log_preview(self, value, max_len: int = 240) -> str:
+        return self._truncate_tool_text(value, max_len=max_len).replace("\n", "\\n")
+
+    def _log_tool_request_batch(
+        self,
+        model: str,
+        tool_calls: list[dict],
+        tool_context: dict | None = None,
+        round_index: int = 1,
+    ) -> None:
+        user = (tool_context or {}).get("user")
+        guild = (tool_context or {}).get("guild")
+        requested = []
+        for tool_call in tool_calls:
+            name = str(tool_call.get("name") or "unknown")
+            arguments = self._safe_parse_tool_arguments(tool_call.get("arguments"))
+            requested.append(f"{name}(args={self._tool_log_preview(arguments, max_len=160)})")
+        if not requested:
+            return
+        log(
+            f"model={model} | round={round_index} | requested_tools={'; '.join(requested)}",
+            module_name="AI-Tool",
+            level=logging.INFO,
+            user=user,
+            guild=guild,
+        )
+
+    def _log_tool_result(
+        self,
+        model: str,
+        tool_name: str,
+        arguments: dict,
+        result: dict,
+        tool_context: dict | None = None,
+        round_index: int = 1,
+    ) -> None:
+        user = (tool_context or {}).get("user")
+        guild = (tool_context or {}).get("guild")
+        ok = bool((result or {}).get("ok"))
+        payload = (result or {}).get("data") if ok else (result or {}).get("error")
+        status = "ok" if ok else "error"
+        level = logging.INFO if ok else logging.WARNING
+        log(
+            (
+                f"model={model} | round={round_index} | tool={tool_name or 'unknown'} "
+                f"| status={status} | args={self._tool_log_preview(arguments, max_len=160)} "
+                f"| preview={self._tool_log_preview(payload, max_len=260)}"
+            ),
+            module_name="AI-Tool",
+            level=level,
+            user=user,
+            guild=guild,
+        )
 
     @staticmethod
     def _get_server_config_fallback(guild_id, key: str, default=None):
