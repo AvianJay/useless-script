@@ -905,10 +905,10 @@ class AICommands(commands.Cog):
 
     @staticmethod
     async def _get_default_model(user_id: int) -> str:
-        """取得使用者的預設模型，默認為 openai-fast"""
-        model = get_user_data(GLOBAL_GUILD_ID, user_id, "default_ai_model", "openai-fast")
+        """取得使用者的預設模型，默認為 openai"""
+        model = get_user_data(GLOBAL_GUILD_ID, user_id, "default_ai_model", "openai")
         if model not in MODEL_RATES:
-            return "openai-fast"
+            return "openai"
         return model
 
     @classmethod
