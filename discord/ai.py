@@ -2499,7 +2499,7 @@ class AICommands(commands.Cog):
         message="你想問 AI 的問題或訊息",
         image="傳入圖片讓 AI 分析（選用）",
         new_conversation="是否開始新對話（清除之前的對話歷史）",
-        model="選擇 AI 模型（預設 openai-fast）"
+        model="選擇 AI 模型（預設 openai）"
     )
     @app_commands.autocomplete(model=model_select_autocomplete)
     @app_commands.allowed_installs(guilds=True, users=True)
