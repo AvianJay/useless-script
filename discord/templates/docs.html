@@ -170,6 +170,68 @@
         }
         .doc-note strong { color: var(--accent); }
 
+        .markdown-doc h1,
+        .markdown-doc h2,
+        .markdown-doc h3 {
+            color: var(--text-primary);
+            line-height: 1.3;
+        }
+        .markdown-doc h1 {
+            font-size: 1.5rem;
+            margin-bottom: 0.75rem;
+        }
+        .markdown-doc h2 {
+            font-size: 1.2rem;
+            margin-top: 1.75rem;
+            margin-bottom: 0.75rem;
+        }
+        .markdown-doc h3 {
+            font-size: 1.05rem;
+            margin-top: 1.25rem;
+            margin-bottom: 0.6rem;
+        }
+        .markdown-doc p,
+        .markdown-doc li {
+            color: var(--text-secondary);
+            line-height: 1.75;
+        }
+        .markdown-doc ul {
+            margin: 0.75rem 0 1rem 1.25rem;
+            padding-left: 0.5rem;
+        }
+        .markdown-doc pre {
+            background: rgba(88, 101, 242, 0.1);
+            border: 1px solid rgba(88, 101, 242, 0.18);
+            border-radius: 8px;
+            padding: 0.9rem 1rem;
+            overflow-x: auto;
+            margin: 0.85rem 0 1rem;
+        }
+        .markdown-doc code {
+            background: rgba(88, 101, 242, 0.15);
+            color: var(--accent);
+            padding: 0.12rem 0.4rem;
+            border-radius: 4px;
+            font-family: 'Consolas', 'Monaco', monospace;
+            font-size: 0.88rem;
+            word-break: break-word;
+        }
+        .markdown-doc pre code {
+            background: transparent;
+            padding: 0;
+            color: var(--text-primary);
+        }
+        .markdown-doc blockquote {
+            margin: 1rem 0;
+            background: rgba(88, 101, 242, 0.08);
+            border-left: 3px solid var(--accent);
+            padding: 0.75rem 1rem;
+            border-radius: 0 6px 6px 0;
+        }
+        .markdown-doc blockquote p {
+            margin: 0;
+        }
+
         .doc-tag {
             display: inline-block;
             padding: 0.15rem 0.5rem;
@@ -350,6 +412,14 @@
         <aside class="docs-sidebar">
             <button class="sidebar-toggle" id="sidebarToggle">📋 導覽目錄</button>
             <div class="docs-sidebar-inner" id="sidebarInner">
+            {% if docs_sidebar_groups %}
+            {% for group in docs_sidebar_groups %}
+            <h3>{{ group.title }}</h3>
+            {% for item in group.items %}
+            <a href="#{{ item.id }}">{{ item.label }}</a>
+            {% endfor %}
+            {% endfor %}
+            {% else %}
             <h3>快速開始</h3>
             <a href="#getting-started">🚀 快速入門</a>
             <a href="#prefix">⌨️ 指令前綴</a>
@@ -402,11 +472,19 @@
             <h3>⚙️ 系統</h3>
             <a href="#GuildPanel">網頁面板</a>
             <a href="#r34">R34 搜尋</a>
+            {% endif %}
             </div>
         </aside>
 
         <!-- Main Documentation Content -->
         <main class="docs-content">
+            {% if docs_sections %}
+            {% for section in docs_sections %}
+            <div class="doc-section" id="{{ section.id }}">
+                <div class="markdown-doc">{{ section.html | safe }}</div>
+            </div>
+            {% endfor %}
+            {% else %}
 
             <!-- Getting Started -->
             <div class="doc-section" id="getting-started">
@@ -799,6 +877,9 @@
             </div>
 
             <div class="doc-section" id="AutoReply">
+                {% if docs_markdown and docs_markdown.get('autoreply') %}
+                <div class="markdown-doc">{{ docs_markdown.get('autoreply') | safe }}</div>
+                {% else %}
                 <h2><span class="module-icon">💬</span> AutoReply — 自動回覆 <span class="doc-tag admin">管理員</span></h2>
                 <div class="module-desc">
                     管理員可設定關鍵字觸發自動回覆。支援正則表達式、貼圖回覆、表情反應、機率觸發、頻道忽略等進階功能。
@@ -812,11 +893,26 @@
                     <tr><td><code>/autoreply list</code></td><td>列出所有自動回覆</td></tr>
                     <tr><td><code>/autoreply clear</code></td><td>清除所有自動回覆</td></tr>
                     <tr><td><code>/autoreply test</code></td><td>測試回覆內容的變數替換效果</td></tr>
+                    <tr><td><code>/autoreply template</code></td><td>匯入內建的自動回覆範本包</td></tr>
                     <tr><td><code>/autoreply export</code></td><td>匯出自動回覆設定為 JSON 檔案</td></tr>
                     <tr><td><code>/autoreply import</code></td><td>從 JSON 檔案匯入自動回覆設定</td></tr>
                     <tr><td><code>/autoreply ignore</code></td><td>設定忽略/限定的頻道</td></tr>
                     <tr><td><code>/autoreply help</code></td><td>在 Discord 內查看使用說明</td></tr>
                 </table>
+                <div class="doc-note">
+                    <strong>限流：</strong>同一個 guild 的自動回覆目前為每 1 秒最多 3 條。超過時會直接略過，不會排隊補發。
+                </div>
+
+                <h3 style="margin-top: 1.5rem; color: var(--text-primary);">內建範本包</h3>
+                <table class="cmd-table">
+                    <tr><th>範本包</th><th>用途</th><th>內含規則</th></tr>
+                    <tr><td><code>daily_greetings</code></td><td>依照現在時間回應問候語</td><td><code>早安</code>、<code>午安</code>、<code>晚安</code>、<code>安安</code></td></tr>
+                    <tr><td><code>mini_commands</code></td><td>快速塞一組簡單文字指令</td><td><code>!say</code>、<code>!time</code>、<code>!date</code>、<code>!roll</code></td></tr>
+                    <tr><td><code>chat_fun</code></td><td>讓聊天室先有互動感</td><td><code>簽到</code>、<code>抽一個人</code>、<code>今日運勢</code>、<code>好耶</code></td></tr>
+                </table>
+                <div class="doc-note">
+                    <strong>使用方式：</strong>使用 <code>/autoreply template</code> 可直接匯入範本包，並選擇和現有規則合併，或直接覆蓋現有規則。匯入後仍可再用 <code>/autoreply edit</code> 自行調整文字。
+                </div>
 
                 <h3 style="margin-top: 1.5rem; color: var(--text-primary);">觸發模式</h3>
                 <div class="module-desc">
@@ -851,6 +947,24 @@
                     <tr><td><code>\t</code></td><td>制表符（Tab）</td></tr>
                 </table>
 
+                <h3 style="margin-top: 1.5rem; color: var(--text-primary);">日期、時間與內容切割</h3>
+                <table class="cmd-table">
+                    <tr><th>語法</th><th>說明</th><th>範例</th></tr>
+                    <tr><td><code>{date}</code></td><td>目前日期，格式為 <code>YYYY/MM/DD</code></td><td><code>2026/03/28</code></td></tr>
+                    <tr><td><code>{year}</code> / <code>{month}</code> / <code>{day}</code></td><td>分別取出年、月、日</td><td><code>{year}-{month}-{day}</code></td></tr>
+                    <tr><td><code>{time}</code></td><td>12 小時制時間，帶上午/下午</td><td><code>下午 08:23</code></td></tr>
+                    <tr><td><code>{time24}</code></td><td>24 小時制時間</td><td><code>20:23</code></td></tr>
+                    <tr><td><code>{hour}</code> / <code>{minute}</code> / <code>{second}</code></td><td>分別取出時、分、秒</td><td><code>{hour}:{minute}:{second}</code></td></tr>
+                    <tr><td><code>{timemd:t}</code> ~ <code>{timemd:R}</code></td><td>產生 Discord 時間戳標記</td><td><code>{timemd:F}</code></td></tr>
+                    <tr><td><code>{contentsplit:0}</code></td><td>等同於 <code>content.split()[0]</code></td><td><code>{contentsplit:1}</code> 取得第二個單字</td></tr>
+                </table>
+                <div class="doc-note">
+                    <strong>時區：</strong><code>{date}</code>、<code>{time}</code>、<code>{timemd:...}</code> 目前跟隨機器人主機的本地時區；如果主機設在 Asia/Taipei，就會是 UTC+8。
+                </div>
+                <!-- <div class="doc-note">
+                    <strong>相容性：</strong><code>{contentsplit:索引}</code> 是目前建議寫法，舊格式 <code>{contentsplit(索引)}</code> 仍可使用。
+                </div> -->
+
                 <h3 style="margin-top: 1.5rem; color: var(--text-primary);">隨機與進階語法</h3>
                 <table class="cmd-table">
                     <tr><th>語法</th><th>說明</th><th>範例</th></tr>
@@ -864,6 +978,33 @@
                     <strong>取得貼圖 ID：</strong>可使用 <code>y!sticker</code> 指令取得伺服器貼圖的 ID。
                 </div>
 
+                <h3 style="margin-top: 1.5rem; color: var(--text-primary);">條件判斷</h3>
+                <table class="cmd-table">
+                    <tr><th>語法</th><th>說明</th><th>範例</th></tr>
+                    <tr><td><code>{if:左邊==右邊:成立內容:else:不成立內容}</code></td><td>條件成立時輸出前段，否則輸出 <code>else</code> 後半段</td><td><code>{if:{contentsplit:1}==true:You sent true!:else:Its false}</code></td></tr>
+                    <tr><td><code>{if:左邊==右邊:成立內容:不成立內容}</code></td><td>簡寫版 if/else，不寫 <code>else</code> 也可使用</td><td><code>{if:{contentsplit:1}==true:Yes:No}</code></td></tr>
+                    <tr><td><code>==</code> / <code>!=</code></td><td>相等或不相等比較</td><td><code>{if:{author}!=Admin:不是管理員:else:是管理員}</code></td></tr>
+                    <tr><td><code>&lt;=</code> / <code>&gt;=</code></td><td>數字或字串大小比較</td><td><code>{if:{contentsplit:2}&gt;=10:合格:else:未達標}</code></td></tr>
+                </table>
+                <div class="doc-note">
+                    <strong>說明：</strong><code>true</code>/<code>false</code> 會視為布林值，純數字會視為數值，其餘內容則會以字串比較。條件內外都可以繼續使用其他 <code>{}</code> 變數；若只想在成立時輸出內容，也可寫成 <code>{if:條件:成立內容}</code>。
+                </div>
+
+                <h3 style="margin-top: 1.5rem; color: var(--text-primary);">Embed 回覆</h3>
+                <table class="cmd-table">
+                    <tr><th>語法</th><th>說明</th><th>範例</th></tr>
+                    <tr><td><code>{embedtitle:文字}</code></td><td>設定 Embed 標題</td><td><code>{embedtitle:簽到成功}</code></td></tr>
+                    <tr><td><code>{embeddescription:文字}</code></td><td>設定 Embed 內容</td><td><code>{embeddescription:{user} 在 {date} 完成簽到}</code></td></tr>
+                    <tr><td><code>{embedimage:連結}</code> / <code>{embedthumbnail:連結}</code></td><td>設定大圖或縮圖</td><td><code>{embedthumbnail:https://example.com/a.png}</code></td></tr>
+                    <tr><td><code>{embedcolor:HEX}</code></td><td>設定顏色，可用 <code>57F287</code>、<code>#57F287</code> 或 <code>0x57F287</code></td><td><code>{embedcolor:57F287}</code></td></tr>
+                    <tr><td><code>{embedfooter:文字}</code> / <code>{embedauthor:文字}</code></td><td>設定 footer 與 author</td><td><code>{embedfooter:由 AutoReply 發送}</code></td></tr>
+                    <tr><td><code>{embedtime:true}</code></td><td>在 Embed 顯示目前時間</td><td><code>{embedtime:true}</code></td></tr>
+                    <tr><td><code>{embedfield:欄位名:欄位值}</code></td><td>新增欄位，可重複寫多次</td><td><code>{embedfield:狀態:成功}</code></td></tr>
+                </table>
+                <div class="doc-note">
+                    <strong>提示：</strong>Embed 內的文字也會再跑一次變數替換，所以可以混用 <code>{user}</code>、<code>{date}</code>、<code>{if:...}</code> 等語法。
+                </div>
+
                 <h3 style="margin-top: 1.5rem; color: var(--text-primary);">頻道控制</h3>
                 <div class="module-desc">
                     自動回覆提供兩層頻道控制：
@@ -873,6 +1014,9 @@
                     <tr><td>全域忽略</td><td><code>/autoreply ignore</code></td><td>設定整個模組在哪些頻道生效或不生效（黑名單 / 白名單）</td></tr>
                     <tr><td>單條規則</td><td><code>/autoreply add</code> 的 <code>channel_mode</code> 參數</td><td>每條自動回覆可獨立設定頻道白名單或黑名單</td></tr>
                 </table>
+                <div class="doc-note">
+                    <strong>語法檢查：</strong>如果模板語法錯誤，例如括號不成對、<code>{if:...}</code> 格式錯誤、<code>{contentsplit:...}</code> 參數不合法，系統會直接輸出空字串。
+                </div>
 
                 <h3 style="margin-top: 1.5rem; color: var(--text-primary);">組合範例</h3>
                 <div class="doc-note" style="background: rgba(87, 242, 135, 0.08); border-left-color: #57f287;">
@@ -885,6 +1029,19 @@
                     <strong>範例 4：</strong>機率觸發<br>
                     模式：<code>contains</code>，觸發：<code>哈哈</code>，回覆：<code>有什麼好笑的 {user}, 真的好笑嗎</code>，機率：10%
                 </div>
+                <div class="doc-note" style="background: rgba(88, 101, 242, 0.08);">
+                    <strong>範例 5：</strong>條件判斷<br>
+                    模式：<code>starts_with</code>，觸發：<code>check</code>，回覆：<code>{if:{contentsplit:1}==true:你輸入了 true:else:你沒有輸入 true}</code><br><br>
+                    <strong>範例 6：</strong>Embed 簽到訊息<br>
+                    模式：<code>equals</code>，觸發：<code>簽到</code>，回覆：<code>{embedtitle:簽到成功}{embeddescription:{user} 在 {date} {time24} 完成簽到}{embedcolor:57F287}{embedfield:伺服器:{guild}}</code><br><br>
+                    <strong>範例 7：</strong>讀取訊息第 2 個單字<br>
+                    模式：<code>contains</code>，觸發：<code>查詢</code>，回覆：<code>你輸入的關鍵字是：{contentsplit:1}</code><br><br>
+                    <strong>範例 8：</strong>早安模板<br>
+                    模式：<code>starts_with</code>，觸發：<code>早安</code>，回覆：<code>{if:{hour}>=5:{if:{hour}<=11:早安 {user}，記得先喝水再開始今天。:現在都 {time24} 了，這句早安是不是送得有點晚。}:現在才 {time24}，你這不是早安，是熬夜安。}</code><br><br>
+                    <strong>範例 9：</strong><code>!say aaa</code> 小指令<br>
+                    模式：<code>starts_with</code>，觸發：<code>!say </code>，回覆：<code>你剛剛說的是：{contentsplit:1}</code>
+                </div>
+                {% endif %}
             </div>
 
             <!-- ==================== 工具與自動化 ==================== -->
@@ -1114,6 +1271,7 @@
                 </table>
             </div>
 
+            {% endif %}
         </main>
     </div>
 

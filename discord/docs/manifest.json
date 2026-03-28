@@ -1,0 +1,219 @@
+{
+  "groups": [
+    {
+      "title": "快速開始",
+      "items": [
+        {
+          "id": "getting-started",
+          "label": "🚀 快速入門",
+          "file": "getting-started"
+        },
+        {
+          "id": "prefix",
+          "label": "⌨️ 指令前綴",
+          "file": "prefix"
+        }
+      ]
+    },
+    {
+      "title": "🛡️ 管理與安全",
+      "items": [
+        {
+          "id": "Moderate",
+          "label": "管理工具",
+          "file": "moderate"
+        },
+        {
+          "id": "AutoModerate",
+          "label": "自動管理",
+          "file": "automoderate"
+        },
+        {
+          "id": "ReportSystem",
+          "label": "檢舉系統",
+          "file": "reportsystem"
+        },
+        {
+          "id": "ModerationNotify",
+          "label": "懲處通知",
+          "file": "moderationnotify"
+        },
+        {
+          "id": "ServerWebVerify",
+          "label": "網頁驗證",
+          "file": "serverwebverify"
+        },
+        {
+          "id": "StickyRole",
+          "label": "黏性身份組",
+          "file": "stickyrole"
+        }
+      ]
+    },
+    {
+      "title": "🎮 娛樂與遊戲",
+      "items": [
+        {
+          "id": "MiniGames",
+          "label": "迷你遊戲",
+          "file": "minigames"
+        },
+        {
+          "id": "dsize",
+          "label": "趣味尺寸",
+          "file": "dsize"
+        },
+        {
+          "id": "doomcord",
+          "label": "DOOM",
+          "file": "doomcord"
+        },
+        {
+          "id": "aki",
+          "label": "Akinator",
+          "file": "aki"
+        },
+        {
+          "id": "petpet",
+          "label": "PetPet",
+          "file": "petpet"
+        },
+        {
+          "id": "OwOify",
+          "label": "OwOify",
+          "file": "owoify"
+        }
+      ]
+    },
+    {
+      "title": "💰 經濟與物品",
+      "items": [
+        {
+          "id": "Economy",
+          "label": "經濟系統",
+          "file": "economy"
+        },
+        {
+          "id": "ItemSystem",
+          "label": "物品系統",
+          "file": "itemsystem"
+        }
+      ]
+    },
+    {
+      "title": "🎵 媒體",
+      "items": [
+        {
+          "id": "Music",
+          "label": "音樂播放",
+          "file": "music"
+        },
+        {
+          "id": "MessageImage",
+          "label": "訊息截圖",
+          "file": "messageimage"
+        }
+      ]
+    },
+    {
+      "title": "🤖 AI 與聊天",
+      "items": [
+        {
+          "id": "ai",
+          "label": "AI 聊天",
+          "file": "ai"
+        },
+        {
+          "id": "AutoReply",
+          "label": "自動回覆",
+          "file": "autoreply"
+        }
+      ]
+    },
+    {
+      "title": "🔧 工具與自動化",
+      "items": [
+        {
+          "id": "UtilCommands",
+          "label": "實用指令",
+          "file": "utilcommands"
+        },
+        {
+          "id": "AutoPublish",
+          "label": "自動發布",
+          "file": "autopublish"
+        },
+        {
+          "id": "DynamicVoice",
+          "label": "動態語音",
+          "file": "dynamicvoice"
+        },
+        {
+          "id": "CustomPrefix",
+          "label": "自定義前綴",
+          "file": "customprefix"
+        },
+        {
+          "id": "FakeUser",
+          "label": "假冒用戶",
+          "file": "fakeuser"
+        },
+        {
+          "id": "Contribute",
+          "label": "投稿系統",
+          "file": "contribute"
+        },
+        {
+          "id": "Feedback",
+          "label": "意見回饋",
+          "file": "feedback"
+        },
+        {
+          "id": "Statistics",
+          "label": "指令統計",
+          "file": "statistics"
+        },
+        {
+          "id": "JoinNotify",
+          "label": "加入通知",
+          "file": "joinnotify"
+        }
+      ]
+    },
+    {
+      "title": "🌐 資訊服務",
+      "items": [
+        {
+          "id": "twbus",
+          "label": "公車 / YouBike",
+          "file": "twbus"
+        },
+        {
+          "id": "OXWU",
+          "label": "地震監測",
+          "file": "oxwu"
+        },
+        {
+          "id": "dgpa",
+          "label": "停班停課",
+          "file": "dgpa"
+        }
+      ]
+    },
+    {
+      "title": "⚙️ 系統",
+      "items": [
+        {
+          "id": "GuildPanel",
+          "label": "網頁面板",
+          "file": "guildpanel"
+        },
+        {
+          "id": "r34",
+          "label": "R34 搜尋",
+          "file": "r34"
+        }
+      ]
+    }
+  ]
+}

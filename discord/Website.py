@@ -1,6 +1,7 @@
 from flask import Flask, send_from_directory, render_template, send_file
 import os
 import asyncio
+from pathlib import Path
 from hypercorn.config import Config
 from hypercorn.asyncio import serve
 from globalenv import bot, modules, config, on_ready_tasks, get_global_config, on_close_tasks
@@ -8,6 +9,7 @@ from logger import log
 from PIL import Image
 import requests
 from discord.ext import commands
+from doc_markdown import load_docs_site
 
 # Shutdown event for graceful shutdown
 _shutdown_event: asyncio.Event = None
@@ -69,7 +71,16 @@ def index():
 @app.route('/docs')
 def docs():
     og = _get_bot_og_data()
-    return render_template('docs.html', bot=bot, gtag=config("website_gtag", ""), **og)
+    base_dir = Path(__file__).resolve().parent
+    docs_sidebar_groups, docs_sections = load_docs_site(base_dir / "docs")
+    return render_template(
+        'docs.html',
+        bot=bot,
+        gtag=config("website_gtag", ""),
+        docs_sidebar_groups=docs_sidebar_groups,
+        docs_sections=docs_sections,
+        **og,
+    )
 
 @app.route('/privacy-policy')
 def privacy_policy():

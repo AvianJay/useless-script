@@ -14,6 +14,7 @@ from datetime import datetime, timezone, timedelta
 from logger import log
 import logging
 from pathlib import Path
+from doc_markdown import read_markdown_file, extract_markdown_search_entries
 
 from Economy import log_transaction, send_economy_audit_log
 
@@ -1252,6 +1253,26 @@ class AICommands(commands.Cog):
 
         walk_app_commands(self.bot.tree.get_commands())
 
+        markdown_docs_dir = base_dir / "docs" / "sections"
+        if markdown_docs_dir.exists():
+            for markdown_path in sorted(markdown_docs_dir.rglob("*.md")):
+                try:
+                    markdown_raw = read_markdown_file(markdown_path)
+                    relative_source = markdown_path.relative_to(base_dir).as_posix()
+                    for entry in extract_markdown_search_entries(markdown_raw, relative_source):
+                        add_entry(
+                            entry.get("category", "docs"),
+                            entry.get("title", ""),
+                            entry.get("text", ""),
+                            entry.get("source", relative_source),
+                        )
+                except Exception as e:
+                    log(
+                        f"Failed to load markdown docs {markdown_path.name}: {e}",
+                        module_name="AI",
+                        level=logging.WARNING,
+                    )
+
         docs_path = base_dir / "templates" / "docs.html"
         if docs_path.exists():
             docs_raw = docs_path.read_text(encoding="utf-8", errors="ignore")
@@ -1295,6 +1316,28 @@ class AICommands(commands.Cog):
         return entries
 
     @staticmethod
+    def _search_terms(query: str) -> list[str]:
+        normalized_query = str(query or "").strip().lower()
+        if not normalized_query:
+            return []
+        normalized_query = re.sub(
+            r"(怎麼做|怎麼寫|怎麼用|如何|用法|教我|請問|可以|一下|幫我|示範|範例)",
+            " ",
+            normalized_query,
+        )
+        normalized_query = re.sub(
+            r"(?<=[\u4e00-\u9fff])(?=[a-z0-9])|(?<=[a-z0-9])(?=[\u4e00-\u9fff])",
+            " ",
+            normalized_query,
+        )
+        terms = [
+            term
+            for term in re.split(r"[\s/,_:：、，。!?！？()\[\]{}\"'`<>|+-]+", normalized_query)
+            if term
+        ]
+        return terms or [normalized_query]
+
+    @staticmethod
     def _score_search_entry(query: str, entry: dict) -> int:
         normalized_query = str(query or "").strip().lower()
         if not normalized_query:
@@ -1308,15 +1351,23 @@ class AICommands(commands.Cog):
             score += 12
         if normalized_query in text:
             score += 6
-        for term in [term for term in re.split(r"\s+", normalized_query) if term]:
+        matched_terms = 0
+        for term in AICommands._search_terms(normalized_query):
+            term_hit = False
             if term in title:
                 score += 5
+                term_hit = True
             if term in text:
                 score += 2
+                term_hit = True
             if term in source:
                 score += 1
             if term in category:
                 score += 1
+            if term_hit:
+                matched_terms += 1
+        if matched_terms >= 2:
+            score += matched_terms
         return score
 
     def _build_ai_tools(self) -> list[dict]:
