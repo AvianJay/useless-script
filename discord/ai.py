@@ -1427,6 +1427,39 @@ class AICommands(commands.Cog):
             },
         ]
 
+    def _prepare_tool_emulation_messages(self, messages: list, tools: list[dict]) -> list[dict]:
+        tool_names: list[str] = []
+        tool_schemas: dict[str, dict] = {}
+        for tool in tools or []:
+            if not isinstance(tool, dict) or tool.get("type") != "function":
+                continue
+            function = tool.get("function")
+            if not isinstance(function, dict):
+                continue
+            name = function.get("name")
+            if not isinstance(name, str) or not name:
+                continue
+            tool_names.append(name)
+            parameters = function.get("parameters")
+            if isinstance(parameters, dict):
+                tool_schemas[name] = parameters
+
+        if not tool_names:
+            return messages
+
+        tool_prompt = "\n".join(
+            [
+                "Tool mode instructions:",
+                "If you need tools, respond with ONLY valid JSON and no markdown.",
+                'Format: {"tool_calls":[{"name":"TOOL_NAME","arguments":{}}]}',
+                "You may include multiple tool calls in the array.",
+                "If no tool is needed, respond normally with plain text.",
+                f"Available tools: {', '.join(tool_names)}",
+                f"Tool schemas: {json.dumps(tool_schemas, ensure_ascii=False)}",
+            ]
+        )
+        return [{"role": "system", "content": tool_prompt}, *messages]
+
     async def _tool_search_bot_docs(self, args: dict, tool_context: dict) -> dict:
         query = str(args.get("query", "") or "").strip()
         if not query:
@@ -2194,18 +2227,14 @@ class AICommands(commands.Cog):
         image: bytes = None,
         tools: list | None = None,
     ):
+        request_messages = self._prepare_tool_emulation_messages(messages, tools) if tools else messages
         kwargs = dict(
             model=model,
-            messages=messages,
+            messages=request_messages,
             provider=g4f.Provider.PollinationsAI,
         )
         if image is not None:
             kwargs["image"] = image
-        if tools:
-            kwargs["tools"] = tools
-            kwargs["tool_choice"] = "auto"
-            kwargs["parallel_tool_calls"] = True
-            kwargs["tool_emulation"] = True
         return await asyncio.to_thread(
             self.client.chat.completions.create,
             **kwargs,
