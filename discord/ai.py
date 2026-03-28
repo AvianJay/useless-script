@@ -1,14 +1,19 @@
-from globalenv import bot, get_user_data, get_server_config, set_server_config, set_user_data, config, get_command_mention
+from globalenv import bot, get_user_data, get_server_config, set_server_config, set_user_data, config, get_command_mention, get_all_user_data, get_global_config
 import discord
 from discord.ext import commands
 from discord import app_commands
 import g4f
 from g4f.client import Client
 import asyncio
+import html
+import importlib
+import json
 import re
 import time
+from datetime import datetime, timezone, timedelta
 from logger import log
 import logging
+from pathlib import Path
 
 from Economy import log_transaction, send_economy_audit_log
 
@@ -605,12 +610,15 @@ class ClearHistoryView(discord.ui.LayoutView):
 class AICommands(commands.Cog):
     """AI 聊天機器人指令"""
     MAX_EMOJI_CONTEXT_COUNT = 80
+    MAX_TOOL_ITERATIONS = 4
+    MAX_TOOL_RESULT_LENGTH = 3500
     EMOJI_NAME_PATTERN = re.compile(r'(?<!<):([a-zA-Z0-9_]{2,32}):')
     
     def __init__(self, bot):
         self.bot = bot
         self.client = Client(api_key=config("pollinations_api_key", ""))
         self.rate_limits = {}  # 簡單的速率限制
+        self._docs_search_cache = None
 
     @staticmethod
     def _parse_model_prefix(message: str, default: str = "openai-fast") -> tuple[str, str]:
@@ -739,7 +747,7 @@ class AICommands(commands.Cog):
         self.rate_limits[user_id].append(current_time)
         return True
     
-    async def generate_response(self, messages: list, model: str = "openai-fast", image: bytes = None) -> tuple[str, str, str]:
+    async def _generate_response_legacy(self, messages: list, model: str = "openai-fast", image: bytes = None) -> tuple[str, str, str]:
         """使用 g4f 生成 AI 回應"""
         try:
             start_time = time.perf_counter()
@@ -759,6 +767,1442 @@ class AICommands(commands.Cog):
         except Exception as e:
             log(f"AI 生成錯誤: {e}", module_name="AI", level=logging.ERROR)
             raise
+
+    async def generate_response(
+        self,
+        messages: list,
+        model: str = "openai-fast",
+        image: bytes = None,
+        tool_context: dict | None = None,
+    ) -> tuple[str, str, str]:
+        """Generate an AI response with optional read-only tool calling."""
+        try:
+            start_time = time.perf_counter()
+            working_messages = [dict(message) for message in messages]
+            working_image = image
+            tools = self._build_ai_tools() if tool_context else None
+
+            for _ in range(self.MAX_TOOL_ITERATIONS if tools else 1):
+                response = await self._request_ai_completion(
+                    working_messages,
+                    model=model,
+                    image=working_image,
+                    tools=tools,
+                )
+                message = response.choices[0].message
+                response_text = str(getattr(message, "content", "") or "").strip()
+                tool_calls = self._extract_tool_calls(message)
+
+                if not tool_calls:
+                    end_time = time.perf_counter()
+                    return response_text, getattr(response, "model", model), f"{end_time - start_time:.2f}s"
+
+                tool_results = []
+                for tool_call in tool_calls:
+                    arguments = self._safe_parse_tool_arguments(tool_call.get("arguments"))
+                    tool_results.append(
+                        {
+                            "id": tool_call.get("id"),
+                            "name": tool_call.get("name"),
+                            "arguments": arguments,
+                            "result": await self._execute_ai_tool(
+                                tool_call.get("name"),
+                                arguments,
+                                tool_context or {},
+                            ),
+                        }
+                    )
+
+                requested_tools = ", ".join(result["name"] for result in tool_results if result.get("name"))
+                working_messages.append(
+                    {
+                        "role": "assistant",
+                        "content": response_text or f"[Tool request] {requested_tools}",
+                    }
+                )
+                tool_payload = {
+                    "tool_results": tool_results,
+                    "instructions": (
+                        "Use these tool results to answer the original user request. "
+                        "If more data is still required, you may call another tool."
+                    ),
+                }
+                working_messages.append(
+                    {
+                        "role": "user",
+                        "content": self._truncate_tool_text(
+                            "Tool results:\n" + json.dumps(tool_payload, ensure_ascii=False, default=str),
+                            max_len=self.MAX_TOOL_RESULT_LENGTH * 2,
+                        ),
+                    }
+                )
+                working_image = None
+
+            final_response = await self._request_ai_completion(
+                working_messages
+                + [
+                    {
+                        "role": "user",
+                        "content": (
+                            "Please provide your final answer now. "
+                            "Do not call more tools unless absolutely necessary."
+                        ),
+                    }
+                ],
+                model=model,
+            )
+            end_time = time.perf_counter()
+            final_text = str(getattr(final_response.choices[0].message, "content", "") or "").strip()
+            return final_text, getattr(final_response, "model", model), f"{end_time - start_time:.2f}s"
+        except Exception as e:
+            log(f"AI tool response error: {e}", module_name="AI", level=logging.ERROR)
+            raise
+
+    @staticmethod
+    def _coerce_bool(value, default: bool = False) -> bool:
+        if isinstance(value, bool):
+            return value
+        if value is None:
+            return default
+        if isinstance(value, (int, float)):
+            return bool(value)
+        if isinstance(value, str):
+            lowered = value.strip().lower()
+            if lowered in {"1", "true", "yes", "y", "on"}:
+                return True
+            if lowered in {"0", "false", "no", "n", "off"}:
+                return False
+        return default
+
+    @staticmethod
+    def _coerce_int(
+        value,
+        default: int,
+        minimum: int | None = None,
+        maximum: int | None = None,
+    ) -> int:
+        try:
+            parsed = int(value)
+        except (TypeError, ValueError):
+            parsed = default
+        if minimum is not None:
+            parsed = max(minimum, parsed)
+        if maximum is not None:
+            parsed = min(maximum, parsed)
+        return parsed
+
+    @staticmethod
+    def _safe_parse_tool_arguments(arguments) -> dict:
+        if isinstance(arguments, dict):
+            return arguments
+        if arguments is None:
+            return {}
+        raw = str(arguments).strip()
+        if not raw:
+            return {}
+        candidates = [raw]
+        object_match = re.search(r"\{[\s\S]*\}", raw)
+        if object_match:
+            candidates.append(object_match.group(0))
+        for candidate in candidates:
+            try:
+                parsed = json.loads(candidate)
+            except Exception:
+                continue
+            if isinstance(parsed, dict):
+                return parsed
+        return {}
+
+    def _extract_tool_calls(self, message) -> list[dict]:
+        normalized = []
+        raw_tool_calls = getattr(message, "tool_calls", None) or []
+        for index, tool_call in enumerate(raw_tool_calls, start=1):
+            if isinstance(tool_call, dict):
+                function = tool_call.get("function", {}) or {}
+                name = function.get("name")
+                arguments = function.get("arguments", "{}")
+                tool_id = tool_call.get("id") or f"call_{index}"
+            else:
+                function = getattr(tool_call, "function", None)
+                name = getattr(function, "name", None) if function else None
+                arguments = getattr(function, "arguments", "{}") if function else "{}"
+                tool_id = getattr(tool_call, "id", None) or f"call_{index}"
+            if not name:
+                continue
+            normalized.append(
+                {
+                    "id": tool_id,
+                    "name": name,
+                    "arguments": arguments,
+                }
+            )
+        if normalized:
+            return normalized
+
+        content = getattr(message, "content", None)
+        if not isinstance(content, str):
+            return []
+        raw = content.strip()
+        if not raw:
+            return []
+        candidates = [raw]
+        object_match = re.search(r"\{[\s\S]*\}", raw)
+        if object_match:
+            candidates.append(object_match.group(0))
+        list_match = re.search(r"\[[\s\S]*\]", raw)
+        if list_match:
+            candidates.append(list_match.group(0))
+
+        for candidate in candidates:
+            try:
+                payload = json.loads(candidate)
+            except Exception:
+                continue
+
+            if isinstance(payload, dict) and isinstance(payload.get("tool_calls"), list):
+                raw_calls = payload["tool_calls"]
+            elif isinstance(payload, list):
+                raw_calls = payload
+            elif isinstance(payload, dict) and (payload.get("name") or payload.get("tool")):
+                raw_calls = [payload]
+            else:
+                continue
+
+            fallback_calls = []
+            for index, tool_call in enumerate(raw_calls, start=1):
+                if not isinstance(tool_call, dict):
+                    continue
+                name = tool_call.get("name") or tool_call.get("tool")
+                if not name:
+                    continue
+                fallback_calls.append(
+                    {
+                        "id": tool_call.get("id") or f"call_{index}",
+                        "name": name,
+                        "arguments": tool_call.get("arguments", {}),
+                    }
+                )
+            if fallback_calls:
+                return fallback_calls
+        return []
+
+    def _truncate_tool_text(self, text, max_len: int | None = None) -> str:
+        max_len = max_len or self.MAX_TOOL_RESULT_LENGTH
+        if not isinstance(text, str):
+            try:
+                text = json.dumps(text, ensure_ascii=False, default=str)
+            except Exception:
+                text = str(text)
+        if len(text) <= max_len:
+            return text
+        return text[: max_len - 15] + "\n...[truncated]"
+
+    @staticmethod
+    def _shrink_tool_data(data, max_len: int = 3500):
+        try:
+            serialized = json.dumps(data, ensure_ascii=False, default=str)
+        except Exception:
+            serialized = str(data)
+        if len(serialized) <= max_len:
+            return data
+        return {
+            "truncated": True,
+            "preview": serialized[: max_len - 15] + "...",
+        }
+
+    @staticmethod
+    def _get_server_config_fallback(guild_id, key: str, default=None):
+        sentinel = object()
+        value = get_server_config(guild_id, key, sentinel)
+        if value is not sentinel:
+            return value
+        alternate_ids = []
+        if isinstance(guild_id, int):
+            alternate_ids.append(str(guild_id))
+        elif isinstance(guild_id, str) and guild_id.isdigit():
+            alternate_ids.append(int(guild_id))
+        for alternate_id in alternate_ids:
+            value = get_server_config(alternate_id, key, sentinel)
+            if value is not sentinel:
+                return value
+        return default
+
+    @staticmethod
+    def _get_user_data_fallback(guild_id, user_id, key: str, default=None):
+        sentinel = object()
+        candidates = [user_id]
+        if isinstance(user_id, int):
+            candidates.append(str(user_id))
+        elif isinstance(user_id, str) and user_id.isdigit():
+            candidates.append(int(user_id))
+        for candidate in candidates:
+            value = get_user_data(guild_id, candidate, key, sentinel)
+            if value is not sentinel:
+                return value
+        return default
+
+    def _resolve_scope_guild_id(
+        self,
+        tool_context: dict | None,
+        scope: str = "auto",
+        global_scope_id=0,
+    ) -> tuple[object, str]:
+        guild = (tool_context or {}).get("guild")
+        normalized_scope = str(scope or "auto").strip().lower()
+        if normalized_scope == "global":
+            return global_scope_id, "global"
+        if normalized_scope == "server":
+            if guild:
+                return guild.id, "server"
+            return global_scope_id, "global"
+        if guild:
+            return guild.id, "server"
+        return global_scope_id, "global"
+
+    async def _resolve_user_display(self, user_id: int, guild: discord.Guild | None = None) -> dict:
+        try:
+            user_id = int(user_id)
+        except (TypeError, ValueError):
+            return {"id": user_id, "display_name": str(user_id)}
+
+        if guild:
+            member = guild.get_member(user_id)
+            if member:
+                return {
+                    "id": member.id,
+                    "name": member.name,
+                    "display_name": member.display_name,
+                }
+
+        user = self.bot.get_user(user_id)
+        if user is None:
+            try:
+                user = await self.bot.fetch_user(user_id)
+            except Exception:
+                user = None
+        if user:
+            return {
+                "id": user.id,
+                "name": user.name,
+                "display_name": getattr(user, "display_name", user.name),
+            }
+        return {"id": user_id, "display_name": f"user_{user_id}"}
+
+    @staticmethod
+    def _format_channel_ref(guild: discord.Guild | None, channel_id) -> str | None:
+        if not guild or channel_id in (None, "", 0, "0"):
+            return None
+        try:
+            channel_id = int(channel_id)
+        except (TypeError, ValueError):
+            return str(channel_id)
+        channel = guild.get_channel(channel_id)
+        if channel:
+            return f"#{channel.name} ({channel.id})"
+        return f"channel:{channel_id}"
+
+    @staticmethod
+    def _format_role_ref(guild: discord.Guild | None, role_id) -> str | None:
+        if not guild or role_id in (None, "", 0, "0"):
+            return None
+        try:
+            role_id = int(role_id)
+        except (TypeError, ValueError):
+            return str(role_id)
+        role = guild.get_role(role_id)
+        if role:
+            return f"@{role.name} ({role.id})"
+        return f"role:{role_id}"
+
+    @staticmethod
+    def _serialize_track(track) -> dict | None:
+        if track is None:
+            return None
+        return {
+            "title": getattr(track, "title", None),
+            "author": getattr(track, "author", None),
+            "uri": getattr(track, "uri", None),
+            "length_ms": getattr(track, "length", None),
+            "thumbnail": getattr(track, "thumbnail", None),
+        }
+
+    def _get_docs_search_corpus(self) -> list[dict]:
+        if self._docs_search_cache is not None:
+            return self._docs_search_cache
+
+        base_dir = Path(__file__).resolve().parent
+        entries = []
+        seen = set()
+
+        def add_entry(category: str, title: str, text: str, source: str):
+            normalized_title = re.sub(r"\s+", " ", str(title or "")).strip()
+            normalized_text = re.sub(r"\s+", " ", str(text or "")).strip()
+            if not normalized_title and not normalized_text:
+                return
+            key = (category, normalized_title, source)
+            if key in seen:
+                return
+            seen.add(key)
+            entries.append(
+                {
+                    "category": category,
+                    "title": normalized_title,
+                    "text": normalized_text,
+                    "source": source,
+                }
+            )
+
+        for command in self.bot.walk_commands():
+            add_entry(
+                "command",
+                f"y!{command.qualified_name}",
+                command.help or command.brief or "No description",
+                "prefix",
+            )
+
+        def walk_app_commands(command_list):
+            for command in command_list:
+                qualified_name = getattr(command, "qualified_name", None) or getattr(command, "name", "")
+                add_entry(
+                    "command",
+                    f"/{qualified_name}",
+                    getattr(command, "description", "") or "No description",
+                    "slash",
+                )
+                children = getattr(command, "commands", None) or []
+                if children:
+                    walk_app_commands(children)
+
+        walk_app_commands(self.bot.tree.get_commands())
+
+        docs_path = base_dir / "templates" / "docs.html"
+        if docs_path.exists():
+            docs_raw = docs_path.read_text(encoding="utf-8", errors="ignore")
+
+            def strip_html(fragment: str) -> str:
+                fragment = re.sub(r"<br\s*/?>", "\n", fragment, flags=re.I)
+                fragment = re.sub(r"<[^>]+>", " ", fragment)
+                return html.unescape(re.sub(r"\s+", " ", fragment)).strip()
+
+            for command_html, desc_html in re.findall(
+                r"<tr><td>(.*?)</td><td>(.*?)</td></tr>",
+                docs_raw,
+                flags=re.S,
+            ):
+                add_entry("docs", strip_html(command_html), strip_html(desc_html), "docs.html")
+
+            for section_id, title_html, desc_html in re.findall(
+                r'<div class="doc-section" id="(.*?)">.*?<h2>(.*?)</h2>.*?<div class="module-desc">(.*?)</div>',
+                docs_raw,
+                flags=re.S,
+            ):
+                add_entry("module", strip_html(title_html) or section_id, strip_html(desc_html), "docs.html")
+
+        changelog_path = base_dir / "changelog.md"
+        if changelog_path.exists():
+            current_version = None
+            collected_lines = []
+            for line in changelog_path.read_text(encoding="utf-8", errors="ignore").splitlines():
+                if line.startswith("## "):
+                    if current_version:
+                        add_entry("changelog", current_version, " ".join(collected_lines), "changelog.md")
+                    current_version = line[3:].strip()
+                    collected_lines = []
+                    continue
+                if current_version and line.strip():
+                    collected_lines.append(line.strip().lstrip("*").strip())
+            if current_version:
+                add_entry("changelog", current_version, " ".join(collected_lines), "changelog.md")
+
+        self._docs_search_cache = entries
+        return entries
+
+    @staticmethod
+    def _score_search_entry(query: str, entry: dict) -> int:
+        normalized_query = str(query or "").strip().lower()
+        if not normalized_query:
+            return 0
+        title = str(entry.get("title", "")).lower()
+        text = str(entry.get("text", "")).lower()
+        source = str(entry.get("source", "")).lower()
+        category = str(entry.get("category", "")).lower()
+        score = 0
+        if normalized_query in title:
+            score += 12
+        if normalized_query in text:
+            score += 6
+        for term in [term for term in re.split(r"\s+", normalized_query) if term]:
+            if term in title:
+                score += 5
+            if term in text:
+                score += 2
+            if term in source:
+                score += 1
+            if term in category:
+                score += 1
+        return score
+
+    def _build_ai_tools(self) -> list[dict]:
+        return [
+            {
+                "type": "function",
+                "function": {
+                    "name": "search_bot_docs",
+                    "description": "Search local bot docs, command help, and changelog entries.",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "query": {"type": "string"},
+                            "category": {
+                                "type": "string",
+                                "enum": ["all", "command", "docs", "module", "changelog"],
+                            },
+                            "limit": {"type": "integer"},
+                        },
+                        "required": ["query"],
+                    },
+                },
+            },
+            {
+                "type": "function",
+                "function": {
+                    "name": "get_dsize_context",
+                    "description": "Get dsize stats, recent history, and optional leaderboard context for a user.",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "target_user_id": {"type": "integer"},
+                            "scope": {"type": "string", "enum": ["auto", "server", "global"]},
+                            "include_history": {"type": "boolean"},
+                            "include_leaderboard": {"type": "boolean"},
+                            "leaderboard_limit": {"type": "integer"},
+                        },
+                    },
+                },
+            },
+            {
+                "type": "function",
+                "function": {
+                    "name": "get_inventory_context",
+                    "description": "Get a user's item inventory and item definitions.",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "target_user_id": {"type": "integer"},
+                            "scope": {"type": "string", "enum": ["auto", "server", "global"]},
+                            "item_query": {"type": "string"},
+                            "limit": {"type": "integer"},
+                        },
+                    },
+                },
+            },
+            {
+                "type": "function",
+                "function": {
+                    "name": "get_economy_context",
+                    "description": "Get a user's economy balance, recent transactions, and server economy settings.",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "target_user_id": {"type": "integer"},
+                            "scope": {"type": "string", "enum": ["auto", "server", "global"]},
+                            "include_history": {"type": "boolean"},
+                        },
+                    },
+                },
+            },
+            {
+                "type": "function",
+                "function": {
+                    "name": "get_server_feature_status",
+                    "description": "Inspect server feature configuration such as autoreply, automod, webverify, dynamic voice, sticky role, autopublish, fakeuser, and prefix.",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "feature": {
+                                "type": "string",
+                                "enum": [
+                                    "overview",
+                                    "autoreply",
+                                    "automod",
+                                    "webverify",
+                                    "dynamic_voice",
+                                    "stickyrole",
+                                    "autopublish",
+                                    "fakeuser",
+                                    "prefix",
+                                ],
+                            },
+                        },
+                    },
+                },
+            },
+            {
+                "type": "function",
+                "function": {
+                    "name": "get_music_status",
+                    "description": "Get current music player, queue, loop mode, and radio status for the current guild.",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {},
+                    },
+                },
+            },
+            {
+                "type": "function",
+                "function": {
+                    "name": "get_earthquake_status",
+                    "description": "Get OXWU earthquake monitoring status and latest warning/report summaries.",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "include_latest": {"type": "boolean"},
+                        },
+                    },
+                },
+            },
+            {
+                "type": "function",
+                "function": {
+                    "name": "get_disaster_status",
+                    "description": "Get the latest natural-disaster stop-work and school-closure status snapshot.",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {},
+                    },
+                },
+            },
+            {
+                "type": "function",
+                "function": {
+                    "name": "get_transport_info",
+                    "description": "Get bus route, stop, YouBike, or favorites information.",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "mode": {"type": "string", "enum": ["favorites", "route", "stop", "youbike"]},
+                            "query": {"type": "string"},
+                            "target_user_id": {"type": "integer"},
+                            "route_key": {"type": "integer"},
+                            "stop_id": {"type": "integer"},
+                            "station_id": {"type": "string"},
+                            "limit": {"type": "integer"},
+                        },
+                    },
+                },
+            },
+            {
+                "type": "function",
+                "function": {
+                    "name": "get_fakeuser_status",
+                    "description": "Get fakeuser filters, log channel, and a user's blacklist settings.",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "target_user_id": {"type": "integer"},
+                        },
+                    },
+                },
+            },
+            {
+                "type": "function",
+                "function": {
+                    "name": "get_user_command_stats",
+                    "description": "Get global command usage and error statistics.",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "query": {"type": "string"},
+                            "limit": {"type": "integer"},
+                        },
+                    },
+                },
+            },
+        ]
+
+    async def _tool_search_bot_docs(self, args: dict, tool_context: dict) -> dict:
+        query = str(args.get("query", "") or "").strip()
+        if not query:
+            return {"error": "query is required"}
+        category = str(args.get("category", "all") or "all").strip().lower()
+        limit = self._coerce_int(args.get("limit"), 5, minimum=1, maximum=8)
+        corpus = self._get_docs_search_corpus()
+        filtered = [entry for entry in corpus if category == "all" or entry["category"] == category]
+        scored = []
+        for entry in filtered:
+            score = self._score_search_entry(query, entry)
+            if score > 0:
+                scored.append((score, entry))
+        scored.sort(key=lambda item: item[0], reverse=True)
+        results = [
+            {
+                "title": entry["title"],
+                "summary": self._truncate_tool_text(entry["text"], max_len=220),
+                "category": entry["category"],
+                "source": entry["source"],
+                "score": score,
+            }
+            for score, entry in scored[:limit]
+        ]
+        website_url = config("website_url", "")
+        return {
+            "query": query,
+            "category": category,
+            "result_count": len(results),
+            "results": results,
+            "docs_url": f"{website_url}/docs" if website_url else None,
+        }
+
+    async def _tool_get_dsize_context(self, args: dict, tool_context: dict) -> dict:
+        guild = (tool_context or {}).get("guild")
+        current_user = (tool_context or {}).get("user")
+        target_user_id = args.get("target_user_id") or getattr(current_user, "id", None)
+        if target_user_id is None:
+            return {"error": "target_user_id is required"}
+        try:
+            target_user_id = int(target_user_id)
+        except (TypeError, ValueError):
+            return {"error": "target_user_id must be an integer"}
+
+        scope_id, scope_label = self._resolve_scope_guild_id(
+            tool_context,
+            args.get("scope", "auto"),
+            global_scope_id=None,
+        )
+        include_history = self._coerce_bool(args.get("include_history"), True)
+        include_leaderboard = self._coerce_bool(args.get("include_leaderboard"), False)
+        leaderboard_limit = self._coerce_int(args.get("leaderboard_limit"), 5, minimum=1, maximum=10)
+
+        stats = get_user_data(0, target_user_id, "dsize_statistics", {}) or {}
+        last_size = get_user_data(scope_id, target_user_id, "last_dsize_size", None)
+        last_measurement_at = get_user_data(scope_id, target_user_id, "last_dsize", None)
+        history = get_user_data(scope_id, target_user_id, "dsize_history", []) or []
+        history_rows = []
+        if include_history:
+            for record in sorted(history, key=lambda item: item.get("date", ""), reverse=True)[:5]:
+                record_size = record.get("size")
+                history_rows.append(
+                    {
+                        "date": record.get("date"),
+                        "size_cm": None if record_size == -1 else record_size,
+                        "state": "cut_off" if record_size == -1 else "normal",
+                        "type": record.get("type"),
+                    }
+                )
+
+        result = {
+            "scope": scope_label,
+            "user": await self._resolve_user_display(target_user_id, guild),
+            "last_size_cm": None if last_size == -1 else last_size,
+            "last_size_state": "cut_off" if last_size == -1 else "normal",
+            "last_measurement_at": str(last_measurement_at) if last_measurement_at is not None else None,
+            "statistics": {
+                "total_uses": stats.get("total_uses", 0),
+                "total_battles": stats.get("total_battles", 0),
+                "wins": stats.get("wins", 0),
+                "losses": stats.get("losses", 0),
+                "total_surgeries": stats.get("total_surgeries", 0),
+                "successful_surgeries": stats.get("successful_surgeries", 0),
+                "mangirl_count": stats.get("mangirl_count", 0),
+                "total_feedgrass": stats.get("total_feedgrass", 0),
+                "total_been_feedgrass": stats.get("total_been_feedgrass", 0),
+                "total_drops": stats.get("total_drops", 0),
+                "total_checkins": stats.get("total_checkins", 0),
+                "checkin_streak": stats.get("checkin_streak", 0),
+                "total_perform_random_attacks": stats.get("total_perform_random_attacks", 0),
+                "total_random_attacks": stats.get("total_random_attacks", 0),
+            },
+            "recent_history": history_rows,
+        }
+
+        if include_leaderboard:
+            today = datetime.now(timezone(timedelta(hours=8))).date()
+            next_day = today + timedelta(days=1)
+            valid_user_ids = set(get_all_user_data(scope_id, "last_dsize", value=str(today)).keys()) | set(
+                get_all_user_data(scope_id, "last_dsize", value=str(next_day)).keys()
+            )
+            leaderboard = []
+            for raw_user_id in valid_user_ids:
+                try:
+                    user_id = int(raw_user_id)
+                except (TypeError, ValueError):
+                    continue
+                size = get_user_data(scope_id, user_id, "last_dsize_size", None)
+                if size is None:
+                    continue
+                leaderboard.append((user_id, size))
+            leaderboard.sort(key=lambda item: item[1], reverse=True)
+
+            rank = None
+            top_rows = []
+            for index, (leader_user_id, leader_size) in enumerate(leaderboard, start=1):
+                if leader_user_id == target_user_id:
+                    rank = index
+                if index <= leaderboard_limit:
+                    top_rows.append(
+                        {
+                            "rank": index,
+                            "user": await self._resolve_user_display(leader_user_id, guild),
+                            "size_cm": None if leader_size == -1 else leader_size,
+                            "state": "cut_off" if leader_size == -1 else "normal",
+                        }
+                    )
+            result["leaderboard"] = {
+                "rank": rank,
+                "total_ranked_users": len(leaderboard),
+                "top": top_rows,
+            }
+
+        return result
+
+    async def _tool_get_inventory_context(self, args: dict, tool_context: dict) -> dict:
+        current_user = (tool_context or {}).get("user")
+        target_user_id = args.get("target_user_id") or getattr(current_user, "id", None)
+        if target_user_id is None:
+            return {"error": "target_user_id is required"}
+        try:
+            target_user_id = int(target_user_id)
+        except (TypeError, ValueError):
+            return {"error": "target_user_id must be an integer"}
+
+        scope_id, scope_label = self._resolve_scope_guild_id(tool_context, args.get("scope", "auto"), global_scope_id=0)
+        item_query = str(args.get("item_query", "") or "").strip().lower()
+        limit = self._coerce_int(args.get("limit"), 10, minimum=1, maximum=20)
+        guild = (tool_context or {}).get("guild")
+
+        item_system = importlib.import_module("ItemSystem")
+        raw_items = get_user_data(scope_id, target_user_id, "items", {}) or {}
+        all_items = item_system.get_all_items_for_guild(scope_id if scope_label == "server" else None)
+        item_map = {str(item.get("id")): item for item in all_items}
+
+        matching_items = []
+        for item_id, count in raw_items.items():
+            if not count:
+                continue
+            definition = item_map.get(str(item_id)) or item_system.get_item_by_id(
+                str(item_id),
+                scope_id if scope_label == "server" else None,
+            ) or {
+                "id": str(item_id),
+                "name": str(item_id),
+                "description": "",
+            }
+            name = str(definition.get("name", item_id))
+            if item_query and item_query not in str(item_id).lower() and item_query not in name.lower():
+                continue
+            matching_items.append(
+                {
+                    "id": str(item_id),
+                    "name": name,
+                    "count": count,
+                    "description": definition.get("description"),
+                    "worth": definition.get("worth"),
+                    "is_custom": str(item_id).startswith("custom_"),
+                }
+            )
+        matching_items.sort(key=lambda item: (-int(item["count"]), item["name"].lower()))
+
+        custom_items = (
+            item_system.get_custom_items(scope_id)
+            if scope_label == "server"
+            else {}
+        )
+        return {
+            "scope": scope_label,
+            "user": await self._resolve_user_display(target_user_id, guild),
+            "total_unique_items": len([item for item in raw_items.values() if item]),
+            "total_item_count": sum(int(count) for count in raw_items.values() if count),
+            "matching_items": matching_items[:limit],
+            "custom_item_count": len(custom_items),
+        }
+
+    async def _tool_get_economy_context(self, args: dict, tool_context: dict) -> dict:
+        current_user = (tool_context or {}).get("user")
+        target_user_id = args.get("target_user_id") or getattr(current_user, "id", None)
+        if target_user_id is None:
+            return {"error": "target_user_id is required"}
+        try:
+            target_user_id = int(target_user_id)
+        except (TypeError, ValueError):
+            return {"error": "target_user_id must be an integer"}
+
+        scope_id, scope_label = self._resolve_scope_guild_id(tool_context, args.get("scope", "auto"), global_scope_id=0)
+        include_history = self._coerce_bool(args.get("include_history"), True)
+        guild = (tool_context or {}).get("guild")
+
+        economy = importlib.import_module("Economy")
+        history = get_user_data(scope_id, target_user_id, "economy_history", []) or []
+        recent_history = []
+        if include_history:
+            for record in reversed(history[-5:]):
+                recent_history.append(
+                    {
+                        "time": record.get("time"),
+                        "type": record.get("type"),
+                        "amount": record.get("amount"),
+                        "currency": record.get("currency"),
+                        "detail": record.get("detail"),
+                        "balance_after": record.get("balance_after"),
+                    }
+                )
+
+        result = {
+            "scope": scope_label,
+            "user": await self._resolve_user_display(target_user_id, guild),
+            "balance": round(float(economy.get_balance(scope_id, target_user_id)), 2),
+            "currency_name": economy.get_currency_name(scope_id),
+            "global_balance": round(float(economy.get_balance(0, target_user_id)), 2),
+            "recent_history": recent_history,
+        }
+
+        if scope_label == "server" and scope_id:
+            result["server_settings"] = {
+                "exchange_rate": float(economy.get_exchange_rate(scope_id)),
+                "sell_ratio": float(economy.get_sell_ratio(scope_id)) if hasattr(economy, "get_sell_ratio") else None,
+                "allow_global_flow": bool(economy.get_allow_global_flow(scope_id)) if hasattr(economy, "get_allow_global_flow") else None,
+                "flow_blacklist": economy.get_flow_blacklist_info(scope_id) if hasattr(economy, "get_flow_blacklist_info") else {},
+                "transaction_count": self._get_server_config_fallback(scope_id, "economy_transaction_count", 0),
+            }
+
+        return result
+
+    async def _tool_get_server_feature_status(self, args: dict, tool_context: dict) -> dict:
+        guild = (tool_context or {}).get("guild")
+        if guild is None:
+            return {"error": "Server feature status is only available in guild channels."}
+
+        guild_id = guild.id
+        feature = str(args.get("feature", "overview") or "overview").strip().lower()
+        autoreplies = self._get_server_config_fallback(guild_id, "autoreplies", []) or []
+        automod = self._get_server_config_fallback(guild_id, "automod", {}) or {}
+        webverify = self._get_server_config_fallback(guild_id, "webverify_config", {}) or {}
+        dynamic_voice_channel = self._get_server_config_fallback(guild_id, "dynamic_voice_channel", None)
+        dynamic_voice_category = self._get_server_config_fallback(guild_id, "dynamic_voice_channel_category", None)
+        dynamic_voice_name = self._get_server_config_fallback(guild_id, "dynamic_voice_channel_name", None)
+        dynamic_voice_play_audio = self._get_server_config_fallback(guild_id, "dynamic_voice_play_audio", False)
+        dynamic_voice_blacklist_roles = self._get_server_config_fallback(guild_id, "dynamic_voice_blacklist_roles", []) or []
+        created_dynamic_channels = self._get_server_config_fallback(guild_id, "created_dynamic_channels", []) or []
+        sticky_enabled = self._get_server_config_fallback(guild_id, "stickyrole_enabled", False)
+        sticky_allowed_roles = self._get_server_config_fallback(guild_id, "stickyrole_allowed_roles", []) or []
+        sticky_ignore_bots = self._get_server_config_fallback(guild_id, "stickyrole_ignore_bots", True)
+        sticky_log_channel = self._get_server_config_fallback(guild_id, "stickyrole_log_channel", None)
+        autopublish = self._get_server_config_fallback(guild_id, "autopublish", {}) or {}
+        fake_filters = self._get_server_config_fallback(guild_id, "fake_user_filters", []) or []
+        fake_log_channel = self._get_server_config_fallback(guild_id, "fake_user_log_channel", None)
+        custom_prefix = self._get_server_config_fallback(guild_id, "custom_prefix", config("prefix", "!"))
+        ignore_channels = self._get_server_config_fallback(guild_id, "autoreply_ignore_channels", []) or []
+        autoreply_ignore_mode = self._get_server_config_fallback(guild_id, "autoreply_ignore_mode", "blacklist")
+        automod_enabled_features = sorted(
+            key for key, value in automod.items() if isinstance(value, dict) and value.get("enabled", False)
+        )
+
+        details = {
+            "overview": {
+                "server_name": guild.name,
+                "custom_prefix": custom_prefix,
+                "autoreply_rule_count": len(autoreplies),
+                "automod_enabled_features": automod_enabled_features,
+                "webverify_enabled": bool(webverify.get("enabled", False)),
+                "dynamic_voice_configured": bool(dynamic_voice_channel),
+                "stickyrole_enabled": bool(sticky_enabled),
+                "autopublish_enabled": bool(autopublish.get("enabled", False)),
+                "fakeuser_filter_count": len(fake_filters),
+            },
+            "autoreply": {
+                "rule_count": len(autoreplies),
+                "ignore_mode": autoreply_ignore_mode,
+                "ignore_channels": [
+                    self._format_channel_ref(guild, channel_id) for channel_id in ignore_channels
+                ],
+                "rules_preview": [
+                    {
+                        "trigger": rule.get("trigger"),
+                        "response": self._truncate_tool_text(rule.get("response", ""), max_len=120),
+                        "mode": rule.get("mode"),
+                        "reply": rule.get("reply"),
+                        "channel_mode": rule.get("channel_mode"),
+                        "random_chance": rule.get("random_chance"),
+                    }
+                    for rule in autoreplies[:5]
+                ],
+            },
+            "automod": {
+                "enabled_features": automod_enabled_features,
+                "notify_channel": self._format_channel_ref(
+                    guild,
+                    self._get_server_config_fallback(guild_id, "flagged_user_onjoin_channel", None),
+                ),
+                "settings": {
+                    key: value
+                    for key, value in automod.items()
+                    if isinstance(value, dict) and value.get("enabled", False)
+                },
+            },
+            "webverify": {
+                "enabled": bool(webverify.get("enabled", False)),
+                "captcha_type": webverify.get("captcha_type"),
+                "notify": webverify.get("notify"),
+                "min_age": webverify.get("min_age"),
+                "unverified_role": self._format_role_ref(guild, webverify.get("unverified_role_id")),
+                "autorole_enabled": bool(webverify.get("autorole_enabled", False)),
+                "autorole_trigger": webverify.get("autorole_trigger"),
+                "country_alert": webverify.get("webverify_country_alert"),
+                "force_verify_until": self._get_server_config_fallback(guild_id, "force_verify_until", None),
+            },
+            "dynamic_voice": {
+                "channel": self._format_channel_ref(guild, dynamic_voice_channel),
+                "category": self._format_channel_ref(guild, dynamic_voice_category),
+                "name_template": dynamic_voice_name,
+                "play_audio": bool(dynamic_voice_play_audio),
+                "blacklist_roles": [
+                    self._format_role_ref(guild, role_id) for role_id in dynamic_voice_blacklist_roles
+                ],
+                "created_channel_count": len(created_dynamic_channels),
+            },
+            "stickyrole": {
+                "enabled": bool(sticky_enabled),
+                "ignore_bots": bool(sticky_ignore_bots),
+                "allowed_roles": [
+                    self._format_role_ref(guild, role_id) for role_id in sticky_allowed_roles
+                ],
+                "log_channel": self._format_channel_ref(guild, sticky_log_channel),
+            },
+            "autopublish": {
+                "enabled": bool(autopublish.get("enabled", False)),
+                "tracked_channels": len((autopublish.get("channels") or {})),
+            },
+            "fakeuser": {
+                "filter_count": len(fake_filters),
+                "filters_preview": fake_filters[:10],
+                "log_channel": self._format_channel_ref(guild, fake_log_channel),
+            },
+            "prefix": {
+                "custom_prefix": custom_prefix,
+                "default_prefix": config("prefix", "!"),
+            },
+        }
+        if feature not in details:
+            return {
+                "error": f"Unknown feature: {feature}",
+                "available_features": sorted(details),
+            }
+        return {
+            "feature": feature,
+            "details": details[feature],
+        }
+
+    async def _tool_get_music_status(self, args: dict, tool_context: dict) -> dict:
+        guild = (tool_context or {}).get("guild")
+        if guild is None:
+            return {"error": "Music status is only available in guild channels."}
+
+        music = importlib.import_module("Music")
+        music_cog = self.bot.get_cog("Music")
+        player = guild.voice_client
+        queue = music.get_queue(guild.id)
+        loop_mode = music.loop_modes.get(guild.id)
+        radio_station_key = music.radio_modes.get(guild.id)
+
+        queue_preview = []
+        for index, track in enumerate(queue, start=1):
+            if index > 5:
+                break
+            queue_preview.append(
+                {
+                    "position": index,
+                    "track": self._serialize_track(track),
+                }
+            )
+
+        result = {
+            "connected": bool(player and getattr(player, "channel", None)),
+            "voice_channel": getattr(getattr(player, "channel", None), "name", None),
+            "queue_length": len(queue),
+            "current_track": self._serialize_track(getattr(player, "current", None)),
+            "queue_preview": queue_preview,
+            "loop_mode": getattr(loop_mode, "name", str(loop_mode) if loop_mode is not None else "OFF"),
+            "radio_mode": radio_station_key,
+        }
+
+        if radio_station_key and music_cog:
+            station = music_cog._get_guild_radio_station(guild.id)
+            info = music_cog._get_radio_info(radio_station_key)
+            result["radio"] = {
+                "station_key": radio_station_key,
+                "station_name": getattr(station, "display_name", radio_station_key),
+                "latest_info": {
+                    "artist": info.get("artist"),
+                    "title": info.get("title"),
+                    "display": info.get("display"),
+                    "url": info.get("url"),
+                } if isinstance(info, dict) else {},
+            }
+
+        return result
+
+    async def _tool_get_earthquake_status(self, args: dict, tool_context: dict) -> dict:
+        earthquake_cog = self.bot.get_cog("OXWU")
+        if earthquake_cog is None:
+            return {"error": "OXWU module is not loaded."}
+
+        guild = (tool_context or {}).get("guild")
+        include_latest = self._coerce_bool(args.get("include_latest"), True)
+
+        proxy_socket = getattr(getattr(earthquake_cog, "proxy_client", None), "_socket", None)
+        result = {
+            "proxy_connected": bool(proxy_socket and getattr(proxy_socket, "connected", False)),
+            "last_warning_time": getattr(earthquake_cog, "last_warning_time", None),
+            "last_report_time": getattr(earthquake_cog, "last_report_time", None),
+        }
+
+        if guild:
+            result["warning_channel"] = self._format_channel_ref(
+                guild,
+                self._get_server_config_fallback(guild.id, "oxwu_warning_channel", None),
+            )
+            result["report_channel"] = self._format_channel_ref(
+                guild,
+                self._get_server_config_fallback(guild.id, "oxwu_report_channel", None),
+            )
+
+        def compact(info: dict | None) -> dict | None:
+            if not isinstance(info, dict):
+                return None
+            compacted = {}
+            for key in (
+                "id",
+                "number",
+                "time",
+                "originTime",
+                "location",
+                "loc",
+                "depth",
+                "scale",
+                "mag",
+                "magnitude",
+                "intensity",
+                "max",
+                "arrival_count",
+                "arrival_generated_at",
+            ):
+                if info.get(key) is not None:
+                    compacted[key] = info.get(key)
+            if isinstance(info.get("arrival_times"), dict):
+                compacted["arrival_times"] = dict(list(info["arrival_times"].items())[:8])
+            if isinstance(info.get("estimated_intensities"), dict):
+                compacted["estimated_intensities"] = dict(list(info["estimated_intensities"].items())[:8])
+            if not compacted:
+                for key, value in list(info.items())[:8]:
+                    if isinstance(value, (dict, list)):
+                        continue
+                    compacted[key] = value
+            return compacted
+
+        if include_latest:
+            warning = await earthquake_cog._fetch_warning_info()
+            report = await earthquake_cog._fetch_report_info()
+            result["latest_warning"] = compact(warning)
+            result["latest_report"] = compact(report)
+
+        return result
+
+    async def _tool_get_disaster_status(self, args: dict, tool_context: dict) -> dict:
+        nds_module = importlib.import_module("dgpa")
+        data = await asyncio.to_thread(nds_module.fetch_and_parse_nds)
+        records = data.get("data", []) or []
+
+        active_records = []
+        for record in records:
+            status = str(record.get("status", "") or "")
+            if any(keyword in status for keyword in ("照常", "未達停班停課", "正常上班上課")):
+                continue
+            active_records.append(
+                {
+                    "city": record.get("city"),
+                    "status": status,
+                }
+            )
+
+        guild = (tool_context or {}).get("guild")
+        result = {
+            "update_time": data.get("update_time"),
+            "fetched_at": data.get("fetched_at"),
+            "active_notices": active_records[:10],
+            "records_preview": [
+                {
+                    "city": record.get("city"),
+                    "status": record.get("status"),
+                }
+                for record in (active_records[:10] or records[:10])
+            ],
+        }
+        if guild:
+            result["follow_channel"] = self._format_channel_ref(
+                guild,
+                self._get_server_config_fallback(guild.id, "nds_follow_channel_id", None),
+            )
+        return result
+
+    async def _tool_get_transport_info(self, args: dict, tool_context: dict) -> dict:
+        mode = str(args.get("mode", "favorites") or "favorites").strip().lower()
+        twbus = importlib.import_module("twbus")
+        current_user = (tool_context or {}).get("user")
+        target_user_id = args.get("target_user_id") or getattr(current_user, "id", None)
+        limit = self._coerce_int(args.get("limit"), 5, minimum=1, maximum=8)
+
+        if mode == "route":
+            query = str(args.get("query", "") or "").strip()
+            if not query:
+                return {"error": "query is required for route mode"}
+            routes = await asyncio.to_thread(twbus.busapi.fetch_routes_by_name, query)
+            return {
+                "mode": "route",
+                "query": query,
+                "matches": [
+                    {
+                        "route_key": route.get("route_key"),
+                        "route_name": route.get("route_name"),
+                        "description": route.get("description"),
+                    }
+                    for route in (routes or [])[:limit]
+                ],
+            }
+
+        if mode == "stop":
+            route_key = args.get("route_key")
+            stop_id = args.get("stop_id")
+            if route_key is None or stop_id is None:
+                return {"error": "route_key and stop_id are required for stop mode"}
+            route_key = self._coerce_int(route_key, 0, minimum=1)
+            stop_id = self._coerce_int(stop_id, 0, minimum=1)
+            stop_info = await asyncio.to_thread(twbus.fetch_stop_info, route_key, stop_id)
+            if not stop_info:
+                return {"error": "stop not found"}
+            title, summary = twbus.make_bus_text(stop_info)
+            return {
+                "mode": "stop",
+                "route_key": route_key,
+                "stop_id": stop_id,
+                "title": title,
+                "summary": summary,
+                "payload": {
+                    "route_name": stop_info.get("route_name"),
+                    "path_name": stop_info.get("path_name"),
+                    "stop_name": stop_info.get("stop_name"),
+                    "sec": stop_info.get("sec"),
+                    "msg": stop_info.get("msg"),
+                },
+            }
+
+        if mode == "youbike":
+            station_id = args.get("station_id")
+            query = str(args.get("query", "") or "").strip().lower()
+            if station_id:
+                station = await asyncio.to_thread(twbus.youbike.getstationbyid, station_id)
+                if not station:
+                    return {"error": "station not found"}
+                title, summary = twbus.make_youbike_text(station)
+                return {
+                    "mode": "youbike",
+                    "station": {
+                        "station_id": station.get("station_no"),
+                        "name": station.get("name_tw"),
+                        "district": station.get("district_tw"),
+                        "address": station.get("address_tw"),
+                        "title": title,
+                        "summary": summary,
+                    },
+                }
+            if not query:
+                return {"error": "station_id or query is required for youbike mode"}
+            stations = getattr(twbus, "youbike_data", None) or []
+            matches = [
+                station
+                for station in stations
+                if query in str(station.get("name_tw", "")).lower()
+                or query in str(station.get("address_tw", "")).lower()
+                or query in str(station.get("district_tw", "")).lower()
+            ]
+            return {
+                "mode": "youbike",
+                "query": query,
+                "matches": [
+                    {
+                        "station_id": station.get("station_no"),
+                        "name": station.get("name_tw"),
+                        "district": station.get("district_tw"),
+                        "address": station.get("address_tw"),
+                    }
+                    for station in matches[:limit]
+                ],
+            }
+
+        if target_user_id is None:
+            return {"error": "target_user_id is required for favorites mode"}
+
+        user_key = str(target_user_id)
+        favorite_stops = self._get_user_data_fallback(0, user_key, "favorite_stops", []) or []
+        favorite_youbike = self._get_user_data_fallback(0, user_key, "favorite_youbike", []) or []
+
+        stop_details = []
+        for identifier in favorite_stops[:limit]:
+            try:
+                route_key_raw, stop_id_raw = str(identifier).split(":", 1)
+                stop_info = await asyncio.to_thread(
+                    twbus.fetch_stop_info,
+                    int(route_key_raw),
+                    int(stop_id_raw),
+                )
+                if stop_info:
+                    title, summary = twbus.make_bus_text(stop_info)
+                    stop_details.append(
+                        {
+                            "identifier": identifier,
+                            "title": title,
+                            "summary": summary,
+                        }
+                    )
+            except Exception:
+                stop_details.append({"identifier": identifier, "error": "failed to resolve stop"})
+
+        youbike_details = []
+        for station_identifier in favorite_youbike[:limit]:
+            try:
+                station = await asyncio.to_thread(twbus.youbike.getstationbyid, station_identifier)
+                if station:
+                    title, summary = twbus.make_youbike_text(station)
+                    youbike_details.append(
+                        {
+                            "station_id": station_identifier,
+                            "title": title,
+                            "summary": summary,
+                        }
+                    )
+            except Exception:
+                youbike_details.append({"station_id": station_identifier, "error": "failed to resolve station"})
+
+        return {
+            "mode": "favorites",
+            "user_id": int(target_user_id),
+            "favorite_stop_count": len(favorite_stops),
+            "favorite_youbike_count": len(favorite_youbike),
+            "favorite_stops": stop_details,
+            "favorite_youbike": youbike_details,
+        }
+
+    async def _tool_get_fakeuser_status(self, args: dict, tool_context: dict) -> dict:
+        guild = (tool_context or {}).get("guild")
+        current_user = (tool_context or {}).get("user")
+        target_user_id = args.get("target_user_id") or getattr(current_user, "id", None)
+        if target_user_id is None:
+            return {"error": "target_user_id is required"}
+        try:
+            target_user_id = int(target_user_id)
+        except (TypeError, ValueError):
+            return {"error": "target_user_id must be an integer"}
+
+        guild_id = guild.id if guild else 0
+        filters = self._get_server_config_fallback(guild_id, "fake_user_filters", []) or []
+        log_channel = self._get_server_config_fallback(guild_id, "fake_user_log_channel", None)
+        blacklist = self._get_user_data_fallback(guild_id, target_user_id, "fake_user_blacklist", []) or []
+
+        return {
+            "user": await self._resolve_user_display(target_user_id, guild),
+            "filter_count": len(filters),
+            "filters_preview": filters[:10],
+            "log_channel": self._format_channel_ref(guild, log_channel),
+            "user_blacklist_count": len(blacklist),
+            "user_blacklist_preview": blacklist[:10],
+            "impersonation_history_available": False,
+            "note": "FakeUser currently does not store structured impersonation history for AI queries.",
+        }
+
+    async def _tool_get_user_command_stats(self, args: dict, tool_context: dict) -> dict:
+        query = str(args.get("query", "") or "").strip().lower()
+        limit = self._coerce_int(args.get("limit"), 10, minimum=1, maximum=15)
+
+        def normalize(stats: dict) -> list[dict]:
+            rows = []
+            for command_name, count in (stats or {}).items():
+                try:
+                    numeric_count = int(count)
+                except (TypeError, ValueError):
+                    continue
+                if query and query not in str(command_name).lower():
+                    continue
+                rows.append({"command": str(command_name), "count": numeric_count})
+            rows.sort(key=lambda item: item["count"], reverse=True)
+            return rows[:limit]
+
+        command_usage = get_global_config("command_usage_stats", {}) or {}
+        app_command_usage = get_global_config("app_command_usage_stats", {}) or {}
+        command_errors = get_global_config("command_error_stats", {}) or {}
+        app_command_errors = get_global_config("app_command_error_stats", {}) or {}
+
+        return {
+            "query": query or None,
+            "totals": {
+                "text_usage_total": sum(int(value) for value in command_usage.values()) if command_usage else 0,
+                "slash_usage_total": sum(int(value) for value in app_command_usage.values()) if app_command_usage else 0,
+                "text_error_total": sum(int(value) for value in command_errors.values()) if command_errors else 0,
+                "slash_error_total": sum(int(value) for value in app_command_errors.values()) if app_command_errors else 0,
+            },
+            "top_text_commands": normalize(command_usage),
+            "top_slash_commands": normalize(app_command_usage),
+            "top_text_errors": normalize(command_errors),
+            "top_slash_errors": normalize(app_command_errors),
+        }
+
+    async def _execute_ai_tool(self, name: str, arguments: dict, tool_context: dict) -> dict:
+        handlers = {
+            "search_bot_docs": self._tool_search_bot_docs,
+            "get_dsize_context": self._tool_get_dsize_context,
+            "get_inventory_context": self._tool_get_inventory_context,
+            "get_economy_context": self._tool_get_economy_context,
+            "get_server_feature_status": self._tool_get_server_feature_status,
+            "get_music_status": self._tool_get_music_status,
+            "get_earthquake_status": self._tool_get_earthquake_status,
+            "get_disaster_status": self._tool_get_disaster_status,
+            "get_transport_info": self._tool_get_transport_info,
+            "get_fakeuser_status": self._tool_get_fakeuser_status,
+            "get_user_command_stats": self._tool_get_user_command_stats,
+        }
+        handler = handlers.get(name)
+        if handler is None:
+            return {"ok": False, "error": f"Unknown tool: {name}"}
+        try:
+            result = await handler(arguments or {}, tool_context or {})
+            return {
+                "ok": True,
+                "data": self._shrink_tool_data(result, max_len=self.MAX_TOOL_RESULT_LENGTH),
+            }
+        except Exception as e:
+            log(f"AI tool execution failed: {name} -> {e}", module_name="AI", level=logging.ERROR)
+            return {"ok": False, "error": str(e)}
+
+    async def _request_ai_completion(
+        self,
+        messages: list,
+        model: str,
+        image: bytes = None,
+        tools: list | None = None,
+    ):
+        kwargs = dict(
+            model=model,
+            messages=messages,
+            provider=g4f.Provider.PollinationsAI,
+        )
+        if image is not None:
+            kwargs["image"] = image
+        if tools:
+            kwargs["tools"] = tools
+            kwargs["tool_choice"] = "auto"
+            kwargs["parallel_tool_calls"] = True
+            kwargs["tool_emulation"] = True
+        return await asyncio.to_thread(
+            self.client.chat.completions.create,
+            **kwargs,
+        )
 
     @staticmethod
     def _embed_summary(embed: discord.Embed) -> str:
@@ -1141,7 +2585,12 @@ class AICommands(commands.Cog):
             response_text, model_name, response_time = await self.generate_response(
                 messages,
                 model=selected_model,
-                image=image_bytes
+                image=image_bytes,
+                tool_context={
+                    "user": user,
+                    "guild": interaction.guild,
+                    "channel": interaction.channel,
+                },
             )
 
             raw_output_chars = len(response_text)
@@ -1458,7 +2907,12 @@ class AICommands(commands.Cog):
                 response_text, model_name, response_time = await self.generate_response(
                     messages,
                     model=selected_model,
-                    image=image_bytes
+                    image=image_bytes,
+                    tool_context={
+                        "user": user,
+                        "guild": guild,
+                        "channel": ctx.channel,
+                    },
                 )
 
                 raw_output_chars = len(response_text)
