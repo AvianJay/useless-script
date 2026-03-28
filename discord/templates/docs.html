@@ -195,9 +195,40 @@
             color: var(--text-secondary);
             line-height: 1.75;
         }
-        .markdown-doc ul {
+        .markdown-doc ul,
+        .markdown-doc ol {
             margin: 0.75rem 0 1rem 1.25rem;
-            padding-left: 0.5rem;
+            padding-left: 1rem;
+        }
+        .markdown-doc ol {
+            list-style-position: outside;
+        }
+        .markdown-doc li {
+            margin-bottom: 0.35rem;
+        }
+        .markdown-doc table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 0.85rem 0 1rem;
+        }
+        .markdown-doc th {
+            text-align: left;
+            padding: 0.6rem 0.75rem;
+            background: rgba(88, 101, 242, 0.12);
+            color: var(--accent);
+            font-size: 0.85rem;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        .markdown-doc td {
+            padding: 0.6rem 0.75rem;
+            border-bottom: 1px solid rgba(255,255,255,0.05);
+            font-size: 0.92rem;
+            color: var(--text-secondary);
+            vertical-align: top;
+        }
+        .markdown-doc tr:last-child td {
+            border-bottom: none;
         }
         .markdown-doc pre {
             background: rgba(88, 101, 242, 0.1);
@@ -364,6 +395,22 @@
             .cmd-table code {
                 font-size: 0.78rem;
                 padding: 0.1rem 0.3rem;
+            }
+            .markdown-doc ul,
+            .markdown-doc ol {
+                margin-left: 0;
+                padding-left: 1.2rem;
+            }
+            .markdown-doc table {
+                display: block;
+                overflow-x: auto;
+                -webkit-overflow-scrolling: touch;
+                max-width: 100%;
+            }
+            .markdown-doc th,
+            .markdown-doc td {
+                padding: 0.5rem 0.6rem;
+                font-size: 0.82rem;
             }
             .doc-note {
                 font-size: 0.82rem;

@@ -4,21 +4,25 @@
 
 ## 一般用戶指令（/item）
 
-- 指令?`/item list` | 說明?查看你擁有的物品（可選伺服器 / 全域範圍）
-- 指令?`/item use` | 說明?使用一個物品，觸發該物品的回呼功能
-- 指令?`/item drop` | 說明?丟棄物品到目前頻道，其他人可撿起
-- 指令?`/item give` | 說明?將物品贈送給另一位用戶
+| 指令 | 說明 |
+| --- | --- |
+| `/item list` | 查看你擁有的物品（可選伺服器 / 全域範圍） |
+| `/item use` | 使用一個物品，觸發該物品的回呼功能 |
+| `/item drop` | 丟棄物品到目前頻道，其他人可撿起 |
+| `/item give` | 將物品贈送給另一位用戶 |
 
 ## 管理員指令（/itemmod）管理員
 
-- 指令?`/itemmod give` | 說明?給予用戶指定物品
-- 指令?`/itemmod remove` | 說明?移除用戶的指定物品
-- 指令?`/itemmod list` | 說明?列出所有可用的物品（含自定義）
-- 指令?`/itemmod listuser` | 說明?查看指定用戶擁有的物品
-- 指令?`/itemmod addcustom` | 說明?新增伺服器自定義物品
-- 指令?`/itemmod removecustom` | 說明?移除伺服器自定義物品
-- 指令?`/itemmod editcustom` | 說明?編輯自定義物品的內容、定價等設定
-- 指令?`/itemmod listcustom` | 說明?列出本伺服器所有自定義物品
+| 指令 | 說明 |
+| --- | --- |
+| `/itemmod give` | 給予用戶指定物品 |
+| `/itemmod remove` | 移除用戶的指定物品 |
+| `/itemmod list` | 列出所有可用的物品（含自定義） |
+| `/itemmod listuser` | 查看指定用戶擁有的物品 |
+| `/itemmod addcustom` | 新增伺服器自定義物品 |
+| `/itemmod removecustom` | 移除伺服器自定義物品 |
+| `/itemmod editcustom` | 編輯自定義物品的內容、定價等設定 |
+| `/itemmod listcustom` | 列出本伺服器所有自定義物品 |
 
 ## 丟棄與撿起
 
@@ -32,12 +36,14 @@
 
 管理員可透過 `/itemmod addcustom` 建立伺服器專屬物品。自定義物品使用時會傳送預設的文字內容。
 
-- 參數?`name` | 說明?物品名稱（最長 100 字元）
-- 參數?`content` | 說明?使用時傳送的文字內容（最長 2000 字元）
-- 參數?`description` | 說明?物品說明（可選）
-- 參數?`list_in_shop` | 說明?是否上架到伺服器商店
-- 參數?`price` | 說明?商店定價（上架時必填，單位：伺服幣）
-- 參數?`remove_after_use` | 說明?使用後是否自動消耗（預設是）
-- 參數?`ephemeral_response` | 說明?使用後回應是否只有自己看得到（預設否）
+| 參數 | 說明 |
+| --- | --- |
+| `name` | 物品名稱（最長 100 字元） |
+| `content` | 使用時傳送的文字內容（最長 2000 字元） |
+| `description` | 物品說明（可選） |
+| `list_in_shop` | 是否上架到伺服器商店 |
+| `price` | 商店定價（上架時必填，單位：伺服幣） |
+| `remove_after_use` | 使用後是否自動消耗（預設是） |
+| `ephemeral_response` | 使用後回應是否只有自己看得到（預設否） |
 
 > **提示：**自定義物品若設定 `list_in_shop = 是` 並指定定價，會出現在經濟系統的伺服器商店中，其他用戶可以購買。
