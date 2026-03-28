@@ -3,6 +3,7 @@ from globalenv import bot, start_bot, set_server_config, get_server_config, conf
 from discord.ext import commands
 from discord import app_commands
 import asyncio
+import copy
 import random
 import json
 import io
@@ -10,8 +11,179 @@ import aiohttp
 from logger import log
 import logging
 import re
+from datetime import datetime
 
 MAX_AUTOREPLY_CONFIGS = 50
+AUTOREPLY_RATE_LIMIT_COUNT = 3
+AUTOREPLY_RATE_LIMIT_WINDOW = 1.0
+AUTOREPLY_TEMPLATE_PACKS = {
+    "daily_greetings": {
+        "display_name": "日常問候包",
+        "description": "早安 / 午安 / 晚安 / 安安，會依現在時間給不同回覆。",
+        "rules": [
+            {
+                "trigger": ["早安", "早啊", "早安安"],
+                "response": [
+                    "{if:{hour}>=5:{if:{hour}<=11:早安 {user}，記得先喝水再開始今天。:現在都 {time24} 了，這句早安是不是送得有點晚。}:現在才 {time24}，你這不是早安，是熬夜安。}",
+                    "{if:{hour}>=5:{if:{hour}<=11:早安！今天的待辦也要像鬧鐘一樣準時解決。:已經 {time} 了，現在比較像補發早安。}:凌晨 {time24} 說早安，我先當你還沒睡。}",
+                    "{if:{hour}>=5:{if:{hour}<=11:早安！願你今天的 bug 比咖啡還少。:這個時間點說早安，我很難不吐槽一下。}:現在 {time24}，太拼了吧，先睡一下也行。}",
+                ],
+                "mode": "starts_with",
+                "reply": True,
+                "channel_mode": "all",
+                "channels": [],
+                "random_chance": 100,
+            },
+            {
+                "trigger": ["午安", "午安安"],
+                "response": [
+                    "{if:{hour}>=12:{if:{hour}<=17:午安 {user}，午餐有吃飽嗎？:現在都 {time24} 了，午安已經快過期了。}:現在才 {time24}，午安得等中午以後。}",
+                    "{if:{hour}>=12:{if:{hour}<=17:午安！記得補充能量，下午繼續衝。:這個時間講午安，我只能說你時差有點自由。}:太早啦，現在還不到午安時段。}",
+                    "{if:{hour}>=12:{if:{hour}<=17:午安！願你下午的進度比訊息通知還快。:現在是 {time}，這句午安送得很有個性。}:還沒中午就在午安，先等等太陽。}",
+                ],
+                "mode": "starts_with",
+                "reply": True,
+                "channel_mode": "all",
+                "channels": [],
+                "random_chance": 100,
+            },
+            {
+                "trigger": ["晚安", "晚安安"],
+                "response": [
+                    "{if:{hour}>=18:晚安 {user}，今天辛苦了，該休息就休息。:現在才 {time24}，這麼早就在晚安嗎？}",
+                    "{if:{hour}>=18:晚安！希望你今晚的夢裡沒有 bug。:還沒到晚上耶，現在是 {time24}。}",
+                    "{if:{hour}>=18:晚安安，記得把今天的煩惱留給昨天。:白天就晚安，這睡意來得有點快。}",
+                ],
+                "mode": "starts_with",
+                "reply": True,
+                "channel_mode": "all",
+                "channels": [],
+                "random_chance": 100,
+            },
+            {
+                "trigger": ["安安"],
+                "response": [
+                    "{if:{hour}<=11:安安，這邊自動幫你翻譯成早安。:else:{if:{hour}<=17:安安，午安版本已送達。:else:{if:{hour}>=22:安安，差不多可以準備睡了。:安安，晚餐時間過得還順利嗎？}}}",
+                    "{if:{hour}<=11:安安！今天也要精神滿滿。:else:{if:{hour}<=17:安安！下午場繼續加油。:else:{if:{hour}>=22:安安，夜深了，記得休息。:安安，今晚也辛苦了。}}}",
+                    "{if:{hour}<=11:安安，早晨模式啟動。:else:{if:{hour}<=17:安安，午后模式啟動。:else:{if:{hour}>=22:安安，睡前模式啟動。:安安，晚上模式啟動。}}}",
+                ],
+                "mode": "equals",
+                "reply": True,
+                "channel_mode": "all",
+                "channels": [],
+                "random_chance": 100,
+            },
+        ],
+    },
+    "mini_commands": {
+        "display_name": "迷你指令包",
+        "description": "幾個常用小指令，像是 !say、!time、!date、!roll。",
+        "rules": [
+            {
+                "trigger": ["!say"],
+                "response": ["用法：!say 內容"],
+                "mode": "equals",
+                "reply": False,
+                "channel_mode": "all",
+                "channels": [],
+                "random_chance": 100,
+            },
+            {
+                "trigger": ["!say "],
+                "response": ["你剛剛說的是：{contentsplit:1}"],
+                "mode": "starts_with",
+                "reply": False,
+                "channel_mode": "all",
+                "channels": [],
+                "random_chance": 100,
+            },
+            {
+                "trigger": ["!time", "!時間"],
+                "response": ["現在時間：{date} {time}（{time24}）"],
+                "mode": "equals",
+                "reply": False,
+                "channel_mode": "all",
+                "channels": [],
+                "random_chance": 100,
+            },
+            {
+                "trigger": ["!date", "!日期"],
+                "response": ["今天是 {date}"],
+                "mode": "equals",
+                "reply": False,
+                "channel_mode": "all",
+                "channels": [],
+                "random_chance": 100,
+            },
+            {
+                "trigger": ["!roll", "!dice", "!骰子"],
+                "response": ["🎲 {user} 擲出了 {randint:1-100}"],
+                "mode": "equals",
+                "reply": False,
+                "channel_mode": "all",
+                "channels": [],
+                "random_chance": 100,
+            },
+        ],
+    },
+    "chat_fun": {
+        "display_name": "聊天互動包",
+        "description": "簽到、點名、運勢和好耶反應，適合先讓聊天室動起來。",
+        "rules": [
+            {
+                "trigger": ["抽一個人", "抽人", "點名"],
+                "response": [
+                    "{random_user}，就是你了，不要偷看旁邊。",
+                    "今天就決定是 {random_user} 了。",
+                    "我選中了 {random_user}，恭喜中獎。",
+                ],
+                "mode": "equals",
+                "reply": False,
+                "channel_mode": "all",
+                "channels": [],
+                "random_chance": 100,
+            },
+            {
+                "trigger": ["簽到", "!checkin", "!簽到"],
+                "response": [
+                    "{embedtitle:簽到成功}{embeddescription:{user} 在 {date} {time24} 完成簽到}{embedcolor:57F287}{embedfield:伺服器:{guild}}{embedfooter:AutoReply Template}{embedtime:true}"
+                ],
+                "mode": "equals",
+                "reply": False,
+                "channel_mode": "all",
+                "channels": [],
+                "random_chance": 100,
+            },
+            {
+                "trigger": ["今日運勢", "運勢"],
+                "response": [
+                    "{if:{random}>=90:今日運勢：{random}/100，大吉，適合把卡住的事一次解開。:else:{if:{random}>=60:今日運勢：{random}/100，普通偏順，穩穩來就好。:今日運勢：{random}/100，先補咖啡再開工會比較穩。}}"
+                ],
+                "mode": "equals",
+                "reply": False,
+                "channel_mode": "all",
+                "channels": [],
+                "random_chance": 100,
+            },
+            {
+                "trigger": ["好耶"],
+                "response": [
+                    "好耶！！！{react:🎉}{react:🔥}",
+                    "真的好耶。{react:🎉}",
+                ],
+                "mode": "contains",
+                "reply": False,
+                "channel_mode": "all",
+                "channels": [],
+                "random_chance": 100,
+            },
+        ],
+    },
+}
+
+
+class TemplateSyntaxError(ValueError):
+    pass
 
 
 def percent_random(percent: int) -> bool:
@@ -38,6 +210,23 @@ async def list_autoreply_autocomplete(interaction: discord.Interaction, current:
     return choices[:25]  # Discord 限制最多 25 個選項
 
 
+async def list_template_pack_autocomplete(interaction: discord.Interaction, current: str):
+    lowered_current = current.lower()
+    choices = []
+    for pack_key, pack_data in AUTOREPLY_TEMPLATE_PACKS.items():
+        searchable_text = " ".join([
+            pack_key,
+            pack_data["display_name"],
+            pack_data["description"],
+        ]).lower()
+        if lowered_current and lowered_current not in searchable_text:
+            continue
+        display_name = f'{pack_data["display_name"]} ({pack_key})'
+        display_name = display_name if len(display_name) <= 100 else display_name[:97] + "..."
+        choices.append(app_commands.Choice(name=display_name, value=pack_key))
+    return choices[:25]
+
+
 def parse_channel_mention(mention: str) -> str:
     match = re.match(r"<#(\d+)>", mention)
     if match:
@@ -54,6 +243,548 @@ class AutoReply(commands.GroupCog, name="autoreply"):
 
     def __init__(self, bot):
         self.bot = bot
+        self.autoreply_rate_limit = commands.CooldownMapping.from_cooldown(
+            AUTOREPLY_RATE_LIMIT_COUNT,
+            AUTOREPLY_RATE_LIMIT_WINDOW,
+            commands.BucketType.guild
+        )
+
+    def _is_rate_limited(self, message: discord.Message) -> bool:
+        bucket = self.autoreply_rate_limit.get_bucket(message)
+        if bucket is None:
+            return False
+        return bucket.update_rate_limit() is not None
+
+    def _parse_embed_color(self, value: str):
+        raw_value = str(value).strip().lower()
+        if not raw_value:
+            return None
+        if raw_value.startswith("#"):
+            raw_value = raw_value[1:]
+        elif raw_value.startswith("0x"):
+            raw_value = raw_value[2:]
+        try:
+            color_value = int(raw_value, 16)
+        except ValueError:
+            return None
+        if 0 <= color_value <= 0xFFFFFF:
+            return color_value
+        return None
+
+    def _parse_bool(self, value: str) -> bool:
+        return str(value).strip().lower() in {"1", "true", "yes", "y", "on"}
+
+    def _split_top_level(self, value: str, separator: str = ":"):
+        depth = 0
+        for index, char in enumerate(value):
+            if char == "{":
+                depth += 1
+            elif char == "}":
+                depth = max(0, depth - 1)
+            elif char == separator and depth == 0:
+                return value[:index], value[index + 1:]
+        return value, None
+
+    def _find_matching_brace(self, value: str, start_index: int) -> int:
+        depth = 0
+        for index in range(start_index, len(value)):
+            char = value[index]
+            if char == "{":
+                depth += 1
+            elif char == "}":
+                depth -= 1
+                if depth == 0:
+                    return index
+                if depth < 0:
+                    return -1
+        return -1
+
+    def _find_top_level_token(self, value: str, token: str):
+        depth = 0
+        for index, char in enumerate(value):
+            if char == "{":
+                depth += 1
+            elif char == "}":
+                depth = max(0, depth - 1)
+            elif depth == 0 and value.startswith(token, index):
+                return index
+        return -1
+
+    def _split_if_branches(self, branch_block: str):
+        else_index = self._find_top_level_token(branch_block, ":else:")
+        if else_index != -1:
+            return branch_block[:else_index], branch_block[else_index + len(":else:"):]
+
+        true_branch, false_branch = self._split_top_level(branch_block)
+        if false_branch is None:
+            return branch_block, ""
+        return true_branch, false_branch
+
+    def _validate_if_payload(self, payload: str):
+        condition_text, branch_block = self._split_top_level(payload)
+        if branch_block is None:
+            raise TemplateSyntaxError("Invalid if syntax")
+
+        left_text, operator, right_text = self._split_condition_expression(condition_text)
+        if operator is None or not left_text.strip() or not right_text.strip():
+            raise TemplateSyntaxError("Invalid if condition")
+
+        true_branch, false_branch = self._split_if_branches(branch_block)
+
+        self._validate_template_syntax(left_text)
+        self._validate_template_syntax(right_text)
+        self._validate_template_syntax(true_branch)
+        self._validate_template_syntax(false_branch)
+
+    def _validate_template_syntax(self, response: str):
+        if not response:
+            return
+
+        index = 0
+        response_length = len(response)
+        embed_prefixes = (
+            "embedtitle:",
+            "embeddescription:",
+            "embedimage:",
+            "embedcolor:",
+            "embedthumbnail:",
+            "embedfooter:",
+            "embedauthor:",
+            "embedtime:",
+            "embedfield:",
+        )
+
+        while index < response_length:
+            if response[index] == "}":
+                raise TemplateSyntaxError("Unexpected closing brace")
+
+            if response[index] != "{":
+                index += 1
+                continue
+
+            closing_index = self._find_matching_brace(response, index)
+            if closing_index == -1:
+                raise TemplateSyntaxError("Unclosed brace")
+
+            token = response[index + 1:closing_index]
+            lowered = token.lower()
+
+            if lowered.startswith("if:"):
+                self._validate_if_payload(token[3:])
+            elif lowered.startswith("embedfield:"):
+                field_name, field_value = self._split_top_level(token[len("embedfield:"):])
+                if field_value is None:
+                    raise TemplateSyntaxError("Invalid embed field syntax")
+                self._validate_template_syntax(field_name)
+                self._validate_template_syntax(field_value)
+            elif lowered.startswith(embed_prefixes):
+                prefix, payload = token.split(":", 1)
+                if not payload:
+                    raise TemplateSyntaxError(f"Empty {prefix} payload")
+                self._validate_template_syntax(payload)
+            elif lowered.startswith("contentsplit") and not re.fullmatch(r"contentsplit:(-?\d+)|contentsplit\((-?\d+)\)", token, re.IGNORECASE):
+                raise TemplateSyntaxError("Invalid contentsplit syntax")
+            elif lowered.startswith("randint:") and not re.fullmatch(r"randint:(\d+)-(\d+)", token, re.IGNORECASE):
+                raise TemplateSyntaxError("Invalid randint syntax")
+            elif lowered.startswith("timemd:") and not re.fullmatch(r"timemd:[tTdDfFrR]", token, re.IGNORECASE):
+                raise TemplateSyntaxError("Invalid timemd syntax")
+            elif lowered.startswith("sticker:") and not re.fullmatch(r"sticker:\d+", token, re.IGNORECASE):
+                raise TemplateSyntaxError("Invalid sticker syntax")
+            elif lowered.startswith("react:") and not token[len("react:"):].strip():
+                raise TemplateSyntaxError("Empty react payload")
+
+            index = closing_index + 1
+
+    def _split_condition_expression(self, expression: str):
+        operators = ("==", "!=", "<=", ">=")
+        depth = 0
+        index = 0
+        while index < len(expression) - 1:
+            char = expression[index]
+            if char == "{":
+                depth += 1
+            elif char == "}":
+                depth = max(0, depth - 1)
+            elif depth == 0:
+                for operator in operators:
+                    if expression.startswith(operator, index):
+                        left = expression[:index]
+                        right = expression[index + len(operator):]
+                        return left, operator, right
+            index += 1
+        return None, None, None
+
+    def _coerce_condition_value(self, value: str):
+        raw_value = str(value).strip()
+        lowered = raw_value.lower()
+        if lowered == "true":
+            return True
+        if lowered == "false":
+            return False
+        try:
+            return float(raw_value)
+        except ValueError:
+            return raw_value
+
+    def _compare_condition_values(self, left: str, operator: str, right: str) -> bool:
+        left_value = self._coerce_condition_value(left)
+        right_value = self._coerce_condition_value(right)
+
+        if operator == "==":
+            return left_value == right_value
+        if operator == "!=":
+            return left_value != right_value
+
+        if type(left_value) is not type(right_value):
+            left_value = str(left).strip()
+            right_value = str(right).strip()
+
+        if operator == "<=":
+            return left_value <= right_value
+        if operator == ">=":
+            return left_value >= right_value
+        return False
+
+    async def _resolve_if_expressions(self, response: str, message: discord.Message, context: dict) -> str:
+        if not response or "{if:" not in response:
+            return response
+
+        output = []
+        index = 0
+        response_length = len(response)
+
+        while index < response_length:
+            if response[index] != "{" or not response.startswith("{if:", index):
+                output.append(response[index])
+                index += 1
+                continue
+
+            payload_start = index + 4
+            cursor = payload_start
+            depth = 1
+            while cursor < response_length:
+                if response[cursor] == "{":
+                    depth += 1
+                elif response[cursor] == "}":
+                    depth -= 1
+                    if depth == 0:
+                        break
+                cursor += 1
+
+            if cursor >= response_length or depth != 0:
+                output.append(response[index])
+                index += 1
+                continue
+
+            payload = response[payload_start:cursor]
+            condition_text, branch_block = self._split_top_level(payload)
+            if branch_block is None:
+                output.append(response[index:cursor + 1])
+                index = cursor + 1
+                continue
+
+            true_branch, false_branch = self._split_if_branches(branch_block)
+
+            left_text, operator, right_text = self._split_condition_expression(condition_text)
+            if operator is None:
+                output.append(response[index:cursor + 1])
+                index = cursor + 1
+                continue
+
+            resolved_left = await self._resolve_response_variables(left_text.strip(), message, context)
+            resolved_right = await self._resolve_response_variables(right_text.strip(), message, context)
+            chosen_branch = true_branch if self._compare_condition_values(resolved_left, operator, resolved_right) else false_branch
+            chosen_branch = await self._resolve_if_expressions(chosen_branch, message, context)
+            output.append(chosen_branch)
+            index = cursor + 1
+
+        return "".join(output)
+
+    def _extract_embed_tokens(self, response: str):
+        directives = {
+            "embedtitle:": "title",
+            "embeddescription:": "description",
+            "embedimage:": "image",
+            "embedcolor:": "color",
+            "embedthumbnail:": "thumbnail",
+            "embedfooter:": "footer",
+            "embedauthor:": "author",
+            "embedtime:": "time",
+            "embedfield:": "field",
+        }
+        extracted = {
+            "title": None,
+            "description": None,
+            "image": None,
+            "color": None,
+            "thumbnail": None,
+            "footer": None,
+            "author": None,
+            "time": None,
+            "fields": [],
+        }
+        output = []
+        index = 0
+        response_length = len(response)
+
+        while index < response_length:
+            if response[index] != "{":
+                output.append(response[index])
+                index += 1
+                continue
+
+            matched_prefix = None
+            matched_key = None
+            remaining = response[index + 1:].lower()
+            for prefix, key in directives.items():
+                if remaining.startswith(prefix):
+                    matched_prefix = prefix
+                    matched_key = key
+                    break
+
+            if matched_prefix is None:
+                output.append(response[index])
+                index += 1
+                continue
+
+            value_start = index + 1 + len(matched_prefix)
+            cursor = value_start
+            depth = 1
+            while cursor < response_length:
+                if response[cursor] == "{":
+                    depth += 1
+                elif response[cursor] == "}":
+                    depth -= 1
+                    if depth == 0:
+                        break
+                cursor += 1
+
+            if cursor >= response_length or depth != 0:
+                output.append(response[index])
+                index += 1
+                continue
+
+            payload = response[value_start:cursor]
+            if matched_key == "field":
+                field_name, field_value = self._split_top_level(payload)
+                if field_value is not None:
+                    extracted["fields"].append((field_name, field_value))
+            else:
+                extracted[matched_key] = payload
+            index = cursor + 1
+
+        return "".join(output), extracted
+
+    async def _resolve_response_variables(self, response: str, message: discord.Message, context: dict) -> str:
+        if not response:
+            return response
+
+        response = await self._resolve_if_expressions(response, message, context)
+
+        guild = message.guild
+        author = message.author
+        channel = message.channel
+        now = context["now"]
+        am_pm = "上午" if now.hour < 12 else "下午"
+        hour_12 = now.hour % 12 or 12
+        content_parts = message.content.split()
+        role_name = getattr(getattr(author, "top_role", None), "name", "")
+        channel_name = getattr(channel, "name", "")
+
+        replacements = {
+            "{user}": author.mention,
+            "{content}": message.content,
+            "{guild}": guild.name,
+            "{server}": guild.name,
+            "{channel}": channel_name,
+            "{author}": author.name,
+            "{member}": author.name,
+            "{role}": role_name,
+            "{id}": str(author.id),
+            "{date}": now.strftime("%Y/%m/%d"),
+            "{year}": now.strftime("%Y"),
+            "{month}": now.strftime("%m"),
+            "{day}": now.strftime("%d"),
+            "{time}": f"{am_pm} {hour_12:02d}:{now.minute:02d}",
+            "{time24}": now.strftime("%H:%M"),
+            "{hour}": now.strftime("%H"),
+            "{minute}": now.strftime("%M"),
+            "{second}": now.strftime("%S"),
+            "\\n": "\n",
+            "\\t": "\t"
+        }
+
+        for key, value in replacements.items():
+            response = response.replace(key, value)
+
+        def content_split_replacer(match):
+            try:
+                index = match.group(1) if match.group(1) is not None else match.group(2)
+                return content_parts[int(index)]
+            except (ValueError, IndexError):
+                return ""
+
+        response = re.sub(r"\{contentsplit:(-?\d+)\}|\{contentsplit\((-?\d+)\)\}", content_split_replacer, response)
+
+        if "{random}" in response:
+            response = response.replace("{random}", context["random"])
+
+        randint_pattern = re.compile(r"\{randint:(\d+)-(\d+)\}")
+
+        def randint_replacer(match):
+            try:
+                min_val = int(match.group(1))
+                max_val = int(match.group(2))
+                if min_val > max_val:
+                    min_val, max_val = max_val, min_val
+                return str(random.randint(min_val, max_val))
+            except (ValueError, IndexError):
+                return match.group(0)
+
+        response = randint_pattern.sub(randint_replacer, response)
+
+        if "{random_user}" in response:
+            if context["random_user"] is None:
+                try:
+                    users = set()
+                    async for history_message in channel.history(limit=50):
+                        if not history_message.author.bot:
+                            users.add(history_message.author)
+                    if users:
+                        context["random_user"] = random.choice(list(users)).display_name
+                    else:
+                        context["random_user"] = "查無使用者"
+                except Exception as e:
+                    log(f"?? {{random_user}} ??隤? {e}", module_name="AutoReply", level=logging.ERROR)
+                    context["random_user"] = "無法取得使用者"
+            response = response.replace("{random_user}", context["random_user"])
+
+        current_timestamp = str(int(now.timestamp()))
+
+        def timemd_replacer(match):
+            style = match.group(1)
+            if style == "r":
+                style = "R"
+            return f"<t:{current_timestamp}:{style}>"
+
+        response = re.sub(r"\{timemd:([tTdDfFrR])\}", timemd_replacer, response)
+
+        return response
+
+    async def _build_embed_from_tokens(self, extracted: dict, message: discord.Message, context: dict):
+        embed_requested = any(
+            extracted[key] is not None
+            for key in ("title", "description", "image", "color", "thumbnail", "footer", "author", "time")
+        ) or bool(extracted["fields"])
+        if not embed_requested:
+            return None
+
+        embed = discord.Embed()
+
+        if extracted["title"] is not None:
+            title = (await self._resolve_response_variables(extracted["title"], message, context)).strip()
+            if title:
+                embed.title = title
+
+        if extracted["description"] is not None:
+            description = (await self._resolve_response_variables(extracted["description"], message, context)).strip()
+            if description:
+                embed.description = description
+
+        if extracted["image"] is not None:
+            image_url = (await self._resolve_response_variables(extracted["image"], message, context)).strip()
+            if image_url:
+                embed.set_image(url=image_url)
+
+        if extracted["thumbnail"] is not None:
+            thumbnail_url = (await self._resolve_response_variables(extracted["thumbnail"], message, context)).strip()
+            if thumbnail_url:
+                embed.set_thumbnail(url=thumbnail_url)
+
+        if extracted["footer"] is not None:
+            footer_text = (await self._resolve_response_variables(extracted["footer"], message, context)).strip()
+            if footer_text:
+                embed.set_footer(text=footer_text)
+
+        if extracted["author"] is not None:
+            author_name = (await self._resolve_response_variables(extracted["author"], message, context)).strip()
+            if author_name:
+                embed.set_author(name=author_name)
+
+        if extracted["color"] is not None:
+            color_value = (await self._resolve_response_variables(extracted["color"], message, context)).strip()
+            parsed_color = self._parse_embed_color(color_value)
+            if parsed_color is not None:
+                embed.color = discord.Colour(parsed_color)
+
+        if extracted["time"] is not None:
+            time_value = (await self._resolve_response_variables(extracted["time"], message, context)).strip()
+            if self._parse_bool(time_value):
+                embed.timestamp = context["now"]
+
+        for field_name, field_value in extracted["fields"][:25]:
+            resolved_name = (await self._resolve_response_variables(field_name, message, context)).strip()
+            resolved_value = (await self._resolve_response_variables(field_value, message, context)).strip()
+            if resolved_name and resolved_value:
+                embed.add_field(name=resolved_name, value=resolved_value, inline=False)
+
+        return embed
+
+    async def _process_response_v2(self, response: str, message: discord.Message) -> tuple:
+        """Process autoreply response text and optional sticker/embed payloads."""
+
+        try:
+            self._validate_template_syntax(response)
+        except TemplateSyntaxError as e:
+            log(f"自動回覆模板語法錯誤: {e}", module_name="AutoReply", level=logging.WARNING)
+            return "", None, None
+
+        react_pattern = re.compile(r"\{react:([^\}]+)\}")
+
+        def react_replacer(match):
+            emoji_str = match.group(1).strip()
+            try:
+                if emoji_str.isdigit():
+                    emoji = discord.utils.get(message.guild.emojis, id=int(emoji_str))
+                    if emoji:
+                        asyncio.create_task(message.add_reaction(emoji))
+                else:
+                    asyncio.create_task(message.add_reaction(emoji_str))
+                log(f"自動回覆觸發，對訊息添加反應：{emoji_str}", module_name="AutoReply", level=logging.INFO)
+            except Exception as e:
+                log(f"處理 {{react:{emoji_str}}} 時發生錯誤: {e}", module_name="AutoReply", level=logging.ERROR)
+            return ""
+
+        response = react_pattern.sub(react_replacer, response)
+
+        sticker = None
+        sticker_pattern = re.compile(r"\{sticker:(\d+)\}")
+
+        def sticker_replacer(match):
+            sticker_id = int(match.group(1))
+            try:
+                nonlocal sticker
+                sticker = discord.utils.get(message.guild.stickers, id=sticker_id)
+            except Exception as e:
+                log(f"處理 {{sticker:{sticker_id}}} 時發生錯誤: {e}", module_name="AutoReply", level=logging.ERROR)
+            return ""
+
+        response = sticker_pattern.sub(sticker_replacer, response)
+        response, extracted_embed = self._extract_embed_tokens(response)
+
+        template_context = {
+            "now": datetime.now().astimezone(),
+            "random": str(random.randint(1, 100)),
+            "random_user": None,
+        }
+        response = await self._resolve_if_expressions(response, message, template_context)
+        response = (await self._resolve_response_variables(response, message, template_context)).strip()
+        embed = await self._build_embed_from_tokens(extracted_embed, message, template_context)
+
+        if not response and not sticker and embed is None:
+            return "", None, None
+
+        return response, sticker, embed
 
     @app_commands.command(name="add", description="新增自動回覆")
     @app_commands.describe(
@@ -319,6 +1050,83 @@ class AutoReply(commands.GroupCog, name="autoreply"):
                 log(f"自動回覆被快速新增：`{det}`。", module_name="AutoReply", level=logging.INFO, user=interaction.user, guild=interaction.guild)
                 return
         await interaction.response.send_message(f"找不到觸發字串 `{trigger}` 的自動回覆。")
+
+    @app_commands.command(name="template", description="套用內建自動回覆範本包")
+    @app_commands.describe(pack="要套用的範本包", merge="是否與現有規則合併")
+    @app_commands.choices(
+        merge=[
+            app_commands.Choice(name="是", value="True"),
+            app_commands.Choice(name="否（覆蓋現有規則）", value="False"),
+        ]
+    )
+    @app_commands.autocomplete(pack=list_template_pack_autocomplete)
+    @app_commands.default_permissions(manage_guild=True)
+    async def apply_autoreply_template(self, interaction: discord.Interaction, pack: str, merge: str = "True"):
+        pack_data = AUTOREPLY_TEMPLATE_PACKS.get(pack)
+        if pack_data is None:
+            await interaction.response.send_message("找不到這個範本包。", ephemeral=True)
+            return
+
+        guild_id = interaction.guild.id
+        merge_enabled = (merge == "True")
+        current_autoreplies = get_server_config(guild_id, "autoreplies", [])
+        template_rules = copy.deepcopy(pack_data["rules"])
+        skipped_duplicates = 0
+
+        if merge_enabled:
+            final_autoreplies = list(current_autoreplies)
+            existing_rules = {
+                json.dumps(rule, ensure_ascii=False, sort_keys=True)
+                for rule in current_autoreplies
+            }
+            for rule in template_rules:
+                serialized_rule = json.dumps(rule, ensure_ascii=False, sort_keys=True)
+                if serialized_rule in existing_rules:
+                    skipped_duplicates += 1
+                    continue
+                existing_rules.add(serialized_rule)
+                final_autoreplies.append(rule)
+            added_count = len(final_autoreplies) - len(current_autoreplies)
+        else:
+            final_autoreplies = template_rules
+            added_count = len(template_rules)
+
+        if len(final_autoreplies) > MAX_AUTOREPLY_CONFIGS:
+            await interaction.response.send_message(
+                f"套用後會超過 {MAX_AUTOREPLY_CONFIGS} 筆自動回覆上限，這次未套用。",
+                ephemeral=True
+            )
+            return
+
+        set_server_config(guild_id, "autoreplies", final_autoreplies)
+
+        preview_lines = []
+        for index, rule in enumerate(pack_data["rules"][:5], start=1):
+            trigger_preview = ", ".join(rule["trigger"])
+            trigger_preview = trigger_preview if len(trigger_preview) <= 40 else trigger_preview[:37] + "..."
+            preview_lines.append(f"{index}. {rule['mode']} / {trigger_preview}")
+        preview_text = "\n".join(preview_lines) if preview_lines else "無"
+
+        embed = discord.Embed(
+            title="已套用自動回覆範本包",
+            description=pack_data["description"],
+            color=0x57F287 if added_count else 0xFEE75C,
+        )
+        embed.add_field(name="範本包", value=f"`{pack_data['display_name']}` (`{pack}`)", inline=False)
+        embed.add_field(name="套用模式", value="合併現有規則" if merge_enabled else "覆蓋現有規則")
+        embed.add_field(name="新增規則", value=str(added_count))
+        if merge_enabled:
+            embed.add_field(name="略過重複", value=str(skipped_duplicates))
+        embed.add_field(name="目前總數", value=str(len(final_autoreplies)))
+        embed.add_field(name="內含規則", value=preview_text, inline=False)
+        await interaction.response.send_message(embed=embed)
+        log(
+            f"自動回覆範本包被套用：{pack}，模式：{'merge' if merge_enabled else 'replace'}，新增 {added_count} 筆，略過 {skipped_duplicates} 筆。",
+            module_name="AutoReply",
+            level=logging.INFO,
+            user=interaction.user,
+            guild=interaction.guild
+        )
     
     @app_commands.command(name="export", description="匯出自動回覆設定為 JSON")
     @app_commands.default_permissions(administrator=True)
@@ -415,10 +1223,16 @@ class AutoReply(commands.GroupCog, name="autoreply"):
                 self.channel = channel
                 self.content = content
 
+            async def add_reaction(self, emoji):
+                return None
+
         mock_message = MockMessage(guild, author, channel, "這是一則測試訊息內容。")
 
-        final_response = await self._process_response(response, mock_message)
-        await interaction.response.send_message(f"測試結果：\n{final_response}")
+        final_response, _, embed = await self._process_response_v2(response, mock_message)
+        preview_text = final_response or None
+        if preview_text is None and embed is None:
+            preview_text = "沒有可輸出的內容"
+        await interaction.response.send_message(preview_text, embed=embed)
     
     @app_commands.command(name="help", description="顯示自動回覆的使用說明")
     async def autoreply_help(self, interaction: discord.Interaction):
@@ -509,6 +1323,120 @@ class AutoReply(commands.GroupCog, name="autoreply"):
             @discord.ui.button(label="提示：測試替換", style=discord.ButtonStyle.secondary)
             async def hint(self, i: discord.Interaction, _: discord.ui.Button):
                 await i.response.send_message(f"可用 {await get_command_mention('autoreply', 'test')} 測試變數替換結果。", ephemeral=True)
+
+        await interaction.followup.send(embed=embed, view=HelpView())
+
+    @app_commands.command(name="help", description="顯示自動回覆功能說明")
+    async def autoreply_help(self, interaction: discord.Interaction):
+        await interaction.response.defer()
+        embed = discord.Embed(
+            title="自動回覆使用說明",
+            description="支援變數替換、條件判斷、Embed 回覆、貼圖/反應。",
+            color=0x00FF00,
+        )
+
+        embed.add_field(
+            name="指令說明",
+            value=(
+                f"{await get_command_mention('autoreply', 'add')}：新增規則\n"
+                f"{await get_command_mention('autoreply', 'edit')} / {await get_command_mention('autoreply', 'remove')}：修改或刪除規則\n"
+                f"{await get_command_mention('autoreply', 'quickadd')}：快速補 trigger / response\n"
+                f"{await get_command_mention('autoreply', 'template')}：套用內建範本包\n"
+                f"{await get_command_mention('autoreply', 'list')} / {await get_command_mention('autoreply', 'clear')}：查看或清空規則\n"
+                f"{await get_command_mention('autoreply', 'export')} / {await get_command_mention('autoreply', 'import')}：匯出或匯入 JSON\n"
+                f"{await get_command_mention('autoreply', 'ignore')}：設定全域忽略/白名單頻道\n"
+                f"{await get_command_mention('autoreply', 'test')}：預覽變數、條件與 embed 效果"
+            ),
+            inline=False,
+        )
+
+        embed.add_field(
+            name="基本變數",
+            value=(
+                "- `{user}` / `{author}` / `{member}` / `{id}`\n"
+                "- `{content}` / `{channel}` / `{guild}` / `{server}` / `{role}`\n"
+                "- `\\n` 換行、`\\t` Tab"
+            ),
+            inline=False,
+        )
+
+        embed.add_field(
+            name="日期與條件",
+            value=(
+                "- `{date}` `{year}` `{month}` `{day}`\n"
+                "- `{time}` `{time24}` `{hour}` `{minute}` `{second}`\n"
+                "- `{timemd:t}` ~ `{timemd:R}` 產生 Discord 時間戳\n"
+                "- `{contentsplit:0}` 取 `content.split()[0]`\n"
+                "- `{if:{contentsplit:1}==true:Yes:else:No}`\n"
+                "- 也支援 `{if:{contentsplit:1}==true:Yes:No}` 與 `{if:條件:成立內容}`\n"
+                "- 支援 `==` `!=` `<=` `>=`"
+            ),
+            inline=False,
+        )
+
+        embed.add_field(
+            name="Embed / 進階效果",
+            value=(
+                "- `{random}` / `{randint:min-max}` / `{random_user}`\n"
+                "- `{react:emoji}`、`{sticker:sticker_id}`\n"
+                "- `{embedtitle:標題}` `{embeddescription:內容}`\n"
+                "- `{embedimage:連結}` `{embedthumbnail:連結}`\n"
+                "- `{embedcolor:HEX}` `{embedfooter:文字}` `{embedauthor:名字}`\n"
+                "- `{embedtime:true}` `{embedfield:欄位名:欄位值}`\n"
+                "- Embed 內文也可繼續使用其他 `{}` 變數"
+            ),
+            inline=False,
+        )
+
+        embed.add_field(
+            name="內建範本包",
+            value=(
+                "- `daily_greetings`：早安 / 午安 / 晚安 / 安安\n"
+                "- `mini_commands`：!say / !time / !date / !roll\n"
+                "- `chat_fun`：簽到 / 抽一個人 / 今日運勢 / 好耶\n"
+                f"- 可用 {await get_command_mention('autoreply', 'template')} 直接套用"
+            ),
+            inline=False,
+        )
+
+        embed.add_field(
+            name="注意事項",
+            value=(
+                "- 同一個 guild 每 1 秒最多發 3 條 autoreply\n"
+                "- 模板語法錯誤時會直接輸出空字串\n"
+                "- 日期 / 時間變數跟隨機器人主機本地時區\n"
+            ),
+            inline=False,
+        )
+
+        class HelpView(discord.ui.View):
+            def __init__(self):
+                super().__init__(timeout=60)
+
+            async def on_timeout(self):
+                for child in self.children:
+                    child.disabled = True
+                await interaction.edit_original_response(view=self)
+                self.stop()
+
+            @discord.ui.button(label="顯示更多範例", style=discord.ButtonStyle.primary)
+            async def examples(self, i: discord.Interaction, _: discord.ui.Button):
+                ex = discord.Embed(title="自動回覆範例", color=0x00FF00)
+                ex.description = (
+                    "1) `歡迎 {user} 來到 {guild}！`\n"
+                    "2) `{if:{contentsplit:1}==true:你輸入了 true:else:你沒有輸入 true}`\n"
+                    "3) `{embedtitle:簽到成功}{embeddescription:{user} 在 {date} {time24} 完成簽到}{embedcolor:57F287}`\n"
+                    "4) `第 2 個單字是：{contentsplit:1}`\n"
+                    "5) `剛剛聊天室隨機點名：{random_user}`"
+                )
+                await i.response.send_message(embed=ex, ephemeral=True)
+
+            @discord.ui.button(label="提示：測試替換", style=discord.ButtonStyle.secondary)
+            async def hint(self, i: discord.Interaction, _: discord.ui.Button):
+                await i.response.send_message(
+                    f"可用 {await get_command_mention('autoreply', 'test')} 測試變數、條件與 embed 結果。",
+                    ephemeral=True
+                )
 
         await interaction.followup.send(embed=embed, view=HelpView())
 
@@ -695,21 +1623,26 @@ class AutoReply(commands.GroupCog, name="autoreply"):
                 raw_response = random.choice(responses)
                 
                 # 使用新的處理方法
-                final_response, sticker = await self._process_response(raw_response, message)
+                final_response, sticker, embed = await self._process_response_v2(raw_response, message)
                 
-                if not final_response and not sticker:
+                if not final_response and not sticker and embed is None:
+                    return
+
+                if self._is_rate_limited(message):
                     return
                 
                 try:
+                    send_content = final_response or None
                     if ar.get("reply", False):
-                        await message.reply(final_response, stickers=[sticker] if sticker else [], allowed_mentions=discord.AllowedMentions(users=True, roles=False, everyone=False))
+                        await message.reply(send_content, embed=embed, stickers=[sticker] if sticker else [], allowed_mentions=discord.AllowedMentions(users=True, roles=False, everyone=False))
                     else:
-                        await message.channel.send(final_response, stickers=[sticker] if sticker else [], allowed_mentions=discord.AllowedMentions(users=True, roles=False, everyone=False))
+                        await message.channel.send(send_content, embed=embed, stickers=[sticker] if sticker else [], allowed_mentions=discord.AllowedMentions(users=True, roles=False, everyone=False))
                     
                     # 記錄日誌
                     # 避免 trigger 太長
-                    trigger_used = triggers[0] if triggers else "unknown" 
-                    log(f"自動回覆觸發：`{trigger_used[:10]}...` 回覆內容：`{final_response[:10]}...`。", 
+                    trigger_used = triggers[0] if triggers else "unknown"
+                    response_preview = final_response or (embed.title if embed and embed.title else "[embed]")
+                    log(f"自動回覆觸發：`{trigger_used[:10]}...` 回覆內容：`{response_preview[:10]}...`。", 
                         module_name="AutoReply", level=logging.INFO, user=message.author, guild=message.guild)
                 except discord.HTTPException as e:
                     log(f"自動回覆發送失敗: {e}", module_name="AutoReply", level=logging.ERROR)

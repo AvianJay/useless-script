@@ -677,6 +677,7 @@ translations = {
     "radio": "電台",
     "station": "頻道",
     "level": "等級",
+    "template": "模板",
 }
 class CommandNameTranslator(app_commands.Translator):
     async def translate(
