@@ -2553,16 +2553,16 @@ class AICommands(commands.Cog):
             "3. 從 bot docs 裡找 /help 或 /tutorial 的用法重點。"
         )
 
-    @app_commands.command(name="ai-tool-smoke", description="顯示測試 AI tool calling 的建議 prompt")
-    @app_commands.allowed_installs(guilds=True, users=True)
-    @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
-    async def ai_tool_smoke_prompt(self, interaction: discord.Interaction):
-        prompt = self._build_tool_smoke_prompt(interaction.guild is not None)
-        await interaction.response.send_message(
-            f"把下面這段直接丟給 `/ai` 測試：\n```text\n{prompt}\n```",
-            ephemeral=True,
-            allowed_mentions=SAFE_MENTIONS,
-        )
+    # @app_commands.command(name="ai-tool-smoke", description="顯示測試 AI tool calling 的建議 prompt")
+    # @app_commands.allowed_installs(guilds=True, users=True)
+    # @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
+    # async def ai_tool_smoke_prompt(self, interaction: discord.Interaction):
+    #     prompt = self._build_tool_smoke_prompt(interaction.guild is not None)
+    #     await interaction.response.send_message(
+    #         f"把下面這段直接丟給 `/ai` 測試：\n```text\n{prompt}\n```",
+    #         ephemeral=True,
+    #         allowed_mentions=SAFE_MENTIONS,
+    #     )
 
     @app_commands.command(name="ai", description="與 AI 助手對話")
     @app_commands.describe(
