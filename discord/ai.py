@@ -393,6 +393,13 @@ SYSTEM_PROMPT = """你是 Discord 群組裡的搞笑 AI，個性抽象。
 # Component V2 回應建立器 (使用 LayoutView)
 # ============================================
 
+TOOL_USAGE_PROMPT = """工具使用規則：
+- 當問題需要查 bot docs、dsize、背包、經濟、伺服器功能設定、音樂播放狀態、地震資訊、停班停課資訊、交通資訊、FakeUser 設定或指令統計時，優先使用工具，不要只靠猜測。
+- 如果使用者問的是「現在」「目前」「最近」「這個伺服器」「我的」這類需要即時資料的問題，優先查最相關的一到數個工具。
+- 先用最少的工具解決問題，不要無意義地重複呼叫同一個工具。
+- 如果工具回傳資料不足或該資料目前沒有被結構化儲存，就直接說明限制，不要編造。
+- 正常回答時把工具結果整理成人話，不要把 JSON 原樣貼給使用者，除非使用者特別要求。"""
+
 class AIResponseBuilder:
     """使用 Component V2 (LayoutView) 建立 AI 回應"""
     
@@ -2424,6 +2431,40 @@ class AICommands(commands.Cog):
 
         return choices[:25]
 
+    @staticmethod
+    def _build_tool_smoke_prompt(in_guild: bool = True) -> str:
+        shared = (
+            "請先判斷哪些問題需要查工具，並實際使用工具，不要只靠記憶猜測。\n"
+            "如果某項資料查不到，就直接說查不到，不要編造。\n"
+            "最後請用一句話列出你實際呼叫了哪些工具名稱。"
+        )
+        if in_guild:
+            return (
+                f"{shared}\n\n"
+                "請依序回答：\n"
+                "1. 先檢查這個伺服器目前有哪些 AI 可查的功能設定有開著。\n"
+                "2. 再查我的經濟餘額、背包摘要、dsize 摘要。\n"
+                "3. 從 bot docs 裡找 /help 或 /tutorial 的用法重點。"
+            )
+        return (
+            f"{shared}\n\n"
+            "請依序回答：\n"
+            "1. 查我的全域經濟餘額與背包摘要。\n"
+            "2. 查我的 dsize 摘要。\n"
+            "3. 從 bot docs 裡找 /help 或 /tutorial 的用法重點。"
+        )
+
+    @app_commands.command(name="ai-tool-smoke", description="顯示測試 AI tool calling 的建議 prompt")
+    @app_commands.allowed_installs(guilds=True, users=True)
+    @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
+    async def ai_tool_smoke_prompt(self, interaction: discord.Interaction):
+        prompt = self._build_tool_smoke_prompt(interaction.guild is not None)
+        await interaction.response.send_message(
+            f"把下面這段直接丟給 `/ai` 測試：\n```text\n{prompt}\n```",
+            ephemeral=True,
+            allowed_mentions=SAFE_MENTIONS,
+        )
+
     @app_commands.command(name="ai", description="與 AI 助手對話")
     @app_commands.describe(
         message="你想問 AI 的問題或訊息",
@@ -2570,7 +2611,7 @@ class AICommands(commands.Cog):
                 except Exception as e:
                     log(f"獲取頻道訊息失敗: {e}", module_name="AI", level=logging.WARNING)
             
-            system_with_context = f"{SYSTEM_PROMPT}\n\n{user_context}{guild_info}{channel_context}{emoji_context}"
+            system_with_context = f"{SYSTEM_PROMPT}\n\n{TOOL_USAGE_PROMPT}\n\n{user_context}{guild_info}{channel_context}{emoji_context}"
             
             messages = [{"role": "system", "content": system_with_context}]
             messages.extend(ConversationManager.format_for_api(history))
@@ -2892,7 +2933,7 @@ class AICommands(commands.Cog):
                     except Exception as e:
                         log(f"獲取頻道訊息失敗: {e}", module_name="AI", level=logging.WARNING)
                 
-                system_with_context = f"{SYSTEM_PROMPT}\n\n{user_context}{guild_info}{channel_context}{emoji_context}"
+                system_with_context = f"{SYSTEM_PROMPT}\n\n{TOOL_USAGE_PROMPT}\n\n{user_context}{guild_info}{channel_context}{emoji_context}"
                 
                 messages = [{"role": "system", "content": system_with_context}]
                 messages.extend(ConversationManager.format_for_api(history))
@@ -3052,6 +3093,14 @@ class AICommands(commands.Cog):
         view = AIResponseBuilder.create_history_view(recent_history, len(history))
         
         await ctx.reply(view=view, allowed_mentions=discord.AllowedMentions.none())
+
+    @commands.command(name="ai-tool-smoke", aliases=["aitoolsmoke"])
+    async def ai_tool_smoke_text(self, ctx: commands.Context):
+        prompt = self._build_tool_smoke_prompt(ctx.guild is not None)
+        await ctx.reply(
+            f"把下面這段直接丟給 `!ai` 或 `/ai` 測試：\n```text\n{prompt}\n```",
+            allowed_mentions=SAFE_MENTIONS,
+        )
 
 
 asyncio.run(bot.add_cog(AICommands(bot)))
