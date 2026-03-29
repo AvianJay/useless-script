@@ -550,7 +550,7 @@ class Music(commands.GroupCog, group_name=app_commands.locale_str("music")):
                     break
                 await asyncio.sleep(5)
 
-    def _check_valid_query(query: str) -> bool:
+    def _check_valid_query(self, query: str) -> bool:
         if not query:
             return False
 
