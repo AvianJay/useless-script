@@ -397,6 +397,7 @@ SYSTEM_PROMPT = """你是 Discord 群組裡的搞笑 AI，個性抽象。
 TOOL_USAGE_PROMPT = """工具使用規則：
 - 當問題需要查 bot docs、dsize、背包、經濟、伺服器功能設定、音樂播放狀態、地震資訊、停班停課資訊、交通資訊、FakeUser 設定或指令統計時，優先使用工具，不要只靠猜測。
 - 如果使用者問的是「現在」「目前」「最近」「這個伺服器」「我的」這類需要即時資料的問題，優先查最相關的一到數個工具。
+- 如果問題依賴外部網路上的最新資訊、新聞、價格、版本、公告或今天/近期的狀態，而且本地工具沒有資料，才使用 `search_web`。
 - 先用最少的工具解決問題，不要無意義地重複呼叫同一個工具。
 - 如果工具回傳資料不足或該資料目前沒有被結構化儲存，就直接說明限制，不要編造。
 - 正常回答時把工具結果整理成人話，不要把 JSON 原樣貼給使用者，除非使用者特別要求。"""
@@ -620,6 +621,10 @@ class AICommands(commands.Cog):
     MAX_EMOJI_CONTEXT_COUNT = 80
     MAX_TOOL_ITERATIONS = 4
     MAX_TOOL_RESULT_LENGTH = 3500
+    WEB_SEARCH_TOOL_MODEL = "gemini-search"
+    WEB_SEARCH_TOOL_MAX_CHARS = 500
+    WEB_SEARCH_TOOL_MAX_TOKENS = 240
+    WEB_SEARCH_TOOL_MAX_SOURCES = 4
     EMOJI_NAME_PATTERN = re.compile(r'(?<!<):([a-zA-Z0-9_]{2,32}):')
     
     def __init__(self, bot):
@@ -1034,6 +1039,65 @@ class AICommands(commands.Cog):
             "preview": serialized[: max_len - 15] + "...",
         }
 
+    @classmethod
+    def _extract_urls_from_text(cls, text: str, limit: int | None = None) -> list[str]:
+        if not isinstance(text, str) or not text.strip():
+            return []
+        max_urls = limit or cls.WEB_SEARCH_TOOL_MAX_SOURCES
+        urls: list[str] = []
+        seen: set[str] = set()
+        for pattern in (r"\((https?://[^)\s]+)\)", r"(https?://[^\s>\])]+)"):
+            for match in re.finditer(pattern, text):
+                url = str(match.group(1) or "").strip().rstrip(".,)")
+                if not url or url in seen:
+                    continue
+                seen.add(url)
+                urls.append(url)
+                if len(urls) >= max_urls:
+                    return urls
+        return urls
+
+    def _clean_web_search_summary(self, text: str, max_chars: int | None = None) -> str:
+        limit = max_chars or self.WEB_SEARCH_TOOL_MAX_CHARS
+        if not isinstance(text, str):
+            text = str(text or "")
+        cleaned_lines = []
+        for line in text.splitlines():
+            stripped = line.strip()
+            if not stripped:
+                continue
+            if re.match(r"^>\s*\[\d+\]", stripped):
+                continue
+            cleaned_lines.append(stripped)
+        cleaned = " ".join(cleaned_lines)
+        cleaned = re.sub(r"\[\[\d+\]\]\((https?://[^)]+)\)", "", cleaned)
+        cleaned = re.sub(r"\[(.*?)\]\((https?://[^)]+)\)", r"\1", cleaned)
+        cleaned = re.sub(r"(?:\s*>\s*){2,}", " ", cleaned)
+        cleaned = re.sub(r"\s+", " ", cleaned).strip()
+        if not cleaned:
+            cleaned = re.sub(r"\s+", " ", text).strip()
+        return self._truncate_tool_text(cleaned, max_len=limit)
+
+    def _build_web_search_messages(self, query: str, max_chars: int, include_sources: bool) -> list[dict]:
+        source_instruction = (
+            f"At the end, include up to {self.WEB_SEARCH_TOOL_MAX_SOURCES} short source URLs."
+            if include_sources
+            else "Do not include source URLs."
+        )
+        return [
+            {
+                "role": "system",
+                "content": (
+                    "Use web search to answer the user's query. "
+                    "Reply in Traditional Chinese unless the user clearly asks for another language. "
+                    f"Keep the answer within about {max_chars} characters. "
+                    "Prefer concrete dates, mention uncertainty if sources conflict, and avoid speculation. "
+                    f"{source_instruction}"
+                ),
+            },
+            {"role": "user", "content": query},
+        ]
+
     def _tool_log_preview(self, value, max_len: int = 240) -> str:
         return self._truncate_tool_text(value, max_len=max_len).replace("\n", "\\n")
 
@@ -1394,6 +1458,26 @@ class AICommands(commands.Cog):
             {
                 "type": "function",
                 "function": {
+                    "name": "search_web",
+                    "description": "Search the public web for latest external information using Pollinations Gemini. Keep results short and use this only when local tools do not have the answer.",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "query": {"type": "string"},
+                            "model": {
+                                "type": "string",
+                                "enum": ["auto", "gemini-search", "gemini-fast"],
+                            },
+                            "max_chars": {"type": "integer"},
+                            "include_sources": {"type": "boolean"},
+                        },
+                        "required": ["query"],
+                    },
+                },
+            },
+            {
+                "type": "function",
+                "function": {
                     "name": "get_dsize_context",
                     "description": "Get dsize stats, recent history, and optional leaderboard context for a user.",
                     "parameters": {
@@ -1612,6 +1696,56 @@ class AICommands(commands.Cog):
             "result_count": len(results),
             "results": results,
             "docs_url": f"{website_url}/docs" if website_url else None,
+        }
+
+    async def _tool_search_web(self, args: dict, tool_context: dict) -> dict:
+        query = str(args.get("query", "") or "").strip()
+        if not query:
+            return {"error": "query is required"}
+
+        requested_model = str(args.get("model", "auto") or "auto").strip().lower()
+        if requested_model not in {"auto", "gemini-search", "gemini-fast"}:
+            requested_model = "auto"
+        search_model = self.WEB_SEARCH_TOOL_MODEL if requested_model == "auto" else requested_model
+
+        max_chars = self._coerce_int(
+            args.get("max_chars"),
+            self.WEB_SEARCH_TOOL_MAX_CHARS,
+            minimum=120,
+            maximum=900,
+        )
+        include_sources = self._coerce_bool(args.get("include_sources"), True)
+        max_tokens = self._coerce_int(
+            max_chars // 2,
+            self.WEB_SEARCH_TOOL_MAX_TOKENS,
+            minimum=80,
+            maximum=320,
+        )
+
+        request_kwargs = {
+            "model": search_model,
+            "messages": self._build_web_search_messages(query, max_chars=max_chars, include_sources=include_sources),
+            "provider": g4f.Provider.PollinationsAI,
+            "web_search": True,
+            "max_tokens": max_tokens,
+        }
+
+        response = await asyncio.to_thread(
+            self.client.chat.completions.create,
+            **request_kwargs,
+        )
+        raw_text = str(getattr(response.choices[0].message, "content", "") or "").strip()
+        summary = self._clean_web_search_summary(raw_text, max_chars=max_chars)
+        sources = self._extract_urls_from_text(raw_text, limit=self.WEB_SEARCH_TOOL_MAX_SOURCES) if include_sources else []
+
+        return {
+            "query": query,
+            "requested_model": requested_model,
+            "search_model": search_model,
+            "returned_model": getattr(response, "model", search_model),
+            "summary": summary,
+            "sources": sources,
+            "note": "External web search results may contain stale or noisy information. Verify important facts before acting on them.",
         }
 
     async def _tool_get_dsize_context(self, args: dict, tool_context: dict) -> dict:
@@ -2317,6 +2451,7 @@ class AICommands(commands.Cog):
     async def _execute_ai_tool(self, name: str, arguments: dict, tool_context: dict) -> dict:
         handlers = {
             "search_bot_docs": self._tool_search_bot_docs,
+            "search_web": self._tool_search_web,
             "get_dsize_context": self._tool_get_dsize_context,
             "get_inventory_context": self._tool_get_inventory_context,
             "get_economy_context": self._tool_get_economy_context,
