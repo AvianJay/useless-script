@@ -106,6 +106,11 @@ class OXWU(commands.GroupCog, name="earthquake", description="OXWU 地震監測�
         
         # 註冊 Socket.IO 事件
         self._register_proxy_events()
+        log(
+            f"Configured OXWU proxy url={self.api_url} api_key={'set' if bool(self.api_key) else 'missing'}",
+            module_name="OXWU",
+            level=logging.INFO,
+        )
     
     async def _get_session(self) -> aiohttp.ClientSession:
         """取得共用的 aiohttp session"""
@@ -596,7 +601,11 @@ class OXWU(commands.GroupCog, name="earthquake", description="OXWU 地震監測�
             except asyncio.CancelledError:
                 break
             except Exception as e:
-                log(f"Proxy Socket.IO 連線失敗: {e}", module_name="OXWU", level=logging.ERROR)
+                log(
+                    f"Proxy Socket.IO connection failed ({self.api_url}): {type(e).__name__}: {e}",
+                    module_name="OXWU",
+                    level=logging.ERROR,
+                )
                 await asyncio.sleep(10)
     
     @commands.Cog.listener()
@@ -735,6 +744,8 @@ class OXWU(commands.GroupCog, name="earthquake", description="OXWU 地震監測�
         embed = discord.Embed(title="🔌 OXWU 連線狀態", color=discord.Color.blue())
         proxy_connected = bool(getattr(self.proxy_client, "_socket", None) and self.proxy_client._socket.connected)
         embed.add_field(name="Socket.IO", value="✅ 已連線" if proxy_connected else "❌ 未連線", inline=True)
+        embed.add_field(name="Proxy API", value=self.api_url or "not set", inline=False)
+        embed.add_field(name="API Key", value="configured" if self.api_key else "missing", inline=True)
         embed.add_field(name="最後速報時間", value=self.last_warning_time or "無", inline=True)
         embed.add_field(name="最後報告時間", value=self.last_report_time or "無", inline=True)
         
