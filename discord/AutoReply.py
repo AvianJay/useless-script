@@ -758,11 +758,77 @@ class AutoReply(commands.GroupCog, name="autoreply"):
             "random_chance": random_chance,
         }
 
+    def _normalize_autoreply_trigger(self, trigger: str) -> str:
+        return re.sub(r"\s+", " ", str(trigger).strip()).casefold()
+
+    def _find_duplicate_triggers_in_list(self, triggers: list[str]) -> list[str]:
+        seen = {}
+        duplicates = []
+
+        for trigger in triggers or []:
+            clean_trigger = str(trigger).strip()
+            normalized_trigger = self._normalize_autoreply_trigger(clean_trigger)
+            if not normalized_trigger:
+                continue
+
+            if normalized_trigger in seen:
+                if seen[normalized_trigger] not in duplicates:
+                    duplicates.append(seen[normalized_trigger])
+                continue
+
+            seen[normalized_trigger] = clean_trigger
+
+        return duplicates
+
+    def _find_conflicting_autoreply_triggers(self, autoreplies: list[dict], triggers: list[str], skip_rule: dict | None = None) -> list[str]:
+        existing_triggers = {}
+
+        for autoreply in autoreplies or []:
+            if skip_rule is not None and autoreply is skip_rule:
+                continue
+
+            for existing_trigger in autoreply.get("trigger", []) or []:
+                clean_trigger = str(existing_trigger).strip()
+                normalized_trigger = self._normalize_autoreply_trigger(clean_trigger)
+                if normalized_trigger and normalized_trigger not in existing_triggers:
+                    existing_triggers[normalized_trigger] = clean_trigger
+
+        conflicts = []
+        seen_conflicts = set()
+
+        for trigger in triggers or []:
+            clean_trigger = str(trigger).strip()
+            normalized_trigger = self._normalize_autoreply_trigger(clean_trigger)
+            if not normalized_trigger or normalized_trigger not in existing_triggers or normalized_trigger in seen_conflicts:
+                continue
+
+            conflicts.append(clean_trigger)
+            seen_conflicts.add(normalized_trigger)
+
+        return conflicts
+
+    def _format_autoreply_trigger_conflict_message(self, triggers: list[str], *, existing: bool) -> str:
+        preview = ", ".join(f"`{trigger}`" for trigger in triggers[:5])
+        if len(triggers) > 5:
+            preview += f" ... (+{len(triggers) - 5})"
+
+        if existing:
+            return f"這些觸發器已經存在於其他自動回覆規則中：{preview}"
+        return f"你這次新增的觸發器裡有重複項目：{preview}"
+
     def _save_new_autoreply_rule(self, guild_id: int, rule: dict) -> tuple[int, int]:
         autoreplies = get_server_config(guild_id, "autoreplies", [])
         autoreply_limit = self._get_autoreply_limit(guild_id)
         if len(autoreplies) >= autoreply_limit:
             raise ValueError(f"自動回覆上限為 {autoreply_limit} 條。")
+
+        duplicate_triggers = self._find_duplicate_triggers_in_list(rule.get("trigger", []))
+        if duplicate_triggers:
+            raise ValueError(self._format_autoreply_trigger_conflict_message(duplicate_triggers, existing=False))
+
+        conflicting_triggers = self._find_conflicting_autoreply_triggers(autoreplies, rule.get("trigger", []))
+        if conflicting_triggers:
+            raise ValueError(self._format_autoreply_trigger_conflict_message(conflicting_triggers, existing=True))
 
         autoreplies.append(rule)
         set_server_config(guild_id, "autoreplies", autoreplies)
@@ -1914,6 +1980,20 @@ class AutoReply(commands.GroupCog, name="autoreply"):
             return
         trigger = trigger.split(",")  # multiple triggers
         trigger = [t.strip() for t in trigger if t.strip()]  # remove empty triggers
+        duplicate_triggers = self._find_duplicate_triggers_in_list(trigger)
+        if duplicate_triggers:
+            await interaction.response.send_message(
+                self._format_autoreply_trigger_conflict_message(duplicate_triggers, existing=False),
+                ephemeral=True
+            )
+            return
+        conflicting_triggers = self._find_conflicting_autoreply_triggers(autoreplies, trigger)
+        if conflicting_triggers:
+            await interaction.response.send_message(
+                self._format_autoreply_trigger_conflict_message(conflicting_triggers, existing=True),
+                ephemeral=True
+            )
+            return
         response = response.split(",")  # random response
         response = [r.strip() for r in response if r.strip()]  # remove empty responses
         channels = channels.split(",") if channels else []
@@ -2114,6 +2194,20 @@ class AutoReply(commands.GroupCog, name="autoreply"):
             if det == trigger:
                 if new_trigger:
                     new_triggers = [t.strip() for t in new_trigger.split(",") if t.strip()]
+                    duplicate_triggers = self._find_duplicate_triggers_in_list(new_triggers)
+                    if duplicate_triggers:
+                        await interaction.response.send_message(
+                            self._format_autoreply_trigger_conflict_message(duplicate_triggers, existing=False),
+                            ephemeral=True
+                        )
+                        return
+                    conflicting_triggers = self._find_conflicting_autoreply_triggers(autoreplies, new_triggers, skip_rule=ar)
+                    if conflicting_triggers:
+                        await interaction.response.send_message(
+                            self._format_autoreply_trigger_conflict_message(conflicting_triggers, existing=True),
+                            ephemeral=True
+                        )
+                        return
                     ar["trigger"].extend(new_triggers)
                     ar["trigger"] = list(set(ar["trigger"]))  # remove duplicates
                 if new_response:
