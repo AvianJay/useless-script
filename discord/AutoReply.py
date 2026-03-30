@@ -383,7 +383,7 @@ class AutoReplyBuilderChannelModeSelect(discord.ui.Select):
             min_values=1,
             max_values=1,
             options=options,
-            row=0,
+            row=1,
         )
 
     async def callback(self, interaction: discord.Interaction):
@@ -406,7 +406,7 @@ class AutoReplyBuilderChannelSelect(discord.ui.ChannelSelect):
             channel_types=[discord.ChannelType.text, discord.ChannelType.news],
             min_values=0,
             max_values=max(1, min(25, text_channel_count or 1)),
-            row=1,
+            row=2,
         )
 
     async def callback(self, interaction: discord.Interaction):
@@ -453,27 +453,27 @@ class AutoReplyBuilderView(discord.ui.View):
         self.add_item(AutoReplyBuilderChannelModeSelect(self))
         self.add_item(AutoReplyBuilderChannelSelect(self))
 
-        edit_button = discord.ui.Button(label="編輯觸發與回覆", style=discord.ButtonStyle.primary, row=2)
+        edit_button = discord.ui.Button(label="編輯觸發與回覆", style=discord.ButtonStyle.primary, row=3)
         edit_button.callback = self.open_content_modal
         self.add_item(edit_button)
 
         reply_button = discord.ui.Button(
             label=f"Reply：{'開啟' if self.state['reply'] else '關閉'}",
             style=discord.ButtonStyle.success if self.state["reply"] else discord.ButtonStyle.secondary,
-            row=2,
+            row=3,
         )
         reply_button.callback = self.toggle_reply
         self.add_item(reply_button)
 
-        clear_channels_button = discord.ui.Button(label="清空頻道限制", style=discord.ButtonStyle.secondary, row=2)
+        clear_channels_button = discord.ui.Button(label="清空頻道限制", style=discord.ButtonStyle.secondary, row=3)
         clear_channels_button.callback = self.clear_channels
         self.add_item(clear_channels_button)
 
-        save_button = discord.ui.Button(label="儲存規則", style=discord.ButtonStyle.success, row=3)
+        save_button = discord.ui.Button(label="儲存規則", style=discord.ButtonStyle.success, row=4)
         save_button.callback = self.save_rule
         self.add_item(save_button)
 
-        cancel_button = discord.ui.Button(label="取消", style=discord.ButtonStyle.danger, row=3)
+        cancel_button = discord.ui.Button(label="取消", style=discord.ButtonStyle.danger, row=4)
         cancel_button.callback = self.cancel_builder
         self.add_item(cancel_button)
 
