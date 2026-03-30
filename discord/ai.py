@@ -14,7 +14,7 @@ from datetime import datetime, timezone, timedelta
 from logger import log
 import logging
 from pathlib import Path
-from doc_markdown import read_markdown_file, extract_markdown_search_entries
+from doc_markdown import read_markdown_file, extract_markdown_search_entries, load_docs_site
 
 from Economy import log_transaction, send_economy_audit_log
 
@@ -396,6 +396,7 @@ SYSTEM_PROMPT = """你是 Discord 群組裡的搞笑 AI，個性抽象。
 
 TOOL_USAGE_PROMPT = """工具使用規則：
 - 當問題需要查 bot docs、dsize、背包、經濟、伺服器功能設定、音樂播放狀態、地震資訊、停班停課資訊、交通資訊、FakeUser 設定或指令統計時，優先使用工具，不要只靠猜測。
+- 只要使用者在問某個模組/功能怎麼設定、有哪些變數、embed 怎麼寫、條件判斷怎麼寫、指令怎麼用、權限怎麼設、或文件裡有沒有範例，優先使用 `search_bot_docs`。
 - 如果使用者問的是「現在」「目前」「最近」「這個伺服器」「我的」這類需要即時資料的問題，優先查最相關的一到數個工具。
 - 如果問題依賴外部網路上的最新資訊、新聞、價格、版本、公告或今天/近期的狀態，而且本地工具沒有資料，才使用 `search_web`。
 - 先用最少的工具解決問題，不要無意義地重複呼叫同一個工具。
@@ -632,6 +633,7 @@ class AICommands(commands.Cog):
         self.client = Client(api_key=config("pollinations_api_key", ""))
         self.rate_limits = {}  # 簡單的速率限制
         self._docs_search_cache = None
+        self._docs_feature_prompt_cache = None
 
     @staticmethod
     def _parse_model_prefix(message: str, default: str = "openai-fast") -> tuple[str, str]:
@@ -1268,6 +1270,55 @@ class AICommands(commands.Cog):
             "thumbnail": getattr(track, "thumbnail", None),
         }
 
+    def _get_docs_feature_prompt(self) -> str:
+        if self._docs_feature_prompt_cache is not None:
+            return self._docs_feature_prompt_cache
+
+        base_dir = Path(__file__).resolve().parent
+        groups, _sections = load_docs_site(base_dir / "docs")
+        lines = []
+        for group in groups:
+            title = re.sub(r"\s+", " ", str(group.get("title", "") or "")).strip()
+            items = group.get("items") or []
+            if not title or not items:
+                continue
+            item_labels = []
+            for item in items:
+                section_id = re.sub(r"\s+", " ", str(item.get("id", "") or "")).strip()
+                label = re.sub(r"\s+", " ", str(item.get("label", "") or "")).strip()
+                if label and section_id and label.lower() != section_id.lower():
+                    item_labels.append(f"{label} ({section_id})")
+                elif label or section_id:
+                    item_labels.append(label or section_id)
+            if item_labels:
+                lines.append(f"- {title}: {', '.join(item_labels)}")
+
+        if not lines:
+            self._docs_feature_prompt_cache = ""
+            return self._docs_feature_prompt_cache
+
+        self._docs_feature_prompt_cache = (
+            "Bot docs 功能總覽：\n"
+            + "\n".join(lines)
+            + "\n只要使用者提到以上模組、功能名稱、設定方式、變數、embed、條件判斷、權限、教學、範例或指令用法，就先使用 `search_bot_docs` 查 docs 再回答。"
+        )
+        return self._docs_feature_prompt_cache
+
+    def _build_system_with_context(
+        self,
+        user_context: str = "",
+        guild_info: str = "",
+        channel_context: str = "",
+        emoji_context: str = "",
+    ) -> str:
+        parts = [
+            SYSTEM_PROMPT,
+            TOOL_USAGE_PROMPT,
+            self._get_docs_feature_prompt(),
+            f"{user_context}{guild_info}{channel_context}{emoji_context}".strip(),
+        ]
+        return "\n\n".join(part for part in parts if part)
+
     def _get_docs_search_corpus(self) -> list[dict]:
         if self._docs_search_cache is not None:
             return self._docs_search_cache
@@ -1316,6 +1367,47 @@ class AICommands(commands.Cog):
                     walk_app_commands(children)
 
         walk_app_commands(self.bot.tree.get_commands())
+
+        docs_groups, docs_sections = load_docs_site(base_dir / "docs")
+        for group in docs_groups:
+            group_title = str(group.get("title", "") or "").strip()
+            items = group.get("items") or []
+            if not group_title or not items:
+                continue
+            group_text_parts = []
+            for item in items:
+                section_id = str(item.get("id", "") or "").strip()
+                label = str(item.get("label", "") or "").strip()
+                file_slug = str(item.get("file", "") or "").strip()
+                if label and section_id and label.lower() != section_id.lower():
+                    group_text_parts.append(f"{label} ({section_id})")
+                elif label or section_id:
+                    group_text_parts.append(label or section_id)
+                if file_slug:
+                    add_entry(
+                        "module",
+                        label or section_id or file_slug,
+                        f"Bot docs module {label or section_id or file_slug}. Group: {group_title}. File: {file_slug}.",
+                        f"docs/sections/{file_slug}.md",
+                    )
+            add_entry(
+                "module",
+                group_title,
+                ", ".join(group_text_parts),
+                "docs/manifest.json",
+            )
+
+        for section in docs_sections:
+            section_id = str(section.get("id", "") or "").strip()
+            label = str(section.get("label", "") or "").strip()
+            file_slug = str(section.get("file", "") or "").strip()
+            if label or section_id or file_slug:
+                add_entry(
+                    "module",
+                    label or section_id or file_slug,
+                    f"Docs section id: {section_id}. File: {file_slug}.",
+                    f"docs/sections/{file_slug}.md" if file_slug else "docs/manifest.json",
+                )
 
         markdown_docs_dir = base_dir / "docs" / "sections"
         if markdown_docs_dir.exists():
@@ -1440,7 +1532,7 @@ class AICommands(commands.Cog):
                 "type": "function",
                 "function": {
                     "name": "search_bot_docs",
-                    "description": "Search local bot docs, command help, and changelog entries.",
+                    "description": "Search local bot docs, module manuals, command help, setup guides, syntax references, variable/embedding examples, and changelog entries.",
                     "parameters": {
                         "type": "object",
                         "properties": {
@@ -1635,6 +1727,7 @@ class AICommands(commands.Cog):
     def _prepare_tool_emulation_messages(self, messages: list, tools: list[dict]) -> list[dict]:
         tool_names: list[str] = []
         tool_schemas: dict[str, dict] = {}
+        docs_feature_prompt = self._get_docs_feature_prompt()
         for tool in tools or []:
             if not isinstance(tool, dict) or tool.get("type") != "function":
                 continue
@@ -1659,8 +1752,10 @@ class AICommands(commands.Cog):
                 'Format: {"tool_calls":[{"name":"TOOL_NAME","arguments":{}}]}',
                 "You may include multiple tool calls in the array.",
                 "If no tool is needed, respond normally with plain text.",
+                "If the user is asking about bot features, docs, setup, syntax, variables, embeds, conditions, examples, permissions, or how to use a module, call search_bot_docs first.",
                 f"Available tools: {', '.join(tool_names)}",
                 f"Tool schemas: {json.dumps(tool_schemas, ensure_ascii=False)}",
+                docs_feature_prompt,
             ]
         )
         return [{"role": "system", "content": tool_prompt}, *messages]
@@ -2896,7 +2991,12 @@ class AICommands(commands.Cog):
                 except Exception as e:
                     log(f"獲取頻道訊息失敗: {e}", module_name="AI", level=logging.WARNING)
             
-            system_with_context = f"{SYSTEM_PROMPT}\n\n{TOOL_USAGE_PROMPT}\n\n{user_context}{guild_info}{channel_context}{emoji_context}"
+            system_with_context = self._build_system_with_context(
+                user_context=user_context,
+                guild_info=guild_info,
+                channel_context=channel_context,
+                emoji_context=emoji_context,
+            )
             
             messages = [{"role": "system", "content": system_with_context}]
             messages.extend(ConversationManager.format_for_api(history))
@@ -3218,7 +3318,12 @@ class AICommands(commands.Cog):
                     except Exception as e:
                         log(f"獲取頻道訊息失敗: {e}", module_name="AI", level=logging.WARNING)
                 
-                system_with_context = f"{SYSTEM_PROMPT}\n\n{TOOL_USAGE_PROMPT}\n\n{user_context}{guild_info}{channel_context}{emoji_context}"
+                system_with_context = self._build_system_with_context(
+                    user_context=user_context,
+                    guild_info=guild_info,
+                    channel_context=channel_context,
+                    emoji_context=emoji_context,
+                )
                 
                 messages = [{"role": "system", "content": system_with_context}]
                 messages.extend(ConversationManager.format_for_api(history))
