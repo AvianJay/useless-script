@@ -3,6 +3,7 @@ import discord
 import asyncio
 import logging
 import secrets
+from types import SimpleNamespace
 from globalenv import (
     bot, start_bot, get_user_data, set_user_data, get_server_config, set_server_config,
     interaction_uses_guild_scope, get_interaction_scope_guild_id,
@@ -18,6 +19,159 @@ items = []
 admin_action_callbacks = []  # Economy module hooks into this
 
 CUSTOM_ITEMS_KEY = "custom_items"
+
+
+def _get_autoreply_cog():
+    return bot.get_cog("AutoReply") or bot.get_cog("autoreply")
+
+
+class _ItemTemplateMessage:
+    def __init__(self, guild, author, channel, content):
+        self.guild = guild
+        self.author = author
+        self.channel = channel
+        self.content = content
+
+    async def add_reaction(self, emoji):
+        return None
+
+
+def _build_item_template_guild(interaction: discord.Interaction, scope_guild_id: int):
+    source_guild = interaction.guild
+    if source_guild is not None and scope_guild_id == getattr(source_guild, "id", None):
+        return source_guild
+
+    if scope_guild_id == 0:
+        guild_name = "全域"
+    elif source_guild is not None:
+        guild_name = source_guild.name
+    else:
+        guild_name = "未知伺服器"
+
+    return SimpleNamespace(
+        id=scope_guild_id,
+        name=guild_name,
+        emojis=getattr(source_guild, "emojis", []),
+        stickers=getattr(source_guild, "stickers", []),
+    )
+
+
+def _get_item_template_allowed_mentions():
+    return discord.AllowedMentions(users=True, roles=False, everyone=False)
+
+
+def _validate_custom_item_template(content: str):
+    autoreply_cog = _get_autoreply_cog()
+    if autoreply_cog is None:
+        return
+    autoreply_cog._validate_template_syntax(content)
+
+
+async def _execute_custom_item_original_edits(interaction: discord.Interaction, autoreply_cog, trigger_message: _ItemTemplateMessage, edit_actions: list[dict]):
+    for edit_action in edit_actions:
+        try:
+            await asyncio.sleep(edit_action["delay"])
+            edit_content, _, edit_embed = await autoreply_cog._render_response_segment(edit_action["template"], trigger_message)
+            if not edit_content and edit_embed is None:
+                continue
+            await interaction.edit_original_response(
+                content=edit_content or None,
+                embed=edit_embed,
+                allowed_mentions=_get_item_template_allowed_mentions(),
+            )
+        except discord.HTTPException as e:
+            log(f"Custom item delayed edit failed: {e}", module_name="ItemSystem", level=logging.ERROR)
+            return
+        except Exception as e:
+            log(f"Custom item delayed edit error: {e}", module_name="ItemSystem", level=logging.ERROR)
+            return
+
+
+async def _execute_custom_item_followup_edits(sent_message, autoreply_cog, trigger_message: _ItemTemplateMessage, edit_actions: list[dict]):
+    for edit_action in edit_actions:
+        try:
+            await asyncio.sleep(edit_action["delay"])
+            edit_content, _, edit_embed = await autoreply_cog._render_response_segment(edit_action["template"], trigger_message)
+            if not edit_content and edit_embed is None:
+                continue
+            await sent_message.edit(
+                content=edit_content or None,
+                embed=edit_embed,
+                allowed_mentions=_get_item_template_allowed_mentions(),
+            )
+        except discord.HTTPException as e:
+            log(f"Custom item followup edit failed: {e}", module_name="ItemSystem", level=logging.ERROR)
+            return
+        except Exception as e:
+            log(f"Custom item followup edit error: {e}", module_name="ItemSystem", level=logging.ERROR)
+            return
+
+
+async def _execute_custom_item_followup_stage(interaction: discord.Interaction, autoreply_cog, trigger_message: _ItemTemplateMessage, stage: dict, ephemeral_response: bool):
+    try:
+        await asyncio.sleep(stage["send_delay"])
+        followup_content, _, followup_embed = await autoreply_cog._render_response_segment(stage["template"], trigger_message)
+        if not followup_content and followup_embed is None:
+            return
+
+        sent_message = await interaction.followup.send(
+            followup_content or None,
+            embed=followup_embed,
+            ephemeral=ephemeral_response,
+            allowed_mentions=_get_item_template_allowed_mentions(),
+            wait=bool(stage["edits"]),
+        )
+
+        if stage["edits"] and sent_message is not None:
+            asyncio.create_task(_execute_custom_item_followup_edits(sent_message, autoreply_cog, trigger_message, stage["edits"]))
+    except discord.HTTPException as e:
+        log(f"Custom item delayed followup failed: {e}", module_name="ItemSystem", level=logging.ERROR)
+    except Exception as e:
+        log(f"Custom item delayed followup error: {e}", module_name="ItemSystem", level=logging.ERROR)
+
+
+async def _send_custom_item_content(interaction: discord.Interaction, item_id: str, content: str, ephemeral_response: bool):
+    autoreply_cog = _get_autoreply_cog()
+    if autoreply_cog is None:
+        await interaction.response.send_message(
+            content,
+            ephemeral=ephemeral_response,
+            allowed_mentions=_get_item_template_allowed_mentions(),
+        )
+        return
+
+    scope_guild_id = getattr(interaction, "guild_id", interaction.guild.id if interaction.guild else 0) or 0
+    mock_guild = _build_item_template_guild(interaction, int(scope_guild_id))
+    mock_message = _ItemTemplateMessage(
+        mock_guild,
+        interaction.user,
+        interaction.channel,
+        f"/item use {item_id}",
+    )
+
+    final_response, _, embed, delayed_actions = await autoreply_cog._process_response_v2(content, mock_message)
+    has_delayed_actions = bool(delayed_actions["initial_edits"] or delayed_actions["followups"])
+
+    if final_response or embed is not None:
+        await interaction.response.send_message(
+            final_response or None,
+            embed=embed,
+            ephemeral=ephemeral_response,
+            allowed_mentions=_get_item_template_allowed_mentions(),
+        )
+    elif has_delayed_actions:
+        await interaction.response.defer(ephemeral=ephemeral_response, thinking=True)
+    else:
+        await interaction.response.send_message(
+            "已使用物品。",
+            ephemeral=ephemeral_response,
+            allowed_mentions=_get_item_template_allowed_mentions(),
+        )
+
+    if delayed_actions["initial_edits"]:
+        asyncio.create_task(_execute_custom_item_original_edits(interaction, autoreply_cog, mock_message, delayed_actions["initial_edits"]))
+    for stage in delayed_actions["followups"]:
+        asyncio.create_task(_execute_custom_item_followup_stage(interaction, autoreply_cog, mock_message, stage, ephemeral_response))
 
 
 def _make_custom_text_callback(item_id: str, content: str, remove_after_use: bool = True, ephemeral_response: bool = False, worth: float = 0, revenue_share_user_id: int = None):
@@ -48,7 +202,7 @@ def _make_custom_text_callback(item_id: str, content: str, remove_after_use: boo
         else:
             # 如果不使用後移除，則補回去
             await give_item_to_user(guild_id, user_id, item_id, 1)
-        await interaction.response.send_message(content, ephemeral=ephemeral_response)
+        await _send_custom_item_content(interaction, item_id, content, ephemeral_response)
         log(f"Custom item {item_id} used by {interaction.user} in guild {guild_id}", module_name="ItemSystem")
 
     return callback
@@ -638,7 +792,7 @@ class ItemModerate(commands.GroupCog, name="itemmod", description="物品系統�
     @app_commands.command(name="addcustom", description="新增伺服器自定義物品")
     @app_commands.describe(
         name="物品名稱",
-        content="使用物品時要傳送的文字內容",
+        content="使用物品時要傳送的文字內容，可使用 AutoReply 變數",
         description="物品說明（可選，預設為「自定義物品」）",
         list_in_shop="是否上架伺服器商店",
         price="商店定價（伺服幣，僅在「上架商店」為是時有效）",
@@ -658,6 +812,11 @@ class ItemModerate(commands.GroupCog, name="itemmod", description="物品系統�
             return
         if len(content) > 2000:
             await interaction.response.send_message("文字內容不可超過 2000 字元。", ephemeral=True)
+            return
+        try:
+            _validate_custom_item_template(content.strip())
+        except Exception as e:
+            await interaction.response.send_message(f"❌ 文字內容的 AutoReply 模板語法錯誤: {e}", ephemeral=True)
             return
         if len(name) > 100:
             await interaction.response.send_message("物品名稱不可超過 100 字元。", ephemeral=True)
@@ -730,7 +889,7 @@ class ItemModerate(commands.GroupCog, name="itemmod", description="物品系統�
         item_id="要編輯的自定義物品",
         name="物品名稱",
         description="物品說明",
-        content="使用物品時要傳送的文字內容",
+        content="使用物品時要傳送的文字內容，可使用 AutoReply 變數",
         list_in_shop="是否上架伺服器商店",
         remove_after_use="使用後是否自動移除物品",
         ephemeral_response="是否以隱藏訊息方式回應使用者",
@@ -755,6 +914,11 @@ class ItemModerate(commands.GroupCog, name="itemmod", description="物品系統�
         if description is not None:
             data["description"] = description.strip()[:500]
         if content is not None:
+            try:
+                _validate_custom_item_template(content.strip())
+            except Exception as e:
+                await interaction.response.send_message(f"❌ 文字內容的 AutoReply 模板語法錯誤: {e}", ephemeral=True)
+                return
             data["content"] = content.strip()[:2000]
         if remove_after_use is not None:
             data["remove_after_use"] = remove_after_use
