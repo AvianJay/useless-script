@@ -2013,7 +2013,7 @@ class AutoReply(commands.GroupCog, name="autoreply"):
         autoreplies = get_server_config(guild_id, "autoreplies", [])
         autoreply_limit = self._get_autoreply_limit(guild_id)
         if len(autoreplies) >= autoreply_limit:
-            await interaction.response.send_message(f"自動回覆設定最多只能有 {autoreply_limit} 筆。", ephemeral=True)
+            await interaction.response.send_message(f"自動回覆設定最多只能有 {autoreply_limit} 筆。\n> 想要增加限制？\n> 前往支援伺服器開啟客服單取得支援！\n> {config('support_server_invite')}", ephemeral=True)
             return
         trigger = trigger.split(",")  # multiple triggers
         trigger = [t.strip() for t in trigger if t.strip()]  # remove empty triggers
@@ -2395,7 +2395,7 @@ class AutoReply(commands.GroupCog, name="autoreply"):
             autoreplies = new_autoreplies
         autoreply_limit = self._get_autoreply_limit(guild_id)
         if len(autoreplies) > autoreply_limit:
-            await interaction.followup.send(f"自動回覆設定最多只能有 {autoreply_limit} 筆，這次匯入未套用。")
+            await interaction.followup.send(f"自動回覆設定最多只能有 {autoreply_limit} 筆，這次匯入未套用。\n> 想要增加限制？\n> 前往支援伺服器開啟客服單取得支援！\n> {config('support_server_invite')}")
             return
         set_server_config(guild_id, "autoreplies", autoreplies)
         await interaction.followup.send("已匯入自動回覆設定。")
