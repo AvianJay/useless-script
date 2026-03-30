@@ -678,6 +678,7 @@ translations = {
     "station": "頻道",
     "level": "等級",
     "template": "模板",
+    "builder": "建造器",
 }
 class CommandNameTranslator(app_commands.Translator):
     async def translate(
