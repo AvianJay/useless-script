@@ -362,7 +362,7 @@ class AutoReplyBuilderModeSelect(discord.ui.Select):
         if not await self.builder_view.ensure_owner(interaction):
             return
         self.builder_view.state["mode"] = interaction.data["values"][0]
-        await interaction.response.defer_update()
+        await interaction.response.defer()
         await self.builder_view.refresh_message(interaction.message)
 
 
@@ -390,7 +390,7 @@ class AutoReplyBuilderChannelModeSelect(discord.ui.Select):
         if not await self.builder_view.ensure_owner(interaction):
             return
         self.builder_view.state["channel_mode"] = interaction.data["values"][0]
-        await interaction.response.defer_update()
+        await interaction.response.defer()
         await self.builder_view.refresh_message(interaction.message)
 
 
@@ -418,7 +418,7 @@ class AutoReplyBuilderChannelSelect(discord.ui.ChannelSelect):
             for channel_id in selected_values
             if str(channel_id).isdigit()
         ]
-        await interaction.response.defer_update()
+        await interaction.response.defer()
         await self.builder_view.refresh_message(interaction.message)
 
 
@@ -526,14 +526,14 @@ class AutoReplyBuilderView(discord.ui.View):
         if not await self.ensure_owner(interaction):
             return
         self.state["reply"] = not self.state["reply"]
-        await interaction.response.defer_update()
+        await interaction.response.defer()
         await self.refresh_message(interaction.message)
 
     async def clear_channels(self, interaction: discord.Interaction):
         if not await self.ensure_owner(interaction):
             return
         self.state["channels"] = []
-        await interaction.response.defer_update()
+        await interaction.response.defer()
         await self.refresh_message(interaction.message)
 
     async def save_rule(self, interaction: discord.Interaction):
@@ -585,7 +585,7 @@ class AutoReplyBuilderView(discord.ui.View):
     async def cancel_builder(self, interaction: discord.Interaction):
         if not await self.ensure_owner(interaction):
             return
-        await interaction.response.defer_update()
+        await interaction.response.defer()
         for child in self.children:
             child.disabled = True
         self.stop()

@@ -302,67 +302,67 @@ class QuickSetupView(discord.ui.View):
 
     async def _on_scamtrap_channel(self, interaction: discord.Interaction):
         self.config["channel_id"] = str(interaction.data["values"][0])
-        await interaction.response.defer_update()
+        await interaction.response.defer()
         await interaction.message.edit(embed=self._get_embed(interaction.guild), view=self)
 
     async def _on_escape_punish_select(self, interaction: discord.Interaction):
         self.config["punishment"] = interaction.data["values"][0]
-        await interaction.response.defer_update()
+        await interaction.response.defer()
         await interaction.message.edit(embed=self._get_embed(interaction.guild), view=self)
 
     async def _on_escape_duration_select(self, interaction: discord.Interaction):
         self.config["duration"] = interaction.data["values"][0]
-        await interaction.response.defer_update()
+        await interaction.response.defer()
         await interaction.message.edit(embed=self._get_embed(interaction.guild), view=self)
 
     async def _on_h1_length_select(self, interaction: discord.Interaction):
         self.config["max_length"] = interaction.data["values"][0]
-        await interaction.response.defer_update()
+        await interaction.response.defer()
         await interaction.message.edit(embed=self._get_embed(interaction.guild), view=self)
 
     async def _on_emojis_select(self, interaction: discord.Interaction):
         self.config["max_emojis"] = interaction.data["values"][0]
-        await interaction.response.defer_update()
+        await interaction.response.defer()
         await interaction.message.edit(embed=self._get_embed(interaction.guild), view=self)
 
     async def _on_uispam_count_select(self, interaction: discord.Interaction):
         self.config["max_count"] = interaction.data["values"][0]
-        await interaction.response.defer_update()
+        await interaction.response.defer()
         await interaction.message.edit(embed=self._get_embed(interaction.guild), view=self)
 
     async def _on_uispam_window_select(self, interaction: discord.Interaction):
         self.config["time_window"] = interaction.data["values"][0]
-        await interaction.response.defer_update()
+        await interaction.response.defer()
         await interaction.message.edit(embed=self._get_embed(interaction.guild), view=self)
 
     async def _on_raid_joins_select(self, interaction: discord.Interaction):
         self.config["max_joins"] = interaction.data["values"][0]
-        await interaction.response.defer_update()
+        await interaction.response.defer()
         await interaction.message.edit(embed=self._get_embed(interaction.guild), view=self)
 
     async def _on_raid_window_select(self, interaction: discord.Interaction):
         self.config["time_window"] = interaction.data["values"][0]
-        await interaction.response.defer_update()
+        await interaction.response.defer()
         await interaction.message.edit(embed=self._get_embed(interaction.guild), view=self)
 
     async def _on_spam_messages_select(self, interaction: discord.Interaction):
         self.config["max_messages"] = interaction.data["values"][0]
-        await interaction.response.defer_update()
+        await interaction.response.defer()
         await interaction.message.edit(embed=self._get_embed(interaction.guild), view=self)
 
     async def _on_spam_window_select(self, interaction: discord.Interaction):
         self.config["time_window"] = interaction.data["values"][0]
-        await interaction.response.defer_update()
+        await interaction.response.defer()
         await interaction.message.edit(embed=self._get_embed(interaction.guild), view=self)
 
     async def _on_spam_similarity_select(self, interaction: discord.Interaction):
         self.config["similarity"] = interaction.data["values"][0]
-        await interaction.response.defer_update()
+        await interaction.response.defer()
         await interaction.message.edit(embed=self._get_embed(interaction.guild), view=self)
 
     async def _on_automod_detect_channel(self, interaction: discord.Interaction):
         self.config["log_channel"] = str(interaction.data["values"][0])
-        await interaction.response.defer_update()
+        await interaction.response.defer()
         await interaction.message.edit(embed=self._get_embed(interaction.guild), view=self)
 
     async def _on_action_select(self, interaction: discord.Interaction):
@@ -372,7 +372,7 @@ class QuickSetupView(discord.ui.View):
             await interaction.response.send_modal(modal)
             return
         self.config["action"] = value
-        await interaction.response.defer_update()
+        await interaction.response.defer()
         await interaction.message.edit(embed=self._get_embed(interaction.guild), view=self)
 
     async def _on_finish(self, interaction: discord.Interaction):
