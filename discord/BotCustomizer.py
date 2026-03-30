@@ -71,6 +71,7 @@ class HumanReviewView(discord.ui.View):
                     response.raise_for_status()
                     log(f"人工審核通過，橫幅已更新", module_name="BotCustomizer")
             elif self.review_type == "bio":
+                self.bio_text += f"\n\n----------\n{bot.user.name}#{bot.user.discriminator} - {config('website_url', 'https://example.com')}"
                 url = f"https://discord.com/api/v10/guilds/{self.guild_id}/members/@me"
                 headers = {"Authorization": f"Bot {bot.http.token}"}
                 payload = {"bio": self.bio_text}
@@ -460,6 +461,7 @@ class BotCustomizer(commands.GroupCog, name="change"):
                     embed.color = discord.Color.green()
                     embed.set_field_at(2, name="目前狀態", value="擁有者提交，直接更新關於我", inline=False)
                     await msg.edit(embed=embed)
+            bio += f"\n\n----------\n{bot.user.name}#{bot.user.discriminator} - {config('website_url', 'https://example.com')}"
             url = f"https://discord.com/api/v10/guilds/{guild_id}/members/@me"
             headers = {"Authorization": f"Bot {bot.http.token}"}
             payload = {"bio": bio}
