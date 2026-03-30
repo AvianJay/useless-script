@@ -90,7 +90,7 @@ AUTOREPLY_TEMPLATE_PACKS = {
             },
             {
                 "trigger": ["!say "],
-                "response": ["你剛剛說的是：{contentsplit:1}"],
+                "response": ["你剛剛說的是：{contentsplit:1-}"],
                 "mode": "starts_with",
                 "reply": False,
                 "channel_mode": "all",
@@ -320,19 +320,129 @@ class AutoReply(commands.GroupCog, name="autoreply"):
             return branch_block, ""
         return true_branch, false_branch
 
+    def _split_top_level_all(self, value: str, token: str):
+        parts = []
+        depth = 0
+        last_index = 0
+        token_length = len(token)
+        index = 0
+
+        while index <= len(value) - token_length:
+            char = value[index]
+            if char == "{":
+                depth += 1
+                index += 1
+                continue
+            if char == "}":
+                depth = max(0, depth - 1)
+                index += 1
+                continue
+            if depth == 0 and value.startswith(token, index):
+                parts.append(value[last_index:index])
+                index += token_length
+                last_index = index
+                continue
+            index += 1
+
+        parts.append(value[last_index:])
+        return parts
+
+    def _parse_contentsplit_token(self, token: str):
+        legacy_match = re.fullmatch(r"contentsplit\((-?\d+)\)", token, re.IGNORECASE)
+        if legacy_match:
+            return "index", int(legacy_match.group(1)), None
+
+        if not token.lower().startswith("contentsplit:"):
+            raise TemplateSyntaxError("Invalid contentsplit syntax")
+
+        spec = token[len("contentsplit:"):].strip()
+        if re.fullmatch(r"\d+", spec):
+            return "index", int(spec), None
+
+        range_match = re.fullmatch(r"(\d*)-(\d*)", spec)
+        if range_match and (range_match.group(1) or range_match.group(2)):
+            start = int(range_match.group(1)) if range_match.group(1) else None
+            end = int(range_match.group(2)) if range_match.group(2) else None
+            return "range", start, end
+
+        raise TemplateSyntaxError("Invalid contentsplit syntax")
+
+    def _resolve_contentsplit_token(self, token: str, content_parts: list[str]) -> str:
+        try:
+            split_type, start_value, end_value = self._parse_contentsplit_token(token)
+        except TemplateSyntaxError:
+            return ""
+
+        if split_type == "index":
+            try:
+                return content_parts[start_value]
+            except IndexError:
+                return ""
+
+        start_index = 0 if start_value is None else start_value
+        if end_value is None:
+            selected_parts = content_parts[start_index:]
+        else:
+            if start_index > end_value:
+                return ""
+            selected_parts = content_parts[start_index:end_value + 1]
+        return " ".join(selected_parts)
+
+    def _validate_condition_expression(self, expression: str):
+        or_parts = self._split_top_level_all(expression, "||")
+        if len(or_parts) > 1:
+            for part in or_parts:
+                if not part.strip():
+                    raise TemplateSyntaxError("Invalid if condition")
+                self._validate_condition_expression(part)
+            return
+
+        and_parts = self._split_top_level_all(expression, "&&")
+        if len(and_parts) > 1:
+            for part in and_parts:
+                if not part.strip():
+                    raise TemplateSyntaxError("Invalid if condition")
+                self._validate_condition_expression(part)
+            return
+
+        left_text, operator, right_text = self._split_condition_expression(expression)
+        if operator is None or not left_text.strip() or not right_text.strip():
+            raise TemplateSyntaxError("Invalid if condition")
+
+        self._validate_template_syntax(left_text)
+        self._validate_template_syntax(right_text)
+
+    async def _evaluate_condition_expression(self, expression: str, message: discord.Message, context: dict) -> bool:
+        or_parts = self._split_top_level_all(expression, "||")
+        if len(or_parts) > 1:
+            for part in or_parts:
+                if await self._evaluate_condition_expression(part, message, context):
+                    return True
+            return False
+
+        and_parts = self._split_top_level_all(expression, "&&")
+        if len(and_parts) > 1:
+            for part in and_parts:
+                if not await self._evaluate_condition_expression(part, message, context):
+                    return False
+            return True
+
+        left_text, operator, right_text = self._split_condition_expression(expression)
+        if operator is None:
+            return False
+
+        resolved_left = await self._resolve_response_variables(left_text.strip(), message, context)
+        resolved_right = await self._resolve_response_variables(right_text.strip(), message, context)
+        return self._compare_condition_values(resolved_left, operator, resolved_right)
+
     def _validate_if_payload(self, payload: str):
         condition_text, branch_block = self._split_top_level(payload)
         if branch_block is None:
             raise TemplateSyntaxError("Invalid if syntax")
 
-        left_text, operator, right_text = self._split_condition_expression(condition_text)
-        if operator is None or not left_text.strip() or not right_text.strip():
-            raise TemplateSyntaxError("Invalid if condition")
-
+        self._validate_condition_expression(condition_text)
         true_branch, false_branch = self._split_if_branches(branch_block)
 
-        self._validate_template_syntax(left_text)
-        self._validate_template_syntax(right_text)
         self._validate_template_syntax(true_branch)
         self._validate_template_syntax(false_branch)
 
@@ -382,8 +492,8 @@ class AutoReply(commands.GroupCog, name="autoreply"):
                 if not payload:
                     raise TemplateSyntaxError(f"Empty {prefix} payload")
                 self._validate_template_syntax(payload)
-            elif lowered.startswith("contentsplit") and not re.fullmatch(r"contentsplit:(-?\d+)|contentsplit\((-?\d+)\)", token, re.IGNORECASE):
-                raise TemplateSyntaxError("Invalid contentsplit syntax")
+            elif lowered.startswith("contentsplit"):
+                self._parse_contentsplit_token(token)
             elif lowered.startswith("randint:") and not re.fullmatch(r"randint:(\d+)-(\d+)", token, re.IGNORECASE):
                 raise TemplateSyntaxError("Invalid randint syntax")
             elif lowered.startswith("timemd:") and not re.fullmatch(r"timemd:[tTdDfFrR]", token, re.IGNORECASE):
@@ -485,15 +595,8 @@ class AutoReply(commands.GroupCog, name="autoreply"):
 
             true_branch, false_branch = self._split_if_branches(branch_block)
 
-            left_text, operator, right_text = self._split_condition_expression(condition_text)
-            if operator is None:
-                output.append(response[index:cursor + 1])
-                index = cursor + 1
-                continue
-
-            resolved_left = await self._resolve_response_variables(left_text.strip(), message, context)
-            resolved_right = await self._resolve_response_variables(right_text.strip(), message, context)
-            chosen_branch = true_branch if self._compare_condition_values(resolved_left, operator, resolved_right) else false_branch
+            condition_result = await self._evaluate_condition_expression(condition_text, message, context)
+            chosen_branch = true_branch if condition_result else false_branch
             chosen_branch = await self._resolve_if_expressions(chosen_branch, message, context)
             output.append(chosen_branch)
             index = cursor + 1
@@ -618,13 +721,10 @@ class AutoReply(commands.GroupCog, name="autoreply"):
             response = response.replace(key, value)
 
         def content_split_replacer(match):
-            try:
-                index = match.group(1) if match.group(1) is not None else match.group(2)
-                return content_parts[int(index)]
-            except (ValueError, IndexError):
-                return ""
+            token = match.group(1)
+            return self._resolve_contentsplit_token(token, content_parts)
 
-        response = re.sub(r"\{contentsplit:(-?\d+)\}|\{contentsplit\((-?\d+)\)\}", content_split_replacer, response)
+        response = re.sub(r"\{(contentsplit:[^{}]+|contentsplit\(-?\d+\))\}", content_split_replacer, response)
 
         if "{random}" in response:
             response = response.replace("{random}", context["random"])
@@ -1366,10 +1466,10 @@ class AutoReply(commands.GroupCog, name="autoreply"):
                 "- `{date}` `{year}` `{month}` `{day}`\n"
                 "- `{time}` `{time24}` `{hour}` `{minute}` `{second}`\n"
                 "- `{timemd:t}` ~ `{timemd:R}` 產生 Discord 時間戳\n"
-                "- `{contentsplit:0}` 取 `content.split()[0]`\n"
+                "- `{contentsplit:0}`、`{contentsplit:1-}`、`{contentsplit:-4}`、`{contentsplit:1-2}`\n"
                 "- `{if:{contentsplit:1}==true:Yes:else:No}`\n"
                 "- 也支援 `{if:{contentsplit:1}==true:Yes:No}` 與 `{if:條件:成立內容}`\n"
-                "- 支援 `==` `!=` `<=` `>=`"
+                "- 支援 `==` `!=` `<=` `>=` `&&` `||`"
             ),
             inline=False,
         )
@@ -1424,9 +1524,9 @@ class AutoReply(commands.GroupCog, name="autoreply"):
                 ex = discord.Embed(title="自動回覆範例", color=0x00FF00)
                 ex.description = (
                     "1) `歡迎 {user} 來到 {guild}！`\n"
-                    "2) `{if:{contentsplit:1}==true:你輸入了 true:else:你沒有輸入 true}`\n"
+                    "2) `{if:{contentsplit:1}==true&&{hour}>=12:你在下午輸入了 true:還沒達成條件}`\n"
                     "3) `{embedtitle:簽到成功}{embeddescription:{user} 在 {date} {time24} 完成簽到}{embedcolor:57F287}`\n"
-                    "4) `第 2 個單字是：{contentsplit:1}`\n"
+                    "4) `從第 2 個單字開始：{contentsplit:1-}`\n"
                     "5) `剛剛聊天室隨機點名：{random_user}`"
                 )
                 await i.response.send_message(embed=ex, ephemeral=True)
