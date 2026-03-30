@@ -458,7 +458,7 @@ class AutoReplyBuilderView(discord.ui.View):
         self.add_item(edit_button)
 
         reply_button = discord.ui.Button(
-            label=f"Reply：{'開啟' if self.state['reply'] else '關閉'}",
+            label=f"回覆原訊息：{'開啟' if self.state['reply'] else '關閉'}",
             style=discord.ButtonStyle.success if self.state["reply"] else discord.ButtonStyle.secondary,
             row=3,
         )
@@ -497,7 +497,7 @@ class AutoReplyBuilderView(discord.ui.View):
         embed.add_field(name="觸發字", value=trigger_preview, inline=False)
         embed.add_field(name="回覆內容", value=response_preview, inline=False)
         embed.add_field(name="模式", value=f"{mode_label} (`{self.state['mode']}`)", inline=True)
-        embed.add_field(name="Reply", value="開啟" if self.state["reply"] else "關閉", inline=True)
+        embed.add_field(name="回覆原訊息", value="開啟" if self.state["reply"] else "關閉", inline=True)
         embed.add_field(name="機率", value=f"{self.state['random_chance']}%", inline=True)
         embed.add_field(name="頻道模式", value=f"{channel_mode_label} (`{self.state['channel_mode']}`)", inline=True)
         embed.add_field(name="指定頻道", value=channel_text, inline=True)
