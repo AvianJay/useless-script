@@ -468,6 +468,38 @@ async def owner_userinfo(ctx, user: Union[discord.User, discord.Member] = None):
     await ctx.send(embed=embed, view=view)
 
 
+@bot.command()
+@is_owner()
+async def eval(ctx, *, code: str):
+    """執行 Python 代碼，僅限機器人擁有者使用。
+    
+    用法： eval [代碼]
+    例如： eval 1 + 1
+    """
+    try:
+        # Create a local scope with commonly used variables
+        local_scope = {
+            "bot": bot,
+            "ctx": ctx,
+            "discord": discord,
+            "get_user_data": get_user_data,
+            "set_user_data": set_user_data,
+            "get_server_config": get_server_config,
+            "set_server_config": set_server_config,
+            "config": config,
+            "_config": _config,
+            "default_config": default_config,
+            "db": db,
+            "asyncio": asyncio
+        }
+        result = eval(code, {"__builtins__": {}}, local_scope)
+        if asyncio.iscoroutine(result):
+            result = await result
+        await ctx.send(f"結果：```{result}```")
+    except Exception as e:
+        await ctx.send(f"執行代碼時發生錯誤：```{e}```")
+
+
 @bot.event
 async def on_guild_join(guild: discord.Guild):
     # print(f"Joined guild: {guild.name} (ID: {guild.id})")
