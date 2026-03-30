@@ -54,8 +54,11 @@ Builder 內的 `trigger / response` 支援：
 - `{guild}` / `{server}`：伺服器名稱
 - `{channel}`：頻道名稱
 - `{author}` / `{member}`：觸發者名稱
+- `{authorid}`：觸發者 ID
+- `{authoravatar}`：觸發者頭像 URL
 - `{role}`：觸發者最高身分組名稱
 - `{id}`：觸發者 ID
+- `{null}`：空字串，可拿來做 `if` 比較
 - `\n`：換行
 - `\t`：Tab
 
@@ -156,6 +159,7 @@ Builder 內的 `trigger / response` 支援：
 
 ```text
 {if:{contentsplit:1}==true:You sent true!:else:Its false}
+{if:{contentsplit:1}!={null}:你有輸入內容:else:空白}
 {if:{contentsplit:2}>=10:大於等於 10:else:小於 10}
 {if:{contentsplit:1}==true&&{hour}>=12:午安 true:else:還不是午安時間}
 ```

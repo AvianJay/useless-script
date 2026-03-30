@@ -1581,6 +1581,8 @@ class AutoReply(commands.GroupCog, name="autoreply"):
             "{channel}": channel_name,
             "{author}": author.name,
             "{member}": author.name,
+            "{authorid}": str(author.id),
+            "{authoravatar}": author.display_avatar.url if author.display_avatar else "",
             "{role}": role_name,
             "{id}": str(author.id),
             "{date}": now.strftime("%Y/%m/%d"),
@@ -1592,6 +1594,7 @@ class AutoReply(commands.GroupCog, name="autoreply"):
             "{hour}": now.strftime("%H"),
             "{minute}": now.strftime("%M"),
             "{second}": now.strftime("%S"),
+            "{null}": "",
             "\\n": "\n",
             "\\t": "\t"
         }
@@ -2590,8 +2593,9 @@ class AutoReply(commands.GroupCog, name="autoreply"):
         embed.add_field(
             name="基本變數",
             value=(
-                "- `{user}` / `{author}` / `{member}` / `{id}`\n"
+                "- `{user}` / `{author}` / `{authorid}` / `{authoravatar}` / `{member}` / `{id}`\n"
                 "- `{content}` / `{channel}` / `{guild}` / `{server}` / `{role}`\n"
+                "- `{null}` 空字串，可拿來做 `if` 比較\n"
                 "- `\\n` 換行、`\\t` Tab"
             ),
             inline=False,
@@ -2607,6 +2611,7 @@ class AutoReply(commands.GroupCog, name="autoreply"):
                 "- `{math:(1+2*3)}`，只支援 `+ - * /`，數字限制 `-1000 ~ 1000`\n"
                 "- `math` 內可用其他變數，例如 `{math:({contentsplit:1}+5)}`\n"
                 "- `{if:{contentsplit:1}==true:Yes:else:No}`\n"
+                "- `{if:{contentsplit:1}!={null}:有內容:else:空白}`\n"
                 "- 也支援 `{if:{contentsplit:1}==true:Yes:No}` 與 `{if:條件:成立內容}`\n"
                 "- 支援 `==` `!=` `<=` `>=` `&&` `||`"
             ),
@@ -2676,9 +2681,10 @@ class AutoReply(commands.GroupCog, name="autoreply"):
                 ex.description = (
                     "1) `歡迎 {user} 來到 {guild}！`\n"
                     "2) `{if:{contentsplit:1}==true&&{hour}>=12:你在下午輸入了 true:還沒達成條件}`\n"
-                    "3) `{embedtitle:簽到成功}{embeddescription:{user} 在 {date} {time24} 完成簽到}{embedcolor:57F287}`\n"
-                    "4) `從第 2 個單字開始：{contentsplit:1-}`\n"
-                    "5) `剛剛聊天室隨機點名：{random_user}`"
+                    "3) `{if:{contentsplit:1}!={null}:你有輸入參數:else:你沒輸入參數}`\n"
+                    "4) `{embedtitle:簽到成功}{embeddescription:{user} 在 {date} {time24} 完成簽到}{embedcolor:57F287}`\n"
+                    "5) `從第 2 個單字開始：{contentsplit:1-}`\n"
+                    "6) `剛剛聊天室隨機點名：{random_user}`"
                 )
                 await i.response.send_message(embed=ex, ephemeral=True)
 
