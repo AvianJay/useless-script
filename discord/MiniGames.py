@@ -85,6 +85,7 @@ class Game:
     finish_order: List[int] = field(default_factory=list)  # 依出完牌順序：第 1 名、第 2 名…
     stake_paid: bool = False  # 賭注局獎金是否已發放（只發一次）
     lock: asyncio.Lock = field(default_factory=asyncio.Lock)
+    active_view: Optional[discord.ui.View] = field(default=None, init=False, repr=False)
 
     def current_player(self) -> PlayerState:
         return self.players[self.turn_index]
@@ -336,6 +337,7 @@ class TowerGame:
     game_over_reveal_all: bool = False  # 遊戲結束後揭露全部仙人掌
     message_id: Optional[int] = None
     message: Optional[discord.Message] = None
+    active_view: Optional[discord.ui.View] = field(default=None, init=False, repr=False)
 
     def safe_level(self) -> int:
         """目前已安全達到的層數（可提現的倍率層）"""
@@ -436,6 +438,9 @@ class LobbyView(discord.ui.View):
         self.stop()
 
     async def on_timeout(self):
+        if self.game.active_view is not self:
+            return
+        self.game.active_view = None
         self.cog.games.pop(self.game.channel_id, None)
         for child in self.children:
             child.disabled = True
@@ -444,6 +449,7 @@ class LobbyView(discord.ui.View):
                 await self.game.lobby_message.edit(content="大廳已逾時。", embed=None, view=self)
             except (discord.NotFound, discord.HTTPException):
                 pass
+        self.stop()
 
 
 # -----------------------------
@@ -462,7 +468,8 @@ class TowerConfirmView(discord.ui.View):
 
     @discord.ui.button(label="✅ 確認開始", style=discord.ButtonStyle.success)
     async def confirm_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await self.cog.start_tower(interaction, self.bet)
+        if await self.cog.start_tower(interaction, self.bet):
+            self.stop()
 
     async def on_timeout(self):
         for child in self.children:
@@ -577,6 +584,9 @@ class TowerGameView(discord.ui.View):
                 child.callback = lambda i, b=child: on_tile_click(i, b)
 
     async def on_timeout(self):
+        if self.game.active_view is not self:
+            return
+        self.game.active_view = None
         key = (self.game.channel_id, self.game.user_id)
         self.cog.tower_games.pop(key, None)
         for child in self.children:
@@ -586,6 +596,7 @@ class TowerGameView(discord.ui.View):
                 await self.game.message.edit(content="遊戲已逾時。", embed=None, view=self)
             except (discord.NotFound, discord.HTTPException):
                 pass
+        self.stop()
 
 
 class TableView(discord.ui.View):
@@ -630,6 +641,9 @@ class TableView(discord.ui.View):
         self.stop()
 
     async def on_timeout(self):
+        if self.game.active_view is not self:
+            return
+        self.game.active_view = None
         # timeout=None，理論上不會觸發；若將來改為有 timeout 則停用按鈕
         for child in self.children:
             child.disabled = True
@@ -639,6 +653,7 @@ class TableView(discord.ui.View):
                 self.cog.games.pop(self.game.channel_id, None)
             except (discord.NotFound, discord.HTTPException):
                 pass
+        self.stop()
 
 
 class HandView(discord.ui.View):
@@ -838,6 +853,30 @@ class MiniGamesCog(commands.GroupCog, group_name="games", description="迷你遊
         self.games: Dict[int, Game] = {}
         self.tower_games: Dict[Tuple[int, int], TowerGame] = {}  # (channel_id, user_id) -> TowerGame
 
+    async def _edit_game_message(
+        self,
+        game: Game,
+        message: discord.Message,
+        *,
+        content: Any = discord.utils.MISSING,
+        embed: Any = discord.utils.MISSING,
+        view: Optional[discord.ui.View],
+    ) -> None:
+        old_view = game.active_view
+        edit_kwargs: Dict[str, Any] = {"view": view}
+        if content is not discord.utils.MISSING:
+            edit_kwargs["content"] = content
+        if embed is not discord.utils.MISSING:
+            edit_kwargs["embed"] = embed
+        await message.edit(**edit_kwargs)
+        game.lobby_message = message
+        game.lobby_message_id = message.id
+        game.active_view = view
+        if view is not None and hasattr(view, "message"):
+            view.message = message
+        if old_view is not None and old_view is not view:
+            old_view.stop()
+
     @app_commands.command(name="big2", description="建立一桌大老二")
     async def startbig2(self, interaction: discord.Interaction):
         cid = interaction.channel_id
@@ -854,6 +893,7 @@ class MiniGamesCog(commands.GroupCog, group_name="games", description="迷你遊
         sent = await interaction.original_response()
         g.lobby_message_id = sent.id
         g.lobby_message = sent  # 存參考，之後都用 .edit() 不 fetch，user-install 才穩
+        g.active_view = view
         view.message = sent
 
     # -----------------------------
@@ -903,19 +943,22 @@ class MiniGamesCog(commands.GroupCog, group_name="games", description="迷你遊
         sent = await interaction.original_response()
         view.message = sent
 
-    async def start_tower(self, interaction: discord.Interaction, bet: float):
+    async def start_tower(self, interaction: discord.Interaction, bet: float) -> bool:
         """選擇賭注後開始遊戲"""
         guild_id = interaction.guild.id if interaction.guild else GLOBAL_GUILD_ID
         key = (interaction.channel_id, interaction.user.id)
         if key in self.tower_games:
-            return await interaction.response.send_message("你已經有一局 Tower 遊戲。", ephemeral=True)
+            await interaction.response.send_message("你已經有一局 Tower 遊戲。", ephemeral=True)
+            return False
 
         if get_balance(guild_id, interaction.user.id) < bet:
             currency = get_currency_name(guild_id)
-            return await interaction.response.send_message(f"餘額不足 {bet:,.0f} {currency}。", ephemeral=True)
+            await interaction.response.send_message(f"餘額不足 {bet:,.0f} {currency}。", ephemeral=True)
+            return False
 
         if not remove_balance(guild_id, interaction.user.id, bet):
-            return await interaction.response.send_message("扣除賭注失敗。", ephemeral=True)
+            await interaction.response.send_message("扣除賭注失敗。", ephemeral=True)
+            return False
         if guild_id != GLOBAL_GUILD_ID:
             record_transaction(guild_id)
 
@@ -935,7 +978,9 @@ class MiniGamesCog(commands.GroupCog, group_name="games", description="迷你遊
         msg = await interaction.original_response()
         game.message_id = msg.id
         game.message = msg
+        game.active_view = view
         view.message = msg
+        return True
 
     def _tower_embed(self, game: TowerGame, phase: str = "pick") -> discord.Embed:
         """phase: pick=選格中, result_safe=選到安全可繼續/提現, result_cactus=踩到仙人掌, cashout=提現成功"""
@@ -1003,7 +1048,16 @@ class MiniGamesCog(commands.GroupCog, group_name="games", description="迷你遊
             for child in view.children:
                 if isinstance(child, discord.ui.Button):
                     child.disabled = True
+            old_view = game.active_view
             await interaction.response.edit_message(embed=embed, view=view)
+            msg = await interaction.original_response()
+            game.message = msg
+            game.message_id = msg.id
+            game.active_view = None
+            view.message = msg
+            view.stop()
+            if old_view is not None and old_view is not view:
+                old_view.stop()
             return
 
         safe = game.safe_level()
@@ -1028,13 +1082,30 @@ class MiniGamesCog(commands.GroupCog, group_name="games", description="迷你遊
             for child in view.children:
                 if isinstance(child, discord.ui.Button):
                     child.disabled = True
+            old_view = game.active_view
             await interaction.response.edit_message(embed=embed, view=view)
+            msg = await interaction.original_response()
+            game.message = msg
+            game.message_id = msg.id
+            game.active_view = None
+            view.message = msg
+            view.stop()
+            if old_view is not None and old_view is not view:
+                old_view.stop()
             return
 
         game.awaiting_continue = True
         embed = self._tower_embed(game, phase="result_safe")
         view = TowerGameView(self, game)
+        old_view = game.active_view
         await interaction.response.edit_message(embed=embed, view=view)
+        msg = await interaction.original_response()
+        game.message = msg
+        game.message_id = msg.id
+        game.active_view = view
+        view.message = msg
+        if old_view is not None and old_view is not view:
+            old_view.stop()
 
     async def tower_cashout(self, interaction: discord.Interaction, game: TowerGame):
         if interaction.user.id != game.user_id:
@@ -1054,7 +1125,19 @@ class MiniGamesCog(commands.GroupCog, group_name="games", description="迷你遊
 
         embed = self._tower_embed(game, phase="cashout")
         view = TowerGameView(self, game)
+        for child in view.children:
+            if isinstance(child, discord.ui.Button):
+                child.disabled = True
+        old_view = game.active_view
         await interaction.response.edit_message(embed=embed, view=view)
+        msg = await interaction.original_response()
+        game.message = msg
+        game.message_id = msg.id
+        game.active_view = None
+        view.message = msg
+        view.stop()
+        if old_view is not None and old_view is not view:
+            old_view.stop()
 
     def big2_rules_embed(self) -> discord.Embed:
         """大老二規則玩法說明（給規則按鈕用）"""
@@ -1111,7 +1194,8 @@ class MiniGamesCog(commands.GroupCog, group_name="games", description="迷你遊
     async def edit_lobby_message(self, interaction: discord.Interaction, g: Game):
         try:
             if g.lobby_message is not None:
-                await g.lobby_message.edit(embed=self.lobby_embed(g), view=LobbyView(self, g))
+                view = LobbyView(self, g)
+                await self._edit_game_message(g, g.lobby_message, embed=self.lobby_embed(g), view=view)
                 return
             if g.lobby_message_id is None:
                 return
@@ -1119,7 +1203,8 @@ class MiniGamesCog(commands.GroupCog, group_name="games", description="迷你遊
             if hasattr(channel, "fetch_message"):
                 msg = await channel.fetch_message(g.lobby_message_id)
                 g.lobby_message = msg
-                await msg.edit(embed=self.lobby_embed(g), view=LobbyView(self, g))
+                view = LobbyView(self, g)
+                await self._edit_game_message(g, msg, embed=self.lobby_embed(g), view=view)
         except Exception:
             pass
 
@@ -1198,11 +1283,13 @@ class MiniGamesCog(commands.GroupCog, group_name="games", description="迷你遊
         await interaction.response.send_message("遊戲開始！", ephemeral=True)
         try:
             if g.lobby_message is not None:
-                await g.lobby_message.edit(embed=self.table_embed(g), view=TableView(self, g))
+                view = TableView(self, g)
+                await self._edit_game_message(g, g.lobby_message, embed=self.table_embed(g), view=view)
             elif g.lobby_message_id is not None and hasattr(interaction.channel, "fetch_message"):
                 msg = await interaction.channel.fetch_message(g.lobby_message_id)
                 g.lobby_message = msg
-                await msg.edit(embed=self.table_embed(g), view=TableView(self, g))
+                view = TableView(self, g)
+                await self._edit_game_message(g, msg, embed=self.table_embed(g), view=view)
             else:
                 await interaction.followup.send("無法取得桌面訊息。", ephemeral=True)
         except Exception:
@@ -1270,7 +1357,7 @@ class MiniGamesCog(commands.GroupCog, group_name="games", description="迷你遊
                     record_transaction(g.guild_id)
             view = None if game_over else TableView(self, g)
             if g.lobby_message is not None:
-                await g.lobby_message.edit(embed=self.table_embed(g), view=view)
+                await self._edit_game_message(g, g.lobby_message, embed=self.table_embed(g), view=view)
                 if game_over:
                     self.games.pop(g.channel_id, None)
                 return
@@ -1279,7 +1366,7 @@ class MiniGamesCog(commands.GroupCog, group_name="games", description="迷你遊
             if hasattr(channel, "fetch_message"):
                 msg = await channel.fetch_message(g.lobby_message_id)
                 g.lobby_message = msg
-                await msg.edit(embed=self.table_embed(g), view=view)
+                await self._edit_game_message(g, msg, embed=self.table_embed(g), view=view)
                 if game_over:
                     self.games.pop(g.channel_id, None)
         except Exception:
