@@ -1,5 +1,5 @@
 import discord
-from globalenv import bot, start_bot, set_server_config, get_server_config, config, get_command_mention
+from globalenv import bot, start_bot, set_server_config, get_server_config, get_user_data, set_user_data, get_db_connection, config, get_command_mention
 from discord.ext import commands
 from discord import app_commands
 import asyncio
@@ -13,9 +13,17 @@ import logging
 import re
 from datetime import datetime
 
-MAX_AUTOREPLY_CONFIGS = 50
+DEFAULT_AUTOREPLY_CONFIG_LIMIT = 50
 AUTOREPLY_RATE_LIMIT_COUNT = 3
 AUTOREPLY_RATE_LIMIT_WINDOW = 1.0
+AUTOREPLY_NEWMESSAGE_LIMIT = 2
+AUTOREPLY_EDIT_LIMIT = 4
+AUTOREPLY_DELAY_MIN_SECONDS = 1
+AUTOREPLY_DELAY_MAX_SECONDS = 3
+AUTOREPLY_USERVAR_LIMIT = 5
+AUTOREPLY_GUILDVAR_LIMIT = 10
+AUTOREPLY_VAR_MAX_LENGTH = 100
+AUTOREPLY_VAR_KEY_PREFIX = "autoreply_var_"
 AUTOREPLY_TEMPLATE_PACKS = {
     "daily_greetings": {
         "display_name": "日常問候包",
@@ -255,6 +263,12 @@ class AutoReply(commands.GroupCog, name="autoreply"):
             return False
         return bucket.update_rate_limit() is not None
 
+    def _get_autoreply_limit(self, guild_id: int) -> int:
+        try:
+            return int(get_server_config(guild_id, "autoreply_limit", DEFAULT_AUTOREPLY_CONFIG_LIMIT) or DEFAULT_AUTOREPLY_CONFIG_LIMIT)
+        except (TypeError, ValueError):
+            return DEFAULT_AUTOREPLY_CONFIG_LIMIT
+
     def _parse_embed_color(self, value: str):
         raw_value = str(value).strip().lower()
         if not raw_value:
@@ -388,6 +402,106 @@ class AutoReply(commands.GroupCog, name="autoreply"):
             selected_parts = content_parts[start_index:end_value + 1]
         return " ".join(selected_parts)
 
+    def _parse_delay_directive_token(self, token: str):
+        lowered = token.lower()
+        if lowered.startswith("newmsg:"):
+            directive_name = "newmsg"
+            raw_delay = token[len("newmsg:"):].strip()
+        elif lowered.startswith("edit:"):
+            directive_name = "edit"
+            raw_delay = token[len("edit:"):].strip()
+        else:
+            raise TemplateSyntaxError("Invalid delay directive syntax")
+
+        if not raw_delay.isdigit():
+            raise TemplateSyntaxError(f"Invalid {directive_name} syntax")
+
+        delay_seconds = int(raw_delay)
+        if not AUTOREPLY_DELAY_MIN_SECONDS <= delay_seconds <= AUTOREPLY_DELAY_MAX_SECONDS:
+            raise TemplateSyntaxError(f"{directive_name} delay must be between {AUTOREPLY_DELAY_MIN_SECONDS} and {AUTOREPLY_DELAY_MAX_SECONDS}")
+
+        return directive_name, delay_seconds
+
+    def _parse_state_var_token(self, token: str):
+        lowered = token.lower()
+        if lowered.startswith("uservar:"):
+            scope = "user"
+            payload = token[len("uservar:"):]
+        elif lowered.startswith("guildvar:"):
+            scope = "guild"
+            payload = token[len("guildvar:"):]
+        else:
+            raise TemplateSyntaxError("Invalid state var syntax")
+
+        key, value = self._split_top_level(payload)
+        if not key or not key.strip():
+            raise TemplateSyntaxError("Invalid state var syntax")
+
+        return scope, key.strip(), value
+
+    def _get_autoreply_var_storage_key(self, key: str) -> str:
+        return f"{AUTOREPLY_VAR_KEY_PREFIX}{key}"
+
+    def _count_autoreply_user_vars(self, guild_id: int, user_id: int) -> int:
+        with get_db_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                "SELECT COUNT(*) FROM user_data WHERE guild_id = ? AND user_id = ? AND data_key LIKE ?",
+                (guild_id or 0, user_id, f"{AUTOREPLY_VAR_KEY_PREFIX}%")
+            )
+            result = cursor.fetchone()
+        return int(result[0]) if result and result[0] is not None else 0
+
+    def _user_var_exists(self, guild_id: int, user_id: int, storage_key: str) -> bool:
+        with get_db_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                "SELECT 1 FROM user_data WHERE guild_id = ? AND user_id = ? AND data_key = ? LIMIT 1",
+                (guild_id or 0, user_id, storage_key)
+            )
+            return cursor.fetchone() is not None
+
+    def _count_autoreply_guild_vars(self, guild_id: int) -> int:
+        with get_db_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                "SELECT COUNT(*) FROM server_configs WHERE guild_id = ? AND config_key LIKE ?",
+                (guild_id, f"{AUTOREPLY_VAR_KEY_PREFIX}%")
+            )
+            result = cursor.fetchone()
+        return int(result[0]) if result and result[0] is not None else 0
+
+    def _guild_var_exists(self, guild_id: int, storage_key: str) -> bool:
+        with get_db_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                "SELECT 1 FROM server_configs WHERE guild_id = ? AND config_key = ? LIMIT 1",
+                (guild_id, storage_key)
+            )
+            return cursor.fetchone() is not None
+
+    def _set_autoreply_user_var(self, guild_id: int, user_id: int, key: str, value: str) -> bool:
+        if not key or len(key) > AUTOREPLY_VAR_MAX_LENGTH or len(value) > AUTOREPLY_VAR_MAX_LENGTH:
+            return False
+
+        storage_key = self._get_autoreply_var_storage_key(key)
+        if not self._user_var_exists(guild_id, user_id, storage_key):
+            if self._count_autoreply_user_vars(guild_id, user_id) >= AUTOREPLY_USERVAR_LIMIT:
+                return False
+
+        return bool(set_user_data(guild_id, user_id, storage_key, value))
+
+    def _set_autoreply_guild_var(self, guild_id: int, key: str, value: str) -> bool:
+        if not key or len(key) > AUTOREPLY_VAR_MAX_LENGTH or len(value) > AUTOREPLY_VAR_MAX_LENGTH:
+            return False
+
+        storage_key = self._get_autoreply_var_storage_key(key)
+        if not self._guild_var_exists(guild_id, storage_key):
+            if self._count_autoreply_guild_vars(guild_id) >= AUTOREPLY_GUILDVAR_LIMIT:
+                return False
+
+        return bool(set_server_config(guild_id, storage_key, value))
+
     def _validate_condition_expression(self, expression: str):
         or_parts = self._split_top_level_all(expression, "||")
         if len(or_parts) > 1:
@@ -494,6 +608,13 @@ class AutoReply(commands.GroupCog, name="autoreply"):
                 self._validate_template_syntax(payload)
             elif lowered.startswith("contentsplit"):
                 self._parse_contentsplit_token(token)
+            elif lowered.startswith("newmsg:") or lowered.startswith("edit:"):
+                self._parse_delay_directive_token(token)
+            elif lowered.startswith("uservar:") or lowered.startswith("guildvar:"):
+                _, key_text, value_text = self._parse_state_var_token(token)
+                self._validate_template_syntax(key_text)
+                if value_text is not None:
+                    self._validate_template_syntax(value_text)
             elif lowered.startswith("randint:") and not re.fullmatch(r"randint:(\d+)-(\d+)", token, re.IGNORECASE):
                 raise TemplateSyntaxError("Invalid randint syntax")
             elif lowered.startswith("timemd:") and not re.fullmatch(r"timemd:[tTdDfFrR]", token, re.IGNORECASE):
@@ -769,6 +890,38 @@ class AutoReply(commands.GroupCog, name="autoreply"):
 
         response = re.sub(r"\{timemd:([tTdDfFrR])\}", timemd_replacer, response)
 
+        def state_var_replacer(match):
+            token = match.group(1)
+            try:
+                scope, key_text, value_text = self._parse_state_var_token(token)
+            except TemplateSyntaxError:
+                return ""
+
+            key_text = key_text.strip()
+            if not key_text or len(key_text) > AUTOREPLY_VAR_MAX_LENGTH:
+                return ""
+
+            storage_key = self._get_autoreply_var_storage_key(key_text)
+            if value_text is None:
+                if scope == "user":
+                    stored_value = get_user_data(guild.id, author.id, storage_key, "")
+                else:
+                    stored_value = get_server_config(guild.id, storage_key, "")
+                stored_value = "" if stored_value is None else str(stored_value)
+                return stored_value[:AUTOREPLY_VAR_MAX_LENGTH]
+
+            raw_value = str(value_text)
+            if len(raw_value) > AUTOREPLY_VAR_MAX_LENGTH:
+                return ""
+
+            if scope == "user":
+                self._set_autoreply_user_var(guild.id, author.id, key_text, raw_value)
+            else:
+                self._set_autoreply_guild_var(guild.id, key_text, raw_value)
+            return ""
+
+        response = re.sub(r"\{((?:user|guild)var:[^{}]+)\}", state_var_replacer, response, flags=re.IGNORECASE)
+
         return response
 
     async def _build_embed_from_tokens(self, extracted: dict, message: discord.Message, context: dict):
@@ -830,14 +983,79 @@ class AutoReply(commands.GroupCog, name="autoreply"):
 
         return embed
 
-    async def _process_response_v2(self, response: str, message: discord.Message) -> tuple:
-        """Process autoreply response text and optional sticker/embed payloads."""
+    def _build_template_context(self) -> dict:
+        return {
+            "now": datetime.now().astimezone(),
+            "random": str(random.randint(1, 100)),
+            "random_user": None,
+        }
 
-        try:
-            self._validate_template_syntax(response)
-        except TemplateSyntaxError as e:
-            log(f"自動回覆模板語法錯誤: {e}", module_name="AutoReply", level=logging.WARNING)
-            return "", None, None
+    def _extract_timed_response_plan(self, response: str):
+        stages = [{"send_delay": 0, "template": "", "edits": []}]
+        current_stage = stages[0]
+        current_target = "template"
+        buffer = []
+        newmsg_count = 0
+        edit_count = 0
+        index = 0
+
+        while index < len(response):
+            if response[index] != "{":
+                buffer.append(response[index])
+                index += 1
+                continue
+
+            closing_index = self._find_matching_brace(response, index)
+            if closing_index == -1:
+                buffer.append(response[index])
+                index += 1
+                continue
+
+            token = response[index + 1:closing_index]
+            lowered = token.lower()
+            if lowered.startswith("newmsg:") or lowered.startswith("edit:"):
+                directive_name, delay_seconds = self._parse_delay_directive_token(token)
+                current_chunk = "".join(buffer)
+                buffer = []
+
+                if current_target == "template":
+                    current_stage["template"] += current_chunk
+                else:
+                    current_stage["edits"][-1]["template"] += current_chunk
+
+                if directive_name == "newmsg":
+                    newmsg_count += 1
+                    if newmsg_count > AUTOREPLY_NEWMESSAGE_LIMIT:
+                        raise TemplateSyntaxError(f"newmsg limit exceeded ({AUTOREPLY_NEWMESSAGE_LIMIT})")
+                    current_stage = {"send_delay": delay_seconds, "template": "", "edits": []}
+                    stages.append(current_stage)
+                    current_target = "template"
+                else:
+                    edit_count += 1
+                    if edit_count > AUTOREPLY_EDIT_LIMIT:
+                        raise TemplateSyntaxError(f"edit limit exceeded ({AUTOREPLY_EDIT_LIMIT})")
+                    current_stage["edits"].append({"delay": delay_seconds, "template": ""})
+                    current_target = "edit"
+
+                index = closing_index + 1
+                continue
+
+            buffer.append(response[index:closing_index + 1])
+            index = closing_index + 1
+
+        remaining_chunk = "".join(buffer)
+        if current_target == "template":
+            current_stage["template"] += remaining_chunk
+        else:
+            current_stage["edits"][-1]["template"] += remaining_chunk
+
+        return stages
+
+    async def _render_response_segment(self, response: str, message: discord.Message, context: dict | None = None) -> tuple:
+        if context is None:
+            context = self._build_template_context()
+
+        response = (await self._resolve_response_variables(response, message, context)).strip()
 
         react_pattern = re.compile(r"\{react:([^\}]+)\}")
 
@@ -871,20 +1089,100 @@ class AutoReply(commands.GroupCog, name="autoreply"):
 
         response = sticker_pattern.sub(sticker_replacer, response)
         response, extracted_embed = self._extract_embed_tokens(response)
-
-        template_context = {
-            "now": datetime.now().astimezone(),
-            "random": str(random.randint(1, 100)),
-            "random_user": None,
-        }
-        response = await self._resolve_if_expressions(response, message, template_context)
-        response = (await self._resolve_response_variables(response, message, template_context)).strip()
-        embed = await self._build_embed_from_tokens(extracted_embed, message, template_context)
+        embed = await self._build_embed_from_tokens(extracted_embed, message, context)
 
         if not response and not sticker and embed is None:
             return "", None, None
 
         return response, sticker, embed
+
+    async def _send_autoreply_message(self, trigger_message: discord.Message, reply_mode: bool, content: str, embed: discord.Embed | None, sticker):
+        send_content = content or None
+        if reply_mode:
+            return await trigger_message.reply(
+                send_content,
+                embed=embed,
+                stickers=[sticker] if sticker else [],
+                allowed_mentions=discord.AllowedMentions(users=True, roles=False, everyone=False),
+            )
+        return await trigger_message.channel.send(
+            send_content,
+            embed=embed,
+            stickers=[sticker] if sticker else [],
+            allowed_mentions=discord.AllowedMentions(users=True, roles=False, everyone=False),
+        )
+
+    async def _execute_autoreply_edits(self, sent_message: discord.Message, trigger_message: discord.Message, edit_actions: list[dict]):
+        for edit_action in edit_actions:
+            try:
+                await asyncio.sleep(edit_action["delay"])
+                edit_content, _, edit_embed = await self._render_response_segment(edit_action["template"], trigger_message)
+                if not edit_content and edit_embed is None:
+                    continue
+                await sent_message.edit(
+                    content=edit_content or None,
+                    embed=edit_embed,
+                    allowed_mentions=discord.AllowedMentions(users=True, roles=False, everyone=False),
+                )
+            except discord.HTTPException as e:
+                log(f"自動回覆編輯失敗: {e}", module_name="AutoReply", level=logging.ERROR)
+                return
+            except Exception as e:
+                log(f"自動回覆編輯發生錯誤: {e}", module_name="AutoReply", level=logging.ERROR)
+                return
+
+    async def _execute_autoreply_followup_stage(self, trigger_message: discord.Message, reply_mode: bool, stage: dict):
+        try:
+            await asyncio.sleep(stage["send_delay"])
+
+            if self._is_rate_limited(trigger_message):
+                return
+
+            followup_content, followup_sticker, followup_embed = await self._render_response_segment(stage["template"], trigger_message)
+            if not followup_content and not followup_sticker and followup_embed is None:
+                return
+
+            sent_message = await self._send_autoreply_message(
+                trigger_message,
+                reply_mode,
+                followup_content,
+                followup_embed,
+                followup_sticker,
+            )
+
+            if stage["edits"]:
+                asyncio.create_task(self._execute_autoreply_edits(sent_message, trigger_message, stage["edits"]))
+        except discord.HTTPException as e:
+            log(f"自動回覆延遲訊息發送失敗: {e}", module_name="AutoReply", level=logging.ERROR)
+        except Exception as e:
+            log(f"自動回覆延遲訊息發生錯誤: {e}", module_name="AutoReply", level=logging.ERROR)
+
+    async def _process_response_v2(self, response: str, message: discord.Message) -> tuple:
+        """Process autoreply response text and return the immediate result plus delayed actions."""
+
+        try:
+            self._validate_template_syntax(response)
+        except TemplateSyntaxError as e:
+            log(f"自動回覆模板語法錯誤: {e}", module_name="AutoReply", level=logging.WARNING)
+            return "", None, None, {"initial_edits": [], "followups": []}
+
+        planning_context = self._build_template_context()
+        resolved_response = await self._resolve_if_expressions(response, message, planning_context)
+
+        try:
+            response_stages = self._extract_timed_response_plan(resolved_response)
+        except TemplateSyntaxError as e:
+            log(f"自動回覆模板語法錯誤: {e}", module_name="AutoReply", level=logging.WARNING)
+            return "", None, None, {"initial_edits": [], "followups": []}
+
+        initial_stage = response_stages[0] if response_stages else {"template": "", "edits": []}
+        final_response, sticker, embed = await self._render_response_segment(initial_stage["template"], message)
+        delayed_actions = {
+            "initial_edits": initial_stage["edits"],
+            "followups": response_stages[1:],
+        }
+
+        return final_response, sticker, embed, delayed_actions
 
     @app_commands.command(name="add", description="新增自動回覆")
     @app_commands.describe(
@@ -922,8 +1220,9 @@ class AutoReply(commands.GroupCog, name="autoreply"):
             await interaction.response.send_message("隨機回覆機率必須在 1 到 100 之間。", ephemeral=True)
             return
         autoreplies = get_server_config(guild_id, "autoreplies", [])
-        if len(autoreplies) >= MAX_AUTOREPLY_CONFIGS:
-            await interaction.response.send_message(f"自動回覆設定最多只能有 {MAX_AUTOREPLY_CONFIGS} 筆。", ephemeral=True)
+        autoreply_limit = self._get_autoreply_limit(guild_id)
+        if len(autoreplies) >= autoreply_limit:
+            await interaction.response.send_message(f"自動回覆設定最多只能有 {autoreply_limit} 筆。", ephemeral=True)
             return
         trigger = trigger.split(",")  # multiple triggers
         trigger = [t.strip() for t in trigger if t.strip()]  # remove empty triggers
@@ -1191,9 +1490,10 @@ class AutoReply(commands.GroupCog, name="autoreply"):
             final_autoreplies = template_rules
             added_count = len(template_rules)
 
-        if len(final_autoreplies) > MAX_AUTOREPLY_CONFIGS:
+        autoreply_limit = self._get_autoreply_limit(guild_id)
+        if len(final_autoreplies) > autoreply_limit:
             await interaction.response.send_message(
-                f"套用後會超過 {MAX_AUTOREPLY_CONFIGS} 筆自動回覆上限，這次未套用。",
+                f"套用後會超過 {autoreply_limit} 筆自動回覆上限，這次未套用。",
                 ephemeral=True
             )
             return
@@ -1274,8 +1574,9 @@ class AutoReply(commands.GroupCog, name="autoreply"):
             autoreplies.extend(new_autoreplies)
         else:
             autoreplies = new_autoreplies
-        if len(autoreplies) > MAX_AUTOREPLY_CONFIGS:
-            await interaction.followup.send(f"自動回覆設定最多只能有 {MAX_AUTOREPLY_CONFIGS} 筆，這次匯入未套用。")
+        autoreply_limit = self._get_autoreply_limit(guild_id)
+        if len(autoreplies) > autoreply_limit:
+            await interaction.followup.send(f"自動回覆設定最多只能有 {autoreply_limit} 筆，這次匯入未套用。")
             return
         set_server_config(guild_id, "autoreplies", autoreplies)
         await interaction.followup.send("已匯入自動回覆設定。")
@@ -1328,8 +1629,18 @@ class AutoReply(commands.GroupCog, name="autoreply"):
 
         mock_message = MockMessage(guild, author, channel, "這是一則測試訊息內容。")
 
-        final_response, _, embed = await self._process_response_v2(response, mock_message)
+        final_response, _, embed, delayed_actions = await self._process_response_v2(response, mock_message)
         preview_text = final_response or None
+        delayed_lines = []
+        for edit_action in delayed_actions["initial_edits"]:
+            delayed_lines.append(f"[edit {edit_action['delay']}s] {edit_action['template']}")
+        for followup_stage in delayed_actions["followups"]:
+            delayed_lines.append(f"[newmsg {followup_stage['send_delay']}s] {followup_stage['template']}")
+            for edit_action in followup_stage["edits"]:
+                delayed_lines.append(f"[edit {edit_action['delay']}s] {edit_action['template']}")
+        if delayed_lines:
+            delayed_preview = "\n".join(delayed_lines)
+            preview_text = f"{preview_text}\n\n{delayed_preview}" if preview_text else delayed_preview
         if preview_text is None and embed is None:
             preview_text = "沒有可輸出的內容"
         await interaction.response.send_message(preview_text, embed=embed)
@@ -1484,6 +1795,18 @@ class AutoReply(commands.GroupCog, name="autoreply"):
                 "- `{embedcolor:HEX}` `{embedfooter:文字}` `{embedauthor:名字}`\n"
                 "- `{embedtime:true}` `{embedfield:欄位名:欄位值}`\n"
                 "- Embed 內文也可繼續使用其他 `{}` 變數"
+            ),
+            inline=False,
+        )
+
+        embed.add_field(
+            name="延遲 / 狀態變數",
+            value=(
+                "- `{newmsg:2}`：1~3 秒後再發一則新訊息，最多 2 個\n"
+                "- `{edit:2}`：1~3 秒後編輯目前這則 autoreply，最多 4 個\n"
+                "- `{uservar:key}` / `{uservar:key:value}`\n"
+                "- `{guildvar:key}` / `{guildvar:key:value}`\n"
+                "- uservar 最多 5 個、guildvar 最多 10 個，key/value 最長 100"
             ),
             inline=False,
         )
@@ -1723,25 +2046,43 @@ class AutoReply(commands.GroupCog, name="autoreply"):
                 raw_response = random.choice(responses)
                 
                 # 使用新的處理方法
-                final_response, sticker, embed = await self._process_response_v2(raw_response, message)
-                
-                if not final_response and not sticker and embed is None:
-                    return
+                final_response, sticker, embed, delayed_actions = await self._process_response_v2(raw_response, message)
 
-                if self._is_rate_limited(message):
+                has_immediate_output = bool(final_response or sticker or embed is not None)
+                has_followups = bool(delayed_actions["followups"])
+                if not has_immediate_output and not has_followups:
                     return
                 
                 try:
-                    send_content = final_response or None
-                    if ar.get("reply", False):
-                        await message.reply(send_content, embed=embed, stickers=[sticker] if sticker else [], allowed_mentions=discord.AllowedMentions(users=True, roles=False, everyone=False))
-                    else:
-                        await message.channel.send(send_content, embed=embed, stickers=[sticker] if sticker else [], allowed_mentions=discord.AllowedMentions(users=True, roles=False, everyone=False))
+                    sent_message = None
+                    if has_immediate_output:
+                        if self._is_rate_limited(message):
+                            return
+                        sent_message = await self._send_autoreply_message(
+                            message,
+                            ar.get("reply", False),
+                            final_response,
+                            embed,
+                            sticker,
+                        )
+
+                    if sent_message and delayed_actions["initial_edits"]:
+                        asyncio.create_task(self._execute_autoreply_edits(sent_message, message, delayed_actions["initial_edits"]))
+
+                    for followup_stage in delayed_actions["followups"]:
+                        asyncio.create_task(self._execute_autoreply_followup_stage(message, ar.get("reply", False), followup_stage))
                     
                     # 記錄日誌
                     # 避免 trigger 太長
                     trigger_used = triggers[0] if triggers else "unknown"
-                    response_preview = final_response or (embed.title if embed and embed.title else "[embed]")
+                    if final_response:
+                        response_preview = final_response
+                    elif embed and embed.title:
+                        response_preview = embed.title
+                    elif has_followups:
+                        response_preview = "[delayed]"
+                    else:
+                        response_preview = "[embed]"
                     log(f"自動回覆觸發：`{trigger_used[:10]}...` 回覆內容：`{response_preview[:10]}...`。", 
                         module_name="AutoReply", level=logging.INFO, user=message.author, guild=message.guild)
                 except discord.HTTPException as e:

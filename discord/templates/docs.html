@@ -1004,9 +1004,11 @@
                     <tr><td><code>{hour}</code> / <code>{minute}</code> / <code>{second}</code></td><td>分別取出時、分、秒</td><td><code>{hour}:{minute}:{second}</code></td></tr>
                     <tr><td><code>{timemd:t}</code> ~ <code>{timemd:R}</code></td><td>產生 Discord 時間戳標記</td><td><code>{timemd:F}</code></td></tr>
                     <tr><td><code>{contentsplit:0}</code></td><td>等同於 <code>content.split()[0]</code></td><td><code>{contentsplit:1}</code> 取得第二個單字</td></tr>
+                    <tr><td><code>{contentsplit:1-}</code></td><td>從指定索引取到結尾，並用空白重新接起來</td><td><code>!say hello world</code> → <code>hello world</code></td></tr>
+                    <tr><td><code>{contentsplit:-4}</code> / <code>{contentsplit:1-2}</code></td><td>取範圍內容；省略前段代表從開頭，省略後段代表取到結尾</td><td><code>{contentsplit:1-2}</code> 可取第 2 到第 3 個單字</td></tr>
                 </table>
                 <div class="doc-note">
-                    <strong>時區：</strong><code>{date}</code>、<code>{time}</code>、<code>{timemd:...}</code> 目前跟隨機器人主機的本地時區；如果主機設在 Asia/Taipei，就會是 UTC+8。
+                    <strong>時區：</strong><code>{date}</code>、<code>{time}</code>、<code>{timemd:...}</code> 目前跟隨機器人主機的本地時區；如果主機設在 Asia/Taipei，就會是 UTC+8。<code>{contentsplit:1-2}</code> 的結尾索引是包含在內的。
                 </div>
                 <!-- <div class="doc-note">
                     <strong>相容性：</strong><code>{contentsplit:索引}</code> 是目前建議寫法，舊格式 <code>{contentsplit(索引)}</code> 仍可使用。
@@ -1020,9 +1022,13 @@
                     <tr><td><code>{random_user}</code></td><td>從最近 50 則訊息中隨機選一位非機器人使用者</td><td>「隨機點名：{random_user}」</td></tr>
                     <tr><td><code>{react:emoji}</code></td><td>對觸發訊息添加表情反應（不會產生回覆文字）</td><td><code>{react:👍}</code> 或 <code>{react:↖️}</code></td></tr>
                     <tr><td><code>{sticker:ID}</code></td><td>傳送指定 ID 的伺服器貼圖</td><td><code>{sticker:123456789012345678}</code></td></tr>
+                    <tr><td><code>{newmsg:2}</code></td><td>1~3 秒後再發一則新訊息，可寫 2 個</td><td><code>第一句{newmsg:2}第二句</code></td></tr>
+                    <tr><td><code>{edit:2}</code></td><td>1~3 秒後編輯目前這則 autoreply，可寫 4 個</td><td><code>原文{edit:2}兩秒後改掉</code></td></tr>
+                    <tr><td><code>{uservar:key}</code> / <code>{uservar:key:value}</code></td><td>讀取或寫入使用者變數；有 value 會寫入且不輸出</td><td><code>{uservar:pet:cat}</code> / <code>{uservar:pet}</code></td></tr>
+                    <tr><td><code>{guildvar:key}</code> / <code>{guildvar:key:value}</code></td><td>讀取或寫入 guild 變數；有 value 會寫入且不輸出</td><td><code>{guildvar:welcome:on}</code> / <code>{guildvar:welcome}</code></td></tr>
                 </table>
                 <div class="doc-note">
-                    <strong>取得貼圖 ID：</strong>可使用 <code>y!sticker</code> 指令取得伺服器貼圖的 ID。
+                    <strong>取得貼圖 ID：</strong>可使用 <code>y!sticker</code> 指令取得伺服器貼圖的 ID。<code>uservar</code> 最多 5 個、<code>guildvar</code> 最多 10 個，key/value 長度最長 100。
                 </div>
 
                 <h3 style="margin-top: 1.5rem; color: var(--text-primary);">條件判斷</h3>
@@ -1030,6 +1036,7 @@
                     <tr><th>語法</th><th>說明</th><th>範例</th></tr>
                     <tr><td><code>{if:左邊==右邊:成立內容:else:不成立內容}</code></td><td>條件成立時輸出前段，否則輸出 <code>else</code> 後半段</td><td><code>{if:{contentsplit:1}==true:You sent true!:else:Its false}</code></td></tr>
                     <tr><td><code>{if:左邊==右邊:成立內容:不成立內容}</code></td><td>簡寫版 if/else，不寫 <code>else</code> 也可使用</td><td><code>{if:{contentsplit:1}==true:Yes:No}</code></td></tr>
+                    <tr><td><code>&amp;&amp;</code> / <code>||</code></td><td>可組合多個條件；<code>&amp;&amp;</code> 優先於 <code>||</code></td><td><code>{if:{contentsplit:1}==true&amp;&amp;{hour}&gt;=12:成立:不成立}</code></td></tr>
                     <tr><td><code>==</code> / <code>!=</code></td><td>相等或不相等比較</td><td><code>{if:{author}!=Admin:不是管理員:else:是管理員}</code></td></tr>
                     <tr><td><code>&lt;=</code> / <code>&gt;=</code></td><td>數字或字串大小比較</td><td><code>{if:{contentsplit:2}&gt;=10:合格:else:未達標}</code></td></tr>
                 </table>
@@ -1086,7 +1093,14 @@
                     <strong>範例 8：</strong>早安模板<br>
                     模式：<code>starts_with</code>，觸發：<code>早安</code>，回覆：<code>{if:{hour}>=5:{if:{hour}<=11:早安 {user}，記得先喝水再開始今天。:現在都 {time24} 了，這句早安是不是送得有點晚。}:現在才 {time24}，你這不是早安，是熬夜安。}</code><br><br>
                     <strong>範例 9：</strong><code>!say aaa</code> 小指令<br>
-                    模式：<code>starts_with</code>，觸發：<code>!say </code>，回覆：<code>你剛剛說的是：{contentsplit:1}</code>
+                    模式：<code>starts_with</code>，觸發：<code>!say </code>，回覆：<code>你剛剛說的是：{contentsplit:1-}</code><br><br>
+                    <strong>範例 10：</strong>多條件判斷<br>
+                    模式：<code>starts_with</code>，觸發：<code>check</code>，回覆：<code>{if:{contentsplit:1}==true&amp;&amp;{hour}&gt;=12:你在下午輸入了 true:條件不成立}</code><br><br>
+                    <strong>範例 11：</strong>延遲新訊息 / 編輯<br>
+                    模式：<code>equals</code>，觸發：<code>倒數</code>，回覆：<code>3...{edit:1}2...{edit:2}1...{newmsg:3}好耶</code><br><br>
+                    <strong>範例 12：</strong>寫入並讀取變數<br>
+                    模式：<code>starts_with</code>，觸發：<code>!pet </code>，回覆：<code>{uservar:pet:{contentsplit:1-}}已記住你的寵物</code><br>
+                    模式：<code>equals</code>，觸發：<code>!mypet</code>，回覆：<code>你記住的寵物是：{uservar:pet}</code>
                 </div>
                 {% endif %}
             </div>
