@@ -6,6 +6,8 @@ from Economy import (
     remove_balance,
     get_currency_name,
     record_transaction,
+    log_transaction,
+    queue_economy_audit_log,
     GLOBAL_GUILD_ID,
 )
 from discord.ext import commands
@@ -877,6 +879,20 @@ class MiniGamesCog(commands.GroupCog, group_name="games", description="迷你遊
         if old_view is not None and old_view is not view:
             old_view.stop()
 
+    def _resolve_audit_user(self, guild_id: int, user_id: int):
+        if guild_id != GLOBAL_GUILD_ID:
+            guild = self.bot.get_guild(guild_id)
+            if guild is not None:
+                member = guild.get_member(user_id)
+                if member is not None:
+                    return member
+        return self.bot.get_user(user_id)
+
+    def _log_economy_history(self, guild_id: int, user_id: int, tx_type: str, amount: float, detail: str = "") -> str:
+        currency = get_currency_name(guild_id)
+        log_transaction(guild_id, user_id, tx_type, amount, currency, detail)
+        return currency
+
     @app_commands.command(name="big2", description="建立一桌大老二")
     async def startbig2(self, interaction: discord.Interaction):
         cid = interaction.channel_id
@@ -946,19 +962,40 @@ class MiniGamesCog(commands.GroupCog, group_name="games", description="迷你遊
     async def start_tower(self, interaction: discord.Interaction, bet: float) -> bool:
         """選擇賭注後開始遊戲"""
         guild_id = interaction.guild.id if interaction.guild else GLOBAL_GUILD_ID
+        currency = get_currency_name(guild_id)
         key = (interaction.channel_id, interaction.user.id)
         if key in self.tower_games:
             await interaction.response.send_message("你已經有一局 Tower 遊戲。", ephemeral=True)
             return False
 
-        if get_balance(guild_id, interaction.user.id) < bet:
-            currency = get_currency_name(guild_id)
+        balance_before = get_balance(guild_id, interaction.user.id)
+        if balance_before < bet:
             await interaction.response.send_message(f"餘額不足 {bet:,.0f} {currency}。", ephemeral=True)
             return False
 
         if not remove_balance(guild_id, interaction.user.id, bet):
             await interaction.response.send_message("扣除賭注失敗。", ephemeral=True)
             return False
+        balance_after = get_balance(guild_id, interaction.user.id)
+        self._log_economy_history(
+            guild_id,
+            interaction.user.id,
+            "Tower 下注",
+            -bet,
+            f"下注 {bet:,.0f} {currency}",
+        )
+        queue_economy_audit_log(
+            "tower_bet",
+            guild_id=guild_id,
+            actor=interaction.user,
+            interaction=interaction,
+            currency=currency,
+            amount=bet,
+            balance_before=balance_before,
+            balance_after=balance_after,
+            detail=f"Tower game started with bet {bet:,.0f} {currency}.",
+            color=0xE67E22,
+        )
         if guild_id != GLOBAL_GUILD_ID:
             record_transaction(guild_id)
 
@@ -1065,7 +1102,29 @@ class MiniGamesCog(commands.GroupCog, group_name="games", description="迷你遊
             game.game_over_reveal_all = True
             mult = TOWER_MULTIPLIERS[TOWER_LEVELS]
             payout = round(game.bet * mult, 2)
+            currency = get_currency_name(game.guild_id)
+            balance_before = get_balance(game.guild_id, game.user_id)
             add_balance(game.guild_id, game.user_id, payout)
+            balance_after = get_balance(game.guild_id, game.user_id)
+            self._log_economy_history(
+                game.guild_id,
+                game.user_id,
+                "Tower 提現",
+                payout,
+                f"通關自動提現，倍率 x{mult:.2f}，下注 {game.bet:,.0f} {currency}",
+            )
+            queue_economy_audit_log(
+                "tower_cashout",
+                guild_id=game.guild_id,
+                actor=interaction.user,
+                interaction=interaction,
+                currency=currency,
+                amount=payout,
+                balance_before=balance_before,
+                balance_after=balance_after,
+                detail=f"Tower auto cashout at top level with multiplier x{mult:.2f}.",
+                color=0x2ECC71,
+            )
             if game.guild_id != GLOBAL_GUILD_ID:
                 record_transaction(game.guild_id)
             self.tower_games.pop(key, None)
@@ -1118,7 +1177,29 @@ class MiniGamesCog(commands.GroupCog, group_name="games", description="迷你遊
         safe = game.safe_level()
         mult = TOWER_MULTIPLIERS[safe]
         payout = round(game.bet * mult, 2)
+        currency = get_currency_name(game.guild_id)
+        balance_before = get_balance(game.guild_id, game.user_id)
         add_balance(game.guild_id, game.user_id, payout)
+        balance_after = get_balance(game.guild_id, game.user_id)
+        self._log_economy_history(
+            game.guild_id,
+            game.user_id,
+            "Tower 提現",
+            payout,
+            f"手動提現，倍率 x{mult:.2f}，下注 {game.bet:,.0f} {currency}",
+        )
+        queue_economy_audit_log(
+            "tower_cashout",
+            guild_id=game.guild_id,
+            actor=interaction.user,
+            interaction=interaction,
+            currency=currency,
+            amount=payout,
+            balance_before=balance_before,
+            balance_after=balance_after,
+            detail=f"Tower manual cashout at safe level {safe} with multiplier x{mult:.2f}.",
+            color=0x2ECC71,
+        )
         if game.guild_id != GLOBAL_GUILD_ID:
             record_transaction(game.guild_id)
         self.tower_games.pop(key, None)
@@ -1243,13 +1324,57 @@ class MiniGamesCog(commands.GroupCog, group_name="games", description="迷你遊
                 )
             collected: List[int] = []
             for p in g.players:
+                balance_before = get_balance(g.guild_id, p.user_id)
                 if not remove_balance(g.guild_id, p.user_id, g.stake):
                     for uid in collected:
+                        refund_before = get_balance(g.guild_id, uid)
                         add_balance(g.guild_id, uid, g.stake)
+                        refund_after = get_balance(g.guild_id, uid)
+                        self._log_economy_history(
+                            g.guild_id,
+                            uid,
+                            "大老二退款",
+                            g.stake,
+                            f"房間開局扣款失敗，退還賭注 {g.stake:,.0f} {currency}",
+                        )
+                        queue_economy_audit_log(
+                            "big2_refund",
+                            guild_id=g.guild_id,
+                            actor=interaction.user,
+                            target=self._resolve_audit_user(g.guild_id, uid),
+                            interaction=interaction,
+                            currency=currency,
+                            amount=g.stake,
+                            balance_before=refund_before,
+                            balance_after=refund_after,
+                            detail=f"Refunded Big2 stake because player {p.user_id} deduction failed.",
+                            color=0x95A5A6,
+                        )
                     return await interaction.response.send_message(
                         f"<@{p.user_id}> 扣款失敗，已退還已扣玩家。",
                         ephemeral=True,
                     )
+                balance_after = get_balance(g.guild_id, p.user_id)
+                self._log_economy_history(
+                    g.guild_id,
+                    p.user_id,
+                    "大老二下注",
+                    -g.stake,
+                    f"房主 {g.owner_id} 開局，下注 {g.stake:,.0f} {currency}",
+                )
+                queue_economy_audit_log(
+                    "big2_bet",
+                    guild_id=g.guild_id,
+                    actor=interaction.user,
+                    target=self._resolve_audit_user(g.guild_id, p.user_id),
+                    interaction=interaction,
+                    currency=currency,
+                    amount=g.stake,
+                    balance_before=balance_before,
+                    balance_after=balance_after,
+                    detail=f"Collected Big2 stake from player {p.user_id}.",
+                    color=0xF39C12,
+                )
                 collected.append(p.user_id)
             if g.guild_id != GLOBAL_GUILD_ID:
                 record_transaction(g.guild_id)
@@ -1352,7 +1477,33 @@ class MiniGamesCog(commands.GroupCog, group_name="games", description="迷你遊
                 g.stake_paid = True
                 winner_id = g.finish_order[0]
                 prize = g.stake * len(g.players)
+                currency = get_currency_name(g.guild_id)
+                balance_before = get_balance(g.guild_id, winner_id)
                 add_balance(g.guild_id, winner_id, prize)
+                balance_after = get_balance(g.guild_id, winner_id)
+                self._log_economy_history(
+                    g.guild_id,
+                    winner_id,
+                    "大老二獎金",
+                    prize,
+                    f"冠軍獎金，{len(g.players)} 人局，底注 {g.stake:,.0f} {currency}",
+                )
+                queue_economy_audit_log(
+                    "big2_payout",
+                    guild_id=g.guild_id,
+                    target=self._resolve_audit_user(g.guild_id, winner_id),
+                    currency=currency,
+                    amount=prize,
+                    balance_before=balance_before,
+                    balance_after=balance_after,
+                    detail=f"Big2 payout sent to winner {winner_id}.",
+                    color=0xF1C40F,
+                    extra_fields=[
+                        ("Winner", f"<@{winner_id}>", False),
+                        ("Stake / Player", f"{g.stake:,.0f} {currency}", True),
+                        ("Players", str(len(g.players)), True),
+                    ],
+                )
                 if g.guild_id != GLOBAL_GUILD_ID:
                     record_transaction(g.guild_id)
             view = None if game_over else TableView(self, g)
