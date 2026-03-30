@@ -168,11 +168,15 @@ Builder 內的 `trigger / response` 支援：
 
 - `{embedtitle:Title}`
 - `{embeddescription:Description}`
+- `{embedurl:URL}`
 - `{embedimage:SomeLink}`
 - `{embedthumbnail:SomeLink}`
 - `{embedcolor:57F287}`
 - `{embedfooter:Footer}`
+- `{embedfooterimage:SomeLink}`
 - `{embedauthor:Author}`
+- `{embedauthorurl:URL}`
+- `{embedauthorimage:SomeLink}`
 - `{embedtime:true}`
 - `{embedfield:FieldName:Content}`
 
@@ -182,10 +186,15 @@ Builder 內的 `trigger / response` 支援：
 
 ```text
 {embedtitle:簽到成功}
+{embedurl:https://example.com}
 {embeddescription:{user} 在 {date} {time24} 完成簽到}
+{embedauthor:系統}
+{embedauthorurl:https://example.com/profile}
+{embedauthorimage:{authoravatar}}
 {embedcolor:57F287}
 {embedfield:伺服器:{guild}}
 {embedfooter:AutoReply Template}
+{embedfooterimage:{authoravatar}}
 {embedtime:true}
 ```
 

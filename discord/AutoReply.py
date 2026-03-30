@@ -1324,11 +1324,15 @@ class AutoReply(commands.GroupCog, name="autoreply"):
         embed_prefixes = (
             "embedtitle:",
             "embeddescription:",
+            "embedurl:",
             "embedimage:",
             "embedcolor:",
             "embedthumbnail:",
             "embedfooter:",
+            "embedfooterimage:",
             "embedauthor:",
+            "embedauthorurl:",
+            "embedauthorimage:",
             "embedtime:",
             "embedfield:",
         )
@@ -1486,22 +1490,30 @@ class AutoReply(commands.GroupCog, name="autoreply"):
         directives = {
             "embedtitle:": "title",
             "embeddescription:": "description",
+            "embedurl:": "url",
             "embedimage:": "image",
             "embedcolor:": "color",
             "embedthumbnail:": "thumbnail",
             "embedfooter:": "footer",
+            "embedfooterimage:": "footer_image",
             "embedauthor:": "author",
+            "embedauthorurl:": "author_url",
+            "embedauthorimage:": "author_image",
             "embedtime:": "time",
             "embedfield:": "field",
         }
         extracted = {
             "title": None,
             "description": None,
+            "url": None,
             "image": None,
             "color": None,
             "thumbnail": None,
             "footer": None,
+            "footer_image": None,
             "author": None,
+            "author_url": None,
+            "author_image": None,
             "time": None,
             "fields": [],
         }
@@ -1721,7 +1733,20 @@ class AutoReply(commands.GroupCog, name="autoreply"):
     async def _build_embed_from_tokens(self, extracted: dict, message: discord.Message, context: dict):
         embed_requested = any(
             extracted[key] is not None
-            for key in ("title", "description", "image", "color", "thumbnail", "footer", "author", "time")
+            for key in (
+                "title",
+                "description",
+                "url",
+                "image",
+                "color",
+                "thumbnail",
+                "footer",
+                "footer_image",
+                "author",
+                "author_url",
+                "author_image",
+                "time",
+            )
         ) or bool(extracted["fields"])
         if not embed_requested:
             return None
@@ -1738,6 +1763,11 @@ class AutoReply(commands.GroupCog, name="autoreply"):
             if description:
                 embed.description = description
 
+        if extracted["url"] is not None:
+            embed_url = (await self._resolve_response_variables(extracted["url"], message, context)).strip()
+            if embed_url:
+                embed.url = embed_url
+
         if extracted["image"] is not None:
             image_url = (await self._resolve_response_variables(extracted["image"], message, context)).strip()
             if image_url:
@@ -1750,13 +1780,38 @@ class AutoReply(commands.GroupCog, name="autoreply"):
 
         if extracted["footer"] is not None:
             footer_text = (await self._resolve_response_variables(extracted["footer"], message, context)).strip()
-            if footer_text:
-                embed.set_footer(text=footer_text)
+        else:
+            footer_text = ""
+
+        if extracted["footer_image"] is not None:
+            footer_image_url = (await self._resolve_response_variables(extracted["footer_image"], message, context)).strip()
+        else:
+            footer_image_url = ""
+
+        if footer_text or footer_image_url:
+            embed.set_footer(text=footer_text or "\u200b", icon_url=footer_image_url or None)
 
         if extracted["author"] is not None:
             author_name = (await self._resolve_response_variables(extracted["author"], message, context)).strip()
-            if author_name:
-                embed.set_author(name=author_name)
+        else:
+            author_name = ""
+
+        if extracted["author_url"] is not None:
+            author_url = (await self._resolve_response_variables(extracted["author_url"], message, context)).strip()
+        else:
+            author_url = ""
+
+        if extracted["author_image"] is not None:
+            author_icon_url = (await self._resolve_response_variables(extracted["author_image"], message, context)).strip()
+        else:
+            author_icon_url = ""
+
+        if author_name or author_url or author_icon_url:
+            embed.set_author(
+                name=author_name or "\u200b",
+                url=author_url or None,
+                icon_url=author_icon_url or None,
+            )
 
         if extracted["color"] is not None:
             color_value = (await self._resolve_response_variables(extracted["color"], message, context)).strip()
@@ -2623,9 +2678,10 @@ class AutoReply(commands.GroupCog, name="autoreply"):
             value=(
                 "- `{random}` / `{randint:min-max}` / `{random_user}`\n"
                 "- `{react:emoji}`、`{sticker:sticker_id}`\n"
-                "- `{embedtitle:標題}` `{embeddescription:內容}`\n"
+                "- `{embedtitle:標題}` `{embeddescription:內容}` `{embedurl:連結}`\n"
                 "- `{embedimage:連結}` `{embedthumbnail:連結}`\n"
-                "- `{embedcolor:HEX}` `{embedfooter:文字}` `{embedauthor:名字}`\n"
+                "- `{embedcolor:HEX}` `{embedfooter:文字}` `{embedfooterimage:連結}`\n"
+                "- `{embedauthor:名字}` `{embedauthorurl:連結}` `{embedauthorimage:連結}`\n"
                 "- `{embedtime:true}` `{embedfield:欄位名:欄位值}`\n"
                 "- Embed 內文也可繼續使用其他 `{}` 變數"
             ),
@@ -2682,7 +2738,7 @@ class AutoReply(commands.GroupCog, name="autoreply"):
                     "1) `歡迎 {user} 來到 {guild}！`\n"
                     "2) `{if:{contentsplit:1}==true&&{hour}>=12:你在下午輸入了 true:還沒達成條件}`\n"
                     "3) `{if:{contentsplit:1}!={null}:你有輸入參數:else:你沒輸入參數}`\n"
-                    "4) `{embedtitle:簽到成功}{embeddescription:{user} 在 {date} {time24} 完成簽到}{embedcolor:57F287}`\n"
+                    "4) `{embedtitle:簽到成功}{embedurl:https://example.com}{embeddescription:{user} 在 {date} {time24} 完成簽到}{embedauthor:系統}{embedauthorimage:{authoravatar}}{embedcolor:57F287}`\n"
                     "5) `從第 2 個單字開始：{contentsplit:1-}`\n"
                     "6) `剛剛聊天室隨機點名：{random_user}`"
                 )
