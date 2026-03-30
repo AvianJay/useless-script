@@ -244,6 +244,381 @@ def parse_channel_mention(mention: str) -> str:
     return mention
 
 
+AUTOREPLY_MODE_METADATA = {
+    "contains": {
+        "label": "包含",
+        "description": "訊息包含其中一個觸發字就回覆",
+    },
+    "equals": {
+        "label": "完全相同",
+        "description": "訊息要和觸發字完全一樣",
+    },
+    "starts_with": {
+        "label": "開頭符合",
+        "description": "訊息開頭符合時觸發",
+    },
+    "ends_with": {
+        "label": "結尾符合",
+        "description": "訊息結尾符合時觸發",
+    },
+    "regex": {
+        "label": "正規表達式",
+        "description": "用 Python regex 比對訊息",
+    },
+}
+
+AUTOREPLY_CHANNEL_MODE_METADATA = {
+    "all": {
+        "label": "全部頻道",
+        "description": "任何文字頻道都能觸發",
+    },
+    "whitelist": {
+        "label": "白名單",
+        "description": "只有指定頻道會觸發",
+    },
+    "blacklist": {
+        "label": "黑名單",
+        "description": "除了指定頻道外都會觸發",
+    },
+}
+
+
+class AutoReplyBuilderContentModal(discord.ui.Modal, title="AutoReply Builder"):
+    def __init__(self, builder_view: "AutoReplyBuilderView"):
+        super().__init__()
+        self.builder_view = builder_view
+
+        self.trigger_input = discord.ui.TextInput(
+            label="觸發字",
+            placeholder="一行一個 trigger；只有一行時也可用逗號分隔",
+            required=True,
+            max_length=1000,
+            style=discord.TextStyle.paragraph,
+            default=builder_view.state["trigger_text"],
+        )
+        self.response_input = discord.ui.TextInput(
+            label="回覆內容",
+            placeholder="一行一個 response；可直接使用 {user}、{contentsplit:1-} 等變數",
+            required=True,
+            max_length=2000,
+            style=discord.TextStyle.paragraph,
+            default=builder_view.state["response_text"],
+        )
+        self.random_chance_input = discord.ui.TextInput(
+            label="觸發機率 (1-100)",
+            placeholder="100",
+            required=True,
+            max_length=3,
+            style=discord.TextStyle.short,
+            default=str(builder_view.state["random_chance"]),
+        )
+
+        self.add_item(self.trigger_input)
+        self.add_item(self.response_input)
+        self.add_item(self.random_chance_input)
+
+    async def on_submit(self, interaction: discord.Interaction):
+        chance_raw = self.random_chance_input.value.strip()
+        try:
+            random_chance = int(chance_raw)
+        except (TypeError, ValueError):
+            await interaction.response.send_message("觸發機率必須是 1 到 100 的整數。", ephemeral=True)
+            return
+
+        if random_chance < 1 or random_chance > 100:
+            await interaction.response.send_message("觸發機率必須是 1 到 100 的整數。", ephemeral=True)
+            return
+
+        self.builder_view.state["trigger_text"] = self.trigger_input.value.strip()
+        self.builder_view.state["response_text"] = self.response_input.value.strip()
+        self.builder_view.state["random_chance"] = random_chance
+
+        await interaction.response.defer(ephemeral=True)
+        await self.builder_view.refresh_message()
+        await interaction.followup.send("Builder 內容已更新。", ephemeral=True)
+
+
+class AutoReplyBuilderModeSelect(discord.ui.Select):
+    def __init__(self, builder_view: "AutoReplyBuilderView"):
+        self.builder_view = builder_view
+        options = [
+            discord.SelectOption(
+                label=meta["label"],
+                value=value,
+                description=meta["description"],
+                default=builder_view.state["mode"] == value,
+            )
+            for value, meta in AUTOREPLY_MODE_METADATA.items()
+        ]
+        super().__init__(
+            placeholder="選擇觸發模式",
+            min_values=1,
+            max_values=1,
+            options=options,
+            row=0,
+        )
+
+    async def callback(self, interaction: discord.Interaction):
+        if not await self.builder_view.ensure_owner(interaction):
+            return
+        self.builder_view.state["mode"] = interaction.data["values"][0]
+        await interaction.response.defer_update()
+        await self.builder_view.refresh_message(interaction.message)
+
+
+class AutoReplyBuilderChannelModeSelect(discord.ui.Select):
+    def __init__(self, builder_view: "AutoReplyBuilderView"):
+        self.builder_view = builder_view
+        options = [
+            discord.SelectOption(
+                label=meta["label"],
+                value=value,
+                description=meta["description"],
+                default=builder_view.state["channel_mode"] == value,
+            )
+            for value, meta in AUTOREPLY_CHANNEL_MODE_METADATA.items()
+        ]
+        super().__init__(
+            placeholder="選擇頻道限制模式",
+            min_values=1,
+            max_values=1,
+            options=options,
+            row=0,
+        )
+
+    async def callback(self, interaction: discord.Interaction):
+        if not await self.builder_view.ensure_owner(interaction):
+            return
+        self.builder_view.state["channel_mode"] = interaction.data["values"][0]
+        await interaction.response.defer_update()
+        await self.builder_view.refresh_message(interaction.message)
+
+
+class AutoReplyBuilderChannelSelect(discord.ui.ChannelSelect):
+    def __init__(self, builder_view: "AutoReplyBuilderView"):
+        self.builder_view = builder_view
+        text_channel_count = len([
+            channel for channel in builder_view.guild.channels
+            if getattr(channel, "type", None) in (discord.ChannelType.text, discord.ChannelType.news)
+        ])
+        super().__init__(
+            placeholder="選擇頻道限制（可多選，不選就是空清單）",
+            channel_types=[discord.ChannelType.text, discord.ChannelType.news],
+            min_values=0,
+            max_values=max(1, min(25, text_channel_count or 1)),
+            row=1,
+        )
+
+    async def callback(self, interaction: discord.Interaction):
+        if not await self.builder_view.ensure_owner(interaction):
+            return
+        selected_values = interaction.data.get("values", [])
+        self.builder_view.state["channels"] = [
+            int(channel_id)
+            for channel_id in selected_values
+            if str(channel_id).isdigit()
+        ]
+        await interaction.response.defer_update()
+        await self.builder_view.refresh_message(interaction.message)
+
+
+class AutoReplyBuilderView(discord.ui.View):
+    def __init__(self, cog: "AutoReply", interaction: discord.Interaction):
+        super().__init__(timeout=900)
+        self.cog = cog
+        self.owner_id = interaction.user.id
+        self.guild = interaction.guild
+        self.original_interaction = interaction
+        self.message: discord.Message | None = None
+        self.state = {
+            "trigger_text": "",
+            "response_text": "",
+            "mode": "contains",
+            "reply": False,
+            "channel_mode": "all",
+            "channels": [],
+            "random_chance": 100,
+        }
+        self._rebuild_components()
+
+    async def ensure_owner(self, interaction: discord.Interaction) -> bool:
+        if interaction.user.id == self.owner_id:
+            return True
+        await interaction.response.send_message("這個 builder 只給原本開啟的人操作。", ephemeral=True)
+        return False
+
+    def _rebuild_components(self):
+        self.clear_items()
+        self.add_item(AutoReplyBuilderModeSelect(self))
+        self.add_item(AutoReplyBuilderChannelModeSelect(self))
+        self.add_item(AutoReplyBuilderChannelSelect(self))
+
+        edit_button = discord.ui.Button(label="編輯觸發與回覆", style=discord.ButtonStyle.primary, row=2)
+        edit_button.callback = self.open_content_modal
+        self.add_item(edit_button)
+
+        reply_button = discord.ui.Button(
+            label=f"Reply：{'開啟' if self.state['reply'] else '關閉'}",
+            style=discord.ButtonStyle.success if self.state["reply"] else discord.ButtonStyle.secondary,
+            row=2,
+        )
+        reply_button.callback = self.toggle_reply
+        self.add_item(reply_button)
+
+        clear_channels_button = discord.ui.Button(label="清空頻道限制", style=discord.ButtonStyle.secondary, row=2)
+        clear_channels_button.callback = self.clear_channels
+        self.add_item(clear_channels_button)
+
+        save_button = discord.ui.Button(label="儲存規則", style=discord.ButtonStyle.success, row=3)
+        save_button.callback = self.save_rule
+        self.add_item(save_button)
+
+        cancel_button = discord.ui.Button(label="取消", style=discord.ButtonStyle.danger, row=3)
+        cancel_button.callback = self.cancel_builder
+        self.add_item(cancel_button)
+
+    def build_embed(self, *, title: str = "AutoReply Builder", description: str | None = None, color: int = 0x5865F2):
+        trigger_preview = self.cog._preview_builder_items(self.state["trigger_text"], empty_text="還沒設定")
+        response_preview = self.cog._preview_builder_items(self.state["response_text"], empty_text="還沒設定")
+        channel_mentions = [
+            f"<#{channel_id}>"
+            for channel_id in self.state["channels"]
+            if self.guild.get_channel(channel_id) is not None
+        ]
+        mode_label = AUTOREPLY_MODE_METADATA[self.state["mode"]]["label"]
+        channel_mode_label = AUTOREPLY_CHANNEL_MODE_METADATA[self.state["channel_mode"]]["label"]
+        channel_text = ", ".join(channel_mentions) if channel_mentions else "空清單"
+
+        embed = discord.Embed(
+            title=title,
+            description=description or "用下方按鈕和下拉選單慢慢組這條規則，準備好之後按「儲存規則」。",
+            color=color,
+        )
+        embed.add_field(name="觸發字", value=trigger_preview, inline=False)
+        embed.add_field(name="回覆內容", value=response_preview, inline=False)
+        embed.add_field(name="模式", value=f"{mode_label} (`{self.state['mode']}`)", inline=True)
+        embed.add_field(name="Reply", value="開啟" if self.state["reply"] else "關閉", inline=True)
+        embed.add_field(name="機率", value=f"{self.state['random_chance']}%", inline=True)
+        embed.add_field(name="頻道模式", value=f"{channel_mode_label} (`{self.state['channel_mode']}`)", inline=True)
+        embed.add_field(name="指定頻道", value=channel_text, inline=True)
+        embed.add_field(name="目前條數", value=f"{len(get_server_config(self.guild.id, 'autoreplies', []))} / {self.cog._get_autoreply_limit(self.guild.id)}", inline=True)
+        embed.add_field(
+            name="小提示",
+            value="觸發字 / 回覆可以一行一個；回覆可直接用 `{user}`、`{content}`、`{contentsplit:1-}`、`{if:...}`、`{math:(...)}`。",
+            inline=False,
+        )
+        return embed
+
+    async def refresh_message(self, message: discord.Message | None = None):
+        if message is not None:
+            self.message = message
+        if self.message is None:
+            return
+        self._rebuild_components()
+        await self.message.edit(embed=self.build_embed(), view=self)
+
+    async def open_content_modal(self, interaction: discord.Interaction):
+        if not await self.ensure_owner(interaction):
+            return
+        await interaction.response.send_modal(AutoReplyBuilderContentModal(self))
+
+    async def toggle_reply(self, interaction: discord.Interaction):
+        if not await self.ensure_owner(interaction):
+            return
+        self.state["reply"] = not self.state["reply"]
+        await interaction.response.defer_update()
+        await self.refresh_message(interaction.message)
+
+    async def clear_channels(self, interaction: discord.Interaction):
+        if not await self.ensure_owner(interaction):
+            return
+        self.state["channels"] = []
+        await interaction.response.defer_update()
+        await self.refresh_message(interaction.message)
+
+    async def save_rule(self, interaction: discord.Interaction):
+        if not await self.ensure_owner(interaction):
+            return
+
+        try:
+            rule = self.cog._build_autoreply_rule(
+                guild=self.guild,
+                mode=self.state["mode"],
+                trigger_input=self.state["trigger_text"],
+                response_input=self.state["response_text"],
+                reply=self.state["reply"],
+                channel_mode=self.state["channel_mode"],
+                channels_input=self.state["channels"],
+                random_chance=self.state["random_chance"],
+            )
+            total_count, limit = self.cog._save_new_autoreply_rule(self.guild.id, rule)
+        except ValueError as e:
+            await interaction.response.send_message(str(e), ephemeral=True)
+            return
+
+        await interaction.response.defer(ephemeral=True)
+        for child in self.children:
+            child.disabled = True
+        self.stop()
+
+        success_embed = self.cog._build_autoreply_rule_embed(
+            title="已儲存 AutoReply 規則",
+            rule=rule,
+            guild=self.guild,
+            description=f"這條規則已經加入清單，目前共有 {total_count} / {limit} 條。",
+        )
+        if self.message is None:
+            self.message = interaction.message
+        if self.message is not None:
+            await self.message.edit(embed=success_embed, view=self)
+
+        trigger_text = ", ".join(rule["trigger"])
+        log(
+            f"自動回覆由 builder 新增：`{trigger_text[:10]}{'...' if len(trigger_text) > 10 else ''}`。",
+            module_name="AutoReply",
+            level=logging.INFO,
+            user=interaction.user,
+            guild=interaction.guild,
+        )
+        await interaction.followup.send("規則已加入 AutoReply 清單。", ephemeral=True)
+
+    async def cancel_builder(self, interaction: discord.Interaction):
+        if not await self.ensure_owner(interaction):
+            return
+        await interaction.response.defer_update()
+        for child in self.children:
+            child.disabled = True
+        self.stop()
+        if self.message is None:
+            self.message = interaction.message
+        if self.message is not None:
+            await self.message.edit(
+                embed=self.build_embed(
+                    title="AutoReply Builder 已取消",
+                    description="這次沒有儲存任何規則。",
+                    color=0x747F8D,
+                ),
+                view=self,
+            )
+
+    async def on_timeout(self):
+        for child in self.children:
+            child.disabled = True
+        self.stop()
+        if self.message is not None:
+            try:
+                await self.message.edit(
+                    embed=self.build_embed(
+                        title="AutoReply Builder 已逾時",
+                        description="Builder 已關閉，想繼續的話請重新執行指令。",
+                        color=0xED4245,
+                    ),
+                    view=self,
+                )
+            except Exception:
+                pass
+
+
 @app_commands.guild_only()
 @app_commands.default_permissions(manage_guild=True)
 @app_commands.allowed_installs(guilds=True, users=False)
@@ -270,6 +645,165 @@ class AutoReply(commands.GroupCog, name="autoreply"):
             return int(get_server_config(guild_id, "autoreply_limit", DEFAULT_AUTOREPLY_CONFIG_LIMIT) or DEFAULT_AUTOREPLY_CONFIG_LIMIT)
         except (TypeError, ValueError):
             return DEFAULT_AUTOREPLY_CONFIG_LIMIT
+
+    def _split_autoreply_items(self, raw_value: str) -> list[str]:
+        if raw_value is None:
+            return []
+
+        normalized_value = str(raw_value).replace("\r\n", "\n").strip()
+        if not normalized_value:
+            return []
+
+        if "\n" in normalized_value:
+            return [item.strip() for item in normalized_value.split("\n") if item.strip()]
+
+        return [item.strip() for item in normalized_value.split(",") if item.strip()]
+
+    def _preview_builder_items(self, raw_value: str, *, empty_text: str = "未設定") -> str:
+        items = self._split_autoreply_items(raw_value)
+        if not items:
+            return empty_text
+
+        preview_lines = []
+        for item in items[:5]:
+            shortened = item if len(item) <= 250 else item[:247] + "..."
+            preview_lines.append(f"• {shortened}")
+
+        if len(items) > 5:
+            preview_lines.append(f"… 另外還有 {len(items) - 5} 項")
+
+        preview_text = "\n".join(preview_lines)
+        return preview_text if len(preview_text) <= 1024 else preview_text[:1021] + "..."
+
+    def _normalize_autoreply_channels(self, guild: discord.Guild, channels_input) -> list[int]:
+        if not channels_input:
+            return []
+
+        if isinstance(channels_input, str):
+            channel_candidates = [parse_channel_mention(item.strip()) for item in channels_input.split(",") if item.strip()]
+        else:
+            channel_candidates = list(channels_input)
+
+        valid_channels = []
+        seen_channels = set()
+
+        for channel_candidate in channel_candidates:
+            channel_id = None
+
+            if isinstance(channel_candidate, int):
+                channel_id = channel_candidate
+            else:
+                channel_text = str(channel_candidate).strip()
+                if channel_text.isdigit():
+                    channel_id = int(channel_text)
+
+            if channel_id is None or channel_id in seen_channels:
+                continue
+
+            if guild.get_channel(channel_id) is None:
+                continue
+
+            seen_channels.add(channel_id)
+            valid_channels.append(channel_id)
+
+        return valid_channels
+
+    def _build_autoreply_rule(
+        self,
+        guild: discord.Guild,
+        mode: str,
+        trigger_input: str,
+        response_input: str,
+        reply: bool = False,
+        channel_mode: str = "all",
+        channels_input=None,
+        random_chance: int = 100,
+    ) -> dict:
+        if mode not in AUTOREPLY_MODE_METADATA:
+            raise ValueError("未知的觸發模式。")
+        if channel_mode not in AUTOREPLY_CHANNEL_MODE_METADATA:
+            raise ValueError("未知的頻道限制模式。")
+
+        try:
+            random_chance = int(random_chance)
+        except (TypeError, ValueError):
+            raise ValueError("觸發機率必須是 1 到 100 的整數。")
+
+        if random_chance < 1 or random_chance > 100:
+            raise ValueError("觸發機率必須是 1 到 100 的整數。")
+
+        trigger = self._split_autoreply_items(trigger_input)
+        response = self._split_autoreply_items(response_input)
+
+        if not trigger:
+            raise ValueError("至少要設定一個觸發字。")
+        if not response:
+            raise ValueError("至少要設定一個回覆內容。")
+
+        for template in response:
+            try:
+                self._validate_template_syntax(template)
+            except TemplateSyntaxError as e:
+                raise ValueError(f"回覆模板語法錯誤：{e}") from e
+
+        valid_channels = self._normalize_autoreply_channels(guild, channels_input)
+
+        return {
+            "trigger": trigger,
+            "response": response,
+            "mode": mode,
+            "reply": bool(reply),
+            "channel_mode": channel_mode,
+            "channels": valid_channels,
+            "random_chance": random_chance,
+        }
+
+    def _save_new_autoreply_rule(self, guild_id: int, rule: dict) -> tuple[int, int]:
+        autoreplies = get_server_config(guild_id, "autoreplies", [])
+        autoreply_limit = self._get_autoreply_limit(guild_id)
+        if len(autoreplies) >= autoreply_limit:
+            raise ValueError(f"自動回覆上限為 {autoreply_limit} 條。")
+
+        autoreplies.append(rule)
+        set_server_config(guild_id, "autoreplies", autoreplies)
+        return len(autoreplies), autoreply_limit
+
+    def _build_autoreply_rule_embed(
+        self,
+        title: str,
+        rule: dict,
+        guild: discord.Guild | None = None,
+        description: str | None = None,
+        color: int = 0x00FF00,
+    ) -> discord.Embed:
+        trigger_text = ", ".join(rule["trigger"])
+        response_text = ", ".join(rule["response"])
+        trigger_preview = trigger_text if len(trigger_text) <= 1024 else trigger_text[:1021] + "..."
+        response_preview = response_text if len(response_text) <= 1024 else response_text[:1021] + "..."
+
+        if rule["channels"]:
+            channel_mentions = []
+            for channel_id in rule["channels"]:
+                if guild is not None and guild.get_channel(channel_id) is not None:
+                    channel_mentions.append(f"<#{channel_id}>")
+                else:
+                    channel_mentions.append(str(channel_id))
+            channel_text = ", ".join(channel_mentions)
+        else:
+            channel_text = "無"
+
+        mode_label = AUTOREPLY_MODE_METADATA.get(rule["mode"], {}).get("label", rule["mode"])
+        channel_mode_label = AUTOREPLY_CHANNEL_MODE_METADATA.get(rule["channel_mode"], {}).get("label", rule["channel_mode"])
+
+        embed = discord.Embed(title=title, description=description, color=color)
+        embed.add_field(name="模式", value=f"{mode_label} (`{rule['mode']}`)")
+        embed.add_field(name="觸發字", value=f"`{trigger_preview}`", inline=False)
+        embed.add_field(name="回覆內容", value=f"`{response_preview}`", inline=False)
+        embed.add_field(name="Reply", value="是" if rule["reply"] else "否")
+        embed.add_field(name="頻道模式", value=f"{channel_mode_label} (`{rule['channel_mode']}`)")
+        embed.add_field(name="指定頻道", value=channel_text, inline=False)
+        embed.add_field(name="觸發機率", value=f"{rule['random_chance']}%")
+        return embed
 
     def _parse_embed_color(self, value: str):
         raw_value = str(value).strip().lower()
@@ -1798,6 +2332,13 @@ class AutoReply(commands.GroupCog, name="autoreply"):
         if preview_text is None and embed is None:
             preview_text = "沒有可輸出的內容"
         await interaction.response.send_message(preview_text, embed=embed)
+
+    @app_commands.command(name="builder", description="用互動式介面建立自動回覆")
+    @app_commands.default_permissions(manage_guild=True)
+    async def autoreply_builder(self, interaction: discord.Interaction):
+        view = AutoReplyBuilderView(self, interaction)
+        await interaction.response.send_message(embed=view.build_embed(), view=view, ephemeral=True)
+        view.message = await interaction.original_response()
     
     @app_commands.command(name="help", description="顯示自動回覆的使用說明")
     async def autoreply_help(self, interaction: discord.Interaction):

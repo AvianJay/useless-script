@@ -31,10 +31,6 @@
         gtag('config', '{{ gtag }}');
     </script>
     <style>
-        html, body {
-            overflow-x: hidden;
-        }
-
         .docs-hero {
             text-align: center;
             padding: 3rem 1rem 2rem;
@@ -49,6 +45,14 @@
             padding: 2rem;
             display: flex;
             gap: 2rem;
+        }
+
+        .docs-layout,
+        .docs-content,
+        .doc-section,
+        .markdown-doc {
+            min-width: 0;
+            max-width: 100%;
         }
 
         /* Sidebar */
@@ -263,6 +267,11 @@
             margin: 0;
         }
 
+        .markdown-doc img {
+            max-width: 100%;
+            height: auto;
+        }
+
         .doc-tag {
             display: inline-block;
             padding: 0.15rem 0.5rem;
@@ -383,7 +392,8 @@
                 font-size: 0.82rem;
             }
             .doc-section {
-                overflow-x: hidden;
+                overflow-x: auto;
+                -webkit-overflow-scrolling: touch;
                 word-break: break-word;
             }
             .doc-note {
@@ -1111,6 +1121,12 @@
             </div>
 
             <!-- ==================== 工具與自動化 ==================== -->
+
+            <div class="doc-note" style="background: rgba(88, 101, 242, 0.08); border-left-color: #5865f2;">
+                <strong>/autoreply builder</strong><br>
+                用互動式 builder 一步一步填觸發字、回覆、模式、reply 和頻道限制，最後直接儲存成規則。<br>
+                Builder 內的 trigger / response 支援一行一個；如果只寫一行，也可以繼續用逗號分隔多個項目。
+            </div>
 
             <div class="doc-section" id="UtilCommands">
                 <h2><span class="module-icon">🔧</span> UtilCommands — 實用指令</h2>
