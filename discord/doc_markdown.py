@@ -15,6 +15,15 @@ _HEADING_RE = re.compile(r"^(#{1,6})\s+(.*)$")
 _LIST_RE = re.compile(r"^-\s+(.*)$")
 _BLOCKQUOTE_RE = re.compile(r"^>\s?(.*)$")
 _CODE_FENCE_RE = re.compile(r"^```([A-Za-z0-9_-]+)?\s*$")
+_HTML_HEADING_RE = re.compile(r"<h(?P<level>[1-6])>(?P<inner>.*?)</h(?P=level)>", re.DOTALL)
+
+_DOC_HEADING_TAGS: list[tuple[str, list[tuple[str, str]]]] = [
+    ("管理員自動化", [("admin", "管理員"), ("auto", "自動化")]),
+    ("管理員", [("admin", "管理員")]),
+    ("自動化", [("auto", "自動化")]),
+    ("擁有者", [("owner", "擁有者")]),
+    ("娛樂", [("fun", "娛樂")]),
+]
 
 
 def read_markdown_file(path: str | Path) -> str:
@@ -140,9 +149,48 @@ def _render_markdown_fallback(markdown_text: str) -> str:
     return "\n".join(html_parts)
 
 
+def _split_heading_tags(text: str) -> tuple[str, list[tuple[str, str]]]:
+    remaining = str(text or "").rstrip()
+    tags: list[tuple[str, str]] = []
+
+    while remaining:
+        matched = False
+        for marker, marker_tags in _DOC_HEADING_TAGS:
+            if remaining.endswith(marker):
+                remaining = remaining[: -len(marker)].rstrip()
+                tags = marker_tags + tags
+                matched = True
+                break
+        if not matched:
+            break
+
+    return remaining, tags
+
+
+def _decorate_heading_tags(rendered_html: str) -> str:
+    def replace_heading(match: re.Match) -> str:
+        inner_html = match.group("inner").strip()
+        if "doc-tag" in inner_html:
+            return match.group(0)
+
+        base_html, tags = _split_heading_tags(inner_html)
+        if not tags:
+            return match.group(0)
+
+        tags_html = "".join(
+            f'<span class="doc-tag {css_class}">{escape(label)}</span>'
+            for css_class, label in tags
+        )
+        spacer = " " if base_html else ""
+        level = match.group("level")
+        return f"<h{level}>{base_html}{spacer}{tags_html}</h{level}>"
+
+    return _HTML_HEADING_RE.sub(replace_heading, str(rendered_html or ""))
+
+
 def render_markdown(markdown_text: str) -> str:
     if markdown_package is not None:
-        return markdown_package.markdown(
+        rendered_html = markdown_package.markdown(
             str(markdown_text or ""),
             extensions=[
                 "fenced_code",
@@ -151,7 +199,8 @@ def render_markdown(markdown_text: str) -> str:
                 "nl2br",
             ],
         )
-    return _render_markdown_fallback(markdown_text)
+        return _decorate_heading_tags(rendered_html)
+    return _decorate_heading_tags(_render_markdown_fallback(markdown_text))
 
 
 def load_markdown_documents(directory: str | Path) -> dict[str, str]:
