@@ -816,8 +816,8 @@ async def sticker_info(ctx: commands.Context):
     await ctx.reply(embed=embed, view=view)
 
 class StealView(discord.ui.View):
-    def __init__(self):
-        super().__init__()
+    def __init__(self, *, timeout: float | None = None):
+        super().__init__(timeout=timeout)
 
     @discord.ui.button(label="偷", style=discord.ButtonStyle.primary, emoji="💾", custom_id="steal")
     async def download_button(self, interaction: discord.Interaction, button: discord.ui.Button):
@@ -858,38 +858,128 @@ class StealView(discord.ui.View):
             await interaction.followup.send(f"❌ 無法加入{target}：{e}", ephemeral=True)
 
 _CUSTOM_EMOJI_RE = re.compile(r'<(a?):(\w+):(\d+)>')
+_MAX_EMOJI_INFO_RESULTS = 10
 
-def _find_first_custom_emoji(content: str) -> discord.PartialEmoji | None:
-    m = _CUSTOM_EMOJI_RE.search(content or "")
-    if m:
-        return discord.PartialEmoji(animated=m.group(1) == 'a', name=m.group(2), id=int(m.group(3)))
-    return None
+def _append_custom_emojis(
+    content: str,
+    emojis: list[discord.PartialEmoji],
+    seen_ids: set[int],
+    limit: int = _MAX_EMOJI_INFO_RESULTS,
+) -> None:
+    for match in _CUSTOM_EMOJI_RE.finditer(content or ""):
+        emoji_id = int(match.group(3))
+        if emoji_id in seen_ids:
+            continue
+
+        emojis.append(
+            discord.PartialEmoji(
+                animated=match.group(1) == "a",
+                name=match.group(2),
+                id=emoji_id,
+            )
+        )
+        seen_ids.add(emoji_id)
+
+        if len(emojis) >= limit:
+            return
+
+
+def _collect_custom_emojis_from_message(
+    message: discord.Message,
+    limit: int = _MAX_EMOJI_INFO_RESULTS,
+) -> list[discord.PartialEmoji]:
+    emojis: list[discord.PartialEmoji] = []
+    seen_ids: set[int] = set()
+
+    _append_custom_emojis(message.content, emojis, seen_ids, limit=limit)
+    if len(emojis) >= limit:
+        return emojis
+
+    for snapshot in message.message_snapshots or []:
+        _append_custom_emojis(snapshot.content, emojis, seen_ids, limit=limit)
+        if len(emojis) >= limit:
+            break
+
+    return emojis
+
+
+class EmojiInfoView(StealView):
+    def __init__(
+        self,
+        emojis: list[discord.PartialEmoji],
+        interaction: discord.Interaction,
+        *,
+        allow_steal: bool,
+    ):
+        super().__init__(timeout=300)
+        self.emojis = emojis[:_MAX_EMOJI_INFO_RESULTS]
+        self.current_page = 0
+        self.original_interaction = interaction
+        self.link_button = discord.ui.Button(
+            label="表情符號連結",
+            url=str(self.emojis[0].url),
+            row=0,
+        )
+        self.add_item(self.link_button)
+
+        if not allow_steal:
+            self.remove_item(self.download_button)
+
+        self.update_buttons()
+
+    @property
+    def current_emoji(self) -> discord.PartialEmoji:
+        return self.emojis[self.current_page]
+
+    def get_embed(self) -> discord.Embed:
+        emoji = self.current_emoji
+        embed = discord.Embed(title=f"{emoji.name}", color=0x00ff00)
+        embed.set_author(name="表情符號資訊")
+        embed.set_image(url=str(emoji.url))
+        embed.add_field(name="表情符號 ID", value=str(emoji.id), inline=True)
+        embed.add_field(name="是否為動畫", value=str(emoji.animated), inline=True)
+        embed.set_footer(text=f"表情符號 {self.current_page + 1} / {len(self.emojis)}")
+        return embed
+
+    def update_buttons(self):
+        self.prev_button.disabled = self.current_page <= 0
+        self.next_button.disabled = self.current_page >= len(self.emojis) - 1
+        self.link_button.url = str(self.current_emoji.url)
+
+    async def on_timeout(self):
+        for item in self.children:
+            item.disabled = True
+        try:
+            await self.original_interaction.edit_original_response(view=self)
+        except Exception:
+            pass
+
+    @discord.ui.button(emoji="⬅️", style=discord.ButtonStyle.primary, row=0)
+    async def prev_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        self.current_page = max(0, self.current_page - 1)
+        self.update_buttons()
+        await interaction.response.edit_message(embed=self.get_embed(), view=self)
+
+    @discord.ui.button(emoji="➡️", style=discord.ButtonStyle.primary, row=0)
+    async def next_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        self.current_page = min(len(self.emojis) - 1, self.current_page + 1)
+        self.update_buttons()
+        await interaction.response.edit_message(embed=self.get_embed(), view=self)
 
 @app_commands.allowed_installs(guilds=True, users=True)
 @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
 @bot.tree.context_menu(name="表情符號資訊")
 async def emoji_info_context(interaction: discord.Interaction, message: discord.Message):
-    emoji = _find_first_custom_emoji(message.content)
-    if emoji is None and message.message_snapshots:
-        for snapshot in message.message_snapshots:
-            emoji = _find_first_custom_emoji(snapshot.content)
-            if emoji:
-                break
-    if emoji is None:
+    emojis = _collect_custom_emojis_from_message(message)
+    if not emojis:
         await interaction.response.send_message("此訊息沒有表情符號。", ephemeral=True)
         return
-    embed = discord.Embed(title=f"{emoji.name}", color=0x00ff00)
-    embed.set_author(name=f"表情符號資訊")
-    embed.set_image(url=emoji.url)
-    embed.add_field(name="表情符號 ID", value=str(emoji.id), inline=True)
-    embed.add_field(name="是否為動畫", value=str(emoji.animated), inline=True)
-    if interaction.is_guild_integration():
-        view = StealView()
-    else:
-        view = discord.ui.View()
-    btn = discord.ui.Button(label="表情符號連結", url=emoji.url)
-    view.add_item(btn)
-    await interaction.response.send_message(embed=embed, view=view)
+    view = EmojiInfoView(
+        emojis,
+        interaction=interaction,
+        allow_steal=interaction.is_guild_integration(),
+    )
+    await interaction.response.send_message(embed=view.get_embed(), view=view)
 
 # context menu for sticker info
 @app_commands.allowed_installs(guilds=True, users=True)
