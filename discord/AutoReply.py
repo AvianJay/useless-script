@@ -25,6 +25,9 @@ AUTOREPLY_DELAY_MAX_SECONDS = 3
 AUTOREPLY_USERVAR_LIMIT = 5
 AUTOREPLY_GUILDVAR_LIMIT = 10
 AUTOREPLY_VAR_MAX_LENGTH = 100
+AUTOREPLY_MATH_EXPRESSION_MAX_LENGTH = 300
+AUTOREPLY_MATH_AST_MAX_DEPTH = 64
+AUTOREPLY_MATH_AST_MAX_NODES = 256
 AUTOREPLY_VAR_KEY_PREFIX = "autoreply_var_"
 AUTOREPLY_TEMPLATE_PACKS = {
     "daily_greetings": {
@@ -1053,6 +1056,9 @@ class AutoReply(commands.GroupCog, name="autoreply"):
         if not expression:
             raise TemplateSyntaxError("Invalid math syntax")
 
+        if len(expression) > AUTOREPLY_MATH_EXPRESSION_MAX_LENGTH:
+            raise TemplateSyntaxError("Math expression too long")
+
         return expression
 
     def _prepare_math_expression_for_validation(self, expression: str) -> str:
@@ -1074,11 +1080,34 @@ class AutoReply(commands.GroupCog, name="autoreply"):
             output.append("0")
             index = closing_index + 1
 
-        return "".join(output)
+        prepared_expression = "".join(output)
+        if len(prepared_expression) > AUTOREPLY_MATH_EXPRESSION_MAX_LENGTH:
+            raise TemplateSyntaxError("Math expression too long")
+
+        return prepared_expression
+
+    def _validate_math_ast_limits(self, parsed_expression):
+        stack = [(parsed_expression, 1)]
+        node_count = 0
+
+        while stack:
+            node, depth = stack.pop()
+            node_count += 1
+
+            if node_count > AUTOREPLY_MATH_AST_MAX_NODES:
+                raise TemplateSyntaxError("Math expression too complex")
+            if depth > AUTOREPLY_MATH_AST_MAX_DEPTH:
+                raise TemplateSyntaxError("Math expression too complex")
+
+            for child in ast.iter_child_nodes(node):
+                stack.append((child, depth + 1))
 
     def _normalize_math_expression(self, expression: str) -> str:
         if not expression.strip():
             raise TemplateSyntaxError("Invalid math syntax")
+
+        if len(expression) > AUTOREPLY_MATH_EXPRESSION_MAX_LENGTH:
+            raise TemplateSyntaxError("Math expression too long")
 
         if not re.fullmatch(r"[0-9\.\+\-\*/\(\)\s]+", expression):
             raise TemplateSyntaxError("Invalid math syntax")
@@ -1115,8 +1144,13 @@ class AutoReply(commands.GroupCog, name="autoreply"):
 
         try:
             parsed_expression = ast.parse(expression, mode="eval")
-        except SyntaxError as e:
+        except (SyntaxError, RecursionError, MemoryError) as e:
             raise TemplateSyntaxError("Invalid math syntax") from e
+
+        try:
+            self._validate_math_ast_limits(parsed_expression)
+        except (RecursionError, MemoryError) as e:
+            raise TemplateSyntaxError("Math expression too complex") from e
 
         def evaluate_node(node):
             if isinstance(node, ast.Expression):
@@ -1148,7 +1182,10 @@ class AutoReply(commands.GroupCog, name="autoreply"):
 
             raise TemplateSyntaxError("Invalid math syntax")
 
-        result = evaluate_node(parsed_expression)
+        try:
+            result = evaluate_node(parsed_expression)
+        except (RecursionError, MemoryError) as e:
+            raise TemplateSyntaxError("Math expression too complex") from e
         if not math.isfinite(result):
             raise TemplateSyntaxError("Invalid math result")
 
