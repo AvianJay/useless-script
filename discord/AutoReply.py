@@ -3,7 +3,9 @@ from globalenv import bot, start_bot, set_server_config, get_server_config, get_
 from discord.ext import commands
 from discord import app_commands
 import asyncio
+import ast
 import copy
+import math
 import random
 import json
 import io
@@ -439,6 +441,122 @@ class AutoReply(commands.GroupCog, name="autoreply"):
 
         return scope, key.strip(), value
 
+    def _parse_math_token(self, token: str) -> str:
+        if not token.lower().startswith("math:"):
+            raise TemplateSyntaxError("Invalid math syntax")
+
+        raw_expression = token[len("math:"):].strip()
+        if len(raw_expression) < 2 or raw_expression[0] != "(" or raw_expression[-1] != ")":
+            raise TemplateSyntaxError("Invalid math syntax")
+
+        expression = raw_expression[1:-1].strip()
+        if not expression:
+            raise TemplateSyntaxError("Invalid math syntax")
+
+        return expression
+
+    def _prepare_math_expression_for_validation(self, expression: str) -> str:
+        output = []
+        index = 0
+
+        while index < len(expression):
+            if expression[index] != "{":
+                output.append(expression[index])
+                index += 1
+                continue
+
+            closing_index = self._find_matching_brace(expression, index)
+            if closing_index == -1:
+                raise TemplateSyntaxError("Invalid math syntax")
+
+            nested_token = expression[index:closing_index + 1]
+            self._validate_template_syntax(nested_token)
+            output.append("0")
+            index = closing_index + 1
+
+        return "".join(output)
+
+    def _normalize_math_expression(self, expression: str) -> str:
+        if not expression.strip():
+            raise TemplateSyntaxError("Invalid math syntax")
+
+        if not re.fullmatch(r"[0-9\.\+\-\*/\(\)\s]+", expression):
+            raise TemplateSyntaxError("Invalid math syntax")
+
+        number_pattern = re.compile(r"(?<![\w.])(?:\d+(?:\.\d*)?|\.\d+)")
+
+        def normalize_number(match):
+            literal = match.group(0)
+            try:
+                numeric_value = float(literal)
+            except ValueError as e:
+                raise TemplateSyntaxError("Invalid math syntax") from e
+
+            if numeric_value < 0 or numeric_value > 1000:
+                raise TemplateSyntaxError("Math number out of range")
+
+            if "." in literal:
+                normalized_value = format(numeric_value, ".15g")
+                if normalized_value.startswith("."):
+                    normalized_value = f"0{normalized_value}"
+                return normalized_value
+
+            return str(int(numeric_value))
+
+        return number_pattern.sub(normalize_number, expression)
+
+    def _evaluate_math_expression(self, expression: str, allow_template_placeholders: bool = False) -> str:
+        if allow_template_placeholders:
+            expression = self._prepare_math_expression_for_validation(expression)
+        elif "{" in expression or "}" in expression:
+            raise TemplateSyntaxError("Invalid math syntax")
+
+        expression = self._normalize_math_expression(expression)
+
+        try:
+            parsed_expression = ast.parse(expression, mode="eval")
+        except SyntaxError as e:
+            raise TemplateSyntaxError("Invalid math syntax") from e
+
+        def evaluate_node(node):
+            if isinstance(node, ast.Expression):
+                return evaluate_node(node.body)
+
+            if isinstance(node, ast.Constant) and isinstance(node.value, (int, float)) and not isinstance(node.value, bool):
+                numeric_value = float(node.value)
+                if numeric_value < -1000 or numeric_value > 1000:
+                    raise TemplateSyntaxError("Math number out of range")
+                return numeric_value
+
+            if isinstance(node, ast.UnaryOp) and isinstance(node.op, (ast.UAdd, ast.USub)):
+                operand_value = evaluate_node(node.operand)
+                return operand_value if isinstance(node.op, ast.UAdd) else -operand_value
+
+            if isinstance(node, ast.BinOp) and isinstance(node.op, (ast.Add, ast.Sub, ast.Mult, ast.Div)):
+                left_value = evaluate_node(node.left)
+                right_value = evaluate_node(node.right)
+
+                if isinstance(node.op, ast.Add):
+                    return left_value + right_value
+                if isinstance(node.op, ast.Sub):
+                    return left_value - right_value
+                if isinstance(node.op, ast.Mult):
+                    return left_value * right_value
+                if right_value == 0:
+                    raise TemplateSyntaxError("Division by zero")
+                return left_value / right_value
+
+            raise TemplateSyntaxError("Invalid math syntax")
+
+        result = evaluate_node(parsed_expression)
+        if not math.isfinite(result):
+            raise TemplateSyntaxError("Invalid math result")
+
+        if float(result).is_integer():
+            return str(int(result))
+
+        return format(result, ".10f").rstrip("0").rstrip(".")
+
     def _get_autoreply_var_storage_key(self, key: str) -> str:
         return f"{AUTOREPLY_VAR_KEY_PREFIX}{key}"
 
@@ -615,6 +733,9 @@ class AutoReply(commands.GroupCog, name="autoreply"):
                 self._validate_template_syntax(key_text)
                 if value_text is not None:
                     self._validate_template_syntax(value_text)
+            elif lowered.startswith("math:"):
+                expression = self._parse_math_token(token)
+                self._evaluate_math_expression(expression, allow_template_placeholders=True)
             elif lowered.startswith("randint:") and not re.fullmatch(r"randint:(\d+)-(\d+)", token, re.IGNORECASE):
                 raise TemplateSyntaxError("Invalid randint syntax")
             elif lowered.startswith("timemd:") and not re.fullmatch(r"timemd:[tTdDfFrR]", token, re.IGNORECASE):
@@ -921,8 +1042,41 @@ class AutoReply(commands.GroupCog, name="autoreply"):
             return ""
 
         response = re.sub(r"\{((?:user|guild)var:[^{}]+)\}", state_var_replacer, response, flags=re.IGNORECASE)
+        response = self._resolve_math_tokens(response)
 
         return response
+
+    def _resolve_math_tokens(self, response: str) -> str:
+        if not response or "{math:" not in response.lower():
+            return response
+
+        output = []
+        index = 0
+        response_length = len(response)
+
+        while index < response_length:
+            if response[index] != "{" or not response[index:index + 6].lower() == "{math:":
+                output.append(response[index])
+                index += 1
+                continue
+
+            closing_index = self._find_matching_brace(response, index)
+            if closing_index == -1:
+                output.append(response[index])
+                index += 1
+                continue
+
+            token = response[index + 1:closing_index]
+            try:
+                expression = self._parse_math_token(token)
+                expression = self._resolve_math_tokens(expression)
+                output.append(self._evaluate_math_expression(expression))
+            except TemplateSyntaxError:
+                output.append("")
+
+            index = closing_index + 1
+
+        return "".join(output)
 
     async def _build_embed_from_tokens(self, extracted: dict, message: discord.Message, context: dict):
         embed_requested = any(
@@ -1778,6 +1932,8 @@ class AutoReply(commands.GroupCog, name="autoreply"):
                 "- `{time}` `{time24}` `{hour}` `{minute}` `{second}`\n"
                 "- `{timemd:t}` ~ `{timemd:R}` 產生 Discord 時間戳\n"
                 "- `{contentsplit:0}`、`{contentsplit:1-}`、`{contentsplit:-4}`、`{contentsplit:1-2}`\n"
+                "- `{math:(1+2*3)}`，只支援 `+ - * /`，數字限制 `-1000 ~ 1000`\n"
+                "- `math` 內可用其他變數，例如 `{math:({contentsplit:1}+5)}`\n"
                 "- `{if:{contentsplit:1}==true:Yes:else:No}`\n"
                 "- 也支援 `{if:{contentsplit:1}==true:Yes:No}` 與 `{if:條件:成立內容}`\n"
                 "- 支援 `==` `!=` `<=` `>=` `&&` `||`"

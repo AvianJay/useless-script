@@ -1006,9 +1006,10 @@
                     <tr><td><code>{contentsplit:0}</code></td><td>等同於 <code>content.split()[0]</code></td><td><code>{contentsplit:1}</code> 取得第二個單字</td></tr>
                     <tr><td><code>{contentsplit:1-}</code></td><td>從指定索引取到結尾，並用空白重新接起來</td><td><code>!say hello world</code> → <code>hello world</code></td></tr>
                     <tr><td><code>{contentsplit:-4}</code> / <code>{contentsplit:1-2}</code></td><td>取範圍內容；省略前段代表從開頭，省略後段代表取到結尾</td><td><code>{contentsplit:1-2}</code> 可取第 2 到第 3 個單字</td></tr>
+                    <tr><td><code>{math:(1+2*3)}</code></td><td>計算基本四則運算，只支援 <code>+ - * /</code>，且可混用其他變數</td><td><code>{math:(10/4)}</code> → <code>2.5</code></td></tr>
                 </table>
                 <div class="doc-note">
-                    <strong>時區：</strong><code>{date}</code>、<code>{time}</code>、<code>{timemd:...}</code> 目前跟隨機器人主機的本地時區；如果主機設在 Asia/Taipei，就會是 UTC+8。<code>{contentsplit:1-2}</code> 的結尾索引是包含在內的。
+                    <strong>時區：</strong><code>{date}</code>、<code>{time}</code>、<code>{timemd:...}</code> 目前跟隨機器人主機的本地時區；如果主機設在 Asia/Taipei，就會是 UTC+8。<code>{contentsplit:1-2}</code> 的結尾索引是包含在內的；<code>{math:(...)}</code> 的數字字面值限制在 <code>-1000 ~ 1000</code>，且可寫成 <code>{math:({contentsplit:1}+5)}</code>。
                 </div>
                 <!-- <div class="doc-note">
                     <strong>相容性：</strong><code>{contentsplit:索引}</code> 是目前建議寫法，舊格式 <code>{contentsplit(索引)}</code> 仍可使用。
@@ -1100,7 +1101,11 @@
                     模式：<code>equals</code>，觸發：<code>倒數</code>，回覆：<code>3...{edit:1}2...{edit:2}1...{newmsg:3}好耶</code><br><br>
                     <strong>範例 12：</strong>寫入並讀取變數<br>
                     模式：<code>starts_with</code>，觸發：<code>!pet </code>，回覆：<code>{uservar:pet:{contentsplit:1-}}已記住你的寵物</code><br>
-                    模式：<code>equals</code>，觸發：<code>!mypet</code>，回覆：<code>你記住的寵物是：{uservar:pet}</code>
+                    模式：<code>equals</code>，觸發：<code>!mypet</code>，回覆：<code>你記住的寵物是：{uservar:pet}</code><br><br>
+                    <strong>範例 13：</strong>數學計算<br>
+                    模式：<code>starts_with</code>，觸發：<code>算一下</code>，回覆：<code>結果：{math:(10/4)}</code><br><br>
+                    <strong>範例 14：</strong>數學裡使用變數<br>
+                    模式：<code>starts_with</code>，觸發：<code>加五</code>，回覆：<code>結果：{math:({contentsplit:1}+5)}</code>
                 </div>
                 {% endif %}
             </div>
