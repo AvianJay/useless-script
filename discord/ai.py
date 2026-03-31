@@ -14,6 +14,7 @@ from datetime import datetime, timezone, timedelta
 from logger import log
 import logging
 from pathlib import Path
+from uuid import uuid4
 from doc_markdown import read_markdown_file, extract_markdown_search_entries, load_docs_site
 
 from Economy import log_transaction, send_economy_audit_log
@@ -397,6 +398,11 @@ SYSTEM_PROMPT = """你是 Discord 群組裡的搞笑 AI，個性抽象。
 TOOL_USAGE_PROMPT = """工具使用規則：
 - 當問題需要查 bot docs、dsize、背包、經濟、伺服器功能設定、音樂播放狀態、地震資訊、停班停課資訊、交通資訊、FakeUser 設定或指令統計時，優先使用工具，不要只靠猜測。
 - 只要使用者在問某個模組/功能怎麼設定、有哪些變數、embed 怎麼寫、條件判斷怎麼寫、指令怎麼用、權限怎麼設、或文件裡有沒有範例，優先使用 `search_bot_docs`。
+- AI 會自動看到目前使用者的共通 profile 和這個伺服器的共通氛圍 profile；平常聊天以讀取這些 profile 為主，不要因為一般聊天就自動改寫。
+- 只有在使用者明確要求「記住 / 更新 / 忘記」某件事時，才使用 AI memory tools 去修改記憶。
+- `user_global` 記憶是某個使用者跨伺服器共通的長期記憶；`guild_shared` 記憶是這個伺服器共享的共同記憶。
+- `guild_shared` 只適合放伺服器氛圍、共同梗、共同偏好、bot 使用習慣；這類共通 profile 只有伺服器管理者適合修改。
+- AI memory 只存長期有用、低風險、和聊天體驗有幫助的資訊；不要存密碼、token、精準金流、身分證個資、醫療法律隱私、未成年人情色內容或其他高敏感資訊。
 - 如果使用者問的是「現在」「目前」「最近」「這個伺服器」「我的」這類需要即時資料的問題，優先查最相關的一到數個工具。
 - 如果問題依賴外部網路上的最新資訊、新聞、價格、版本、公告或今天/近期的狀態，而且本地工具沒有資料，才使用 `search_web`。
 - 先用最少的工具解決問題，不要無意義地重複呼叫同一個工具。
@@ -622,6 +628,13 @@ class AICommands(commands.Cog):
     MAX_EMOJI_CONTEXT_COUNT = 80
     MAX_TOOL_ITERATIONS = 4
     MAX_TOOL_RESULT_LENGTH = 3500
+    AI_USER_GLOBAL_MEMORY_KEY = "ai_user_global_memory"
+    AI_GUILD_SHARED_MEMORY_KEY = "ai_guild_shared_memory"
+    MAX_AI_MEMORY_ENTRIES = 80
+    MAX_AI_MEMORY_RESULTS = 8
+    MAX_AI_MEMORY_TITLE_LENGTH = 80
+    MAX_AI_MEMORY_CONTENT_LENGTH = 400
+    MAX_AI_MEMORY_TAGS = 8
     WEB_SEARCH_TOOL_MODEL = "gemini-search"
     WEB_SEARCH_TOOL_MAX_CHARS = 500
     WEB_SEARCH_TOOL_MAX_TOKENS = 240
@@ -1310,14 +1323,247 @@ class AICommands(commands.Cog):
         guild_info: str = "",
         channel_context: str = "",
         emoji_context: str = "",
+        tool_context: dict | None = None,
     ) -> str:
         parts = [
             SYSTEM_PROMPT,
             TOOL_USAGE_PROMPT,
             self._get_docs_feature_prompt(),
+            self._build_ai_profile_context(tool_context),
             f"{user_context}{guild_info}{channel_context}{emoji_context}".strip(),
         ]
         return "\n\n".join(part for part in parts if part)
+
+    @staticmethod
+    def _ai_memory_timestamp() -> str:
+        return datetime.now(timezone(timedelta(hours=8))).isoformat(timespec="seconds")
+
+    @classmethod
+    def _normalize_ai_memory_tags(cls, tags) -> list[str]:
+        if tags is None:
+            return []
+        if not isinstance(tags, (list, tuple, set)):
+            tags = [tags]
+        normalized: list[str] = []
+        seen: set[str] = set()
+        for tag in tags:
+            value = re.sub(r"\s+", " ", str(tag or "")).strip()
+            if not value:
+                continue
+            lowered = value.lower()
+            if lowered in seen:
+                continue
+            seen.add(lowered)
+            normalized.append(value[:32])
+            if len(normalized) >= cls.MAX_AI_MEMORY_TAGS:
+                break
+        return normalized
+
+    @classmethod
+    def _sanitize_ai_memory_text(cls, value: str, limit: int) -> str:
+        return re.sub(r"\s+", " ", str(value or "")).strip()[:limit]
+
+    @staticmethod
+    def _has_explicit_ai_memory_write_intent(message: str) -> bool:
+        text = str(message or "").strip()
+        if not text:
+            return False
+        patterns = (
+            r"記住",
+            r"幫我記",
+            r"請記下",
+            r"記下來",
+            r"更新記憶",
+            r"更新這段記憶",
+            r"忘記這件事",
+            r"忘掉這件事",
+            r"刪掉這段記憶",
+            r"刪除這段記憶",
+            r"不要再記得",
+            r"(?i)\bremember\b",
+            r"(?i)\bsave (this|that)\b",
+            r"(?i)\bupdate memory\b",
+            r"(?i)\bforget (this|that)\b",
+            r"(?i)\bdelete (this|that) memory\b",
+        )
+        return any(re.search(pattern, text) for pattern in patterns)
+
+    @staticmethod
+    def _can_manage_guild_ai_memory(user, guild) -> bool:
+        if user is None or guild is None:
+            return False
+        if getattr(user, "id", None) == getattr(guild, "owner_id", None):
+            return True
+        permissions = getattr(user, "guild_permissions", None)
+        if permissions is None:
+            return False
+        return bool(
+            getattr(permissions, "administrator", False)
+            or getattr(permissions, "manage_guild", False)
+        )
+
+    def _resolve_ai_memory_scope(
+        self,
+        requested_scope,
+        tool_context: dict | None,
+        allow_both: bool = False,
+    ) -> tuple[str | None, str | None]:
+        guild = (tool_context or {}).get("guild")
+        default_scope = "both" if allow_both and guild else "user_global"
+        scope = str(requested_scope or default_scope).strip().lower()
+        if scope == "auto":
+            scope = default_scope
+        valid_scopes = {"user_global", "guild_shared"}
+        if allow_both:
+            valid_scopes.add("both")
+        if scope not in valid_scopes:
+            return None, f"Invalid memory scope: {scope}"
+        if scope in {"guild_shared", "both"} and guild is None:
+            return None, "guild_shared memory is only available in guild channels."
+        return scope, None
+
+    def _get_ai_memory_entries(self, scope: str, tool_context: dict | None) -> tuple[list[dict], str | None]:
+        current_user = (tool_context or {}).get("user")
+        guild = (tool_context or {}).get("guild")
+        if scope == "user_global":
+            user_id = getattr(current_user, "id", None)
+            if user_id is None:
+                return [], "Current user is required for user_global memory."
+            data = get_user_data(GLOBAL_GUILD_ID, int(user_id), self.AI_USER_GLOBAL_MEMORY_KEY, []) or []
+        elif scope == "guild_shared":
+            guild_id = getattr(guild, "id", None)
+            if guild_id is None:
+                return [], "Current guild is required for guild_shared memory."
+            data = get_server_config(int(guild_id), self.AI_GUILD_SHARED_MEMORY_KEY, []) or []
+        else:
+            return [], f"Unknown memory scope: {scope}"
+        if not isinstance(data, list):
+            return [], None
+        return [entry for entry in data if isinstance(entry, dict)], None
+
+    def _set_ai_memory_entries(self, scope: str, tool_context: dict | None, entries: list[dict]) -> str | None:
+        current_user = (tool_context or {}).get("user")
+        guild = (tool_context or {}).get("guild")
+        normalized_entries = [entry for entry in entries if isinstance(entry, dict)][-self.MAX_AI_MEMORY_ENTRIES:]
+        if scope == "user_global":
+            user_id = getattr(current_user, "id", None)
+            if user_id is None:
+                return "Current user is required for user_global memory."
+            set_user_data(GLOBAL_GUILD_ID, int(user_id), self.AI_USER_GLOBAL_MEMORY_KEY, normalized_entries)
+            return None
+        if scope == "guild_shared":
+            guild_id = getattr(guild, "id", None)
+            if guild_id is None:
+                return "Current guild is required for guild_shared memory."
+            set_server_config(int(guild_id), self.AI_GUILD_SHARED_MEMORY_KEY, normalized_entries)
+            return None
+        return f"Unknown memory scope: {scope}"
+
+    def _score_ai_memory_entry(self, query: str, entry: dict, scope: str) -> int:
+        if not str(query or "").strip():
+            return 1
+        search_entry = {
+            "title": " ".join(
+                part for part in [entry.get("title"), entry.get("subject"), entry.get("memory_id"), scope] if part
+            ),
+            "text": " ".join(
+                part
+                for part in [
+                    entry.get("content"),
+                    " ".join(entry.get("tags") or []),
+                    str(entry.get("subject_user_id") or ""),
+                ]
+                if part
+            ),
+            "source": scope,
+            "category": "memory",
+        }
+        return self._score_search_entry(query, search_entry)
+
+    def _serialize_ai_memory_entry(self, entry: dict, scope: str) -> dict:
+        return {
+            "memory_id": entry.get("memory_id") or entry.get("id"),
+            "scope": scope,
+            "title": entry.get("title"),
+            "subject": entry.get("subject"),
+            "subject_user_id": entry.get("subject_user_id"),
+            "content": self._truncate_tool_text(entry.get("content", ""), max_len=220),
+            "tags": entry.get("tags") or [],
+            "created_at": entry.get("created_at"),
+            "updated_at": entry.get("updated_at"),
+        }
+
+    def _find_ai_memory_index(self, entries: list[dict], memory_id: str = "", query: str = "", scope: str = "") -> int | None:
+        memory_id = str(memory_id or "").strip()
+        if memory_id:
+            for index, entry in enumerate(entries):
+                if str(entry.get("memory_id") or entry.get("id") or "").strip() == memory_id:
+                    return index
+        query = str(query or "").strip()
+        if query:
+            scored_matches = []
+            for index, entry in enumerate(entries):
+                score = self._score_ai_memory_entry(query, entry, scope)
+                if score > 0:
+                    scored_matches.append((score, index))
+            if scored_matches:
+                scored_matches.sort(key=lambda item: item[0], reverse=True)
+                return scored_matches[0][1]
+        return None
+
+    def _format_ai_profile_entry(self, entry: dict) -> str | None:
+        if not isinstance(entry, dict):
+            return None
+        title = self._sanitize_ai_memory_text(entry.get("title", ""), self.MAX_AI_MEMORY_TITLE_LENGTH)
+        subject = self._sanitize_ai_memory_text(entry.get("subject", ""), self.MAX_AI_MEMORY_TITLE_LENGTH)
+        content = self._sanitize_ai_memory_text(entry.get("content", ""), self.MAX_AI_MEMORY_CONTENT_LENGTH)
+        tags = self._normalize_ai_memory_tags(entry.get("tags"))
+        label_parts = [part for part in [title, subject] if part]
+        label = " / ".join(dict.fromkeys(label_parts)) if label_parts else "未命名資訊"
+        if not content:
+            return None
+        if tags:
+            return f"- {label}: {content} [tags: {', '.join(tags)}]"
+        return f"- {label}: {content}"
+
+    def _build_ai_profile_context(self, tool_context: dict | None = None) -> str:
+        parts = []
+        user_entries, _ = self._get_ai_memory_entries("user_global", tool_context)
+        if user_entries:
+            user_lines = []
+            for entry in sorted(
+                user_entries,
+                key=lambda item: str(item.get("updated_at") or item.get("created_at") or ""),
+                reverse=True,
+            )[:4]:
+                line = self._format_ai_profile_entry(entry)
+                if line:
+                    user_lines.append(line)
+            if user_lines:
+                parts.append("[使用者共通 profile]\n" + "\n".join(user_lines))
+
+        guild = (tool_context or {}).get("guild")
+        if guild is not None:
+            guild_entries, _ = self._get_ai_memory_entries("guild_shared", tool_context)
+            if guild_entries:
+                guild_lines = []
+                for entry in sorted(
+                    guild_entries,
+                    key=lambda item: str(item.get("updated_at") or item.get("created_at") or ""),
+                    reverse=True,
+                )[:6]:
+                    line = self._format_ai_profile_entry(entry)
+                    if line:
+                        guild_lines.append(line)
+                if guild_lines:
+                    parts.append("[伺服器共通氛圍 / profile]\n" + "\n".join(guild_lines))
+
+        if not parts:
+            return ""
+        return (
+            "AI 共通背景（每次對話都可以參考；如果和當前訊息衝突，就以當前訊息為準）：\n"
+            + "\n\n".join(parts)
+        )
 
     def _get_docs_search_corpus(self) -> list[dict]:
         if self._docs_search_cache is not None:
@@ -1550,6 +1796,68 @@ class AICommands(commands.Cog):
             {
                 "type": "function",
                 "function": {
+                    "name": "get_ai_memory",
+                    "description": "Read AI-managed long-term memory for the current user across servers or the current guild's shared memory.",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "scope": {
+                                "type": "string",
+                                "enum": ["auto", "user_global", "guild_shared", "both"],
+                            },
+                            "query": {"type": "string"},
+                            "limit": {"type": "integer"},
+                        },
+                    },
+                },
+            },
+            {
+                "type": "function",
+                "function": {
+                    "name": "upsert_ai_memory",
+                    "description": "Create or update AI-managed long-term memory. Use user_global for the current user's cross-server memory, and guild_shared for shared memory of this server.",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "scope": {
+                                "type": "string",
+                                "enum": ["auto", "user_global", "guild_shared"],
+                            },
+                            "memory_id": {"type": "string"},
+                            "title": {"type": "string"},
+                            "content": {"type": "string"},
+                            "tags": {
+                                "type": "array",
+                                "items": {"type": "string"},
+                            },
+                            "subject": {"type": "string"},
+                            "subject_user_id": {"type": "integer"},
+                        },
+                        "required": ["content"],
+                    },
+                },
+            },
+            {
+                "type": "function",
+                "function": {
+                    "name": "delete_ai_memory",
+                    "description": "Delete an AI-managed memory entry by memory_id, or by matching a query if the exact id is not known.",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "scope": {
+                                "type": "string",
+                                "enum": ["auto", "user_global", "guild_shared"],
+                            },
+                            "memory_id": {"type": "string"},
+                            "query": {"type": "string"},
+                        },
+                    },
+                },
+            },
+            {
+                "type": "function",
+                "function": {
                     "name": "search_web",
                     "description": "Search the public web for latest external information using Pollinations Gemini. Keep results short and use this only when local tools do not have the answer.",
                     "parameters": {
@@ -1753,6 +2061,10 @@ class AICommands(commands.Cog):
                 "You may include multiple tool calls in the array.",
                 "If no tool is needed, respond normally with plain text.",
                 "If the user is asking about bot features, docs, setup, syntax, variables, embeds, conditions, examples, permissions, or how to use a module, call search_bot_docs first.",
+                "Current user/global profile and guild shared profile may already be injected into context. Read them normally instead of writing memory by default.",
+                "Only use AI memory write tools when the user explicitly asks you to remember, update, or forget something. Do not write memory just because you inferred a pattern from casual chat.",
+                "Store personal cross-server facts in user_global. Store server culture/shared facts in guild_shared only when the request is explicit, suitable for a shared profile, and the user is allowed to manage guild memory.",
+                "Use memory conservatively: keep durable helpful facts, and do not store secrets, tokens, passwords, exact financial data, or highly sensitive private information.",
                 f"Available tools: {', '.join(tool_names)}",
                 f"Tool schemas: {json.dumps(tool_schemas, ensure_ascii=False)}",
                 docs_feature_prompt,
@@ -1791,6 +2103,176 @@ class AICommands(commands.Cog):
             "result_count": len(results),
             "results": results,
             "docs_url": f"{website_url}/docs" if website_url else None,
+        }
+
+    async def _tool_get_ai_memory(self, args: dict, tool_context: dict) -> dict:
+        scope, error = self._resolve_ai_memory_scope(args.get("scope"), tool_context, allow_both=True)
+        if error:
+            return {"error": error}
+
+        limit = self._coerce_int(args.get("limit"), 5, minimum=1, maximum=self.MAX_AI_MEMORY_RESULTS)
+        query = self._sanitize_ai_memory_text(args.get("query", ""), 120)
+        scopes = ["user_global", "guild_shared"] if scope == "both" else [scope]
+
+        results = []
+        for scope_name in scopes:
+            entries, scope_error = self._get_ai_memory_entries(scope_name, tool_context)
+            if scope_error:
+                continue
+            scored_entries = []
+            for entry in entries:
+                score = self._score_ai_memory_entry(query, entry, scope_name)
+                if query and score <= 0:
+                    continue
+                scored_entries.append((score, entry))
+            if query:
+                scored_entries.sort(key=lambda item: item[0], reverse=True)
+            else:
+                scored_entries.sort(key=lambda item: str(item[1].get("updated_at") or item[1].get("created_at") or ""), reverse=True)
+            for score, entry in scored_entries[:limit]:
+                serialized = self._serialize_ai_memory_entry(entry, scope_name)
+                serialized["score"] = score
+                results.append(serialized)
+
+        if query:
+            results.sort(key=lambda item: item.get("score", 0), reverse=True)
+        else:
+            results.sort(key=lambda item: str(item.get("updated_at") or item.get("created_at") or ""), reverse=True)
+
+        current_user = (tool_context or {}).get("user")
+        guild = (tool_context or {}).get("guild")
+        return {
+            "scope": scope,
+            "query": query or None,
+            "result_count": len(results[:limit]),
+            "entries": results[:limit],
+            "memory_spaces": {
+                "user_global": {
+                    "user_id": getattr(current_user, "id", None),
+                    "available": getattr(current_user, "id", None) is not None,
+                },
+                "guild_shared": {
+                    "guild_id": getattr(guild, "id", None),
+                    "available": guild is not None,
+                },
+            },
+        }
+
+    async def _tool_upsert_ai_memory(self, args: dict, tool_context: dict) -> dict:
+        scope, error = self._resolve_ai_memory_scope(args.get("scope"), tool_context, allow_both=False)
+        if error:
+            return {"error": error}
+
+        current_user = (tool_context or {}).get("user")
+        guild = (tool_context or {}).get("guild")
+        if not self._coerce_bool((tool_context or {}).get("memory_write_request_allowed"), False):
+            return {"error": "AI memory writes are only allowed when the user explicitly asks to remember or update something."}
+        if scope == "guild_shared" and not self._coerce_bool((tool_context or {}).get("guild_memory_write_allowed"), False):
+            return {"error": "guild_shared profile can only be modified by a guild manager or administrator."}
+        content = self._sanitize_ai_memory_text(args.get("content", ""), self.MAX_AI_MEMORY_CONTENT_LENGTH)
+        if not content:
+            return {"error": "content is required"}
+
+        title = self._sanitize_ai_memory_text(args.get("title", ""), self.MAX_AI_MEMORY_TITLE_LENGTH)
+        subject = self._sanitize_ai_memory_text(args.get("subject", ""), self.MAX_AI_MEMORY_TITLE_LENGTH)
+        tags = self._normalize_ai_memory_tags(args.get("tags"))
+        memory_id = self._sanitize_ai_memory_text(args.get("memory_id", ""), 48)
+
+        subject_user_id = args.get("subject_user_id")
+        if subject_user_id is not None:
+            try:
+                subject_user_id = int(subject_user_id)
+            except (TypeError, ValueError):
+                return {"error": "subject_user_id must be an integer"}
+        elif scope == "user_global" and getattr(current_user, "id", None) is not None:
+            subject_user_id = int(current_user.id)
+
+        if subject_user_id is not None:
+            subject_user = await self._resolve_user_display(subject_user_id, guild)
+            subject = subject or str(subject_user.get("display_name") or subject_user.get("name") or subject_user_id)
+
+        entries, scope_error = self._get_ai_memory_entries(scope, tool_context)
+        if scope_error:
+            return {"error": scope_error}
+
+        existing_index = None
+        if memory_id:
+            existing_index = self._find_ai_memory_index(entries, memory_id=memory_id, scope=scope)
+        if existing_index is None:
+            for index, entry in enumerate(entries):
+                if (
+                    self._sanitize_ai_memory_text(entry.get("title", ""), self.MAX_AI_MEMORY_TITLE_LENGTH) == title
+                    and self._sanitize_ai_memory_text(entry.get("content", ""), self.MAX_AI_MEMORY_CONTENT_LENGTH) == content
+                    and self._sanitize_ai_memory_text(entry.get("subject", ""), self.MAX_AI_MEMORY_TITLE_LENGTH) == subject
+                    and str(entry.get("subject_user_id") or "") == str(subject_user_id or "")
+                ):
+                    existing_index = index
+                    break
+
+        now = self._ai_memory_timestamp()
+        existing_entry = dict(entries[existing_index]) if existing_index is not None else {}
+        memory_id = memory_id or str(existing_entry.get("memory_id") or existing_entry.get("id") or uuid4().hex[:12])
+        entry = {
+            "memory_id": memory_id,
+            "title": title or None,
+            "subject": subject or None,
+            "subject_user_id": subject_user_id,
+            "content": content,
+            "tags": tags,
+            "created_at": existing_entry.get("created_at") or now,
+            "updated_at": now,
+            "created_by_user_id": existing_entry.get("created_by_user_id") or getattr(current_user, "id", None),
+            "updated_by_user_id": getattr(current_user, "id", None),
+        }
+
+        if existing_index is not None:
+            entries.pop(existing_index)
+            action = "updated"
+        else:
+            action = "created"
+        entries.append(entry)
+
+        set_error = self._set_ai_memory_entries(scope, tool_context, entries)
+        if set_error:
+            return {"error": set_error}
+
+        return {
+            "action": action,
+            "scope": scope,
+            "entry": self._serialize_ai_memory_entry(entry, scope),
+        }
+
+    async def _tool_delete_ai_memory(self, args: dict, tool_context: dict) -> dict:
+        scope, error = self._resolve_ai_memory_scope(args.get("scope"), tool_context, allow_both=False)
+        if error:
+            return {"error": error}
+
+        if not self._coerce_bool((tool_context or {}).get("memory_write_request_allowed"), False):
+            return {"error": "AI memory deletes are only allowed when the user explicitly asks to forget or delete something."}
+        if scope == "guild_shared" and not self._coerce_bool((tool_context or {}).get("guild_memory_write_allowed"), False):
+            return {"error": "guild_shared profile can only be modified by a guild manager or administrator."}
+        memory_id = self._sanitize_ai_memory_text(args.get("memory_id", ""), 48)
+        query = self._sanitize_ai_memory_text(args.get("query", ""), 120)
+        if not memory_id and not query:
+            return {"error": "memory_id or query is required"}
+
+        entries, scope_error = self._get_ai_memory_entries(scope, tool_context)
+        if scope_error:
+            return {"error": scope_error}
+
+        index = self._find_ai_memory_index(entries, memory_id=memory_id, query=query, scope=scope)
+        if index is None:
+            return {"error": "memory entry not found"}
+
+        removed_entry = entries.pop(index)
+        set_error = self._set_ai_memory_entries(scope, tool_context, entries)
+        if set_error:
+            return {"error": set_error}
+
+        return {
+            "action": "deleted",
+            "scope": scope,
+            "entry": self._serialize_ai_memory_entry(removed_entry, scope),
         }
 
     async def _tool_search_web(self, args: dict, tool_context: dict) -> dict:
@@ -2546,6 +3028,9 @@ class AICommands(commands.Cog):
     async def _execute_ai_tool(self, name: str, arguments: dict, tool_context: dict) -> dict:
         handlers = {
             "search_bot_docs": self._tool_search_bot_docs,
+            "get_ai_memory": self._tool_get_ai_memory,
+            "upsert_ai_memory": self._tool_upsert_ai_memory,
+            "delete_ai_memory": self._tool_delete_ai_memory,
             "search_web": self._tool_search_web,
             "get_dsize_context": self._tool_get_dsize_context,
             "get_inventory_context": self._tool_get_inventory_context,
@@ -2955,6 +3440,13 @@ class AICommands(commands.Cog):
                 ConversationManager.clear_history(user.id, guild_id)
             
             history = ConversationManager.get_history(user.id, guild_id)
+            tool_context = {
+                "user": user,
+                "guild": interaction.guild,
+                "channel": interaction.channel,
+                "memory_write_request_allowed": self._has_explicit_ai_memory_write_intent(resolved_message),
+                "guild_memory_write_allowed": self._can_manage_guild_ai_memory(user, interaction.guild),
+            }
             
             # 構建訊息列表（包含用戶名稱和頻道上下文）
             user_context = f"當前與你對話的用戶是：{user.display_name} (ID: {user.id})"
@@ -2996,6 +3488,7 @@ class AICommands(commands.Cog):
                 guild_info=guild_info,
                 channel_context=channel_context,
                 emoji_context=emoji_context,
+                tool_context=tool_context,
             )
             
             messages = [{"role": "system", "content": system_with_context}]
@@ -3012,11 +3505,7 @@ class AICommands(commands.Cog):
                 messages,
                 model=selected_model,
                 image=image_bytes,
-                tool_context={
-                    "user": user,
-                    "guild": interaction.guild,
-                    "channel": interaction.channel,
-                },
+                tool_context=tool_context,
             )
 
             raw_output_chars = len(response_text)
@@ -3284,6 +3773,13 @@ class AICommands(commands.Cog):
         async with ctx.typing():
             try:
                 history = ConversationManager.get_history(user.id, guild_id)
+                tool_context = {
+                    "user": user,
+                    "guild": guild,
+                    "channel": ctx.channel,
+                    "memory_write_request_allowed": self._has_explicit_ai_memory_write_intent(sanitized_message),
+                    "guild_memory_write_allowed": self._can_manage_guild_ai_memory(user, guild),
+                }
                 
                 # 構建訊息列表（包含用戶名稱和頻道上下文）
                 user_context = f"當前與你對話的用戶是：{user.display_name}"
@@ -3323,6 +3819,7 @@ class AICommands(commands.Cog):
                     guild_info=guild_info,
                     channel_context=channel_context,
                     emoji_context=emoji_context,
+                    tool_context=tool_context,
                 )
                 
                 messages = [{"role": "system", "content": system_with_context}]
@@ -3339,11 +3836,7 @@ class AICommands(commands.Cog):
                     messages,
                     model=selected_model,
                     image=image_bytes,
-                    tool_context={
-                        "user": user,
-                        "guild": guild,
-                        "channel": ctx.channel,
-                    },
+                    tool_context=tool_context,
                 )
 
                 raw_output_chars = len(response_text)
