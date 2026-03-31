@@ -52,15 +52,28 @@ Builder 內的 `trigger / response` 支援：
 - `{user}`：觸發者 mention
 - `{content}`：原始訊息內容
 - `{guild}` / `{server}`：伺服器名稱
+- `{guildid}`：伺服器 ID
+- `{guildicon}`：伺服器 icon URL
+- `{guildbanner}`：伺服器 banner URL
+- `{guildowner}`：伺服器擁有者名稱
+- `{guildownerid}`：伺服器擁有者 ID
+- `{guildmembers}`：伺服器成員數
+- `{guildroles}`：伺服器身分組數量
+- `{guildboosts}`：伺服器 boost 數
 - `{channel}`：頻道名稱
 - `{author}` / `{member}`：觸發者名稱
 - `{authorid}`：觸發者 ID
 - `{authoravatar}`：觸發者頭像 URL
+- `{authorbanner}`：觸發者 banner URL
+- `{authorcreated}`：觸發者帳號建立時間，格式 `YYYY/MM/DD HH:MM:SS`
 - `{role}`：觸發者最高身分組名稱
 - `{id}`：觸發者 ID
 - `{null}`：空字串，可拿來做 `if` 比較
 - `\n`：換行
 - `\t`：Tab
+
+> 注意
+> `icon` / `banner` 這類 URL 變數如果該對象沒有設定圖片，會回傳空字串。
 
 ## 日期與時間
 

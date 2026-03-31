@@ -1590,11 +1590,21 @@ class AutoReply(commands.GroupCog, name="autoreply"):
             "{content}": message.content,
             "{guild}": guild.name,
             "{server}": guild.name,
+            "{guildid}": str(guild.id),
+            "{guildicon}": guild.icon.url if guild.icon else "",
+            "{guildowner}": guild.owner.name if guild.owner else "",
+            "{guildownerid}": str(guild.owner.id) if guild.owner else "",
+            "{guildmembers}": str(guild.member_count),
+            "{guildroles}": str(len(guild.roles)),
+            "{guildbanner}": guild.banner.url if guild.banner else "",
+            "{guildboosts}": str(guild.premium_subscription_count) if guild.premium_subscription_count is not None else "0",
             "{channel}": channel_name,
             "{author}": author.name,
             "{member}": author.name,
             "{authorid}": str(author.id),
             "{authoravatar}": author.display_avatar.url if author.display_avatar else "",
+            "{authorbanner}": author.banner.url if getattr(author, "banner", None) else "",
+            "{authorcreated}": author.created_at.strftime("%Y/%m/%d %H:%M:%S"),
             "{role}": role_name,
             "{id}": str(author.id),
             "{date}": now.strftime("%Y/%m/%d"),
@@ -1649,7 +1659,7 @@ class AutoReply(commands.GroupCog, name="autoreply"):
                     else:
                         context["random_user"] = "查無使用者"
                 except Exception as e:
-                    log(f"?? {{random_user}} ??隤? {e}", module_name="AutoReply", level=logging.ERROR)
+                    log(f"處理 {{random_user}} 時發生錯誤: {e}", module_name="AutoReply", level=logging.ERROR)
                     context["random_user"] = "無法取得使用者"
             response = response.replace("{random_user}", context["random_user"])
 
@@ -2648,8 +2658,12 @@ class AutoReply(commands.GroupCog, name="autoreply"):
         embed.add_field(
             name="基本變數",
             value=(
-                "- `{user}` / `{author}` / `{authorid}` / `{authoravatar}` / `{member}` / `{id}`\n"
-                "- `{content}` / `{channel}` / `{guild}` / `{server}` / `{role}`\n"
+                "- `{user}` mention；`{author}` / `{member}` 名稱；`{id}` / `{authorid}` 使用者 ID\n"
+                "- `{authoravatar}` 頭像 URL；`{authorbanner}` banner URL；`{authorcreated}` 帳號建立時間\n"
+                "- `{guild}` / `{server}` 伺服器名稱；`{guildid}` 伺服器 ID\n"
+                "- `{guildicon}` icon URL；`{guildbanner}` banner URL；`{guildowner}` / `{guildownerid}` 擁有者\n"
+                "- `{guildmembers}` 成員數；`{guildroles}` 身分組數；`{guildboosts}` boost 數\n"
+                "- `{content}` / `{channel}` / `{role}`\n"
                 "- `{null}` 空字串，可拿來做 `if` 比較\n"
                 "- `\\n` 換行、`\\t` Tab"
             ),
