@@ -33,6 +33,26 @@ def percent_random(percent: int) -> bool:
         return False
 
 
+async def animate_break_explosion(
+    interaction: discord.Interaction,
+    embed: discord.Embed,
+    start_size: int,
+    content: str,
+    delay: float = 0.08,
+):
+    embed.color = 0xff0000
+    explosion_size = max(1, min(int(start_size), 200))
+
+    while explosion_size > 0:
+        embed.set_field_at(0, name=f"{explosion_size} cm", value=f"8{'💥' * explosion_size}", inline=False)
+        await interaction.edit_original_response(content=content, embed=embed)
+        await asyncio.sleep(delay)
+        explosion_size -= max(1, explosion_size // 2)
+
+    embed.set_field_at(0, name="-1 cm", value="8", inline=False)
+    await interaction.edit_original_response(content=content, embed=embed)
+
+
 async def process_checkin(user_id: int) -> tuple[bool, int]:
     """
     Process daily check-in for a user (always global).
@@ -419,9 +439,7 @@ async def dsize(interaction: discord.Interaction, global_dsize: str = "False"):
                 size = -1
                 final_size = -1
                 break_content += "\n你變成男娘了。"
-                embed.set_field_at(0, name=f"{size} cm", value="8", inline=False)
-                embed.color = 0xff0000
-                await interaction.edit_original_response(content=break_content, embed=embed)
+                await animate_break_explosion(interaction, embed, i, break_content)
                 break
             current_size = i
             embed.set_field_at(0, name=f"{current_size} cm", value=f"8{d_string}D", inline=False)
@@ -1774,9 +1792,7 @@ async def use_cloud_ruler(interaction: discord.Interaction):
                         final_size = -1
                         cloud_content += f"\n{target_user.display_name} 變成男娘了。"
                         set_user_data(guild_key, target_id, "last_dsize_size", -1)
-                        # embed.set_field_at(0, name="斷掉了！男娘了！", value="🏳️‍⚧️", inline=False)
-                        embed.color = 0xff0000
-                        await interaction.edit_original_response(content=cloud_content, embed=embed)
+                        await animate_break_explosion(interaction, embed, i, cloud_content)
                         break
                     current_size = i
                     embed.set_field_at(0, name=f"{current_size} cm", value=f"8{d_string}D", inline=False)
