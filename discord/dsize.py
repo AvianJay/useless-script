@@ -893,7 +893,7 @@ async def dsize_battle(interaction: discord.Interaction, opponent: Union[discord
                     # 10% break check for user
                     if not user_broke and i < size_user and random.random() < 0.1 and will_user_break:
                         user_break_counter += 1
-                        if user_break_counter >= 1:
+                        if user_break_counter == 1:
                             user_break_message += f"{original_user.display_name} 的ㄐㄐ今天好像怪怪的。"
                         if user_break_counter >= 5:
                             size_user = -1
@@ -902,7 +902,7 @@ async def dsize_battle(interaction: discord.Interaction, opponent: Union[discord
                     # 10% break check for opponent
                     if not opponent_broke and i < size_opponent and random.random() < 0.1 and will_opponent_break:
                         opponent_break_counter += 1
-                        if opponent_break_counter >= 1:
+                        if opponent_break_counter == 1:
                             opponent_break_message += f"{opponent.display_name} 的ㄐㄐ今天好像怪怪的。"
                         if opponent_break_counter >= 5:
                             size_opponent = -1
@@ -1751,8 +1751,8 @@ async def use_cloud_ruler(interaction: discord.Interaction):
             embed.timestamp = datetime.now(timezone.utc)
             await interaction.response.send_message(content=f"{target_user.mention} 被抓去量長度。", embed=embed, allowed_mentions=discord.AllowedMentions(users=is_used_dsize, roles=False, everyone=False))
             if size == -1:
-                embed.set_field_at(0, name="你現在是男娘了！", value="🏳️‍⚧️", inline=False)
-                await interaction.edit_original_response(content=f"{target_user.mention} 被抓去量長度。", embed=embed)
+                embed.set_field_at(0, name="-1 cm", value="8", inline=False)
+                await interaction.edit_original_response(content=f"{target_user.mention} 被抓去量長度，變男娘了。", embed=embed)
             else:
                 # animate to size
                 break_counter = 0
