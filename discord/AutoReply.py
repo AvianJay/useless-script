@@ -893,6 +893,25 @@ class AutoReply(commands.GroupCog, name="autoreply"):
     def _parse_bool(self, value: str) -> bool:
         return str(value).strip().lower() in {"1", "true", "yes", "y", "on"}
 
+    def _build_allowed_mentions(self, allow_everyone_and_roles: bool = False) -> discord.AllowedMentions:
+        return discord.AllowedMentions(
+            users=True,
+            roles=allow_everyone_and_roles,
+            everyone=allow_everyone_and_roles,
+            replied_user=True,
+        )
+
+    def _extract_mention_directive(self, response: str) -> tuple[str, discord.AllowedMentions]:
+        allow_everyone_and_roles = False
+
+        def mention_replacer(match):
+            nonlocal allow_everyone_and_roles
+            allow_everyone_and_roles = match.group(1).strip().lower() == "true"
+            return ""
+
+        cleaned_response = re.sub(r"\{mention:(true|false)\}", mention_replacer, response, flags=re.IGNORECASE)
+        return cleaned_response, self._build_allowed_mentions(allow_everyone_and_roles)
+
     def _split_top_level(self, value: str, separator: str = ":"):
         depth = 0
         for index, char in enumerate(value):
@@ -1383,6 +1402,8 @@ class AutoReply(commands.GroupCog, name="autoreply"):
                 raise TemplateSyntaxError("Invalid timemd syntax")
             elif lowered.startswith("sticker:") and not re.fullmatch(r"sticker:\d+", token, re.IGNORECASE):
                 raise TemplateSyntaxError("Invalid sticker syntax")
+            elif lowered.startswith("mention:") and not re.fullmatch(r"mention:(true|false)", token, re.IGNORECASE):
+                raise TemplateSyntaxError("Invalid mention syntax")
             elif lowered.startswith("react:") and not token[len("react:"):].strip():
                 raise TemplateSyntaxError("Empty react payload")
 
@@ -1915,6 +1936,7 @@ class AutoReply(commands.GroupCog, name="autoreply"):
             context = self._build_template_context()
 
         response = (await self._resolve_response_variables(response, message, context)).strip()
+        response, allowed_mentions = self._extract_mention_directive(response)
 
         react_pattern = re.compile(r"\{react:([^\}]+)\}")
 
@@ -1951,37 +1973,38 @@ class AutoReply(commands.GroupCog, name="autoreply"):
         embed = await self._build_embed_from_tokens(extracted_embed, message, context)
 
         if not response and not sticker and embed is None:
-            return "", None, None
+            return "", None, None, allowed_mentions
 
-        return response, sticker, embed
+        return response, sticker, embed, allowed_mentions
 
-    async def _send_autoreply_message(self, trigger_message: discord.Message, reply_mode: bool, content: str, embed: discord.Embed | None, sticker):
+    async def _send_autoreply_message(self, trigger_message: discord.Message, reply_mode: bool, content: str, embed: discord.Embed | None, sticker, allowed_mentions: discord.AllowedMentions | None = None):
         send_content = content or None
+        send_allowed_mentions = allowed_mentions or self._build_allowed_mentions()
         if reply_mode:
             return await trigger_message.reply(
                 send_content,
                 embed=embed,
                 stickers=[sticker] if sticker else [],
-                allowed_mentions=discord.AllowedMentions(users=True, roles=False, everyone=False),
+                allowed_mentions=send_allowed_mentions,
             )
         return await trigger_message.channel.send(
             send_content,
             embed=embed,
             stickers=[sticker] if sticker else [],
-            allowed_mentions=discord.AllowedMentions(users=True, roles=False, everyone=False),
+            allowed_mentions=send_allowed_mentions,
         )
 
     async def _execute_autoreply_edits(self, sent_message: discord.Message, trigger_message: discord.Message, edit_actions: list[dict]):
         for edit_action in edit_actions:
             try:
                 await asyncio.sleep(edit_action["delay"])
-                edit_content, _, edit_embed = await self._render_response_segment(edit_action["template"], trigger_message)
+                edit_content, _, edit_embed, edit_allowed_mentions = await self._render_response_segment(edit_action["template"], trigger_message)
                 if not edit_content and edit_embed is None:
                     continue
                 await sent_message.edit(
                     content=edit_content or None,
                     embed=edit_embed,
-                    allowed_mentions=discord.AllowedMentions(users=True, roles=False, everyone=False),
+                    allowed_mentions=edit_allowed_mentions,
                 )
             except discord.HTTPException as e:
                 log(f"自動回覆編輯失敗: {e}", module_name="AutoReply", level=logging.ERROR)
@@ -1997,7 +2020,7 @@ class AutoReply(commands.GroupCog, name="autoreply"):
             if self._is_rate_limited(trigger_message):
                 return
 
-            followup_content, followup_sticker, followup_embed = await self._render_response_segment(stage["template"], trigger_message)
+            followup_content, followup_sticker, followup_embed, followup_allowed_mentions = await self._render_response_segment(stage["template"], trigger_message)
             if not followup_content and not followup_sticker and followup_embed is None:
                 return
 
@@ -2007,6 +2030,7 @@ class AutoReply(commands.GroupCog, name="autoreply"):
                 followup_content,
                 followup_embed,
                 followup_sticker,
+                followup_allowed_mentions,
             )
 
             if stage["edits"]:
@@ -2023,7 +2047,7 @@ class AutoReply(commands.GroupCog, name="autoreply"):
             self._validate_template_syntax(response)
         except TemplateSyntaxError as e:
             log(f"自動回覆模板語法錯誤: {e}", module_name="AutoReply", level=logging.WARNING)
-            return "", None, None, {"initial_edits": [], "followups": []}
+            return "", None, None, self._build_allowed_mentions(), {"initial_edits": [], "followups": []}
 
         planning_context = self._build_template_context()
         resolved_response = await self._resolve_if_expressions(response, message, planning_context)
@@ -2032,16 +2056,16 @@ class AutoReply(commands.GroupCog, name="autoreply"):
             response_stages = self._extract_timed_response_plan(resolved_response)
         except TemplateSyntaxError as e:
             log(f"自動回覆模板語法錯誤: {e}", module_name="AutoReply", level=logging.WARNING)
-            return "", None, None, {"initial_edits": [], "followups": []}
+            return "", None, None, self._build_allowed_mentions(), {"initial_edits": [], "followups": []}
 
         initial_stage = response_stages[0] if response_stages else {"template": "", "edits": []}
-        final_response, sticker, embed = await self._render_response_segment(initial_stage["template"], message)
+        final_response, sticker, embed, allowed_mentions = await self._render_response_segment(initial_stage["template"], message)
         delayed_actions = {
             "initial_edits": initial_stage["edits"],
             "followups": response_stages[1:],
         }
 
-        return final_response, sticker, embed, delayed_actions
+        return final_response, sticker, embed, allowed_mentions, delayed_actions
 
     @app_commands.command(name="add", description="新增自動回覆")
     @app_commands.describe(
@@ -2516,7 +2540,7 @@ class AutoReply(commands.GroupCog, name="autoreply"):
 
         mock_message = MockMessage(guild, author, channel, "這是一則測試訊息內容。")
 
-        final_response, _, embed, delayed_actions = await self._process_response_v2(response, mock_message)
+        final_response, _, embed, _, delayed_actions = await self._process_response_v2(response, mock_message)
         preview_text = final_response or None
         delayed_lines = []
         for edit_action in delayed_actions["initial_edits"]:
@@ -2530,7 +2554,11 @@ class AutoReply(commands.GroupCog, name="autoreply"):
             preview_text = f"{preview_text}\n\n{delayed_preview}" if preview_text else delayed_preview
         if preview_text is None and embed is None:
             preview_text = "沒有可輸出的內容"
-        await interaction.response.send_message(preview_text, embed=embed)
+        await interaction.response.send_message(
+            preview_text,
+            embed=embed,
+            allowed_mentions=self._build_allowed_mentions(),
+        )
 
     @app_commands.command(name="builder", description="用互動式介面建立自動回覆")
     @app_commands.default_permissions(manage_guild=True)
@@ -2707,6 +2735,7 @@ class AutoReply(commands.GroupCog, name="autoreply"):
             value=(
                 "- `{newmsg:2}`：1~3 秒後再發一則新訊息，最多 2 個\n"
                 "- `{edit:2}`：1~3 秒後編輯目前這則 autoreply，最多 4 個\n"
+                "- 預設只允許提及 users；`{mention:true}` 開放 `@everyone` / 身分組，`{mention:false}` 關閉\n"
                 "- `{uservar:key}` / `{uservar:key:value}`\n"
                 "- `{guildvar:key}` / `{guildvar:key:value}`\n"
                 "- uservar 最多 5 個、guildvar 最多 10 個，key/value 最長 100"
@@ -2754,7 +2783,8 @@ class AutoReply(commands.GroupCog, name="autoreply"):
                     "3) `{if:{contentsplit:1}!={null}:你有輸入參數:else:你沒輸入參數}`\n"
                     "4) `{embedtitle:簽到成功}{embedurl:https://example.com}{embeddescription:{user} 在 {date} {time24} 完成簽到}{embedauthor:系統}{embedauthorimage:{authoravatar}}{embedcolor:57F287}`\n"
                     "5) `從第 2 個單字開始：{contentsplit:1-}`\n"
-                    "6) `剛剛聊天室隨機點名：{random_user}`"
+                    "6) `剛剛聊天室隨機點名：{random_user}`\n"
+                    "7) `{mention:true}@everyone 系統維護開始`"
                 )
                 await i.response.send_message(embed=ex, ephemeral=True)
 
@@ -2950,7 +2980,7 @@ class AutoReply(commands.GroupCog, name="autoreply"):
                 raw_response = random.choice(responses)
                 
                 # 使用新的處理方法
-                final_response, sticker, embed, delayed_actions = await self._process_response_v2(raw_response, message)
+                final_response, sticker, embed, allowed_mentions, delayed_actions = await self._process_response_v2(raw_response, message)
 
                 has_immediate_output = bool(final_response or sticker or embed is not None)
                 has_followups = bool(delayed_actions["followups"])
@@ -2968,6 +2998,7 @@ class AutoReply(commands.GroupCog, name="autoreply"):
                             final_response,
                             embed,
                             sticker,
+                            allowed_mentions,
                         )
 
                     if sent_message and delayed_actions["initial_edits"]:

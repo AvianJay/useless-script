@@ -56,8 +56,13 @@ def _build_item_template_guild(interaction: discord.Interaction, scope_guild_id:
     )
 
 
-def _get_item_template_allowed_mentions():
-    return discord.AllowedMentions(users=True, roles=False, everyone=False)
+def _get_item_template_allowed_mentions(allow_everyone_and_roles: bool = False):
+    return discord.AllowedMentions(
+        users=True,
+        roles=allow_everyone_and_roles,
+        everyone=allow_everyone_and_roles,
+        replied_user=True,
+    )
 
 
 def _validate_custom_item_template(content: str):
@@ -71,13 +76,13 @@ async def _execute_custom_item_original_edits(interaction: discord.Interaction, 
     for edit_action in edit_actions:
         try:
             await asyncio.sleep(edit_action["delay"])
-            edit_content, _, edit_embed = await autoreply_cog._render_response_segment(edit_action["template"], trigger_message)
+            edit_content, _, edit_embed, edit_allowed_mentions = await autoreply_cog._render_response_segment(edit_action["template"], trigger_message)
             if not edit_content and edit_embed is None:
                 continue
             await interaction.edit_original_response(
                 content=edit_content or None,
                 embed=edit_embed,
-                allowed_mentions=_get_item_template_allowed_mentions(),
+                allowed_mentions=edit_allowed_mentions,
             )
         except discord.HTTPException as e:
             log(f"Custom item delayed edit failed: {e}", module_name="ItemSystem", level=logging.ERROR)
@@ -91,13 +96,13 @@ async def _execute_custom_item_followup_edits(sent_message, autoreply_cog, trigg
     for edit_action in edit_actions:
         try:
             await asyncio.sleep(edit_action["delay"])
-            edit_content, _, edit_embed = await autoreply_cog._render_response_segment(edit_action["template"], trigger_message)
+            edit_content, _, edit_embed, edit_allowed_mentions = await autoreply_cog._render_response_segment(edit_action["template"], trigger_message)
             if not edit_content and edit_embed is None:
                 continue
             await sent_message.edit(
                 content=edit_content or None,
                 embed=edit_embed,
-                allowed_mentions=_get_item_template_allowed_mentions(),
+                allowed_mentions=edit_allowed_mentions,
             )
         except discord.HTTPException as e:
             log(f"Custom item followup edit failed: {e}", module_name="ItemSystem", level=logging.ERROR)
@@ -110,7 +115,7 @@ async def _execute_custom_item_followup_edits(sent_message, autoreply_cog, trigg
 async def _execute_custom_item_followup_stage(interaction: discord.Interaction, autoreply_cog, trigger_message: _ItemTemplateMessage, stage: dict, ephemeral_response: bool):
     try:
         await asyncio.sleep(stage["send_delay"])
-        followup_content, _, followup_embed = await autoreply_cog._render_response_segment(stage["template"], trigger_message)
+        followup_content, _, followup_embed, followup_allowed_mentions = await autoreply_cog._render_response_segment(stage["template"], trigger_message)
         if not followup_content and followup_embed is None:
             return
 
@@ -118,7 +123,7 @@ async def _execute_custom_item_followup_stage(interaction: discord.Interaction, 
             followup_content or None,
             embed=followup_embed,
             ephemeral=ephemeral_response,
-            allowed_mentions=_get_item_template_allowed_mentions(),
+            allowed_mentions=followup_allowed_mentions,
             wait=bool(stage["edits"]),
         )
 
@@ -149,7 +154,7 @@ async def _send_custom_item_content(interaction: discord.Interaction, item_id: s
         f"/item use {item_id}",
     )
 
-    final_response, _, embed, delayed_actions = await autoreply_cog._process_response_v2(content, mock_message)
+    final_response, _, embed, allowed_mentions, delayed_actions = await autoreply_cog._process_response_v2(content, mock_message)
     has_delayed_actions = bool(delayed_actions["initial_edits"] or delayed_actions["followups"])
 
     if final_response or embed is not None:
@@ -157,7 +162,7 @@ async def _send_custom_item_content(interaction: discord.Interaction, item_id: s
             final_response or None,
             embed=embed,
             ephemeral=ephemeral_response,
-            allowed_mentions=_get_item_template_allowed_mentions(),
+            allowed_mentions=allowed_mentions,
         )
     elif has_delayed_actions:
         await interaction.response.defer(ephemeral=ephemeral_response, thinking=True)

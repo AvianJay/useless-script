@@ -129,6 +129,7 @@ Builder 內的 `trigger / response` 支援：
 - `{sticker:ID}`：附上貼圖
 - `{newmsg:second}`：延遲送出下一則訊息
 - `{edit:second}`：延遲編輯目前這則 autoreply
+- `{mention:true}` / `{mention:false}`：控制是否允許提及 `@everyone` 與身分組
 - `{uservar:key}`：讀取 user 變數
 - `{uservar:key:value}`：寫入 user 變數，不輸出
 - `{guildvar:key}`：讀取 guild 變數
@@ -138,6 +139,7 @@ Builder 內的 `trigger / response` 支援：
 
 - `{newmsg:second}`：最多 `2` 個，秒數只能 `1 ~ 3`
 - `{edit:second}`：最多 `4` 個，秒數只能 `1 ~ 3`
+- 預設 `allowed_mentions` 只允許 users；若要開放 `@everyone` / 身分組，請加上 `{mention:true}`
 - `uservar` 最多 `5` 個 key
 - `guildvar` 最多 `10` 個 key
 - key / value 長度最多 `100`
@@ -175,6 +177,7 @@ Builder 內的 `trigger / response` 支援：
 {if:{contentsplit:1}!={null}:你有輸入內容:else:空白}
 {if:{contentsplit:2}>=10:大於等於 10:else:小於 10}
 {if:{contentsplit:1}==true&&{hour}>=12:午安 true:else:還不是午安時間}
+{mention:true}@everyone 維護開始
 ```
 
 ## Embed 回覆
