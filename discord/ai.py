@@ -628,6 +628,9 @@ class AICommands(commands.Cog):
     MAX_EMOJI_CONTEXT_COUNT = 80
     MAX_TOOL_ITERATIONS = 4
     MAX_TOOL_RESULT_LENGTH = 3500
+    AI_GUILD_BILLING_USER_KEY = "ai_guild_billing_user_id"
+    AI_GUILD_CUSTOM_PROMPT_KEY = "ai_guild_custom_prompt"
+    MAX_AI_GUILD_CUSTOM_PROMPT_LENGTH = 1800
     AI_USER_GLOBAL_MEMORY_KEY = "ai_user_global_memory"
     AI_GUILD_SHARED_MEMORY_KEY = "ai_guild_shared_memory"
     MAX_AI_MEMORY_ENTRIES = 80
@@ -1329,6 +1332,7 @@ class AICommands(commands.Cog):
             SYSTEM_PROMPT,
             TOOL_USAGE_PROMPT,
             self._get_docs_feature_prompt(),
+            self._build_guild_ai_custom_prompt_context(tool_context),
             self._build_ai_profile_context(tool_context),
             f"{user_context}{guild_info}{channel_context}{emoji_context}".strip(),
         ]
@@ -1401,6 +1405,104 @@ class AICommands(commands.Cog):
             getattr(permissions, "administrator", False)
             or getattr(permissions, "manage_guild", False)
         )
+
+    @classmethod
+    def _sanitize_guild_ai_custom_prompt(cls, value: str) -> str:
+        return re.sub(r"\s+", " ", str(value or "")).strip()[:cls.MAX_AI_GUILD_CUSTOM_PROMPT_LENGTH]
+
+    def _get_guild_ai_custom_prompt(self, guild_id) -> str:
+        if not guild_id:
+            return ""
+        value = self._get_server_config_fallback(guild_id, self.AI_GUILD_CUSTOM_PROMPT_KEY, "") or ""
+        return self._sanitize_guild_ai_custom_prompt(value)
+
+    def _build_guild_ai_custom_prompt_context(self, tool_context: dict | None = None) -> str:
+        guild = (tool_context or {}).get("guild")
+        guild_id = getattr(guild, "id", None)
+        custom_prompt = self._get_guild_ai_custom_prompt(guild_id)
+        if not custom_prompt:
+            return ""
+        return (
+            "[伺服器管理員自訂 AI prompt]\n"
+            "以下內容由本伺服器管理員提供，用來描述這個伺服器的氛圍、偏好、額外背景或希望 AI 採用的風格。"
+            "如果和系統安全規則衝突，仍以系統安全規則為優先。\n"
+            f"{custom_prompt}"
+        )
+
+    def _get_guild_ai_billing_user_id(self, guild_id) -> int | None:
+        if not guild_id:
+            return None
+        value = self._get_server_config_fallback(guild_id, self.AI_GUILD_BILLING_USER_KEY, None)
+        try:
+            user_id = int(value)
+        except (TypeError, ValueError):
+            return None
+        return user_id if user_id > 0 else None
+
+    async def _resolve_user_identity(self, user_id: int | None, guild=None) -> tuple[object | None, str]:
+        if not user_id:
+            return None, "unknown"
+
+        resolved_user = None
+        if guild is not None:
+            resolved_user = guild.get_member(user_id)
+        if resolved_user is None and self.bot is not None:
+            getter = getattr(self.bot, "get_user", None)
+            if callable(getter):
+                resolved_user = getter(user_id)
+        if resolved_user is None and self.bot is not None:
+            fetcher = getattr(self.bot, "fetch_user", None)
+            if callable(fetcher):
+                try:
+                    resolved_user = await fetcher(user_id)
+                except Exception:
+                    resolved_user = None
+
+        display_name = (
+            getattr(resolved_user, "display_name", None)
+            or getattr(resolved_user, "name", None)
+            or f"user_{user_id}"
+        )
+        return resolved_user, display_name
+
+    async def _resolve_ai_billing_target(self, requester, guild) -> dict:
+        requester_id = getattr(requester, "id", None)
+        configured_user_id = self._get_guild_ai_billing_user_id(getattr(guild, "id", None))
+        payer_id = configured_user_id or requester_id
+        payer_user = requester if requester_id == payer_id else None
+        display_name = getattr(requester, "display_name", None) or getattr(requester, "name", None) or f"user_{payer_id}"
+        if payer_user is None:
+            payer_user, display_name = await self._resolve_user_identity(payer_id, guild)
+        return {
+            "payer_id": payer_id,
+            "payer_user": payer_user,
+            "display_name": display_name,
+            "uses_guild_billing": bool(configured_user_id and configured_user_id != requester_id),
+        }
+
+    @staticmethod
+    def _build_ai_billing_detail_suffix(requester_id: int | None, payer_id: int | None) -> str:
+        parts = []
+        if payer_id is not None:
+            parts.append(f"payer={payer_id}")
+        if requester_id is not None and requester_id != payer_id:
+            parts.append(f"requester={requester_id}")
+        return f" {' '.join(parts)}" if parts else ""
+
+    @staticmethod
+    def _build_ai_billing_info_suffix(requester_id: int | None, payer_id: int | None, payer_name: str) -> str:
+        if requester_id is None or payer_id is None or requester_id == payer_id or not payer_name:
+            return ""
+        return f" | Pay {payer_name}"
+
+    async def _describe_guild_ai_billing(self, guild) -> tuple[int | None, str]:
+        guild_id = getattr(guild, "id", None)
+        configured_user_id = self._get_guild_ai_billing_user_id(guild_id)
+        if not configured_user_id:
+            return None, "目前這個伺服器的 AI 沒有指定付款人，預設是各自付款。"
+
+        _, payer_name = await self._resolve_user_identity(configured_user_id, guild)
+        return configured_user_id, f"目前這個伺服器的 AI 由 {payer_name}（ID: {configured_user_id}）付款。"
 
     def _resolve_ai_memory_scope(
         self,
@@ -3397,34 +3499,44 @@ class AICommands(commands.Cog):
         rate_per_char = MODEL_RATES[selected_model]
         input_chars = len(resolved_message)
         input_cost = round(input_chars * rate_per_char, 2)
+        billing_target = await self._resolve_ai_billing_target(user, guild)
+        payer_id = billing_target["payer_id"]
+        payer_user = billing_target["payer_user"]
+        payer_name = billing_target["display_name"]
+        billing_actor = payer_user or user
+        billing_detail_suffix = self._build_ai_billing_detail_suffix(user.id, payer_id)
 
-        global_balance = self._get_global_balance(user.id)
+        global_balance = self._get_global_balance(payer_id)
         if global_balance < input_cost:
+            payer_note = ""
+            if billing_target["uses_guild_billing"]:
+                payer_note = f"\n本伺服器 AI 目前由 {payer_name} 付款。"
             view = AIResponseBuilder.create_error_view(
                 f"全域幣不足，無法送出請求。\n"
                 f"本次輸入費用：{input_cost:,.2f} {GLOBAL_CURRENCY_NAME}（{selected_model} @ {rate_per_char:.2f}/字）\n"
                 f"目前餘額：{global_balance:,.2f} {GLOBAL_CURRENCY_NAME}"
+                f"{payer_note}"
             )
             await interaction.response.send_message(view=view, ephemeral=True, allowed_mentions=SAFE_MENTIONS)
             return
 
         balance_before_input = global_balance
-        charged_input, balance_after_input = self._charge_global_balance(user.id, input_cost)
+        charged_input, balance_after_input = self._charge_global_balance(payer_id, input_cost)
         if charged_input < input_cost:
             view = AIResponseBuilder.create_error_view("扣款失敗，請稍後再試。")
             await interaction.response.send_message(view=view, ephemeral=True, allowed_mentions=SAFE_MENTIONS)
             return
         self._log_economy_transaction(
-            user.id,
+            payer_id,
             "AI 輸入扣費",
             -charged_input,
-            f"模型={selected_model}，輸入={input_chars}字，費率={rate_per_char:.2f}/字"
+            f"模型={selected_model}，輸入={input_chars}字，費率={rate_per_char:.2f}/字{billing_detail_suffix}"
         )
         self._queue_economy_audit_log(
-            user=user,
+            user=billing_actor,
             action="ai_input_charge",
             amount=charged_input,
-            detail=f"model={selected_model} input_chars={input_chars} rate={rate_per_char:.2f}",
+            detail=f"model={selected_model} input_chars={input_chars} rate={rate_per_char:.2f}{billing_detail_suffix}",
             balance_before=balance_before_input,
             balance_after=balance_after_input,
             interaction=interaction,
@@ -3513,20 +3625,20 @@ class AICommands(commands.Cog):
 
             output_chars = raw_output_chars
             output_cost = round(output_chars * rate_per_char, 2)
-            balance_before_output = self._get_global_balance(user.id)
-            charged_output, final_balance = self._charge_global_balance(user.id, output_cost)
+            balance_before_output = self._get_global_balance(payer_id)
+            charged_output, final_balance = self._charge_global_balance(payer_id, output_cost)
             self._log_economy_transaction(
-                user.id,
+                payer_id,
                 "AI 輸出扣費",
                 -charged_output,
-                f"模型={selected_model}，輸出={output_chars}字，費率={rate_per_char:.2f}/字"
+                f"模型={selected_model}，輸出={output_chars}字，費率={rate_per_char:.2f}/字{billing_detail_suffix}"
             )
 
             self._queue_economy_audit_log(
-                user=user,
+                user=billing_actor,
                 action="ai_output_charge",
                 amount=charged_output,
-                detail=f"model={selected_model} output_chars={output_chars} rate={rate_per_char:.2f}",
+                detail=f"model={selected_model} output_chars={output_chars} rate={rate_per_char:.2f}{billing_detail_suffix}",
                 balance_before=balance_before_output,
                 balance_after=final_balance,
                 interaction=interaction,
@@ -3539,6 +3651,7 @@ class AICommands(commands.Cog):
                 f"{rate_per_char:.2f}/C | I {input_chars}C/{input_cost:,.2f} | "
                 f"O {output_chars}C/{output_cost:,.2f} | TC {total_charged:,.2f}"
             )
+            billing_info += self._build_ai_billing_info_suffix(user.id, payer_id, payer_name)
             # if shortfall > 0:
             #     billing_info += f" | 餘額不足少扣 {shortfall:,.2f}（原應扣 {total_cost:,.2f}）"
             
@@ -3563,20 +3676,20 @@ class AICommands(commands.Cog):
             await interaction.followup.send(view=view, allowed_mentions=SAFE_MENTIONS)
             
         except Exception as e:
-            balance_before_refund = self._get_global_balance(user.id)
-            balance_after_refund = self._refund_global_balance(user.id, charged_input)
+            balance_before_refund = self._get_global_balance(payer_id)
+            balance_after_refund = self._refund_global_balance(payer_id, charged_input)
             self._log_economy_transaction(
-                user.id,
+                payer_id,
                 "AI 退款",
                 charged_input,
-                f"模型={selected_model}，生成失敗，退回輸入扣費"
+                f"模型={selected_model}，生成失敗，退回輸入扣費{billing_detail_suffix}"
             )
             log(f"AI 指令錯誤: {e}", module_name="AI", level=logging.ERROR)
             self._queue_economy_audit_log(
-                user=user,
+                user=billing_actor,
                 action="ai_refund",
                 amount=charged_input,
-                detail=f"model={selected_model} refunded_input={charged_input:.2f} because_generation_failed",
+                detail=f"model={selected_model} refunded_input={charged_input:.2f} because_generation_failed{billing_detail_suffix}",
                 balance_before=balance_before_refund,
                 balance_after=balance_after_refund,
                 interaction=interaction,
@@ -3639,6 +3752,118 @@ class AICommands(commands.Cog):
 
         await self._set_default_model(user.id, model)
         await interaction.response.send_message(f"✅ 已設定預設模型為：{model}", ephemeral=True, allowed_mentions=SAFE_MENTIONS)
+
+    @app_commands.command(name="ai-server-prompt-set", description="設定這個伺服器的 AI 自訂 prompt")
+    @app_commands.describe(
+        prompt="提供給 AI 的額外伺服器背景、風格描述或回覆偏好"
+    )
+    @app_commands.allowed_installs(guilds=True, users=False)
+    @app_commands.allowed_contexts(guilds=True, dms=False, private_channels=False)
+    async def ai_server_prompt_set(self, interaction: discord.Interaction, prompt: str):
+        guild = interaction.guild
+        user = interaction.user
+        if guild is None:
+            await interaction.response.send_message("❌ 此指令只能在伺服器中使用。", ephemeral=True, allowed_mentions=SAFE_MENTIONS)
+            return
+        if not self._can_manage_guild_ai_memory(user, guild):
+            await interaction.response.send_message("❌ 你需要管理伺服器或管理員權限才能設定 AI 自訂 prompt。", ephemeral=True, allowed_mentions=SAFE_MENTIONS)
+            return
+
+        sanitized_prompt = self._sanitize_guild_ai_custom_prompt(prompt)
+        if not sanitized_prompt:
+            await interaction.response.send_message("❌ 自訂 prompt 不能是空的。", ephemeral=True, allowed_mentions=SAFE_MENTIONS)
+            return
+
+        set_server_config(guild.id, self.AI_GUILD_CUSTOM_PROMPT_KEY, sanitized_prompt)
+        await interaction.response.send_message(
+            f"✅ 已更新這個伺服器的 AI 自訂 prompt（{len(sanitized_prompt)}/{self.MAX_AI_GUILD_CUSTOM_PROMPT_LENGTH} 字）。",
+            ephemeral=True,
+            allowed_mentions=SAFE_MENTIONS,
+        )
+
+    @app_commands.command(name="ai-server-prompt-view", description="查看這個伺服器目前的 AI 自訂 prompt")
+    @app_commands.allowed_installs(guilds=True, users=False)
+    @app_commands.allowed_contexts(guilds=True, dms=False, private_channels=False)
+    async def ai_server_prompt_view(self, interaction: discord.Interaction):
+        guild = interaction.guild
+        if guild is None:
+            await interaction.response.send_message("❌ 此指令只能在伺服器中使用。", ephemeral=True, allowed_mentions=SAFE_MENTIONS)
+            return
+
+        custom_prompt = self._get_guild_ai_custom_prompt(guild.id)
+        if not custom_prompt:
+            await interaction.response.send_message("目前這個伺服器還沒有設定 AI 自訂 prompt。", ephemeral=True, allowed_mentions=SAFE_MENTIONS)
+            return
+
+        await interaction.response.send_message(
+            f"目前的 AI 自訂 prompt（{len(custom_prompt)}/{self.MAX_AI_GUILD_CUSTOM_PROMPT_LENGTH} 字）：\n```text\n{custom_prompt}\n```",
+            ephemeral=True,
+            allowed_mentions=SAFE_MENTIONS,
+        )
+
+    @app_commands.command(name="ai-server-prompt-clear", description="清除這個伺服器的 AI 自訂 prompt")
+    @app_commands.allowed_installs(guilds=True, users=False)
+    @app_commands.allowed_contexts(guilds=True, dms=False, private_channels=False)
+    async def ai_server_prompt_clear(self, interaction: discord.Interaction):
+        guild = interaction.guild
+        user = interaction.user
+        if guild is None:
+            await interaction.response.send_message("❌ 此指令只能在伺服器中使用。", ephemeral=True, allowed_mentions=SAFE_MENTIONS)
+            return
+        if not self._can_manage_guild_ai_memory(user, guild):
+            await interaction.response.send_message("❌ 你需要管理伺服器或管理員權限才能清除 AI 自訂 prompt。", ephemeral=True, allowed_mentions=SAFE_MENTIONS)
+            return
+
+        set_server_config(guild.id, self.AI_GUILD_CUSTOM_PROMPT_KEY, "")
+        await interaction.response.send_message("✅ 已清除這個伺服器的 AI 自訂 prompt。", ephemeral=True, allowed_mentions=SAFE_MENTIONS)
+
+    @app_commands.command(name="ai-server-billing-set", description="將這個伺服器的 AI 付款人設成自己")
+    @app_commands.allowed_installs(guilds=True, users=False)
+    @app_commands.allowed_contexts(guilds=True, dms=False, private_channels=False)
+    async def ai_server_billing_set(self, interaction: discord.Interaction):
+        guild = interaction.guild
+        user = interaction.user
+        if guild is None:
+            await interaction.response.send_message("❌ 此指令只能在伺服器中使用。", ephemeral=True, allowed_mentions=SAFE_MENTIONS)
+            return
+        if not self._can_manage_guild_ai_memory(user, guild):
+            await interaction.response.send_message("❌ 你需要管理伺服器或管理員權限才能設定 AI 付款人。", ephemeral=True, allowed_mentions=SAFE_MENTIONS)
+            return
+
+        set_server_config(guild.id, self.AI_GUILD_BILLING_USER_KEY, user.id)
+        await interaction.response.send_message(
+            f"✅ 已將這個伺服器的 AI 付款人設為你自己 {user.display_name}（ID: {user.id}）。",
+            ephemeral=True,
+            allowed_mentions=SAFE_MENTIONS,
+        )
+
+    @app_commands.command(name="ai-server-billing-view", description="查看這個伺服器 AI 目前由誰付款")
+    @app_commands.allowed_installs(guilds=True, users=False)
+    @app_commands.allowed_contexts(guilds=True, dms=False, private_channels=False)
+    async def ai_server_billing_view(self, interaction: discord.Interaction):
+        guild = interaction.guild
+        if guild is None:
+            await interaction.response.send_message("❌ 此指令只能在伺服器中使用。", ephemeral=True, allowed_mentions=SAFE_MENTIONS)
+            return
+
+        _, description = await self._describe_guild_ai_billing(guild)
+        await interaction.response.send_message(description, ephemeral=True, allowed_mentions=SAFE_MENTIONS)
+
+    @app_commands.command(name="ai-server-billing-clear", description="清除這個伺服器的 AI 指定付款人")
+    @app_commands.allowed_installs(guilds=True, users=False)
+    @app_commands.allowed_contexts(guilds=True, dms=False, private_channels=False)
+    async def ai_server_billing_clear(self, interaction: discord.Interaction):
+        guild = interaction.guild
+        user = interaction.user
+        if guild is None:
+            await interaction.response.send_message("❌ 此指令只能在伺服器中使用。", ephemeral=True, allowed_mentions=SAFE_MENTIONS)
+            return
+        if not self._can_manage_guild_ai_memory(user, guild):
+            await interaction.response.send_message("❌ 你需要管理伺服器或管理員權限才能清除 AI 付款人設定。", ephemeral=True, allowed_mentions=SAFE_MENTIONS)
+            return
+
+        set_server_config(guild.id, self.AI_GUILD_BILLING_USER_KEY, "")
+        await interaction.response.send_message("✅ 已清除這個伺服器的 AI 指定付款人，之後會恢復各自付款。", ephemeral=True, allowed_mentions=SAFE_MENTIONS)
 
     # ============================================
     # 文字指令
@@ -3713,35 +3938,45 @@ class AICommands(commands.Cog):
         rate_per_char = MODEL_RATES.get(selected_model, MODEL_RATES["openai"])
         input_chars = len(sanitized_message)
         input_cost = round(input_chars * rate_per_char, 2)
-        global_balance = self._get_global_balance(user.id)
+        billing_target = await self._resolve_ai_billing_target(user, guild)
+        payer_id = billing_target["payer_id"]
+        payer_user = billing_target["payer_user"]
+        payer_name = billing_target["display_name"]
+        billing_actor = payer_user or user
+        billing_detail_suffix = self._build_ai_billing_detail_suffix(user.id, payer_id)
+        global_balance = self._get_global_balance(payer_id)
 
         if global_balance < input_cost:
+            payer_note = ""
+            if billing_target["uses_guild_billing"]:
+                payer_note = f"\n本伺服器 AI 目前由 {payer_name} 付款。"
             await ctx.reply(
                 f"❌ 全域幣不足，無法送出請求。\n"
                 f"本次輸入費用：{input_cost:,.2f} {GLOBAL_CURRENCY_NAME}（{selected_model} @ {rate_per_char:.2f}/字）\n"
-                f"目前餘額：{global_balance:,.2f} {GLOBAL_CURRENCY_NAME}",
+                f"目前餘額：{global_balance:,.2f} {GLOBAL_CURRENCY_NAME}"
+                f"{payer_note}",
                 allowed_mentions=SAFE_MENTIONS
             )
             return
 
         balance_before_input = global_balance
-        charged_input, balance_after_input = self._charge_global_balance(user.id, input_cost)
+        charged_input, balance_after_input = self._charge_global_balance(payer_id, input_cost)
         if charged_input < input_cost:
             await ctx.reply("❌ 扣款失敗，請稍後再試。", allowed_mentions=SAFE_MENTIONS)
             return
         self._log_economy_transaction(
-            user.id,
+            payer_id,
             "AI 輸入扣費",
             -charged_input,
-            f"模型={selected_model}，輸入={input_chars}字，費率={rate_per_char:.2f}/字"
+            f"模型={selected_model}，輸入={input_chars}字，費率={rate_per_char:.2f}/字{billing_detail_suffix}"
         )
         
         # 處理回覆訊息
         self._queue_economy_audit_log(
-            user=user,
+            user=billing_actor,
             action="ai_input_charge",
             amount=charged_input,
-            detail=f"model={selected_model} input_chars={input_chars} rate={rate_per_char:.2f}",
+            detail=f"model={selected_model} input_chars={input_chars} rate={rate_per_char:.2f}{billing_detail_suffix}",
             balance_before=balance_before_input,
             balance_after=balance_after_input,
             ctx=ctx,
@@ -3844,20 +4079,20 @@ class AICommands(commands.Cog):
 
                 output_chars = raw_output_chars
                 output_cost = round(output_chars * rate_per_char, 2)
-                balance_before_output = self._get_global_balance(user.id)
-                charged_output, final_balance = self._charge_global_balance(user.id, output_cost)
+                balance_before_output = self._get_global_balance(payer_id)
+                charged_output, final_balance = self._charge_global_balance(payer_id, output_cost)
                 self._log_economy_transaction(
-                    user.id,
+                    payer_id,
                     "AI 輸出扣費",
                     -charged_output,
-                    f"模型={selected_model}，輸出={output_chars}字，費率={rate_per_char:.2f}/字"
+                    f"模型={selected_model}，輸出={output_chars}字，費率={rate_per_char:.2f}/字{billing_detail_suffix}"
                 )
 
                 self._queue_economy_audit_log(
-                    user=user,
+                    user=billing_actor,
                     action="ai_output_charge",
                     amount=charged_output,
-                    detail=f"model={selected_model} output_chars={output_chars} rate={rate_per_char:.2f}",
+                    detail=f"model={selected_model} output_chars={output_chars} rate={rate_per_char:.2f}{billing_detail_suffix}",
                     balance_before=balance_before_output,
                     balance_after=final_balance,
                     ctx=ctx,
@@ -3870,6 +4105,7 @@ class AICommands(commands.Cog):
                     f"{rate_per_char:.2f}/C | I {input_chars}C/{input_cost:,.2f} | "
                     f"O {output_chars}C/{output_cost:,.2f} | TC {total_charged:,.2f}"
                 )
+                billing_info += self._build_ai_billing_info_suffix(user.id, payer_id, payer_name)
                 if shortfall > 0:
                     billing_info += f" | 餘額不足少扣 {shortfall:,.2f}（原應扣 {total_cost:,.2f}）"
                 
@@ -3894,20 +4130,20 @@ class AICommands(commands.Cog):
                 await ctx.reply(view=view, allowed_mentions=SAFE_MENTIONS)
                 
             except Exception as e:
-                balance_before_refund = self._get_global_balance(user.id)
-                balance_after_refund = self._refund_global_balance(user.id, charged_input)
+                balance_before_refund = self._get_global_balance(payer_id)
+                balance_after_refund = self._refund_global_balance(payer_id, charged_input)
                 self._log_economy_transaction(
-                    user.id,
+                    payer_id,
                     "AI 退款",
                     charged_input,
-                    f"模型={selected_model}，生成失敗，退回輸入扣費"
+                    f"模型={selected_model}，生成失敗，退回輸入扣費{billing_detail_suffix}"
                 )
                 log(f"AI 文字指令錯誤: {e}", module_name="AI", level=logging.ERROR)
                 self._queue_economy_audit_log(
-                    user=user,
+                    user=billing_actor,
                     action="ai_refund",
                     amount=charged_input,
-                    detail=f"model={selected_model} refunded_input={charged_input:.2f} because_generation_failed",
+                    detail=f"model={selected_model} refunded_input={charged_input:.2f} because_generation_failed{billing_detail_suffix}",
                     balance_before=balance_before_refund,
                     balance_after=balance_after_refund,
                     ctx=ctx,
@@ -3976,6 +4212,93 @@ class AICommands(commands.Cog):
         view = AIResponseBuilder.create_history_view(recent_history, len(history))
         
         await ctx.reply(view=view, allowed_mentions=discord.AllowedMentions.none())
+
+    @commands.command(name="ai-server-prompt", aliases=["aiserverprompt", "aiprompt"])
+    async def ai_server_prompt_text(self, ctx: commands.Context, *, prompt: str = None):
+        """
+        設定或查看這個伺服器的 AI 自訂 prompt
+
+        用法:
+        !ai-server-prompt
+        !ai-server-prompt clear
+        !ai-server-prompt <內容>
+        """
+        guild = ctx.guild
+        user = ctx.author
+        if guild is None:
+            await ctx.reply("❌ 此指令只能在伺服器中使用。", allowed_mentions=SAFE_MENTIONS)
+            return
+
+        if prompt is None:
+            current_prompt = self._get_guild_ai_custom_prompt(guild.id)
+            if not current_prompt:
+                await ctx.reply("目前這個伺服器還沒有設定 AI 自訂 prompt。", allowed_mentions=SAFE_MENTIONS)
+                return
+            await ctx.reply(
+                f"目前的 AI 自訂 prompt（{len(current_prompt)}/{self.MAX_AI_GUILD_CUSTOM_PROMPT_LENGTH} 字）：\n```text\n{current_prompt}\n```",
+                allowed_mentions=SAFE_MENTIONS,
+            )
+            return
+
+        if not self._can_manage_guild_ai_memory(user, guild):
+            await ctx.reply("❌ 你需要管理伺服器或管理員權限才能修改 AI 自訂 prompt。", allowed_mentions=SAFE_MENTIONS)
+            return
+
+        if prompt.strip().lower() in {"clear", "reset", "remove"}:
+            set_server_config(guild.id, self.AI_GUILD_CUSTOM_PROMPT_KEY, "")
+            await ctx.reply("✅ 已清除這個伺服器的 AI 自訂 prompt。", allowed_mentions=SAFE_MENTIONS)
+            return
+
+        sanitized_prompt = self._sanitize_guild_ai_custom_prompt(prompt)
+        if not sanitized_prompt:
+            await ctx.reply("❌ 自訂 prompt 不能是空的。", allowed_mentions=SAFE_MENTIONS)
+            return
+
+        set_server_config(guild.id, self.AI_GUILD_CUSTOM_PROMPT_KEY, sanitized_prompt)
+        await ctx.reply(
+            f"✅ 已更新這個伺服器的 AI 自訂 prompt（{len(sanitized_prompt)}/{self.MAX_AI_GUILD_CUSTOM_PROMPT_LENGTH} 字）。",
+            allowed_mentions=SAFE_MENTIONS,
+        )
+
+    @commands.command(name="ai-server-billing", aliases=["aiserverbilling", "aibilling"])
+    async def ai_server_billing_text(self, ctx: commands.Context, *, target: str = None):
+        """
+        設定或查看這個伺服器 AI 由誰付款
+
+        用法:
+        !ai-server-billing
+        !ai-server-billing set
+        !ai-server-billing clear
+        """
+        guild = ctx.guild
+        user = ctx.author
+        if guild is None:
+            await ctx.reply("❌ 此指令只能在伺服器中使用。", allowed_mentions=SAFE_MENTIONS)
+            return
+
+        if target is None:
+            _, description = await self._describe_guild_ai_billing(guild)
+            await ctx.reply(description, allowed_mentions=SAFE_MENTIONS)
+            return
+
+        if not self._can_manage_guild_ai_memory(user, guild):
+            await ctx.reply("❌ 你需要管理伺服器或管理員權限才能修改 AI 付款人。", allowed_mentions=SAFE_MENTIONS)
+            return
+
+        normalized_target = target.strip()
+        if normalized_target.lower() in {"clear", "reset", "remove"}:
+            set_server_config(guild.id, self.AI_GUILD_BILLING_USER_KEY, "")
+            await ctx.reply("✅ 已清除這個伺服器的 AI 指定付款人，之後會恢復各自付款。", allowed_mentions=SAFE_MENTIONS)
+            return
+        if normalized_target.lower() not in {"set", "self", "me"}:
+            await ctx.reply("❌ 現在只能把 AI 付款人設成你自己。請用 `!ai-server-billing set` 或 `!ai-server-billing clear`。", allowed_mentions=SAFE_MENTIONS)
+            return
+
+        set_server_config(guild.id, self.AI_GUILD_BILLING_USER_KEY, user.id)
+        await ctx.reply(
+            f"✅ 已將這個伺服器的 AI 付款人設為你自己 {user.display_name}（ID: {user.id}）。",
+            allowed_mentions=SAFE_MENTIONS,
+        )
 
     @commands.command(name="ai-tool-smoke", aliases=["aitoolsmoke"])
     async def ai_tool_smoke_text(self, ctx: commands.Context):
