@@ -625,6 +625,9 @@ class ClearHistoryView(discord.ui.LayoutView):
 
 class AICommands(commands.Cog):
     """AI 聊天機器人指令"""
+    ai_admin = app_commands.Group(name="ai-admin", description="AI 管理指令")
+    ai_admin_prompt = app_commands.Group(name="prompt", description="管理伺服器的 AI 自訂 prompt", parent=ai_admin)
+    ai_admin_billing = app_commands.Group(name="billing", description="管理伺服器的 AI 付款設定", parent=ai_admin)
     MAX_EMOJI_CONTEXT_COUNT = 80
     MAX_TOOL_ITERATIONS = 4
     MAX_TOOL_RESULT_LENGTH = 3500
@@ -3753,7 +3756,7 @@ class AICommands(commands.Cog):
         await self._set_default_model(user.id, model)
         await interaction.response.send_message(f"✅ 已設定預設模型為：{model}", ephemeral=True, allowed_mentions=SAFE_MENTIONS)
 
-    @app_commands.command(name="ai-server-prompt-set", description="設定這個伺服器的 AI 自訂 prompt")
+    @ai_admin_prompt.command(name="set", description="設定這個伺服器的 AI 自訂 prompt")
     @app_commands.describe(
         prompt="提供給 AI 的額外伺服器背景、風格描述或回覆偏好"
     )
@@ -3781,7 +3784,7 @@ class AICommands(commands.Cog):
             allowed_mentions=SAFE_MENTIONS,
         )
 
-    @app_commands.command(name="ai-server-prompt-view", description="查看這個伺服器目前的 AI 自訂 prompt")
+    @ai_admin_prompt.command(name="view", description="查看這個伺服器目前的 AI 自訂 prompt")
     @app_commands.allowed_installs(guilds=True, users=False)
     @app_commands.allowed_contexts(guilds=True, dms=False, private_channels=False)
     async def ai_server_prompt_view(self, interaction: discord.Interaction):
@@ -3801,7 +3804,7 @@ class AICommands(commands.Cog):
             allowed_mentions=SAFE_MENTIONS,
         )
 
-    @app_commands.command(name="ai-server-prompt-clear", description="清除這個伺服器的 AI 自訂 prompt")
+    @ai_admin_prompt.command(name="clear", description="清除這個伺服器的 AI 自訂 prompt")
     @app_commands.allowed_installs(guilds=True, users=False)
     @app_commands.allowed_contexts(guilds=True, dms=False, private_channels=False)
     async def ai_server_prompt_clear(self, interaction: discord.Interaction):
@@ -3817,7 +3820,7 @@ class AICommands(commands.Cog):
         set_server_config(guild.id, self.AI_GUILD_CUSTOM_PROMPT_KEY, "")
         await interaction.response.send_message("✅ 已清除這個伺服器的 AI 自訂 prompt。", ephemeral=True, allowed_mentions=SAFE_MENTIONS)
 
-    @app_commands.command(name="ai-server-billing-set", description="將這個伺服器的 AI 付款人設成自己")
+    @ai_admin_billing.command(name="set", description="將這個伺服器的 AI 付款人設成自己")
     @app_commands.allowed_installs(guilds=True, users=False)
     @app_commands.allowed_contexts(guilds=True, dms=False, private_channels=False)
     async def ai_server_billing_set(self, interaction: discord.Interaction):
@@ -3837,7 +3840,7 @@ class AICommands(commands.Cog):
             allowed_mentions=SAFE_MENTIONS,
         )
 
-    @app_commands.command(name="ai-server-billing-view", description="查看這個伺服器 AI 目前由誰付款")
+    @ai_admin_billing.command(name="view", description="查看這個伺服器 AI 目前由誰付款")
     @app_commands.allowed_installs(guilds=True, users=False)
     @app_commands.allowed_contexts(guilds=True, dms=False, private_channels=False)
     async def ai_server_billing_view(self, interaction: discord.Interaction):
@@ -3849,7 +3852,7 @@ class AICommands(commands.Cog):
         _, description = await self._describe_guild_ai_billing(guild)
         await interaction.response.send_message(description, ephemeral=True, allowed_mentions=SAFE_MENTIONS)
 
-    @app_commands.command(name="ai-server-billing-clear", description="清除這個伺服器的 AI 指定付款人")
+    @ai_admin_billing.command(name="clear", description="清除這個伺服器的 AI 指定付款人")
     @app_commands.allowed_installs(guilds=True, users=False)
     @app_commands.allowed_contexts(guilds=True, dms=False, private_channels=False)
     async def ai_server_billing_clear(self, interaction: discord.Interaction):
