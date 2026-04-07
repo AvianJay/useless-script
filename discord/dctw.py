@@ -14,6 +14,7 @@ import time
 
 
 API_BASE = "https://dctw.nkhost.dev"
+SITE_BASE = "https://dctw.xyz"
 USER_KEY_NAME = "dctw_api_key"
 CACHE_TTL_SECONDS = 300
 BROWSE_PAGE_SIZE = 10
@@ -199,7 +200,7 @@ def _resource_colour(resource: str) -> discord.Colour:
 
 
 def _listing_page_url(resource: str, listing_id: int) -> str:
-    return f"{API_BASE}/{resource}/{listing_id}"
+    return f"{SITE_BASE}/{resource}/{listing_id}"
 
 
 def _compact_join(values, fallback: str = "無") -> str:
