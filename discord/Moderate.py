@@ -949,10 +949,10 @@ class Moderate(commands.Cog):
 
 
     @app_commands.command(name=app_commands.locale_str("ban"), description="封禁用戶")
-    @app_commands.describe(user="選擇用戶", reason="封禁原因（可選）", duration="封禁時間（可選，預設永久）", delete_message="刪除訊息時間（可選，預設不刪除）")
+    @app_commands.describe(user="選擇用戶", reason="封禁原因（可選）", duration="封禁時間（可選，預設永久）", delete_message="刪除訊息時間（可選，預設不刪除）", send_moderation_message="是否同步發送處分通知")
     @app_commands.allowed_installs(guilds=True, users=False)
     @app_commands.default_permissions(ban_members=True)
-    async def ban_user(self, interaction: discord.Interaction, user: Union[discord.Member, discord.User], reason: str = "無", duration: str = "", delete_message: str = ""):
+    async def ban_user(self, interaction: discord.Interaction, user: Union[discord.Member, discord.User], reason: str = "無", duration: str = "", delete_message: str = "", send_moderation_message: bool = False):
         await interaction.response.defer()
         guild = interaction.guild
         if guild is None:
@@ -986,6 +986,14 @@ class Moderate(commands.Cog):
         if not success:
             await interaction.followup.send("封禁時發生錯誤，請確認機器人是否有足夠的權限。")
             return
+
+        if send_moderation_message:
+            moderator = interaction.user
+            actions_json = [{"action": "ban", "duration": duration_seconds if unban_time else 0, "reason": reason}]
+            try:
+                await moderation_message_settings(None, user, moderator, actions_json, direct=True, guild=guild)
+            except Exception as e:
+                pass
 
         mention = user.mention if user else f"<@{user.id}>"
         parts = [f"已將 {mention} 封禁。"]
@@ -1028,10 +1036,10 @@ class Moderate(commands.Cog):
 
 
     @app_commands.command(name=app_commands.locale_str("kick"), description="踢出用戶")
-    @app_commands.describe(user="選擇用戶（@或ID）", reason="踢出原因（可選）")
+    @app_commands.describe(user="選擇用戶（@或ID）", reason="踢出原因（可選）", send_moderation_message="是否同步發送處分通知")
     @app_commands.default_permissions(kick_members=True)
     @app_commands.allowed_installs(guilds=True, users=False)
-    async def kick_user(self, interaction: discord.Interaction, user: discord.Member, reason: str = "無"):
+    async def kick_user(self, interaction: discord.Interaction, user: discord.Member, reason: str = "無", send_moderation_message: bool = False):
         await interaction.response.defer()
         guild = interaction.guild
         if guild is None:
@@ -1066,15 +1074,23 @@ class Moderate(commands.Cog):
             await interaction.followup.send(f"踢出時發生錯誤：{e}")
             return
 
+        if send_moderation_message:
+            moderator = interaction.user
+            actions_json = [{"action": "kick", "reason": reason}]
+            try:
+                await moderation_message_settings(None, user, moderator, actions_json, direct=True, guild=guild)
+            except Exception as e:
+                pass
+
         suffix = f"\n- 原因：{reason}" if reason != "無" else ""
         await interaction.followup.send(f"已將 {user.mention} 踢出伺服器。{suffix}")
 
 
     @app_commands.command(name=app_commands.locale_str("timeout"), description="禁言用戶")
-    @app_commands.describe(user="選擇用戶", reason="禁言原因（可選）", duration="禁言時間（可選，預設10分鐘）")
+    @app_commands.describe(user="選擇用戶", reason="禁言原因（可選）", duration="禁言時間（可選，預設10分鐘）", send_moderation_message="是否同步發送處分通知")
     @app_commands.default_permissions(mute_members=True)
     @app_commands.allowed_installs(guilds=True, users=False)
-    async def timeout_user(self, interaction: discord.Interaction, user: discord.Member, reason: str = "無", duration: str = "10m"):
+    async def timeout_user(self, interaction: discord.Interaction, user: discord.Member, reason: str = "無", duration: str = "10m", send_moderation_message: bool = False):
         # 先 defer，避免耗時操作導致 interaction 過期
         await interaction.response.defer()
 
@@ -1109,6 +1125,14 @@ class Moderate(commands.Cog):
             print(f"[!] 禁言 {user} 時發生錯誤：{e}")
             await interaction.followup.send(f"禁言時發生錯誤：{e}")
             return
+
+        if send_moderation_message:
+            moderator = interaction.user
+            actions_json = [{"action": "mute", "duration": duration_seconds, "reason": reason}]
+            try:
+                await moderation_message_settings(None, user, moderator, actions_json, direct=True, guild=guild)
+            except Exception as e:
+                pass
 
         # 使用 followup 送出最終訊息
         suffix = f"\n- 原因：{reason}" if reason != "無" else ""
@@ -1152,6 +1176,8 @@ class Moderate(commands.Cog):
     @app_commands.command(name=app_commands.locale_str("moderation-message-channel"), description="設定懲處公告頻道")
     @app_commands.describe(channel="選擇頻道")
     @app_commands.default_permissions(manage_channels=True)
+    @app_commands.allowed_installs(guilds=True, users=False)
+    @app_commands.allowed_contexts(guilds=True, dms=False, private_channels=False)
     async def set_moderation_message_channel(self, interaction: discord.Interaction, channel: discord.TextChannel):
         await interaction.response.defer()
         permissions = channel.permissions_for(interaction.guild.me)
