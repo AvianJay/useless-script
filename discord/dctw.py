@@ -62,6 +62,14 @@ TAG_MAPPINGS = {
     "templates": TEMPLATE_TAGS,
 }
 
+SORT_MODE_MAPPINGS = {
+    "newest": "最新",
+    "votes": "票數",
+    "members": "成員數",
+    "servers": "伺服器數",
+    "bumped": "置頂",
+}
+
 
 RESOURCE_CONFIG = {
     "bots": {
@@ -365,10 +373,9 @@ class DCTWBrowseView(discord.ui.LayoutView):
         page_items = self._current_page_items()
         header_lines = [
             f"## DCTW {conf['title']} 瀏覽",
-            f"排序: `{self.sort_mode}`",
+            f"排序: `{SORT_MODE_MAPPINGS.get(self.sort_mode, self.sort_mode)}`",
             f"頁數: {self.page_index + 1}/{self._total_pages()}",
             f"總數: {len(self.items)}",
-            f"來源: {'快取' if self.cached else '即時'}",
         ]
         if self.truncated:
             header_lines.append(f"-# 已使用前 {AGGREGATE_LIMIT} 筆資料排序")
