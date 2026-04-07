@@ -917,6 +917,32 @@ class DCTW(commands.GroupCog, name="dctw", description="DCTW 瀏覽器！"):
         masked = api_key[:4] + "*" * max(0, len(api_key) - 8) + api_key[-4:]
         await interaction.response.send_message(f"目前 key: {masked}", ephemeral=True, allowed_mentions=SAFE_MENTIONS)
 
+    @dctw_key.command(name="help", description="說明如何取得 DCTW API key")
+    async def key_help(self, interaction: discord.Interaction):
+        embed = discord.Embed(title="如何獲取 DCTW API Key", color=discord.Colour.blue())
+        embed.add_field(
+            name="1. 加入雲端貓居 Discord 伺服器",
+            value="點擊[這裡](https://discord.gg/UMyXvz9Y9W)加入雲端貓居的官方 Discord 伺服器。",
+            inline=False,
+        )
+        embed.add_field(
+            name="2. 前往 #🤖┇開刷指令␥ᴄᴏᴍᴍᴀɴᴅꜱ 頻道",
+            value="在伺服器中找到 #🤖┇開刷指令␥ᴄᴏᴍᴍᴀɴᴅꜱ 頻道。",
+            inline=False,
+        )
+        embed.add_field(
+            name="3. 使用 `/key` 指令",
+            value="在該頻道輸入 `/key` 指令，機器人會回應你的專屬 API key。",
+            inline=False,
+        )
+        embed.add_field(
+            name="5. 設定 API key",
+            value="將獲取的 API key 複製後，使用 `/dctw key set <你的 API key>` 指令將其設定到此機器人中。",
+            inline=False,
+        )
+        embed.set_footer(text="請勿將 API key 洩露給他人，以免被濫用。")
+        await interaction.response.send_message(embed=embed, ephemeral=True, allowed_mentions=SAFE_MENTIONS)
+
     @dctw_bot.command(name="browse", description="瀏覽機器人清單")
     @app_commands.choices(
         sort=[
