@@ -547,6 +547,10 @@ translations = {
     "queue": "佇列",
     "now-playing": "正在播放",
     "volume": "音量",
+    "set": "設定",
+    "prompt": "提示詞",
+    "billing": "付款",
+    "ai-admin": "ai-管理",
     "ai-clear": "ai-清除",
     "ai-history": "ai-歷史紀錄",
     "git-commits": "git-提交紀錄",
@@ -695,6 +699,7 @@ translations = {
     "members": "成員數",
     "bumped": "最近置頂",
     "builder": "建造器",
+    "vote": "投票",
 }
 class CommandNameTranslator(app_commands.Translator):
     async def translate(
