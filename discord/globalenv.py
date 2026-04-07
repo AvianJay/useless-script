@@ -14,7 +14,7 @@ from pathlib import Path
 
 
 # Global configuration for backward compatibility
-config_version = 28
+config_version = 29
 config_path = 'config.json'
 
 default_config = {
@@ -74,6 +74,7 @@ default_config = {
     "pollinations_api_key": "",
     "economy_log_channel_id": 0,
     "backend_guild_id": 0,
+    "dctw_api_key": "",
 }
 _config = None
 _runtime_logging_configured = False
@@ -677,7 +678,22 @@ translations = {
     "radio": "電台",
     "station": "頻道",
     "level": "等級",
+    "bot": "機器人",
+    "server": "伺服器",
     "template": "模板",
+    "key": "金鑰",
+    "browse": "瀏覽",
+    "show": "顯示",
+    "bump": "置頂",
+    "cache-stats": "快取統計",
+    "sort": "排序",
+    "target": "目標",
+    "api_key": "api-金鑰",
+    "newest": "最新",
+    "votes": "票數",
+    "servers": "伺服器數",
+    "members": "成員數",
+    "bumped": "最近置頂",
     "builder": "建造器",
 }
 class CommandNameTranslator(app_commands.Translator):
