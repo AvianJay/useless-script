@@ -180,6 +180,17 @@ class FakeUser(commands.Cog):
                     await asyncio.sleep(delay_before_send)
                 await webhook.send(content=chunk, username=user.display_name, avatar_url=avatar_url.url, allowed_mentions=discord.AllowedMentions(everyone=mention, users=True, roles=mention))
 
+            history_scope_id = interaction.guild.id if interaction.guild else 0
+            fake_history = get_user_data(history_scope_id, user.id, "fakeuser_history", [])
+            if not isinstance(fake_history, list):
+                fake_history = []
+            fake_history.append({
+                "user": interaction.user.id,
+                "content": "\n".join(chunk for _, chunk in send_plan),
+            })
+            fake_history = fake_history[-10:]
+            set_user_data(history_scope_id, user.id, "fakeuser_history", fake_history)
+
             await interaction.followup.send(f"訊息已發送（共 {len(send_plan)} 則）。", ephemeral=True)
             log(f"假冒了用戶 {user} 發送訊息：{message}", module_name="FakeUser", user=interaction.user, guild=interaction.guild)
             if log_channel:

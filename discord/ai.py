@@ -2032,7 +2032,7 @@ class AICommands(commands.Cog):
                 "type": "function",
                 "function": {
                     "name": "get_server_feature_status",
-                    "description": "Inspect server feature configuration such as autoreply, automod, webverify, dynamic voice, sticky role, autopublish, fakeuser, and prefix.",
+                    "description": "Get server feature status. Sensitive configuration details are only available to guild managers/admins.",
                     "parameters": {
                         "type": "object",
                         "properties": {
@@ -2112,7 +2112,7 @@ class AICommands(commands.Cog):
                 "type": "function",
                 "function": {
                     "name": "get_fakeuser_status",
-                    "description": "Get fakeuser filters, log channel, and a user's blacklist settings.",
+                    "description": "Get fakeuser status and recent impersonation history. Sensitive guild configuration details are only available to guild managers/admins.",
                     "parameters": {
                         "type": "object",
                         "properties": {
@@ -2645,10 +2645,12 @@ class AICommands(commands.Cog):
 
     async def _tool_get_server_feature_status(self, args: dict, tool_context: dict) -> dict:
         guild = (tool_context or {}).get("guild")
+        current_user = (tool_context or {}).get("user")
         if guild is None:
             return {"error": "Server feature status is only available in guild channels."}
 
         guild_id = guild.id
+        can_view_sensitive = self._can_manage_guild_ai_memory(current_user, guild)
         feature = str(args.get("feature", "overview") or "overview").strip().lower()
         autoreplies = self._get_server_config_fallback(guild_id, "autoreplies", []) or []
         automod = self._get_server_config_fallback(guild_id, "automod", {}) or {}
@@ -2672,92 +2674,136 @@ class AICommands(commands.Cog):
         automod_enabled_features = sorted(
             key for key, value in automod.items() if isinstance(value, dict) and value.get("enabled", False)
         )
-
-        details = {
-            "overview": {
-                "server_name": guild.name,
-                "custom_prefix": custom_prefix,
-                "autoreply_rule_count": len(autoreplies),
-                "automod_enabled_features": automod_enabled_features,
-                "webverify_enabled": bool(webverify.get("enabled", False)),
-                "dynamic_voice_configured": bool(dynamic_voice_channel),
-                "stickyrole_enabled": bool(sticky_enabled),
-                "autopublish_enabled": bool(autopublish.get("enabled", False)),
-                "fakeuser_filter_count": len(fake_filters),
-            },
-            "autoreply": {
-                "rule_count": len(autoreplies),
-                "ignore_mode": autoreply_ignore_mode,
-                "ignore_channels": [
-                    self._format_channel_ref(guild, channel_id) for channel_id in ignore_channels
-                ],
-                "rules_preview": [
-                    {
-                        "trigger": rule.get("trigger"),
-                        "response": self._truncate_tool_text(rule.get("response", ""), max_len=120),
-                        "mode": rule.get("mode"),
-                        "reply": rule.get("reply"),
-                        "channel_mode": rule.get("channel_mode"),
-                        "random_chance": rule.get("random_chance"),
-                    }
-                    for rule in autoreplies[:5]
-                ],
-            },
-            "automod": {
-                "enabled_features": automod_enabled_features,
-                "notify_channel": self._format_channel_ref(
-                    guild,
-                    self._get_server_config_fallback(guild_id, "flagged_user_onjoin_channel", None),
-                ),
-                "settings": {
-                    key: value
-                    for key, value in automod.items()
-                    if isinstance(value, dict) and value.get("enabled", False)
-                },
-            },
-            "webverify": {
-                "enabled": bool(webverify.get("enabled", False)),
-                "captcha_type": webverify.get("captcha_type"),
-                "notify": webverify.get("notify"),
-                "min_age": webverify.get("min_age"),
-                "unverified_role": self._format_role_ref(guild, webverify.get("unverified_role_id")),
-                "autorole_enabled": bool(webverify.get("autorole_enabled", False)),
-                "autorole_trigger": webverify.get("autorole_trigger"),
-                "country_alert": webverify.get("webverify_country_alert"),
-                "force_verify_until": self._get_server_config_fallback(guild_id, "force_verify_until", None),
-            },
-            "dynamic_voice": {
-                "channel": self._format_channel_ref(guild, dynamic_voice_channel),
-                "category": self._format_channel_ref(guild, dynamic_voice_category),
-                "name_template": dynamic_voice_name,
-                "play_audio": bool(dynamic_voice_play_audio),
-                "blacklist_roles": [
-                    self._format_role_ref(guild, role_id) for role_id in dynamic_voice_blacklist_roles
-                ],
-                "created_channel_count": len(created_dynamic_channels),
-            },
-            "stickyrole": {
-                "enabled": bool(sticky_enabled),
-                "ignore_bots": bool(sticky_ignore_bots),
-                "allowed_roles": [
-                    self._format_role_ref(guild, role_id) for role_id in sticky_allowed_roles
-                ],
-                "log_channel": self._format_channel_ref(guild, sticky_log_channel),
-            },
-            "autopublish": {
-                "enabled": bool(autopublish.get("enabled", False)),
-                "tracked_channels": len((autopublish.get("channels") or {})),
-            },
-            "fakeuser": {
-                "filter_count": len(fake_filters),
-                "filters_preview": fake_filters[:10],
-                "log_channel": self._format_channel_ref(guild, fake_log_channel),
-            },
-            "prefix": {
-                "custom_prefix": custom_prefix,
-                "default_prefix": config("prefix", "!"),
-            },
+        dynamic_voice_configured = bool(dynamic_voice_channel or dynamic_voice_category)
+        fakeuser_enabled = bool(fake_log_channel)
+        overview_summary = {
+            "server_name": guild.name,
+            "custom_prefix": custom_prefix,
+            "autoreply_enabled": bool(autoreplies),
+            "autoreply_rule_count": len(autoreplies),
+            "automod_enabled": bool(automod_enabled_features),
+            "automod_enabled_feature_count": len(automod_enabled_features),
+            "webverify_enabled": bool(webverify.get("enabled", False)),
+            "dynamic_voice_configured": dynamic_voice_configured,
+            "stickyrole_enabled": bool(sticky_enabled),
+            "autopublish_enabled": bool(autopublish.get("enabled", False)),
+            "fakeuser_enabled": fakeuser_enabled,
         }
+
+        if can_view_sensitive:
+            details = {
+                "overview": {
+                    **overview_summary,
+                    "automod_enabled_features": automod_enabled_features,
+                    "fakeuser_filter_count": len(fake_filters),
+                },
+                "autoreply": {
+                    "rule_count": len(autoreplies),
+                    "ignore_mode": autoreply_ignore_mode,
+                    "ignore_channels": [
+                        self._format_channel_ref(guild, channel_id) for channel_id in ignore_channels
+                    ],
+                    "rules_preview": [
+                        {
+                            "trigger": rule.get("trigger"),
+                            "response": self._truncate_tool_text(rule.get("response", ""), max_len=120),
+                            "mode": rule.get("mode"),
+                            "reply": rule.get("reply"),
+                            "channel_mode": rule.get("channel_mode"),
+                            "random_chance": rule.get("random_chance"),
+                        }
+                        for rule in autoreplies[:5]
+                    ],
+                },
+                "automod": {
+                    "enabled_features": automod_enabled_features,
+                    "notify_channel": self._format_channel_ref(
+                        guild,
+                        self._get_server_config_fallback(guild_id, "flagged_user_onjoin_channel", None),
+                    ),
+                    "settings": {
+                        key: value
+                        for key, value in automod.items()
+                        if isinstance(value, dict) and value.get("enabled", False)
+                    },
+                },
+                "webverify": {
+                    "enabled": bool(webverify.get("enabled", False)),
+                    "captcha_type": webverify.get("captcha_type"),
+                },
+                "dynamic_voice": {
+                    "channel": self._format_channel_ref(guild, dynamic_voice_channel),
+                    "category": self._format_channel_ref(guild, dynamic_voice_category),
+                    "name_template": dynamic_voice_name,
+                    "play_audio": bool(dynamic_voice_play_audio),
+                    "blacklist_roles": [
+                        self._format_role_ref(guild, role_id) for role_id in dynamic_voice_blacklist_roles
+                    ],
+                    "created_channel_count": len(created_dynamic_channels),
+                },
+                "stickyrole": {
+                    "enabled": bool(sticky_enabled),
+                    "ignore_bots": bool(sticky_ignore_bots),
+                    "allowed_roles": [
+                        self._format_role_ref(guild, role_id) for role_id in sticky_allowed_roles
+                    ],
+                    "log_channel": self._format_channel_ref(guild, sticky_log_channel),
+                },
+                "autopublish": {
+                    "enabled": bool(autopublish.get("enabled", False)),
+                    "tracked_channels": len((autopublish.get("channels") or {})),
+                },
+                "fakeuser": {
+                    "filter_count": len(fake_filters),
+                    "filters_preview": fake_filters[:10],
+                    "log_channel": self._format_channel_ref(guild, fake_log_channel),
+                },
+                "prefix": {
+                    "custom_prefix": custom_prefix,
+                    "default_prefix": config("prefix", "!"),
+                },
+            }
+        else:
+            details = {
+                "overview": overview_summary,
+                "autoreply": {
+                    "enabled": bool(autoreplies),
+                    "rule_count": len(autoreplies),
+                    "sensitive_details_redacted": True,
+                },
+                "automod": {
+                    "enabled": bool(automod_enabled_features),
+                    "enabled_feature_count": len(automod_enabled_features),
+                    "sensitive_details_redacted": True,
+                },
+                "webverify": {
+                    "enabled": bool(webverify.get("enabled", False)),
+                    "sensitive_details_redacted": True,
+                },
+                "dynamic_voice": {
+                    "configured": dynamic_voice_configured,
+                    "created_channel_count": len(created_dynamic_channels),
+                    "sensitive_details_redacted": True,
+                },
+                "stickyrole": {
+                    "enabled": bool(sticky_enabled),
+                    "sensitive_details_redacted": True,
+                },
+                "autopublish": {
+                    "enabled": bool(autopublish.get("enabled", False)),
+                    "tracked_channels": len((autopublish.get("channels") or {})),
+                    "sensitive_details_redacted": True,
+                },
+                "fakeuser": {
+                    "enabled": fakeuser_enabled,
+                    "filter_count": len(fake_filters),
+                    "sensitive_details_redacted": True,
+                },
+                "prefix": {
+                    "custom_prefix": custom_prefix,
+                    "default_prefix": config("prefix", "!"),
+                },
+            }
         if feature not in details:
             return {
                 "error": f"Unknown feature: {feature}",
@@ -2766,6 +2812,7 @@ class AICommands(commands.Cog):
         return {
             "feature": feature,
             "details": details[feature],
+            "sensitive_details_available": can_view_sensitive,
         }
 
     async def _tool_get_music_status(self, args: dict, tool_context: dict) -> dict:
@@ -3079,19 +3126,49 @@ class AICommands(commands.Cog):
             return {"error": "target_user_id must be an integer"}
 
         guild_id = guild.id if guild else 0
+        can_view_sensitive = self._can_manage_guild_ai_memory(current_user, guild)
         filters = self._get_server_config_fallback(guild_id, "fake_user_filters", []) or []
         log_channel = self._get_server_config_fallback(guild_id, "fake_user_log_channel", None)
         blacklist = self._get_user_data_fallback(guild_id, target_user_id, "fake_user_blacklist", []) or []
+        fake_history = self._get_user_data_fallback(guild_id, target_user_id, "fakeuser_history", []) or []
+        if not isinstance(fake_history, list):
+            fake_history = []
+
+        history_preview = []
+        for entry in reversed(fake_history[-10:]):
+            if not isinstance(entry, dict):
+                continue
+            raw_actor_id = entry.get("user")
+            try:
+                actor_id = int(raw_actor_id)
+            except (TypeError, ValueError):
+                actor_id = None
+            actor_display = await self._resolve_user_display(actor_id, guild) if actor_id is not None else str(raw_actor_id or "unknown")
+            history_preview.append(
+                {
+                    "user": actor_display,
+                    "user_id": actor_id,
+                    "content": self._truncate_tool_text(entry.get("content", ""), max_len=180),
+                }
+            )
 
         return {
             "user": await self._resolve_user_display(target_user_id, guild),
             "filter_count": len(filters),
-            "filters_preview": filters[:10],
-            "log_channel": self._format_channel_ref(guild, log_channel),
+            "fakeuser_enabled": bool(log_channel),
             "user_blacklist_count": len(blacklist),
-            "user_blacklist_preview": blacklist[:10],
-            "impersonation_history_available": False,
-            "note": "FakeUser currently does not store structured impersonation history for AI queries.",
+            "impersonation_history_count": len(fake_history),
+            "impersonation_history_preview": history_preview,
+            "sensitive_details_available": can_view_sensitive,
+            "sensitive_details": (
+                {
+                    "filters_preview": filters[:10],
+                    "log_channel": self._format_channel_ref(guild, log_channel),
+                    "user_blacklist_preview": blacklist[:10],
+                }
+                if can_view_sensitive
+                else None
+            ),
         }
 
     async def _tool_get_user_command_stats(self, args: dict, tool_context: dict) -> dict:
