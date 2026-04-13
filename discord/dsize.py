@@ -33,6 +33,17 @@ def percent_random(percent: int) -> bool:
         return False
 
 
+def normalize_stored_date(value, default=None):
+    if value is None:
+        return default
+    if isinstance(value, datetime):
+        return value.date()
+    try:
+        return datetime.fromisoformat(str(value)).date()
+    except Exception:
+        return default
+
+
 async def animate_break_explosion(
     interaction: discord.Interaction,
     embed: discord.Embed,
@@ -1331,6 +1342,7 @@ async def dsize_feedgrass(interaction: discord.Interaction, user: Union[discord.
         return
     if not user:
         user = interaction.user  # self-feedgrass
+    today = datetime.now(timezone(timedelta(hours=8))).date()
     global_feedgrass_bool = global_feedgrass.lower() == "true"
     # if user.id == interaction.user.id:
         # await interaction.response.send_message("不能草飼自己。", ephemeral=True)
@@ -1342,6 +1354,18 @@ async def dsize_feedgrass(interaction: discord.Interaction, user: Union[discord.
             guild_id = None
         else:
             guild_id = interaction.guild.id if interaction.guild else None
+    last_dsize = normalize_stored_date(
+        get_user_data(guild_id, interaction.user.id, "last_dsize"),
+        datetime(1970, 1, 1).date(),
+    )
+    if last_dsize < today:
+        await interaction.response.send_message("你今天還沒有量過，無法草飼。", ephemeral=True)
+        return
+    feeder_is_mangirl = get_user_data(guild_id, interaction.user.id, "last_dsize_size", 0) == -1
+    last_japanese_cola_used = normalize_stored_date(get_user_data(guild_id, interaction.user.id, "last_dsize_japanese_cola_used"))
+    if feeder_is_mangirl and user.id != interaction.user.id and last_japanese_cola_used != today:
+        await interaction.response.send_message("男娘無法草飼，除非今天有喝日本生可樂。", ephemeral=True)
+        return
     if get_user_data(guild_id, user.id, "last_dsize_size", 0) != -1:
         name = user.display_name + " " if user.id != interaction.user.id else "你"
         await interaction.response.send_message(f"{name}不是男娘，無法草飼。", ephemeral=True)
