@@ -1023,6 +1023,10 @@ class AutoModerate(commands.GroupCog, name=app_commands.locale_str("automod")):
                         if message.id not in Moderate.ignore_message_ids:
                             await message.delete()
                         return
+                ok, msg = Moderate.check_member_hierarchy(message.guild.me, target, message.guild.me)
+                if not ok:
+                    log(f"詐騙陷阱: 無法對用戶 {target} 執行處理，因為階級不足: {msg}", level=logging.ERROR, module_name="AutoModerate", user=target, guild=message.guild)
+                    return
                 try:
                     result = await do_action_str(action, guild=message.guild, user=target, message=message)
                     res = '\n'.join(result)
