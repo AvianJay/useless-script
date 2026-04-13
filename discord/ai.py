@@ -398,6 +398,7 @@ SYSTEM_PROMPT = """你是 Discord 群組裡的搞笑 AI，個性抽象。
 TOOL_USAGE_PROMPT = """工具使用規則：
 - 當問題需要查 bot docs、dsize、背包、經濟、伺服器功能設定、音樂播放狀態、地震資訊、停班停課資訊、交通資訊、FakeUser 設定或指令統計時，優先使用工具，不要只靠猜測。
 - 只要使用者在問某個模組/功能怎麼設定、有哪些變數、embed 怎麼寫、條件判斷怎麼寫、指令怎麼用、權限怎麼設、或文件裡有沒有範例，優先使用 `search_bot_docs`。
+- 只要使用者在問機器人目前狀態、是否在線、延遲、版本、安裝量、用了多少指令、進了幾個伺服器，優先使用 `get_bot_status`。
 - AI 會自動看到目前使用者的共通 profile 和這個伺服器的共通氛圍 profile；平常聊天以讀取這些 profile 為主，不要因為一般聊天就自動改寫。
 - 只有在使用者明確要求「記住 / 更新 / 忘記」某件事時，才使用 AI memory tools 去修改記憶。
 - `user_global` 記憶是某個使用者跨伺服器共通的長期記憶；`guild_shared` 記憶是這個伺服器共享的共同記憶。
@@ -2031,6 +2032,17 @@ class AICommands(commands.Cog):
             {
                 "type": "function",
                 "function": {
+                    "name": "get_bot_status",
+                    "description": "Get bot information similar to the website status endpoint, including online status, uptime, counts, latency, and version.",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {},
+                    },
+                },
+            },
+            {
+                "type": "function",
+                "function": {
                     "name": "get_server_feature_status",
                     "description": "Get server feature status. Sensitive configuration details are only available to guild managers/admins.",
                     "parameters": {
@@ -2166,6 +2178,7 @@ class AICommands(commands.Cog):
                 "You may include multiple tool calls in the array.",
                 "If no tool is needed, respond normally with plain text.",
                 "If the user is asking about bot features, docs, setup, syntax, variables, embeds, conditions, examples, permissions, or how to use a module, call search_bot_docs first.",
+                "If the user is asking about the bot's current status, uptime, latency, version, install count, command totals, or server count, call get_bot_status.",
                 "Current user/global profile and guild shared profile may already be injected into context. Read them normally instead of writing memory by default.",
                 "Only use AI memory write tools when the user explicitly asks you to remember, update, or forget something. Do not write memory just because you inferred a pattern from casual chat.",
                 "Store personal cross-server facts in user_global. Store server culture/shared facts in guild_shared only when the request is explicit, suitable for a shared profile, and the user is allowed to manage guild memory.",
@@ -2642,6 +2655,59 @@ class AICommands(commands.Cog):
             }
 
         return result
+
+    async def _tool_get_bot_status(self, args: dict, tool_context: dict) -> dict:
+        try:
+            bot_latency = round(self.bot.latency * 1000)
+        except OverflowError:
+            bot_latency = "N/A"
+        except Exception:
+            bot_latency = None
+
+        util_module = None
+        website_module = None
+        try:
+            util_module = importlib.import_module("UtilCommands")
+        except Exception:
+            util_module = None
+        try:
+            website_module = importlib.import_module("Website")
+        except Exception:
+            website_module = None
+
+        fully_ready = bool(getattr(website_module, "fully_ready", False))
+        if self.bot.is_ready():
+            status_text = "online" if fully_ready else "starting"
+        else:
+            status_text = "offline"
+
+        application = getattr(self.bot, "application", None)
+        bot_user = getattr(self.bot, "user", None)
+        command_usage = get_global_config("command_usage_stats", {}) or {}
+        app_command_usage = get_global_config("app_command_usage_stats", {}) or {}
+        command_errors = get_global_config("command_error_stats", {}) or {}
+        app_command_errors = get_global_config("app_command_error_stats", {}) or {}
+
+        return {
+            "status": status_text,
+            "name": getattr(bot_user, "name", None),
+            "display_name": getattr(bot_user, "display_name", None) or getattr(bot_user, "name", None),
+            "avatar_url": str(bot_user.avatar.url) if bot_user and getattr(bot_user, "avatar", None) else None,
+            "id": str(bot_user.id) if bot_user else None,
+            "uptime": util_module.get_uptime_seconds() if util_module and hasattr(util_module, "get_uptime_seconds") else None,
+            "server_count": len(self.bot.guilds),
+            "user_count": len(set(self.bot.get_all_members())),
+            "user_install_count": getattr(application, "approximate_user_install_count", None),
+            "command_stats": (
+                sum(command_usage.values())
+                + sum(app_command_usage.values())
+                + sum(command_errors.values())
+                + sum(app_command_errors.values())
+            ),
+            "latency_ms": bot_latency,
+            "version": getattr(util_module, "full_version", "N/A") if util_module else "N/A",
+            "fully_ready": fully_ready,
+        }
 
     async def _tool_get_server_feature_status(self, args: dict, tool_context: dict) -> dict:
         guild = (tool_context or {}).get("guild")
@@ -3217,6 +3283,7 @@ class AICommands(commands.Cog):
             "get_dsize_context": self._tool_get_dsize_context,
             "get_inventory_context": self._tool_get_inventory_context,
             "get_economy_context": self._tool_get_economy_context,
+            "get_bot_status": self._tool_get_bot_status,
             "get_server_feature_status": self._tool_get_server_feature_status,
             "get_music_status": self._tool_get_music_status,
             "get_earthquake_status": self._tool_get_earthquake_status,
