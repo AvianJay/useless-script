@@ -875,6 +875,7 @@ class ServerWebVerify(commands.GroupCog, name="webverify", description="伺服�
                     assign_role = True
 
         if assign_role:
+            await asyncio.sleep(.5) # wait for discord to update member's roles if they have any join roles, to avoid conflicts
             await member.add_roles(discord.Object(id=unverified_role_id), reason="自動分配未驗證角色")
             notify_type = guild_config.get('notify', {}).get('type', 'dm')
             log(f"自動為新成員 {member} 分配未驗證角色", module_name="ServerWebVerify", guild=member.guild, user=member)
