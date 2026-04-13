@@ -646,6 +646,24 @@ class AICommands(commands.Cog):
     WEB_SEARCH_TOOL_MAX_CHARS = 500
     WEB_SEARCH_TOOL_MAX_TOKENS = 240
     WEB_SEARCH_TOOL_MAX_SOURCES = 4
+    TOOL_USAGE_LABELS = {
+        "search_bot_docs": "bot docs",
+        "get_ai_memory": "AI 記憶",
+        "upsert_ai_memory": "AI 記憶",
+        "delete_ai_memory": "AI 記憶",
+        "search_web": "網路搜尋",
+        "get_dsize_context": "dsize 資料",
+        "get_inventory_context": "背包資料",
+        "get_economy_context": "經濟資料",
+        "get_bot_status": "機器人資訊",
+        "get_server_feature_status": "伺服器功能",
+        "get_music_status": "音樂狀態",
+        "get_earthquake_status": "地震資訊",
+        "get_disaster_status": "停班停課資訊",
+        "get_transport_info": "交通資訊",
+        "get_fakeuser_status": "FakeUser 資料",
+        "get_user_command_stats": "指令統計",
+    }
     EMOJI_NAME_PATTERN = re.compile(r'(?<!<):([a-zA-Z0-9_]{2,32}):')
     
     def __init__(self, bot):
@@ -809,6 +827,7 @@ class AICommands(commands.Cog):
         model: str = "openai-fast",
         image: bytes = None,
         tool_context: dict | None = None,
+        tool_progress_callback=None,
     ) -> tuple[str, str, str]:
         """Generate an AI response with optional read-only tool calling."""
         try:
@@ -839,6 +858,15 @@ class AICommands(commands.Cog):
                     tool_context=active_tool_context,
                     round_index=round_index,
                 )
+                if tool_progress_callback is not None:
+                    try:
+                        await tool_progress_callback(tool_calls, round_index)
+                    except Exception as callback_error:
+                        log(
+                            f"AI tool progress callback failed: {callback_error}",
+                            module_name="AI",
+                            level=logging.WARNING,
+                        )
                 tool_results = []
                 for tool_call in tool_calls:
                     arguments = self._safe_parse_tool_arguments(tool_call.get("arguments"))
@@ -1173,6 +1201,26 @@ class AICommands(commands.Cog):
             user=user,
             guild=guild,
         )
+
+    @classmethod
+    def _build_tool_usage_notice(cls, tool_calls: list[dict]) -> str:
+        labels: list[str] = []
+        seen: set[str] = set()
+        for tool_call in tool_calls or []:
+            tool_name = str((tool_call or {}).get("name") or "").strip()
+            if not tool_name:
+                continue
+            label = cls.TOOL_USAGE_LABELS.get(tool_name, tool_name)
+            if label in seen:
+                continue
+            seen.add(label)
+            labels.append(label)
+
+        if not labels:
+            return "查詢中..."
+        if len(labels) > 4:
+            return f"查詢中：{'、'.join(labels[:4])} 等 {len(labels)} 個工具"
+        return f"查詢中：{'、'.join(labels)}"
 
     @staticmethod
     def _get_server_config_fallback(guild_id, key: str, default=None):
@@ -3691,8 +3739,8 @@ class AICommands(commands.Cog):
         )
         
         # 延遲回應（因為 AI 生成可能需要時間）
-        await interaction.response.defer()
-        
+        await interaction.response.defer(thinking=True)
+
         try:
             # 處理對話歷史
             if new_conversation:
@@ -3706,6 +3754,15 @@ class AICommands(commands.Cog):
                 "memory_write_request_allowed": self._has_explicit_ai_memory_write_intent(resolved_message),
                 "guild_memory_write_allowed": self._can_manage_guild_ai_memory(user, interaction.guild),
             }
+            tool_notice_text = None
+
+            async def tool_progress_callback(tool_calls: list[dict], round_index: int):
+                nonlocal tool_notice_text
+                notice = self._build_tool_usage_notice(tool_calls)
+                if notice == tool_notice_text:
+                    return
+                tool_notice_text = notice
+                await interaction.edit_original_response(content=notice, view=None)
             
             # 構建訊息列表（包含用戶名稱和頻道上下文）
             user_context = f"當前與你對話的用戶是：{user.display_name} (ID: {user.id})"
@@ -3765,6 +3822,7 @@ class AICommands(commands.Cog):
                 model=selected_model,
                 image=image_bytes,
                 tool_context=tool_context,
+                tool_progress_callback=tool_progress_callback,
             )
 
             raw_output_chars = len(response_text)
@@ -3820,7 +3878,7 @@ class AICommands(commands.Cog):
                 billing_info=billing_info
             )
             
-            await interaction.followup.send(view=view, allowed_mentions=SAFE_MENTIONS)
+            await interaction.edit_original_response(content=None, view=view)
             
         except Exception as e:
             balance_before_refund = self._get_global_balance(payer_id)
@@ -3845,7 +3903,7 @@ class AICommands(commands.Cog):
             view = AIResponseBuilder.create_error_view(
                 f"生成回應時發生錯誤：{str(e)[:200]}"
             )
-            await interaction.followup.send(view=view, allowed_mentions=SAFE_MENTIONS)
+            await interaction.edit_original_response(content=None, view=view)
     
     @app_commands.command(name="ai-clear", description="清除你的 AI 對話歷史")
     @app_commands.allowed_installs(guilds=True, users=True)
@@ -4152,6 +4210,7 @@ class AICommands(commands.Cog):
         final_message = f"{reply_context}{sanitized_message}"
         
         # 顯示正在輸入
+        tool_notice_message = None
         async with ctx.typing():
             try:
                 history = ConversationManager.get_history(user.id, guild_id)
@@ -4162,6 +4221,18 @@ class AICommands(commands.Cog):
                     "memory_write_request_allowed": self._has_explicit_ai_memory_write_intent(sanitized_message),
                     "guild_memory_write_allowed": self._can_manage_guild_ai_memory(user, guild),
                 }
+                tool_notice_text = None
+
+                async def tool_progress_callback(tool_calls: list[dict], round_index: int):
+                    nonlocal tool_notice_message, tool_notice_text
+                    notice = self._build_tool_usage_notice(tool_calls)
+                    if notice == tool_notice_text:
+                        return
+                    tool_notice_text = notice
+                    if tool_notice_message is None:
+                        tool_notice_message = await ctx.send(content=notice, allowed_mentions=SAFE_MENTIONS)
+                    else:
+                        await tool_notice_message.edit(content=notice)
                 
                 # 構建訊息列表（包含用戶名稱和頻道上下文）
                 user_context = f"當前與你對話的用戶是：{user.display_name}"
@@ -4219,6 +4290,7 @@ class AICommands(commands.Cog):
                     model=selected_model,
                     image=image_bytes,
                     tool_context=tool_context,
+                    tool_progress_callback=tool_progress_callback,
                 )
 
                 raw_output_chars = len(response_text)
@@ -4273,6 +4345,11 @@ class AICommands(commands.Cog):
                     response_time=response_time,
                     billing_info=billing_info
                 )
+                if tool_notice_message is not None:
+                    try:
+                        await tool_notice_message.delete()
+                    except Exception:
+                        pass
                 
                 await ctx.reply(view=view, allowed_mentions=SAFE_MENTIONS)
                 
@@ -4299,6 +4376,11 @@ class AICommands(commands.Cog):
                 view = AIResponseBuilder.create_error_view(
                     f"生成回應時發生錯誤：{str(e)[:200]}"
                 )
+                if tool_notice_message is not None:
+                    try:
+                        await tool_notice_message.delete()
+                    except Exception:
+                        pass
                 await ctx.reply(view=view, allowed_mentions=SAFE_MENTIONS)
     
     @commands.command(name="ai-new", aliases=["ainew", "newchat"])
