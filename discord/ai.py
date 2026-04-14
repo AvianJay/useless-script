@@ -626,7 +626,13 @@ class ClearHistoryView(discord.ui.LayoutView):
 
 class AICommands(commands.Cog):
     """AI 聊天機器人指令"""
-    ai_admin = app_commands.Group(name="ai-admin", description="AI 管理指令")
+    ai_admin = app_commands.Group(
+        name="ai-admin",
+        description="AI 管理指令",
+        allowed_contexts=app_commands.AppCommandContext(guilds=True, dm_channel=False, private_channel=False),
+        allowed_installs=app_commands.AppInstallationType(guild=True, user=False),
+        default_permissions=discord.Permissions(manage_guild=True)
+    )
     ai_admin_prompt = app_commands.Group(name="prompt", description="管理伺服器的 AI 自訂 prompt", parent=ai_admin)
     ai_admin_billing = app_commands.Group(name="billing", description="管理伺服器的 AI 付款設定", parent=ai_admin)
     MAX_EMOJI_CONTEXT_COUNT = 80
