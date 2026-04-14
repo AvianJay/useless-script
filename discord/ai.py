@@ -629,7 +629,7 @@ class AICommands(commands.Cog):
     ai_admin = app_commands.Group(
         name="ai-admin",
         description="AI 管理指令",
-        allowed_contexts=app_commands.AppCommandContext(guilds=True, dm_channel=False, private_channel=False),
+        allowed_contexts=app_commands.AppCommandContext(guild=True, dm_channel=False, private_channel=False),
         allowed_installs=app_commands.AppInstallationType(guild=True, user=False),
         default_permissions=discord.Permissions(manage_guild=True)
     )
