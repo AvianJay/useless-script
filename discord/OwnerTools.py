@@ -468,9 +468,9 @@ async def owner_userinfo(ctx, user: Union[discord.User, discord.Member] = None):
     await ctx.send(embed=embed, view=view)
 
 
-@bot.command()
+@bot.command(aliases=["eval"])
 @is_owner()
-async def eval(ctx, *, code: str):
+async def eval_command(ctx, *, code: str):
     """執行 Python 代碼，僅限機器人擁有者使用。
     
     用法： eval [代碼]
