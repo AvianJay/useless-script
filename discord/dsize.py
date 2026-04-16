@@ -838,7 +838,7 @@ async def dsize_battle(interaction: discord.Interaction, opponent: Union[discord
                 child.disabled = True
             await interaction.edit_original_response(content="對決邀請已過期。", view=self)
 
-        @discord.ui.button(label="✅ 同意", style=discord.ButtonStyle.success)
+        @discord.ui.button(label="同意", style=discord.ButtonStyle.success, emoji="✅")
         async def confirm(self, interaction: discord.Interaction, button: discord.ui.Button):
             if interaction.user.id != opponent_id:
                 await interaction.response.send_message("這不是你的對決邀請。", ephemeral=True)
@@ -1093,7 +1093,7 @@ async def dsize_battle(interaction: discord.Interaction, opponent: Union[discord
                 user_using_dsize_battle.discard(user_id)
                 user_using_dsize_battle.discard(opponent_id)
 
-        @discord.ui.button(label="❌ 拒絕", style=discord.ButtonStyle.danger)
+        @discord.ui.button(label="拒絕", style=discord.ButtonStyle.danger, emoji="❌")
         async def cancel(self, interaction: discord.Interaction, button: discord.ui.Button):
             if interaction.user.id != opponent_id:
                 await interaction.response.send_message("這不是你的對決邀請。", ephemeral=True)
