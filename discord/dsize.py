@@ -827,9 +827,6 @@ async def dsize_battle(interaction: discord.Interaction, opponent: Union[discord
     # print(f"[DSize] {interaction.user} is challenging {opponent} to a dsize battle in guild {interaction.guild.id}")
     log(f"{interaction.user} 正在對 {opponent} 進行屌長對決，伺服器: {interaction.guild.id if guild_key else '全域'}", module_name="dsize", user=interaction.user, guild=interaction.guild)
     
-    user_using_dsize_battle.add(user_id)
-    user_using_dsize_battle.add(opponent_id)
-    
     class dsize_Confirm(discord.ui.View):
         def __init__(self):
             super().__init__(timeout=30)
@@ -1104,13 +1101,18 @@ async def dsize_battle(interaction: discord.Interaction, opponent: Union[discord
             self.value = False
             self.stop()
             await interaction.response.edit_message(content="已拒絕對決邀請。", view=None)
-            user_using_dsize_battle.discard(user_id)
-            user_using_dsize_battle.discard(opponent_id)
+            release_dsize_battle_lock(user_id, opponent_id)
             # print(f"[DSize] {interaction.user} canceled the dsize battle")
             log(f"{interaction.user} 取消了屌長對決", module_name="dsize", user=interaction.user, guild=interaction.guild)
 
     # 徵求對方同意
-    await interaction.response.send_message(f"{opponent.mention}，{interaction.user.name} 想跟你比長度。\n請在 30 秒內按下 ✅ 同意 或 ❌ 拒絕。", ephemeral=False, view=dsize_Confirm())
+    try:
+        user_using_dsize_battle.add(user_id)
+        user_using_dsize_battle.add(opponent_id)
+        await interaction.response.send_message(f"{opponent.mention}，{interaction.user.name} 想跟你比長度。\n請在 30 秒內按下 ✅ 同意 或 ❌ 拒絕。", ephemeral=False, view=dsize_Confirm())
+    except Exception as e:
+        release_dsize_battle_lock(user_id, opponent_id)
+        raise e
 
 
 # server settings command
