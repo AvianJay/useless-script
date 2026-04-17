@@ -10,6 +10,9 @@ import importlib
 import json
 import re
 import time
+from types import SimpleNamespace
+import urllib.request
+import urllib.error
 from datetime import datetime, timezone, timedelta
 from logger import log
 import logging
@@ -26,6 +29,7 @@ SAFE_MENTIONS = discord.AllowedMentions(users=True, roles=False, everyone=False)
 MODEL_RATES = {
     "openai-fast": 0.05,
     "openai": 0.10,
+    "openai-large": 0.45,
     "gemini-fast": 0.10,
     "claude-fast": 0.15,
 }
@@ -33,6 +37,24 @@ MODEL_RATES = {
 GLOBAL_GUILD_ID = 0
 GLOBAL_CURRENCY_NAME = "全域幣"
 GLOBAL_BALANCE_KEY = "economy_balance"
+
+# Poe
+poeclient = Client(
+    api_key=config("poe_api_key"),
+    base_url="https://api.poe.com/v1",
+)
+
+poe_text_models = {
+    "kimi-k2.5-fw": 0.05,
+    "gemma-4-31b": 0.10,
+    "glm-5.1-fw": 0.10,
+    "qwen3.5-397b-a17b-t": 0.15,
+}
+
+poe_video_models = {
+    "seedance-2.0-fast-el": 5.00,
+    "seedance-2.0-pro-el": 10.00,
+}
 
 # ============================================
 # Discord 提及處理
@@ -399,6 +421,7 @@ TOOL_USAGE_PROMPT = """工具使用規則：
 - 當問題需要查 bot docs、dsize、背包、經濟、伺服器功能設定、音樂播放狀態、地震資訊、停班停課資訊、交通資訊、FakeUser 設定或指令統計時，優先使用工具，不要只靠猜測。
 - 只要使用者在問某個模組/功能怎麼設定、有哪些變數、embed 怎麼寫、條件判斷怎麼寫、指令怎麼用、權限怎麼設、或文件裡有沒有範例，優先使用 `search_bot_docs`。
 - 只要使用者在問機器人目前狀態、是否在線、延遲、版本、安裝量、用了多少指令、進了幾個伺服器，優先使用 `get_bot_status`。
+- 如果使用者明確要求「直接幫我生成影片 / 動畫 / 廣告短片」，優先使用 `generate_video`。
 - AI 會自動看到目前使用者的共通 profile 和這個伺服器的共通氛圍 profile；平常聊天以讀取這些 profile 為主，不要因為一般聊天就自動改寫。
 - 只有在使用者明確要求「記住 / 更新 / 忘記」某件事時，才使用 AI memory tools 去修改記憶。
 - `user_global` 記憶是某個使用者跨伺服器共通的長期記憶；`guild_shared` 記憶是這個伺服器共享的共同記憶。
@@ -652,22 +675,30 @@ class AICommands(commands.Cog):
     WEB_SEARCH_TOOL_MAX_CHARS = 500
     WEB_SEARCH_TOOL_MAX_TOKENS = 240
     WEB_SEARCH_TOOL_MAX_SOURCES = 4
+    POE_HTTP_TIMEOUT_SECONDS = 600
+    POE_HTTP_FALLBACK_RETRIES = 2
+    VIDEO_TOOL_DEFAULT_MODEL = "seedance-2.0-fast-el"
+    VIDEO_TOOL_MAX_PROMPT_CHARS = 600
+    VIDEO_TOOL_DEFAULT_TIMEOUT_SECONDS = 600
+    VIDEO_TOOL_MAX_TIMEOUT_SECONDS = 1800
+    VIDEO_TOOL_MAX_URLS = 4
     TOOL_USAGE_LABELS = {
-        "search_bot_docs": "bot docs",
-        "get_ai_memory": "AI 記憶",
-        "upsert_ai_memory": "AI 記憶",
-        "delete_ai_memory": "AI 記憶",
-        "search_web": "網路搜尋",
-        "get_dsize_context": "dsize 資料",
-        "get_inventory_context": "背包資料",
-        "get_economy_context": "經濟資料",
-        "get_bot_status": "機器人資訊",
-        "get_server_feature_status": "伺服器功能",
-        "get_music_status": "音樂狀態",
-        "get_earthquake_status": "地震資訊",
-        "get_disaster_status": "停班停課資訊",
-        "get_transport_info": "交通資訊",
-        "get_fakeuser_status": "FakeUser 資料",
+        "search_bot_docs": "正在搜尋機器人文檔",
+        "get_ai_memory": "取得 AI 記憶",
+        "upsert_ai_memory": "更新 AI 記憶",
+        "delete_ai_memory": "刪除 AI 記憶",
+        "search_web": "正在搜尋網路",
+        "generate_video": "正在生成影片",
+        "get_dsize_context": "取得 dsize 資料",
+        "get_inventory_context": "取得背包資料",
+        "get_economy_context": "取得經濟資料",
+        "get_bot_status": "取得機器人資訊",
+        "get_server_feature_status": "取得伺服器功能資訊",
+        "get_music_status": "查詢音樂狀態",
+        "get_earthquake_status": "查詢地震資訊",
+        "get_disaster_status": "查詢停班停課資訊",
+        "get_transport_info": "查詢交通資訊",
+        "get_fakeuser_status": "查詢仿冒資料",
         "get_user_command_stats": "指令統計",
     }
     EMOJI_NAME_PATTERN = re.compile(r'(?<!<):([a-zA-Z0-9_]{2,32}):')
@@ -786,7 +817,169 @@ class AICommands(commands.Cog):
             )
         except RuntimeError:
             pass
-    
+
+    async def _generate_ai_completion(self, **kwargs):
+        """封裝 AI 請求，方便未來統一修改"""
+        # check model
+        model = kwargs.get("model", "openai-fast")
+        if model in MODEL_RATES:
+            return await asyncio.to_thread(self.client.chat.completions.create, **kwargs)
+        if model in poe_text_models or model in poe_video_models:
+            return await self._request_poe_completion_with_fallback(kwargs)
+        raise ValueError(f"Unsupported model: {model}")
+
+    @staticmethod
+    def _is_poe_slow_request_error(error: Exception) -> bool:
+        message = str(error or "").lower()
+        return (
+            "curl: (28)" in message
+            or "operation too slow" in message
+            or ("curl_cffi" in message and "timed out" in message)
+        )
+
+    @staticmethod
+    def _normalize_completion_content(content) -> str:
+        if isinstance(content, str):
+            return content.strip()
+        if isinstance(content, list):
+            chunks = []
+            for part in content:
+                if isinstance(part, dict):
+                    text = part.get("text")
+                    if text:
+                        chunks.append(str(text))
+                elif part:
+                    chunks.append(str(part))
+            return "\n".join(chunk for chunk in chunks if chunk).strip()
+        if isinstance(content, dict):
+            for key in ("text", "content", "value"):
+                value = content.get(key)
+                if value:
+                    return str(value).strip()
+            return json.dumps(content, ensure_ascii=False)
+        return str(content or "").strip()
+
+    @classmethod
+    def _payload_to_completion_response(cls, payload: dict, fallback_model: str):
+        payload_dict = payload if isinstance(payload, dict) else {}
+        message_payload = {}
+        choices = payload_dict.get("choices")
+        if isinstance(choices, list) and choices:
+            first_choice = choices[0]
+            if isinstance(first_choice, dict):
+                message_payload = first_choice.get("message") or {}
+        if not isinstance(message_payload, dict):
+            message_payload = {}
+        content = cls._normalize_completion_content(message_payload.get("content"))
+        tool_calls = message_payload.get("tool_calls")
+        message = SimpleNamespace(content=content, tool_calls=tool_calls)
+        return SimpleNamespace(
+            choices=[SimpleNamespace(message=message)],
+            model=str(payload_dict.get("model") or fallback_model),
+        )
+
+    @staticmethod
+    def _poe_http_chat_completion(payload: dict, timeout_seconds: int) -> dict:
+        api_key = str(config("poe_api_key", "") or "").strip()
+        if not api_key:
+            raise RuntimeError("poe_api_key is not configured")
+
+        request = urllib.request.Request(
+            "https://api.poe.com/v1/chat/completions",
+            data=json.dumps(payload, ensure_ascii=False).encode("utf-8"),
+            headers={
+                "Authorization": f"Bearer {api_key}",
+                "Content-Type": "application/json",
+            },
+            method="POST",
+        )
+
+        try:
+            with urllib.request.urlopen(request, timeout=timeout_seconds) as response:
+                raw_body = response.read().decode("utf-8", errors="ignore")
+        except urllib.error.HTTPError as http_error:
+            detail = http_error.read().decode("utf-8", errors="ignore")
+            raise RuntimeError(f"Poe API HTTP {http_error.code}: {detail[:400]}") from http_error
+        except urllib.error.URLError as url_error:
+            raise RuntimeError(f"Poe API request failed: {url_error}") from url_error
+
+        if not raw_body.strip():
+            raise RuntimeError("Poe API returned an empty response")
+        try:
+            return json.loads(raw_body)
+        except json.JSONDecodeError as parse_error:
+            raise RuntimeError(f"Poe API returned non-JSON response: {raw_body[:400]}") from parse_error
+
+    async def _request_poe_completion_with_fallback(
+        self,
+        request_kwargs: dict,
+        timeout_seconds: int | None = None,
+    ):
+        kwargs = dict(request_kwargs or {})
+        kwargs.pop("provider", None)
+        kwargs.pop("web_search", None)
+
+        model = str(kwargs.get("model", "") or "").strip()
+        if not model:
+            raise ValueError("Poe request missing model")
+
+        payload = {
+            "model": model,
+            "messages": kwargs.get("messages") or [],
+        }
+        for optional_key in (
+            "max_tokens",
+            "temperature",
+            "top_p",
+            "frequency_penalty",
+            "presence_penalty",
+            "stream",
+        ):
+            if optional_key in kwargs:
+                payload[optional_key] = kwargs[optional_key]
+
+        request_timeout = self._coerce_int(
+            timeout_seconds,
+            self.POE_HTTP_TIMEOUT_SECONDS,
+            minimum=60,
+            maximum=1800,
+        )
+
+        use_http_first = model in poe_video_models
+        if not use_http_first:
+            try:
+                return await asyncio.to_thread(poeclient.chat.completions.create, **kwargs)
+            except Exception as request_error:
+                if not self._is_poe_slow_request_error(request_error):
+                    raise
+                log(
+                    f"Poe request slow timeout, switching to HTTP fallback: {request_error}",
+                    module_name="AI",
+                    level=logging.WARNING,
+                )
+        else:
+            log(
+                f"Poe video model {model} uses direct HTTP path to avoid curl slow timeout.",
+                module_name="AI",
+                level=logging.INFO,
+            )
+
+        last_error = None
+        for attempt in range(1, self.POE_HTTP_FALLBACK_RETRIES + 1):
+            try:
+                fallback_payload = await asyncio.to_thread(
+                    self._poe_http_chat_completion,
+                    payload,
+                    request_timeout,
+                )
+                return self._payload_to_completion_response(fallback_payload, fallback_model=model)
+            except Exception as fallback_error:
+                last_error = fallback_error
+                if attempt < self.POE_HTTP_FALLBACK_RETRIES:
+                    await asyncio.sleep(min(1.5 * attempt, 3.0))
+
+        raise last_error or RuntimeError("Poe completion fallback failed")
+
     def check_rate_limit(self, user_id: int) -> bool:
         """檢查速率限制 (每分鐘 10 次請求)"""
         current_time = time.time()
@@ -817,10 +1010,7 @@ class AICommands(commands.Cog):
             )
             if image is not None:
                 kwargs["image"] = image
-            response = await asyncio.to_thread(
-                self.client.chat.completions.create,
-                **kwargs
-            )
+            response = await self._generate_ai_completion(**kwargs)
             end_time = time.perf_counter()
             return response.choices[0].message.content.strip(), response.model, f"{end_time - start_time:.2f}s"
         except Exception as e:
@@ -1225,8 +1415,8 @@ class AICommands(commands.Cog):
         if not labels:
             return "查詢中..."
         if len(labels) > 4:
-            return f"查詢中：{'、'.join(labels[:4])} 等 {len(labels)} 個工具"
-        return f"查詢中：{'、'.join(labels)}"
+            return f"{'\n'.join(labels[:4])}\n等 {len(labels)} 個工具"
+        return '\n'.join(labels)
 
     @staticmethod
     def _get_server_config_fallback(guild_id, key: str, default=None):
@@ -2038,6 +2228,25 @@ class AICommands(commands.Cog):
             {
                 "type": "function",
                 "function": {
+                    "name": "generate_video",
+                    "description": "Generate a short video from a text prompt using Poe video models and return direct video URLs when available.",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "prompt": {"type": "string"},
+                            "model": {
+                                "type": "string",
+                                "enum": ["seedance-2.0-fast-el", "seedance-2.0-pro-el"],
+                            },
+                            "timeout_seconds": {"type": "integer"},
+                        },
+                        "required": ["prompt"],
+                    },
+                },
+            },
+            {
+                "type": "function",
+                "function": {
                     "name": "get_dsize_context",
                     "description": "Get dsize stats, recent history, and optional leaderboard context for a user.",
                     "parameters": {
@@ -2233,6 +2442,7 @@ class AICommands(commands.Cog):
                 "If no tool is needed, respond normally with plain text.",
                 "If the user is asking about bot features, docs, setup, syntax, variables, embeds, conditions, examples, permissions, or how to use a module, call search_bot_docs first.",
                 "If the user is asking about the bot's current status, uptime, latency, version, install count, command totals, or server count, call get_bot_status.",
+                "If the user explicitly asks to generate a video, animation clip, or ad clip, call generate_video.",
                 "Current user/global profile and guild shared profile may already be injected into context. Read them normally instead of writing memory by default.",
                 "Only use AI memory write tools when the user explicitly asks you to remember, update, or forget something. Do not write memory just because you inferred a pattern from casual chat.",
                 "Store personal cross-server facts in user_global. Store server culture/shared facts in guild_shared only when the request is explicit, suitable for a shared profile, and the user is allowed to manage guild memory.",
@@ -2479,10 +2689,7 @@ class AICommands(commands.Cog):
             "max_tokens": max_tokens,
         }
 
-        response = await asyncio.to_thread(
-            self.client.chat.completions.create,
-            **request_kwargs,
-        )
+        response = await self._generate_ai_completion(**request_kwargs)
         raw_text = str(getattr(response.choices[0].message, "content", "") or "").strip()
         summary = self._clean_web_search_summary(raw_text, max_chars=max_chars)
         sources = self._extract_urls_from_text(raw_text, limit=self.WEB_SEARCH_TOOL_MAX_SOURCES) if include_sources else []
@@ -2496,6 +2703,120 @@ class AICommands(commands.Cog):
             "sources": sources,
             "note": "External web search results may contain stale or noisy information. Verify important facts before acting on them.",
         }
+
+    async def _tool_generate_video(self, args: dict, tool_context: dict) -> dict:
+        prompt = str(args.get("prompt", "") or args.get("query", "") or "").strip()
+        if not prompt:
+            return {"error": "prompt is required"}
+
+        if len(prompt) > self.VIDEO_TOOL_MAX_PROMPT_CHARS:
+            prompt = prompt[: self.VIDEO_TOOL_MAX_PROMPT_CHARS]
+
+        model = str(args.get("model", self.VIDEO_TOOL_DEFAULT_MODEL) or self.VIDEO_TOOL_DEFAULT_MODEL).strip()
+        if model not in poe_video_models:
+            return {
+                "error": f"unsupported video model: {model}",
+                "available_models": sorted(poe_video_models),
+            }
+
+        timeout_seconds = self._coerce_int(
+            args.get("timeout_seconds"),
+            self.VIDEO_TOOL_DEFAULT_TIMEOUT_SECONDS,
+            minimum=90,
+            maximum=self.VIDEO_TOOL_MAX_TIMEOUT_SECONDS,
+        )
+
+        requester = (tool_context or {}).get("user")
+        guild = (tool_context or {}).get("guild")
+        requester_id = getattr(requester, "id", None)
+        if requester_id is None:
+            return {"error": "unable to resolve requester id"}
+
+        billing_target = await self._resolve_ai_billing_target(requester, guild)
+        payer_id = billing_target["payer_id"]
+        payer_user = billing_target["payer_user"]
+        payer_name = billing_target["display_name"]
+        billing_actor = payer_user or requester
+        billing_detail_suffix = self._build_ai_billing_detail_suffix(requester_id, payer_id)
+
+        charge_amount = round(float(poe_video_models.get(model, 0.0)), 2)
+        if charge_amount <= 0:
+            return {"error": f"invalid video pricing for model: {model}"}
+
+        balance_before_charge = self._get_global_balance(payer_id)
+        if balance_before_charge < charge_amount:
+            return {
+                "error": (
+                    f"insufficient {GLOBAL_CURRENCY_NAME}: need {charge_amount:.2f}, "
+                    f"current {balance_before_charge:.2f}, payer {payer_name}"
+                )
+            }
+
+        charged_amount, balance_after_charge = self._charge_global_balance(payer_id, charge_amount)
+        if charged_amount < charge_amount:
+            return {"error": "failed to charge currency for video generation"}
+
+        self._log_economy_transaction(
+            payer_id,
+            "AI 影片生成扣費",
+            -charged_amount,
+            f"模型={model}，提示詞長度={len(prompt)}{billing_detail_suffix}",
+        )
+        self._queue_economy_audit_log(
+            user=billing_actor,
+            action="ai_video_charge",
+            amount=charged_amount,
+            detail=f"model={model} prompt_chars={len(prompt)}{billing_detail_suffix}",
+            balance_before=balance_before_charge,
+            balance_after=balance_after_charge,
+            color=0x8E44AD,
+        )
+
+        start_time = time.perf_counter()
+        try:
+            response = await self._request_poe_completion_with_fallback(
+                {
+                    "model": model,
+                    "messages": [{"role": "user", "content": prompt}],
+                },
+                timeout_seconds=timeout_seconds,
+            )
+            elapsed = round(time.perf_counter() - start_time, 2)
+            raw_text = self._normalize_completion_content(getattr(response.choices[0].message, "content", ""))
+            video_urls = self._extract_urls_from_text(raw_text, limit=self.VIDEO_TOOL_MAX_URLS)
+
+            return {
+                "model": model,
+                "prompt": prompt,
+                "elapsed_seconds": elapsed,
+                "cost": charged_amount,
+                "currency": GLOBAL_CURRENCY_NAME,
+                "video_urls": video_urls,
+                "raw_response": self._truncate_tool_text(raw_text, max_len=1200),
+                "note": (
+                    "If no direct video URL is present, use raw_response to keep polling "
+                    "or ask the user to retry with a more specific prompt."
+                ),
+            }
+        except Exception as e:
+            balance_before_refund = self._get_global_balance(payer_id)
+            balance_after_refund = self._refund_global_balance(payer_id, charged_amount)
+            self._log_economy_transaction(
+                payer_id,
+                "AI 影片生成退款",
+                charged_amount,
+                f"模型={model}，生成失敗退款{billing_detail_suffix}",
+            )
+            self._queue_economy_audit_log(
+                user=billing_actor,
+                action="ai_video_refund",
+                amount=charged_amount,
+                detail=f"model={model} refund_on_error{billing_detail_suffix}",
+                balance_before=balance_before_refund,
+                balance_after=balance_after_refund,
+                color=0x27AE60,
+            )
+            return {"error": f"video generation failed: {e}"}
 
     async def _tool_get_dsize_context(self, args: dict, tool_context: dict) -> dict:
         guild = (tool_context or {}).get("guild")
@@ -3334,6 +3655,7 @@ class AICommands(commands.Cog):
             "upsert_ai_memory": self._tool_upsert_ai_memory,
             "delete_ai_memory": self._tool_delete_ai_memory,
             "search_web": self._tool_search_web,
+            "generate_video": self._tool_generate_video,
             "get_dsize_context": self._tool_get_dsize_context,
             "get_inventory_context": self._tool_get_inventory_context,
             "get_economy_context": self._tool_get_economy_context,
@@ -3374,10 +3696,7 @@ class AICommands(commands.Cog):
         )
         if image is not None:
             kwargs["image"] = image
-        return await asyncio.to_thread(
-            self.client.chat.completions.create,
-            **kwargs,
-        )
+        return await self._generate_ai_completion(**kwargs)
 
     @staticmethod
     def _embed_summary(embed: discord.Embed) -> str:
@@ -3517,7 +3836,7 @@ class AICommands(commands.Cog):
         model: str
     ) -> bool:
         """設定使用者的預設模型，返回是否成功"""
-        if model not in MODEL_RATES:
+        if model not in MODEL_RATES and model not in poe_text_models:
             return False
         set_user_data(GLOBAL_GUILD_ID, user_id, "default_ai_model", model)
         return True
@@ -3526,7 +3845,7 @@ class AICommands(commands.Cog):
     async def _get_default_model(user_id: int) -> str:
         """取得使用者的預設模型，默認為 openai"""
         model = get_user_data(GLOBAL_GUILD_ID, user_id, "default_ai_model", "openai")
-        if model not in MODEL_RATES:
+        if model not in MODEL_RATES and model not in poe_text_models:
             return "openai"
         return model
 
@@ -3587,6 +3906,16 @@ class AICommands(commands.Cog):
         choices = []
 
         for model, rate in MODEL_RATES.items():
+            name = f"{model} @ {rate:.2f}/C"
+
+            if not current_lower or \
+               current_lower in model.lower() or \
+               current_lower in name.lower():
+
+                choices.append(
+                    app_commands.Choice(name=name, value=model)
+                )
+        for model, rate in poe_text_models.items():
             name = f"{model} @ {rate:.2f}/C"
 
             if not current_lower or \
@@ -3957,7 +4286,7 @@ class AICommands(commands.Cog):
         
         user = interaction.user
         
-        if model not in MODEL_RATES:
+        if model not in MODEL_RATES and model not in poe_text_models:
             await interaction.response.send_message("❌ 無效的模型名稱。", ephemeral=True, allowed_mentions=SAFE_MENTIONS)
             return
 

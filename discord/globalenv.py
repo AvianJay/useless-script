@@ -14,7 +14,7 @@ from pathlib import Path
 
 
 # Global configuration for backward compatibility
-config_version = 29
+config_version = 30
 config_path = 'config.json'
 
 default_config = {
@@ -75,6 +75,7 @@ default_config = {
     "economy_log_channel_id": 0,
     "backend_guild_id": 0,
     "dctw_api_key": "",
+    "poe_api_key": "",
 }
 _config = None
 _runtime_logging_configured = False
