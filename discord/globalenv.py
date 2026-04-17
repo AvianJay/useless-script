@@ -348,6 +348,23 @@ async def get_command_mention(command_name: str, subcommand_name: str = None):
             return command.mention
     return None
 
+fetched_emojis_cache = None
+
+async def get_emoji_by_name(emoji_name: str) -> discord.Emoji | None:
+    global fetched_emojis_cache
+    if fetched_emojis_cache is None:
+        fetched_emojis_cache = await bot.fetch_application_emojis()
+    for emoji in fetched_emojis_cache:
+        if emoji.name == emoji_name:
+            return emoji
+    return None
+
+async def get_emoji_mention_by_name(emoji_name: str) -> str:
+    emoji = await get_emoji_by_name(emoji_name)
+    if emoji:
+        return str(emoji)
+    return f":{emoji_name}:"
+
 translations = {
     "test": "測試",
     "admin": "管理",

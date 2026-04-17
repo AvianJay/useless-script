@@ -1,4 +1,4 @@
-from globalenv import bot, get_user_data, get_server_config, set_server_config, set_user_data, config, get_command_mention, get_all_user_data, get_global_config
+from globalenv import bot, get_user_data, get_server_config, set_server_config, set_user_data, config, get_command_mention, get_all_user_data, get_global_config, get_emoji_mention_by_name
 import discord
 from discord.ext import commands
 from discord import app_commands
@@ -1413,7 +1413,8 @@ class AICommands(commands.Cog):
             labels.append(label)
 
         if not labels:
-            return "查詢中..."
+            return f"{asyncio.run(get_emoji_mention_by_name('loading'))} 查詢中..."
+        labels[-1] = f"{asyncio.run(get_emoji_mention_by_name('loading'))} {labels[-1]}"
         if len(labels) > 4:
             return f"{'\n'.join(labels[:4])}\n等 {len(labels)} 個工具"
         return '\n'.join(labels)
