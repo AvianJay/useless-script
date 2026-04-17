@@ -702,6 +702,9 @@ class AICommands(commands.Cog):
         "get_user_command_stats": "指令統計",
     }
     EMOJI_NAME_PATTERN = re.compile(r'(?<!<):([a-zA-Z0-9_]{2,32}):')
+    CUSTOM_EMOJI_LITERAL_PATTERN = re.compile(r'<a?:[a-zA-Z0-9_]{2,32}:\d+>')
+    EMOJI_SHORTHAND_WRAPPER_PATTERN = re.compile(r'<a?:([a-zA-Z0-9_]{2,32}):>')
+    BROKEN_NESTED_EMOJI_PATTERN = re.compile(r'<:?(<a?:[a-zA-Z0-9_]{2,32}:\d+>):?\d*>')
     
     def __init__(self, bot):
         self.bot = bot
@@ -3895,11 +3898,37 @@ class AICommands(commands.Cog):
         if not text or not emoji_map:
             return text
 
+        normalized = str(text)
+
+        # 修復常見壞格式，例如 <:<:emoji:1234>:1234> 或 <<:emoji:1234>1234>
+        for _ in range(3):
+            collapsed = cls.BROKEN_NESTED_EMOJI_PATTERN.sub(r"\1", normalized)
+            if collapsed == normalized:
+                break
+            normalized = collapsed
+
+        preserved_mentions: list[str] = []
+
+        def preserve_literal(match: re.Match) -> str:
+            preserved_mentions.append(match.group(0))
+            return f"\x00EMJ{len(preserved_mentions) - 1}\x00"
+
+        # 先保護已合法的 <a:name:id> / <:name:id>，避免被二次替換
+        normalized = cls.CUSTOM_EMOJI_LITERAL_PATTERN.sub(preserve_literal, normalized)
+
+        # 將 AI 可能輸出的 <:name:> / <a:name:> 先轉回 :name: 再統一映射
+        normalized = cls.EMOJI_SHORTHAND_WRAPPER_PATTERN.sub(lambda m: f":{m.group(1)}:", normalized)
+
         def repl(match: re.Match) -> str:
             name = match.group(1)
             return emoji_map.get(name.lower(), match.group(0))
 
-        return cls.EMOJI_NAME_PATTERN.sub(repl, text)
+        normalized = cls.EMOJI_NAME_PATTERN.sub(repl, normalized)
+
+        for index, mention in enumerate(preserved_mentions):
+            normalized = normalized.replace(f"\x00EMJ{index}\x00", mention)
+
+        return normalized
 
     async def model_select_autocomplete(
         self,
