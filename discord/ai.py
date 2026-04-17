@@ -1399,7 +1399,7 @@ class AICommands(commands.Cog):
         )
 
     @classmethod
-    def _build_tool_usage_notice(cls, tool_calls: list[dict]) -> str:
+    async def _build_tool_usage_notice(cls, tool_calls: list[dict]) -> str:
         labels: list[str] = []
         seen: set[str] = set()
         for tool_call in tool_calls or []:
@@ -1412,9 +1412,14 @@ class AICommands(commands.Cog):
             seen.add(label)
             labels.append(label)
 
+        try:
+            loading_emoji = await get_emoji_mention_by_name("loading")
+        except Exception:
+            loading_emoji = ":loading:"
+
         if not labels:
-            return f"{asyncio.run(get_emoji_mention_by_name('loading'))} 查詢中..."
-        labels[-1] = f"{asyncio.run(get_emoji_mention_by_name('loading'))} {labels[-1]}"
+            return f"{loading_emoji} 查詢中..."
+        labels[-1] = f"{loading_emoji} {labels[-1]}"
         if len(labels) > 4:
             return '\n'.join(labels[:4]) + f"\n等 {len(labels)} 個工具"
         return '\n'.join(labels)
@@ -4094,7 +4099,7 @@ class AICommands(commands.Cog):
 
             async def tool_progress_callback(tool_calls: list[dict], round_index: int):
                 nonlocal tool_notice_text
-                notice = self._build_tool_usage_notice(tool_calls)
+                notice = await self._build_tool_usage_notice(tool_calls)
                 if notice == tool_notice_text:
                     return
                 tool_notice_text = notice
@@ -4561,7 +4566,7 @@ class AICommands(commands.Cog):
 
                 async def tool_progress_callback(tool_calls: list[dict], round_index: int):
                     nonlocal tool_notice_message, tool_notice_text
-                    notice = self._build_tool_usage_notice(tool_calls)
+                    notice = await self._build_tool_usage_notice(tool_calls)
                     if notice == tool_notice_text:
                         return
                     tool_notice_text = notice
