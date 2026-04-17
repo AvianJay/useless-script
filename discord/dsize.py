@@ -15,12 +15,24 @@ from logger import log
 import logging
 import os
 import json
+import time
+from collections import deque
 from typing import Union
 from urllib.parse import urlencode
+from expiring_dict import ExpiringDict
 if "OwnerTools" in modules:
     import OwnerTools
 else:
     OwnerTools = None
+
+BREAK_TRIGGER_KEYWORDS = ("炸", "爆", "💥")
+BREAK_TRIGGER_BASE_CHANCE = 0.05
+BREAK_TRIGGER_BONUS = 0.05
+BREAK_TRIGGER_MAX_CHANCE = 0.50
+BREAK_TRIGGER_CACHE_EXPIRE_SECONDS = 30
+
+# Per-channel keyword trigger timestamps. Entries expire automatically by TTL.
+channel_break_trigger_times = ExpiringDict(ttl=BREAK_TRIGGER_CACHE_EXPIRE_SECONDS)
 
 
 def percent_random(percent: int) -> bool:
@@ -42,6 +54,32 @@ def normalize_stored_date(value, default=None):
         return datetime.fromisoformat(str(value)).date()
     except Exception:
         return default
+
+
+def update_channel_break_trigger_state(channel_id: int) -> None:
+    channel_break_trigger_times[channel_id] = channel_break_trigger_times.get(channel_id, 0) + 1
+
+
+def get_channel_break_trigger_count(
+    channel_id: int | None,
+) -> int:
+    if channel_id is None:
+        return 0
+    t = channel_break_trigger_times.get(channel_id, 0)
+    channel_break_trigger_times.pop(channel_id, None)  # Clear the count after retrieving
+    return t
+
+
+@bot.listen("on_message")
+async def track_break_trigger_keywords(message: discord.Message):
+    if getattr(message.author, "bot", False):
+        return
+    channel_id = getattr(message.channel, "id", None)
+    if channel_id is None:
+        return
+    if not any(keyword in message.content for keyword in BREAK_TRIGGER_KEYWORDS):
+        return
+    update_channel_break_trigger_state(channel_id)
 
 
 async def animate_break_explosion(
@@ -435,8 +473,13 @@ async def dsize(interaction: discord.Interaction, global_dsize: str = "False"):
         break_counter = 0
         break_content = ""
         will_break = random.random() < 0.05
+        channel_id = getattr(interaction.channel, "id", None)
         speed = size // 50 + 1
         for i in range(1, size + 1, speed):
+            c = get_channel_break_trigger_count(channel_id)
+            if c > 0:
+                will_break = True
+                break_counter += c
             if random.random() < 0.1 and will_break:
                 break_counter += 1
                 break_content = "你的ㄐㄐ今天好像怪怪的。"
