@@ -1416,7 +1416,7 @@ class AICommands(commands.Cog):
             return f"{asyncio.run(get_emoji_mention_by_name('loading'))} 查詢中..."
         labels[-1] = f"{asyncio.run(get_emoji_mention_by_name('loading'))} {labels[-1]}"
         if len(labels) > 4:
-            return f"{'\n'.join(labels[:4])}\n等 {len(labels)} 個工具"
+            return '\n'.join(labels[:4]) + f"\n等 {len(labels)} 個工具"
         return '\n'.join(labels)
 
     @staticmethod
