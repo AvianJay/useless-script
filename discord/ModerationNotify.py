@@ -15,7 +15,7 @@ ignore = []
 def _ingore_user(user_id: int):
     if user_id not in ignore:
         ignore.append(user_id)
-        time.sleep(5)  # 避免重複觸發
+        time.sleep(10)  # 避免重複觸發
         ignore.remove(user_id)
 
 def ignore_user(user_id: int):

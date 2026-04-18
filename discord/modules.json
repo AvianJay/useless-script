@@ -40,5 +40,6 @@
     "GuildPanel",
     "JoinNotify",
     "MiniGames",
-    "dctw"
+    "dctw",
+    "HackedDetector"
 ]
