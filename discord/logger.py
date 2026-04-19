@@ -7,6 +7,7 @@ import logging
 import traceback
 from datetime import datetime, timezone, timedelta
 import os
+import sys
 from pathlib import Path
 from expiring_dict import ExpiringDict
 import random
@@ -22,6 +23,8 @@ _pending_discord_batch_task = None
 
 DISCORD_LOG_BATCH_DELAY = 1.0
 DISCORD_LOG_BATCH_SIZE = 10
+DEBUG_MODE = "--debug" in sys.argv
+LOGGER_LEVEL = logging.DEBUG if DEBUG_MODE else logging.INFO
 
 def cleanup_old_logs(days=7):
     """清理超過指定天數的舊日誌檔案"""
@@ -383,9 +386,9 @@ async def _log(*messages, level = logging.INFO, module_name: str = "General", us
     
     logger = logging.getLogger(module_name)
     if not logger.handlers:
-        logger.setLevel(logging.DEBUG)
+        logger.setLevel(LOGGER_LEVEL)
         handler = logging.FileHandler(log_filename, encoding='utf-8')
-        handler.setLevel(logging.INFO)
+        handler.setLevel(LOGGER_LEVEL)
         formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
         handler.setFormatter(formatter)
         logger.addHandler(handler)
@@ -508,7 +511,7 @@ def install_webhook_bridge():
             _webhook_bridge_installed = True
             return
 
-    bridge_handler = WebhookBridgeHandler(level=logging.INFO)
+    bridge_handler = WebhookBridgeHandler(level=LOGGER_LEVEL)
     root_logger.addHandler(bridge_handler)
     _webhook_bridge_installed = True
 

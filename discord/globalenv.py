@@ -81,6 +81,7 @@ _config = None
 _runtime_logging_configured = False
 _app_command_error_handlers = []
 _app_command_error_dispatcher_installed = False
+DEBUG_MODE = "--debug" in sys.argv
 
 try:
     if os.path.exists(config_path):
@@ -155,7 +156,7 @@ def configure_runtime_logging():
 
     formatter = logging.Formatter("%(asctime)s | %(levelname)s | %(name)s | %(message)s")
     root_logger = logging.getLogger()
-    root_logger.setLevel(logging.INFO)
+    root_logger.setLevel(logging.DEBUG if DEBUG_MODE else logging.INFO)
 
     has_stream_handler = any(
         isinstance(handler, logging.StreamHandler) and not isinstance(handler, logging.FileHandler)
