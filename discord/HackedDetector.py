@@ -50,7 +50,7 @@ class HackedDetector(commands.Cog):
                 continue
             try:
                 # discord.Member.timeout is a coroutine in discord.py v2 → await it
-                await member.timeout(until=None, reason="解除預防性禁言。")
+                await member.timeout(None, reason="解除預防性禁言。")
                 # log(f"User {user} has been unmuted in guild {guild.name} ({guild.id}).", level=logging.INFO, module_name="HackedDetector", user=user) ##anti 429##
             except Exception as e:
                 log(f"Failed to untimeout user {user} in guild {guild.name} ({guild.id}): {e}", level=logging.ERROR, module_name="HackedDetector", user=user)
@@ -104,7 +104,7 @@ class HackedDetector(commands.Cog):
             )
             if ok and not already_muted and not is_admin:
                 try:
-                    await member.timeout(until=until, reason="檢測到被盜帳戶，預防性禁言。")
+                    await member.timeout(until, reason="檢測到被盜帳戶，預防性禁言。")
                     muted.append(guild.id)
                 except Exception as e:
                     log(f"Failed to timeout user {user} in guild {guild.name} ({guild.id}): {e}", level=logging.ERROR, module_name="HackedDetector", user=user)
@@ -118,7 +118,7 @@ class HackedDetector(commands.Cog):
                             await member.remove_roles(admin_role, reason="檢測到被盜帳戶，移除管理員角色以進行預防性禁言。")
                         except Exception as e:
                             log(f"Failed to remove admin role from user {user} in guild {guild.name} ({guild.id}): {e}", level=logging.ERROR, module_name="HackedDetector", user=user)
-                        await member.timeout(until=until, reason="檢測到被盜帳戶，預防性禁言。")
+                        await member.timeout(until, reason="檢測到被盜帳戶，預防性禁言。")
                         muted.append(guild.id)
                         admin_ids[guild.id] = admin_role.id
                     else:
