@@ -223,6 +223,8 @@ async def on_member_update(before, after):
         return
     if not get_server_config(after.guild.id, "notify_user_on_mute", True):
         return
+    if after.id in ignore:
+        return
     if before.timed_out_until != after.timed_out_until and after.timed_out_until is not None:
         # 檢查database的值避免重複
         if get_user_data(after.guild.id, after.id, "muted_until") == after.timed_out_until.isoformat():
