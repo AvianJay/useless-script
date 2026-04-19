@@ -16,6 +16,8 @@ import asyncio
 f = Figlet(font='slant')
 
 class HackedDetector(commands.Cog):
+    HACKED_DATA_GUILD_ID = 0
+
     def __init__(self):
         super().__init__()
         # 增加 TTL 以避免過度敏感
@@ -23,10 +25,16 @@ class HackedDetector(commands.Cog):
         # {user_id: [channel_id1, channel_id2]}
         log("HackedDetector initialized with usercache ttl=10s.", level=logging.DEBUG, module_name="HackedDetector")
 
+    def _get_hacked_user_data(self, user_id: int, key: str, default=None):
+        return get_user_data(self.HACKED_DATA_GUILD_ID, user_id, key, default)
+
+    def _set_hacked_user_data(self, user_id: int, key: str, value):
+        return set_user_data(self.HACKED_DATA_GUILD_ID, user_id, key, value)
+
     async def unlock_user(self, user: discord.User):
         # untimeout the user in all mutual guilds
-        guilds = get_user_data(user.id, "hacked_timed_out_channel", [])
-        admin_removed = get_user_data(user.id, "hacked_admin_removed", {}) or {}
+        guilds = self._get_hacked_user_data(user.id, "hacked_timed_out_channel", [])
+        admin_removed = self._get_hacked_user_data(user.id, "hacked_admin_removed", {}) or {}
         log(f"Unlock flow started for user {user.id}. timed_out_guilds={len(guilds)}, admin_roles={len(admin_removed)}", level=logging.DEBUG, module_name="HackedDetector", user=user)
         if not guilds:
             log(f"Unlock flow aborted for user {user.id}: no timed out guild records.", level=logging.DEBUG, module_name="HackedDetector", user=user)
@@ -59,8 +67,8 @@ class HackedDetector(commands.Cog):
                 else:
                     log(f"Restore admin skipped for user {user.id} in guild={guild.id}: role_id={admin_role_id} not found.", level=logging.DEBUG, module_name="HackedDetector", user=user)
         # 清理資料
-        set_user_data(user.id, "hacked_timed_out_channel", [])
-        set_user_data(user.id, "hacked_admin_removed", {})
+        self._set_hacked_user_data(user.id, "hacked_timed_out_channel", [])
+        self._set_hacked_user_data(user.id, "hacked_admin_removed", {})
         log(f"Unlock flow finished for user {user.id}. Records cleared.", level=logging.DEBUG, module_name="HackedDetector", user=user)
         return True
 
@@ -126,8 +134,8 @@ class HackedDetector(commands.Cog):
             log(f"Failed to timeout user {user} in any mutual guilds. No guilds were muted.", level=logging.WARNING, module_name="HackedDetector", user=user)
             return
         # 儲存被禁言的伺服器 id 及移除過的 admin role id
-        set_user_data(user.id, "hacked_timed_out_channel", muted)
-        set_user_data(user.id, "hacked_admin_removed", admin_ids)
+        self._set_hacked_user_data(user.id, "hacked_timed_out_channel", muted)
+        self._set_hacked_user_data(user.id, "hacked_admin_removed", admin_ids)
         log(f"Timed out user in {muted} guild(s), removed {len(admin_ids)} admins, {failed} failed.", level=logging.INFO, module_name="HackedDetector", user=user)
         embed = discord.Embed(
             title="系統警告",
@@ -243,7 +251,7 @@ class HackedDetector(commands.Cog):
 
         if len(self.usercache.get(message.author.id, [])) > 2:
             # check if user is already timed out
-            timed_out = get_user_data(message.author.id, "hacked_timed_out_channel", [])
+            timed_out = self._get_hacked_user_data(message.author.id, "hacked_timed_out_channel", [])
             if timed_out:
                 # User is already timed out, no need to handle again
                 log(f"Skip handling user {message.author.id}: already has timeout records {timed_out}.", level=logging.DEBUG, module_name="HackedDetector", user=message.author, guild=message.guild)
@@ -260,7 +268,7 @@ class HackedDetector(commands.Cog):
     @app_commands.command(name="imhacked", description="開始解除被盜帳戶的流程")
     async def imhacked(self, interaction: discord.Interaction):
         user = interaction.user
-        timed_out = get_user_data(user.id, "hacked_timed_out_channel", [])
+        timed_out = self._get_hacked_user_data(user.id, "hacked_timed_out_channel", [])
         log(f"/imhacked invoked by user {user.id}, timeout_records={len(timed_out)}", level=logging.DEBUG, module_name="HackedDetector", user=user, guild=interaction.guild)
         if not timed_out:
             log(f"User {user} used /imhacked but has no active timeouts.", level=logging.DEBUG, module_name="HackedDetector", user=user)
