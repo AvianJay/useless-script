@@ -14,6 +14,34 @@ import random
 import asyncio
 
 f = Figlet(font='slant')
+fonts = [
+    "6x9",
+    "helvb",
+    "5x8",
+    "pagga",
+    "xhelv",
+    "keyboard",
+    "future_5",
+    "mono9",
+    "ntgreek",
+    "slant",
+    "yie_ar_k",
+    "chunky",
+    "fuzzy",
+    "xcouri",
+    "script",
+    "beer_pub",
+    "tec_7000",
+    "new_asci",
+    "clr5x6",
+    "utopiab",
+    "xtty",
+    "4max",
+    "xsbooki",
+    "tavl____",
+    "calghpy2",
+    "modern__"
+]
 
 class HackedDetector(commands.Cog):
     HACKED_DATA_GUILD_ID = 0
