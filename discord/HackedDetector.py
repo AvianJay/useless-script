@@ -1,4 +1,4 @@
-from globalenv import bot, set_user_data, get_user_data
+from globalenv import bot, set_user_data, get_user_data, start_bot
 import discord
 from discord.ext import commands
 from discord import app_commands
@@ -15,7 +15,7 @@ import asyncio
 
 f = Figlet(font='slant')
 
-class HackedDetector(commands.GroupCog, group_name="hacked"):
+class HackedDetector(commands.Cog):
     def __init__(self):
         super().__init__()
         # 增加 TTL 以避免過度敏感
@@ -229,3 +229,6 @@ class HackedDetector(commands.GroupCog, group_name="hacked"):
 
 
 asyncio.run(bot.add_cog(HackedDetector()))
+
+if __name__ == "__main__":
+    start_bot()
