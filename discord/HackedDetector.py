@@ -241,7 +241,7 @@ class HackedDetector(commands.Cog):
             self.usercache[message.author.id] = [message.channel.id]
         log(f"User {message.author.id} suspicious-channel cache={self.usercache.get(message.author.id, [])}", level=logging.DEBUG, module_name="HackedDetector", user=message.author, guild=message.guild)
 
-        if len(self.usercache[message.author.id]) > 2:
+        if len(self.usercache.get(message.author.id, [])) > 2:
             # check if user is already timed out
             timed_out = get_user_data(message.author.id, "hacked_timed_out_channel", [])
             if timed_out:
