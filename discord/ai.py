@@ -53,8 +53,8 @@ poe_text_models = {
 }
 
 poe_video_models = {
-    "seedance-2.0-fast-el": 5.00,
-    "seedance-2.0-pro-el": 10.00,
+    "seedance-2.0-fast-el": 500.00,
+    "seedance-2.0-pro-el": 1000.00,
 }
 
 # ============================================
