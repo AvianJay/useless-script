@@ -1,8 +1,7 @@
-from globalenv import bot, set_user_data, get_user_data, start_bot
+from globalenv import bot, set_user_data, get_user_data, start_bot, get_command_mention
 import discord
 from discord.ext import commands
 from discord import app_commands
-from expiring_dict import ExpiringDict
 from logger import log
 import logging
 from Moderate import check_member_hierarchy
@@ -13,7 +12,6 @@ import re
 import random
 import asyncio
 
-f = Figlet(font='slant')
 fonts = [
     "6x9",
     "helvb",
@@ -45,19 +43,129 @@ fonts = [
 
 class HackedDetector(commands.Cog):
     HACKED_DATA_GUILD_ID = 0
+    DETECTION_WINDOW_SECONDS = 10
+    DETECTION_MIN_CHANNELS = 3
+    DEFAULT_UNLOCK_FONT = "slant"
 
     def __init__(self):
         super().__init__()
-        # 增加 TTL 以避免過度敏感
-        self.usercache = ExpiringDict(ttl=10)
-        # {user_id: [channel_id1, channel_id2]}
-        log("HackedDetector initialized with usercache ttl=10s.", level=logging.DEBUG, module_name="HackedDetector")
+        # {user_id: [{"time": float, "channel_id": int, "message": discord.Message, "message_id": int}]}
+        self.usercache = {}
+        log(
+            f"HackedDetector initialized with detection_window={self.DETECTION_WINDOW_SECONDS}s min_channels={self.DETECTION_MIN_CHANNELS}.",
+            level=logging.DEBUG,
+            module_name="HackedDetector",
+        )
 
     def _get_hacked_user_data(self, user_id: int, key: str, default=None):
         return get_user_data(self.HACKED_DATA_GUILD_ID, user_id, key, default)
 
     def _set_hacked_user_data(self, user_id: int, key: str, value):
         return set_user_data(self.HACKED_DATA_GUILD_ID, user_id, key, value)
+
+    def _render_unlock_code_art(self, code: str):
+        font_name = random.choice(fonts or [self.DEFAULT_UNLOCK_FONT])
+        try:
+            return Figlet(font=font_name).renderText(code), font_name
+        except Exception as e:
+            log(
+                f"Failed to render unlock code with font {font_name}: {e}",
+                level=logging.WARNING,
+                module_name="HackedDetector",
+            )
+            fallback_font = self.DEFAULT_UNLOCK_FONT
+            return Figlet(font=fallback_font).renderText(code), fallback_font
+
+    def _prune_suspicious_events(self, user_id: int, now: float):
+        window_start = now - self.DETECTION_WINDOW_SECONDS
+        events = [
+            event for event in self.usercache.get(user_id, [])
+            if event.get("time", 0) >= window_start
+        ]
+        if events:
+            self.usercache[user_id] = events
+        else:
+            self.usercache.pop(user_id, None)
+        return events
+
+    def _record_suspicious_event(self, message: discord.Message):
+        now = asyncio.get_running_loop().time()
+        events = self._prune_suspicious_events(message.author.id, now)
+        events.append({
+            "time": now,
+            "channel_id": message.channel.id,
+            "message": message,
+            "message_id": message.id,
+        })
+        self.usercache[message.author.id] = events
+        return events
+
+    async def _delete_detected_messages(self, events: list[dict]):
+        deleted = 0
+        failed = 0
+        seen_message_ids = set()
+
+        for event in events:
+            message = event.get("message")
+            message_id = event.get("message_id")
+            if message is None or message_id in seen_message_ids:
+                continue
+            seen_message_ids.add(message_id)
+            try:
+                await message.delete()
+                deleted += 1
+            except discord.NotFound:
+                continue
+            except Exception as e:
+                failed += 1
+                log(
+                    f"Failed to delete suspicious message {message_id} from user {message.author.id} in channel {message.channel.id}: {e}",
+                    level=logging.ERROR,
+                    module_name="HackedDetector",
+                    user=message.author,
+                    guild=message.guild,
+                )
+
+        return deleted, failed
+
+    async def _notify_unlock_in_channel(self, user: discord.User, channel):
+        if channel is None or not hasattr(channel, "send"):
+            return False
+
+        try:
+            command_mention = await get_command_mention("imhacked") or "/imhacked"
+        except Exception as e:
+            command_mention = "/imhacked"
+            log(
+                f"Failed to resolve /imhacked mention for user {user.id}: {e}",
+                level=logging.DEBUG,
+                module_name="HackedDetector",
+                user=user,
+                guild=getattr(channel, "guild", None),
+            )
+
+        try:
+            await channel.send(
+                f"{user.mention} 我無法私訊你。請先私訊我，然後使用 {command_mention} 開始解除禁言流程。",
+                allowed_mentions=discord.AllowedMentions(users=True, roles=False, everyone=False),
+            )
+            log(
+                f"Fallback unlock instructions sent in channel {channel.id} for user {user.id}.",
+                level=logging.DEBUG,
+                module_name="HackedDetector",
+                user=user,
+                guild=getattr(channel, "guild", None),
+            )
+            return True
+        except Exception as e:
+            log(
+                f"Failed to send fallback unlock instructions in channel {getattr(channel, 'id', 'unknown')} for user {user.id}: {e}",
+                level=logging.ERROR,
+                module_name="HackedDetector",
+                user=user,
+                guild=getattr(channel, "guild", None),
+            )
+            return False
 
     async def unlock_user(self, user: discord.User):
         # untimeout the user in all mutual guilds
@@ -179,6 +287,7 @@ class HackedDetector(commands.Cog):
             log(f"Warning DM sent to suspected hacked user {user.id}.", level=logging.DEBUG, module_name="HackedDetector", user=user)
         except Exception as e:
             log(f"Failed to send DM to user {user}: {e}", level=logging.ERROR, module_name="HackedDetector", user=user)
+            await self._notify_unlock_in_channel(user, channel)
 
     class UnlockModal(discord.ui.Modal, title="解除禁言"):
         # enter code to unlock account
@@ -234,21 +343,22 @@ class HackedDetector(commands.Cog):
         async def start_unlock_button(self, interaction: discord.Interaction, button: discord.ui.Button):
             user = interaction.user
             code = str(random.randint(1, 9999)).zfill(4)
+            rendered_code, font_name = self.parent._render_unlock_code_art(code)
             embed = discord.Embed(
                 title="請輸入驗證碼",
-                description=f"```\n{f.renderText(code)}\n```\n請在下面的按鈕中輸入上方的驗證碼以解除禁言。",
+                description=f"```\n{rendered_code}\n```\n請在下面的按鈕中輸入上方的驗證碼以解除禁言。",
                 color=discord.Color.blue()
             )
             embed.timestamp = datetime.now()
             # 傳入正確的 parent (cog instance)
             view = self.parent.UnlockView(user, self.parent, code)
             await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
-            log(f"Sent unlock challenge to user {user.id}.", level=logging.DEBUG, module_name="HackedDetector", user=user)
+            log(f"Sent unlock challenge to user {user.id} with font={font_name}.", level=logging.DEBUG, module_name="HackedDetector", user=user)
 
 
     @commands.Cog.listener()
     async def on_message(self, message):
-        if message.author.bot:
+        if message.author.bot or message.guild is None:
             return
 
         # check message is matched some pattern that indicates the user might be hacked
@@ -265,28 +375,45 @@ class HackedDetector(commands.Cog):
             guild=message.guild,
         )
 
-        # 更新 cache，記錄不同的 channel id
-        if message.author.id in self.usercache:
-            if message.channel.id not in self.usercache[message.author.id]:
-                self.usercache[message.author.id].append(message.channel.id)
-            else:
-                # not required behavior
-                del self.usercache[message.author.id]
-                log(f"User {message.author.id} repeated suspicious message in same channel; cache reset.", level=logging.DEBUG, module_name="HackedDetector", user=message.author, guild=message.guild)
-        else:
-            self.usercache[message.author.id] = [message.channel.id]
-        log(f"User {message.author.id} suspicious-channel cache={self.usercache.get(message.author.id, [])}", level=logging.DEBUG, module_name="HackedDetector", user=message.author, guild=message.guild)
+        events = self._record_suspicious_event(message)
+        channel_ids = sorted({event["channel_id"] for event in events})
+        log(
+            f"User {message.author.id} suspicious window events={len(events)} unique_channels={channel_ids}",
+            level=logging.DEBUG,
+            module_name="HackedDetector",
+            user=message.author,
+            guild=message.guild,
+        )
 
-        if len(self.usercache.get(message.author.id, [])) > 2:
-            # check if user is already timed out
-            timed_out = self._get_hacked_user_data(message.author.id, "hacked_timed_out_channel", [])
-            if timed_out:
-                # User is already timed out, no need to handle again
-                log(f"Skip handling user {message.author.id}: already has timeout records {timed_out}.", level=logging.DEBUG, module_name="HackedDetector", user=message.author, guild=message.guild)
-                return
-            # User has sent messages in multiple channels within the TTL
-            log(f"Trigger hacked handling for user {message.author.id} with channels={self.usercache[message.author.id]}", level=logging.DEBUG, module_name="HackedDetector", user=message.author, guild=message.guild)
-            await self.handle_hacked_user(message.author)
+        if len(channel_ids) < self.DETECTION_MIN_CHANNELS:
+            return
+
+        detected_events = list(events)
+        self.usercache.pop(message.author.id, None)
+
+        deleted, delete_failed = await self._delete_detected_messages(detected_events)
+        log(
+            f"Suspicious message cleanup for user {message.author.id}: deleted={deleted}, failed={delete_failed}",
+            level=logging.INFO,
+            module_name="HackedDetector",
+            user=message.author,
+            guild=message.guild,
+        )
+
+        # check if user is already timed out
+        timed_out = self._get_hacked_user_data(message.author.id, "hacked_timed_out_channel", [])
+        if timed_out:
+            log(f"Skip handling user {message.author.id}: already has timeout records {timed_out}.", level=logging.DEBUG, module_name="HackedDetector", user=message.author, guild=message.guild)
+            return
+
+        log(
+            f"Trigger hacked handling for user {message.author.id} with channels={channel_ids} in {self.DETECTION_WINDOW_SECONDS}s window.",
+            level=logging.DEBUG,
+            module_name="HackedDetector",
+            user=message.author,
+            guild=message.guild,
+        )
+        await self.handle_hacked_user(message.author, channel=message.channel)
 
     async def cog_load(self):
         # 註冊 persistent view：timeout=None + 穩定 custom_id
