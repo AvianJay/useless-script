@@ -4169,8 +4169,8 @@ class AICommands(commands.Cog):
         guild = interaction.guild
         resolved_message = await MentionResolver.resolve_mentions(sanitized_message, guild, self.bot)
 
-        selected_model = model if model and model in MODEL_RATES else await self._get_default_model(user.id)
-        rate_per_char = MODEL_RATES[selected_model]
+        selected_model = model if model and (model in MODEL_RATES or model in poe_text_models) else await self._get_default_model(user.id)
+        rate_per_char = MODEL_RATES.get(selected_model, poe_text_models.get(selected_model, 0.1))
         input_chars = len(resolved_message)
         input_cost = round(input_chars * rate_per_char, 2)
         billing_target = await self._resolve_ai_billing_target(user, guild)
