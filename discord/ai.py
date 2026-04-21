@@ -422,6 +422,8 @@ TOOL_USAGE_PROMPT = """工具使用規則：
 - 當問題需要查 bot docs、dsize、背包、經濟、伺服器功能設定、音樂播放狀態、地震資訊、停班停課資訊、交通資訊、FakeUser 設定或指令統計時，優先使用工具，不要只靠猜測。
 - 只要使用者在問某個模組/功能怎麼設定、有哪些變數、embed 怎麼寫、條件判斷怎麼寫、指令怎麼用、權限怎麼設、或文件裡有沒有範例，優先使用 `search_bot_docs`。
 - 只要使用者在問機器人目前狀態、是否在線、延遲、版本、安裝量、用了多少指令、進了幾個伺服器，優先使用 `get_bot_status`。
+- 如果使用者要你讀某個頻道最近內容、讀某一則訊息、確認某個使用者資訊或檢查某人在某個頻道的權限，優先使用 `read_channel`、`read_message`、`get_user`。
+- `read_channel`、`read_message`、`get_user` 只能讀取目前伺服器或目前私訊中，本來就對當前使用者與 bot 可見的資料；不要嘗試繞過隱藏頻道、私人討論串或其他看不到的內容。
 - 如果使用者明確要求「直接幫我生成影片 / 動畫 / 廣告短片」，優先使用 `generate_video`。
 - Discord 原始訊息內容有 2000 字限制；如果完整回覆、程式碼、清單、日誌或文件可能超過這個上限，優先使用 `send_as_file`，最後只留簡短摘要。
 - AI 會自動看到目前使用者的共通 profile 和這個伺服器的共通氛圍 profile；平常聊天以讀取這些 profile 為主，不要因為一般聊天就自動改寫。
@@ -688,6 +690,9 @@ class AICommands(commands.Cog):
     SEND_AS_FILE_DEFAULT_NAME = "ai-response.txt"
     SEND_AS_FILE_NAME_LIMIT = 80
     SEND_AS_FILE_MAX_BYTES = 7_500_000
+    CHANNEL_TOOL_DEFAULT_LIMIT = 8
+    CHANNEL_TOOL_MAX_LIMIT = 20
+    USER_TOOL_MAX_ROLE_PREVIEW = 15
     TOOL_USAGE_LABELS = {
         "search_bot_docs": "正在搜尋機器人文檔",
         "get_ai_memory": "取得 AI 記憶",
@@ -696,6 +701,9 @@ class AICommands(commands.Cog):
         "search_web": "正在搜尋網路",
         "generate_video": "正在生成影片",
         "send_as_file": "整理為檔案",
+        "read_channel": "讀取頻道內容",
+        "read_message": "讀取單則訊息",
+        "get_user": "查詢使用者資訊",
         "get_dsize_context": "取得 dsize 資料",
         "get_inventory_context": "取得背包資料",
         "get_economy_context": "取得經濟資料",
@@ -1585,6 +1593,325 @@ class AICommands(commands.Cog):
         return f"role:{role_id}"
 
     @staticmethod
+    def _serialize_datetime(value) -> str | None:
+        if value is None:
+            return None
+        try:
+            return value.isoformat()
+        except Exception:
+            return str(value)
+
+    @staticmethod
+    def _build_permission_snapshot(permissions, names: tuple[str, ...]) -> dict:
+        snapshot = {}
+        for name in names:
+            snapshot[name] = bool(getattr(permissions, name, False)) if permissions is not None else False
+        return snapshot
+
+    def _get_guild_bot_member(self, guild: discord.Guild | None) -> discord.Member | None:
+        if guild is None or self.bot is None or getattr(self.bot, "user", None) is None:
+            return None
+        return getattr(guild, "me", None) or guild.get_member(self.bot.user.id)
+
+    def _resolve_tool_channel(
+        self,
+        channel_id,
+        tool_context: dict | None,
+        *,
+        require_messageable: bool = False,
+    ) -> tuple[object | None, str | None]:
+        current_channel = (tool_context or {}).get("channel")
+        guild = (tool_context or {}).get("guild")
+
+        if channel_id in (None, "", 0, "0"):
+            channel = current_channel
+        else:
+            try:
+                resolved_channel_id = int(channel_id)
+            except (TypeError, ValueError):
+                return None, "channel_id must be an integer"
+
+            channel = None
+            if guild is None:
+                if current_channel is not None and getattr(current_channel, "id", None) == resolved_channel_id:
+                    channel = current_channel
+                else:
+                    return None, "In DMs you can only access the current channel."
+            else:
+                resolver = getattr(guild, "get_channel_or_thread", None)
+                if callable(resolver):
+                    channel = resolver(resolved_channel_id)
+                if channel is None:
+                    channel = guild.get_channel(resolved_channel_id)
+                if channel is None:
+                    thread_getter = getattr(guild, "get_thread", None)
+                    if callable(thread_getter):
+                        channel = thread_getter(resolved_channel_id)
+                if channel is None and current_channel is not None and getattr(current_channel, "id", None) == resolved_channel_id:
+                    channel = current_channel
+
+        if channel is None:
+            return None, "Channel not found in the current context."
+        if require_messageable and not callable(getattr(channel, "history", None)):
+            return None, "This channel does not support reading message history."
+        return channel, None
+
+    def _validate_channel_tool_access(
+        self,
+        channel,
+        tool_context: dict | None,
+        *,
+        require_history: bool = True,
+    ) -> tuple[str | None, dict]:
+        current_channel = (tool_context or {}).get("channel")
+        guild = getattr(channel, "guild", None) or (tool_context or {}).get("guild")
+        current_user = (tool_context or {}).get("user")
+
+        if guild is None:
+            if current_channel is None or getattr(current_channel, "id", None) != getattr(channel, "id", None):
+                return "In DMs you can only access the current channel.", {}
+            return None, {
+                "requester": current_user,
+                "bot_member": getattr(self.bot, "user", None),
+                "requester_permissions": None,
+                "bot_permissions": None,
+            }
+
+        requester = current_user if isinstance(current_user, discord.Member) and getattr(current_user, "guild", None) == guild else None
+        if requester is None and getattr(current_user, "id", None) is not None:
+            requester = guild.get_member(current_user.id)
+        if requester is None:
+            return "Unable to resolve the current user in this guild.", {}
+
+        bot_member = self._get_guild_bot_member(guild)
+        if bot_member is None:
+            return "Unable to resolve the bot member in this guild.", {}
+
+        permissions_for = getattr(channel, "permissions_for", None)
+        if not callable(permissions_for):
+            return "This channel does not support permission checks.", {}
+
+        requester_permissions = permissions_for(requester)
+        bot_permissions = permissions_for(bot_member)
+        required_permissions = ["view_channel"]
+        if require_history:
+            required_permissions.append("read_message_history")
+
+        requester_missing = [
+            permission_name
+            for permission_name in required_permissions
+            if not getattr(requester_permissions, permission_name, False)
+        ]
+        if requester_missing:
+            return (
+                "Current user is missing required channel permissions: "
+                + ", ".join(requester_missing),
+                {},
+            )
+
+        bot_missing = [
+            permission_name
+            for permission_name in required_permissions
+            if not getattr(bot_permissions, permission_name, False)
+        ]
+        if bot_missing:
+            return (
+                "Bot is missing required channel permissions: "
+                + ", ".join(bot_missing),
+                {},
+            )
+
+        return None, {
+            "requester": requester,
+            "bot_member": bot_member,
+            "requester_permissions": requester_permissions,
+            "bot_permissions": bot_permissions,
+        }
+
+    def _serialize_channel_for_tool(self, channel, access: dict | None = None) -> dict:
+        payload = {
+            "id": getattr(channel, "id", None),
+            "name": getattr(channel, "name", None),
+            "mention": getattr(channel, "mention", None),
+            "type": str(getattr(channel, "type", None) or "unknown"),
+            "guild_id": getattr(getattr(channel, "guild", None), "id", None),
+        }
+
+        topic = getattr(channel, "topic", None)
+        if topic:
+            payload["topic"] = self._truncate_tool_text(topic, max_len=240)
+
+        parent = getattr(channel, "parent", None)
+        if parent is not None:
+            payload["parent"] = {
+                "id": getattr(parent, "id", None),
+                "name": getattr(parent, "name", None),
+            }
+
+        category = getattr(channel, "category", None)
+        if category is not None:
+            payload["category"] = {
+                "id": getattr(category, "id", None),
+                "name": getattr(category, "name", None),
+            }
+
+        is_nsfw = getattr(channel, "is_nsfw", None)
+        if callable(is_nsfw):
+            payload["nsfw"] = bool(is_nsfw())
+        elif hasattr(channel, "nsfw"):
+            payload["nsfw"] = bool(getattr(channel, "nsfw", False))
+
+        if hasattr(channel, "slowmode_delay"):
+            payload["slowmode_delay"] = getattr(channel, "slowmode_delay", None)
+        if isinstance(channel, discord.Thread):
+            payload["archived"] = bool(getattr(channel, "archived", False))
+            payload["locked"] = bool(getattr(channel, "locked", False))
+
+        access = access or {}
+        requester_permissions = access.get("requester_permissions")
+        bot_permissions = access.get("bot_permissions")
+        channel_permission_fields = (
+            "view_channel",
+            "read_message_history",
+            "send_messages",
+            "manage_messages",
+            "manage_threads",
+            "send_messages_in_threads",
+            "embed_links",
+            "attach_files",
+        )
+        if requester_permissions is not None:
+            payload["requester_permissions"] = self._build_permission_snapshot(
+                requester_permissions,
+                channel_permission_fields,
+            )
+        if bot_permissions is not None:
+            payload["bot_permissions"] = self._build_permission_snapshot(
+                bot_permissions,
+                channel_permission_fields,
+            )
+        return payload
+
+    async def _serialize_message_for_tool(self, message: discord.Message, guild: discord.Guild | None) -> dict:
+        formatted = await self._format_msg_for_context(
+            message,
+            guild,
+            self.bot,
+            self_id=getattr(getattr(self.bot, "user", None), "id", None),
+        )
+        content = ""
+        if message.content:
+            content = await MentionResolver.resolve_mentions(message.content, guild, self.bot)
+
+        reference_preview = None
+        resolved_reference = getattr(getattr(message, "reference", None), "resolved", None)
+        if resolved_reference is not None and hasattr(resolved_reference, "id") and hasattr(resolved_reference, "author"):
+            reference_content = getattr(resolved_reference, "content", "") or ""
+            if reference_content:
+                reference_content = await MentionResolver.resolve_mentions(reference_content, guild, self.bot)
+            reference_preview = {
+                "message_id": getattr(resolved_reference, "id", None),
+                "author": await self._resolve_user_display(getattr(getattr(resolved_reference, "author", None), "id", None), guild),
+                "content_preview": self._truncate_tool_text(reference_content or "[圖片/附件]", max_len=120),
+            }
+
+        attachments = [
+            {
+                "filename": attachment.filename,
+                "content_type": attachment.content_type,
+                "size": attachment.size,
+                "url": attachment.url,
+            }
+            for attachment in message.attachments[:5]
+        ]
+        embed_summaries = []
+        for embed in message.embeds[:5]:
+            summary = self._embed_summary(embed)
+            embed_summaries.append(summary or "[Embed]")
+
+        reaction_summaries = [
+            {
+                "emoji": str(reaction.emoji),
+                "count": reaction.count,
+            }
+            for reaction in message.reactions[:8]
+        ]
+
+        return {
+            "id": message.id,
+            "channel_id": getattr(getattr(message, "channel", None), "id", None),
+            "author": await self._resolve_user_display(getattr(getattr(message, "author", None), "id", None), guild),
+            "content": content or None,
+            "formatted": formatted,
+            "created_at": self._serialize_datetime(message.created_at),
+            "edited_at": self._serialize_datetime(message.edited_at),
+            "jump_url": getattr(message, "jump_url", None),
+            "attachments": attachments,
+            "embed_summaries": embed_summaries,
+            "reaction_summaries": reaction_summaries,
+            "reply_to": reference_preview,
+            "has_components": bool(getattr(message, "components", None)),
+            "has_stickers": bool(getattr(message, "stickers", None)),
+        }
+
+    async def _resolve_visible_user_for_tool(self, user_id, tool_context: dict | None) -> tuple[object | None, str | None]:
+        current_user = (tool_context or {}).get("user")
+        guild = (tool_context or {}).get("guild")
+        bot_user = getattr(self.bot, "user", None)
+        bot_user_id = getattr(bot_user, "id", None)
+
+        try:
+            resolved_user_id = int(user_id)
+        except (TypeError, ValueError):
+            return None, "user_id must be an integer"
+
+        if guild is None:
+            allowed_ids = {getattr(current_user, "id", None), bot_user_id}
+            if resolved_user_id not in allowed_ids:
+                return None, "In DMs you can only inspect yourself or the bot."
+            if resolved_user_id == bot_user_id:
+                return bot_user, None
+            return current_user, None
+
+        if resolved_user_id == getattr(current_user, "id", None) and isinstance(current_user, discord.Member):
+            return current_user, None
+
+        if resolved_user_id == bot_user_id:
+            bot_member = self._get_guild_bot_member(guild)
+            if bot_member is not None:
+                return bot_member, None
+
+        member = guild.get_member(resolved_user_id)
+        if member is None:
+            fetch_member = getattr(guild, "fetch_member", None)
+            if callable(fetch_member):
+                try:
+                    member = await fetch_member(resolved_user_id)
+                except (discord.NotFound, discord.Forbidden, discord.HTTPException):
+                    member = None
+        if member is None:
+            return None, "You can only inspect users visible in the current guild."
+        return member, None
+
+    @staticmethod
+    def _parse_message_link(message_link: str | None) -> dict | None:
+        raw = str(message_link or "").strip()
+        if not raw:
+            return None
+        match = re.search(
+            r"https?://(?:canary\.|ptb\.)?discord(?:app)?\.com/channels/([^/]+)/(?P<channel_id>\d+)/(?P<message_id>\d+)",
+            raw,
+        )
+        if not match:
+            return None
+        guild_token = match.group(1)
+        return {
+            "guild_token": guild_token,
+            "channel_id": int(match.group("channel_id")),
+            "message_id": int(match.group("message_id")),
+        }
+
+    @staticmethod
     def _serialize_track(track) -> dict | None:
         if track is None:
             return None
@@ -2325,6 +2652,49 @@ class AICommands(commands.Cog):
             {
                 "type": "function",
                 "function": {
+                    "name": "read_channel",
+                    "description": "Read recent messages from the current channel or another visible channel in the current guild. This respects both the current user's and the bot's channel permissions.",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "channel_id": {"type": "integer"},
+                            "limit": {"type": "integer"},
+                        },
+                    },
+                },
+            },
+            {
+                "type": "function",
+                "function": {
+                    "name": "read_message",
+                    "description": "Read a specific visible message from the current channel or another visible channel in the current guild. This respects both the current user's and the bot's permissions.",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "message_id": {"type": "integer"},
+                            "channel_id": {"type": "integer"},
+                            "message_link": {"type": "string"},
+                        },
+                    },
+                },
+            },
+            {
+                "type": "function",
+                "function": {
+                    "name": "get_user",
+                    "description": "Get information for the current user or another visible user in the current guild, including guild and channel permission snapshots when available.",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "user_id": {"type": "integer"},
+                            "channel_id": {"type": "integer"},
+                        },
+                    },
+                },
+            },
+            {
+                "type": "function",
+                "function": {
                     "name": "get_dsize_context",
                     "description": "Get dsize stats, recent history, and optional leaderboard context for a user.",
                     "parameters": {
@@ -2520,6 +2890,8 @@ class AICommands(commands.Cog):
                 "If no tool is needed, respond normally with plain text.",
                 "If the user is asking about bot features, docs, setup, syntax, variables, embeds, conditions, examples, permissions, or how to use a module, call search_bot_docs first.",
                 "If the user is asking about the bot's current status, uptime, latency, version, install count, command totals, or server count, call get_bot_status.",
+                "If the user asks to inspect channel history, a specific message, a user's visible profile, or a member's channel permissions, call read_channel, read_message, or get_user as appropriate.",
+                "read_channel, read_message, and get_user are permission-aware. They only work for the current guild or current DM and must not be used to bypass hidden channels, private threads, or other inaccessible content.",
                 "If the user explicitly asks to generate a video, animation clip, or ad clip, call generate_video.",
                 f"Discord message content is limited to about {self.DISCORD_MESSAGE_CHAR_LIMIT} characters. If the full answer, code, logs, list, or document would exceed that, call send_as_file.",
                 "After calling send_as_file, keep the final answer short and do not repeat the full file contents in the final message.",
@@ -2934,6 +3306,216 @@ class AICommands(commands.Cog):
             "message_limit": self.DISCORD_MESSAGE_CHAR_LIMIT,
             "summary": summary or None,
         }
+
+    async def _tool_read_channel(self, args: dict, tool_context: dict) -> dict:
+        channel, error = self._resolve_tool_channel(
+            args.get("channel_id"),
+            tool_context,
+            require_messageable=True,
+        )
+        if error:
+            return {"error": error}
+
+        error, access = self._validate_channel_tool_access(
+            channel,
+            tool_context,
+            require_history=True,
+        )
+        if error:
+            return {"error": error}
+
+        limit = self._coerce_int(
+            args.get("limit"),
+            self.CHANNEL_TOOL_DEFAULT_LIMIT,
+            minimum=1,
+            maximum=self.CHANNEL_TOOL_MAX_LIMIT,
+        )
+        guild = getattr(channel, "guild", None) or (tool_context or {}).get("guild")
+
+        try:
+            raw_messages = [message async for message in channel.history(limit=limit)]
+        except (discord.Forbidden, discord.HTTPException) as exc:
+            return {"error": f"failed to read channel history: {exc}"}
+
+        raw_messages.reverse()
+        messages = []
+        for message in raw_messages:
+            serialized = await self._serialize_message_for_tool(message, guild)
+            item = {
+                "id": serialized.get("id"),
+                "author": serialized.get("author"),
+                "created_at": serialized.get("created_at"),
+                "formatted": serialized.get("formatted"),
+                "jump_url": serialized.get("jump_url"),
+            }
+            if serialized.get("attachments"):
+                item["attachments"] = serialized.get("attachments")
+            if serialized.get("embed_summaries"):
+                item["embed_summaries"] = serialized.get("embed_summaries")
+            messages.append(item)
+
+        return {
+            "channel": self._serialize_channel_for_tool(channel, access),
+            "returned_count": len(messages),
+            "messages": messages,
+        }
+
+    async def _tool_read_message(self, args: dict, tool_context: dict) -> dict:
+        message_link = args.get("message_link")
+        parsed_link = self._parse_message_link(message_link)
+        channel_id = args.get("channel_id")
+        message_id = args.get("message_id")
+
+        if parsed_link is not None:
+            guild = (tool_context or {}).get("guild")
+            current_channel = (tool_context or {}).get("channel")
+            current_guild_token = str(getattr(guild, "id", "@me")) if guild else "@me"
+            if parsed_link["guild_token"] != current_guild_token:
+                return {"error": "message_link must point to the current guild or current DM channel."}
+            channel_id = parsed_link["channel_id"]
+            message_id = parsed_link["message_id"]
+            if guild is None and getattr(current_channel, "id", None) != channel_id:
+                return {"error": "In DMs you can only read messages from the current channel."}
+
+        if message_id in (None, ""):
+            return {"error": "message_id or message_link is required"}
+
+        channel, error = self._resolve_tool_channel(
+            channel_id,
+            tool_context,
+            require_messageable=True,
+        )
+        if error:
+            return {"error": error}
+
+        error, access = self._validate_channel_tool_access(
+            channel,
+            tool_context,
+            require_history=True,
+        )
+        if error:
+            return {"error": error}
+
+        try:
+            resolved_message_id = int(message_id)
+        except (TypeError, ValueError):
+            return {"error": "message_id must be an integer"}
+
+        fetch_message = getattr(channel, "fetch_message", None)
+        if not callable(fetch_message):
+            return {"error": "This channel does not support fetching a specific message."}
+
+        try:
+            message = await fetch_message(resolved_message_id)
+        except discord.NotFound:
+            return {"error": "message not found"}
+        except (discord.Forbidden, discord.HTTPException) as exc:
+            return {"error": f"failed to fetch message: {exc}"}
+
+        guild = getattr(channel, "guild", None) or (tool_context or {}).get("guild")
+        return {
+            "channel": self._serialize_channel_for_tool(channel, access),
+            "message": await self._serialize_message_for_tool(message, guild),
+        }
+
+    async def _tool_get_user(self, args: dict, tool_context: dict) -> dict:
+        current_user = (tool_context or {}).get("user")
+        guild = (tool_context or {}).get("guild")
+        target_user_id = args.get("user_id") or getattr(current_user, "id", None)
+        if target_user_id is None:
+            return {"error": "user_id is required"}
+
+        target_user, error = await self._resolve_visible_user_for_tool(target_user_id, tool_context)
+        if error:
+            return {"error": error}
+
+        member = target_user if isinstance(target_user, discord.Member) else None
+        target_channel = None
+        channel_access = {}
+        if guild is not None:
+            target_channel, error = self._resolve_tool_channel(args.get("channel_id"), tool_context)
+            if error:
+                return {"error": error}
+            error, channel_access = self._validate_channel_tool_access(
+                target_channel,
+                tool_context,
+                require_history=False,
+            )
+            if error:
+                return {"error": error}
+
+        user_payload = {
+            "id": getattr(target_user, "id", None),
+            "name": getattr(target_user, "name", None),
+            "display_name": getattr(target_user, "display_name", None) or getattr(target_user, "name", None),
+            "mention": getattr(target_user, "mention", None),
+            "bot": bool(getattr(target_user, "bot", False)),
+            "created_at": self._serialize_datetime(getattr(target_user, "created_at", None)),
+            "avatar_url": str(getattr(getattr(target_user, "display_avatar", None), "url", "") or "") or None,
+        }
+
+        result = {
+            "user": user_payload,
+            "is_current_user": getattr(target_user, "id", None) == getattr(current_user, "id", None),
+            "is_guild_member": bool(member),
+        }
+
+        if member is not None:
+            guild_permission_fields = (
+                "administrator",
+                "manage_guild",
+                "manage_channels",
+                "manage_roles",
+                "manage_messages",
+                "manage_threads",
+                "moderate_members",
+                "kick_members",
+                "ban_members",
+                "mention_everyone",
+                "view_audit_log",
+            )
+            role_preview = [
+                {
+                    "id": role.id,
+                    "name": role.name,
+                }
+                for role in list(reversed(member.roles[1:]))[: self.USER_TOOL_MAX_ROLE_PREVIEW]
+            ]
+            result["member"] = {
+                "nick": member.nick,
+                "joined_at": self._serialize_datetime(member.joined_at),
+                "pending": bool(getattr(member, "pending", False)),
+                "timed_out_until": self._serialize_datetime(getattr(member, "timed_out_until", None)),
+                "top_role": self._format_role_ref(guild, getattr(getattr(member, "top_role", None), "id", None)),
+                "role_count": max(0, len(member.roles) - 1),
+                "roles_preview": role_preview,
+                "guild_permissions": self._build_permission_snapshot(member.guild_permissions, guild_permission_fields),
+            }
+
+        if target_channel is not None:
+            result["channel_permissions"] = {
+                "channel": self._serialize_channel_for_tool(target_channel, channel_access),
+                "target_permissions": (
+                    self._build_permission_snapshot(
+                        target_channel.permissions_for(member),
+                        (
+                            "view_channel",
+                            "read_message_history",
+                            "send_messages",
+                            "manage_messages",
+                            "manage_threads",
+                            "send_messages_in_threads",
+                            "mention_everyone",
+                            "attach_files",
+                            "embed_links",
+                        ),
+                    )
+                    if member is not None and callable(getattr(target_channel, "permissions_for", None))
+                    else None
+                ),
+            }
+
+        return result
 
     async def _tool_get_dsize_context(self, args: dict, tool_context: dict) -> dict:
         guild = (tool_context or {}).get("guild")
@@ -3774,6 +4356,9 @@ class AICommands(commands.Cog):
             "search_web": self._tool_search_web,
             "generate_video": self._tool_generate_video,
             "send_as_file": self._tool_send_as_file,
+            "read_channel": self._tool_read_channel,
+            "read_message": self._tool_read_message,
+            "get_user": self._tool_get_user,
             "get_dsize_context": self._tool_get_dsize_context,
             "get_inventory_context": self._tool_get_inventory_context,
             "get_economy_context": self._tool_get_economy_context,
