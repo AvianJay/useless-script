@@ -142,7 +142,8 @@ def _require_guild(f):
 def panel_login():
     if _current_user():
         return redirect(url_for("panel_index"))
-    return render_template("panel_login.html", bot=bot, gtag=config("website_gtag", ""))
+    # return render_template("panel_login.html", bot=bot, gtag=config("website_gtag", ""))
+    return redirect(url_for("panel_auth"))
 
 
 @app.route("/panel/auth")
