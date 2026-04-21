@@ -6,6 +6,7 @@ import g4f
 from g4f.client import Client
 import asyncio
 import html
+import io
 import importlib
 import json
 import re
@@ -422,6 +423,7 @@ TOOL_USAGE_PROMPT = """工具使用規則：
 - 只要使用者在問某個模組/功能怎麼設定、有哪些變數、embed 怎麼寫、條件判斷怎麼寫、指令怎麼用、權限怎麼設、或文件裡有沒有範例，優先使用 `search_bot_docs`。
 - 只要使用者在問機器人目前狀態、是否在線、延遲、版本、安裝量、用了多少指令、進了幾個伺服器，優先使用 `get_bot_status`。
 - 如果使用者明確要求「直接幫我生成影片 / 動畫 / 廣告短片」，優先使用 `generate_video`。
+- Discord 原始訊息內容有 2000 字限制；如果完整回覆、程式碼、清單、日誌或文件可能超過這個上限，優先使用 `send_as_file`，最後只留簡短摘要。
 - AI 會自動看到目前使用者的共通 profile 和這個伺服器的共通氛圍 profile；平常聊天以讀取這些 profile 為主，不要因為一般聊天就自動改寫。
 - 只有在使用者明確要求「記住 / 更新 / 忘記」某件事時，才使用 AI memory tools 去修改記憶。
 - `user_global` 記憶是某個使用者跨伺服器共通的長期記憶；`guild_shared` 記憶是這個伺服器共享的共同記憶。
@@ -682,6 +684,10 @@ class AICommands(commands.Cog):
     VIDEO_TOOL_DEFAULT_TIMEOUT_SECONDS = 600
     VIDEO_TOOL_MAX_TIMEOUT_SECONDS = 1800
     VIDEO_TOOL_MAX_URLS = 4
+    DISCORD_MESSAGE_CHAR_LIMIT = 2000
+    SEND_AS_FILE_DEFAULT_NAME = "ai-response.txt"
+    SEND_AS_FILE_NAME_LIMIT = 80
+    SEND_AS_FILE_MAX_BYTES = 7_500_000
     TOOL_USAGE_LABELS = {
         "search_bot_docs": "正在搜尋機器人文檔",
         "get_ai_memory": "取得 AI 記憶",
@@ -689,6 +695,7 @@ class AICommands(commands.Cog):
         "delete_ai_memory": "刪除 AI 記憶",
         "search_web": "正在搜尋網路",
         "generate_video": "正在生成影片",
+        "send_as_file": "整理為檔案",
         "get_dsize_context": "取得 dsize 資料",
         "get_inventory_context": "取得背包資料",
         "get_economy_context": "取得經濟資料",
@@ -1326,6 +1333,52 @@ class AICommands(commands.Cog):
         if not cleaned:
             cleaned = re.sub(r"\s+", " ", text).strip()
         return self._truncate_tool_text(cleaned, max_len=limit)
+
+    @classmethod
+    def _sanitize_send_as_file_name(cls, filename: str | None) -> str:
+        raw = str(filename or cls.SEND_AS_FILE_DEFAULT_NAME).strip()
+        raw = raw.replace("\\", "/").split("/")[-1]
+        raw = re.sub(r"\s+", "-", raw)
+        raw = re.sub(r"[^a-zA-Z0-9._-]", "-", raw)
+        raw = raw.strip(" ._-")
+        if not raw:
+            raw = cls.SEND_AS_FILE_DEFAULT_NAME
+        if "." not in raw:
+            raw += ".txt"
+        if len(raw) > cls.SEND_AS_FILE_NAME_LIMIT:
+            stem, dot, suffix = raw.rpartition(".")
+            if dot and suffix:
+                max_stem_len = max(1, cls.SEND_AS_FILE_NAME_LIMIT - len(suffix) - 1)
+                raw = f"{stem[:max_stem_len].rstrip(' ._-') or 'ai-response'}.{suffix}"
+            else:
+                raw = raw[:cls.SEND_AS_FILE_NAME_LIMIT].rstrip(" ._-") or cls.SEND_AS_FILE_DEFAULT_NAME
+        return raw
+
+    @staticmethod
+    def _pop_pending_file_response(tool_context: dict | None) -> dict | None:
+        if not isinstance(tool_context, dict):
+            return None
+        pending = tool_context.pop("pending_file_response", None)
+        return pending if isinstance(pending, dict) else None
+
+    @staticmethod
+    def _build_pending_file_attachment(file_payload: dict) -> discord.File:
+        filename = str((file_payload or {}).get("filename") or "ai-response.txt")
+        content = str((file_payload or {}).get("content") or "")
+        return discord.File(io.BytesIO(content.encode("utf-8")), filename=filename)
+
+    @classmethod
+    def _build_send_as_file_notice(cls, response_text: str, file_payload: dict | None) -> str:
+        payload = file_payload if isinstance(file_payload, dict) else {}
+        filename = str(payload.get("filename") or cls.SEND_AS_FILE_DEFAULT_NAME)
+        summary = str(payload.get("summary") or "").strip()
+        fallback_response = str(response_text or "").strip()
+        if fallback_response and len(fallback_response) > 600:
+            fallback_response = ""
+        note = summary or fallback_response
+        if not note:
+            note = f"完整內容超過 Discord 單則訊息 {cls.DISCORD_MESSAGE_CHAR_LIMIT} 字限制，已改用附件傳送。"
+        return f"{note}\n\n附件：{filename}"
 
     def _build_web_search_messages(self, query: str, max_chars: int, include_sources: bool) -> list[dict]:
         source_instruction = (
@@ -2256,6 +2309,22 @@ class AICommands(commands.Cog):
             {
                 "type": "function",
                 "function": {
+                    "name": "send_as_file",
+                    "description": "Queue the full answer as a text file attachment when Discord's message limit would be exceeded. Use this for long answers, code, logs, or documents.",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "content": {"type": "string"},
+                            "filename": {"type": "string"},
+                            "summary": {"type": "string"},
+                        },
+                        "required": ["content"],
+                    },
+                },
+            },
+            {
+                "type": "function",
+                "function": {
                     "name": "get_dsize_context",
                     "description": "Get dsize stats, recent history, and optional leaderboard context for a user.",
                     "parameters": {
@@ -2452,6 +2521,8 @@ class AICommands(commands.Cog):
                 "If the user is asking about bot features, docs, setup, syntax, variables, embeds, conditions, examples, permissions, or how to use a module, call search_bot_docs first.",
                 "If the user is asking about the bot's current status, uptime, latency, version, install count, command totals, or server count, call get_bot_status.",
                 "If the user explicitly asks to generate a video, animation clip, or ad clip, call generate_video.",
+                f"Discord message content is limited to about {self.DISCORD_MESSAGE_CHAR_LIMIT} characters. If the full answer, code, logs, list, or document would exceed that, call send_as_file.",
+                "After calling send_as_file, keep the final answer short and do not repeat the full file contents in the final message.",
                 "Current user/global profile and guild shared profile may already be injected into context. Read them normally instead of writing memory by default.",
                 "Only use AI memory write tools when the user explicitly asks you to remember, update, or forget something. Do not write memory just because you inferred a pattern from casual chat.",
                 "Store personal cross-server facts in user_global. Store server culture/shared facts in guild_shared only when the request is explicit, suitable for a shared profile, and the user is allowed to manage guild memory.",
@@ -2826,6 +2897,43 @@ class AICommands(commands.Cog):
                 color=0x27AE60,
             )
             return {"error": f"video generation failed: {e}"}
+
+    async def _tool_send_as_file(self, args: dict, tool_context: dict) -> dict:
+        content = str(args.get("content", "") or "")
+        if not content:
+            return {"error": "content is required"}
+
+        encoded = content.encode("utf-8")
+        if len(encoded) > self.SEND_AS_FILE_MAX_BYTES:
+            return {
+                "error": (
+                    f"file is too large for Discord attachment: {len(encoded)} bytes "
+                    f"(limit {self.SEND_AS_FILE_MAX_BYTES} bytes)"
+                )
+            }
+
+        filename = self._sanitize_send_as_file_name(args.get("filename"))
+        summary = str(args.get("summary", "") or "").strip()
+        if len(summary) > 500:
+            summary = summary[:497] + "..."
+
+        if isinstance(tool_context, dict):
+            tool_context["pending_file_response"] = {
+                "filename": filename,
+                "content": content,
+                "summary": summary or None,
+                "char_count": len(content),
+                "size_bytes": len(encoded),
+            }
+
+        return {
+            "queued": True,
+            "filename": filename,
+            "char_count": len(content),
+            "size_bytes": len(encoded),
+            "message_limit": self.DISCORD_MESSAGE_CHAR_LIMIT,
+            "summary": summary or None,
+        }
 
     async def _tool_get_dsize_context(self, args: dict, tool_context: dict) -> dict:
         guild = (tool_context or {}).get("guild")
@@ -3665,6 +3773,7 @@ class AICommands(commands.Cog):
             "delete_ai_memory": self._tool_delete_ai_memory,
             "search_web": self._tool_search_web,
             "generate_video": self._tool_generate_video,
+            "send_as_file": self._tool_send_as_file,
             "get_dsize_context": self._tool_get_dsize_context,
             "get_inventory_context": self._tool_get_inventory_context,
             "get_economy_context": self._tool_get_economy_context,
@@ -4195,10 +4304,26 @@ class AICommands(commands.Cog):
                 tool_progress_callback=tool_progress_callback,
             )
 
-            raw_output_chars = len(response_text)
-            response_text = self._resolve_ai_custom_emojis(response_text, emoji_map)
+            pending_file_response = self._pop_pending_file_response(tool_context)
 
-            output_chars = raw_output_chars
+            raw_output_chars = len(response_text)
+            file_output_chars = 0
+            if pending_file_response:
+                file_output_chars = int(
+                    pending_file_response.get("char_count")
+                    or len(str(pending_file_response.get("content") or ""))
+                )
+                if pending_file_response.get("summary"):
+                    pending_file_response["summary"] = self._resolve_ai_custom_emojis(
+                        str(pending_file_response.get("summary") or ""),
+                        emoji_map,
+                    )
+            response_text = self._resolve_ai_custom_emojis(response_text, emoji_map)
+            display_response_text = response_text
+            if pending_file_response:
+                display_response_text = self._build_send_as_file_notice(response_text, pending_file_response)
+
+            output_chars = raw_output_chars + file_output_chars
             output_cost = round(output_chars * rate_per_char, 2)
             balance_before_output = self._get_global_balance(payer_id)
             charged_output, final_balance = self._charge_global_balance(payer_id, output_cost)
@@ -4232,7 +4357,12 @@ class AICommands(commands.Cog):
             
             # 儲存對話歷史（圖片為一次性，不存入歷史）
             ConversationManager.add_message(user.id, "user", resolved_message, guild_id)
-            ConversationManager.add_message(user.id, "assistant", response_text, guild_id)
+            assistant_history_text = display_response_text
+            if pending_file_response:
+                assistant_history_text += (
+                    f"\n[file:{pending_file_response.get('filename')}, chars={file_output_chars}]"
+                )
+            ConversationManager.add_message(user.id, "assistant", assistant_history_text, guild_id)
             
             # 建立回應
             warning = None
@@ -4240,15 +4370,20 @@ class AICommands(commands.Cog):
                 warning = "你的訊息已被輕微修正以確保安全。"
             
             view = AIResponseBuilder.create_response_view(
-                response_text=response_text,
+                response_text=display_response_text,
                 user=user,
                 model_name=model_name,
                 response_time=response_time,
                 warning=warning,
                 billing_info=billing_info
             )
-            
-            await interaction.edit_original_response(content=None, view=view)
+
+            if pending_file_response:
+                file_attachment = self._build_pending_file_attachment(pending_file_response)
+                await interaction.edit_original_response(content=None, view=view)
+                await interaction.followup.send(file=file_attachment, allowed_mentions=SAFE_MENTIONS)
+            else:
+                await interaction.edit_original_response(content=None, view=view)
             
         except Exception as e:
             balance_before_refund = self._get_global_balance(payer_id)
@@ -4663,10 +4798,26 @@ class AICommands(commands.Cog):
                     tool_progress_callback=tool_progress_callback,
                 )
 
-                raw_output_chars = len(response_text)
-                response_text = self._resolve_ai_custom_emojis(response_text, emoji_map)
+                pending_file_response = self._pop_pending_file_response(tool_context)
 
-                output_chars = raw_output_chars
+                raw_output_chars = len(response_text)
+                file_output_chars = 0
+                if pending_file_response:
+                    file_output_chars = int(
+                        pending_file_response.get("char_count")
+                        or len(str(pending_file_response.get("content") or ""))
+                    )
+                    if pending_file_response.get("summary"):
+                        pending_file_response["summary"] = self._resolve_ai_custom_emojis(
+                            str(pending_file_response.get("summary") or ""),
+                            emoji_map,
+                        )
+                response_text = self._resolve_ai_custom_emojis(response_text, emoji_map)
+                display_response_text = response_text
+                if pending_file_response:
+                    display_response_text = self._build_send_as_file_notice(response_text, pending_file_response)
+
+                output_chars = raw_output_chars + file_output_chars
                 output_cost = round(output_chars * rate_per_char, 2)
                 balance_before_output = self._get_global_balance(payer_id)
                 charged_output, final_balance = self._charge_global_balance(payer_id, output_cost)
@@ -4700,7 +4851,12 @@ class AICommands(commands.Cog):
                 
                 # 儲存對話歷史（圖片為一次性，不存入歷史）
                 ConversationManager.add_message(user.id, "user", final_message, guild_id)
-                ConversationManager.add_message(user.id, "assistant", response_text, guild_id)
+                assistant_history_text = display_response_text
+                if pending_file_response:
+                    assistant_history_text += (
+                        f"\n[file:{pending_file_response.get('filename')}, chars={file_output_chars}]"
+                    )
+                ConversationManager.add_message(user.id, "assistant", assistant_history_text, guild_id)
                 
                 # 建立回應（使用 Component V2 避免 @everyone/@here 攻擊）
                 warning = None
@@ -4708,7 +4864,7 @@ class AICommands(commands.Cog):
                     warning = "你的訊息已被輕微修正以確保安全。"
                 
                 view = AIResponseBuilder.create_response_view(
-                    response_text=response_text,
+                    response_text=display_response_text,
                     user=user,
                     model_name=model_name,
                     warning=warning,
@@ -4720,8 +4876,12 @@ class AICommands(commands.Cog):
                         await tool_notice_message.delete()
                     except Exception:
                         pass
-                
-                await ctx.reply(view=view, allowed_mentions=SAFE_MENTIONS)
+
+                if pending_file_response:
+                    file_attachment = self._build_pending_file_attachment(pending_file_response)
+                    await ctx.reply(view=view, file=file_attachment, allowed_mentions=SAFE_MENTIONS)
+                else:
+                    await ctx.reply(view=view, allowed_mentions=SAFE_MENTIONS)
                 
             except Exception as e:
                 balance_before_refund = self._get_global_balance(payer_id)
