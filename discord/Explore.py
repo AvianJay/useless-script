@@ -63,6 +63,14 @@ asgi_app = socketio_asgi.ASGIApp(sio, other_asgi_app=flask_asgi, socketio_path="
 
 activity_entry = ActivityEntry(name=app_commands.locale_str("explore space"), description="開啟探索空間")
 
+EXPLORE_SAVE_DATA_KEY = "explore_save_data"
+EXPLORE_SAVE_ALLOWED_SWITCH_IDS = (
+    3, 4
+)
+EXPLORE_SAVE_ALLOWED_VARIABLE_IDS = (
+    # Add variable IDs here, for example: 1, 2, 3
+)
+
 
 # --- Auth (Explore API) ---
 
@@ -244,6 +252,104 @@ def get_user_skin(user_id: int):
 def set_user_skin(user_id: int, skin_data: str):
     set_user_data(0, user_id, "explore_skin_data", skin_data)
 
+
+def _normalize_save_id_allowlist(values) -> set[str]:
+    allowed: set[str] = set()
+    for value in values or ():
+        try:
+            value_int = int(value)
+        except (TypeError, ValueError):
+            continue
+        if value_int > 0:
+            allowed.add(str(value_int))
+    return allowed
+
+
+def _parse_optional_int(value) -> int | None:
+    if value is None or value == "":
+        return None
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _empty_explore_save_data() -> dict:
+    return {
+        "map_id": None,
+        "x": None,
+        "y": None,
+        "guild_id": None,
+        "is_world_map": None,
+        "switches": {},
+        "variables": {},
+    }
+
+
+def _sanitize_explore_save_entries(values, allowed_ids: set[str]) -> dict:
+    if not isinstance(values, dict):
+        return {}
+
+    sanitized: dict = {}
+    for raw_id, value in values.items():
+        try:
+            save_id = str(int(raw_id))
+        except (TypeError, ValueError):
+            continue
+        if save_id not in allowed_ids:
+            continue
+        sanitized[save_id] = value
+    return sanitized
+
+
+def _sanitize_explore_save_data(payload, *, for_storage: bool) -> dict:
+    payload = payload if isinstance(payload, dict) else {}
+    sanitized = _empty_explore_save_data()
+
+    allowed_switch_ids = _normalize_save_id_allowlist(EXPLORE_SAVE_ALLOWED_SWITCH_IDS)
+    allowed_variable_ids = _normalize_save_id_allowlist(EXPLORE_SAVE_ALLOWED_VARIABLE_IDS)
+
+    guild_id = payload.get("guild_id")
+    if guild_id is not None:
+        guild_id = str(guild_id).strip() or None
+
+    raw_is_world_map = payload.get("is_world_map")
+    if raw_is_world_map is None and guild_id is not None:
+        is_world_map = guild_id == "world"
+    elif raw_is_world_map is None:
+        is_world_map = None
+    else:
+        is_world_map = bool(raw_is_world_map)
+
+    sanitized.update({
+        "map_id": _parse_optional_int(payload.get("map_id")),
+        "x": _parse_optional_int(payload.get("x")),
+        "y": _parse_optional_int(payload.get("y")),
+        "guild_id": guild_id,
+        "is_world_map": is_world_map,
+        "switches": _sanitize_explore_save_entries(payload.get("switches"), allowed_switch_ids),
+        "variables": _sanitize_explore_save_entries(payload.get("variables"), allowed_variable_ids),
+    })
+
+    updated_at = int(time.time()) if for_storage else _parse_optional_int(payload.get("updated_at"))
+    if updated_at is not None:
+        sanitized["updated_at"] = updated_at
+
+    return sanitized
+
+
+def get_explore_save_data(user_id: int) -> tuple[bool, dict]:
+    stored = get_user_data(0, user_id, EXPLORE_SAVE_DATA_KEY, None)
+    if stored is None:
+        return False, _empty_explore_save_data()
+    return True, _sanitize_explore_save_data(stored, for_storage=False)
+
+
+def set_explore_save_data(user_id: int, payload) -> dict:
+    sanitized = _sanitize_explore_save_data(payload, for_storage=True)
+    set_user_data(0, user_id, EXPLORE_SAVE_DATA_KEY, sanitized)
+    return sanitized
+
 def get_space_tiles(guild_id: int) -> list[dict]:
     with db.get_connection() as conn:
         cursor = conn.cursor()
@@ -307,6 +413,26 @@ def explore_me():
     return jsonify({
         'name': username,
         'skin_id': skin_id,
+    })
+
+
+@app.route('/api/explore/me/save-data', methods=['GET', 'POST'])
+@_require_explore_auth
+def explore_my_save_data():
+    user_id = int(g.explore_user['user_id'])
+
+    if request.method == 'GET':
+        has_save, save_data = get_explore_save_data(user_id)
+        return jsonify({
+            'has_save': has_save,
+            **save_data,
+        })
+
+    payload = request.get_json(silent=True) or {}
+    save_data = set_explore_save_data(user_id, payload)
+    return jsonify({
+        'success': True,
+        **save_data,
     })
 
 
