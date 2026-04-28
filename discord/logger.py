@@ -26,6 +26,10 @@ DISCORD_LOG_BATCH_SIZE = 10
 DEBUG_MODE = "--debug" in sys.argv
 LOGGER_LEVEL = logging.DEBUG if DEBUG_MODE else logging.INFO
 
+
+def _should_send_level_to_discord(level: int) -> bool:
+    return DEBUG_MODE or level != logging.DEBUG
+
 def cleanup_old_logs(days=7):
     """清理超過指定天數的舊日誌檔案"""
     logs_dir = Path("logs")
@@ -413,6 +417,8 @@ async def _log(*messages, level = logging.INFO, module_name: str = "General", us
     # 如果正在關閉，不要嘗試發送到 Discord
     if _shutting_down or bot.is_closed():
         return
+    if not _should_send_level_to_discord(level):
+        return
 
     log_channel_id = config("log_channel_id", None)
     if log_channel_id:
@@ -448,6 +454,8 @@ def log(*messages, level = logging.INFO, module_name: str = "General", user: dis
         print(f"[{module_name}] {message}", f"guild={guild.id}" if guild else "", f"user={user.id}" if user else "")
         if _shutting_down or bot.is_closed():
             return
+        if not _should_send_level_to_discord(level):
+            return
 
         try:
             embed = _build_log_embed(message, level, module_name, user=user, guild=guild)
@@ -466,6 +474,8 @@ def log(*messages, level = logging.INFO, module_name: str = "General", user: dis
 
 def _enqueue_webhook_log_from_record(record: logging.LogRecord):
     if _shutting_down or "logger" not in modules:
+        return
+    if not _should_send_level_to_discord(record.levelno):
         return
 
     if getattr(record, "_skip_webhook_bridge", False):
