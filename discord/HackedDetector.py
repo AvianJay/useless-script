@@ -1,4 +1,4 @@
-from globalenv import bot, set_user_data, get_user_data, start_bot, get_command_mention
+from globalenv import bot, set_user_data, get_user_data, start_bot, get_command_mention, get_global_config, set_global_config
 import discord
 from discord.ext import commands
 from discord import app_commands
@@ -11,6 +11,8 @@ from pyfiglet import Figlet
 import re
 import random
 import asyncio
+import json
+from OwnerTools import is_owner
 
 fonts = [
     "6x9",
@@ -41,16 +43,22 @@ fonts = [
     "modern__"
 ]
 
+sussy_thumbhashs = []
+
 class HackedDetector(commands.Cog):
     HACKED_DATA_GUILD_ID = 0
     DETECTION_WINDOW_SECONDS = 10
     DETECTION_MIN_CHANNELS = 3
+    RAW_DETECTION_MIN_CHANNELS = 2
     DEFAULT_UNLOCK_FONT = "slant"
 
     def __init__(self):
         super().__init__()
         # {user_id: [{"time": float, "channel_id": int, "message": discord.Message, "message_id": int}]}
         self.usercache = {}
+        # {user_id: [{"time": float, "channel_id": int}]}
+        self.raw_usercache = {}
+        sussy_thumbhashs.extend(get_global_config("hacked_detector_sussy_thumbhashs", []))
         log(
             f"HackedDetector initialized with detection_window={self.DETECTION_WINDOW_SECONDS}s min_channels={self.DETECTION_MIN_CHANNELS}.",
             level=logging.DEBUG,
@@ -62,6 +70,18 @@ class HackedDetector(commands.Cog):
 
     def _set_hacked_user_data(self, user_id: int, key: str, value):
         return set_user_data(self.HACKED_DATA_GUILD_ID, user_id, key, value)
+
+    def _prune_cached_events(self, cache: dict, user_id: int, now: float, window_seconds: int):
+        window_start = now - window_seconds
+        events = [
+            event for event in cache.get(user_id, [])
+            if event.get("time", 0) >= window_start
+        ]
+        if events:
+            cache[user_id] = events
+        else:
+            cache.pop(user_id, None)
+        return events
 
     def _render_unlock_code_art(self, code: str):
         font_name = random.choice(fonts or [self.DEFAULT_UNLOCK_FONT])
@@ -77,16 +97,7 @@ class HackedDetector(commands.Cog):
             return Figlet(font=fallback_font).renderText(code), fallback_font
 
     def _prune_suspicious_events(self, user_id: int, now: float):
-        window_start = now - self.DETECTION_WINDOW_SECONDS
-        events = [
-            event for event in self.usercache.get(user_id, [])
-            if event.get("time", 0) >= window_start
-        ]
-        if events:
-            self.usercache[user_id] = events
-        else:
-            self.usercache.pop(user_id, None)
-        return events
+        return self._prune_cached_events(self.usercache, user_id, now, self.DETECTION_WINDOW_SECONDS)
 
     def _record_suspicious_event(self, message: discord.Message):
         now = asyncio.get_running_loop().time()
@@ -98,6 +109,16 @@ class HackedDetector(commands.Cog):
             "message_id": message.id,
         })
         self.usercache[message.author.id] = events
+        return events
+
+    def _record_raw_suspicious_event(self, user_id: int, channel_id: int):
+        now = asyncio.get_running_loop().time()
+        events = self._prune_cached_events(self.raw_usercache, user_id, now, self.DETECTION_WINDOW_SECONDS)
+        events.append({
+            "time": now,
+            "channel_id": channel_id,
+        })
+        self.raw_usercache[user_id] = events
         return events
 
     async def _delete_detected_messages(self, events: list[dict]):
@@ -213,7 +234,7 @@ class HackedDetector(commands.Cog):
         log(f"User {user} is suspected to be hacked. Sent messages in multiple channels within a short time frame.", level=logging.WARNING, module_name="HackedDetector", user=user)
         # get mutual guilds
         guilds = user.mutual_guilds
-        until = datetime.now(timezone.utc) + timedelta(days=1)
+        until = datetime.now(timezone.utc) + timedelta(days=7)
         log(f"Start handling suspected hacked user {user.id}: mutual_guilds={len(guilds)} timeout_until={until.isoformat()}", level=logging.DEBUG, module_name="HackedDetector", user=user)
         try:
             ignore_user(user.id)
@@ -415,6 +436,85 @@ class HackedDetector(commands.Cog):
         )
         await self.handle_hacked_user(message.author, channel=message.channel)
 
+    @commands.Cog.listener()
+    async def on_socket_raw_receive(self, payload):
+        if isinstance(payload, bytes):
+            try:
+                payload = payload.decode("utf-8")
+            except Exception:
+                return
+        if not isinstance(payload, str):
+            return
+        try:
+            data = json.loads(payload)
+        except json.JSONDecodeError:
+            return
+        if data.get("t") != "MESSAGE_CREATE":
+            return
+
+        message = data.get("d", {})
+        author = message.get("author", {})
+        if author.get("bot") or message.get("guild_id") is None:
+            return
+
+        attachments = message.get("attachments", [])
+        if not attachments or len(attachments) != 4:
+            return
+        if not all(attachment.get("placeholder") in sussy_thumbhashs for attachment in attachments):
+            return
+
+        try:
+            user_id = int(author.get("id"))
+            channel_id = int(message.get("channel_id"))
+            guild_id = int(message.get("guild_id"))
+        except (TypeError, ValueError):
+            return
+
+        guild = bot.get_guild(guild_id)
+        events = self._record_raw_suspicious_event(user_id, channel_id)
+        channel_ids = sorted({event["channel_id"] for event in events})
+        log(
+            f"Raw suspicious window events for user {user_id}: events={len(events)} unique_channels={channel_ids}",
+            level=logging.DEBUG,
+            module_name="HackedDetector",
+            guild=guild,
+        )
+
+        if len(channel_ids) < self.RAW_DETECTION_MIN_CHANNELS:
+            return
+
+        self.raw_usercache.pop(user_id, None)
+
+        timed_out = self._get_hacked_user_data(user_id, "hacked_timed_out_channel", [])
+        if timed_out:
+            log(
+                f"Skip raw handling user {user_id}: already has timeout records {timed_out}.",
+                level=logging.DEBUG,
+                module_name="HackedDetector",
+                guild=guild,
+            )
+            return
+
+        user = bot.get_user(user_id)
+        channel = bot.get_channel(channel_id)
+        if user is None or channel is None:
+            log(
+                f"Skip raw handling user {user_id}: user or channel not found. channel_id={channel_id}",
+                level=logging.DEBUG,
+                module_name="HackedDetector",
+                guild=guild,
+            )
+            return
+
+        log(
+            f"Trigger raw hacked handling for user {user_id} with channels={channel_ids} in {self.DETECTION_WINDOW_SECONDS}s window.",
+            level=logging.DEBUG,
+            module_name="HackedDetector",
+            user=user,
+            guild=guild,
+        )
+        await self.handle_hacked_user(user, channel=channel)
+
     async def cog_load(self):
         # 註冊 persistent view：timeout=None + 穩定 custom_id
         bot.add_view(self.StartUnlockView(self))
@@ -430,6 +530,41 @@ class HackedDetector(commands.Cog):
             await interaction.response.send_message("我們沒有檢測到你的帳戶有被盜用的跡象，無需解除禁言。", ephemeral=True)
             return
         await interaction.response.send_message("按下下面的按鈕開始解除禁言流程。", view=self.StartUnlockView(self), ephemeral=True)
+
+    @commands.command(name="hack-addhash", description="Add a suspicious thumbhash for hacked account detection (owner only)")
+    @is_owner()
+    async def hack_addhash(self, ctx: commands.Context, thumbhash: str):
+        if thumbhash in sussy_thumbhashs:
+            await ctx.send("這個 thumbhash 已經在列表中了。")
+            return
+        sussy_thumbhashs.append(thumbhash)
+        set_global_config("hacked_detector_sussy_thumbhashs", sussy_thumbhashs)
+        await ctx.send(f"已添加 suspicious thumbhash: {thumbhash}")
+
+    @commands.command(name="hack-clearhashes", description="Clear all suspicious thumbhashes (owner only)")
+    @is_owner()
+    async def hack_clearhashes(self, ctx: commands.Context):
+        sussy_thumbhashs.clear()
+        set_global_config("hacked_detector_sussy_thumbhashs", sussy_thumbhashs)
+        await ctx.send("已清除所有 suspicious thumbhashes。")
+
+    @commands.command(name="hack-showhashes", description="Show all suspicious thumbhashes (owner only)")
+    @is_owner()
+    async def hack_showhashes(self, ctx: commands.Context):
+        if not sussy_thumbhashs:
+            await ctx.send("目前沒有 suspicious thumbhashes。")
+            return
+        await ctx.send("目前的 suspicious thumbhashes：\n" + "\n".join(sussy_thumbhashs))
+
+    @commands.command(name="hack-removehash", description="Remove a suspicious thumbhash by index (owner only)")
+    @is_owner()
+    async def hack_removehash(self, ctx: commands.Context, index: int):
+        if index < 0 or index >= len(sussy_thumbhashs):
+            await ctx.send("無效的索引。")
+            return
+        removed = sussy_thumbhashs.pop(index)
+        set_global_config("hacked_detector_sussy_thumbhashs", sussy_thumbhashs)
+        await ctx.send(f"已移除 suspicious thumbhash: {removed}")
 
 
 asyncio.run(bot.add_cog(HackedDetector()))

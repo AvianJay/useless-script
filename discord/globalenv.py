@@ -243,7 +243,7 @@ intents = discord.Intents.default()
 intents.message_content = True
 intents.members = True
 intents.guilds = True
-bot = commands.Bot(command_prefix=config("prefix", "!"), intents=intents, chunk_guilds_at_startup=False)
+bot = commands.Bot(command_prefix=config("prefix", "!"), intents=intents, chunk_guilds_at_startup=False, enable_debug_events=True)
 configure_runtime_logging()
 
 
