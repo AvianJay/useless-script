@@ -16,18 +16,131 @@ _LIST_RE = re.compile(r"^-\s+(.*)$")
 _BLOCKQUOTE_RE = re.compile(r"^>\s?(.*)$")
 _CODE_FENCE_RE = re.compile(r"^```([A-Za-z0-9_-]+)?\s*$")
 _HTML_HEADING_RE = re.compile(r"<h(?P<level>[1-6])>(?P<inner>.*?)</h(?P=level)>", re.DOTALL)
+_ICON_TOKEN_RE = re.compile(r"\[icon:([a-z0-9_-]+)\]")
 
 _DOC_HEADING_TAGS: list[tuple[str, list[tuple[str, str]]]] = [
     ("管理員自動化", [("admin", "管理員"), ("auto", "自動化")]),
     ("管理員", [("admin", "管理員")]),
     ("自動化", [("auto", "自動化")]),
+    ("測試", [("test", "測試")]),
     ("擁有者", [("owner", "擁有者")]),
     ("娛樂", [("fun", "娛樂")]),
 ]
 
+_DOC_ICON_CLASSES: dict[str, str] = {
+    "book": "fa-solid fa-book-open",
+    "list": "fa-solid fa-list",
+    "rocket": "fa-solid fa-rocket",
+    "keyboard": "fa-solid fa-keyboard",
+    "shield": "fa-solid fa-shield-halved",
+    "gamepad": "fa-solid fa-gamepad",
+    "dice": "fa-solid fa-dice",
+    "coins": "fa-solid fa-coins",
+    "music": "fa-solid fa-music",
+    "robot": "fa-solid fa-robot",
+    "tools": "fa-solid fa-wrench",
+    "globe": "fa-solid fa-globe",
+    "gear": "fa-solid fa-gear",
+    "check": "fa-solid fa-circle-check",
+    "pin": "fa-solid fa-thumbtack",
+    "mail": "fa-solid fa-envelope",
+    "bullhorn": "fa-solid fa-bullhorn",
+    "image": "fa-solid fa-image",
+    "school": "fa-solid fa-school",
+    "volume": "fa-solid fa-volume-high",
+    "ruler": "fa-solid fa-ruler",
+    "comment": "fa-solid fa-comment-dots",
+    "mask": "fa-solid fa-masks-theater",
+    "note": "fa-solid fa-file-lines",
+    "box": "fa-solid fa-box-open",
+    "hand": "fa-solid fa-hand",
+    "camera": "fa-solid fa-camera",
+    "sparkle": "fa-solid fa-star",
+    "earth": "fa-solid fa-earth-asia",
+    "paw": "fa-solid fa-paw",
+    "warning": "fa-solid fa-triangle-exclamation",
+    "chart": "fa-solid fa-chart-column",
+    "bus": "fa-solid fa-bus",
+    "refresh": "fa-solid fa-rotate-right",
+    "heart": "fa-solid fa-heart",
+    "location": "fa-solid fa-location-dot",
+    "skull": "fa-solid fa-skull",
+    "mystery": "fa-solid fa-user-secret",
+}
+
+_DOC_EMOJI_ICON_NAMES: dict[str, str] = {
+    "📖": "book",
+    "📋": "list",
+    "🚀": "rocket",
+    "⌨️": "keyboard",
+    "🛡️": "shield",
+    "🎮": "gamepad",
+    "🃏": "dice",
+    "💰": "coins",
+    "🎵": "music",
+    "🤖": "robot",
+    "🔧": "tools",
+    "🌐": "globe",
+    "⚙️": "gear",
+    "✅": "check",
+    "📌": "pin",
+    "📬": "mail",
+    "📢": "bullhorn",
+    "🖼️": "image",
+    "🏫": "school",
+    "🔊": "volume",
+    "📏": "ruler",
+    "💬": "comment",
+    "🎭": "mask",
+    "📝": "note",
+    "🎒": "box",
+    "👋": "hand",
+    "📸": "camera",
+    "✨": "sparkle",
+    "🌍": "earth",
+    "🐾": "paw",
+    "🔞": "warning",
+    "🚨": "warning",
+    "📊": "chart",
+    "🚌": "bus",
+    "🔄": "refresh",
+    "❤️": "heart",
+    "🗺️": "location",
+    "👹": "skull",
+    "🧞": "mystery",
+}
+
 
 def read_markdown_file(path: str | Path) -> str:
     return Path(path).read_text(encoding="utf-8", errors="ignore")
+
+
+def _render_icon_markup(icon_name: str) -> str:
+    icon_class = _DOC_ICON_CLASSES.get(icon_name)
+    if not icon_class:
+        return ""
+    return f'<span class="docs-fa-icon" aria-hidden="true"><i class="{escape(icon_class, quote=True)}"></i></span>'
+
+
+def _replace_icon_tokens(text: str) -> str:
+    return _ICON_TOKEN_RE.sub(lambda match: _render_icon_markup(match.group(1)), str(text or ""))
+
+
+def _replace_doc_emojis_with_tokens(text: str) -> str:
+    rendered = str(text or "")
+    for native, icon_name in sorted(_DOC_EMOJI_ICON_NAMES.items(), key=lambda item: len(item[0]), reverse=True):
+        rendered = rendered.replace(native, f"[icon:{icon_name}]")
+    return rendered
+
+
+def _extract_leading_doc_icon(text: str) -> tuple[str | None, str]:
+    rendered = str(text or "").strip()
+    for native, icon_name in sorted(_DOC_EMOJI_ICON_NAMES.items(), key=lambda item: len(item[0]), reverse=True):
+        if not rendered.startswith(native):
+            continue
+        stripped = rendered[len(native):].lstrip()
+        return _DOC_ICON_CLASSES.get(icon_name), stripped
+    return None, rendered
 
 
 def _render_inline(text: str) -> str:
@@ -189,6 +302,7 @@ def _decorate_heading_tags(rendered_html: str) -> str:
 
 
 def render_markdown(markdown_text: str) -> str:
+    markdown_text = _replace_doc_emojis_with_tokens(markdown_text)
     if markdown_package is not None:
         rendered_html = markdown_package.markdown(
             str(markdown_text or ""),
@@ -199,8 +313,8 @@ def render_markdown(markdown_text: str) -> str:
                 "nl2br",
             ],
         )
-        return _decorate_heading_tags(rendered_html)
-    return _decorate_heading_tags(_render_markdown_fallback(markdown_text))
+        return _decorate_heading_tags(_replace_icon_tokens(rendered_html))
+    return _decorate_heading_tags(_replace_icon_tokens(_render_markdown_fallback(markdown_text)))
 
 
 def load_markdown_documents(directory: str | Path) -> dict[str, str]:
@@ -230,7 +344,7 @@ def load_docs_site(directory: str | Path) -> tuple[list[dict], list[dict]]:
     seen_section_ids: set[str] = set()
 
     for raw_group in manifest.get("groups", []):
-        group_title = str(raw_group.get("title", "")).strip()
+        group_icon, group_title = _extract_leading_doc_icon(raw_group.get("title", ""))
         raw_items = raw_group.get("items") or []
         group_items: list[dict] = []
 
@@ -242,7 +356,7 @@ def load_docs_site(directory: str | Path) -> tuple[list[dict], list[dict]]:
             markdown_path = sections_dir / f"{file_slug}.md"
             if not markdown_path.exists():
                 continue
-            label = str(raw_item.get("label") or section_id).strip()
+            item_icon, label = _extract_leading_doc_icon(raw_item.get("label") or section_id)
             html = render_markdown(read_markdown_file(markdown_path))
 
             item = {
@@ -250,6 +364,8 @@ def load_docs_site(directory: str | Path) -> tuple[list[dict], list[dict]]:
                 "label": label,
                 "file": file_slug,
             }
+            if item_icon:
+                item["icon"] = item_icon
             group_items.append(item)
             if section_id not in seen_section_ids:
                 sections.append(
@@ -257,13 +373,17 @@ def load_docs_site(directory: str | Path) -> tuple[list[dict], list[dict]]:
                         "id": section_id,
                         "label": label,
                         "file": file_slug,
+                        "icon": item_icon,
                         "html": html,
                     }
                 )
                 seen_section_ids.add(section_id)
 
         if group_title and group_items:
-            groups.append({"title": group_title, "items": group_items})
+            group_entry = {"title": group_title, "items": group_items}
+            if group_icon:
+                group_entry["icon"] = group_icon
+            groups.append(group_entry)
 
     return groups, sections
 

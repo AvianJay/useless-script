@@ -22,6 +22,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@7.2.0/css/all.min.css">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
     <script async src="https://www.googletagmanager.com/gtag/js?id={{ gtag }}"></script>
     <script>
@@ -36,8 +37,26 @@
             padding: 3rem 1rem 2rem;
             background: linear-gradient(180deg, var(--bg-secondary) 0%, var(--bg-primary) 100%);
         }
-        .docs-hero h1 { font-size: 2.2rem; margin-bottom: 0.5rem; }
+        .docs-hero h1 {
+            font-size: 2.2rem;
+            margin-bottom: 0.5rem;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.65rem;
+        }
         .docs-hero p { color: var(--text-secondary); font-size: 1.1rem; }
+
+        .docs-fa-icon {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 1.2em;
+            flex-shrink: 0;
+            color: var(--accent);
+        }
+        .docs-fa-icon i {
+            font-size: 0.95em;
+        }
 
         .docs-layout {
             max-width: 1200px;
@@ -78,13 +97,19 @@
         }
         .docs-sidebar h3:first-child { margin-top: 0; }
         .docs-sidebar a {
-            display: block;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
             color: var(--text-secondary);
             text-decoration: none;
             padding: 0.3rem 0.5rem;
             border-radius: 4px;
             font-size: 0.9rem;
             transition: all 0.2s;
+        }
+        .docs-sidebar h3 .docs-fa-icon,
+        .docs-sidebar a .docs-fa-icon {
+            color: inherit;
         }
         .docs-sidebar a:hover, .docs-sidebar a.active {
             color: var(--text-primary);
@@ -114,6 +139,13 @@
         }
         .doc-section h2 .module-icon {
             font-size: 1.3rem;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 1.2em;
+        }
+        .doc-section h2 .module-icon i {
+            font-size: 0.95em;
         }
         .doc-section .module-desc {
             color: var(--text-secondary);
@@ -345,13 +377,17 @@
                 cursor: pointer;
                 font-family: var(--font-main);
             }
-            .sidebar-toggle::after {
-                content: '▼';
+            .sidebar-toggle-label {
+                display: inline-flex;
+                align-items: center;
+                gap: 0.55rem;
+            }
+            .sidebar-toggle-caret {
                 font-size: 0.7rem;
                 color: var(--text-secondary);
                 transition: transform 0.2s;
             }
-            .sidebar-toggle.open::after {
+            .sidebar-toggle.open .sidebar-toggle-caret {
                 transform: rotate(180deg);
             }
         }
@@ -449,7 +485,7 @@
                 style="width: 30px; height: 30px; border-radius: 50%; display: none;">
             <span id="nav-name">{{ bot.user.name }}</span>
         </a>
-        <button class="nav-toggle" id="navToggle" aria-label="選單">☰</button>
+        <button class="nav-toggle" id="navToggle" aria-label="選單"><i class="fa-solid fa-bars" aria-hidden="true"></i></button>
         <div class="nav-links" id="navLinks">
             <a href="/">首頁</a>
             <a href="/docs">使用文檔</a>
@@ -461,28 +497,31 @@
     </nav>
 
     <section class="docs-hero" id="top">
-        <h1>📖 使用文檔</h1>
+        <h1><span class="docs-fa-icon"><i class="fa-solid fa-book-open" aria-hidden="true"></i></span>使用文檔</h1>
         <p>完整的指令與功能說明，幫助你充分發揮機器人的抽象潛力</p>
     </section>
 
     <div class="docs-layout">
         <!-- Sidebar Navigation -->
         <aside class="docs-sidebar">
-            <button class="sidebar-toggle" id="sidebarToggle">📋 導覽目錄</button>
+            <button class="sidebar-toggle" id="sidebarToggle">
+                <span class="sidebar-toggle-label"><span class="docs-fa-icon"><i class="fa-solid fa-list" aria-hidden="true"></i></span>導覽目錄</span>
+                <i class="fa-solid fa-chevron-down sidebar-toggle-caret" aria-hidden="true"></i>
+            </button>
             <div class="docs-sidebar-inner" id="sidebarInner">
             {% if docs_sidebar_groups %}
             {% for group in docs_sidebar_groups %}
-            <h3>{{ group["title"] }}</h3>
+            <h3>{% if group.get("icon") %}<span class="docs-fa-icon"><i class="{{ group['icon'] }}" aria-hidden="true"></i></span>{% endif %}{{ group["title"] }}</h3>
             {% for item in group["items"] %}
-            <a href="#{{ item["id"] }}">{{ item["label"] }}</a>
+            <a href="#{{ item["id"] }}">{% if item.get("icon") %}<span class="docs-fa-icon"><i class="{{ item['icon'] }}" aria-hidden="true"></i></span>{% endif %}<span>{{ item["label"] }}</span></a>
             {% endfor %}
             {% endfor %}
             {% else %}
             <h3>快速開始</h3>
-            <a href="#getting-started">🚀 快速入門</a>
-            <a href="#prefix">⌨️ 指令前綴</a>
+            <a href="#getting-started"><span class="docs-fa-icon"><i class="fa-solid fa-rocket" aria-hidden="true"></i></span><span>快速入門</span></a>
+            <a href="#prefix"><span class="docs-fa-icon"><i class="fa-solid fa-keyboard" aria-hidden="true"></i></span><span>指令前綴</span></a>
 
-            <h3>🛡️ 管理與安全</h3>
+            <h3><span class="docs-fa-icon"><i class="fa-solid fa-shield-halved" aria-hidden="true"></i></span>管理與安全</h3>
             <a href="#Moderate">管理工具</a>
             <a href="#AutoModerate">自動管理</a>
             <a href="#ReportSystem">檢舉系統</a>
@@ -490,7 +529,7 @@
             <a href="#ServerWebVerify">網頁驗證</a>
             <a href="#StickyRole">黏性身份組</a>
 
-            <h3>🎮 娛樂與遊戲</h3>
+            <h3><span class="docs-fa-icon"><i class="fa-solid fa-gamepad" aria-hidden="true"></i></span>娛樂與遊戲</h3>
             <a href="#MiniGames">迷你遊戲</a>
             <a href="#dsize">趣味尺寸</a>
             <a href="#doomcord">DOOM</a>
@@ -498,19 +537,19 @@
             <a href="#petpet">PetPet</a>
             <a href="#OwOify">OwOify</a>
 
-            <h3>💰 經濟與物品</h3>
+            <h3><span class="docs-fa-icon"><i class="fa-solid fa-coins" aria-hidden="true"></i></span>經濟與物品</h3>
             <a href="#Economy">經濟系統</a>
             <a href="#ItemSystem">物品系統</a>
 
-            <h3>🎵 媒體</h3>
+            <h3><span class="docs-fa-icon"><i class="fa-solid fa-music" aria-hidden="true"></i></span>媒體</h3>
             <a href="#Music">音樂播放</a>
             <a href="#MessageImage">訊息截圖</a>
 
-            <h3>🤖 AI 與聊天</h3>
+            <h3><span class="docs-fa-icon"><i class="fa-solid fa-robot" aria-hidden="true"></i></span>AI 與聊天</h3>
             <a href="#ai">AI 聊天</a>
             <a href="#AutoReply">自動回覆</a>
 
-            <h3>🔧 工具與自動化</h3>
+            <h3><span class="docs-fa-icon"><i class="fa-solid fa-wrench" aria-hidden="true"></i></span>工具與自動化</h3>
             <a href="#UtilCommands">實用指令</a>
             <a href="#AutoPublish">自動發布</a>
             <a href="#DynamicVoice">動態語音</a>
@@ -521,13 +560,13 @@
             <a href="#Statistics">指令統計</a>
             <a href="#JoinNotify">加入通知</a>
 
-            <h3>🌐 資訊服務</h3>
+            <h3><span class="docs-fa-icon"><i class="fa-solid fa-globe" aria-hidden="true"></i></span>資訊服務</h3>
             <a href="#twbus">公車 / YouBike</a>
             <a href="#OXWU">地震監測</a>
             <a href="#dgpa">停班停課</a>
             <!-- <a href="#Explore">太空探索</a> -->
 
-            <h3>⚙️ 系統</h3>
+            <h3><span class="docs-fa-icon"><i class="fa-solid fa-gear" aria-hidden="true"></i></span>系統</h3>
             <a href="#GuildPanel">網頁面板</a>
             <a href="#r34">R34 搜尋</a>
             {% endif %}
@@ -546,7 +585,7 @@
 
             <!-- Getting Started -->
             <div class="doc-section" id="getting-started">
-                <h2>🚀 快速入門</h2>
+                <h2><span class="module-icon"><i class="fa-solid fa-rocket" aria-hidden="true"></i></span>快速入門</h2>
                 <div class="module-desc">
                     歡迎使用本機器人！只需幾個簡單步驟即可開始：
                     <ol style="margin-top: 0.75rem; padding-left: 1.25rem; line-height: 2;">
@@ -562,7 +601,7 @@
             </div>
 
             <div class="doc-section" id="prefix">
-                <h2>⌨️ 指令前綴</h2>
+                <h2><span class="module-icon"><i class="fa-solid fa-keyboard" aria-hidden="true"></i></span>指令前綴</h2>
                 <div class="module-desc">
                     預設前綴為 <code>y!</code>。每個伺服器可以透過 <code>y!setprefix</code> 設定自定義前綴。你也可以透過 <strong>@提及機器人</strong> 來查看目前的前綴設定。
                 </div>
@@ -571,7 +610,7 @@
             <!-- ==================== 管理與安全 ==================== -->
 
             <div class="doc-section" id="Moderate">
-                <h2><span class="module-icon">🛡️</span> Moderate — 管理工具 <span class="doc-tag admin">管理員</span></h2>
+                <h2><span class="module-icon"><i class="fa-solid fa-shield-halved" aria-hidden="true"></i></span> Moderate — 管理工具 <span class="doc-tag admin">管理員</span></h2>
                 <div class="module-desc">
                     核心管理模組，提供完整的使用者管理工具。支援時間字串解析（如 <code>1h</code>、<code>30m</code>、<code>7d</code>），並可一次對多位使用者執行操作。所有懲處動作會自動整合通知系統。
                 </div>
@@ -615,7 +654,7 @@
             </div>
 
             <div class="doc-section" id="AutoModerate">
-                <h2><span class="module-icon">🤖</span> AutoModerate — 自動管理 <span class="doc-tag admin">管理員</span><span class="doc-tag auto">自動化</span></h2>
+                <h2><span class="module-icon"><i class="fa-solid fa-robot" aria-hidden="true"></i></span> AutoModerate — 自動管理 <span class="doc-tag admin">管理員</span><span class="doc-tag auto">自動化</span></h2>
                 <div class="module-desc">
                     全自動化的伺服器保護系統，包含反垃圾訊息 (Anti-Spam)、反突襲 (Anti-Raid)、反使用者安裝垃圾訊息、詐騙陷阱、過多表情偵測、逃避懲處偵測等多種自動化管理功能。
                 </div>
@@ -629,7 +668,7 @@
             </div>
 
             <div class="doc-section" id="ReportSystem">
-                <h2><span class="module-icon">🚨</span> ReportSystem — 檢舉系統</h2>
+                <h2><span class="module-icon"><i class="fa-solid fa-triangle-exclamation" aria-hidden="true"></i></span> ReportSystem — 檢舉系統</h2>
                 <div class="module-desc">
                     使用者可透過右鍵選單檢舉違規訊息，系統會透過 AI 自動判斷訊息嚴重程度（0-5 級），並依據伺服器規則建議處分動作。內建冷卻時間與黑名單機制防止濫用。
                 </div>
@@ -691,7 +730,7 @@
             </div>
 
             <div class="doc-section" id="ModerationNotify">
-                <h2><span class="module-icon">📬</span> ModerationNotify — 懲處通知</h2>
+                <h2><span class="module-icon"><i class="fa-solid fa-envelope" aria-hidden="true"></i></span> ModerationNotify — 懲處通知</h2>
                 <div class="module-desc">
                     當使用者被踢出、封禁、禁言或列入黑名單時，自動發送通知並提供申訴管道。管理員可透過按鈕直接回覆申訴。
                 </div>
@@ -703,7 +742,7 @@
             </div>
 
             <div class="doc-section" id="ServerWebVerify">
-                <h2><span class="module-icon">✅</span> ServerWebVerify — 網頁驗證 <span class="doc-tag admin">管理員</span></h2>
+                <h2><span class="module-icon"><i class="fa-solid fa-circle-check" aria-hidden="true"></i></span> ServerWebVerify — 網頁驗證 <span class="doc-tag admin">管理員</span></h2>
                 <div class="module-desc">
                     透過網頁表單進行伺服器成員驗證，支援 reCAPTCHA 與 Cloudflare Turnstile、指紋偵測、IP 記錄、地區警示等安全機制。可強制要求新成員驗證，有效防止機器人帳號入侵。
                 </div>
@@ -716,7 +755,7 @@
             </div>
 
             <div class="doc-section" id="StickyRole">
-                <h2><span class="module-icon">📌</span> StickyRole — 黏黏的身份組 <span class="doc-tag admin">管理員</span></h2>
+                <h2><span class="module-icon"><i class="fa-solid fa-thumbtack" aria-hidden="true"></i></span> StickyRole — 黏黏的身份組 <span class="doc-tag admin">管理員</span></h2>
                 <div class="module-desc">
                     當使用者離開伺服器後重新加入時，自動恢復先前擁有的指定身份組。適合用於記住成員驗證狀態或特殊角色。
                 </div>
@@ -731,7 +770,7 @@
             <!-- ==================== 娛樂與遊戲 ==================== -->
 
             <div class="doc-section" id="MiniGames">
-                <h2><span class="module-icon">🃏</span> MiniGames — 迷你遊戲 <span class="doc-tag fun">娛樂</span></h2>
+                <h2><span class="module-icon"><i class="fa-solid fa-dice" aria-hidden="true"></i></span> MiniGames — 迷你遊戲 <span class="doc-tag fun">娛樂</span></h2>
                 <div class="module-desc">
                     集合多種卡牌與賭博遊戲，整合經濟系統進行下注。包含完整的撲克牌邏輯與花色點數系統。
                 </div>
@@ -743,7 +782,7 @@
             </div>
 
             <div class="doc-section" id="dsize">
-                <h2><span class="module-icon">📏</span> dsize — 測量長度 <span class="doc-tag fun">娛樂</span></h2>
+                <h2><span class="module-icon"><i class="fa-solid fa-ruler" aria-hidden="true"></i></span> dsize — 測量長度 <span class="doc-tag fun">娛樂</span></h2>
                 <div class="module-desc">
                     量長度，包含每日簽到、尺寸對決、餵草等娛樂功能，支援全域與伺服器範圍，結合經濟系統獎勵。
                 </div>
@@ -756,7 +795,7 @@
             </div>
 
             <div class="doc-section" id="doomcord">
-                <h2><span class="module-icon">👹</span> doomcord — 在 Discord 玩 DOOM <span class="doc-tag fun">娛樂</span></h2>
+                <h2><span class="module-icon"><i class="fa-solid fa-skull" aria-hidden="true"></i></span> doomcord — 在 Discord 玩 DOOM <span class="doc-tag fun">娛樂</span></h2>
                 <div class="module-desc">
                     直接在 Discord 內玩經典 DOOM 遊戲！透過按鈕控制 WASD 移動與操作，支援存檔與讀檔。
                 </div>
@@ -767,7 +806,7 @@
             </div>
 
             <div class="doc-section" id="aki">
-                <h2><span class="module-icon">🧞</span> aki — Akinator 猜謎 <span class="doc-tag fun">娛樂</span></h2>
+                <h2><span class="module-icon"><i class="fa-solid fa-user-secret" aria-hidden="true"></i></span> aki — Akinator 猜謎 <span class="doc-tag fun">娛樂</span></h2>
                 <div class="module-desc">
                     與 Akinator 精靈互動，心裡想一個角色，然後回答問題讓它猜出來！支援會話管理，5 分鐘無操作自動結束，內建 1 分鐘冷卻。
                 </div>
@@ -778,7 +817,7 @@
             </div>
 
             <div class="doc-section" id="petpet">
-                <h2><span class="module-icon">🐾</span> petpet — PetPet 動圖 <span class="doc-tag fun">娛樂</span></h2>
+                <h2><span class="module-icon"><i class="fa-solid fa-paw" aria-hidden="true"></i></span> petpet — PetPet 動圖 <span class="doc-tag fun">娛樂</span></h2>
                 <div class="module-desc">
                     將任何使用者的頭像生成撫摸動畫 GIF！支援斜線指令和右鍵選單操作，並記錄撫摸與被撫摸次數。
                 </div>
@@ -791,7 +830,7 @@
             </div>
 
             <div class="doc-section" id="OwOify">
-                <h2><span class="module-icon">✨</span> OwOify — 可愛化文字 <span class="doc-tag fun">娛樂</span></h2>
+                <h2><span class="module-icon"><i class="fa-solid fa-star" aria-hidden="true"></i></span> OwOify — 可愛化文字 <span class="doc-tag fun">娛樂</span></h2>
                 <div class="module-desc">
                     OwO UwU
                 </div>
@@ -806,7 +845,7 @@
             <!-- ==================== 經濟與物品 ==================== -->
 
             <div class="doc-section" id="Economy">
-                <h2><span class="module-icon">💰</span> Economy — 經濟系統</h2>
+                <h2><span class="module-icon"><i class="fa-solid fa-coins" aria-hidden="true"></i></span> Economy — 經濟系統</h2>
                 <div class="module-desc">
                     完整的雙幣制虛擬經濟系統。全域幣可跨伺服器使用，伺服幣僅限當前伺服器。包含每日/每小時獎勵、商店買賣、轉帳、匯率機制、通膨/通縮模型、支票系統等。
                 </div>
@@ -827,7 +866,7 @@
             </div>
 
             <div class="doc-section" id="ItemSystem">
-                <h2><span class="module-icon">🎒</span> ItemSystem — 物品系統</h2>
+                <h2><span class="module-icon"><i class="fa-solid fa-box-open" aria-hidden="true"></i></span> ItemSystem — 物品系統</h2>
                 <div class="module-desc">
                     虛擬物品系統，支援伺服器範圍與全域範圍的背包。每個伺服器可建立自定義物品，物品使用時可觸發特定功能。物品可以丟棄讓其他人撿起、贈送給其他用戶等。
                 </div>
@@ -885,7 +924,7 @@
             <!-- ==================== 媒體 ==================== -->
 
             <div class="doc-section" id="Music">
-                <h2><span class="module-icon">🎵</span> Music — 音樂播放</h2>
+                <h2><span class="module-icon"><i class="fa-solid fa-music" aria-hidden="true"></i></span> Music — 音樂播放</h2>
                 <div class="module-desc">
                     透過 Lavalink 節點高品質播放音樂，支援隊列管理、循環播放（單曲/隊列）、隨機播放、搜尋自動完成、推薦歌曲、斷線自動離開、隊列儲存/恢復等功能，並支援多節點備援。
                 </div>
@@ -903,7 +942,7 @@
             </div>
 
             <div class="doc-section" id="MessageImage">
-                <h2><span class="module-icon">📸</span> MessageImage — 訊息截圖</h2>
+                <h2><span class="module-icon"><i class="fa-solid fa-camera" aria-hidden="true"></i></span> MessageImage — 訊息截圖</h2>
                 <div class="module-desc">
                     將 Discord 訊息轉換為一些奇怪的圖片(?)。支援 Upvoteboard 功能：當訊息獲得足夠讚數後，自動截圖並發送至指定頻道保存精華。
                 </div>
@@ -920,7 +959,7 @@
             <!-- ==================== AI 與聊天 ==================== -->
 
             <div class="doc-section" id="ai">
-                <h2><span class="module-icon">🤖</span> ai — AI 聊天</h2>
+                <h2><span class="module-icon"><i class="fa-solid fa-robot" aria-hidden="true"></i></span> ai — AI 聊天</h2>
                 <div class="module-desc">
                     使用免費 AI 模型進行智能對話，支援多輪對話上下文記憶。
                 </div>
@@ -938,7 +977,7 @@
                 {% if docs_markdown and docs_markdown.get('autoreply') %}
                 <div class="markdown-doc">{{ docs_markdown.get('autoreply') | safe }}</div>
                 {% else %}
-                <h2><span class="module-icon">💬</span> AutoReply — 自動回覆 <span class="doc-tag admin">管理員</span></h2>
+                <h2><span class="module-icon"><i class="fa-solid fa-comment-dots" aria-hidden="true"></i></span> AutoReply — 自動回覆 <span class="doc-tag admin">管理員</span></h2>
                 <div class="module-desc">
                     管理員可設定關鍵字觸發自動回覆。支援正則表達式、貼圖回覆、表情反應、機率觸發、頻道忽略等進階功能。
                 </div>
@@ -1130,7 +1169,7 @@
             </div>
 
             <div class="doc-section" id="UtilCommands">
-                <h2><span class="module-icon">🔧</span> UtilCommands — 實用指令</h2>
+                <h2><span class="module-icon"><i class="fa-solid fa-wrench" aria-hidden="true"></i></span> UtilCommands — 實用指令</h2>
                 <div class="module-desc">
                     常用的實用工具指令集，包含機器人資訊、伺服器資訊、延遲測試、更新日誌、教學指南等功能。
                 </div>
@@ -1148,7 +1187,7 @@
             </div>
 
             <div class="doc-section" id="AutoPublish">
-                <h2><span class="module-icon">📢</span> AutoPublish — 自動發布 <span class="doc-tag admin">管理員</span><span class="doc-tag auto">自動化</span></h2>
+                <h2><span class="module-icon"><i class="fa-solid fa-bullhorn" aria-hidden="true"></i></span> AutoPublish — 自動發布 <span class="doc-tag admin">管理員</span><span class="doc-tag auto">自動化</span></h2>
                 <div class="module-desc">
                     啟用後自動發布公告頻道中的新訊息，省去手動點擊「發布」的麻煩。內建每小時 10 則的速率限制。
                 </div>
@@ -1160,7 +1199,7 @@
             </div>
 
             <div class="doc-section" id="DynamicVoice">
-                <h2><span class="module-icon">🔊</span> DynamicVoice — 動態語音 <span class="doc-tag admin">管理員</span><span class="doc-tag auto">自動化</span></h2>
+                <h2><span class="module-icon"><i class="fa-solid fa-volume-high" aria-hidden="true"></i></span> DynamicVoice — 動態語音 <span class="doc-tag admin">管理員</span><span class="doc-tag auto">自動化</span></h2>
                 <div class="module-desc">
                     使用者加入指定語音頻道時自動建立專屬臨時頻道，支援自定義名稱模板（例如 <code>{user} 的頻道</code>），離開後自動刪除。
                 </div>
@@ -1173,7 +1212,7 @@
             </div>
 
             <div class="doc-section" id="CustomPrefix">
-                <h2><span class="module-icon">⌨️</span> CustomPrefix — 自定義前綴 <span class="doc-tag admin">管理員</span></h2>
+                <h2><span class="module-icon"><i class="fa-solid fa-keyboard" aria-hidden="true"></i></span> CustomPrefix — 自定義前綴 <span class="doc-tag admin">管理員</span></h2>
                 <div class="module-desc">
                     每個伺服器可設定獨立的指令前綴，方便與其他機器人區分。支援提及機器人查看當前前綴。
                 </div>
@@ -1185,7 +1224,7 @@
             </div>
 
             <div class="doc-section" id="FakeUser">
-                <h2><span class="module-icon">🎭</span> FakeUser — 假冒用戶 <span class="doc-tag fun">娛樂</span></h2>
+                <h2><span class="module-icon"><i class="fa-solid fa-masks-theater" aria-hidden="true"></i></span> FakeUser — 假冒用戶 <span class="doc-tag fun">娛樂</span></h2>
                 <div class="module-desc">
                     使用 Webhook 模擬其他使用者發言（娛樂用途），包含 30 秒冷卻時間，管理員可設定黑名單和紀錄頻道。
                 </div>
@@ -1198,7 +1237,7 @@
             </div>
 
             <div class="doc-section" id="Contribute">
-                <h2><span class="module-icon">🖼️</span> Contribute — 投稿系統</h2>
+                <h2><span class="module-icon"><i class="fa-solid fa-image" aria-hidden="true"></i></span> Contribute — 投稿系統</h2>
                 <div class="module-desc">
                     使用者可透過 Discord OAuth2 登入後投稿圖片。投稿被批准後可獲得 200 全域幣獎勵。
                 </div>
@@ -1217,7 +1256,7 @@
             </div>
 
             <div class="doc-section" id="Feedback">
-                <h2><span class="module-icon">📝</span> Feedback — 意見回饋</h2>
+                <h2><span class="module-icon"><i class="fa-solid fa-file-lines" aria-hidden="true"></i></span> Feedback — 意見回饋</h2>
                 <div class="module-desc">
                     使用者可透過 Modal 表單提交回饋給開發者，開發者可能會回覆使用者。內建 30 秒冷卻防止濫用。
                 </div>
@@ -1228,7 +1267,7 @@
             </div>
 
             <div class="doc-section" id="Statistics">
-                <h2><span class="module-icon">📊</span> Statistics — 指令統計</h2>
+                <h2><span class="module-icon"><i class="fa-solid fa-chart-column" aria-hidden="true"></i></span> Statistics — 指令統計</h2>
                 <div class="module-desc">
                     記錄並顯示文字指令與應用程式指令的使用次數和錯誤次數，支援完整/摘要兩種顯示模式。
                 </div>
@@ -1239,7 +1278,7 @@
             </div>
 
             <div class="doc-section" id="JoinNotify">
-                <h2><span class="module-icon">👋</span> JoinNotify — 加入通知 <span class="doc-tag auto">自動化</span></h2>
+                <h2><span class="module-icon"><i class="fa-solid fa-hand" aria-hidden="true"></i></span> JoinNotify — 加入通知 <span class="doc-tag auto">自動化</span></h2>
                 <div class="module-desc">
                     當使用者邀請機器人加入新伺服器時，自動發送歡迎通知私訊，介紹機器人功能。使用者可隨時停用通知。
                 </div>
@@ -1252,7 +1291,7 @@
             <!-- ==================== 資訊服務 ==================== -->
 
             <div class="doc-section" id="twbus">
-                <h2><span class="module-icon">🚌</span> twbus — 台灣公車 / YouBike</h2>
+                <h2><span class="module-icon"><i class="fa-solid fa-bus" aria-hidden="true"></i></span> twbus — 台灣公車 / YouBike</h2>
                 <div class="module-desc">
                     即時查詢台灣公車到站資訊、路線總覽、YouBike 站點狀態，並支援收藏站牌。公車資料庫每小時自動更新一次。
                 </div>
@@ -1268,9 +1307,9 @@
                 <div class="module-desc">查詢結果的嵌入訊息下方附有操作按鈕：</div>
                 <table class="cmd-table">
                     <tr><th>按鈕</th><th>說明</th></tr>
-                    <tr><td><code>🔄</code></td><td>重新整理到站資訊（10 秒冷卻）</td></tr>
-                    <tr><td><code>❤️</code></td><td>加入 / 移除最愛（收藏上限可由伺服器設定）</td></tr>
-                    <tr><td><code>🗺️</code></td><td>在 Google 地圖上開啟站牌位置（若有座標）</td></tr>
+                    <tr><td><span class="docs-fa-icon"><i class="fa-solid fa-rotate-right" aria-hidden="true"></i></span></td><td>重新整理到站資訊（10 秒冷卻）</td></tr>
+                    <tr><td><span class="docs-fa-icon"><i class="fa-solid fa-heart" aria-hidden="true"></i></span></td><td>加入 / 移除最愛（收藏上限可由伺服器設定）</td></tr>
+                    <tr><td><span class="docs-fa-icon"><i class="fa-solid fa-location-dot" aria-hidden="true"></i></span></td><td>在 Google 地圖上開啟站牌位置（若有座標）</td></tr>
                 </table>
 
                 <h3 style="margin-top: 1.5rem; color: var(--text-primary);">到站資訊說明</h3>
@@ -1299,7 +1338,7 @@
             </div>
 
             <div class="doc-section" id="OXWU">
-                <h2><span class="module-icon">🌍</span> OXWU — 地震監測 <span class="doc-tag auto">自動化</span></h2>
+                <h2><span class="module-icon"><i class="fa-solid fa-earth-asia" aria-hidden="true"></i></span> OXWU — 地震監測 <span class="doc-tag auto">自動化</span></h2>
                 <div class="module-desc">
                     整合 OXWU API 與中央氣象署 (CWA)，透過 Socket.IO 即時接收地震速報與報告，自動推送至設定的頻道。
                 </div>
@@ -1313,7 +1352,7 @@
             </div>
 
             <div class="doc-section" id="dgpa">
-                <h2><span class="module-icon">🏫</span> dgpa — 停班停課查詢</h2>
+                <h2><span class="module-icon"><i class="fa-solid fa-school" aria-hidden="true"></i></span> dgpa — 停班停課查詢</h2>
                 <div class="module-desc">
                     從行政院人事行政總處網站爬取停班停課公告資訊，支援設定自動推送頻道，颱風假第一時間通知。
                 </div>
@@ -1324,7 +1363,7 @@
             </div>
 
             <!-- <div class="doc-section" id="Explore">
-                <h2><span class="module-icon">🚀</span> Explore — 太空探索 <span class="doc-tag fun">娛樂</span></h2>
+                <h2><span class="module-icon"><i class="fa-solid fa-rocket" aria-hidden="true"></i></span> Explore — 太空探索 <span class="doc-tag fun">娛樂</span></h2>
                 <div class="module-desc">
                     基於 Socket.IO 的即時互動太空地圖系統，使用稀疏地圖磁磚技術，透過 ASGI WebSocket 即時通訊，打造沉浸式探索體驗。
                 </div>
@@ -1333,7 +1372,7 @@
             <!-- ==================== 系統 ==================== -->
 
             <div class="doc-section" id="GuildPanel">
-                <h2><span class="module-icon">⚙️</span> GuildPanel — 網頁管理面板 <span class="doc-tag admin">管理員</span></h2>
+                <h2><span class="module-icon"><i class="fa-solid fa-gear" aria-hidden="true"></i></span> GuildPanel — 網頁管理面板 <span class="doc-tag admin">管理員</span></h2>
                 <div class="module-desc">
                     透過 Discord OAuth2 登入後，在網頁介面上查看和編輯你的伺服器設定。支援網頁驗證、自動管理、自動回覆、經濟系統等模組的配置。其他模組可動態註冊自己的設定項。
                 </div>
@@ -1344,7 +1383,7 @@
             </div>
 
             <div class="doc-section" id="r34">
-                <h2><span class="module-icon">🔞</span> r34 — R34 搜尋</h2>
+                <h2><span class="module-icon"><i class="fa-solid fa-triangle-exclamation" aria-hidden="true"></i></span> r34 — R34 搜尋</h2>
                 <div class="module-desc">
                     從 Rule34 API 搜尋並顯示圖片，包含 5 分鐘快取機制，僅限 NSFW 頻道使用。
                 </div>
@@ -1358,7 +1397,7 @@
         </main>
     </div>
 
-    <a href="#top" class="back-to-top" id="backToTop" title="回到頂部">↑</a>
+    <a href="#top" class="back-to-top" id="backToTop" title="回到頂部"><i class="fa-solid fa-arrow-up" aria-hidden="true"></i></a>
 
     <footer>
         <p>&copy; 2025 {{ bot.user.name }}. All rights reserved.</p>
