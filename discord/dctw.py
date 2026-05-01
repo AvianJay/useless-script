@@ -17,9 +17,11 @@ API_BASE = "https://dctw.nkhost.dev"
 SITE_BASE = "https://dctw.xyz"
 USER_KEY_NAME = "dctw_api_key"
 CACHE_TTL_SECONDS = 300
+OWNED_CACHE_TTL_SECONDS = 120
 BROWSE_PAGE_SIZE = 10
 AGGREGATE_LIMIT = 300
 FETCH_LIMIT = 50
+BUMP_COOLDOWN_SECONDS = 60
 SAFE_MENTIONS = discord.AllowedMentions.none()
 
 BOT_TAGS = {
@@ -333,6 +335,7 @@ class DCTWBrowseView(discord.ui.LayoutView):
         items: list[dict],
         cached: bool,
         truncated: bool,
+        query_text: str | None = None,
         page_index: int = 0,
     ):
         super().__init__(timeout=300)
@@ -343,6 +346,7 @@ class DCTWBrowseView(discord.ui.LayoutView):
         self.items = items
         self.cached = cached
         self.truncated = truncated
+        self.query_text = (query_text or "").strip()
         self.page_index = page_index
         self.prev_button = discord.ui.Button(label="上一頁", style=discord.ButtonStyle.secondary)
         self.prev_button.callback = self._on_prev_page
@@ -377,6 +381,8 @@ class DCTWBrowseView(discord.ui.LayoutView):
             f"頁數: {self.page_index + 1}/{self._total_pages()}",
             f"總數: {len(self.items)}",
         ]
+        if self.query_text:
+            header_lines.append(f"搜尋: `{self.query_text}`")
         if self.truncated:
             header_lines.append(f"-# 已使用前 {AGGREGATE_LIMIT} 筆資料排序")
 
@@ -458,6 +464,7 @@ class DCTWBrowseView(discord.ui.LayoutView):
             sort_mode=self.sort_mode,
             items=self.items,
             page_index=self.page_index,
+            query_text=self.query_text,
             selected_item=selected,
         )
         await interaction.message.edit(view=detail_view)
@@ -485,6 +492,7 @@ class DCTWDetailView(discord.ui.LayoutView):
         sort_mode: str,
         items: list[dict],
         page_index: int,
+        query_text: str | None,
         selected_item: dict,
     ) -> "DCTWDetailView":
         self = cls(timeout=300)
@@ -494,8 +502,10 @@ class DCTWDetailView(discord.ui.LayoutView):
         self.sort_mode = sort_mode
         self.items = items
         self.page_index = page_index
+        self.query_text = (query_text or "").strip()
         self.selected_item = selected_item
         await self._hydrate_selected_item()
+        await self._refresh_bump_permission()
         await self._refresh_layout()
         return self
 
@@ -636,14 +646,23 @@ class DCTWDetailView(discord.ui.LayoutView):
                     row.add_item(discord.ui.Button(label=label, url=url, style=discord.ButtonStyle.link))
                 self.add_item(row)
 
-        self.add_item(
-            discord.ui.ActionRow(
-                self.back_button,
-                self.comments_button,
-                self.vote_button,
-                self.bump_button,
-            )
+        can_bump = bool(getattr(self, "can_bump", False))
+        row = discord.ui.ActionRow(
+            self.back_button,
+            self.comments_button,
+            self.vote_button,
         )
+        if can_bump:
+            row.add_item(self.bump_button)
+        self.add_item(row)
+
+    async def _refresh_bump_permission(self):
+        conf = RESOURCE_CONFIG[self.resource]
+        listing_id = _safe_int(self.selected_item.get(conf["id_key"]))
+        if listing_id <= 0:
+            self.can_bump = False
+            return
+        self.can_bump = await self.cog._is_owned_listing(self.user_id, self.resource, listing_id)
 
     def _listing_id(self) -> int:
         conf = RESOURCE_CONFIG[self.resource]
@@ -658,6 +677,7 @@ class DCTWDetailView(discord.ui.LayoutView):
             items=self.items,
             cached=True,
             truncated=len(self.items) >= AGGREGATE_LIMIT,
+            query_text=self.query_text,
             page_index=self.page_index,
         )
         await interaction.response.edit_message(view=list_view)
@@ -716,6 +736,8 @@ class DCTW(commands.GroupCog, name="dctw", description="DCTW 瀏覽器！"):
         self._session: aiohttp.ClientSession | None = None
         self._cache_lock = asyncio.Lock()
         self._list_cache: dict[tuple, dict] = {}
+        self._owned_cache_lock = asyncio.Lock()
+        self._owned_cache: dict[tuple[int, str], dict] = {}
         self._cache_hits = 0
         self._cache_misses = 0
         self._user_name_cache: dict[int, str] = {}
@@ -857,6 +879,161 @@ class DCTW(commands.GroupCog, name="dctw", description="DCTW 瀏覽器！"):
 
         return items, False, truncated
 
+    async def _fetch_owned_ids(self, user_id: int, resource: str, *, api_key: str, force_refresh: bool = False) -> set[int]:
+        now = time.time()
+        cache_key = (user_id, resource)
+        if not force_refresh:
+            async with self._owned_cache_lock:
+                cached = self._owned_cache.get(cache_key)
+                if cached and cached["expires_at"] > now:
+                    return set(cached["ids"])
+
+        conf = RESOURCE_CONFIG[resource]
+        payload = await self._request_json("GET", f"{conf['list_path']}/@me", api_key=api_key)
+        if not isinstance(payload, list):
+            return set()
+
+        id_key = conf["id_key"]
+        owned_ids = {_safe_int(item.get(id_key), -1) for item in payload if isinstance(item, dict)}
+        owned_ids.discard(-1)
+
+        async with self._owned_cache_lock:
+            self._owned_cache[cache_key] = {
+                "expires_at": time.time() + OWNED_CACHE_TTL_SECONDS,
+                "ids": owned_ids,
+            }
+        return owned_ids
+
+    async def _is_owned_listing(self, user_id: int, resource: str, listing_id: int) -> bool:
+        if listing_id <= 0:
+            return False
+
+        user_key = self._get_user_key(user_id)
+        if not user_key:
+            return False
+
+        try:
+            owned = await self._fetch_owned_ids(user_id, resource, api_key=user_key)
+        except Exception:
+            return False
+        return listing_id in owned
+
+    async def _post_action(self, resource: str, listing_id: int, action: str, *, api_key: str):
+        conf = RESOURCE_CONFIG[resource]
+        path = f"{conf['list_path']}/{listing_id}/{action}"
+        await self._request_json("POST", path, api_key=api_key)
+
+    def _matches_search(self, resource: str, item: dict, keyword: str) -> bool:
+        conf = RESOURCE_CONFIG[resource]
+        listing_id = _safe_int(item.get(conf["id_key"]), -1)
+        if listing_id > 0 and keyword in str(listing_id):
+            return True
+
+        for text_field in ("name", "description", "introduce"):
+            value = str(item.get(text_field) or "").casefold()
+            if value and keyword in value:
+                return True
+
+        for list_field in ("keywords", "tags"):
+            values = item.get(list_field)
+            if isinstance(values, list):
+                for entry in values:
+                    if keyword in str(entry or "").casefold():
+                        return True
+
+        return False
+
+    async def _send_search(self, interaction: discord.Interaction, resource: str, keyword: str, sort_mode: str):
+        query = keyword.strip()
+        if not query:
+            await interaction.response.send_message("請輸入搜尋關鍵字。", ephemeral=True, allowed_mentions=SAFE_MENTIONS)
+            return
+
+        await interaction.response.defer()
+        request_key = self._get_read_api_key(interaction.user.id)
+        if not request_key:
+            await interaction.followup.send("查詢需要 API key。請先使用 /dctw key set 設定你的 key。", ephemeral=True, allowed_mentions=SAFE_MENTIONS)
+            return
+
+        try:
+            items, cached, truncated = await self._fetch_and_sort_resource(resource, sort_mode, api_key=request_key)
+        except Exception as exc:
+            await interaction.followup.send(f"查詢失敗：{_format_error(exc)}", ephemeral=True, allowed_mentions=SAFE_MENTIONS)
+            return
+
+        normalized = query.casefold()
+        filtered_items = [item for item in items if self._matches_search(resource, item, normalized)]
+        if not filtered_items:
+            await interaction.followup.send(f"找不到符合 `{query}` 的結果。", ephemeral=True, allowed_mentions=SAFE_MENTIONS)
+            return
+
+        view = DCTWBrowseView(
+            self,
+            user_id=interaction.user.id,
+            resource=resource,
+            sort_mode=sort_mode,
+            items=filtered_items,
+            cached=cached,
+            truncated=truncated,
+            query_text=query,
+            page_index=0,
+        )
+        await interaction.followup.send(view=view, allowed_mentions=SAFE_MENTIONS)
+
+    async def _do_bumpall(self, interaction: discord.Interaction, resources: list[str]):
+        await interaction.response.defer(ephemeral=True, thinking=True)
+        user_key = self._get_user_key(interaction.user.id)
+        if not user_key:
+            await interaction.followup.send("你還沒設定個人 API key，先用 /dctw key set。", ephemeral=True, allowed_mentions=SAFE_MENTIONS)
+            return
+
+        owned_targets: list[tuple[str, int]] = []
+        fetch_errors: list[str] = []
+        for resource in resources:
+            try:
+                owned_ids = await self._fetch_owned_ids(interaction.user.id, resource, api_key=user_key, force_refresh=True)
+            except Exception as exc:
+                fetch_errors.append(f"{resource}: {_format_error(exc)}")
+                continue
+            for listing_id in sorted(owned_ids):
+                owned_targets.append((resource, listing_id))
+
+        if not owned_targets:
+            error_part = f"\n錯誤: {'; '.join(fetch_errors)}" if fetch_errors else ""
+            await interaction.followup.send(f"你目前沒有可置頂的資源。{error_part}", ephemeral=True, allowed_mentions=SAFE_MENTIONS)
+            return
+
+        estimated_minutes = math.ceil(max(0, len(owned_targets) - 1) * BUMP_COOLDOWN_SECONDS / 60)
+        await interaction.followup.send(
+            f"置頂中請稍後...\n預計 {estimated_minutes} 分鐘。",
+            ephemeral=True,
+            allowed_mentions=SAFE_MENTIONS,
+        )
+
+        success_count = 0
+        failed: list[str] = []
+        for idx, (resource, listing_id) in enumerate(owned_targets):
+            if idx > 0:
+                await asyncio.sleep(BUMP_COOLDOWN_SECONDS)
+            try:
+                await self._post_action(resource, listing_id, "bump", api_key=user_key)
+                success_count += 1
+            except Exception as exc:
+                failed.append(f"{resource}:{listing_id} -> {_format_error(exc)}")
+
+        summary_lines = [
+            f"✅ 置頂完成：{success_count}/{len(owned_targets)}",
+            f"資源類別：{', '.join(resources)}",
+        ]
+        if fetch_errors:
+            summary_lines.append("擁有資源查詢錯誤：")
+            summary_lines.extend(f"- {line}" for line in fetch_errors[:10])
+        if failed:
+            summary_lines.append("置頂失敗：")
+            summary_lines.extend(f"- {line}" for line in failed[:15])
+
+        await interaction.followup.send("\n".join(summary_lines), ephemeral=True, allowed_mentions=SAFE_MENTIONS)
+
     async def _send_browse(self, interaction: discord.Interaction, resource: str, sort_mode: str):
         await interaction.response.defer()
         request_key = self._get_read_api_key(interaction.user.id)
@@ -877,6 +1054,7 @@ class DCTW(commands.GroupCog, name="dctw", description="DCTW 瀏覽器！"):
             items=items,
             cached=cached,
             truncated=truncated,
+            query_text=None,
             page_index=0,
         )
         await interaction.followup.send(view=view, allowed_mentions=SAFE_MENTIONS)
@@ -888,10 +1066,8 @@ class DCTW(commands.GroupCog, name="dctw", description="DCTW 瀏覽器！"):
             await interaction.followup.send("你還沒設定個人 API key，先用 /dctw key set。", ephemeral=True, allowed_mentions=SAFE_MENTIONS)
             return
 
-        conf = RESOURCE_CONFIG[resource]
-        path = f"{conf['list_path']}/{listing_id}/{action}"
         try:
-            await self._request_json("POST", path, api_key=user_key)
+            await self._post_action(resource, listing_id, action, api_key=user_key)
         except Exception as exc:
             await interaction.followup.send(f"操作失敗：{_format_error(exc)}", ephemeral=True, allowed_mentions=SAFE_MENTIONS)
             return
@@ -977,6 +1153,57 @@ class DCTW(commands.GroupCog, name="dctw", description="DCTW 瀏覽器！"):
     )
     async def template_browse(self, interaction: discord.Interaction, sort: app_commands.Choice[str] | None = None):
         await self._send_browse(interaction, "templates", sort.value if sort else "bumped")
+
+    @dctw_bot.command(name="search", description="搜尋 bot")
+    @app_commands.choices(
+        sort=[
+            app_commands.Choice(name="newest", value="newest"),
+            app_commands.Choice(name="votes", value="votes"),
+            app_commands.Choice(name="servers", value="servers"),
+            app_commands.Choice(name="bumped", value="bumped"),
+        ]
+    )
+    async def bot_search(self, interaction: discord.Interaction, keyword: str, sort: app_commands.Choice[str] | None = None):
+        await self._send_search(interaction, "bots", keyword, sort.value if sort else "bumped")
+
+    @dctw_server.command(name="search", description="搜尋 server")
+    @app_commands.choices(
+        sort=[
+            app_commands.Choice(name="newest", value="newest"),
+            app_commands.Choice(name="votes", value="votes"),
+            app_commands.Choice(name="members", value="members"),
+            app_commands.Choice(name="bumped", value="bumped"),
+        ]
+    )
+    async def server_search(self, interaction: discord.Interaction, keyword: str, sort: app_commands.Choice[str] | None = None):
+        await self._send_search(interaction, "servers", keyword, sort.value if sort else "bumped")
+
+    @dctw_template.command(name="search", description="搜尋 template")
+    @app_commands.choices(
+        sort=[
+            app_commands.Choice(name="newest", value="newest"),
+            app_commands.Choice(name="votes", value="votes"),
+            app_commands.Choice(name="bumped", value="bumped"),
+        ]
+    )
+    async def template_search(self, interaction: discord.Interaction, keyword: str, sort: app_commands.Choice[str] | None = None):
+        await self._send_search(interaction, "templates", keyword, sort.value if sort else "bumped")
+
+    @app_commands.command(name="bumpall", description="一次置頂你擁有的全部資源")
+    async def bumpall(self, interaction: discord.Interaction):
+        await self._do_bumpall(interaction, ["bots", "servers", "templates"])
+
+    @dctw_bot.command(name="bumpall", description="一次置頂你擁有的全部 bots")
+    async def bot_bumpall(self, interaction: discord.Interaction):
+        await self._do_bumpall(interaction, ["bots"])
+
+    @dctw_server.command(name="bumpall", description="一次置頂你擁有的全部 servers")
+    async def server_bumpall(self, interaction: discord.Interaction):
+        await self._do_bumpall(interaction, ["servers"])
+
+    @dctw_template.command(name="bumpall", description="一次置頂你擁有的全部 templates")
+    async def template_bumpall(self, interaction: discord.Interaction):
+        await self._do_bumpall(interaction, ["templates"])
 
     @dctw_bot.command(name="vote", description="對指定 bot 投票")
     async def bot_vote(self, interaction: discord.Interaction, target: str):
