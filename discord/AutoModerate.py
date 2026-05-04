@@ -28,6 +28,8 @@ all_settings = [
     "too_many_emojis-action",
     "scamtrap-channel_id",
     "scamtrap-action",
+    "anti_invite_link-allow_current_server",
+    "anti_invite_link-action",
     "anti_uispam-max_count",
     "anti_uispam-time_window",
     "anti_uispam-action",
@@ -55,6 +57,67 @@ _raid_tracker: dict[int, list[tuple[discord.Member, datetime]]] = {}
 # 用於追蹤用戶刷頻的記憶體字典
 # 結構: {guild_id: {user_id: [(content, timestamp), ...]}}
 _spam_tracker: dict[int, dict[int, list[tuple[str, datetime]]]] = {}
+
+INVITE_LINK_RE = re.compile(
+    r"(?:https?://)?(?:www\.)?(?:discord\.gg|discord(?:app)?\.com/invite)/([A-Za-z0-9-]+)",
+    re.IGNORECASE,
+)
+_INVITE_GUILD_CACHE_TTL = timedelta(minutes=10)
+_invite_guild_cache: dict[str, tuple[int | None, datetime]] = {}
+
+
+def _is_truthy(value, default: bool = False) -> bool:
+    if value is None:
+        return default
+    if isinstance(value, bool):
+        return value
+    return str(value).strip().lower() in {"true", "1", "yes", "on"}
+
+
+def _extract_invite_codes(content: str) -> list[str]:
+    seen = set()
+    codes = []
+    for code in INVITE_LINK_RE.findall(content or ""):
+        normalized = code.lower()
+        if normalized in seen:
+            continue
+        seen.add(normalized)
+        codes.append(normalized)
+    return codes
+
+
+async def _resolve_invite_guild_id(invite_code: str) -> int | None:
+    now = datetime.now(timezone.utc)
+    cached = _invite_guild_cache.get(invite_code)
+    if cached and (now - cached[1]) < _INVITE_GUILD_CACHE_TTL:
+        return cached[0]
+
+    guild_id = None
+    try:
+        invite = await bot.fetch_invite(invite_code)
+        invite_guild = getattr(invite, "guild", None)
+        if invite_guild:
+            guild_id = invite_guild.id
+    except (discord.NotFound, discord.Forbidden, discord.HTTPException):
+        guild_id = None
+
+    _invite_guild_cache[invite_code] = (guild_id, now)
+    return guild_id
+
+
+async def _get_external_invite_codes(message: discord.Message, guild_id: int, allow_current_server: bool) -> list[str]:
+    invite_codes = _extract_invite_codes(message.content)
+    if not invite_codes:
+        return []
+    if not allow_current_server:
+        return invite_codes
+
+    external_codes = []
+    for invite_code in invite_codes:
+        invite_guild_id = await _resolve_invite_guild_id(invite_code)
+        if invite_guild_id != guild_id:
+            external_codes.append(invite_code)
+    return external_codes
 
 def _text_similarity(a: str, b: str) -> float:
     """計算兩個字串的相似度 (0.0 ~ 1.0)"""
@@ -130,6 +193,7 @@ class QuickSetupView(discord.ui.View):
                 "escape_punish": "🏃 逃避責任懲處",
                 "too_many_h1": "📢 標題過多",
                 "too_many_emojis": "😂 表情符號過多",
+                "anti_invite_link": "🔗 邀請連結",
                 "anti_uispam": "📲 用戶安裝應用程式濫用",
                 "anti_raid": "🚨 防突襲",
                 "anti_spam": "🔁 防刷頻",
@@ -144,6 +208,8 @@ class QuickSetupView(discord.ui.View):
                     elif k == "channel_id" and v:
                         ch = guild.get_channel(int(v))
                         embed.add_field(name="頻道", value=ch.mention if ch else v, inline=False)
+                    elif k == "allow_current_server":
+                        embed.add_field(name="允許本伺服器連結", value="是" if _is_truthy(v) else "否", inline=False)
                     elif k == "action":
                         embed.add_field(name="處置動作", value=f"`{str(v)[:50]}{'...' if len(str(v)) > 50 else ''}`", inline=False)
                     else:
@@ -157,6 +223,7 @@ class QuickSetupView(discord.ui.View):
             discord.SelectOption(label="逃避責任懲處", value="escape_punish", description="禁言期間離開者"),
             discord.SelectOption(label="標題過多", value="too_many_h1", description="Markdown 大標題洗版"),
             discord.SelectOption(label="表情符號過多", value="too_many_emojis", description="過多 emoji"),
+            discord.SelectOption(label="邀請連結", value="anti_invite_link", description="偵測 Discord 邀請連結"),
             discord.SelectOption(label="用戶安裝應用程式濫用", value="anti_uispam", description="User Install 濫用"),
             discord.SelectOption(label="防突襲", value="anti_raid", description="大量加入偵測"),
             discord.SelectOption(label="防刷頻", value="anti_spam", description="相似訊息刷頻"),
@@ -179,6 +246,13 @@ class QuickSetupView(discord.ui.View):
             )
             ch_sel.callback = self._on_scamtrap_channel
             self.add_item(ch_sel)
+        elif self.feature == "anti_invite_link":
+            allow_sel = discord.ui.Select(placeholder="是否允許本伺服器邀請連結", options=[
+                discord.SelectOption(label="允許", value="True", description="只阻擋其他伺服器的邀請連結"),
+                discord.SelectOption(label="不允許", value="False", description="任何 Discord 邀請連結都會觸發"),
+            ])
+            allow_sel.callback = self._on_invite_allow_current_server_select
+            self.add_item(allow_sel)
         elif self.feature == "escape_punish":
             punish_sel = discord.ui.Select(placeholder="懲處方式", options=[
                 discord.SelectOption(label="封禁", value="ban", description="永久封禁"),
@@ -291,6 +365,7 @@ class QuickSetupView(discord.ui.View):
         feat_defaults = {
             "too_many_h1": {"max_length": "20"},
             "too_many_emojis": {"max_emojis": "10"},
+            "anti_invite_link": {"allow_current_server": "False"},
             "anti_uispam": {"max_count": "5", "time_window": "60"},
             "anti_raid": {"max_joins": "5", "time_window": "60"},
             "anti_spam": {"max_messages": "5", "time_window": "30", "similarity": "75"},
@@ -323,6 +398,11 @@ class QuickSetupView(discord.ui.View):
 
     async def _on_emojis_select(self, interaction: discord.Interaction):
         self.config["max_emojis"] = interaction.data["values"][0]
+        await interaction.response.defer()
+        await interaction.message.edit(embed=self._get_embed(interaction.guild), view=self)
+
+    async def _on_invite_allow_current_server_select(self, interaction: discord.Interaction):
+        self.config["allow_current_server"] = interaction.data["values"][0]
         await interaction.response.defer()
         await interaction.message.edit(embed=self._get_embed(interaction.guild), view=self)
 
@@ -377,7 +457,7 @@ class QuickSetupView(discord.ui.View):
         await interaction.message.edit(embed=self._get_embed(interaction.guild), view=self)
 
     async def _on_finish(self, interaction: discord.Interaction):
-        if self.feature not in ("scamtrap", "escape_punish", "too_many_h1", "too_many_emojis", "anti_uispam", "anti_raid", "anti_spam", "automod_detect"):
+        if self.feature not in ("scamtrap", "escape_punish", "too_many_h1", "too_many_emojis", "anti_invite_link", "anti_uispam", "anti_raid", "anti_spam", "automod_detect"):
             await interaction.response.send_message("無效的功能。", ephemeral=True)
             return
         if self.feature == "scamtrap" and "channel_id" not in self.config:
@@ -386,7 +466,7 @@ class QuickSetupView(discord.ui.View):
         if self.feature == "automod_detect" and "log_channel" not in self.config:
             await interaction.response.send_message("AutoMod 偵測請先選擇通知頻道。", ephemeral=True)
             return
-        if "action" not in self.config and self.feature in ("scamtrap", "too_many_h1", "too_many_emojis", "anti_uispam", "anti_raid", "anti_spam"):
+        if "action" not in self.config and self.feature in ("scamtrap", "too_many_h1", "too_many_emojis", "anti_invite_link", "anti_uispam", "anti_raid", "anti_spam"):
             await interaction.response.send_message("請選擇處置動作。", ephemeral=True)
             return
 
@@ -399,7 +479,8 @@ class QuickSetupView(discord.ui.View):
         set_server_config(self.guild_id, "automod", automod_settings)
 
         feat_names = {"scamtrap": "詐騙陷阱", "escape_punish": "逃避責任懲處", "too_many_h1": "標題過多",
-                      "too_many_emojis": "表情符號過多", "anti_uispam": "用戶安裝應用程式濫用",
+                      "too_many_emojis": "表情符號過多", "anti_invite_link": "邀請連結",
+                      "anti_uispam": "用戶安裝應用程式濫用",
                       "anti_raid": "防突襲", "anti_spam": "防刷頻", "automod_detect": "AutoMod 偵測"}
         self.stop()
         await interaction.response.edit_message(
@@ -462,6 +543,7 @@ class AutoModerate(commands.GroupCog, name=app_commands.locale_str("automod")):
             app_commands.Choice(name="逃避責任懲處", value="escape_punish"),
             app_commands.Choice(name="標題過多", value="too_many_h1"),
             app_commands.Choice(name="表情符號過多", value="too_many_emojis"),
+            app_commands.Choice(name="邀請連結", value="anti_invite_link"),
             app_commands.Choice(name="用戶安裝應用程式濫用", value="anti_uispam"),
             app_commands.Choice(name="防突襲（大量加入偵測）", value="anti_raid"),
             app_commands.Choice(name="防刷頻", value="anti_spam"),
@@ -489,6 +571,9 @@ class AutoModerate(commands.GroupCog, name=app_commands.locale_str("automod")):
         if setting == "automod_detect" and enable == "True":
             if "log_channel" not in automod_settings.get("automod_detect", {}):
                 await interaction.followup.send(f"請注意，AutoMod 偵測已啟用，但尚未設定通知頻道。請使用 {await get_command_mention('automod', 'settings')} 來設定 `automod_detect-log_channel`。", ephemeral=True)
+        if setting == "anti_invite_link" and enable == "True":
+            if "action" not in automod_settings.get("anti_invite_link", {}):
+                await interaction.followup.send(f"請注意，邀請連結偵測已啟用，但尚未設定動作指令。請使用 {await get_command_mention('automod', 'settings')} 來設定 `anti_invite_link-action`。", ephemeral=True)
 
     @app_commands.command(name=app_commands.locale_str("quick-setup"), description="互動式快速設定精靈（選單引導）")
     async def quick_setup_automod(self, interaction: discord.Interaction):
@@ -515,6 +600,12 @@ class AutoModerate(commands.GroupCog, name=app_commands.locale_str("automod")):
         if setting_base not in automod_settings:
             automod_settings[setting_base] = {}
         value = parse_mention_to_id(value) if setting_key in ["channel_id", "log_channel"] else value
+        if setting_key == "allow_current_server":
+            normalized_value = str(value).strip().lower()
+            if normalized_value not in ("true", "false", "1", "0", "yes", "no", "on", "off"):
+                await interaction.response.send_message("`allow_current_server` 只接受 true / false。", ephemeral=True)
+                return
+            value = _is_truthy(normalized_value)
         # 若為頻道設定，驗證頻道存在且機器人有發言權限
         if setting_key in ["channel_id", "log_channel"] and value:
             try:
@@ -723,6 +814,12 @@ class AutoModerate(commands.GroupCog, name=app_commands.locale_str("automod")):
             name="😂 表情符號過多 (too_many_emojis)",
             value="偵測訊息中的表情符號數量（含自訂及 Unicode emoji），超過上限自動處置。\n"
                   "設定項: `max_emojis`（最大數量，預設10）、`action`",
+            inline=False
+        )
+        embed.add_field(
+            name="🔗 邀請連結 (anti_invite_link)",
+            value="偵測 Discord 邀請連結，可選擇是否允許本伺服器的邀請連結。\n"
+                  "設定項: `allow_current_server`（是否允許本服邀請）、`action`",
             inline=False
         )
         embed.add_field(
@@ -1041,6 +1138,29 @@ class AutoModerate(commands.GroupCog, name=app_commands.locale_str("automod")):
             return
         if message.author.guild_permissions.administrator:
             return
+
+        # 邀請連結檢查
+        if automod_settings.get("anti_invite_link", {}).get("enabled", False):
+            allow_current_server = _is_truthy(automod_settings["anti_invite_link"].get("allow_current_server", False))
+            action = automod_settings["anti_invite_link"].get("action", "delete {user}，請勿發送其他伺服器的邀請連結。")
+            external_invite_codes = await _get_external_invite_codes(message, guild_id, allow_current_server)
+            if external_invite_codes:
+                try:
+                    await do_action_str(action, guild=message.guild, user=message.author, message=message)
+                    log(
+                        f"用戶 {message.author} 因發送邀請連結被處理 (允許本服連結: {allow_current_server}, 觸發代碼: {', '.join(external_invite_codes)}): {action}",
+                        module_name="AutoModerate",
+                        user=message.author,
+                        guild=message.guild,
+                    )
+                except Exception as e:
+                    log(
+                        f"無法對用戶 {message.author} 執行邀請連結的處理: {e}",
+                        level=logging.ERROR,
+                        module_name="AutoModerate",
+                        user=message.author,
+                        guild=message.guild,
+                    )
 
         # 標題過多檢查
         if automod_settings.get("too_many_h1", {}).get("enabled", False):

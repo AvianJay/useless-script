@@ -460,7 +460,7 @@ def _coerce(value, stype):
         if not isinstance(value, dict):
             return {}
         out = {}
-        for feat in ("scamtrap", "escape_punish", "too_many_h1", "too_many_emojis", "anti_uispam", "anti_raid", "anti_spam", "automod_detect"):
+        for feat in ("scamtrap", "escape_punish", "too_many_h1", "too_many_emojis", "anti_invite_link", "anti_uispam", "anti_raid", "anti_spam", "automod_detect"):
             data = value.get(feat)
             if not isinstance(data, dict):
                 out[feat] = {"enabled": False}
@@ -470,6 +470,12 @@ def _coerce(value, stype):
                 if k == "enabled":
                     continue
                 if v is None:
+                    continue
+                if k == "allow_current_server":
+                    if isinstance(v, bool):
+                        row[k] = v
+                    else:
+                        row[k] = str(v).strip().lower() in ("true", "1", "yes", "on")
                     continue
                 row[k] = str(v) if not isinstance(v, str) else v
             if feat == "scamtrap" and "channel_id" in row:
@@ -535,7 +541,7 @@ def _coerce(value, stype):
         if not isinstance(value, dict):
             return {}
         out = {}
-        for feat in ("scamtrap", "escape_punish", "too_many_h1", "too_many_emojis", "anti_uispam", "anti_raid", "anti_spam", "automod_detect"):
+        for feat in ("scamtrap", "escape_punish", "too_many_h1", "too_many_emojis", "anti_invite_link", "anti_uispam", "anti_raid", "anti_spam", "automod_detect"):
             data = value.get(feat)
             if not isinstance(data, dict):
                 out[feat] = {"enabled": False}
@@ -545,6 +551,12 @@ def _coerce(value, stype):
                 if k == "enabled":
                     continue
                 if v is None or (isinstance(v, str) and v.strip() == ""):
+                    continue
+                if k == "allow_current_server":
+                    if isinstance(v, bool):
+                        row[k] = v
+                    else:
+                        row[k] = str(v).strip().lower() in ("true", "1", "yes", "on")
                     continue
                 row[k] = str(v).strip() if v is not None else ""
             if row.get("channel_id"):
@@ -693,8 +705,8 @@ def _register_all():
     if "AutoModerate" in modules:
         register_settings("AutoModerate", "自動管理", [
             {"display": "標記用戶加入通知頻道", "description": "當被標記的用戶加入伺服器時，於此頻道發送通知", "database_key": "flagged_user_onjoin_channel", "type": "channel", "default": None},
-            {"display": "自動管理規則", "description": "詐騙陷阱、逃避懲處、標題/表情過多、防突襲、防刷頻、AutoMod 偵測等功能的啟用與參數", "database_key": "automod", "type": "automod_config", "default": {}},
-        ], description="自動管理相關設定", icon="🛡️")
+            {"display": "自動管理規則", "description": "詐騙陷阱、邀請連結、逃避懲處、標題/表情過多、防突襲、防刷頻、AutoMod 偵測等功能的啟用與參數", "database_key": "automod", "type": "automod_config", "default": {}},
+        ], description="自動管理相關設定（含邀請連結偵測）", icon="🛡️")
 
     if "CustomPrefix" in modules:
         register_settings("CustomPrefix", "自訂前綴", [

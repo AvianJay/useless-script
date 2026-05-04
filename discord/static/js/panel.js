@@ -726,6 +726,10 @@ const AUTOMOD_FEATURES = [
         { key: 'max_emojis', label: '最大數量', type: 'number', default: '10', min: 1 },
         { key: 'action', label: '處置動作', type: 'string', default: 'warn' },
     ]},
+    { id: 'anti_invite_link', label: '🔗 邀請連結', desc: '偵測 Discord 邀請連結，可選擇是否允許本伺服器連結', fields: [
+        { key: 'allow_current_server', label: '允許本伺服器連結', type: 'boolean', default: false },
+        { key: 'action', label: '處置動作', type: 'string', default: 'delete {user}，請勿發送其他伺服器的邀請連結。' },
+    ]},
     { id: 'anti_uispam', label: '📲 用戶安裝應用程式濫用', desc: 'User Install 指令觸發頻率', fields: [
         { key: 'max_count', label: '時間內最大觸發次數', type: 'number', default: '5', min: 1 },
         { key: 'time_window', label: '時間窗口 (秒)', type: 'number', default: '60', min: 1 },
@@ -754,6 +758,13 @@ function buildAutomodConfigEditor(mod, s, value, channels) {
     const config = typeof value === 'object' && value !== null ? { ...value } : {};
     const container = document.createElement('div');
     container.className = 'automod-config-editor';
+
+    function toBoolean(val) {
+        if (typeof val === 'string') {
+            return ['true', '1', 'yes', 'on'].includes(val.trim().toLowerCase());
+        }
+        return !!val;
+    }
 
     function getFeat(featId) {
         if (!config[featId]) config[featId] = { enabled: false };
@@ -789,7 +800,7 @@ function buildAutomodConfigEditor(mod, s, value, channels) {
         enableLabel.className = 'toggle';
         const enableCheck = document.createElement('input');
         enableCheck.type = 'checkbox';
-        enableCheck.checked = !!featData.enabled;
+        enableCheck.checked = toBoolean(featData.enabled);
         enableCheck.addEventListener('change', () => {
             featData.enabled = enableCheck.checked;
             save();
@@ -819,7 +830,8 @@ function buildAutomodConfigEditor(mod, s, value, channels) {
             lab.className = 'automod-feature-field-label';
             lab.textContent = field.label + '：';
             row.appendChild(lab);
-            const cur = featData[field.key] != null ? String(featData[field.key]) : (field.default || '');
+            const rawCur = featData[field.key] != null ? featData[field.key] : field.default;
+            const cur = rawCur != null ? String(rawCur) : '';
             if (field.type === 'channel') {
                 const sel = document.createElement('select');
                 sel.className = 'form-select';
@@ -846,6 +858,18 @@ function buildAutomodConfigEditor(mod, s, value, channels) {
                 }
                 sel.addEventListener('change', () => setFeatValue(feat.id, field.key, sel.value));
                 row.appendChild(sel);
+            } else if (field.type === 'boolean') {
+                const wrap = document.createElement('label');
+                wrap.className = 'toggle';
+                const input = document.createElement('input');
+                input.type = 'checkbox';
+                input.checked = toBoolean(rawCur);
+                input.addEventListener('change', () => setFeatValue(feat.id, field.key, input.checked));
+                const slider = document.createElement('span');
+                slider.className = 'toggle-slider';
+                wrap.appendChild(input);
+                wrap.appendChild(slider);
+                row.appendChild(wrap);
             } else if (field.type === 'number') {
                 const input = document.createElement('input');
                 input.type = 'number';
