@@ -285,6 +285,29 @@ AUTOREPLY_CHANNEL_MODE_METADATA = {
     },
 }
 
+AUTOREPLY_MESSAGE_TYPE_TRIGGER_ALIASES = {
+    "boost": "premium_guild_subscription",
+    "booster": "premium_guild_subscription",
+    "join": "new_member",
+}
+
+
+def build_autoreply_message_type_lookup() -> dict[str, discord.MessageType]:
+    lookup = {
+        name.casefold(): message_type
+        for name, message_type in discord.MessageType.__members__.items()
+    }
+
+    for alias, target_name in AUTOREPLY_MESSAGE_TYPE_TRIGGER_ALIASES.items():
+        target_message_type = discord.MessageType.__members__.get(target_name)
+        if target_message_type is not None:
+            lookup[alias.casefold()] = target_message_type
+
+    return lookup
+
+
+AUTOREPLY_MESSAGE_TYPE_TRIGGER_LOOKUP = build_autoreply_message_type_lookup()
+
 
 class AutoReplyBuilderContentModal(discord.ui.Modal, title="AutoReply Builder"):
     def __init__(self, builder_view: "AutoReplyBuilderView"):
@@ -740,6 +763,7 @@ class AutoReply(commands.GroupCog, name="autoreply"):
 
         if not trigger:
             raise ValueError("至少要設定一個觸發字。")
+        self._validate_message_type_triggers(trigger)
         if not response:
             raise ValueError("至少要設定一個回覆內容。")
 
@@ -761,8 +785,83 @@ class AutoReply(commands.GroupCog, name="autoreply"):
             "random_chance": random_chance,
         }
 
+    def _parse_message_type_trigger(self, trigger: str) -> tuple[bool, discord.MessageType | None, str | None]:
+        raw_trigger = str(trigger).strip()
+        prefix, separator, payload = raw_trigger.partition(":")
+        if separator != ":" or prefix.casefold() != "type":
+            return False, None, None
+
+        normalized_payload = re.sub(r"[\s\-]+", "_", payload.strip()).casefold()
+        if not normalized_payload:
+            return True, None, ""
+
+        return True, AUTOREPLY_MESSAGE_TYPE_TRIGGER_LOOKUP.get(normalized_payload), normalized_payload
+
+    def _format_invalid_message_type_trigger_message(self, triggers: list[str]) -> str:
+        preview = ", ".join(f"`{trigger}`" for trigger in triggers[:5])
+        if len(triggers) > 5:
+            preview += f" ... (+{len(triggers) - 5})"
+
+        return (
+            f"未知的 type trigger：{preview}。"
+            "可用 `type:join`、`type:boost`，或直接填 Discord 的 MessageType 名稱，例如 `type:premium_guild_subscription`。"
+        )
+
+    def _validate_message_type_triggers(self, triggers: list[str]):
+        invalid_triggers = []
+
+        for trigger in triggers or []:
+            is_type_trigger, message_type, _ = self._parse_message_type_trigger(trigger)
+            if is_type_trigger and message_type is None:
+                invalid_triggers.append(str(trigger).strip())
+
+        if invalid_triggers:
+            raise ValueError(self._format_invalid_message_type_trigger_message(invalid_triggers))
+
     def _normalize_autoreply_trigger(self, trigger: str) -> str:
+        is_type_trigger, message_type, normalized_payload = self._parse_message_type_trigger(trigger)
+        if is_type_trigger:
+            if message_type is not None:
+                return f"type:{message_type.name.casefold()}"
+            return f"type:{normalized_payload or ''}"
+
         return re.sub(r"\s+", " ", str(trigger).strip()).casefold()
+
+    def _message_matches_autoreply_triggers(self, message: discord.Message, mode: str, triggers: list[str]) -> bool:
+        text_triggers = []
+
+        for trigger in triggers or []:
+            is_type_trigger, message_type, _ = self._parse_message_type_trigger(trigger)
+            if is_type_trigger:
+                if message_type is not None and message.type == message_type:
+                    return True
+                continue
+
+            text_triggers.append(str(trigger))
+
+        if not text_triggers:
+            return False
+
+        content = message.content
+        if mode == "regex":
+            for trigger in text_triggers:
+                try:
+                    if re.search(trigger, content):
+                        return True
+                except re.error:
+                    continue
+            return False
+
+        if mode == "contains":
+            return any(trigger in content for trigger in text_triggers)
+        if mode == "equals":
+            return any(trigger == content for trigger in text_triggers)
+        if mode == "starts_with":
+            return any(content.startswith(trigger) for trigger in text_triggers)
+        if mode == "ends_with":
+            return any(content.endswith(trigger) for trigger in text_triggers)
+
+        return False
 
     def _find_duplicate_triggers_in_list(self, triggers: list[str]) -> list[str]:
         seen = {}
@@ -2109,6 +2208,11 @@ class AutoReply(commands.GroupCog, name="autoreply"):
             return
         trigger = trigger.split(",")  # multiple triggers
         trigger = [t.strip() for t in trigger if t.strip()]  # remove empty triggers
+        try:
+            self._validate_message_type_triggers(trigger)
+        except ValueError as e:
+            await interaction.response.send_message(str(e), ephemeral=True)
+            return
         duplicate_triggers = self._find_duplicate_triggers_in_list(trigger)
         if duplicate_triggers:
             await interaction.response.send_message(
@@ -2277,7 +2381,13 @@ class AutoReply(commands.GroupCog, name="autoreply"):
                 if new_mode:
                     ar["mode"] = new_mode
                 if new_trigger:
-                    ar["trigger"] = [t.strip() for t in new_trigger.split(",") if t.strip()]
+                    parsed_triggers = [t.strip() for t in new_trigger.split(",") if t.strip()]
+                    try:
+                        self._validate_message_type_triggers(parsed_triggers)
+                    except ValueError as e:
+                        await interaction.response.send_message(str(e), ephemeral=True)
+                        return
+                    ar["trigger"] = parsed_triggers
                 if new_response:
                     ar["response"] = [r.strip() for r in new_response.split(",") if r.strip()]
                 if reply is not None:
@@ -2323,6 +2433,11 @@ class AutoReply(commands.GroupCog, name="autoreply"):
             if det == trigger:
                 if new_trigger:
                     new_triggers = [t.strip() for t in new_trigger.split(",") if t.strip()]
+                    try:
+                        self._validate_message_type_triggers(new_triggers)
+                    except ValueError as e:
+                        await interaction.response.send_message(str(e), ephemeral=True)
+                        return
                     duplicate_triggers = self._find_duplicate_triggers_in_list(new_triggers)
                     if duplicate_triggers:
                         await interaction.response.send_message(
@@ -2731,6 +2846,16 @@ class AutoReply(commands.GroupCog, name="autoreply"):
         )
 
         embed.add_field(
+            name="特殊 Trigger",
+            value=(
+                "- `type:join`：只在成員加入系統訊息觸發 (`discord.MessageType.new_member`)\n"
+                "- `type:boost`：只在伺服器 boost 系統訊息觸發 (`discord.MessageType.premium_guild_subscription`)\n"
+                "- 也可直接用 Discord 原生名稱，例如 `type:premium_guild_tier_1`"
+            ),
+            inline=False,
+        )
+
+        embed.add_field(
             name="延遲 / 狀態變數",
             value=(
                 "- `{newmsg:2}`：1~3 秒後再發一則新訊息，最多 2 個\n"
@@ -2784,7 +2909,8 @@ class AutoReply(commands.GroupCog, name="autoreply"):
                     "4) `{embedtitle:簽到成功}{embedurl:https://example.com}{embeddescription:{user} 在 {date} {time24} 完成簽到}{embedauthor:系統}{embedauthorimage:{authoravatar}}{embedcolor:57F287}`\n"
                     "5) `從第 2 個單字開始：{contentsplit:1-}`\n"
                     "6) `剛剛聊天室隨機點名：{random_user}`\n"
-                    "7) `{mention:true}@everyone 系統維護開始`"
+                    "7) `{mention:true}@everyone 系統維護開始`\n"
+                    "8) trigger 寫 `type:boost` 或 `type:join` 來監聽系統訊息"
                 )
                 await i.response.send_message(embed=ex, ephemeral=True)
 
@@ -2945,26 +3071,8 @@ class AutoReply(commands.GroupCog, name="autoreply"):
             match_found = False
             mode = ar.get("mode")
             triggers = ar.get("trigger", [])
-            
-            # 優化：根據模式選擇匹配邏輯
-            if mode == "regex":
-                for trigger in triggers:
-                    try:
-                        if re.search(trigger, content):
-                            match_found = True
-                            break
-                    except re.error:
-                        continue
-            else:
-                 # 對於字串比對，可以使用 any 提早結束
-                if mode == "contains":
-                    match_found = any(trigger in content for trigger in triggers)
-                elif mode == "equals":
-                    match_found = any(trigger == content for trigger in triggers)
-                elif mode == "starts_with":
-                    match_found = any(content.startswith(trigger) for trigger in triggers)
-                elif mode == "ends_with":
-                    match_found = any(content.endswith(trigger) for trigger in triggers)
+
+            match_found = self._message_matches_autoreply_triggers(message, mode, triggers)
             
             if match_found:
                 if not percent_random(ar.get("random_chance", 100)):

@@ -47,6 +47,34 @@ Builder 內的 `trigger / response` 支援：
 - `ends_with`：訊息結尾符合 trigger 才觸發
 - `regex`：使用 Python regex 比對
 
+## 特殊 Trigger
+
+除了上面的文字比對模式，也支援用 `type:名稱` 直接比對 Discord 系統訊息的 `message.type`。
+
+- `type:join`：等於 `discord.MessageType.new_member`
+- `type:boost`：等於 `discord.MessageType.premium_guild_subscription`
+- 也可以直接填 Discord 原生名稱，例如 `type:premium_guild_tier_1`
+
+規則：
+
+- `type:` trigger 會先檢查 `message.type`
+- 如果同一條規則裡還有一般 trigger，仍然會照 `contains` / `equals` / `regex` 等模式繼續判斷訊息內容
+- 未知的 `type:` 名稱在新增或編輯規則時會直接報錯，不會靜默失效
+
+例如：
+
+```text
+模式: equals
+觸發字: type:join
+回覆: 歡迎 {user} 加入 {guild}！
+```
+
+```text
+模式: contains
+觸發字: type:boost, boost了
+回覆: 感謝 {user} Boost 伺服器！
+```
+
 ## 基本變數
 
 - `{user}`：觸發者 mention
