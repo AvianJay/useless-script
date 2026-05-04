@@ -6,7 +6,7 @@ import random
 import discord
 from discord import app_commands
 from discord.ext import commands
-from globalenv import bot, start_bot, get_user_data, set_user_data, get_command_mention, modules, failed_modules, config, get_global_config
+from globalenv import bot, start_bot, get_user_data, set_user_data, get_command_mention, modules, failed_modules, config, get_global_config, get_emoji_by_name, get_emoji_mention_by_name
 from CustomPrefix import get_prefix
 from typing import Union
 from datetime import datetime, timezone
@@ -23,6 +23,153 @@ try:
 except Exception as e:
     git_commit_hash = "unknown"
 full_version = f"{version} ({git_commit_hash})"
+
+
+UI_EMOJI_FALLBACKS: dict[str, str] = {
+    "book": "📖",
+    "books": "📚",
+    "list": "📋",
+    "tools": "🔧",
+    "package": "📦",
+    "folder": "📁",
+    "success": "✅",
+    "error": "❌",
+    "warning": "⚠️",
+    "nav_left": "⬅️",
+    "nav_right": "➡️",
+    "nav_first": "⏪",
+    "nav_last": "⏩",
+    "party": "🎉",
+    "confetti": "🎊",
+    "download": "💾",
+    "wave": "👋",
+    "chart_bar": "📊",
+    "ping": "🏓",
+    "info": "ℹ️",
+    "note": "📝",
+    "chart_line": "📈",
+    "search": "🔍",
+    "user": "👤",
+    "server": "🏠",
+    "image": "🖼️",
+    "palette": "🎨",
+    "dice": "🎲",
+    "users": "👥",
+    "ruler": "📏",
+    "cat": "🐱",
+    "shield": "🛡️",
+    "hammer": "🔨",
+    "unlock": "🔓",
+    "boot": "👢",
+    "mute": "🔇",
+    "volume": "🔊",
+    "bolt": "⚡",
+    "robot": "🤖",
+    "chat": "💬",
+    "plus": "➕",
+    "minus": "➖",
+    "edit": "✏️",
+    "upload": "📤",
+    "import": "📥",
+    "flask": "🧪",
+    "coins": "💰",
+    "wallet": "💵",
+    "calendar": "📅",
+    "clock": "⏰",
+    "money_send": "💸",
+    "refresh": "🔄",
+    "cart": "🛒",
+    "shopping_bag": "🛍️",
+    "handshake": "🤝",
+    "trophy": "🏆",
+    "music": "🎵",
+    "play": "▶️",
+    "pause": "⏸️",
+    "resume": "⏯️",
+    "stop": "⏹️",
+    "skip": "⏭️",
+    "history": "📜",
+    "music_note": "🎶",
+    "shuffle": "🔀",
+    "idea": "💡",
+    "trash": "🗑️",
+    "report": "🚨",
+    "battle": "⚔️",
+    "grass": "🌿",
+    "gift": "🎁",
+    "paw": "🐾",
+    "globe": "🌐",
+    "gamepad": "🎮",
+}
+
+NATIVE_UI_EMOJI_NAMES: dict[str, str] = {
+    fallback: name
+    for name, fallback in UI_EMOJI_FALLBACKS.items()
+}
+
+
+async def get_ui_emoji(name: str) -> str:
+    emoji = await get_emoji_mention_by_name(name)
+    if emoji == f":{name}:":
+        return UI_EMOJI_FALLBACKS.get(name, "")
+    return emoji
+
+
+async def get_ui_button_emoji(name: str) -> discord.Emoji | str | None:
+    emoji = await get_emoji_by_name(name)
+    if emoji is not None:
+        return emoji
+    return UI_EMOJI_FALLBACKS.get(name)
+
+
+async def replace_native_ui_emojis(text: str | None) -> str | None:
+    if text is None:
+        return None
+
+    rendered = str(text)
+    cache: dict[str, str] = {}
+
+    for native, name in sorted(NATIVE_UI_EMOJI_NAMES.items(), key=lambda item: len(item[0]), reverse=True):
+        if native not in rendered:
+            continue
+        if name not in cache:
+            cache[name] = await get_ui_emoji(name)
+        rendered = rendered.replace(native, cache[name])
+
+    return rendered
+
+
+async def apply_ui_embed_emojis(embed: discord.Embed | None) -> discord.Embed | None:
+    if embed is None:
+        return None
+
+    if embed.title:
+        embed.title = await replace_native_ui_emojis(embed.title)
+    if embed.description:
+        embed.description = await replace_native_ui_emojis(embed.description)
+
+    for index, field in enumerate(list(embed.fields)):
+        embed.set_field_at(
+            index,
+            name=await replace_native_ui_emojis(field.name),
+            value=await replace_native_ui_emojis(field.value),
+            inline=field.inline,
+        )
+
+    if embed.footer and embed.footer.text:
+        embed.set_footer(
+            text=await replace_native_ui_emojis(embed.footer.text),
+            icon_url=embed.footer.icon_url,
+        )
+
+    if embed.author and embed.author.name:
+        embed.set_author(
+            name=await replace_native_ui_emojis(embed.author.name),
+            url=embed.author.url,
+            icon_url=embed.author.icon_url,
+        )
+
+    return embed
 
 
 def get_commit_logs(limit=10) -> str:
@@ -578,6 +725,10 @@ class ChangeLogView(discord.ui.View):
         self.interaction = interaction
         self.time = datetime.now(timezone.utc)
         self.update_buttons()
+
+    async def apply_ui_emojis(self):
+        self.prev_button.emoji = await get_ui_button_emoji("nav_left")
+        self.next_button.emoji = await get_ui_button_emoji("nav_right")
     
     async def on_timeout(self):
         for item in self.children:
@@ -603,13 +754,13 @@ class ChangeLogView(discord.ui.View):
         embed.timestamp = self.time
         return embed
 
-    @discord.ui.button(emoji="⬅️", style=discord.ButtonStyle.primary, custom_id="changelog_prev")
+    @discord.ui.button(style=discord.ButtonStyle.primary, custom_id="changelog_prev")
     async def prev_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         self.current_page -= 1
         self.update_buttons()
         await interaction.response.edit_message(embed=self.get_embed(), view=self)
     
-    @discord.ui.button(emoji="➡️", style=discord.ButtonStyle.primary, custom_id="changelog_next")
+    @discord.ui.button(style=discord.ButtonStyle.primary, custom_id="changelog_next")
     async def next_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         self.current_page += 1
         self.update_buttons()
@@ -626,7 +777,8 @@ async def changelog_command(interaction: discord.Interaction):
         return
     
     view = ChangeLogView(versions, interaction=interaction)
-    await interaction.response.send_message(embed=view.get_embed(), view=view)
+    await view.apply_ui_emojis()
+    await interaction.response.send_message(embed=await apply_ui_embed_emojis(view.get_embed()), view=view)
 
 
 @bot.tree.command(name=app_commands.locale_str("ping"), description="檢查機器人延遲")
@@ -684,7 +836,7 @@ class NitroLinkModal(discord.ui.Modal, title="發送 Nitro 禮物"):
         link = self.nitro_link.value.strip()
         
         if not link.startswith("https://discord.gift/"):
-            await interaction.response.send_message("❌ 錯誤：這不是有效的 Nitro 連結格式。", ephemeral=True)
+            await interaction.response.send_message(await replace_native_ui_emojis("❌ 錯誤：這不是有效的 Nitro 連結格式。"), ephemeral=True)
             return
 
         # 延遲回應，避免 API 請求超時
@@ -701,7 +853,7 @@ class NitroLinkModal(discord.ui.Modal, title="發送 Nitro 禮物"):
                     # 檢查是否已被領取
                     is_redeemed = data.get("uses", 0) >= data.get("max_uses", 1)
                     if is_redeemed:
-                        await interaction.followup.send("⚠️ 此連結已被使用過。", ephemeral=True)
+                        await interaction.followup.send(await replace_native_ui_emojis("⚠️ 此連結已被使用過。"), ephemeral=True)
                         return
 
                     # 準備顯示用的資訊
@@ -736,12 +888,13 @@ class NitroLinkModal(discord.ui.Modal, title="發送 Nitro 禮物"):
 
                     # 建立按鈕 View 並把連結傳進去
                     view = NitroClaimView(link, gift_name, need_message=self.need_message, author_ids=self.author_ids)
+                    await view.apply_ui_emojis()
 
                     # 在頻道發送公開訊息（非 ephemeral），讓大家搶
                     await interaction.followup.send(embed=embed, view=view)
-                    await interaction.followup.send(f"✅ 禮物已成功發送至頻道！{warn_message}", ephemeral=True)
+                    await interaction.followup.send(await replace_native_ui_emojis(f"✅ 禮物已成功發送至頻道！{warn_message}"), ephemeral=True)
                 else:
-                    await interaction.followup.send("❌ 無法驗證此連結，請檢查是否輸入正確。", ephemeral=True)
+                    await interaction.followup.send(await replace_native_ui_emojis("❌ 無法驗證此連結，請檢查是否輸入正確。"), ephemeral=True)
 
 class NitroClaimView(discord.ui.View):
     def __init__(self, link: str, gift_name: str, need_message: bool = False, author_ids: set[int] = None):
@@ -752,14 +905,17 @@ class NitroClaimView(discord.ui.View):
         self.author_ids = author_ids
         self.claimed = False
 
-    @discord.ui.button(label="領取", style=discord.ButtonStyle.primary, emoji="🎉")
+    async def apply_ui_emojis(self):
+        self.claim_button.emoji = await get_ui_button_emoji("party")
+
+    @discord.ui.button(label="領取", style=discord.ButtonStyle.primary)
     async def claim_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         if self.claimed:  # avoid edit message delay
-            await interaction.response.send_message("⚠️ 此禮物已被領取。", ephemeral=True)
+            await interaction.response.send_message(await replace_native_ui_emojis("⚠️ 此禮物已被領取。"), ephemeral=True)
             return
         if self.need_message and self.author_ids is not None:
             if interaction.user.id not in self.author_ids:
-                await interaction.response.send_message("❌ 你需要在這個頻道發過訊息才能使用這個禮物。", ephemeral=True)
+                await interaction.response.send_message(await replace_native_ui_emojis("❌ 你需要在這個頻道發過訊息才能使用這個禮物。"), ephemeral=True)
                 return
         self.claimed = True
         # 禁用所有按鈕防止重複點擊
@@ -775,7 +931,7 @@ class NitroClaimView(discord.ui.View):
         await interaction.response.edit_message(embed=embed, view=self)
         
         # 私訊領取者連結
-        await interaction.followup.send(f"🎊 這是你的 Nitro 連結：\n{self.link}", ephemeral=True)
+        await interaction.followup.send(await replace_native_ui_emojis(f"🎊 這是你的 Nitro 連結：\n{self.link}"), ephemeral=True)
         self.stop()
 
 
@@ -819,7 +975,10 @@ class StealView(discord.ui.View):
     def __init__(self, *, timeout: float | None = None):
         super().__init__(timeout=timeout)
 
-    @discord.ui.button(label="偷", style=discord.ButtonStyle.primary, emoji="💾", custom_id="steal")
+    async def apply_ui_emojis(self):
+        self.download_button.emoji = await get_ui_button_emoji("download")
+
+    @discord.ui.button(label="偷", style=discord.ButtonStyle.primary, custom_id="steal")
     async def download_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         await interaction.response.defer()
         if not interaction.guild:
@@ -853,9 +1012,9 @@ class StealView(discord.ui.View):
                     emoji=embed.title,
                     file=discord.File(fp=io.BytesIO(image_bytes), filename=f"{embed.title}.{embed.fields[1].value.lower()}"),
                 )
-            await interaction.followup.send(f"✅ 已成功將{target} '{embed.title}' 加入到伺服器！", ephemeral=True)
+            await interaction.followup.send(await replace_native_ui_emojis(f"✅ 已成功將{target} '{embed.title}' 加入到伺服器！"), ephemeral=True)
         except discord.HTTPException as e:
-            await interaction.followup.send(f"❌ 無法加入{target}：{e}", ephemeral=True)
+            await interaction.followup.send(await replace_native_ui_emojis(f"❌ 無法加入{target}：{e}"), ephemeral=True)
 
 _CUSTOM_EMOJI_RE = re.compile(r'<(a?):(\w+):(\d+)>')
 _MAX_EMOJI_INFO_RESULTS = 10
@@ -927,6 +1086,11 @@ class EmojiInfoView(StealView):
 
         self.update_buttons()
 
+    async def apply_ui_emojis(self):
+        await super().apply_ui_emojis()
+        self.prev_button.emoji = await get_ui_button_emoji("nav_left")
+        self.next_button.emoji = await get_ui_button_emoji("nav_right")
+
     @property
     def current_emoji(self) -> discord.PartialEmoji:
         return self.emojis[self.current_page]
@@ -954,13 +1118,13 @@ class EmojiInfoView(StealView):
         except Exception:
             pass
 
-    @discord.ui.button(emoji="⬅️", style=discord.ButtonStyle.primary, row=0)
+    @discord.ui.button(style=discord.ButtonStyle.primary, row=0)
     async def prev_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         self.current_page = max(0, self.current_page - 1)
         self.update_buttons()
         await interaction.response.edit_message(embed=self.get_embed(), view=self)
 
-    @discord.ui.button(emoji="➡️", style=discord.ButtonStyle.primary, row=0)
+    @discord.ui.button(style=discord.ButtonStyle.primary, row=0)
     async def next_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         self.current_page = min(len(self.emojis) - 1, self.current_page + 1)
         self.update_buttons()
@@ -979,6 +1143,7 @@ async def emoji_info_context(interaction: discord.Interaction, message: discord.
         interaction=interaction,
         allow_steal=interaction.is_guild_integration(),
     )
+    await view.apply_ui_emojis()
     await interaction.response.send_message(embed=view.get_embed(), view=view)
 
 # context menu for sticker info
@@ -1000,6 +1165,7 @@ async def sticker_info_context(interaction: discord.Interaction, message: discor
     embed.add_field(name="貼圖格式", value=sticker.format.name, inline=True)
     if interaction.is_guild_integration():
         view = StealView()
+        await view.apply_ui_emojis()
     else:
         view = discord.ui.View()
     btn = discord.ui.Button(label="貼圖連結", url=sticker.url)
@@ -1050,7 +1216,7 @@ class PrettyHelpCommand(commands.HelpCommand):
         embed.set_footer(text=f"共 {len(self.context.bot.commands)} 個文字指令 | by AvianJay")
         
         channel = self.get_destination()
-        await channel.send(embed=embed)
+        await channel.send(embed=await apply_ui_embed_emojis(embed))
     
     async def send_cog_help(self, cog: commands.Cog):
         """顯示特定 Cog 的指令"""
@@ -1071,7 +1237,7 @@ class PrettyHelpCommand(commands.HelpCommand):
         embed.set_footer(text=f"使用 {self.context.clean_prefix}help <指令> 查看詳細說明")
         
         channel = self.get_destination()
-        await channel.send(embed=embed)
+        await channel.send(embed=await apply_ui_embed_emojis(embed))
     
     async def send_group_help(self, group: commands.Group):
         """顯示群組指令的幫助"""
@@ -1107,7 +1273,7 @@ class PrettyHelpCommand(commands.HelpCommand):
             )
         
         channel = self.get_destination()
-        await channel.send(embed=embed)
+        await channel.send(embed=await apply_ui_embed_emojis(embed))
     
     async def send_command_help(self, command: commands.Command):
         """顯示單一指令的幫助"""
@@ -1142,7 +1308,7 @@ class PrettyHelpCommand(commands.HelpCommand):
         embed.set_footer(text=f"<> = 必填參數 | [] = 選填參數")
         
         channel = self.get_destination()
-        await channel.send(embed=embed)
+        await channel.send(embed=await apply_ui_embed_emojis(embed))
     
     async def send_error_message(self, error: str):
         """顯示錯誤訊息"""
@@ -1154,7 +1320,7 @@ class PrettyHelpCommand(commands.HelpCommand):
         embed.set_footer(text=f"使用 {self.context.clean_prefix}help 查看所有指令")
         
         channel = self.get_destination()
-        await channel.send(embed=embed)
+        await channel.send(embed=await apply_ui_embed_emojis(embed))
 
 
 bot.help_command = PrettyHelpCommand()
@@ -1253,6 +1419,10 @@ class HelpPageView(discord.ui.View):
         self.interaction = interaction
         self.update_buttons()
 
+    async def apply_ui_emojis(self):
+        self.prev_button.emoji = await get_ui_button_emoji("nav_left")
+        self.next_button.emoji = await get_ui_button_emoji("nav_right")
+
     def update_buttons(self):
         self.prev_button.disabled = self.current_page <= 0
         self.next_button.disabled = self.current_page >= len(self.pages) - 1
@@ -1265,13 +1435,13 @@ class HelpPageView(discord.ui.View):
         except Exception:
             pass
 
-    @discord.ui.button(emoji="⬅️", style=discord.ButtonStyle.primary)
+    @discord.ui.button(style=discord.ButtonStyle.primary)
     async def prev_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         self.current_page -= 1
         self.update_buttons()
         await interaction.response.edit_message(embed=self.pages[self.current_page], view=self)
 
-    @discord.ui.button(emoji="➡️", style=discord.ButtonStyle.primary)
+    @discord.ui.button(style=discord.ButtonStyle.primary)
     async def next_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         self.current_page += 1
         self.update_buttons()
@@ -1331,6 +1501,7 @@ async def help_slash_command(interaction: discord.Interaction, command: str = No
                     value=" ".join(chunk),
                     inline=False
                 )
+            await apply_ui_embed_emojis(embed)
             pages.append(embed)
         
         # 文字指令分頁
@@ -1349,6 +1520,7 @@ async def help_slash_command(interaction: discord.Interaction, command: str = No
                 value=" ".join(chunk),
                 inline=False
             )
+            await apply_ui_embed_emojis(embed)
             pages.append(embed)
         
         # 加上頁碼
@@ -1361,6 +1533,7 @@ async def help_slash_command(interaction: discord.Interaction, command: str = No
             await interaction.followup.send(embed=pages[0])
         else:
             view = HelpPageView(pages, interaction)
+            await view.apply_ui_emojis()
             await interaction.followup.send(embed=pages[0], view=view)
         return
     
@@ -1373,7 +1546,7 @@ async def help_slash_command(interaction: discord.Interaction, command: str = No
         
         target_cmd = bot.tree.get_command(cmd_name)
         if target_cmd is None:
-            await interaction.followup.send("❌ 找不到此指令。", ephemeral=True)
+            await interaction.followup.send(await replace_native_ui_emojis("❌ 找不到此指令。"), ephemeral=True)
             return
         
         if subcmd_name and isinstance(target_cmd, app_commands.Group):
@@ -1383,7 +1556,7 @@ async def help_slash_command(interaction: discord.Interaction, command: str = No
                     target_cmd = subcmd
                     break
             else:
-                await interaction.followup.send("❌ 找不到此子指令。", ephemeral=True)
+                await interaction.followup.send(await replace_native_ui_emojis("❌ 找不到此子指令。"), ephemeral=True)
                 return
         
         embed = discord.Embed(
@@ -1417,7 +1590,7 @@ async def help_slash_command(interaction: discord.Interaction, command: str = No
                     inline=False
                 )
         
-        await interaction.followup.send(embed=embed)
+        await interaction.followup.send(embed=await apply_ui_embed_emojis(embed))
     
     elif command.startswith("text:"):
         # 文字指令
@@ -1427,13 +1600,13 @@ async def help_slash_command(interaction: discord.Interaction, command: str = No
         
         target_cmd = bot.get_command(cmd_name)
         if target_cmd is None:
-            await interaction.followup.send("❌ 找不到此指令。", ephemeral=True)
+            await interaction.followup.send(await replace_native_ui_emojis("❌ 找不到此指令。"), ephemeral=True)
             return
         
         if subcmd_name and isinstance(target_cmd, commands.Group):
             target_cmd = target_cmd.get_command(subcmd_name)
             if target_cmd is None:
-                await interaction.followup.send("❌ 找不到此子指令。", ephemeral=True)
+                await interaction.followup.send(await replace_native_ui_emojis("❌ 找不到此子指令。"), ephemeral=True)
                 return
         
         embed = discord.Embed(
@@ -1467,7 +1640,7 @@ async def help_slash_command(interaction: discord.Interaction, command: str = No
                     inline=False
                 )
         
-        await interaction.followup.send(embed=embed)
+        await interaction.followup.send(embed=await apply_ui_embed_emojis(embed))
     
     else:
         # 嘗試搜尋指令
@@ -1503,7 +1676,7 @@ async def help_slash_command(interaction: discord.Interaction, command: str = No
                         inline=False
                     )
             
-            await interaction.followup.send(embed=embed)
+            await interaction.followup.send(embed=await apply_ui_embed_emojis(embed))
             return
         
         # 搜尋文字指令
@@ -1537,10 +1710,10 @@ async def help_slash_command(interaction: discord.Interaction, command: str = No
                         inline=False
                     )
             
-            await interaction.followup.send(embed=embed)
+            await interaction.followup.send(embed=await apply_ui_embed_emojis(embed))
             return
         
-        await interaction.followup.send("❌ 找不到此指令。請使用自動完成選擇指令。", ephemeral=True)
+        await interaction.followup.send(await replace_native_ui_emojis("❌ 找不到此指令。請使用自動完成選擇指令。"), ephemeral=True)
 
 
 # ===== 使用教學指令 =====
@@ -1589,7 +1762,7 @@ async def build_tutorial_pages(guild: discord.Guild = None) -> list[dict]:
         mention = await get_command_mention(group, sub)
         cmd[key] = mention or f"`/{key}`"
 
-    return [
+    pages = [
         {
             "title": f"👋 歡迎使用 {bot_name} 機器人！",
             "description": (
@@ -1758,6 +1931,12 @@ async def build_tutorial_pages(guild: discord.Guild = None) -> list[dict]:
         },
     ]
 
+    for page in pages:
+        page["title"] = await replace_native_ui_emojis(page["title"])
+        page["description"] = await replace_native_ui_emojis(page["description"])
+
+    return pages
+
 
 class TutorialView(discord.ui.View):
     def __init__(self, pages: list[dict], interaction: discord.Interaction):
@@ -1766,6 +1945,12 @@ class TutorialView(discord.ui.View):
         self.current_page = 0
         self.original_interaction = interaction
         self.update_buttons()
+
+    async def apply_ui_emojis(self):
+        self.first_button.emoji = await get_ui_button_emoji("nav_first")
+        self.prev_button.emoji = await get_ui_button_emoji("nav_left")
+        self.next_button.emoji = await get_ui_button_emoji("nav_right")
+        self.last_button.emoji = await get_ui_button_emoji("nav_last")
 
     async def on_timeout(self):
         for child in self.children:
@@ -1791,25 +1976,25 @@ class TutorialView(discord.ui.View):
         embed.set_footer(text=f"頁面 {self.current_page + 1} / {len(self.pages)} • 使用教學")
         return embed
 
-    @discord.ui.button(emoji="⏪", style=discord.ButtonStyle.secondary, custom_id="tutorial_first")
+    @discord.ui.button(style=discord.ButtonStyle.secondary, custom_id="tutorial_first")
     async def first_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         self.current_page = 0
         self.update_buttons()
         await interaction.response.edit_message(embed=self.get_embed(), view=self)
 
-    @discord.ui.button(emoji="⬅️", style=discord.ButtonStyle.primary, custom_id="tutorial_prev")
+    @discord.ui.button(style=discord.ButtonStyle.primary, custom_id="tutorial_prev")
     async def prev_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         self.current_page = max(0, self.current_page - 1)
         self.update_buttons()
         await interaction.response.edit_message(embed=self.get_embed(), view=self)
 
-    @discord.ui.button(emoji="➡️", style=discord.ButtonStyle.primary, custom_id="tutorial_next")
+    @discord.ui.button(style=discord.ButtonStyle.primary, custom_id="tutorial_next")
     async def next_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         self.current_page = min(len(self.pages) - 1, self.current_page + 1)
         self.update_buttons()
         await interaction.response.edit_message(embed=self.get_embed(), view=self)
 
-    @discord.ui.button(emoji="⏩", style=discord.ButtonStyle.secondary, custom_id="tutorial_last")
+    @discord.ui.button(style=discord.ButtonStyle.secondary, custom_id="tutorial_last")
     async def last_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         self.current_page = len(self.pages) - 1
         self.update_buttons()
@@ -1823,7 +2008,8 @@ async def tutorial_command(interaction: discord.Interaction):
     await interaction.response.defer(ephemeral=True)
     pages = await build_tutorial_pages(guild=interaction.guild)
     view = TutorialView(pages, interaction=interaction)
-    await interaction.followup.send(embed=view.get_embed(), view=view, ephemeral=True)
+    await view.apply_ui_emojis()
+    await interaction.followup.send(embed=await apply_ui_embed_emojis(view.get_embed()), view=view, ephemeral=True)
 
 
 @bot.command(aliases=["tut", "guide"])
@@ -1865,7 +2051,7 @@ async def tutorial(ctx: commands.Context):
     )
     embed.set_thumbnail(url=ctx.bot.user.avatar.url if ctx.bot.user.avatar else None)
     embed.set_footer(text="by AvianJay")
-    await ctx.send(embed=embed)
+    await ctx.send(embed=await apply_ui_embed_emojis(embed))
 
 
 if __name__ == "__main__":

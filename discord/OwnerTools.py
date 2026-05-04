@@ -1,6 +1,7 @@
 import io
 import json
 import discord
+import globalenv
 from globalenv import bot, start_bot, get_user_data, set_user_data, config, get_server_config, set_server_config, _config, default_config, get_all_user_data, db, on_close_tasks, reload_config
 from discord.ext import commands
 from typing import Callable
@@ -10,6 +11,11 @@ import logging
 from typing import Union
 import time
 import asyncio
+from pathlib import Path
+
+
+APP_EMOJI_ASSET_DIR = Path(__file__).resolve().parent / "assets" / "app-emojis"
+APP_EMOJI_MANIFEST_PATH = APP_EMOJI_ASSET_DIR / "manifest.json"
 
 def is_owner() -> Callable:
     async def predicate(ctx):
@@ -340,6 +346,106 @@ async def sendmessage(ctx, channel_id: int, *, message: str):
         await ctx.send("無法在該頻道發送訊息，機器人缺少權限。")
     except Exception as e:
         await ctx.send(f"發送訊息時發生錯誤：{e}")
+
+
+@bot.command(aliases=["uploadmissingemoji", "ume"])
+@is_owner()
+async def uploadmissingemojis(ctx, limit: int = None):
+    if not APP_EMOJI_MANIFEST_PATH.is_file():
+        await ctx.send(f"找不到 emoji 清單：{APP_EMOJI_MANIFEST_PATH}")
+        return
+
+    try:
+        manifest = json.loads(APP_EMOJI_MANIFEST_PATH.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as e:
+        await ctx.send(f"emoji 清單讀取失敗：{e}")
+        return
+
+    if not isinstance(manifest, list):
+        await ctx.send("emoji 清單格式錯誤：manifest.json 必須是陣列。")
+        return
+
+    if limit is not None and limit <= 0:
+        await ctx.send("limit 必須大於 0。")
+        return
+
+    existing_emojis = await bot.fetch_application_emojis()
+    existing_names = {emoji.name for emoji in existing_emojis}
+
+    missing_entries = []
+    invalid_entries = []
+    for entry in manifest:
+        if not isinstance(entry, dict):
+            invalid_entries.append(("<invalid>", "manifest 項目不是物件"))
+            continue
+
+        emoji_name = entry.get("emoji_name")
+        file_name = entry.get("file")
+        if not emoji_name or not file_name:
+            invalid_entries.append((str(emoji_name or "<missing-name>"), "缺少 emoji_name 或 file"))
+            continue
+
+        if emoji_name in existing_names:
+            continue
+
+        asset_path = APP_EMOJI_ASSET_DIR / file_name
+        if not asset_path.is_file():
+            invalid_entries.append((emoji_name, f"找不到檔案 {file_name}"))
+            continue
+
+        missing_entries.append((emoji_name, asset_path))
+
+    total_missing = len(missing_entries)
+    if limit is not None:
+        missing_entries = missing_entries[:limit]
+
+    if not missing_entries and not invalid_entries:
+        await ctx.send(f"沒有缺少的 application emoji。目前共有 {len(existing_names)} 個。")
+        return
+
+    progress = await ctx.send(
+        f"開始上傳缺少的 application emoji：本次 {len(missing_entries)} 個"
+        f"（總缺少 {total_missing} 個，現有 {len(existing_names)} 個）。"
+    )
+
+    uploaded_names = []
+    failed_entries = invalid_entries[:]
+    for index, (emoji_name, asset_path) in enumerate(missing_entries, start=1):
+        try:
+            image_bytes = asset_path.read_bytes()
+            await bot.create_application_emoji(name=emoji_name, image=image_bytes)
+            uploaded_names.append(emoji_name)
+        except discord.HTTPException as e:
+            failed_entries.append((emoji_name, str(e)))
+            log(
+                f"上傳 application emoji {emoji_name} 失敗: {e}",
+                level=logging.ERROR,
+                module_name="OwnerTools"
+            )
+
+        if index == len(missing_entries) or index % 5 == 0:
+            await progress.edit(
+                content=(
+                    f"正在上傳缺少的 application emoji... {index}/{len(missing_entries)}\n"
+                    f"成功：{len(uploaded_names)} 個，失敗：{len(failed_entries)} 個"
+                )
+            )
+
+    globalenv.fetched_emojis_cache = None
+
+    summary_lines = [
+        f"完成。成功上傳 {len(uploaded_names)} 個 application emoji。",
+    ]
+    if uploaded_names:
+        summary_lines.append("成功名稱：" + ", ".join(uploaded_names))
+    if failed_entries:
+        summary_lines.append(
+            "失敗項目：\n" + "\n".join(f"- {name}: {reason}" for name, reason in failed_entries[:20])
+        )
+        if len(failed_entries) > 20:
+            summary_lines.append(f"其餘失敗項目還有 {len(failed_entries) - 20} 個。")
+
+    await progress.edit(content="\n".join(summary_lines))
 
 
 @bot.command(aliases=["transcript", "ct"])

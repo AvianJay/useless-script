@@ -1,0 +1,446 @@
+[
+  {
+    "emoji_name": "battle",
+    "file": "battle.png",
+    "fontawesome_icon": "hand-fist",
+    "source": "https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@7.2.0/svgs/solid/hand-fist.svg"
+  },
+  {
+    "emoji_name": "bolt",
+    "file": "bolt.png",
+    "fontawesome_icon": "bolt",
+    "source": "https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@7.2.0/svgs/solid/bolt.svg"
+  },
+  {
+    "emoji_name": "book",
+    "file": "book.png",
+    "fontawesome_icon": "book-open",
+    "source": "https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@7.2.0/svgs/solid/book-open.svg"
+  },
+  {
+    "emoji_name": "books",
+    "file": "books.png",
+    "fontawesome_icon": "book-open",
+    "source": "https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@7.2.0/svgs/solid/book-open.svg"
+  },
+  {
+    "emoji_name": "boot",
+    "file": "boot.png",
+    "fontawesome_icon": "shoe-prints",
+    "source": "https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@7.2.0/svgs/solid/shoe-prints.svg"
+  },
+  {
+    "emoji_name": "calendar",
+    "file": "calendar.png",
+    "fontawesome_icon": "calendar-days",
+    "source": "https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@7.2.0/svgs/solid/calendar-days.svg"
+  },
+  {
+    "emoji_name": "cart",
+    "file": "cart.png",
+    "fontawesome_icon": "cart-shopping",
+    "source": "https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@7.2.0/svgs/solid/cart-shopping.svg"
+  },
+  {
+    "emoji_name": "cat",
+    "file": "cat.png",
+    "fontawesome_icon": "cat",
+    "source": "https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@7.2.0/svgs/solid/cat.svg"
+  },
+  {
+    "emoji_name": "chart_bar",
+    "file": "chart_bar.png",
+    "fontawesome_icon": "chart-bar",
+    "source": "https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@7.2.0/svgs/solid/chart-bar.svg"
+  },
+  {
+    "emoji_name": "chart_line",
+    "file": "chart_line.png",
+    "fontawesome_icon": "chart-line",
+    "source": "https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@7.2.0/svgs/solid/chart-line.svg"
+  },
+  {
+    "emoji_name": "chat",
+    "file": "chat.png",
+    "fontawesome_icon": "comment-dots",
+    "source": "https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@7.2.0/svgs/solid/comment-dots.svg"
+  },
+  {
+    "emoji_name": "clock",
+    "file": "clock.png",
+    "fontawesome_icon": "clock",
+    "source": "https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@7.2.0/svgs/solid/clock.svg"
+  },
+  {
+    "emoji_name": "coins",
+    "file": "coins.png",
+    "fontawesome_icon": "coins",
+    "source": "https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@7.2.0/svgs/solid/coins.svg"
+  },
+  {
+    "emoji_name": "confetti",
+    "file": "confetti.png",
+    "fontawesome_icon": "wand-magic-sparkles",
+    "source": "https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@7.2.0/svgs/solid/wand-magic-sparkles.svg"
+  },
+  {
+    "emoji_name": "dice",
+    "file": "dice.png",
+    "fontawesome_icon": "dice",
+    "source": "https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@7.2.0/svgs/solid/dice.svg"
+  },
+  {
+    "emoji_name": "download",
+    "file": "download.png",
+    "fontawesome_icon": "floppy-disk",
+    "source": "https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@7.2.0/svgs/solid/floppy-disk.svg"
+  },
+  {
+    "emoji_name": "edit",
+    "file": "edit.png",
+    "fontawesome_icon": "pen-to-square",
+    "source": "https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@7.2.0/svgs/solid/pen-to-square.svg"
+  },
+  {
+    "emoji_name": "error",
+    "file": "error.png",
+    "fontawesome_icon": "circle-xmark",
+    "source": "https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@7.2.0/svgs/solid/circle-xmark.svg"
+  },
+  {
+    "emoji_name": "flask",
+    "file": "flask.png",
+    "fontawesome_icon": "flask",
+    "source": "https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@7.2.0/svgs/solid/flask.svg"
+  },
+  {
+    "emoji_name": "folder",
+    "file": "folder.png",
+    "fontawesome_icon": "folder",
+    "source": "https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@7.2.0/svgs/solid/folder.svg"
+  },
+  {
+    "emoji_name": "gamepad",
+    "file": "gamepad.png",
+    "fontawesome_icon": "gamepad",
+    "source": "https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@7.2.0/svgs/solid/gamepad.svg"
+  },
+  {
+    "emoji_name": "gift",
+    "file": "gift.png",
+    "fontawesome_icon": "gift",
+    "source": "https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@7.2.0/svgs/solid/gift.svg"
+  },
+  {
+    "emoji_name": "globe",
+    "file": "globe.png",
+    "fontawesome_icon": "globe",
+    "source": "https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@7.2.0/svgs/solid/globe.svg"
+  },
+  {
+    "emoji_name": "grass",
+    "file": "grass.png",
+    "fontawesome_icon": "seedling",
+    "source": "https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@7.2.0/svgs/solid/seedling.svg"
+  },
+  {
+    "emoji_name": "hammer",
+    "file": "hammer.png",
+    "fontawesome_icon": "hammer",
+    "source": "https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@7.2.0/svgs/solid/hammer.svg"
+  },
+  {
+    "emoji_name": "handshake",
+    "file": "handshake.png",
+    "fontawesome_icon": "handshake",
+    "source": "https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@7.2.0/svgs/solid/handshake.svg"
+  },
+  {
+    "emoji_name": "history",
+    "file": "history.png",
+    "fontawesome_icon": "clock-rotate-left",
+    "source": "https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@7.2.0/svgs/solid/clock-rotate-left.svg"
+  },
+  {
+    "emoji_name": "idea",
+    "file": "idea.png",
+    "fontawesome_icon": "lightbulb",
+    "source": "https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@7.2.0/svgs/solid/lightbulb.svg"
+  },
+  {
+    "emoji_name": "image",
+    "file": "image.png",
+    "fontawesome_icon": "image",
+    "source": "https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@7.2.0/svgs/solid/image.svg"
+  },
+  {
+    "emoji_name": "import",
+    "file": "import.png",
+    "fontawesome_icon": "file-import",
+    "source": "https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@7.2.0/svgs/solid/file-import.svg"
+  },
+  {
+    "emoji_name": "info",
+    "file": "info.png",
+    "fontawesome_icon": "circle-info",
+    "source": "https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@7.2.0/svgs/solid/circle-info.svg"
+  },
+  {
+    "emoji_name": "list",
+    "file": "list.png",
+    "fontawesome_icon": "list",
+    "source": "https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@7.2.0/svgs/solid/list.svg"
+  },
+  {
+    "emoji_name": "minus",
+    "file": "minus.png",
+    "fontawesome_icon": "minus",
+    "source": "https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@7.2.0/svgs/solid/minus.svg"
+  },
+  {
+    "emoji_name": "money_send",
+    "file": "money_send.png",
+    "fontawesome_icon": "money-bill-transfer",
+    "source": "https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@7.2.0/svgs/solid/money-bill-transfer.svg"
+  },
+  {
+    "emoji_name": "music",
+    "file": "music.png",
+    "fontawesome_icon": "music",
+    "source": "https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@7.2.0/svgs/solid/music.svg"
+  },
+  {
+    "emoji_name": "music_note",
+    "file": "music_note.png",
+    "fontawesome_icon": "music",
+    "source": "https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@7.2.0/svgs/solid/music.svg"
+  },
+  {
+    "emoji_name": "mute",
+    "file": "mute.png",
+    "fontawesome_icon": "volume-xmark",
+    "source": "https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@7.2.0/svgs/solid/volume-xmark.svg"
+  },
+  {
+    "emoji_name": "nav_first",
+    "file": "nav_first.png",
+    "fontawesome_icon": "angles-left",
+    "source": "https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@7.2.0/svgs/solid/angles-left.svg"
+  },
+  {
+    "emoji_name": "nav_last",
+    "file": "nav_last.png",
+    "fontawesome_icon": "angles-right",
+    "source": "https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@7.2.0/svgs/solid/angles-right.svg"
+  },
+  {
+    "emoji_name": "nav_left",
+    "file": "nav_left.png",
+    "fontawesome_icon": "chevron-left",
+    "source": "https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@7.2.0/svgs/solid/chevron-left.svg"
+  },
+  {
+    "emoji_name": "nav_right",
+    "file": "nav_right.png",
+    "fontawesome_icon": "chevron-right",
+    "source": "https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@7.2.0/svgs/solid/chevron-right.svg"
+  },
+  {
+    "emoji_name": "note",
+    "file": "note.png",
+    "fontawesome_icon": "file-lines",
+    "source": "https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@7.2.0/svgs/solid/file-lines.svg"
+  },
+  {
+    "emoji_name": "package",
+    "file": "package.png",
+    "fontawesome_icon": "box-open",
+    "source": "https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@7.2.0/svgs/solid/box-open.svg"
+  },
+  {
+    "emoji_name": "palette",
+    "file": "palette.png",
+    "fontawesome_icon": "palette",
+    "source": "https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@7.2.0/svgs/solid/palette.svg"
+  },
+  {
+    "emoji_name": "party",
+    "file": "party.png",
+    "fontawesome_icon": "champagne-glasses",
+    "source": "https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@7.2.0/svgs/solid/champagne-glasses.svg"
+  },
+  {
+    "emoji_name": "pause",
+    "file": "pause.png",
+    "fontawesome_icon": "pause",
+    "source": "https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@7.2.0/svgs/solid/pause.svg"
+  },
+  {
+    "emoji_name": "paw",
+    "file": "paw.png",
+    "fontawesome_icon": "paw",
+    "source": "https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@7.2.0/svgs/solid/paw.svg"
+  },
+  {
+    "emoji_name": "ping",
+    "file": "ping.png",
+    "fontawesome_icon": "table-tennis-paddle-ball",
+    "source": "https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@7.2.0/svgs/solid/table-tennis-paddle-ball.svg"
+  },
+  {
+    "emoji_name": "play",
+    "file": "play.png",
+    "fontawesome_icon": "play",
+    "source": "https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@7.2.0/svgs/solid/play.svg"
+  },
+  {
+    "emoji_name": "plus",
+    "file": "plus.png",
+    "fontawesome_icon": "plus",
+    "source": "https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@7.2.0/svgs/solid/plus.svg"
+  },
+  {
+    "emoji_name": "refresh",
+    "file": "refresh.png",
+    "fontawesome_icon": "rotate-right",
+    "source": "https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@7.2.0/svgs/solid/rotate-right.svg"
+  },
+  {
+    "emoji_name": "report",
+    "file": "report.png",
+    "fontawesome_icon": "triangle-exclamation",
+    "source": "https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@7.2.0/svgs/solid/triangle-exclamation.svg"
+  },
+  {
+    "emoji_name": "resume",
+    "file": "resume.png",
+    "fontawesome_icon": "circle-play",
+    "source": "https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@7.2.0/svgs/solid/circle-play.svg"
+  },
+  {
+    "emoji_name": "robot",
+    "file": "robot.png",
+    "fontawesome_icon": "robot",
+    "source": "https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@7.2.0/svgs/solid/robot.svg"
+  },
+  {
+    "emoji_name": "ruler",
+    "file": "ruler.png",
+    "fontawesome_icon": "ruler",
+    "source": "https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@7.2.0/svgs/solid/ruler.svg"
+  },
+  {
+    "emoji_name": "search",
+    "file": "search.png",
+    "fontawesome_icon": "magnifying-glass",
+    "source": "https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@7.2.0/svgs/solid/magnifying-glass.svg"
+  },
+  {
+    "emoji_name": "server",
+    "file": "server.png",
+    "fontawesome_icon": "house",
+    "source": "https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@7.2.0/svgs/solid/house.svg"
+  },
+  {
+    "emoji_name": "shield",
+    "file": "shield.png",
+    "fontawesome_icon": "shield-halved",
+    "source": "https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@7.2.0/svgs/solid/shield-halved.svg"
+  },
+  {
+    "emoji_name": "shopping_bag",
+    "file": "shopping_bag.png",
+    "fontawesome_icon": "bag-shopping",
+    "source": "https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@7.2.0/svgs/solid/bag-shopping.svg"
+  },
+  {
+    "emoji_name": "shuffle",
+    "file": "shuffle.png",
+    "fontawesome_icon": "shuffle",
+    "source": "https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@7.2.0/svgs/solid/shuffle.svg"
+  },
+  {
+    "emoji_name": "skip",
+    "file": "skip.png",
+    "fontawesome_icon": "forward-step",
+    "source": "https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@7.2.0/svgs/solid/forward-step.svg"
+  },
+  {
+    "emoji_name": "stop",
+    "file": "stop.png",
+    "fontawesome_icon": "stop",
+    "source": "https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@7.2.0/svgs/solid/stop.svg"
+  },
+  {
+    "emoji_name": "success",
+    "file": "success.png",
+    "fontawesome_icon": "circle-check",
+    "source": "https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@7.2.0/svgs/solid/circle-check.svg"
+  },
+  {
+    "emoji_name": "tools",
+    "file": "tools.png",
+    "fontawesome_icon": "wrench",
+    "source": "https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@7.2.0/svgs/solid/wrench.svg"
+  },
+  {
+    "emoji_name": "trash",
+    "file": "trash.png",
+    "fontawesome_icon": "trash-can",
+    "source": "https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@7.2.0/svgs/solid/trash-can.svg"
+  },
+  {
+    "emoji_name": "trophy",
+    "file": "trophy.png",
+    "fontawesome_icon": "trophy",
+    "source": "https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@7.2.0/svgs/solid/trophy.svg"
+  },
+  {
+    "emoji_name": "unlock",
+    "file": "unlock.png",
+    "fontawesome_icon": "unlock",
+    "source": "https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@7.2.0/svgs/solid/unlock.svg"
+  },
+  {
+    "emoji_name": "upload",
+    "file": "upload.png",
+    "fontawesome_icon": "upload",
+    "source": "https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@7.2.0/svgs/solid/upload.svg"
+  },
+  {
+    "emoji_name": "user",
+    "file": "user.png",
+    "fontawesome_icon": "user",
+    "source": "https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@7.2.0/svgs/solid/user.svg"
+  },
+  {
+    "emoji_name": "users",
+    "file": "users.png",
+    "fontawesome_icon": "users",
+    "source": "https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@7.2.0/svgs/solid/users.svg"
+  },
+  {
+    "emoji_name": "volume",
+    "file": "volume.png",
+    "fontawesome_icon": "volume-high",
+    "source": "https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@7.2.0/svgs/solid/volume-high.svg"
+  },
+  {
+    "emoji_name": "wallet",
+    "file": "wallet.png",
+    "fontawesome_icon": "wallet",
+    "source": "https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@7.2.0/svgs/solid/wallet.svg"
+  },
+  {
+    "emoji_name": "warning",
+    "file": "warning.png",
+    "fontawesome_icon": "triangle-exclamation",
+    "source": "https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@7.2.0/svgs/solid/triangle-exclamation.svg"
+  },
+  {
+    "emoji_name": "wave",
+    "file": "wave.png",
+    "fontawesome_icon": "hand",
+    "source": "https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@7.2.0/svgs/solid/hand.svg"
+  }
+]
