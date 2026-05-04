@@ -16,6 +16,12 @@ from pathlib import Path
 
 APP_EMOJI_ASSET_DIR = Path(__file__).resolve().parent / "assets" / "app-emojis"
 APP_EMOJI_MANIFEST_PATH = APP_EMOJI_ASSET_DIR / "manifest.json"
+BUTTON_EMOJI_ASSET_DIR = Path(__file__).resolve().parent / "assets" / "button-emojis"
+BUTTON_EMOJI_MANIFEST_PATH = BUTTON_EMOJI_ASSET_DIR / "manifest.json"
+EMOJI_ASSET_SOURCES = [
+    ("一般", APP_EMOJI_ASSET_DIR, APP_EMOJI_MANIFEST_PATH),
+    ("按鈕", BUTTON_EMOJI_ASSET_DIR, BUTTON_EMOJI_MANIFEST_PATH),
+]
 
 def is_owner() -> Callable:
     async def predicate(ctx):
@@ -351,18 +357,16 @@ async def sendmessage(ctx, channel_id: int, *, message: str):
 @bot.command(aliases=["uploadmissingemoji", "ume"])
 @is_owner()
 async def uploadmissingemojis(ctx, limit: int = None):
-    if not APP_EMOJI_MANIFEST_PATH.is_file():
-        await ctx.send(f"找不到 emoji 清單：{APP_EMOJI_MANIFEST_PATH}")
-        return
+    manifest_sources = [
+        (source_name, asset_dir, manifest_path)
+        for source_name, asset_dir, manifest_path in EMOJI_ASSET_SOURCES
+        if manifest_path.is_file()
+    ]
 
-    try:
-        manifest = json.loads(APP_EMOJI_MANIFEST_PATH.read_text(encoding="utf-8"))
-    except json.JSONDecodeError as e:
-        await ctx.send(f"emoji 清單讀取失敗：{e}")
-        return
-
-    if not isinstance(manifest, list):
-        await ctx.send("emoji 清單格式錯誤：manifest.json 必須是陣列。")
+    if not manifest_sources:
+        await ctx.send(
+            "找不到任何 emoji 清單：" + ", ".join(str(manifest_path) for _, _, manifest_path in EMOJI_ASSET_SOURCES)
+        )
         return
 
     if limit is not None and limit <= 0:
@@ -374,26 +378,43 @@ async def uploadmissingemojis(ctx, limit: int = None):
 
     missing_entries = []
     invalid_entries = []
-    for entry in manifest:
-        if not isinstance(entry, dict):
-            invalid_entries.append(("<invalid>", "manifest 項目不是物件"))
-            continue
+    seen_manifest_names = set()
+    for source_name, asset_dir, manifest_path in manifest_sources:
+        try:
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        except json.JSONDecodeError as e:
+            await ctx.send(f"emoji 清單讀取失敗：{manifest_path} ({e})")
+            return
 
-        emoji_name = entry.get("emoji_name")
-        file_name = entry.get("file")
-        if not emoji_name or not file_name:
-            invalid_entries.append((str(emoji_name or "<missing-name>"), "缺少 emoji_name 或 file"))
-            continue
+        if not isinstance(manifest, list):
+            await ctx.send(f"emoji 清單格式錯誤：{manifest_path} 必須是陣列。")
+            return
 
-        if emoji_name in existing_names:
-            continue
+        for entry in manifest:
+            if not isinstance(entry, dict):
+                invalid_entries.append((f"{source_name}:<invalid>", "manifest 項目不是物件"))
+                continue
 
-        asset_path = APP_EMOJI_ASSET_DIR / file_name
-        if not asset_path.is_file():
-            invalid_entries.append((emoji_name, f"找不到檔案 {file_name}"))
-            continue
+            emoji_name = entry.get("emoji_name")
+            file_name = entry.get("file")
+            if not emoji_name or not file_name:
+                invalid_entries.append((f"{source_name}:{emoji_name or '<missing-name>'}", "缺少 emoji_name 或 file"))
+                continue
 
-        missing_entries.append((emoji_name, asset_path))
+            if emoji_name in seen_manifest_names:
+                invalid_entries.append((f"{source_name}:{emoji_name}", "manifest 中有重複名稱"))
+                continue
+            seen_manifest_names.add(emoji_name)
+
+            if emoji_name in existing_names:
+                continue
+
+            asset_path = asset_dir / file_name
+            if not asset_path.is_file():
+                invalid_entries.append((f"{source_name}:{emoji_name}", f"找不到檔案 {file_name}"))
+                continue
+
+            missing_entries.append((emoji_name, asset_path))
 
     total_missing = len(missing_entries)
     if limit is not None:

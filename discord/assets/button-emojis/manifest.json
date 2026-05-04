@@ -1,0 +1,44 @@
+[
+  {
+    "emoji_name": "btn_download",
+    "file": "btn_download.png",
+    "fontawesome_icon": "floppy-disk",
+    "color": "#F8FAFF",
+    "source": "https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@7.2.0/svgs/solid/floppy-disk.svg"
+  },
+  {
+    "emoji_name": "btn_nav_first",
+    "file": "btn_nav_first.png",
+    "fontawesome_icon": "angles-left",
+    "color": "#F8FAFF",
+    "source": "https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@7.2.0/svgs/solid/angles-left.svg"
+  },
+  {
+    "emoji_name": "btn_nav_last",
+    "file": "btn_nav_last.png",
+    "fontawesome_icon": "angles-right",
+    "color": "#F8FAFF",
+    "source": "https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@7.2.0/svgs/solid/angles-right.svg"
+  },
+  {
+    "emoji_name": "btn_nav_left",
+    "file": "btn_nav_left.png",
+    "fontawesome_icon": "chevron-left",
+    "color": "#F8FAFF",
+    "source": "https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@7.2.0/svgs/solid/chevron-left.svg"
+  },
+  {
+    "emoji_name": "btn_nav_right",
+    "file": "btn_nav_right.png",
+    "fontawesome_icon": "chevron-right",
+    "color": "#F8FAFF",
+    "source": "https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@7.2.0/svgs/solid/chevron-right.svg"
+  },
+  {
+    "emoji_name": "btn_party",
+    "file": "btn_party.png",
+    "fontawesome_icon": "champagne-glasses",
+    "color": "#F8FAFF",
+    "source": "https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@7.2.0/svgs/solid/champagne-glasses.svg"
+  }
+]

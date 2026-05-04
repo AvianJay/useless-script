@@ -102,6 +102,15 @@ UI_EMOJI_FALLBACKS: dict[str, str] = {
     "gamepad": "🎮",
 }
 
+BUTTON_UI_EMOJI_NAMES: dict[str, str] = {
+    "nav_left": "btn_nav_left",
+    "nav_right": "btn_nav_right",
+    "nav_first": "btn_nav_first",
+    "nav_last": "btn_nav_last",
+    "party": "btn_party",
+    "download": "btn_download",
+}
+
 NATIVE_UI_EMOJI_NAMES: dict[str, str] = {
     fallback: name
     for name, fallback in UI_EMOJI_FALLBACKS.items()
@@ -116,6 +125,12 @@ async def get_ui_emoji(name: str) -> str:
 
 
 async def get_ui_button_emoji(name: str) -> discord.Emoji | str | None:
+    button_emoji_name = BUTTON_UI_EMOJI_NAMES.get(name)
+    if button_emoji_name is not None:
+        emoji = await get_emoji_by_name(button_emoji_name)
+        if emoji is not None:
+            return emoji
+
     emoji = await get_emoji_by_name(name)
     if emoji is not None:
         return emoji
