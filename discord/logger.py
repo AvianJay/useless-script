@@ -573,6 +573,9 @@ class LoggerCog(commands.Cog):
         cleanup_old_logs(days=7)
         self.error_user_cache = ExpiringDict(ttl=60)  # 用於記錄已經提示過錯誤的用戶，避免重複提示
 
+    @app_commands.default_permissions(manage_guild=True, manage_webhooks=True)
+    @app_commands.allowed_installs(guilds=True, users=False)
+    @app_commands.allowed_contexts(guilds=True, dms=False, private_channels=False)
     @app_commands.command(name="set-log-channel", description="設置日誌頻道 (若不設置則不發送到頻道)")
     @app_commands.describe(channel="選擇日誌頻道")
     async def set_log_channel(self, interaction: discord.Interaction, channel: discord.TextChannel = None):
