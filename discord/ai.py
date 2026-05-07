@@ -3157,6 +3157,8 @@ class AICommands(commands.Cog):
         }
 
     async def _tool_generate_video(self, args: dict, tool_context: dict) -> dict:
+        # disabled for now
+        return {"error": "video generation tool is currently unavailable", "note": "沒錢了"}
         prompt = str(args.get("prompt", "") or args.get("query", "") or "").strip()
         if not prompt:
             return {"error": "prompt is required"}
