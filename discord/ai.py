@@ -30,6 +30,7 @@ SAFE_MENTIONS = discord.AllowedMentions(users=True, roles=False, everyone=False)
 MODEL_RATES = {
     "openai-fast": 0.05,
     "openai": 0.10,
+    "gpt-5-mini": 0.10,
     "openai-large": 0.45,
     "gemini-fast": 0.10,
     "claude-fast": 0.15,
@@ -48,7 +49,7 @@ poeclient = Client(
 poe_text_models = {
     "kimi-k2.5-fw": 0.05,
     "gemma-4-31b": 0.10,
-    "glm-5.1-fw": 0.10,
+    "glm-5.1-t": 0.10,
     "qwen3.5-397b-a17b-t": 0.15,
 }
 
@@ -4549,7 +4550,7 @@ class AICommands(commands.Cog):
     @staticmethod
     async def _get_default_model(user_id: int) -> str:
         """取得使用者的預設模型，默認為 openai"""
-        model = get_user_data(GLOBAL_GUILD_ID, user_id, "default_ai_model", "openai")
+        model = get_user_data(GLOBAL_GUILD_ID, user_id, "default_ai_model", "kimi-k2.5-fw")
         if model not in MODEL_RATES and model not in poe_text_models:
             return "openai"
         return model
