@@ -1,5 +1,37 @@
 # 更新日誌
 
+## 0.20.5
+### 更新內容如下：
+* 更新自動管理 | /automod
+  * 新增 `anti_invite_link`：可偵測 Discord 邀請連結並執行自訂處置。
+  * 新增 `allow_current_server`：可選擇是否允許本伺服器邀請連結。
+  * 快速設定、資訊頁與網頁面板同步支援以上設定。
+* 更新自動回覆 | /autoreply
+  * 新增特殊 trigger：可使用 `type:join`、`type:boost` 或 Discord `MessageType` 名稱來監聽系統訊息。
+  * `/autoreply add`、`/autoreply edit`、`/autoreply quickadd` 現在會驗證上述 trigger，避免設定錯誤。
+  * `/autoreply help` 補充相關說明。
+* 更新 DCTW 瀏覽器 | /dctw
+  * 新增 `search`：可依關鍵字搜尋 bot / server / template，並支援關鍵字、標籤與 ID 比對。
+  * 新增 `bumpall`：可一次置頂自己擁有的資源。
+  * 瀏覽與詳細頁新增關鍵字、置頂時間顯示，並新增 `bumped` 排序。
+* 更新被盜帳號偵測 | /imhacked
+  * 新增 thumbhash 偵測：可從 raw event 直接辨識四張可疑圖片訊息。
+  * 新增 suspicious thumbhash 管理指令（開發者用）。
+* 更新 AI | /ai
+  * 新增 `gpt-5-mini` 模型。
+  * 預設模型改為 `kimi-k2.5-fw`。
+  * 調整部分模型名稱。
+  * 暫時停用影片生成工具。
+* 更新介面與文檔
+  * 新增一批 application emoji / button emoji，部分按鈕與 Embed 顯示更新。
+  * 使用文檔介面改用新的圖示顯示方式。
+* 更新網頁面板
+  * 自動管理設定新增邀請連結偵測相關選項。
+* 更新地震監測 | /earthquake
+  * 暫時停用 `/earthquake set-alert-channel`。
+* 修復 `/set-log-channel` 權限問題。
+* 修復一些 Bug。
+
 ## 0.20.4
 ### 更新內容如下：
 * 新增被盜帳號偵測 | /imhacked
