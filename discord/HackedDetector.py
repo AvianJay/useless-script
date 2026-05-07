@@ -50,6 +50,7 @@ class HackedDetector(commands.Cog):
     DETECTION_WINDOW_SECONDS = 10
     DETECTION_MIN_CHANNELS = 3
     RAW_DETECTION_MIN_CHANNELS = 2
+    RAW_DETECTION_WINDOW_SECONDS = 60
     DEFAULT_UNLOCK_FONT = "slant"
 
     def __init__(self):
@@ -113,7 +114,7 @@ class HackedDetector(commands.Cog):
 
     def _record_raw_suspicious_event(self, user_id: int, channel_id: int):
         now = asyncio.get_running_loop().time()
-        events = self._prune_cached_events(self.raw_usercache, user_id, now, self.DETECTION_WINDOW_SECONDS)
+        events = self._prune_cached_events(self.raw_usercache, user_id, now, self.RAW_DETECTION_WINDOW_SECONDS)
         events.append({
             "time": now,
             "channel_id": channel_id,
