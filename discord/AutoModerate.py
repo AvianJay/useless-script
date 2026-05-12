@@ -10,6 +10,7 @@ import re
 import emoji
 import sqlite3
 import io
+import json
 from logger import log
 import logging
 
@@ -24,15 +25,19 @@ all_settings = [
     "escape_punish-duration",
     "too_many_h1-max_length",
     "too_many_h1-action",
+    "too_many_h1-ignore_channels",
     "too_many_emojis-max_emojis",
     "too_many_emojis-action",
+    "too_many_emojis-ignore_channels",
     "scamtrap-channel_id",
     "scamtrap-action",
     "anti_invite_link-allow_current_server",
     "anti_invite_link-action",
+    "anti_invite_link-ignore_channels",
     "anti_uispam-max_count",
     "anti_uispam-time_window",
     "anti_uispam-action",
+    "anti_uispam-ignore_channels",
     "anti_raid-max_joins",
     "anti_raid-time_window",
     "anti_raid-action",
@@ -40,6 +45,7 @@ all_settings = [
     "anti_spam-time_window",
     "anti_spam-similarity",
     "anti_spam-action",
+    "anti_spam-ignore_channels",
     "automod_detect-log_channel",
     "automod_detect-action",
     "automod_detect-filter_rule",
@@ -64,6 +70,13 @@ INVITE_LINK_RE = re.compile(
 )
 _INVITE_GUILD_CACHE_TTL = timedelta(minutes=10)
 _invite_guild_cache: dict[str, tuple[int | None, datetime]] = {}
+AUTOMOD_IGNORE_CHANNEL_FEATURES = {
+    "anti_invite_link",
+    "too_many_h1",
+    "too_many_emojis",
+    "anti_uispam",
+    "anti_spam",
+}
 
 
 def _is_truthy(value, default: bool = False) -> bool:
@@ -72,6 +85,47 @@ def _is_truthy(value, default: bool = False) -> bool:
     if isinstance(value, bool):
         return value
     return str(value).strip().lower() in {"true", "1", "yes", "on"}
+
+
+def _normalize_channel_id_list(value) -> list[int]:
+    if value is None:
+        return []
+
+    if isinstance(value, (list, tuple, set)):
+        raw_items = list(value)
+    elif isinstance(value, int):
+        raw_items = [value]
+    elif isinstance(value, str):
+        text = value.strip()
+        if not text or text.lower() in {"none", "null", "[]"}:
+            return []
+        try:
+            parsed = json.loads(text)
+        except (json.JSONDecodeError, TypeError):
+            parsed = None
+        if isinstance(parsed, list):
+            raw_items = parsed
+        else:
+            raw_items = re.findall(r"\d+", text)
+    else:
+        return []
+
+    channel_ids = []
+    seen = set()
+    for item in raw_items:
+        normalized = parse_mention_to_id(str(item).strip())
+        if not normalized.isdigit():
+            continue
+        channel_id = int(normalized)
+        if channel_id in seen:
+            continue
+        seen.add(channel_id)
+        channel_ids.append(channel_id)
+    return channel_ids
+
+
+def _is_ignored_channel(feature_config: dict, channel_id: int) -> bool:
+    return channel_id in _normalize_channel_id_list(feature_config.get("ignore_channels"))
 
 
 def _extract_invite_codes(content: str) -> list[str]:
@@ -183,6 +237,19 @@ class QuickSetupView(discord.ui.View):
         self.feature = None
         self.config = {}
 
+    def _format_channel_list(self, guild: discord.Guild, channel_ids) -> str:
+        normalized_ids = _normalize_channel_id_list(channel_ids)
+        if not normalized_ids:
+            return "無"
+
+        mentions = []
+        for channel_id in normalized_ids[:10]:
+            ch = guild.get_channel(channel_id)
+            mentions.append(ch.mention if ch else f"<#{channel_id}>")
+        if len(normalized_ids) > 10:
+            mentions.append(f"... 共 {len(normalized_ids)} 個")
+        return "、".join(mentions)
+
     def _get_embed(self, guild: discord.Guild):
         embed = discord.Embed(title="⚡ 自動管理快速設定", color=0x5865F2)
         if self.step == 1:
@@ -208,6 +275,8 @@ class QuickSetupView(discord.ui.View):
                     elif k == "channel_id" and v:
                         ch = guild.get_channel(int(v))
                         embed.add_field(name="頻道", value=ch.mention if ch else v, inline=False)
+                    elif k == "ignore_channels":
+                        embed.add_field(name="忽略頻道", value=self._format_channel_list(guild, v), inline=False)
                     elif k == "allow_current_server":
                         embed.add_field(name="允許本伺服器連結", value="是" if _is_truthy(v) else "否", inline=False)
                     elif k == "action":
@@ -349,6 +418,15 @@ class QuickSetupView(discord.ui.View):
             ch_sel.callback = self._on_automod_detect_channel
             self.add_item(ch_sel)
 
+        if self.feature in AUTOMOD_IGNORE_CHANNEL_FEATURES:
+            ignore_sel = discord.ui.ChannelSelect(
+                placeholder="選擇要忽略的頻道（可多選）",
+                channel_types=[discord.ChannelType.text, discord.ChannelType.news],
+                min_values=0, max_values=25,
+            )
+            ignore_sel.callback = self._on_ignore_channels_select
+            self.add_item(ignore_sel)
+
         action_opts = [discord.SelectOption(label=l, value=v) for l, v in ACTION_PRESETS]
         action_sel = discord.ui.Select(placeholder="處置動作（選一個）", options=action_opts)
         action_sel.callback = self._on_action_select
@@ -446,6 +524,11 @@ class QuickSetupView(discord.ui.View):
         await interaction.response.defer()
         await interaction.message.edit(embed=self._get_embed(interaction.guild), view=self)
 
+    async def _on_ignore_channels_select(self, interaction: discord.Interaction):
+        self.config["ignore_channels"] = _normalize_channel_id_list(interaction.data.get("values", []))
+        await interaction.response.defer()
+        await interaction.message.edit(embed=self._get_embed(interaction.guild), view=self)
+
     async def _on_action_select(self, interaction: discord.Interaction):
         value = interaction.data["values"][0]
         if value == "__custom__":
@@ -475,7 +558,12 @@ class QuickSetupView(discord.ui.View):
         automod_settings[self.feature]["enabled"] = True
         for k, v in self.config.items():
             if k and v is not None:
-                automod_settings[self.feature][k] = str(v)
+                if k == "ignore_channels":
+                    automod_settings[self.feature][k] = _normalize_channel_id_list(v)
+                elif k == "allow_current_server":
+                    automod_settings[self.feature][k] = _is_truthy(v)
+                else:
+                    automod_settings[self.feature][k] = str(v)
         set_server_config(self.guild_id, "automod", automod_settings)
 
         feat_names = {"scamtrap": "詐騙陷阱", "escape_punish": "逃避責任懲處", "too_many_h1": "標題過多",
@@ -606,6 +694,42 @@ class AutoModerate(commands.GroupCog, name=app_commands.locale_str("automod")):
                 await interaction.response.send_message("`allow_current_server` 只接受 true / false。", ephemeral=True)
                 return
             value = _is_truthy(normalized_value)
+        if setting_key == "ignore_channels":
+            raw_text = str(value or "").strip()
+            if raw_text.lower() in {"none", "null", "clear", "[]"} or raw_text in {"無", "清空"}:
+                value = []
+            else:
+                tokens = [token.strip() for token in re.split(r"[,，\n]+", raw_text) if token.strip()]
+                if not tokens:
+                    value = []
+                else:
+                    parsed_channels = []
+                    invalid_tokens = []
+                    seen_channels = set()
+                    for token in tokens:
+                        parsed = parse_mention_to_id(token)
+                        if not parsed.isdigit():
+                            invalid_tokens.append(token)
+                            continue
+                        channel_id = int(parsed)
+                        if channel_id in seen_channels:
+                            continue
+                        seen_channels.add(channel_id)
+                        parsed_channels.append(channel_id)
+                    if invalid_tokens:
+                        await interaction.response.send_message(
+                            f"⚠️ 無法解析以下頻道：`{', '.join(invalid_tokens)}`。請使用頻道提及或頻道 ID，並以逗號分隔。",
+                            ephemeral=True,
+                        )
+                        return
+                    for channel_id in parsed_channels:
+                        if interaction.guild.get_channel(channel_id) is None:
+                            await interaction.response.send_message(
+                                f"⚠️ 找不到頻道（ID: `{channel_id}`），請確認這些頻道屬於目前伺服器。",
+                                ephemeral=True,
+                            )
+                            return
+                    value = parsed_channels
         # 若為頻道設定，驗證頻道存在且機器人有發言權限
         if setting_key in ["channel_id", "log_channel"] and value:
             try:
@@ -807,25 +931,25 @@ class AutoModerate(commands.GroupCog, name=app_commands.locale_str("automod")):
         embed.add_field(
             name="📢 標題過多 (too_many_h1)",
             value="偵測訊息中 Markdown 大標題 (`# `) 的總字數過長，防止洗版。\n"
-                  "設定項: `max_length`（最大字數，預設20）、`action`",
+                  "設定項: `max_length`（最大字數，預設20）、`action`、`ignore_channels`（忽略頻道）",
             inline=False
         )
         embed.add_field(
             name="😂 表情符號過多 (too_many_emojis)",
             value="偵測訊息中的表情符號數量（含自訂及 Unicode emoji），超過上限自動處置。\n"
-                  "設定項: `max_emojis`（最大數量，預設10）、`action`",
+                  "設定項: `max_emojis`（最大數量，預設10）、`action`、`ignore_channels`（忽略頻道）",
             inline=False
         )
         embed.add_field(
             name="🔗 邀請連結 (anti_invite_link)",
             value="偵測 Discord 邀請連結，可選擇是否允許本伺服器的邀請連結。\n"
-                  "設定項: `allow_current_server`（是否允許本服邀請）、`action`",
+                  "設定項: `allow_current_server`（是否允許本服邀請）、`action`、`ignore_channels`（忽略頻道）",
             inline=False
         )
         embed.add_field(
             name="📲 用戶安裝應用程式濫用 (anti_uispam)",
             value="偵測用戶透過 User Install 方式觸發的指令頻率，防止濫用。\n"
-                  "設定項: `max_count`（最大次數，預設5）、`time_window`（秒，預設60）、`action`",
+                  "設定項: `max_count`（最大次數，預設5）、`time_window`（秒，預設60）、`action`、`ignore_channels`（忽略頻道）",
             inline=False
         )
         embed.add_field(
@@ -837,7 +961,7 @@ class AutoModerate(commands.GroupCog, name=app_commands.locale_str("automod")):
         embed.add_field(
             name="🔁 防刷頻 (anti_spam)",
             value="偵測用戶短時間內發送相同或高度相似的訊息。\n"
-                  "設定項: `max_messages`（最大訊息數，預設5）、`time_window`（秒，預設30）、`similarity`（相似度閾值 0~100，預設75）、`action`",
+                  "設定項: `max_messages`（最大訊息數，預設5）、`time_window`（秒，預設30）、`similarity`（相似度閾值 0~100，預設75）、`action`、`ignore_channels`（忽略頻道）",
             inline=False
         )
         embed.add_field(
@@ -1069,6 +1193,7 @@ class AutoModerate(commands.GroupCog, name=app_commands.locale_str("automod")):
         if not message.guild:
             return
         guild_id = message.guild.id
+        message_channel_id = message.channel.id
         automod_settings = get_server_config(guild_id, "automod", {})
         
         # 用戶安裝應用程式濫用檢查（需在 bot 訊息過濾之前，因為 user install 的訊息作者是 bot）
@@ -1078,13 +1203,14 @@ class AutoModerate(commands.GroupCog, name=app_commands.locale_str("automod")):
             and not message.interaction_metadata.is_guild_integration()
         )
         
-        if is_user_install_message and automod_settings.get("anti_uispam", {}).get("enabled", False):
+        anti_uispam_settings = automod_settings.get("anti_uispam", {})
+        if is_user_install_message and anti_uispam_settings.get("enabled", False):
             triggering_user = message.interaction_metadata.user
             member = message.guild.get_member(triggering_user.id)
-            if member and not member.guild_permissions.administrator:
-                max_count = int(automod_settings["anti_uispam"].get("max_count", 5))
-                time_window = int(automod_settings["anti_uispam"].get("time_window", 60))
-                action = automod_settings["anti_uispam"].get("action", "delete {user}，請勿濫用用戶安裝的應用程式指令。, mute 10m 濫用用戶安裝指令")
+            if member and not member.guild_permissions.administrator and not _is_ignored_channel(anti_uispam_settings, message_channel_id):
+                max_count = int(anti_uispam_settings.get("max_count", 5))
+                time_window = int(anti_uispam_settings.get("time_window", 60))
+                action = anti_uispam_settings.get("action", "delete {user}，請勿濫用用戶安裝的應用程式指令。, mute 10m 濫用用戶安裝指令")
                 
                 now = datetime.now(timezone.utc)
                 guild_tracker = _uispam_tracker.setdefault(guild_id, {})
@@ -1140,9 +1266,10 @@ class AutoModerate(commands.GroupCog, name=app_commands.locale_str("automod")):
             return
 
         # 邀請連結檢查
-        if automod_settings.get("anti_invite_link", {}).get("enabled", False):
-            allow_current_server = _is_truthy(automod_settings["anti_invite_link"].get("allow_current_server", False))
-            action = automod_settings["anti_invite_link"].get("action", "delete {user}，請勿發送其他伺服器的邀請連結。")
+        anti_invite_settings = automod_settings.get("anti_invite_link", {})
+        if anti_invite_settings.get("enabled", False) and not _is_ignored_channel(anti_invite_settings, message_channel_id):
+            allow_current_server = _is_truthy(anti_invite_settings.get("allow_current_server", False))
+            action = anti_invite_settings.get("action", "delete {user}，請勿發送其他伺服器的邀請連結。")
             external_invite_codes = await _get_external_invite_codes(message, guild_id, allow_current_server)
             if external_invite_codes:
                 try:
@@ -1163,9 +1290,10 @@ class AutoModerate(commands.GroupCog, name=app_commands.locale_str("automod")):
                     )
 
         # 標題過多檢查
-        if automod_settings.get("too_many_h1", {}).get("enabled", False):
-            max_length = int(automod_settings["too_many_h1"].get("max_length", 20))
-            action = automod_settings["too_many_h1"].get("action", "warn")
+        too_many_h1_settings = automod_settings.get("too_many_h1", {})
+        if too_many_h1_settings.get("enabled", False) and not _is_ignored_channel(too_many_h1_settings, message_channel_id):
+            max_length = int(too_many_h1_settings.get("max_length", 20))
+            action = too_many_h1_settings.get("action", "warn")
             h1_count = 0
             split_lines = message.content.split("\n")
             for line in split_lines:
@@ -1186,9 +1314,10 @@ class AutoModerate(commands.GroupCog, name=app_commands.locale_str("automod")):
                     log(f"無法對用戶 {message.author} 執行標題過多的處理: {e}", level=logging.ERROR, module_name="AutoModerate", user=message.author, guild=message.guild)
         
         # 表情符號過多檢查
-        if automod_settings.get("too_many_emojis", {}).get("enabled", False):
-            max_emojis = int(automod_settings["too_many_emojis"].get("max_emojis", 10))
-            action = automod_settings["too_many_emojis"].get("action", "warn")
+        too_many_emojis_settings = automod_settings.get("too_many_emojis", {})
+        if too_many_emojis_settings.get("enabled", False) and not _is_ignored_channel(too_many_emojis_settings, message_channel_id):
+            max_emojis = int(too_many_emojis_settings.get("max_emojis", 10))
+            action = too_many_emojis_settings.get("action", "warn")
             emoji_count = len(re.findall(r'<a?:\w+:\d+>', message.content))
             emoji_count += len([c for c in message.content if emoji.is_emoji(c)])
             if emoji_count > max_emojis:
@@ -1199,11 +1328,12 @@ class AutoModerate(commands.GroupCog, name=app_commands.locale_str("automod")):
                     log(f"無法對用戶 {message.author} 執行表情符號過多的處理: {e}", level=logging.ERROR, module_name="AutoModerate", user=message.author, guild=message.guild)
         
         # 刷頻偵測檢查
-        if automod_settings.get("anti_spam", {}).get("enabled", False):
-            max_messages = int(automod_settings["anti_spam"].get("max_messages", 5))
-            time_window = int(automod_settings["anti_spam"].get("time_window", 30))
-            similarity_threshold = int(automod_settings["anti_spam"].get("similarity", 75)) / 100.0
-            action = automod_settings["anti_spam"].get("action", "mute 10m 刷頻自動禁言, delete {user}，請勿刷頻。")
+        anti_spam_settings = automod_settings.get("anti_spam", {})
+        if anti_spam_settings.get("enabled", False) and not _is_ignored_channel(anti_spam_settings, message_channel_id):
+            max_messages = int(anti_spam_settings.get("max_messages", 5))
+            time_window = int(anti_spam_settings.get("time_window", 30))
+            similarity_threshold = int(anti_spam_settings.get("similarity", 75)) / 100.0
+            action = anti_spam_settings.get("action", "mute 10m 刷頻自動禁言, delete {user}，請勿刷頻。")
             
             now = datetime.now(timezone.utc)
             content = message.content.strip()

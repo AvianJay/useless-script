@@ -13,6 +13,7 @@ import requests as http_requests
 import os
 import json
 import urllib.parse
+import re
 import discord
 from discord import app_commands
 from discord.ext import commands
@@ -476,6 +477,12 @@ def _coerce(value, stype):
                         row[k] = v
                     else:
                         row[k] = str(v).strip().lower() in ("true", "1", "yes", "on")
+                    continue
+                if k == "ignore_channels":
+                    if isinstance(v, list):
+                        row[k] = [int(ch) for ch in v if ch is not None and str(ch).strip().isdigit()]
+                    else:
+                        row[k] = [int(ch) for ch in re.findall(r"\d+", str(v))]
                     continue
                 row[k] = str(v) if not isinstance(v, str) else v
             if feat == "scamtrap" and "channel_id" in row:

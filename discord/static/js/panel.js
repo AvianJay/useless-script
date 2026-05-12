@@ -721,19 +721,23 @@ const AUTOMOD_FEATURES = [
     { id: 'too_many_h1', label: '📢 標題過多', desc: 'Markdown 大標題總字數上限', fields: [
         { key: 'max_length', label: '最大字數', type: 'number', default: '20', min: 1 },
         { key: 'action', label: '處置動作', type: 'string', default: 'warn', placeholder: '例: warn 或 mute 10m' },
+        { key: 'ignore_channels', label: '忽略頻道', type: 'channel_list', default: [] },
     ]},
     { id: 'too_many_emojis', label: '😂 表情符號過多', desc: '單則訊息 emoji 數量上限', fields: [
         { key: 'max_emojis', label: '最大數量', type: 'number', default: '10', min: 1 },
         { key: 'action', label: '處置動作', type: 'string', default: 'warn' },
+        { key: 'ignore_channels', label: '忽略頻道', type: 'channel_list', default: [] },
     ]},
     { id: 'anti_invite_link', label: '🔗 邀請連結', desc: '偵測 Discord 邀請連結，可選擇是否允許本伺服器連結', fields: [
         { key: 'allow_current_server', label: '允許本伺服器連結', type: 'boolean', default: false },
         { key: 'action', label: '處置動作', type: 'string', default: 'delete {user}，請勿發送其他伺服器的邀請連結。' },
+        { key: 'ignore_channels', label: '忽略頻道', type: 'channel_list', default: [] },
     ]},
     { id: 'anti_uispam', label: '📲 用戶安裝應用程式濫用', desc: 'User Install 指令觸發頻率', fields: [
         { key: 'max_count', label: '時間內最大觸發次數', type: 'number', default: '5', min: 1 },
         { key: 'time_window', label: '時間窗口 (秒)', type: 'number', default: '60', min: 1 },
         { key: 'action', label: '處置動作', type: 'string', default: 'delete {user}，請勿濫用用戶安裝的應用程式指令。, mute 10m 濫用用戶安裝指令' },
+        { key: 'ignore_channels', label: '忽略頻道', type: 'channel_list', default: [] },
     ]},
     { id: 'anti_raid', label: '🚨 防突襲', desc: '短時間內大量加入偵測', fields: [
         { key: 'max_joins', label: '時間內最大加入數', type: 'number', default: '5', min: 1 },
@@ -745,6 +749,7 @@ const AUTOMOD_FEATURES = [
         { key: 'time_window', label: '時間窗口 (秒)', type: 'number', default: '30', min: 1 },
         { key: 'similarity', label: '相似度 (%)', type: 'number', default: '75', min: 1, max: 100 },
         { key: 'action', label: '處置動作', type: 'string', default: 'mute 10m 刷頻自動禁言, delete {user}，請勿刷頻。' },
+        { key: 'ignore_channels', label: '忽略頻道', type: 'channel_list', default: [] },
     ]},
     { id: 'automod_detect', label: '🛡️ AutoMod 偵測', desc: '偵測 Discord 原生 AutoMod 規則觸發，發送通知並可執行額外處置', fields: [
         { key: 'log_channel', label: '通知頻道', type: 'channel', default: '' },
@@ -782,6 +787,88 @@ function buildAutomodConfigEditor(mod, s, value, channels) {
     function setFeatValue(featId, key, val) {
         getFeat(featId)[key] = val;
         save();
+    }
+
+    function normalizeChannelListValue(raw) {
+        if (Array.isArray(raw)) return raw.map(String).filter(Boolean);
+        if (raw == null || raw === '') return [];
+        if (typeof raw === 'string') {
+            const trimmed = raw.trim();
+            if (!trimmed) return [];
+            try {
+                const parsed = JSON.parse(trimmed);
+                if (Array.isArray(parsed)) return parsed.map(String).filter(Boolean);
+            } catch (_) {
+                return trimmed.match(/\d+/g) || [];
+            }
+        }
+        return [];
+    }
+
+    function buildAutomodChannelListEditor(initialValue, onChange) {
+        const selected = normalizeChannelListValue(initialValue);
+        const container = document.createElement('div');
+        container.className = 'role-list-container';
+
+        const tagsWrap = document.createElement('div');
+        tagsWrap.className = 'role-tags';
+        container.appendChild(tagsWrap);
+
+        const sel = document.createElement('select');
+        sel.className = 'form-select';
+        sel.innerHTML = '<option value="">➕ 新增頻道...</option>';
+        container.appendChild(sel);
+
+        const allowedChannels = channels.filter(ch => ['text', 'news'].includes(ch.type));
+
+        function renderTags() {
+            tagsWrap.innerHTML = '';
+            if (selected.length === 0) {
+                tagsWrap.innerHTML = '<span class="role-tag-empty">尚未新增任何頻道</span>';
+            }
+            for (const cid of selected) {
+                const ch = channels.find(c => String(c.id) === cid);
+                const tag = document.createElement('span');
+                tag.className = 'role-tag';
+                const prefix = ch && ch.category ? `[${ch.category}] ` : '';
+                tag.textContent = ch ? `# ${prefix}${ch.name}` : `ID: ${cid}`;
+                const removeBtn = document.createElement('button');
+                removeBtn.className = 'role-tag-remove';
+                removeBtn.textContent = '×';
+                removeBtn.addEventListener('click', () => {
+                    const idx = selected.indexOf(cid);
+                    if (idx > -1) selected.splice(idx, 1);
+                    renderTags();
+                    rebuildOptions();
+                    onChange([...selected]);
+                });
+                tag.appendChild(removeBtn);
+                tagsWrap.appendChild(tag);
+            }
+        }
+
+        function rebuildOptions() {
+            sel.innerHTML = '<option value="">➕ 新增頻道...</option>';
+            for (const ch of allowedChannels) {
+                if (selected.includes(String(ch.id))) continue;
+                const opt = document.createElement('option');
+                opt.value = ch.id;
+                opt.textContent = (ch.category ? `[${ch.category}] ` : '') + ch.name;
+                sel.appendChild(opt);
+            }
+        }
+
+        sel.addEventListener('change', () => {
+            if (!sel.value) return;
+            selected.push(sel.value);
+            renderTags();
+            rebuildOptions();
+            onChange([...selected]);
+        });
+
+        renderTags();
+        rebuildOptions();
+        return container;
     }
 
     for (const feat of AUTOMOD_FEATURES) {
@@ -870,6 +957,8 @@ function buildAutomodConfigEditor(mod, s, value, channels) {
                 wrap.appendChild(input);
                 wrap.appendChild(slider);
                 row.appendChild(wrap);
+            } else if (field.type === 'channel_list') {
+                row.appendChild(buildAutomodChannelListEditor(rawCur, val => setFeatValue(feat.id, field.key, val)));
             } else if (field.type === 'number') {
                 const input = document.createElement('input');
                 input.type = 'number';
