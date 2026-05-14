@@ -666,6 +666,9 @@ class AICommands(commands.Cog):
     MAX_EMOJI_CONTEXT_COUNT = 80
     MAX_TOOL_ITERATIONS = 4
     MAX_TOOL_RESULT_LENGTH = 3500
+    AI_RETRY_MAX_ATTEMPTS = 4
+    AI_RETRY_BASE_DELAY_SECONDS = 1.5
+    AI_RETRY_MAX_DELAY_SECONDS = 12.0
     AI_GUILD_BILLING_USER_KEY = "ai_guild_billing_user_id"
     AI_GUILD_CUSTOM_PROMPT_KEY = "ai_guild_custom_prompt"
     MAX_AI_GUILD_CUSTOM_PROMPT_LENGTH = 1800
@@ -676,7 +679,11 @@ class AICommands(commands.Cog):
     MAX_AI_MEMORY_TITLE_LENGTH = 80
     MAX_AI_MEMORY_CONTENT_LENGTH = 400
     MAX_AI_MEMORY_TAGS = 8
-    WEB_SEARCH_TOOL_MODEL = "gemini-search"
+    MAX_AI_MEMORY_PROMPT_USER_ENTRIES = 12
+    MAX_AI_MEMORY_PROMPT_GUILD_ENTRIES = 24
+    MAX_AI_MEMORY_PROMPT_TOTAL_CHARS = 5000
+    MAX_AI_MEMORY_PROMPT_ENTRY_CONTENT_LENGTH = 320
+    WEB_SEARCH_TOOL_MODEL = "gemini-fast"
     WEB_SEARCH_TOOL_MAX_CHARS = 500
     WEB_SEARCH_TOOL_MAX_TOKENS = 240
     WEB_SEARCH_TOOL_MAX_SOURCES = 4
@@ -837,15 +844,105 @@ class AICommands(commands.Cog):
         except RuntimeError:
             pass
 
+    @staticmethod
+    def _get_prompt_now() -> datetime:
+        return datetime.now(timezone(timedelta(hours=8)))
+
+    @classmethod
+    def _is_ai_rate_limit_error(cls, error: Exception) -> bool:
+        if error is None:
+            return False
+
+        for candidate in (
+            getattr(error, "status", None),
+            getattr(error, "status_code", None),
+            getattr(getattr(error, "response", None), "status", None),
+            getattr(getattr(error, "response", None), "status_code", None),
+        ):
+            try:
+                if int(candidate) == 429:
+                    return True
+            except (TypeError, ValueError):
+                pass
+
+        message = str(error or "").lower()
+        return (
+            "429" in message
+            or "too many requests" in message
+            or "rate limit" in message
+            or "ratelimit" in message
+        )
+
+    @classmethod
+    def _get_ai_retry_delay_seconds(cls, error: Exception, attempt_index: int) -> float:
+        headers = getattr(getattr(error, "response", None), "headers", None) or getattr(error, "headers", None)
+        if headers:
+            retry_after = headers.get("Retry-After") or headers.get("retry-after")
+            try:
+                retry_after_seconds = float(retry_after)
+            except (TypeError, ValueError):
+                retry_after_seconds = None
+            if retry_after_seconds is not None:
+                return max(0.5, min(cls.AI_RETRY_MAX_DELAY_SECONDS, retry_after_seconds))
+
+        message = str(error or "")
+        for pattern in (
+            r"retry(?:[-_\s]+after)?[:=\s]+(\d+(?:\.\d+)?)",
+            r"try again in (\d+(?:\.\d+)?)\s*(?:seconds?|secs?|s)\b",
+        ):
+            match = re.search(pattern, message, flags=re.IGNORECASE)
+            if not match:
+                continue
+            try:
+                parsed_delay = float(match.group(1))
+            except (TypeError, ValueError):
+                continue
+            return max(0.5, min(cls.AI_RETRY_MAX_DELAY_SECONDS, parsed_delay))
+
+        backoff_delay = cls.AI_RETRY_BASE_DELAY_SECONDS * (2 ** max(0, attempt_index - 1))
+        return min(cls.AI_RETRY_MAX_DELAY_SECONDS, backoff_delay)
+
+    async def _run_ai_completion_with_retry(self, request_coro_factory, *, model: str):
+        last_error = None
+        max_attempts = max(1, int(self.AI_RETRY_MAX_ATTEMPTS))
+
+        for attempt_index in range(1, max_attempts + 1):
+            try:
+                return await request_coro_factory()
+            except Exception as error:
+                last_error = error
+                if not self._is_ai_rate_limit_error(error):
+                    raise
+                if attempt_index >= max_attempts:
+                    break
+
+                delay_seconds = self._get_ai_retry_delay_seconds(error, attempt_index)
+                log(
+                    (
+                        f"AI completion rate limited for model={model}, "
+                        f"retrying in {delay_seconds:.2f}s (attempt {attempt_index}/{max_attempts})"
+                    ),
+                    module_name="AI",
+                    level=logging.WARNING,
+                )
+                await asyncio.sleep(delay_seconds)
+
+        raise RuntimeError(
+            f"AI provider returned rate limit / 429 after {max_attempts} attempts: {str(last_error)[:220]}"
+        ) from last_error
+
     async def _generate_ai_completion(self, **kwargs):
         """封裝 AI 請求，方便未來統一修改"""
-        # check model
         model = kwargs.get("model", "openai-fast")
-        if model in MODEL_RATES:
-            return await asyncio.to_thread(self.client.chat.completions.create, **kwargs)
-        if model in poe_text_models or model in poe_video_models:
-            return await self._request_poe_completion_with_fallback(kwargs)
-        raise ValueError(f"Unsupported model: {model}")
+
+        async def request_once():
+            if model in MODEL_RATES:
+                return await asyncio.to_thread(self.client.chat.completions.create, **kwargs)
+            if model in poe_text_models or model in poe_video_models:
+                return await self._request_poe_completion_with_fallback(kwargs)
+            raise ValueError(f"Unsupported model: {model}")
+
+        return await self._run_ai_completion_with_retry(request_once, model=model)
 
     @staticmethod
     def _is_poe_slow_request_error(error: Exception) -> bool:
@@ -1837,6 +1934,7 @@ class AICommands(commands.Cog):
             }
             for reaction in message.reactions[:8]
         ]
+        component_text = self._extract_component_text(getattr(message, "components", None))
 
         return {
             "id": message.id,
@@ -1844,6 +1942,7 @@ class AICommands(commands.Cog):
             "author": await self._resolve_user_display(getattr(getattr(message, "author", None), "id", None), guild),
             "content": content or None,
             "formatted": formatted,
+            "component_text": component_text or None,
             "created_at": self._serialize_datetime(message.created_at),
             "edited_at": self._serialize_datetime(message.edited_at),
             "jump_url": getattr(message, "jump_url", None),
@@ -1958,6 +2057,22 @@ class AICommands(commands.Cog):
         )
         return self._docs_feature_prompt_cache
 
+    def _build_runtime_prompt_context(self, tool_context: dict | None = None) -> str:
+        now = self._get_prompt_now()
+        lines = [
+            "[Runtime context]",
+            f"Current time: {now.strftime('%Y-%m-%d %H:%M:%S')} UTC+08:00 (Asia/Taipei, {now.strftime('%A')}).",
+            "You may create or update AI memory whenever it is useful, even if the user did not explicitly ask you to remember something.",
+            "In guild channels, prefer guild_shared for server-wide facts, shared lists, recurring jokes, and member notes that should be visible to everyone using AI in this server.",
+            "Use user_global for personal facts tied only to the current user across servers.",
+            "When the memory list below already contains the same topic, reuse its memory_id and update that entry instead of creating duplicates.",
+            "Casual shared lists are allowed. Avoid storing obvious secrets such as passwords, tokens, private API keys, or payment credentials.",
+        ]
+        guild = (tool_context or {}).get("guild")
+        if guild is not None:
+            lines.append("guild_shared memory in this channel is shared by members of the current server.")
+        return "\n".join(lines)
+
     def _build_system_with_context(
         self,
         user_context: str = "",
@@ -1969,6 +2084,7 @@ class AICommands(commands.Cog):
         parts = [
             SYSTEM_PROMPT,
             TOOL_USAGE_PROMPT,
+            self._build_runtime_prompt_context(tool_context),
             self._get_docs_feature_prompt(),
             self._build_guild_ai_custom_prompt_context(tool_context),
             self._build_ai_profile_context(tool_context),
@@ -1976,9 +2092,9 @@ class AICommands(commands.Cog):
         ]
         return "\n\n".join(part for part in parts if part)
 
-    @staticmethod
-    def _ai_memory_timestamp() -> str:
-        return datetime.now(timezone(timedelta(hours=8))).isoformat(timespec="seconds")
+    @classmethod
+    def _ai_memory_timestamp(cls) -> str:
+        return cls._get_prompt_now().isoformat(timespec="seconds")
 
     @classmethod
     def _normalize_ai_memory_tags(cls, tags) -> list[str]:
@@ -2004,31 +2120,6 @@ class AICommands(commands.Cog):
     @classmethod
     def _sanitize_ai_memory_text(cls, value: str, limit: int) -> str:
         return re.sub(r"\s+", " ", str(value or "")).strip()[:limit]
-
-    @staticmethod
-    def _has_explicit_ai_memory_write_intent(message: str) -> bool:
-        text = str(message or "").strip()
-        if not text:
-            return False
-        patterns = (
-            r"記住",
-            r"幫我記",
-            r"請記下",
-            r"記下來",
-            r"更新記憶",
-            r"更新這段記憶",
-            r"忘記這件事",
-            r"忘掉這件事",
-            r"刪掉這段記憶",
-            r"刪除這段記憶",
-            r"不要再記得",
-            r"(?i)\bremember\b",
-            r"(?i)\bsave (this|that)\b",
-            r"(?i)\bupdate memory\b",
-            r"(?i)\bforget (this|that)\b",
-            r"(?i)\bdelete (this|that) memory\b",
-        )
-        return any(re.search(pattern, text) for pattern in patterns)
 
     @staticmethod
     def _can_manage_guild_ai_memory(user, guild) -> bool:
@@ -2149,7 +2240,7 @@ class AICommands(commands.Cog):
         allow_both: bool = False,
     ) -> tuple[str | None, str | None]:
         guild = (tool_context or {}).get("guild")
-        default_scope = "both" if allow_both and guild else "user_global"
+        default_scope = "both" if allow_both and guild else ("guild_shared" if guild else "user_global")
         scope = str(requested_scope or default_scope).strip().lower()
         if scope == "auto":
             scope = default_scope
@@ -2251,57 +2342,106 @@ class AICommands(commands.Cog):
                 return scored_matches[0][1]
         return None
 
-    def _format_ai_profile_entry(self, entry: dict) -> str | None:
+    def _format_ai_profile_entry(self, entry: dict, scope: str, *, content_limit: int | None = None) -> str | None:
         if not isinstance(entry, dict):
             return None
+
         title = self._sanitize_ai_memory_text(entry.get("title", ""), self.MAX_AI_MEMORY_TITLE_LENGTH)
         subject = self._sanitize_ai_memory_text(entry.get("subject", ""), self.MAX_AI_MEMORY_TITLE_LENGTH)
-        content = self._sanitize_ai_memory_text(entry.get("content", ""), self.MAX_AI_MEMORY_CONTENT_LENGTH)
-        tags = self._normalize_ai_memory_tags(entry.get("tags"))
-        label_parts = [part for part in [title, subject] if part]
-        label = " / ".join(dict.fromkeys(label_parts)) if label_parts else "未命名資訊"
+        content = self._sanitize_ai_memory_text(
+            entry.get("content", ""),
+            min(content_limit or self.MAX_AI_MEMORY_PROMPT_ENTRY_CONTENT_LENGTH, self.MAX_AI_MEMORY_CONTENT_LENGTH),
+        )
         if not content:
             return None
+
+        memory_id = self._sanitize_ai_memory_text(entry.get("memory_id") or entry.get("id") or "", 48)
+        tags = self._normalize_ai_memory_tags(entry.get("tags"))
+        updated_at = self._sanitize_ai_memory_text(entry.get("updated_at", ""), 40)
+
+        parts = [f"scope={scope}"]
+        if memory_id:
+            parts.append(f"id={memory_id}")
+        if title:
+            parts.append(f"title={title}")
+        if subject:
+            parts.append(f"subject={subject}")
         if tags:
-            return f"- {label}: {content} [tags: {', '.join(tags)}]"
-        return f"- {label}: {content}"
+            parts.append(f"tags={', '.join(tags)}")
+        if updated_at:
+            parts.append(f"updated={updated_at}")
+        parts.append(f"content={content}")
+        return "- " + " | ".join(parts)
 
     def _build_ai_profile_context(self, tool_context: dict | None = None) -> str:
         parts = []
-        user_entries, _ = self._get_ai_memory_entries("user_global", tool_context)
-        if user_entries:
-            user_lines = []
-            for entry in sorted(
-                user_entries,
+        remaining_chars = self.MAX_AI_MEMORY_PROMPT_TOTAL_CHARS
+
+        def build_section(title: str, scope: str, entries: list[dict], limit: int):
+            nonlocal remaining_chars
+            if not entries or remaining_chars <= 0:
+                return
+
+            lines = []
+            sorted_entries = sorted(
+                entries,
                 key=lambda item: str(item.get("updated_at") or item.get("created_at") or ""),
                 reverse=True,
-            )[:4]:
-                line = self._format_ai_profile_entry(entry)
-                if line:
-                    user_lines.append(line)
-            if user_lines:
-                parts.append("[使用者共通 profile]\n" + "\n".join(user_lines))
+            )
+            for entry in sorted_entries[:limit]:
+                line = self._format_ai_profile_entry(
+                    entry,
+                    scope,
+                    content_limit=self.MAX_AI_MEMORY_PROMPT_ENTRY_CONTENT_LENGTH,
+                )
+                if not line:
+                    continue
+                projected_len = len(line) + 1
+                if lines and projected_len > remaining_chars:
+                    break
+                if projected_len > remaining_chars:
+                    line = self._truncate_tool_text(line, max_len=max(80, remaining_chars - 4))
+                    projected_len = len(line) + 1
+                lines.append(line)
+                remaining_chars -= projected_len
+                if remaining_chars <= 0:
+                    break
+
+            if not lines:
+                return
+
+            omitted_count = max(0, len(sorted_entries) - len(lines))
+            if omitted_count > 0 and remaining_chars > 40:
+                omitted_line = f"- ... {omitted_count} more {scope} memory entries not shown."
+                lines.append(omitted_line)
+                remaining_chars -= len(omitted_line) + 1
+
+            parts.append(f"[{title}]\n" + "\n".join(lines))
+
+        user_entries, _ = self._get_ai_memory_entries("user_global", tool_context)
+        build_section(
+            "AI user_global memory list",
+            "user_global",
+            user_entries,
+            self.MAX_AI_MEMORY_PROMPT_USER_ENTRIES,
+        )
 
         guild = (tool_context or {}).get("guild")
         if guild is not None:
             guild_entries, _ = self._get_ai_memory_entries("guild_shared", tool_context)
-            if guild_entries:
-                guild_lines = []
-                for entry in sorted(
-                    guild_entries,
-                    key=lambda item: str(item.get("updated_at") or item.get("created_at") or ""),
-                    reverse=True,
-                )[:6]:
-                    line = self._format_ai_profile_entry(entry)
-                    if line:
-                        guild_lines.append(line)
-                if guild_lines:
-                    parts.append("[伺服器共通氛圍 / profile]\n" + "\n".join(guild_lines))
+            build_section(
+                "AI guild_shared memory list",
+                "guild_shared",
+                guild_entries,
+                self.MAX_AI_MEMORY_PROMPT_GUILD_ENTRIES,
+            )
 
         if not parts:
             return ""
         return (
-            "AI 共通背景（每次對話都可以參考；如果和當前訊息衝突，就以當前訊息為準）：\n"
+            "[AI memory list]\n"
+            "These are durable memories already stored. `guild_shared` entries are shared across this server. "
+            "Prefer updating an existing memory by `memory_id` when the topic already exists.\n"
             + "\n\n".join(parts)
         )
 
@@ -2606,7 +2746,7 @@ class AICommands(commands.Cog):
                             "query": {"type": "string"},
                             "model": {
                                 "type": "string",
-                                "enum": ["auto", "gemini-search", "gemini-fast"],
+                                "enum": ["auto", "gemini-fast"],
                             },
                             "max_chars": {"type": "integer"},
                             "include_sources": {"type": "boolean"},
@@ -2896,10 +3036,11 @@ class AICommands(commands.Cog):
                 "If the user explicitly asks to generate a video, animation clip, or ad clip, call generate_video.",
                 f"Discord message content is limited to about {self.DISCORD_MESSAGE_CHAR_LIMIT} characters. If the full answer, code, logs, list, or document would exceed that, call send_as_file.",
                 "After calling send_as_file, keep the final answer short and do not repeat the full file contents in the final message.",
-                "Current user/global profile and guild shared profile may already be injected into context. Read them normally instead of writing memory by default.",
-                "Only use AI memory write tools when the user explicitly asks you to remember, update, or forget something. Do not write memory just because you inferred a pattern from casual chat.",
-                "Store personal cross-server facts in user_global. Store server culture/shared facts in guild_shared only when the request is explicit, suitable for a shared profile, and the user is allowed to manage guild memory.",
-                "Use memory conservatively: keep durable helpful facts, and do not store secrets, tokens, passwords, exact financial data, or highly sensitive private information.",
+                "Current user/global memory and guild shared memory may already be injected into context. Reuse those memories directly and use the listed memory_ids when updating an existing topic.",
+                "You may create or update AI memory whenever it is useful, even if the user did not explicitly ask you to remember something.",
+                "In guild channels, prefer guild_shared for server-wide facts, recurring jokes, shared lists, and member notes that should be visible to everyone using AI in this server. Use user_global for personal cross-server facts tied only to the current user.",
+                "Casual shared lists are allowed. Avoid storing obvious secrets such as passwords, tokens, private API keys, or payment credentials.",
+                "Prefer updating an existing memory entry instead of creating duplicates when the memory list already contains the same topic.",
                 f"Available tools: {', '.join(tool_names)}",
                 f"Tool schemas: {json.dumps(tool_schemas, ensure_ascii=False)}",
                 docs_feature_prompt,
@@ -3000,10 +3141,6 @@ class AICommands(commands.Cog):
 
         current_user = (tool_context or {}).get("user")
         guild = (tool_context or {}).get("guild")
-        if not self._coerce_bool((tool_context or {}).get("memory_write_request_allowed"), False):
-            return {"error": "AI memory writes are only allowed when the user explicitly asks to remember or update something."}
-        if scope == "guild_shared" and not self._coerce_bool((tool_context or {}).get("guild_memory_write_allowed"), False):
-            return {"error": "guild_shared profile can only be modified by a guild manager or administrator."}
         content = self._sanitize_ai_memory_text(args.get("content", ""), self.MAX_AI_MEMORY_CONTENT_LENGTH)
         if not content:
             return {"error": "content is required"}
@@ -3082,10 +3219,6 @@ class AICommands(commands.Cog):
         if error:
             return {"error": error}
 
-        if not self._coerce_bool((tool_context or {}).get("memory_write_request_allowed"), False):
-            return {"error": "AI memory deletes are only allowed when the user explicitly asks to forget or delete something."}
-        if scope == "guild_shared" and not self._coerce_bool((tool_context or {}).get("guild_memory_write_allowed"), False):
-            return {"error": "guild_shared profile can only be modified by a guild manager or administrator."}
         memory_id = self._sanitize_ai_memory_text(args.get("memory_id", ""), 48)
         query = self._sanitize_ai_memory_text(args.get("query", ""), 120)
         if not memory_id and not query:
@@ -3116,7 +3249,7 @@ class AICommands(commands.Cog):
             return {"error": "query is required"}
 
         requested_model = str(args.get("model", "auto") or "auto").strip().lower()
-        if requested_model not in {"auto", "gemini-search", "gemini-fast"}:
+        if requested_model not in {"auto", "gemini-fast"}:
             requested_model = "auto"
         search_model = self.WEB_SEARCH_TOOL_MODEL if requested_model == "auto" else requested_model
 
@@ -3355,6 +3488,8 @@ class AICommands(commands.Cog):
                 item["attachments"] = serialized.get("attachments")
             if serialized.get("embed_summaries"):
                 item["embed_summaries"] = serialized.get("embed_summaries")
+            if serialized.get("component_text"):
+                item["component_text"] = serialized.get("component_text")
             messages.append(item)
 
         return {
@@ -4405,6 +4540,102 @@ class AICommands(commands.Cog):
         return await self._generate_ai_completion(**kwargs)
 
     @staticmethod
+    def _component_attr(item, attr: str):
+        try:
+            return getattr(item, attr, None)
+        except Exception:
+            return None
+
+    @staticmethod
+    def _normalize_component_text_fragment(value, max_len: int = 160) -> str:
+        text = re.sub(r"\s+", " ", str(value or "")).strip()
+        if not text:
+            return ""
+        if len(text) > max_len:
+            return text[: max_len - 3].rstrip() + "..."
+        return text
+
+    @classmethod
+    def _extract_component_text(
+        cls,
+        components,
+        *,
+        max_chars: int = 520,
+        max_items: int = 24,
+    ) -> str:
+        if not components:
+            return ""
+
+        fragments: list[str] = []
+        seen: set[str] = set()
+
+        def add_fragment(raw_value, label: str = ""):
+            if len(fragments) >= max_items:
+                return
+            value = cls._normalize_component_text_fragment(raw_value)
+            if not value:
+                return
+            if label:
+                label = cls._normalize_component_text_fragment(label, max_len=48)
+                if label:
+                    value = f"{label}: {value}"
+            dedupe_key = value.lower()
+            if dedupe_key in seen:
+                return
+            seen.add(dedupe_key)
+            fragments.append(value)
+
+        def walk(item):
+            if item is None or len(fragments) >= max_items:
+                return
+            if isinstance(item, str):
+                add_fragment(item)
+                return
+
+            class_name = type(item).__name__
+            for attr in ("content", "label", "description", "placeholder", "title", "value"):
+                value = cls._component_attr(item, attr)
+                if not value:
+                    continue
+                label = "" if attr == "content" else f"{class_name} {attr}"
+                add_fragment(value, label)
+
+            options = cls._component_attr(item, "options") or []
+            for option in list(options)[:6]:
+                option_bits = []
+                for attr in ("label", "description", "value"):
+                    option_value = cls._normalize_component_text_fragment(cls._component_attr(option, attr), max_len=80)
+                    if option_value:
+                        option_bits.append(option_value)
+                if option_bits:
+                    add_fragment(" / ".join(dict.fromkeys(option_bits)), f"{class_name} option")
+                if len(fragments) >= max_items:
+                    return
+
+            accessory = cls._component_attr(item, "accessory")
+            if accessory is not None:
+                walk(accessory)
+
+            children = cls._component_attr(item, "children") or []
+            for child in list(children)[:10]:
+                walk(child)
+                if len(fragments) >= max_items:
+                    return
+
+        for component in list(components)[:8]:
+            walk(component)
+            if len(fragments) >= max_items:
+                break
+
+        if not fragments:
+            return ""
+
+        combined = " | ".join(fragments)
+        if len(combined) > max_chars:
+            return combined[: max_chars - 3].rstrip() + "..."
+        return combined
+
+    @staticmethod
     def _embed_summary(embed: discord.Embed) -> str:
         """擷取 embed 的簡短文字摘要"""
         parts = []
@@ -4435,6 +4666,8 @@ class AICommands(commands.Cog):
         if skip_id and msg.id == skip_id:
             return None
 
+        component_text = AICommands._extract_component_text(getattr(msg, "components", None), max_chars=320, max_items=16)
+
         if msg.author.bot:
             # ── 本機器人的訊息 ──
             if self_id and msg.author.id == self_id:
@@ -4448,7 +4681,7 @@ class AICommands(commands.Cog):
                     summary = AICommands._embed_summary(msg.embeds[0])
                     parts.append(f"[Embed: {summary}]" if summary else "[Embed]")
                 if msg.components:
-                    parts.append("[包含互動元件]")
+                    parts.append(f"[Components: {component_text}]" if component_text else "[包含互動元件]")
                 if not parts:
                     return None
                 body = " ".join(parts)
@@ -4484,6 +4717,8 @@ class AICommands(commands.Cog):
                 summary = AICommands._embed_summary(msg.embeds[0])
                 if summary:
                     label += f" → {summary}"
+            if component_text:
+                label += f" → Components: {component_text}"
             return f"{msg.author.display_name} (ID: {msg.author.id}): {label}"
 
         # ── 一般用戶訊息 ──
@@ -4521,7 +4756,7 @@ class AICommands(commands.Cog):
 
         # Components（Component V2 / 一般按鈕等）
         if msg.components:
-            extra_parts.append("[包含互動元件]")
+            extra_parts.append(f"[Components: {component_text}]" if component_text else "[包含互動元件]")
 
         if not msg.content and not extra_parts:
             return None
@@ -4813,14 +5048,12 @@ class AICommands(commands.Cog):
             if new_conversation:
                 ConversationManager.clear_history(user.id, guild_id)
             
-            history = ConversationManager.get_history(user.id, guild_id)
-            tool_context = {
-                "user": user,
-                "guild": interaction.guild,
-                "channel": interaction.channel,
-                "memory_write_request_allowed": self._has_explicit_ai_memory_write_intent(resolved_message),
-                "guild_memory_write_allowed": self._can_manage_guild_ai_memory(user, interaction.guild),
-            }
+                history = ConversationManager.get_history(user.id, guild_id)
+                tool_context = {
+                    "user": user,
+                    "guild": interaction.guild,
+                    "channel": interaction.channel,
+                }
             tool_notice_text = None
 
             async def tool_progress_callback(tool_calls: list[dict], round_index: int):
@@ -5311,8 +5544,6 @@ class AICommands(commands.Cog):
                     "user": user,
                     "guild": guild,
                     "channel": ctx.channel,
-                    "memory_write_request_allowed": self._has_explicit_ai_memory_write_intent(sanitized_message),
-                    "guild_memory_write_allowed": self._can_manage_guild_ai_memory(user, guild),
                 }
                 tool_notice_text = None
 
