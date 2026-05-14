@@ -467,7 +467,7 @@ class DCTWBrowseView(discord.ui.LayoutView):
             query_text=self.query_text,
             selected_item=selected,
         )
-        await interaction.message.edit(view=detail_view)
+        await interaction.edit_original_response(view=detail_view)
 
 
 class DCTWDetailView(discord.ui.LayoutView):
