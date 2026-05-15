@@ -5047,13 +5047,13 @@ class AICommands(commands.Cog):
             # 處理對話歷史
             if new_conversation:
                 ConversationManager.clear_history(user.id, guild_id)
-            
-                history = ConversationManager.get_history(user.id, guild_id)
-                tool_context = {
-                    "user": user,
-                    "guild": interaction.guild,
-                    "channel": interaction.channel,
-                }
+
+            history = ConversationManager.get_history(user.id, guild_id)
+            tool_context = {
+                "user": user,
+                "guild": interaction.guild,
+                "channel": interaction.channel,
+            }
             tool_notice_text = None
 
             async def tool_progress_callback(tool_calls: list[dict], round_index: int):
