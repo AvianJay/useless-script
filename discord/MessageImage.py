@@ -15,6 +15,9 @@ import logging
 import traceback
 import random
 import time
+import json
+import math
+import tempfile
 if "OwnerTools" in modules:
     import OwnerTools
 
@@ -26,6 +29,18 @@ else:
 
 import re
 import emoji
+
+WHATTISTHISGUYTALKING_STATIC_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp"}
+WHATTISTHISGUYTALKING_GIF_EXTENSIONS = {".gif"}
+WHATTISTHISGUYTALKING_VIDEO_EXTENSIONS = {".mp4", ".mov", ".webm", ".mkv"}
+WHATTISTHISGUYTALKING_GIF_COOLDOWN_SECONDS = 20
+WHATTISTHISGUYTALKING_VIDEO_COOLDOWN_SECONDS = 60
+DEFAULT_DISCORD_UPLOAD_LIMIT = 25 * 1024 * 1024
+
+whatisthisguytalking_media = {"static": [], "gif": [], "video": []}
+whatisthisguytalking_gif_cooldowns = {}
+whatisthisguytalking_video_cooldowns = {}
+whatisthisguytalking_images = []
 
 def resolve_mentions(text, message):
     guild = message.guild
@@ -712,7 +727,266 @@ async def screenshot_cmd(ctx: commands.Context):
     except Exception as e:
         await ctx.reply(f"截圖失敗: {e}")
 
-whatisthisguytalking_images = []
+def _classify_whatisthisguytalking_file(file_path: str) -> str | None:
+    ext = os.path.splitext(file_path)[1].lower()
+    if ext in WHATTISTHISGUYTALKING_STATIC_EXTENSIONS:
+        return "static"
+    if ext in WHATTISTHISGUYTALKING_GIF_EXTENSIONS:
+        return "gif"
+    if ext in WHATTISTHISGUYTALKING_VIDEO_EXTENSIONS:
+        return "video"
+    return None
+
+
+def _pick_whatisthisguytalking_media(media_type: str | None = None) -> tuple[str, str]:
+    if media_type is not None:
+        choices = whatisthisguytalking_media.get(media_type, [])
+        if not choices:
+            raise RuntimeError(f"找不到可用的 {media_type} 素材")
+        return random.choice(choices), media_type
+
+    for candidate_type in ("static", "gif", "video"):
+        choices = whatisthisguytalking_media.get(candidate_type, [])
+        if choices:
+            return random.choice(choices), candidate_type
+
+    raise RuntimeError("目前沒有可用的「這傢伙在說什麼呢」素材")
+
+
+def _resize_whatisthisguytalking_screenshot(screenshot_bytes: bytes, target_width: int) -> Image.Image:
+    with Image.open(io.BytesIO(screenshot_bytes)) as screenshot_pil_image:
+        screenshot_rgb = screenshot_pil_image.convert("RGB")
+
+    screenshot_aspect_ratio = screenshot_rgb.width / screenshot_rgb.height
+    new_screenshot_height = max(int(target_width / screenshot_aspect_ratio), 1)
+    return screenshot_rgb.resize((target_width, new_screenshot_height), Image.Resampling.LANCZOS)
+
+
+def _compose_whatisthisguytalking_png(
+    screenshot_bytes: bytes,
+    template_image: Image.Image,
+) -> io.BytesIO:
+    template_rgba = template_image.convert("RGBA")
+    resized_screenshot = _resize_whatisthisguytalking_screenshot(
+        screenshot_bytes,
+        template_rgba.width,
+    )
+
+    combined_height = resized_screenshot.height + template_rgba.height
+    combined_image = Image.new("RGB", (template_rgba.width, combined_height))
+    combined_image.paste(resized_screenshot, (0, 0))
+    combined_image.paste(template_rgba, (0, resized_screenshot.height), template_rgba)
+
+    image_bytes = io.BytesIO()
+    combined_image.save(image_bytes, "PNG")
+    image_bytes.seek(0)
+    return image_bytes
+
+
+async def _run_media_command(command: list[str]) -> tuple[int, str, str]:
+    process = await asyncio.create_subprocess_exec(
+        *command,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
+    )
+    stdout, stderr = await process.communicate()
+    return (
+        process.returncode,
+        stdout.decode("utf-8", errors="ignore"),
+        stderr.decode("utf-8", errors="ignore"),
+    )
+
+
+async def _probe_video_dimensions(file_path: str) -> tuple[int, int]:
+    return_code, stdout, stderr = await _run_media_command([
+        "ffprobe",
+        "-v",
+        "error",
+        "-select_streams",
+        "v:0",
+        "-show_entries",
+        "stream=width,height",
+        "-of",
+        "json",
+        file_path,
+    ])
+    if return_code != 0:
+        raise RuntimeError(f"ffprobe 執行失敗: {stderr.strip() or stdout.strip()}")
+
+    payload = json.loads(stdout or "{}")
+    streams = payload.get("streams") or []
+    if not streams:
+        raise RuntimeError("影片素材沒有可用的視訊串流")
+
+    width = int(streams[0].get("width") or 0)
+    height = int(streams[0].get("height") or 0)
+    if width <= 0 or height <= 0:
+        raise RuntimeError("無法取得影片素材尺寸")
+
+    return width, height
+
+
+async def _extract_video_preview_frame(file_path: str) -> Image.Image:
+    with tempfile.TemporaryDirectory(prefix="whatisthisguytalking-frame-") as temp_dir:
+        frame_path = os.path.join(temp_dir, "frame.png")
+        return_code, stdout, stderr = await _run_media_command([
+            "ffmpeg",
+            "-y",
+            "-i",
+            file_path,
+            "-frames:v",
+            "1",
+            frame_path,
+        ])
+        if return_code != 0 or not os.path.exists(frame_path):
+            raise RuntimeError(f"擷取影片預覽失敗: {stderr.strip() or stdout.strip()}")
+
+        with Image.open(frame_path) as frame_image:
+            return frame_image.convert("RGBA").copy()
+
+
+async def _load_whatisthisguytalking_preview_template(
+    file_path: str,
+    media_type: str,
+) -> Image.Image:
+    if media_type == "video":
+        return await _extract_video_preview_frame(file_path)
+
+    with Image.open(file_path) as template_image:
+        return template_image.convert("RGBA").copy()
+
+
+async def _build_whatisthisguytalking_preview(screenshot_bytes: bytes) -> io.BytesIO:
+    file_path, media_type = _pick_whatisthisguytalking_media()
+    template_image = await _load_whatisthisguytalking_preview_template(file_path, media_type)
+    return _compose_whatisthisguytalking_png(screenshot_bytes, template_image)
+
+
+async def generate_whatisthisguytalking_gif(screenshot_bytes: bytes) -> io.BytesIO:
+    file_path, _ = _pick_whatisthisguytalking_media("gif")
+
+    with Image.open(file_path) as template_image:
+        resized_screenshot = _resize_whatisthisguytalking_screenshot(
+            screenshot_bytes,
+            template_image.width,
+        )
+        frames = []
+        durations = []
+        loop = template_image.info.get("loop", 0)
+
+        for frame in ImageSequence.Iterator(template_image):
+            frame_rgba = frame.convert("RGBA")
+            if frame_rgba.width != template_image.width:
+                new_height = max(
+                    int(frame_rgba.height * (template_image.width / frame_rgba.width)),
+                    1,
+                )
+                frame_rgba = frame_rgba.resize(
+                    (template_image.width, new_height),
+                    Image.Resampling.LANCZOS,
+                )
+
+            combined = Image.new(
+                "RGBA",
+                (template_image.width, resized_screenshot.height + frame_rgba.height),
+                (0, 0, 0, 255),
+            )
+            combined.paste(resized_screenshot, (0, 0))
+            combined.paste(frame_rgba, (0, resized_screenshot.height), frame_rgba)
+            frames.append(combined.convert("RGB"))
+            durations.append(
+                frame.info.get("duration", template_image.info.get("duration", 80)) or 80
+            )
+
+    if not frames:
+        raise RuntimeError("GIF 素材沒有可用的影格")
+
+    output_buffer = io.BytesIO()
+    frames[0].save(
+        output_buffer,
+        format="GIF",
+        save_all=True,
+        append_images=frames[1:],
+        duration=durations,
+        loop=loop,
+        optimize=True,
+    )
+    output_buffer.seek(0)
+    return output_buffer
+
+
+async def generate_whatisthisguytalking_video(screenshot_bytes: bytes) -> io.BytesIO:
+    file_path, _ = _pick_whatisthisguytalking_media("video")
+    target_width, _ = await _probe_video_dimensions(file_path)
+    resized_screenshot = _resize_whatisthisguytalking_screenshot(screenshot_bytes, target_width)
+
+    with tempfile.TemporaryDirectory(prefix="whatisthisguytalking-video-") as temp_dir:
+        screenshot_path = os.path.join(temp_dir, "screenshot.png")
+        output_path = os.path.join(temp_dir, "whatisthisguytalking.mp4")
+        resized_screenshot.save(screenshot_path, "PNG")
+
+        return_code, stdout, stderr = await _run_media_command([
+            "ffmpeg",
+            "-y",
+            "-loop",
+            "1",
+            "-framerate",
+            "30",
+            "-i",
+            screenshot_path,
+            "-i",
+            file_path,
+            "-filter_complex",
+            "[0:v][1:v]vstack=inputs=2,pad=ceil(iw/2)*2:ceil(ih/2)*2,format=yuv420p[v]",
+            "-map",
+            "[v]",
+            "-map",
+            "1:a?",
+            "-c:v",
+            "libx264",
+            "-preset",
+            "veryfast",
+            "-crf",
+            "28",
+            "-c:a",
+            "aac",
+            "-b:a",
+            "96k",
+            "-movflags",
+            "+faststart",
+            "-shortest",
+            output_path,
+        ])
+        if return_code != 0 or not os.path.exists(output_path):
+            raise RuntimeError(f"生成影片失敗: {stderr.strip() or stdout.strip()}")
+
+        with open(output_path, "rb") as video_file:
+            video_bytes = io.BytesIO(video_file.read())
+
+    video_bytes.seek(0)
+    return video_bytes
+
+
+def _consume_whatisthisguytalking_cooldown(
+    cooldowns: dict[int, float],
+    user_id: int,
+    cooldown_seconds: int,
+) -> int:
+    now = time.monotonic()
+    last_used = cooldowns.get(user_id)
+    if last_used is not None:
+        remaining = cooldown_seconds - (now - last_used)
+        if remaining > 0:
+            return math.ceil(remaining)
+
+    cooldowns[user_id] = now
+    return 0
+
+
+def _get_interaction_upload_limit(interaction: discord.Interaction) -> int:
+    if interaction.guild and interaction.guild.filesize_limit:
+        return interaction.guild.filesize_limit
+    return DEFAULT_DISCORD_UPLOAD_LIMIT
 
 def _composite_whatisthisguytalking(screenshot_bytes: bytes) -> io.BytesIO:
     """將快取的截圖 bytes 與隨機模板圖片合成"""
@@ -746,7 +1020,7 @@ async def generate_whatisthisguytalking(message: discord.Message) -> tuple[io.By
     """生成圖片，回傳 (合成圖片 buffer, 截圖原始 bytes 用於快取)"""
     screenshot_buffer = await screenshot(message)
     screenshot_bytes = screenshot_buffer.getvalue()
-    result = _composite_whatisthisguytalking(screenshot_bytes)
+    result = await _build_whatisthisguytalking_preview(screenshot_bytes)
     return result, screenshot_bytes
 
 
@@ -763,7 +1037,7 @@ class WhatIsThisGuyTalkingView(UpvoteView):
             await interaction.followup.send("❌只有原始請求者可以重新生成圖片。", ephemeral=True)
             return
         try:
-            buffer = _composite_whatisthisguytalking(self.screenshot_bytes)
+            buffer = await _build_whatisthisguytalking_preview(self.screenshot_bytes)
             await interaction.edit_original_response(
                 attachments=[discord.File(buffer, filename="whatisthisguytalking.png")],
                 view=self
@@ -780,10 +1054,128 @@ async def whatisthisguytalking(interaction: discord.Interaction, message: discor
     try:
         buffer, screenshot_bytes = await generate_whatisthisguytalking(message)
         # msg = f"現正開放投稿！\n-# {await get_command_mention('contribute', 'what-is-this-guy-talking-about')}"
-        await interaction.followup.send(file=discord.File(buffer, filename="whatisthisguytalking.png"), view=WhatIsThisGuyTalkingView(screenshot_bytes, user=interaction.user, original_user=message.author))
+        await interaction.followup.send(file=discord.File(buffer, filename="whatisthisguytalking.png"), view=EnhancedWhatIsThisGuyTalkingView(screenshot_bytes, user=interaction.user, original_user=message.author))
         log("引用圖片生成完成", module_name="MessageImage", user=interaction.user, guild=interaction.guild)
     except Exception as e:
         await interaction.followup.send(f"引用圖片生成失敗: {e}", ephemeral=True)
+
+class EnhancedWhatIsThisGuyTalkingView(UpvoteView):
+    def __init__(self, screenshot_bytes: bytes, user: discord.User = None, original_user: discord.User = None):
+        super().__init__(original_user=original_user)
+        self.screenshot_bytes = screenshot_bytes
+        self.user = user
+        self._media_lock = asyncio.Lock()
+        self.render_gif.disabled = not bool(whatisthisguytalking_media["gif"])
+        self.render_video.disabled = not bool(whatisthisguytalking_media["video"])
+
+    async def _start_media_generation(
+        self,
+        interaction: discord.Interaction,
+        button: discord.ui.Button,
+        media_type: str,
+        cooldowns: dict[int, float],
+        cooldown_seconds: int,
+    ) -> bool:
+        if self.user and interaction.user.id != self.user.id:
+            await interaction.response.send_message("只有原本產生這張圖的人可以按這個按鈕。", ephemeral=True)
+            return False
+
+        if not whatisthisguytalking_media.get(media_type):
+            await interaction.response.send_message(f"目前沒有可用的 {media_type} 素材。", ephemeral=True)
+            return False
+
+        remaining = _consume_whatisthisguytalking_cooldown(
+            cooldowns,
+            interaction.user.id,
+            cooldown_seconds,
+        )
+        if remaining > 0:
+            await interaction.response.send_message(
+                f"你還要等 {remaining} 秒才能再生成 {media_type}。",
+                ephemeral=True,
+            )
+            return False
+
+        async with self._media_lock:
+            if button.disabled:
+                await interaction.response.send_message("這個按鈕已經用過了。", ephemeral=True)
+                return False
+
+            button.disabled = True
+            button.style = discord.ButtonStyle.primary
+            await interaction.response.edit_message(view=self)
+
+        return True
+
+    @discord.ui.button(emoji="🔄", style=discord.ButtonStyle.blurple)
+    async def refresh(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await interaction.response.defer()
+        if self.user and interaction.user.id != self.user.id:
+            await interaction.followup.send("只有原本產生這張圖的人可以重新整理。", ephemeral=True)
+            return
+        try:
+            buffer = await _build_whatisthisguytalking_preview(self.screenshot_bytes)
+            await interaction.edit_original_response(
+                attachments=[discord.File(buffer, filename="whatisthisguytalking.png")],
+                view=self,
+            )
+        except Exception as e:
+            await interaction.followup.send(f"重新生成失敗: {e}", ephemeral=True)
+
+    @discord.ui.button(label="GIF", style=discord.ButtonStyle.gray)
+    async def render_gif(self, interaction: discord.Interaction, button: discord.ui.Button):
+        allowed = await self._start_media_generation(
+            interaction,
+            button,
+            "gif",
+            whatisthisguytalking_gif_cooldowns,
+            WHATTISTHISGUYTALKING_GIF_COOLDOWN_SECONDS,
+        )
+        if not allowed:
+            return
+
+        try:
+            output_buffer = await generate_whatisthisguytalking_gif(self.screenshot_bytes)
+            if output_buffer.getbuffer().nbytes > _get_interaction_upload_limit(interaction):
+                await interaction.followup.send("生成出的 GIF 超過這個地方的上傳限制。", ephemeral=True)
+                return
+
+            await interaction.edit_original_response(
+                attachments=[discord.File(output_buffer, filename="whatisthisguytalking.gif")],
+                view=self,
+            )
+        except discord.HTTPException as e:
+            await interaction.followup.send(f"GIF 生成失敗: {e}", ephemeral=True)
+        except Exception as e:
+            await interaction.followup.send(f"GIF 生成失敗: {e}", ephemeral=True)
+
+    @discord.ui.button(label="影片", style=discord.ButtonStyle.gray)
+    async def render_video(self, interaction: discord.Interaction, button: discord.ui.Button):
+        allowed = await self._start_media_generation(
+            interaction,
+            button,
+            "video",
+            whatisthisguytalking_video_cooldowns,
+            WHATTISTHISGUYTALKING_VIDEO_COOLDOWN_SECONDS,
+        )
+        if not allowed:
+            return
+
+        try:
+            output_buffer = await generate_whatisthisguytalking_video(self.screenshot_bytes)
+            if output_buffer.getbuffer().nbytes > _get_interaction_upload_limit(interaction):
+                await interaction.followup.send("生成出的影片超過這個地方的上傳限制。", ephemeral=True)
+                return
+
+            await interaction.edit_original_response(
+                attachments=[discord.File(output_buffer, filename="whatisthisguytalking.mp4")],
+                view=self,
+            )
+        except discord.HTTPException as e:
+            await interaction.followup.send(f"影片生成失敗: {e}", ephemeral=True)
+        except Exception as e:
+            await interaction.followup.send(f"影片生成失敗: {e}", ephemeral=True)
+
 
 browser = None
 
@@ -805,14 +1197,21 @@ async def setup_browser():
 on_ready_tasks.append(setup_browser)
 
 async def load_whatisthisguytalking_images():
-    global whatisthisguytalking_images
+    global whatisthisguytalking_media, whatisthisguytalking_images
     try:
         dir = "./whatisthisguytalking-images"
+        os.makedirs(dir, exist_ok=True)
+        whatisthisguytalking_media = {"static": [], "gif": [], "video": []}
+        whatisthisguytalking_images = []
         count    = 0
         for file in os.listdir(dir):
-            if file.endswith(".png") or file.endswith(".jpg") or file.endswith(".jpeg") or file.endswith(".gif") or file.endswith(".webp"):
-                whatisthisguytalking_images.append(os.path.join(dir, file))
-                count += 1
+            file_path = os.path.join(dir, file)
+            media_type = _classify_whatisthisguytalking_file(file_path)
+            if media_type is None:
+                continue
+            whatisthisguytalking_media[media_type].append(file_path)
+            whatisthisguytalking_images.append(file_path)
+            count += 1
         log(f"載入了 {count} 張「這傢伙在說什麼呢？」的圖片", module_name="MessageImage")
         return count
     except Exception as e:
@@ -822,7 +1221,7 @@ async def load_whatisthisguytalking_images():
 on_ready_tasks.append(load_whatisthisguytalking_images)
 
 @bot.command(aliases=["rwi"])
-@OwnerTools.is_owner()
+@((OwnerTools.is_owner()) if "OwnerTools" in modules else commands.check(lambda ctx: False))
 async def reload_whatisthisguytalking_images(ctx: commands.Context):
     count = await load_whatisthisguytalking_images()
     if count == 0:

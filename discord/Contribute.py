@@ -61,6 +61,34 @@ auth_tokens = {}
 contribution_cooldowns = {} # user_id: timestamp
 GLOBAL_GUILD_ID = 0
 APPROVAL_REWARD_GLOBAL = 200
+WHATTISTHISGUYTALKING_STATIC_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp"}
+WHATTISTHISGUYTALKING_GIF_EXTENSIONS = {".gif"}
+WHATTISTHISGUYTALKING_VIDEO_EXTENSIONS = {".mp4", ".mov", ".webm", ".mkv"}
+
+
+def classify_whatisthisguytalking_attachment(attachment: discord.Attachment) -> str | None:
+    content_type = (attachment.content_type or "").lower()
+    ext = os.path.splitext(attachment.filename or "")[1].lower()
+
+    if content_type == "image/gif" or ext in WHATTISTHISGUYTALKING_GIF_EXTENSIONS:
+        return "gif"
+    if content_type.startswith("video/") or ext in WHATTISTHISGUYTALKING_VIDEO_EXTENSIONS:
+        return "video"
+    if content_type.startswith("image/") or ext in WHATTISTHISGUYTALKING_STATIC_EXTENSIONS:
+        return "static"
+    return None
+
+
+def get_whatisthisguytalking_extension(attachment: discord.Attachment, media_type: str) -> str:
+    ext = os.path.splitext(attachment.filename or "")[1].lower()
+    if ext:
+        return ext
+
+    if media_type == "gif":
+        return ".gif"
+    if media_type == "video":
+        return ".mp4"
+    return ".png"
 
 def cleanup_tokens():
     current_time = time.time()
@@ -322,6 +350,54 @@ class ContributionView(discord.ui.View):
                     await user.send("你的投稿已被批准！")
 
             elif self.ctype == "whatisthisguytalking":
+                media_att = interaction.message.attachments[0] if interaction.message.attachments else None
+                if media_att is None:
+                    await interaction.followup.send("找不到投稿附件。", ephemeral=True)
+                    return
+
+                media_type = classify_whatisthisguytalking_attachment(media_att)
+                if media_type is None:
+                    await interaction.followup.send("這個投稿不是支援的圖片、GIF 或影片格式。", ephemeral=True)
+                    return
+
+                os.makedirs("whatisthisguytalking-images", exist_ok=True)
+                file_ext = get_whatisthisguytalking_extension(media_att, media_type)
+                path = os.path.join("whatisthisguytalking-images", uuid.uuid4().hex + file_ext)
+                await media_att.save(path)
+                await interaction.followup.send("投稿素材已儲存。", ephemeral=True)
+
+                embed = interaction.message.embeds[0]
+                embed.color = discord.Color.green()
+                embed.title += " [已通過]"
+                for child in self.children:
+                    child.disabled = True
+                await interaction.edit_original_response(embed=embed, view=self)
+
+                try:
+                    from MessageImage import load_whatisthisguytalking_images
+                    count = await load_whatisthisguytalking_images()
+                    await interaction.followup.send(f"已重新載入素材，目前共有 {count} 個檔案。", ephemeral=True)
+                except Exception as e:
+                    await interaction.followup.send(f"重新載入素材失敗: {e}", ephemeral=True)
+
+                user_id = interaction.message.embeds[0].fields[0].value
+                user_id_int = int(user_id)
+                rewarded, new_global_balance = grant_approval_global_reward_once(
+                    user_id=user_id_int,
+                    message_id=interaction.message.id,
+                    ctype=self.ctype
+                )
+
+                user = await bot.fetch_user(user_id_int)
+                if rewarded:
+                    await user.send(
+                        f"你的「這傢伙在說什麼呢」投稿已通過，並獲得 **{APPROVAL_REWARD_GLOBAL}** {GLOBAL_CURRENCY_NAME}\n"
+                        f"目前餘額: **{new_global_balance:,.2f}**"
+                    )
+                else:
+                    await user.send("你的「這傢伙在說什麼呢」投稿已通過。")
+                return
+
                 # Attachment 0: Image
                 embed = interaction.message.embeds[0]
                 if not embed.image:
@@ -584,8 +660,9 @@ class Contribute(commands.GroupCog, description="投稿圖片"):
                 await interaction.response.send_message(f"投稿過於頻繁，請等待 {remaining} 秒後再試。", ephemeral=True)
                 return
 
-        if not image.content_type or not image.content_type.startswith("image/"):
-            await interaction.response.send_message("請上傳一個圖片檔案。", ephemeral=True)
+        media_type = classify_whatisthisguytalking_attachment(image)
+        if media_type is None:
+            await interaction.response.send_message("請上傳圖片、GIF 或影片檔。", ephemeral=True)
             return
         contribute_channel_id = config("contribute_channel_id", None)
         if contribute_channel_id is None:
@@ -607,12 +684,16 @@ class Contribute(commands.GroupCog, description="投稿圖片"):
         
         # Download first
         img_data = await image.read()
-        file_ext = image.filename.split('.')[-1]
+        file_ext = get_whatisthisguytalking_extension(image, media_type).lstrip(".")
         file_uuid = str(uuid.uuid4())
         new_filename = f"{file_uuid}.{file_ext}"
         
         file = discord.File(io.BytesIO(img_data), filename=new_filename)
-        embed.set_image(url=f"attachment://{new_filename}")
+        embed.add_field(name="媒體類型", value={"static": "靜態圖片", "gif": "GIF", "video": "影片"}[media_type])
+        if media_type != "video":
+            embed.set_image(url=f"attachment://{new_filename}")
+        else:
+            embed.description = f"附件為影片：`{new_filename}`"
         
         view = ContributionView("whatisthisguytalking")
         await contribute_channel.send(embed=embed, file=file, view=view)
