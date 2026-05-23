@@ -536,6 +536,186 @@ class ContributionView(discord.ui.View):
             child.disabled = True
         await interaction.response.edit_message(embed=embed, view=self, attachments=[])
 
+class ContributionReviewView(discord.ui.View):
+    def __init__(self, ctype, audio_filename=None):
+        super().__init__(timeout=None)
+        self.ctype = ctype
+        self.audio_filename = audio_filename
+
+        if ctype == "feedgrass":
+            edit_btn = discord.ui.Button(
+                label="編輯 JSON",
+                style=discord.ButtonStyle.grey,
+                custom_id="contribution_edit_json_v2",
+                emoji="🛠️",
+            )
+            edit_btn.callback = self.edit_json
+            self.add_item(edit_btn)
+
+        approve_btn = discord.ui.Button(
+            label="批准",
+            style=discord.ButtonStyle.green,
+            custom_id=f"contribution_approve_v2_{ctype}",
+        )
+        approve_btn.callback = self.approve
+        self.add_item(approve_btn)
+
+        reject_btn = discord.ui.Button(
+            label="拒絕",
+            style=discord.ButtonStyle.red,
+            custom_id=f"contribution_reject_v2_{ctype}",
+        )
+        reject_btn.callback = self.reject
+        self.add_item(reject_btn)
+
+    def _disable_all_buttons(self):
+        for child in self.children:
+            child.disabled = True
+
+    async def _reward_submitter(self, interaction: discord.Interaction, approved_text: str):
+        user_id_int = int(interaction.message.embeds[0].fields[0].value)
+        rewarded, new_global_balance = grant_approval_global_reward_once(
+            user_id=user_id_int,
+            message_id=interaction.message.id,
+            ctype=self.ctype,
+        )
+        user = await bot.fetch_user(user_id_int)
+        if rewarded:
+            await user.send(
+                f"{approved_text}，並獲得 **{APPROVAL_REWARD_GLOBAL}** {GLOBAL_CURRENCY_NAME}\n"
+                f"目前餘額: **{new_global_balance:,.2f}**"
+            )
+        else:
+            await user.send(f"{approved_text}。")
+
+    async def approve(self, interaction: discord.Interaction):
+        await interaction.response.defer()
+        try:
+            if self.ctype == "feedgrass":
+                img_att = None
+                json_att = None
+                for att in interaction.message.attachments:
+                    if att.filename.endswith(".json"):
+                        json_att = att
+                    elif att.filename.endswith(".png") and att.filename != "preview.png":
+                        img_att = att
+
+                if not img_att or not json_att:
+                    await interaction.followup.send("找不到投稿需要的圖片或 JSON 附件。", ephemeral=True)
+                    return
+
+                os.makedirs("dsize-feedgrass-images", exist_ok=True)
+                await img_att.save(os.path.join("dsize-feedgrass-images", img_att.filename))
+                await json_att.save(os.path.join("dsize-feedgrass-images", json_att.filename))
+                await interaction.followup.send("投稿已儲存。", ephemeral=True)
+
+                embed = interaction.message.embeds[0]
+                embed.color = discord.Color.green()
+                embed.title += " [已通過]"
+                self._disable_all_buttons()
+                await interaction.edit_original_response(embed=embed, view=self)
+
+                try:
+                    from dsize import load_feedgrass_images
+                    count = load_feedgrass_images()
+                    await interaction.followup.send(f"已重新載入素材，目前共有 {count} 個檔案。", ephemeral=True)
+                except ImportError:
+                    pass
+
+                await self._reward_submitter(interaction, "你的投稿已通過")
+                return
+
+            if self.ctype == "whatisthisguytalking":
+                media_att = interaction.message.attachments[0] if interaction.message.attachments else None
+                if media_att is None:
+                    await interaction.followup.send("找不到投稿附件。", ephemeral=True)
+                    return
+
+                media_type = classify_whatisthisguytalking_attachment(media_att)
+                if media_type is None:
+                    await interaction.followup.send("這個投稿不是支援的圖片、GIF 或影片格式。", ephemeral=True)
+                    return
+
+                os.makedirs("whatisthisguytalking-images", exist_ok=True)
+                file_ext = get_whatisthisguytalking_extension(media_att, media_type)
+                saved_path = os.path.join("whatisthisguytalking-images", uuid.uuid4().hex + file_ext)
+                await media_att.save(saved_path)
+                await interaction.followup.send("投稿素材已儲存。", ephemeral=True)
+
+                embed = interaction.message.embeds[0]
+                embed.color = discord.Color.green()
+                embed.title += " [已通過]"
+                self._disable_all_buttons()
+                await interaction.edit_original_response(embed=embed, view=self)
+
+                try:
+                    from MessageImage import load_whatisthisguytalking_images
+                    count = await load_whatisthisguytalking_images()
+                    await interaction.followup.send(f"已重新載入素材，目前共有 {count} 個檔案。", ephemeral=True)
+                except Exception as e:
+                    await interaction.followup.send(f"重新載入素材失敗: {e}", ephemeral=True)
+
+                await self._reward_submitter(interaction, "你的「這傢伙在說什麼呢」投稿已通過")
+                return
+
+            if self.ctype == "dynamic_voice_audio":
+                if len(interaction.message.attachments) < 1:
+                    await interaction.followup.send("找不到投稿音訊附件。", ephemeral=True)
+                    return
+
+                audio_att = interaction.message.attachments[0]
+                audio_data = await audio_att.read()
+                audio_folder = os.path.join(os.path.dirname(__file__), "assets", "dynamic_voice_audio")
+                os.makedirs(audio_folder, exist_ok=True)
+                audio_path = os.path.join(audio_folder, self.audio_filename)
+                with open(audio_path, "wb") as f:
+                    f.write(audio_data)
+
+                await interaction.followup.send(f"投稿音訊已儲存為 {self.audio_filename}", ephemeral=True)
+
+                embed = interaction.message.embeds[0]
+                embed.color = discord.Color.green()
+                embed.title += " [已通過]"
+                self._disable_all_buttons()
+                await interaction.edit_original_response(embed=embed, view=self)
+
+                log(f"音檔已保存為：{self.audio_filename}", module_name="Contribute")
+                await self._reward_submitter(interaction, "你的音訊投稿已通過")
+                return
+
+        except Exception as e:
+            await interaction.followup.send(f"審核失敗: {e}", ephemeral=True)
+            traceback.print_exc()
+            log(f"Contribution Approve Error: {e}", module_name="Contribute", level=logging.ERROR)
+
+    async def edit_json(self, interaction: discord.Interaction):
+        try:
+            json_att = None
+            for att in interaction.message.attachments:
+                if att.filename.endswith(".json"):
+                    json_att = att
+                    break
+
+            if not json_att:
+                await interaction.response.send_message("找不到 JSON 附件。", ephemeral=True)
+                return
+
+            json_data = await json_att.read()
+            json_str = json_data.decode("utf-8")
+            modal = EditJsonModal(interaction.message)
+            modal.json_content.default = json_str
+            await interaction.response.send_modal(modal)
+        except Exception as e:
+            await interaction.response.send_message(f"開啟 JSON 編輯器失敗: {e}", ephemeral=True)
+            traceback.print_exc()
+
+    async def reject(self, interaction: discord.Interaction):
+        embed = interaction.message.embeds[0]
+        embed.color = discord.Color.red()
+        embed.title += " [已拒絕]"
+        self._disable_all_buttons()
+        await interaction.response.edit_message(embed=embed, view=self)
+
 @app.route("/contribute-feed-grass", methods=["GET", "POST"])
 def contribute_feed_grass():
     cleanup_tokens()
@@ -620,7 +800,7 @@ def contribute_feed_grass():
                 json_bytes = json.dumps(json_payload, indent=4, ensure_ascii=False).encode('utf-8')
                 json_file = discord.File(io.BytesIO(json_bytes), filename=json_filename)
                 
-                view = ContributionView("feedgrass")
+                view = ContributionReviewView("feedgrass")
                 await channel.send(embed=embed, files=[img_file, json_file, preview_file], view=view)
 
             bot.loop.create_task(send_contribution())
@@ -695,7 +875,7 @@ class Contribute(commands.GroupCog, description="投稿圖片"):
         else:
             embed.description = f"附件為影片：`{new_filename}`"
         
-        view = ContributionView("whatisthisguytalking")
+        view = ContributionReviewView("whatisthisguytalking")
         await contribute_channel.send(embed=embed, file=file, view=view)
         contribution_cooldowns[user_id] = time.time()
         await interaction.response.send_message("感謝您的投稿！我們會盡快審核您的圖片。", ephemeral=True)
@@ -748,7 +928,7 @@ class Contribute(commands.GroupCog, description="投稿圖片"):
         
         file = discord.File(io.BytesIO(audio_data), filename=audio.filename)
         
-        view = ContributionView("dynamic_voice_audio", audio_filename=audio_filename)
+        view = ContributionReviewView("dynamic_voice_audio", audio_filename=audio_filename)
         await contribute_channel.send(embed=embed, file=file, view=view)
         contribution_cooldowns[user_id] = time.time()
         await interaction.response.send_message("感謝您的投稿！我們會盡快審核您的音檔。\n-# 審核通過後會通知你。", ephemeral=True)
