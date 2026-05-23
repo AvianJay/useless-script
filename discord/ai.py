@@ -441,9 +441,56 @@ TOOL_USAGE_PROMPT = """工具使用規則：
 
 class AIResponseBuilder:
     """使用 Component V2 (LayoutView) 建立 AI 回應"""
+
+    RESPONSE_TEXT_MAX_LENGTH = 1900
+
+    @classmethod
+    def _split_response_text_chunks(cls, text: str, max_length: int | None = None) -> list[str]:
+        max_length = max_length or cls.RESPONSE_TEXT_MAX_LENGTH
+        remaining = str(text or "")
+        chunks: list[str] = []
+
+        while remaining:
+            if len(remaining) <= max_length:
+                chunks.append(remaining)
+                break
+
+            split_point = remaining.rfind('\n\n', 0, max_length)
+            if split_point == -1:
+                split_point = remaining.rfind('\n', 0, max_length)
+            if split_point == -1:
+                split_point = remaining.rfind(' ', 0, max_length)
+            if split_point == -1:
+                split_point = max_length
+
+            chunks.append(remaining[:split_point])
+            remaining = remaining[split_point:].lstrip()
+
+        return [chunk for chunk in chunks if chunk] or [""]
+
+    @classmethod
+    def _append_response_text_to_container(cls, container: discord.ui.Container, response_text: str):
+        sections = re.split(r'(?m)^\s*---\s*$', str(response_text or ""))
+        rendered_any = False
+
+        for section in sections:
+            if not section.strip():
+                continue
+
+            if rendered_any:
+                container.add_item(discord.ui.Separator(spacing=discord.SeparatorSpacing.small))
+
+            for chunk in cls._split_response_text_chunks(section.strip('\n')):
+                container.add_item(discord.ui.TextDisplay(chunk))
+
+            rendered_any = True
+
+        if not rendered_any:
+            container.add_item(discord.ui.TextDisplay(str(response_text or "")))
     
-    @staticmethod
+    @classmethod
     def create_response_view(
+        cls,
         response_text: str,
         user: discord.User,
         model_name: str = "gpt-oss",
@@ -469,28 +516,8 @@ class AIResponseBuilder:
             container.add_item(discord.ui.TextDisplay(f"⚠️ **警告**: {warning}"))
             container.add_item(discord.ui.Separator(spacing=discord.SeparatorSpacing.small))
         
-        # 回應內容 - 分割長訊息
-        max_length = 1900
-        if len(response_text) <= max_length:
-            container.add_item(discord.ui.TextDisplay(response_text))
-        else:
-            remaining = response_text
-            while remaining:
-                if len(remaining) <= max_length:
-                    container.add_item(discord.ui.TextDisplay(remaining))
-                    break
-                
-                # 找到最佳分割點
-                split_point = remaining.rfind('\n\n', 0, max_length)
-                if split_point == -1:
-                    split_point = remaining.rfind('\n', 0, max_length)
-                if split_point == -1:
-                    split_point = remaining.rfind(' ', 0, max_length)
-                if split_point == -1:
-                    split_point = max_length
-                
-                container.add_item(discord.ui.TextDisplay(remaining[:split_point]))
-                remaining = remaining[split_point:].lstrip()
+        # 回應內容 - 支援 `---` 轉成 View 分隔線，並自動分段長訊息
+        cls._append_response_text_to_container(container, response_text)
         
         # 底部資訊
         container.add_item(discord.ui.Separator(spacing=discord.SeparatorSpacing.small))
@@ -5699,7 +5726,8 @@ class AICommands(commands.Cog):
 
                 if pending_file_response:
                     file_attachment = self._build_pending_file_attachment(pending_file_response)
-                    await ctx.reply(view=view, file=file_attachment, allowed_mentions=SAFE_MENTIONS)
+                    await ctx.reply(view=view, allowed_mentions=SAFE_MENTIONS)
+                    await ctx.send(file=file_attachment, allowed_mentions=SAFE_MENTIONS)
                 else:
                     await ctx.reply(view=view, allowed_mentions=SAFE_MENTIONS)
                 
