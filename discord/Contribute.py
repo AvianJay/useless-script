@@ -17,7 +17,7 @@ import json
 import os
 import io
 from io import BytesIO
-from urllib.parse import urlencode
+from urllib.parse import urlencode, urlparse
 import asyncio
 import traceback
 from Economy import log_transaction, GLOBAL_CURRENCY_NAME
@@ -588,13 +588,37 @@ class ContributionReviewView(discord.ui.View):
         else:
             await user.send(f"{approved_text}。")
 
+    async def _get_source_message(self, interaction: discord.Interaction) -> discord.Message:
+        message = interaction.message
+        channel = interaction.channel
+        if channel and hasattr(channel, "fetch_message"):
+            try:
+                fetched = await channel.fetch_message(interaction.message.id)
+                if fetched is not None:
+                    message = fetched
+            except Exception:
+                pass
+        return message
+
+    def _download_embed_media(self, embed: discord.Embed) -> tuple[bytes, str] | None:
+        if not embed.image or not embed.image.url:
+            return None
+
+        response = requests.get(embed.image.url, timeout=15)
+        response.raise_for_status()
+        path = urlparse(embed.image.url).path
+        ext = os.path.splitext(path)[1].lower() or ".png"
+        return response.content, ext
+
     async def approve(self, interaction: discord.Interaction):
         await interaction.response.defer()
         try:
+            source_message = await self._get_source_message(interaction)
+
             if self.ctype == "feedgrass":
                 img_att = None
                 json_att = None
-                for att in interaction.message.attachments:
+                for att in source_message.attachments:
                     if att.filename.endswith(".json"):
                         json_att = att
                     elif att.filename.endswith(".png") and att.filename != "preview.png":
@@ -609,7 +633,7 @@ class ContributionReviewView(discord.ui.View):
                 await json_att.save(os.path.join("dsize-feedgrass-images", json_att.filename))
                 await interaction.followup.send("投稿已儲存。", ephemeral=True)
 
-                embed = interaction.message.embeds[0]
+                embed = source_message.embeds[0]
                 embed.color = discord.Color.green()
                 embed.title += " [已通過]"
                 self._disable_all_buttons()
@@ -626,23 +650,32 @@ class ContributionReviewView(discord.ui.View):
                 return
 
             if self.ctype == "whatisthisguytalking":
-                media_att = interaction.message.attachments[0] if interaction.message.attachments else None
-                if media_att is None:
-                    await interaction.followup.send("找不到投稿附件。", ephemeral=True)
-                    return
-
-                media_type = classify_whatisthisguytalking_attachment(media_att)
-                if media_type is None:
-                    await interaction.followup.send("這個投稿不是支援的圖片、GIF 或影片格式。", ephemeral=True)
-                    return
-
                 os.makedirs("whatisthisguytalking-images", exist_ok=True)
-                file_ext = get_whatisthisguytalking_extension(media_att, media_type)
-                saved_path = os.path.join("whatisthisguytalking-images", uuid.uuid4().hex + file_ext)
-                await media_att.save(saved_path)
+                media_att = source_message.attachments[0] if source_message.attachments else None
+
+                if media_att is not None:
+                    media_type = classify_whatisthisguytalking_attachment(media_att)
+                    if media_type is None:
+                        await interaction.followup.send("這個投稿不是支援的圖片、GIF 或影片格式。", ephemeral=True)
+                        return
+
+                    file_ext = get_whatisthisguytalking_extension(media_att, media_type)
+                    saved_path = os.path.join("whatisthisguytalking-images", uuid.uuid4().hex + file_ext)
+                    await media_att.save(saved_path)
+                else:
+                    embed_media = self._download_embed_media(source_message.embeds[0])
+                    if embed_media is None:
+                        await interaction.followup.send("找不到投稿附件，也沒有可下載的圖片預覽。", ephemeral=True)
+                        return
+
+                    media_bytes, file_ext = embed_media
+                    saved_path = os.path.join("whatisthisguytalking-images", uuid.uuid4().hex + file_ext)
+                    with open(saved_path, "wb") as f:
+                        f.write(media_bytes)
+
                 await interaction.followup.send("投稿素材已儲存。", ephemeral=True)
 
-                embed = interaction.message.embeds[0]
+                embed = source_message.embeds[0]
                 embed.color = discord.Color.green()
                 embed.title += " [已通過]"
                 self._disable_all_buttons()
@@ -659,11 +692,11 @@ class ContributionReviewView(discord.ui.View):
                 return
 
             if self.ctype == "dynamic_voice_audio":
-                if len(interaction.message.attachments) < 1:
+                if len(source_message.attachments) < 1:
                     await interaction.followup.send("找不到投稿音訊附件。", ephemeral=True)
                     return
 
-                audio_att = interaction.message.attachments[0]
+                audio_att = source_message.attachments[0]
                 audio_data = await audio_att.read()
                 audio_folder = os.path.join(os.path.dirname(__file__), "assets", "dynamic_voice_audio")
                 os.makedirs(audio_folder, exist_ok=True)
@@ -673,7 +706,7 @@ class ContributionReviewView(discord.ui.View):
 
                 await interaction.followup.send(f"投稿音訊已儲存為 {self.audio_filename}", ephemeral=True)
 
-                embed = interaction.message.embeds[0]
+                embed = source_message.embeds[0]
                 embed.color = discord.Color.green()
                 embed.title += " [已通過]"
                 self._disable_all_buttons()
