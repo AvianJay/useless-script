@@ -1918,7 +1918,13 @@ class AICommands(commands.Cog):
             )
         return payload
 
-    async def _serialize_message_for_tool(self, message: discord.Message, guild: discord.Guild | None) -> dict:
+    async def _serialize_message_for_tool(
+        self,
+        message: discord.Message,
+        guild: discord.Guild | None,
+        *,
+        truncate: bool = True
+    ) -> dict:
         formatted = await self._format_msg_for_context(
             message,
             guild,
@@ -1930,16 +1936,56 @@ class AICommands(commands.Cog):
             content = await MentionResolver.resolve_mentions(message.content, guild, self.bot)
 
         reference_preview = None
-        resolved_reference = getattr(getattr(message, "reference", None), "resolved", None)
-        if resolved_reference is not None and hasattr(resolved_reference, "id") and hasattr(resolved_reference, "author"):
+        forwarded_preview = None
+        message_reference = getattr(message, "reference", None)
+        resolved_reference = getattr(message_reference, "resolved", None)
+
+        # 檢查 resolved_reference 是否為有效的 Message 對象（而非 DeletedReferencedMessage）
+        if resolved_reference is not None and hasattr(resolved_reference, "id"):
             reference_content = getattr(resolved_reference, "content", "") or ""
-            if reference_content:
-                reference_content = await MentionResolver.resolve_mentions(reference_content, guild, self.bot)
-            reference_preview = {
-                "message_id": getattr(resolved_reference, "id", None),
-                "author": await self._resolve_user_display(getattr(getattr(resolved_reference, "author", None), "id", None), guild),
-                "content_preview": self._truncate_tool_text(reference_content or "[圖片/附件]", max_len=120),
-            }
+            ref_type = getattr(message_reference, "type", None)
+
+            # 判斷是回覆還是轉發
+            if ref_type == discord.MessageReferenceType.forward:
+                # 轉發訊息
+                if hasattr(resolved_reference, "author"):
+                    # 轉發的訊息仍存在
+                    if reference_content:
+                        reference_content = await MentionResolver.resolve_mentions(reference_content, guild, self.bot)
+                    forwarded_preview = {
+                        "message_id": getattr(resolved_reference, "id", None),
+                        "author": await self._resolve_user_display(getattr(getattr(resolved_reference, "author", None), "id", None), guild),
+                        "content_preview": self._truncate_tool_text(reference_content or "[圖片/附件]", max_len=240),
+                        "channel_id": getattr(getattr(resolved_reference, "channel", None), "id", None),
+                        "created_at": self._serialize_datetime(getattr(resolved_reference, "created_at", None)),
+                    }
+                else:
+                    # 轉發的訊息已被刪除
+                    forwarded_preview = {
+                        "message_id": getattr(resolved_reference, "id", None),
+                        "author": None,
+                        "content_preview": "[轉發的訊息已被刪除]",
+                        "deleted": True,
+                    }
+            else:
+                # 回覆訊息
+                if hasattr(resolved_reference, "author"):
+                    # 回覆的訊息仍存在
+                    if reference_content:
+                        reference_content = await MentionResolver.resolve_mentions(reference_content, guild, self.bot)
+                    reference_preview = {
+                        "message_id": getattr(resolved_reference, "id", None),
+                        "author": await self._resolve_user_display(getattr(getattr(resolved_reference, "author", None), "id", None), guild),
+                        "content_preview": self._truncate_tool_text(reference_content or "[圖片/附件]", max_len=120),
+                    }
+                else:
+                    # 回覆的訊息已被刪除
+                    reference_preview = {
+                        "message_id": getattr(resolved_reference, "id", None),
+                        "author": None,
+                        "content_preview": "[回覆的訊息已被刪除]",
+                        "deleted": True,
+                    }
 
         attachments = [
             {
@@ -1964,7 +2010,7 @@ class AICommands(commands.Cog):
         ]
         component_text = self._extract_component_text(getattr(message, "components", None))
 
-        return {
+        result = {
             "id": message.id,
             "channel_id": getattr(getattr(message, "channel", None), "id", None),
             "author": await self._resolve_user_display(getattr(getattr(message, "author", None), "id", None), guild),
@@ -1981,6 +2027,12 @@ class AICommands(commands.Cog):
             "has_components": bool(getattr(message, "components", None)),
             "has_stickers": bool(getattr(message, "stickers", None)),
         }
+
+        # 如果是轉發訊息，添加轉發資訊
+        if forwarded_preview:
+            result["forwarded_from"] = forwarded_preview
+
+        return result
 
     async def _resolve_visible_user_for_tool(self, user_id, tool_context: dict | None) -> tuple[object | None, str | None]:
         current_user = (tool_context or {}).get("user")
@@ -2822,12 +2874,13 @@ class AICommands(commands.Cog):
                 "type": "function",
                 "function": {
                     "name": "read_channel",
-                    "description": "Read recent messages from the current channel or another visible channel in the current guild. This respects both the current user's and the bot's channel permissions.",
+                    "description": "Read recent messages from the current channel or another visible channel in the current guild. This respects both the current user's and the bot's channel permissions. Optionally truncate long content to reduce token usage.",
                     "parameters": {
                         "type": "object",
                         "properties": {
                             "channel_id": {"type": "integer"},
                             "limit": {"type": "integer"},
+                            "truncate": {"type": "boolean", "description": "Whether to truncate long message content (default: true)"},
                         },
                     },
                 },
@@ -2836,13 +2889,14 @@ class AICommands(commands.Cog):
                 "type": "function",
                 "function": {
                     "name": "read_message",
-                    "description": "Read a specific visible message from the current channel or another visible channel in the current guild. This respects both the current user's and the bot's permissions.",
+                    "description": "Read a specific visible message from the current channel or another visible channel in the current guild. This respects both the current user's and the bot's permissions. Optionally truncate long content to reduce token usage.",
                     "parameters": {
                         "type": "object",
                         "properties": {
                             "message_id": {"type": "integer"},
                             "channel_id": {"type": "integer"},
                             "message_link": {"type": "string"},
+                            "truncate": {"type": "boolean", "description": "Whether to truncate long message content (default: true)"},
                         },
                     },
                 },
@@ -3494,6 +3548,7 @@ class AICommands(commands.Cog):
             minimum=1,
             maximum=self.CHANNEL_TOOL_MAX_LIMIT,
         )
+        truncate = self._coerce_bool(args.get("truncate"), True)
         guild = getattr(channel, "guild", None) or (tool_context or {}).get("guild")
 
         try:
@@ -3504,7 +3559,7 @@ class AICommands(commands.Cog):
         raw_messages.reverse()
         messages = []
         for message in raw_messages:
-            serialized = await self._serialize_message_for_tool(message, guild)
+            serialized = await self._serialize_message_for_tool(message, guild, truncate=truncate)
             item = {
                 "id": serialized.get("id"),
                 "author": serialized.get("author"),
@@ -3512,6 +3567,14 @@ class AICommands(commands.Cog):
                 "formatted": serialized.get("formatted"),
                 "jump_url": serialized.get("jump_url"),
             }
+            # Only include full content if not truncating
+            if not truncate:
+                if serialized.get("content"):
+                    item["content"] = serialized.get("content")
+                if serialized.get("forwarded_from"):
+                    item["forwarded_from"] = serialized.get("forwarded_from")
+                if serialized.get("reply_to"):
+                    item["reply_to"] = serialized.get("reply_to")
             if serialized.get("attachments"):
                 item["attachments"] = serialized.get("attachments")
             if serialized.get("embed_summaries"):
@@ -3578,10 +3641,11 @@ class AICommands(commands.Cog):
         except (discord.Forbidden, discord.HTTPException) as exc:
             return {"error": f"failed to fetch message: {exc}"}
 
+        truncate = self._coerce_bool(args.get("truncate"), True)
         guild = getattr(channel, "guild", None) or (tool_context or {}).get("guild")
         return {
             "channel": self._serialize_channel_for_tool(channel, access),
-            "message": await self._serialize_message_for_tool(message, guild),
+            "message": await self._serialize_message_for_tool(message, guild, truncate=truncate),
         }
 
     async def _tool_get_user(self, args: dict, tool_context: dict) -> dict:
@@ -4756,20 +4820,29 @@ class AICommands(commands.Cog):
         # 回覆 / 轉發上下文
         if msg.reference:
             if msg.reference.type == discord.MessageReferenceType.forward:
-                if msg.reference.resolved:
-                    fwd = msg.reference.resolved
-                    fwd_content = fwd.content if fwd.content else "[圖片/附件]"
+                # 轉發訊息處理
+                resolved = msg.reference.resolved
+                if isinstance(resolved, discord.Message):
+                    fwd_content = resolved.content if resolved.content else "[圖片/附件]"
                     if len(fwd_content) > 100:
                         fwd_content = fwd_content[:100] + "..."
-                    extra_parts.append(f"[轉發 {fwd.author.display_name} (ID: {fwd.author.id}) 的訊息: {fwd_content}]")
+                    extra_parts.append(f"[轉發 {resolved.author.display_name} (ID: {resolved.author.id}) 的訊息: {fwd_content}]")
+                elif resolved is not None:
+                    # 轉發的訊息被刪除或無法讀取
+                    extra_parts.append(f"[轉發訊息 (ID: {getattr(resolved, 'id', 'unknown')}) 已被刪除或無法讀取]")
                 else:
                     extra_parts.append("[轉發訊息]")
             elif msg.reference.resolved:
-                ref = msg.reference.resolved
-                ref_content = ref.content if ref.content else "[圖片/附件]"
-                if len(ref_content) > 50:
-                    ref_content = ref_content[:50] + "..."
-                reply = f" (回覆 {ref.author.display_name} (ID: {ref.author.id}): {ref_content})"
+                # 回覆訊息處理：確保是 Message 對象（而不是 DeletedReferencedMessage）
+                resolved = msg.reference.resolved
+                if isinstance(resolved, discord.Message):
+                    ref_content = resolved.content if resolved.content else "[圖片/附件]"
+                    if len(ref_content) > 50:
+                        ref_content = ref_content[:50] + "..."
+                    reply = f" (回覆 {resolved.author.display_name} (ID: {resolved.author.id}): {ref_content})"
+                elif resolved is not None:
+                    # 被刪除的回覆目標
+                    reply = f" (回覆已被刪除的訊息 ID: {getattr(resolved, 'id', 'unknown')})"
 
         # 附件 / 貼圖
         if msg.attachments:
