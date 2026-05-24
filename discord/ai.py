@@ -1942,51 +1942,70 @@ class AICommands(commands.Cog):
         resolved_reference = getattr(message_reference, "resolved", None)
 
         # 檢查 resolved_reference 是否為有效的 Message 對象（而非 DeletedReferencedMessage）
-        if resolved_reference is not None and hasattr(resolved_reference, "id"):
-            reference_content = getattr(resolved_reference, "content", "") or ""
+        if message_reference is not None and hasattr(message_reference, "id"):
+            reference_content = ""
             ref_type = getattr(message_reference, "type", None)
 
-            # 判斷是回覆還是轉發
-            if ref_type == discord.MessageReferenceType.forward:
-                # 轉發訊息
-                if hasattr(resolved_reference, "author"):
-                    # 轉發的訊息仍存在
-                    if reference_content:
-                        reference_content = await MentionResolver.resolve_mentions(reference_content, guild, self.bot)
-                    forwarded_preview = {
-                        "message_id": getattr(resolved_reference, "id", None),
-                        "author": await self._resolve_user_display(getattr(getattr(resolved_reference, "author", None), "id", None), guild),
-                        "content_preview": self._truncate_tool_text(reference_content or "[圖片/附件]", max_len=240),
-                        "channel_id": getattr(getattr(resolved_reference, "channel", None), "id", None),
-                        "created_at": self._serialize_datetime(getattr(resolved_reference, "created_at", None)),
-                    }
+            # 檢查 resolved_reference 是否是有效的 Message 物件
+            has_valid_message = resolved_reference is not None and hasattr(resolved_reference, "author")
+
+            # 如果沒有有效的 resolved 訊息，嘗試手動獲取
+            if not has_valid_message and self.bot is not None:
+                try:
+                    ref_channel_id = getattr(message_reference, 'channel_id', None)
+                    ref_message_id = getattr(message_reference, 'message_id', None)
+                    if ref_channel_id and ref_message_id:
+                        ref_channel = self.bot.get_channel(ref_channel_id)
+                        if ref_channel and ref_channel.guild == guild:
+                            resolved_reference = await ref_channel.fetch_message(ref_message_id)
+                            has_valid_message = True
+                except Exception:
+                    pass  # 獲取失敗，保留原狀態
+
+            if resolved_reference is not None and hasattr(resolved_reference, "id"):
+                reference_content = getattr(resolved_reference, "content", "") or ""
+
+                # 判斷是回覆還是轉發
+                if ref_type == discord.MessageReferenceType.forward:
+                    # 轉發訊息
+                    if hasattr(resolved_reference, "author"):
+                        # 轉發的訊息仍存在
+                        if reference_content:
+                            reference_content = await MentionResolver.resolve_mentions(reference_content, guild, self.bot)
+                        forwarded_preview = {
+                            "message_id": getattr(resolved_reference, "id", None),
+                            "author": await self._resolve_user_display(getattr(getattr(resolved_reference, "author", None), "id", None), guild),
+                            "content_preview": self._truncate_tool_text(reference_content or "[圖片/附件]", max_len=240),
+                            "channel_id": getattr(getattr(resolved_reference, "channel", None), "id", None),
+                            "created_at": self._serialize_datetime(getattr(resolved_reference, "created_at", None)),
+                        }
+                    else:
+                        # 轉發的訊息已被刪除
+                        forwarded_preview = {
+                            "message_id": getattr(resolved_reference, "id", None),
+                            "author": None,
+                            "content_preview": "[轉發的訊息已被刪除]",
+                            "deleted": True,
+                        }
                 else:
-                    # 轉發的訊息已被刪除
-                    forwarded_preview = {
-                        "message_id": getattr(resolved_reference, "id", None),
-                        "author": None,
-                        "content_preview": "[轉發的訊息已被刪除]",
-                        "deleted": True,
-                    }
-            else:
-                # 回覆訊息
-                if hasattr(resolved_reference, "author"):
-                    # 回覆的訊息仍存在
-                    if reference_content:
-                        reference_content = await MentionResolver.resolve_mentions(reference_content, guild, self.bot)
-                    reference_preview = {
-                        "message_id": getattr(resolved_reference, "id", None),
-                        "author": await self._resolve_user_display(getattr(getattr(resolved_reference, "author", None), "id", None), guild),
-                        "content_preview": self._truncate_tool_text(reference_content or "[圖片/附件]", max_len=120),
-                    }
-                else:
-                    # 回覆的訊息已被刪除
-                    reference_preview = {
-                        "message_id": getattr(resolved_reference, "id", None),
-                        "author": None,
-                        "content_preview": "[回覆的訊息已被刪除]",
-                        "deleted": True,
-                    }
+                    # 回覆訊息
+                    if hasattr(resolved_reference, "author"):
+                        # 回覆的訊息仍存在
+                        if reference_content:
+                            reference_content = await MentionResolver.resolve_mentions(reference_content, guild, self.bot)
+                        reference_preview = {
+                            "message_id": getattr(resolved_reference, "id", None),
+                            "author": await self._resolve_user_display(getattr(getattr(resolved_reference, "author", None), "id", None), guild),
+                            "content_preview": self._truncate_tool_text(reference_content or "[圖片/附件]", max_len=120),
+                        }
+                    else:
+                        # 回覆的訊息已被刪除
+                        reference_preview = {
+                            "message_id": getattr(resolved_reference, "id", None),
+                            "author": None,
+                            "content_preview": "[回覆的訊息已被刪除]",
+                            "deleted": True,
+                        }
 
         attachments = [
             {
@@ -4830,6 +4849,20 @@ class AICommands(commands.Cog):
             if msg.reference.type == discord.MessageReferenceType.forward:
                 # 轉發訊息處理
                 resolved = msg.reference.resolved
+
+                # 如果 resolved 不是 Message 物件，嘗試手動獲取
+                if not isinstance(resolved, discord.Message) and bot is not None:
+                    try:
+                        # 從 reference 中獲取 channel_id 和 message_id
+                        ref_channel_id = getattr(msg.reference, 'channel_id', None)
+                        ref_message_id = getattr(msg.reference, 'message_id', None)
+                        if ref_channel_id and ref_message_id:
+                            ref_channel = bot.get_channel(ref_channel_id)
+                            if ref_channel:
+                                resolved = await ref_channel.fetch_message(ref_message_id)
+                    except Exception:
+                        pass  # 獲取失敗，保留原狀態
+
                 if isinstance(resolved, discord.Message):
                     fwd_content = resolved.content if resolved.content else "[圖片/附件]"
                     if len(fwd_content) > max_forward_length:
