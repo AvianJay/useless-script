@@ -1930,6 +1930,7 @@ class AICommands(commands.Cog):
             guild,
             self.bot,
             self_id=getattr(getattr(self.bot, "user", None), "id", None),
+            truncate=truncate,
         )
         content = ""
         if message.content:
@@ -4749,7 +4750,9 @@ class AICommands(commands.Cog):
         guild: discord.Guild,
         bot: commands.Bot,
         skip_id: int = None,
-        self_id: int = None
+        self_id: int = None,
+        *,
+        truncate: bool = True
     ) -> str | None:
         """
         將單則訊息格式化為頻道上下文字串。
@@ -4757,6 +4760,11 @@ class AICommands(commands.Cog):
         """
         if skip_id and msg.id == skip_id:
             return None
+
+        # 設定截斷長度極限
+        max_content_length = 100 if truncate else 2000
+        max_reply_length = 50 if truncate else 200
+        max_forward_length = 100 if truncate else 400
 
         component_text = AICommands._extract_component_text(getattr(msg, "components", None), max_chars=320, max_items=16)
 
@@ -4766,8 +4774,8 @@ class AICommands(commands.Cog):
                 parts = []
                 if msg.content:
                     content = msg.content
-                    if len(content) > 100:
-                        content = content[:100] + "..."
+                    if len(content) > max_content_length:
+                        content = content[:max_content_length] + "..."
                     parts.append(content)
                 if msg.embeds:
                     summary = AICommands._embed_summary(msg.embeds[0])
@@ -4824,8 +4832,8 @@ class AICommands(commands.Cog):
                 resolved = msg.reference.resolved
                 if isinstance(resolved, discord.Message):
                     fwd_content = resolved.content if resolved.content else "[圖片/附件]"
-                    if len(fwd_content) > 100:
-                        fwd_content = fwd_content[:100] + "..."
+                    if len(fwd_content) > max_forward_length:
+                        fwd_content = fwd_content[:max_forward_length] + "..."
                     extra_parts.append(f"[轉發 {resolved.author.display_name} (ID: {resolved.author.id}) 的訊息: {fwd_content}]")
                 elif resolved is not None:
                     # 轉發的訊息被刪除或無法讀取
@@ -4837,8 +4845,8 @@ class AICommands(commands.Cog):
                 resolved = msg.reference.resolved
                 if isinstance(resolved, discord.Message):
                     ref_content = resolved.content if resolved.content else "[圖片/附件]"
-                    if len(ref_content) > 50:
-                        ref_content = ref_content[:50] + "..."
+                    if len(ref_content) > max_reply_length:
+                        ref_content = ref_content[:max_reply_length] + "..."
                     reply = f" (回覆 {resolved.author.display_name} (ID: {resolved.author.id}): {ref_content})"
                 elif resolved is not None:
                     # 被刪除的回覆目標
@@ -4866,8 +4874,8 @@ class AICommands(commands.Cog):
         msg_text = ""
         if msg.content:
             msg_text = await MentionResolver.resolve_mentions(msg.content, guild, bot)
-            if len(msg_text) > 100:
-                msg_text = msg_text[:100] + "..."
+            if len(msg_text) > max_content_length:
+                msg_text = msg_text[:max_content_length] + "..."
 
         body = (msg_text + " " + " ".join(extra_parts)).strip() if extra_parts else msg_text
         return f"{msg.author.display_name} (ID: {msg.author.id}){reply}: {body}"
