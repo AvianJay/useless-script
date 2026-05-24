@@ -3299,7 +3299,7 @@ class AICommands(commands.Cog):
             "model": search_model,
             "messages": self._build_web_search_messages(query, max_chars=max_chars, include_sources=include_sources),
             "provider": g4f.Provider.PollinationsAI,
-            "web_search": True,
+            # "web_search": True,  # perplexity will fucked up
             "max_tokens": max_tokens,
         }
 

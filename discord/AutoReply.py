@@ -192,6 +192,40 @@ AUTOREPLY_TEMPLATE_PACKS = {
             },
         ],
     },
+    "welcome": {
+        "display_name": "歡迎語包",
+        "description": "新成員加入歡迎語，適合放在歡迎頻道或一般聊天頻道。",
+        "rules": [
+            {
+                "trigger": ["type:join"],
+                "response": [
+                    "{embedtitle:歡迎新成員！}{embeddescription:歡迎 {user} 加入 {guild}！}{embedcolor:5865F2}{embedfooter:{guildmembers}}{embedtime:true}"
+                ],
+                "mode": "equals",
+                "reply": True,
+                "channel_mode": "all",
+                "channels": [],
+                "random_chance": 100,
+            },
+        ],
+    },
+    "booster": {
+        "display_name": "加成者回覆包",
+        "description": "專為加成者設計的回覆規則，適合放在公告頻道或一般聊天頻道。",
+        "rules": [
+            {
+                "trigger": ["type:boost"],
+                "response": [
+                    "{user}{embedtitle:感謝加成！}{embeddescription:{user} 剛剛加成了伺服器！}{embedcolor:F04747}{embedfooter:享受專屬特權吧！}{embedtime:true}"
+                ],
+                "mode": "equals",
+                "reply": True,
+                "channel_mode": "all",
+                "channels": [],
+                "random_chance": 100,
+            },
+        ],
+    }
 }
 
 
