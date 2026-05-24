@@ -1941,8 +1941,23 @@ class AICommands(commands.Cog):
         message_reference = getattr(message, "reference", None)
         resolved_reference = getattr(message_reference, "resolved", None)
 
-        # 檢查 resolved_reference 是否為有效的 Message 對象（而非 DeletedReferencedMessage）
-        if message_reference is not None and hasattr(message_reference, "id"):
+        # 檢查是否為轉發訊息（從 message_snapshots 取得）
+        message_snapshots = getattr(message, "message_snapshots", [])
+        if message_snapshots and len(message_snapshots) > 0:
+            # 處理轉發訊息
+            snapshot = message_snapshots[0]
+            snapshot_content = getattr(snapshot, "content", "") or ""
+            snapshot_author = getattr(snapshot, "author", None)
+            if snapshot_content:
+                snapshot_content = await MentionResolver.resolve_mentions(snapshot_content, guild, self.bot)
+            forwarded_preview = {
+                "message_id": getattr(snapshot, "id", None),
+                "author": await self._resolve_user_display(getattr(snapshot_author, "id", None), guild) if snapshot_author else None,
+                "content_preview": self._truncate_tool_text(snapshot_content or "[圖片/附件]", max_len=240),
+                "channel_id": None,  # snapshot 沒有頻道資訊
+                "created_at": self._serialize_datetime(getattr(snapshot, "created_at", None)),
+            }
+        elif message_reference is not None and hasattr(message_reference, "id"):
             reference_content = ""
             ref_type = getattr(message_reference, "type", None)
 
@@ -1967,7 +1982,7 @@ class AICommands(commands.Cog):
 
                 # 判斷是回覆還是轉發
                 if ref_type == discord.MessageReferenceType.forward:
-                    # 轉發訊息
+                    # 轉發訊息（備用，通常會被 message_snapshots 提前處理）
                     if hasattr(resolved_reference, "author"):
                         # 轉發的訊息仍存在
                         if reference_content:
@@ -4845,9 +4860,28 @@ class AICommands(commands.Cog):
         reply = ""
 
         # 回覆 / 轉發上下文
-        if msg.reference:
+        # 優先檢查 message_snapshots（轉發訊息的正確來源）
+        message_snapshots = getattr(msg, "message_snapshots", [])
+        if message_snapshots and len(message_snapshots) > 0:
+            # 從 message_snapshots 取得轉發的原始訊息內容
+            snapshot = message_snapshots[0]
+            snapshot_content = getattr(snapshot, "content", "") or ""
+            snapshot_author = getattr(snapshot, "author", None)
+            if snapshot_content:
+                fwd_content = snapshot_content
+                if len(fwd_content) > max_forward_length:
+                    fwd_content = fwd_content[:max_forward_length] + "..."
+            else:
+                fwd_content = "[圖片/附件]"
+            if snapshot_author:
+                author_name = getattr(snapshot_author, "display_name", None) or getattr(snapshot_author, "name", "某人")
+                author_id = getattr(snapshot_author, "id", "unknown")
+                extra_parts.append(f"[轉發 {author_name} (ID: {author_id}) 的訊息: {fwd_content}]")
+            else:
+                extra_parts.append(f"[轉發訊息: {fwd_content}]")
+        elif msg.reference:
             if msg.reference.type == discord.MessageReferenceType.forward:
-                # 轉發訊息處理
+                # 轉發訊息處理（備用，通常會被 message_snapshots 提前處理）
                 resolved = msg.reference.resolved
 
                 # 如果 resolved 不是 Message 物件，嘗試手動獲取
