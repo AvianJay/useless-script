@@ -32,7 +32,7 @@ MODEL_RATES = {
     "openai": 0.10,
     "gpt-5-mini": 0.10,
     "openai-large": 0.45,
-    "gemini-fast": 0.10,
+    "perplexity-fast": 0.10,
     "claude-fast": 0.15,
 }
 
