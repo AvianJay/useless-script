@@ -24,6 +24,21 @@ from collections import Counter
 
 
 # -----------------------------
+# DOOM (from doomcord.py)
+# -----------------------------
+
+def generate_doom_embed(link="https://doom.p2r3.com/i.webp", step=None):
+    embed = discord.Embed(color=0xff0000)
+    if step:
+        if step not in ["w", "a", "s", "d", "q", "e"]:
+            raise ValueError("Invalid step")
+        link = link.replace("i", step + "i")
+    embed.set_image(url=link)
+    embed.set_footer(text="Doomcord by PortalRunner", icon_url="https://yt3.ggpht.com/ytc/AIdro_mWb-zYQYCfaIC0pRsxHQqxQiIIpDLXOhB1YZXPgMKGsQ=s68-c-k-c0x00ffffff-no-rj")
+    return embed, link
+
+
+# -----------------------------
 # Card / Rules
 # -----------------------------
 
@@ -1523,5 +1538,81 @@ class MiniGamesCog(commands.GroupCog, group_name="games", description="迷你遊
                     self.games.pop(g.channel_id, None)
         except Exception:
             pass
+
+    # -----------------------------
+    # DOOM Command
+    # -----------------------------
+
+    @app_commands.command(name="doom", description="開始玩 DOOM")
+    async def doom(self, interaction: discord.Interaction):
+        link = "https://doom.p2r3.com/i.webp"
+        user = interaction.user
+
+        class StepButton(discord.ui.Button):
+            def __init__(self, step, label=None, emoji=None, style=discord.ButtonStyle.primary, row: int = 0):
+                super().__init__(style=style, row=row, emoji=emoji)
+                self.step = step
+
+            async def callback(self, interaction: discord.Interaction):
+                nonlocal link
+                if interaction.user.id != user.id:
+                    await interaction.response.send_message("這不是你的遊戲。", ephemeral=True)
+                    return
+                embed, link = generate_doom_embed(link=link, step=self.step)
+                await interaction.response.edit_message(embed=embed, view=self.view)
+
+        class SaveButton(discord.ui.Button):
+            def __init__(self):
+                super().__init__(label=None, style=discord.ButtonStyle.primary, row=0, emoji="💾")
+
+            async def callback(self, interaction: discord.Interaction):
+                user_id = str(interaction.user.id)
+                if interaction.user.id != user.id:
+                    await interaction.response.send_message("這不是你的遊戲。", ephemeral=True)
+                    return
+                guild_id = None
+                set_user_data(guild_id, user_id, "doom_link", link)
+                await interaction.response.send_message("存檔成功！", ephemeral=True)
+
+        class LoadButton(discord.ui.Button):
+            def __init__(self):
+                super().__init__(label=None, style=discord.ButtonStyle.primary, row=1, emoji="📂")
+
+            async def callback(self, interaction: discord.Interaction):
+                user_id = str(interaction.user.id)
+                if interaction.user.id != user.id:
+                    await interaction.response.send_message("這不是你的遊戲。", ephemeral=True)
+                    return
+                guild_id = None
+                saved_link = get_user_data(guild_id, user_id, "doom_link")
+                if not saved_link:
+                    await interaction.response.send_message("錯誤：沒有存檔。", ephemeral=True)
+                    return
+                nonlocal link
+                link = saved_link
+                embed, link = generate_doom_embed(link=link)
+                await interaction.response.edit_message(embed=embed, view=self.view)
+                await interaction.followup.send("讀檔成功！", ephemeral=True)
+
+        embed, link = generate_doom_embed()
+
+        emoji_map = {
+            "q": "🔫",
+            "w": "⬆️",
+            "e": "🖐️",
+            "a": "⬅️",
+            "s": "⬇️",
+            "d": "➡️",
+        }
+
+        view = discord.ui.View(timeout=None)
+        for i, s in enumerate(["q", "w", "e", "a", "s", "d"]):
+            row = 0 if i < 3 else 1
+            view.add_item(StepButton(step=s, emoji=emoji_map.get(s), row=row))
+        view.add_item(SaveButton())
+        view.add_item(LoadButton())
+
+        await interaction.response.send_message(embed=embed, view=view)
+
 
 asyncio.run(bot.add_cog(MiniGamesCog(bot)))

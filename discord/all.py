@@ -23,7 +23,6 @@ except FileNotFoundError:
         "ReportSystem",
         "ModerationNotify",
         "dsize",
-        "doomcord",
         "PresenceChange",
         "OwnerTools",
         "Moderate",
