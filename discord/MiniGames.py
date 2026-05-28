@@ -9,6 +9,7 @@ from Economy import (
     log_transaction,
     queue_economy_audit_log,
     GLOBAL_GUILD_ID,
+    interaction_uses_server_scope,
 )
 from discord.ext import commands
 from discord import app_commands
@@ -899,7 +900,7 @@ class MiniGamesCog(commands.GroupCog, group_name="games", description="迷你遊
         if cid in self.games:
             return await interaction.response.send_message("此頻道已經有一桌了。", ephemeral=True)
 
-        guild_id = interaction.guild.id if interaction.guild else GLOBAL_GUILD_ID
+        guild_id = interaction.guild.id if interaction_uses_server_scope(interaction) else GLOBAL_GUILD_ID
         g = Game(channel_id=cid, owner_id=interaction.user.id, guild_id=guild_id)
         g.players.append(PlayerState(user_id=interaction.user.id))
         self.games[cid] = g
@@ -929,7 +930,7 @@ class MiniGamesCog(commands.GroupCog, group_name="games", description="迷你遊
         if key in self.tower_games:
             return await interaction.response.send_message("你已經有一局 Tower 遊戲正在進行。", ephemeral=True)
 
-        guild_id = interaction.guild.id if interaction.guild else GLOBAL_GUILD_ID
+        guild_id = interaction.guild.id if interaction_uses_server_scope(interaction) else GLOBAL_GUILD_ID
         currency = get_currency_name(guild_id)
         balance = get_balance(guild_id, interaction.user.id)
 
@@ -961,7 +962,7 @@ class MiniGamesCog(commands.GroupCog, group_name="games", description="迷你遊
 
     async def start_tower(self, interaction: discord.Interaction, bet: float) -> bool:
         """選擇賭注後開始遊戲"""
-        guild_id = interaction.guild.id if interaction.guild else GLOBAL_GUILD_ID
+        guild_id = interaction.guild.id if interaction_uses_server_scope(interaction) else GLOBAL_GUILD_ID
         currency = get_currency_name(guild_id)
         key = (interaction.channel_id, interaction.user.id)
         if key in self.tower_games:
