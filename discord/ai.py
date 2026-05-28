@@ -496,37 +496,52 @@ class AIResponseBuilder:
         model_name: str = "gpt-oss",
         response_time: str = None,
         warning: str = None,
-        billing_info: str = None
+        billing_info: str = None,
+        use_container: bool = True,
+        show_cost: bool = True,
     ) -> discord.ui.LayoutView:
         """建立 AI 回應的 LayoutView"""
         
         view = discord.ui.LayoutView()
         
-        # 主容器
-        container = discord.ui.Container(accent_colour=discord.Colour.blurple())
-        
-        # 標題區塊 - 使用 TextDisplay
-        # container.add_item(discord.ui.TextDisplay(f"## 🤖 AI 回應\n*模型: {model_name}*"))
-        
-        # 分隔線
-        # container.add_item(discord.ui.Separator(spacing=discord.SeparatorSpacing.small))
-        
-        # 警告區塊（如果有）
-        if warning:
-            container.add_item(discord.ui.TextDisplay(f"⚠️ **警告**: {warning}"))
-            container.add_item(discord.ui.Separator(spacing=discord.SeparatorSpacing.small))
-        
-        # 回應內容 - 支援 `---` 轉成 View 分隔線，並自動分段長訊息
-        cls._append_response_text_to_container(container, response_text)
-        
-        # 底部資訊
-        container.add_item(discord.ui.Separator(spacing=discord.SeparatorSpacing.small))
-        if billing_info:
-            container.add_item(discord.ui.TextDisplay(f"-# {billing_info}"))
+        # 根據設定決定是否使用 Container
+        if use_container:
+            # 主容器
+            container = discord.ui.Container(accent_colour=discord.Colour.blurple())
+            
+            # 警告區塊（如果有）
+            if warning:
+                container.add_item(discord.ui.TextDisplay(f"⚠️ **警告**: {warning}"))
+                container.add_item(discord.ui.Separator(spacing=discord.SeparatorSpacing.small))
+            
+            # 回應內容 - 支援 `---` 轉成 View 分隔線，並自動分段長訊息
+            cls._append_response_text_to_container(container, response_text)
+            
+            # 底部資訊
+            if show_cost:
+                container.add_item(discord.ui.Separator(spacing=discord.SeparatorSpacing.small))
+                if billing_info:
+                    container.add_item(discord.ui.TextDisplay(f"-# {billing_info}"))
 
-        container.add_item(discord.ui.TextDisplay(f"-# {model_name} | {response_time or '未知時間'}"))
+            container.add_item(discord.ui.TextDisplay(f"-# {model_name} | {response_time or '未知時間'}"))
+            
+            view.add_item(container)
+        else:
+            # 不使用 Container，直接添加到 LayoutView
+            # 警告區塊（如果有）
+            if warning:
+                view.add_item(discord.ui.TextDisplay(f"⚠️ **警告**: {warning}"))
+            
+            # 回應內容 - 自動分段長訊息
+            for chunk in cls._split_response_text_chunks(response_text):
+                view.add_item(discord.ui.TextDisplay(chunk))
+            
+            # 底部資訊
+            if show_cost and billing_info:
+                view.add_item(discord.ui.TextDisplay(f"-# {billing_info}"))
+            
+            view.add_item(discord.ui.TextDisplay(f"-# {model_name} | {response_time or '未知時間'}"))
         
-        view.add_item(container)
         return view
     
     @staticmethod
@@ -729,6 +744,7 @@ class AICommands(commands.Cog):
     CHANNEL_TOOL_DEFAULT_LIMIT = 8
     CHANNEL_TOOL_MAX_LIMIT = 20
     USER_TOOL_MAX_ROLE_PREVIEW = 15
+    AI_RESPONSE_VIEW_CONFIG_KEY = "ai_response_view_config"
     TOOL_USAGE_LABELS = {
         "search_bot_docs": "正在搜尋機器人文檔",
         "get_ai_memory": "取得 AI 記憶",
@@ -4967,6 +4983,25 @@ class AICommands(commands.Cog):
         return model
 
     @classmethod
+    def _get_response_view_config(cls, user_id: int) -> dict:
+        """取得使用者的回應視圖配置"""
+        config = get_user_data(GLOBAL_GUILD_ID, user_id, cls.AI_RESPONSE_VIEW_CONFIG_KEY, {})
+        if not isinstance(config, dict):
+            return {"container": True, "cost": True}
+        return {
+            "container": config.get("container", True),
+            "cost": config.get("cost", True),
+        }
+
+    @classmethod
+    def _set_response_view_config(cls, user_id: int, container: bool, cost: bool):
+        """設定使用者的回應視圖配置"""
+        set_user_data(GLOBAL_GUILD_ID, user_id, cls.AI_RESPONSE_VIEW_CONFIG_KEY, {
+            "container": container,
+            "cost": cost,
+        })
+
+    @classmethod
     def _build_guild_emoji_context(cls, guild: discord.Guild) -> tuple[str, dict[str, str]]:
         """建立可用伺服器自訂表情符號清單與名稱映射。"""
         if not guild:
@@ -5366,13 +5401,18 @@ class AICommands(commands.Cog):
             if minor_threats:
                 warning = "你的訊息已被輕微修正以確保安全。"
             
+            # 取得使用者回應視圖配置
+            response_view_config = self._get_response_view_config(user.id)
+            
             view = AIResponseBuilder.create_response_view(
                 response_text=display_response_text,
                 user=user,
                 model_name=model_name,
                 response_time=response_time,
                 warning=warning,
-                billing_info=billing_info
+                billing_info=billing_info,
+                use_container=response_view_config.get("container", True),
+                show_cost=response_view_config.get("cost", True),
             )
 
             if pending_file_response:
@@ -5440,6 +5480,29 @@ class AICommands(commands.Cog):
         view = AIResponseBuilder.create_history_view(recent_history, len(history))
         
         await interaction.response.send_message(view=view, ephemeral=True, allowed_mentions=SAFE_MENTIONS)
+
+    @app_commands.command(name="ai-set-response-view", description="設定你使用 AI 指令的回應顯示方式")
+    @app_commands.describe(
+        container="是否使用 Container 容器顯示回應",
+        cost="是否顯示計費資訊"
+    )
+    @app_commands.allowed_installs(guilds=True, users=True)
+    @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
+    async def ai_set_response_view(self, interaction: discord.Interaction, container: bool, cost: bool):
+        """設定回應視圖顯示方式"""
+        user = interaction.user
+        self._set_response_view_config(user.id, container, cost)
+        
+        container_status = "✅ 使用" if container else "❌ 不使用"
+        cost_status = "✅ 顯示" if cost else "❌ 隱藏"
+        
+        await interaction.response.send_message(
+            f"已設定回應顯示方式：\n"
+            f"• Container 容器：{container_status}\n"
+            f"• 計費資訊：{cost_status}",
+            ephemeral=True,
+            allowed_mentions=SAFE_MENTIONS,
+        )
 
     @app_commands.command(name="ai-set-default-model", description="設定你使用 AI 指令的預設模型")
     @app_commands.describe(
@@ -5858,13 +5921,18 @@ class AICommands(commands.Cog):
                 if minor_threats:
                     warning = "你的訊息已被輕微修正以確保安全。"
                 
+                # 取得使用者回應視圖配置
+                response_view_config = self._get_response_view_config(user.id)
+                
                 view = AIResponseBuilder.create_response_view(
                     response_text=display_response_text,
                     user=user,
                     model_name=model_name,
                     warning=warning,
                     response_time=response_time,
-                    billing_info=billing_info
+                    billing_info=billing_info,
+                    use_container=response_view_config.get("container", True),
+                    show_cost=response_view_config.get("cost", True),
                 )
                 if tool_notice_message is not None:
                     try:
