@@ -50,7 +50,7 @@ class HackedDetector(commands.Cog):
     DETECTION_WINDOW_SECONDS = 10
     DETECTION_MIN_CHANNELS = 3
     RAW_DETECTION_MIN_CHANNELS = 2
-    RAW_DETECTION_WINDOW_SECONDS = 60
+    RAW_DETECTION_WINDOW_SECONDS = 180
     DEFAULT_UNLOCK_FONT = "slant"
 
     def __init__(self):
@@ -386,8 +386,8 @@ class HackedDetector(commands.Cog):
         # check message is matched some pattern that indicates the user might be hacked
         # discord invite links or 4 attachment images in a message
         has_invite = re.search(r"(https?://)?(www\.)?(discord\.gg|discordapp\.com/invite)/[a-zA-Z0-9]+", message.content)
-        # 4 attachment images in a message
-        if not (has_invite or len(message.attachments) == 4):
+        # 4 or 2 attachment images in a message
+        if not (has_invite or (len(message.attachments) == 4 or len(message.attachments) == 2)):
             return
         log(
             f"Suspicious pattern matched from user {message.author.id} in channel {message.channel.id}: has_invite={bool(has_invite)} attachments={len(message.attachments)}",
@@ -459,7 +459,7 @@ class HackedDetector(commands.Cog):
             return
 
         attachments = message.get("attachments", [])
-        if not attachments or len(attachments) != 4:
+        if not attachments or (len(attachments) != 4 and len(attachments) != 2):
             return
         if not all(attachment.get("placeholder") in sussy_thumbhashs for attachment in attachments):
             return
