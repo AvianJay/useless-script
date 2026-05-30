@@ -499,6 +499,7 @@ class AIResponseBuilder:
         billing_info: str = None,
         use_container: bool = True,
         show_cost: bool = True,
+        show_model: bool = True,
     ) -> discord.ui.LayoutView:
         """建立 AI 回應的 LayoutView"""
         
@@ -518,13 +519,16 @@ class AIResponseBuilder:
             cls._append_response_text_to_container(container, response_text)
             
             # 底部資訊
-            if show_cost:
-                container.add_item(discord.ui.Separator(spacing=discord.SeparatorSpacing.small))
-                if billing_info:
-                    container.add_item(discord.ui.TextDisplay(f"-# {billing_info}"))
+            if show_cost or show_model:
+                footer_parts = []
+                if billing_info and show_cost:
+                    footer_parts.append(billing_info)
+                if show_model:
+                    footer_parts.append(f"{model_name} | {response_time or '未知時間'}")
+                if footer_parts:
+                    container.add_item(discord.ui.Separator(spacing=discord.SeparatorSpacing.small))
+                    container.add_item(discord.ui.TextDisplay("-# " + " | ".join(footer_parts)))
 
-            container.add_item(discord.ui.TextDisplay(f"-# {model_name} | {response_time or '未知時間'}"))
-            
             view.add_item(container)
         else:
             # 不使用 Container，直接添加到 LayoutView
@@ -537,10 +541,13 @@ class AIResponseBuilder:
                 view.add_item(discord.ui.TextDisplay(chunk))
             
             # 底部資訊
-            if show_cost and billing_info:
-                view.add_item(discord.ui.TextDisplay(f"-# {billing_info}"))
-            
-            view.add_item(discord.ui.TextDisplay(f"-# {model_name} | {response_time or '未知時間'}"))
+            footer_parts = []
+            if billing_info and show_cost:
+                footer_parts.append(billing_info)
+            if show_model:
+                footer_parts.append(f"{model_name} | {response_time or '未知時間'}")
+            if footer_parts:
+                view.add_item(discord.ui.TextDisplay("-# " + " | ".join(footer_parts)))
         
         return view
     
@@ -4987,18 +4994,20 @@ class AICommands(commands.Cog):
         """取得使用者的回應視圖配置"""
         config = get_user_data(GLOBAL_GUILD_ID, user_id, cls.AI_RESPONSE_VIEW_CONFIG_KEY, {})
         if not isinstance(config, dict):
-            return {"container": True, "cost": True}
+            return {"container": True, "cost": True, "model": True}
         return {
             "container": config.get("container", True),
             "cost": config.get("cost", True),
+            "model": config.get("model", True),
         }
 
     @classmethod
-    def _set_response_view_config(cls, user_id: int, container: bool, cost: bool):
+    def _set_response_view_config(cls, user_id: int, container: bool, cost: bool, model: bool):
         """設定使用者的回應視圖配置"""
         set_user_data(GLOBAL_GUILD_ID, user_id, cls.AI_RESPONSE_VIEW_CONFIG_KEY, {
             "container": container,
             "cost": cost,
+            "model": model,
         })
 
     @classmethod
@@ -5413,6 +5422,7 @@ class AICommands(commands.Cog):
                 billing_info=billing_info,
                 use_container=response_view_config.get("container", True),
                 show_cost=response_view_config.get("cost", True),
+                show_model=response_view_config.get("model", True),
             )
 
             if pending_file_response:
@@ -5484,22 +5494,25 @@ class AICommands(commands.Cog):
     @app_commands.command(name="ai-set-response-view", description="設定你使用 AI 指令的回應顯示方式")
     @app_commands.describe(
         container="是否使用 Container 容器顯示回應",
-        cost="是否顯示計費資訊"
+        cost="是否顯示計費資訊",
+        model="是否顯示模型名稱與時間資訊"
     )
     @app_commands.allowed_installs(guilds=True, users=True)
     @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
-    async def ai_set_response_view(self, interaction: discord.Interaction, container: bool, cost: bool):
+    async def ai_set_response_view(self, interaction: discord.Interaction, container: bool, cost: bool, model: bool):
         """設定回應視圖顯示方式"""
         user = interaction.user
-        self._set_response_view_config(user.id, container, cost)
+        self._set_response_view_config(user.id, container, cost, model)
         
         container_status = "✅ 使用" if container else "❌ 不使用"
         cost_status = "✅ 顯示" if cost else "❌ 隱藏"
+        model_status = "✅ 顯示" if model else "❌ 隱藏"
         
         await interaction.response.send_message(
             f"已設定回應顯示方式：\n"
             f"• Container 容器：{container_status}\n"
-            f"• 計費資訊：{cost_status}",
+            f"• 計費資訊：{cost_status}\n"
+            f"• 模型資訊：{model_status}",
             ephemeral=True,
             allowed_mentions=SAFE_MENTIONS,
         )
@@ -5933,6 +5946,7 @@ class AICommands(commands.Cog):
                     billing_info=billing_info,
                     use_container=response_view_config.get("container", True),
                     show_cost=response_view_config.get("cost", True),
+                    show_model=response_view_config.get("model", True),
                 )
                 if tool_notice_message is not None:
                     try:
