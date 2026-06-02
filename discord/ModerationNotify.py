@@ -134,6 +134,20 @@ class AppealView(discord.ui.View):
                     child.disabled = True
                 await interaction.edit_original_response(view=origself)
                 origself.stop()
+        # check if banned or muted
+        message = interaction.message  # 直接使用 interaction.message (DM 中也能用)
+        guild_id = int(message.embeds[0].fields[0].value)  # 從嵌入訊息中取得伺服器 ID
+        guild = bot.get_guild(guild_id)
+        if not guild:
+            await interaction.response.send_message("無法找到對應的伺服器，請聯繫管理員。", ephemeral=True)
+            return
+        if guild.get_member(interaction.user.id) is None:
+            if not guild.fetch_ban(interaction.user.id):
+                await interaction.response.send_message("你沒有被封禁，無法提出申訴。", ephemeral=True)
+                return
+        if not guild.get_member(interaction.user.id).is_timed_out():
+            await interaction.response.send_message("你沒有被禁言，無法提出申訴。", ephemeral=True)
+            return
         await interaction.response.send_modal(AppealModal())
 
 async def notify_user(user: discord.User, guild: discord.Guild, action: str, reason: str = "未提供", end_time=None, moderator: discord.Member = None):
