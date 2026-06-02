@@ -24,7 +24,7 @@ from doc_markdown import read_markdown_file, extract_markdown_search_entries, lo
 from Economy import log_transaction, send_economy_audit_log
 
 # 全局允許提及設定（只允許提及用戶，禁止 @everyone 和 @here）
-SAFE_MENTIONS = discord.AllowedMentions(users=True, roles=False, everyone=False)
+SAFE_MENTIONS = discord.AllowedMentions(users=False, roles=False, everyone=False)
 
 # AI 模型費率（全域幣/字）
 MODEL_RATES = {
