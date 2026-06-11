@@ -1,4 +1,4 @@
-# https://dctw.nkhost.dev/api/v2/openapi.json
+# https://dctw.xyz/docs/?tags=api
 from __future__ import annotations
 
 from globalenv import bot, get_user_data, set_user_data, config
@@ -13,7 +13,7 @@ import re
 import time
 
 
-API_BASE = "https://dctw.nkhost.dev"
+API_BASE = "https://dctw.xyz"
 SITE_BASE = "https://dctw.xyz"
 USER_KEY_NAME = "dctw_api_key"
 CACHE_TTL_SECONDS = 300
@@ -77,41 +77,38 @@ RESOURCE_CONFIG = {
     "bots": {
         "list_path": "/api/v2/bots",
         "detail_path": "/api/v2/bots/{id}",
-        "comments_path": "/api/v2/bots/{id}/comments",
         "id_key": "id",
         "title": "機器人",
         "name_key": "name",
         "sort_map": {
             "newest": "created_at",
-            "votes": "votes",
-            "servers": "server_count",
+            "votes": "vote_count",
+            "servers": "servers",
             "bumped": "bumped_at",
         },
     },
     "servers": {
         "list_path": "/api/v2/servers",
         "detail_path": "/api/v2/servers/{id}",
-        "comments_path": "/api/v2/servers/{id}/comments",
         "id_key": "id",
         "title": "伺服器",
         "name_key": "name",
         "sort_map": {
             "newest": "created_at",
-            "votes": "votes",
-            "members": "member_count",
+            "votes": "vote_count",
+            "members": "members",
             "bumped": "bumped_at",
         },
     },
     "templates": {
         "list_path": "/api/v2/templates",
         "detail_path": "/api/v2/templates/{id}",
-        "comments_path": "/api/v2/templates/{id}/comments",
         "id_key": "id",
         "title": "模板",
         "name_key": "name",
         "sort_map": {
             "newest": "created_at",
-            "votes": "votes",
+            "votes": "vote_count",
             "bumped": "bumped_at",
         },
     },
@@ -165,6 +162,14 @@ def _normalize_url(value) -> str | None:
 
 
 def _format_timestamp(value) -> str:
+    if isinstance(value, str) and value.strip():
+        try:
+            dt = datetime.datetime.fromisoformat(value.replace("Z", "+00:00"))
+            ts = int(dt.timestamp())
+            if ts > 0:
+                return f"<t:{ts}:f>"
+        except (ValueError, OverflowError, OSError):
+            pass
     ts = _safe_int(value)
     if ts <= 0:
         return "未知"
@@ -248,9 +253,9 @@ def _format_tag_labels(resource: str, tags) -> str:
 def _extract_thumbnail_url(resource: str, item: dict) -> str | None:
     candidates: list = []
     if resource == "bots":
-        candidates.append(item.get("avatar_url"))
+        candidates.append(item.get("avatar"))
     elif resource == "servers":
-        candidates.append(item.get("icon_url"))
+        candidates.append(item.get("avatar"))
     elif resource == "templates":
         screenshots = item.get("screenshots")
         if isinstance(screenshots, list):
@@ -264,7 +269,7 @@ def _extract_thumbnail_url(resource: str, item: dict) -> str | None:
 
 
 def _extract_gallery_urls(resource: str, item: dict) -> list[str]:
-    banner_url = _normalize_url(item.get("banner_url"))
+    banner_url = _normalize_url(item.get("banner"))
     if resource in {"bots", "servers"} and banner_url:
         return [banner_url]
 
@@ -293,21 +298,24 @@ def _build_detail_link_specs(resource: str, item: dict) -> list[tuple[str, str]]
     listing_id = _safe_int(item.get(conf["id_key"]))
     buttons: list[tuple[str, str]] = []
 
-    primary_url = _normalize_url(item.get("url"))
-    if resource == "bots" and primary_url:
-        buttons.append(("邀請機器人", primary_url))
-    elif resource == "servers" and primary_url:
-        buttons.append(("加入伺服器", primary_url))
-    elif resource == "templates" and primary_url:
-        buttons.append(("套用模板", primary_url))
-
     if resource == "bots":
-        support_url = _normalize_url(item.get("discord_url"))
-        website_url = _normalize_url(item.get("website_url"))
+        invite_url = _normalize_url(item.get("inviteLink"))
+        if invite_url:
+            buttons.append(("邀請機器人", invite_url))
+        support_url = _normalize_url(item.get("serverLink"))
+        website_url = _normalize_url(item.get("webLink"))
         if support_url:
             buttons.append(("支援伺服器", support_url))
         if website_url:
             buttons.append(("官方網站", website_url))
+    elif resource == "servers":
+        invite_url = _normalize_url(item.get("inviteLink"))
+        if invite_url:
+            buttons.append(("加入伺服器", invite_url))
+    elif resource == "templates":
+        share_url = _normalize_url(item.get("shareLink"))
+        if share_url:
+            buttons.append(("套用模板", share_url))
 
     page_url = _listing_page_url(resource, listing_id)
     if page_url:
@@ -393,12 +401,12 @@ class DCTWBrowseView(discord.ui.LayoutView):
         for idx, item in page_items:
             listing_id = _safe_int(item.get(conf["id_key"]))
             name = _normalize_text(item.get(conf["name_key"]), "(無名稱)")
-            votes = _safe_int(item.get("votes"))
+            votes = _safe_int(item.get("vote_count"))
             extra = ""
             if self.resource == "bots":
-                extra = f" | 伺服器數: {_safe_int(item.get('server_count'))}"
+                extra = f" | 伺服器數: {_safe_int(item.get('servers'))}"
             elif self.resource == "servers":
-                extra = f" | 成員數: {_safe_int(item.get('member_count'))}"
+                extra = f" | 成員數: {_safe_int(item.get('members'))}"
             lines.append(f"{idx + 1}. {name} (ID: {listing_id}) | 票數: {votes}{extra}")
 
         return "\n".join(header_lines + ["", *lines])
@@ -541,7 +549,7 @@ class DCTWDetailView(discord.ui.LayoutView):
         conf = RESOURCE_CONFIG[self.resource]
         listing_id = _safe_int(self.selected_item.get(conf["id_key"]))
         name = _normalize_text(self.selected_item.get(conf["name_key"]), "(無名稱)")
-        votes = _safe_int(self.selected_item.get("votes"))
+        votes = _safe_int(self.selected_item.get("vote_count"))
         created_at = _format_timestamp(self.selected_item.get("created_at"))
         bumped_at = _format_timestamp(self.selected_item.get("bumped_at"))
         thumbnail_url = _extract_thumbnail_url(self.resource, self.selected_item)
@@ -551,17 +559,17 @@ class DCTWDetailView(discord.ui.LayoutView):
         if self.resource == "bots":
             lines.extend(
                 [
-                    f"伺服器數: {_safe_int(self.selected_item.get('server_count'))}",
-                    f"驗證狀態: {'已驗證' if self.selected_item.get('verified') else '未驗證'}",
-                    f"Slash 指令: {'是' if self.selected_item.get('is_slash') else '否'}",
+                    f"伺服器數: {_safe_int(self.selected_item.get('servers'))}",
+                    f"驗證狀態: {'已驗證' if self.selected_item.get('is_dc_verified') else '未驗證'}",
+                    f"官方認證: {'是' if self.selected_item.get('is_official_verified') else '否'}",
                     f"前綴: {_normalize_text(self.selected_item.get('prefix'))}",
                 ]
             )
         elif self.resource == "servers":
             lines.extend(
                 [
-                    f"成員數: {_safe_int(self.selected_item.get('member_count'))}",
-                    f"線上成員數: {_safe_int(self.selected_item.get('online_member_count'))}",
+                    f"成員數: {_safe_int(self.selected_item.get('members'))}",
+                    f"線上成員數: {_safe_int(self.selected_item.get('onlineMembers'))}",
                 ]
             )
 
@@ -596,9 +604,9 @@ class DCTWDetailView(discord.ui.LayoutView):
         if introduce and introduce != "無" and introduce != description:
             body_sections.append(("介紹", introduce))
 
-        social_links = self.selected_item.get("social_links") if isinstance(self.selected_item.get("social_links"), dict) else {}
+        social_links = self.selected_item.get("socialLinks") if isinstance(self.selected_item.get("socialLinks"), dict) else {}
         social_lines = []
-        for key, label in [("line", "LINE"), ("facebook", "Facebook"), ("instagram", "Instagram"), ("twitch", "Twitch"), ("threads", "Threads"), ("x", "X")]:
+        for key, label in [("Line", "LINE"), ("Facebook", "Facebook"), ("Instagram", "Instagram"), ("Twitch", "Twitch"), ("Threads", "Threads"), ("X", "X")]:
             url = _normalize_url(social_links.get(key))
             if url:
                 social_lines.append(f"{label}: {url}")
@@ -606,11 +614,12 @@ class DCTWDetailView(discord.ui.LayoutView):
             body_sections.append(("社群連結", "\n".join(social_lines)))
 
         if self.resource == "servers":
-            features = _compact_join(self.selected_item.get("features"), "")
+            features_raw = self.selected_item.get("features")
+            features = _compact_join([f.strip() for f in str(features_raw).split(",") if f.strip()], "") if isinstance(features_raw, str) else _compact_join(features_raw, "")
             if features:
                 body_sections.append(("伺服器功能", features))
         elif self.resource == "bots":
-            developers = await self.cog._format_user_refs(self.selected_item.get("developers"), bullet_prefix="- ")
+            developers = await self.cog._format_user_refs(self.selected_item.get("devs"), bullet_prefix="- ")
             if developers:
                 body_sections.append(("開發者", developers))
 
@@ -684,33 +693,23 @@ class DCTWDetailView(discord.ui.LayoutView):
 
     async def _show_comments(self, interaction: discord.Interaction):
         await interaction.response.defer(ephemeral=True, thinking=True)
-        conf = RESOURCE_CONFIG[self.resource]
-        listing_id = self._listing_id()
-        path = conf["comments_path"].format(id=listing_id)
-        read_key = self.cog._get_read_api_key(interaction.user.id)
-        if not read_key:
-            await interaction.followup.send("查看留言需要 API key。請先使用 /dctw key set。", ephemeral=True, allowed_mentions=SAFE_MENTIONS)
-            return
-
-        try:
-            payload = await self.cog._request_json("GET", path, api_key=read_key)
-        except Exception as exc:
-            await interaction.followup.send(f"取得留言失敗：{_format_error(exc)}", ephemeral=True, allowed_mentions=SAFE_MENTIONS)
-            return
-
-        items = payload.get("items", []) if isinstance(payload, dict) else []
-        if not items:
+        comments = self.selected_item.get("comments")
+        if not isinstance(comments, list) or not comments:
             await interaction.followup.send("目前沒有留言。", ephemeral=True, allowed_mentions=SAFE_MENTIONS)
             return
 
         preview_lines = []
-        for idx, comment in enumerate(items[:5], start=1):
-            user_id = _safe_int(comment.get("user_id"))
+        for idx, comment in enumerate(comments[:5], start=1):
+            user_id = _safe_int(comment.get("userId"))
             author_name = await self.cog._resolve_user_name(user_id)
             stars = _safe_int(comment.get("stars"))
             content = str(comment.get("content") or "(無內容)").replace("\n", " ")
-            updated_at = _format_timestamp(comment.get("updated_at"))
-            preview_lines.append(f"{idx}. {author_name} | {stars}★ | {updated_at}\n{content[:120]}")
+            created_at = comment.get("created_at", "")
+            if created_at:
+                ts_line = _format_timestamp(created_at)
+            else:
+                ts_line = "未知"
+            preview_lines.append(f"{idx}. {author_name} | {stars}★ | {ts_line}\n{content[:120]}")
         await interaction.followup.send("\n".join(preview_lines), ephemeral=True, allowed_mentions=SAFE_MENTIONS)
 
     async def _vote_item(self, interaction: discord.Interaction):
@@ -764,7 +763,6 @@ class DCTW(commands.GroupCog, name="dctw", description="DCTW 瀏覽器！"):
         headers = {"Accept": "application/json"}
         if api_key:
             headers["Authorization"] = f"Bearer {api_key}"
-            headers["X-API-KEY"] = api_key
 
         session = await self._get_session()
         async with session.request(method, url, params=params, headers=headers) as resp:
@@ -849,26 +847,31 @@ class DCTW(commands.GroupCog, name="dctw", description="DCTW 瀏覽器！"):
         self._cache_misses += 1
 
         items: list[dict] = []
-        cursor = None
         truncated = False
-        while len(items) < AGGREGATE_LIMIT:
-            params = {"limit": min(FETCH_LIMIT, 50)}
-            if cursor:
-                params["cursor"] = cursor
-            payload = await self._request_json("GET", conf["list_path"], params=params, api_key=api_key)
-            batch = payload.get("items") or []
-            if not batch:
-                break
-            items.extend(batch)
-            if len(items) >= AGGREGATE_LIMIT:
+
+        try:
+            payload = await self._request_json("GET", conf["list_path"], api_key=api_key)
+        except Exception:
+            payload = []
+
+        if isinstance(payload, list):
+            items = payload
+            if len(items) > AGGREGATE_LIMIT:
                 items = items[:AGGREGATE_LIMIT]
                 truncated = True
-                break
-            cursor = payload.get("next_cursor")
-            if not cursor:
-                break
 
-        items.sort(key=lambda i: _safe_int(i.get(sort_key), 0), reverse=True)
+        def _sort_value(item: dict):
+            v = item.get(sort_key)
+            if isinstance(v, (int, float)):
+                return (0, -v, "")
+            s = str(v or "")
+            try:
+                return (0, -float(s), "")
+            except (ValueError, TypeError):
+                pass
+            return (1, 0, s)
+
+        items.sort(key=_sort_value)
 
         async with self._cache_lock:
             self._list_cache[cache_key] = {
@@ -880,43 +883,13 @@ class DCTW(commands.GroupCog, name="dctw", description="DCTW 瀏覽器！"):
         return items, False, truncated
 
     async def _fetch_owned_ids(self, user_id: int, resource: str, *, api_key: str, force_refresh: bool = False) -> set[int]:
-        now = time.time()
-        cache_key = (user_id, resource)
-        if not force_refresh:
-            async with self._owned_cache_lock:
-                cached = self._owned_cache.get(cache_key)
-                if cached and cached["expires_at"] > now:
-                    return set(cached["ids"])
-
-        conf = RESOURCE_CONFIG[resource]
-        payload = await self._request_json("GET", f"{conf['list_path']}/@me", api_key=api_key)
-        if not isinstance(payload, list):
-            return set()
-
-        id_key = conf["id_key"]
-        owned_ids = {_safe_int(item.get(id_key), -1) for item in payload if isinstance(item, dict)}
-        owned_ids.discard(-1)
-
-        async with self._owned_cache_lock:
-            self._owned_cache[cache_key] = {
-                "expires_at": time.time() + OWNED_CACHE_TTL_SECONDS,
-                "ids": owned_ids,
-            }
-        return owned_ids
+        # 官方 API 目前沒有 owned item endpoint，等下一版再做
+        # 暫時返回空 set
+        return set()
 
     async def _is_owned_listing(self, user_id: int, resource: str, listing_id: int) -> bool:
-        if listing_id <= 0:
-            return False
-
-        user_key = self._get_user_key(user_id)
-        if not user_key:
-            return False
-
-        try:
-            owned = await self._fetch_owned_ids(user_id, resource, api_key=user_key)
-        except Exception:
-            return False
-        return listing_id in owned
+        # 官方 API 目前沒有 owned item endpoint，暫時一律返回 True
+        return True
 
     async def _post_action(self, resource: str, listing_id: int, action: str, *, api_key: str):
         conf = RESOURCE_CONFIG[resource]
@@ -991,17 +964,23 @@ class DCTW(commands.GroupCog, name="dctw", description="DCTW 瀏覽器！"):
         fetch_errors: list[str] = []
         for resource in resources:
             try:
-                owned_ids = await self._fetch_owned_ids(interaction.user.id, resource, api_key=user_key, force_refresh=True)
+                request_key = self._get_read_api_key(interaction.user.id)
+                items, _, _ = await self._fetch_and_sort_resource(resource, "bumped", api_key=request_key)
+                conf = RESOURCE_CONFIG[resource]
+                for item in items:
+                    listing_id = _safe_int(item.get(conf["id_key"]))
+                    if listing_id > 0:
+                        owned_targets.append((resource, listing_id))
             except Exception as exc:
                 fetch_errors.append(f"{resource}: {_format_error(exc)}")
                 continue
-            for listing_id in sorted(owned_ids):
-                owned_targets.append((resource, listing_id))
 
         if not owned_targets:
             error_part = f"\n錯誤: {'; '.join(fetch_errors)}" if fetch_errors else ""
             await interaction.followup.send(f"你目前沒有可置頂的資源。{error_part}", ephemeral=True, allowed_mentions=SAFE_MENTIONS)
             return
+
+        owned_targets.sort(key=lambda t: t[1])
 
         estimated_minutes = math.ceil(max(0, len(owned_targets) - 1) * BUMP_COOLDOWN_SECONDS / 60)
         await interaction.followup.send(
@@ -1097,26 +1076,26 @@ class DCTW(commands.GroupCog, name="dctw", description="DCTW 瀏覽器！"):
     async def key_help(self, interaction: discord.Interaction):
         embed = discord.Embed(title="如何獲取 DCTW API Key", color=discord.Colour.blue())
         embed.add_field(
-            name="1. 加入雲端貓居 Discord 伺服器",
-            value="點擊[這裡](https://discord.gg/UMyXvz9Y9W)加入雲端貓居的官方 Discord 伺服器。",
+            name="1. 登入 DCTW 官網",
+            value="前往 [dctw.xyz](https://dctw.xyz)，點擊右上角登入 Discord。",
             inline=False,
         )
         embed.add_field(
-            name="2. 前往 #🤖┇開刷指令␥ᴄᴏᴍᴍᴀɴᴅꜱ 頻道",
-            value="在伺服器中找到 #🤖┇開刷指令␥ᴄᴏᴍᴍᴀɴᴅꜱ 頻道。",
+            name="2. 進入後台",
+            value="登入後點擊帳號管理，進入後台面板。",
             inline=False,
         )
         embed.add_field(
-            name="3. 使用 `/key` 指令",
-            value="在該頻道輸入 `/key` 指令，機器人會回應你的專屬 API key。",
+            name="3. 複製 API Key",
+            value="在個人檔案附近找到「點我複製 API KEY」按鈕，點擊後會自動複製到剪貼簿。",
             inline=False,
         )
         embed.add_field(
-            name="5. 設定 API key",
+            name="4. 設定 API key",
             value="將獲取的 API key 複製後，使用 `/dctw key set <你的 API key>` 指令將其設定到此機器人中。",
             inline=False,
         )
-        embed.set_footer(text="請勿將 API key 洩露給他人，以免被濫用。")
+        embed.set_footer(text="請勿將 API key 洩露給他人，以免被濫用。\n官方文檔: https://dctw.xyz/docs/?tags=api")
         await interaction.response.send_message(embed=embed, ephemeral=True, allowed_mentions=SAFE_MENTIONS)
 
     @dctw_bot.command(name="browse", description="瀏覽機器人清單")
