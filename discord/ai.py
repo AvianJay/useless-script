@@ -699,10 +699,99 @@ class ClearHistoryView(discord.ui.LayoutView):
 
 
 # ============================================
+# 沉浸式 AI 頻道管理器
+# ============================================
+
+class ImmersiveChannelManager:
+    """管理沉浸式 AI 頻道的狀態：訊息緩衝、上下文、佇列等"""
+
+    # 每個頻道的運行時狀態 (guild_id, channel_id) -> dict
+    _states: dict[tuple[int, int], dict] = {}
+
+    @classmethod
+    def get_state(cls, guild_id: int, channel_id: int) -> dict:
+        key = (guild_id, channel_id)
+        if key not in cls._states:
+            cls._states[key] = {
+                "buffer": [],           # 累積的訊息 list[dict]
+                "context": [],          # 已送出的上下文 list[dict]  (role/content for API)
+                "queue": [],            # 溢出/錯誤時的待處理訊息 list[dict]
+                "processing": False,    # 是否正在請求 AI
+                "total_context_chars": 0,
+            }
+        return cls._states[key]
+
+    @classmethod
+    def remove_state(cls, guild_id: int, channel_id: int):
+        cls._states.pop((guild_id, channel_id), None)
+
+    @classmethod
+    def reset_context(cls, guild_id: int, channel_id: int):
+        state = cls.get_state(guild_id, channel_id)
+        state["context"] = []
+        state["total_context_chars"] = 0
+
+    @classmethod
+    def add_to_buffer(cls, guild_id: int, channel_id: int, msg_data: dict):
+        state = cls.get_state(guild_id, channel_id)
+        state["buffer"].append(msg_data)
+
+    @classmethod
+    def drain_buffer(cls, guild_id: int, channel_id: int) -> list[dict]:
+        state = cls.get_state(guild_id, channel_id)
+        msgs = state["buffer"]
+        state["buffer"] = []
+        return msgs
+
+    @classmethod
+    def add_to_queue(cls, guild_id: int, channel_id: int, msg_data: dict):
+        state = cls.get_state(guild_id, channel_id)
+        state["queue"].append(msg_data)
+
+    @classmethod
+    def drain_queue(cls, guild_id: int, channel_id: int) -> list[dict]:
+        state = cls.get_state(guild_id, channel_id)
+        msgs = state["queue"]
+        state["queue"] = []
+        return msgs
+
+    @classmethod
+    def append_context(cls, guild_id: int, channel_id: int, messages: list[dict], chars: int = 0):
+        state = cls.get_state(guild_id, channel_id)
+        state["context"].extend(messages)
+        state["total_context_chars"] += chars
+
+    @classmethod
+    def compress_context(cls, guild_id: int, channel_id: int, summary_text: str, chars: int):
+        state = cls.get_state(guild_id, channel_id)
+        state["context"] = [{"role": "system", "content": f"[前文摘要]\n{summary_text}"}]
+        state["total_context_chars"] = chars
+
+    @classmethod
+    def is_processing(cls, guild_id: int, channel_id: int) -> bool:
+        state = cls.get_state(guild_id, channel_id)
+        return state.get("processing", False)
+
+    @classmethod
+    def set_processing(cls, guild_id: int, channel_id: int, value: bool):
+        state = cls.get_state(guild_id, channel_id)
+        state["processing"] = value
+
+
+# ============================================
 # AI Commands Cog
 # ============================================
 
 class AICommands(commands.Cog):
+    # ...existing code...
+    AI_IMMERSIVE_CHANNEL_CONFIG_KEY = "ai_immersive_channel_config"
+    AI_IMMERSIVE_DEFAULT_PROMPT = "你是一個聊天機器人，就像一般人正常聊天就好，如果沒有相關的請不要回答。"
+    AI_IMMERSIVE_BATCH_SIZE = 5
+    AI_IMMERSIVE_MAX_CONTEXT_CHARS = 12000
+    AI_IMMERSIVE_COMPRESS_THRESHOLD_CHARS = 9000
+    AI_IMMERSIVE_COMPRESS_TARGET_CHARS = 4000
+    AI_IMMERSIVE_MODEL = "kimi-k2.5-fw"
+    # ...existing code...
     """AI 聊天機器人指令"""
     ai_admin = app_commands.Group(
         name="ai-admin",
@@ -774,6 +863,9 @@ class AICommands(commands.Cog):
         "get_transport_info": "查詢交通資訊",
         "get_fakeuser_status": "查詢仿冒資料",
         "get_user_command_stats": "指令統計",
+        "immersive_send": "沉浸式發送訊息",
+        "immersive_reply": "沉浸式回覆訊息",
+        "immersive_react": "沉浸式添加反應",
     }
     EMOJI_NAME_PATTERN = re.compile(r'(?<!<):([a-zA-Z0-9_]{2,32}):')
     CUSTOM_EMOJI_LITERAL_PATTERN = re.compile(r'<a?:[a-zA-Z0-9_]{2,32}:\d+>')
@@ -786,6 +878,14 @@ class AICommands(commands.Cog):
         self.rate_limits = {}  # 簡單的速率限制
         self._docs_search_cache = None
         self._docs_feature_prompt_cache = None
+
+    async def cog_load(self):
+        """Cog 載入時，啟動沉浸式 AI 的 on_message listener"""
+        self.bot.add_listener(self._on_immersive_message, "on_message")
+
+    async def cog_unload(self):
+        """Cog 卸載時，移除沉浸式 AI 的 on_message listener"""
+        self.bot.remove_listener(self._on_immersive_message, "on_message")
 
     @staticmethod
     def _parse_model_prefix(message: str, default: str = "openai-fast") -> tuple[str, str]:
@@ -1198,7 +1298,11 @@ class AICommands(commands.Cog):
             working_messages = [dict(message) for message in messages]
             working_image = image
             active_tool_context = tool_context or {}
-            tools = self._build_ai_tools() if active_tool_context else None
+            # 沉浸式 AI 使用專用工具集
+            if active_tool_context.get("immersive"):
+                tools = self._build_immersive_tools()
+            else:
+                tools = self._build_ai_tools() if active_tool_context else None
 
             for round_index in range(1, (self.MAX_TOOL_ITERATIONS if tools else 1) + 1):
                 response = await self._request_ai_completion(
@@ -3162,13 +3266,26 @@ class AICommands(commands.Cog):
         if not tool_names:
             return messages
 
-        tool_prompt = "\n".join(
-            [
-                "Tool mode instructions:",
-                "If you need tools, respond with ONLY valid JSON and no markdown.",
-                'Format: {"tool_calls":[{"name":"TOOL_NAME","arguments":{}}]}',
-                "You may include multiple tool calls in the array.",
-                "If no tool is needed, respond normally with plain text.",
+        # 沉浸式模式：必須使用工具回應，不允許純文字
+        is_immersive = any(name.startswith("immersive_") for name in tool_names)
+
+        tool_prompt_lines = [
+            "Tool mode instructions:",
+            "If you need tools, respond with ONLY valid JSON and no markdown.",
+            'Format: {"tool_calls":[{"name":"TOOL_NAME","arguments":{}}]}',
+            "You may include multiple tool calls in the array.",
+        ]
+        if is_immersive:
+            tool_prompt_lines.append(
+                "You MUST use tool calling to respond. Never respond with plain text. "
+                "Every response must include at least one tool call (immersive_send, immersive_reply, or immersive_react)."
+            )
+        else:
+            tool_prompt_lines.append("If no tool is needed, respond normally with plain text.")
+
+        # 沉浸式模式不需要一般工具的引導提示
+        if not is_immersive:
+            tool_prompt_lines.extend([
                 "If the user is asking about bot features, docs, setup, syntax, variables, embeds, conditions, examples, permissions, or how to use a module, call search_bot_docs first.",
                 "If the user is asking about the bot's current status, uptime, latency, version, install count, command totals, or server count, call get_bot_status.",
                 "If the user asks to inspect channel history, a specific message, a user's visible profile, or a member's channel permissions, call read_channel, read_message, or get_user as appropriate.",
@@ -3176,16 +3293,20 @@ class AICommands(commands.Cog):
                 "If the user explicitly asks to generate a video, animation clip, or ad clip, call generate_video.",
                 f"Discord message content is limited to about {self.DISCORD_MESSAGE_CHAR_LIMIT} characters. If the full answer, code, logs, list, or document would exceed that, call send_as_file.",
                 "After calling send_as_file, keep the final answer short and do not repeat the full file contents in the final message.",
-                "Current user/global memory and guild shared memory may already be injected into context. Reuse those memories directly and use the listed memory_ids when updating an existing topic.",
-                "You may create or update AI memory whenever it is useful, even if the user did not explicitly ask you to remember something.",
-                "In guild channels, prefer guild_shared for server-wide facts, recurring jokes, shared lists, and member notes that should be visible to everyone using AI in this server. Use user_global for personal cross-server facts tied only to the current user.",
-                "Casual shared lists are allowed. Avoid storing obvious secrets such as passwords, tokens, private API keys, or payment credentials.",
-                "Prefer updating an existing memory entry instead of creating duplicates when the memory list already contains the same topic.",
-                f"Available tools: {', '.join(tool_names)}",
-                f"Tool schemas: {json.dumps(tool_schemas, ensure_ascii=False)}",
-                docs_feature_prompt,
-            ]
-        )
+            ])
+
+        tool_prompt_lines.extend([
+            "Current user/global memory and guild shared memory may already be injected into context. Reuse those memories directly and use the listed memory_ids when updating an existing topic.",
+            "You may create or update AI memory whenever it is useful, even if the user did not explicitly ask you to remember something.",
+            "In guild channels, prefer guild_shared for server-wide facts, recurring jokes, shared lists, and member notes that should be visible to everyone using AI in this server. Use user_global for personal cross-server facts tied only to the current user.",
+            "Casual shared lists are allowed. Avoid storing obvious secrets such as passwords, tokens, private API keys, or payment credentials.",
+            "Prefer updating an existing memory entry instead of creating duplicates when the memory list already contains the same topic.",
+            f"Available tools: {', '.join(tool_names)}",
+            f"Tool schemas: {json.dumps(tool_schemas, ensure_ascii=False)}",
+            docs_feature_prompt,
+        ])
+
+        tool_prompt = "\n".join(tool_prompt_lines)
         return [{"role": "system", "content": tool_prompt}, *messages]
 
     async def _tool_search_bot_docs(self, args: dict, tool_context: dict) -> dict:
@@ -4635,6 +4756,102 @@ class AICommands(commands.Cog):
             "top_slash_errors": normalize(app_command_errors),
         }
 
+    async def _tool_immersive_send(self, args: dict, tool_context: dict) -> dict:
+        """沉浸式 AI 發送訊息工具"""
+        content = str(args.get("content", "") or "").strip()
+        if not content:
+            return {"error": "content is required"}
+
+        channel = tool_context.get("channel")
+        if not isinstance(channel, discord.TextChannel):
+            return {"error": "channel is not a text channel"}
+
+        guild = tool_context.get("guild")
+        emoji_map = {}
+        if guild:
+            _, emoji_map = self._build_guild_emoji_context(guild)
+
+        content = self._resolve_ai_custom_emojis(content, emoji_map)
+
+        # 截斷至 Discord 限制
+        if len(content) > 2000:
+            content = content[:2000]
+
+        try:
+            sent_msg = await channel.send(content, allowed_mentions=SAFE_MENTIONS)
+            return {"ok": True, "message_id": sent_msg.id, "content_length": len(content)}
+        except Exception as e:
+            return {"ok": False, "error": str(e)}
+
+    async def _tool_immersive_reply(self, args: dict, tool_context: dict) -> dict:
+        """沉浸式 AI 回覆訊息工具"""
+        message_id = args.get("message_id")
+        content = str(args.get("content", "") or "").strip()
+        if not message_id:
+            return {"error": "message_id is required"}
+        if not content:
+            return {"error": "content is required"}
+
+        channel = tool_context.get("channel")
+        if not isinstance(channel, discord.TextChannel):
+            return {"error": "channel is not a text channel"}
+
+        try:
+            target_msg = await channel.fetch_message(int(message_id))
+        except Exception as e:
+            return {"error": f"cannot find message {message_id}: {e}"}
+
+        guild = tool_context.get("guild")
+        emoji_map = {}
+        if guild:
+            _, emoji_map = self._build_guild_emoji_context(guild)
+
+        content = self._resolve_ai_custom_emojis(content, emoji_map)
+
+        if len(content) > 2000:
+            content = content[:2000]
+
+        try:
+            sent_msg = await target_msg.reply(content, allowed_mentions=SAFE_MENTIONS)
+            return {"ok": True, "message_id": sent_msg.id, "replied_to": int(message_id), "content_length": len(content)}
+        except Exception as e:
+            return {"ok": False, "error": str(e)}
+
+    async def _tool_immersive_react(self, args: dict, tool_context: dict) -> dict:
+        """沉浸式 AI 添加反應工具"""
+        message_id = args.get("message_id")
+        emoji = str(args.get("emoji", "") or "").strip()
+        if not message_id:
+            return {"error": "message_id is required"}
+        if not emoji:
+            return {"error": "emoji is required"}
+
+        channel = tool_context.get("channel")
+        if not isinstance(channel, discord.TextChannel):
+            return {"error": "channel is not a text channel"}
+
+        try:
+            target_msg = await channel.fetch_message(int(message_id))
+        except Exception as e:
+            return {"error": f"cannot find message {message_id}: {e}"}
+
+        # 解析 emoji
+        guild = tool_context.get("guild")
+        if guild:
+            _, emoji_map = self._build_guild_emoji_context(guild)
+            # 嘗試從 :name: 格式解析為自訂表情
+            if emoji.startswith(":") and emoji.endswith(":"):
+                emoji_name = emoji.strip(":").lower()
+                resolved = emoji_map.get(emoji_name)
+                if resolved:
+                    emoji = resolved
+
+        try:
+            await target_msg.add_reaction(emoji)
+            return {"ok": True, "message_id": int(message_id), "emoji": emoji}
+        except Exception as e:
+            return {"ok": False, "error": str(e)}
+
     async def _execute_ai_tool(self, name: str, arguments: dict, tool_context: dict) -> dict:
         handlers = {
             "search_bot_docs": self._tool_search_bot_docs,
@@ -4658,6 +4875,9 @@ class AICommands(commands.Cog):
             "get_transport_info": self._tool_get_transport_info,
             "get_fakeuser_status": self._tool_get_fakeuser_status,
             "get_user_command_stats": self._tool_get_user_command_stats,
+            "immersive_send": self._tool_immersive_send,
+            "immersive_reply": self._tool_immersive_reply,
+            "immersive_react": self._tool_immersive_react,
         }
         handler = handlers.get(name)
         if handler is None:
@@ -5599,6 +5819,629 @@ class AICommands(commands.Cog):
 
         set_server_config(guild.id, self.AI_GUILD_CUSTOM_PROMPT_KEY, "")
         await interaction.response.send_message("✅ 已清除這個伺服器的 AI 自訂 prompt。", ephemeral=True, allowed_mentions=SAFE_MENTIONS)
+
+    @ai_admin.command(name="set-channel", description="設定沉浸式 AI 頻道，機器人會自動閱讀頻道訊息並參與對話")
+    @app_commands.describe(
+        channel="要啟用沉浸式 AI 的頻道",
+        prompt="沉浸式 AI 的系統提示詞",
+    )
+    @app_commands.allowed_installs(guilds=True, users=False)
+    @app_commands.allowed_contexts(guilds=True, dms=False, private_channels=False)
+    async def ai_immersive_set_channel(
+        self,
+        interaction: discord.Interaction,
+        channel: discord.TextChannel,
+        prompt: str = "你是一個聊天機器人，就像一般人正常聊天就好，如果沒有相關的請不要回答。",
+    ):
+        guild = interaction.guild
+        user = interaction.user
+        if guild is None:
+            await interaction.response.send_message("❌ 此指令只能在伺服器中使用。", ephemeral=True, allowed_mentions=SAFE_MENTIONS)
+            return
+        if not self._can_manage_guild_ai_memory(user, guild):
+            await interaction.response.send_message("❌ 你需要管理伺服器或管理員權限才能設定沉浸式 AI 頻道。", ephemeral=True, allowed_mentions=SAFE_MENTIONS)
+            return
+
+        # 確保 bot 能看到該頻道
+        perms = channel.permissions_for(guild.me)
+        if not perms.view_channel or not perms.send_messages or not perms.read_message_history:
+            await interaction.response.send_message(
+                "❌ 機器人在該頻道缺少必要權限（需要查看頻道、發送訊息、讀取歷史）。",
+                ephemeral=True,
+                allowed_mentions=SAFE_MENTIONS,
+            )
+            return
+
+        sanitized_prompt = self._sanitize_guild_ai_custom_prompt(prompt) if len(prompt) > self.MAX_AI_GUILD_CUSTOM_PROMPT_LENGTH else prompt.strip()
+        if not sanitized_prompt:
+            sanitized_prompt = self.AI_IMMERSIVE_DEFAULT_PROMPT
+
+        config_data = {
+            "channel_id": channel.id,
+            "prompt": sanitized_prompt,
+            "enabled": True,
+            "set_by": user.id,
+        }
+        set_server_config(guild.id, self.AI_IMMERSIVE_CHANNEL_CONFIG_KEY, config_data)
+        # 初始化運行時狀態
+        ImmersiveChannelManager.get_state(guild.id, channel.id)
+        await interaction.response.send_message(
+            f"✅ 已將 {channel.mention} 設為沉浸式 AI 頻道。\n"
+            f"系統提示詞（{len(sanitized_prompt)} 字）：```text\n{sanitized_prompt[:500]}\n```",
+            ephemeral=True,
+            allowed_mentions=SAFE_MENTIONS,
+        )
+
+    @ai_admin.command(name="unset-channel", description="停用沉浸式 AI 頻道")
+    @app_commands.describe(channel="要停用沉浸式 AI 的頻道（不指定則停用目前所有）")
+    @app_commands.allowed_installs(guilds=True, users=False)
+    @app_commands.allowed_contexts(guilds=True, dms=False, private_channels=False)
+    async def ai_immersive_unset_channel(
+        self,
+        interaction: discord.Interaction,
+        channel: discord.TextChannel = None,
+    ):
+        guild = interaction.guild
+        user = interaction.user
+        if guild is None:
+            await interaction.response.send_message("❌ 此指令只能在伺服器中使用。", ephemeral=True, allowed_mentions=SAFE_MENTIONS)
+            return
+        if not self._can_manage_guild_ai_memory(user, guild):
+            await interaction.response.send_message("❌ 你需要管理伺服器或管理員權限才能停用沉浸式 AI 頻道。", ephemeral=True, allowed_mentions=SAFE_MENTIONS)
+            return
+
+        if channel:
+            current_config = self._get_server_config_fallback(guild.id, self.AI_IMMERSIVE_CHANNEL_CONFIG_KEY, {})
+            if isinstance(current_config, dict) and current_config.get("channel_id") == channel.id:
+                set_server_config(guild.id, self.AI_IMMERSIVE_CHANNEL_CONFIG_KEY, {})
+                ImmersiveChannelManager.remove_state(guild.id, channel.id)
+                await interaction.response.send_message(
+                    f"✅ 已停用 {channel.mention} 的沉浸式 AI。",
+                    ephemeral=True,
+                    allowed_mentions=SAFE_MENTIONS,
+                )
+            else:
+                await interaction.response.send_message(
+                    f"❌ {channel.mention} 並未被設定為沉浸式 AI 頻道。",
+                    ephemeral=True,
+                    allowed_mentions=SAFE_MENTIONS,
+                )
+        else:
+            set_server_config(guild.id, self.AI_IMMERSIVE_CHANNEL_CONFIG_KEY, {})
+            # 清除所有此 guild 的 runtime state
+            keys_to_remove = [k for k in ImmersiveChannelManager._states if k[0] == guild.id]
+            for k in keys_to_remove:
+                del ImmersiveChannelManager._states[k]
+            await interaction.response.send_message(
+                "✅ 已停用這個伺服器的所有沉浸式 AI 頻道。",
+                ephemeral=True,
+                allowed_mentions=SAFE_MENTIONS,
+            )
+
+    @ai_admin.command(name="view-channel", description="查看沉浸式 AI 頻道設定")
+    @app_commands.allowed_installs(guilds=True, users=False)
+    @app_commands.allowed_contexts(guilds=True, dms=False, private_channels=False)
+    async def ai_immersive_view_channel(self, interaction: discord.Interaction):
+        guild = interaction.guild
+        if guild is None:
+            await interaction.response.send_message("❌ 此指令只能在伺服器中使用。", ephemeral=True, allowed_mentions=SAFE_MENTIONS)
+            return
+
+        config_data = self._get_server_config_fallback(guild.id, self.AI_IMMERSIVE_CHANNEL_CONFIG_KEY, {})
+        if not isinstance(config_data, dict) or not config_data.get("channel_id"):
+            await interaction.response.send_message(
+                "目前這個伺服器沒有設定沉浸式 AI 頻道。",
+                ephemeral=True,
+                allowed_mentions=SAFE_MENTIONS,
+            )
+            return
+
+        channel_id = config_data["channel_id"]
+        prompt = config_data.get("prompt", self.AI_IMMERSIVE_DEFAULT_PROMPT)
+        enabled = config_data.get("enabled", True)
+        set_by_id = config_data.get("set_by")
+
+        channel_mention = f"<#{channel_id}>"
+        status = "✅ 啟用中" if enabled else "❌ 已停用"
+        set_by_text = f"（由 <@{set_by_id}> 設定）" if set_by_id else ""
+
+        state = ImmersiveChannelManager.get_state(guild.id, channel_id)
+        ctx_len = state.get("total_context_chars", 0)
+        buf_len = len(state.get("buffer", []))
+        q_len = len(state.get("queue", []))
+
+        await interaction.response.send_message(
+            f"**沉浸式 AI 頻道設定**\n"
+            f"• 頻道：{channel_mention}{set_by_text}\n"
+            f"• 狀態：{status}\n"
+            f"• 系統提示詞（{len(prompt)} 字）：```text\n{prompt[:400]}\n```"
+            f"• 上下文字數：{ctx_len} / {self.AI_IMMERSIVE_MAX_CONTEXT_CHARS}\n"
+            f"• 緩衝區訊息：{buf_len} / {self.AI_IMMERSIVE_BATCH_SIZE}\n"
+            f"• 佇列訊息：{q_len}",
+            ephemeral=True,
+            allowed_mentions=SAFE_MENTIONS,
+        )
+
+    # ============================================
+    # 沉浸式 AI 核心方法
+    # ============================================
+
+    def _build_immersive_tools(self) -> list[dict]:
+        """沉浸式 AI 專用工具集：只能透過工具回應"""
+        return [
+            {
+                "type": "function",
+                "function": {
+                    "name": "immersive_send",
+                    "description": "Send a message to the immersive channel. Use this to participate in the conversation.",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "content": {"type": "string", "description": "The message content to send."},
+                        },
+                        "required": ["content"],
+                    },
+                },
+            },
+            {
+                "type": "function",
+                "function": {
+                    "name": "immersive_reply",
+                    "description": "Reply to a specific message in the immersive channel. Use this when responding to a particular person's message.",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "message_id": {"type": "integer", "description": "The ID of the message to reply to."},
+                            "content": {"type": "string", "description": "The reply content."},
+                        },
+                        "required": ["message_id", "content"],
+                    },
+                },
+            },
+            {
+                "type": "function",
+                "function": {
+                    "name": "immersive_react",
+                    "description": "Add an emoji reaction to a message in the immersive channel. Use this to react to messages without sending text.",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "message_id": {"type": "integer", "description": "The ID of the message to react to."},
+                            "emoji": {"type": "string", "description": "The emoji to add. Use :name: format for custom server emojis, or a standard Unicode emoji."},
+                        },
+                        "required": ["message_id", "emoji"],
+                    },
+                },
+            },
+        ]
+
+    async def _on_immersive_message(self, msg: discord.Message):
+        """沉浸式 AI 的 on_message 監聽器"""
+        # 忽略 bot、DM、非 guild
+        if msg.author.bot:
+            return
+        if not msg.guild:
+            return
+
+        guild_id = msg.guild.id
+        channel_id = msg.channel.id
+
+        # 取得沉浸式頻道設定
+        config_data = self._get_server_config_fallback(guild_id, self.AI_IMMERSIVE_CHANNEL_CONFIG_KEY, {})
+        if not isinstance(config_data, dict) or not config_data.get("enabled"):
+            return
+        if config_data.get("channel_id") != channel_id:
+            return
+
+        # 格式化訊息
+        msg_data = await self._format_immersive_message(msg)
+        if not msg_data:
+            return
+
+        is_mention = msg_data.get("is_mention", False)
+
+        # 判斷路由
+        if is_mention:
+            # 被 mention → 立即處理
+            await self._process_immersive_batch(guild_id, channel_id, config_data, force_msg=msg_data)
+            return
+
+        if ImmersiveChannelManager.is_processing(guild_id, channel_id):
+            # 正在處理中 → 放入 queue
+            ImmersiveChannelManager.add_to_queue(guild_id, channel_id, msg_data)
+            return
+
+        # 放入 buffer
+        ImmersiveChannelManager.add_to_buffer(guild_id, channel_id, msg_data)
+        state = ImmersiveChannelManager.get_state(guild_id, channel_id)
+        buffer_len = len(state.get("buffer", []))
+
+        # 達到 batch size → 處理
+        if buffer_len >= self.AI_IMMERSIVE_BATCH_SIZE:
+            await self._process_immersive_batch(guild_id, channel_id, config_data)
+
+    async def _format_immersive_message(self, msg: discord.Message) -> dict | None:
+        """將 Discord 訊息格式化為沉浸式上下文 dict"""
+        if not msg.guild:
+            return None
+
+        # 解析 mention
+        content = msg.content or ""
+        try:
+            content = await MentionResolver.resolve_mentions(content, msg.guild, self.bot)
+        except Exception:
+            pass
+
+        # 截斷
+        if len(content) > 200:
+            content = content[:200] + "..."
+
+        # 判斷是否 mention bot
+        is_mention = False
+        try:
+            is_mention = msg.guild.me.mentioned_in(msg) or self.bot.user in msg.mentions
+        except Exception:
+            pass
+
+        return {
+            "message_id": msg.id,
+            "author_id": msg.author.id,
+            "author_name": msg.author.display_name,
+            "content": content,
+            "is_mention": is_mention,
+            "timestamp": msg.created_at.isoformat() if msg.created_at else "",
+        }
+
+    async def _process_immersive_batch(
+        self,
+        guild_id: int,
+        channel_id: int,
+        config_data: dict,
+        force_msg: dict | None = None,
+    ):
+        """沉浸式 AI 批次處理：drain buffer + queue，建構上下文，請求 AI"""
+        # 防止重入
+        if ImmersiveChannelManager.is_processing(guild_id, channel_id):
+            # 如果正在處理且 force_msg 存在，放入 queue 下次處理
+            if force_msg:
+                ImmersiveChannelManager.add_to_queue(guild_id, channel_id, force_msg)
+            return
+
+        ImmersiveChannelManager.set_processing(guild_id, channel_id, True)
+        charged_input = 0.0
+        payer_id = None
+
+        try:
+            guild = self.bot.get_guild(guild_id)
+            if not guild:
+                return
+            channel = guild.get_channel_or_thread(channel_id)
+            if not isinstance(channel, discord.TextChannel):
+                return
+
+            # 收集訊息
+            buffer_msgs = ImmersiveChannelManager.drain_buffer(guild_id, channel_id)
+            queue_msgs = ImmersiveChannelManager.drain_queue(guild_id, channel_id)
+            batch = buffer_msgs + queue_msgs
+            if force_msg:
+                batch.append(force_msg)
+
+            if not batch:
+                return
+
+            # 建構上下文 messages
+            context_additions = []
+            chars_added = 0
+            for msg_data in batch:
+                is_mention = msg_data.get("is_mention", False)
+                mention_tag = " [MENTION]" if is_mention else ""
+                content = (
+                    f"[{msg_data.get('author_name', '?')} (ID:{msg_data.get('author_id', '?')})]{mention_tag}: "
+                    f"{msg_data.get('content', '')}"
+                )
+                context_additions.append({"role": "user", "content": content})
+                chars_added += len(content)
+
+            # 加入上下文
+            ImmersiveChannelManager.append_context(guild_id, channel_id, context_additions, chars_added)
+
+            # 檢查是否需要壓縮
+            state = ImmersiveChannelManager.get_state(guild_id, channel_id)
+            if state.get("total_context_chars", 0) > self.AI_IMMERSIVE_COMPRESS_THRESHOLD_CHARS:
+                await self._compress_immersive_context(guild_id, channel_id, config_data.get("prompt", ""))
+
+            # 再次檢查上下文上限
+            state = ImmersiveChannelManager.get_state(guild_id, channel_id)
+            if state.get("total_context_chars", 0) > self.AI_IMMERSIVE_MAX_CONTEXT_CHARS:
+                # 硬截斷：移除最舊的上下文直到符合
+                self._trim_immersive_context(guild_id, channel_id)
+
+            # 建構 system prompt
+            custom_prompt = config_data.get("prompt", self.AI_IMMERSIVE_DEFAULT_PROMPT)
+            system_prompt = self._build_immersive_system_prompt(custom_prompt, guild, channel)
+
+            # 準備 messages
+            messages = [{"role": "system", "content": system_prompt}]
+            state = ImmersiveChannelManager.get_state(guild_id, channel_id)
+            messages.extend(state.get("context", []))
+
+            # 計費
+            model = self.AI_IMMERSIVE_MODEL
+            rate_per_char = poe_text_models.get(model, 0.05)
+            input_chars = sum(len(m.get("content", "")) for m in messages)
+            input_cost = round(input_chars * rate_per_char, 2)
+
+            # 解決付費對象 - 使用 guild billing
+            billing_target = await self._resolve_ai_billing_target(guild.me, guild)
+            payer_id = billing_target["payer_id"]
+            global_balance = self._get_global_balance(payer_id)
+
+            if global_balance < input_cost:
+                # 餘額不足，把訊息放回 queue 下次再試
+                for msg_data in batch:
+                    ImmersiveChannelManager.add_to_queue(guild_id, channel_id, msg_data)
+                log(
+                    f"沉浸式 AI 餘額不足: guild={guild_id} channel={channel_id} "
+                    f"need={input_cost:.2f} balance={global_balance:.2f}",
+                    module_name="AI",
+                    level=logging.WARNING,
+                )
+                return
+
+            balance_before = global_balance
+            charged_input, balance_after = self._charge_global_balance(payer_id, input_cost)
+            self._log_economy_transaction(
+                payer_id,
+                "沉浸式 AI 輸入扣費",
+                -charged_input,
+                f"模型={model}，輸入={input_chars}字，費率={rate_per_char:.2f}/字",
+            )
+
+            # 建構 tool_context
+            tool_context = {
+                "immersive": True,
+                "guild": guild,
+                "channel": channel,
+            }
+
+            # 請求 AI
+            try:
+                response_text, model_name, response_time = await self.generate_response(
+                    messages,
+                    model=model,
+                    tool_context=tool_context,
+                )
+            except Exception as e:
+                # AI 請求失敗 → 退費 + 放回 queue
+                refund_amount = self._refund_global_balance(payer_id, charged_input)
+                self._log_economy_transaction(
+                    payer_id,
+                    "沉浸式 AI 退款",
+                    charged_input,
+                    f"模型={model}，生成失敗",
+                )
+                for msg_data in batch:
+                    ImmersiveChannelManager.add_to_queue(guild_id, channel_id, msg_data)
+                log(
+                    f"沉浸式 AI 請求失敗: guild={guild_id} channel={channel_id} error={e}",
+                    module_name="AI",
+                    level=logging.ERROR,
+                )
+                return
+
+            # 輸出計費
+            output_chars = len(response_text or "")
+            output_cost = round(output_chars * rate_per_char, 2)
+            balance_before_output = self._get_global_balance(payer_id)
+            charged_output, final_balance = self._charge_global_balance(payer_id, output_cost)
+            self._log_economy_transaction(
+                payer_id,
+                "沉浸式 AI 輸出扣費",
+                -charged_output,
+                f"模型={model_name}，輸出={output_chars}字，費率={rate_per_char:.2f}/字",
+            )
+
+            # 如果 AI 沒有使用工具（直接回純文字），強制用 immersive_send 發送
+            if response_text and not self._is_only_tool_calls(response_text, tool_context):
+                # AI 沒遵循「只能用工具」的規則，強制幫它發
+                try:
+                    emoji_context, emoji_map = self._build_guild_emoji_context(guild)
+                    resolved_text = self._resolve_ai_custom_emojis(response_text, emoji_map)
+                    if len(resolved_text) > 2000:
+                        resolved_text = resolved_text[:2000]
+                    await channel.send(resolved_text, allowed_mentions=SAFE_MENTIONS)
+                except Exception as e:
+                    log(
+                        f"沉浸式 AI fallback send 失敗: {e}",
+                        module_name="AI",
+                        level=logging.WARNING,
+                    )
+
+            # 將 AI 回應加入上下文（tool calling 的結果已由 tool handler 處理）
+            if response_text:
+                assistant_msg = {"role": "assistant", "content": response_text}
+                ImmersiveChannelManager.append_context(
+                    guild_id, channel_id, [assistant_msg], len(response_text)
+                )
+
+        except Exception as e:
+            log(
+                f"沉浸式 AI 批次處理異常: guild={guild_id} channel={channel_id} error={e}",
+                module_name="AI",
+                level=logging.ERROR,
+            )
+            # 異常時退費
+            if charged_input > 0 and payer_id is not None:
+                self._refund_global_balance(payer_id, charged_input)
+                self._log_economy_transaction(
+                    payer_id,
+                    "沉浸式 AI 異常退款",
+                    charged_input,
+                    "批次處理異常",
+                )
+        finally:
+            ImmersiveChannelManager.set_processing(guild_id, channel_id, False)
+            # 處理結束後檢查是否有新的 queue 累積
+            state = ImmersiveChannelManager.get_state(guild_id, channel_id)
+            if state.get("queue") or len(state.get("buffer", [])) >= self.AI_IMMERSIVE_BATCH_SIZE:
+                asyncio.create_task(
+                    self._process_immersive_batch(guild_id, channel_id, config_data)
+                )
+
+    def _build_immersive_system_prompt(
+        self,
+        custom_prompt: str,
+        guild: discord.Guild,
+        channel: discord.TextChannel,
+    ) -> str:
+        """建構沉浸式 AI 的系統提示詞"""
+        parts = []
+
+        # 自訂 prompt
+        if custom_prompt:
+            parts.append(custom_prompt)
+
+        # 沉浸式專用規則
+        parts.append(
+            "[沉浸式 AI 規則]\n"
+            "你正在一個 Discord 頻道中參與群組對話。你必須使用工具來回應，只能使用 immersive_send、immersive_reply、immersive_react 來發送訊息。\n"
+            "絕對不要直接輸出純文字回應。你的每次回應都必須包含至少一個工具呼叫。\n"
+            "你可以同時呼叫多個工具（例如同時回覆一個人 + 對另一則訊息加反應）。\n"
+            "自然地參與對話，不要每次都回覆每一則訊息，只在適當時機回應。\n"
+            "如果沒有需要回應的內容，可以使用 immersive_react 對訊息加反應來表示你看到了。\n"
+            "回應風格要自然、輕鬆，像一個真實的群組成員。"
+        )
+
+        # 伺服器資訊
+        if guild:
+            owner_name = guild.owner.display_name if guild.owner else f"ID:{guild.owner_id}"
+            guild_info = (
+                f"[伺服器資訊]\n"
+                f"伺服器：{guild.name}（成員 {guild.member_count} 人，擁有者：{owner_name}）\n"
+                f"伺服器描述：{guild.description if guild.description else '無描述'}\n"
+                f"目前頻道：#{channel.name if channel else '未知'}"
+            )
+            parts.append(guild_info)
+
+        # Emoji 上下文
+        if guild:
+            emoji_context, _ = self._build_guild_emoji_context(guild)
+            if emoji_context:
+                parts.append(emoji_context)
+
+        # AI 記憶
+        tool_context = {"guild": guild}
+        memory_context = self._build_ai_profile_context(tool_context)
+        if memory_context:
+            parts.append(memory_context)
+
+        # Runtime context
+        runtime_context = self._build_runtime_prompt_context(tool_context)
+        if runtime_context:
+            parts.append(runtime_context)
+
+        # 伺服器自訂 prompt
+        guild_custom = self._build_guild_ai_custom_prompt_context(tool_context)
+        if guild_custom:
+            parts.append(guild_custom)
+
+        return "\n\n".join(parts)
+
+    def _is_only_tool_calls(self, response_text: str, tool_context: dict | None) -> bool:
+        """檢查 AI 回應是否只包含工具呼叫（沒有實質純文字內容）"""
+        if not response_text or not response_text.strip():
+            return True
+
+        # 嘗試解析為 tool_calls JSON
+        stripped = response_text.strip()
+        # 檢查是否為純 JSON tool call
+        try:
+            payload = json.loads(stripped)
+            if isinstance(payload, dict) and isinstance(payload.get("tool_calls"), list):
+                # 純工具呼叫格式，沒有附加文字
+                return True
+            if isinstance(payload, list):
+                return True
+        except (json.JSONDecodeError, ValueError):
+            pass
+
+        # 嘗試提取 JSON 部分
+        object_match = re.search(r"\{[\s\S]*\}", stripped)
+        if object_match:
+            try:
+                payload = json.loads(object_match.group(0))
+                if isinstance(payload, dict) and isinstance(payload.get("tool_calls"), list):
+                    # 檢查 JSON 之外是否還有實質文字
+                    before = stripped[:object_match.start()].strip()
+                    after = stripped[object_match.end():].strip()
+                    if not before and not after:
+                        return True
+            except (json.JSONDecodeError, ValueError):
+                pass
+
+        # 如果文字很短且像是工具相關的描述，也算
+        # 否則表示有實質文字內容
+        return False
+
+    async def _compress_immersive_context(self, guild_id: int, channel_id: int, prompt: str):
+        """使用 AI 摘要壓縮沉浸式上下文，失敗時 fallback 到截斷"""
+        state = ImmersiveChannelManager.get_state(guild_id, channel_id)
+        context = state.get("context", [])
+        if not context:
+            return
+
+        try:
+            # 建構摘要請求
+            context_text = "\n".join(
+                f"[{m.get('role', '?')}] {m.get('content', '')}" for m in context
+            )
+            summary_prompt = (
+                "請將以下對話歷史摘要為重點保留版。保留人名、關鍵事實、未解決的話題、情緒氛圍。"
+                "刪除寒暄、重複、無關緊要的細節。用繁體中文。"
+                f"原本的系統提示是：{prompt[:200]}\n\n"
+                f"對話歷史：\n{context_text}"
+            )
+            messages = [
+                {"role": "system", "content": "你是一個對話摘要助手。請簡潔地摘要對話，保留重要資訊。"},
+                {"role": "user", "content": summary_prompt},
+            ]
+
+            model = self.AI_IMMERSIVE_MODEL
+            response = await self._request_ai_completion(messages, model=model, tools=None)
+            summary = str(getattr(response.choices[0].message, "content", "") or "").strip()
+
+            if summary:
+                summary_chars = len(summary)
+                ImmersiveChannelManager.compress_context(guild_id, channel_id, summary, summary_chars)
+                log(
+                    f"沉浸式 AI 上下文已壓縮: guild={guild_id} channel={channel_id} "
+                    f"chars={summary_chars}",
+                    module_name="AI",
+                    level=logging.INFO,
+                )
+                return
+
+        except Exception as e:
+            log(
+                f"沉浸式 AI 壓縮失敗，改用截斷: guild={guild_id} channel={channel_id} error={e}",
+                module_name="AI",
+                level=logging.WARNING,
+            )
+
+        # Fallback: 截斷最舊的上下文
+        self._trim_immersive_context(guild_id, channel_id)
+
+    def _trim_immersive_context(self, guild_id: int, channel_id: int):
+        """硬截斷沉浸式上下文，移除最舊的條目直到符合目標字數"""
+        state = ImmersiveChannelManager.get_state(guild_id, channel_id)
+        context = state.get("context", [])
+        target_chars = self.AI_IMMERSIVE_COMPRESS_TARGET_CHARS
+
+        # 從頭移除直到 total_context_chars <= target
+        while context and state.get("total_context_chars", 0) > target_chars:
+            removed = context.pop(0)
+            removed_chars = len(removed.get("content", ""))
+            state["total_context_chars"] = max(0, state.get("total_context_chars", 0) - removed_chars)
 
     @ai_admin_billing.command(name="set", description="將這個伺服器的 AI 付款人設成自己")
     @app_commands.allowed_installs(guilds=True, users=False)
