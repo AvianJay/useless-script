@@ -331,8 +331,12 @@ class PromptGuard:
 class ConversationManager:
     """管理使用者對話歷史"""
     
-    MAX_HISTORY_LENGTH = 20  # 最大對話歷史長度
+    MAX_HISTORY_LENGTH = 200  # 最大對話歷史長度（持久化儲存）
     MAX_MESSAGE_LENGTH = 2000  # 單條訊息最大長度
+    API_MAX_CONTEXT_TOKENS = 10000
+    HISTORY_SUMMARY_MAX_CHARS = 2200
+    HISTORY_SUMMARY_HEAD_MESSAGES = 6
+    HISTORY_SUMMARY_TAIL_MESSAGES = 12
     
     @staticmethod
     def get_conversation_key(user_id: int, guild_id: int = None) -> str:
@@ -371,6 +375,48 @@ class ConversationManager:
             history = history[-cls.MAX_HISTORY_LENGTH:]
         
         set_user_data(guild_id or 0, user_id, key, history)
+
+    @staticmethod
+    def _estimate_tokens(text: str) -> int:
+        raw = str(text or "")
+        if not raw:
+            return 0
+        return max(1, (len(raw) + 3) // 4)
+
+    @classmethod
+    def _estimate_history_tokens(cls, history: list) -> int:
+        total = 0
+        for message in history:
+            if not isinstance(message, dict):
+                continue
+            total += cls._estimate_tokens(message.get("content", "")) + 12
+        return total
+
+    @classmethod
+    def _summarize_history_messages(cls, history: list) -> str:
+        if not history:
+            return ""
+
+        lines: list[str] = []
+        for message in history:
+            if not isinstance(message, dict):
+                continue
+            role = str(message.get("role") or "unknown").strip().lower()
+            label = "user" if role == "user" else "assistant" if role == "assistant" else role or "unknown"
+            content = re.sub(r"\s+", " ", str(message.get("content", "") or "")).strip()
+            if not content:
+                continue
+            if len(content) > 220:
+                content = content[:217].rstrip() + "..."
+            lines.append(f"- {label}: {content}")
+
+        if not lines:
+            return ""
+
+        summary = "[Earlier conversation summary]\n" + "\n".join(lines)
+        if len(summary) > cls.HISTORY_SUMMARY_MAX_CHARS:
+            summary = summary[: cls.HISTORY_SUMMARY_MAX_CHARS - 3].rstrip() + "..."
+        return summary
     
     @classmethod
     def clear_history(cls, user_id: int, guild_id: int = None):
@@ -381,7 +427,42 @@ class ConversationManager:
     @classmethod
     def format_for_api(cls, history: list) -> list:
         """格式化歷史記錄以供 API 使用"""
-        return [{"role": msg["role"], "content": msg["content"]} for msg in history]
+        normalized = []
+        for msg in history:
+            if not isinstance(msg, dict):
+                continue
+            role = str(msg.get("role") or "").strip().lower()
+            content = str(msg.get("content") or "")
+            if role not in {"user", "assistant"} or not content:
+                continue
+            normalized.append({"role": role, "content": content})
+
+        if cls._estimate_history_tokens(normalized) <= cls.API_MAX_CONTEXT_TOKENS:
+            return normalized
+
+        tail_count = min(cls.HISTORY_SUMMARY_TAIL_MESSAGES, len(normalized))
+        tail = normalized[-tail_count:]
+        head_count = min(cls.HISTORY_SUMMARY_HEAD_MESSAGES, max(len(normalized) - tail_count, 0))
+        head = normalized[:head_count]
+        middle = normalized[head_count:-tail_count] if tail_count < len(normalized) else normalized[head_count:]
+
+        summary_source = []
+        summary_source.extend(head)
+        summary_source.extend(middle)
+        summary_text = cls._summarize_history_messages(summary_source)
+
+        compressed = []
+        if summary_text:
+            compressed.append({"role": "system", "content": summary_text})
+        compressed.extend(tail)
+
+        while len(compressed) > 1 and cls._estimate_history_tokens(compressed) > cls.API_MAX_CONTEXT_TOKENS:
+            removable_index = 1 if compressed and compressed[0].get("role") == "system" else 0
+            if removable_index >= len(compressed):
+                break
+            del compressed[removable_index]
+
+        return compressed
 
 
 # ============================================
@@ -745,11 +826,15 @@ class AICommands(commands.Cog):
     VIDEO_TOOL_MAX_TIMEOUT_SECONDS = 1800
     VIDEO_TOOL_MAX_URLS = 4
     DISCORD_MESSAGE_CHAR_LIMIT = 2000
+    AI_AUTO_FILE_THRESHOLD = 4000
     SEND_AS_FILE_DEFAULT_NAME = "ai-response.txt"
     SEND_AS_FILE_NAME_LIMIT = 80
     SEND_AS_FILE_MAX_BYTES = 7_500_000
-    CHANNEL_TOOL_DEFAULT_LIMIT = 8
-    CHANNEL_TOOL_MAX_LIMIT = 20
+    CHANNEL_TOOL_DEFAULT_LIMIT = 20
+    CHANNEL_TOOL_MAX_LIMIT = 100
+    CHANNEL_TOOL_AROUND_DEFAULT = 10
+    MESSAGE_SEARCH_DEFAULT_LIMIT = 10
+    MESSAGE_SEARCH_MAX_LIMIT = 25
     USER_TOOL_MAX_ROLE_PREVIEW = 15
     AI_RESPONSE_VIEW_CONFIG_KEY = "ai_response_view_config"
     TOOL_USAGE_LABELS = {
@@ -762,6 +847,7 @@ class AICommands(commands.Cog):
         "send_as_file": "整理為檔案",
         "read_channel": "讀取頻道內容",
         "read_message": "讀取單則訊息",
+        "search_message": "搜尋訊息",
         "get_user": "查詢使用者資訊",
         "get_dsize_context": "取得 dsize 資料",
         "get_inventory_context": "取得背包資料",
@@ -1536,6 +1622,57 @@ class AICommands(commands.Cog):
         if not note:
             note = f"完整內容超過 Discord 單則訊息 {cls.DISCORD_MESSAGE_CHAR_LIMIT} 字限制，已改用附件傳送。"
         return f"{note}\n\n附件：{filename}"
+
+    def _queue_auto_file_response(
+        self,
+        response_text: str,
+        tool_context: dict | None,
+        *,
+        filename: str | None = None,
+        summary: str | None = None,
+    ) -> dict | None:
+        content = str(response_text or "")
+        if not content:
+            return None
+
+        encoded = content.encode("utf-8")
+        if len(encoded) > self.SEND_AS_FILE_MAX_BYTES:
+            truncated_content = content[: self.SEND_AS_FILE_MAX_BYTES // 2]
+            encoded = truncated_content.encode("utf-8")
+            content = truncated_content
+
+        payload = {
+            "filename": self._sanitize_send_as_file_name(filename),
+            "content": content,
+            "summary": str(summary or "").strip() or None,
+            "char_count": len(content),
+            "size_bytes": len(encoded),
+            "auto_generated": True,
+        }
+        if isinstance(tool_context, dict):
+            tool_context["pending_file_response"] = payload
+        return payload
+
+    def _prepare_ai_response_delivery(self, response_text: str, tool_context: dict | None) -> tuple[str, str, dict | None]:
+        pending_file_response = self._pop_pending_file_response(tool_context)
+        resolved_response_text = str(response_text or "")
+
+        if pending_file_response is None and len(resolved_response_text) > self.AI_AUTO_FILE_THRESHOLD:
+            summary = (
+                f"AI 回覆長度為 {len(resolved_response_text)} 字，已改為文字附件傳送。"
+            )
+            pending_file_response = self._queue_auto_file_response(
+                resolved_response_text,
+                tool_context,
+                filename="ai-response-long.txt",
+                summary=summary,
+            )
+
+        display_response_text = resolved_response_text
+        if pending_file_response:
+            display_response_text = self._build_send_as_file_notice(resolved_response_text, pending_file_response)
+
+        return resolved_response_text, display_response_text, pending_file_response
 
     def _build_web_search_messages(self, query: str, max_chars: int, include_sources: bool) -> list[dict]:
         source_instruction = (
@@ -2932,12 +3069,15 @@ class AICommands(commands.Cog):
                 "type": "function",
                 "function": {
                     "name": "read_channel",
-                    "description": "Read recent messages from the current channel or another visible channel in the current guild. This respects both the current user's and the bot's channel permissions. Optionally truncate long content to reduce token usage.",
+                    "description": "Read recent messages from the current channel or another visible channel in the current guild. This respects both the current user's and the bot's channel permissions. You can read the latest messages or messages around a specific target message.",
                     "parameters": {
                         "type": "object",
                         "properties": {
                             "channel_id": {"type": "integer"},
                             "limit": {"type": "integer"},
+                            "around_message_id": {"type": "integer", "description": "Read messages around this message id instead of only the latest history."},
+                            "before": {"type": "integer", "description": "How many messages before the target message to include when around_message_id is set."},
+                            "after": {"type": "integer", "description": "How many messages after the target message to include when around_message_id is set."},
                             "truncate": {"type": "boolean", "description": "Whether to truncate long message content (default: true)"},
                         },
                     },
@@ -2956,6 +3096,23 @@ class AICommands(commands.Cog):
                             "message_link": {"type": "string"},
                             "truncate": {"type": "boolean", "description": "Whether to truncate long message content (default: true)"},
                         },
+                    },
+                },
+            },
+            {
+                "type": "function",
+                "function": {
+                    "name": "search_message",
+                    "description": "Search visible messages in the current channel or another visible channel in the current guild by keyword. This respects both the current user's and the bot's channel permissions.",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "query": {"type": "string"},
+                            "channel_id": {"type": "integer"},
+                            "limit": {"type": "integer"},
+                            "truncate": {"type": "boolean", "description": "Whether to truncate long message content (default: true)"},
+                        },
+                        "required": ["query"],
                     },
                 },
             },
@@ -3608,13 +3765,53 @@ class AICommands(commands.Cog):
         )
         truncate = self._coerce_bool(args.get("truncate"), True)
         guild = getattr(channel, "guild", None) or (tool_context or {}).get("guild")
+        around_message_id = args.get("around_message_id")
 
         try:
-            raw_messages = [message async for message in channel.history(limit=limit)]
+            if around_message_id in (None, ""):
+                raw_messages = [message async for message in channel.history(limit=limit)]
+            else:
+                try:
+                    around_message_id = int(around_message_id)
+                except (TypeError, ValueError):
+                    return {"error": "around_message_id must be an integer"}
+
+                fetch_message = getattr(channel, "fetch_message", None)
+                if not callable(fetch_message):
+                    return {"error": "This channel does not support fetching a specific message."}
+
+                target_message = await fetch_message(around_message_id)
+                before_limit = self._coerce_int(
+                    args.get("before"),
+                    min(self.CHANNEL_TOOL_AROUND_DEFAULT, max(limit - 1, 0)),
+                    minimum=0,
+                    maximum=self.CHANNEL_TOOL_MAX_LIMIT,
+                )
+                max_after_default = max(limit - before_limit - 1, 0)
+                after_limit = self._coerce_int(
+                    args.get("after"),
+                    min(self.CHANNEL_TOOL_AROUND_DEFAULT, max_after_default),
+                    minimum=0,
+                    maximum=self.CHANNEL_TOOL_MAX_LIMIT,
+                )
+
+                before_messages = []
+                after_messages = []
+                if before_limit > 0:
+                    before_messages = [
+                        message async for message in channel.history(limit=before_limit, before=target_message)
+                    ]
+                    before_messages.reverse()
+                if after_limit > 0:
+                    after_messages = [
+                        message async for message in channel.history(limit=after_limit, after=target_message, oldest_first=True)
+                    ]
+                raw_messages = [*before_messages, target_message, *after_messages]
         except (discord.Forbidden, discord.HTTPException) as exc:
             return {"error": f"failed to read channel history: {exc}"}
 
-        raw_messages.reverse()
+        if around_message_id in (None, ""):
+            raw_messages.reverse()
         messages = []
         for message in raw_messages:
             serialized = await self._serialize_message_for_tool(message, guild, truncate=truncate)
@@ -3644,6 +3841,7 @@ class AICommands(commands.Cog):
         return {
             "channel": self._serialize_channel_for_tool(channel, access),
             "returned_count": len(messages),
+            "mode": "around" if around_message_id not in (None, "") else "recent",
             "messages": messages,
         }
 
@@ -3704,6 +3902,63 @@ class AICommands(commands.Cog):
         return {
             "channel": self._serialize_channel_for_tool(channel, access),
             "message": await self._serialize_message_for_tool(message, guild, truncate=truncate),
+        }
+
+    async def _tool_search_message(self, args: dict, tool_context: dict) -> dict:
+        query = re.sub(r"\s+", " ", str(args.get("query", "") or "")).strip()
+        if not query:
+            return {"error": "query is required"}
+
+        channel, error = self._resolve_tool_channel(
+            args.get("channel_id"),
+            tool_context,
+            require_messageable=True,
+        )
+        if error:
+            return {"error": error}
+
+        error, access = self._validate_channel_tool_access(
+            channel,
+            tool_context,
+            require_history=True,
+        )
+        if error:
+            return {"error": error}
+
+        limit = self._coerce_int(
+            args.get("limit"),
+            self.MESSAGE_SEARCH_DEFAULT_LIMIT,
+            minimum=1,
+            maximum=self.MESSAGE_SEARCH_MAX_LIMIT,
+        )
+        truncate = self._coerce_bool(args.get("truncate"), True)
+        guild = getattr(channel, "guild", None) or (tool_context or {}).get("guild")
+        lowered_query = query.lower()
+        scanned = 0
+        matches = []
+
+        try:
+            async for message in channel.history(limit=500):
+                scanned += 1
+                haystacks = [str(message.content or "")]
+                haystacks.extend(str(embed.title or "") for embed in getattr(message, "embeds", []) if getattr(embed, "title", None))
+                haystacks.extend(str(embed.description or "") for embed in getattr(message, "embeds", []) if getattr(embed, "description", None))
+                combined = "\n".join(part for part in haystacks if part)
+                if lowered_query not in combined.lower():
+                    continue
+                matches.append(await self._serialize_message_for_tool(message, guild, truncate=truncate))
+                if len(matches) >= limit:
+                    break
+        except (discord.Forbidden, discord.HTTPException) as exc:
+            return {"error": f"failed to search channel history: {exc}"}
+
+        matches.reverse()
+        return {
+            "channel": self._serialize_channel_for_tool(channel, access),
+            "query": query,
+            "returned_count": len(matches),
+            "scanned_count": scanned,
+            "messages": matches,
         }
 
     async def _tool_get_user(self, args: dict, tool_context: dict) -> dict:
@@ -4646,6 +4901,7 @@ class AICommands(commands.Cog):
             "send_as_file": self._tool_send_as_file,
             "read_channel": self._tool_read_channel,
             "read_message": self._tool_read_message,
+            "search_message": self._tool_search_message,
             "get_user": self._tool_get_user,
             "get_dsize_context": self._tool_get_dsize_context,
             "get_inventory_context": self._tool_get_inventory_context,
@@ -5345,7 +5601,11 @@ class AICommands(commands.Cog):
                 tool_progress_callback=tool_progress_callback,
             )
 
-            pending_file_response = self._pop_pending_file_response(tool_context)
+            response_text = self._resolve_ai_custom_emojis(response_text, emoji_map)
+            response_text, display_response_text, pending_file_response = self._prepare_ai_response_delivery(
+                response_text,
+                tool_context,
+            )
 
             raw_output_chars = len(response_text)
             file_output_chars = 0
@@ -5359,10 +5619,6 @@ class AICommands(commands.Cog):
                         str(pending_file_response.get("summary") or ""),
                         emoji_map,
                     )
-            response_text = self._resolve_ai_custom_emojis(response_text, emoji_map)
-            display_response_text = response_text
-            if pending_file_response:
-                display_response_text = self._build_send_as_file_notice(response_text, pending_file_response)
 
             output_chars = raw_output_chars + file_output_chars
             output_cost = round(output_chars * rate_per_char, 2)
@@ -5869,7 +6125,11 @@ class AICommands(commands.Cog):
                     tool_progress_callback=tool_progress_callback,
                 )
 
-                pending_file_response = self._pop_pending_file_response(tool_context)
+                response_text = self._resolve_ai_custom_emojis(response_text, emoji_map)
+                response_text, display_response_text, pending_file_response = self._prepare_ai_response_delivery(
+                    response_text,
+                    tool_context,
+                )
 
                 raw_output_chars = len(response_text)
                 file_output_chars = 0
@@ -5883,10 +6143,6 @@ class AICommands(commands.Cog):
                             str(pending_file_response.get("summary") or ""),
                             emoji_map,
                         )
-                response_text = self._resolve_ai_custom_emojis(response_text, emoji_map)
-                display_response_text = response_text
-                if pending_file_response:
-                    display_response_text = self._build_send_as_file_notice(response_text, pending_file_response)
 
                 output_chars = raw_output_chars + file_output_chars
                 output_cost = round(output_chars * rate_per_char, 2)
