@@ -326,6 +326,12 @@ class Music(commands.GroupCog, group_name=app_commands.locale_str("music")):
             except Exception as e:
                 log(f"發送電台換曲通知失敗: {e}", level=logging.WARNING, module_name="Music", guild=guild)
 
+            try:
+                from Explore import _emit_music_update
+                asyncio.create_task(_emit_music_update(guild.id))
+            except Exception:
+                pass
+
     def _parse_listen_moe_payload(self, payload: dict[str, Any]) -> Optional[dict[str, Any]]:
         song = payload.get("song") or {}
         if not song:
@@ -667,6 +673,12 @@ class Music(commands.GroupCog, group_name=app_commands.locale_str("music")):
             if radio_station:
                 await self._stop_radio_listener_if_unused(radio_station)
 
+            try:
+                from Explore import _emit_music_update
+                asyncio.create_task(_emit_music_update(guild_id))
+            except Exception:
+                pass
+
         except Exception as e:
             log(f"清理播放器時出錯: {e}", level=logging.ERROR, module_name="Music")
 
@@ -778,7 +790,13 @@ class Music(commands.GroupCog, group_name=app_commands.locale_str("music")):
                 await text_channel.send(embed=embed)
         except Exception as e:
             log(f"無法發送播放通知: {e}", level=logging.WARNING, module_name="Music")
-    
+
+        try:
+            from Explore import _emit_music_update
+            asyncio.create_task(_emit_music_update(player.guild.id))
+        except Exception:
+            pass
+
     @commands.Cog.listener()
     async def on_lyra_track_end(self, player: lava_lyra.Player, track: lava_lyra.Track, reason: Optional[str]):
         """當音樂結束播放時"""

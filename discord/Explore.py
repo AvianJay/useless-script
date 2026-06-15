@@ -12,10 +12,12 @@ import base64
 from Activity import ActivityEntry
 import requests
 import secrets
+import uuid as _uuid_mod
 from functools import wraps
 import threading
 import urllib.parse
 from logger import log
+import logging
 
 import socketio as socketio_asgi
 
@@ -60,6 +62,14 @@ flask_asgi = WsgiToAsgi(app)
 
 # socketio_path must NOT start with '/'
 asgi_app = socketio_asgi.ASGIApp(sio, other_asgi_app=flask_asgi, socketio_path="explore/socket.io")
+
+# Music module integration (optional — graceful degradation when Music is absent)
+try:
+    import Music as _music_mod
+    _music_available = True
+except Exception:
+    _music_mod = None
+    _music_available = False
 
 activity_entry = ActivityEntry(name=app_commands.locale_str("explore space"), description="開啟探索空間")
 
@@ -182,7 +192,7 @@ _presence_lock = threading.Lock()
 # guild_id(str) -> {user_id(str): {user_id,name,skin_id,x,y}}
 space_players: dict[str, dict[str, dict]] = {}
 
-# sid -> {'user_id': str, 'guild_id': str|None}
+# sid -> {'user_id': str, 'guild_id': str|None, 'music_guild_id': str|None}
 socket_sessions: dict[str, dict] = {}
 _session_lock = threading.Lock()
 
@@ -202,6 +212,27 @@ def _parse_token_from_query(environ: dict) -> str | None:
 def _get_socket_session(sid: str) -> dict | None:
     with _session_lock:
         return socket_sessions.get(sid)
+
+
+def _music_room_name(guild_id: int | str) -> str:
+    return f"music:{guild_id}"
+
+
+async def _set_socket_music_room(sid: str, guild_id: int | str | None) -> None:
+    previous_guild_id = None
+    next_guild_id = str(guild_id) if guild_id is not None else None
+
+    with _session_lock:
+        sess = socket_sessions.get(sid)
+        if not sess:
+            return
+        previous_guild_id = sess.get("music_guild_id")
+        sess["music_guild_id"] = next_guild_id
+
+    if previous_guild_id and previous_guild_id != next_guild_id:
+        await sio.leave_room(sid, _music_room_name(previous_guild_id))
+    if next_guild_id and previous_guild_id != next_guild_id:
+        await sio.enter_room(sid, _music_room_name(next_guild_id))
 
 # --- Helper Functions ---
 
@@ -376,6 +407,156 @@ def set_space_tile(guild_id: int, x: int, y: int, z: int, tile_id: str):
 
 def get_available_skins() -> list[dict]:
     return [{'id': '1', 'name': 'Skin 1', 'icon_url': None}]  # TODO: implement skin storage
+
+
+# --- Music Integration ---
+
+# ── Thumbnail proxy cache ──────────────────────────────────────────────────────
+# Maps  UUID  →  {url: str, expires_at: float}
+# Maps  URL   →  UUID  (reverse; for deduplication)
+_thumb_by_uuid: dict[str, dict] = {}
+_thumb_by_url:  dict[str, str]  = {}
+_thumb_lock     = threading.Lock()
+_THUMB_TTL      = 30 * 60   # seconds — long enough to outlive any single track
+_THUMB_MAX      = 300       # hard cap; oldest entries evicted when exceeded
+
+
+def _thumb_cleanup_locked() -> None:
+    """Evict all expired entries. Must be called while holding _thumb_lock."""
+    now = time.time()
+    expired = [uid for uid, v in _thumb_by_uuid.items() if v['expires_at'] <= now]
+    for uid in expired:
+        url = _thumb_by_uuid.pop(uid, {}).get('url')
+        if url:
+            _thumb_by_url.pop(url, None)
+
+
+def _get_thumbnail_proxy_url(raw_url: str | None) -> str | None:
+    """
+    Register *raw_url* in the proxy cache and return its proxy path.
+    Returns None when raw_url is falsy.
+    """
+    if not raw_url:
+        return None
+    with _thumb_lock:
+        _thumb_cleanup_locked()
+
+        uid = _thumb_by_url.get(raw_url)
+        if uid and uid in _thumb_by_uuid:
+            # Refresh TTL so actively-played thumbnails stay alive
+            _thumb_by_uuid[uid]['expires_at'] = time.time() + _THUMB_TTL
+            return f'/api/explore/music/thumbnail/{uid}'
+
+        # Enforce hard cap — evict the entry that expires soonest
+        if len(_thumb_by_uuid) >= _THUMB_MAX:
+            oldest = min(_thumb_by_uuid, key=lambda k: _thumb_by_uuid[k]['expires_at'])
+            old_url = _thumb_by_uuid.pop(oldest, {}).get('url')
+            if old_url:
+                _thumb_by_url.pop(old_url, None)
+
+        uid = str(_uuid_mod.uuid4())
+        _thumb_by_uuid[uid] = {'url': raw_url, 'expires_at': time.time() + _THUMB_TTL}
+        _thumb_by_url[raw_url] = uid
+    return f'/api/explore/music/thumbnail/{uid}'
+
+
+def _run_async(coro, timeout: float = 10.0):
+    """Run an async coroutine from a synchronous (Flask) handler thread."""
+    loop = bot.loop
+    if loop is None or not loop.is_running():
+        raise RuntimeError("Bot event loop is not running")
+    future = asyncio.run_coroutine_threadsafe(coro, loop)
+    return future.result(timeout=timeout)
+
+
+def _get_music_state(guild_id: int) -> dict | None:
+    """Return current music info dict for a guild, or None if nothing is playing."""
+    if not _music_available:
+        return None
+    guild = bot.get_guild(guild_id)
+    if not guild:
+        return None
+    player = guild.voice_client
+    if not player:
+        return None
+
+    # Radio mode — read from Music cog's cached info
+    station_key = _music_mod.radio_modes.get(guild_id)
+    if station_key:
+        music_cog = bot.get_cog("Music")
+        radio_info: dict = (music_cog._get_radio_info(station_key) if music_cog else {}) or {}
+        return {
+            "title": radio_info.get("title") or f"📻 {station_key}",
+            "author": radio_info.get("artist"),
+            "thumbnail": _get_thumbnail_proxy_url(radio_info.get("thumbnail")),
+            "url": radio_info.get("url"),
+            "current": None,
+            "is_paused": False,
+            "is_radio": True,
+        }
+
+    current = getattr(player, 'current', None)
+    if not current:
+        return None
+    return {
+        "title": getattr(current, 'title', None),
+        "author": getattr(current, 'author', None),
+        "thumbnail": _get_thumbnail_proxy_url(getattr(current, 'thumbnail', None)),
+        "url": getattr(current, 'uri', None),
+        "current": int(getattr(player, 'position', 0) // 1000),
+        "is_paused": bool(getattr(player, 'is_paused', False)),
+        "is_radio": False,
+    }
+
+
+def _is_music_context_available(guild_id: int) -> bool:
+    guild = bot.get_guild(guild_id)
+    if not guild:
+        return False
+    player = guild.voice_client
+    return bool(player and player.channel)
+
+
+async def _emit_music_update(guild_id: int) -> None:
+    """Broadcast music_update to all Socket.IO clients in the guild room."""
+    gid_str = str(guild_id)
+    state = _get_music_state(guild_id)
+    available = _is_music_context_available(guild_id)
+    if state:
+        await sio.emit("music_update", {"guild_id": gid_str, "playing": True, "available": available, **state}, room=_music_room_name(gid_str))
+    else:
+        await sio.emit("music_update", {"guild_id": gid_str, "playing": False, "available": available}, room=_music_room_name(gid_str))
+
+
+def _find_user_music_guild(user_id: int):
+    """
+    Find the first guild where this user AND the bot are in the same voice channel.
+    Returns (guild, guild_id) on success, or (None, None).
+    """
+    for guild in bot.guilds:
+        player = guild.voice_client
+        if not player or not player.channel:
+            continue
+        member = guild.get_member(user_id)
+        if not member or not member.voice or not member.voice.channel:
+            continue
+        if member.voice.channel.id == player.channel.id:
+            return guild, guild.id
+    return None, None
+
+
+def _verify_user_in_voice_channel(guild_id: int, user_id: int) -> bool:
+    """Return True only if the user is in the same voice channel as the bot right now."""
+    guild = bot.get_guild(guild_id)
+    if not guild:
+        return False
+    player = guild.voice_client
+    if not player or not player.channel:
+        return False
+    member = guild.get_member(user_id)
+    if not member or not member.voice or not member.voice.channel:
+        return False
+    return member.voice.channel.id == player.channel.id
 
 
 # --- Routes ---
@@ -616,6 +797,216 @@ def explore_guild_icon(guild_id):
         return jsonify({"error": "Guild has no icon"}), 404
     return requests.get(guild.icon.url).content, 200, {'Content-Type': 'image/png'}
 
+
+# --- Music API ---
+# All three endpoints identify the target guild via the caller's voice channel (user_id from auth
+# token). The user MUST be in the same voice channel as the bot; otherwise 403 is returned.
+
+@app.route('/api/explore/music/thumbnail/<thumb_id>')
+def explore_music_thumbnail(thumb_id: str):
+    """
+    Proxy a music thumbnail by its UUID key.
+    No auth required — the opaque UUID is sufficient access control.
+    Needed because Discord Activities' CSP blocks direct external image URLs.
+    """
+    with _thumb_lock:
+        _thumb_cleanup_locked()
+        entry = _thumb_by_uuid.get(str(thumb_id))
+
+    if not entry:
+        return jsonify({'error': 'Not found or expired'}), 404
+
+    raw_url = entry.get('url')
+    if not raw_url:
+        return jsonify({'error': 'Not found'}), 404
+
+    try:
+        resp = requests.get(raw_url, timeout=10)
+        if resp.status_code != 200:
+            return jsonify({'error': 'Upstream error'}), 502
+
+        content_type = resp.headers.get('Content-Type', 'image/jpeg')
+        if not content_type.startswith('image/'):
+            content_type = 'image/jpeg'
+
+        return resp.content, 200, {
+            'Content-Type': content_type,
+            'Cache-Control': f'public, max-age={_THUMB_TTL}',
+        }
+    except Exception as e:
+        log(f"Thumbnail proxy fetch failed: {e}", level=logging.WARNING, module_name="Explore")
+        return jsonify({'error': 'Failed to fetch thumbnail'}), 502
+
+def _music_resolve_caller(user_id: int):
+    """
+    Find the guild & player for a REST music request.
+    Returns (guild, player) when the user is co-located with the bot, else (None, error_response).
+    The "error_response" is a Flask response tuple ready to be returned.
+    """
+    guild, guild_id = _find_user_music_guild(user_id)
+    if not guild:
+        return None, (jsonify({'error': 'No Music Found'}), 404)
+    player = guild.voice_client
+    if not player:
+        return None, (jsonify({'error': 'No Music Found'}), 404)
+    return (guild, player), None
+
+
+@app.route('/api/explore/music', methods=['GET'])
+@_require_explore_auth
+def explore_music_get():
+    """
+    GET /api/explore/music
+    Looks up the caller's current voice channel (user_id from auth token).
+    Returns music state, or 404 {"error": "No Music Found"} when not co-located with bot.
+    """
+    if not _music_available:
+        return jsonify({'error': 'Music module not available'}), 503
+
+    user_id = int(g.explore_user['user_id'])
+    result, err_resp = _music_resolve_caller(user_id)
+    if err_resp:
+        return err_resp
+
+    guild, _ = result
+    state = _get_music_state(guild.id)
+    if not state:
+        return jsonify({'guild_id': str(guild.id), 'playing': False, 'available': True})
+    return jsonify({**state, 'guild_id': str(guild.id), 'playing': True, 'available': True})
+
+
+@app.route('/api/explore/music', methods=['PATCH'])
+@_require_explore_auth
+def explore_music_patch():
+    """
+    PATCH /api/explore/music
+    Body: {"action": "next|pause|play|seek|recommend", "data": <optional>}
+      - seek:      data = seconds (int)
+      - recommend: data = count   (int, 1-10, default 5)
+    Caller must be in the same voice channel as the bot.
+    """
+    if not _music_available:
+        return jsonify({'error': 'Music module not available'}), 503
+
+    user_id = int(g.explore_user['user_id'])
+    result, err_resp = _music_resolve_caller(user_id)
+    if err_resp:
+        return err_resp
+
+    guild, player = result
+
+    payload = request.get_json(silent=True) or {}
+    action = str(payload.get('action') or '').lower().strip()
+    action_data = payload.get('data')
+
+    VALID_ACTIONS = {'next', 'pause', 'play', 'seek', 'recommend'}
+    if action not in VALID_ACTIONS:
+        return jsonify({'error': f'Invalid action. Valid: {", ".join(sorted(VALID_ACTIONS))}'}), 400
+
+    try:
+        if action == 'pause':
+            _run_async(player.set_pause(True))
+
+        elif action == 'play':
+            _run_async(player.set_pause(False))
+
+        elif action == 'next':
+            if _music_mod.radio_modes.get(guild.id):
+                return jsonify({'error': 'Cannot skip in radio mode'}), 400
+            queue = _music_mod.get_queue(guild.id)
+            next_track = queue.get()
+
+            async def _skip():
+                await player.stop()
+                if next_track:
+                    await player.play(next_track)
+
+            _run_async(_skip())
+
+        elif action == 'seek':
+            try:
+                seek_ms = int(action_data) * 1000
+            except (TypeError, ValueError):
+                return jsonify({'error': 'seek requires data as integer seconds'}), 400
+            _run_async(player.seek(seek_ms))
+
+        elif action == 'recommend':
+            if _music_mod.radio_modes.get(guild.id):
+                return jsonify({'error': 'Cannot recommend in radio mode'}), 400
+            current = getattr(player, 'current', None)
+            if not current:
+                return jsonify({'error': 'No current track to base recommendations on'}), 404
+            try:
+                count = max(1, min(int(action_data or 5), 10))
+            except (TypeError, ValueError):
+                count = 5
+
+            async def _recommend():
+                results = await player.get_recommendations(track=current)
+                if not results:
+                    return 0
+                tracks = getattr(results, 'tracks', results)
+                q = _music_mod.get_queue(guild.id)
+                for t in tracks[:count]:
+                    q.add(t)
+                if not player.is_playing:
+                    nt = q.get()
+                    if nt:
+                        await player.play(nt)
+                return min(len(tracks), count)
+
+            added = _run_async(_recommend())
+            try:
+                _run_async(_emit_music_update(guild.id))
+            except Exception:
+                pass
+            return jsonify({'success': True, 'action': action, 'added': added})
+
+    except Exception as e:
+        log(f"Music PATCH action='{action}' failed: {e}", level=logging.WARNING, module_name="Explore")
+        return jsonify({'error': str(e)}), 500
+
+    try:
+        _run_async(_emit_music_update(guild.id))
+    except Exception:
+        pass
+    return jsonify({'success': True, 'action': action})
+
+
+@app.route('/api/explore/music', methods=['DELETE'])
+@_require_explore_auth
+def explore_music_delete():
+    """
+    DELETE /api/explore/music
+    Stop music and disconnect the player. Caller must be in the same voice channel as the bot.
+    """
+    if not _music_available:
+        return jsonify({'error': 'Music module not available'}), 503
+
+    user_id = int(g.explore_user['user_id'])
+    result, err_resp = _music_resolve_caller(user_id)
+    if err_resp:
+        return err_resp
+
+    guild, player = result
+    music_cog = bot.get_cog("Music")
+
+    try:
+        async def _stop():
+            await player.stop()
+            await player.destroy()
+            if music_cog:
+                await music_cog._cleanup_player(guild.id)
+
+        _run_async(_stop())
+        _run_async(_emit_music_update(guild.id))
+    except Exception as e:
+        log(f"Music DELETE failed: {e}", level=logging.WARNING, module_name="Explore")
+        return jsonify({'error': str(e)}), 500
+
+    return jsonify({'success': True})
+
+
 @app.route("/explore/<path:path>")
 def serve_game_files(path):
     return send_from_directory(os.path.join(os.getcwd(), 'Explore'), path)
@@ -650,6 +1041,7 @@ async def connect(sid, environ, auth):
             "user_id": str(entry["user_id"]),
             "username": entry.get("username", "Unknown"),
             "guild_id": None,
+            "music_guild_id": None,
             "auth_token": token,
             "guild_ids": [str(x) for x in (entry.get("guild_ids") or [])],
         }
@@ -685,7 +1077,7 @@ async def disconnect(sid):
 
 
 @sio.on("join")
-async def on_join(sid, data):
+async def on_join(sid, data=None):
     sess = _get_socket_session(sid)
     if not sess:
         await sio.emit("error", {"message": "Unauthorized"}, to=sid)
@@ -741,7 +1133,7 @@ async def on_join(sid, data):
 
 
 @sio.on("leave")
-async def on_leave(sid, data):
+async def on_leave(sid, data=None):
     sess = _get_socket_session(sid)
     if not sess:
         await sio.emit("error", {"message": "Unauthorized"}, to=sid)
@@ -770,7 +1162,7 @@ async def on_leave(sid, data):
 
 
 @sio.on("move")
-async def on_move(sid, data):
+async def on_move(sid, data=None):
     sess = _get_socket_session(sid)
     if not sess:
         await sio.emit("error", {"message": "Unauthorized"}, to=sid)
@@ -818,7 +1210,7 @@ async def on_move(sid, data):
 
 
 @sio.on("edit_map")
-async def on_edit_map(sid, data):
+async def on_edit_map(sid, data=None):
     sess = _get_socket_session(sid)
     if not sess:
         await sio.emit("error", {"message": "Unauthorized"}, to=sid)
@@ -844,7 +1236,7 @@ async def on_edit_map(sid, data):
 
 
 @sio.on("skin_change")
-async def on_skin_change(sid, data):
+async def on_skin_change(sid, data=None):
     sess = _get_socket_session(sid)
     if not sess:
         await sio.emit("error", {"message": "Unauthorized"}, to=sid)
@@ -876,6 +1268,148 @@ async def on_skin_change(sid, data):
         room=guild_id,
         skip_sid=sid,
     )
+
+
+# --- Music Socket.IO Events ---
+
+@sio.on("music_get")
+async def on_music_get(sid, data=None):
+    """
+    Request current music state. The guild is auto-detected from the caller's voice channel.
+    Responds with music_update only to the requesting sid.
+    """
+    sess = _get_socket_session(sid)
+    if not sess:
+        await sio.emit("error", {"message": "Unauthorized"}, to=sid)
+        return
+
+    if not _music_available:
+        await _set_socket_music_room(sid, None)
+        await sio.emit("music_update", {"playing": False, "available": False}, to=sid)
+        return
+
+    try:
+        user_id = int(sess["user_id"])
+    except (ValueError, TypeError):
+        await _set_socket_music_room(sid, None)
+        await sio.emit("music_update", {"playing": False, "available": False}, to=sid)
+        return
+
+    guild, guild_id = _find_user_music_guild(user_id)
+    if not guild:
+        await _set_socket_music_room(sid, None)
+        await sio.emit("music_update", {"playing": False, "available": False}, to=sid)
+        return
+
+    await _set_socket_music_room(sid, guild_id)
+
+    gid = str(guild_id)
+    state = _get_music_state(guild_id)
+    if state:
+        await sio.emit("music_update", {"guild_id": gid, "playing": True, "available": True, **state}, to=sid)
+    else:
+        await sio.emit("music_update", {"guild_id": gid, "playing": False, "available": True}, to=sid)
+
+
+@sio.on("music_action")
+async def on_music_action(sid, data=None):
+    """
+    Control music via Socket.IO. Guild is auto-detected from the caller's voice channel;
+    the caller must be co-located with the bot. Broadcasts music_update to the guild room.
+    Payload: {action: "next|pause|play|seek|recommend", data: <optional>}
+    """
+    sess = _get_socket_session(sid)
+    if not sess:
+        await sio.emit("error", {"message": "Unauthorized"}, to=sid)
+        return
+
+    if not _music_available:
+        await sio.emit("music_error", {"message": "Music module not available"}, to=sid)
+        return
+
+    payload = data or {}
+    action = str(payload.get("action") or "").lower().strip()
+    action_data = payload.get("data")
+
+    VALID_ACTIONS = {'next', 'pause', 'play', 'seek', 'recommend'}
+    if action not in VALID_ACTIONS:
+        await sio.emit("music_error", {"message": f"Invalid action. Valid: {', '.join(sorted(VALID_ACTIONS))}"}, to=sid)
+        return
+
+    try:
+        user_id = int(sess["user_id"])
+    except (ValueError, TypeError):
+        await sio.emit("music_error", {"message": "Invalid session"}, to=sid)
+        return
+
+    guild, guild_id = _find_user_music_guild(user_id)
+    if not guild:
+        await _set_socket_music_room(sid, None)
+        await sio.emit("music_error", {"message": "You are not in any voice channel with the bot"}, to=sid)
+        return
+
+    await _set_socket_music_room(sid, guild_id)
+
+    player = guild.voice_client
+    if not player:
+        await sio.emit("music_error", {"message": "No active player"}, to=sid)
+        return
+
+    try:
+        if action == 'pause':
+            await player.set_pause(True)
+
+        elif action == 'play':
+            await player.set_pause(False)
+
+        elif action == 'next':
+            if _music_mod.radio_modes.get(guild.id):
+                await sio.emit("music_error", {"message": "Cannot skip in radio mode"}, to=sid)
+                return
+            queue = _music_mod.get_queue(guild.id)
+            next_track = queue.get()
+            await player.stop()
+            if next_track:
+                await player.play(next_track)
+
+        elif action == 'seek':
+            try:
+                seek_ms = int(action_data) * 1000
+            except (TypeError, ValueError):
+                await sio.emit("music_error", {"message": "seek requires integer seconds"}, to=sid)
+                return
+            await player.seek(seek_ms)
+
+        elif action == 'recommend':
+            if _music_mod.radio_modes.get(guild.id):
+                await sio.emit("music_error", {"message": "Cannot recommend in radio mode"}, to=sid)
+                return
+            current = getattr(player, 'current', None)
+            if not current:
+                await sio.emit("music_error", {"message": "No current track"}, to=sid)
+                return
+            try:
+                count = max(1, min(int(action_data or 5), 10))
+            except (TypeError, ValueError):
+                count = 5
+            results = await player.get_recommendations(track=current)
+            if results:
+                tracks = getattr(results, 'tracks', results)
+                q = _music_mod.get_queue(guild.id)
+                for t in tracks[:count]:
+                    q.add(t)
+                if not player.is_playing:
+                    nt = q.get()
+                    if nt:
+                        await player.play(nt)
+
+    except Exception as e:
+        log(f"Socket music_action '{action}' failed: {e}", level=logging.WARNING, module_name="Explore")
+        await sio.emit("music_error", {"message": str(e)}, to=sid)
+        return
+
+    await _emit_music_update(guild.id)
+
 
 # --- Discord Commands ---
 
