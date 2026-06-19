@@ -1,4 +1,4 @@
-from globalenv import bot, get_global_config, set_global_config, add_app_command_error_handler
+from globalenv import bot, get_global_config, set_global_config, add_app_command_error_handler, get_user_data
 import discord
 from discord.ext import commands
 from discord import app_commands
@@ -7,7 +7,7 @@ import asyncio
 
 semaphore = Semaphore()
 
-class Statistics(commands.Cog):
+class Statistics(commands.GroupCog, name="stats"):
     def __init__(self, bot: commands.Bot) -> None:
         self.bot = bot
         super().__init__()
@@ -15,9 +15,9 @@ class Statistics(commands.Cog):
     
     @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
     @app_commands.allowed_installs(guilds=True, users=True)
-    @app_commands.command(name="stats", description="查看指令使用統計")
+    @app_commands.command(name="command", description="查看指令使用統計")
     @app_commands.describe(full="是否顯示完整統計數據")
-    async def stats(self, interaction: discord.Interaction, full: bool = False):
+    async def command_stats(self, interaction: discord.Interaction, full: bool = False):
         command_stats = get_global_config("command_usage_stats", {})
         command_error_stats = get_global_config("command_error_stats", {})
         app_command_stats = get_global_config("app_command_usage_stats", {})
@@ -47,6 +47,17 @@ class Statistics(commands.Cog):
         embed.add_field(name="文字指令錯誤次數", value=command_error_stats_str, inline=False)
         embed.add_field(name="應用程式指令使用次數", value=app_command_stats_str, inline=False)
         embed.add_field(name="應用程式指令錯誤次數", value=app_command_error_stats_str, inline=False)
+
+        await interaction.response.send_message(embed=embed)
+
+    @app_commands.command(name="petpet-stats", description="查看你使用 petpet 指令的次數")
+    async def petpet_stats(self, interaction: discord.Interaction):
+        petpet_count = get_user_data(None, interaction.user.id, "petpet_count", 0)
+        get_petpet_count = get_user_data(None, interaction.user.id, "get_petpet_count", 0)
+
+        embed = discord.Embed(title="PetPet 統計", color=0x00ff00)
+        embed.add_field(name="你 PetPet 了多少次？", value=str(petpet_count), inline=False)
+        embed.add_field(name="被別人 PetPet 了多少次？", value=str(get_petpet_count), inline=False)
 
         await interaction.response.send_message(embed=embed)
     

@@ -258,16 +258,16 @@ class PetPetCommand(commands.Cog):
                 log(f"生成 PetPet GIF 時發生錯誤：{e}", module_name="petpet", level=logging.ERROR, user=ctx.author, guild=ctx.guild)
                 traceback.print_exc()
     
-    @app_commands.command(name="petpet-stats", description="查看你使用 petpet 指令的次數")
-    async def petpet_stats(self, interaction: discord.Interaction):
-        petpet_count = get_user_data(None, interaction.user.id, "petpet_count", 0)
-        get_petpet_count = get_user_data(None, interaction.user.id, "get_petpet_count", 0)
+    # @app_commands.command(name="petpet-stats", description="查看你使用 petpet 指令的次數")
+    # async def petpet_stats(self, interaction: discord.Interaction):
+    #     petpet_count = get_user_data(None, interaction.user.id, "petpet_count", 0)
+    #     get_petpet_count = get_user_data(None, interaction.user.id, "get_petpet_count", 0)
 
-        embed = discord.Embed(title="PetPet 統計", color=0x00ff00)
-        embed.add_field(name="你 PetPet 了多少次？", value=str(petpet_count), inline=False)
-        embed.add_field(name="被別人 PetPet 了多少次？", value=str(get_petpet_count), inline=False)
+    #     embed = discord.Embed(title="PetPet 統計", color=0x00ff00)
+    #     embed.add_field(name="你 PetPet 了多少次？", value=str(petpet_count), inline=False)
+    #     embed.add_field(name="被別人 PetPet 了多少次？", value=str(get_petpet_count), inline=False)
 
-        await interaction.response.send_message(embed=embed)
+    #     await interaction.response.send_message(embed=embed)
     
     async def petpet_context_menu(self, interaction: discord.Interaction, user: Union[discord.User, discord.Member]):
         try:
