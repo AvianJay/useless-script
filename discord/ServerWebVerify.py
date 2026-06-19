@@ -903,24 +903,26 @@ class ServerWebVerify(commands.GroupCog, name="webverify", description="伺服�
             unverified_role_id = guild_config.get('unverified_role_id')
             if not unverified_role_id:
                 return
-            # had_unverified = any(role.id == unverified_role_id for role in before.roles)
-            has_unverified = any(role.id == unverified_role_id for role in after.roles)
-            if has_unverified:
-                # if dm enabled, send dm
-                notify_type = guild_config.get('notify', {}).get('type', 'dm')
-                if notify_type in ['dm', 'both']:
-                    notify_title = guild_config.get('notify', {}).get('title')
-                    notify_message = guild_config.get('notify', {}).get('message')
-                    embed = discord.Embed(title=notify_title, description=notify_message, color=0x00ff00)
-                    embed.set_footer(text=after.guild.name, icon_url=after.guild.icon.url if after.guild.icon else None)
-                    verify_url = f"https://discord.com/oauth2/authorize?client_id={bot.application.id}&response_type=code&scope=identify&prompt=none&{urlencode({'redirect_uri': config('webverify_url')})}&state={after.guild.id}"
-                    verify_button = discord.ui.Button(label="前往驗證", url=verify_url)
-                    view = discord.ui.View()
-                    view.add_item(verify_button)
-                    try:
-                        await after.send(embed=embed, view=view)
-                    except Exception as e:
-                        log(f"無法私訊用戶 {after} 通知其驗證狀態變更：{e}", level=logging.ERROR, module_name="ServerWebVerify", user=after, guild=after.guild)
+            before_role_ids = {role.id for role in before.roles}
+            after_role_ids = {role.id for role in after.roles}
+            added_role_ids = after_role_ids - before_role_ids
+            if unverified_role_id not in added_role_ids:
+                return
+            # if dm enabled, send dm
+            notify_type = guild_config.get('notify', {}).get('type', 'dm')
+            if notify_type in ['dm', 'both']:
+                notify_title = guild_config.get('notify', {}).get('title')
+                notify_message = guild_config.get('notify', {}).get('message')
+                embed = discord.Embed(title=notify_title, description=notify_message, color=0x00ff00)
+                embed.set_footer(text=after.guild.name, icon_url=after.guild.icon.url if after.guild.icon else None)
+                verify_url = f"https://discord.com/oauth2/authorize?client_id={bot.application.id}&response_type=code&scope=identify&prompt=none&{urlencode({'redirect_uri': config('webverify_url')})}&state={after.guild.id}"
+                verify_button = discord.ui.Button(label="前往驗證", url=verify_url)
+                view = discord.ui.View()
+                view.add_item(verify_button)
+                try:
+                    await after.send(embed=embed, view=view)
+                except Exception as e:
+                    log(f"無法私訊用戶 {after} 通知其驗證狀態變更：{e}", level=logging.ERROR, module_name="ServerWebVerify", user=after, guild=after.guild)
     
     @app_commands.allowed_contexts(guilds=True, dms=False, private_channels=False)
     @app_commands.allowed_installs(guilds=True, users=False)
