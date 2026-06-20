@@ -207,12 +207,8 @@ async def handle_checkin_rewards(interaction: discord.Interaction, user: Union[d
     if not is_milestone:
         return
     
-    # check not global
-    if guild_key is None:
-        set_user_data(0, user.id, "claim_reward_unsuccessful", True)
-        await interaction.followup.send(f"{user.mention}\n你獲得了簽到獎勵！\n請在有此機器人的伺服器中使用 {await get_command_mention('dsize')} 以領取獎勵。")
-        return
     set_user_data(0, user.id, "claim_reward_unsuccessful", False)
+    reward_guild_key = guild_key if interaction_uses_guild_scope(interaction) and guild_key is not None else 0
     
     # Give random reward
     if "ItemSystem" in modules:
@@ -247,7 +243,7 @@ async def handle_checkin_rewards(interaction: discord.Interaction, user: Union[d
             reward = random.choice(level_1_rewards)
         else:
             reward = get_user_data(0, user.id, "checkin_reward")
-        await ItemSystem.give_item_to_user(guild_key, user.id, reward[0], reward[1])
+        await ItemSystem.give_item_to_user(reward_guild_key, user.id, reward[0], reward[1])
 
         # Update statistics
         statistics = get_user_data(0, user.id, "dsize_statistics", {})
