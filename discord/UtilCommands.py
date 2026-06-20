@@ -1334,7 +1334,7 @@ class InfoCommands(commands.GroupCog, name=app_commands.locale_str("info")):
 
     @app_commands.command(name=app_commands.locale_str("bot"), description="顯示機器人資訊")
     @app_commands.describe(full="是否顯示完整模組列表與載入失敗模組")
-    async def bot_info(self, interaction: discord.Interaction, full: bool = False):
+    async def show_bot_info(self, interaction: discord.Interaction, full: bool = False):
         await info_command(interaction, full)
 
     @app_commands.command(name=app_commands.locale_str("user"), description="顯示用戶資訊")
