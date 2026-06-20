@@ -5384,14 +5384,14 @@ class AICommands(commands.Cog):
                 "請依序回答：\n"
                 "1. 先檢查這個伺服器目前有哪些 AI 可查的功能設定有開著。\n"
                 "2. 再查我的經濟餘額、背包摘要、dsize 摘要。\n"
-                "3. 從 bot docs 裡找 /help 或 /tutorial 的用法重點。"
+                "3. 從 bot docs 裡找 /info help 或 /info tutorial 的用法重點。"
             )
         return (
             f"{shared}\n\n"
             "請依序回答：\n"
             "1. 查我的全域經濟餘額與背包摘要。\n"
             "2. 查我的 dsize 摘要。\n"
-            "3. 從 bot docs 裡找 /help 或 /tutorial 的用法重點。"
+            "3. 從 bot docs 裡找 /info help 或 /info tutorial 的用法重點。"
         )
 
     # @app_commands.command(name="ai-tool-smoke", description="顯示測試 AI tool calling 的建議 prompt")
@@ -5766,7 +5766,7 @@ class AICommands(commands.Cog):
         
         await interaction.response.send_message(
             f"已設定回應顯示方式：\n"
-            f"• Container 容器：{container_status}\n"
+            f"• 容器：{container_status}\n"
             f"• 計費資訊：{cost_status}\n"
             f"• 模型資訊：{model_status}",
             ephemeral=True,

@@ -3,6 +3,7 @@ import sys
 import re
 import io
 import random
+import asyncio
 import discord
 from discord import app_commands
 from discord.ext import commands
@@ -252,34 +253,46 @@ def get_uptime_seconds() -> int:
     return int((datetime.now(timezone.utc) - startup_time).total_seconds())
 
 
-@bot.tree.command(name=app_commands.locale_str("info"), description="顯示機器人資訊")
-@app_commands.allowed_installs(guilds=True, users=True)
-@app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
-@app_commands.describe(
-    full="是否顯示完整模組列表與載入失敗模組"
-)
-async def info_command(interaction: discord.Interaction, full: bool = False):
-    await interaction.response.defer()
-    server_count = len(bot.guilds)
-    user_count = f"{len(bot.users)}/{sum(guild.member_count for guild in bot.guilds)}"
-    try:
-        bot_latency = round(bot.latency * 1000, 2)  # Convert to milliseconds
-    except OverflowError:
-        bot_latency = "N/A"
+DEFAULT_AVATAR_URL = "https://discord.com/assets/6debd47ed13483642cf09e832ed0bc1b.png"
+INFO_COMMAND_WARNING = "-# 提示：如果你指令用到一半停住或沒辦法用了那很有可能是那個傻逼開發者||尼摳||又再重開機器人了||不然就是機器人又當機了||"
+SERVER_VERIFICATION_LABELS = {
+    "none": "無",
+    "low": "低",
+    "medium": "中等",
+    "high": "高",
+    "highest": "最高",
+}
 
+
+def get_bot_latency_ms() -> str | float:
+    try:
+        return round(bot.latency * 1000, 2)
+    except OverflowError:
+        return "N/A"
+
+
+def get_total_app_command_count() -> int:
+    tree_commands = bot.tree.get_commands()
+    return len(tree_commands) + sum(len(cmd.commands) for cmd in tree_commands if isinstance(cmd, app_commands.Group))
+
+
+def build_bot_info_embed(*, full: bool, user_count_value: str | int, include_timestamp: bool = False) -> discord.Embed:
+    server_count = len(bot.guilds)
+    bot_latency = get_bot_latency_ms()
     uptime = get_time_text(get_uptime_seconds())
-    
     commands_count = len(bot.commands) + sum(len(c.commands) for c in bot.commands if isinstance(c, commands.Group))
-    app_commands_count = len(bot.tree.get_commands()) + sum(len(c.commands) for c in bot.tree.get_commands() if isinstance(c, app_commands.Group))
+    app_commands_count = get_total_app_command_count()
     dbcount = db.get_database_count()
+    application = bot.application
+    install_count = getattr(application, "approximate_user_install_count", None) if application else None
 
     embed = discord.Embed(title="機器人資訊", color=0x00ff00)
     embed.add_field(name="機器人名稱", value=bot.user.name)
     embed.add_field(name="版本", value=full_version)
     embed.add_field(name="指令數量", value=f"{commands_count + app_commands_count} ({commands_count} 文字, {app_commands_count} 應用)")
     embed.add_field(name="伺服器數量", value=server_count)
-    embed.add_field(name="用戶總數量", value=user_count)
-    embed.add_field(name="用戶安裝數量", value=bot.application.approximate_user_install_count or "N/A")
+    embed.add_field(name="用戶總數量", value=user_count_value)
+    embed.add_field(name="用戶安裝數量", value=install_count or "N/A")
     embed.add_field(name="機器人延遲", value=f"{bot_latency}ms")
     embed.add_field(name="CPU 使用率", value=f"{psutil.cpu_percent()}%")
     embed.add_field(name="記憶體使用率", value=f"{psutil.virtual_memory().percent}%")
@@ -295,15 +308,104 @@ async def info_command(interaction: discord.Interaction, full: bool = False):
         if failed_modules:
             embed.add_field(name=f"載入失敗的模組({len(failed_modules)})", value="\n".join(failed_modules), inline=False)
     else:
-        embed.add_field(name=f"已載入模組數量", value=str(len(modules)), inline=False)
+        embed.add_field(name="已載入模組數量", value=str(len(modules)), inline=False)
         if config("disable_modules", []):
-            embed.add_field(name=f"已禁用模組數量", value=str(len(config("disable_modules", []))), inline=False)
+            embed.add_field(name="已禁用模組數量", value=str(len(config("disable_modules", []))), inline=False)
         if failed_modules:
-            embed.add_field(name=f"載入失敗的模組數量", value=str(len(failed_modules)), inline=False)
+            embed.add_field(name="載入失敗的模組數量", value=str(len(failed_modules)), inline=False)
     embed.add_field(name="相關連結", value=f"* [機器人網站]({config('website_url')})\n* [使用文檔]({config('website_url')}/docs)\n* [支援伺服器]({config('support_server_invite')})\n* [隱私政策]({config('website_url')}/privacy-policy)\n* [服務條款]({config('website_url')}/terms-of-service)\n* [邀請機器人](https://discord.com/oauth2/authorize?client_id={str(bot.user.id)})", inline=False)
     embed.set_thumbnail(url=bot.user.avatar.url if bot.user.avatar else None)
+    if include_timestamp:
+        embed.timestamp = datetime.now(timezone.utc)
     embed.set_footer(text="by AvianJay")
-    await interaction.followup.send(content="-# 提示：如果你指令用到一半停住或沒辦法用了那很有可能是那個傻逼開發者||尼摳||又再重開機器人了||不然就是機器人又當機了||", embed=embed)
+    return embed
+
+
+def build_user_info_message(user: Union[discord.User, discord.Member]) -> tuple[discord.Embed, discord.ui.View]:
+    embed = discord.Embed(title=f"{user.display_name} 的資訊", color=0x00ff00)
+    embed.set_thumbnail(url=user.avatar.url if user.avatar else None)
+    view = discord.ui.View()
+    view.add_item(discord.ui.Button(label="頭像連結", url=user.avatar.url if user.avatar else DEFAULT_AVATAR_URL))
+    embed.add_field(name="用戶 ID", value=str(user.id), inline=True)
+    embed.add_field(name="帳號創建時間", value=user.created_at.strftime("%Y-%m-%d %H:%M:%S"), inline=True)
+    if isinstance(user, discord.Member):
+        embed.add_field(name="伺服器暱稱", value=user.nick or "無", inline=True)
+        embed.add_field(name="加入伺服器時間", value=user.joined_at.strftime("%Y-%m-%d %H:%M:%S") if user.joined_at else "未知", inline=True)
+        if user.display_avatar and user.display_avatar.url != (user.avatar.url if user.avatar else None):
+            embed.set_image(url=user.display_avatar.url)
+            view.add_item(discord.ui.Button(label="伺服器頭像連結", url=user.display_avatar.url))
+    return embed, view
+
+
+def build_server_info_message(guild: discord.Guild) -> tuple[discord.Embed, discord.ui.View]:
+    embed = discord.Embed(title=f"{guild.name} 的資訊", color=0x00ff00)
+    view = discord.ui.View()
+    if guild.icon:
+        embed.set_thumbnail(url=guild.icon.url)
+        view.add_item(discord.ui.Button(label="伺服器圖標連結", url=guild.icon.url))
+    if guild.banner:
+        embed.set_image(url=guild.banner.url)
+        view.add_item(discord.ui.Button(label="伺服器橫幅連結", url=guild.banner.url))
+    embed.add_field(name="伺服器 ID", value=str(guild.id), inline=True)
+    embed.add_field(name="創建時間", value=f"<t:{int(guild.created_at.timestamp())}:F>", inline=True)
+    embed.add_field(name="擁有者", value=guild.owner.mention if guild.owner else "未知", inline=True)
+    embed.add_field(name="加成", value=f"{guild.premium_subscription_count} (等級{guild.premium_tier})", inline=True)
+    embed.add_field(name="驗證等級", value=SERVER_VERIFICATION_LABELS.get(guild.verification_level.name.lower(), "無"), inline=True)
+    embed.add_field(name="地區", value=str(guild.preferred_locale), inline=True)
+    embed.add_field(name="成員數量", value=str(guild.member_count), inline=True)
+    embed.add_field(name="頻道數量", value=str(len(guild.channels)), inline=True)
+    embed.add_field(name="身分組數量", value=str(len(guild.roles)), inline=True)
+    return embed, view
+
+
+def build_avatar_message(user: Union[discord.User, discord.Member]) -> tuple[discord.Embed, discord.ui.View]:
+    embed = discord.Embed(title=f"{user.display_name} 的頭像", color=0x00ff00)
+    view = discord.ui.View()
+    avatar_url = user.avatar.url if user.avatar else DEFAULT_AVATAR_URL
+    if user.display_avatar and user.display_avatar.url != avatar_url:
+        embed.set_image(url=user.display_avatar.url)
+        embed.set_thumbnail(url=avatar_url)
+        view.add_item(discord.ui.Button(label="伺服器頭像連結", url=user.display_avatar.url))
+    else:
+        embed.set_image(url=avatar_url)
+    view.add_item(discord.ui.Button(label="頭像連結", url=avatar_url))
+    return embed, view
+
+
+def build_banner_message(user: discord.User) -> tuple[discord.Embed, discord.ui.View]:
+    embed = discord.Embed(title=f"{user.display_name} 的橫幅", color=0x00ff00)
+    embed.set_image(url=user.banner.url)
+    view = discord.ui.View()
+    view.add_item(discord.ui.Button(label="橫幅連結", url=user.banner.url))
+    return embed, view
+
+
+def build_git_commits_embed() -> discord.Embed:
+    commit_logs = get_commit_logs(10)
+    return discord.Embed(title="機器人 git 提交記錄", description="\n".join(commit_logs), color=0x00ff00)
+
+
+def build_ping_embed(*, bot_latency: str | float, rest_latency: float) -> discord.Embed:
+    embed = discord.Embed(title="機器人延遲", color=0x00ff00)
+    embed.add_field(name="Websocket 延遲", value=f"{bot_latency}ms")
+    embed.add_field(name="REST API 延遲", value=f"{rest_latency}ms")
+    return embed
+
+
+async def get_command_display(command_name: str, subcommand_name: str = None) -> str:
+    mention = await get_command_mention(command_name, subcommand_name)
+    if mention is not None:
+        return mention
+    if subcommand_name:
+        return f"`/{command_name} {subcommand_name}`"
+    return f"`/{command_name}`"
+
+
+async def info_command(interaction: discord.Interaction, full: bool = False):
+    await interaction.response.defer()
+    user_count = f"{len(bot.users)}/{sum(guild.member_count for guild in bot.guilds)}"
+    embed = build_bot_info_embed(full=full, user_count_value=user_count)
+    await interaction.followup.send(content=INFO_COMMAND_WARNING, embed=embed)
 
 
 @bot.command(aliases=["botinfo", "bi"])
@@ -314,51 +416,9 @@ async def info(ctx: commands.Context, full: bool = False):
 
     如果指定 full 參數為 True，則顯示完整模組列表與載入失敗模組。
     """
-    server_count = len(bot.guilds)
     user_count = len(set(bot.get_all_members()))
-    try:
-        bot_latency = round(bot.latency * 1000, 2)  # Convert to milliseconds
-    except OverflowError:
-        bot_latency = "N/A"
-    
-    uptime = get_time_text(get_uptime_seconds())
-    
-    commands_count = len(bot.commands) + sum(len(c.commands) for c in bot.commands if isinstance(c, commands.Group))
-    app_commands_count = len(bot.tree.get_commands()) + sum(len(c.commands) for c in bot.tree.get_commands() if isinstance(c, app_commands.Group))
-    dbcount = db.get_database_count()
-
-    embed = discord.Embed(title="機器人資訊", color=0x00ff00)
-    embed.add_field(name="機器人名稱", value=bot.user.name)
-    embed.add_field(name="版本", value=full_version)
-    embed.add_field(name="指令數量", value=f"{commands_count + app_commands_count} ({commands_count} 文字, {app_commands_count} 應用)")
-    embed.add_field(name="伺服器數量", value=server_count)
-    embed.add_field(name="用戶總數量", value=user_count)
-    embed.add_field(name="用戶安裝數量", value=bot.application.approximate_user_install_count or "N/A")
-    embed.add_field(name="機器人延遲", value=f"{bot_latency}ms")
-    embed.add_field(name="CPU 使用率", value=f"{psutil.cpu_percent()}%")
-    embed.add_field(name="記憶體使用率", value=f"{psutil.virtual_memory().percent}%")
-    embed.add_field(name="Discord.py 版本", value=discord.__version__)
-    embed.add_field(name="Python 版本", value=f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}")
-    embed.add_field(name="指令使用次數", value=f"{sum(get_global_config('command_usage_stats', {}).values()) + sum(get_global_config('app_command_usage_stats', {}).values()) + sum(get_global_config('command_error_stats', {}).values()) + sum(get_global_config('app_command_error_stats', {}).values())}", inline=False)
-    embed.add_field(name="運行時間", value=uptime)
-    embed.add_field(name="資料庫資訊", value=f"總筆數: {dbcount['total']}\n伺服器筆數: {dbcount['server_configs']}\n用戶資料筆數: {dbcount['user_data']}", inline=True)
-    if full:
-        embed.add_field(name=f"已載入模組({len(modules)})", value="\n".join(modules) if modules else "無", inline=False)
-        if config("disable_modules", []):
-            embed.add_field(name=f"已禁用模組({len(config('disable_modules', []))})", value="\n".join(config("disable_modules", [])), inline=False)
-        if failed_modules:
-            embed.add_field(name=f"載入失敗的模組({len(failed_modules)})", value="\n".join(failed_modules), inline=False)
-    else:
-        embed.add_field(name=f"已載入模組數量", value=str(len(modules)), inline=False)
-        if config("disable_modules", []):
-            embed.add_field(name=f"已禁用模組數量", value=str(len(config("disable_modules", []))), inline=False)
-        if failed_modules:
-            embed.add_field(name=f"載入失敗的模組數量", value=str(len(failed_modules)), inline=False)
-    embed.add_field(name="相關連結", value=f"* [機器人網站]({config('website_url')})\n* [使用文檔]({config('website_url')}/docs)\n* [支援伺服器]({config('support_server_invite')})\n* [隱私政策]({config('website_url')}/privacy-policy)\n* [服務條款]({config('website_url')}/terms-of-service)\n* [邀請機器人](https://discord.com/oauth2/authorize?client_id={str(bot.user.id)})", inline=False)
-    embed.set_thumbnail(url=bot.user.avatar.url if bot.user.avatar else None)
-    embed.timestamp = datetime.now(timezone.utc)
-    embed.set_footer(text="by AvianJay")
-    await ctx.send(content="-# 提示：如果你指令用到一半停住或沒辦法用了那很有可能是那個傻逼開發者||尼摳||又再重開機器人了||不然就是機器人又當機了||", embed=embed)
+    embed = build_bot_info_embed(full=full, user_count_value=user_count, include_timestamp=True)
+    await ctx.send(content=INFO_COMMAND_WARNING, embed=embed)
 
 
 @bot.tree.command(name=app_commands.locale_str("randomnumber"), description="生成一個隨機數字")
@@ -409,30 +469,6 @@ async def randomuser_command(interaction: discord.Interaction, mention: str = "F
     await interaction.response.send_message(f"隨機選擇的用戶是：{selected_user.mention}！\n-# 抽取用戶總數：{len(users)}", allowed_mentions=discord.AllowedMentions(users=mention, roles=False, everyone=False))
 
 
-@bot.tree.command(name=app_commands.locale_str("userinfo"), description="顯示用戶資訊")
-@app_commands.describe(user="要查詢的用戶")
-@app_commands.allowed_installs(guilds=True, users=True)
-@app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
-async def userinfo_command(interaction: discord.Interaction, user: Union[discord.User, discord.Member]):
-    embed = discord.Embed(title=f"{user.display_name} 的資訊", color=0x00ff00)
-    embed.set_thumbnail(url=user.avatar.url if user.avatar else None)
-    view = discord.ui.View()
-    # avatar url button
-    button = discord.ui.Button(label="頭像連結", url=user.avatar.url if user.avatar else "https://discord.com/assets/6debd47ed13483642cf09e832ed0bc1b.png")
-    view.add_item(button)
-    embed.add_field(name="用戶 ID", value=str(user.id), inline=True)
-    embed.add_field(name="帳號創建時間", value=user.created_at.strftime("%Y-%m-%d %H:%M:%S"), inline=True)
-    if isinstance(user, discord.Member):
-        embed.add_field(name="伺服器暱稱", value=user.nick or "無", inline=True)
-        embed.add_field(name="加入伺服器時間", value=user.joined_at.strftime("%Y-%m-%d %H:%M:%S"), inline=True)
-        # pfp
-        if user.display_avatar and user.display_avatar.url != user.avatar.url:
-            embed.set_image(url=user.display_avatar.url if user.display_avatar.url != user.avatar.url else None)
-            button_serverpfp = discord.ui.Button(label="伺服器頭像連結", url=user.display_avatar.url)
-            view.add_item(button_serverpfp)
-    await interaction.response.send_message(embed=embed, view=view)
-
-
 @bot.command(aliases=["ui"])
 async def userinfo(ctx: commands.Context, user: Union[discord.User, discord.Member] = None):
     """顯示用戶資訊
@@ -442,66 +478,41 @@ async def userinfo(ctx: commands.Context, user: Union[discord.User, discord.Memb
     """
     if user is None:
         user = ctx.author
-    embed = discord.Embed(title=f"{user.display_name} 的資訊", color=0x00ff00)
-    embed.set_thumbnail(url=user.avatar.url if user.avatar else None)
-    # avatar url button
-    button = discord.ui.Button(label="頭像連結", url=user.avatar.url if user.avatar else "https://discord.com/assets/6debd47ed13483642cf09e832ed0bc1b.png")
-    view = discord.ui.View()
-    view.add_item(button)
-    embed.add_field(name="用戶 ID", value=str(user.id), inline=True)
-    embed.add_field(name="帳號創建時間", value=user.created_at.strftime("%Y-%m-%d %H:%M:%S"), inline=True)
-    if isinstance(user, discord.Member):
-        embed.add_field(name="伺服器暱稱", value=user.nick or "無", inline=True)
-        embed.add_field(name="加入伺服器時間", value=user.joined_at.strftime("%Y-%m-%d %H:%M:%S"), inline=True)
-        # pfp
-        if user.display_avatar and user.display_avatar.url != user.avatar.url:
-            embed.set_image(url=user.display_avatar.url if user.display_avatar.url != user.avatar.url else None)
-            button_serverpfp = discord.ui.Button(label="伺服器頭像連結", url=user.display_avatar.url)
-            view.add_item(button_serverpfp)
+    embed, view = build_user_info_message(user)
     await ctx.send(embed=embed, view=view)
 
 
-@bot.tree.command(name=app_commands.locale_str("serverinfo"), description="顯示目前所在伺服器資訊")
-@app_commands.allowed_installs(guilds=True, users=False)
-@app_commands.allowed_contexts(guilds=True, dms=False, private_channels=False)
+async def userinfo_command(interaction: discord.Interaction, user: Union[discord.User, discord.Member]):
+    embed, view = build_user_info_message(user)
+    await interaction.response.send_message(embed=embed, view=view)
+
+
 async def serverinfo_command(interaction: discord.Interaction):
     guild = interaction.guild
     if guild is None:
         await interaction.response.send_message("此指令只能在伺服器中使用。", ephemeral=True)
         return
 
-    embed = discord.Embed(title=f"{guild.name} 的資訊", color=0x00ff00)
-    view = discord.ui.View()
-    if guild.icon:
-        embed.set_thumbnail(url=guild.icon.url if guild.icon else None)
-        iconbutton = discord.ui.Button(label="伺服器圖標連結", url=guild.icon.url)
-        view.add_item(iconbutton)
-    if guild.banner:
-        embed.set_image(url=guild.banner.url if guild.banner else None)
-        bannerbutton = discord.ui.Button(label="伺服器橫幅連結", url=guild.banner.url)
-        view.add_item(bannerbutton)
-    embed.add_field(name="伺服器 ID", value=str(guild.id), inline=True)
-    embed.add_field(name="創建時間", value=f"<t:{int(guild.created_at.timestamp())}:F>", inline=True)
-    embed.add_field(name="擁有者", value=guild.owner.mention if guild.owner else "未知", inline=True)
-    embed.add_field(name="加成", value=f"{guild.premium_subscription_count} (等級{guild.premium_tier})", inline=True)
-    embed.add_field(
-        name="驗證等級",
-        value={
-            "none": "無",
-            "low": "低",
-            "medium": "中等",
-            "high": "高",
-            "highest": "最高"
-        }
-        .get(
-                guild.verification_level.name.lower(), "none"
-            ),
-        inline=True
-    )
-    embed.add_field(name="地區", value=str(guild.preferred_locale), inline=True)
-    embed.add_field(name="成員數量", value=str(guild.member_count), inline=True)
-    embed.add_field(name="頻道數量", value=str(len(guild.channels)), inline=True)
-    embed.add_field(name="身分組數量", value=str(len(guild.roles)), inline=True)
+    embed, view = build_server_info_message(guild)
+    await interaction.response.send_message(embed=embed, view=view)
+
+
+async def avatar_command(interaction: discord.Interaction, user: Union[discord.User, discord.Member] = None):
+    if user is None:
+        user = interaction.user
+    embed, view = build_avatar_message(user)
+    await interaction.response.send_message(embed=embed, view=view)
+
+
+async def banner_command(interaction: discord.Interaction, user: Union[discord.User, discord.Member] = None):
+    if user is None:
+        user = interaction.user
+    user = await bot.fetch_user(user.id)
+    if user.banner is None:
+        await interaction.response.send_message("該用戶沒有設定橫幅。", ephemeral=True)
+        return
+
+    embed, view = build_banner_message(user)
     await interaction.response.send_message(embed=embed, view=view)
 
 @bot.command(aliases=["si"])
@@ -515,60 +526,8 @@ async def serverinfo(ctx: commands.Context):
         await ctx.send("此指令只能在伺服器中使用。")
         return
 
-    embed = discord.Embed(title=f"{guild.name} 的資訊", color=0x00ff00)
-    view = discord.ui.View()
-    if guild.icon:
-        embed.set_thumbnail(url=guild.icon.url if guild.icon else None)
-        iconbutton = discord.ui.Button(label="伺服器圖標連結", url=guild.icon.url)
-        view.add_item(iconbutton)
-    if guild.banner:
-        embed.set_image(url=guild.banner.url if guild.banner else None)
-        bannerbutton = discord.ui.Button(label="伺服器橫幅連結", url=guild.banner.url)
-        view.add_item(bannerbutton)
-    embed.add_field(name="伺服器 ID", value=str(guild.id), inline=True)
-    embed.add_field(name="創建時間", value=f"<t:{int(guild.created_at.timestamp())}:F>", inline=True)
-    embed.add_field(name="擁有者", value=guild.owner.mention if guild.owner else "未知", inline=True)
-    embed.add_field(name="加成", value=f"{guild.premium_subscription_count} (等級{guild.premium_tier})", inline=True)
-    embed.add_field(
-        name="驗證等級",
-        value={
-            "none": "無",
-            "low": "低",
-            "medium": "中等",
-            "high": "高",
-            "highest": "最高"
-        }
-        .get(
-                guild.verification_level.name.lower(), "none"
-            ),
-        inline=True
-    )
-    embed.add_field(name="地區", value=str(guild.preferred_locale), inline=True)
-    embed.add_field(name="成員數量", value=str(guild.member_count), inline=True)
-    embed.add_field(name="頻道數量", value=str(len(guild.channels)), inline=True)
-    embed.add_field(name="身分組數量", value=str(len(guild.roles)), inline=True)
+    embed, view = build_server_info_message(guild)
     await ctx.send(embed=embed, view=view)
-
-@bot.tree.command(name=app_commands.locale_str("avatar"), description="取得用戶頭像")
-@app_commands.describe(user="要查詢的用戶")
-@app_commands.allowed_installs(guilds=True, users=True)
-@app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
-async def avatar_command(interaction: discord.Interaction, user: Union[discord.User, discord.Member] = None):
-    if user is None:
-        user = interaction.user
-    embed = discord.Embed(title=f"{user.display_name} 的頭像", color=0x00ff00)
-    view = discord.ui.View()
-    if user.display_avatar and user.display_avatar.url != user.avatar.url:
-        embed.set_image(url=user.display_avatar.url)
-        embed.set_thumbnail(url=user.avatar.url if user.avatar else None)
-        serverpfp_button = discord.ui.Button(label="伺服器頭像連結", url=user.display_avatar.url)
-        view.add_item(serverpfp_button)
-    else:
-        embed.set_image(url=user.avatar.url if user.avatar else None)
-    button = discord.ui.Button(label="頭像連結", url=user.avatar.url if user.avatar else "https://discord.com/assets/6debd47ed13483642cf09e832ed0bc1b.png")
-    view.add_item(button)
-    await interaction.response.send_message(embed=embed, view=view)
-
 
 @bot.command(aliases=["pfp"])
 async def avatar(ctx: commands.Context, user: Union[discord.User, discord.Member] = None):
@@ -579,38 +538,8 @@ async def avatar(ctx: commands.Context, user: Union[discord.User, discord.Member
     """
     if user is None:
         user = ctx.author
-    embed = discord.Embed(title=f"{user.display_name} 的頭像", color=0x00ff00)
-    view = discord.ui.View()
-    if user.display_avatar and user.display_avatar.url != user.avatar.url:
-        embed.set_image(url=user.display_avatar.url)
-        embed.set_thumbnail(url=user.avatar.url if user.avatar else None)
-        serverpfp_button = discord.ui.Button(label="伺服器頭像連結", url=user.display_avatar.url)
-        view.add_item(serverpfp_button)
-    else:
-        embed.set_image(url=user.avatar.url if user.avatar else None)
-    button = discord.ui.Button(label="頭像連結", url=user.avatar.url if user.avatar else "https://discord.com/assets/6debd47ed13483642cf09e832ed0bc1b.png")
-    view.add_item(button)
+    embed, view = build_avatar_message(user)
     await ctx.send(embed=embed, view=view)
-
-
-@bot.tree.command(name=app_commands.locale_str("banner"), description="取得用戶橫幅")
-@app_commands.describe(user="要查詢的用戶")
-@app_commands.allowed_installs(guilds=True, users=True)
-@app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
-async def banner_command(interaction: discord.Interaction, user: Union[discord.User, discord.Member] = None):
-    if user is None:
-        user = interaction.user
-    user = await bot.fetch_user(user.id)  # Fetch to get banner
-    if user.banner is None:
-        await interaction.response.send_message("該用戶沒有設定橫幅。", ephemeral=True)
-        return
-    embed = discord.Embed(title=f"{user.display_name} 的橫幅", color=0x00ff00)
-    embed.set_image(url=user.banner.url)
-    view = discord.ui.View()
-    button = discord.ui.Button(label="橫幅連結", url=user.banner.url)
-    view.add_item(button)
-    await interaction.response.send_message(embed=embed, view=view)
-
 
 @bot.command(aliases=["bnr"])
 async def banner(ctx: commands.Context, user: Union[discord.User, discord.Member] = None):
@@ -625,11 +554,7 @@ async def banner(ctx: commands.Context, user: Union[discord.User, discord.Member
     if user.banner is None:
         await ctx.send("該用戶沒有設定橫幅。")
         return
-    embed = discord.Embed(title=f"{user.display_name} 的橫幅", color=0x00ff00)
-    embed.set_image(url=user.banner.url)
-    view = discord.ui.View()
-    button = discord.ui.Button(label="橫幅連結", url=user.banner.url)
-    view.add_item(button)
+    embed, view = build_banner_message(user)
     await ctx.send(embed=embed, view=view)
 
 
@@ -657,11 +582,6 @@ async def subcommand_autocomplete(interaction: discord.Interaction, current: str
     ][:25]
 
 
-@bot.tree.command(name=app_commands.locale_str("get-command-mention"), description="取得指令的提及格式")
-@app_commands.describe(command="指令名稱", subcommand="子指令名稱（可選）")
-@app_commands.allowed_installs(guilds=True, users=True)
-@app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
-@app_commands.autocomplete(command=command_autocomplete, subcommand=subcommand_autocomplete)
 async def get_cmd_mention(interaction: discord.Interaction, command: str, subcommand: str = None):
     mention = await get_command_mention(command, subcommand)
     if mention is None:
@@ -722,13 +642,8 @@ async def httpcat(ctx: commands.Context, status_code: int):
     await ctx.send(embed=embed)
 
 
-@bot.tree.command(name=app_commands.locale_str("git-commits"), description="顯示機器人的 git 提交記錄")
-@app_commands.allowed_installs(guilds=True, users=True)
-@app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
 async def changelogs_command(interaction: discord.Interaction):
-    # get 10 commit logs
-    commit_logs = get_commit_logs(10)
-    embed = discord.Embed(title="機器人 git 提交記錄", description="\n".join(commit_logs), color=0x00ff00)
+    embed = build_git_commits_embed()
     await interaction.response.send_message(embed=embed)
 
 
@@ -782,9 +697,6 @@ class ChangeLogView(discord.ui.View):
         await interaction.response.edit_message(embed=self.get_embed(), view=self)
 
 
-@bot.tree.command(name=app_commands.locale_str("changelog"), description="顯示機器人更新日誌")
-@app_commands.allowed_installs(guilds=True, users=True)
-@app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
 async def changelog_command(interaction: discord.Interaction):
     versions = parse_changelog()
     if not versions:
@@ -796,21 +708,13 @@ async def changelog_command(interaction: discord.Interaction):
     await interaction.response.send_message(embed=await apply_ui_embed_emojis(view.get_embed()), view=view)
 
 
-@bot.tree.command(name=app_commands.locale_str("ping"), description="檢查機器人延遲")
-@app_commands.allowed_installs(guilds=True, users=True)
-@app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
 async def ping_command(interaction: discord.Interaction):
-    try:
-        bot_latency = round(bot.latency * 1000, 2)  # Convert to milliseconds
-    except OverflowError:
-        bot_latency = "N/A"
+    bot_latency = get_bot_latency_ms()
     s = time.perf_counter()
     await interaction.response.defer()
     e = time.perf_counter()
-    rest_latency = round((e - s) * 1000, 2)  # in milliseconds
-    embed = discord.Embed(title="機器人延遲", color=0x00ff00)
-    embed.add_field(name="Websocket 延遲", value=f"{bot_latency}ms")
-    embed.add_field(name="REST API 延遲", value=f"{rest_latency}ms")
+    rest_latency = round((e - s) * 1000, 2)
+    embed = build_ping_embed(bot_latency=bot_latency, rest_latency=rest_latency)
     await interaction.followup.send(embed=embed)
 
 
@@ -820,17 +724,12 @@ async def ping(ctx: commands.Context):
     
     用法： ping
     """
-    try:
-        bot_latency = round(bot.latency * 1000, 2)  # Convert to milliseconds
-    except OverflowError:
-        bot_latency = "N/A"
+    bot_latency = get_bot_latency_ms()
     s = time.perf_counter()
     await ctx.typing()
     e = time.perf_counter()
-    rest_latency = round((e - s) * 1000, 2)  # in milliseconds
-    embed = discord.Embed(title="機器人延遲", color=0x00ff00)
-    embed.add_field(name="Websocket 延遲", value=f"{bot_latency}ms")
-    embed.add_field(name="REST API 延遲", value=f"{rest_latency}ms")
+    rest_latency = round((e - s) * 1000, 2)
+    embed = build_ping_embed(bot_latency=bot_latency, rest_latency=rest_latency)
     await ctx.send(embed=embed)
 
 
@@ -1426,6 +1325,68 @@ async def help_command_autocomplete(interaction: discord.Interaction, current: s
     ][:25]
 
 
+@app_commands.allowed_installs(guilds=True, users=True)
+@app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
+class InfoCommands(commands.GroupCog, name=app_commands.locale_str("info")):
+    def __init__(self, bot_: commands.Bot) -> None:
+        self.bot = bot_
+        super().__init__()
+
+    @app_commands.command(name=app_commands.locale_str("bot"), description="顯示機器人資訊")
+    @app_commands.describe(full="是否顯示完整模組列表與載入失敗模組")
+    async def bot_info(self, interaction: discord.Interaction, full: bool = False):
+        await info_command(interaction, full)
+
+    @app_commands.command(name=app_commands.locale_str("user"), description="顯示用戶資訊")
+    @app_commands.describe(user="要查詢的用戶")
+    async def user_info(self, interaction: discord.Interaction, user: Union[discord.User, discord.Member]):
+        await userinfo_command(interaction, user)
+
+    @app_commands.command(name=app_commands.locale_str("server"), description="顯示目前所在伺服器資訊")
+    @app_commands.allowed_installs(guilds=True, users=False)
+    @app_commands.allowed_contexts(guilds=True, dms=False, private_channels=False)
+    async def server_info(self, interaction: discord.Interaction):
+        await serverinfo_command(interaction)
+
+    @app_commands.command(name=app_commands.locale_str("avatar"), description="取得用戶頭像")
+    @app_commands.describe(user="要查詢的用戶")
+    async def avatar_info(self, interaction: discord.Interaction, user: Union[discord.User, discord.Member] = None):
+        await avatar_command(interaction, user)
+
+    @app_commands.command(name=app_commands.locale_str("banner"), description="取得用戶橫幅")
+    @app_commands.describe(user="要查詢的用戶")
+    async def banner_info(self, interaction: discord.Interaction, user: Union[discord.User, discord.Member] = None):
+        await banner_command(interaction, user)
+
+    @app_commands.command(name=app_commands.locale_str("mention"), description="取得指令的提及格式")
+    @app_commands.describe(command="指令名稱", subcommand="子指令名稱（可選）")
+    @app_commands.autocomplete(command=command_autocomplete, subcommand=subcommand_autocomplete)
+    async def mention_info(self, interaction: discord.Interaction, command: str, subcommand: str = None):
+        await get_cmd_mention(interaction, command, subcommand)
+
+    @app_commands.command(name=app_commands.locale_str("commits"), description="顯示機器人的 git 提交記錄")
+    async def commits_info(self, interaction: discord.Interaction):
+        await changelogs_command(interaction)
+
+    @app_commands.command(name=app_commands.locale_str("changelog"), description="顯示機器人更新日誌")
+    async def changelog_info(self, interaction: discord.Interaction):
+        await changelog_command(interaction)
+
+    @app_commands.command(name=app_commands.locale_str("ping"), description="檢查機器人延遲")
+    async def ping_info(self, interaction: discord.Interaction):
+        await ping_command(interaction)
+
+    @app_commands.command(name=app_commands.locale_str("help"), description="顯示指令幫助與說明")
+    @app_commands.describe(command="要查詢的指令名稱")
+    @app_commands.autocomplete(command=help_command_autocomplete)
+    async def help_info(self, interaction: discord.Interaction, command: str = None):
+        await help_slash_command(interaction, command)
+
+    @app_commands.command(name=app_commands.locale_str("tutorial"), description="機器人使用教學")
+    async def tutorial_info(self, interaction: discord.Interaction):
+        await tutorial_command(interaction)
+
+
 class HelpPageView(discord.ui.View):
     def __init__(self, pages: list[discord.Embed], interaction: discord.Interaction):
         super().__init__(timeout=120)
@@ -1463,15 +1424,10 @@ class HelpPageView(discord.ui.View):
         await interaction.response.edit_message(embed=self.pages[self.current_page], view=self)
 
 
-@bot.tree.command(name=app_commands.locale_str("help"), description="顯示指令幫助與說明")
-@app_commands.describe(command="要查詢的指令名稱")
-@app_commands.allowed_installs(guilds=True, users=True)
-@app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
-@app_commands.autocomplete(command=help_command_autocomplete)
 async def help_slash_command(interaction: discord.Interaction, command: str = None):
     await interaction.response.defer()
     if command is None:
-        help_mention = await get_command_mention('help')
+        help_mention = await get_command_display("info", "help")
         
         # 收集斜線指令
         app_cmds = []
@@ -1741,15 +1697,16 @@ async def build_tutorial_pages(guild: discord.Guild = None) -> list[dict]:
     # 批次取得所有需要的指令提及
     cmd = {}
     cmd_names = [
-        "ping", "info", "changelog", "git-commits", "stats",
-        "userinfo", "serverinfo", "avatar", "banner",
+        "stats",
         "randomnumber", "randomuser", "textlength", "httpcat",
-        "nitro", "petpet", "explore", "feedback", "help", "tutorial",
+        "nitro", "petpet", "explore", "feedback",
         "dsize", "dsize-leaderboard", "dsize-battle", "dsize-feedgrass", "dsize-stats",
         "ai", "ai-clear", "ai-history", "ban", "unban", "kick", "timeout", "untimeout", "multi-moderate",
     ]
     # 群組指令：(group_name, subcommand_name)
     subcmd_names = [
+        ("info", "bot"), ("info", "help"), ("info", "tutorial"), ("info", "ping"), ("info", "changelog"),
+        ("info", "commits"), ("info", "user"), ("info", "server"), ("info", "avatar"), ("info", "banner"),
         ("automod", "view"), ("automod", "toggle"), ("automod", "settings"),
         ("autopublish", "settings"),
         ("autoreply", "add"), ("autoreply", "remove"), ("autoreply", "list"),
@@ -1787,7 +1744,7 @@ async def build_tutorial_pages(guild: discord.Guild = None) -> list[dict]:
                 "**指令類型：**\n"
                 "• **斜線指令** — 輸入 `/` 後從選單選取\n"
                 f"• **文字指令** — 在聊天中輸入前綴（目前為 `{prefix}`）加上指令名稱\n\n"
-                f"**小提示：** 使用 {cmd['help']} 或 `{prefix}help` 可以隨時查看所有指令清單。"
+                f"**小提示：** 使用 {cmd['info help']} 或 `{prefix}help` 可以隨時查看所有指令清單。"
             ),
             "color": 0x5865F2,
         },
@@ -1795,10 +1752,10 @@ async def build_tutorial_pages(guild: discord.Guild = None) -> list[dict]:
             "title": "📊 基本資訊指令",
             "description": (
                 "這些指令讓你快速取得機器人與伺服器的相關資訊。\n\n"
-                f"🏓 {cmd['ping']} — 檢查機器人延遲（Websocket & REST API）\n"
-                f"ℹ️ {cmd['info']} — 顯示機器人版本、伺服器數量、運行時間等詳細資訊\n"
-                f"📋 {cmd['changelog']} — 查看機器人的更新日誌\n"
-                f"📝 {cmd['git-commits']} — 顯示最近的 Git 提交記錄\n"
+                f"🏓 {cmd['info ping']} — 檢查機器人延遲（Websocket & REST API）\n"
+                f"ℹ️ {cmd['info bot']} — 顯示機器人版本、伺服器數量、運行時間等詳細資訊\n"
+                f"📋 {cmd['info changelog']} — 查看機器人的更新日誌\n"
+                f"📝 {cmd['info commits']} — 顯示最近的 Git 提交記錄\n"
                 f"📈 {cmd['stats']} — 查看指令使用統計\n"
             ),
             "color": 0x3498DB,
@@ -1807,10 +1764,10 @@ async def build_tutorial_pages(guild: discord.Guild = None) -> list[dict]:
             "title": "🔍 查詢指令",
             "description": (
                 "查詢用戶、伺服器與其他實用資訊。\n\n"
-                f"👤 {cmd['userinfo']} `<用戶>` — 查詢用戶的 ID、創建時間、加入時間等\n"
-                f"🏠 {cmd['serverinfo']} — 查詢目前伺服器的詳細資訊\n"
-                f"🖼️ {cmd['avatar']} `[用戶]` — 取得用戶的頭像圖片\n"
-                f"🎨 {cmd['banner']} `[用戶]` — 取得用戶的橫幅圖片\n"
+                f"👤 {cmd['info user']} `<用戶>` — 查詢用戶的 ID、創建時間、加入時間等\n"
+                f"🏠 {cmd['info server']} — 查詢目前伺服器的詳細資訊\n"
+                f"🖼️ {cmd['info avatar']} `[用戶]` — 取得用戶的頭像圖片\n"
+                f"🎨 {cmd['info banner']} `[用戶]` — 取得用戶的橫幅圖片\n"
                 f"🎲 {cmd['randomnumber']} `[min] [max]` — 生成一個隨機數字\n"
                 f"👥 {cmd['randomuser']} — 從頻道的發言者中隨機選一人\n"
                 f"📏 {cmd['textlength']} `<文字>` — 計算文字長度\n"
@@ -1934,9 +1891,9 @@ async def build_tutorial_pages(guild: discord.Guild = None) -> list[dict]:
             "description": (
                 "恭喜你完成了機器人的使用教學！🎉\n\n"
                 "**快速回顧：**\n"
-                f"• 使用 {cmd['help']} 查看所有指令\n"
-                f"• 使用 {cmd['help']} `<指令>` 查看特定指令的詳細說明\n"
-                f"• 使用 {cmd['info']} 查看機器人資訊\n"
+                f"• 使用 {cmd['info help']} 查看所有指令\n"
+                f"• 使用 {cmd['info help']} `<指令>` 查看特定指令的詳細說明\n"
+                f"• 使用 {cmd['info bot']} 查看機器人資訊\n"
                 f"• 使用 {cmd['feedback']} 向開發者回饋意見\n\n"
                 "**相關連結：**\n"
                 f"如有任何問題，歡迎加入[支援伺服器]({config('support_server_invite')})尋求協助！\n\n"
@@ -2016,9 +1973,6 @@ class TutorialView(discord.ui.View):
         await interaction.response.edit_message(embed=self.get_embed(), view=self)
 
 
-@bot.tree.command(name=app_commands.locale_str("tutorial"), description="機器人使用教學")
-@app_commands.allowed_installs(guilds=True, users=True)
-@app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
 async def tutorial_command(interaction: discord.Interaction):
     await interaction.response.defer(ephemeral=True)
     pages = await build_tutorial_pages(guild=interaction.guild)
@@ -2037,20 +1991,20 @@ async def tutorial(ctx: commands.Context):
     prefix = get_prefix(ctx.guild)
 
     # 取得常用指令提及
-    cmd_help = await get_command_mention("help") or "`/help`"
-    cmd_info = await get_command_mention("info") or "`/info`"
-    cmd_ping = await get_command_mention("ping") or "`/ping`"
-    cmd_changelog = await get_command_mention("changelog") or "`/changelog`"
+    cmd_help = await get_command_display("info", "help")
+    cmd_info = await get_command_display("info", "bot")
+    cmd_ping = await get_command_display("info", "ping")
+    cmd_changelog = await get_command_display("info", "changelog")
     cmd_stats = await get_command_mention("stats") or "`/stats`"
     cmd_feedback = await get_command_mention("feedback") or "`/feedback`"
-    cmd_tutorial = await get_command_mention("tutorial") or "`/tutorial`"
+    cmd_tutorial = await get_command_display("info", "tutorial")
 
     embed = discord.Embed(
         title="📖 機器人使用教學",
         description=(
             "歡迎使用本機器人！以下是主要功能分類：\n\n"
             f"📊 **基本資訊** — {cmd_ping}, {cmd_info}, {cmd_changelog}, {cmd_stats}\n"
-            "🔍 **查詢功能** — `/userinfo`, `/serverinfo`, `/avatar`, `/banner`\n"
+            "🔍 **查詢功能** — `/info user`, `/info server`, `/info avatar`, `/info banner`\n"
             "🛡️ **管理工具** — `/ban/kick/timeout` 等\n"
             "🤖 **自動管理** — `/automod`, `/autopublish`\n"
             "💬 **自動回覆** — `/autoreply add/remove/list`\n"
@@ -2067,6 +2021,9 @@ async def tutorial(ctx: commands.Context):
     embed.set_thumbnail(url=ctx.bot.user.avatar.url if ctx.bot.user.avatar else None)
     embed.set_footer(text="by AvianJay")
     await ctx.send(embed=await apply_ui_embed_emojis(embed))
+
+
+asyncio.run(bot.add_cog(InfoCommands(bot)))
 
 
 if __name__ == "__main__":
