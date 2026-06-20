@@ -260,7 +260,7 @@ _DISCORD_INVITE_CODE_RE = re.compile(r"^[A-Za-z0-9-]+$")
 
 def _default_explore_server_config() -> dict:
     return {
-        "enabled": False,
+        "enabled": True,
         "is_public": False,
         "map_type": 1,
         "require_join": False,
