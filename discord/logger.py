@@ -572,6 +572,7 @@ class LoggerCog(commands.Cog):
         # 清理舊日誌檔案
         cleanup_old_logs(days=7)
         self.error_user_cache = ExpiringDict(ttl=60)  # 用於記錄已經提示過錯誤的用戶，避免重複提示
+        self.dm_message_log_cache = ExpiringDict(ttl=30)  # 用於避免短時間內重複記錄相同私訊
 
     @app_commands.default_permissions(manage_guild=True, manage_webhooks=True)
     @app_commands.allowed_installs(guilds=True, users=False)
@@ -590,7 +591,22 @@ class LoggerCog(commands.Cog):
             return
         # only log dm messages
         if isinstance(message.channel, discord.DMChannel):
-            log(f"收到了私訊 {message.author}: {message.content}", module_name="Logger", level=logging.INFO, user=message.author)
+            # get channel recipient (the other user in the DM)
+            recipient = message.channel.recipients[0] if message.channel.recipients else None
+            content = message.content or ""
+            if message.attachments:
+                content += " [附件: " + ", ".join(attachment.filename for attachment in message.attachments) + "]"
+            if message.embeds:
+                content += " [嵌入內容]"
+            if message.stickers:
+                content += " [貼圖]"
+            if message.components:
+                content += " [互動元件]"
+            message_cache_key = (message.channel.id, content)
+            if message_cache_key in self.dm_message_log_cache:
+                return
+            self.dm_message_log_cache[message_cache_key] = True
+            log(f"收到了私訊 {message.author}: {content}", module_name="Logger", level=logging.INFO, user=recipient)
         # else:
         #     await log(f"收到了訊息 {message.author}: {message.content}", module_name="Logger", level=logging.INFO, user=message.author, guild=message.guild)
 
