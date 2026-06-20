@@ -18,6 +18,7 @@ import threading
 import urllib.parse
 from logger import log
 import logging
+import re
 
 import socketio as socketio_asgi
 
@@ -169,7 +170,24 @@ def _fetch_discord_user_guild_ids(discord_token: str) -> set[str]:
         return set()
 
 
-def _issue_explore_auth_token(user_id: int, username: str, guild_ids: set[str]) -> str:
+def _fetch_discord_user_guild_ids_result(discord_token: str) -> tuple[bool, set[str]]:
+    header_value = discord_token.strip()
+    if not (header_value.lower().startswith('bearer ') or header_value.lower().startswith('bot ')):
+        header_value = f"Bearer {header_value}"
+    try:
+        r = requests.get(
+            "https://discord.com/api/users/@me/guilds",
+            headers={"Authorization": header_value},
+            timeout=10,
+        )
+        if r.status_code != 200:
+            return False, set()
+        return True, {str(g.get('id')) for g in r.json() if g.get('id') is not None}
+    except Exception:
+        return False, set()
+
+
+def _issue_explore_auth_token(user_id: int, username: str, guild_ids: set[str], discord_token: str | None = None) -> str:
     token = secrets.token_urlsafe(32)
     now = time.time()
     with _auth_lock:
@@ -177,6 +195,7 @@ def _issue_explore_auth_token(user_id: int, username: str, guild_ids: set[str]) 
             'user_id': int(user_id),
             'username': username,
             'guild_ids': set(guild_ids),
+            'discord_token': str(discord_token).strip() if discord_token else None,
             'issued_at': now,
             'expires_at': now + AUTH_TOKEN_TTL_SECONDS,
         }
@@ -236,45 +255,262 @@ async def _set_socket_music_room(sid: str, guild_id: int | str | None) -> None:
 
 # --- Helper Functions ---
 
+_DISCORD_INVITE_CODE_RE = re.compile(r"^[A-Za-z0-9-]+$")
+
+
+def _default_explore_server_config() -> dict:
+    return {
+        "enabled": False,
+        "is_public": False,
+        "map_type": 1,
+        "require_join": False,
+        "invite_link": None,
+    }
+
+
+def _normalize_explore_server_config(value) -> dict:
+    config_value = _default_explore_server_config()
+    if isinstance(value, dict):
+        config_value.update(value)
+    config_value["enabled"] = bool(config_value.get("enabled"))
+    config_value["is_public"] = bool(config_value.get("is_public"))
+    config_value["require_join"] = bool(config_value.get("require_join"))
+    invite_link = str(config_value.get("invite_link") or "").strip()
+    config_value["invite_link"] = invite_link or None
+    return config_value
+
+
+def _save_explore_server_config(guild_id: int, guild_config: dict) -> dict:
+    normalized = _normalize_explore_server_config(guild_config)
+    set_server_config(guild_id, "explore_config", normalized)
+    return normalized
+
+
+def _update_explore_server_config(guild_id: int, **changes) -> dict:
+    guild_config = get_explore_server(guild_id)
+    guild_config.update(changes)
+    return _save_explore_server_config(guild_id, guild_config)
+
+
+def _normalize_discord_invite_url(value: str | None) -> str | None:
+    raw_value = str(value or "").strip()
+    if not raw_value:
+        return None
+    if "://" not in raw_value:
+        raw_value = f"https://{raw_value.lstrip('/')}"
+    try:
+        parsed = urllib.parse.urlparse(raw_value)
+    except Exception:
+        return None
+
+    host = (parsed.netloc or "").lower()
+    path_parts = [segment for segment in (parsed.path or "").split("/") if segment]
+    invite_code = None
+
+    if host in {"discord.gg", "www.discord.gg"} and path_parts:
+        invite_code = path_parts[0]
+    elif host in {"discord.com", "www.discord.com", "discordapp.com", "www.discordapp.com"}:
+        if len(path_parts) >= 2 and path_parts[0].lower() == "invite":
+            invite_code = path_parts[1]
+
+    if not invite_code or not _DISCORD_INVITE_CODE_RE.fullmatch(invite_code):
+        return None
+    return f"https://discord.gg/{invite_code}"
+
+
+def _get_explore_bot_member(guild: discord.Guild) -> discord.Member | None:
+    member = getattr(guild, "me", None)
+    if member is not None:
+        return member
+    if bot.user is None:
+        return None
+    return guild.get_member(bot.user.id)
+
+
+def _find_explore_invite_channel(guild: discord.Guild) -> discord.abc.GuildChannel | None:
+    bot_member = _get_explore_bot_member(guild)
+    if bot_member is None:
+        return None
+    for channel in guild.text_channels:
+        try:
+            permissions = channel.permissions_for(bot_member)
+        except Exception:
+            continue
+        if permissions.view_channel and permissions.create_instant_invite:
+            return channel
+    return None
+
+
+async def _create_explore_invite_link(guild: discord.Guild) -> str | None:
+    channel = _find_explore_invite_channel(guild)
+    if channel is None:
+        return None
+    try:
+        invite = await channel.create_invite(
+            max_age=0,
+            max_uses=0,
+            unique=False,
+            reason="Enable Explore require-join",
+        )
+    except (discord.Forbidden, discord.HTTPException):
+        return None
+    return getattr(invite, "url", None)
+
+
+async def _validate_explore_invite_link(
+    guild: discord.Guild,
+    invite_link: str | None,
+) -> tuple[str | None, str | None]:
+    normalized = _normalize_discord_invite_url(invite_link)
+    if not normalized:
+        return None, "邀請連結格式無效，請提供 Discord 邀請連結。"
+    try:
+        invite = await bot.fetch_invite(normalized)
+    except discord.NotFound:
+        return None, "找不到這個邀請連結，請確認它仍然有效。"
+    except discord.HTTPException:
+        return None, "目前無法驗證這個邀請連結，請稍後再試。"
+
+    invite_guild = getattr(invite, "guild", None)
+    if invite_guild is None or invite_guild.id != guild.id:
+        return None, "這個邀請連結不屬於目前的伺服器。"
+
+    resolved_url = getattr(invite, "url", None) or normalized
+    return resolved_url, None
+
+
+async def _resolve_explore_require_join_invite_link(
+    guild: discord.Guild,
+    invite_link: str | None,
+    fallback_invite_link: str | None = None,
+) -> tuple[str | None, str | None, bool]:
+    candidate_link = str(invite_link or "").strip() or fallback_invite_link
+    if candidate_link:
+        resolved_link, error_message = await _validate_explore_invite_link(guild, candidate_link)
+        if resolved_link:
+            return resolved_link, None, False
+        if invite_link:
+            return None, error_message, False
+
+    created_link = await _create_explore_invite_link(guild)
+    if created_link:
+        return created_link, None, True
+    return None, "我沒有權限自動建立永久邀請連結，請先提供 `invite_link` 或給我建立邀請的權限。", False
+
+
+def _is_explore_server_member(guild_id: int | str, guild_ids: set[str]) -> bool:
+    return str(guild_id) in {str(x) for x in (guild_ids or set())}
+
+
+def _can_access_explore_server(server: dict, guild_id: int | str, guild_ids: set[str]) -> bool:
+    if not server or not server.get("enabled"):
+        return False
+    if _is_explore_server_member(guild_id, guild_ids):
+        return True
+    if not server.get("is_public"):
+        return False
+    return not server.get("require_join")
+
+
+def _refresh_explore_auth_guild_ids(auth_token: str | None) -> set[str] | None:
+    if not auth_token:
+        return None
+    with _auth_lock:
+        entry = auth_tokens.get(auth_token)
+        if not entry:
+            return None
+        existing_guild_ids = set(entry.get("guild_ids") or [])
+        discord_token = entry.get("discord_token")
+
+    if not discord_token:
+        return existing_guild_ids
+
+    ok, guild_ids = _fetch_discord_user_guild_ids_result(str(discord_token))
+    if not ok:
+        return existing_guild_ids
+
+    with _auth_lock:
+        current_entry = auth_tokens.get(auth_token)
+        if current_entry:
+            current_entry["guild_ids"] = set(guild_ids)
+    return set(guild_ids)
+
+
+def _get_request_explore_guild_ids(refresh: bool = False) -> set[str]:
+    guild_ids = set(g.explore_user.get("guild_ids") or [])
+    if refresh:
+        refreshed = _refresh_explore_auth_guild_ids(getattr(g, "explore_auth_token", None))
+        if refreshed is not None:
+            guild_ids = set(refreshed)
+            g.explore_user["guild_ids"] = set(guild_ids)
+
+    if not guild_ids:
+        uid = int(g.explore_user["user_id"])
+        for guild in bot.guilds:
+            try:
+                if guild.get_member(uid):
+                    guild_ids.add(str(guild.id))
+            except Exception:
+                pass
+        g.explore_user["guild_ids"] = set(guild_ids)
+    return guild_ids
+
+
+def _refresh_socket_session_guild_ids(sid: str) -> set[str]:
+    with _session_lock:
+        sess = socket_sessions.get(sid)
+        if not sess:
+            return set()
+        auth_token = sess.get("auth_token")
+        existing = {str(x) for x in (sess.get("guild_ids") or [])}
+
+    refreshed = _refresh_explore_auth_guild_ids(auth_token)
+    if refreshed is None:
+        return existing
+
+    refreshed_list = sorted(str(x) for x in refreshed)
+    with _session_lock:
+        sess = socket_sessions.get(sid)
+        if sess is not None:
+            sess["guild_ids"] = refreshed_list
+    return set(refreshed_list)
+
+
+def _build_explore_server_payload(guild: discord.Guild, server: dict, viewer_guild_ids: set[str]) -> dict:
+    gid = str(guild.id)
+    is_member = _is_explore_server_member(gid, viewer_guild_ids)
+    with _presence_lock:
+        in_space = len(space_presence.get(gid, set()))
+    return {
+        "id": gid,
+        "name": guild.name,
+        "icon_url": "/api/explore/icon/guild/" + gid if guild.icon else None,
+        "member_count": int(getattr(guild, "member_count", 0) or 0),
+        "in_space_count": in_space,
+        "is_public": bool(server.get("is_public")),
+        "require_join": bool(server.get("require_join")),
+        "invite_link": server.get("invite_link"),
+        "is_member": is_member,
+        "can_enter": _can_access_explore_server(server, gid, viewer_guild_ids),
+    }
+
+
 def get_explore_server(guild_id: int):
-    return get_server_config(
-        guild_id,
-        "explore_config",
-        {
-            "enabled": False,
-            "is_public": False,
-            "map_type": 1,
-            "require_join": False,
-        }
+    return _normalize_explore_server_config(
+        get_server_config(
+            guild_id,
+            "explore_config",
+            _default_explore_server_config(),
+        )
     )
+
 
 def toggle_explore_server(guild_id: int, enabled: bool):
-    guild_config = get_server_config(
-        guild_id,
-        "explore_config",
-        {
-            "enabled": False,
-            "is_public": False,
-            "map_type": 1,
-            "require_join": False,
-        }
-    )
-    guild_config['enabled'] = enabled
-    set_server_config(guild_id, "explore_config", guild_config)
+    _update_explore_server_config(guild_id, enabled=enabled)
+
 
 def set_explore_privacy(guild_id: int, is_public: bool):
-    guild_config = get_server_config(
-        guild_id,
-        "explore_config",
-        {
-            "enabled": False,
-            "is_public": False,
-            "map_type": 1,
-            "require_join": False,
-        }
-    )
-    guild_config['is_public'] = is_public
-    set_server_config(guild_id, "explore_config", guild_config)
+    _update_explore_server_config(guild_id, is_public=is_public)
 
 
 def get_user_skin(user_id: int):
@@ -634,7 +870,12 @@ def explore_auth_discord_token():
     username = d_user.get('username') or d_user.get('global_name') or str(user_id)
     guild_ids = _fetch_discord_user_guild_ids(str(discord_token))
 
-    auth_token = _issue_explore_auth_token(user_id=user_id, username=username, guild_ids=guild_ids)
+    auth_token = _issue_explore_auth_token(
+        user_id=user_id,
+        username=username,
+        guild_ids=guild_ids,
+        discord_token=str(discord_token),
+    )
     return jsonify({
         'auth_token': auth_token,
         'expires_in': AUTH_TOKEN_TTL_SECONDS,
@@ -645,43 +886,22 @@ def explore_auth_discord_token():
 @_require_explore_auth
 def explore_get_accessible_servers():
     """List accessible servers with icon url + name + member count + in-space count."""
-    guild_ids: set[str] = set(g.explore_user.get('guild_ids') or [])
-
-    # Get all enabled explore servers
-    enabled: set[str] = set()
+    guild_ids = _get_request_explore_guild_ids(refresh=True)
+    result = []
     for gid in get_all_server_config_key("explore_config"):
         server = get_explore_server(int(gid))
-        if server and server.get('enabled'):
-            enabled.add(str(gid))
-
-
-    # If we have no guild list (missing scope), fall back to mutual guilds via cache.
-    if not guild_ids:
-        uid = int(g.explore_user['user_id'])
-        for guild in bot.guilds:
-            try:
-                if guild.get_member(uid):
-                    guild_ids.add(str(guild.id))
-            except Exception:
-                pass
-
-    result = []
-    for gid in sorted(guild_ids):
-        if gid not in enabled:
+        if not server or not server.get("enabled"):
             continue
         guild = bot.get_guild(int(gid))
         if not guild:
             continue
-        with _presence_lock:
-            in_space = len(space_presence.get(gid, set()))
-        result.append({
-            'id': gid,
-            'name': guild.name,
-            'icon_url': "/api/explore/icon/guild/" + gid if guild.icon else None,
-            'member_count': int(getattr(guild, 'member_count', 0) or 0),
-            'in_space_count': in_space,
-        })
+        gid_str = str(gid)
+        is_member = _is_explore_server_member(gid_str, guild_ids)
+        if not is_member and not server.get("is_public"):
+            continue
+        result.append(_build_explore_server_payload(guild, server, guild_ids))
 
+    result.sort(key=lambda entry: (not entry.get("is_member", False), entry.get("name", "").lower(), entry["id"]))
     return jsonify(result)
 
 
@@ -694,25 +914,15 @@ def explore_get_server_info(guild_id: str):
     if not server or not server.get('enabled'):
         return jsonify({'error': 'Server not enabled'}), 404
 
-    # Access control: must be in the verified guild list if provided
-    allowed: set[str] = set(g.explore_user.get('guild_ids') or [])
-    if allowed and gid not in allowed:
+    guild_ids = _get_request_explore_guild_ids(refresh=True)
+    if not _can_access_explore_server(server, gid, guild_ids):
         return jsonify({'error': 'Forbidden'}), 403
 
     guild = bot.get_guild(int(gid))
     if not guild:
         return jsonify({'error': 'Guild not found'}), 404
 
-    with _presence_lock:
-        in_space = len(space_presence.get(gid, set()))
-
-    return jsonify({
-        'id': gid,
-        'name': guild.name,
-        'icon_url': "/api/explore/icon/guild/" + gid if guild.icon else None,
-        'member_count': int(getattr(guild, 'member_count', 0) or 0),
-        'in_space_count': in_space,
-    })
+    return jsonify(_build_explore_server_payload(guild, server, guild_ids))
 
 
 @app.route('/api/explore/space/<guild_id>', methods=['GET'])
@@ -725,9 +935,8 @@ def explore_get_space_data(guild_id: str):
         if not server or not server.get('enabled'):
             return jsonify({'error': 'Server not enabled'}), 404
 
-    # Access control: must be in the verified guild list if provided
-    allowed: set[str] = set(g.explore_user.get('guild_ids') or [])
-    if allowed and gid not in allowed:
+    guild_ids = _get_request_explore_guild_ids(refresh=True)
+    if gid != 'world' and not _can_access_explore_server(server, gid, guild_ids):
         return jsonify({'error': 'Forbidden'}), 403
 
     tiles = get_space_tiles(0 if gid == 'world' else int(gid))
@@ -1094,9 +1303,20 @@ async def on_join(sid, data=None):
             await sio.emit("error", {"message": "Server not enabled"}, to=sid)
             return
 
-        allowed = {str(x) for x in (sess.get("guild_ids") or [])}
-        if str(guild_id) not in allowed:
-            await sio.emit("error", {"message": "Membership required"}, to=sid)
+        allowed = _refresh_socket_session_guild_ids(sid)
+        if str(guild_id) not in allowed and server.get("require_join"):
+            await sio.emit(
+                "error",
+                {
+                    "message": "Membership required",
+                    "guild_id": guild_id,
+                    "invite_link": server.get("invite_link"),
+                },
+                to=sid,
+            )
+            return
+        if str(guild_id) not in allowed and not server.get("is_public"):
+            await sio.emit("error", {"message": "Forbidden", "guild_id": guild_id}, to=sid)
             return
 
     uid = sess["user_id"]
@@ -1445,6 +1665,44 @@ class ExplorerCommands(commands.GroupCog, name="explore-settings"):
         set_explore_privacy(interaction.guild.id, bool(public))
         status = "公開" if public else "私人"
         await interaction.response.send_message(f"已將本伺服器設定為{status}（在探索大廳{'可見' if public else '不可見'}）。")
+
+    @app_commands.command(name="require-join", description="設定是否必須先加入伺服器才能進入 Explore")
+    async def require_join(
+        self,
+        interaction: discord.Interaction,
+        enabled: bool,
+        invite_link: str | None = None,
+    ):
+        if interaction.guild is None:
+            await interaction.response.send_message("這個指令只能在伺服器內使用。", ephemeral=True)
+            return
+
+        guild = interaction.guild
+        current_config = get_explore_server(guild.id)
+
+        if not enabled:
+            _update_explore_server_config(guild.id, require_join=False)
+            await interaction.response.send_message("已關閉必須先加入伺服器才能進入 Explore 的限制。")
+            return
+
+        resolved_link, error_message, created_link = await _resolve_explore_require_join_invite_link(
+            guild,
+            invite_link,
+            fallback_invite_link=current_config.get("invite_link"),
+        )
+        if not resolved_link:
+            await interaction.response.send_message(error_message or "無法設定加入限制。", ephemeral=True)
+            return
+
+        _update_explore_server_config(
+            guild.id,
+            require_join=True,
+            invite_link=resolved_link,
+        )
+        source_text = "已自動建立永久邀請連結" if created_link else "已使用提供的邀請連結"
+        await interaction.response.send_message(
+            f"已啟用先加入伺服器才能進入 Explore。{source_text}：{resolved_link}"
+        )
 
 init_db()
 
