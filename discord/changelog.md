@@ -1,5 +1,44 @@
 # 更新日誌
 
+## 0.21.0
+### 更新內容如下：
+* 更新資訊指令 | /info
+  * 將原本分散的 `/help`、`/info`、`/ping`、`/serverinfo`、`/changelog`、`/git-commits`、`/tutorial` 等資訊類 Slash 指令整併為 `/info` 群組。
+  * 新增 `/info user`、`/info avatar`、`/info banner`、`/info mention`，查詢使用者資訊更集中。
+  * 使用說明與文件同步改為 `/info help`、`/info tutorial` 等新路徑。
+* 更新 Owner 管理工具
+  * 新增 `restart` / `res` / `reboot` 指令：可在重啟前自動執行 `git pull`、顯示進度，並在偵測到新設定欄位時直接互動式補齊。
+  * 新增 `restart_command` 設定，方便重啟後自動重新啟動機器人。
+* 更新 Explore
+  * 新增 `/explore-settings require-join`，可設定使用者是否必須先加入伺服器才能進入 Explore，並支援自動建立或驗證邀請連結。
+  * Explore 現在會依據公開狀態、加入限制與實際共同伺服器狀態正確顯示可進入的伺服器。
+  * Explore 活動內新增音樂狀態讀取與控制支援，可在相同語音頻道中同步查看與操作播放狀態。
+* 更新 AI | /ai
+  * 對話歷史容量提升，超長歷史會自動摘要壓縮，降低長對話中斷的情況。
+  * 新增 `/ai-set-response-view`，可切換 AI 回覆是否使用 Container 容器顯示。
+  * 長篇回覆現在會在超過限制時自動改用文字附件傳送，避免訊息長度溢出。
+  * 改進回覆分段與版面，並新增搜尋訊息工具與更大的搜尋上限。
+  * 調整 Allowed Mentions，避免 AI 回覆意外提及使用者。
+* 更新自動回覆 | /autoreply
+  * 新增內建範本包：歡迎語包與加成者回覆包，可快速建立 `type:join`、`type:boost` 回覆。
+* 更新統計與迷你遊戲
+  * 統計指令改為 `/stats` 群組，並新增 `/stats petpet-stats` 查看 PetPet 使用統計。
+  * 將 Doomcord 整併進迷你遊戲，新增 `/games doom`。
+* 更新投稿審核
+  * `feedgrass`、`what-is-this-guy-talking-about`、`dynamic-voice-audio` 投稿現在有新的審核按鈕介面。
+  * 通過投稿後可自動儲存素材、重新載入資源，並發放一次性的全域獎勵。
+* 更新 DCTW
+  * 調整為相容新版 DCTW API 欄位與資料格式，修正瀏覽、詳細資訊、留言與連結按鈕顯示。
+  * `/dctw key help` 說明改為新的官網後台取 key 流程。
+* 更新被盜帳號偵測 | /imhacked
+  * 放寬可疑訊息偵測條件，現在除了四張圖片外，也能偵測兩張圖片的可疑洗版訊息。
+  * 原始事件偵測時間窗延長，提高攔截成功率。
+* 修復伺服器驗證與其他問題
+  * 修復 `ServerWebVerify` 在其他 bot 自動加身分組時，可能重複私訊要求驗證的問題。
+  * 修復申訴流程中未被封禁或禁言的使用者仍可送出申訴的問題。
+  * 減少重複私訊內容被反覆記錄的情況。
+* 修復一些 Bug。
+
 ## 0.20.8
 ### 更新內容如下：
 * 更新 AI | /ai
