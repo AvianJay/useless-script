@@ -248,14 +248,42 @@ def create_progress_message(header: str, tasks: list, tick: int, *extra_lines: s
     return "```ansi\n" + "\n".join(sections) + "\n```"
 
 
+def evaluate_static_ast_node(node: ast.AST, context: dict):
+    if isinstance(node, ast.Constant):
+        return node.value
+    if isinstance(node, ast.Name):
+        if node.id in context:
+            return context[node.id]
+        raise ValueError(f"Unknown name: {node.id}")
+    if isinstance(node, ast.List):
+        return [evaluate_static_ast_node(element, context) for element in node.elts]
+    if isinstance(node, ast.Tuple):
+        return tuple(evaluate_static_ast_node(element, context) for element in node.elts)
+    if isinstance(node, ast.Set):
+        return {evaluate_static_ast_node(element, context) for element in node.elts}
+    if isinstance(node, ast.Dict):
+        return {
+            evaluate_static_ast_node(key, context): evaluate_static_ast_node(value, context)
+            for key, value in zip(node.keys, node.values)
+        }
+    if isinstance(node, ast.UnaryOp) and isinstance(node.op, (ast.UAdd, ast.USub)):
+        value = evaluate_static_ast_node(node.operand, context)
+        return +value if isinstance(node.op, ast.UAdd) else -value
+    raise ValueError(f"Unsupported AST node: {type(node).__name__}")
+
+
 def load_literal_from_module(module_path: Path, variable_name: str):
     module_ast = ast.parse(module_path.read_text(encoding="utf-8"), filename=str(module_path))
+    context = {}
     for node in module_ast.body:
         if not isinstance(node, ast.Assign):
             continue
+        value = evaluate_static_ast_node(node.value, context)
         for target in node.targets:
-            if isinstance(target, ast.Name) and target.id == variable_name:
-                return ast.literal_eval(node.value)
+            if isinstance(target, ast.Name):
+                context[target.id] = value
+                if target.id == variable_name:
+                    return value
     raise ValueError(f"{variable_name} not found in {module_path.name}")
 
 
