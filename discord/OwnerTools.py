@@ -1,23 +1,29 @@
+import ast
 import io
 import json
+import subprocess
 import discord
 import globalenv
 from globalenv import bot, start_bot, get_user_data, set_user_data, config, get_server_config, set_server_config, _config, default_config, get_all_user_data, db, on_close_tasks, reload_config
 from discord.ext import commands
-from typing import Callable
+from typing import Callable, Union
 import chat_exporter
 from logger import log
 import logging
-from typing import Union
 import time
 import asyncio
 from pathlib import Path
+import UtilCommands
+import sys
 
 
 APP_EMOJI_ASSET_DIR = Path(__file__).resolve().parent / "assets" / "app-emojis"
 APP_EMOJI_MANIFEST_PATH = APP_EMOJI_ASSET_DIR / "manifest.json"
 BUTTON_EMOJI_ASSET_DIR = Path(__file__).resolve().parent / "assets" / "button-emojis"
 BUTTON_EMOJI_MANIFEST_PATH = BUTTON_EMOJI_ASSET_DIR / "manifest.json"
+REPO_ROOT = Path(__file__).resolve().parents[1]
+GLOBALENV_SOURCE_PATH = REPO_ROOT / "discord" / "globalenv.py"
+UTIL_COMMANDS_SOURCE_PATH = REPO_ROOT / "discord" / "UtilCommands.py"
 EMOJI_ASSET_SOURCES = [
     ("一般", APP_EMOJI_ASSET_DIR, APP_EMOJI_MANIFEST_PATH),
     ("按鈕", BUTTON_EMOJI_ASSET_DIR, BUTTON_EMOJI_MANIFEST_PATH),
@@ -88,6 +94,52 @@ pending_ani = [
     "\\"
 ]
 
+class ANSIText:
+    def __init__(self):
+        self.clear = "\u001b[0m"
+        self.gray = "\u001b[30m"
+        self.red = "\u001b[31m"
+        self.green = "\u001b[32m"
+        self.yellow = "\u001b[33m"
+        self.blue = "\u001b[34m"
+        self.pink = "\u001b[35m"
+        self.cyan = "\u001b[36m"
+        self.white = "\u001b[37m"
+
+    @classmethod
+    def color_text(cls, text: str, color: str):
+        return f"{color}{text}{cls().clear}"
+
+
+ANSI = ANSIText()
+
+
+def ansi_success(text: str):
+    return ANSIText.color_text(text, ANSI.green)
+
+
+def ansi_error(text: str):
+    return ANSIText.color_text(text, ANSI.red)
+
+
+def ansi_warning(text: str):
+    return ANSIText.color_text(text, ANSI.yellow)
+
+
+def ansi_info(text: str):
+    return ANSIText.color_text(text, ANSI.cyan)
+
+
+def ansi_muted(text: str):
+    return ANSIText.color_text(text, ANSI.white)
+
+
+def ansi_multiline(text: str, color: str):
+    lines = (text or "").splitlines()
+    if not lines:
+        return ANSIText.color_text("(no output)", color)
+    return "\n".join(ANSIText.color_text(line, color) for line in lines)
+
 
 def create_shutdowntask_message(data: list, tick: int):
     texts = []
@@ -101,10 +153,318 @@ def create_shutdowntask_message(data: list, tick: int):
             time_str = f"{task['time']:.2f}s"
         else:
             time_str = ""
-        texts.append(f"[{pr}] {task['name']} {time_str} {task.get('error', '')}")
+        color = ANSIText().green if task.get("status") == "done" else ANSIText().red if task.get("status") == "error" else ANSIText().yellow if task.get("status") == "pending" else ANSIText().gray
+        texts.append(ANSIText.color_text(f"[{pr}] {task['name']} {time_str} {task.get('error', '')}", color))
 
     t = '\n'.join(texts)
-    return f"```\n{t}\n```"
+    return t
+
+
+def truncate_codeblock_text(text: str, limit: int = 1200):
+    safe_text = (text or "").replace("```", "'''").strip()
+    if not safe_text:
+        return "(no output)"
+    if len(safe_text) <= limit:
+        return safe_text
+    return safe_text[:limit - 3].rstrip() + "..."
+
+
+def format_config_value(value):
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    if isinstance(value, (list, dict)):
+        return json.dumps(value, ensure_ascii=False)
+    return str(value)
+
+
+def summarize_config_value(value, limit: int = 220):
+    return truncate_codeblock_text(format_config_value(value), limit)
+
+
+def get_config_value_placeholder(default_value):
+    if isinstance(default_value, bool):
+        return "輸入 true / false"
+    if isinstance(default_value, int) and not isinstance(default_value, bool):
+        return "輸入整數"
+    if isinstance(default_value, float):
+        return "輸入數字"
+    if isinstance(default_value, list):
+        return "輸入 JSON 陣列或逗號分隔清單"
+    if isinstance(default_value, dict):
+        return "輸入 JSON 物件"
+    return "輸入新的設定值"
+
+
+def parse_config_value(raw_value: str, default_value):
+    original_type = type(default_value)
+
+    if original_type is bool:
+        lowered = raw_value.strip().lower()
+        if lowered in ["true", "1", "yes", "on"]:
+            return True
+        if lowered in ["false", "0", "no", "off"]:
+            return False
+        raise ValueError("布林值請輸入 true / false。")
+
+    if original_type is int:
+        try:
+            return int(raw_value)
+        except ValueError as e:
+            raise ValueError(f"無法將值轉成整數：{e}") from e
+
+    if original_type is float:
+        try:
+            return float(raw_value)
+        except ValueError as e:
+            raise ValueError(f"無法將值轉成數字：{e}") from e
+
+    if original_type is list:
+        try:
+            parsed = json.loads(raw_value)
+        except json.JSONDecodeError:
+            return [value.strip() for value in raw_value.split(",") if value.strip()]
+        if not isinstance(parsed, list):
+            raise ValueError("清單值請輸入 JSON 陣列或逗號分隔清單。")
+        return parsed
+
+    if original_type is dict:
+        try:
+            parsed = json.loads(raw_value)
+        except json.JSONDecodeError as e:
+            raise ValueError(f"字典值請輸入 JSON 物件：{e}") from e
+        if not isinstance(parsed, dict):
+            raise ValueError("字典值請輸入 JSON 物件。")
+        return parsed
+
+    return raw_value
+
+
+def create_progress_message(header: str, tasks: list, tick: int, *extra_lines: str):
+    sections = [header.rstrip()]
+    task_text = create_shutdowntask_message(tasks, tick).strip()
+    if task_text:
+        sections.append(task_text)
+    sections.extend(line for line in extra_lines if line)
+    return "```ansi\n" + "\n".join(sections) + "\n```"
+
+
+def load_literal_from_module(module_path: Path, variable_name: str):
+    module_ast = ast.parse(module_path.read_text(encoding="utf-8"), filename=str(module_path))
+    for node in module_ast.body:
+        if not isinstance(node, ast.Assign):
+            continue
+        for target in node.targets:
+            if isinstance(target, ast.Name) and target.id == variable_name:
+                return ast.literal_eval(node.value)
+    raise ValueError(f"{variable_name} not found in {module_path.name}")
+
+
+def run_git_pull():
+    try:
+        result = subprocess.run(
+            ["git", "pull", "--ff-only"],
+            cwd=REPO_ROOT,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            check=False,
+        )
+    except Exception as e:
+        return False, f"git pull failed to start: {e}"
+
+    output_parts = []
+    if result.stdout.strip():
+        output_parts.append(result.stdout.strip())
+    if result.stderr.strip():
+        output_parts.append(result.stderr.strip())
+    if not output_parts:
+        output_parts.append("Already up to date.")
+
+    return result.returncode == 0, "\n".join(output_parts)
+
+
+def read_runtime_config():
+    config_file = Path(globalenv.config_path)
+    config_data = json.loads(config_file.read_text(encoding="utf-8"))
+    if not isinstance(config_data, dict):
+        raise ValueError("config file is not a JSON object")
+    return config_file, config_data
+
+
+def get_missing_config_entries():
+    try:
+        latest_default_config = load_literal_from_module(GLOBALENV_SOURCE_PATH, "default_config")
+        config_file, config_data = read_runtime_config()
+    except Exception as e:
+        return [], None, f"Could not inspect latest config state: {e}"
+
+    missing_entries = []
+    for key, value in latest_default_config.items():
+        if key not in config_data:
+            missing_entries.append({
+                "key": key,
+                "default": value,
+                "type_name": type(value).__name__,
+            })
+
+    latest_config_version = latest_default_config.get("config_version")
+    current_config_version = config_data.get("config_version")
+    should_update_config_version = (
+        isinstance(latest_config_version, int)
+        and (
+            not isinstance(current_config_version, int)
+            or current_config_version < latest_config_version
+        )
+    )
+
+    if not missing_entries and not should_update_config_version:
+        return [], None, None
+
+    return missing_entries, latest_config_version if should_update_config_version else None, None
+
+
+def apply_config_updates(new_values: dict, config_version=None):
+    try:
+        config_file, config_data = read_runtime_config()
+    except Exception as e:
+        return [], f"Could not load config for writing: {e}"
+
+    added_keys = []
+    for key, value in new_values.items():
+        if key not in config_data:
+            added_keys.append(key)
+        config_data[key] = value
+
+    if config_version is not None:
+        config_data["config_version"] = config_version
+
+    if not added_keys and not new_values and config_version is None:
+        return [], None
+
+    try:
+        config_file.write_text(
+            json.dumps(config_data, ensure_ascii=False, indent=4),
+            encoding="utf-8",
+        )
+        reload_config()
+    except Exception as e:
+        return [], f"Could not write config updates: {e}"
+
+    return added_keys, None
+
+
+def get_latest_full_version():
+    try:
+        latest_version = load_literal_from_module(UTIL_COMMANDS_SOURCE_PATH, "version")
+        if not isinstance(latest_version, str):
+            raise ValueError("version is not a string")
+    except Exception:
+        return UtilCommands.full_version
+
+    try:
+        git_commit_hash = subprocess.check_output(
+            ["git", "rev-parse", "--short", "HEAD"],
+            cwd=REPO_ROOT,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+        ).strip()
+    except Exception:
+        git_commit_hash = "unknown"
+
+    return f"{latest_version} ({git_commit_hash})"
+
+
+class RestartConfigValueModal(discord.ui.Modal):
+    def __init__(self, review_view: "RestartConfigReviewView"):
+        super().__init__(title=f"設定 {review_view.config_key}"[:45])
+        self.review_view = review_view
+
+        default_text = format_config_value(review_view.default_value)
+        input_style = (
+            discord.TextStyle.paragraph
+            if isinstance(review_view.default_value, (list, dict)) or len(default_text) > 120
+            else discord.TextStyle.short
+        )
+        self.value_input = discord.ui.TextInput(
+            label="新的 config 值",
+            default=default_text[:4000],
+            placeholder=get_config_value_placeholder(review_view.default_value),
+            required=True,
+            max_length=4000,
+            style=input_style,
+        )
+        self.add_item(self.value_input)
+
+    async def on_submit(self, interaction: discord.Interaction):
+        try:
+            parsed_value = parse_config_value(self.value_input.value, self.review_view.default_value)
+        except ValueError as e:
+            await interaction.response.send_message(f"這個值無法使用：{e}", ephemeral=True)
+            return
+
+        self.review_view.selected_value = parsed_value
+        self.review_view.used_default = False
+        await interaction.response.defer()
+        self.review_view.stop()
+
+
+class RestartConfigReviewView(discord.ui.View):
+    def __init__(self, owner_id: int, config_key: str, default_value, message: discord.Message, timeout: float = 300):
+        super().__init__(timeout=timeout)
+        self.owner_id = owner_id
+        self.config_key = config_key
+        self.default_value = default_value
+        self.message = message
+        self.selected_value = None
+        self.used_default = None
+        self.timed_out = False
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if interaction.user.id != self.owner_id:
+            await interaction.response.send_message("只有發起這次重啟的 owner 可以操作這個設定流程。", ephemeral=True)
+            return False
+        return True
+
+    async def on_timeout(self):
+        self.timed_out = True
+        try:
+            await self.message.edit(view=None)
+        except Exception:
+            pass
+        self.stop()
+
+    @discord.ui.button(label="繼續", style=discord.ButtonStyle.success)
+    async def continue_with_default(self, interaction: discord.Interaction, button: discord.ui.Button):
+        self.selected_value = self.default_value
+        self.used_default = True
+        await interaction.response.defer()
+        self.stop()
+
+    @discord.ui.button(label="修改數值", style=discord.ButtonStyle.primary)
+    async def modify_value(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await interaction.response.send_modal(RestartConfigValueModal(self))
+
+
+def start_restart_process(command):
+    use_shell = isinstance(command, str)
+    popen_kwargs = {
+        "cwd": REPO_ROOT,
+        "stdin": subprocess.DEVNULL,
+        "stdout": subprocess.DEVNULL,
+        "stderr": subprocess.DEVNULL,
+        "shell": use_shell,
+        "creationflags": getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0),
+    }
+    if sys.platform != "win32":
+        popen_kwargs["start_new_session"] = True
+
+    try:
+        subprocess.Popen(command, **popen_kwargs)
+    except Exception as e:
+        return False, str(e)
+    return True, None
     
 
 
@@ -115,7 +475,8 @@ async def shutdown(ctx):
     print("Shutting down...")
     if on_close_tasks:
         print("Running on_close tasks...")
-        msg = await ctx.send(f"正在執行關閉前任務...共 {len(on_close_tasks)} 項。")
+        closingtext = "正在執行關閉前任務...共 {} 項。\n".format(len(on_close_tasks))
+        msg = await ctx.send(f"```ansi\n{closingtext}\n```")
         tasks = []
         for task in on_close_tasks:
             tasks.append({
@@ -132,8 +493,9 @@ async def shutdown(ctx):
             while not corotask.done():
                 end_time = time.perf_counter()
                 task["time"] = end_time - start_time
-                await msg.edit(content=f"正在執行關閉前任務...共 {len(on_close_tasks)} 項。\n{create_shutdowntask_message(tasks, tick)}")
+                await msg.edit(content=f"```ansi\n{closingtext}\n{create_shutdowntask_message(tasks, tick)}\n```")
                 tick += 1
+                await asyncio.sleep(0.25)
             try:
                 corotask.result()
                 task["status"] = "done"
@@ -143,10 +505,242 @@ async def shutdown(ctx):
                 log(f"執行關閉前任務 {task['name']} 時發生錯誤: {e}", level=logging.ERROR, module_name="OwnerTools")
             end_time = time.perf_counter()
             task["time"] = end_time - start_time
-            await msg.edit(content=f"正在執行關閉前任務...共 {len(on_close_tasks)} 項。\n{create_shutdowntask_message(tasks, tick)}")
+            await msg.edit(content=f"```ansi\n{closingtext}\n{create_shutdowntask_message(tasks, tick)}\n```")
             tick += 1
-            await msg.edit(content=f"正在執行關閉前任務...共 {len(on_close_tasks)} 項。\n{create_shutdowntask_message(tasks, tick)}")
+            await msg.edit(content=f"```ansi\n{closingtext}\n{create_shutdowntask_message(tasks, tick)}\n```")
     await bot.close()
+    
+@bot.command(aliases=["res", "reboot"])
+@is_owner()
+async def restart(ctx):
+    msg = await ctx.send("機器人正在重啟...")
+    print("Restarting...")
+    closingtext = "機器人正在重啟..."
+    tasks = []
+    tick = 0
+    if on_close_tasks:
+        print("Running on_close tasks...")
+        closingtext = "機器人正在重啟...\n正在執行關閉前任務...共 {} 項。\n".format(len(on_close_tasks))
+        await msg.edit(content=f"```ansi\n{closingtext}\n```")
+        tasks = []
+        for task in on_close_tasks:
+            tasks.append({
+                "name": task.__name__,
+                "func": task,
+                "status": "none",
+                "time": None
+            })
+        tick = 0
+        for task in tasks:
+            task["status"] = "pending"
+            start_time = time.perf_counter()
+            corotask = asyncio.create_task(task["func"]())
+            while not corotask.done():
+                end_time = time.perf_counter()
+                task["time"] = end_time - start_time
+                await msg.edit(content=f"```ansi\n{closingtext}\n{create_shutdowntask_message(tasks, tick)}\n```")
+                tick += 1
+                await asyncio.sleep(0.25)
+            try:
+                corotask.result()
+                task["status"] = "done"
+            except Exception as e:
+                task["status"] = "error"
+                task["error"] = str(e)
+                log(f"執行關閉前任務 {task['name']} 時發生錯誤: {e}", level=logging.ERROR, module_name="OwnerTools")
+            end_time = time.perf_counter()
+            task["time"] = end_time - start_time
+            await msg.edit(content=f"```ansi\n{closingtext}\n{create_shutdowntask_message(tasks, tick)}\n```")
+            tick += 1
+            await msg.edit(content=f"```ansi\n{closingtext}\n{create_shutdowntask_message(tasks, tick)}\n```")
+    await msg.edit(content=create_progress_message(closingtext, tasks, tick, ansi_info("> git pull")))
+    git_pull_ok, git_pull_output = run_git_pull()
+    git_pull_summary = truncate_codeblock_text(git_pull_output)
+
+    await msg.edit(
+        content=create_progress_message(
+            closingtext,
+            tasks,
+            tick,
+            ansi_info("> git pull"),
+            ansi_multiline(git_pull_summary, ANSI.white),
+            ansi_info("> Checking new config keys..."),
+        )
+    )
+    missing_config_entries, pending_config_version, config_sync_error = get_missing_config_entries()
+
+    config_summary_lines = []
+    applied_config_values = {}
+    if config_sync_error:
+        config_summary_lines.append(ansi_error(f"> Config check failed: {truncate_codeblock_text(config_sync_error, 300)}"))
+    elif missing_config_entries:
+        config_summary_lines.append(ansi_warning(f"> Found {len(missing_config_entries)} missing config key(s)."))
+        if pending_config_version is not None:
+            config_summary_lines.append(ansi_info(f"> Config version will be updated to {pending_config_version}."))
+
+        for index, entry in enumerate(missing_config_entries, start=1):
+            key = entry["key"]
+            default_value = entry["default"]
+            config_summary_lines.append(
+                ansi_warning(
+                    f"> Waiting for config {index}/{len(missing_config_entries)}: {key} ({entry['type_name']})"
+                )
+            )
+            config_summary_lines.append(ansi_muted(f"  default = {summarize_config_value(default_value)}"))
+            config_summary_lines.append(ansi_info("  choose: [繼續] 套用預設值 / [修改數值] 開啟 modal"))
+            await msg.edit(
+                content=create_progress_message(
+                    closingtext,
+                    tasks,
+                    tick,
+                    ansi_info("> git pull"),
+                    ansi_multiline(git_pull_summary, ANSI.white),
+                    ansi_info("> Checking new config keys..."),
+                    *config_summary_lines,
+                )
+            )
+
+            review_view = RestartConfigReviewView(ctx.author.id, key, default_value, msg)
+            await msg.edit(view=review_view)
+            await review_view.wait()
+            await msg.edit(view=None)
+
+            if review_view.timed_out or review_view.used_default is None:
+                await msg.edit(
+                    content=create_progress_message(
+                        closingtext,
+                        tasks,
+                        tick,
+                        ansi_info("> git pull"),
+                        ansi_multiline(git_pull_summary, ANSI.white),
+                        ansi_info("> Checking new config keys..."),
+                        *config_summary_lines,
+                        ansi_error("> Config review timed out. Restart cancelled."),
+                    ),
+                    view=None,
+                )
+                return
+
+            applied_config_values[key] = review_view.selected_value
+            action_label = "default" if review_view.used_default else "custom"
+            config_summary_lines.append(
+                ansi_success(f"  applied {key} ({action_label}) = {summarize_config_value(review_view.selected_value)}")
+            )
+
+        added_config_keys, config_apply_error = apply_config_updates(
+            applied_config_values,
+            config_version=pending_config_version,
+        )
+        if config_apply_error:
+            config_summary_lines.append(ansi_error(f"> Failed to save config updates: {truncate_codeblock_text(config_apply_error, 300)}"))
+            await msg.edit(
+                content=create_progress_message(
+                    closingtext,
+                    tasks,
+                    tick,
+                    ansi_info("> git pull"),
+                    ansi_multiline(git_pull_summary, ANSI.white),
+                    ansi_info("> Checking new config keys..."),
+                    *config_summary_lines,
+                    ansi_error("> Restart cancelled because config updates were not saved."),
+                ),
+                view=None,
+            )
+            return
+        else:
+            config_summary_lines.append(ansi_success(f"> Saved {len(added_config_keys)} new config key(s)."))
+    else:
+        if pending_config_version is not None:
+            _, config_apply_error = apply_config_updates({}, config_version=pending_config_version)
+            if config_apply_error:
+                config_summary_lines.append(ansi_error(f"> Failed to update config version: {truncate_codeblock_text(config_apply_error, 300)}"))
+                await msg.edit(
+                    content=create_progress_message(
+                        closingtext,
+                        tasks,
+                        tick,
+                        ansi_info("> git pull"),
+                        ansi_multiline(git_pull_summary, ANSI.white),
+                        ansi_info("> Checking new config keys..."),
+                        *config_summary_lines,
+                        ansi_error("> Restart cancelled because config version sync failed."),
+                    ),
+                    view=None,
+                )
+                return
+            else:
+                config_summary_lines.append(ansi_success(f"> Updated config version to {pending_config_version}."))
+        else:
+            config_summary_lines.append(ansi_success("> No missing config keys found."))
+
+    latest_full_version = get_latest_full_version()
+    if not git_pull_ok:
+        config_summary_lines.append(ansi_warning("> git pull did not complete successfully; continuing with the current checkout."))
+
+    await msg.edit(
+        content=create_progress_message(
+            closingtext,
+            tasks,
+            tick,
+            ansi_info("> git pull"),
+            ansi_multiline(git_pull_summary, ANSI.white),
+            ansi_info("> Checking new config keys..."),
+            *config_summary_lines,
+            ansi_info(f"Version: {UtilCommands.full_version} -> {latest_full_version}"),
+            ansi_info("> Restarting bot..."),
+        )
+    )
+
+    restart_command = config("restart_command")
+    if restart_command:
+        await msg.edit(
+            content=create_progress_message(
+                closingtext,
+                tasks,
+                tick,
+                ansi_info("> git pull"),
+                ansi_multiline(git_pull_summary, ANSI.white),
+                ansi_info("> Checking new config keys..."),
+                *config_summary_lines,
+                ansi_info(f"Version: {UtilCommands.full_version} -> {latest_full_version}"),
+                ansi_info("> Restarting bot..."),
+                ansi_info("> Running restart command..."),
+            )
+        )
+        started, error = start_restart_process(restart_command)
+        if not started:
+            await msg.edit(
+                content=create_progress_message(
+                    closingtext,
+                    tasks,
+                    tick,
+                    ansi_info("> git pull"),
+                    ansi_multiline(git_pull_summary, ANSI.white),
+                    ansi_info("> Checking new config keys..."),
+                    *config_summary_lines,
+                    ansi_info(f"Version: {UtilCommands.full_version} -> {latest_full_version}"),
+                    ansi_info("> Restarting bot..."),
+                    ansi_info("> Running restart command..."),
+                    ansi_error(f"Error: {truncate_codeblock_text(error, 300)}"),
+                )
+            )
+            return
+        sys.exit(0)
+    await msg.edit(
+        content=create_progress_message(
+            closingtext,
+            tasks,
+            tick,
+            ansi_info("> git pull"),
+            ansi_multiline(git_pull_summary, ANSI.white),
+            ansi_info("> Checking new config keys..."),
+            *config_summary_lines,
+            ansi_info(f"Version: {UtilCommands.full_version} -> {latest_full_version}"),
+            ansi_info("> Restarting bot..."),
+            ansi_warning("> No restart command configured. Please restart the bot manually."),
+        )
+    )
+    sys.exit(0)  # exit with code 0 to indicate successful restart
 
 
 @bot.command(aliases=["user", "u"])
