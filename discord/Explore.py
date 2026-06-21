@@ -541,6 +541,29 @@ def _parse_optional_int(value) -> int | None:
         return None
 
 
+def _remove_user_from_space(guild_id: str | None, user_id: str | None) -> bool:
+    if not guild_id or not user_id:
+        return False
+
+    removed = False
+    with _presence_lock:
+        presence = space_presence.get(guild_id)
+        if presence and user_id in presence:
+            presence.remove(user_id)
+            removed = True
+            if not presence:
+                space_presence.pop(guild_id, None)
+
+        players = space_players.get(guild_id)
+        if players and user_id in players:
+            del players[user_id]
+            removed = True
+            if not players:
+                space_players.pop(guild_id, None)
+
+    return removed
+
+
 def _empty_explore_save_data() -> dict:
     return {
         "map_id": None,
@@ -1268,20 +1291,9 @@ async def disconnect(sid):
     gid = sess.get("guild_id")
     uid = sess.get("user_id")
     if gid and uid:
-        with _presence_lock:
-            s = space_presence.get(gid)
-            if s and uid in s:
-                s.remove(uid)
-                if not s:
-                    space_presence.pop(gid, None)
-
-            players = space_players.get(gid)
-            if players and uid in players:
-                del players[uid]
-                if not players:
-                    space_players.pop(gid, None)
-
-        await sio.emit("user_left", {"guild_id": str(gid), "user_id": uid}, room=str(gid), skip_sid=sid)
+        removed = _remove_user_from_space(str(gid), str(uid))
+        if removed:
+            await sio.emit("user_left", {"guild_id": str(gid), "user_id": str(uid)}, room=str(gid), skip_sid=sid)
         log(f"User {sess.get('username','Unknown')} ({uid}) disconnected (sid={sid})", module_name="Explore")
 
 
@@ -1292,7 +1304,14 @@ async def on_join(sid, data=None):
         await sio.emit("error", {"message": "Unauthorized"}, to=sid)
         return
 
-    guild_id = str((data or {}).get("guild_id") or "world")
+    payload = data or {}
+    guild_id = str(payload.get("guild_id") or "world")
+    map_id = _parse_optional_int(payload.get("map_id"))
+    x = _parse_optional_int(payload.get("x"))
+    y = _parse_optional_int(payload.get("y"))
+    direction = _parse_optional_int(payload.get("direction"))
+    move_speed = payload.get("moveSpeed")
+    move_frequency = payload.get("moveFrequency")
 
     if guild_id != "world":
         try:
@@ -1322,6 +1341,12 @@ async def on_join(sid, data=None):
     uid = sess["user_id"]
     username = sess.get("username", "Unknown")
     skin_id = get_user_skin(int(uid))
+    previous_guild_id = str(sess.get("guild_id")) if sess.get("guild_id") else None
+
+    if previous_guild_id and previous_guild_id != guild_id:
+        await sio.leave_room(sid, previous_guild_id)
+        if _remove_user_from_space(previous_guild_id, uid):
+            await sio.emit("user_left", {"guild_id": previous_guild_id, "user_id": uid}, room=previous_guild_id, skip_sid=sid)
 
     with _session_lock:
         if sid in socket_sessions:
@@ -1332,21 +1357,36 @@ async def on_join(sid, data=None):
     with _presence_lock:
         space_presence.setdefault(guild_id, set()).add(uid)
         players = space_players.setdefault(guild_id, {})
+        previous_state = players.get(uid, {})
         players[uid] = {
             "user_id": uid,
             "name": username,
             "skin_id": skin_id,
-            "x": players.get(uid, {}).get("x", 0),
-            "y": players.get(uid, {}).get("y", 0),
-            "direction": players.get(uid, {}).get("direction", 2),
+            "map_id": map_id,
+            "x": x if x is not None else previous_state.get("x", 0),
+            "y": y if y is not None else previous_state.get("y", 0),
+            "direction": direction if direction is not None else previous_state.get("direction", 2),
+            "moveSpeed": move_speed if move_speed is not None else previous_state.get("moveSpeed"),
+            "moveFrequency": move_frequency if move_frequency is not None else previous_state.get("moveFrequency"),
         }
         snapshot_players = list(players.values())
 
-    await sio.emit("joined", {"guild_id": guild_id, "user_id": uid, "name": username, "skin_id": skin_id}, to=sid)
+    await sio.emit("joined", {"guild_id": guild_id, "user_id": uid, "name": username, "skin_id": skin_id, "map_id": map_id}, to=sid)
     await sio.emit("room_state", {"guild_id": guild_id, "players": snapshot_players}, to=sid)
     await sio.emit(
         "user_joined",
-        {"guild_id": guild_id, "user_id": uid, "name": username, "skin_id": skin_id},
+        {
+            "guild_id": guild_id,
+            "user_id": uid,
+            "name": username,
+            "skin_id": skin_id,
+            "map_id": map_id,
+            "x": players[uid].get("x", 0),
+            "y": players[uid].get("y", 0),
+            "direction": players[uid].get("direction", 2),
+            "moveSpeed": players[uid].get("moveSpeed"),
+            "moveFrequency": players[uid].get("moveFrequency"),
+        },
         room=guild_id,
         skip_sid=sid,
     )
@@ -1363,22 +1403,14 @@ async def on_leave(sid, data=None):
     uid = sess.get("user_id")
 
     await sio.leave_room(sid, guild_id)
-
-    with _presence_lock:
-        s = space_presence.get(guild_id)
-        if s and uid in s:
-            s.remove(uid)
-            if not s:
-                space_presence.pop(guild_id, None)
-
-        players = space_players.get(guild_id)
-        if players and uid in players:
-            del players[uid]
-            if not players:
-                space_players.pop(guild_id, None)
+    removed = _remove_user_from_space(guild_id, str(uid))
+    with _session_lock:
+        if sid in socket_sessions and str(socket_sessions[sid].get("guild_id") or "") == guild_id:
+            socket_sessions[sid]["guild_id"] = None
 
     await sio.emit("left", {"guild_id": guild_id, "user_id": uid}, to=sid)
-    await sio.emit("user_left", {"guild_id": guild_id, "user_id": uid}, room=guild_id, skip_sid=sid)
+    if removed:
+        await sio.emit("user_left", {"guild_id": guild_id, "user_id": uid}, room=guild_id, skip_sid=sid)
 
 
 @sio.on("move")
@@ -1390,6 +1422,7 @@ async def on_move(sid, data=None):
 
     payload = data or {}
     guild_id = str(payload.get("guild_id") or sess.get("guild_id") or "world")
+    map_id = _parse_optional_int(payload.get("map_id"))
     x = payload.get("x")
     y = payload.get("y")
     direction = payload.get("direction")
@@ -1414,6 +1447,7 @@ async def on_move(sid, data=None):
         }
         existing["x"] = ix
         existing["y"] = iy
+        existing["map_id"] = map_id
         if idir is not None:
             existing["direction"] = idir
         if moveSpeed is not None:
@@ -1422,7 +1456,7 @@ async def on_move(sid, data=None):
             existing["moveFrequency"] = moveFrequency
         players[sess["user_id"]] = existing
 
-    out = {"guild_id": guild_id, "user_id": sess["user_id"], "x": ix, "y": iy, "moveSpeed": moveSpeed, "moveFrequency": moveFrequency}
+    out = {"guild_id": guild_id, "user_id": sess["user_id"], "map_id": map_id, "x": ix, "y": iy, "moveSpeed": moveSpeed, "moveFrequency": moveFrequency}
     if idir is not None:
         out["direction"] = idir
 
@@ -1470,6 +1504,7 @@ async def on_skin_change(sid, data=None):
     uid = int(sess["user_id"])
     set_user_skin(uid, str(skin_id))
     guild_id = str(payload.get("guild_id") or sess.get("guild_id") or "world")
+    map_id = _parse_optional_int(payload.get("map_id"))
 
     with _presence_lock:
         players = space_players.setdefault(guild_id, {})
@@ -1480,11 +1515,12 @@ async def on_skin_change(sid, data=None):
             "y": 0,
         }
         existing["skin_id"] = str(skin_id)
+        existing["map_id"] = map_id
         players[str(uid)] = existing
 
     await sio.emit(
         "skin_changed",
-        {"guild_id": guild_id, "user_id": str(uid), "skin_id": str(skin_id)},
+        {"guild_id": guild_id, "user_id": str(uid), "skin_id": str(skin_id), "map_id": map_id},
         room=guild_id,
         skip_sid=sid,
     )
