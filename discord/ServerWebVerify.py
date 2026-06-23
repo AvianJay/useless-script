@@ -1133,7 +1133,11 @@ class WebVerifySetupWizard(discord.ui.View):
 
     async def on_notify_type_select(self, interaction: discord.Interaction):
         if 'notify' not in self.config: self.config['notify'] = {}
-        self.config['notify']['type'] = self.select.values[0]
+        selected_type = interaction.data.get('values', [None])[0]
+        if not selected_type:
+            await interaction.response.defer()
+            return
+        self.config['notify']['type'] = selected_type
         self.update_components()
         await interaction.response.edit_message(embed=await self.get_embed(), view=self)
 
