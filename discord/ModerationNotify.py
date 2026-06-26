@@ -154,6 +154,15 @@ async def notify_user(user: discord.User, guild: discord.Guild, action: str, rea
     en_action = ch2en_map.get(action, action.lower())
     if not get_server_config(guild.id, f"notify_user_on_{en_action}", True):
         return
+    if guild.get_member(user.id) is None:
+        # user is not in the guild, check if they are banned
+        try:
+            ban_entry = await guild.fetch_ban(user)
+            if ban_entry:
+                # already banned
+                return
+        except discord.NotFound:
+            return
     embed = discord.Embed(
         title=f"你在 {guild.name} 被{action}。",
         description=f"原因：{reason}",
@@ -170,7 +179,7 @@ async def notify_user(user: discord.User, guild: discord.Guild, action: str, rea
     # if present
     # print("Debug:", end_time)
     if end_time:
-        embed.add_field(name="解禁時間", value=f"<t:{str(int(end_time.timestamp()))}:F>", inline=False)
+        embed.add_field(name="解禁時間", value=f"<t:{str(int(end_time.timestamp()))}:R> (<t:{str(int(end_time.timestamp()))}:F>)", inline=False)
 
     # fuck you 草薙明音
     if moderator:
