@@ -1,25 +1,35 @@
-from globalenv import bot, get_user_data, get_server_config, set_server_config, set_user_data, config, get_command_mention, get_all_user_data, get_global_config, get_emoji_mention_by_name
+from globalenv import (
+    bot,
+    config,
+    get_all_user_data,
+    get_command_mention,
+    get_emoji_mention_by_name,
+    get_global_config,
+    get_server_config,
+    get_user_data,
+    set_global_config,
+    set_server_config,
+    set_user_data,
+)
 import discord
 from discord.ext import commands
 from discord import app_commands
-import g4f
-from g4f.client import Client
+from openai import OpenAI
 import asyncio
+import base64
 import html
 import io
 import importlib
 import json
 import re
 import time
-from types import SimpleNamespace
-import urllib.request
-import urllib.error
 from datetime import datetime, timezone, timedelta
 from logger import log
 import logging
 from pathlib import Path
 from uuid import uuid4
 from doc_markdown import read_markdown_file, extract_markdown_search_entries, load_docs_site
+from OwnerTools import is_owner
 
 from Economy import log_transaction, send_economy_audit_log
 
@@ -27,36 +37,104 @@ from Economy import log_transaction, send_economy_audit_log
 SAFE_MENTIONS = discord.AllowedMentions(users=False, roles=False, everyone=False)
 
 # AI 模型費率（全域幣/字）
-MODEL_RATES = {
+AI_ENDPOINT_CONFIG_KEY = "ai_endpoint"
+AI_API_KEY_CONFIG_KEY = "ai_api_key"
+AI_MODELS_CONFIG_KEY = "ai_models"
+AI_VIDEO_MODELS_CONFIG_KEY = "ai_video_models"
+DEFAULT_AI_ENDPOINT = "https://api.poe.com/v1"
+DEFAULT_AI_MODELS = {
     "openai-fast": 0.05,
     "openai": 0.10,
     "gpt-5-mini": 0.10,
     "openai-large": 0.45,
     "perplexity-fast": 0.10,
     "claude-fast": 0.15,
+    "kimi-k2.6": 0.05,
+    "gemma-4-31b": 0.10,
+    "glm-5.1-t": 0.10,
+    "qwen3.5-397b-a17b-t": 0.15,
 }
+DEFAULT_AI_VIDEO_MODELS = {
+    "seedance-2.0-fast-el": 500.00,
+    "seedance-2.0-pro-el": 1000.00,
+}
+AI_GLOBAL_CONFIG_DEFAULTS = {
+    AI_ENDPOINT_CONFIG_KEY: DEFAULT_AI_ENDPOINT,
+    AI_API_KEY_CONFIG_KEY: "",
+    AI_MODELS_CONFIG_KEY: DEFAULT_AI_MODELS,
+    AI_VIDEO_MODELS_CONFIG_KEY: DEFAULT_AI_VIDEO_MODELS,
+}
+_GLOBAL_CONFIG_MISSING = object()
+
+
+def _ensure_ai_global_config_defaults():
+    for key, value in AI_GLOBAL_CONFIG_DEFAULTS.items():
+        if get_global_config(key, _GLOBAL_CONFIG_MISSING) is _GLOBAL_CONFIG_MISSING:
+            set_global_config(key, value)
+
+
+def _coerce_ai_rate_dict(value, default: dict[str, float]) -> dict[str, float]:
+    source = value if isinstance(value, dict) else default
+    rates: dict[str, float] = {}
+    for model, rate in source.items():
+        model_name = str(model).strip()
+        if not model_name:
+            continue
+        try:
+            rates[model_name] = float(rate)
+        except (TypeError, ValueError):
+            continue
+    return rates or dict(default)
 
 GLOBAL_GUILD_ID = 0
 GLOBAL_CURRENCY_NAME = "全域幣"
 GLOBAL_BALANCE_KEY = "economy_balance"
 
-# Poe
-poeclient = Client(
-    api_key=config("poe_api_key"),
-    base_url="https://api.poe.com/v1",
-)
+def _get_ai_endpoint() -> str:
+    endpoint = str(get_global_config(AI_ENDPOINT_CONFIG_KEY, DEFAULT_AI_ENDPOINT) or "").strip()
+    return (endpoint or DEFAULT_AI_ENDPOINT).rstrip("/")
 
-poe_text_models = {
-    "kimi-k2.5-fw": 0.05,
-    "gemma-4-31b": 0.10,
-    "glm-5.1-t": 0.10,
-    "qwen3.5-397b-a17b-t": 0.15,
-}
 
-poe_video_models = {
-    "seedance-2.0-fast-el": 500.00,
-    "seedance-2.0-pro-el": 1000.00,
-}
+def _get_ai_api_key() -> str:
+    return str(get_global_config(AI_API_KEY_CONFIG_KEY, "") or "").strip()
+
+
+def _get_ai_model_rates() -> dict[str, float]:
+    return _coerce_ai_rate_dict(
+        get_global_config(AI_MODELS_CONFIG_KEY, DEFAULT_AI_MODELS),
+        DEFAULT_AI_MODELS,
+    )
+
+
+def _get_ai_video_model_rates() -> dict[str, float]:
+    return _coerce_ai_rate_dict(
+        get_global_config(AI_VIDEO_MODELS_CONFIG_KEY, DEFAULT_AI_VIDEO_MODELS),
+        DEFAULT_AI_VIDEO_MODELS,
+    )
+
+
+def _is_ai_text_model(model: str) -> bool:
+    return str(model or "") in _get_ai_model_rates()
+
+
+def _get_ai_text_model_rate(model: str, default: float = 0.1) -> float:
+    return float(_get_ai_model_rates().get(model, default))
+
+
+def _create_ai_client() -> OpenAI:
+    api_key = _get_ai_api_key()
+    if not api_key:
+        raise RuntimeError("ai_api_key is not configured")
+    return OpenAI(api_key=api_key, base_url=_get_ai_endpoint())
+
+
+def _format_ai_models_for_display(model_rates: dict[str, float]) -> str:
+    if not model_rates:
+        return "(empty)"
+    return "\n".join(f"- {model}: {rate:.2f}/C" for model, rate in model_rates.items())
+
+
+_ensure_ai_global_config_defaults()
 
 # ============================================
 # Discord 提及處理
@@ -818,8 +896,6 @@ class AICommands(commands.Cog):
     WEB_SEARCH_TOOL_MAX_CHARS = 500
     WEB_SEARCH_TOOL_MAX_TOKENS = 240
     WEB_SEARCH_TOOL_MAX_SOURCES = 4
-    POE_HTTP_TIMEOUT_SECONDS = 600
-    POE_HTTP_FALLBACK_RETRIES = 2
     VIDEO_TOOL_DEFAULT_MODEL = "seedance-2.0-fast-el"
     VIDEO_TOOL_MAX_PROMPT_CHARS = 600
     VIDEO_TOOL_DEFAULT_TIMEOUT_SECONDS = 600
@@ -868,7 +944,6 @@ class AICommands(commands.Cog):
     
     def __init__(self, bot):
         self.bot = bot
-        self.client = Client(api_key=config("pollinations_api_key", ""))
         self.rate_limits = {}  # 簡單的速率限制
         self._docs_search_cache = None
         self._docs_feature_prompt_cache = None
@@ -882,7 +957,7 @@ class AICommands(commands.Cog):
 
         first_token, sep, rest = stripped.partition(" ")
         token = first_token.lower().strip()
-        if token in MODEL_RATES:
+        if _is_ai_text_model(token):
             return token, rest.lstrip()
         return default, message
 
@@ -1070,168 +1145,62 @@ class AICommands(commands.Cog):
 
     async def _generate_ai_completion(self, **kwargs):
         """封裝 AI 請求，方便未來統一修改"""
-        model = kwargs.get("model", "openai-fast")
+        kwargs = dict(kwargs or {})
+        kwargs.pop("provider", None)
+        kwargs.pop("web_search", None)
+        image = kwargs.pop("image", None)
+        model = str(kwargs.get("model", "openai-fast") or "openai-fast")
+        if model not in _get_ai_model_rates() and model not in _get_ai_video_model_rates():
+            raise ValueError(f"Unsupported model: {model}")
+        kwargs["model"] = model
+        kwargs["messages"] = self._attach_image_to_messages(kwargs.get("messages") or [], image)
 
         async def request_once():
-            if model in MODEL_RATES:
-                return await asyncio.to_thread(self.client.chat.completions.create, **kwargs)
-            if model in poe_text_models or model in poe_video_models:
-                return await self._request_poe_completion_with_fallback(kwargs)
-            raise ValueError(f"Unsupported model: {model}")
+            client = _create_ai_client()
+            return await asyncio.to_thread(client.chat.completions.create, **kwargs)
 
         return await self._run_ai_completion_with_retry(request_once, model=model)
 
     @staticmethod
-    def _is_poe_slow_request_error(error: Exception) -> bool:
-        message = str(error or "").lower()
-        return (
-            "curl: (28)" in message
-            or "operation too slow" in message
-            or ("curl_cffi" in message and "timed out" in message)
-        )
-
-    @staticmethod
-    def _normalize_completion_content(content) -> str:
-        if isinstance(content, str):
-            return content.strip()
-        if isinstance(content, list):
-            chunks = []
-            for part in content:
-                if isinstance(part, dict):
-                    text = part.get("text")
-                    if text:
-                        chunks.append(str(text))
-                elif part:
-                    chunks.append(str(part))
-            return "\n".join(chunk for chunk in chunks if chunk).strip()
-        if isinstance(content, dict):
-            for key in ("text", "content", "value"):
-                value = content.get(key)
-                if value:
-                    return str(value).strip()
-            return json.dumps(content, ensure_ascii=False)
-        return str(content or "").strip()
+    def _guess_image_mime_type(image: bytes) -> str:
+        if image.startswith(b"\x89PNG\r\n\x1a\n"):
+            return "image/png"
+        if image.startswith(b"\xff\xd8\xff"):
+            return "image/jpeg"
+        if image.startswith((b"GIF87a", b"GIF89a")):
+            return "image/gif"
+        if image.startswith(b"RIFF") and image[8:12] == b"WEBP":
+            return "image/webp"
+        return "image/png"
 
     @classmethod
-    def _payload_to_completion_response(cls, payload: dict, fallback_model: str):
-        payload_dict = payload if isinstance(payload, dict) else {}
-        message_payload = {}
-        choices = payload_dict.get("choices")
-        if isinstance(choices, list) and choices:
-            first_choice = choices[0]
-            if isinstance(first_choice, dict):
-                message_payload = first_choice.get("message") or {}
-        if not isinstance(message_payload, dict):
-            message_payload = {}
-        content = cls._normalize_completion_content(message_payload.get("content"))
-        tool_calls = message_payload.get("tool_calls")
-        message = SimpleNamespace(content=content, tool_calls=tool_calls)
-        return SimpleNamespace(
-            choices=[SimpleNamespace(message=message)],
-            model=str(payload_dict.get("model") or fallback_model),
-        )
-
-    @staticmethod
-    def _poe_http_chat_completion(payload: dict, timeout_seconds: int) -> dict:
-        api_key = str(config("poe_api_key", "") or "").strip()
-        if not api_key:
-            raise RuntimeError("poe_api_key is not configured")
-
-        request = urllib.request.Request(
-            "https://api.poe.com/v1/chat/completions",
-            data=json.dumps(payload, ensure_ascii=False).encode("utf-8"),
-            headers={
-                "Authorization": f"Bearer {api_key}",
-                "Content-Type": "application/json",
-            },
-            method="POST",
-        )
-
-        try:
-            with urllib.request.urlopen(request, timeout=timeout_seconds) as response:
-                raw_body = response.read().decode("utf-8", errors="ignore")
-        except urllib.error.HTTPError as http_error:
-            detail = http_error.read().decode("utf-8", errors="ignore")
-            raise RuntimeError(f"Poe API HTTP {http_error.code}: {detail[:400]}") from http_error
-        except urllib.error.URLError as url_error:
-            raise RuntimeError(f"Poe API request failed: {url_error}") from url_error
-
-        if not raw_body.strip():
-            raise RuntimeError("Poe API returned an empty response")
-        try:
-            return json.loads(raw_body)
-        except json.JSONDecodeError as parse_error:
-            raise RuntimeError(f"Poe API returned non-JSON response: {raw_body[:400]}") from parse_error
-
-    async def _request_poe_completion_with_fallback(
-        self,
-        request_kwargs: dict,
-        timeout_seconds: int | None = None,
-    ):
-        kwargs = dict(request_kwargs or {})
-        kwargs.pop("provider", None)
-        kwargs.pop("web_search", None)
-
-        model = str(kwargs.get("model", "") or "").strip()
-        if not model:
-            raise ValueError("Poe request missing model")
-
-        payload = {
-            "model": model,
-            "messages": kwargs.get("messages") or [],
-        }
-        for optional_key in (
-            "max_tokens",
-            "temperature",
-            "top_p",
-            "frequency_penalty",
-            "presence_penalty",
-            "stream",
-        ):
-            if optional_key in kwargs:
-                payload[optional_key] = kwargs[optional_key]
-
-        request_timeout = self._coerce_int(
-            timeout_seconds,
-            self.POE_HTTP_TIMEOUT_SECONDS,
-            minimum=60,
-            maximum=1800,
-        )
-
-        use_http_first = model in poe_video_models
-        if not use_http_first:
-            try:
-                return await asyncio.to_thread(poeclient.chat.completions.create, **kwargs)
-            except Exception as request_error:
-                if not self._is_poe_slow_request_error(request_error):
-                    raise
-                log(
-                    f"Poe request slow timeout, switching to HTTP fallback: {request_error}",
-                    module_name="AI",
-                    level=logging.WARNING,
-                )
+    def _content_with_image(cls, content, image: bytes):
+        parts = []
+        if isinstance(content, list):
+            parts.extend(content)
         else:
-            log(
-                f"Poe video model {model} uses direct HTTP path to avoid curl slow timeout.",
-                module_name="AI",
-                level=logging.INFO,
-            )
+            text = str(content or "").strip()
+            if text:
+                parts.append({"type": "text", "text": text})
+        mime_type = cls._guess_image_mime_type(image)
+        encoded_image = base64.b64encode(image).decode("ascii")
+        parts.append({
+            "type": "image_url",
+            "image_url": {"url": f"data:{mime_type};base64,{encoded_image}"},
+        })
+        return parts
 
-        last_error = None
-        for attempt in range(1, self.POE_HTTP_FALLBACK_RETRIES + 1):
-            try:
-                fallback_payload = await asyncio.to_thread(
-                    self._poe_http_chat_completion,
-                    payload,
-                    request_timeout,
-                )
-                return self._payload_to_completion_response(fallback_payload, fallback_model=model)
-            except Exception as fallback_error:
-                last_error = fallback_error
-                if attempt < self.POE_HTTP_FALLBACK_RETRIES:
-                    await asyncio.sleep(min(1.5 * attempt, 3.0))
-
-        raise last_error or RuntimeError("Poe completion fallback failed")
+    @classmethod
+    def _attach_image_to_messages(cls, messages: list, image: bytes | None) -> list:
+        prepared = [dict(message) for message in (messages or [])]
+        if not image:
+            return prepared
+        for message in reversed(prepared):
+            if message.get("role") == "user":
+                message["content"] = cls._content_with_image(message.get("content"), image)
+                return prepared
+        prepared.append({"role": "user", "content": cls._content_with_image("", image)})
+        return prepared
 
     def check_rate_limit(self, user_id: int) -> bool:
         """檢查速率限制 (每分鐘 10 次請求)"""
@@ -1253,13 +1222,12 @@ class AICommands(commands.Cog):
         return True
     
     async def _generate_response_legacy(self, messages: list, model: str = "openai-fast", image: bytes = None) -> tuple[str, str, str]:
-        """使用 g4f 生成 AI 回應"""
+        """使用 OpenAI-compatible API 生成 AI 回應"""
         try:
             start_time = time.perf_counter()
             kwargs = dict(
                 model=model,
                 messages=messages,
-                provider=g4f.Provider.PollinationsAI
             )
             if image is not None:
                 kwargs["image"] = image
@@ -3567,8 +3535,6 @@ class AICommands(commands.Cog):
         request_kwargs = {
             "model": search_model,
             "messages": self._build_web_search_messages(query, max_chars=max_chars, include_sources=include_sources),
-            "provider": g4f.Provider.PollinationsAI,
-            # "web_search": True,  # perplexity will fucked up
             "max_tokens": max_tokens,
         }
 
@@ -3598,10 +3564,11 @@ class AICommands(commands.Cog):
             prompt = prompt[: self.VIDEO_TOOL_MAX_PROMPT_CHARS]
 
         model = str(args.get("model", self.VIDEO_TOOL_DEFAULT_MODEL) or self.VIDEO_TOOL_DEFAULT_MODEL).strip()
-        if model not in poe_video_models:
+        video_model_rates = _get_ai_video_model_rates()
+        if model not in video_model_rates:
             return {
                 "error": f"unsupported video model: {model}",
-                "available_models": sorted(poe_video_models),
+                "available_models": sorted(video_model_rates),
             }
 
         timeout_seconds = self._coerce_int(
@@ -3624,7 +3591,7 @@ class AICommands(commands.Cog):
         billing_actor = payer_user or requester
         billing_detail_suffix = self._build_ai_billing_detail_suffix(requester_id, payer_id)
 
-        charge_amount = round(float(poe_video_models.get(model, 0.0)), 2)
+        charge_amount = round(float(video_model_rates.get(model, 0.0)), 2)
         if charge_amount <= 0:
             return {"error": f"invalid video pricing for model: {model}"}
 
@@ -3659,15 +3626,12 @@ class AICommands(commands.Cog):
 
         start_time = time.perf_counter()
         try:
-            response = await self._request_poe_completion_with_fallback(
-                {
-                    "model": model,
-                    "messages": [{"role": "user", "content": prompt}],
-                },
-                timeout_seconds=timeout_seconds,
+            response = await self._generate_ai_completion(
+                model=model,
+                messages=[{"role": "user", "content": prompt}],
             )
             elapsed = round(time.perf_counter() - start_time, 2)
-            raw_text = self._normalize_completion_content(getattr(response.choices[0].message, "content", ""))
+            raw_text = str(getattr(response.choices[0].message, "content", "") or "").strip()
             video_urls = self._extract_urls_from_text(raw_text, limit=self.VIDEO_TOOL_MAX_URLS)
 
             return {
@@ -4939,7 +4903,6 @@ class AICommands(commands.Cog):
         kwargs = dict(
             model=model,
             messages=request_messages,
-            provider=g4f.Provider.PollinationsAI,
         )
         if image is not None:
             kwargs["image"] = image
@@ -5232,7 +5195,7 @@ class AICommands(commands.Cog):
         model: str
     ) -> bool:
         """設定使用者的預設模型，返回是否成功"""
-        if model not in MODEL_RATES and model not in poe_text_models:
+        if not _is_ai_text_model(model):
             return False
         set_user_data(GLOBAL_GUILD_ID, user_id, "default_ai_model", model)
         return True
@@ -5240,9 +5203,10 @@ class AICommands(commands.Cog):
     @staticmethod
     async def _get_default_model(user_id: int) -> str:
         """取得使用者的預設模型，默認為 openai"""
-        model = get_user_data(GLOBAL_GUILD_ID, user_id, "default_ai_model", "kimi-k2.5-fw")
-        if model not in MODEL_RATES and model not in poe_text_models:
-            return "openai"
+        model = get_user_data(GLOBAL_GUILD_ID, user_id, "default_ai_model", "kimi-k2.6")
+        text_model_rates = _get_ai_model_rates()
+        if model not in text_model_rates:
+            return "openai" if "openai" in text_model_rates else next(iter(text_model_rates), "openai")
         return model
 
     @classmethod
@@ -5348,7 +5312,7 @@ class AICommands(commands.Cog):
         current_lower = current.lower()
         choices = []
 
-        for model, rate in MODEL_RATES.items():
+        for model, rate in _get_ai_model_rates().items():
             name = f"{model} @ {rate:.2f}/C"
 
             if not current_lower or \
@@ -5358,18 +5322,104 @@ class AICommands(commands.Cog):
                 choices.append(
                     app_commands.Choice(name=name, value=model)
                 )
-        for model, rate in poe_text_models.items():
-            name = f"{model} @ {rate:.2f}/C"
-
-            if not current_lower or \
-               current_lower in model.lower() or \
-               current_lower in name.lower():
-
-                choices.append(
-                    app_commands.Choice(name=name, value=model)
-                )
-
         return choices[:25]
+
+    @commands.group(name="ai-config", aliases=["aicfg"], invoke_without_command=True)
+    @is_owner()
+    async def ai_config_text(self, ctx: commands.Context):
+        models = _get_ai_model_rates()
+        api_key_status = "configured" if _get_ai_api_key() else "empty"
+        await ctx.send(
+            "AI config\n"
+            f"- endpoint: {_get_ai_endpoint()}\n"
+            f"- api_key: {api_key_status}\n"
+            f"- models:\n{_format_ai_models_for_display(models)}",
+            allowed_mentions=SAFE_MENTIONS,
+        )
+
+    @ai_config_text.command(name="endpoint")
+    @is_owner()
+    async def ai_config_endpoint_text(self, ctx: commands.Context, *, endpoint: str = None):
+        if endpoint is None:
+            await ctx.send(f"ai_endpoint: {_get_ai_endpoint()}", allowed_mentions=SAFE_MENTIONS)
+            return
+        endpoint = endpoint.strip().rstrip("/")
+        if not endpoint:
+            await ctx.send("ai_endpoint cannot be empty.", allowed_mentions=SAFE_MENTIONS)
+            return
+        set_global_config(AI_ENDPOINT_CONFIG_KEY, endpoint)
+        await ctx.send(f"Updated ai_endpoint: {endpoint}", allowed_mentions=SAFE_MENTIONS)
+
+    @ai_config_text.command(name="api-key", aliases=["apikey"])
+    @is_owner()
+    async def ai_config_api_key_text(self, ctx: commands.Context, *, api_key: str = None):
+        if api_key is None:
+            status = "configured" if _get_ai_api_key() else "empty"
+            await ctx.send(f"ai_api_key: {status}", allowed_mentions=SAFE_MENTIONS)
+            return
+        api_key = api_key.strip()
+        set_global_config(AI_API_KEY_CONFIG_KEY, api_key)
+        status = "configured" if api_key else "empty"
+        await ctx.send(f"Updated ai_api_key: {status}", allowed_mentions=SAFE_MENTIONS)
+
+    @ai_config_text.command(name="models")
+    @is_owner()
+    async def ai_config_models_text(self, ctx: commands.Context):
+        await ctx.send(
+            "AI models:\n" + _format_ai_models_for_display(_get_ai_model_rates()),
+            allowed_mentions=SAFE_MENTIONS,
+        )
+
+    @ai_config_text.command(name="model")
+    @is_owner()
+    async def ai_config_model_text(self, ctx: commands.Context, model: str = None, price: float = None):
+        if not model or price is None:
+            await ctx.send("Usage: ai-config model <model> <price>", allowed_mentions=SAFE_MENTIONS)
+            return
+        if price < 0:
+            await ctx.send("Model price cannot be negative.", allowed_mentions=SAFE_MENTIONS)
+            return
+        model = model.strip()
+        models = _get_ai_model_rates()
+        models[model] = float(price)
+        set_global_config(AI_MODELS_CONFIG_KEY, models)
+        await ctx.send(f"Updated model {model}: {float(price):.2f}/C", allowed_mentions=SAFE_MENTIONS)
+
+    @ai_config_text.command(name="remove-model", aliases=["del-model"])
+    @is_owner()
+    async def ai_config_remove_model_text(self, ctx: commands.Context, model: str = None):
+        if not model:
+            await ctx.send("Usage: ai-config remove-model <model>", allowed_mentions=SAFE_MENTIONS)
+            return
+        model = model.strip()
+        models = _get_ai_model_rates()
+        removed = models.pop(model, None)
+        if removed is None:
+            await ctx.send(f"Model not found: {model}", allowed_mentions=SAFE_MENTIONS)
+            return
+        set_global_config(AI_MODELS_CONFIG_KEY, models)
+        await ctx.send(f"Removed model {model}.", allowed_mentions=SAFE_MENTIONS)
+
+    @ai_config_text.command(name="models-json")
+    @is_owner()
+    async def ai_config_models_json_text(self, ctx: commands.Context, *, models_json: str = None):
+        if not models_json:
+            await ctx.send('Usage: ai-config models-json {"model": 0.10}', allowed_mentions=SAFE_MENTIONS)
+            return
+        try:
+            parsed = json.loads(models_json)
+        except json.JSONDecodeError as e:
+            await ctx.send(f"Invalid JSON: {e}", allowed_mentions=SAFE_MENTIONS)
+            return
+        models = _coerce_ai_rate_dict(parsed, {})
+        if not models:
+            await ctx.send('Model JSON must be an object like {"model": 0.10}.', allowed_mentions=SAFE_MENTIONS)
+            return
+        set_global_config(AI_MODELS_CONFIG_KEY, models)
+        await ctx.send(
+            "Replaced AI models:\n" + _format_ai_models_for_display(models),
+            allowed_mentions=SAFE_MENTIONS,
+        )
 
     @staticmethod
     def _build_tool_smoke_prompt(in_guild: bool = True) -> str:
@@ -5468,8 +5518,8 @@ class AICommands(commands.Cog):
         guild = interaction.guild
         resolved_message = await MentionResolver.resolve_mentions(sanitized_message, guild, self.bot)
 
-        selected_model = model if model and (model in MODEL_RATES or model in poe_text_models) else await self._get_default_model(user.id)
-        rate_per_char = MODEL_RATES.get(selected_model, poe_text_models.get(selected_model, 0.1))
+        selected_model = model if model and _is_ai_text_model(model) else await self._get_default_model(user.id)
+        rate_per_char = _get_ai_text_model_rate(selected_model)
         input_chars = len(resolved_message)
         input_cost = round(input_chars * rate_per_char, 2)
         billing_target = await self._resolve_ai_billing_target(user, guild)
@@ -5785,7 +5835,7 @@ class AICommands(commands.Cog):
         
         user = interaction.user
         
-        if model not in MODEL_RATES and model not in poe_text_models:
+        if not _is_ai_text_model(model):
             await interaction.response.send_message("❌ 無效的模型名稱。", ephemeral=True, allowed_mentions=SAFE_MENTIONS)
             return
 
@@ -5974,7 +6024,7 @@ class AICommands(commands.Cog):
         # 清理輸入
         sanitized_message, minor_threats = PromptGuard.sanitize_input(resolved_message)
 
-        rate_per_char = MODEL_RATES.get(selected_model, MODEL_RATES["openai"])
+        rate_per_char = _get_ai_text_model_rate(selected_model, _get_ai_text_model_rate("openai", 0.1))
         input_chars = len(sanitized_message)
         input_cost = round(input_chars * rate_per_char, 2)
         billing_target = await self._resolve_ai_billing_target(user, guild)
