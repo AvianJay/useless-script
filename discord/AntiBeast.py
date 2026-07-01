@@ -167,18 +167,36 @@ class AntiBeast(commands.GroupCog, name="antibeast"):
         ]
         return [*BASE_KEYWORD_FILTER, *role_keywords]
 
+    @staticmethod
+    def _is_antibeast_rule_object(rule: discord.AutoModRule) -> bool:
+        if rule.name != RULE_NAME and rule.name not in LEGACY_RULE_NAMES:
+            return False
+        if rule.event_type != discord.AutoModRuleEventType.message_send:
+            return False
+
+        trigger_type = getattr(rule, "trigger_type", None)
+        if trigger_type is None and getattr(rule, "trigger", None) is not None:
+            trigger_type = getattr(rule.trigger, "type", None)
+        if trigger_type != discord.AutoModRuleTriggerType.keyword:
+            return False
+        return True
+
     async def _find_rule(self, guild: discord.Guild, config: dict) -> discord.AutoModRule | None:
         rule_id = config.get("rule_id")
         if rule_id:
             try:
-                return await guild.fetch_automod_rule(int(rule_id))
+                rule = await guild.fetch_automod_rule(int(rule_id))
             except (TypeError, ValueError):
                 config["rule_id"] = None
             except discord.NotFound:
                 config["rule_id"] = None
+            else:
+                if self._is_antibeast_rule_object(rule):
+                    return rule
+                config["rule_id"] = None
 
         for rule in await guild.fetch_automod_rules():
-            if rule.name == RULE_NAME or rule.name in LEGACY_RULE_NAMES:
+            if self._is_antibeast_rule_object(rule):
                 config["rule_id"] = rule.id
                 return rule
         return None
@@ -304,11 +322,32 @@ class AntiBeast(commands.GroupCog, name="antibeast"):
         await interaction.followup.send(message, ephemeral=True)
 
     async def _is_antibeast_execution(self, execution: discord.AutoModAction, config: dict) -> bool:
-        expected_rule_id = config.get("rule_id")
-        if expected_rule_id:
+        try:
+            execution_rule_id = int(execution.rule_id)
+        except (TypeError, ValueError):
+            return False
+
+        configured_rule_id = None
+        if config.get("rule_id"):
             try:
-                return int(expected_rule_id) == int(execution.rule_id)
+                configured_rule_id = int(config["rule_id"])
             except (TypeError, ValueError):
+                config["rule_id"] = None
+
+        if configured_rule_id is not None and configured_rule_id != execution_rule_id:
+            guild = execution.guild
+            if guild is None:
+                return False
+
+            try:
+                configured_rule = await guild.fetch_automod_rule(configured_rule_id)
+            except discord.NotFound:
+                config["rule_id"] = None
+            except discord.HTTPException:
+                return False
+            else:
+                if self._is_antibeast_rule_object(configured_rule):
+                    return False
                 config["rule_id"] = None
 
         try:
@@ -316,7 +355,7 @@ class AntiBeast(commands.GroupCog, name="antibeast"):
         except discord.HTTPException:
             return False
 
-        if rule.name == RULE_NAME or rule.name in LEGACY_RULE_NAMES:
+        if self._is_antibeast_rule_object(rule):
             config["rule_id"] = rule.id
             return True
         return False
@@ -712,7 +751,11 @@ class AntiBeast(commands.GroupCog, name="antibeast"):
         if not config["enabled"] or not kick_config["enabled"]:
             return
 
-        if not await self._is_antibeast_execution(execution, config):
+        previous_rule_id = config.get("rule_id")
+        is_antibeast_execution = await self._is_antibeast_execution(execution, config)
+        if config.get("rule_id") != previous_rule_id:
+            set_server_config(guild.id, "antibeast", config)
+        if not is_antibeast_execution:
             return
 
         set_server_config(guild.id, "antibeast", config)
