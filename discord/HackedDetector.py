@@ -72,6 +72,55 @@ class HackedDetector(commands.Cog):
     def _set_hacked_user_data(self, user_id: int, key: str, value):
         return set_user_data(self.HACKED_DATA_GUILD_ID, user_id, key, value)
 
+    def _normalize_guild_ids(self, guild_ids):
+        normalized = []
+        seen = set()
+        for guild_id in guild_ids or []:
+            try:
+                guild_id = int(guild_id)
+            except (TypeError, ValueError):
+                continue
+            if guild_id in seen:
+                continue
+            seen.add(guild_id)
+            normalized.append(guild_id)
+        return normalized
+
+    def _normalize_admin_removed(self, admin_removed):
+        if not isinstance(admin_removed, dict):
+            return {}
+        normalized = {}
+        for guild_id, role_id in admin_removed.items():
+            try:
+                guild_id = int(guild_id)
+                role_id = int(role_id)
+            except (TypeError, ValueError):
+                continue
+            normalized[guild_id] = role_id
+        return normalized
+
+    def _merge_hacked_user_records(self, user_id: int, guild_ids, admin_ids=None):
+        merged_guilds = self._normalize_guild_ids(
+            self._get_hacked_user_data(user_id, "hacked_timed_out_channel", [])
+        )
+        seen_guilds = set(merged_guilds)
+        added_guilds = []
+        for guild_id in self._normalize_guild_ids(guild_ids):
+            if guild_id in seen_guilds:
+                continue
+            seen_guilds.add(guild_id)
+            merged_guilds.append(guild_id)
+            added_guilds.append(guild_id)
+
+        merged_admin_ids = self._normalize_admin_removed(
+            self._get_hacked_user_data(user_id, "hacked_admin_removed", {}) or {}
+        )
+        merged_admin_ids.update(self._normalize_admin_removed(admin_ids or {}))
+
+        self._set_hacked_user_data(user_id, "hacked_timed_out_channel", merged_guilds)
+        self._set_hacked_user_data(user_id, "hacked_admin_removed", merged_admin_ids)
+        return merged_guilds, merged_admin_ids, added_guilds
+
     def _prune_cached_events(self, cache: dict, user_id: int, now: float, window_seconds: int):
         window_start = now - window_seconds
         events = [
@@ -191,8 +240,8 @@ class HackedDetector(commands.Cog):
 
     async def unlock_user(self, user: discord.User):
         # untimeout the user in all mutual guilds
-        guilds = self._get_hacked_user_data(user.id, "hacked_timed_out_channel", [])
-        admin_removed = self._get_hacked_user_data(user.id, "hacked_admin_removed", {}) or {}
+        guilds = self._normalize_guild_ids(self._get_hacked_user_data(user.id, "hacked_timed_out_channel", []))
+        admin_removed = self._normalize_admin_removed(self._get_hacked_user_data(user.id, "hacked_admin_removed", {}) or {})
         log(f"Unlock flow started for user {user.id}. timed_out_guilds={len(guilds)}, admin_roles={len(admin_removed)}", level=logging.DEBUG, module_name="HackedDetector", user=user)
         if not guilds:
             log(f"Unlock flow aborted for user {user.id}: no timed out guild records.", level=logging.DEBUG, module_name="HackedDetector", user=user)
@@ -227,6 +276,7 @@ class HackedDetector(commands.Cog):
         # 清理資料
         self._set_hacked_user_data(user.id, "hacked_timed_out_channel", [])
         self._set_hacked_user_data(user.id, "hacked_admin_removed", {})
+        set_user_data(0, user.id, "verified", True)
         log(f"Unlock flow finished for user {user.id}. Records cleared.", level=logging.DEBUG, module_name="HackedDetector", user=user)
         return True
 
@@ -242,6 +292,8 @@ class HackedDetector(commands.Cog):
         except Exception:
             # ignore_user 失敗不應阻止後續流程
             log(f"ignore_user failed for {user.id}", level=logging.DEBUG, module_name="HackedDetector", user=user)
+        existing_muted = self._normalize_guild_ids(self._get_hacked_user_data(user.id, "hacked_timed_out_channel", []))
+        existing_muted_set = set(existing_muted)
         muted = []
         admin_ids = {}
         failed = 0
@@ -260,6 +312,12 @@ class HackedDetector(commands.Cog):
                 user=user,
                 guild=guild,
             )
+            if already_muted:
+                if guild.id in existing_muted_set:
+                    log(f"Skip guild {guild.id} for user {user.id}: timeout already recorded.", level=logging.DEBUG, module_name="HackedDetector", user=user, guild=guild)
+                else:
+                    log(f"Skip guild {guild.id} for user {user.id}: member is already timed out but not recorded by HackedDetector.", level=logging.DEBUG, module_name="HackedDetector", user=user, guild=guild)
+                continue
             if ok and not already_muted and not is_admin:
                 try:
                     await member.timeout(until, reason="檢測到被盜帳戶，預防性禁言。")
@@ -289,18 +347,25 @@ class HackedDetector(commands.Cog):
                 if not ok:
                     log(f"Skip timeout in guild {guild.id} for user {user.id}: hierarchy check failed ({msg}).", level=logging.DEBUG, module_name="HackedDetector", user=user, guild=guild)
         if not muted:
-            log(f"Failed to timeout user {user} in any mutual guilds. No guilds were muted.", level=logging.WARNING, module_name="HackedDetector", user=user)
+            if existing_muted:
+                log(
+                    f"No additional guilds were timed out for already handled user {user.id}. Existing records preserved: {existing_muted}, failed={failed}.",
+                    level=logging.DEBUG,
+                    module_name="HackedDetector",
+                    user=user,
+                )
+            else:
+                log(f"Failed to timeout user {user} in any mutual guilds. No guilds were muted.", level=logging.WARNING, module_name="HackedDetector", user=user)
             return
         # 儲存被禁言的伺服器 id 及移除過的 admin role id
-        self._set_hacked_user_data(user.id, "hacked_timed_out_channel", muted)
-        self._set_hacked_user_data(user.id, "hacked_admin_removed", admin_ids)
-        log(f"Timed out user in {muted} guild(s), removed {len(admin_ids)} admins, {failed} failed.", level=logging.INFO, module_name="HackedDetector", user=user)
+        all_muted, all_admin_ids, added_guilds = self._merge_hacked_user_records(user.id, muted, admin_ids)
+        log(f"Timed out user in {muted} guild(s), added_records={added_guilds}, total_records={all_muted}, removed {len(all_admin_ids)} admins, {failed} failed.", level=logging.INFO, module_name="HackedDetector", user=user)
         embed = discord.Embed(
             title="系統警告",
             description="我們檢測到您的帳戶可能被盜用，已對您進行預防性禁言，請盡快檢查您的帳戶安全。",
             color=discord.Color.red()
         )
-        embed.add_field(name="被禁言的伺服器數量", value=str(len(muted)), inline=False)
+        embed.add_field(name="被禁言的伺服器數量", value=str(len(all_muted)), inline=False)
         embed.add_field(name="未能禁言的伺服器數量", value=str(failed), inline=False)
         embed.timestamp = datetime.now()
         try:
@@ -310,6 +375,40 @@ class HackedDetector(commands.Cog):
         except Exception as e:
             log(f"Failed to send DM to user {user}: {e}", level=logging.ERROR, module_name="HackedDetector", user=user)
             await self._notify_unlock_in_channel(user, channel)
+
+    async def handle_suspicious_user(self, member: discord.Member):
+        # mute user for 7 days
+        until = datetime.now(timezone.utc) + timedelta(days=7)
+        try:
+            await member.timeout(until, reason="檢測到可疑帳號，預防性禁言。")
+        except Exception as e:
+            log(f"Failed to timeout suspicious member {member}: {e}", level=logging.ERROR, module_name="HackedDetector", user=member, guild=member.guild)
+            return
+        muted_guilds = [member.guild.id]
+        all_muted, _, added_guilds = self._merge_hacked_user_records(member.id, muted_guilds)
+        if not added_guilds:
+            log(
+                f"Suspicious member {member.id} timed out in guild {member.guild.id}, but guild was already recorded. Records preserved: {all_muted}.",
+                level=logging.DEBUG,
+                module_name="HackedDetector",
+                user=member,
+                guild=member.guild,
+            )
+        embed = discord.Embed(
+            title="系統警告",
+            description="我們檢測到您的帳戶可能被盜用，已對您進行預防性禁言，請盡快檢查您的帳戶安全。",
+            color=discord.Color.red()
+        )
+        embed.add_field(name="被禁言的伺服器數量", value=str(len(all_muted)), inline=False)
+        # embed.add_field(name="未能禁言的伺服器數量", value=str(failed), inline=False)
+        embed.timestamp = datetime.now()
+        try:
+            # 傳送帶有按鈕的私訊，StartUnlockView 需要 parent
+            await member.send(embed=embed, view=self.StartUnlockView(self))
+            log(f"Warning DM sent to suspected hacked user {member.id}.", level=logging.DEBUG, module_name="HackedDetector", user=member)
+        except Exception as e:
+            log(f"Failed to send DM to user {member}: {e}", level=logging.ERROR, module_name="HackedDetector", user=member)
+            # await self._notify_unlock_in_channel(member, channel)
 
     class UnlockModal(discord.ui.Modal, title="解除禁言"):
         # enter code to unlock account
@@ -423,10 +522,9 @@ class HackedDetector(commands.Cog):
         )
 
         # check if user is already timed out
-        timed_out = self._get_hacked_user_data(message.author.id, "hacked_timed_out_channel", [])
+        timed_out = self._normalize_guild_ids(self._get_hacked_user_data(message.author.id, "hacked_timed_out_channel", []))
         if timed_out:
-            log(f"Skip handling user {message.author.id}: already has timeout records {timed_out}.", level=logging.DEBUG, module_name="HackedDetector", user=message.author, guild=message.guild)
-            return
+            log(f"Continue handling user {message.author.id}: existing timeout records will be preserved while checking for new guilds {timed_out}.", level=logging.DEBUG, module_name="HackedDetector", user=message.author, guild=message.guild)
 
         log(
             f"Trigger hacked handling for user {message.author.id} with channels={channel_ids} in {self.DETECTION_WINDOW_SECONDS}s window.",
@@ -436,6 +534,73 @@ class HackedDetector(commands.Cog):
             guild=message.guild,
         )
         await self.handle_hacked_user(message.author, channel=message.channel)
+
+    @commands.Cog.listener()
+    async def on_member_join(self, member):
+        if member.bot:
+            return
+
+        verified = get_user_data(0, member.id, "verified", False)
+        if verified:
+            log(f"User {member.id} joined guild {member.guild.id} but is already verified. No action taken.", level=logging.DEBUG, module_name="HackedDetector", user=member, guild=member.guild)
+            return
+
+        existing_timed_out = self._normalize_guild_ids(self._get_hacked_user_data(member.id, "hacked_timed_out_channel", []))
+        if existing_timed_out and member.guild.id not in existing_timed_out:
+            log(
+                f"Previously handled user {member.id} joined new guild {member.guild.id}; applying timeout and preserving existing records {existing_timed_out}.",
+                level=logging.WARNING,
+                module_name="HackedDetector",
+                user=member,
+                guild=member.guild,
+            )
+            try:
+                await self.handle_suspicious_user(member)
+            except Exception as e:
+                log(f"Failed to handle previously timed out member {member}: {e}", level=logging.ERROR, module_name="HackedDetector", user=member, guild=member.guild)
+            return
+
+        score = 0
+        global_name = member.global_name or ""
+        # check if the member is sus
+        # no avatar
+        if member.avatar is None:
+            score += 1
+        # account age < 30 days
+        if (discord.utils.utcnow() - member.created_at).days < 30:
+            score += 1
+        # global display name starts with "!"
+        if global_name.startswith("!"):
+            score += 1
+        # username "english+numbers" only
+        if re.fullmatch(r"[A-Za-z0-9]+", member.name):
+            score += 1
+        # global name full english
+        if global_name and re.fullmatch(r"[A-Za-z0-9]+", global_name):
+            score += 1
+        # how many spaces in global name
+        if global_name and global_name.count(" ") > 0:
+            score += global_name.count(" ")
+        # split words in global name and every word first is uppercase
+        if global_name:
+            words = global_name.split()
+            for word in words:
+                if word[0].isupper():
+                    score += 1
+
+        # final
+        if score >= 5:
+            log(
+                f"Suspicious new member detected: {member} (id={member.id}) score={score}",
+                level=logging.WARNING,
+                module_name="HackedDetector",
+                user=member,
+                guild=member.guild,
+            )
+            try:
+                await self.handle_suspicious_user(member)
+            except Exception as e:
+                log(f"Failed to handle suspicious member {member}: {e}", level=logging.ERROR, module_name="HackedDetector", user=member, guild=member.guild)
 
     @commands.Cog.listener()
     async def on_socket_raw_receive(self, payload):
@@ -486,15 +651,14 @@ class HackedDetector(commands.Cog):
 
         self.raw_usercache.pop(user_id, None)
 
-        timed_out = self._get_hacked_user_data(user_id, "hacked_timed_out_channel", [])
+        timed_out = self._normalize_guild_ids(self._get_hacked_user_data(user_id, "hacked_timed_out_channel", []))
         if timed_out:
             log(
-                f"Skip raw handling user {user_id}: already has timeout records {timed_out}.",
+                f"Continue raw handling user {user_id}: existing timeout records will be preserved while checking for new guilds {timed_out}.",
                 level=logging.DEBUG,
                 module_name="HackedDetector",
                 guild=guild,
             )
-            return
 
         user = bot.get_user(user_id)
         channel = bot.get_channel(channel_id)
