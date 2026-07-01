@@ -54,8 +54,8 @@ class AntiBeast(commands.GroupCog, name="antibeast"):
             "everyone_mention_before": None,
             "kick": {
                 "enabled": False,
-                "threshold": 3,
-                "time_window": 30,
+                "threshold": 2,
+                "time_window": 10,
                 "action": DEFAULT_TRIGGER_ACTION,
             },
         }
@@ -93,14 +93,14 @@ class AntiBeast(commands.GroupCog, name="antibeast"):
             kick_config = {}
 
         try:
-            threshold = int(kick_config.get("threshold", 3))
+            threshold = int(kick_config.get("threshold", 2))
         except (TypeError, ValueError):
-            threshold = 3
+            threshold = 2
 
         try:
-            time_window = int(kick_config.get("time_window", 30))
+            time_window = int(kick_config.get("time_window", 10))
         except (TypeError, ValueError):
-            time_window = 30
+            time_window = 10
 
         return {
             "enabled": bool(kick_config.get("enabled", False)),
