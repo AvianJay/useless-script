@@ -735,6 +735,9 @@ translations = {
     "container": "容器",
     "cost": "花費",
     "imhacked": "我被盜了",
+    "about": "關於",
+    "bypass": "繞過",
+    "threshold": "閾值",
 }
 class CommandNameTranslator(app_commands.Translator):
     async def translate(
