@@ -7,16 +7,13 @@ from globalenv import (
     get_global_config,
     get_server_config,
     get_user_data,
-    set_global_config,
     set_server_config,
     set_user_data,
 )
 import discord
 from discord.ext import commands
 from discord import app_commands
-from openai import OpenAI
 import asyncio
-import base64
 import html
 import io
 import importlib
@@ -30,6 +27,26 @@ from pathlib import Path
 from uuid import uuid4
 from doc_markdown import read_markdown_file, extract_markdown_search_entries, load_docs_site
 from OwnerTools import is_owner
+from ai_provider import (
+    attach_image_to_messages as _attach_image_to_messages,
+    coerce_ai_rate_dict as _coerce_ai_rate_dict,
+    create_ai_client as _create_ai_client,
+    ensure_ai_global_config_defaults as _ensure_ai_global_config_defaults,
+    format_ai_models_for_display as _format_ai_models_for_display,
+    get_ai_api_key as _get_ai_api_key,
+    get_ai_endpoint as _get_ai_endpoint,
+    get_ai_model_rates as _get_ai_model_rates,
+    get_ai_report_model as _get_ai_report_model,
+    get_ai_review_model as _get_ai_review_model,
+    get_ai_text_model_rate as _get_ai_text_model_rate,
+    get_ai_video_model_rates as _get_ai_video_model_rates,
+    is_ai_text_model as _is_ai_text_model,
+    set_ai_api_key as _set_ai_api_key,
+    set_ai_endpoint as _set_ai_endpoint,
+    set_ai_model_rates as _set_ai_model_rates,
+    set_ai_report_model as _set_ai_report_model,
+    set_ai_review_model as _set_ai_review_model,
+)
 
 from Economy import log_transaction, send_economy_audit_log
 
@@ -37,102 +54,9 @@ from Economy import log_transaction, send_economy_audit_log
 SAFE_MENTIONS = discord.AllowedMentions(users=False, roles=False, everyone=False)
 
 # AI 模型費率（全域幣/字）
-AI_ENDPOINT_CONFIG_KEY = "ai_endpoint"
-AI_API_KEY_CONFIG_KEY = "ai_api_key"
-AI_MODELS_CONFIG_KEY = "ai_models"
-AI_VIDEO_MODELS_CONFIG_KEY = "ai_video_models"
-DEFAULT_AI_ENDPOINT = "https://api.poe.com/v1"
-DEFAULT_AI_MODELS = {
-    "openai-fast": 0.05,
-    "openai": 0.10,
-    "gpt-5-mini": 0.10,
-    "openai-large": 0.45,
-    "perplexity-fast": 0.10,
-    "claude-fast": 0.15,
-    "kimi-k2.6": 0.05,
-    "gemma-4-31b": 0.10,
-    "glm-5.1-t": 0.10,
-    "qwen3.5-397b-a17b-t": 0.15,
-}
-DEFAULT_AI_VIDEO_MODELS = {
-    "seedance-2.0-fast-el": 500.00,
-    "seedance-2.0-pro-el": 1000.00,
-}
-AI_GLOBAL_CONFIG_DEFAULTS = {
-    AI_ENDPOINT_CONFIG_KEY: DEFAULT_AI_ENDPOINT,
-    AI_API_KEY_CONFIG_KEY: "",
-    AI_MODELS_CONFIG_KEY: DEFAULT_AI_MODELS,
-    AI_VIDEO_MODELS_CONFIG_KEY: DEFAULT_AI_VIDEO_MODELS,
-}
-_GLOBAL_CONFIG_MISSING = object()
-
-
-def _ensure_ai_global_config_defaults():
-    for key, value in AI_GLOBAL_CONFIG_DEFAULTS.items():
-        if get_global_config(key, _GLOBAL_CONFIG_MISSING) is _GLOBAL_CONFIG_MISSING:
-            set_global_config(key, value)
-
-
-def _coerce_ai_rate_dict(value, default: dict[str, float]) -> dict[str, float]:
-    source = value if isinstance(value, dict) else default
-    rates: dict[str, float] = {}
-    for model, rate in source.items():
-        model_name = str(model).strip()
-        if not model_name:
-            continue
-        try:
-            rates[model_name] = float(rate)
-        except (TypeError, ValueError):
-            continue
-    return rates or dict(default)
-
 GLOBAL_GUILD_ID = 0
 GLOBAL_CURRENCY_NAME = "全域幣"
 GLOBAL_BALANCE_KEY = "economy_balance"
-
-def _get_ai_endpoint() -> str:
-    endpoint = str(get_global_config(AI_ENDPOINT_CONFIG_KEY, DEFAULT_AI_ENDPOINT) or "").strip()
-    return (endpoint or DEFAULT_AI_ENDPOINT).rstrip("/")
-
-
-def _get_ai_api_key() -> str:
-    return str(get_global_config(AI_API_KEY_CONFIG_KEY, "") or "").strip()
-
-
-def _get_ai_model_rates() -> dict[str, float]:
-    return _coerce_ai_rate_dict(
-        get_global_config(AI_MODELS_CONFIG_KEY, DEFAULT_AI_MODELS),
-        DEFAULT_AI_MODELS,
-    )
-
-
-def _get_ai_video_model_rates() -> dict[str, float]:
-    return _coerce_ai_rate_dict(
-        get_global_config(AI_VIDEO_MODELS_CONFIG_KEY, DEFAULT_AI_VIDEO_MODELS),
-        DEFAULT_AI_VIDEO_MODELS,
-    )
-
-
-def _is_ai_text_model(model: str) -> bool:
-    return str(model or "") in _get_ai_model_rates()
-
-
-def _get_ai_text_model_rate(model: str, default: float = 0.1) -> float:
-    return float(_get_ai_model_rates().get(model, default))
-
-
-def _create_ai_client() -> OpenAI:
-    api_key = _get_ai_api_key()
-    if not api_key:
-        raise RuntimeError("ai_api_key is not configured")
-    return OpenAI(api_key=api_key, base_url=_get_ai_endpoint())
-
-
-def _format_ai_models_for_display(model_rates: dict[str, float]) -> str:
-    if not model_rates:
-        return "(empty)"
-    return "\n".join(f"- {model}: {rate:.2f}/C" for model, rate in model_rates.items())
-
 
 _ensure_ai_global_config_defaults()
 
@@ -1153,54 +1077,13 @@ class AICommands(commands.Cog):
         if model not in _get_ai_model_rates() and model not in _get_ai_video_model_rates():
             raise ValueError(f"Unsupported model: {model}")
         kwargs["model"] = model
-        kwargs["messages"] = self._attach_image_to_messages(kwargs.get("messages") or [], image)
+        kwargs["messages"] = _attach_image_to_messages(kwargs.get("messages") or [], image)
 
         async def request_once():
             client = _create_ai_client()
             return await asyncio.to_thread(client.chat.completions.create, **kwargs)
 
         return await self._run_ai_completion_with_retry(request_once, model=model)
-
-    @staticmethod
-    def _guess_image_mime_type(image: bytes) -> str:
-        if image.startswith(b"\x89PNG\r\n\x1a\n"):
-            return "image/png"
-        if image.startswith(b"\xff\xd8\xff"):
-            return "image/jpeg"
-        if image.startswith((b"GIF87a", b"GIF89a")):
-            return "image/gif"
-        if image.startswith(b"RIFF") and image[8:12] == b"WEBP":
-            return "image/webp"
-        return "image/png"
-
-    @classmethod
-    def _content_with_image(cls, content, image: bytes):
-        parts = []
-        if isinstance(content, list):
-            parts.extend(content)
-        else:
-            text = str(content or "").strip()
-            if text:
-                parts.append({"type": "text", "text": text})
-        mime_type = cls._guess_image_mime_type(image)
-        encoded_image = base64.b64encode(image).decode("ascii")
-        parts.append({
-            "type": "image_url",
-            "image_url": {"url": f"data:{mime_type};base64,{encoded_image}"},
-        })
-        return parts
-
-    @classmethod
-    def _attach_image_to_messages(cls, messages: list, image: bytes | None) -> list:
-        prepared = [dict(message) for message in (messages or [])]
-        if not image:
-            return prepared
-        for message in reversed(prepared):
-            if message.get("role") == "user":
-                message["content"] = cls._content_with_image(message.get("content"), image)
-                return prepared
-        prepared.append({"role": "user", "content": cls._content_with_image("", image)})
-        return prepared
 
     def check_rate_limit(self, user_id: int) -> bool:
         """檢查速率限制 (每分鐘 10 次請求)"""
@@ -5333,6 +5216,8 @@ class AICommands(commands.Cog):
             "AI config\n"
             f"- endpoint: {_get_ai_endpoint()}\n"
             f"- api_key: {api_key_status}\n"
+            f"- review_model: {_get_ai_review_model()}\n"
+            f"- report_model: {_get_ai_report_model()}\n"
             f"- models:\n{_format_ai_models_for_display(models)}",
             allowed_mentions=SAFE_MENTIONS,
         )
@@ -5347,7 +5232,7 @@ class AICommands(commands.Cog):
         if not endpoint:
             await ctx.send("ai_endpoint cannot be empty.", allowed_mentions=SAFE_MENTIONS)
             return
-        set_global_config(AI_ENDPOINT_CONFIG_KEY, endpoint)
+        _set_ai_endpoint(endpoint)
         await ctx.send(f"Updated ai_endpoint: {endpoint}", allowed_mentions=SAFE_MENTIONS)
 
     @ai_config_text.command(name="api-key", aliases=["apikey"])
@@ -5358,7 +5243,7 @@ class AICommands(commands.Cog):
             await ctx.send(f"ai_api_key: {status}", allowed_mentions=SAFE_MENTIONS)
             return
         api_key = api_key.strip()
-        set_global_config(AI_API_KEY_CONFIG_KEY, api_key)
+        _set_ai_api_key(api_key)
         status = "configured" if api_key else "empty"
         await ctx.send(f"Updated ai_api_key: {status}", allowed_mentions=SAFE_MENTIONS)
 
@@ -5382,8 +5267,34 @@ class AICommands(commands.Cog):
         model = model.strip()
         models = _get_ai_model_rates()
         models[model] = float(price)
-        set_global_config(AI_MODELS_CONFIG_KEY, models)
+        _set_ai_model_rates(models)
         await ctx.send(f"Updated model {model}: {float(price):.2f}/C", allowed_mentions=SAFE_MENTIONS)
+
+    @ai_config_text.command(name="review-model")
+    @is_owner()
+    async def ai_config_review_model_text(self, ctx: commands.Context, model: str = None):
+        if model is None:
+            await ctx.send(f"ai_review_model: {_get_ai_review_model()}", allowed_mentions=SAFE_MENTIONS)
+            return
+        model = model.strip()
+        if not _is_ai_text_model(model):
+            await ctx.send(f"Model not found in ai_models: {model}", allowed_mentions=SAFE_MENTIONS)
+            return
+        _set_ai_review_model(model)
+        await ctx.send(f"Updated ai_review_model: {model}", allowed_mentions=SAFE_MENTIONS)
+
+    @ai_config_text.command(name="report-model")
+    @is_owner()
+    async def ai_config_report_model_text(self, ctx: commands.Context, model: str = None):
+        if model is None:
+            await ctx.send(f"ai_report_model: {_get_ai_report_model()}", allowed_mentions=SAFE_MENTIONS)
+            return
+        model = model.strip()
+        if not _is_ai_text_model(model):
+            await ctx.send(f"Model not found in ai_models: {model}", allowed_mentions=SAFE_MENTIONS)
+            return
+        _set_ai_report_model(model)
+        await ctx.send(f"Updated ai_report_model: {model}", allowed_mentions=SAFE_MENTIONS)
 
     @ai_config_text.command(name="remove-model", aliases=["del-model"])
     @is_owner()
@@ -5397,8 +5308,17 @@ class AICommands(commands.Cog):
         if removed is None:
             await ctx.send(f"Model not found: {model}", allowed_mentions=SAFE_MENTIONS)
             return
-        set_global_config(AI_MODELS_CONFIG_KEY, models)
-        await ctx.send(f"Removed model {model}.", allowed_mentions=SAFE_MENTIONS)
+        _set_ai_model_rates(models)
+        fallback_model = "openai" if "openai" in models else next(iter(models), "")
+        reset_targets = []
+        if fallback_model and _get_ai_review_model() == model:
+            _set_ai_review_model(fallback_model)
+            reset_targets.append(f"review_model -> {fallback_model}")
+        if fallback_model and _get_ai_report_model() == model:
+            _set_ai_report_model(fallback_model)
+            reset_targets.append(f"report_model -> {fallback_model}")
+        suffix = f" ({', '.join(reset_targets)})" if reset_targets else ""
+        await ctx.send(f"Removed model {model}.{suffix}", allowed_mentions=SAFE_MENTIONS)
 
     @ai_config_text.command(name="models-json")
     @is_owner()
@@ -5415,7 +5335,7 @@ class AICommands(commands.Cog):
         if not models:
             await ctx.send('Model JSON must be an object like {"model": 0.10}.', allowed_mentions=SAFE_MENTIONS)
             return
-        set_global_config(AI_MODELS_CONFIG_KEY, models)
+        _set_ai_model_rates(models)
         await ctx.send(
             "Replaced AI models:\n" + _format_ai_models_for_display(models),
             allowed_mentions=SAFE_MENTIONS,

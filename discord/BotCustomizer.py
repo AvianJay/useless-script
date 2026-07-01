@@ -5,8 +5,6 @@ from globalenv import bot, config
 import base64
 import mimetypes
 import requests
-import g4f
-from g4f.client import Client
 import json
 from logger import log
 import asyncio
@@ -14,8 +12,7 @@ import traceback
 import io
 from typing import Optional
 import re
-
-client = Client(api_key=config("pollinations_api_key", ""))
+from ai_provider import create_ai_chat_completion, get_ai_review_model
 
 
 class HumanReviewView(discord.ui.View):
@@ -175,9 +172,8 @@ bio_prompt = """
 async def review_image(image_data: bytes) -> dict:
     try:
         chat = await asyncio.to_thread(
-            client.chat.completions.create,
-            model="openai",
-            provider=g4f.Provider.PollinationsAI,
+            create_ai_chat_completion,
+            model=get_ai_review_model(),
             messages=[
                 {"role": "system", "content": prompt},
                 {"role": "user", "content": "請審核這張圖片，並以 JSON 格式回應。"},
@@ -204,9 +200,8 @@ async def review_image(image_data: bytes) -> dict:
 async def review_bio(bio_text: str) -> dict:
     try:
         chat = await asyncio.to_thread(
-            client.chat.completions.create,
-            model="openai",
-            provider=g4f.Provider.PollinationsAI,
+            create_ai_chat_completion,
+            model=get_ai_review_model(),
             messages=[
                 {"role": "system", "content": bio_prompt},
                 {"role": "user", "content": f"請審核這段關於我內容：{bio_text}，並以 JSON 格式回應。"},

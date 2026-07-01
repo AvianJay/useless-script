@@ -1,5 +1,4 @@
 import asyncio
-import g4f
 import json
 from datetime import datetime, timedelta
 import discord
