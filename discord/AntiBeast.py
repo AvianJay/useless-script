@@ -1,10 +1,12 @@
 import asyncio
 import logging
+import time
 
 import discord
 from discord import app_commands
 from discord.ext import commands
 
+import Moderate
 from globalenv import bot, get_server_config, set_server_config, start_bot
 from logger import log
 
@@ -13,6 +15,21 @@ RULE_NAME = "AntiBeast - block everyone/here and roles"
 LEGACY_RULE_NAMES = {"AntiBeast - block everyone/here"}
 BASE_KEYWORD_FILTER = ["@everyone", "@here"]
 BLOCK_MESSAGE = "AntiBeast 已阻擋 everyone/here 或受保護身分組提及。"
+DEFAULT_TRIGGER_ACTION = "kick AntiBeast: {time_window} 秒內觸發 {trigger_count} 次"
+SUPPORTED_ACTION_PREFIXES = {
+    "ban",
+    "kick",
+    "mute",
+    "timeout",
+    "unban",
+    "unmute",
+    "untimeout",
+    "delete",
+    "warn",
+    "send_mod_message",
+    "smm",
+    "force_verify",
+}
 
 
 class AntiBeastPermissionError(RuntimeError):
@@ -26,6 +43,7 @@ class AntiBeastPermissionError(RuntimeError):
 class AntiBeast(commands.GroupCog, name="antibeast"):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
+        self._trigger_history: dict[tuple[int, int], list[float]] = {}
 
     @staticmethod
     def _default_config() -> dict:
@@ -34,6 +52,12 @@ class AntiBeast(commands.GroupCog, name="antibeast"):
             "bypass_roles": [],
             "rule_id": None,
             "everyone_mention_before": None,
+            "kick": {
+                "enabled": False,
+                "threshold": 3,
+                "time_window": 30,
+                "action": DEFAULT_TRIGGER_ACTION,
+            },
         }
 
     def _get_config(self, guild_id: int) -> dict:
@@ -45,6 +69,7 @@ class AntiBeast(commands.GroupCog, name="antibeast"):
         merged.update(config)
         merged["enabled"] = bool(merged.get("enabled", False))
         merged["bypass_roles"] = self._normalize_role_ids(merged.get("bypass_roles", []))
+        merged["kick"] = self._normalize_kick_config(merged.get("kick", {}))
         return merged
 
     @staticmethod
@@ -61,6 +86,51 @@ class AntiBeast(commands.GroupCog, name="antibeast"):
             seen.add(role_id)
             normalized.append(role_id)
         return normalized
+
+    @staticmethod
+    def _normalize_kick_config(kick_config) -> dict:
+        if not isinstance(kick_config, dict):
+            kick_config = {}
+
+        try:
+            threshold = int(kick_config.get("threshold", 3))
+        except (TypeError, ValueError):
+            threshold = 3
+
+        try:
+            time_window = int(kick_config.get("time_window", 30))
+        except (TypeError, ValueError):
+            time_window = 30
+
+        return {
+            "enabled": bool(kick_config.get("enabled", False)),
+            "threshold": min(max(threshold, 1), 20),
+            "time_window": min(max(time_window, 5), 3600),
+            "action": str(kick_config.get("action") or DEFAULT_TRIGGER_ACTION).strip()[:500],
+        }
+
+    @staticmethod
+    def _expand_action_string(action: str, guild_id: int | None) -> tuple[list[str], str | None]:
+        action = (action or "").strip()
+        if not action:
+            return [], "action 不能是空的。"
+        if len(action) > 500:
+            return [], "action 最多 500 個字。"
+
+        try:
+            custom_actions = Moderate._load_custom_action_strings(guild_id)
+            actions = Moderate._expand_custom_action_aliases(action, custom_actions)
+        except ValueError as error:
+            return [], str(error)
+
+        if len(actions) > 5:
+            return [], "一次只能執行最多 5 個動作。"
+
+        for expanded_action in actions:
+            prefix = expanded_action.strip().split(" ", 1)[0]
+            if prefix not in SUPPORTED_ACTION_PREFIXES:
+                return [], f"不支援的 Moderate 動作：{prefix}"
+        return actions, None
 
     @staticmethod
     def _required_bot_permissions(guild: discord.Guild) -> list[str]:
@@ -233,6 +303,122 @@ class AntiBeast(commands.GroupCog, name="antibeast"):
         )
         await interaction.followup.send(message, ephemeral=True)
 
+    async def _is_antibeast_execution(self, execution: discord.AutoModAction, config: dict) -> bool:
+        expected_rule_id = config.get("rule_id")
+        if expected_rule_id:
+            try:
+                return int(expected_rule_id) == int(execution.rule_id)
+            except (TypeError, ValueError):
+                config["rule_id"] = None
+
+        try:
+            rule = await execution.fetch_rule()
+        except discord.HTTPException:
+            return False
+
+        if rule.name == RULE_NAME or rule.name in LEGACY_RULE_NAMES:
+            config["rule_id"] = rule.id
+            return True
+        return False
+
+    async def _get_execution_member(
+        self,
+        guild: discord.Guild,
+        execution: discord.AutoModAction,
+    ) -> discord.Member | None:
+        member = getattr(execution, "member", None)
+        if isinstance(member, discord.Member):
+            return member
+
+        member = guild.get_member(execution.user_id)
+        if member is not None:
+            return member
+
+        try:
+            return await guild.fetch_member(execution.user_id)
+        except (discord.HTTPException, discord.NotFound):
+            return None
+
+    def _record_trigger(self, guild_id: int, user_id: int, kick_config: dict) -> int:
+        now = time.monotonic()
+        time_window = kick_config["time_window"]
+        key = (guild_id, user_id)
+        history = [
+            timestamp
+            for timestamp in self._trigger_history.get(key, [])
+            if now - timestamp <= time_window
+        ]
+        history.append(now)
+
+        if len(history) >= kick_config["threshold"]:
+            self._trigger_history.pop(key, None)
+        else:
+            self._trigger_history[key] = history
+        return len(history)
+
+    def _format_trigger_action(
+        self,
+        action: str,
+        *,
+        trigger_count: int,
+        time_window: int,
+    ) -> str:
+        return (
+            action.replace("{trigger_count}", str(trigger_count))
+            .replace("{time_window}", str(time_window))
+        )
+
+    async def _run_trigger_action(
+        self,
+        guild: discord.Guild,
+        member: discord.Member,
+        *,
+        trigger_count: int,
+        time_window: int,
+        action: str,
+    ) -> bool:
+        formatted_action = self._format_trigger_action(
+            action,
+            trigger_count=trigger_count,
+            time_window=time_window,
+        )
+        _, error = self._expand_action_string(formatted_action, guild.id)
+        if error:
+            log(
+                f"AntiBeast 觸發動作無效: {error}",
+                level=logging.ERROR,
+                module_name="AntiBeast",
+                guild=guild,
+                user=member,
+            )
+            return False
+
+        try:
+            result = await Moderate.do_action_str(
+                formatted_action,
+                guild=guild,
+                user=member,
+                message=None,
+                moderator=guild.me,
+            )
+        except Exception as error:
+            log(
+                f"AntiBeast 執行觸發動作失敗: {error}",
+                level=logging.ERROR,
+                module_name="AntiBeast",
+                guild=guild,
+                user=member,
+            )
+            return False
+
+        log(
+            f"AntiBeast 已對 {member} 執行觸發動作: {formatted_action} / {result}",
+            module_name="AntiBeast",
+            guild=guild,
+            user=member,
+        )
+        return True
+
     @app_commands.command(name="about", description="關於 AntiBeast")
     async def about(self, interaction: discord.Interaction):
         embed = discord.Embed(
@@ -258,6 +444,11 @@ class AntiBeast(commands.GroupCog, name="antibeast"):
                 "可以把需要正常被提及的身分組加入繞過清單；"
                 "這些身分組不會被放進 AutoMod keyword filter。"
             ),
+            inline=False,
+        )
+        embed.add_field(
+            name="連續觸發處置",
+            value="可以設定在指定秒數內觸發 AntiBeast 幾次後，執行 Moderate.py 動作字串；預設是踢出。",
             inline=False,
         )
         await interaction.response.send_message(embed=embed, ephemeral=True)
@@ -345,6 +536,78 @@ class AntiBeast(commands.GroupCog, name="antibeast"):
             allowed_mentions=discord.AllowedMentions.none(),
         )
 
+    @app_commands.command(name="settings", description="設定 AntiBeast 短時間多次觸發時的處置動作")
+    @app_commands.default_permissions(administrator=True)
+    @app_commands.describe(
+        enable="是否啟用自動處置",
+        threshold="時間窗口內觸發幾次後處置（1-20）",
+        time_window="時間窗口秒數（5-3600）",
+        action="Moderate.py 動作字串，留空則保留目前設定",
+    )
+    async def settings(
+        self,
+        interaction: discord.Interaction,
+        enable: bool = None,
+        threshold: int = None,
+        time_window: int = None,
+        action: str = None,
+    ):
+        config = self._get_config(interaction.guild.id)
+        kick_config = dict(config["kick"])
+        changed = False
+
+        if enable is not None:
+            kick_config["enabled"] = enable
+            changed = True
+
+        if threshold is not None:
+            if threshold < 1 or threshold > 20:
+                await interaction.response.send_message("⚠️ threshold 必須介於 1 到 20。", ephemeral=True)
+                return
+            kick_config["threshold"] = threshold
+            changed = True
+
+        if time_window is not None:
+            if time_window < 5 or time_window > 3600:
+                await interaction.response.send_message("⚠️ time_window 必須介於 5 到 3600 秒。", ephemeral=True)
+                return
+            kick_config["time_window"] = time_window
+            changed = True
+
+        if action is not None:
+            action = action.strip()
+            _, error = self._expand_action_string(action, interaction.guild.id)
+            if error:
+                await interaction.response.send_message(f"⚠️ action 無效：{error}", ephemeral=True)
+                return
+            kick_config["action"] = action
+            changed = True
+
+        kick_config = self._normalize_kick_config(kick_config)
+        config["kick"] = kick_config
+        set_server_config(interaction.guild.id, "antibeast", config)
+
+        if not kick_config["enabled"]:
+            status = "❌ 停用"
+        else:
+            status = (
+                f"✅ 啟用，{kick_config['time_window']} 秒內觸發 {kick_config['threshold']} 次後執行："
+                f"`{kick_config['action']}`"
+            )
+
+        log(
+            f"AntiBeast 自動處置設定更新: {kick_config}",
+            module_name="AntiBeast",
+            guild=interaction.guild,
+            user=interaction.user,
+        )
+        prefix = "已更新設定。" if changed else "目前設定："
+        await interaction.response.send_message(
+            f"{prefix}\n自動處置：{status}",
+            ephemeral=True,
+            allowed_mentions=discord.AllowedMentions.none(),
+        )
+
     @app_commands.command(name="list", description="列出 AntiBeast 設定")
     @app_commands.default_permissions(administrator=True)
     async def list_config(self, interaction: discord.Interaction):
@@ -373,6 +636,14 @@ class AntiBeast(commands.GroupCog, name="antibeast"):
             value=f"{protected_role_count} 個身分組會被放進 keyword filter",
             inline=False,
         )
+        kick_config = config["kick"]
+        kick_text = (
+            f"✅ 啟用，{kick_config['time_window']} 秒內觸發 {kick_config['threshold']} 次後執行："
+            f"`{kick_config['action']}`"
+            if kick_config["enabled"]
+            else "❌ 停用"
+        )
+        embed.add_field(name="連續觸發處置", value=kick_text, inline=False)
         embed.add_field(
             name="繞過身分組",
             value="\n".join(role.mention for role in roles) if roles else "目前沒有任何想要被繞過的身分組。",
@@ -428,6 +699,43 @@ class AntiBeast(commands.GroupCog, name="antibeast"):
         await self._sync_enabled_guild_state(
             role.guild,
             reason=f"AntiBeast role deleted: {role.id}",
+        )
+
+    @commands.Cog.listener()
+    async def on_automod_action(self, execution: discord.AutoModAction):
+        guild = execution.guild
+        if guild is None:
+            return
+
+        config = self._get_config(guild.id)
+        kick_config = config["kick"]
+        if not config["enabled"] or not kick_config["enabled"]:
+            return
+
+        if not await self._is_antibeast_execution(execution, config):
+            return
+
+        set_server_config(guild.id, "antibeast", config)
+        trigger_count = self._record_trigger(guild.id, execution.user_id, kick_config)
+        if trigger_count < kick_config["threshold"]:
+            return
+
+        member = await self._get_execution_member(guild, execution)
+        if member is None:
+            log(
+                f"AntiBeast 達到處置門檻，但找不到用戶 {execution.user_id}。",
+                level=logging.WARNING,
+                module_name="AntiBeast",
+                guild=guild,
+            )
+            return
+
+        await self._run_trigger_action(
+            guild,
+            member,
+            trigger_count=trigger_count,
+            time_window=kick_config["time_window"],
+            action=kick_config["action"],
         )
 
 
