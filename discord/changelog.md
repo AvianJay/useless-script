@@ -1,5 +1,31 @@
 # 更新日誌
 
+## 0.21.1
+### 更新內容如下：
+* 新增 AntiBeast | /antibeast
+  * 新增針對 Mr. Beast 圖片詐騙、批量提及與盜帳號機器人的提及防護模組。
+  * 可透過 `/antibeast setup` 互動式啟用，並自動建立 Discord 原生 AutoMod 規則，阻擋 `@everyone`、`@here` 與未被繞過的身分組提及。
+  * 支援 `/antibeast bypass`、`/antibeast settings`、`/antibeast list`，可設定繞過身分組，以及在短時間連續觸發後自動 `kick`、`ban`、`mute`、`warn` 等處置。
+* 更新 AI | /ai
+  * AI 後端改為 OpenAI-compatible custom API，主 AI、圖片審核與檢舉審核共用同一套 endpoint、API key 與模型設定。
+  * 新增開發者專用的 `ai-config` / `aicfg` 管理指令，可設定 endpoint、API key、模型價格、review model、report model 與整體模型 JSON。
+  * 調整預設模型與模型設定來源。
+* 強化被盜帳號偵測 | /imhacked
+  * 預防性禁言期限延長為 28 天，並保留跨伺服器的處置記錄。
+  * 可疑新帳號加入伺服器時，現在也會依據帳號特徵自動評分，必要時立即預防性禁言。
+  * 已被標記的帳號若加入新的共同伺服器，也會自動延續處置。
+  * 若 28 天內仍未完成驗證，系統會自動踢出仍未驗證的帳號。
+* 更新 Explore
+  * 修復探索空間切換伺服器、離開或斷線時可能殘留玩家資料的問題。
+  * 加入、移動與換造型時現在會同步帶上地圖與位置資訊，空間狀態更一致。
+* 更新通知與驗證
+  * Moderation 通知現在會更正確判斷使用者是否仍在伺服器或已被封禁，避免錯誤通知。
+  * 禁言通知的解禁時間顯示改進，現在會同時顯示相對時間與完整時間。
+  * 修復 WebVerify 設定精靈在通知方式選單異常時的處理問題。
+* 更新文檔
+  * 新增 AntiBeast 使用說明與網站文件頁面。
+* 修復一些 Bug。
+
 ## 0.21.0
 ### 更新內容如下：
 * 更新資訊指令 | /info

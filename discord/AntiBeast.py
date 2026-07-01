@@ -486,7 +486,7 @@ class AntiBeast(commands.GroupCog, name="antibeast"):
         )
         embed.add_field(
             name="連續觸發處置",
-            value="可以設定在指定秒數內觸發 AntiBeast 幾次後，執行 Moderate.py 動作字串；預設是踢出。",
+            value="可以設定在指定秒數內觸發 AntiBeast 幾次後，執行 Moderate 動作指令；預設是踢出。",
             inline=False,
         )
         return embed
@@ -629,7 +629,7 @@ class AntiBeast(commands.GroupCog, name="antibeast"):
         enable="是否啟用自動處置",
         threshold="時間窗口內觸發幾次後處置（1-20）",
         time_window="時間窗口秒數（5-3600）",
-        action="Moderate.py 動作字串，留空則保留目前設定",
+        action="Moderate 動作指令，留空則保留目前設定",
     )
     async def settings(
         self,
@@ -853,7 +853,7 @@ class AntiBeastSetupView(discord.ui.View):
         embed = discord.Embed(
             title="AntiBeast Setup: 連續觸發處置",
             description=(
-                "設定同一個使用者在短時間內連續觸發 AntiBeast 後要執行的 Moderate.py 動作。\n"
+                "設定同一個使用者在短時間內連續觸發 AntiBeast 後要執行的 Moderate 指令。\n"
                 "預設會在門檻達成後踢出。"
             ),
             color=discord.Color.blurple(),
@@ -1044,7 +1044,7 @@ class AntiBeastActionModal(discord.ui.Modal, title="AntiBeast 處置設定"):
             max_length=4,
         )
         self.action = discord.ui.TextInput(
-            label="Moderate.py 動作字串",
+            label="Moderate 動作指令",
             default=kick_config["action"],
             placeholder=DEFAULT_TRIGGER_ACTION,
             style=discord.TextStyle.paragraph,
