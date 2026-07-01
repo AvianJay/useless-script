@@ -524,6 +524,7 @@
             <h3><span class="docs-fa-icon"><i class="fa-solid fa-shield-halved" aria-hidden="true"></i></span>管理與安全</h3>
             <a href="#Moderate">管理工具</a>
             <a href="#AutoModerate">自動管理</a>
+            <a href="#AntiBeast">AntiBeast</a>
             <a href="#ReportSystem">檢舉系統</a>
             <a href="#ModerationNotify">懲處通知</a>
             <a href="#ServerWebVerify">網頁驗證</a>
@@ -664,6 +665,31 @@
                 </table>
                 <div class="doc-note">
                     <strong>功能清單：</strong>Anti-Spam、Anti-Raid、Anti-UISpam、ScamTrap、過多表情偵測、逃避懲處偵測、AutoMod 事件整合。可透過 <a href="/panel/" style="color: var(--accent);">網頁面板</a> 進行詳細配置。
+                </div>
+            </div>
+
+            <div class="doc-section" id="AntiBeast">
+                <h2><span class="module-icon"><i class="fa-solid fa-shield-virus" aria-hidden="true"></i></span> AntiBeast — 提及詐騙防護 <span class="doc-tag admin">管理員</span><span class="doc-tag auto">自動化</span></h2>
+                <div class="module-desc">
+                    AntiBeast 會建立 Discord 原生 AutoMod keyword 規則，阻擋 <code>@everyone</code>、<code>@here</code> 與所有未被繞過的身分組提及，用於降低 Mr. Beast 圖片詐騙與批量提及攻擊的影響。
+                </div>
+                <table class="cmd-table">
+                    <tr><th>指令</th><th>說明</th></tr>
+                    <tr><td><code>/antibeast setup</code></td><td>互動式設定流程：查看說明、設定繞過身分組、設定處置，最後啟用</td></tr>
+                    <tr><td><code>/antibeast about</code></td><td>查看 AntiBeast 的功能說明</td></tr>
+                    <tr><td><code>/antibeast toggle</code></td><td>啟用、停用或切換 AntiBeast</td></tr>
+                    <tr><td><code>/antibeast bypass</code></td><td>新增或移除不放進 keyword filter 的繞過身分組</td></tr>
+                    <tr><td><code>/antibeast settings</code></td><td>設定連續觸發處置的時間窗口、門檻與 Moderate.py action</td></tr>
+                    <tr><td><code>/antibeast list</code></td><td>查看目前設定、AutoMod 規則 ID、受保護身分組與處置設定</td></tr>
+                </table>
+                <div class="doc-note">
+                    <strong>繞過清單：</strong>這不是 AutoMod exempt roles，而是不要把該身分組的 <code>&lt;@&amp;role_id&gt;</code> token 放進 keyword filter。
+                </div>
+                <div class="doc-note">
+                    <strong>連續觸發處置：</strong>預設為 <code>10</code> 秒內觸發 <code>2</code> 次後執行 <code>kick AntiBeast: {time_window} 秒內觸發 {trigger_count} 次</code>。action 使用 Moderate.py 動作字串，可改成 <code>mute</code>、<code>ban</code>、<code>warn</code>、<code>smm</code> 等組合。
+                </div>
+                <div class="doc-note">
+                    <strong>權限需求：</strong>需要管理伺服器與管理身分組；若處置 action 會踢出、封禁或禁言，也需要對應權限與足夠的身分組階級。
                 </div>
             </div>
 

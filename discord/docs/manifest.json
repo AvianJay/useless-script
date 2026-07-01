@@ -29,6 +29,11 @@
           "file": "automoderate"
         },
         {
+          "id": "AntiBeast",
+          "label": "AntiBeast",
+          "file": "antibeast"
+        },
+        {
           "id": "ReportSystem",
           "label": "檢舉系統",
           "file": "reportsystem"
