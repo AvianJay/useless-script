@@ -29,6 +29,29 @@ def check_mentions(content: str) -> bool:
     return False
 
 
+def is_antibeast_enabled(guild: discord.Guild | None) -> bool:
+    if guild is None:
+        return False
+
+    config = get_server_config(guild.id, "antibeast", {})
+    return isinstance(config, dict) and bool(config.get("enabled", False))
+
+
+def can_send_mass_mentions(interaction: discord.Interaction) -> bool:
+    if not interaction.guild or not interaction.channel:
+        return False
+
+    channel = interaction.channel
+    if not channel.permissions_for(interaction.user).mention_everyone:
+        return False
+    if not channel.permissions_for(interaction.guild.me).mention_everyone:
+        return False
+
+    if is_antibeast_enabled(interaction.guild):
+        return interaction.user.guild_permissions.manage_guild
+    return True
+
+
 class ConfirmMentionsView(discord.ui.View):
     def __init__(self, user: Union[discord.User, discord.Member], message: str, interaction: discord.Interaction):
         super().__init__(timeout=30)
@@ -162,7 +185,7 @@ class FakeUser(commands.Cog):
         mention = False
 
         if check_mentions(message):
-            if interaction.channel.permissions_for(interaction.user).mention_everyone and interaction.channel.permissions_for(interaction.guild.me).mention_everyone:
+            if can_send_mass_mentions(interaction):
                 # ask user if they really want to send a message with mentions
                 view = ConfirmMentionsView(interaction.user, message, interaction)
                 await interaction.followup.send("你的訊息中包含了提及，這可能會通知到很多人。你確定要發送這條訊息嗎？", view=view, ephemeral=True)
