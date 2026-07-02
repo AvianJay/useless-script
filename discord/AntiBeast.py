@@ -16,6 +16,7 @@ LEGACY_RULE_NAMES = {"AntiBeast - block everyone/here"}
 BASE_KEYWORD_FILTER = ["@everyone", "@here"]
 BLOCK_MESSAGE = "AntiBeast 已阻擋 everyone/here 或受保護身分組提及。"
 DEFAULT_TRIGGER_ACTION = "kick AntiBeast: {time_window} 秒內觸發 {trigger_count} 次"
+AUTOMOD_RULE_LIMIT_ERROR_CODES = {30034}
 SUPPORTED_ACTION_PREFIXES = {
     "ban",
     "kick",
@@ -308,7 +309,13 @@ class AntiBeast(commands.GroupCog, name="antibeast"):
         elif isinstance(error, discord.Forbidden):
             message = f"⚠️ AntiBeast 同步失敗：{error.text or error}"
         elif isinstance(error, discord.HTTPException):
-            message = f"⚠️ AntiBeast 同步失敗：Discord API 回應錯誤 ({error.status})。"
+            if self._is_automod_rule_limit_error(error):
+                message = (
+                    "⚠️ AntiBeast 無法建立 AutoMod 規則：這個伺服器的 Discord AutoMod 規則數量已達上限。"
+                    "請先刪除不需要的 AutoMod 規則，或移除舊的 AntiBeast 規則後再試。"
+                )
+            else:
+                message = f"⚠️ AntiBeast 同步失敗：Discord API 回應錯誤 ({error.status})。"
         else:
             message = "⚠️ AntiBeast 同步失敗，請稍後再試。"
 
@@ -320,6 +327,26 @@ class AntiBeast(commands.GroupCog, name="antibeast"):
             user=interaction.user,
         )
         await interaction.followup.send(message, ephemeral=True)
+
+    @staticmethod
+    def _is_automod_rule_limit_error(error: discord.HTTPException) -> bool:
+        if getattr(error, "code", None) in AUTOMOD_RULE_LIMIT_ERROR_CODES:
+            return True
+
+        error_text = " ".join(
+            str(part)
+            for part in (
+                getattr(error, "text", ""),
+                getattr(error, "response", ""),
+                error,
+            )
+        ).casefold()
+        mentions_automod = "automod" in error_text or "auto moderation" in error_text
+        mentions_limit = any(
+            keyword in error_text
+            for keyword in ("maximum", "limit", "too many", "reached", "已達", "上限")
+        )
+        return mentions_automod and mentions_limit
 
     async def _is_antibeast_execution(self, execution: discord.AutoModAction, config: dict) -> bool:
         try:
@@ -572,7 +599,7 @@ class AntiBeast(commands.GroupCog, name="antibeast"):
             user=interaction.user,
         )
         await interaction.followup.send(
-            f"✅ AntiBeast 已 **{status}**。\n{rule_text}\n{everyone_text}。",
+            f"✅ AntiBeast 已**{status}**。\n{rule_text}\n{everyone_text}。",
             ephemeral=True,
             allowed_mentions=discord.AllowedMentions.none(),
         )
