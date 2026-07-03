@@ -373,6 +373,10 @@ def _get_support_guild_bonus_count(user_id: int, interaction: discord.Interactio
     bonus_count = 0
     if support_guild.get_member(user_id):
         bonus_count += 1
+        # check if user boosted the support guild
+        if support_guild.premium_subscriber_role:
+            if support_guild.premium_subscriber_role in support_guild.get_member(user_id).roles:
+                bonus_count += 5
 
     if guild_id != GLOBAL_GUILD_ID and interaction.guild:
         owner_id = getattr(interaction.guild, "owner_id", None)
