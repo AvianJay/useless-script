@@ -145,9 +145,10 @@ class AppealView(discord.ui.View):
             if not guild.fetch_ban(interaction.user.id):
                 await interaction.response.send_message("你沒有被封禁，無法提出申訴。", ephemeral=True)
                 return
-        if not guild.get_member(interaction.user.id).is_timed_out():
-            await interaction.response.send_message("你沒有被禁言，無法提出申訴。", ephemeral=True)
-            return
+        if guild.get_member(interaction.user.id):
+            if not guild.get_member(interaction.user.id).is_timed_out():
+                await interaction.response.send_message("你沒有被禁言，無法提出申訴。", ephemeral=True)
+                return
         await interaction.response.send_modal(AppealModal())
 
 async def notify_user(user: discord.User, guild: discord.Guild, action: str, reason: str = "未提供", end_time=None, moderator: discord.Member = None):
