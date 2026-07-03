@@ -356,27 +356,31 @@ def interaction_uses_server_scope(interaction: discord.Interaction) -> bool:
     return interaction_uses_guild_scope(interaction)
 
 
-def _get_support_guild_bonus_count(user_id: int, interaction: discord.Interaction, guild_id: int) -> int:
+def _get_support_guild():
     support_guild_id = config("support_guild_id", 0)
     try:
         support_guild_id = int(str(support_guild_id).strip())
     except (TypeError, ValueError):
-        return 0
+        return None
 
     if not support_guild_id:
-        return 0
+        return None
 
-    support_guild = bot.get_guild(support_guild_id)
+    return bot.get_guild(support_guild_id)
+
+
+def _get_support_guild_bonus_count(user_id: int, interaction: discord.Interaction, guild_id: int) -> int:
+    support_guild = _get_support_guild()
     if not support_guild:
         return 0
 
+    support_member = support_guild.get_member(user_id)
     bonus_count = 0
-    if support_guild.get_member(user_id):
+    if support_member:
         bonus_count += 1
         # check if user boosted the support guild
-        if support_guild.premium_subscriber_role:
-            if support_guild.premium_subscriber_role in support_guild.get_member(user_id).roles:
-                bonus_count += 5
+        if support_guild.premium_subscriber_role and support_guild.premium_subscriber_role in support_member.roles:
+            bonus_count += 5
 
     if guild_id != GLOBAL_GUILD_ID and interaction.guild:
         owner_id = getattr(interaction.guild, "owner_id", None)
@@ -384,6 +388,18 @@ def _get_support_guild_bonus_count(user_id: int, interaction: discord.Interactio
             bonus_count += 1
 
     return bonus_count
+
+
+def _should_show_support_guild_join_notice(user_id: int) -> bool:
+    support_invite = str(config("support_server_invite", "") or "").strip()
+    if not support_invite:
+        return False
+
+    support_guild = _get_support_guild()
+    if not support_guild:
+        return False
+
+    return support_guild.get_member(user_id) is None
 
 
 def _economy_user_label(user) -> str:
@@ -1460,7 +1476,7 @@ class Economy(commands.GroupCog, name="economy", description="經濟系統指令
             "\n-# 提示：加入[支援伺服器]("
             + support_invite
             + ")可獲得額外加成！"
-            if support_bonus_count > 0 else ""
+            if _should_show_support_guild_join_notice(user_id) else ""
         )
         embed = discord.Embed(
             title=f"📅 每日獎勵（{scope_label}）",
@@ -1575,7 +1591,7 @@ class Economy(commands.GroupCog, name="economy", description="經濟系統指令
             "\n-# 提示：加入[支援伺服器]("
             + support_invite
             + ")可獲得額外加成！"
-            if support_bonus_count > 0 else ""
+            if _should_show_support_guild_join_notice(user_id) else ""
         )
         embed = discord.Embed(
             title=f"⏱️ 每小時獎勵（{scope_label}）",
