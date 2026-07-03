@@ -563,12 +563,32 @@ class AIResponseBuilder:
         return sections or [[str(response_text or "")]]
 
     @classmethod
-    def _append_response_text_to_container(cls, container: discord.ui.Container, response_text: str):
-        for index, chunks in enumerate(cls._iter_response_text_sections(response_text)):
-            if index > 0:
-                container.add_item(discord.ui.Separator(spacing=discord.SeparatorSpacing.small))
+    def _iter_response_text_items(cls, response_text: str) -> list[tuple[str, list[str] | None]]:
+        text = str(response_text or "")
+        items: list[tuple[str, list[str] | None]] = []
+        cursor = 0
 
-            for chunk in chunks:
+        for match in re.finditer(r'(?m)^\s*---\s*$', text):
+            section = text[cursor:match.start()].strip('\n')
+            if section.strip():
+                items.append(("text", cls._split_response_text_chunks(section)))
+            items.append(("separator", None))
+            cursor = match.end()
+
+        section = text[cursor:].strip('\n')
+        if section.strip():
+            items.append(("text", cls._split_response_text_chunks(section)))
+
+        return items or [("text", [text])]
+
+    @classmethod
+    def _append_response_text_to_container(cls, container: discord.ui.Container, response_text: str):
+        for item_type, chunks in cls._iter_response_text_items(response_text):
+            if item_type == "separator":
+                container.add_item(discord.ui.Separator(spacing=discord.SeparatorSpacing.small))
+                continue
+
+            for chunk in chunks or []:
                 container.add_item(discord.ui.TextDisplay(chunk))
     
     @classmethod
@@ -620,10 +640,11 @@ class AIResponseBuilder:
                 view.add_item(discord.ui.TextDisplay(f"⚠️ **警告**: {warning}"))
             
             # 回應內容 - 支援 `---` 轉成 View 分隔線，並自動分段長訊息
-            for index, chunks in enumerate(cls._iter_response_text_sections(response_text)):
-                if index > 0:
+            for item_type, chunks in cls._iter_response_text_items(response_text):
+                if item_type == "separator":
                     view.add_item(discord.ui.Separator(spacing=discord.SeparatorSpacing.small))
-                for chunk in chunks:
+                    continue
+                for chunk in chunks or []:
                     view.add_item(discord.ui.TextDisplay(chunk))
             
             # 底部資訊
