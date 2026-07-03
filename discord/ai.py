@@ -552,24 +552,24 @@ class AIResponseBuilder:
         return [chunk for chunk in chunks if chunk] or [""]
 
     @classmethod
-    def _append_response_text_to_container(cls, container: discord.ui.Container, response_text: str):
-        sections = re.split(r'(?m)^\s*---\s*$', str(response_text or ""))
-        rendered_any = False
-
-        for section in sections:
+    def _iter_response_text_sections(cls, response_text: str) -> list[list[str]]:
+        sections: list[list[str]] = []
+        for section in re.split(r'(?m)^\s*---\s*$', str(response_text or "")):
             if not section.strip():
                 continue
+            chunks = cls._split_response_text_chunks(section.strip('\n'))
+            if chunks:
+                sections.append(chunks)
+        return sections or [[str(response_text or "")]]
 
-            if rendered_any:
+    @classmethod
+    def _append_response_text_to_container(cls, container: discord.ui.Container, response_text: str):
+        for index, chunks in enumerate(cls._iter_response_text_sections(response_text)):
+            if index > 0:
                 container.add_item(discord.ui.Separator(spacing=discord.SeparatorSpacing.small))
 
-            for chunk in cls._split_response_text_chunks(section.strip('\n')):
+            for chunk in chunks:
                 container.add_item(discord.ui.TextDisplay(chunk))
-
-            rendered_any = True
-
-        if not rendered_any:
-            container.add_item(discord.ui.TextDisplay(str(response_text or "")))
     
     @classmethod
     def create_response_view(
@@ -619,9 +619,12 @@ class AIResponseBuilder:
             if warning:
                 view.add_item(discord.ui.TextDisplay(f"⚠️ **警告**: {warning}"))
             
-            # 回應內容 - 自動分段長訊息
-            for chunk in cls._split_response_text_chunks(response_text):
-                view.add_item(discord.ui.TextDisplay(chunk))
+            # 回應內容 - 支援 `---` 轉成 View 分隔線，並自動分段長訊息
+            for index, chunks in enumerate(cls._iter_response_text_sections(response_text)):
+                if index > 0:
+                    view.add_item(discord.ui.Separator(spacing=discord.SeparatorSpacing.small))
+                for chunk in chunks:
+                    view.add_item(discord.ui.TextDisplay(chunk))
             
             # 底部資訊
             footer_parts = []
