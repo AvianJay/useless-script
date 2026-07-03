@@ -356,6 +356,32 @@ def interaction_uses_server_scope(interaction: discord.Interaction) -> bool:
     return interaction_uses_guild_scope(interaction)
 
 
+def _get_support_guild_bonus_count(user_id: int, interaction: discord.Interaction, guild_id: int) -> int:
+    support_guild_id = config("support_guild_id", 0)
+    try:
+        support_guild_id = int(str(support_guild_id).strip())
+    except (TypeError, ValueError):
+        return 0
+
+    if not support_guild_id:
+        return 0
+
+    support_guild = bot.get_guild(support_guild_id)
+    if not support_guild:
+        return 0
+
+    bonus_count = 0
+    if support_guild.get_member(user_id):
+        bonus_count += 1
+
+    if guild_id != GLOBAL_GUILD_ID and interaction.guild:
+        owner_id = getattr(interaction.guild, "owner_id", None)
+        if owner_id and support_guild.get_member(owner_id):
+            bonus_count += 1
+
+    return bonus_count
+
+
 def _economy_user_label(user) -> str:
     if not user:
         return "N/A"
@@ -1396,6 +1422,7 @@ class Economy(commands.GroupCog, name="economy", description="經濟系統指令
 
         daily_amount = get_daily_amount(guild_id)
         currency_name = get_currency_name(guild_id)
+        balance_before = get_balance(guild_id, user_id)
 
         # 發放獎勵
         add_balance(guild_id, user_id, daily_amount)
@@ -1415,19 +1442,37 @@ class Economy(commands.GroupCog, name="economy", description="經濟系統指令
 
         bonus = 0
         if streak >= 7:
-            bonus = int(daily_amount * 0.5)
+            bonus = int(daily_amount * 0.5 + ((streak - 7) // 3) * 10)  # 7天以上額外獎勵
             add_balance(guild_id, user_id, bonus)
 
+        support_bonus_count = _get_support_guild_bonus_count(user_id, interaction, guild_id)
+        support_bonus = round((daily_amount + bonus) * (0.1 * support_bonus_count), 2)
+        if support_bonus > 0:
+            add_balance(guild_id, user_id, support_bonus)
+
         scope_label = "全域" if guild_id == GLOBAL_GUILD_ID else "伺服器"
+        support_invite = str(config("support_server_invite", "") or "")
+        support_bonus_notice = (
+            "\n-# 提示：加入[支援伺服器]("
+            + support_invite
+            + ")可獲得額外加成！"
+            if support_bonus_count > 0 else ""
+        )
         embed = discord.Embed(
             title=f"📅 每日獎勵（{scope_label}）",
-            description=f"你獲得了 **{daily_amount:,.0f}** {currency_name}！",
+            description=f"你獲得了 **{daily_amount:,.0f}** {currency_name}！{support_bonus_notice}",
             color=0x2ecc71
         )
         if bonus > 0:
             embed.add_field(
                 name="🔥 連續登入獎勵",
                 value=f"+{bonus:,.0f} {currency_name}（連續 {streak} 天）",
+                inline=False
+            )
+        if support_bonus > 0:
+            embed.add_field(
+                name="🎁 支援伺服器加成",
+                value=f"+{support_bonus:,.0f} {currency_name}（+{support_bonus_count * 10}%）",
                 inline=False
             )
         embed.add_field(
@@ -1437,8 +1482,14 @@ class Economy(commands.GroupCog, name="economy", description="經濟系統指令
         )
         embed.set_footer(text=f"連續登入：{streak} 天")
         embed.timestamp = datetime.now(timezone(timedelta(hours=8)))
-        total_earned = daily_amount + bonus
-        log_transaction(guild_id, user_id, "每日簽到", total_earned, currency_name, f"連續 {streak} 天" + (f"，含獎勵 {bonus}" if bonus > 0 else ""))
+        balance_after = get_balance(guild_id, user_id)
+        total_earned = balance_after - balance_before
+        detail_parts = [f"連續 {streak} 天"]
+        if bonus > 0:
+            detail_parts.append(f"含連續獎勵 {bonus:,.0f}")
+        if support_bonus > 0:
+            detail_parts.append(f"支援伺服器加成 {support_bonus:,.0f}")
+        log_transaction(guild_id, user_id, "每日簽到", total_earned, currency_name, "，".join(detail_parts))
         queue_economy_audit_log(
             "daily",
             guild_id=guild_id,
@@ -1446,9 +1497,9 @@ class Economy(commands.GroupCog, name="economy", description="經濟系統指令
             interaction=interaction,
             currency=currency_name,
             amount=total_earned,
-            balance_before=get_balance(guild_id, user_id) - total_earned,
-            balance_after=get_balance(guild_id, user_id),
-            detail=f"Daily reward claimed. Streak={streak}, bonus={bonus:,.2f}",
+            balance_before=balance_before,
+            balance_after=balance_after,
+            detail=f"Daily reward claimed. Streak={streak}, bonus={bonus:,.2f}, support_bonus={support_bonus:,.2f}",
             color=0x2ECC71,
         )
         await interaction.response.send_message(embed=embed)
@@ -1499,6 +1550,7 @@ class Economy(commands.GroupCog, name="economy", description="經濟系統指令
 
         hourly_amount = get_hourly_amount(guild_id)
         currency_name = get_currency_name(guild_id)
+        balance_before = get_balance(guild_id, user_id)
 
         # 發放獎勵
         add_balance(guild_id, user_id, hourly_amount)
@@ -1508,12 +1560,30 @@ class Economy(commands.GroupCog, name="economy", description="經濟系統指令
         if guild_id != GLOBAL_GUILD_ID:
             apply_inflation(guild_id, hourly_amount, HOURLY_INFLATION_WEIGHT)
 
+        support_bonus_count = _get_support_guild_bonus_count(user_id, interaction, guild_id)
+        support_bonus = round(hourly_amount * (0.1 * support_bonus_count), 2)
+        if support_bonus > 0:
+            add_balance(guild_id, user_id, support_bonus)
+
         scope_label = "全域" if guild_id == GLOBAL_GUILD_ID else "伺服器"
+        support_invite = str(config("support_server_invite", "") or "")
+        support_bonus_notice = (
+            "\n-# 提示：加入[支援伺服器]("
+            + support_invite
+            + ")可獲得額外加成！"
+            if support_bonus_count > 0 else ""
+        )
         embed = discord.Embed(
             title=f"⏱️ 每小時獎勵（{scope_label}）",
-            description=f"你獲得了 **{hourly_amount:,.0f}** {currency_name}！",
+            description=f"你獲得了 **{hourly_amount:,.0f}** {currency_name}！{support_bonus_notice}",
             color=0x3498db
         )
+        if support_bonus > 0:
+            embed.add_field(
+                name="🎁 支援伺服器加成",
+                value=f"+{support_bonus:,.0f} {currency_name}（+{support_bonus_count * 10}%）",
+                inline=False
+            )
         embed.add_field(
             name="📊 目前餘額",
             value=f"{get_balance(guild_id, user_id):,.2f} {currency_name}",
@@ -1521,17 +1591,20 @@ class Economy(commands.GroupCog, name="economy", description="經濟系統指令
         )
         # embed.set_footer(text="AwA")
         embed.timestamp = now
-        log_transaction(guild_id, user_id, "每小時簽到", hourly_amount, currency_name)
+        balance_after = get_balance(guild_id, user_id)
+        total_earned = balance_after - balance_before
+        detail = f"支援伺服器加成 {support_bonus:,.0f}" if support_bonus > 0 else ""
+        log_transaction(guild_id, user_id, "每小時簽到", total_earned, currency_name, detail)
         queue_economy_audit_log(
             "hourly",
             guild_id=guild_id,
             actor=interaction.user,
             interaction=interaction,
             currency=currency_name,
-            amount=hourly_amount,
-            balance_before=get_balance(guild_id, user_id) - hourly_amount,
-            balance_after=get_balance(guild_id, user_id),
-            detail="Hourly reward claimed.",
+            amount=total_earned,
+            balance_before=balance_before,
+            balance_after=balance_after,
+            detail=f"Hourly reward claimed. support_bonus={support_bonus:,.2f}",
             color=0x3498DB,
         )
         await interaction.response.send_message(embed=embed)
