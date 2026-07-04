@@ -605,6 +605,8 @@ class HackedDetector(commands.Cog):
         # no avatar
         if member.avatar is None:
             score += 1
+        else:
+            score -= 3
         # account age < 30 days
         if (discord.utils.utcnow() - member.created_at).days < 30:
             score += 1
