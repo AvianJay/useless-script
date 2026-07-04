@@ -13,17 +13,21 @@ from globalenv import (
 import discord
 from discord.ext import commands
 from discord import app_commands
+import aiohttp
 import asyncio
+import base64
 import html
 import io
 import importlib
 import json
+import math
 import re
 import time
 from datetime import datetime, timezone, timedelta
 from logger import log
 import logging
 from pathlib import Path
+from urllib.parse import urlparse
 from uuid import uuid4
 from doc_markdown import read_markdown_file, extract_markdown_search_entries, load_docs_site
 from OwnerTools import is_owner
@@ -35,6 +39,8 @@ from ai_provider import (
     format_ai_models_for_display as _format_ai_models_for_display,
     get_ai_api_key as _get_ai_api_key,
     get_ai_endpoint as _get_ai_endpoint,
+    get_ai_image_model as _get_ai_image_model,
+    get_ai_image_model_rates as _get_ai_image_model_rates,
     get_ai_model_rates as _get_ai_model_rates,
     get_ai_report_model as _get_ai_report_model,
     get_ai_review_model as _get_ai_review_model,
@@ -43,6 +49,8 @@ from ai_provider import (
     is_ai_text_model as _is_ai_text_model,
     set_ai_api_key as _set_ai_api_key,
     set_ai_endpoint as _set_ai_endpoint,
+    set_ai_image_model as _set_ai_image_model,
+    set_ai_image_model_rates as _set_ai_image_model_rates,
     set_ai_model_rates as _set_ai_model_rates,
     set_ai_report_model as _set_ai_report_model,
     set_ai_review_model as _set_ai_review_model,
@@ -52,6 +60,28 @@ from Economy import log_transaction, send_economy_audit_log
 
 # 全局允許提及設定（只允許提及用戶，禁止 @everyone 和 @here）
 SAFE_MENTIONS = discord.AllowedMentions(users=False, roles=False, everyone=False)
+ALLOWED_DISCORD_IMAGE_HOSTS = {"cdn.discordapp.com", "media.discordapp.net"}
+
+
+def normalize_discord_image_url(value: str | None) -> str | None:
+    url = html.unescape(str(value or "")).strip().strip("<>")
+    if not url or any(char.isspace() for char in url):
+        return None
+
+    try:
+        parsed = urlparse(url)
+        hostname = (parsed.hostname or "").lower()
+        port = parsed.port
+    except ValueError:
+        return None
+
+    if parsed.scheme != "https" or hostname not in ALLOWED_DISCORD_IMAGE_HOSTS:
+        return None
+    if port not in (None, 443):
+        return None
+    if not parsed.path or parsed.path == "/":
+        return None
+    return url
 
 # AI 模型費率（全域幣/字）
 GLOBAL_GUILD_ID = 0
@@ -522,10 +552,25 @@ TOOL_USAGE_PROMPT = """工具使用規則：
 - 如果工具回傳資料不足或該資料目前沒有被結構化儲存，就直接說明限制，不要編造。
 - 正常回答時把工具結果整理成人話，不要把 JSON 原樣貼給使用者，除非使用者特別要求。"""
 
+TOOL_USAGE_PROMPT += """
+
+Response formatting helpers:
+- Use the `image_analyze` tool when the user asks about an image URL. The URL must be on cdn.discordapp.com or media.discordapp.net.
+- To mention a slash command, write exactly: <command_mention>/autoreply list</command_mention>. The renderer will convert it to Discord's command mention when possible.
+- To show a Discord CDN image in the response body, write exactly: <image>https://cdn.discordapp.com/...</image> or <image>https://media.discordapp.net/...</image>.
+- To show a small side image, write exactly: <thumbnail>https://cdn.discordapp.com/...</thumbnail> or <thumbnail>https://media.discordapp.net/...</thumbnail>.
+- Only use cdn.discordapp.com or media.discordapp.net URLs inside image/thumbnail tags. Do not put other hosts in those tags.
+- Use the `generate_image` tool when the user asks you to create, draw, render, or generate an image. If the tool reports attachments, say the image is attached below.
+"""
+
+
 class AIResponseBuilder:
     """使用 Component V2 (LayoutView) 建立 AI 回應"""
 
     RESPONSE_TEXT_MAX_LENGTH = 1900
+    RESPONSE_MAX_MEDIA_COMPONENTS = 9
+    RESPONSE_MEDIA_TAG_PATTERN = re.compile(r"<(image|thumbnail)>(.*?)</\1>", re.IGNORECASE | re.DOTALL)
+    RESPONSE_CODE_FENCE_PATTERN = re.compile(r"```.*?```", re.DOTALL)
 
     @classmethod
     def _split_response_text_chunks(cls, text: str, max_length: int | None = None) -> list[str]:
@@ -582,13 +627,94 @@ class AIResponseBuilder:
         return items or [("text", [text])]
 
     @classmethod
+    def _protect_response_code_fences(cls, text: str) -> tuple[str, list[str]]:
+        fences: list[str] = []
+
+        def preserve(match: re.Match) -> str:
+            fences.append(match.group(0))
+            return f"\x01CODE{len(fences) - 1}\x01"
+
+        return cls.RESPONSE_CODE_FENCE_PATTERN.sub(preserve, text), fences
+
+    @staticmethod
+    def _restore_response_code_fences(text: str, fences: list[str]) -> str:
+        restored = text
+        for index, fence in enumerate(fences):
+            restored = restored.replace(f"\x01CODE{index}\x01", fence)
+        return restored
+
+    @classmethod
+    def _iter_response_layout_items(cls, response_text: str) -> list[tuple[str, list[str] | str | None]]:
+        original_text = str(response_text or "")
+        text, fences = cls._protect_response_code_fences(original_text)
+        items: list[tuple[str, list[str] | str | None]] = []
+        cursor = 0
+        media_components = 0
+        omitted_media = 0
+
+        def add_text(raw_text: str):
+            restored = cls._restore_response_code_fences(raw_text, fences)
+            if restored.strip():
+                items.extend(cls._iter_response_text_items(restored))
+
+        for match in cls.RESPONSE_MEDIA_TAG_PATTERN.finditer(text):
+            add_text(text[cursor:match.start()])
+
+            tag_name = match.group(1).lower()
+            component_cost = 3 if tag_name == "thumbnail" else 1
+            image_url = normalize_discord_image_url(match.group(2))
+            if not image_url:
+                items.append(("text", cls._split_response_text_chunks("[invalid Discord image URL omitted]")))
+            elif media_components + component_cost > cls.RESPONSE_MAX_MEDIA_COMPONENTS:
+                omitted_media += 1
+            else:
+                media_components += component_cost
+                items.append((tag_name, image_url))
+            cursor = match.end()
+
+        add_text(text[cursor:])
+        if omitted_media:
+            items.append(("text", cls._split_response_text_chunks(f"[省略 {omitted_media} 個圖片，避免超過 Discord 元件上限]")))
+        if not items:
+            items.extend(cls._iter_response_text_items(original_text))
+
+        return items
+
+    @staticmethod
+    def _append_image_item(target, image_url: str):
+        gallery = discord.ui.MediaGallery()
+        gallery.add_item(media=image_url)
+        target.add_item(gallery)
+
+    @staticmethod
+    def _append_thumbnail_item(target, image_url: str):
+        thumbnail = discord.ui.Thumbnail(image_url)
+        target.add_item(discord.ui.Section("​", accessory=thumbnail))
+
+    @classmethod
+    def strip_media_tags_for_history(cls, response_text: str) -> str:
+        def replace_media(match: re.Match) -> str:
+            tag_name = match.group(1).lower()
+            label = "縮圖" if tag_name == "thumbnail" else "圖片"
+            image_url = normalize_discord_image_url(match.group(2))
+            return f"[{label}: {image_url}]" if image_url else f"[{label}: 已略過無效 URL]"
+
+        return cls.RESPONSE_MEDIA_TAG_PATTERN.sub(replace_media, str(response_text or ""))
+
+    @classmethod
     def _append_response_text_to_container(cls, container: discord.ui.Container, response_text: str):
-        for item_type, chunks in cls._iter_response_text_items(response_text):
+        for item_type, value in cls._iter_response_layout_items(response_text):
             if item_type == "separator":
                 container.add_item(discord.ui.Separator(spacing=discord.SeparatorSpacing.small))
                 continue
+            if item_type == "image":
+                cls._append_image_item(container, str(value or ""))
+                continue
+            if item_type == "thumbnail":
+                cls._append_thumbnail_item(container, str(value or ""))
+                continue
 
-            for chunk in chunks or []:
+            for chunk in value or []:
                 container.add_item(discord.ui.TextDisplay(chunk))
     
     @classmethod
@@ -640,11 +766,17 @@ class AIResponseBuilder:
                 view.add_item(discord.ui.TextDisplay(f"⚠️ **警告**: {warning}"))
             
             # 回應內容 - 支援 `---` 轉成 View 分隔線，並自動分段長訊息
-            for item_type, chunks in cls._iter_response_text_items(response_text):
+            for item_type, value in cls._iter_response_layout_items(response_text):
                 if item_type == "separator":
                     view.add_item(discord.ui.Separator(spacing=discord.SeparatorSpacing.small))
                     continue
-                for chunk in chunks or []:
+                if item_type == "image":
+                    cls._append_image_item(view, str(value or ""))
+                    continue
+                if item_type == "thumbnail":
+                    cls._append_thumbnail_item(view, str(value or ""))
+                    continue
+                for chunk in value or []:
                     view.add_item(discord.ui.TextDisplay(chunk))
             
             # 底部資訊
@@ -849,11 +981,24 @@ class AICommands(commands.Cog):
     VIDEO_TOOL_DEFAULT_TIMEOUT_SECONDS = 600
     VIDEO_TOOL_MAX_TIMEOUT_SECONDS = 1800
     VIDEO_TOOL_MAX_URLS = 4
+    IMAGE_TOOL_MAX_PROMPT_CHARS = 900
+    IMAGE_TOOL_DEFAULT_SIZE = "1024x1024"
+    IMAGE_TOOL_ALLOWED_SIZES = {"auto", "1024x1024", "1536x1024", "1024x1536", "256x256", "512x512", "1792x1024", "1024x1792"}
+    IMAGE_TOOL_ALLOWED_QUALITIES = {"auto", "low", "medium", "high", "standard", "hd"}
+    IMAGE_TOOL_MAX_COUNT = 4
+    IMAGE_TOOL_MAX_B64_BYTES = 7_500_000
+    IMAGE_FILES_PER_MESSAGE = 10
+    IMAGE_BYTES_PER_MESSAGE = 25 * 1024 * 1024
+    IMAGE_ANALYZE_COST = 25.00
+    RESPONSE_MAX_MEDIA_COMPONENTS = 9
     DISCORD_MESSAGE_CHAR_LIMIT = 2000
     AI_AUTO_FILE_THRESHOLD = 4000
     SEND_AS_FILE_DEFAULT_NAME = "ai-response.txt"
     SEND_AS_FILE_NAME_LIMIT = 80
     SEND_AS_FILE_MAX_BYTES = 7_500_000
+    IMAGE_ANALYZE_MAX_BYTES = 8_000_000
+    IMAGE_ANALYZE_DEFAULT_MAX_CHARS = 700
+    IMAGE_ANALYZE_MAX_CHARS = 1800
     CHANNEL_TOOL_DEFAULT_LIMIT = 20
     CHANNEL_TOOL_MAX_LIMIT = 100
     CHANNEL_TOOL_AROUND_DEFAULT = 10
@@ -861,7 +1006,10 @@ class AICommands(commands.Cog):
     MESSAGE_SEARCH_MAX_LIMIT = 25
     USER_TOOL_MAX_ROLE_PREVIEW = 15
     AI_RESPONSE_VIEW_CONFIG_KEY = "ai_response_view_config"
+    COMMAND_MENTION_TAG_PATTERN = re.compile(r"<command_mention>(.*?)</command_mention>", re.IGNORECASE | re.DOTALL)
     TOOL_USAGE_LABELS = {
+        "image_analyze": "Analyze image",
+        "generate_image": "Generate image",
         "search_bot_docs": "正在搜尋機器人文檔",
         "get_ai_memory": "取得 AI 記憶",
         "upsert_ai_memory": "更新 AI 記憶",
@@ -895,6 +1043,7 @@ class AICommands(commands.Cog):
         self.rate_limits = {}  # 簡單的速率限制
         self._docs_search_cache = None
         self._docs_feature_prompt_cache = None
+        self._application_emoji_cache = None
 
     @staticmethod
     def _parse_model_prefix(message: str, default: str = "openai-fast") -> tuple[str, str]:
@@ -1480,10 +1629,96 @@ class AICommands(commands.Cog):
         return pending if isinstance(pending, dict) else None
 
     @staticmethod
+    def _pop_pending_image_attachments(tool_context: dict | None) -> list[dict]:
+        if not isinstance(tool_context, dict):
+            return []
+        pending = tool_context.pop("pending_image_attachments", [])
+        if not isinstance(pending, list):
+            return []
+        return [item for item in pending if isinstance(item, dict)]
+
+    @staticmethod
     def _build_pending_file_attachment(file_payload: dict) -> discord.File:
         filename = str((file_payload or {}).get("filename") or "ai-response.txt")
         content = str((file_payload or {}).get("content") or "")
         return discord.File(io.BytesIO(content.encode("utf-8")), filename=filename)
+
+    @staticmethod
+    def _build_pending_image_files(image_payloads: list[dict]) -> list[discord.File]:
+        files: list[discord.File] = []
+        for payload in image_payloads or []:
+            content = payload.get("content")
+            if not isinstance(content, (bytes, bytearray)) or not content:
+                continue
+            filename = str(payload.get("filename") or f"ai-image-{uuid4().hex[:8]}.png")
+            files.append(discord.File(io.BytesIO(bytes(content)), filename=filename))
+        return files
+
+    @classmethod
+    def _chunk_pending_image_payloads(cls, image_payloads: list[dict]) -> list[list[dict]]:
+        chunks: list[list[dict]] = []
+        current: list[dict] = []
+        current_bytes = 0
+
+        for payload in image_payloads or []:
+            content = payload.get("content") if isinstance(payload, dict) else None
+            if not isinstance(content, (bytes, bytearray)) or not content:
+                continue
+            size_bytes = len(content)
+            if current and (
+                len(current) >= cls.IMAGE_FILES_PER_MESSAGE
+                or current_bytes + size_bytes > cls.IMAGE_BYTES_PER_MESSAGE
+            ):
+                chunks.append(current)
+                current = []
+                current_bytes = 0
+            current.append(payload)
+            current_bytes += size_bytes
+
+        if current:
+            chunks.append(current)
+        return chunks
+
+    async def _deliver_pending_image_attachments(
+        self,
+        image_payloads: list[dict],
+        *,
+        send_files,
+        send_notice=None,
+    ):
+        for chunk in self._chunk_pending_image_payloads(image_payloads):
+            files = self._build_pending_image_files(chunk)
+            if not files:
+                continue
+            try:
+                await send_files(files)
+            except Exception as e:
+                log(f"AI image attachment delivery failed: {e}", module_name="AI", level=logging.WARNING)
+                if send_notice is not None:
+                    try:
+                        await send_notice("⚠️ 圖片已生成，但傳送附件時失敗。")
+                    except Exception:
+                        pass
+
+    @classmethod
+    def _queue_pending_image_attachment(
+        cls,
+        tool_context: dict | None,
+        image_bytes: bytes,
+        *,
+        filename: str | None = None,
+    ) -> dict:
+        payload = {
+            "filename": filename or f"ai-image-{uuid4().hex[:8]}.png",
+            "content": image_bytes,
+            "size_bytes": len(image_bytes),
+        }
+        if isinstance(tool_context, dict):
+            tool_context.setdefault("pending_image_attachments", []).append(payload)
+        return {
+            "filename": payload["filename"],
+            "size_bytes": payload["size_bytes"],
+        }
 
     @classmethod
     def _build_send_as_file_notice(cls, response_text: str, file_payload: dict | None) -> str:
@@ -1528,9 +1763,56 @@ class AICommands(commands.Cog):
             tool_context["pending_file_response"] = payload
         return payload
 
-    def _prepare_ai_response_delivery(self, response_text: str, tool_context: dict | None) -> tuple[str, str, dict | None]:
+    @staticmethod
+    def _parse_command_mention_tag(raw_text: str) -> tuple[str | None, str | None, str]:
+        fallback = re.sub(r"\s+", " ", str(raw_text or "")).strip()
+        cleaned = fallback.strip("`").strip()
+        if cleaned.startswith("/"):
+            cleaned = cleaned[1:].strip()
+        if not cleaned:
+            return None, None, fallback
+        parts = cleaned.split()
+        command_name = parts[0].strip().lstrip("/")
+        subcommand_name = " ".join(parts[1:]).strip() if len(parts) > 1 else None
+        token_pattern = r"[A-Za-z0-9_-]{1,32}"
+        if not re.fullmatch(token_pattern, command_name):
+            return None, None, fallback
+        if subcommand_name:
+            subcommand_parts = subcommand_name.split()
+            if len(subcommand_parts) > 2 or any(not re.fullmatch(token_pattern, part) for part in subcommand_parts):
+                return None, None, fallback
+        return command_name, subcommand_name, fallback
+
+    async def _resolve_response_command_mentions(self, response_text: str) -> str:
+        text = str(response_text or "")
+        resolved_parts: list[str] = []
+        cursor = 0
+
+        for match in self.COMMAND_MENTION_TAG_PATTERN.finditer(text):
+            resolved_parts.append(text[cursor:match.start()])
+            command_name, subcommand_name, fallback = self._parse_command_mention_tag(match.group(1))
+            mention = None
+            if command_name:
+                try:
+                    mention = await get_command_mention(command_name, subcommand_name)
+                except Exception as e:
+                    log(f"Failed to resolve AI command mention tag: {e}", module_name="AI", level=logging.WARNING)
+            if mention:
+                resolved_parts.append(mention)
+            elif fallback:
+                safe_fallback = fallback.lstrip('/').replace('`', '')
+                resolved_parts.append(f"`/{safe_fallback}`")
+            else:
+                resolved_parts.append("")
+            cursor = match.end()
+
+        resolved_parts.append(text[cursor:])
+        return "".join(resolved_parts)
+
+    async def _prepare_ai_response_delivery(self, response_text: str, tool_context: dict | None) -> tuple[str, str, dict | None, list[dict]]:
         pending_file_response = self._pop_pending_file_response(tool_context)
-        resolved_response_text = str(response_text or "")
+        pending_image_attachments = self._pop_pending_image_attachments(tool_context)
+        resolved_response_text = await self._resolve_response_command_mentions(response_text)
 
         if pending_file_response is None and len(resolved_response_text) > self.AI_AUTO_FILE_THRESHOLD:
             summary = (
@@ -1547,7 +1829,7 @@ class AICommands(commands.Cog):
         if pending_file_response:
             display_response_text = self._build_send_as_file_notice(resolved_response_text, pending_file_response)
 
-        return resolved_response_text, display_response_text, pending_file_response
+        return resolved_response_text, display_response_text, pending_file_response, pending_image_attachments
 
     def _build_web_search_messages(self, query: str, max_chars: int, include_sources: bool) -> list[dict]:
         source_instruction = (
@@ -2908,6 +3190,41 @@ class AICommands(commands.Cog):
             {
                 "type": "function",
                 "function": {
+                    "name": "image_analyze",
+                    "description": "Analyze an image from a Discord CDN URL. Only https://cdn.discordapp.com/... and https://media.discordapp.net/... URLs are allowed.",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "image_url": {"type": "string"},
+                            "prompt": {"type": "string"},
+                            "max_chars": {"type": "integer"},
+                            "model": {"type": "string"},
+                        },
+                        "required": ["image_url"],
+                    },
+                },
+            },
+            {
+                "type": "function",
+                "function": {
+                    "name": "generate_image",
+                    "description": "Generate an image from a text prompt using the configured image generation model. Use this when the user explicitly asks to create, draw, render, or generate an image.",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "prompt": {"type": "string"},
+                            "model": {"type": "string"},
+                            "size": {"type": "string"},
+                            "quality": {"type": "string"},
+                            "n": {"type": "integer"},
+                        },
+                        "required": ["prompt"],
+                    },
+                },
+            },
+            {
+                "type": "function",
+                "function": {
                     "name": "generate_video",
                     "description": "Generate a short video from a text prompt using Poe video models and return direct video URLs when available.",
                     "parameters": {
@@ -3459,6 +3776,352 @@ class AICommands(commands.Cog):
             "sources": sources,
             "note": "External web search results may contain stale or noisy information. Verify important facts before acting on them.",
         }
+
+    async def _fetch_discord_image_bytes(self, image_url: str) -> tuple[bytes | None, str | None]:
+        normalized_url = normalize_discord_image_url(image_url)
+        if not normalized_url:
+            return None, "image_url must be an https URL on cdn.discordapp.com or media.discordapp.net"
+
+        timeout = aiohttp.ClientTimeout(total=20)
+        async with aiohttp.ClientSession(timeout=timeout) as session:
+            async with session.get(normalized_url, allow_redirects=False) as response:
+                if response.status != 200:
+                    return None, f"Discord CDN returned HTTP {response.status}"
+
+                content_type = str(response.headers.get("Content-Type", "") or "").split(";", 1)[0].lower()
+                if not content_type.startswith("image/"):
+                    return None, f"URL did not return an image content type: {content_type or 'unknown'}"
+
+                chunks: list[bytes] = []
+                total = 0
+                async for chunk in response.content.iter_chunked(64 * 1024):
+                    total += len(chunk)
+                    if total > self.IMAGE_ANALYZE_MAX_BYTES:
+                        return None, f"image is too large; limit is {self.IMAGE_ANALYZE_MAX_BYTES} bytes"
+                    chunks.append(chunk)
+
+        image_bytes = b"".join(chunks)
+        if not image_bytes:
+            return None, "image response was empty"
+        return image_bytes, None
+
+    async def _tool_image_analyze(self, args: dict, tool_context: dict) -> dict:
+        image_url = str(args.get("image_url") or args.get("url") or "").strip()
+        normalized_url = normalize_discord_image_url(image_url)
+        if not normalized_url:
+            return {"error": "image_url must be an https URL on cdn.discordapp.com or media.discordapp.net"}
+
+        prompt = str(args.get("prompt") or "").strip()
+        if not prompt:
+            prompt = "Analyze this image. Describe the important visible details, text, and any notable context."
+
+        max_chars = self._coerce_int(
+            args.get("max_chars"),
+            self.IMAGE_ANALYZE_DEFAULT_MAX_CHARS,
+            minimum=120,
+            maximum=self.IMAGE_ANALYZE_MAX_CHARS,
+        )
+        prompt = self._truncate_tool_text(prompt, max_len=900)
+
+        requested_model = str(args.get("model") or (tool_context or {}).get("model") or "").strip()
+        requester = (tool_context or {}).get("user")
+        guild = (tool_context or {}).get("guild")
+        requester_id = getattr(requester, "id", None)
+        if not _is_ai_text_model(requested_model):
+            requested_model = await self._get_default_model(requester_id) if requester_id is not None else await self._get_default_model(0)
+        if requester_id is None:
+            return {"error": "unable to resolve requester id"}
+
+        billing_target = await self._resolve_ai_billing_target(requester, guild)
+        payer_id = billing_target["payer_id"]
+        payer_user = billing_target["payer_user"]
+        payer_name = billing_target["display_name"]
+        billing_actor = payer_user or requester
+        billing_detail_suffix = self._build_ai_billing_detail_suffix(requester_id, payer_id)
+        charge_amount = float(self.IMAGE_ANALYZE_COST)
+        balance_before_charge = self._get_global_balance(payer_id)
+        if balance_before_charge < charge_amount:
+            return {
+                "error": (
+                    f"insufficient {GLOBAL_CURRENCY_NAME}: need {charge_amount:.2f}, "
+                    f"current {balance_before_charge:.2f}, payer {payer_name}"
+                )
+            }
+
+        charged_amount, balance_after_charge = self._charge_global_balance(payer_id, charge_amount)
+        if charged_amount < charge_amount:
+            return {"error": "failed to charge currency for image analysis"}
+        self._log_economy_transaction(
+            payer_id,
+            "AI image analysis",
+            -charged_amount,
+            f"model={requested_model} url_chars={len(normalized_url)}{billing_detail_suffix}",
+        )
+        self._queue_economy_audit_log(
+            user=billing_actor,
+            action="ai_image_analyze_charge",
+            amount=charged_amount,
+            detail=f"model={requested_model} url_chars={len(normalized_url)}{billing_detail_suffix}",
+            balance_before=balance_before_charge,
+            balance_after=balance_after_charge,
+            color=0x3498DB,
+        )
+
+        try:
+            image_bytes, fetch_error = await self._fetch_discord_image_bytes(normalized_url)
+            if fetch_error:
+                raise RuntimeError(fetch_error)
+
+            response = await self._generate_ai_completion(
+                model=requested_model,
+                messages=[
+                    {
+                        "role": "system",
+                        "content": "You analyze images for a Discord bot. Keep the answer concise and factual.",
+                    },
+                    {
+                        "role": "user",
+                        "content": f"{prompt}\n\nKeep the answer under {max_chars} characters.",
+                    },
+                ],
+                image=image_bytes,
+                max_tokens=max(80, min(700, max_chars // 2)),
+            )
+            raw_text = str(getattr(response.choices[0].message, "content", "") or "").strip()
+            summary = self._truncate_tool_text(raw_text, max_len=max_chars)
+
+            return {
+                "image_url": normalized_url,
+                "analysis_model": getattr(response, "model", requested_model),
+                "cost": charged_amount,
+                "currency": GLOBAL_CURRENCY_NAME,
+                "summary": summary,
+            }
+        except Exception as e:
+            balance_before_refund = self._get_global_balance(payer_id)
+            balance_after_refund = self._refund_global_balance(payer_id, charged_amount)
+            self._log_economy_transaction(
+                payer_id,
+                "AI image analysis refund",
+                charged_amount,
+                f"model={requested_model} refund_on_error{billing_detail_suffix}",
+            )
+            self._queue_economy_audit_log(
+                user=billing_actor,
+                action="ai_image_analyze_refund",
+                amount=charged_amount,
+                detail=f"model={requested_model} refund_on_error{billing_detail_suffix}",
+                balance_before=balance_before_refund,
+                balance_after=balance_after_refund,
+                color=0x27AE60,
+            )
+            return {"error": f"image analysis failed: {e}"}
+
+    @staticmethod
+    def _image_response_item_value(item, key: str):
+        if isinstance(item, dict):
+            return item.get(key)
+        return getattr(item, key, None)
+
+    @staticmethod
+    def _decode_generated_image_b64(value: str) -> bytes:
+        raw = str(value or "").strip()
+        if "," in raw and raw.lower().startswith("data:"):
+            raw = raw.split(",", 1)[1]
+        return base64.b64decode(raw, validate=False)
+
+    async def _create_image_generation_response(self, **kwargs):
+        async def request_once():
+            client = _create_ai_client()
+            return await asyncio.to_thread(client.images.generate, **kwargs)
+
+        return await self._run_ai_completion_with_retry(request_once, model=str(kwargs.get("model") or "image"))
+
+    async def _tool_generate_image(self, args: dict, tool_context: dict) -> dict:
+        prompt = str(args.get("prompt", "") or args.get("query", "") or "").strip()
+        if not prompt:
+            return {"error": "prompt is required"}
+        if len(prompt) > self.IMAGE_TOOL_MAX_PROMPT_CHARS:
+            prompt = prompt[: self.IMAGE_TOOL_MAX_PROMPT_CHARS]
+
+        image_model_rates = _get_ai_image_model_rates()
+        model = str(args.get("model") or _get_ai_image_model() or "").strip()
+        if model not in image_model_rates:
+            return {
+                "error": f"unsupported image model: {model}",
+                "available_models": sorted(image_model_rates),
+            }
+
+        size = str(args.get("size") or self.IMAGE_TOOL_DEFAULT_SIZE).strip()
+        if size not in self.IMAGE_TOOL_ALLOWED_SIZES:
+            return {
+                "error": f"unsupported image size: {size}",
+                "available_sizes": sorted(self.IMAGE_TOOL_ALLOWED_SIZES),
+            }
+
+        quality = str(args.get("quality") or "").strip().lower()
+        if quality and quality not in self.IMAGE_TOOL_ALLOWED_QUALITIES:
+            return {
+                "error": f"unsupported image quality: {quality}",
+                "available_qualities": sorted(self.IMAGE_TOOL_ALLOWED_QUALITIES),
+            }
+
+        image_count = self._coerce_int(args.get("n"), 1, minimum=1, maximum=self.IMAGE_TOOL_MAX_COUNT)
+        requester = (tool_context or {}).get("user")
+        guild = (tool_context or {}).get("guild")
+        requester_id = getattr(requester, "id", None)
+        if requester_id is None:
+            return {"error": "unable to resolve requester id"}
+
+        billing_target = await self._resolve_ai_billing_target(requester, guild)
+        payer_id = billing_target["payer_id"]
+        payer_user = billing_target["payer_user"]
+        payer_name = billing_target["display_name"]
+        billing_actor = payer_user or requester
+        billing_detail_suffix = self._build_ai_billing_detail_suffix(requester_id, payer_id)
+
+        price_per_image = float(image_model_rates.get(model, 0.0))
+        charge_amount = round(price_per_image * image_count, 2)
+        if not math.isfinite(price_per_image) or not math.isfinite(charge_amount) or charge_amount < 0:
+            return {"error": f"invalid image pricing for model: {model}"}
+
+        balance_before_charge = self._get_global_balance(payer_id)
+        if balance_before_charge < charge_amount:
+            return {
+                "error": (
+                    f"insufficient {GLOBAL_CURRENCY_NAME}: need {charge_amount:.2f}, "
+                    f"current {balance_before_charge:.2f}, payer {payer_name}"
+                )
+            }
+
+        charged_amount, balance_after_charge = self._charge_global_balance(payer_id, charge_amount)
+        if charged_amount < charge_amount:
+            return {"error": "failed to charge currency for image generation"}
+
+        self._log_economy_transaction(
+            payer_id,
+            "AI image generation",
+            -charged_amount,
+            f"model={model} prompt_chars={len(prompt)} count={image_count}{billing_detail_suffix}",
+        )
+        self._queue_economy_audit_log(
+            user=billing_actor,
+            action="ai_image_charge",
+            amount=charged_amount,
+            detail=f"model={model} prompt_chars={len(prompt)} count={image_count}{billing_detail_suffix}",
+            balance_before=balance_before_charge,
+            balance_after=balance_after_charge,
+            color=0x9B59B6,
+        )
+
+        start_time = time.perf_counter()
+        try:
+            request_kwargs = {
+                "model": model,
+                "prompt": prompt,
+                "n": image_count,
+                "size": size,
+            }
+            if quality:
+                request_kwargs["quality"] = quality
+
+            response = await self._create_image_generation_response(**request_kwargs)
+
+            elapsed = round(time.perf_counter() - start_time, 2)
+            data = getattr(response, "data", None) or []
+            image_urls: list[str] = []
+            attachments: list[dict] = []
+            revised_prompts: list[str] = []
+
+            output_format = str(getattr(response, "output_format", "") or "png").lower()
+            extension = output_format if output_format in {"png", "jpeg", "jpg", "webp"} else "png"
+            if extension == "jpeg":
+                extension = "jpg"
+
+            for index, item in enumerate(data, start=1):
+                revised_prompt = self._image_response_item_value(item, "revised_prompt")
+                if revised_prompt:
+                    revised_prompts.append(str(revised_prompt))
+
+                url = self._image_response_item_value(item, "url")
+                if url:
+                    image_urls.append(str(url))
+                    continue
+
+                b64_json = self._image_response_item_value(item, "b64_json")
+                if b64_json:
+                    image_bytes = self._decode_generated_image_b64(str(b64_json))
+                    if len(image_bytes) > self.IMAGE_TOOL_MAX_B64_BYTES:
+                        raise RuntimeError(f"generated image is too large: {len(image_bytes)} bytes")
+                    attachments.append(
+                        self._queue_pending_image_attachment(
+                            tool_context,
+                            image_bytes,
+                            filename=f"ai-image-{uuid4().hex[:8]}-{index}.{extension}",
+                        )
+                    )
+
+            if not attachments:
+                if image_urls:
+                    raise RuntimeError("image provider returned URL-only results; attachment data is required")
+                raise RuntimeError("image provider did not return any base64 image data")
+
+            delivered_count = len(attachments)
+            refund_amount = round(max(image_count - delivered_count, 0) * price_per_image, 2)
+            if refund_amount > 0:
+                balance_before_partial_refund = self._get_global_balance(payer_id)
+                balance_after_partial_refund = self._refund_global_balance(payer_id, refund_amount)
+                charged_amount = round(max(charged_amount - refund_amount, 0.0), 2)
+                self._log_economy_transaction(
+                    payer_id,
+                    "AI image generation partial refund",
+                    refund_amount,
+                    f"model={model} requested={image_count} delivered={delivered_count}{billing_detail_suffix}",
+                )
+                self._queue_economy_audit_log(
+                    user=billing_actor,
+                    action="ai_image_partial_refund",
+                    amount=refund_amount,
+                    detail=f"model={model} requested={image_count} delivered={delivered_count}{billing_detail_suffix}",
+                    balance_before=balance_before_partial_refund,
+                    balance_after=balance_after_partial_refund,
+                    color=0x27AE60,
+                )
+
+            return {
+                "model": model,
+                "prompt": prompt,
+                "size": size,
+                "quality": quality or None,
+                "count": image_count,
+                "delivered_count": delivered_count,
+                "elapsed_seconds": elapsed,
+                "cost": charged_amount,
+                "currency": GLOBAL_CURRENCY_NAME,
+                "attachments": attachments,
+                "revised_prompts": revised_prompts[:delivered_count],
+                "note": "Tell the user the generated image is attached below.",
+            }
+        except Exception as e:
+            self._pop_pending_image_attachments(tool_context)
+            balance_before_refund = self._get_global_balance(payer_id)
+            balance_after_refund = self._refund_global_balance(payer_id, charged_amount)
+            self._log_economy_transaction(
+                payer_id,
+                "AI image generation refund",
+                charged_amount,
+                f"model={model} refund_on_error{billing_detail_suffix}",
+            )
+            self._queue_economy_audit_log(
+                user=billing_actor,
+                action="ai_image_refund",
+                amount=charged_amount,
+                detail=f"model={model} refund_on_error{billing_detail_suffix}",
+                balance_before=balance_before_refund,
+                balance_after=balance_after_refund,
+                color=0x27AE60,
+            )
+            return {"error": f"image generation failed: {e}"}
 
     async def _tool_generate_video(self, args: dict, tool_context: dict) -> dict:
         # disabled for now
@@ -4768,6 +5431,8 @@ class AICommands(commands.Cog):
             "upsert_ai_memory": self._tool_upsert_ai_memory,
             "delete_ai_memory": self._tool_delete_ai_memory,
             "search_web": self._tool_search_web,
+            "image_analyze": self._tool_image_analyze,
+            "generate_image": self._tool_generate_image,
             "generate_video": self._tool_generate_video,
             "send_as_file": self._tool_send_as_file,
             "read_channel": self._tool_read_channel,
@@ -5137,31 +5802,49 @@ class AICommands(commands.Cog):
             "model": model,
         })
 
-    @classmethod
-    def _build_guild_emoji_context(cls, guild: discord.Guild) -> tuple[str, dict[str, str]]:
-        """建立可用伺服器自訂表情符號清單與名稱映射。"""
-        if not guild:
-            return "", {}
+    async def _build_guild_emoji_context(self, guild: discord.Guild | None) -> tuple[str, dict[str, str]]:
+        """建立可用自訂表情符號清單與名稱映射。"""
+        emoji_map: dict[str, str] = {}
+        emoji_names: list[str] = []
 
-        emoji_map = {}
-        emoji_names = []
+        def add_emoji(emoji, *, include_in_prompt: bool = False):
+            name = str(getattr(emoji, "name", "") or "").strip()
+            if not name:
+                return
+            key = name.lower()
+            if key not in emoji_map:
+                emoji_map[key] = str(emoji)
+            if include_in_prompt:
+                emoji_names.append(name)
 
-        for emoji in guild.emojis:
-            key = emoji.name.lower()
-            if key in emoji_map:
-                continue
-            emoji_map[key] = str(emoji)
-            emoji_names.append(emoji.name)
+        for emoji in getattr(self.bot, "emojis", []) or []:
+            add_emoji(emoji)
+
+        if self._application_emoji_cache is None:
+            try:
+                self._application_emoji_cache = await self.bot.fetch_application_emojis()
+            except Exception:
+                self._application_emoji_cache = []
+        for emoji in self._application_emoji_cache or []:
+            add_emoji(emoji)
+
+        if guild:
+            for emoji in guild.emojis:
+                name = str(getattr(emoji, "name", "") or "").strip()
+                if not name:
+                    continue
+                emoji_map[name.lower()] = str(emoji)
+                emoji_names.append(name)
 
         if not emoji_names:
             return "", emoji_map
 
         total = len(emoji_names)
-        display_names = emoji_names[:cls.MAX_EMOJI_CONTEXT_COUNT]
+        display_names = emoji_names[:self.MAX_EMOJI_CONTEXT_COUNT]
         names_text = ", ".join(f":{name}:" for name in display_names)
         truncated_note = ""
-        if total > cls.MAX_EMOJI_CONTEXT_COUNT:
-            truncated_note = f"（僅顯示前 {cls.MAX_EMOJI_CONTEXT_COUNT} 個）"
+        if total > self.MAX_EMOJI_CONTEXT_COUNT:
+            truncated_note = f"（僅顯示前 {self.MAX_EMOJI_CONTEXT_COUNT} 個）"
 
         context = (
             "\n\n[可用伺服器自訂表情符號]\n"
@@ -5235,6 +5918,7 @@ class AICommands(commands.Cog):
     @is_owner()
     async def ai_config_text(self, ctx: commands.Context):
         models = _get_ai_model_rates()
+        image_models = _get_ai_image_model_rates()
         api_key_status = "configured" if _get_ai_api_key() else "empty"
         await ctx.send(
             "AI config\n"
@@ -5242,7 +5926,9 @@ class AICommands(commands.Cog):
             f"- api_key: {api_key_status}\n"
             f"- review_model: {_get_ai_review_model()}\n"
             f"- report_model: {_get_ai_report_model()}\n"
-            f"- models:\n{_format_ai_models_for_display(models)}",
+            f"- image_model: {_get_ai_image_model()}\n"
+            f"- models:\n{_format_ai_models_for_display(models)}\n"
+            f"- image_models:\n{_format_ai_models_for_display(image_models)}",
             allowed_mentions=SAFE_MENTIONS,
         )
 
@@ -5285,14 +5971,15 @@ class AICommands(commands.Cog):
         if not model or price is None:
             await ctx.send("Usage: ai-config model <model> <price>", allowed_mentions=SAFE_MENTIONS)
             return
-        if price < 0:
-            await ctx.send("Model price cannot be negative.", allowed_mentions=SAFE_MENTIONS)
+        price_value = float(price)
+        if not math.isfinite(price_value) or price_value < 0:
+            await ctx.send("Model price must be a finite non-negative number.", allowed_mentions=SAFE_MENTIONS)
             return
         model = model.strip()
         models = _get_ai_model_rates()
-        models[model] = float(price)
+        models[model] = price_value
         _set_ai_model_rates(models)
-        await ctx.send(f"Updated model {model}: {float(price):.2f}/C", allowed_mentions=SAFE_MENTIONS)
+        await ctx.send(f"Updated model {model}: {price_value:.2f}/C", allowed_mentions=SAFE_MENTIONS)
 
     @ai_config_text.command(name="review-model")
     @is_owner()
@@ -5320,6 +6007,91 @@ class AICommands(commands.Cog):
         _set_ai_report_model(model)
         await ctx.send(f"Updated ai_report_model: {model}", allowed_mentions=SAFE_MENTIONS)
 
+    @ai_config_text.command(name="image-model")
+    @is_owner()
+    async def ai_config_image_model_text(self, ctx: commands.Context, model: str = None):
+        if model is None:
+            await ctx.send(f"ai_image_model: {_get_ai_image_model()}", allowed_mentions=SAFE_MENTIONS)
+            return
+        model = model.strip()
+        if model not in _get_ai_image_model_rates():
+            await ctx.send(f"Model not found in ai_image_models: {model}", allowed_mentions=SAFE_MENTIONS)
+            return
+        _set_ai_image_model(model)
+        await ctx.send(f"Updated ai_image_model: {model}", allowed_mentions=SAFE_MENTIONS)
+
+    @ai_config_text.command(name="image-models")
+    @is_owner()
+    async def ai_config_image_models_text(self, ctx: commands.Context):
+        await ctx.send(
+            "AI image models:\n" + _format_ai_models_for_display(_get_ai_image_model_rates()),
+            allowed_mentions=SAFE_MENTIONS,
+        )
+
+    @ai_config_text.command(name="image-model-rate")
+    @is_owner()
+    async def ai_config_image_model_rate_text(self, ctx: commands.Context, model: str = None, price: float = None):
+        if not model or price is None:
+            await ctx.send("Usage: ai-config image-model-rate <model> <price>", allowed_mentions=SAFE_MENTIONS)
+            return
+        price_value = float(price)
+        if not math.isfinite(price_value) or price_value < 0:
+            await ctx.send("Image model price must be a finite non-negative number.", allowed_mentions=SAFE_MENTIONS)
+            return
+        model = model.strip()
+        models = _get_ai_image_model_rates()
+        models[model] = price_value
+        _set_ai_image_model_rates(models)
+        await ctx.send(f"Updated image model {model}: {price_value:.2f}/image", allowed_mentions=SAFE_MENTIONS)
+
+    @ai_config_text.command(name="remove-image-model", aliases=["del-image-model"])
+    @is_owner()
+    async def ai_config_remove_image_model_text(self, ctx: commands.Context, model: str = None):
+        if not model:
+            await ctx.send("Usage: ai-config remove-image-model <model>", allowed_mentions=SAFE_MENTIONS)
+            return
+        model = model.strip()
+        models = _get_ai_image_model_rates()
+        was_default_model = _get_ai_image_model() == model
+        removed = models.pop(model, None)
+        if removed is None:
+            await ctx.send(f"Image model not found: {model}", allowed_mentions=SAFE_MENTIONS)
+            return
+        if not models:
+            await ctx.send("Cannot remove the last image model; add another model first.", allowed_mentions=SAFE_MENTIONS)
+            return
+        _set_ai_image_model_rates(models)
+        fallback_model = next(iter(models), "")
+        suffix = ""
+        if fallback_model and was_default_model:
+            _set_ai_image_model(fallback_model)
+            suffix = f" (image_model -> {fallback_model})"
+        await ctx.send(f"Removed image model {model}.{suffix}", allowed_mentions=SAFE_MENTIONS)
+
+    @ai_config_text.command(name="image-models-json")
+    @is_owner()
+    async def ai_config_image_models_json_text(self, ctx: commands.Context, *, models_json: str = None):
+        if not models_json:
+            await ctx.send('Usage: ai-config image-models-json {"model": 250.00}', allowed_mentions=SAFE_MENTIONS)
+            return
+        try:
+            parsed = json.loads(models_json)
+        except json.JSONDecodeError as e:
+            await ctx.send(f"Invalid JSON: {e}", allowed_mentions=SAFE_MENTIONS)
+            return
+        models = _coerce_ai_rate_dict(parsed, {})
+        if not models:
+            await ctx.send('Image model JSON must be an object like {"model": 250.00}.', allowed_mentions=SAFE_MENTIONS)
+            return
+        current_image_model = _get_ai_image_model()
+        _set_ai_image_model_rates(models)
+        if current_image_model not in models:
+            _set_ai_image_model(next(iter(models)))
+        await ctx.send(
+            "Replaced AI image models:\n" + _format_ai_models_for_display(models),
+            allowed_mentions=SAFE_MENTIONS,
+        )
+
     @ai_config_text.command(name="remove-model", aliases=["del-model"])
     @is_owner()
     async def ai_config_remove_model_text(self, ctx: commands.Context, model: str = None):
@@ -5331,6 +6103,9 @@ class AICommands(commands.Cog):
         removed = models.pop(model, None)
         if removed is None:
             await ctx.send(f"Model not found: {model}", allowed_mentions=SAFE_MENTIONS)
+            return
+        if not models:
+            await ctx.send("Cannot remove the last text model; add another model first.", allowed_mentions=SAFE_MENTIONS)
             return
         _set_ai_model_rates(models)
         fallback_model = "openai" if "openai" in models else next(iter(models), "")
@@ -5422,11 +6197,7 @@ class AICommands(commands.Cog):
         
         user = interaction.user
         guild_id = interaction.guild.id if interaction.guild else None
-        emoji_context = ""
-        emoji_map = {}
-
-        if interaction.guild:
-            emoji_context, emoji_map = self._build_guild_emoji_context(interaction.guild)
+        emoji_context, emoji_map = await self._build_guild_emoji_context(interaction.guild)
         
         # 速率限制檢查
         if not self.check_rate_limit(user.id):
@@ -5512,6 +6283,8 @@ class AICommands(commands.Cog):
         
         # 延遲回應（因為 AI 生成可能需要時間）
         await interaction.response.defer(thinking=True)
+        pending_image_attachments: list[dict] = []
+        tool_context: dict | None = None
 
         try:
             # 處理對話歷史
@@ -5523,6 +6296,7 @@ class AICommands(commands.Cog):
                 "user": user,
                 "guild": interaction.guild,
                 "channel": interaction.channel,
+                "model": selected_model,
             }
             tool_notice_text = None
 
@@ -5596,7 +6370,7 @@ class AICommands(commands.Cog):
             )
 
             response_text = self._resolve_ai_custom_emojis(response_text, emoji_map)
-            response_text, display_response_text, pending_file_response = self._prepare_ai_response_delivery(
+            response_text, display_response_text, pending_file_response, pending_image_attachments = await self._prepare_ai_response_delivery(
                 response_text,
                 tool_context,
             )
@@ -5648,11 +6422,14 @@ class AICommands(commands.Cog):
             
             # 儲存對話歷史（圖片為一次性，不存入歷史）
             ConversationManager.add_message(user.id, "user", resolved_message, guild_id)
-            assistant_history_text = display_response_text
+            assistant_history_text = AIResponseBuilder.strip_media_tags_for_history(display_response_text)
             if pending_file_response:
                 assistant_history_text += (
                     f"\n[file:{pending_file_response.get('filename')}, chars={file_output_chars}]"
                 )
+            if pending_image_attachments:
+                image_names = ", ".join(str(item.get("filename") or "image") for item in pending_image_attachments)
+                assistant_history_text += f"\n[images:{image_names}]"
             ConversationManager.add_message(user.id, "assistant", assistant_history_text, guild_id)
             
             # 建立回應
@@ -5681,8 +6458,10 @@ class AICommands(commands.Cog):
                 await interaction.followup.send(file=file_attachment, allowed_mentions=SAFE_MENTIONS)
             else:
                 await interaction.edit_original_response(content=None, view=view)
-            
+
         except Exception as e:
+            if not pending_image_attachments:
+                pending_image_attachments = self._pop_pending_image_attachments(tool_context)
             balance_before_refund = self._get_global_balance(payer_id)
             balance_after_refund = self._refund_global_balance(payer_id, charged_input)
             self._log_economy_transaction(
@@ -5706,7 +6485,13 @@ class AICommands(commands.Cog):
                 f"生成回應時發生錯誤：{str(e)[:200]}"
             )
             await interaction.edit_original_response(content=None, view=view)
-    
+
+        await self._deliver_pending_image_attachments(
+            pending_image_attachments,
+            send_files=lambda files: interaction.followup.send(files=files, allowed_mentions=SAFE_MENTIONS),
+            send_notice=lambda message: interaction.followup.send(content=message, allowed_mentions=SAFE_MENTIONS),
+        )
+
     @app_commands.command(name="ai-clear", description="清除你的 AI 對話歷史")
     @app_commands.allowed_installs(guilds=True, users=True)
     @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
@@ -5914,11 +6699,7 @@ class AICommands(commands.Cog):
         user = ctx.author
         guild = ctx.guild
         guild_id = guild.id if guild else None
-        emoji_context = ""
-        emoji_map = {}
-
-        if guild:
-            emoji_context, emoji_map = self._build_guild_emoji_context(guild)
+        emoji_context, emoji_map = await self._build_guild_emoji_context(guild)
         
         # 偵測訊息附件中的圖片
         image_attachment = None
@@ -6039,6 +6820,8 @@ class AICommands(commands.Cog):
         
         # 顯示正在輸入
         tool_notice_message = None
+        pending_image_attachments: list[dict] = []
+        tool_context: dict | None = None
         async with ctx.typing():
             try:
                 history = ConversationManager.get_history(user.id, guild_id)
@@ -6046,6 +6829,7 @@ class AICommands(commands.Cog):
                     "user": user,
                     "guild": guild,
                     "channel": ctx.channel,
+                    "model": selected_model,
                 }
                 tool_notice_text = None
 
@@ -6120,7 +6904,7 @@ class AICommands(commands.Cog):
                 )
 
                 response_text = self._resolve_ai_custom_emojis(response_text, emoji_map)
-                response_text, display_response_text, pending_file_response = self._prepare_ai_response_delivery(
+                response_text, display_response_text, pending_file_response, pending_image_attachments = await self._prepare_ai_response_delivery(
                     response_text,
                     tool_context,
                 )
@@ -6172,11 +6956,14 @@ class AICommands(commands.Cog):
                 
                 # 儲存對話歷史（圖片為一次性，不存入歷史）
                 ConversationManager.add_message(user.id, "user", final_message, guild_id)
-                assistant_history_text = display_response_text
+                assistant_history_text = AIResponseBuilder.strip_media_tags_for_history(display_response_text)
                 if pending_file_response:
                     assistant_history_text += (
                         f"\n[file:{pending_file_response.get('filename')}, chars={file_output_chars}]"
                     )
+                if pending_image_attachments:
+                    image_names = ", ".join(str(item.get("filename") or "image") for item in pending_image_attachments)
+                    assistant_history_text += f"\n[images:{image_names}]"
                 ConversationManager.add_message(user.id, "assistant", assistant_history_text, guild_id)
                 
                 # 建立回應（使用 Component V2 避免 @everyone/@here 攻擊）
@@ -6210,8 +6997,10 @@ class AICommands(commands.Cog):
                     await ctx.send(file=file_attachment, allowed_mentions=SAFE_MENTIONS)
                 else:
                     await ctx.reply(view=view, allowed_mentions=SAFE_MENTIONS)
-                
+
             except Exception as e:
+                if not pending_image_attachments:
+                    pending_image_attachments = self._pop_pending_image_attachments(tool_context)
                 balance_before_refund = self._get_global_balance(payer_id)
                 balance_after_refund = self._refund_global_balance(payer_id, charged_input)
                 self._log_economy_transaction(
@@ -6240,7 +7029,13 @@ class AICommands(commands.Cog):
                     except Exception:
                         pass
                 await ctx.reply(view=view, allowed_mentions=SAFE_MENTIONS)
-    
+
+            await self._deliver_pending_image_attachments(
+                pending_image_attachments,
+                send_files=lambda files: ctx.send(files=files, allowed_mentions=SAFE_MENTIONS),
+                send_notice=lambda message: ctx.send(message, allowed_mentions=SAFE_MENTIONS),
+            )
+
     @commands.command(name="ai-new", aliases=["ainew", "newchat"])
     async def ai_new_conversation(self, ctx: commands.Context, *, message: str = None):
         """

@@ -1,4 +1,5 @@
 import base64
+import math
 
 from openai import OpenAI
 
@@ -9,6 +10,8 @@ AI_ENDPOINT_CONFIG_KEY = "ai_endpoint"
 AI_API_KEY_CONFIG_KEY = "ai_api_key"
 AI_MODELS_CONFIG_KEY = "ai_models"
 AI_VIDEO_MODELS_CONFIG_KEY = "ai_video_models"
+AI_IMAGE_MODELS_CONFIG_KEY = "ai_image_models"
+AI_IMAGE_MODEL_CONFIG_KEY = "ai_image_model"
 AI_REVIEW_MODEL_CONFIG_KEY = "ai_review_model"
 AI_REPORT_MODEL_CONFIG_KEY = "ai_report_model"
 
@@ -29,6 +32,10 @@ DEFAULT_AI_VIDEO_MODELS = {
     "seedance-2.0-fast-el": 500.00,
     "seedance-2.0-pro-el": 1000.00,
 }
+DEFAULT_AI_IMAGE_MODELS = {
+    "gpt-image-2": 250.00,
+}
+DEFAULT_AI_IMAGE_MODEL = "gpt-image-2"
 DEFAULT_AI_REVIEW_MODEL = "openai"
 DEFAULT_AI_REPORT_MODEL = "openai-fast"
 AI_GLOBAL_CONFIG_DEFAULTS = {
@@ -36,6 +43,8 @@ AI_GLOBAL_CONFIG_DEFAULTS = {
     AI_API_KEY_CONFIG_KEY: "",
     AI_MODELS_CONFIG_KEY: DEFAULT_AI_MODELS,
     AI_VIDEO_MODELS_CONFIG_KEY: DEFAULT_AI_VIDEO_MODELS,
+    AI_IMAGE_MODELS_CONFIG_KEY: DEFAULT_AI_IMAGE_MODELS,
+    AI_IMAGE_MODEL_CONFIG_KEY: DEFAULT_AI_IMAGE_MODEL,
     AI_REVIEW_MODEL_CONFIG_KEY: DEFAULT_AI_REVIEW_MODEL,
     AI_REPORT_MODEL_CONFIG_KEY: DEFAULT_AI_REPORT_MODEL,
 }
@@ -56,9 +65,12 @@ def coerce_ai_rate_dict(value, default: dict[str, float]) -> dict[str, float]:
         if not model_name:
             continue
         try:
-            rates[model_name] = float(rate)
+            rate_value = float(rate)
         except (TypeError, ValueError):
             continue
+        if not math.isfinite(rate_value):
+            continue
+        rates[model_name] = rate_value
     return rates or dict(default)
 
 
@@ -99,6 +111,31 @@ def get_ai_video_model_rates() -> dict[str, float]:
         get_global_config(AI_VIDEO_MODELS_CONFIG_KEY, DEFAULT_AI_VIDEO_MODELS),
         DEFAULT_AI_VIDEO_MODELS,
     )
+
+
+def get_ai_image_model_rates() -> dict[str, float]:
+    ensure_ai_global_config_defaults()
+    return coerce_ai_rate_dict(
+        get_global_config(AI_IMAGE_MODELS_CONFIG_KEY, DEFAULT_AI_IMAGE_MODELS),
+        DEFAULT_AI_IMAGE_MODELS,
+    )
+
+
+def set_ai_image_model_rates(models: dict[str, float]):
+    set_global_config(AI_IMAGE_MODELS_CONFIG_KEY, coerce_ai_rate_dict(models, {}))
+
+
+def get_ai_image_model() -> str:
+    ensure_ai_global_config_defaults()
+    configured_model = str(get_global_config(AI_IMAGE_MODEL_CONFIG_KEY, DEFAULT_AI_IMAGE_MODEL) or "").strip()
+    image_models = get_ai_image_model_rates()
+    if configured_model in image_models:
+        return configured_model
+    return DEFAULT_AI_IMAGE_MODEL if DEFAULT_AI_IMAGE_MODEL in image_models else next(iter(image_models), DEFAULT_AI_IMAGE_MODEL)
+
+
+def set_ai_image_model(model: str):
+    set_global_config(AI_IMAGE_MODEL_CONFIG_KEY, str(model or "").strip())
 
 
 def get_ai_review_model() -> str:
