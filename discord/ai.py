@@ -83,6 +83,35 @@ def normalize_discord_image_url(value: str | None) -> str | None:
         return None
     return url
 
+
+def decode_image_data_url(value: str | None) -> tuple[bytes | None, str | None]:
+    raw = str(value or "").strip()
+    if not raw.startswith("data:") or "," not in raw:
+        return None, None
+
+    header, encoded = raw.split(",", 1)
+    if ";base64" not in header.lower():
+        return None, None
+
+    mime_type = header[5:].split(";", 1)[0].strip().lower() or "image/png"
+    try:
+        return base64.b64decode(encoded, validate=False), mime_type
+    except Exception:
+        return None, mime_type
+
+
+def image_extension_for_mime_type(mime_type: str | None) -> str:
+    normalized = str(mime_type or "").strip().lower()
+    mapping = {
+        "image/png": "png",
+        "image/jpeg": "jpg",
+        "image/jpg": "jpg",
+        "image/webp": "webp",
+        "image/gif": "gif",
+        "image/svg+xml": "svg",
+    }
+    return mapping.get(normalized, "png")
+
 # AI 模型費率（全域幣/字）
 GLOBAL_GUILD_ID = 0
 GLOBAL_CURRENCY_NAME = "全域幣"
@@ -560,6 +589,7 @@ Response formatting helpers:
 - To show a Discord CDN image in the response body, write exactly: <image>https://cdn.discordapp.com/...</image> or <image>https://media.discordapp.net/...</image>.
 - To show a small side image, write exactly: <thumbnail>https://cdn.discordapp.com/...</thumbnail> or <thumbnail>https://media.discordapp.net/...</thumbnail>.
 - Only use cdn.discordapp.com or media.discordapp.net URLs inside image/thumbnail tags. Do not put other hosts in those tags.
+- Use <generated_image></generated_image> only when an image was actually generated in this reply. Put it exactly where the generated image should appear. If omitted, generated images will be appended at the bottom automatically.
 - Use the `generate_image` tool when the user asks you to create, draw, render, or generate an image. If the tool reports attachments, say the image is attached below.
 """
 
@@ -570,6 +600,11 @@ class AIResponseBuilder:
     RESPONSE_TEXT_MAX_LENGTH = 1900
     RESPONSE_MAX_MEDIA_COMPONENTS = 9
     RESPONSE_MEDIA_TAG_PATTERN = re.compile(r"<(image|thumbnail)>(.*?)</\1>", re.IGNORECASE | re.DOTALL)
+    RESPONSE_GENERATED_IMAGE_TAG_PATTERN = re.compile(r"<generated_image>(.*?)</generated_image>", re.IGNORECASE | re.DOTALL)
+    RESPONSE_LAYOUT_TAG_PATTERN = re.compile(
+        r"<(image|thumbnail)>(.*?)</\1>|<generated_image>(.*?)</generated_image>",
+        re.IGNORECASE | re.DOTALL,
+    )
     RESPONSE_CODE_FENCE_PATTERN = re.compile(r"```.*?```", re.DOTALL)
 
     @classmethod
@@ -643,36 +678,72 @@ class AIResponseBuilder:
             restored = restored.replace(f"\x01CODE{index}\x01", fence)
         return restored
 
+    @staticmethod
+    def _build_generated_image_refs(generated_image_attachments: list[dict] | None) -> list[str]:
+        refs: list[str] = []
+        for payload in generated_image_attachments or []:
+            filename = str((payload or {}).get("filename") or "").strip()
+            if filename:
+                refs.append(f"attachment://{filename}")
+        return refs
+
     @classmethod
-    def _iter_response_layout_items(cls, response_text: str) -> list[tuple[str, list[str] | str | None]]:
+    def _iter_response_layout_items(
+        cls,
+        response_text: str,
+        generated_image_attachments: list[dict] | None = None,
+    ) -> list[tuple[str, list[str] | str | None]]:
         original_text = str(response_text or "")
         text, fences = cls._protect_response_code_fences(original_text)
         items: list[tuple[str, list[str] | str | None]] = []
         cursor = 0
         media_components = 0
         omitted_media = 0
+        generated_refs = cls._build_generated_image_refs(generated_image_attachments)
+        generated_index = 0
 
         def add_text(raw_text: str):
             restored = cls._restore_response_code_fences(raw_text, fences)
             if restored.strip():
                 items.extend(cls._iter_response_text_items(restored))
 
-        for match in cls.RESPONSE_MEDIA_TAG_PATTERN.finditer(text):
+        for match in cls.RESPONSE_LAYOUT_TAG_PATTERN.finditer(text):
             add_text(text[cursor:match.start()])
 
-            tag_name = match.group(1).lower()
+            tag_name = (match.group(1) or "generated_image").lower()
             component_cost = 3 if tag_name == "thumbnail" else 1
-            image_url = normalize_discord_image_url(match.group(2))
-            if not image_url:
-                items.append(("text", cls._split_response_text_chunks("[invalid Discord image URL omitted]")))
+            media_ref: str | None = None
+            if tag_name == "generated_image":
+                inline_ref = str(match.group(3) or "").strip()
+                if inline_ref.startswith("attachment://"):
+                    media_ref = inline_ref
+                elif inline_ref:
+                    media_ref = normalize_discord_image_url(inline_ref)
+                elif generated_index < len(generated_refs):
+                    media_ref = generated_refs[generated_index]
+                    generated_index += 1
+            else:
+                media_ref = normalize_discord_image_url(match.group(2))
+
+            if not media_ref:
+                if tag_name != "generated_image":
+                    items.append(("text", cls._split_response_text_chunks("[invalid Discord image URL omitted]")))
             elif media_components + component_cost > cls.RESPONSE_MAX_MEDIA_COMPONENTS:
                 omitted_media += 1
             else:
                 media_components += component_cost
-                items.append((tag_name, image_url))
+                items.append(("image" if tag_name == "generated_image" else tag_name, media_ref))
             cursor = match.end()
 
         add_text(text[cursor:])
+        while generated_index < len(generated_refs):
+            media_ref = generated_refs[generated_index]
+            generated_index += 1
+            if media_components + 1 > cls.RESPONSE_MAX_MEDIA_COMPONENTS:
+                omitted_media += 1
+                continue
+            media_components += 1
+            items.append(("image", media_ref))
         if omitted_media:
             items.append(("text", cls._split_response_text_chunks(f"[省略 {omitted_media} 個圖片，避免超過 Discord 元件上限]")))
         if not items:
@@ -699,11 +770,17 @@ class AIResponseBuilder:
             image_url = normalize_discord_image_url(match.group(2))
             return f"[{label}: {image_url}]" if image_url else f"[{label}: 已略過無效 URL]"
 
-        return cls.RESPONSE_MEDIA_TAG_PATTERN.sub(replace_media, str(response_text or ""))
+        stripped = cls.RESPONSE_MEDIA_TAG_PATTERN.sub(replace_media, str(response_text or ""))
+        return cls.RESPONSE_GENERATED_IMAGE_TAG_PATTERN.sub("", stripped)
 
     @classmethod
-    def _append_response_text_to_container(cls, container: discord.ui.Container, response_text: str):
-        for item_type, value in cls._iter_response_layout_items(response_text):
+    def _append_response_text_to_container(
+        cls,
+        container: discord.ui.Container,
+        response_text: str,
+        generated_image_attachments: list[dict] | None = None,
+    ):
+        for item_type, value in cls._iter_response_layout_items(response_text, generated_image_attachments):
             if item_type == "separator":
                 container.add_item(discord.ui.Separator(spacing=discord.SeparatorSpacing.small))
                 continue
@@ -729,6 +806,7 @@ class AIResponseBuilder:
         use_container: bool = True,
         show_cost: bool = True,
         show_model: bool = True,
+        generated_image_attachments: list[dict] | None = None,
     ) -> discord.ui.LayoutView:
         """建立 AI 回應的 LayoutView"""
         
@@ -745,7 +823,7 @@ class AIResponseBuilder:
                 container.add_item(discord.ui.Separator(spacing=discord.SeparatorSpacing.small))
             
             # 回應內容 - 支援 `---` 轉成 View 分隔線，並自動分段長訊息
-            cls._append_response_text_to_container(container, response_text)
+            cls._append_response_text_to_container(container, response_text, generated_image_attachments)
             
             # 底部資訊
             if show_cost or show_model:
@@ -766,7 +844,7 @@ class AIResponseBuilder:
                 view.add_item(discord.ui.TextDisplay(f"⚠️ **警告**: {warning}"))
             
             # 回應內容 - 支援 `---` 轉成 View 分隔線，並自動分段長訊息
-            for item_type, value in cls._iter_response_layout_items(response_text):
+            for item_type, value in cls._iter_response_layout_items(response_text, generated_image_attachments):
                 if item_type == "separator":
                     view.add_item(discord.ui.Separator(spacing=discord.SeparatorSpacing.small))
                     continue
@@ -1319,6 +1397,14 @@ class AICommands(commands.Cog):
                 )
                 message = response.choices[0].message
                 response_text = str(getattr(message, "content", "") or "").strip()
+                generated_images = self._queue_message_generated_images(message, active_tool_context)
+                if generated_images and not response_text:
+                    response_text = "生好了，圖在下面。"
+                if generated_images:
+                    log(
+                        f"AI native image output detected: model={getattr(response, 'model', model)} count={len(generated_images)}",
+                        module_name="AI",
+                    )
                 tool_calls = self._extract_tool_calls(message)
 
                 if not tool_calls:
@@ -1404,7 +1490,16 @@ class AICommands(commands.Cog):
                 model=model,
             )
             end_time = time.perf_counter()
-            final_text = str(getattr(final_response.choices[0].message, "content", "") or "").strip()
+            final_message = final_response.choices[0].message
+            final_text = str(getattr(final_message, "content", "") or "").strip()
+            final_generated_images = self._queue_message_generated_images(final_message, active_tool_context)
+            if final_generated_images and not final_text:
+                final_text = "生好了，圖在下面。"
+            if final_generated_images:
+                log(
+                    f"AI native image output detected: model={getattr(final_response, 'model', model)} count={len(final_generated_images)}",
+                    module_name="AI",
+                )
             return final_text, getattr(final_response, "model", model), f"{end_time - start_time:.2f}s"
         except Exception as e:
             log(f"AI tool response error: {e}", module_name="AI", level=logging.ERROR)
@@ -3924,6 +4019,37 @@ class AICommands(commands.Cog):
         return getattr(item, key, None)
 
     @staticmethod
+    def _message_image_item_value(item, key: str):
+        if isinstance(item, dict):
+            return item.get(key)
+        return getattr(item, key, None)
+
+    def _queue_message_generated_images(self, message, tool_context: dict | None) -> list[dict]:
+        queued: list[dict] = []
+        raw_images = getattr(message, "images", None) or []
+
+        for index, item in enumerate(raw_images, start=1):
+            image_url = self._message_image_item_value(item, "image_url")
+            if isinstance(image_url, dict):
+                image_url = image_url.get("url")
+            elif image_url is not None:
+                image_url = getattr(image_url, "url", image_url)
+
+            image_bytes, mime_type = decode_image_data_url(str(image_url or ""))
+            if not image_bytes:
+                continue
+
+            queued.append(
+                self._queue_pending_image_attachment(
+                    tool_context,
+                    image_bytes,
+                    filename=f"ai-inline-{uuid4().hex[:8]}-{index}.{image_extension_for_mime_type(mime_type)}",
+                )
+            )
+
+        return queued
+
+    @staticmethod
     def _decode_generated_image_b64(value: str) -> bytes:
         raw = str(value or "").strip()
         if "," in raw and raw.lower().startswith("data:"):
@@ -6439,7 +6565,8 @@ class AICommands(commands.Cog):
             
             # 取得使用者回應視圖配置
             response_view_config = self._get_response_view_config(user.id)
-            
+            image_files = self._build_pending_image_files(pending_image_attachments)
+
             view = AIResponseBuilder.create_response_view(
                 response_text=display_response_text,
                 user=user,
@@ -6450,14 +6577,21 @@ class AICommands(commands.Cog):
                 use_container=response_view_config.get("container", True),
                 show_cost=response_view_config.get("cost", True),
                 show_model=response_view_config.get("model", True),
+                generated_image_attachments=pending_image_attachments,
             )
 
             if pending_file_response:
                 file_attachment = self._build_pending_file_attachment(pending_file_response)
-                await interaction.edit_original_response(content=None, view=view)
+                if image_files:
+                    await interaction.edit_original_response(content=None, attachments=image_files, view=view)
+                else:
+                    await interaction.edit_original_response(content=None, view=view)
                 await interaction.followup.send(file=file_attachment, allowed_mentions=SAFE_MENTIONS)
             else:
-                await interaction.edit_original_response(content=None, view=view)
+                if image_files:
+                    await interaction.edit_original_response(content=None, attachments=image_files, view=view)
+                else:
+                    await interaction.edit_original_response(content=None, view=view)
 
         except Exception as e:
             if not pending_image_attachments:
@@ -6973,7 +7107,8 @@ class AICommands(commands.Cog):
                 
                 # 取得使用者回應視圖配置
                 response_view_config = self._get_response_view_config(user.id)
-                
+                image_files = self._build_pending_image_files(pending_image_attachments)
+
                 view = AIResponseBuilder.create_response_view(
                     response_text=display_response_text,
                     user=user,
@@ -6984,6 +7119,7 @@ class AICommands(commands.Cog):
                     use_container=response_view_config.get("container", True),
                     show_cost=response_view_config.get("cost", True),
                     show_model=response_view_config.get("model", True),
+                    generated_image_attachments=pending_image_attachments,
                 )
                 if tool_notice_message is not None:
                     try:
@@ -6993,10 +7129,16 @@ class AICommands(commands.Cog):
 
                 if pending_file_response:
                     file_attachment = self._build_pending_file_attachment(pending_file_response)
-                    await ctx.reply(view=view, allowed_mentions=SAFE_MENTIONS)
+                    if image_files:
+                        await ctx.reply(view=view, files=image_files, allowed_mentions=SAFE_MENTIONS)
+                    else:
+                        await ctx.reply(view=view, allowed_mentions=SAFE_MENTIONS)
                     await ctx.send(file=file_attachment, allowed_mentions=SAFE_MENTIONS)
                 else:
-                    await ctx.reply(view=view, allowed_mentions=SAFE_MENTIONS)
+                    if image_files:
+                        await ctx.reply(view=view, files=image_files, allowed_mentions=SAFE_MENTIONS)
+                    else:
+                        await ctx.reply(view=view, allowed_mentions=SAFE_MENTIONS)
 
             except Exception as e:
                 if not pending_image_attachments:
