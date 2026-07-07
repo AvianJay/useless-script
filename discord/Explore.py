@@ -19,6 +19,8 @@ import urllib.parse
 from logger import log
 import logging
 import re
+import math
+from collections import deque
 
 import socketio as socketio_asgi
 
@@ -71,6 +73,14 @@ try:
 except Exception:
     _music_mod = None
     _music_available = False
+
+# Economy module integration (optional — skin shop & quest rewards use global currency)
+try:
+    import Economy as _economy_mod
+    _economy_available = True
+except Exception:
+    _economy_mod = None
+    _economy_available = False
 
 activity_entry = ActivityEntry(name=app_commands.locale_str("explore space"), description="開啟探索空間")
 
@@ -402,6 +412,34 @@ def _is_explore_server_member(guild_id: int | str, guild_ids: set[str]) -> bool:
     return str(guild_id) in {str(x) for x in (guild_ids or set())}
 
 
+def _is_bot_owner(user_id: int | str) -> bool:
+    try:
+        owners = config("owners") or []
+        return int(user_id) in {int(x) for x in owners}
+    except Exception:
+        return False
+
+
+def _is_explore_guild_admin(guild_id: int | str, user_id: int | str) -> bool:
+    """Server-side admin check via the bot's member cache. 'world' is owner-only."""
+    if str(guild_id) == "world":
+        return _is_bot_owner(user_id)
+    try:
+        guild = bot.get_guild(int(guild_id))
+    except (TypeError, ValueError):
+        return False
+    if not guild:
+        return False
+    try:
+        member = guild.get_member(int(user_id))
+    except (TypeError, ValueError):
+        return False
+    if not member:
+        return False
+    perms = member.guild_permissions
+    return bool(perms.administrator or perms.manage_guild)
+
+
 def _can_access_explore_server(server: dict, guild_id: int | str, guild_ids: set[str]) -> bool:
     if not server or not server.get("enabled"):
         return False
@@ -476,7 +514,7 @@ def _refresh_socket_session_guild_ids(sid: str) -> set[str]:
     return set(refreshed_list)
 
 
-def _build_explore_server_payload(guild: discord.Guild, server: dict, viewer_guild_ids: set[str]) -> dict:
+def _build_explore_server_payload(guild: discord.Guild, server: dict, viewer_guild_ids: set[str], viewer_user_id: int | str | None = None) -> dict:
     gid = str(guild.id)
     is_member = _is_explore_server_member(gid, viewer_guild_ids)
     with _presence_lock:
@@ -492,6 +530,7 @@ def _build_explore_server_payload(guild: discord.Guild, server: dict, viewer_gui
         "invite_link": server.get("invite_link"),
         "is_member": is_member,
         "can_enter": _can_access_explore_server(server, gid, viewer_guild_ids),
+        "can_edit": _is_explore_guild_admin(gid, viewer_user_id) if viewer_user_id is not None else False,
     }
 
 
@@ -513,11 +552,393 @@ def set_explore_privacy(guild_id: int, is_public: bool):
     _update_explore_server_config(guild_id, is_public=is_public)
 
 
+# --- Skins ---
+# Skin id format: "<CharacterSheet>:<index>" (index 0-7 within the sheet).
+# Sheets must exist in Explore/img/characters/. price 0 = free.
+EXPLORE_OWNED_SKINS_KEY = "explore_owned_skins"
+DEFAULT_SKIN_ID = "Actor1:0"
+
+SKIN_CATALOG: list[dict] = [
+    # 免費基本款
+    {"id": "Actor1:0", "name": "勇者", "price": 0},
+    {"id": "Actor1:1", "name": "戰士", "price": 0},
+    {"id": "Actor1:2", "name": "武鬥家", "price": 0},
+    {"id": "Actor1:3", "name": "盜賊", "price": 0},
+    {"id": "Actor1:4", "name": "女勇者", "price": 0},
+    {"id": "Actor1:5", "name": "女戰士", "price": 0},
+    {"id": "Actor1:6", "name": "女武鬥家", "price": 0},
+    {"id": "Actor1:7", "name": "女盜賊", "price": 0},
+    {"id": "Actor2:0", "name": "僧侶", "price": 0},
+    {"id": "Actor2:1", "name": "魔法師", "price": 0},
+    {"id": "Actor2:2", "name": "賢者", "price": 0},
+    {"id": "Actor2:3", "name": "商人", "price": 0},
+    # 村民系列(便宜)
+    {"id": "People1:0", "name": "村民大叔", "price": 50},
+    {"id": "People1:1", "name": "村民大嬸", "price": 50},
+    {"id": "People1:6", "name": "老爺爺", "price": 50},
+    {"id": "People1:7", "name": "老奶奶", "price": 50},
+    {"id": "People2:2", "name": "貴族", "price": 120},
+    {"id": "People2:3", "name": "貴婦", "price": 120},
+    {"id": "People4:4", "name": "國王", "price": 300},
+    {"id": "People4:5", "name": "皇后", "price": 300},
+    # 科幻系列
+    {"id": "SF_Actor1:0", "name": "太空人A", "price": 200},
+    {"id": "SF_Actor1:1", "name": "太空人B", "price": 200},
+    {"id": "SF_Actor2:0", "name": "機器人", "price": 250},
+    {"id": "SF_Actor3:0", "name": "異星人", "price": 250},
+    {"id": "SF_People1:0", "name": "太空市民", "price": 150},
+    # 怪物/特殊系列(貴)
+    {"id": "Evil:0", "name": "魔王手下", "price": 500},
+    {"id": "Evil:4", "name": "死神", "price": 800},
+    {"id": "Monster:0", "name": "史萊姆", "price": 400},
+    {"id": "Monster:2", "name": "蝙蝠", "price": 400},
+    {"id": "Nature:0", "name": "精靈", "price": 600},
+    {"id": "Meme:0", "name": "迷因人", "price": 1000},
+]
+
+_SKIN_BY_ID: dict[str, dict] = {s["id"]: s for s in SKIN_CATALOG}
+
+# 舊版皮膚 id(純數字)→ 新格式的對照
+_LEGACY_SKIN_MAP = {"1": DEFAULT_SKIN_ID}
+
+
+def _normalize_skin_id(skin_id) -> str:
+    sid = str(skin_id or "").strip()
+    sid = _LEGACY_SKIN_MAP.get(sid, sid)
+    if sid not in _SKIN_BY_ID:
+        return DEFAULT_SKIN_ID
+    return sid
+
+
 def get_user_skin(user_id: int):
-    return get_user_data(0, user_id, "explore_skin_data", "1")
+    return _normalize_skin_id(get_user_data(0, user_id, "explore_skin_data", DEFAULT_SKIN_ID))
 
 def set_user_skin(user_id: int, skin_data: str):
-    set_user_data(0, user_id, "explore_skin_data", skin_data)
+    set_user_data(0, user_id, "explore_skin_data", _normalize_skin_id(skin_data))
+
+
+def get_user_owned_skins(user_id: int) -> set[str]:
+    raw = get_user_data(0, user_id, EXPLORE_OWNED_SKINS_KEY, [])
+    owned = {str(x) for x in raw} if isinstance(raw, list) else set()
+    # 免費皮膚人人都有
+    owned.update(s["id"] for s in SKIN_CATALOG if not s.get("price"))
+    return owned
+
+
+def add_user_owned_skin(user_id: int, skin_id: str) -> None:
+    raw = get_user_data(0, user_id, EXPLORE_OWNED_SKINS_KEY, [])
+    owned = [str(x) for x in raw] if isinstance(raw, list) else []
+    if str(skin_id) not in owned:
+        owned.append(str(skin_id))
+        set_user_data(0, user_id, EXPLORE_OWNED_SKINS_KEY, owned)
+
+
+def user_owns_skin(user_id: int, skin_id: str) -> bool:
+    sid = str(skin_id or "").strip()
+    sid = _LEGACY_SKIN_MAP.get(sid, sid)
+    skin = _SKIN_BY_ID.get(sid)
+    if not skin:
+        return False
+    if not skin.get("price"):
+        return True
+    return sid in get_user_owned_skins(user_id)
+
+
+# --- XP / Level ---
+
+EXPLORE_XP_KEY = "explore_xp"
+CHAT_XP_AMOUNT = 2
+CHAT_XP_COOLDOWN_SECONDS = 30
+EMOTE_XP_AMOUNT = 1
+EMOTE_XP_COOLDOWN_SECONDS = 60
+
+# user_id(str) -> {"chat": last_ts, "emote": last_ts}
+_xp_cooldowns: dict[str, dict[str, float]] = {}
+_xp_lock = threading.Lock()
+
+
+def get_user_xp(user_id: int) -> int:
+    try:
+        return max(0, int(get_user_data(0, user_id, EXPLORE_XP_KEY, 0) or 0))
+    except (TypeError, ValueError):
+        return 0
+
+
+def xp_to_level(xp: int) -> int:
+    """Lv.1 起跳;每級所需 XP 平方成長 (Lv n 需要 25*(n-1)^2)。"""
+    return int(math.sqrt(max(0, int(xp)) / 25)) + 1
+
+
+def get_user_level(user_id: int) -> int:
+    return xp_to_level(get_user_xp(user_id))
+
+
+def add_user_xp(user_id: int, amount: int, *, source: str | None = None, cooldown: float = 0.0) -> tuple[int, int, bool]:
+    """
+    Add XP with an optional per-source cooldown.
+    Returns (xp, level, leveled_up). When on cooldown, returns current values unchanged.
+    """
+    amount = int(amount)
+    uid = str(user_id)
+    if amount <= 0:
+        xp = get_user_xp(user_id)
+        return xp, xp_to_level(xp), False
+
+    if source and cooldown > 0:
+        now = time.time()
+        with _xp_lock:
+            per_user = _xp_cooldowns.setdefault(uid, {})
+            if now - per_user.get(source, 0.0) < cooldown:
+                xp = get_user_xp(user_id)
+                return xp, xp_to_level(xp), False
+            per_user[source] = now
+
+    old_xp = get_user_xp(user_id)
+    new_xp = old_xp + amount
+    set_user_data(0, user_id, EXPLORE_XP_KEY, new_xp)
+    old_level = xp_to_level(old_xp)
+    new_level = xp_to_level(new_xp)
+    return new_xp, new_level, new_level > old_level
+
+
+async def _broadcast_level_up(guild_id: str, user_id: str, level: int) -> None:
+    await sio.emit(
+        "level_up",
+        {"guild_id": str(guild_id), "user_id": str(user_id), "level": int(level)},
+        room=str(guild_id),
+    )
+
+
+# --- Chat (in-space chat room with filter + Discord bridge) ---
+
+CHAT_MAX_LENGTH = 200
+CHAT_HISTORY_SIZE = 50
+CHAT_RATE_LIMIT_SECONDS = 1.0
+CHAT_BLOCKLIST_CONFIG_KEY = "explore_chat_blocklist"
+CHAT_CHANNEL_CONFIG_KEY = "explore_chat_channel"
+
+# 內建禁字詞庫(中英俄羅斯基本款,管理員可用指令補充)
+BUILTIN_BANNED_WORDS = [
+    # 英文
+    "fuck", "shit", "bitch", "asshole", "cunt", "faggot", "nigger", "nigga",
+    "retard", "dickhead", "motherfucker",
+    # 中文
+    "幹你娘", "幹您娘", "操你媽", "肏你媽", "操你妈", "干你娘", "他媽的", "他妈的",
+    "媽的", "妈的", "靠北", "靠杯", "雞掰", "機掰", "北七", "白癡", "白痴",
+    "智障", "腦殘", "脑残", "垃圾人", "去死", "婊子", "賤人", "贱人", "傻逼",
+    "沙比", "煞筆", "傻屄", "尼瑪", "你妈死了", "妳媽死了",
+]
+
+# guild_id(str) -> deque of chat message dicts
+_chat_history: dict[str, deque] = {}
+_chat_lock = threading.Lock()
+
+# user_id(str) -> last chat timestamp (rate limit)
+_chat_last_sent: dict[str, float] = {}
+
+
+def _get_guild_banned_words(guild_id: str) -> list[str]:
+    if guild_id == "world":
+        return []
+    try:
+        raw = get_server_config(int(guild_id), CHAT_BLOCKLIST_CONFIG_KEY, [])
+    except (TypeError, ValueError):
+        return []
+    if not isinstance(raw, list):
+        return []
+    return [str(w).strip() for w in raw if str(w).strip()]
+
+
+def filter_chat_text(text: str, guild_id: str = "world") -> tuple[str, bool]:
+    """
+    Mask banned words (builtin + per-guild custom) with '*'.
+    Returns (filtered_text, was_filtered).
+    """
+    filtered = str(text)
+    was_filtered = False
+    words = BUILTIN_BANNED_WORDS + _get_guild_banned_words(guild_id)
+    # 長詞優先,避免短詞先遮蔽壞掉長詞比對
+    for word in sorted(set(words), key=len, reverse=True):
+        if not word:
+            continue
+        pattern = re.compile(re.escape(word), re.IGNORECASE)
+        if pattern.search(filtered):
+            filtered = pattern.sub("*" * len(word), filtered)
+            was_filtered = True
+    return filtered, was_filtered
+
+
+def _get_chat_history(guild_id: str) -> list[dict]:
+    with _chat_lock:
+        dq = _chat_history.get(str(guild_id))
+        return list(dq) if dq else []
+
+
+def _append_chat_history(guild_id: str, message: dict) -> None:
+    with _chat_lock:
+        dq = _chat_history.setdefault(str(guild_id), deque(maxlen=CHAT_HISTORY_SIZE))
+        dq.append(message)
+
+
+def _get_chat_bridge_channel_id(guild_id: str) -> int | None:
+    if guild_id == "world":
+        return None
+    try:
+        raw = get_server_config(int(guild_id), CHAT_CHANNEL_CONFIG_KEY, None)
+        return int(raw) if raw else None
+    except (TypeError, ValueError):
+        return None
+
+
+def _make_chat_message(guild_id: str, user_id: str, name: str, text: str, *, source: str = "game", level: int | None = None) -> dict:
+    return {
+        "guild_id": str(guild_id),
+        "user_id": str(user_id),
+        "name": str(name),
+        "text": str(text),
+        "level": level,
+        "source": source,  # "game" | "discord"
+        "ts": int(time.time()),
+    }
+
+
+async def _forward_chat_to_discord(guild_id: str, name: str, text: str) -> None:
+    """遊戲內訊息 → Discord 橋接頻道(過濾後的內容,防 mention)。"""
+    channel_id = _get_chat_bridge_channel_id(guild_id)
+    if not channel_id:
+        return
+    channel = bot.get_channel(channel_id)
+    if channel is None:
+        return
+    try:
+        await channel.send(
+            f"🎮 **{name}**: {text}",
+            allowed_mentions=discord.AllowedMentions.none(),
+        )
+    except (discord.Forbidden, discord.HTTPException) as e:
+        log(f"Chat bridge send failed for guild {guild_id}: {e}", level=logging.WARNING, module_name="Explore")
+
+
+# --- Quests (one-time, server-side verified) ---
+
+EXPLORE_QUESTS_KEY = "explore_quests"
+
+# 一次性任務目錄。reward: 全域幣 / xp。requires: 前置任務 id 列表。
+QUEST_CATALOG: dict[str, dict] = {
+    "vill_rat": {
+        "name": "村長家的哲學鼠患",
+        "description": "幫村長趕走他家裡那隻會背莎士比亞的老鼠。",
+        "reward_coins": 30,
+        "reward_xp": 50,
+        "requires": [],
+    },
+    "vill_delivery": {
+        "name": "極速快遞(步行)",
+        "description": "把一封「超急件」從村口走路送到隔壁,距離大概十步。",
+        "reward_coins": 30,
+        "reward_xp": 50,
+        "requires": [],
+    },
+    "vill_cabbage": {
+        "name": "高麗菜失蹤事件",
+        "description": "調查菜園裡高麗菜連環失蹤案。兇手可能就是委託人。",
+        "reward_coins": 30,
+        "reward_xp": 50,
+        "requires": [],
+    },
+    "vill_boss": {
+        "name": "迷因大魔王",
+        "description": "村莊三大蠢事解決後,迷因大魔王被吵醒了。把祂打回去睡覺。",
+        "reward_coins": 200,
+        "reward_xp": 300,
+        "requires": ["vill_rat", "vill_delivery", "vill_cabbage"],
+    },
+}
+
+
+def get_user_completed_quests(user_id: int) -> set[str]:
+    raw = get_user_data(0, user_id, EXPLORE_QUESTS_KEY, [])
+    if not isinstance(raw, list):
+        return set()
+    return {str(q) for q in raw if str(q) in QUEST_CATALOG}
+
+
+def _quest_prerequisites_met(quest_id: str, completed: set[str]) -> bool:
+    quest = QUEST_CATALOG.get(quest_id)
+    if not quest:
+        return False
+    return all(req in completed for req in quest.get("requires", []))
+
+
+def complete_user_quest(user_id: int, quest_id: str) -> tuple[bool, str | dict]:
+    """
+    Server-side one-time quest completion.
+    Returns (True, result_dict) or (False, error_message).
+    """
+    quest = QUEST_CATALOG.get(str(quest_id))
+    if not quest:
+        return False, "未知的任務"
+
+    completed = get_user_completed_quests(user_id)
+    if quest_id in completed:
+        return False, "這個任務你已經完成過了"
+    if not _quest_prerequisites_met(quest_id, completed):
+        return False, "前置任務尚未完成"
+
+    completed.add(str(quest_id))
+    set_user_data(0, user_id, EXPLORE_QUESTS_KEY, sorted(completed))
+
+    reward_coins = int(quest.get("reward_coins") or 0)
+    reward_xp = int(quest.get("reward_xp") or 0)
+
+    coins_awarded = 0
+    if reward_coins > 0 and _economy_available:
+        try:
+            balance = float(_economy_mod.get_global_balance(user_id))
+            _economy_mod.set_global_balance(user_id, balance + reward_coins)
+            _economy_mod.log_transaction(
+                _economy_mod.GLOBAL_GUILD_ID, user_id, 'explore_quest',
+                reward_coins, getattr(_economy_mod, 'GLOBAL_CURRENCY_NAME', '全域幣'),
+                f"完成 Explore 任務 {quest['name']} ({quest_id})",
+            )
+            coins_awarded = reward_coins
+        except Exception as e:
+            log(f"Quest coin reward failed for user {user_id}: {e}", level=logging.WARNING, module_name="Explore")
+
+    xp, level, leveled_up = add_user_xp(user_id, reward_xp)
+
+    return True, {
+        "quest_id": str(quest_id),
+        "name": quest["name"],
+        "coins": coins_awarded,
+        "xp_gained": reward_xp,
+        "xp": xp,
+        "level": level,
+        "leveled_up": leveled_up,
+        "completed_quests": sorted(completed),
+    }
+
+
+def build_quest_state_payload(user_id: int) -> dict:
+    completed = get_user_completed_quests(user_id)
+    quests = []
+    for qid, quest in QUEST_CATALOG.items():
+        quests.append({
+            "id": qid,
+            "name": quest["name"],
+            "description": quest["description"],
+            "reward_coins": int(quest.get("reward_coins") or 0),
+            "reward_xp": int(quest.get("reward_xp") or 0),
+            "requires": list(quest.get("requires", [])),
+            "completed": qid in completed,
+            "available": _quest_prerequisites_met(qid, completed) and qid not in completed,
+        })
+    return {
+        "quests": quests,
+        "completed": sorted(completed),
+        # 村莊 Boss 出現條件:三個小任務全完成
+        "vill_boss_ready": _quest_prerequisites_met("vill_boss", completed),
+    }
 
 
 def _normalize_save_id_allowlist(values) -> set[str]:
@@ -664,8 +1085,21 @@ def set_space_tile(guild_id: int, x: int, y: int, z: int, tile_id: str):
         conn.commit()
 
 
-def get_available_skins() -> list[dict]:
-    return [{'id': '1', 'name': 'Skin 1', 'icon_url': None}]  # TODO: implement skin storage
+def get_available_skins(user_id: int | None = None) -> list[dict]:
+    """Full skin catalog; when user_id is given, mark ownership."""
+    owned = get_user_owned_skins(int(user_id)) if user_id is not None else set()
+    result = []
+    for skin in SKIN_CATALOG:
+        entry = {
+            "id": skin["id"],
+            "name": skin["name"],
+            "price": int(skin.get("price") or 0),
+            "icon_url": None,
+        }
+        if user_id is not None:
+            entry["owned"] = skin["id"] in owned
+        result.append(entry)
+    return result
 
 
 # --- Music Integration ---
@@ -922,7 +1356,7 @@ def explore_get_accessible_servers():
         is_member = _is_explore_server_member(gid_str, guild_ids)
         if not is_member and not server.get("is_public"):
             continue
-        result.append(_build_explore_server_payload(guild, server, guild_ids))
+        result.append(_build_explore_server_payload(guild, server, guild_ids, int(g.explore_user["user_id"])))
 
     result.sort(key=lambda entry: (not entry.get("is_member", False), entry.get("name", "").lower(), entry["id"]))
     return jsonify(result)
@@ -945,7 +1379,7 @@ def explore_get_server_info(guild_id: str):
     if not guild:
         return jsonify({'error': 'Guild not found'}), 404
 
-    return jsonify(_build_explore_server_payload(guild, server, guild_ids))
+    return jsonify(_build_explore_server_payload(guild, server, guild_ids, int(g.explore_user["user_id"])))
 
 
 @app.route('/api/explore/space/<guild_id>', methods=['GET'])
@@ -969,31 +1403,129 @@ def explore_get_space_data(guild_id: str):
 @app.route('/api/explore/skins', methods=['GET'])
 @_require_explore_auth
 def explore_get_skins():
-    return jsonify(get_available_skins())
+    user_id = int(g.explore_user['user_id'])
+    balance = None
+    if _economy_available:
+        try:
+            balance = float(_economy_mod.get_global_balance(user_id))
+        except Exception:
+            balance = None
+    return jsonify({
+        'skins': get_available_skins(user_id),
+        'current_skin_id': get_user_skin(user_id),
+        'balance': balance,
+        'currency_name': getattr(_economy_mod, 'GLOBAL_CURRENCY_NAME', '全域幣') if _economy_available else None,
+    })
+
+
+@app.route('/api/explore/skins/buy', methods=['POST'])
+@_require_explore_auth
+def explore_buy_skin():
+    data = request.get_json(silent=True) or {}
+    skin_id = _normalize_skin_id_for_lookup(data.get('skin_id'))
+    if not skin_id:
+        return jsonify({'error': 'Invalid skin_id'}), 400
+
+    skin = _SKIN_BY_ID[skin_id]
+    price = int(skin.get('price') or 0)
+    user_id = int(g.explore_user['user_id'])
+
+    if user_owns_skin(user_id, skin_id):
+        return jsonify({'error': '你已經擁有這個皮膚了'}), 400
+    if price <= 0:
+        return jsonify({'error': '這個皮膚是免費的,不用買'}), 400
+    if not _economy_available:
+        return jsonify({'error': '經濟系統未啟用,無法購買'}), 503
+
+    # Server-side balance check & deduction (never trust client)
+    balance = float(_economy_mod.get_global_balance(user_id))
+    if balance < price:
+        return jsonify({'error': f'全域幣不足(需要 {price},你有 {balance:.0f})', 'balance': balance}), 400
+
+    _economy_mod.set_global_balance(user_id, balance - price)
+    try:
+        _economy_mod.log_transaction(
+            _economy_mod.GLOBAL_GUILD_ID, user_id, 'explore_skin',
+            -price, getattr(_economy_mod, 'GLOBAL_CURRENCY_NAME', '全域幣'),
+            f"購買 Explore 皮膚 {skin['name']} ({skin_id})",
+        )
+    except Exception:
+        pass
+    add_user_owned_skin(user_id, skin_id)
+    return jsonify({
+        'success': True,
+        'skin_id': skin_id,
+        'balance': float(_economy_mod.get_global_balance(user_id)),
+    })
+
+
+def _normalize_skin_id_for_lookup(skin_id) -> str | None:
+    sid = str(skin_id or '').strip()
+    sid = _LEGACY_SKIN_MAP.get(sid, sid)
+    return sid if sid in _SKIN_BY_ID else None
+
+
+@app.route('/api/explore/quests', methods=['GET'])
+@_require_explore_auth
+def explore_get_quests():
+    user_id = int(g.explore_user['user_id'])
+    payload = build_quest_state_payload(user_id)
+    payload['xp'] = get_user_xp(user_id)
+    payload['level'] = get_user_level(user_id)
+    return jsonify(payload)
+
+
+@app.route('/api/explore/quests/complete', methods=['POST'])
+@_require_explore_auth
+def explore_complete_quest():
+    data = request.get_json(silent=True) or {}
+    quest_id = str(data.get('quest_id') or '').strip()
+    if not quest_id:
+        return jsonify({'error': 'Missing quest_id'}), 400
+
+    user_id = int(g.explore_user['user_id'])
+    ok, result = complete_user_quest(user_id, quest_id)
+    if not ok:
+        return jsonify({'error': result}), 400
+
+    # 廣播升級事件到玩家目前所在房間
+    if isinstance(result, dict) and result.get('leveled_up'):
+        gid = None
+        with _session_lock:
+            for sess in socket_sessions.values():
+                if str(sess.get('user_id')) == str(user_id) and sess.get('guild_id'):
+                    gid = str(sess['guild_id'])
+                    break
+        if gid:
+            try:
+                _run_async(_broadcast_level_up(gid, str(user_id), int(result['level'])))
+            except Exception:
+                pass
+
+    return jsonify({'success': True, **result})
 
 
 @app.route('/api/explore/me/skin', methods=['POST'])
 @_require_explore_auth
 def explore_set_my_skin():
     data = request.get_json(silent=True) or {}
-    skin_id = data.get('skin_id')
+    skin_id = _normalize_skin_id_for_lookup(data.get('skin_id'))
     if skin_id is None:
-        return jsonify({'error': 'Missing skin_id'}), 400
-
-    available = {s['id'] for s in get_available_skins()}
-    if str(skin_id) not in available:
         return jsonify({'error': 'Invalid skin_id'}), 400
 
     user_id = int(g.explore_user['user_id'])
-    set_user_skin(user_id, str(skin_id))
-    return jsonify({'success': True, 'skin_id': str(skin_id)})
+    if not user_owns_skin(user_id, skin_id):
+        return jsonify({'error': '你還沒擁有這個皮膚'}), 403
+
+    set_user_skin(user_id, skin_id)
+    return jsonify({'success': True, 'skin_id': skin_id})
 
 @app.route("/api/explore/skin", methods=["GET", "POST"])
 def explore_save_skin():
     # Similar auth check needed
     auth_header = request.headers.get('Authorization')
     uid = None
-    
+
     if not auth_header:
         # Mock
         # data = request.json
@@ -1008,16 +1540,20 @@ def explore_save_skin():
                 uid = int(r.json()['id'])
         except:
             pass
-            
+
     if not uid:
         return jsonify({"error": "Unauthorized"}), 401
-    
+
     skin_id = request.json.get('skin_id')
     if not skin_id:
-        skin_id = get_user_data(0, int(uid), "explore_skin_data", "1")
-        
-    set_user_data(0, int(uid), "explore_skin_data", skin_id)
-    return jsonify({"success": True})
+        return jsonify({"success": True, "skin_id": get_user_skin(int(uid))})
+
+    normalized = _normalize_skin_id_for_lookup(skin_id)
+    if normalized is None or not user_owns_skin(int(uid), normalized):
+        return jsonify({"error": "Invalid or unowned skin"}), 403
+
+    set_user_skin(int(uid), normalized)
+    return jsonify({"success": True, "skin_id": normalized})
 
 @app.route("/api/explore/icon/guild/<guild_id>", methods=["GET"])
 def explore_guild_icon(guild_id):
@@ -1341,6 +1877,7 @@ async def on_join(sid, data=None):
     uid = sess["user_id"]
     username = sess.get("username", "Unknown")
     skin_id = get_user_skin(int(uid))
+    level = get_user_level(int(uid))
     previous_guild_id = str(sess.get("guild_id")) if sess.get("guild_id") else None
 
     if previous_guild_id and previous_guild_id != guild_id:
@@ -1362,6 +1899,7 @@ async def on_join(sid, data=None):
             "user_id": uid,
             "name": username,
             "skin_id": skin_id,
+            "level": level,
             "map_id": map_id,
             "x": x if x is not None else previous_state.get("x", 0),
             "y": y if y is not None else previous_state.get("y", 0),
@@ -1371,7 +1909,7 @@ async def on_join(sid, data=None):
         }
         snapshot_players = list(players.values())
 
-    await sio.emit("joined", {"guild_id": guild_id, "user_id": uid, "name": username, "skin_id": skin_id, "map_id": map_id}, to=sid)
+    await sio.emit("joined", {"guild_id": guild_id, "user_id": uid, "name": username, "skin_id": skin_id, "level": level, "map_id": map_id}, to=sid)
     await sio.emit("room_state", {"guild_id": guild_id, "players": snapshot_players}, to=sid)
     await sio.emit(
         "user_joined",
@@ -1380,6 +1918,7 @@ async def on_join(sid, data=None):
             "user_id": uid,
             "name": username,
             "skin_id": skin_id,
+            "level": level,
             "map_id": map_id,
             "x": players[uid].get("x", 0),
             "y": players[uid].get("y", 0),
@@ -1390,6 +1929,11 @@ async def on_join(sid, data=None):
         room=guild_id,
         skip_sid=sid,
     )
+
+    # 加入房間後補發聊天歷史(只給自己)
+    history = _get_chat_history(guild_id)
+    if history:
+        await sio.emit("chat_history", {"guild_id": guild_id, "messages": history}, to=sid)
 
 
 @sio.on("leave")
@@ -1479,6 +2023,11 @@ async def on_edit_map(sid, data=None):
     if x is None or y is None or tile_id is None:
         return
 
+    # Only guild admins (manage_guild/administrator) may edit; world map is bot-owner only.
+    if not _is_explore_guild_admin(guild_id, sess["user_id"]):
+        await sio.emit("error", {"message": "Edit permission denied", "guild_id": guild_id}, to=sid)
+        return
+
     set_space_tile(0 if guild_id == "world" else int(guild_id), int(x), int(y), int(z), str(tile_id))
 
     await sio.emit(
@@ -1497,11 +2046,14 @@ async def on_skin_change(sid, data=None):
         return
 
     payload = data or {}
-    skin_id = payload.get("skin_id")
+    skin_id = _normalize_skin_id_for_lookup(payload.get("skin_id"))
     if skin_id is None:
         return
 
     uid = int(sess["user_id"])
+    if not user_owns_skin(uid, skin_id):
+        await sio.emit("error", {"message": "你還沒擁有這個皮膚"}, to=sid)
+        return
     set_user_skin(uid, str(skin_id))
     guild_id = str(payload.get("guild_id") or sess.get("guild_id") or "world")
     map_id = _parse_optional_int(payload.get("map_id"))
@@ -1524,6 +2076,85 @@ async def on_skin_change(sid, data=None):
         room=guild_id,
         skip_sid=sid,
     )
+
+
+@sio.on("emote")
+async def on_emote(sid, data=None):
+    """表情氣泡:balloon_id 1-15(RMMZ 內建),廣播到同房間。"""
+    sess = _get_socket_session(sid)
+    if not sess:
+        await sio.emit("error", {"message": "Unauthorized"}, to=sid)
+        return
+
+    payload = data or {}
+    guild_id = str(payload.get("guild_id") or sess.get("guild_id") or "world")
+    map_id = _parse_optional_int(payload.get("map_id"))
+    try:
+        balloon_id = int(payload.get("balloon_id"))
+    except (TypeError, ValueError):
+        return
+    if not (1 <= balloon_id <= 15):
+        return
+
+    uid = str(sess["user_id"])
+
+    # 表情限速(共用 XP 冷卻表,同時當 rate limit 用)
+    now = time.time()
+    with _xp_lock:
+        per_user = _xp_cooldowns.setdefault(uid, {})
+        if now - per_user.get("emote_rate", 0.0) < 1.5:
+            return
+        per_user["emote_rate"] = now
+
+    add_user_xp(int(uid), EMOTE_XP_AMOUNT, source="emote", cooldown=EMOTE_XP_COOLDOWN_SECONDS)
+
+    await sio.emit(
+        "user_emote",
+        {"guild_id": guild_id, "user_id": uid, "balloon_id": balloon_id, "map_id": map_id},
+        room=guild_id,
+    )
+
+
+@sio.on("chat_send")
+async def on_chat_send(sid, data=None):
+    """伺服內聊天:過濾禁字後廣播,並橋接到 Discord 頻道。"""
+    sess = _get_socket_session(sid)
+    if not sess:
+        await sio.emit("error", {"message": "Unauthorized"}, to=sid)
+        return
+
+    payload = data or {}
+    guild_id = str(payload.get("guild_id") or sess.get("guild_id") or "world")
+    text = str(payload.get("text") or "").strip()
+    if not text:
+        return
+    if len(text) > CHAT_MAX_LENGTH:
+        text = text[:CHAT_MAX_LENGTH]
+
+    uid = str(sess["user_id"])
+    username = sess.get("username", "Unknown")
+
+    # Rate limit
+    now = time.time()
+    with _chat_lock:
+        if now - _chat_last_sent.get(uid, 0.0) < CHAT_RATE_LIMIT_SECONDS:
+            await sio.emit("chat_error", {"message": "你講話太快了,慢一點"}, to=sid)
+            return
+        _chat_last_sent[uid] = now
+
+    filtered_text, was_filtered = filter_chat_text(text, guild_id)
+
+    _xp, level, leveled_up = add_user_xp(int(uid), CHAT_XP_AMOUNT, source="chat", cooldown=CHAT_XP_COOLDOWN_SECONDS)
+
+    message = _make_chat_message(guild_id, uid, username, filtered_text, source="game", level=level)
+    message["filtered"] = was_filtered
+    _append_chat_history(guild_id, message)
+
+    await sio.emit("chat_message", message, room=guild_id)
+    if leveled_up:
+        await _broadcast_level_up(guild_id, uid, level)
+
+    await _forward_chat_to_discord(guild_id, username, filtered_text)
 
 
 # --- Music Socket.IO Events ---
@@ -1682,6 +2313,27 @@ class ExplorerCommands(commands.GroupCog, name="explore-settings"):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
 
+    @commands.Cog.listener()
+    async def on_message(self, message: discord.Message):
+        """Discord 頻道 → 遊戲內聊天橋接。"""
+        if message.author.bot or not message.guild:
+            return
+        gid = str(message.guild.id)
+        channel_id = _get_chat_bridge_channel_id(gid)
+        if not channel_id or message.channel.id != channel_id:
+            return
+        text = str(message.content or "").strip()
+        if not text:
+            return
+        if len(text) > CHAT_MAX_LENGTH:
+            text = text[:CHAT_MAX_LENGTH]
+
+        filtered_text, _was_filtered = filter_chat_text(text, gid)
+        display_name = message.author.display_name or message.author.name
+        chat_message = _make_chat_message(gid, message.author.id, display_name, filtered_text, source="discord")
+        _append_chat_history(gid, chat_message)
+        await sio.emit("chat_message", chat_message, room=gid)
+
     @app_commands.command(name="setup", description="啟用或設定探索空間")
     @app_commands.choices(enabled=[
         app_commands.Choice(name="啟用", value=1),
@@ -1739,6 +2391,84 @@ class ExplorerCommands(commands.GroupCog, name="explore-settings"):
         await interaction.response.send_message(
             f"已啟用先加入伺服器才能進入 Explore。{source_text}：{resolved_link}"
         )
+
+    @app_commands.command(name="chat-channel", description="設定 Explore 聊天室橋接的 Discord 文字頻道")
+    async def chat_channel(
+        self,
+        interaction: discord.Interaction,
+        channel: discord.TextChannel | None = None,
+    ):
+        if interaction.guild is None:
+            await interaction.response.send_message("這個指令只能在伺服器內使用。", ephemeral=True)
+            return
+
+        if channel is None:
+            set_server_config(interaction.guild.id, CHAT_CHANNEL_CONFIG_KEY, None)
+            await interaction.response.send_message("已關閉 Explore 聊天室與 Discord 頻道的橋接。")
+            return
+
+        bot_member = _get_explore_bot_member(interaction.guild)
+        if bot_member is not None:
+            perms = channel.permissions_for(bot_member)
+            if not (perms.view_channel and perms.send_messages):
+                await interaction.response.send_message(
+                    f"我沒有在 {channel.mention} 檢視或發言的權限,請先調整頻道權限。",
+                    ephemeral=True,
+                )
+                return
+
+        set_server_config(interaction.guild.id, CHAT_CHANNEL_CONFIG_KEY, str(channel.id))
+        await interaction.response.send_message(
+            f"已將 Explore 聊天室橋接到 {channel.mention}。遊戲內訊息會轉發到這裡,頻道訊息也會出現在遊戲內。"
+        )
+
+    banned_words = app_commands.Group(name="banned-words", description="管理 Explore 聊天室的自訂禁字")
+
+    @banned_words.command(name="add", description="新增一個自訂禁字")
+    async def banned_words_add(self, interaction: discord.Interaction, word: str):
+        if interaction.guild is None:
+            await interaction.response.send_message("這個指令只能在伺服器內使用。", ephemeral=True)
+            return
+        word = word.strip()
+        if not word or len(word) > 50:
+            await interaction.response.send_message("禁字長度需為 1-50 字元。", ephemeral=True)
+            return
+        words = _get_guild_banned_words(str(interaction.guild.id))
+        if word.lower() in {w.lower() for w in words}:
+            await interaction.response.send_message(f"「{word}」已在禁字清單中。", ephemeral=True)
+            return
+        if len(words) >= 100:
+            await interaction.response.send_message("自訂禁字已達上限(100 個)。", ephemeral=True)
+            return
+        words.append(word)
+        set_server_config(interaction.guild.id, CHAT_BLOCKLIST_CONFIG_KEY, words)
+        await interaction.response.send_message(f"已新增禁字「{word}」。目前共 {len(words)} 個自訂禁字。", ephemeral=True)
+
+    @banned_words.command(name="remove", description="移除一個自訂禁字")
+    async def banned_words_remove(self, interaction: discord.Interaction, word: str):
+        if interaction.guild is None:
+            await interaction.response.send_message("這個指令只能在伺服器內使用。", ephemeral=True)
+            return
+        word = word.strip()
+        words = _get_guild_banned_words(str(interaction.guild.id))
+        remaining = [w for w in words if w.lower() != word.lower()]
+        if len(remaining) == len(words):
+            await interaction.response.send_message(f"清單中找不到「{word}」。", ephemeral=True)
+            return
+        set_server_config(interaction.guild.id, CHAT_BLOCKLIST_CONFIG_KEY, remaining)
+        await interaction.response.send_message(f"已移除禁字「{word}」。目前共 {len(remaining)} 個自訂禁字。", ephemeral=True)
+
+    @banned_words.command(name="list", description="列出所有自訂禁字")
+    async def banned_words_list(self, interaction: discord.Interaction):
+        if interaction.guild is None:
+            await interaction.response.send_message("這個指令只能在伺服器內使用。", ephemeral=True)
+            return
+        words = _get_guild_banned_words(str(interaction.guild.id))
+        if not words:
+            await interaction.response.send_message("目前沒有自訂禁字(內建詞庫仍然生效)。", ephemeral=True)
+            return
+        joined = "、".join(f"`{w}`" for w in words[:100])
+        await interaction.response.send_message(f"自訂禁字({len(words)} 個):{joined}", ephemeral=True)
 
 init_db()
 
