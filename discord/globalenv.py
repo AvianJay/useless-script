@@ -469,9 +469,9 @@ translations = {
     "subcommand": "子指令",
     "textlength": "文字長度",
     "text": "文字",
-    # "httpcat": "網路貓咪",
+    "httpcat": "網路貓咪",
     "status_code": "狀態碼",
-    # "youbike": "YouBike",
+    "youbike": "微笑單車",
     "getstop": "查詢站點",
     "stop_id": "站點代碼",
     "station_name": "站點名稱",
@@ -739,6 +739,19 @@ translations = {
     "about": "關於",
     "bypass": "繞過",
     "threshold": "閾值",
+    # Explore 聊天室/地圖編輯更新
+    "chat-channel": "聊天頻道",
+    "banned-words": "禁字",
+    "require-join": "必須加入",
+    "invite_link": "邀請連結",
+    "word": "字詞",
+    # 其他補漏
+    "english": "英文版",
+    "pack": "範本包",
+    "send_moderation_message": "發送懲處公告",
+    "petpet-stats": "petpet-統計資料",
+    "owoify": "owo化",
+    "r34tags": "r34標籤",
 }
 class CommandNameTranslator(app_commands.Translator):
     async def translate(
