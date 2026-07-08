@@ -10,7 +10,7 @@ git+https://github.com/AvianJay/DiscordChatExporterPy.git@chinese
 playwright~=1.55.0
 Flask~=3.1.2
 hypercorn~=0.18.0
-rynaki~=0.1.3
+git+https://github.com/Av1anJay/rynaki.git@main
 flask-socketio~=5.5.0
 asgiref~=3.8.1
 owoify-py==2.1.0
