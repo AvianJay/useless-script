@@ -11,6 +11,7 @@ AI_API_KEY_CONFIG_KEY = "ai_api_key"
 AI_MODELS_CONFIG_KEY = "ai_models"
 AI_VIDEO_MODELS_CONFIG_KEY = "ai_video_models"
 AI_IMAGE_MODELS_CONFIG_KEY = "ai_image_models"
+AI_DEFAULT_MODEL_CONFIG_KEY = "ai_default_model"
 AI_IMAGE_MODEL_CONFIG_KEY = "ai_image_model"
 AI_REVIEW_MODEL_CONFIG_KEY = "ai_review_model"
 AI_REPORT_MODEL_CONFIG_KEY = "ai_report_model"
@@ -35,6 +36,7 @@ DEFAULT_AI_VIDEO_MODELS = {
 DEFAULT_AI_IMAGE_MODELS = {
     "gpt-image-2": 250.00,
 }
+DEFAULT_AI_DEFAULT_MODEL = "kimi-k2.6"
 DEFAULT_AI_IMAGE_MODEL = "gpt-image-2"
 DEFAULT_AI_REVIEW_MODEL = "openai"
 DEFAULT_AI_REPORT_MODEL = "openai-fast"
@@ -44,6 +46,7 @@ AI_GLOBAL_CONFIG_DEFAULTS = {
     AI_MODELS_CONFIG_KEY: DEFAULT_AI_MODELS,
     AI_VIDEO_MODELS_CONFIG_KEY: DEFAULT_AI_VIDEO_MODELS,
     AI_IMAGE_MODELS_CONFIG_KEY: DEFAULT_AI_IMAGE_MODELS,
+    AI_DEFAULT_MODEL_CONFIG_KEY: DEFAULT_AI_DEFAULT_MODEL,
     AI_IMAGE_MODEL_CONFIG_KEY: DEFAULT_AI_IMAGE_MODEL,
     AI_REVIEW_MODEL_CONFIG_KEY: DEFAULT_AI_REVIEW_MODEL,
     AI_REPORT_MODEL_CONFIG_KEY: DEFAULT_AI_REPORT_MODEL,
@@ -103,6 +106,21 @@ def get_ai_model_rates() -> dict[str, float]:
 
 def set_ai_model_rates(models: dict[str, float]):
     set_global_config(AI_MODELS_CONFIG_KEY, coerce_ai_rate_dict(models, {}))
+
+
+def get_ai_default_model() -> str:
+    ensure_ai_global_config_defaults()
+    configured_model = str(get_global_config(AI_DEFAULT_MODEL_CONFIG_KEY, DEFAULT_AI_DEFAULT_MODEL) or "").strip()
+    text_models = get_ai_model_rates()
+    if configured_model in text_models:
+        return configured_model
+    if DEFAULT_AI_DEFAULT_MODEL in text_models:
+        return DEFAULT_AI_DEFAULT_MODEL
+    return "openai" if "openai" in text_models else next(iter(text_models), "openai")
+
+
+def set_ai_default_model(model: str):
+    set_global_config(AI_DEFAULT_MODEL_CONFIG_KEY, str(model or "").strip())
 
 
 def get_ai_video_model_rates() -> dict[str, float]:

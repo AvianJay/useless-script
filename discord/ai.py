@@ -38,6 +38,7 @@ from ai_provider import (
     ensure_ai_global_config_defaults as _ensure_ai_global_config_defaults,
     format_ai_models_for_display as _format_ai_models_for_display,
     get_ai_api_key as _get_ai_api_key,
+    get_ai_default_model as _get_ai_default_model,
     get_ai_endpoint as _get_ai_endpoint,
     get_ai_image_model as _get_ai_image_model,
     get_ai_image_model_rates as _get_ai_image_model_rates,
@@ -48,6 +49,7 @@ from ai_provider import (
     get_ai_video_model_rates as _get_ai_video_model_rates,
     is_ai_text_model as _is_ai_text_model,
     set_ai_api_key as _set_ai_api_key,
+    set_ai_default_model as _set_ai_default_model,
     set_ai_endpoint as _set_ai_endpoint,
     set_ai_image_model as _set_ai_image_model,
     set_ai_image_model_rates as _set_ai_image_model_rates,
@@ -5900,11 +5902,12 @@ class AICommands(commands.Cog):
 
     @staticmethod
     async def _get_default_model(user_id: int) -> str:
-        """取得使用者的預設模型，默認為 openai"""
-        model = get_user_data(GLOBAL_GUILD_ID, user_id, "default_ai_model", "kimi-k2.6")
+        """取得使用者的預設模型，未設定時使用全域預設模型"""
+        global_default_model = _get_ai_default_model()
+        model = get_user_data(GLOBAL_GUILD_ID, user_id, "default_ai_model", global_default_model)
         text_model_rates = _get_ai_model_rates()
         if model not in text_model_rates:
-            return "openai" if "openai" in text_model_rates else next(iter(text_model_rates), "openai")
+            return global_default_model
         return model
 
     @classmethod
@@ -6050,6 +6053,7 @@ class AICommands(commands.Cog):
             "AI config\n"
             f"- endpoint: {_get_ai_endpoint()}\n"
             f"- api_key: {api_key_status}\n"
+            f"- default_model: {_get_ai_default_model()}\n"
             f"- review_model: {_get_ai_review_model()}\n"
             f"- report_model: {_get_ai_report_model()}\n"
             f"- image_model: {_get_ai_image_model()}\n"
@@ -6106,6 +6110,19 @@ class AICommands(commands.Cog):
         models[model] = price_value
         _set_ai_model_rates(models)
         await ctx.send(f"Updated model {model}: {price_value:.2f}/C", allowed_mentions=SAFE_MENTIONS)
+
+    @ai_config_text.command(name="default-model")
+    @is_owner()
+    async def ai_config_default_model_text(self, ctx: commands.Context, model: str = None):
+        if model is None:
+            await ctx.send(f"ai_default_model: {_get_ai_default_model()}", allowed_mentions=SAFE_MENTIONS)
+            return
+        model = model.strip()
+        if not _is_ai_text_model(model):
+            await ctx.send(f"Model not found in ai_models: {model}", allowed_mentions=SAFE_MENTIONS)
+            return
+        _set_ai_default_model(model)
+        await ctx.send(f"Updated ai_default_model: {model}", allowed_mentions=SAFE_MENTIONS)
 
     @ai_config_text.command(name="review-model")
     @is_owner()
