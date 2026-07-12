@@ -1,0 +1,232 @@
+# ==========================================================
+#  反非法物品 (Anti-Illegal Item)
+#  需求:
+#    - Skript 2.7+
+#    - SkBee   (NBT 檢查)
+#    - Reqn    (Discord Webhook, 不想裝的話把 sendWebhook 函式裡
+#               標記 [Reqn] 的那一行註解掉)
+#  功能:
+#    ✅ 非法物品類型 (指令方塊/基岩/屏障...)
+#    ✅ 非法 NBT (Unbreakable / 過大 NBT 崩服物品)
+#    ✅ 非法附魔 (32767, 255 等超過原版上限)
+#    ✅ Mending 黑名單 (可開關)
+#    ✅ 非法 Lore (行數過多 / 單行過長)
+#    ✅ 非法名稱 (過長)
+#    ✅ Attribute Modifier 檢查
+#    ✅ 自動沒收 + 廣播 + 檔案紀錄 + Discord Webhook
+# ==========================================================
+
+options:
+    prefix: &c[反非法物品] &r
+    # Discord Webhook 網址, 不用的話保持 none
+    webhook-url: none
+    # 是否把 Mending (經驗修補) 列入黑名單
+    ban-mending: true
+    # 未列在上限表中的附魔, 等級超過此值視為非法 (原版最高就是 5)
+    default-max-enchant-level: 5
+    # 完整 NBT 字串長度超過此值視為崩服物品
+    max-nbt-length: 15000
+    # Lore 最多幾行
+    max-lore-lines: 10
+    # Lore 單行最長字數
+    max-lore-length: 120
+    # 物品名稱最長字數
+    max-name-length: 60
+
+# ── 原版附魔等級上限表 (只需要列出上限低於 5 的) ──
+on load:
+    # 把 options 存進變數, 避免 "always true" 警告
+    set {-antiillegal::banmending} to "{@ban-mending}"
+    set {-antiillegal::webhook} to "{@webhook-url}"
+    delete {-antiillegal::maxench::*}
+    set {-antiillegal::maxench::protection} to 4
+    set {-antiillegal::maxench::fire protection} to 4
+    set {-antiillegal::maxench::blast protection} to 4
+    set {-antiillegal::maxench::projectile protection} to 4
+    set {-antiillegal::maxench::feather falling} to 4
+    set {-antiillegal::maxench::piercing} to 4
+    set {-antiillegal::maxench::breach} to 4
+    set {-antiillegal::maxench::unbreaking} to 3
+    set {-antiillegal::maxench::looting} to 3
+    set {-antiillegal::maxench::fortune} to 3
+    set {-antiillegal::maxench::respiration} to 3
+    set {-antiillegal::maxench::sweeping edge} to 3
+    set {-antiillegal::maxench::depth strider} to 3
+    set {-antiillegal::maxench::soul speed} to 3
+    set {-antiillegal::maxench::swift sneak} to 3
+    set {-antiillegal::maxench::quick charge} to 3
+    set {-antiillegal::maxench::thorns} to 3
+    set {-antiillegal::maxench::riptide} to 3
+    set {-antiillegal::maxench::loyalty} to 3
+    set {-antiillegal::maxench::lure} to 3
+    set {-antiillegal::maxench::luck of the sea} to 3
+    set {-antiillegal::maxench::wind burst} to 3
+    set {-antiillegal::maxench::frost walker} to 2
+    set {-antiillegal::maxench::knockback} to 2
+    set {-antiillegal::maxench::punch} to 2
+    set {-antiillegal::maxench::fire aspect} to 2
+    set {-antiillegal::maxench::mending} to 1
+    set {-antiillegal::maxench::infinity} to 1
+    set {-antiillegal::maxench::flame} to 1
+    set {-antiillegal::maxench::aqua affinity} to 1
+    set {-antiillegal::maxench::silk touch} to 1
+    set {-antiillegal::maxench::channeling} to 1
+    set {-antiillegal::maxench::multishot} to 1
+    set {-antiillegal::maxench::binding curse} to 1
+    set {-antiillegal::maxench::vanishing curse} to 1
+
+# ==========================================================
+#  核心檢查: 回傳非法原因, 合法則不回傳 (none)
+# ==========================================================
+function checkItem(i: item) :: text:
+    if {_i} is air:
+        stop
+
+    # ── 1. 非法物品類型 ──
+    if {_i} is command block, chain command block, repeating command block, structure block, barrier, jigsaw block, light block, spawner, command block minecart, bedrock or end portal frame:
+        return "非法物品類型"
+
+    # ── 2. 非法名稱 ──
+    if name of {_i} is set:
+        if length of "%name of {_i}%" > {@max-name-length}:
+            return "非法名稱 (過長)"
+
+    # ── 3. 非法 Lore ──
+    set {_lore::*} to lore of {_i}
+    if size of {_lore::*} > {@max-lore-lines}:
+        return "非法 Lore (行數過多)"
+    loop {_lore::*}:
+        if length of "%loop-value%" > {@max-lore-length}:
+            return "非法 Lore (單行過長)"
+
+    # ── 4. Mending 黑名單 ──
+    if {-antiillegal::banmending} is "true":
+        if {_i} is enchanted with mending:
+            return "Mending 黑名單"
+
+    # ── 5. 非法附魔 (等級超過原版上限, 例如 255 / 32767) ──
+    set {_enchs::*} to enchantments of {_i}
+    loop {_enchs::*}:
+        set {_ench} to loop-value
+        # "%enchantment type%" 會印成 "sharpness 255", 直接從字串尾端拆出等級
+        # (比 level of ... 表達式可靠, 某些版本那個表達式會回傳 none)
+        set {_parts::*} to "%{_ench}%" split at " "
+        set {_lvl} to (last element of {_parts::*}) parsed as integer
+        if {_lvl} is set:
+            delete {_parts::%size of {_parts::*}%}
+            set {_name} to join {_parts::*} with " "
+        else:
+            # 字串沒帶等級時退回表達式
+            set {_name} to "%{_ench}%"
+            set {_lvl} to level of {_ench} of {_i}
+            if {_lvl} is not set:
+                set {_lvl} to 1
+        if {_lvl} < 1:
+            return "非法附魔 (%{_name}% 等級 %{_lvl}%)"
+        set {_max} to {-antiillegal::maxench::%{_name}%}
+        if {_max} is not set:
+            set {_max} to {@default-max-enchant-level}
+        if {_lvl} > {_max}:
+            return "非法附魔 (%{_name}% %{_lvl}%)"
+
+    # ── 6. 非法 NBT (SkBee) ──
+    set {_n} to nbt of {_i}
+    if {_n} is set:
+        # Unbreakable (1.20.5+ 是 minecraft:unbreakable, 舊版是 Unbreakable)
+        if {_n} has tag "minecraft:unbreakable":
+            return "非法 NBT (Unbreakable)"
+        if {_n} has tag "Unbreakable":
+            return "非法 NBT (Unbreakable)"
+        # ── 7. Attribute Modifier ──
+        if {_n} has tag "minecraft:attribute_modifiers":
+            return "非法屬性 (Attribute Modifier)"
+        if {_n} has tag "AttributeModifiers":
+            return "非法屬性 (Attribute Modifier)"
+
+    # ── 8. 過大 NBT (崩服物品) ──
+    if length of "%full nbt of {_i}%" > {@max-nbt-length}:
+        return "過大 NBT (疑似崩服物品)"
+
+# ==========================================================
+#  沒收 + 紀錄
+# ==========================================================
+function confiscate(p: player, i: item, reason: text):
+    broadcast "{@prefix}&e%{_p}% &c持有非法物品 &f%type of {_i}% &7(%{_reason}%, 已沒收)"
+    log "[沒收] 玩家: %{_p}% | 物品: %type of {_i}% | 原因: %{_reason}%" to "antiillegal.log"
+    sendWebhook("🚨 **%{_p}%** 持有非法物品 `%type of {_i}%` — %{_reason}% (已沒收)")
+
+function sendWebhook(msg: text):
+    if {-antiillegal::webhook} is "none" or "":
+        stop
+    replace all """" in {_msg} with "'"
+    set {_json} to "{""content"": ""%{_msg}%""}"
+    # 需要 Reqn addon 才能發送 (https://github.com/btk5h/reqn/releases)
+    # 沒裝 Reqn 的話這行會導致整個腳本載入失敗 → 在行首加 "# " 註解掉即可
+    send a "post" request to {-antiillegal::webhook} with the header "Content-Type: application/json" and the body {_json}
+
+# ==========================================================
+#  測試指令: /antiillegaltest — 測試 webhook 是否正常
+# ==========================================================
+command /antiillegaltest:
+    permission: antiillegal.admin
+    trigger:
+        if {-antiillegal::webhook} is "none" or "":
+            send "{@prefix}&cWebhook 未設定 (options 的 webhook-url 還是 none)"
+            stop
+        send "{@prefix}&7正在發送測試訊息到 &f%{-antiillegal::webhook}%"
+        sendWebhook("✅ 反非法物品 Webhook 測試訊息")
+        send "{@prefix}&a已發送, 請檢查 Discord 頻道"
+
+# ==========================================================
+#  掃描玩家背包 (0-35 背包, 36-39 盔甲, 40 副手)
+# ==========================================================
+function checkPlayerInv(p: player):
+    if {_p} is op:
+        stop
+    if {_p} has permission "antiillegal.bypass":
+        stop
+
+    loop integers between 0 and 40:
+        set {_item} to slot loop-value of {_p}
+        if {_item} is air:
+            continue
+        set {_reason} to checkItem({_item})
+        if {_reason} is set:
+            set slot loop-value of {_p} to air
+            confiscate({_p}, {_item}, {_reason})
+
+# ==========================================================
+#  觸發時機
+# ==========================================================
+every 5 seconds:
+    loop all players:
+        checkPlayerInv(loop-player)
+
+on join:
+    wait 2 seconds
+    checkPlayerInv(player)
+
+on inventory click:
+    if player is op:
+        stop
+    if player has permission "antiillegal.bypass":
+        stop
+    if event-item is not set:
+        stop
+    if event-item is air:
+        stop
+    set {_reason} to checkItem(event-item)
+    if {_reason} is set:
+        cancel event
+        remove event-item from player's inventory
+        confiscate(player, event-item, {_reason})
+
+on pickup:
+    if player is op:
+        stop
+    if player has permission "antiillegal.bypass":
+        stop
+    set {_reason} to checkItem(event-item)
+    if {_reason} is set:
+        # 靜默取消撿取 (不廣播, 避免站在物品上洗頻)
+        cancel event
