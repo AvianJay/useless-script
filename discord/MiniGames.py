@@ -1,4 +1,13 @@
-from globalenv import bot, start_bot, get_user_data, set_user_data, get_emoji_mention_by_name
+from globalenv import (
+    bot,
+    start_bot,
+    get_user_data,
+    set_user_data,
+    get_server_config,
+    set_server_config,
+    get_all_server_config_key,
+    get_emoji_mention_by_name,
+)
 import discord
 from Economy import (
     get_balance,
@@ -11,14 +20,17 @@ from Economy import (
     GLOBAL_GUILD_ID,
     interaction_uses_server_scope,
 )
-from discord.ext import commands
+from discord.ext import commands, tasks
 from discord import app_commands
 from logger import log
 import logging
 
 import random
+import secrets
 import asyncio
+import uuid
 from dataclasses import dataclass, field
+from datetime import datetime, timedelta, timezone
 from typing import List, Optional, Dict, Tuple, Any
 from collections import Counter
 
@@ -394,6 +406,201 @@ async def game_emoji(name: str, fallback: str) -> str:
     if mention == f":{name}:":
         return fallback
     return mention
+
+
+# -----------------------------
+# Roulette / Dice / Coinflip / Scratchcard / Lottery
+# -----------------------------
+
+ROULETTE_RED_NUMBERS = frozenset({
+    1, 3, 5, 7, 9, 12, 14, 16, 18,
+    19, 21, 23, 25, 27, 30, 32, 34, 36,
+})
+ROULETTE_BET_LABELS = {
+    "red": "紅色",
+    "black": "黑色",
+    "odd": "單數",
+    "even": "雙數",
+    "low": "小（1～18）",
+    "high": "大（19～36）",
+    "number": "單一號碼",
+}
+
+
+def roulette_color(number: int) -> str:
+    if number == 0:
+        return "green"
+    return "red" if number in ROULETTE_RED_NUMBERS else "black"
+
+
+def roulette_is_win(result: int, bet_type: str, chosen_number: Optional[int] = None) -> bool:
+    if bet_type == "number":
+        return chosen_number == result
+    if result == 0:
+        return False
+    if bet_type == "red":
+        return roulette_color(result) == "red"
+    if bet_type == "black":
+        return roulette_color(result) == "black"
+    if bet_type == "odd":
+        return result % 2 == 1
+    if bet_type == "even":
+        return result % 2 == 0
+    if bet_type == "low":
+        return 1 <= result <= 18
+    if bet_type == "high":
+        return 19 <= result <= 36
+    return False
+
+
+# (key, winning symbol, weight / 10000, total payout multiplier, label)
+SCRATCH_PRIZE_TABLE = [
+    ("none", None, 5500, 0.0, "未中獎"),
+    ("refund", "🍋", 2500, 1.0, "回本"),
+    ("small", "🍒", 1200, 1.5, "小獎"),
+    ("medium", "🔔", 600, 3.0, "中獎"),
+    ("major", "7️⃣", 180, 10.0, "大獎"),
+    ("jackpot", "💎", 20, 80.0, "頭獎"),
+]
+SCRATCH_SYMBOLS = ["🍋", "🍒", "🔔", "7️⃣", "💎", "⭐"]
+
+
+def draw_scratch_prize() -> Tuple[str, Optional[str], float, str]:
+    prize = random.choices(
+        SCRATCH_PRIZE_TABLE,
+        weights=[entry[2] for entry in SCRATCH_PRIZE_TABLE],
+        k=1,
+    )[0]
+    return prize[0], prize[1], prize[3], prize[4]
+
+
+def create_scratch_grid(winning_symbol: Optional[str]) -> List[str]:
+    """建立只會出現指定三連符號的票面；未中獎票面每種符號最多兩個。"""
+    cells = [winning_symbol] * 3 if winning_symbol else []
+    counts = Counter(cells)
+    while len(cells) < 9:
+        available = [
+            symbol for symbol in SCRATCH_SYMBOLS
+            if symbol != winning_symbol and counts[symbol] < 2
+        ]
+        symbol = random.choice(available)
+        cells.append(symbol)
+        counts[symbol] += 1
+    random.shuffle(cells)
+    return cells
+
+
+def scratch_grid_text(grid: List[str], hidden: bool = False) -> str:
+    cells = ["⬜" for _ in grid] if hidden else grid
+    return "\n".join("  ".join(cells[i:i + 3]) for i in range(0, 9, 3))
+
+
+@dataclass
+class ScratchcardGame:
+    user_id: int
+    channel_id: int
+    guild_id: int
+    bet: float
+    prize_key: str
+    prize_name: str
+    multiplier: float
+    grid: List[str]
+    settled: bool = False
+    message: Optional[discord.Message] = None
+    active_view: Optional[discord.ui.View] = field(default=None, init=False, repr=False)
+    lock: asyncio.Lock = field(default_factory=asyncio.Lock)
+
+
+LOTTERY_CONFIG_KEY = "minigames_lottery_state"
+LOTTERY_DRAW_DELAY = timedelta(hours=1)
+LOTTERY_PAYOUT_RATIO = 0.95
+
+
+def default_lottery_state() -> Dict[str, Any]:
+    return {
+        "jackpot": 0.0,
+        "draw_at": None,
+        "round_id": None,
+        "tickets": {},
+        "last_result": None,
+        "pending_settlement": None,
+    }
+
+
+def normalize_lottery_state(raw_state: Any) -> Dict[str, Any]:
+    state = default_lottery_state()
+    if not isinstance(raw_state, dict):
+        return state
+
+    try:
+        state["jackpot"] = max(0.0, round(float(raw_state.get("jackpot", 0.0)), 2))
+    except (TypeError, ValueError):
+        pass
+
+    draw_at = raw_state.get("draw_at")
+    if isinstance(draw_at, str):
+        state["draw_at"] = draw_at
+    round_id = raw_state.get("round_id")
+    if isinstance(round_id, str):
+        state["round_id"] = round_id
+
+    tickets: Dict[str, Dict[str, float]] = {}
+    raw_tickets = raw_state.get("tickets", {})
+    if isinstance(raw_tickets, dict):
+        for raw_number, raw_entries in raw_tickets.items():
+            try:
+                number = int(raw_number)
+            except (TypeError, ValueError):
+                continue
+            if not 0 <= number <= 99 or not isinstance(raw_entries, dict):
+                continue
+            entries: Dict[str, float] = {}
+            for raw_user_id, raw_stake in raw_entries.items():
+                try:
+                    user_id = str(int(raw_user_id))
+                    stake = round(float(raw_stake), 2)
+                except (TypeError, ValueError):
+                    continue
+                if stake > 0:
+                    entries[user_id] = stake
+            if entries:
+                tickets[f"{number:02d}"] = entries
+    state["tickets"] = tickets
+
+    if isinstance(raw_state.get("last_result"), dict):
+        state["last_result"] = raw_state["last_result"]
+    if isinstance(raw_state.get("pending_settlement"), dict):
+        state["pending_settlement"] = raw_state["pending_settlement"]
+    return state
+
+
+def parse_lottery_draw_at(value: Any) -> Optional[datetime]:
+    if not isinstance(value, str):
+        return None
+    try:
+        parsed = datetime.fromisoformat(value)
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
+
+
+def allocate_lottery_payouts(jackpot: float, winning_stakes: Dict[int, float]) -> Dict[int, float]:
+    """按投注比例分配 95% 獎池；不足一分的餘額給最大投注者。"""
+    valid_stakes = {uid: float(stake) for uid, stake in winning_stakes.items() if stake > 0}
+    if not valid_stakes:
+        return {}
+    total_stake = sum(valid_stakes.values())
+    payout_cents = int(round(round(jackpot * LOTTERY_PAYOUT_RATIO, 2) * 100))
+    allocations_cents = {
+        uid: int(payout_cents * stake / total_stake)
+        for uid, stake in valid_stakes.items()
+    }
+    remainder = payout_cents - sum(allocations_cents.values())
+    remainder_user = sorted(valid_stakes, key=lambda uid: (-valid_stakes[uid], uid))[0]
+    allocations_cents[remainder_user] += remainder
+    return {uid: cents / 100 for uid, cents in allocations_cents.items()}
 
 
 # -----------------------------
@@ -1014,8 +1221,27 @@ class HandView(discord.ui.View):
 
 
 # -----------------------------
-# Slots / HighLow / Blackjack Views
+# Scratchcard / Slots / HighLow / Blackjack Views
 # -----------------------------
+
+
+class ScratchcardView(discord.ui.View):
+    def __init__(self, cog: "MiniGamesCog", game: ScratchcardGame):
+        super().__init__(timeout=90)
+        self.cog = cog
+        self.game = game
+        self.message = None
+
+    @discord.ui.button(label="🪙 刮開", style=discord.ButtonStyle.primary)
+    async def reveal_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await self.cog.settle_scratchcard(interaction, self.game, self)
+
+    async def on_timeout(self):
+        if self.game.active_view is not self:
+            return
+        await self.cog.scratchcard_timeout(self.game, self)
+        self.stop()
+
 
 class SlotsAgainView(discord.ui.View):
     """拉霸結果附「再轉一次」按鈕"""
@@ -1119,7 +1345,23 @@ class MiniGamesCog(commands.GroupCog, group_name="games", description="迷你遊
         self.tower_games: Dict[Tuple[int, int], TowerGame] = {}  # (channel_id, user_id) -> TowerGame
         self.highlow_games: Dict[Tuple[int, int], HighLowGame] = {}
         self.blackjack_games: Dict[Tuple[int, int], BlackjackGame] = {}
+        self.scratchcard_games: Dict[Tuple[int, int], ScratchcardGame] = {}
         self.slots_spinning: set = set()  # (channel_id, user_id) 轉動中防連點
+        self.lottery_locks: Dict[int, asyncio.Lock] = {}
+
+    async def cog_load(self):
+        # 模組由 asyncio.run(add_cog) 載入；只有 bot 已在正式 loop ready 時才在這裡啟動。
+        if self.bot.is_ready() and not self.lottery_draw_task.is_running():
+            self.lottery_draw_task.start()
+
+    async def cog_unload(self):
+        if self.lottery_draw_task.is_running():
+            self.lottery_draw_task.cancel()
+
+    @commands.Cog.listener()
+    async def on_ready(self):
+        if not self.lottery_draw_task.is_running():
+            self.lottery_draw_task.start()
 
     async def _edit_game_message(
         self,
@@ -1230,6 +1472,770 @@ class MiniGamesCog(commands.GroupCog, group_name="games", description="迷你遊
         if bet < BET_MIN or bet > BET_MAX:
             return f"❌ 賭注金額需介於 **{BET_MIN}**～**{BET_MAX}** 之間。"
         return None
+
+    @staticmethod
+    def _roulette_result_label(number: int) -> str:
+        color = roulette_color(number)
+        if color == "green":
+            return f"🟢 **{number}**"
+        if color == "red":
+            return f"🔴 **{number}**"
+        return f"⚫ **{number}**"
+
+    def _lottery_lock(self, guild_id: int) -> asyncio.Lock:
+        lock = self.lottery_locks.get(guild_id)
+        if lock is None:
+            lock = asyncio.Lock()
+            self.lottery_locks[guild_id] = lock
+        return lock
+
+    @staticmethod
+    def _load_lottery_state(guild_id: int) -> Dict[str, Any]:
+        return normalize_lottery_state(get_server_config(guild_id, LOTTERY_CONFIG_KEY, {}))
+
+    @staticmethod
+    def _save_lottery_state(guild_id: int, state: Dict[str, Any]) -> bool:
+        return set_server_config(guild_id, LOTTERY_CONFIG_KEY, state)
+
+    @staticmethod
+    def _lottery_payout_recorded(guild_id: int, user_id: int, round_id: str) -> bool:
+        history = get_user_data(guild_id, user_id, "economy_history", []) or []
+        marker = f"彩票輪次 {round_id}"
+        return any(
+            isinstance(entry, dict)
+            and entry.get("type") == "彩票派彩"
+            and marker in str(entry.get("detail", ""))
+            for entry in history
+        )
+
+    def _lottery_status_embed(self, guild_id: int, state: Dict[str, Any]) -> discord.Embed:
+        currency = get_currency_name(guild_id)
+        jackpot = float(state.get("jackpot", 0.0) or 0.0)
+        tickets = state.get("tickets", {}) or {}
+        unique_users = {
+            user_id
+            for entries in tickets.values()
+            if isinstance(entries, dict)
+            for user_id in entries
+        }
+        current_stake = sum(
+            float(stake)
+            for entries in tickets.values()
+            if isinstance(entries, dict)
+            for stake in entries.values()
+        )
+
+        pending = state.get("pending_settlement")
+        draw_at = parse_lottery_draw_at(state.get("draw_at"))
+        if pending:
+            timing = "本輪正在結算，暫停購票。"
+        elif draw_at is not None:
+            timing = f"開獎時間：<t:{int(draw_at.timestamp())}:F>（<t:{int(draw_at.timestamp())}:R>）"
+        elif jackpot > 0:
+            timing = "累積獎池等待下一張票；購票後 60 分鐘開獎。"
+        else:
+            timing = "尚未開始；第一張票售出後 60 分鐘開獎。"
+
+        embed = discord.Embed(
+            title="🎟️ 累積彩票",
+            description=(
+                f"目前獎池：**{jackpot:,.2f}** {currency}\n"
+                f"本輪新增投注：**{current_stake:,.2f}** {currency}\n"
+                f"參與玩家：**{len(unique_users)}** 人\n{timing}"
+            ),
+            color=discord.Color.gold(),
+        )
+        last_result = state.get("last_result")
+        if isinstance(last_result, dict):
+            number = str(last_result.get("number", "??")).zfill(2)
+            winner_count = int(last_result.get("winner_count", 0) or 0)
+            draw_jackpot = float(last_result.get("jackpot", 0.0) or 0.0)
+            payout_total = float(last_result.get("payout_total", 0.0) or 0.0)
+            if winner_count:
+                result_line = (
+                    f"中獎號碼：**{number}**\n中獎人數：**{winner_count}**\n"
+                    f"派彩總額：**{payout_total:,.2f}** {currency}"
+                )
+            else:
+                result_line = (
+                    f"中獎號碼：**{number}**\n無人命中，"
+                    f"**{draw_jackpot:,.2f}** {currency} 已累積至下一輪。"
+                )
+            drawn_at = parse_lottery_draw_at(last_result.get("drawn_at"))
+            if drawn_at is not None:
+                result_line += f"\n開獎時間：<t:{int(drawn_at.timestamp())}:f>"
+            embed.add_field(name="上期結果", value=result_line, inline=False)
+        embed.set_footer(text="票券每輪到期；若無人命中，只累積獎池，不保留舊票。")
+        return embed
+
+    async def _notify_lottery_winner(
+        self,
+        guild_id: int,
+        user_id: int,
+        number: str,
+        payout: float,
+        round_id: str,
+    ) -> None:
+        currency = get_currency_name(guild_id)
+        try:
+            user = self.bot.get_user(user_id) or await self.bot.fetch_user(user_id)
+            embed = discord.Embed(
+                title="🎉 彩票中獎！",
+                description=(
+                    f"中獎號碼：**{number}**\n"
+                    f"你的派彩：**{payout:,.2f}** {currency}\n"
+                    f"目前餘額：**{get_balance(guild_id, user_id):,.2f}** {currency}"
+                ),
+                color=discord.Color.gold(),
+            )
+            embed.set_footer(text=f"輪次：{round_id}")
+            await user.send(embed=embed)
+        except (discord.Forbidden, discord.NotFound, discord.HTTPException, AttributeError) as exc:
+            log(
+                f"Failed to DM lottery winner {user_id} for round {round_id}: {exc}",
+                module_name="MiniGames",
+                level=logging.WARNING,
+            )
+
+    async def _resume_lottery_settlement_locked(self, guild_id: int, state: Dict[str, Any]) -> None:
+        pending = state.get("pending_settlement")
+        if not isinstance(pending, dict):
+            return
+        round_id = str(pending.get("round_id", ""))
+        number = str(pending.get("number", "??")).zfill(2)
+        raw_payouts = pending.get("payouts", {})
+        if not round_id or not isinstance(raw_payouts, dict):
+            log(
+                f"Discarding malformed lottery settlement in scope {guild_id}.",
+                module_name="MiniGames",
+                level=logging.ERROR,
+            )
+            state["pending_settlement"] = None
+            self._save_lottery_state(guild_id, state)
+            return
+
+        paid_user_ids = {str(user_id) for user_id in pending.get("paid_user_ids", [])}
+        currency = get_currency_name(guild_id)
+        for raw_user_id, raw_payout in sorted(raw_payouts.items(), key=lambda item: str(item[0])):
+            try:
+                user_id = int(raw_user_id)
+                payout = round(float(raw_payout), 2)
+            except (TypeError, ValueError):
+                continue
+            if payout <= 0:
+                continue
+            user_key = str(user_id)
+            if user_key not in paid_user_ids and self._lottery_payout_recorded(guild_id, user_id, round_id):
+                paid_user_ids.add(user_key)
+            if user_key in paid_user_ids:
+                continue
+            try:
+                self._pay_out(
+                    guild_id,
+                    user_id,
+                    payout,
+                    "彩票派彩",
+                    "lottery_payout",
+                    f"彩票輪次 {round_id}，中獎號碼 {number}，派彩 {payout:,.2f} {currency}",
+                )
+            except Exception as exc:
+                log(
+                    f"Lottery payout failed in scope {guild_id}, round {round_id}, user {user_id}: {exc}",
+                    module_name="MiniGames",
+                    level=logging.ERROR,
+                )
+                return
+            paid_user_ids.add(user_key)
+            pending["paid_user_ids"] = sorted(paid_user_ids, key=int)
+            state["pending_settlement"] = pending
+            if not self._save_lottery_state(guild_id, state):
+                log(
+                    f"Failed to persist lottery payout progress in scope {guild_id}, round {round_id}.",
+                    module_name="MiniGames",
+                    level=logging.ERROR,
+                )
+                return
+            asyncio.create_task(self._notify_lottery_winner(guild_id, user_id, number, payout, round_id))
+
+        state["last_result"] = pending.get("last_result")
+        state["pending_settlement"] = None
+        if not self._save_lottery_state(guild_id, state):
+            log(
+                f"Failed to finalize lottery settlement in scope {guild_id}, round {round_id}.",
+                module_name="MiniGames",
+                level=logging.ERROR,
+            )
+
+    async def _settle_lottery_scope(self, guild_id: int) -> None:
+        async with self._lottery_lock(guild_id):
+            state = self._load_lottery_state(guild_id)
+            if state.get("pending_settlement"):
+                await self._resume_lottery_settlement_locked(guild_id, state)
+                return
+
+            draw_at = parse_lottery_draw_at(state.get("draw_at"))
+            if draw_at is None or draw_at > datetime.now(timezone.utc):
+                return
+
+            tickets = state.get("tickets", {}) or {}
+            round_id = str(state.get("round_id") or uuid.uuid4().hex)
+            jackpot = round(float(state.get("jackpot", 0.0) or 0.0), 2)
+            drawn_at = datetime.now(timezone.utc)
+            winning_number = secrets.randbelow(100)
+            number_key = f"{winning_number:02d}"
+            winning_entries = tickets.get(number_key, {}) if isinstance(tickets, dict) else {}
+            winning_stakes = {
+                int(user_id): float(stake)
+                for user_id, stake in winning_entries.items()
+                if float(stake) > 0
+            }
+
+            if not winning_stakes:
+                state.update({
+                    "draw_at": None,
+                    "round_id": None,
+                    "tickets": {},
+                    "last_result": {
+                        "round_id": round_id,
+                        "number": number_key,
+                        "jackpot": jackpot,
+                        "payout_total": 0.0,
+                        "winner_count": 0,
+                        "rolled_over": True,
+                        "drawn_at": drawn_at.isoformat(),
+                    },
+                })
+                if self._save_lottery_state(guild_id, state):
+                    log(
+                        f"Lottery round {round_id} in scope {guild_id} drew {number_key}; no winners, jackpot rolled over.",
+                        module_name="MiniGames",
+                        level=logging.INFO,
+                    )
+                return
+
+            payouts = allocate_lottery_payouts(jackpot, winning_stakes)
+            payout_total = round(sum(payouts.values()), 2)
+            pending = {
+                "round_id": round_id,
+                "number": number_key,
+                "payouts": {str(user_id): payout for user_id, payout in payouts.items()},
+                "paid_user_ids": [],
+                "last_result": {
+                    "round_id": round_id,
+                    "number": number_key,
+                    "jackpot": jackpot,
+                    "payout_total": payout_total,
+                    "house_cut": round(jackpot - payout_total, 2),
+                    "winner_count": len(payouts),
+                    "rolled_over": False,
+                    "drawn_at": drawn_at.isoformat(),
+                },
+            }
+            state.update({
+                "jackpot": 0.0,
+                "draw_at": None,
+                "round_id": None,
+                "tickets": {},
+                "pending_settlement": pending,
+            })
+            if not self._save_lottery_state(guild_id, state):
+                log(
+                    f"Failed to persist lottery settlement in scope {guild_id}, round {round_id}.",
+                    module_name="MiniGames",
+                    level=logging.ERROR,
+                )
+                return
+            await self._resume_lottery_settlement_locked(guild_id, state)
+
+    @tasks.loop(minutes=1)
+    async def lottery_draw_task(self):
+        try:
+            states = get_all_server_config_key(LOTTERY_CONFIG_KEY) or {}
+        except Exception as exc:
+            log(
+                f"Failed to load lottery states: {exc}",
+                module_name="MiniGames",
+                level=logging.ERROR,
+            )
+            return
+        now = datetime.now(timezone.utc)
+        for raw_guild_id, raw_state in states.items():
+            try:
+                guild_id = int(raw_guild_id)
+            except (TypeError, ValueError):
+                continue
+            state = normalize_lottery_state(raw_state)
+            draw_at = parse_lottery_draw_at(state.get("draw_at"))
+            if state.get("pending_settlement") or (draw_at is not None and draw_at <= now):
+                try:
+                    await self._settle_lottery_scope(guild_id)
+                except Exception as exc:
+                    log(
+                        f"Lottery draw failed in scope {guild_id}: {exc}",
+                        module_name="MiniGames",
+                        level=logging.ERROR,
+                    )
+
+    @lottery_draw_task.before_loop
+    async def before_lottery_draw_task(self):
+        await self.bot.wait_until_ready()
+
+    @app_commands.command(name="roulette", description="俄羅斯輪盤：選擇投注方式並下注")
+    @app_commands.describe(
+        bet="賭注金額（50～2000）",
+        bet_type="投注方式",
+        number="單號投注時選擇 0～36",
+        use_global="是否使用全域幣（預設依伺服器設定）",
+    )
+    @app_commands.choices(bet_type=[
+        app_commands.Choice(name="紅色", value="red"),
+        app_commands.Choice(name="黑色", value="black"),
+        app_commands.Choice(name="單數", value="odd"),
+        app_commands.Choice(name="雙數", value="even"),
+        app_commands.Choice(name="小（1～18）", value="low"),
+        app_commands.Choice(name="大（19～36）", value="high"),
+        app_commands.Choice(name="單一號碼", value="number"),
+    ])
+    async def roulette(
+        self,
+        interaction: discord.Interaction,
+        bet: int,
+        bet_type: app_commands.Choice[str],
+        number: Optional[app_commands.Range[int, 0, 36]] = None,
+        use_global: bool = False,
+    ):
+        err = self._validate_bet(bet)
+        if err:
+            return await interaction.response.send_message(err, ephemeral=True)
+        if bet_type.value == "number" and number is None:
+            return await interaction.response.send_message("❌ 單號投注必須選擇 0～36 的號碼。", ephemeral=True)
+        if bet_type.value != "number" and number is not None:
+            return await interaction.response.send_message("❌ 只有單號投注需要填寫號碼。", ephemeral=True)
+
+        guild_id = resolve_game_guild_id(interaction, use_global)
+        currency = get_currency_name(guild_id)
+        if not self._charge_bet(
+            interaction,
+            guild_id,
+            float(bet),
+            "輪盤下注",
+            "roulette_bet",
+            f"輪盤 {ROULETTE_BET_LABELS[bet_type.value]} 下注 {bet:,.0f} {currency}",
+        ):
+            balance = get_balance(guild_id, interaction.user.id)
+            return await interaction.response.send_message(
+                f"❌ 餘額不足！\n你的餘額：**{balance:,.0f}** {currency}\n所需賭注：**{bet:,.0f}** {currency}",
+                ephemeral=True,
+            )
+
+        result = random.randint(0, 36)
+        won = roulette_is_win(result, bet_type.value, int(number) if number is not None else None)
+        multiplier = 36.0 if bet_type.value == "number" else 2.0
+        payout = round(bet * multiplier, 2) if won else 0.0
+        selection = f"號碼 {int(number)}" if bet_type.value == "number" else ROULETTE_BET_LABELS[bet_type.value]
+        if payout:
+            self._pay_out(
+                guild_id,
+                interaction.user.id,
+                payout,
+                "輪盤派彩",
+                "roulette_payout",
+                f"投注 {selection}，開出 {result}，倍率 x{multiplier:.0f}",
+                interaction=interaction,
+            )
+
+        spinning = discord.Embed(
+            title="🎡 俄羅斯輪盤",
+            description="輪盤轉動中……",
+            color=discord.Color.blurple(),
+        )
+        spinning.set_footer(text=f"投注：{selection}｜下注：{bet:,.0f} {currency}")
+        await interaction.response.send_message(embed=spinning)
+        message = await interaction.original_response()
+        await asyncio.sleep(1.5)
+
+        profit = payout - bet
+        if won:
+            result_text = (
+                f"開出 {self._roulette_result_label(result)}\n\n🎉 **你贏了！**\n"
+                f"派彩：**{payout:,.2f}** {currency}（+{profit:,.2f}）"
+            )
+            color = discord.Color.green()
+        else:
+            result_text = (
+                f"開出 {self._roulette_result_label(result)}\n\n💥 **未中獎**，"
+                f"損失 **{bet:,.0f}** {currency}"
+            )
+            color = discord.Color.red()
+        result_text += f"\n新餘額：**{get_balance(guild_id, interaction.user.id):,.2f}** {currency}"
+        embed = discord.Embed(title="🎡 俄羅斯輪盤", description=result_text, color=color)
+        embed.set_footer(text=f"投注：{selection}｜下注：{bet:,.0f} {currency}")
+        try:
+            await message.edit(embed=embed)
+        except (discord.NotFound, discord.HTTPException):
+            pass
+
+    @app_commands.command(name="dice", description="骰子遊戲：猜中 1～6 的點數")
+    @app_commands.describe(
+        bet="賭注金額（50～2000）",
+        guess="猜測骰子點數（1～6）",
+        use_global="是否使用全域幣（預設依伺服器設定）",
+    )
+    async def dice(
+        self,
+        interaction: discord.Interaction,
+        bet: int,
+        guess: app_commands.Range[int, 1, 6],
+        use_global: bool = False,
+    ):
+        err = self._validate_bet(bet)
+        if err:
+            return await interaction.response.send_message(err, ephemeral=True)
+        guild_id = resolve_game_guild_id(interaction, use_global)
+        currency = get_currency_name(guild_id)
+        if not self._charge_bet(
+            interaction,
+            guild_id,
+            float(bet),
+            "骰子下注",
+            "dice_bet",
+            f"猜 {int(guess)}，下注 {bet:,.0f} {currency}",
+        ):
+            balance = get_balance(guild_id, interaction.user.id)
+            return await interaction.response.send_message(
+                f"❌ 餘額不足！\n你的餘額：**{balance:,.0f}** {currency}\n所需賭注：**{bet:,.0f}** {currency}",
+                ephemeral=True,
+            )
+
+        result = random.randint(1, 6)
+        won = result == int(guess)
+        payout = round(bet * 5.7, 2) if won else 0.0
+        if payout:
+            self._pay_out(
+                guild_id,
+                interaction.user.id,
+                payout,
+                "骰子派彩",
+                "dice_payout",
+                f"猜中點數 {result}，倍率 x5.70",
+                interaction=interaction,
+            )
+
+        await interaction.response.send_message(
+            embed=discord.Embed(title="🎲 骰子遊戲", description="骰子滾動中……", color=discord.Color.blurple())
+        )
+        message = await interaction.original_response()
+        await asyncio.sleep(1.0)
+        if won:
+            text = (
+                f"你猜：**{int(guess)}**｜骰子：# **{result}**\n\n🎉 **猜中了！**\n"
+                f"派彩：**{payout:,.2f}** {currency}（+{payout - bet:,.2f}）"
+            )
+            color = discord.Color.green()
+        else:
+            text = (
+                f"你猜：**{int(guess)}**｜骰子：# **{result}**\n\n💥 **猜錯了！** "
+                f"損失 **{bet:,.0f}** {currency}"
+            )
+            color = discord.Color.red()
+        text += f"\n新餘額：**{get_balance(guild_id, interaction.user.id):,.2f}** {currency}"
+        embed = discord.Embed(title="🎲 骰子遊戲", description=text, color=color)
+        embed.set_footer(text=f"下注：{bet:,.0f} {currency}｜猜中倍率 x5.70")
+        try:
+            await message.edit(embed=embed)
+        except (discord.NotFound, discord.HTTPException):
+            pass
+
+    @app_commands.command(name="coinflip", description="擲硬幣：猜正面或反面")
+    @app_commands.describe(
+        bet="賭注金額（50～2000）",
+        side="選擇正面或反面",
+        use_global="是否使用全域幣（預設依伺服器設定）",
+    )
+    @app_commands.choices(side=[
+        app_commands.Choice(name="正面", value="heads"),
+        app_commands.Choice(name="反面", value="tails"),
+    ])
+    async def coinflip(
+        self,
+        interaction: discord.Interaction,
+        bet: int,
+        side: app_commands.Choice[str],
+        use_global: bool = False,
+    ):
+        err = self._validate_bet(bet)
+        if err:
+            return await interaction.response.send_message(err, ephemeral=True)
+        guild_id = resolve_game_guild_id(interaction, use_global)
+        currency = get_currency_name(guild_id)
+        side_label = "正面" if side.value == "heads" else "反面"
+        if not self._charge_bet(
+            interaction,
+            guild_id,
+            float(bet),
+            "擲硬幣下注",
+            "coinflip_bet",
+            f"選擇 {side_label}，下注 {bet:,.0f} {currency}",
+        ):
+            balance = get_balance(guild_id, interaction.user.id)
+            return await interaction.response.send_message(
+                f"❌ 餘額不足！\n你的餘額：**{balance:,.0f}** {currency}\n所需賭注：**{bet:,.0f}** {currency}",
+                ephemeral=True,
+            )
+
+        result = random.choice(("heads", "tails"))
+        won = result == side.value
+        payout = round(bet * 1.9, 2) if won else 0.0
+        result_label = "正面" if result == "heads" else "反面"
+        if payout:
+            self._pay_out(
+                guild_id,
+                interaction.user.id,
+                payout,
+                "擲硬幣派彩",
+                "coinflip_payout",
+                f"選擇 {side_label}，開出 {result_label}，倍率 x1.90",
+                interaction=interaction,
+            )
+
+        await interaction.response.send_message(
+            embed=discord.Embed(title="🪙 擲硬幣", description="硬幣翻轉中……", color=discord.Color.blurple())
+        )
+        message = await interaction.original_response()
+        await asyncio.sleep(1.0)
+        if won:
+            text = (
+                f"你選：**{side_label}**｜結果：# **{result_label}**\n\n🎉 **猜中了！**\n"
+                f"派彩：**{payout:,.2f}** {currency}（+{payout - bet:,.2f}）"
+            )
+            color = discord.Color.green()
+        else:
+            text = (
+                f"你選：**{side_label}**｜結果：# **{result_label}**\n\n💥 **猜錯了！** "
+                f"損失 **{bet:,.0f}** {currency}"
+            )
+            color = discord.Color.red()
+        text += f"\n新餘額：**{get_balance(guild_id, interaction.user.id):,.2f}** {currency}"
+        embed = discord.Embed(title="🪙 擲硬幣", description=text, color=color)
+        embed.set_footer(text=f"下注：{bet:,.0f} {currency}｜猜中倍率 x1.90")
+        try:
+            await message.edit(embed=embed)
+        except (discord.NotFound, discord.HTTPException):
+            pass
+
+    @app_commands.command(name="scratchcard", description="購買並刮開一張 3x3 刮刮樂")
+    @app_commands.describe(
+        bet="賭注金額（50～2000）",
+        use_global="是否使用全域幣（預設依伺服器設定）",
+    )
+    async def scratchcard(self, interaction: discord.Interaction, bet: int, use_global: bool = False):
+        err = self._validate_bet(bet)
+        if err:
+            return await interaction.response.send_message(err, ephemeral=True)
+        key = (interaction.channel_id, interaction.user.id)
+        if key in self.scratchcard_games:
+            return await interaction.response.send_message("你已經有一張尚未刮開的刮刮樂。", ephemeral=True)
+
+        guild_id = resolve_game_guild_id(interaction, use_global)
+        currency = get_currency_name(guild_id)
+        if not self._charge_bet(
+            interaction,
+            guild_id,
+            float(bet),
+            "刮刮樂下注",
+            "scratchcard_bet",
+            f"購買刮刮樂，下注 {bet:,.0f} {currency}",
+        ):
+            balance = get_balance(guild_id, interaction.user.id)
+            return await interaction.response.send_message(
+                f"❌ 餘額不足！\n你的餘額：**{balance:,.0f}** {currency}\n所需賭注：**{bet:,.0f}** {currency}",
+                ephemeral=True,
+            )
+
+        prize_key, winning_symbol, multiplier, prize_name = draw_scratch_prize()
+        game = ScratchcardGame(
+            user_id=interaction.user.id,
+            channel_id=interaction.channel_id,
+            guild_id=guild_id,
+            bet=float(bet),
+            prize_key=prize_key,
+            prize_name=prize_name,
+            multiplier=multiplier,
+            grid=create_scratch_grid(winning_symbol),
+        )
+        self.scratchcard_games[key] = game
+        view = ScratchcardView(self, game)
+        embed = discord.Embed(
+            title="🎫 刮刮樂",
+            description=f"# {scratch_grid_text(game.grid, hidden=True)}\n\n按下 **刮開** 揭曉票面。",
+            color=discord.Color.gold(),
+        )
+        embed.set_footer(text=f"下注：{bet:,.0f} {currency}｜逾時將自動刮開")
+        await interaction.response.send_message(embed=embed, view=view)
+        message = await interaction.original_response()
+        game.message = message
+        game.active_view = view
+        view.message = message
+
+    def _settle_scratchcard_finances(
+        self,
+        game: ScratchcardGame,
+        interaction: Optional[discord.Interaction] = None,
+    ) -> discord.Embed:
+        currency = get_currency_name(game.guild_id)
+        payout = round(game.bet * game.multiplier, 2)
+        if payout > 0:
+            self._pay_out(
+                game.guild_id,
+                game.user_id,
+                payout,
+                "刮刮樂派彩",
+                "scratchcard_payout",
+                f"{game.prize_name}，倍率 x{game.multiplier:.2f}，下注 {game.bet:,.0f} {currency}",
+                interaction=interaction,
+                color=0xF1C40F if game.prize_key == "jackpot" else 0x2ECC71,
+            )
+        profit = payout - game.bet
+        if payout > 0:
+            result = (
+                f"🎉 **{game.prize_name}！** 倍率 **x{game.multiplier:.2f}**\n"
+                f"派彩：**{payout:,.2f}** {currency}（{'+' if profit >= 0 else ''}{profit:,.2f}）"
+            )
+            color = discord.Color.gold() if game.prize_key == "jackpot" else discord.Color.green()
+        else:
+            result = f"💥 **未中獎**，損失 **{game.bet:,.0f}** {currency}"
+            color = discord.Color.red()
+        description = (
+            f"# {scratch_grid_text(game.grid)}\n\n{result}\n"
+            f"新餘額：**{get_balance(game.guild_id, game.user_id):,.2f}** {currency}"
+        )
+        embed = discord.Embed(title="🎫 刮刮樂", description=description, color=color)
+        embed.set_footer(text=f"下注：{game.bet:,.0f} {currency}")
+        return embed
+
+    async def settle_scratchcard(
+        self,
+        interaction: discord.Interaction,
+        game: ScratchcardGame,
+        view: ScratchcardView,
+    ):
+        if interaction.user.id != game.user_id:
+            return await interaction.response.send_message("這不是你的刮刮樂。", ephemeral=True)
+        async with game.lock:
+            key = (game.channel_id, game.user_id)
+            if game.settled or self.scratchcard_games.get(key) is not game:
+                return await interaction.response.send_message("這張刮刮樂已經結算。", ephemeral=True)
+            game.settled = True
+            game.active_view = None
+            self.scratchcard_games.pop(key, None)
+            embed = self._settle_scratchcard_finances(game, interaction)
+            await interaction.response.edit_message(embed=embed, view=None)
+            view.stop()
+
+    async def scratchcard_timeout(self, game: ScratchcardGame, view: ScratchcardView):
+        async with game.lock:
+            key = (game.channel_id, game.user_id)
+            if game.settled or self.scratchcard_games.get(key) is not game:
+                return
+            game.settled = True
+            game.active_view = None
+            self.scratchcard_games.pop(key, None)
+            embed = self._settle_scratchcard_finances(game)
+            embed.description += "\n\n⏰ 已逾時，自動刮開並結算。"
+            if game.message is not None:
+                try:
+                    await game.message.edit(embed=embed, view=None)
+                except (discord.NotFound, discord.HTTPException):
+                    pass
+            view.stop()
+
+    @app_commands.command(name="lottery", description="購買 00～99 彩票或查看目前獎池")
+    @app_commands.describe(
+        bet="每張票的投注金額（50～2000；查詢狀態時留空）",
+        number="選擇 00～99（查詢狀態時留空）",
+        use_global="是否使用全域幣（預設依伺服器設定）",
+    )
+    async def lottery(
+        self,
+        interaction: discord.Interaction,
+        bet: Optional[int] = None,
+        number: Optional[app_commands.Range[int, 0, 99]] = None,
+        use_global: bool = False,
+    ):
+        if (bet is None) != (number is None):
+            return await interaction.response.send_message(
+                "❌ 購票時必須同時填寫 `bet` 與 `number`；兩者都留空則查詢狀態。",
+                ephemeral=True,
+            )
+        guild_id = resolve_game_guild_id(interaction, use_global)
+        if bet is None and number is None:
+            state = self._load_lottery_state(guild_id)
+            return await interaction.response.send_message(embed=self._lottery_status_embed(guild_id, state))
+
+        err = self._validate_bet(int(bet))
+        if err:
+            return await interaction.response.send_message(err, ephemeral=True)
+
+        async with self._lottery_lock(guild_id):
+            state = self._load_lottery_state(guild_id)
+            draw_at = parse_lottery_draw_at(state.get("draw_at"))
+            if state.get("pending_settlement") or (draw_at is not None and draw_at <= datetime.now(timezone.utc)):
+                return await interaction.response.send_message("本輪正在等待開獎或結算，請稍後再購票。", ephemeral=True)
+
+            currency = get_currency_name(guild_id)
+            if not self._charge_bet(
+                interaction,
+                guild_id,
+                float(bet),
+                "彩票購票",
+                "lottery_bet",
+                f"購買號碼 {int(number):02d}，投注 {int(bet):,.0f} {currency}",
+            ):
+                balance = get_balance(guild_id, interaction.user.id)
+                return await interaction.response.send_message(
+                    f"❌ 餘額不足！\n你的餘額：**{balance:,.0f}** {currency}\n所需賭注：**{int(bet):,.0f}** {currency}",
+                    ephemeral=True,
+                )
+
+            now = datetime.now(timezone.utc)
+            if draw_at is None or not state.get("round_id"):
+                draw_at = now + LOTTERY_DRAW_DELAY
+                state["draw_at"] = draw_at.isoformat()
+                state["round_id"] = uuid.uuid4().hex
+
+            number_key = f"{int(number):02d}"
+            tickets = state.setdefault("tickets", {})
+            entries = tickets.setdefault(number_key, {})
+            user_key = str(interaction.user.id)
+            entries[user_key] = round(float(entries.get(user_key, 0.0)) + float(bet), 2)
+            state["jackpot"] = round(float(state.get("jackpot", 0.0)) + float(bet), 2)
+
+            if not self._save_lottery_state(guild_id, state):
+                self._pay_out(
+                    guild_id,
+                    interaction.user.id,
+                    float(bet),
+                    "彩票退款",
+                    "lottery_refund",
+                    "彩票狀態寫入失敗，退還本次購票金額",
+                    interaction=interaction,
+                    color=0x95A5A6,
+                )
+                return await interaction.response.send_message("彩票狀態儲存失敗，已退還本次購票金額。", ephemeral=True)
+
+            embed = discord.Embed(
+                title="🎟️ 彩票購買成功",
+                description=(
+                    f"號碼：# **{number_key}**\n"
+                    f"本次投注：**{int(bet):,.0f}** {currency}\n"
+                    f"你在此號碼的累積投注：**{entries[user_key]:,.2f}** {currency}\n"
+                    f"目前獎池：**{state['jackpot']:,.2f}** {currency}\n"
+                    f"開獎時間：<t:{int(draw_at.timestamp())}:F>（<t:{int(draw_at.timestamp())}:R>）"
+                ),
+                color=discord.Color.gold(),
+            )
+            embed.set_footer(text="中獎者依命中號碼的投注額比例分配 95% 獎池。")
+            await interaction.response.send_message(embed=embed)
 
     @app_commands.command(name="big2", description="建立一桌大老二")
     @app_commands.describe(use_global="是否使用全域幣（預設依伺服器設定）")
