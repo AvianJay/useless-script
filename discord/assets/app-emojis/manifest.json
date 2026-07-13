@@ -442,5 +442,11 @@
     "file": "wave.png",
     "fontawesome_icon": "hand",
     "source": "https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@7.2.0/svgs/solid/hand.svg"
+  },
+  {
+    "emoji_name": "card_back",
+    "file": "card_back.png",
+    "fontawesome_icon": "clone",
+    "source": "https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@7.2.0/svgs/solid/clone.svg"
   }
 ]

@@ -1,4 +1,4 @@
-from globalenv import bot, start_bot, get_user_data, set_user_data
+from globalenv import bot, start_bot, get_user_data, set_user_data, get_emoji_mention_by_name
 import discord
 from Economy import (
     get_balance,
@@ -374,6 +374,160 @@ def create_tower_grid() -> List[List[int]]:
 
 
 # -----------------------------
+# 賭博遊戲共用
+# -----------------------------
+
+BET_MIN = 50
+BET_MAX = 2000
+
+
+def resolve_game_guild_id(interaction: discord.Interaction, use_global: bool = False) -> int:
+    """決定遊戲使用的經濟範圍：use_global 或非伺服器情境走全域幣。"""
+    if use_global or not interaction_uses_server_scope(interaction):
+        return GLOBAL_GUILD_ID
+    return interaction.guild.id
+
+
+async def game_emoji(name: str, fallback: str) -> str:
+    """取得已上傳的 app emoji，沒有就用 Unicode fallback。"""
+    mention = await get_emoji_mention_by_name(name)
+    if mention == f":{name}:":
+        return fallback
+    return mention
+
+
+# -----------------------------
+# Slots 拉霸機
+# -----------------------------
+
+# (符號, 權重)
+SLOT_SYMBOLS = [
+    ("🍒", 30),
+    ("🍋", 30),
+    ("🔔", 20),
+    ("💎", 15),
+    ("7️⃣", 5),
+]
+# 三同賠率（總回傳倍率）
+SLOT_TRIPLE_PAYOUT = {
+    "🍒": 3.0,
+    "🍋": 4.0,
+    "🔔": 8.0,
+    "💎": 15.0,
+    "7️⃣": 40.0,
+}
+SLOT_PAIR_PAYOUT = 1.2  # 任意一對
+
+
+def spin_slots() -> List[str]:
+    names = [s[0] for s in SLOT_SYMBOLS]
+    weights = [s[1] for s in SLOT_SYMBOLS]
+    return random.choices(names, weights=weights, k=3)
+
+
+def slots_multiplier(reels: List[str]) -> Tuple[float, str]:
+    """回傳 (總回傳倍率, 獎項名稱)"""
+    if reels[0] == reels[1] == reels[2]:
+        return SLOT_TRIPLE_PAYOUT[reels[0]], "三連線！"
+    if reels[0] == reels[1] or reels[1] == reels[2] or reels[0] == reels[2]:
+        return SLOT_PAIR_PAYOUT, "一對"
+    return 0.0, "未中獎"
+
+
+# -----------------------------
+# HighLow 比大小
+# -----------------------------
+
+HL_RANK_NAMES = ["A", "2", "3", "4", "5", "6", "7", "8", "9", "10", "J", "Q", "K"]
+HL_HOUSE_FACTOR = 0.95  # 每步 RTP 95%
+HL_MAX_MULT = 50.0  # pot 上限 50x 自動提現
+
+
+def hl_rank_name(rank: int) -> str:
+    return HL_RANK_NAMES[rank - 1]
+
+
+def hl_probs(rank: int) -> Tuple[float, float]:
+    """回傳 (p_high, p_low)：下一張從 12 個不同點數中抽。"""
+    return (13 - rank) / 12, (rank - 1) / 12
+
+
+def hl_draw_next(rank: int) -> int:
+    choices = [r for r in range(1, 14) if r != rank]
+    return random.choice(choices)
+
+
+@dataclass
+class HighLowGame:
+    user_id: int
+    channel_id: int
+    guild_id: int
+    bet: float
+    current_rank: int
+    current_suit: str
+    streak: int = 0
+    pot: float = 0.0
+    message: Optional[discord.Message] = None
+    active_view: Optional[discord.ui.View] = field(default=None, init=False, repr=False)
+
+
+# -----------------------------
+# Blackjack 21點
+# -----------------------------
+
+BJ_SUITS = ["♠", "♥", "♦", "♣"]
+BJ_RANKS = ["A", "2", "3", "4", "5", "6", "7", "8", "9", "10", "J", "Q", "K"]
+
+
+def bj_new_deck() -> List[Tuple[str, str]]:
+    deck = [(r, s) for r in BJ_RANKS for s in BJ_SUITS]
+    random.shuffle(deck)
+    return deck
+
+
+def bj_hand_value(hand: List[Tuple[str, str]]) -> Tuple[int, bool]:
+    """回傳 (最佳點數, 是否軟牌)。A 可為 1 或 11。"""
+    total = 0
+    aces = 0
+    for rank, _ in hand:
+        if rank == "A":
+            aces += 1
+            total += 1
+        elif rank in ("J", "Q", "K", "10"):
+            total += 10
+        else:
+            total += int(rank)
+    soft = False
+    if aces and total + 10 <= 21:
+        total += 10
+        soft = True
+    return total, soft
+
+
+def bj_is_blackjack(hand: List[Tuple[str, str]]) -> bool:
+    return len(hand) == 2 and bj_hand_value(hand)[0] == 21
+
+
+def bj_hand_str(hand: List[Tuple[str, str]]) -> str:
+    return " ".join(f"`{r}{s}`" for r, s in hand)
+
+
+@dataclass
+class BlackjackGame:
+    user_id: int
+    channel_id: int
+    guild_id: int
+    bet: float  # 總下注（Double 後翻倍）
+    deck: List[Tuple[str, str]]
+    player_hand: List[Tuple[str, str]] = field(default_factory=list)
+    dealer_hand: List[Tuple[str, str]] = field(default_factory=list)
+    doubled: bool = False
+    settled: bool = False
+    message: Optional[discord.Message] = None
+    active_view: Optional[discord.ui.View] = field(default=None, init=False, repr=False)
+
+
+# -----------------------------
 # Discord Views
 # -----------------------------
 
@@ -486,7 +640,7 @@ class TowerConfirmView(discord.ui.View):
 
     @discord.ui.button(label="✅ 確認開始", style=discord.ButtonStyle.success)
     async def confirm_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
-        if await self.cog.start_tower(interaction, self.bet):
+        if await self.cog.start_tower(interaction, self.bet, self.guild_id):
             self.stop()
 
     async def on_timeout(self):
@@ -860,6 +1014,99 @@ class HandView(discord.ui.View):
 
 
 # -----------------------------
+# Slots / HighLow / Blackjack Views
+# -----------------------------
+
+class SlotsAgainView(discord.ui.View):
+    """拉霸結果附「再轉一次」按鈕"""
+
+    def __init__(self, cog: "MiniGamesCog", user_id: int, guild_id: int, bet: float):
+        super().__init__(timeout=60)
+        self.cog = cog
+        self.user_id = user_id
+        self.guild_id = guild_id
+        self.bet = bet
+        self.message = None
+
+    @discord.ui.button(label="🔁 再轉一次", style=discord.ButtonStyle.primary)
+    async def again_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if interaction.user.id != self.user_id:
+            return await interaction.response.send_message("這不是你的遊戲。", ephemeral=True)
+        button.disabled = True
+        await self.cog.do_slots_spin(interaction, self.guild_id, self.bet, edit=True)
+        self.stop()
+
+    async def on_timeout(self):
+        for child in self.children:
+            child.disabled = True
+        if self.message is not None:
+            try:
+                await self.message.edit(view=self)
+            except (discord.NotFound, discord.HTTPException):
+                pass
+
+
+class HighLowView(discord.ui.View):
+    def __init__(self, cog: "MiniGamesCog", game: HighLowGame):
+        super().__init__(timeout=120)
+        self.cog = cog
+        self.game = game
+        self.message = None
+        p_high, p_low = hl_probs(game.current_rank)
+        self.high_btn.disabled = p_high <= 0
+        self.low_btn.disabled = p_low <= 0
+        self.cashout_btn.disabled = game.streak < 1
+
+    @discord.ui.button(label="🔼 較大", style=discord.ButtonStyle.primary)
+    async def high_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await self.cog.highlow_guess(interaction, self.game, "high", self)
+
+    @discord.ui.button(label="🔽 較小", style=discord.ButtonStyle.primary)
+    async def low_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await self.cog.highlow_guess(interaction, self.game, "low", self)
+
+    @discord.ui.button(label="💰 提現", style=discord.ButtonStyle.success)
+    async def cashout_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await self.cog.highlow_cashout(interaction, self.game, self)
+
+    async def on_timeout(self):
+        if self.game.active_view is not self:
+            return
+        self.game.active_view = None
+        await self.cog.highlow_timeout(self.game)
+        self.stop()
+
+
+class BlackjackView(discord.ui.View):
+    def __init__(self, cog: "MiniGamesCog", game: BlackjackGame):
+        super().__init__(timeout=120)
+        self.cog = cog
+        self.game = game
+        self.message = None
+        # Double 僅首兩張可用
+        self.double_btn.disabled = len(game.player_hand) != 2
+
+    @discord.ui.button(label="🎯 要牌 Hit", style=discord.ButtonStyle.primary)
+    async def hit_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await self.cog.bj_hit(interaction, self.game, self)
+
+    @discord.ui.button(label="✋ 停牌 Stand", style=discord.ButtonStyle.success)
+    async def stand_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await self.cog.bj_stand(interaction, self.game, self)
+
+    @discord.ui.button(label="⏫ 加倍 Double", style=discord.ButtonStyle.danger)
+    async def double_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await self.cog.bj_double(interaction, self.game, self)
+
+    async def on_timeout(self):
+        if self.game.active_view is not self:
+            return
+        self.game.active_view = None
+        await self.cog.bj_timeout(self.game)
+        self.stop()
+
+
+# -----------------------------
 # Cog
 # -----------------------------
 
@@ -870,6 +1117,9 @@ class MiniGamesCog(commands.GroupCog, group_name="games", description="迷你遊
         self.bot = bot
         self.games: Dict[int, Game] = {}
         self.tower_games: Dict[Tuple[int, int], TowerGame] = {}  # (channel_id, user_id) -> TowerGame
+        self.highlow_games: Dict[Tuple[int, int], HighLowGame] = {}
+        self.blackjack_games: Dict[Tuple[int, int], BlackjackGame] = {}
+        self.slots_spinning: set = set()  # (channel_id, user_id) 轉動中防連點
 
     async def _edit_game_message(
         self,
@@ -909,13 +1159,86 @@ class MiniGamesCog(commands.GroupCog, group_name="games", description="迷你遊
         log_transaction(guild_id, user_id, tx_type, amount, currency, detail)
         return currency
 
+    def _charge_bet(
+        self,
+        interaction: discord.Interaction,
+        guild_id: int,
+        bet: float,
+        tx_label: str,
+        audit_event: str,
+        detail: str,
+    ) -> bool:
+        """扣注 + 記錄。回傳是否成功（餘額不足回 False）。"""
+        currency = get_currency_name(guild_id)
+        balance_before = get_balance(guild_id, interaction.user.id)
+        if balance_before < bet or not remove_balance(guild_id, interaction.user.id, bet):
+            return False
+        balance_after = get_balance(guild_id, interaction.user.id)
+        self._log_economy_history(guild_id, interaction.user.id, tx_label, -bet, detail)
+        queue_economy_audit_log(
+            audit_event,
+            guild_id=guild_id,
+            actor=interaction.user,
+            interaction=interaction,
+            currency=currency,
+            amount=bet,
+            balance_before=balance_before,
+            balance_after=balance_after,
+            detail=detail,
+            color=0xE67E22,
+        )
+        if guild_id != GLOBAL_GUILD_ID:
+            record_transaction(guild_id)
+        return True
+
+    def _pay_out(
+        self,
+        guild_id: int,
+        user_id: int,
+        amount: float,
+        tx_label: str,
+        audit_event: str,
+        detail: str,
+        interaction: Optional[discord.Interaction] = None,
+        color: int = 0x2ECC71,
+    ):
+        """發放獎金 + 記錄。"""
+        if amount <= 0:
+            return
+        currency = get_currency_name(guild_id)
+        balance_before = get_balance(guild_id, user_id)
+        add_balance(guild_id, user_id, amount)
+        balance_after = get_balance(guild_id, user_id)
+        self._log_economy_history(guild_id, user_id, tx_label, amount, detail)
+        queue_economy_audit_log(
+            audit_event,
+            guild_id=guild_id,
+            actor=interaction.user if interaction else self._resolve_audit_user(guild_id, user_id),
+            interaction=interaction,
+            currency=currency,
+            amount=amount,
+            balance_before=balance_before,
+            balance_after=balance_after,
+            detail=detail,
+            color=color,
+        )
+        if guild_id != GLOBAL_GUILD_ID:
+            record_transaction(guild_id)
+
+    @staticmethod
+    def _validate_bet(bet: int) -> Optional[str]:
+        if bet < BET_MIN or bet > BET_MAX:
+            return f"❌ 賭注金額需介於 **{BET_MIN}**～**{BET_MAX}** 之間。"
+        return None
+
     @app_commands.command(name="big2", description="建立一桌大老二")
-    async def startbig2(self, interaction: discord.Interaction):
+    @app_commands.describe(use_global="是否使用全域幣（預設依伺服器設定）")
+    async def startbig2(self, interaction: discord.Interaction, use_global: bool = False):
         cid = interaction.channel_id
         if cid in self.games:
             return await interaction.response.send_message("此頻道已經有一桌了。", ephemeral=True)
 
-        guild_id = interaction.guild.id if interaction_uses_server_scope(interaction) else GLOBAL_GUILD_ID
+        guild_id = resolve_game_guild_id(interaction, use_global)
         g = Game(channel_id=cid, owner_id=interaction.user.id, guild_id=guild_id)
         g.players.append(PlayerState(user_id=interaction.user.id))
         self.games[cid] = g
@@ -933,19 +1256,17 @@ class MiniGamesCog(commands.GroupCog, group_name="games", description="迷你遊
     # -----------------------------
 
     @app_commands.command(name="tower", description="爬塔遊戲")
-    @app_commands.describe(bet="賭注金額（50～2000）")
-    async def tower(self, interaction: discord.Interaction, bet: int):
-        if bet < 50 or bet > 2000:
-            return await interaction.response.send_message(
-                "❌ 賭注金額需介於 **50**～**2000** 之間。",
-                ephemeral=True,
-            )
+    @app_commands.describe(bet="賭注金額（50～2000）", use_global="是否使用全域幣（預設依伺服器設定）")
+    async def tower(self, interaction: discord.Interaction, bet: int, use_global: bool = False):
+        err = self._validate_bet(bet)
+        if err:
+            return await interaction.response.send_message(err, ephemeral=True)
         bet_val = bet
         key = (interaction.channel_id, interaction.user.id)
         if key in self.tower_games:
             return await interaction.response.send_message("你已經有一局 Tower 遊戲正在進行。", ephemeral=True)
 
-        guild_id = interaction.guild.id if interaction_uses_server_scope(interaction) else GLOBAL_GUILD_ID
+        guild_id = resolve_game_guild_id(interaction, use_global)
         currency = get_currency_name(guild_id)
         balance = get_balance(guild_id, interaction.user.id)
 
@@ -975,9 +1296,10 @@ class MiniGamesCog(commands.GroupCog, group_name="games", description="迷你遊
         sent = await interaction.original_response()
         view.message = sent
 
-    async def start_tower(self, interaction: discord.Interaction, bet: float) -> bool:
+    async def start_tower(self, interaction: discord.Interaction, bet: float, guild_id: Optional[int] = None) -> bool:
         """選擇賭注後開始遊戲"""
-        guild_id = interaction.guild.id if interaction_uses_server_scope(interaction) else GLOBAL_GUILD_ID
+        if guild_id is None:
+            guild_id = resolve_game_guild_id(interaction)
         currency = get_currency_name(guild_id)
         key = (interaction.channel_id, interaction.user.id)
         if key in self.tower_games:
@@ -1235,6 +1557,511 @@ class MiniGamesCog(commands.GroupCog, group_name="games", description="迷你遊
         view.stop()
         if old_view is not None and old_view is not view:
             old_view.stop()
+
+    # -----------------------------
+    # Slots 拉霸機
+    # -----------------------------
+
+    @app_commands.command(name="slots", description="拉霸機")
+    @app_commands.describe(bet="賭注金額（50～2000）", use_global="是否使用全域幣（預設依伺服器設定）")
+    async def slots(self, interaction: discord.Interaction, bet: int, use_global: bool = False):
+        err = self._validate_bet(bet)
+        if err:
+            return await interaction.response.send_message(err, ephemeral=True)
+        guild_id = resolve_game_guild_id(interaction, use_global)
+        await self.do_slots_spin(interaction, guild_id, float(bet), edit=False)
+
+    async def do_slots_spin(self, interaction: discord.Interaction, guild_id: int, bet: float, edit: bool):
+        currency = get_currency_name(guild_id)
+        key = (interaction.channel_id, interaction.user.id)
+        if key in self.slots_spinning:
+            return await interaction.response.send_message("拉霸機還在轉，等它停下來！", ephemeral=True)
+
+        if not self._charge_bet(
+            interaction, guild_id, bet,
+            "拉霸下注", "slots_bet",
+            f"拉霸下注 {bet:,.0f} {currency}",
+        ):
+            balance = get_balance(guild_id, interaction.user.id)
+            msg = f"❌ 餘額不足！\n你的餘額：**{balance:,.0f}** {currency}\n所需賭注：**{bet:,.0f}** {currency}"
+            return await interaction.response.send_message(msg, ephemeral=True)
+
+        self.slots_spinning.add(key)
+        try:
+            reels = spin_slots()
+            mult, prize_name = slots_multiplier(reels)
+            payout = round(bet * mult, 2)
+            if payout > 0:
+                self._pay_out(
+                    guild_id, interaction.user.id, payout,
+                    "拉霸派彩", "slots_payout",
+                    f"{prize_name}，倍率 x{mult:.2f}，下注 {bet:,.0f} {currency}",
+                    interaction=interaction,
+                )
+
+            emoji_pool = [s[0] for s in SLOT_SYMBOLS]
+
+            def reels_line(revealed: int) -> str:
+                parts = []
+                for i in range(3):
+                    if i < revealed:
+                        parts.append(reels[i])
+                    else:
+                        parts.append(random.choice(emoji_pool))
+                return " | ".join(parts)
+
+            def spin_embed(revealed: int) -> discord.Embed:
+                e = discord.Embed(
+                    title="🎰 拉霸機",
+                    description=f"# {reels_line(revealed)}\n\n🌀 轉動中…",
+                    color=discord.Color.blurple(),
+                )
+                e.set_footer(text=f"下注：{bet:,.0f} {currency}")
+                return e
+
+            # 動畫：先全轉，再逐輪停下
+            if edit:
+                await interaction.response.edit_message(embed=spin_embed(0), view=None)
+            else:
+                await interaction.response.send_message(embed=spin_embed(0))
+            msg = await interaction.original_response()
+            for revealed in (1, 2):
+                await asyncio.sleep(0.9)
+                try:
+                    await msg.edit(embed=spin_embed(revealed))
+                except (discord.NotFound, discord.HTTPException):
+                    pass
+            await asyncio.sleep(0.9)
+
+            profit = payout - bet
+            balance = get_balance(guild_id, interaction.user.id)
+            final_line = " | ".join(reels)
+            if payout > 0:
+                desc = (
+                    f"# {final_line}\n\n"
+                    f"🎉 **{prize_name}** 倍率 **x{mult:.2f}**\n"
+                    f"派彩：**{payout:,.0f}** {currency}（{'+' if profit >= 0 else ''}{profit:,.0f}）"
+                )
+                color = discord.Color.green()
+            else:
+                desc = f"# {final_line}\n\n💥 **{prize_name}**，損失 **{bet:,.0f}** {currency}"
+                color = discord.Color.red()
+            desc += f"\n新餘額：**{balance:,.0f}** {currency}"
+
+            embed = discord.Embed(title="🎰 拉霸機", description=desc, color=color)
+            embed.set_footer(text=f"下注：{bet:,.0f} {currency}")
+            view = SlotsAgainView(self, interaction.user.id, guild_id, bet)
+            try:
+                await msg.edit(embed=embed, view=view)
+                view.message = msg
+            except (discord.NotFound, discord.HTTPException):
+                pass
+        finally:
+            self.slots_spinning.discard(key)
+
+    # -----------------------------
+    # HighLow 比大小
+    # -----------------------------
+
+    @app_commands.command(name="highlow", description="比大小：猜下一張牌較大或較小")
+    @app_commands.describe(bet="賭注金額（50～2000）", use_global="是否使用全域幣（預設依伺服器設定）")
+    async def highlow(self, interaction: discord.Interaction, bet: int, use_global: bool = False):
+        err = self._validate_bet(bet)
+        if err:
+            return await interaction.response.send_message(err, ephemeral=True)
+        key = (interaction.channel_id, interaction.user.id)
+        if key in self.highlow_games:
+            return await interaction.response.send_message("你已經有一局比大小正在進行。", ephemeral=True)
+
+        guild_id = resolve_game_guild_id(interaction, use_global)
+        currency = get_currency_name(guild_id)
+        if not self._charge_bet(
+            interaction, guild_id, float(bet),
+            "比大小下注", "highlow_bet",
+            f"比大小下注 {bet:,.0f} {currency}",
+        ):
+            balance = get_balance(guild_id, interaction.user.id)
+            return await interaction.response.send_message(
+                f"❌ 餘額不足！\n你的餘額：**{balance:,.0f}** {currency}\n所需賭注：**{bet:,.0f}** {currency}",
+                ephemeral=True,
+            )
+
+        game = HighLowGame(
+            user_id=interaction.user.id,
+            channel_id=interaction.channel_id,
+            guild_id=guild_id,
+            bet=float(bet),
+            current_rank=random.randint(1, 13),
+            current_suit=random.choice(BJ_SUITS),
+            pot=float(bet),
+        )
+        self.highlow_games[key] = game
+
+        view = HighLowView(self, game)
+        await interaction.response.send_message(embed=self._highlow_embed(game), view=view)
+        sent = await interaction.original_response()
+        game.message = sent
+        game.active_view = view
+        view.message = sent
+
+    def _highlow_embed(self, game: HighLowGame, result_text: str = "") -> discord.Embed:
+        currency = get_currency_name(game.guild_id)
+        p_high, p_low = hl_probs(game.current_rank)
+        mult_high = HL_HOUSE_FACTOR / p_high if p_high > 0 else 0
+        mult_low = HL_HOUSE_FACTOR / p_low if p_low > 0 else 0
+        card = f"`{hl_rank_name(game.current_rank)}{game.current_suit}`"
+        lines = []
+        if result_text:
+            lines.append(result_text)
+        lines.append(f"目前的牌：# {card}")
+        lines.append(f"連勝：**{game.streak}**｜目前彩池：**{game.pot:,.1f}** {currency}")
+        opts = []
+        if p_high > 0:
+            opts.append(f"🔼 較大 → x{mult_high:.2f}")
+        if p_low > 0:
+            opts.append(f"🔽 較小 → x{mult_low:.2f}")
+        lines.append("｜".join(opts))
+        embed = discord.Embed(
+            title="🃏 比大小",
+            description="\n".join(lines),
+            color=discord.Color.blue(),
+        )
+        embed.set_footer(text=f"下注：{game.bet:,.0f} {currency}｜下一張必為不同點數（A 最小、K 最大）｜彩池上限 {HL_MAX_MULT:.0f}x 自動提現")
+        return embed
+
+    async def highlow_guess(self, interaction: discord.Interaction, game: HighLowGame, guess: str, view: HighLowView):
+        if interaction.user.id != game.user_id:
+            return await interaction.response.send_message("這不是你的遊戲。", ephemeral=True)
+        key = (game.channel_id, game.user_id)
+        if self.highlow_games.get(key) is not game:
+            return await interaction.response.send_message("遊戲已結束。", ephemeral=True)
+
+        currency = get_currency_name(game.guild_id)
+        p_high, p_low = hl_probs(game.current_rank)
+        p_chosen = p_high if guess == "high" else p_low
+        if p_chosen <= 0:
+            return await interaction.response.send_message("無效的選擇。", ephemeral=True)
+
+        next_rank = hl_draw_next(game.current_rank)
+        next_suit = random.choice(BJ_SUITS)
+        correct = (next_rank > game.current_rank) if guess == "high" else (next_rank < game.current_rank)
+        old_card = f"`{hl_rank_name(game.current_rank)}{game.current_suit}`"
+        new_card = f"`{hl_rank_name(next_rank)}{next_suit}`"
+        game.current_rank = next_rank
+        game.current_suit = next_suit
+
+        if not correct:
+            self.highlow_games.pop(key, None)
+            game.active_view = None
+            embed = discord.Embed(
+                title="🃏 比大小",
+                description=(
+                    f"{old_card} → # {new_card}\n\n"
+                    f"💥 猜錯了！損失 **{game.pot:,.1f}** {currency}\n"
+                    f"連勝止於 **{game.streak}**"
+                ),
+                color=discord.Color.red(),
+            )
+            embed.set_footer(text=f"下注：{game.bet:,.0f} {currency}")
+            await interaction.response.edit_message(embed=embed, view=None)
+            view.stop()
+            return
+
+        game.streak += 1
+        game.pot = round(game.pot * HL_HOUSE_FACTOR / p_chosen, 2)
+
+        if game.pot >= game.bet * HL_MAX_MULT:
+            game.pot = min(game.pot, game.bet * HL_MAX_MULT)
+            await self._highlow_do_cashout(interaction, game, view, auto=True)
+            return
+
+        result = f"✅ {old_card} → {new_card} 猜對了！"
+        new_view = HighLowView(self, game)
+        old_view = game.active_view
+        await interaction.response.edit_message(embed=self._highlow_embed(game, result), view=new_view)
+        msg = await interaction.original_response()
+        game.message = msg
+        game.active_view = new_view
+        new_view.message = msg
+        if old_view is not None and old_view is not new_view:
+            old_view.stop()
+
+    async def highlow_cashout(self, interaction: discord.Interaction, game: HighLowGame, view: HighLowView):
+        if interaction.user.id != game.user_id:
+            return await interaction.response.send_message("這不是你的遊戲。", ephemeral=True)
+        key = (game.channel_id, game.user_id)
+        if self.highlow_games.get(key) is not game:
+            return await interaction.response.send_message("遊戲已結束。", ephemeral=True)
+        if game.streak < 1:
+            return await interaction.response.send_message("至少要猜對一次才能提現。", ephemeral=True)
+        await self._highlow_do_cashout(interaction, game, view, auto=False)
+
+    async def _highlow_do_cashout(self, interaction: discord.Interaction, game: HighLowGame, view: HighLowView, auto: bool):
+        key = (game.channel_id, game.user_id)
+        self.highlow_games.pop(key, None)
+        game.active_view = None
+        currency = get_currency_name(game.guild_id)
+        payout = round(game.pot, 2)
+        self._pay_out(
+            game.guild_id, game.user_id, payout,
+            "比大小提現", "highlow_cashout",
+            f"{'達彩池上限自動' if auto else '手動'}提現，連勝 {game.streak}，下注 {game.bet:,.0f} {currency}",
+            interaction=interaction,
+        )
+        profit = payout - game.bet
+        embed = discord.Embed(
+            title="🃏 比大小",
+            description=(
+                f"💰 **{'達上限自動提現！' if auto else 'Cashed Out!'}**\n"
+                f"連勝：**{game.streak}**\n"
+                f"派彩：**{payout:,.1f}** {currency}｜利潤：**{'+' if profit >= 0 else ''}{profit:,.1f}**\n"
+                f"新餘額：**{get_balance(game.guild_id, game.user_id):,.0f}** {currency}"
+            ),
+            color=discord.Color.green(),
+        )
+        embed.set_footer(text=f"下注：{game.bet:,.0f} {currency}")
+        await interaction.response.edit_message(embed=embed, view=None)
+        view.stop()
+
+    async def highlow_timeout(self, game: HighLowGame):
+        """超時：streak 0 退注，否則自動提現。"""
+        key = (game.channel_id, game.user_id)
+        if self.highlow_games.get(key) is not game:
+            return
+        self.highlow_games.pop(key, None)
+        currency = get_currency_name(game.guild_id)
+        payout = round(game.pot, 2)
+        if game.streak < 1:
+            label, detail = "比大小退還", f"超時退還賭注 {game.bet:,.0f} {currency}"
+            event = "highlow_refund"
+        else:
+            label, detail = "比大小提現", f"超時自動提現，連勝 {game.streak}，下注 {game.bet:,.0f} {currency}"
+            event = "highlow_cashout"
+        self._pay_out(game.guild_id, game.user_id, payout, label, event, detail, color=0x95A5A6)
+        if game.message is not None:
+            embed = discord.Embed(
+                title="🃏 比大小",
+                description=f"⏰ 遊戲逾時，自動{'退還賭注' if game.streak < 1 else '提現'} **{payout:,.1f}** {currency}。",
+                color=discord.Color.light_grey(),
+            )
+            try:
+                await game.message.edit(embed=embed, view=None)
+            except (discord.NotFound, discord.HTTPException):
+                pass
+
+    # -----------------------------
+    # Blackjack 21點
+    # -----------------------------
+
+    @app_commands.command(name="blackjack", description="21點：對抗莊家")
+    @app_commands.describe(bet="賭注金額（50～2000）", use_global="是否使用全域幣（預設依伺服器設定）")
+    async def blackjack(self, interaction: discord.Interaction, bet: int, use_global: bool = False):
+        err = self._validate_bet(bet)
+        if err:
+            return await interaction.response.send_message(err, ephemeral=True)
+        key = (interaction.channel_id, interaction.user.id)
+        if key in self.blackjack_games:
+            return await interaction.response.send_message("你已經有一局 21 點正在進行。", ephemeral=True)
+
+        guild_id = resolve_game_guild_id(interaction, use_global)
+        currency = get_currency_name(guild_id)
+        if not self._charge_bet(
+            interaction, guild_id, float(bet),
+            "21點下注", "blackjack_bet",
+            f"21點下注 {bet:,.0f} {currency}",
+        ):
+            balance = get_balance(guild_id, interaction.user.id)
+            return await interaction.response.send_message(
+                f"❌ 餘額不足！\n你的餘額：**{balance:,.0f}** {currency}\n所需賭注：**{bet:,.0f}** {currency}",
+                ephemeral=True,
+            )
+
+        deck = bj_new_deck()
+        game = BlackjackGame(
+            user_id=interaction.user.id,
+            channel_id=interaction.channel_id,
+            guild_id=guild_id,
+            bet=float(bet),
+            deck=deck,
+        )
+        game.player_hand = [deck.pop(), deck.pop()]
+        game.dealer_hand = [deck.pop(), deck.pop()]
+        self.blackjack_games[key] = game
+
+        # 任一方 Blackjack：立即結算
+        if bj_is_blackjack(game.player_hand) or bj_is_blackjack(game.dealer_hand):
+            await interaction.response.send_message(embed=discord.Embed(title="🂡 21點", description="發牌中…", color=discord.Color.blue()))
+            sent = await interaction.original_response()
+            game.message = sent
+            await self._bj_settle(interaction, game, view=None, immediate=True)
+            return
+
+        view = BlackjackView(self, game)
+        await interaction.response.send_message(embed=await self._bj_embed(game, reveal=False), view=view)
+        sent = await interaction.original_response()
+        game.message = sent
+        game.active_view = view
+        view.message = sent
+
+    async def _bj_embed(self, game: BlackjackGame, reveal: bool, result_text: str = "", color: Optional[discord.Color] = None) -> discord.Embed:
+        currency = get_currency_name(game.guild_id)
+        p_total, p_soft = bj_hand_value(game.player_hand)
+        p_label = f"{'軟 ' if p_soft else ''}{p_total}"
+        if reveal:
+            d_total, d_soft = bj_hand_value(game.dealer_hand)
+            dealer_line = f"{bj_hand_str(game.dealer_hand)}（{'軟 ' if d_soft else ''}{d_total}）"
+        else:
+            back = await game_emoji("card_back", "🂠")
+            up = game.dealer_hand[0]
+            dealer_line = f"`{up[0]}{up[1]}` {back}"
+        desc = (
+            f"**莊家**：{dealer_line}\n"
+            f"**你**：{bj_hand_str(game.player_hand)}（{p_label}）"
+        )
+        if result_text:
+            desc += f"\n\n{result_text}"
+        embed = discord.Embed(
+            title="🂡 21點",
+            description=desc,
+            color=color or discord.Color.blue(),
+        )
+        embed.set_footer(text=f"下注：{game.bet:,.0f} {currency}" + ("（已加倍）" if game.doubled else ""))
+        return embed
+
+    async def bj_hit(self, interaction: discord.Interaction, game: BlackjackGame, view: BlackjackView):
+        if interaction.user.id != game.user_id:
+            return await interaction.response.send_message("這不是你的遊戲。", ephemeral=True)
+        key = (game.channel_id, game.user_id)
+        if self.blackjack_games.get(key) is not game:
+            return await interaction.response.send_message("遊戲已結束。", ephemeral=True)
+
+        game.player_hand.append(game.deck.pop())
+        total, _ = bj_hand_value(game.player_hand)
+        if total >= 21:
+            # 爆牌或 21 點：自動結算（21 自動停牌）
+            await self._bj_settle(interaction, game, view)
+            return
+
+        new_view = BlackjackView(self, game)
+        old_view = game.active_view
+        await interaction.response.edit_message(embed=await self._bj_embed(game, reveal=False), view=new_view)
+        msg = await interaction.original_response()
+        game.message = msg
+        game.active_view = new_view
+        new_view.message = msg
+        if old_view is not None and old_view is not new_view:
+            old_view.stop()
+
+    async def bj_stand(self, interaction: discord.Interaction, game: BlackjackGame, view: BlackjackView):
+        if interaction.user.id != game.user_id:
+            return await interaction.response.send_message("這不是你的遊戲。", ephemeral=True)
+        key = (game.channel_id, game.user_id)
+        if self.blackjack_games.get(key) is not game:
+            return await interaction.response.send_message("遊戲已結束。", ephemeral=True)
+        await self._bj_settle(interaction, game, view)
+
+    async def bj_double(self, interaction: discord.Interaction, game: BlackjackGame, view: BlackjackView):
+        if interaction.user.id != game.user_id:
+            return await interaction.response.send_message("這不是你的遊戲。", ephemeral=True)
+        key = (game.channel_id, game.user_id)
+        if self.blackjack_games.get(key) is not game:
+            return await interaction.response.send_message("遊戲已結束。", ephemeral=True)
+        if len(game.player_hand) != 2 or game.doubled:
+            return await interaction.response.send_message("只有首兩張牌時可以加倍。", ephemeral=True)
+
+        currency = get_currency_name(game.guild_id)
+        extra = game.bet
+        if not self._charge_bet(
+            interaction, game.guild_id, extra,
+            "21點加倍", "blackjack_bet",
+            f"21點加倍，追加下注 {extra:,.0f} {currency}",
+        ):
+            balance = get_balance(game.guild_id, interaction.user.id)
+            return await interaction.response.send_message(
+                f"❌ 餘額不足以加倍！\n你的餘額：**{balance:,.0f}** {currency}\n加倍需要：**{extra:,.0f}** {currency}",
+                ephemeral=True,
+            )
+        game.bet += extra
+        game.doubled = True
+        game.player_hand.append(game.deck.pop())
+        await self._bj_settle(interaction, game, view)
+
+    async def _bj_settle(
+        self,
+        interaction: Optional[discord.Interaction],
+        game: BlackjackGame,
+        view: Optional[BlackjackView],
+        immediate: bool = False,
+    ):
+        """結算：莊家補牌到 17（含軟17）停，派彩並更新訊息。"""
+        if game.settled:
+            return
+        game.settled = True
+        key = (game.channel_id, game.user_id)
+        self.blackjack_games.pop(key, None)
+        game.active_view = None
+        currency = get_currency_name(game.guild_id)
+
+        p_total, _ = bj_hand_value(game.player_hand)
+        player_bj = bj_is_blackjack(game.player_hand)
+        dealer_bj = bj_is_blackjack(game.dealer_hand)
+
+        if p_total <= 21 and not player_bj and not dealer_bj:
+            while bj_hand_value(game.dealer_hand)[0] < 17:
+                game.dealer_hand.append(game.deck.pop())
+        d_total, _ = bj_hand_value(game.dealer_hand)
+
+        # 判定
+        if p_total > 21:
+            payout, result, color = 0.0, f"💥 **爆牌！** 損失 **{game.bet:,.0f}** {currency}", discord.Color.red()
+        elif player_bj and dealer_bj:
+            payout, result, color = game.bet, "🤝 **雙方 Blackjack，平手！** 退還賭注", discord.Color.light_grey()
+        elif player_bj:
+            payout = round(game.bet * 2.5, 2)
+            result, color = f"🎉 **Blackjack！** 3:2 派彩 **{payout:,.0f}** {currency}", discord.Color.gold()
+        elif dealer_bj:
+            payout, result, color = 0.0, f"💥 **莊家 Blackjack！** 損失 **{game.bet:,.0f}** {currency}", discord.Color.red()
+        elif d_total > 21:
+            payout = round(game.bet * 2, 2)
+            result, color = f"🎉 **莊家爆牌！** 獲得 **{payout:,.0f}** {currency}", discord.Color.green()
+        elif p_total > d_total:
+            payout = round(game.bet * 2, 2)
+            result, color = f"🎉 **你贏了！** 獲得 **{payout:,.0f}** {currency}", discord.Color.green()
+        elif p_total == d_total:
+            payout, result, color = game.bet, "🤝 **平手！** 退還賭注", discord.Color.light_grey()
+        else:
+            payout, result, color = 0.0, f"💥 **你輸了！** 損失 **{game.bet:,.0f}** {currency}", discord.Color.red()
+
+        if payout > 0:
+            is_push = payout == game.bet
+            self._pay_out(
+                game.guild_id, game.user_id, payout,
+                "21點退還" if is_push else "21點派彩",
+                "blackjack_push" if is_push else "blackjack_payout",
+                f"{'平手退還' if is_push else '勝利派彩'} {payout:,.0f} {currency}，下注 {game.bet:,.0f} {currency}",
+                interaction=interaction,
+                color=0x95A5A6 if is_push else 0x2ECC71,
+            )
+
+        result += f"\n新餘額：**{get_balance(game.guild_id, game.user_id):,.0f}** {currency}"
+        embed = await self._bj_embed(game, reveal=True, result_text=result, color=color)
+
+        if interaction is not None and not interaction.response.is_done():
+            await interaction.response.edit_message(embed=embed, view=None)
+        elif game.message is not None:
+            try:
+                await game.message.edit(embed=embed, view=None)
+            except (discord.NotFound, discord.HTTPException):
+                pass
+        if view is not None:
+            view.stop()
+
+    async def bj_timeout(self, game: BlackjackGame):
+        """超時自動停牌結算，避免資金卡住。"""
+        key = (game.channel_id, game.user_id)
+        if self.blackjack_games.get(key) is not game:
+            return
+        await self._bj_settle(None, game, None)
 
     def big2_rules_embed(self) -> discord.Embed:
         """大老二規則玩法說明（給規則按鈕用）"""

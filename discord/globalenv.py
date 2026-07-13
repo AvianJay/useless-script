@@ -368,6 +368,10 @@ async def get_emoji_mention_by_name(emoji_name: str) -> str:
         return str(emoji)
     return f":{emoji_name}:"
 
+async def reload_emojis_cache():
+    global fetched_emojis_cache
+    fetched_emojis_cache = await bot.fetch_application_emojis()
+
 translations = {
     "test": "測試",
     "admin": "管理",
@@ -752,6 +756,10 @@ translations = {
     "petpet-stats": "petpet-統計資料",
     "owoify": "owo化",
     "r34tags": "r34標籤",
+    "blackjack": "二十一點",
+    "slots": "拉霸機",
+    "highlow": "比大小",
+    "use_global": "使用全域",
 }
 class CommandNameTranslator(app_commands.Translator):
     async def translate(
