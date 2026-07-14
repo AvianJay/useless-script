@@ -21,6 +21,7 @@ import logging
 import re
 import math
 from collections import deque
+from casino_service import CasinoError, default_casino_service, init_casino_tables
 
 import socketio as socketio_asgi
 
@@ -48,7 +49,7 @@ def init_db():
                 PRIMARY KEY (guild_id, x, y, z)
             )
         ''')
-        
+        init_casino_tables(conn)
         conn.commit()
 
 # --- ASGI Socket.IO (real WebSocket under Hypercorn) ---
@@ -1400,6 +1401,55 @@ def explore_get_space_data(guild_id: str):
     return jsonify({'tiles': tiles})
 
 
+def _casino_response(callable_):
+    try:
+        return jsonify(callable_())
+    except CasinoError as exc:
+        return jsonify({'error': exc.message, **exc.payload}), exc.status_code
+    except Exception:
+        logging.getLogger("runtime").exception("Explore casino request failed")
+        return jsonify({'error': '賭場服務暫時無法使用。'}), 500
+
+
+@app.route('/api/explore/casino/state', methods=['GET'])
+@_require_explore_auth
+def explore_casino_state():
+    user_id = int(g.explore_user['user_id'])
+    return _casino_response(lambda: default_casino_service.get_state(user_id))
+
+
+@app.route('/api/explore/casino/play', methods=['POST'])
+@_require_explore_auth
+def explore_casino_play():
+    user_id = int(g.explore_user['user_id'])
+    payload = request.get_json(silent=True) or {}
+    return _casino_response(lambda: default_casino_service.play(user_id, payload))
+
+
+@app.route('/api/explore/casino/rounds', methods=['POST'])
+@_require_explore_auth
+def explore_casino_start_round():
+    user_id = int(g.explore_user['user_id'])
+    payload = request.get_json(silent=True) or {}
+    return _casino_response(lambda: default_casino_service.start_round(user_id, payload))
+
+
+@app.route('/api/explore/casino/rounds/<round_id>/actions', methods=['POST'])
+@_require_explore_auth
+def explore_casino_round_action(round_id: str):
+    user_id = int(g.explore_user['user_id'])
+    payload = request.get_json(silent=True) or {}
+    return _casino_response(lambda: default_casino_service.act_round(user_id, round_id, payload))
+
+
+@app.route('/api/explore/casino/lottery/tickets', methods=['POST'])
+@_require_explore_auth
+def explore_casino_buy_lottery_ticket():
+    user_id = int(g.explore_user['user_id'])
+    payload = request.get_json(silent=True) or {}
+    return _casino_response(lambda: default_casino_service.buy_lottery(user_id, payload))
+
+
 @app.route('/api/explore/skins', methods=['GET'])
 @_require_explore_auth
 def explore_get_skins():
@@ -1437,12 +1487,13 @@ def explore_buy_skin():
     if not _economy_available:
         return jsonify({'error': '經濟系統未啟用,無法購買'}), 503
 
-    # Server-side balance check & deduction (never trust client)
-    balance = float(_economy_mod.get_global_balance(user_id))
-    if balance < price:
-        return jsonify({'error': f'全域幣不足(需要 {price},你有 {balance:.0f})', 'balance': balance}), 400
-
-    _economy_mod.set_global_balance(user_id, balance - price)
+    success, balance_before, balance_after = _economy_mod.mutate_balance_atomic(
+        _economy_mod.GLOBAL_GUILD_ID,
+        user_id,
+        -price,
+    )
+    if not success:
+        return jsonify({'error': f'全域幣不足(需要 {price},你有 {balance_before:.0f})', 'balance': balance_before}), 400
     try:
         _economy_mod.log_transaction(
             _economy_mod.GLOBAL_GUILD_ID, user_id, 'explore_skin',
@@ -1455,7 +1506,7 @@ def explore_buy_skin():
     return jsonify({
         'success': True,
         'skin_id': skin_id,
-        'balance': float(_economy_mod.get_global_balance(user_id)),
+        'balance': balance_after,
     })
 
 

@@ -1,0 +1,12 @@
+command /getitemname:
+    permission: checkname.admin
+    trigger:
+        # item in hand
+        # "%name of {item}%"
+        # get item in hand
+        if player is holding air:
+            send "&c你手上沒有物品"
+            stop
+        set {_item} to player's tool
+        send "&a物品名稱: %name of {_item}%"
+        send "&a名稱長度: %length of name of {_item}%"

@@ -13,6 +13,7 @@ from Economy import (
     get_balance,
     add_balance,
     remove_balance,
+    mutate_balance_atomic,
     get_currency_name,
     record_transaction,
     log_transaction,
@@ -20,6 +21,56 @@ from Economy import (
     GLOBAL_GUILD_ID,
     interaction_uses_server_scope,
 )
+from casino_rules import (
+    BET_MAX,
+    BET_MIN,
+    BJ_RANKS,
+    BJ_SUITS,
+    HL_HOUSE_FACTOR,
+    HL_MAX_MULT,
+    HL_RANK_NAMES,
+    LOTTERY_CONFIG_KEY,
+    LOTTERY_DRAW_DELAY,
+    LOTTERY_PAYOUT_RATIO,
+    ROULETTE_BET_LABELS,
+    ROULETTE_RED_NUMBERS,
+    SCRATCH_PRIZE_TABLE,
+    SCRATCH_SYMBOLS,
+    SLOT_PAIR_PAYOUT,
+    SLOT_SYMBOLS,
+    SLOT_TRIPLE_PAYOUT,
+    TOWER_CACTUS_PER_LEVEL,
+    TOWER_LEVELS,
+    TOWER_MULTIPLIERS,
+    TOWER_TILES_PER_LEVEL,
+    allocate_lottery_payouts,
+    bj_hand_str,
+    bj_hand_value,
+    bj_is_blackjack,
+    bj_new_deck,
+    bj_settle,
+    create_scratch_grid,
+    create_tower_grid,
+    default_lottery_state,
+    draw_scratch_prize,
+    hl_draw_next,
+    hl_apply_win,
+    hl_probs,
+    hl_rank_name,
+    normalize_lottery_state,
+    parse_lottery_draw_at,
+    play_coinflip,
+    play_dice,
+    play_roulette,
+    play_scratchcard,
+    play_slots,
+    roulette_color,
+    roulette_is_win,
+    scratch_grid_text,
+    slots_multiplier,
+    spin_slots,
+)
+from casino_service import CasinoError, default_casino_service
 from discord.ext import commands, tasks
 from discord import app_commands
 from logger import log
@@ -343,10 +394,6 @@ def beats(prev: Optional[List[Card]], new: List[Card], rules: Ruleset) -> bool:
 # Tower Game
 # -----------------------------
 
-TOWER_LEVELS = 5
-TOWER_TILES_PER_LEVEL = 3
-TOWER_CACTUS_PER_LEVEL = 1  # 每層 1 個仙人掌
-TOWER_MULTIPLIERS = [1.0, 1.4, 1.8, 2.2, 2.6, 3.0]  # level 0=退還本金, 1~5 對應倍率（頂層 3.0x）
 EMOJI_SAFE = "🟦"
 EMOJI_REVEALED_SAFE = "✅"
 EMOJI_CACTUS = "🌵"
@@ -374,23 +421,9 @@ class TowerGame:
         safe_levels = [lv for lv, (_, is_cactus) in self.picked_per_level.items() if not is_cactus]
         return max(safe_levels) if safe_levels else 0
 
-
-def create_tower_grid() -> List[List[int]]:
-    """建立隨機塔層：每層 3 格，其中 1 格為仙人掌"""
-    grid = []
-    for _ in range(TOWER_LEVELS):
-        row = [0] * (TOWER_TILES_PER_LEVEL - TOWER_CACTUS_PER_LEVEL) + [1] * TOWER_CACTUS_PER_LEVEL
-        random.shuffle(row)
-        grid.append(row)
-    return grid
-
-
 # -----------------------------
 # 賭博遊戲共用
 # -----------------------------
-
-BET_MIN = 50
-BET_MAX = 2000
 
 
 def resolve_game_guild_id(interaction: discord.Interaction, use_global: bool = False) -> int:
@@ -412,89 +445,6 @@ async def game_emoji(name: str, fallback: str) -> str:
 # Roulette / Dice / Coinflip / Scratchcard / Lottery
 # -----------------------------
 
-ROULETTE_RED_NUMBERS = frozenset({
-    1, 3, 5, 7, 9, 12, 14, 16, 18,
-    19, 21, 23, 25, 27, 30, 32, 34, 36,
-})
-ROULETTE_BET_LABELS = {
-    "red": "紅色",
-    "black": "黑色",
-    "odd": "單數",
-    "even": "雙數",
-    "low": "小（1～18）",
-    "high": "大（19～36）",
-    "number": "單一號碼",
-}
-
-
-def roulette_color(number: int) -> str:
-    if number == 0:
-        return "green"
-    return "red" if number in ROULETTE_RED_NUMBERS else "black"
-
-
-def roulette_is_win(result: int, bet_type: str, chosen_number: Optional[int] = None) -> bool:
-    if bet_type == "number":
-        return chosen_number == result
-    if result == 0:
-        return False
-    if bet_type == "red":
-        return roulette_color(result) == "red"
-    if bet_type == "black":
-        return roulette_color(result) == "black"
-    if bet_type == "odd":
-        return result % 2 == 1
-    if bet_type == "even":
-        return result % 2 == 0
-    if bet_type == "low":
-        return 1 <= result <= 18
-    if bet_type == "high":
-        return 19 <= result <= 36
-    return False
-
-
-# (key, winning symbol, weight / 10000, total payout multiplier, label)
-SCRATCH_PRIZE_TABLE = [
-    ("none", None, 5500, 0.0, "未中獎"),
-    ("refund", "🍋", 2500, 1.0, "回本"),
-    ("small", "🍒", 1200, 1.5, "小獎"),
-    ("medium", "🔔", 600, 3.0, "中獎"),
-    ("major", "7️⃣", 180, 10.0, "大獎"),
-    ("jackpot", "💎", 20, 80.0, "頭獎"),
-]
-SCRATCH_SYMBOLS = ["🍋", "🍒", "🔔", "7️⃣", "💎", "⭐"]
-
-
-def draw_scratch_prize() -> Tuple[str, Optional[str], float, str]:
-    prize = random.choices(
-        SCRATCH_PRIZE_TABLE,
-        weights=[entry[2] for entry in SCRATCH_PRIZE_TABLE],
-        k=1,
-    )[0]
-    return prize[0], prize[1], prize[3], prize[4]
-
-
-def create_scratch_grid(winning_symbol: Optional[str]) -> List[str]:
-    """建立只會出現指定三連符號的票面；未中獎票面每種符號最多兩個。"""
-    cells = [winning_symbol] * 3 if winning_symbol else []
-    counts = Counter(cells)
-    while len(cells) < 9:
-        available = [
-            symbol for symbol in SCRATCH_SYMBOLS
-            if symbol != winning_symbol and counts[symbol] < 2
-        ]
-        symbol = random.choice(available)
-        cells.append(symbol)
-        counts[symbol] += 1
-    random.shuffle(cells)
-    return cells
-
-
-def scratch_grid_text(grid: List[str], hidden: bool = False) -> str:
-    cells = ["⬜" for _ in grid] if hidden else grid
-    return "\n".join("  ".join(cells[i:i + 3]) for i in range(0, 9, 3))
-
-
 @dataclass
 class ScratchcardGame:
     user_id: int
@@ -511,157 +461,13 @@ class ScratchcardGame:
     lock: asyncio.Lock = field(default_factory=asyncio.Lock)
 
 
-LOTTERY_CONFIG_KEY = "minigames_lottery_state"
-LOTTERY_DRAW_DELAY = timedelta(hours=1)
-LOTTERY_PAYOUT_RATIO = 0.95
-
-
-def default_lottery_state() -> Dict[str, Any]:
-    return {
-        "jackpot": 0.0,
-        "draw_at": None,
-        "round_id": None,
-        "tickets": {},
-        "last_result": None,
-        "pending_settlement": None,
-    }
-
-
-def normalize_lottery_state(raw_state: Any) -> Dict[str, Any]:
-    state = default_lottery_state()
-    if not isinstance(raw_state, dict):
-        return state
-
-    try:
-        state["jackpot"] = max(0.0, round(float(raw_state.get("jackpot", 0.0)), 2))
-    except (TypeError, ValueError):
-        pass
-
-    draw_at = raw_state.get("draw_at")
-    if isinstance(draw_at, str):
-        state["draw_at"] = draw_at
-    round_id = raw_state.get("round_id")
-    if isinstance(round_id, str):
-        state["round_id"] = round_id
-
-    tickets: Dict[str, Dict[str, float]] = {}
-    raw_tickets = raw_state.get("tickets", {})
-    if isinstance(raw_tickets, dict):
-        for raw_number, raw_entries in raw_tickets.items():
-            try:
-                number = int(raw_number)
-            except (TypeError, ValueError):
-                continue
-            if not 0 <= number <= 99 or not isinstance(raw_entries, dict):
-                continue
-            entries: Dict[str, float] = {}
-            for raw_user_id, raw_stake in raw_entries.items():
-                try:
-                    user_id = str(int(raw_user_id))
-                    stake = round(float(raw_stake), 2)
-                except (TypeError, ValueError):
-                    continue
-                if stake > 0:
-                    entries[user_id] = stake
-            if entries:
-                tickets[f"{number:02d}"] = entries
-    state["tickets"] = tickets
-
-    if isinstance(raw_state.get("last_result"), dict):
-        state["last_result"] = raw_state["last_result"]
-    if isinstance(raw_state.get("pending_settlement"), dict):
-        state["pending_settlement"] = raw_state["pending_settlement"]
-    return state
-
-
-def parse_lottery_draw_at(value: Any) -> Optional[datetime]:
-    if not isinstance(value, str):
-        return None
-    try:
-        parsed = datetime.fromisoformat(value)
-    except ValueError:
-        return None
-    if parsed.tzinfo is None:
-        parsed = parsed.replace(tzinfo=timezone.utc)
-    return parsed.astimezone(timezone.utc)
-
-
-def allocate_lottery_payouts(jackpot: float, winning_stakes: Dict[int, float]) -> Dict[int, float]:
-    """按投注比例分配 95% 獎池；不足一分的餘額給最大投注者。"""
-    valid_stakes = {uid: float(stake) for uid, stake in winning_stakes.items() if stake > 0}
-    if not valid_stakes:
-        return {}
-    total_stake = sum(valid_stakes.values())
-    payout_cents = int(round(round(jackpot * LOTTERY_PAYOUT_RATIO, 2) * 100))
-    allocations_cents = {
-        uid: int(payout_cents * stake / total_stake)
-        for uid, stake in valid_stakes.items()
-    }
-    remainder = payout_cents - sum(allocations_cents.values())
-    remainder_user = sorted(valid_stakes, key=lambda uid: (-valid_stakes[uid], uid))[0]
-    allocations_cents[remainder_user] += remainder
-    return {uid: cents / 100 for uid, cents in allocations_cents.items()}
-
-
 # -----------------------------
 # Slots 拉霸機
 # -----------------------------
 
-# (符號, 權重)
-SLOT_SYMBOLS = [
-    ("🍒", 30),
-    ("🍋", 30),
-    ("🔔", 20),
-    ("💎", 15),
-    ("7️⃣", 5),
-]
-# 三同賠率（總回傳倍率）
-SLOT_TRIPLE_PAYOUT = {
-    "🍒": 3.0,
-    "🍋": 4.0,
-    "🔔": 8.0,
-    "💎": 15.0,
-    "7️⃣": 40.0,
-}
-SLOT_PAIR_PAYOUT = 1.2  # 任意一對
-
-
-def spin_slots() -> List[str]:
-    names = [s[0] for s in SLOT_SYMBOLS]
-    weights = [s[1] for s in SLOT_SYMBOLS]
-    return random.choices(names, weights=weights, k=3)
-
-
-def slots_multiplier(reels: List[str]) -> Tuple[float, str]:
-    """回傳 (總回傳倍率, 獎項名稱)"""
-    if reels[0] == reels[1] == reels[2]:
-        return SLOT_TRIPLE_PAYOUT[reels[0]], "三連線！"
-    if reels[0] == reels[1] or reels[1] == reels[2] or reels[0] == reels[2]:
-        return SLOT_PAIR_PAYOUT, "一對"
-    return 0.0, "未中獎"
-
-
 # -----------------------------
 # HighLow 比大小
 # -----------------------------
-
-HL_RANK_NAMES = ["A", "2", "3", "4", "5", "6", "7", "8", "9", "10", "J", "Q", "K"]
-HL_HOUSE_FACTOR = 0.95  # 每步 RTP 95%
-HL_MAX_MULT = 50.0  # pot 上限 50x 自動提現
-
-
-def hl_rank_name(rank: int) -> str:
-    return HL_RANK_NAMES[rank - 1]
-
-
-def hl_probs(rank: int) -> Tuple[float, float]:
-    """回傳 (p_high, p_low)：下一張從 12 個不同點數中抽。"""
-    return (13 - rank) / 12, (rank - 1) / 12
-
-
-def hl_draw_next(rank: int) -> int:
-    choices = [r for r in range(1, 14) if r != rank]
-    return random.choice(choices)
 
 
 @dataclass
@@ -681,43 +487,6 @@ class HighLowGame:
 # -----------------------------
 # Blackjack 21點
 # -----------------------------
-
-BJ_SUITS = ["♠", "♥", "♦", "♣"]
-BJ_RANKS = ["A", "2", "3", "4", "5", "6", "7", "8", "9", "10", "J", "Q", "K"]
-
-
-def bj_new_deck() -> List[Tuple[str, str]]:
-    deck = [(r, s) for r in BJ_RANKS for s in BJ_SUITS]
-    random.shuffle(deck)
-    return deck
-
-
-def bj_hand_value(hand: List[Tuple[str, str]]) -> Tuple[int, bool]:
-    """回傳 (最佳點數, 是否軟牌)。A 可為 1 或 11。"""
-    total = 0
-    aces = 0
-    for rank, _ in hand:
-        if rank == "A":
-            aces += 1
-            total += 1
-        elif rank in ("J", "Q", "K", "10"):
-            total += 10
-        else:
-            total += int(rank)
-    soft = False
-    if aces and total + 10 <= 21:
-        total += 10
-        soft = True
-    return total, soft
-
-
-def bj_is_blackjack(hand: List[Tuple[str, str]]) -> bool:
-    return len(hand) == 2 and bj_hand_value(hand)[0] == 21
-
-
-def bj_hand_str(hand: List[Tuple[str, str]]) -> str:
-    return " ".join(f"`{r}{s}`" for r, s in hand)
-
 
 @dataclass
 class BlackjackGame:
@@ -1512,10 +1281,13 @@ class MiniGamesCog(commands.GroupCog, group_name="games", description="迷你遊
     ) -> bool:
         """扣注 + 記錄。回傳是否成功（餘額不足回 False）。"""
         currency = get_currency_name(guild_id)
-        balance_before = get_balance(guild_id, interaction.user.id)
-        if balance_before < bet or not remove_balance(guild_id, interaction.user.id, bet):
+        success, balance_before, balance_after = mutate_balance_atomic(
+            guild_id,
+            interaction.user.id,
+            -bet,
+        )
+        if not success:
             return False
-        balance_after = get_balance(guild_id, interaction.user.id)
         self._log_economy_history(guild_id, interaction.user.id, tx_label, -bet, detail)
         queue_economy_audit_log(
             audit_event,
@@ -1548,9 +1320,7 @@ class MiniGamesCog(commands.GroupCog, group_name="games", description="迷你遊
         if amount <= 0:
             return
         currency = get_currency_name(guild_id)
-        balance_before = get_balance(guild_id, user_id)
-        add_balance(guild_id, user_id, amount)
-        balance_after = get_balance(guild_id, user_id)
+        _, balance_before, balance_after = mutate_balance_atomic(guild_id, user_id, amount)
         self._log_economy_history(guild_id, user_id, tx_label, amount, detail)
         queue_economy_audit_log(
             audit_event,
@@ -1591,10 +1361,14 @@ class MiniGamesCog(commands.GroupCog, group_name="games", description="迷你遊
 
     @staticmethod
     def _load_lottery_state(guild_id: int) -> Dict[str, Any]:
+        if guild_id == GLOBAL_GUILD_ID:
+            return default_casino_service.get_lottery_state(guild_id)
         return normalize_lottery_state(get_server_config(guild_id, LOTTERY_CONFIG_KEY, {}))
 
     @staticmethod
     def _save_lottery_state(guild_id: int, state: Dict[str, Any]) -> bool:
+        if guild_id == GLOBAL_GUILD_ID:
+            return default_casino_service.save_lottery_state(guild_id, state)
         return set_server_config(guild_id, LOTTERY_CONFIG_KEY, state)
 
     @staticmethod
@@ -1768,6 +1542,23 @@ class MiniGamesCog(commands.GroupCog, group_name="games", description="迷你遊
 
     async def _settle_lottery_scope(self, guild_id: int) -> None:
         async with self._lottery_lock(guild_id):
+            if guild_id == GLOBAL_GUILD_ID:
+                state, prepared = default_casino_service.prepare_lottery_settlement(
+                    guild_id,
+                    secrets.randbelow(100),
+                )
+                if state.get("pending_settlement"):
+                    await self._resume_lottery_settlement_locked(guild_id, state)
+                elif prepared:
+                    last_result = state.get("last_result") or {}
+                    log(
+                        f"Lottery round {last_result.get('round_id')} in scope {guild_id} "
+                        f"drew {last_result.get('number')}; no winners, jackpot rolled over.",
+                        module_name="MiniGames",
+                        level=logging.INFO,
+                    )
+                return
+
             state = self._load_lottery_state(guild_id)
             if state.get("pending_settlement"):
                 await self._resume_lottery_settlement_locked(guild_id, state)
@@ -1928,9 +1719,13 @@ class MiniGamesCog(commands.GroupCog, group_name="games", description="迷你遊
                 ephemeral=True,
             )
 
-        result = random.randint(0, 36)
-        won = roulette_is_win(result, bet_type.value, int(number) if number is not None else None)
-        multiplier = 36.0 if bet_type.value == "number" else 2.0
+        roulette_result = play_roulette(
+            bet_type.value,
+            int(number) if number is not None else None,
+        )
+        result = int(roulette_result["result"])
+        won = bool(roulette_result["won"])
+        multiplier = float(roulette_result["multiplier"])
         payout = round(bet * multiplier, 2) if won else 0.0
         selection = f"號碼 {int(number)}" if bet_type.value == "number" else ROULETTE_BET_LABELS[bet_type.value]
         if payout:
@@ -2031,9 +1826,10 @@ class MiniGamesCog(commands.GroupCog, group_name="games", description="迷你遊
                     ephemeral=True,
                 )
 
-            result = random.randint(1, 6)
-            won = result == guess
-            payout = round(view.bet * 5.7, 2) if won else 0.0
+            dice_result = play_dice(guess)
+            result = int(dice_result["result"])
+            won = bool(dice_result["won"])
+            payout = round(view.bet * float(dice_result["multiplier"]), 2) if won else 0.0
             if payout:
                 self._pay_out(
                     view.guild_id,
@@ -2133,9 +1929,10 @@ class MiniGamesCog(commands.GroupCog, group_name="games", description="迷你遊
                     ephemeral=True,
                 )
 
-            result = random.choice(("heads", "tails"))
-            won = result == side
-            payout = round(view.bet * 1.9, 2) if won else 0.0
+            coin_result = play_coinflip(side)
+            result = str(coin_result["result"])
+            won = bool(coin_result["won"])
+            payout = round(view.bet * float(coin_result["multiplier"]), 2) if won else 0.0
             result_label = "正面" if result == "heads" else "反面"
             if payout:
                 self._pay_out(
@@ -2208,16 +2005,16 @@ class MiniGamesCog(commands.GroupCog, group_name="games", description="迷你遊
                 ephemeral=True,
             )
 
-        prize_key, winning_symbol, multiplier, prize_name = draw_scratch_prize()
+        scratch_result = play_scratchcard()
         game = ScratchcardGame(
             user_id=interaction.user.id,
             channel_id=interaction.channel_id,
             guild_id=guild_id,
             bet=float(bet),
-            prize_key=prize_key,
-            prize_name=prize_name,
-            multiplier=multiplier,
-            grid=create_scratch_grid(winning_symbol),
+            prize_key=str(scratch_result["prize_key"]),
+            prize_name=str(scratch_result["prize_name"]),
+            multiplier=float(scratch_result["multiplier"]),
+            grid=list(scratch_result["grid"]),
         )
         self.scratchcard_games[key] = game
         view = ScratchcardView(self, game)
@@ -2331,6 +2128,55 @@ class MiniGamesCog(commands.GroupCog, group_name="games", description="迷你遊
         err = self._validate_bet(int(bet))
         if err:
             return await interaction.response.send_message(err, ephemeral=True)
+
+        if guild_id == GLOBAL_GUILD_ID:
+            try:
+                purchase = default_casino_service.buy_lottery(
+                    interaction.user.id,
+                    {
+                        "request_id": uuid.uuid4().hex,
+                        "bet": int(bet),
+                        "number": int(number),
+                    },
+                    source="Discord",
+                )
+            except CasinoError as exc:
+                return await interaction.response.send_message(exc.message, ephemeral=True)
+
+            lottery = purchase["lottery"]
+            number_key = purchase["number"]
+            draw_at = parse_lottery_draw_at(lottery.get("draw_at"))
+            my_stake = float(lottery.get("my_tickets", {}).get(number_key, 0.0))
+            currency = get_currency_name(guild_id)
+            queue_economy_audit_log(
+                "lottery_bet",
+                guild_id=guild_id,
+                actor=interaction.user,
+                interaction=interaction,
+                currency=currency,
+                amount=float(bet),
+                balance_before=float(purchase["balance"]) + float(bet),
+                balance_after=float(purchase["balance"]),
+                detail=f"購買號碼 {number_key}，投注 {int(bet):,.0f} {currency}",
+                color=0xE67E22,
+            )
+            draw_text = (
+                f"<t:{int(draw_at.timestamp())}:F>（<t:{int(draw_at.timestamp())}:R>）"
+                if draw_at else "尚未排定"
+            )
+            embed = discord.Embed(
+                title="🎟️ 彩票購買成功",
+                description=(
+                    f"號碼：# **{number_key}**\n"
+                    f"本次投注：**{int(bet):,.0f}** {currency}\n"
+                    f"你在此號碼的累積投注：**{my_stake:,.2f}** {currency}\n"
+                    f"目前獎池：**{float(lottery['jackpot']):,.2f}** {currency}\n"
+                    f"開獎時間：{draw_text}"
+                ),
+                color=discord.Color.gold(),
+            )
+            embed.set_footer(text="中獎者依命中號碼的投注額比例分配 95% 獎池。")
+            return await interaction.response.send_message(embed=embed)
 
         async with self._lottery_lock(guild_id):
             state = self._load_lottery_state(guild_id)
@@ -2468,15 +2314,14 @@ class MiniGamesCog(commands.GroupCog, group_name="games", description="迷你遊
             await interaction.response.send_message("你已經有一局 Tower 遊戲。", ephemeral=True)
             return False
 
-        balance_before = get_balance(guild_id, interaction.user.id)
-        if balance_before < bet:
+        success, balance_before, balance_after = mutate_balance_atomic(
+            guild_id,
+            interaction.user.id,
+            -bet,
+        )
+        if not success:
             await interaction.response.send_message(f"餘額不足 {bet:,.0f} {currency}。", ephemeral=True)
             return False
-
-        if not remove_balance(guild_id, interaction.user.id, bet):
-            await interaction.response.send_message("扣除賭注失敗。", ephemeral=True)
-            return False
-        balance_after = get_balance(guild_id, interaction.user.id)
         self._log_economy_history(
             guild_id,
             interaction.user.id,
@@ -2603,9 +2448,7 @@ class MiniGamesCog(commands.GroupCog, group_name="games", description="迷你遊
             mult = TOWER_MULTIPLIERS[TOWER_LEVELS]
             payout = round(game.bet * mult, 2)
             currency = get_currency_name(game.guild_id)
-            balance_before = get_balance(game.guild_id, game.user_id)
-            add_balance(game.guild_id, game.user_id, payout)
-            balance_after = get_balance(game.guild_id, game.user_id)
+            _, balance_before, balance_after = mutate_balance_atomic(game.guild_id, game.user_id, payout)
             self._log_economy_history(
                 game.guild_id,
                 game.user_id,
@@ -2678,9 +2521,7 @@ class MiniGamesCog(commands.GroupCog, group_name="games", description="迷你遊
         mult = TOWER_MULTIPLIERS[safe]
         payout = round(game.bet * mult, 2)
         currency = get_currency_name(game.guild_id)
-        balance_before = get_balance(game.guild_id, game.user_id)
-        add_balance(game.guild_id, game.user_id, payout)
-        balance_after = get_balance(game.guild_id, game.user_id)
+        _, balance_before, balance_after = mutate_balance_atomic(game.guild_id, game.user_id, payout)
         self._log_economy_history(
             game.guild_id,
             game.user_id,
@@ -2750,8 +2591,10 @@ class MiniGamesCog(commands.GroupCog, group_name="games", description="迷你遊
 
         self.slots_spinning.add(key)
         try:
-            reels = spin_slots()
-            mult, prize_name = slots_multiplier(reels)
+            slot_result = play_slots()
+            reels = list(slot_result["reels"])
+            mult = float(slot_result["multiplier"])
+            prize_name = str(slot_result["prize_name"])
             payout = round(bet * mult, 2)
             if payout > 0:
                 self._pay_out(
@@ -2904,10 +2747,11 @@ class MiniGamesCog(commands.GroupCog, group_name="games", description="迷你遊
         if p_chosen <= 0:
             return await interaction.response.send_message("無效的選擇。", ephemeral=True)
 
-        next_rank = hl_draw_next(game.current_rank)
+        previous_rank = game.current_rank
+        next_rank = hl_draw_next(previous_rank)
         next_suit = random.choice(BJ_SUITS)
-        correct = (next_rank > game.current_rank) if guess == "high" else (next_rank < game.current_rank)
-        old_card = f"`{hl_rank_name(game.current_rank)}{game.current_suit}`"
+        correct = (next_rank > previous_rank) if guess == "high" else (next_rank < previous_rank)
+        old_card = f"`{hl_rank_name(previous_rank)}{game.current_suit}`"
         new_card = f"`{hl_rank_name(next_rank)}{next_suit}`"
         game.current_rank = next_rank
         game.current_suit = next_suit
@@ -2930,10 +2774,9 @@ class MiniGamesCog(commands.GroupCog, group_name="games", description="迷你遊
             return
 
         game.streak += 1
-        game.pot = round(game.pot * HL_HOUSE_FACTOR / p_chosen, 2)
+        game.pot, reached_cap = hl_apply_win(game.pot, game.bet, previous_rank, guess)
 
-        if game.pot >= game.bet * HL_MAX_MULT:
-            game.pot = min(game.pot, game.bet * HL_MAX_MULT)
+        if reached_cap:
             await self._highlow_do_cashout(interaction, game, view, auto=True)
             return
 
@@ -3164,35 +3007,19 @@ class MiniGamesCog(commands.GroupCog, group_name="games", description="迷你遊
         game.active_view = None
         currency = get_currency_name(game.guild_id)
 
-        p_total, _ = bj_hand_value(game.player_hand)
-        player_bj = bj_is_blackjack(game.player_hand)
-        dealer_bj = bj_is_blackjack(game.dealer_hand)
-
-        if p_total <= 21 and not player_bj and not dealer_bj:
-            while bj_hand_value(game.dealer_hand)[0] < 17:
-                game.dealer_hand.append(game.deck.pop())
-        d_total, _ = bj_hand_value(game.dealer_hand)
-
-        # 判定
-        if p_total > 21:
-            payout, result, color = 0.0, f"💥 **爆牌！** 損失 **{game.bet:,.0f}** {currency}", discord.Color.red()
-        elif player_bj and dealer_bj:
-            payout, result, color = game.bet, "🤝 **雙方 Blackjack，平手！** 退還賭注", discord.Color.light_grey()
-        elif player_bj:
-            payout = round(game.bet * 2.5, 2)
-            result, color = f"🎉 **Blackjack！** 3:2 派彩 **{payout:,.0f}** {currency}", discord.Color.gold()
-        elif dealer_bj:
-            payout, result, color = 0.0, f"💥 **莊家 Blackjack！** 損失 **{game.bet:,.0f}** {currency}", discord.Color.red()
-        elif d_total > 21:
-            payout = round(game.bet * 2, 2)
-            result, color = f"🎉 **莊家爆牌！** 獲得 **{payout:,.0f}** {currency}", discord.Color.green()
-        elif p_total > d_total:
-            payout = round(game.bet * 2, 2)
-            result, color = f"🎉 **你贏了！** 獲得 **{payout:,.0f}** {currency}", discord.Color.green()
-        elif p_total == d_total:
-            payout, result, color = game.bet, "🤝 **平手！** 退還賭注", discord.Color.light_grey()
-        else:
-            payout, result, color = 0.0, f"💥 **你輸了！** 損失 **{game.bet:,.0f}** {currency}", discord.Color.red()
+        settlement = bj_settle(game.player_hand, game.dealer_hand, game.deck, game.bet)
+        payout = float(settlement["payout"])
+        outcome = settlement["outcome"]
+        result_map = {
+            "player_bust": (f"💥 **爆牌！** 損失 **{game.bet:,.0f}** {currency}", discord.Color.red()),
+            "push": ("🤝 **平手！** 退還賭注", discord.Color.light_grey()),
+            "blackjack": (f"🎉 **Blackjack！** 3:2 派彩 **{payout:,.0f}** {currency}", discord.Color.gold()),
+            "dealer_blackjack": (f"💥 **莊家 Blackjack！** 損失 **{game.bet:,.0f}** {currency}", discord.Color.red()),
+            "dealer_bust": (f"🎉 **莊家爆牌！** 獲得 **{payout:,.0f}** {currency}", discord.Color.green()),
+            "win": (f"🎉 **你贏了！** 獲得 **{payout:,.0f}** {currency}", discord.Color.green()),
+            "lose": (f"💥 **你輸了！** 損失 **{game.bet:,.0f}** {currency}", discord.Color.red()),
+        }
+        result, color = result_map[outcome]
 
         if payout > 0:
             is_push = payout == game.bet

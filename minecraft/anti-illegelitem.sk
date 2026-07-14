@@ -30,8 +30,6 @@ options:
     max-lore-lines: 10
     # Lore 單行最長字數
     max-lore-length: 120
-    # 物品名稱最長字數
-    max-name-length: 60
 
 # ── 原版附魔等級上限表 (只需要列出上限低於 5 的) ──
 on load:
@@ -86,10 +84,10 @@ function checkItem(i: item) :: text:
     if {_i} is command block, chain command block, repeating command block, structure block, barrier, jigsaw block, light block, spawner, command block minecart, bedrock or end portal frame:
         return "非法物品類型"
 
-    # ── 2. 非法名稱 ──
-    if name of {_i} is set:
-        if length of "%name of {_i}%" > {@max-name-length}:
-            return "非法名稱 (過長)"
+    # ── 2. 非法名稱 ── 停用
+    # if name of {_i} is set:
+    #     if length of "%name of {_i}%" > {@max-name-length}:
+    #         return "非法名稱 (過長)"
 
     # ── 3. 非法 Lore ──
     set {_lore::*} to lore of {_i}

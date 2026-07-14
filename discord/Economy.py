@@ -969,30 +969,87 @@ def _owner_build_history_detail_view(target_user: discord.User, guild_id: int, l
 
 def add_balance(guild_id: int, user_id: int, amount: float):
     """增加用戶餘額並追蹤供給量"""
-    current = get_balance(guild_id, user_id)
-    new_balance = current + amount
-
-    # 全域幣上限檢查
-    if guild_id == GLOBAL_GUILD_ID:
-        if new_balance > MAX_GLOBAL_BALANCE:
-            log(f"Global balance cap reached for user {user_id}: {new_balance:.2f} -> {MAX_GLOBAL_BALANCE:.2f}",
-                module_name="Economy", level=logging.WARNING)
-            new_balance = MAX_GLOBAL_BALANCE
-
-    set_balance(guild_id, user_id, new_balance)
-    if guild_id != GLOBAL_GUILD_ID:
+    success, _, _ = mutate_balance_atomic(guild_id, user_id, amount)
+    if success and guild_id != GLOBAL_GUILD_ID:
         adjust_supply(guild_id, amount)
 
 
 def remove_balance(guild_id: int, user_id: int, amount: float) -> bool:
     """扣除用戶餘額，餘額不足時回傳 False"""
-    current = get_balance(guild_id, user_id)
-    if current < amount:
-        return False
-    set_balance(guild_id, user_id, current - amount)
-    if guild_id != GLOBAL_GUILD_ID:
+    success, _, _ = mutate_balance_atomic(guild_id, user_id, -amount)
+    if success and guild_id != GLOBAL_GUILD_ID:
         adjust_supply(guild_id, -amount)
-    return True
+    return success
+
+
+def mutate_balance_atomic(
+    guild_id: int,
+    user_id: int,
+    delta: float,
+    *,
+    connection=None,
+) -> tuple[bool, float, float]:
+    """Atomically change a balance, optionally inside the caller's transaction.
+
+    Returns ``(success, balance_before, balance_after)``. A negative result is
+    rejected without modifying the row. Passing ``connection`` lets callers
+    update game state and balance in the same SQLite transaction.
+    """
+    guild_id = int(guild_id or GLOBAL_GUILD_ID)
+    user_id = int(user_id)
+    delta = round(float(delta), 2)
+    owns_connection = connection is None
+    conn = connection or sqlite3.connect(db.db_path, timeout=30)
+    try:
+        if owns_connection:
+            conn.execute("BEGIN IMMEDIATE")
+        row = conn.execute(
+            """
+            SELECT data_value
+            FROM user_data
+            WHERE user_id = ? AND guild_id = ? AND data_key = 'economy_balance'
+            """,
+            (user_id, guild_id),
+        ).fetchone()
+        try:
+            balance_before = float(row[0]) if row else 0.0
+        except (TypeError, ValueError):
+            balance_before = 0.0
+        requested_balance = round(balance_before + delta, 2)
+        if requested_balance < 0:
+            if owns_connection:
+                conn.rollback()
+            return False, balance_before, balance_before
+
+        balance_after = requested_balance
+        if guild_id == GLOBAL_GUILD_ID and balance_after > MAX_GLOBAL_BALANCE:
+            log(
+                f"Global balance cap reached for user {user_id}: "
+                f"{balance_after:.2f} -> {MAX_GLOBAL_BALANCE:.2f}",
+                module_name="Economy",
+                level=logging.WARNING,
+            )
+            balance_after = MAX_GLOBAL_BALANCE
+
+        conn.execute(
+            """
+            INSERT INTO user_data (user_id, guild_id, data_key, data_value)
+            VALUES (?, ?, 'economy_balance', ?)
+            ON CONFLICT(user_id, guild_id, data_key)
+            DO UPDATE SET data_value = excluded.data_value
+            """,
+            (user_id, guild_id, str(round(balance_after, 2))),
+        )
+        if owns_connection:
+            conn.commit()
+        return True, balance_before, balance_after
+    except Exception:
+        if owns_connection:
+            conn.rollback()
+        raise
+    finally:
+        if owns_connection:
+            conn.close()
 
 
 # ==================== Admin Action Callback ====================
