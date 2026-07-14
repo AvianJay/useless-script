@@ -2300,11 +2300,28 @@ async def on_music_action(sid, data=None):
 
 # --- Discord Commands ---
 
+class PlayView(discord.ui.View):
+    def __init__(self):
+        super().__init__(timeout=None)
+
+    @discord.ui.button(label="玩", style=discord.ButtonStyle.primary, custom_id="explore_play_button")
+    async def play_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await interaction.response.launch_activity()
+
+bot.add_view(PlayView())
+
 @app_commands.allowed_installs(guilds=True, users=True)
 @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
 @bot.tree.command(name="explore", description="啟動探索空間")
 async def explore_command(interaction: discord.Interaction):
     await interaction.response.launch_activity()
+    embed = discord.Embed(
+        title="探索空間",
+        description=f"{interaction.user.display_name} 正在遊玩",
+        color=discord.Color.blue()
+    )
+    embed.set_thumbnail(url=interaction.user.display_avatar.url)
+    await interaction.followup.send(embed=embed, view=PlayView())
 
 @app_commands.allowed_installs(guilds=True, users=False)
 @app_commands.allowed_contexts(guilds=True, dms=False, private_channels=False)
