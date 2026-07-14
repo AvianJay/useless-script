@@ -4,10 +4,11 @@ import discord
 from discord.ext import commands
 from discord import app_commands
 from database import db
-from flask import jsonify, render_template, request, send_from_directory, abort, g
+from flask import jsonify, render_template, request, send_from_directory, abort, g, redirect
 import time
 import asyncio
 import os
+import subprocess
 import base64
 from Activity import ActivityEntry
 import requests
@@ -31,6 +32,37 @@ if "Website" in modules:
     from Website import app
 else:
     raise Exception("Website module not found")
+
+
+EXPLORE_GAME_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "Explore")
+EXPLORE_IMMUTABLE_MAX_AGE = 60 * 60 * 24 * 365
+
+
+def _resolve_explore_build_id() -> str:
+    """Use the deployed Explore submodule commit as its static asset version."""
+    try:
+        result = subprocess.run(
+            ["git", "-C", EXPLORE_GAME_DIR, "rev-parse", "HEAD"],
+            check=True,
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        commit = result.stdout.strip().lower()
+        if re.fullmatch(r"[0-9a-f]{40}", commit):
+            return commit
+        raise ValueError(f"unexpected commit value: {commit!r}")
+    except (OSError, subprocess.SubprocessError, ValueError) as exc:
+        fallback = f"runtime-{_uuid_mod.uuid4().hex}"
+        log(
+            f"Unable to resolve Explore submodule commit; using {fallback}: {exc}",
+            level=logging.WARNING,
+            module_name="Explore",
+        )
+        return fallback
+
+
+EXPLORE_BUILD_ID = _resolve_explore_build_id()
 
 def init_db():
     with db.get_connection() as conn:
@@ -1826,13 +1858,60 @@ def explore_music_delete():
     return jsonify({'success': True})
 
 
+def _set_explore_no_store(response):
+    response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+    response.headers["Pragma"] = "no-cache"
+    response.headers["Expires"] = "0"
+    return response
+
+
+def _serve_versioned_game_file(path: str):
+    response = send_from_directory(
+        EXPLORE_GAME_DIR,
+        path,
+        max_age=EXPLORE_IMMUTABLE_MAX_AGE,
+    )
+    response.headers["Cache-Control"] = (
+        f"public, max-age={EXPLORE_IMMUTABLE_MAX_AGE}, immutable"
+    )
+    return response
+
+
+@app.route("/explore/build/<build_id>/")
+def serve_versioned_game_index(build_id):
+    if build_id != EXPLORE_BUILD_ID:
+        return _set_explore_no_store(app.response_class(status=404))
+    return _serve_versioned_game_file("index.html")
+
+
+@app.route("/explore/build/<build_id>/<path:path>")
+def serve_versioned_game_files(build_id, path):
+    if build_id != EXPLORE_BUILD_ID:
+        return _set_explore_no_store(app.response_class(status=404))
+    return _serve_versioned_game_file(path)
+
+
 @app.route("/explore/<path:path>")
 def serve_game_files(path):
-    return send_from_directory(os.path.join(os.getcwd(), 'Explore'), path)
+    # Compatibility for an old cached index. Always return a fresh response so
+    # it can transition to the commit-versioned URL without a stale 304.
+    response = send_from_directory(
+        EXPLORE_GAME_DIR,
+        path,
+        conditional=False,
+        etag=False,
+        max_age=0,
+    )
+    return _set_explore_no_store(response)
+
 
 @app.route("/explore/")
 def serve_game_index():
-    return send_from_directory(os.path.join(os.getcwd(), 'Explore'), 'index.html')
+    # Keep this redirect relative: Discord Activities proxy this URL through
+    # their own origin, so an absolute /explore/... Location can be remapped
+    # to the wrong upstream path.
+    response = redirect(f"build/{EXPLORE_BUILD_ID}/", code=302)
+    return _set_explore_no_store(response)
 
 # --- Socket.IO Events (ASGI) ---
 
