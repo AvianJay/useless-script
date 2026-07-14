@@ -35,27 +35,96 @@ def rate_limit(seconds: int = 10):
     return decorator
 
 
+def check_view_rate_limit(user_id: str, seconds: int = 3) -> bool:
+    """View 元件共用的速率限制，回傳 True 表示允許操作。"""
+    last = get_user_data(0, user_id, "view_rate_limit_last", None)
+    if last:
+        try:
+            delta = (datetime.utcnow() - datetime.fromisoformat(last)).total_seconds()
+            if delta < seconds:
+                return False
+        except ValueError:
+            pass
+    set_user_data(0, user_id, "view_rate_limit_last", datetime.utcnow().isoformat())
+    return True
+
+
+def _truncate(text: str, limit: int) -> str:
+    return text if len(text) <= limit else text[:limit - 1] + "…"
+
+
 # Helper function to fetch stop info
-def fetch_stop_info(route_key: int, stop_id: int) -> dict:
-    """Fetch complete stop information including route and path details."""
-    paths = busapi.fetch_paths(route_key)
+def fetch_stop_context(route_key: int, stop_id: int) -> Optional[dict]:
+    """取得站牌資訊與其所屬路徑的完整站牌列表（供上一站/下一站/路線總覽使用）。"""
     info = busapi.get_complete_bus_info(route_key)
     route = busapi.fetch_route(route_key)[0]
 
-    stop_info = {}
     for path_id, path_data in info.items():
-        for stop in path_data["stops"]:
+        stops = path_data["stops"]
+        for index, stop in enumerate(stops):
             if stop["stop_id"] == stop_id:
-                stop_info.update(stop)
+                stop_info = dict(stop)
                 stop_info["route_name"] = route["route_name"]
-                path = next((p for p in paths if p["path_id"] == path_id), None)
-                if path:
-                    stop_info["path_name"] = path["path_name"]
-                break
-        if stop_info:
-            break
+                stop_info["path_name"] = path_data.get("name", "")
+                return {
+                    "stop": stop_info,
+                    "route": route,
+                    "path_id": path_id,
+                    "stops": stops,
+                    "index": index,
+                }
+    return None
 
-    return stop_info
+
+def fetch_stop_info(route_key: int, stop_id: int) -> dict:
+    """Fetch complete stop information including route and path details."""
+    ctx = fetch_stop_context(route_key, stop_id)
+    return ctx["stop"] if ctx else {}
+
+
+# 到站狀態 -> emoji
+ETA_EMOJIS = {
+    "approaching": "🟢",  # 進站中
+    "soon": "🟡",         # 3 分鐘內
+    "time": "🔵",         # 一般倒數
+    "scheduled": "🕒",    # 表定時間 (HH:MM)
+    "msg": "⚪",          # 未發車 / 末班駛離等訊息
+    "none": "⚫",         # 無資料
+}
+
+
+def format_eta(payload: dict) -> tuple[str, str]:
+    """將站牌到站資料轉為 (顯示文字, 狀態)，狀態為 ETA_EMOJIS 的 key。"""
+    sec = payload.get("sec")
+    msg = payload.get("msg")
+    try:
+        sec = int(sec) if sec is not None else None
+    except (TypeError, ValueError):
+        sec = None
+
+    if msg and (sec is None or sec < 0):
+        if ":" in str(msg):
+            return str(msg), "scheduled"
+        return str(msg), "msg"
+    if sec is None:
+        return "暫無資料", "none"
+    if sec <= 0:
+        return "進站中", "approaching"
+    if sec < 60:
+        text = f"{sec}秒"
+    else:
+        text = f"{sec // 60}分 {sec % 60}秒"
+    return text, "soon" if sec <= 180 else "time"
+
+
+def format_stop_buses(payload: dict) -> list[str]:
+    lines = []
+    for b in payload.get("bus") or []:
+        bid = b.get("id") or b.get("plate") or "?"
+        full = int(b.get("full") or 0)
+        status = "已滿" if full == 1 else "可上車"
+        lines.append(f"`{bid}`: {status}")
+    return lines
 
 
 # Generic ActionsView with refresh and favorite buttons
@@ -125,6 +194,374 @@ class GenericActionsView(discord.ui.View):
             await interaction.response.send_message(str(e), ephemeral=True)
 
 
+class BaseBusView(discord.ui.View):
+    """公車互動視圖的共同基底：擁有者檢查、速率限制、逾時停用按鈕。"""
+
+    def __init__(self, owner_id: int, timeout: float = 300):
+        super().__init__(timeout=timeout)
+        self.owner_id = owner_id
+        self.message: Optional[discord.Message] = None
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if interaction.user.id != self.owner_id:
+            await interaction.response.send_message("你無權限使用此按鈕。", ephemeral=True)
+            return False
+        if not check_view_rate_limit(str(interaction.user.id)):
+            await interaction.response.send_message("你操作的太快了，請稍後再試。", ephemeral=True)
+            return False
+        self.message = interaction.message
+        return True
+
+    async def on_timeout(self):
+        for item in self.children:
+            if getattr(item, "url", None):
+                continue
+            item.disabled = True
+        if self.message:
+            try:
+                await self.message.edit(view=self)
+            except Exception:
+                pass
+
+
+PAGE_SIZE = 20  # 每頁站數，同時是 selector 的選項數（Discord 上限 25）
+
+
+class BusRouteView(BaseBusView):
+    """路線總覽：分頁顯示站牌，左右換頁（跨路徑循環）、中間按鈕切換路徑、selector 快速查站。"""
+
+    def __init__(self, owner_id: int, route_key: int, route: dict, path_id: Optional[int] = None, page: int = 0):
+        super().__init__(owner_id)
+        self.route_key = route_key
+        self.route = route
+        self.info: dict = {}
+        self.path_ids: list = []
+        self.path_index = 0
+        self.page = page
+        self._want_path_id = path_id
+        self.stop_select: Optional[discord.ui.Select] = None
+
+    async def fetch(self) -> bool:
+        info = await asyncio.to_thread(busapi.get_complete_bus_info, self.route_key)
+        path_ids = [pid for pid, pdata in info.items() if pdata["stops"]]
+        if not path_ids:
+            return False
+        self.info = info
+        self.path_ids = path_ids
+        if self._want_path_id in self.path_ids:
+            self.path_index = self.path_ids.index(self._want_path_id)
+        self._want_path_id = None
+        self.path_index = min(self.path_index, len(self.path_ids) - 1)
+        self.page = max(0, min(self.page, self._page_count() - 1))
+        return True
+
+    def _path_data(self) -> dict:
+        return self.info[self.path_ids[self.path_index]]
+
+    def _stops(self) -> list:
+        return self._path_data()["stops"]
+
+    def _path_name(self) -> str:
+        return self._path_data().get("name") or f"路徑 {self.path_ids[self.path_index]}"
+
+    def _page_count(self) -> int:
+        return max(1, -(-len(self._stops()) // PAGE_SIZE))
+
+    def _chunk(self) -> list:
+        return self._stops()[self.page * PAGE_SIZE:(self.page + 1) * PAGE_SIZE]
+
+    def _flat_pages(self) -> list[tuple[int, int]]:
+        """所有 (path_index, page) 的順序清單，讓左右按鈕可以跨路徑連續翻頁。"""
+        flat = []
+        for pi, pid in enumerate(self.path_ids):
+            pages = max(1, -(-len(self.info[pid]["stops"]) // PAGE_SIZE))
+            flat.extend((pi, pg) for pg in range(pages))
+        return flat
+
+    def build_embed(self) -> discord.Embed:
+        stops = self._stops()
+        pages = self._page_count()
+
+        lines = [f"### 🚏 {self._path_name()}"]
+        for stop in self._chunk():
+            eta_text, state = format_eta(stop)
+            seq = str(stop.get("sequence", "?")).rjust(2)
+            name = (stop.get("stop_name") or "未知站名").strip()
+            line = f"{ETA_EMOJIS[state]} `{seq}` {name} ─ {eta_text}"
+            buses = stop.get("bus") or []
+            if buses:
+                tags = " ".join(
+                    f"🚍`{b.get('id') or b.get('plate') or '?'}`" + ("（滿）" if int(b.get("full") or 0) == 1 else "")
+                    for b in buses
+                )
+                line += f"　{tags}"
+            lines.append(line)
+
+        description = ""
+        for line in lines:
+            if len(description) + len(line) + 1 > 4000:
+                description += "\n…"
+                break
+            description += ("\n" if description else "") + line
+
+        title = f"🚌 {self.route['route_name']}"
+        if self.route.get("description"):
+            title += f"（{self.route['description']}）"
+
+        embed = discord.Embed(title=title, description=description, color=0x3498DB)
+        embed.set_footer(text=f"第 {self.page + 1}/{pages} 頁 ・ 共 {len(stops)} 站 ・ 上次更新")
+        embed.timestamp = datetime.now(timezone.utc)
+        return embed
+
+    def rebuild_items(self):
+        self.clear_items()
+        single_page = len(self._flat_pages()) <= 1
+
+        prev_btn = discord.ui.Button(emoji="◀️", style=discord.ButtonStyle.secondary, row=0, disabled=single_page)
+        prev_btn.callback = self.on_prev_page
+        self.add_item(prev_btn)
+
+        path_btn = discord.ui.Button(
+            emoji="🚏",
+            label=_truncate(self._path_name(), 80),
+            style=discord.ButtonStyle.primary,
+            row=0,
+            disabled=len(self.path_ids) <= 1,
+        )
+        path_btn.callback = self.on_switch_path
+        self.add_item(path_btn)
+
+        next_btn = discord.ui.Button(emoji="▶️", style=discord.ButtonStyle.secondary, row=0, disabled=single_page)
+        next_btn.callback = self.on_next_page
+        self.add_item(next_btn)
+
+        refresh_btn = discord.ui.Button(emoji="🔄", style=discord.ButtonStyle.primary, row=0)
+        refresh_btn.callback = self.on_refresh
+        self.add_item(refresh_btn)
+
+        options = []
+        seen = set()
+        for stop in self._chunk():
+            value = str(stop["stop_id"])
+            if value in seen:
+                continue
+            seen.add(value)
+            eta_text, state = format_eta(stop)
+            name = (stop.get("stop_name") or "未知站名").strip()
+            options.append(discord.SelectOption(
+                label=_truncate(f"{stop.get('sequence', '?')}. {name}", 100),
+                description=_truncate(eta_text, 100),
+                value=value,
+                emoji=ETA_EMOJIS[state],
+            ))
+        self.stop_select = discord.ui.Select(
+            placeholder="🚏 選擇站牌查看到站資訊",
+            options=options,
+            min_values=1,
+            max_values=1,
+            row=1,
+        )
+        self.stop_select.callback = self.on_select_stop
+        self.add_item(self.stop_select)
+
+    async def _refresh_message(self, interaction: discord.Interaction):
+        await interaction.response.defer()
+        try:
+            if not await self.fetch():
+                await interaction.followup.send("找不到該路線的公車到站資訊。", ephemeral=True)
+                return
+            self.rebuild_items()
+            await interaction.edit_original_response(embed=self.build_embed(), view=self)
+        except Exception as e:
+            log(f"更新路線資訊時發生錯誤：{e}", level=logging.ERROR, module_name="TWBus", user=interaction.user, guild=interaction.guild)
+            traceback.print_exc()
+            try:
+                await interaction.followup.send(f"更新路線資訊時發生錯誤：{e}", ephemeral=True)
+            except Exception:
+                pass
+
+    async def _navigate(self, interaction: discord.Interaction, delta: int):
+        flat = self._flat_pages()
+        if flat:
+            try:
+                cur = flat.index((self.path_index, self.page))
+            except ValueError:
+                cur = 0
+            self.path_index, self.page = flat[(cur + delta) % len(flat)]
+        await self._refresh_message(interaction)
+
+    async def on_prev_page(self, interaction: discord.Interaction):
+        await self._navigate(interaction, -1)
+
+    async def on_next_page(self, interaction: discord.Interaction):
+        await self._navigate(interaction, 1)
+
+    async def on_switch_path(self, interaction: discord.Interaction):
+        if self.path_ids:
+            self.path_index = (self.path_index + 1) % len(self.path_ids)
+            self.page = 0
+        await self._refresh_message(interaction)
+
+    async def on_refresh(self, interaction: discord.Interaction):
+        await self._refresh_message(interaction)
+
+    async def on_select_stop(self, interaction: discord.Interaction):
+        await interaction.response.defer()
+        try:
+            stop_id = int(self.stop_select.values[0])
+            view = BusStopView(self.owner_id, self.route_key, stop_id)
+            if not await view.fetch():
+                await interaction.followup.send("找不到該站牌的到站資訊。", ephemeral=True)
+                return
+            view.rebuild_items()
+            await interaction.edit_original_response(embed=view.build_embed(), view=view)
+            view.message = interaction.message
+            self.stop()
+        except Exception as e:
+            log(f"切換至站牌資訊時發生錯誤：{e}", level=logging.ERROR, module_name="TWBus", user=interaction.user, guild=interaction.guild)
+            traceback.print_exc()
+            try:
+                await interaction.followup.send(f"發生錯誤：{e}", ephemeral=True)
+            except Exception:
+                pass
+
+
+class BusStopView(BaseBusView):
+    """站牌到站資訊：重整 / 最愛 / 地圖 + 上一站 / 下一站 / 路線總覽。"""
+
+    def __init__(self, owner_id: int, route_key: int, stop_id: int):
+        super().__init__(owner_id)
+        self.route_key = route_key
+        self.stop_id = stop_id
+        self.ctx: Optional[dict] = None
+        self.embed: Optional[discord.Embed] = None
+        self.map_url: Optional[str] = None
+
+    async def fetch(self) -> bool:
+        ctx = await asyncio.to_thread(fetch_stop_context, self.route_key, self.stop_id)
+        if not ctx:
+            return False
+        self.ctx = ctx
+        stops, index = ctx["stops"], ctx["index"]
+        prev_stop = (stops[index - 1].get("stop_name") or "").strip() if index > 0 else None
+        next_stop = (stops[index + 1].get("stop_name") or "").strip() if index < len(stops) - 1 else None
+        self.embed, self.map_url = make_bus_embed(ctx["stop"], prev_stop, next_stop)
+        return True
+
+    def build_embed(self) -> discord.Embed:
+        return self.embed
+
+    def rebuild_items(self):
+        self.clear_items()
+
+        refresh_btn = discord.ui.Button(emoji="🔄", style=discord.ButtonStyle.primary, row=0)
+        refresh_btn.callback = self.on_refresh
+        self.add_item(refresh_btn)
+
+        fav_btn = discord.ui.Button(emoji="❤️", style=discord.ButtonStyle.primary, row=0)
+        fav_btn.callback = self.on_favorite
+        self.add_item(fav_btn)
+
+        if self.map_url:
+            self.add_item(discord.ui.Button(emoji="🗺️", url=self.map_url, row=0))
+
+        index = self.ctx["index"] if self.ctx else 0
+        total = len(self.ctx["stops"]) if self.ctx else 0
+
+        prev_btn = discord.ui.Button(emoji="⬅️", label="上一站", style=discord.ButtonStyle.secondary, row=1, disabled=index <= 0)
+        prev_btn.callback = self.on_prev_stop
+        self.add_item(prev_btn)
+
+        next_btn = discord.ui.Button(emoji="➡️", label="下一站", style=discord.ButtonStyle.secondary, row=1, disabled=index >= total - 1)
+        next_btn.callback = self.on_next_stop
+        self.add_item(next_btn)
+
+        route_btn = discord.ui.Button(emoji="🚌", label="路線總覽", style=discord.ButtonStyle.secondary, row=1)
+        route_btn.callback = self.on_route_overview
+        self.add_item(route_btn)
+
+    async def _goto(self, interaction: discord.Interaction, stop_id: int):
+        await interaction.response.defer()
+        old_stop_id = self.stop_id
+        self.stop_id = stop_id
+        try:
+            if not await self.fetch():
+                self.stop_id = old_stop_id
+                await interaction.followup.send("找不到該站牌的到站資訊。", ephemeral=True)
+                return
+            self.rebuild_items()
+            await interaction.edit_original_response(embed=self.build_embed(), view=self)
+        except Exception as e:
+            self.stop_id = old_stop_id
+            log(f"更新站牌資訊時發生錯誤：{e}", level=logging.ERROR, module_name="TWBus", user=interaction.user, guild=interaction.guild)
+            traceback.print_exc()
+            try:
+                await interaction.followup.send(f"更新站牌資訊時發生錯誤：{e}", ephemeral=True)
+            except Exception:
+                pass
+
+    async def on_refresh(self, interaction: discord.Interaction):
+        await self._goto(interaction, self.stop_id)
+
+    async def on_prev_stop(self, interaction: discord.Interaction):
+        if not self.ctx or self.ctx["index"] <= 0:
+            await interaction.response.defer()
+            return
+        await self._goto(interaction, self.ctx["stops"][self.ctx["index"] - 1]["stop_id"])
+
+    async def on_next_stop(self, interaction: discord.Interaction):
+        if not self.ctx or self.ctx["index"] >= len(self.ctx["stops"]) - 1:
+            await interaction.response.defer()
+            return
+        await self._goto(interaction, self.ctx["stops"][self.ctx["index"] + 1]["stop_id"])
+
+    async def on_route_overview(self, interaction: discord.Interaction):
+        await interaction.response.defer()
+        try:
+            view = BusRouteView(
+                self.owner_id,
+                self.route_key,
+                self.ctx["route"],
+                path_id=self.ctx["path_id"],
+                page=self.ctx["index"] // PAGE_SIZE,
+            )
+            if not await view.fetch():
+                await interaction.followup.send("找不到該路線的公車到站資訊。", ephemeral=True)
+                return
+            view.rebuild_items()
+            await interaction.edit_original_response(embed=view.build_embed(), view=view)
+            view.message = interaction.message
+            self.stop()
+        except Exception as e:
+            log(f"切換至路線總覽時發生錯誤：{e}", level=logging.ERROR, module_name="TWBus", user=interaction.user, guild=interaction.guild)
+            traceback.print_exc()
+            try:
+                await interaction.followup.send(f"發生錯誤：{e}", ephemeral=True)
+            except Exception:
+                pass
+
+    async def on_favorite(self, interaction: discord.Interaction):
+        user_id = str(interaction.user.id)
+        stop_identifier = f"{self.route_key}:{self.stop_id}"
+        stop_name = (self.ctx or {}).get("stop", {}).get("stop_name", "Unknown Stop")
+        fav_stops = get_user_data(0, user_id, "favorite_stops", [])
+        fav_limit = get_user_data(0, user_id, "favorite_stops_limit", config("default_favorite_stops_limit", 2))
+
+        if stop_identifier not in fav_stops and len(fav_stops) >= fav_limit:
+            await interaction.response.send_message(f"你最多只能有 {fav_limit} 個最愛站牌。", ephemeral=True)
+            return
+
+        if stop_identifier in fav_stops:
+            fav_stops.remove(stop_identifier)
+            action = "已從最愛移除"
+        else:
+            fav_stops.append(stop_identifier)
+            action = "已加入最愛"
+
+        set_user_data(0, user_id, "favorite_stops", fav_stops)
+        await interaction.response.send_message(f"{action} 站牌：{stop_name}", ephemeral=True)
+
+
 async def bus_route_autocomplete(interaction: discord.Interaction, current: str):
     routes = busapi.fetch_routes_by_name(current)
     return [
@@ -139,7 +576,13 @@ async def get_stop_autocomplete(interaction: discord.Interaction, current: str):
         return []
     stops = busapi.fetch_stops_by_route(int(route_key))
     paths = busapi.fetch_paths(int(route_key))
-    choices =  [(f"[{next(path['path_name'] for path in paths if path['path_id'] == stop['path_id'])}] {stop['stop_name']}", str(stop['stop_id'])) for stop in stops]
+    choices = [
+        (
+            f"[{next((path['path_name'] for path in paths if path['path_id'] == stop['path_id']), '?')}] {stop['stop_name']}",
+            str(stop['stop_id'])
+        )
+        for stop in stops
+    ]
     filtered = [app_commands.Choice(name=name, value=value) for name, value in choices if current in name][:25]
     return filtered
 
@@ -307,7 +750,7 @@ def make_youbike_text(station: dict) -> tuple[str]:
     return title, content
 
 
-def make_bus_embed(payload: dict) -> tuple[discord.Embed, Optional[str]]:
+def make_bus_embed(payload: dict, prev_stop: Optional[str] = None, next_stop: Optional[str] = None) -> tuple[discord.Embed, Optional[str]]:
     """
     將公車到站資料（例如 taiwanbus searchstop 回傳的單筆資料）轉為 discord.Embed。
     回傳 (embed, map_url_or_None)
@@ -316,75 +759,56 @@ def make_bus_embed(payload: dict) -> tuple[discord.Embed, Optional[str]]:
     path_name = payload.get("path_name") or payload.get("path") or ""
     stop_name = payload.get("stop_name") or payload.get("stop") or "Unknown Stop"
 
-    title = f"{route_name}"
-    if path_name:
-        title = f"{title} — {path_name}"
-
-    # sec: 0 = approaching, <0 show msg, >0 seconds? depends on API
-    sec = payload.get("sec")
-    msg = payload.get("msg")
-
-    # 解析 upcoming times 字串（例如 "5,10"）
-    sec = payload.get("sec")
-    if sec < 0:
-        time_str = None
-    elif sec < 60 and sec > 0:
-        time_str = f"{sec}秒"
-    else:
-        time_str = f"{sec // 60}分 {sec % 60}秒"
-
-    # bus list
+    eta_text, state = format_eta(payload)
+    bus_lines = format_stop_buses(payload)
     buses = payload.get("bus") or []
-    bus_lines = []
-    any_full = False
-    for b in buses:
-        bid = b.get("id") or b.get("plate") or "?"
+    all_full = bool(buses) and all(int(b.get("full") or 0) == 1 for b in buses)
 
-        full = int(b.get("full") or 0)
-        any_full = any_full or (full == 1)
-        status = "已滿" if full == 1 else "可上車"
-        bus_lines.append(f"`{bid}`: {status}")
+    # 顏色：全部滿載紅色，其餘依到站狀態
+    if all_full:
+        color = discord.Color.red()
+    else:
+        color = {
+            "approaching": discord.Color.green(),
+            "soon": discord.Color.orange(),
+            "time": discord.Color.blue(),
+            "scheduled": discord.Color.gold(),
+            "msg": discord.Color.gold(),
+            "none": discord.Color.greyple(),
+        }.get(state, discord.Color.greyple())
 
-    # 決定顏色：若進站中 (sec == 0) -> 綠；若全部已滿 -> 紅；若 sec < 0 則用金色顯示 msg；預設綠色
-    try:
-        if sec == 0:
-            color = discord.Color.green()
-        elif any_full and not time_str:
-            color = discord.Color.red()
-        elif sec is not None and isinstance(sec, (int, float)) and sec < 0:
-            color = discord.Color.gold()
-        else:
-            color = discord.Color.green()
-    except Exception:
-        color = discord.Color.greyple()
+    title = f"🚌 {route_name}"
+    if path_name:
+        title += f"｜{path_name}"
 
     embed = discord.Embed(title=title, color=color)
-    embed.description = stop_name
+    embed.description = f"### 🚏 {stop_name}"
 
-    # 顯示靠近狀態或時間訊息
-    if not msg and sec <= 0:
-        embed.add_field(name="到站狀態", value="進站中", inline=True)
-    elif sec is not None and isinstance(sec, (int, float)) and sec < 0 and msg:
-        # check msg is **:**
-        if isinstance(msg, str) and ":" in msg:
-            embed.add_field(name="預計到站", value=str(msg), inline=True)
-        else:
-            embed.add_field(name="訊息", value=str(msg), inline=True)
-    elif time_str:
-        embed.add_field(name="預估到站", value=time_str, inline=True)
+    # 到站資訊
+    if state == "approaching":
+        embed.add_field(name="到站狀態", value=f"{ETA_EMOJIS[state]} 進站中", inline=True)
+    elif state == "scheduled":
+        embed.add_field(name="預計到站", value=f"{ETA_EMOJIS[state]} {eta_text}", inline=True)
+    elif state == "msg":
+        embed.add_field(name="訊息", value=f"{ETA_EMOJIS[state]} {eta_text}", inline=True)
+    elif state == "none":
+        embed.add_field(name="到站狀態", value=f"{ETA_EMOJIS[state]} 暫無資料", inline=True)
+    else:
+        embed.add_field(name="預估到站", value=f"{ETA_EMOJIS[state]} {eta_text}", inline=True)
 
-    # 其他欄位
     sequence = payload.get("sequence")
     if sequence is not None:
         embed.add_field(name="站序", value=str(sequence), inline=True)
 
-    # 加入到站資訊
+    # 車輛狀態
     if bus_lines:
-        embed.add_field(name="車輛狀態", value="\n".join(bus_lines), inline=False)
+        embed.add_field(name="車輛狀態", value=_truncate("\n".join(bus_lines), 1024), inline=False)
 
-    # stop_id = payload.get("stop_id")
-    # if stop_id:
-    #     embed.set_footer(text=f"站牌ID: {stop_id}")
+    # 相鄰站牌
+    if prev_stop is not None or next_stop is not None:
+        embed.add_field(name="⬅️ 上一站", value=prev_stop or "─（起點）", inline=True)
+        embed.add_field(name="下一站 ➡️", value=next_stop or "─（終點）", inline=True)
+
     embed.set_footer(text="上次更新")
     embed.timestamp = datetime.now(timezone.utc)
 
@@ -404,31 +828,16 @@ def make_bus_embed(payload: dict) -> tuple[discord.Embed, Optional[str]]:
     return embed, map_url
 
 
-def make_bus_text(payload: dict) -> tuple[str]:
+def make_bus_text(payload: dict) -> tuple[str, str]:
     """
     將公車到站資料（例如 taiwanbus searchstop 回傳的單筆資料）轉為純文字描述。
     僅到站時間。
     """
     title = f"公車/{payload.get('route_name', 'Unknown Route')}[{payload.get('path_name', 'Unknown Path')}] - {payload.get('stop_name', 'Unknown Stop')}"
-    text = ""
-    if payload.get("msg"):
-        text = payload["msg"]
-    elif payload.get("sec") and int(payload["sec"]) >= 0:
-        sec = int(payload["sec"])
-        if sec < 60:
-            text = f"{sec}秒"
-        else:
-            text = f"還有 {sec // 60} 分 {sec % 60} 秒"
-    else:
-        text = "進站中"
-    
-    if payload.get("bus"):
-        bus_lines = []
-        for b in payload["bus"]:
-            bid = b.get("id") or b.get("plate") or "?"
-            full = int(b.get("full") or 0)
-            status = "已滿" if full == 1 else "可上車"
-            bus_lines.append(f"`{bid}`: {status}")
+    text, _ = format_eta(payload)
+
+    bus_lines = format_stop_buses(payload)
+    if bus_lines:
         text += "\n車輛狀態：\n" + "\n".join(bus_lines)
     return title, text
 
@@ -451,23 +860,22 @@ class TWBus(commands.GroupCog, name=app_commands.locale_str("bus")):
 
         route_key_int = int(route_key)
         try:
-            info = busapi.get_complete_bus_info(route_key_int)
-            route = busapi.fetch_route(route_key_int)[0]
-            if not info:
+            routes = await asyncio.to_thread(busapi.fetch_route, route_key_int)
+            if not routes:
+                await interaction.followup.send("找不到該路線。", ephemeral=True)
+                return
+
+            view = BusRouteView(interaction.user.id, route_key_int, routes[0])
+            if not await view.fetch():
                 await interaction.followup.send("找不到該路線的公車到站資訊。", ephemeral=True)
                 return
 
-            formated = busapi.format_bus_info(info)
-            embed = discord.Embed(
-                title=f"{route['route_name']} ({route['description']})",
-                description=formated,
-                color=0x00ff00
-            )
-            await interaction.followup.send(embed=embed)
+            view.rebuild_items()
+            view.message = await interaction.followup.send(embed=view.build_embed(), view=view)
         except Exception as e:
             await interaction.followup.send(f"發生錯誤：{e}", ephemeral=True)
             traceback.print_exc()
-            
+
     @app_commands.command(name=app_commands.locale_str("getstop"), description="查詢指定的站牌")
     @app_commands.describe(route_key="路線ID", stop_id="站牌ID")
     @app_commands.autocomplete(route_key=bus_route_autocomplete, stop_id=get_stop_autocomplete)
@@ -480,40 +888,13 @@ class TWBus(commands.GroupCog, name=app_commands.locale_str("bus")):
         stop_id_int = int(stop_id)
 
         try:
-            stop_info = fetch_stop_info(route_key_int, stop_id_int)
-            if not stop_info:
+            view = BusStopView(interaction.user.id, route_key_int, stop_id_int)
+            if not await view.fetch():
                 await interaction.followup.send("找不到該站牌的到站資訊。", ephemeral=True)
                 return
 
-            embed, map_url = make_bus_embed(stop_info)
-
-            # Refresh callback
-            async def refresh():
-                info = fetch_stop_info(route_key_int, stop_id_int)
-                return make_bus_embed(info)
-
-            # Favorite callback
-            async def toggle_favorite(user_id: str):
-                fav_stops = get_user_data(0, user_id, "favorite_stops", [])
-                stop_identifier = f"{route_key_int}:{stop_id_int}"
-                fav_limit = get_user_data(0, user_id, "favorite_stops_limit", config("default_favorite_stops_limit", 2))
-
-                if stop_identifier not in fav_stops and len(fav_stops) >= fav_limit:
-                    raise ValueError(f"你最多只能有 {fav_limit} 個最愛站牌。")
-
-                if stop_identifier in fav_stops:
-                    fav_stops.remove(stop_identifier)
-                    action = "已從最愛移除"
-                else:
-                    fav_stops.append(stop_identifier)
-                    action = "已加入最愛"
-
-                set_user_data(0, user_id, "favorite_stops", fav_stops)
-                return f"{action} 站牌：{stop_info.get('stop_name', 'Unknown Stop')}"
-
-            view = GenericActionsView(interaction, map_url, refresh, toggle_favorite, stop_info.get('stop_name', 'Unknown Stop'))
-            await interaction.followup.send(embed=embed, view=view)
-
+            view.rebuild_items()
+            view.message = await interaction.followup.send(embed=view.build_embed(), view=view)
         except Exception as e:
             await interaction.followup.send(f"發生錯誤：{e}", ephemeral=True)
             traceback.print_exc()
@@ -563,7 +944,7 @@ class TWBus(commands.GroupCog, name=app_commands.locale_str("bus")):
         except Exception as e:
             await interaction.followup.send(f"發生錯誤：{e}", ephemeral=True)
             traceback.print_exc()
-    
+
     @app_commands.command(name=app_commands.locale_str("favorites"), description="你的最愛站牌與YouBike站點")
     @rate_limit(10)
     async def favorites(self, interaction: discord.Interaction):
@@ -645,22 +1026,27 @@ class TWBus(commands.GroupCog, name=app_commands.locale_str("bus")):
                         await interaction.response.send_message("你無權限使用此選單。", ephemeral=True)
                         return
 
+                    await interaction.response.defer()
                     value = select.values[0]
                     try:
                         category, identifier = value.split("/", 1)
                         if category == "bus":
                             route_key, stop_id = identifier.split(":")
-                            route_key_int = int(route_key)
-                            stop_id_int = int(stop_id)
-                            stop_info = fetch_stop_info(route_key_int, stop_id_int)
-                            embed, map_url = make_bus_embed(stop_info)
-                            await interaction.response.send_message(embed=embed)
+                            stop_view = BusStopView(interaction.user.id, int(route_key), int(stop_id))
+                            if not await stop_view.fetch():
+                                await interaction.followup.send("找不到該站牌的到站資訊。", ephemeral=True)
+                                return
+                            stop_view.rebuild_items()
+                            stop_view.message = await interaction.followup.send(embed=stop_view.build_embed(), view=stop_view)
                         elif category == "youbike":
-                            info = youbike.getstationbyid(identifier)
+                            info = await asyncio.to_thread(youbike.getstationbyid, identifier)
                             embed, map_url = make_youbike_embed(info)
-                            await interaction.response.send_message(embed=embed)
+                            await interaction.followup.send(embed=embed)
                     except Exception as e:
-                        await interaction.response.send_message(f"載入最愛項目時發生錯誤：{e}", ephemeral=True)
+                        try:
+                            await interaction.followup.send(f"載入最愛項目時發生錯誤：{e}", ephemeral=True)
+                        except Exception:
+                            pass
                         log(f"載入最愛項目時發生錯誤：{e}", level=logging.ERROR, module_name="TWBus", user=interaction.user, guild=interaction.guild)
                         traceback.print_exc()
 
