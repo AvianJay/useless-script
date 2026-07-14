@@ -1221,8 +1221,108 @@ class HandView(discord.ui.View):
 
 
 # -----------------------------
-# Scratchcard / Slots / HighLow / Blackjack Views
+# Dice / Coinflip / Scratchcard / Slots / HighLow / Blackjack Views
 # -----------------------------
+
+
+class DiceChoiceView(discord.ui.View):
+    def __init__(self, cog: "MiniGamesCog", user_id: int, guild_id: int, bet: float):
+        super().__init__(timeout=60)
+        self.cog = cog
+        self.user_id = user_id
+        self.guild_id = guild_id
+        self.bet = bet
+        self.message = None
+        self.resolved = False
+        self.lock = asyncio.Lock()
+
+        for guess, face in enumerate(("⚀", "⚁", "⚂", "⚃", "⚄", "⚅"), start=1):
+            button = discord.ui.Button(
+                label=f"{face} {guess}",
+                style=discord.ButtonStyle.primary,
+                row=0 if guess <= 3 else 1,
+            )
+
+            async def callback(interaction: discord.Interaction, value: int = guess):
+                await self.cog.play_dice_choice(interaction, self, value)
+
+            button.callback = callback
+            self.add_item(button)
+
+    async def on_timeout(self):
+        if self.resolved:
+            return
+        for child in self.children:
+            child.disabled = True
+        if self.message is not None:
+            try:
+                await self.message.edit(view=self)
+            except (discord.NotFound, discord.HTTPException):
+                pass
+        self.stop()
+
+
+class CoinflipChoiceView(discord.ui.View):
+    def __init__(self, cog: "MiniGamesCog", user_id: int, guild_id: int, bet: float):
+        super().__init__(timeout=60)
+        self.cog = cog
+        self.user_id = user_id
+        self.guild_id = guild_id
+        self.bet = bet
+        self.message = None
+        self.resolved = False
+        self.lock = asyncio.Lock()
+
+    @discord.ui.button(label="正面", emoji="🪙", style=discord.ButtonStyle.primary)
+    async def heads_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await self.cog.play_coinflip_choice(interaction, self, "heads")
+
+    @discord.ui.button(label="反面", emoji="🌙", style=discord.ButtonStyle.primary)
+    async def tails_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await self.cog.play_coinflip_choice(interaction, self, "tails")
+
+    async def on_timeout(self):
+        if self.resolved:
+            return
+        for child in self.children:
+            child.disabled = True
+        if self.message is not None:
+            try:
+                await self.message.edit(view=self)
+            except (discord.NotFound, discord.HTTPException):
+                pass
+        self.stop()
+
+
+class BetAgainView(discord.ui.View):
+    def __init__(self, cog: "MiniGamesCog", game_type: str, user_id: int, guild_id: int, bet: float):
+        super().__init__(timeout=60)
+        self.cog = cog
+        self.game_type = game_type
+        self.user_id = user_id
+        self.guild_id = guild_id
+        self.bet = bet
+        self.message = None
+
+    @discord.ui.button(label="再賭一次", emoji="🔁", style=discord.ButtonStyle.success)
+    async def again_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if interaction.user.id != self.user_id:
+            return await interaction.response.send_message("這不是你的遊戲。", ephemeral=True)
+        if self.game_type == "dice":
+            await self.cog.show_dice_choices(interaction, self.guild_id, self.bet, edit=True)
+        else:
+            await self.cog.show_coinflip_choices(interaction, self.guild_id, self.bet, edit=True)
+        self.stop()
+
+    async def on_timeout(self):
+        for child in self.children:
+            child.disabled = True
+        if self.message is not None:
+            try:
+                await self.message.edit(view=self)
+            except (discord.NotFound, discord.HTTPException):
+                pass
+        self.stop()
 
 
 class ScratchcardView(discord.ui.View):
@@ -1876,150 +1976,206 @@ class MiniGamesCog(commands.GroupCog, group_name="games", description="迷你遊
             pass
 
     @app_commands.command(name="dice", description="骰子遊戲：猜中 1～6 的點數")
-    @app_commands.describe(
-        bet="賭注金額（50～2000）",
-        guess="猜測骰子點數（1～6）",
-        use_global="是否使用全域幣（預設依伺服器設定）",
-    )
-    async def dice(
-        self,
-        interaction: discord.Interaction,
-        bet: int,
-        guess: app_commands.Range[int, 1, 6],
-        use_global: bool = False,
-    ):
+    @app_commands.describe(bet="賭注金額（50～2000）")
+    async def dice(self, interaction: discord.Interaction, bet: int):
         err = self._validate_bet(bet)
         if err:
             return await interaction.response.send_message(err, ephemeral=True)
-        guild_id = resolve_game_guild_id(interaction, use_global)
+        guild_id = resolve_game_guild_id(interaction)
+        await self.show_dice_choices(interaction, guild_id, float(bet), edit=False)
+
+    async def show_dice_choices(
+        self,
+        interaction: discord.Interaction,
+        guild_id: int,
+        bet: float,
+        edit: bool,
+    ):
         currency = get_currency_name(guild_id)
-        if not self._charge_bet(
-            interaction,
-            guild_id,
-            float(bet),
-            "骰子下注",
-            "dice_bet",
-            f"猜 {int(guess)}，下注 {bet:,.0f} {currency}",
-        ):
-            balance = get_balance(guild_id, interaction.user.id)
-            return await interaction.response.send_message(
-                f"❌ 餘額不足！\n你的餘額：**{balance:,.0f}** {currency}\n所需賭注：**{bet:,.0f}** {currency}",
-                ephemeral=True,
-            )
+        embed = discord.Embed(
+            title="🎲 骰子遊戲",
+            description="選擇你要猜的骰子點數。",
+            color=discord.Color.blurple(),
+        )
+        embed.set_footer(text=f"下注：{bet:,.0f} {currency}｜按下點數後才會扣款")
+        view = DiceChoiceView(self, interaction.user.id, guild_id, bet)
+        if edit:
+            await interaction.response.edit_message(embed=embed, view=view)
+        else:
+            await interaction.response.send_message(embed=embed, view=view)
+        view.message = await interaction.original_response()
 
-        result = random.randint(1, 6)
-        won = result == int(guess)
-        payout = round(bet * 5.7, 2) if won else 0.0
-        if payout:
-            self._pay_out(
-                guild_id,
-                interaction.user.id,
-                payout,
-                "骰子派彩",
-                "dice_payout",
-                f"猜中點數 {result}，倍率 x5.70",
-                interaction=interaction,
-            )
+    async def play_dice_choice(
+        self,
+        interaction: discord.Interaction,
+        view: DiceChoiceView,
+        guess: int,
+    ):
+        if interaction.user.id != view.user_id:
+            return await interaction.response.send_message("這不是你的遊戲。", ephemeral=True)
+        async with view.lock:
+            if view.resolved:
+                return await interaction.response.send_message("這局已經結算。", ephemeral=True)
+            currency = get_currency_name(view.guild_id)
+            if not self._charge_bet(
+                interaction,
+                view.guild_id,
+                view.bet,
+                "骰子下注",
+                "dice_bet",
+                f"猜 {guess}，下注 {view.bet:,.0f} {currency}",
+            ):
+                balance = get_balance(view.guild_id, interaction.user.id)
+                return await interaction.response.send_message(
+                    f"❌ 餘額不足！\n你的餘額：**{balance:,.0f}** {currency}\n所需賭注：**{view.bet:,.0f}** {currency}",
+                    ephemeral=True,
+                )
 
-        await interaction.response.send_message(
-            embed=discord.Embed(title="🎲 骰子遊戲", description="骰子滾動中……", color=discord.Color.blurple())
+            result = random.randint(1, 6)
+            won = result == guess
+            payout = round(view.bet * 5.7, 2) if won else 0.0
+            if payout:
+                self._pay_out(
+                    view.guild_id,
+                    interaction.user.id,
+                    payout,
+                    "骰子派彩",
+                    "dice_payout",
+                    f"猜中點數 {result}，倍率 x5.70",
+                    interaction=interaction,
+                )
+            view.resolved = True
+            view.stop()
+
+        await interaction.response.edit_message(
+            embed=discord.Embed(title="🎲 骰子遊戲", description="骰子滾動中……", color=discord.Color.blurple()),
+            view=None,
         )
         message = await interaction.original_response()
+
         await asyncio.sleep(1.0)
         if won:
             text = (
-                f"你猜：**{int(guess)}**｜骰子：# **{result}**\n\n🎉 **猜中了！**\n"
-                f"派彩：**{payout:,.2f}** {currency}（+{payout - bet:,.2f}）"
+                f"你猜：**{guess}**｜骰子：# **{result}**\n\n🎉 **猜中了！**\n"
+                f"派彩：**{payout:,.2f}** {currency}（+{payout - view.bet:,.2f}）"
             )
             color = discord.Color.green()
         else:
             text = (
-                f"你猜：**{int(guess)}**｜骰子：# **{result}**\n\n💥 **猜錯了！** "
-                f"損失 **{bet:,.0f}** {currency}"
+                f"你猜：**{guess}**｜骰子：# **{result}**\n\n💥 **猜錯了！** "
+                f"損失 **{view.bet:,.0f}** {currency}"
             )
             color = discord.Color.red()
-        text += f"\n新餘額：**{get_balance(guild_id, interaction.user.id):,.2f}** {currency}"
+        text += f"\n新餘額：**{get_balance(view.guild_id, interaction.user.id):,.2f}** {currency}"
         embed = discord.Embed(title="🎲 骰子遊戲", description=text, color=color)
-        embed.set_footer(text=f"下注：{bet:,.0f} {currency}｜猜中倍率 x5.70")
+        embed.set_footer(text=f"下注：{view.bet:,.0f} {currency}｜猜中倍率 x5.70")
+        again_view = BetAgainView(self, "dice", interaction.user.id, view.guild_id, view.bet)
         try:
-            await message.edit(embed=embed)
+            await message.edit(embed=embed, view=again_view)
+            again_view.message = message
         except (discord.NotFound, discord.HTTPException):
             pass
 
     @app_commands.command(name="coinflip", description="擲硬幣：猜正面或反面")
-    @app_commands.describe(
-        bet="賭注金額（50～2000）",
-        side="選擇正面或反面",
-        use_global="是否使用全域幣（預設依伺服器設定）",
-    )
-    @app_commands.choices(side=[
-        app_commands.Choice(name="正面", value="heads"),
-        app_commands.Choice(name="反面", value="tails"),
-    ])
-    async def coinflip(
-        self,
-        interaction: discord.Interaction,
-        bet: int,
-        side: app_commands.Choice[str],
-        use_global: bool = False,
-    ):
+    @app_commands.describe(bet="賭注金額（50～2000）")
+    async def coinflip(self, interaction: discord.Interaction, bet: int):
         err = self._validate_bet(bet)
         if err:
             return await interaction.response.send_message(err, ephemeral=True)
-        guild_id = resolve_game_guild_id(interaction, use_global)
+        guild_id = resolve_game_guild_id(interaction)
+        await self.show_coinflip_choices(interaction, guild_id, float(bet), edit=False)
+
+    async def show_coinflip_choices(
+        self,
+        interaction: discord.Interaction,
+        guild_id: int,
+        bet: float,
+        edit: bool,
+    ):
         currency = get_currency_name(guild_id)
-        side_label = "正面" if side.value == "heads" else "反面"
-        if not self._charge_bet(
-            interaction,
-            guild_id,
-            float(bet),
-            "擲硬幣下注",
-            "coinflip_bet",
-            f"選擇 {side_label}，下注 {bet:,.0f} {currency}",
-        ):
-            balance = get_balance(guild_id, interaction.user.id)
-            return await interaction.response.send_message(
-                f"❌ 餘額不足！\n你的餘額：**{balance:,.0f}** {currency}\n所需賭注：**{bet:,.0f}** {currency}",
-                ephemeral=True,
-            )
+        embed = discord.Embed(
+            title="🪙 擲硬幣",
+            description="選擇 **正面** 或 **反面**。",
+            color=discord.Color.blurple(),
+        )
+        embed.set_footer(text=f"下注：{bet:,.0f} {currency}｜按下選項後才會扣款")
+        view = CoinflipChoiceView(self, interaction.user.id, guild_id, bet)
+        if edit:
+            await interaction.response.edit_message(embed=embed, view=view)
+        else:
+            await interaction.response.send_message(embed=embed, view=view)
+        view.message = await interaction.original_response()
 
-        result = random.choice(("heads", "tails"))
-        won = result == side.value
-        payout = round(bet * 1.9, 2) if won else 0.0
-        result_label = "正面" if result == "heads" else "反面"
-        if payout:
-            self._pay_out(
-                guild_id,
-                interaction.user.id,
-                payout,
-                "擲硬幣派彩",
-                "coinflip_payout",
-                f"選擇 {side_label}，開出 {result_label}，倍率 x1.90",
-                interaction=interaction,
-            )
+    async def play_coinflip_choice(
+        self,
+        interaction: discord.Interaction,
+        view: CoinflipChoiceView,
+        side: str,
+    ):
+        if interaction.user.id != view.user_id:
+            return await interaction.response.send_message("這不是你的遊戲。", ephemeral=True)
+        side_label = "正面" if side == "heads" else "反面"
+        async with view.lock:
+            if view.resolved:
+                return await interaction.response.send_message("這局已經結算。", ephemeral=True)
+            currency = get_currency_name(view.guild_id)
+            if not self._charge_bet(
+                interaction,
+                view.guild_id,
+                view.bet,
+                "擲硬幣下注",
+                "coinflip_bet",
+                f"選擇 {side_label}，下注 {view.bet:,.0f} {currency}",
+            ):
+                balance = get_balance(view.guild_id, interaction.user.id)
+                return await interaction.response.send_message(
+                    f"❌ 餘額不足！\n你的餘額：**{balance:,.0f}** {currency}\n所需賭注：**{view.bet:,.0f}** {currency}",
+                    ephemeral=True,
+                )
 
-        await interaction.response.send_message(
-            embed=discord.Embed(title="🪙 擲硬幣", description="硬幣翻轉中……", color=discord.Color.blurple())
+            result = random.choice(("heads", "tails"))
+            won = result == side
+            payout = round(view.bet * 1.9, 2) if won else 0.0
+            result_label = "正面" if result == "heads" else "反面"
+            if payout:
+                self._pay_out(
+                    view.guild_id,
+                    interaction.user.id,
+                    payout,
+                    "擲硬幣派彩",
+                    "coinflip_payout",
+                    f"選擇 {side_label}，開出 {result_label}，倍率 x1.90",
+                    interaction=interaction,
+                )
+            view.resolved = True
+            view.stop()
+
+        await interaction.response.edit_message(
+            embed=discord.Embed(title="🪙 擲硬幣", description="硬幣翻轉中……", color=discord.Color.blurple()),
+            view=None,
         )
         message = await interaction.original_response()
+
         await asyncio.sleep(1.0)
         if won:
             text = (
                 f"你選：**{side_label}**｜結果：# **{result_label}**\n\n🎉 **猜中了！**\n"
-                f"派彩：**{payout:,.2f}** {currency}（+{payout - bet:,.2f}）"
+                f"派彩：**{payout:,.2f}** {currency}（+{payout - view.bet:,.2f}）"
             )
             color = discord.Color.green()
         else:
             text = (
                 f"你選：**{side_label}**｜結果：# **{result_label}**\n\n💥 **猜錯了！** "
-                f"損失 **{bet:,.0f}** {currency}"
+                f"損失 **{view.bet:,.0f}** {currency}"
             )
             color = discord.Color.red()
-        text += f"\n新餘額：**{get_balance(guild_id, interaction.user.id):,.2f}** {currency}"
+        text += f"\n新餘額：**{get_balance(view.guild_id, interaction.user.id):,.2f}** {currency}"
         embed = discord.Embed(title="🪙 擲硬幣", description=text, color=color)
-        embed.set_footer(text=f"下注：{bet:,.0f} {currency}｜猜中倍率 x1.90")
+        embed.set_footer(text=f"下注：{view.bet:,.0f} {currency}｜猜中倍率 x1.90")
+        again_view = BetAgainView(self, "coinflip", interaction.user.id, view.guild_id, view.bet)
         try:
-            await message.edit(embed=embed)
+            await message.edit(embed=embed, view=again_view)
+            again_view.message = message
         except (discord.NotFound, discord.HTTPException):
             pass
 

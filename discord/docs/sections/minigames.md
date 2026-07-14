@@ -10,8 +10,8 @@
 | `/games highlow` | 比大小 — 猜下一張牌較大或較小 |
 | `/games blackjack` | 21 點 — 對抗莊家，可要牌、停牌或加倍 |
 | `/games roulette` | 俄羅斯輪盤 — 投注紅黑、單雙、大小或單一號碼 |
-| `/games dice` | 骰子 — 猜中 1～6 的點數 |
-| `/games coinflip` | 擲硬幣 — 猜正面或反面 |
+| `/games dice` | 骰子 — 下注後用按鈕選擇 1～6 的點數 |
+| `/games coinflip` | 擲硬幣 — 下注後用按鈕選擇正面或反面 |
 | `/games scratchcard` | 刮刮樂 — 刮開 3x3 票面取得隨機獎項 |
 | `/games lottery` | 累積彩票 — 購買 00～99 號碼或查看每輪 60 分鐘獎池 |
 | `/games doom` | 在 Discord 內遊玩 DOOM |
