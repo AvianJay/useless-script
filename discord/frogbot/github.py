@@ -1,6 +1,17 @@
+import re
 import aiohttp
 import discord
 from discord.ext import commands
+
+HIDDEN_SECTION_PATTERN = re.compile(
+    r'<!--\s*YABUS_RELEASE_DOWNLOAD_TABLE_START\s*-->.*?<!--\s*YABUS_RELEASE_DOWNLOAD_TABLE_END\s*-->',
+    re.DOTALL,
+)
+
+def strip_hidden_sections(text):
+    text = HIDDEN_SECTION_PATTERN.sub('', text)
+    text = re.sub(r'(?:\r?\n){3,}', '\n\n', text)
+    return text.strip()
 
 class GitHub(commands.Cog):
     def __init__(self, bot):
@@ -68,7 +79,7 @@ class GitHub(commands.Cog):
             return
 
         title = data.get('name') or data.get('tag_name') or 'GitHub Release'
-        description = data.get('body') or 'No description available'
+        description = strip_hidden_sections(data.get('body') or '') or 'No description available'
         if len(description) > 4096:
             description = f"{description[:4093].rstrip()}..."
 
