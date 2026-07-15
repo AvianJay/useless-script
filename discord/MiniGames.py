@@ -30,7 +30,6 @@ from casino_rules import (
     HL_MAX_MULT,
     HL_RANK_NAMES,
     LOTTERY_CONFIG_KEY,
-    LOTTERY_DRAW_DELAY,
     LOTTERY_PAYOUT_RATIO,
     ROULETTE_BET_LABELS,
     ROULETTE_RED_NUMBERS,
@@ -58,6 +57,7 @@ from casino_rules import (
     hl_probs,
     hl_rank_name,
     normalize_lottery_state,
+    next_lottery_draw_at,
     parse_lottery_draw_at,
     play_coinflip,
     play_dice,
@@ -2201,7 +2201,7 @@ class MiniGamesCog(commands.GroupCog, group_name="games", description="迷你遊
 
             now = datetime.now(timezone.utc)
             if draw_at is None or not state.get("round_id"):
-                draw_at = now + LOTTERY_DRAW_DELAY
+                draw_at = next_lottery_draw_at(now)
                 state["draw_at"] = draw_at.isoformat()
                 state["round_id"] = uuid.uuid4().hex
 

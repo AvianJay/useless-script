@@ -39,7 +39,6 @@ SCRATCH_PRIZE_TABLE = [
 SCRATCH_SYMBOLS = ["🍋", "🍒", "🔔", "7️⃣", "💎", "⭐"]
 
 LOTTERY_CONFIG_KEY = "minigames_lottery_state"
-LOTTERY_DRAW_DELAY = timedelta(hours=1)
 LOTTERY_PAYOUT_RATIO = 0.95
 
 TOWER_LEVELS = 5
@@ -250,6 +249,14 @@ def parse_lottery_draw_at(value: Any) -> Optional[datetime]:
     if parsed.tzinfo is None:
         parsed = parsed.replace(tzinfo=timezone.utc)
     return parsed.astimezone(timezone.utc)
+
+
+def next_lottery_draw_at(now: Optional[datetime] = None) -> datetime:
+    current = now or datetime.now(timezone.utc)
+    if current.tzinfo is None:
+        current = current.replace(tzinfo=timezone.utc)
+    current = current.astimezone(timezone.utc)
+    return current.replace(minute=0, second=0, microsecond=0) + timedelta(hours=1)
 
 
 def allocate_lottery_payouts(jackpot: float, winning_stakes: Dict[int, float]) -> Dict[int, float]:

@@ -15,5 +15,5 @@
 | `/games dice` | 骰子 — 下注後用按鈕選擇 1～6 的點數 |
 | `/games coinflip` | 擲硬幣 — 下注後用按鈕選擇正面或反面 |
 | `/games scratchcard` | 刮刮樂 — 刮開 3x3 票面取得隨機獎項 |
-| `/games lottery` | 累積彩票 — 購買 00～99 號碼或查看每輪 60 分鐘獎池 |
+| `/games lottery` | 累積彩票 — 購買 00～99 號碼；每輪在下一個整點開獎 |
 | `/games doom` | 在 Discord 內遊玩 DOOM |

@@ -324,7 +324,7 @@ class CasinoService:
             if not success:
                 raise CasinoError("全域幣餘額不足。", 400, {"balance": before})
             if draw_at is None or not state.get("round_id"):
-                draw_at = now + rules.LOTTERY_DRAW_DELAY
+                draw_at = rules.next_lottery_draw_at(now)
                 state["draw_at"] = _iso(draw_at)
                 state["round_id"] = uuid.uuid4().hex
             number_key = f"{number:02d}"

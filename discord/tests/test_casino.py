@@ -61,6 +61,18 @@ class CasinoRulesTests(unittest.TestCase):
         self.assertEqual(sum(payouts.values()), 95.95)
         self.assertGreater(payouts[2], payouts[1])
 
+    def test_lottery_draws_at_next_full_hour(self):
+        before_hour = datetime(2026, 7, 15, 15, 23, 45, 123456, tzinfo=timezone.utc)
+        self.assertEqual(
+            rules.next_lottery_draw_at(before_hour),
+            datetime(2026, 7, 15, 16, 0, tzinfo=timezone.utc),
+        )
+        before_midnight = datetime(2026, 7, 15, 23, 59, 59, tzinfo=timezone.utc)
+        self.assertEqual(
+            rules.next_lottery_draw_at(before_midnight),
+            datetime(2026, 7, 16, 0, 0, tzinfo=timezone.utc),
+        )
+
     def test_blackjack_three_to_two_and_dealer_stands_on_seventeen(self):
         player = [["A", "♠"], ["K", "♥"]]
         dealer = [["10", "♣"], ["7", "♦"]]
@@ -250,6 +262,8 @@ class CasinoServiceTests(unittest.TestCase):
         self.assertEqual(result["result"], {"number": "07"})
         self.assertEqual(result["payout"], 0)
         self.assertEqual(result["lottery"]["my_tickets"]["07"], 50)
+        draw_at = rules.parse_lottery_draw_at(result["lottery"]["draw_at"])
+        self.assertEqual((draw_at.minute, draw_at.second, draw_at.microsecond), (0, 0, 0))
         with closing(sqlite3.connect(self.db_path)) as conn:
             row = conn.execute(
                 "SELECT config_value FROM server_configs WHERE guild_id = 0 AND config_key = ?",

@@ -760,6 +760,13 @@ translations = {
     "slots": "拉霸機",
     "highlow": "比大小",
     "use_global": "使用全域",
+    "coinflip": "擲硬幣",
+    "dice": "骰子",
+    "lottery": "樂透",
+    "roulette": "輪盤",
+    "scratchcard": "刮刮樂",
+    "number": "數字",
+    "bet_type": "賭注類型",
 }
 class CommandNameTranslator(app_commands.Translator):
     async def translate(
