@@ -14,7 +14,7 @@ from pathlib import Path
 
 
 # Global configuration for backward compatibility
-config_version = 32
+config_version = 33
 config_path = 'config.json'
 
 default_config = {
@@ -53,6 +53,7 @@ default_config = {
     "website_url": "http://localhost:8080",
     "website_gtag": "",
     "contribute_channel_id": 0,
+    "update_channel_id": 0,
     "disable_modules": [],
     "join_leave_log_channel_id": 0,
     # "lavalink_host": "localhost",  # decprecated, use lavalink_nodes instead
