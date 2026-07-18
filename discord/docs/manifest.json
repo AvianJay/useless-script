@@ -149,6 +149,11 @@
           "file": "autopublish"
         },
         {
+          "id": "FixLink",
+          "label": "🔗 連結修復",
+          "file": "fixlink"
+        },
+        {
           "id": "DynamicVoice",
           "label": "動態語音",
           "file": "dynamicvoice"
