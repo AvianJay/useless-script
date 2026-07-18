@@ -696,6 +696,64 @@ body {
 }
 .automod-feature-field .form-input[style*="flex"] { flex: 1; }
 
+.action-input-editor {
+    flex: 1;
+    min-width: 240px;
+    display: flex;
+    flex-direction: column;
+    gap: 0.45rem;
+}
+
+.action-analysis {
+    width: 100%;
+    padding: 0.65rem 0.75rem;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    color: var(--text-muted);
+    font-size: 0.85rem;
+    line-height: 1.45;
+}
+
+.action-analysis.valid,
+.action-analysis.saved {
+    border-color: var(--success);
+    background: var(--success-bg);
+    color: var(--text-primary);
+}
+
+.action-analysis.warning {
+    border-color: var(--warning);
+    background: rgba(250, 166, 26, 0.12);
+    color: var(--text-primary);
+}
+
+.action-analysis.error {
+    border-color: var(--danger);
+    background: var(--danger-bg);
+    color: var(--danger);
+}
+
+.action-analysis-title {
+    font-weight: 600;
+    margin-bottom: 0.3rem;
+}
+
+.action-preview-list {
+    margin: 0.25rem 0 0 1.25rem;
+}
+
+.action-confirm-button {
+    margin-top: 0.55rem;
+    border: 0;
+    border-radius: 6px;
+    padding: 0.45rem 0.7rem;
+    background: var(--accent);
+    color: var(--text-white);
+    cursor: pointer;
+}
+
+.action-confirm-button:hover { background: var(--accent-hover); }
+
 /* ============= Webverify Config Editor ============= */
 .webverify-config-editor {
     display: flex;

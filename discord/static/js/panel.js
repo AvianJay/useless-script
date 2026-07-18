@@ -45,11 +45,14 @@ async function loadAutoreplyLimit() {
 
 let saveTimers = {};
 
-function debounceSave(module, key, value, delay = 600) {
+function debounceSave(module, key, value, delay = 600, onComplete = null) {
     const id = `${module}::${key}`;
     clearTimeout(saveTimers[id]);
     setIndicator(id, 'saving', '儲存中...');
-    saveTimers[id] = setTimeout(() => doSave(module, key, value), delay);
+    saveTimers[id] = setTimeout(async () => {
+        const result = await doSave(module, key, value);
+        if (onComplete) onComplete(result);
+    }, delay);
 }
 
 async function doSave(module, key, value) {
@@ -70,9 +73,11 @@ async function doSave(module, key, value) {
             setIndicator(id, 'error', '✗ ' + (data.error || '保存失敗'));
             showToast(data.error || '保存失敗', 'error');
         }
+        return data;
     } catch (e) {
         setIndicator(id, 'error', '✗ 網路錯誤');
         showToast('網路錯誤: ' + e.message, 'error');
+        return { success: false, error: e.message };
     }
 }
 
@@ -709,6 +714,68 @@ function buildAutoreplyListEditor(mod, s, value, channels, autoreplyLimit = 50) 
     return container;
 }
 
+const ACTION_INPUT_SUGGESTIONS = [
+    { label: '刪除訊息', value: 'delete' },
+    { label: '刪除訊息並公開警告', value: 'delete {user}，請注意你的行為。' },
+    { label: '公開警告', value: 'warn {user}，請注意你的行為。' },
+    { label: '禁言 10 分鐘', value: 'mute 10m 違規' },
+    { label: '禁言 10 分鐘（to 短寫）', value: 'to 10m 違規' },
+    { label: '禁言 1 小時', value: 'mute 1h 違規' },
+    { label: '踢出', value: 'kick 違規' },
+    { label: '永久封禁', value: 'ban 0 0 違規' },
+    { label: '封禁 1 天並刪除 7 天訊息', value: 'ban 1d 7d 違規' },
+    { label: '強制驗證 1 天', value: 'force_verify 1d' },
+    { label: '發送懲處公告', value: 'smm' },
+];
+
+async function analyzeActionInput(action) {
+    const response = await fetch(`/api/panel/guild/${GUILD_ID}/action-preview`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action }),
+    });
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    return response.json();
+}
+
+function renderActionAnalysis(container, analysis, { saved = false, onConfirm = null } = {}) {
+    container.innerHTML = '';
+    container.className = 'action-analysis';
+    if (!analysis || !analysis.valid) {
+        container.classList.add('error');
+        container.textContent = (analysis && analysis.error) || '無法解析動作指令。';
+        return;
+    }
+
+    if (analysis.requires_confirmation && !saved) container.classList.add('warning');
+    else container.classList.add(saved ? 'saved' : 'valid');
+
+    const title = document.createElement('div');
+    title.className = 'action-analysis-title';
+    title.textContent = saved
+        ? '已儲存，實際會執行：'
+        : (analysis.requires_confirmation ? analysis.confirmation : '實際會執行：');
+    container.appendChild(title);
+
+    const list = document.createElement('ol');
+    list.className = 'action-preview-list';
+    for (const line of (analysis.preview || [])) {
+        const item = document.createElement('li');
+        item.textContent = line;
+        list.appendChild(item);
+    }
+    container.appendChild(list);
+
+    if (analysis.requires_confirmation && !saved && onConfirm) {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'action-confirm-button';
+        button.textContent = `是，使用 ${analysis.normalized}`;
+        button.addEventListener('click', onConfirm);
+        container.appendChild(button);
+    }
+}
+
 const AUTOMOD_FEATURES = [
     { id: 'scamtrap', label: '🪤 詐騙陷阱', desc: '蜜罐頻道，在該頻道發訊者自動處置', fields: [
         { key: 'channel_id', label: '陷阱頻道', type: 'channel', default: '' },
@@ -776,12 +843,12 @@ function buildAutomodConfigEditor(mod, s, value, channels) {
         return config[featId];
     }
 
-    function save() {
+    function save(onComplete = null) {
         const out = {};
         for (const k of Object.keys(config)) {
             out[k] = { ...config[k] };
         }
-        debounceSave(mod, s.database_key, out, 500);
+        debounceSave(mod, s.database_key, out, 500, onComplete);
     }
 
     function setFeatValue(featId, key, val) {
@@ -969,6 +1036,93 @@ function buildAutomodConfigEditor(mod, s, value, channels) {
                 input.style.width = '5rem';
                 input.addEventListener('input', () => setFeatValue(feat.id, field.key, input.value));
                 row.appendChild(input);
+            } else if (field.key === 'action') {
+                const editor = document.createElement('div');
+                editor.className = 'action-input-editor';
+                const input = document.createElement('input');
+                input.type = 'text';
+                input.className = 'form-input';
+                input.value = cur;
+                input.placeholder = field.placeholder || '選擇建議或輸入，例如 mute 10m 違規';
+                const listId = `action-suggestions-${feat.id}`;
+                input.setAttribute('list', listId);
+                const datalist = document.createElement('datalist');
+                datalist.id = listId;
+                for (const suggestion of ACTION_INPUT_SUGGESTIONS) {
+                    const option = document.createElement('option');
+                    option.value = suggestion.value;
+                    option.label = suggestion.label;
+                    datalist.appendChild(option);
+                }
+                const analysisBox = document.createElement('div');
+                analysisBox.className = 'action-analysis';
+                let previewTimer = null;
+                let revision = 0;
+
+                async function previewAction(raw, persist) {
+                    const currentRevision = ++revision;
+                    const clean = raw.trim();
+                    if (!clean) {
+                        analysisBox.className = 'action-analysis';
+                        analysisBox.textContent = '尚未設定動作。';
+                        if (persist) {
+                            featData[field.key] = '';
+                            save();
+                        }
+                        return;
+                    }
+                    analysisBox.className = 'action-analysis loading';
+                    analysisBox.textContent = '正在解析動作...';
+                    try {
+                        const analysis = await analyzeActionInput(clean);
+                        if (currentRevision !== revision) return;
+                        if (analysis.requires_confirmation) {
+                            renderActionAnalysis(analysisBox, analysis, {
+                                onConfirm: () => {
+                                    input.value = analysis.normalized;
+                                    featData[field.key] = analysis.normalized;
+                                    save(result => {
+                                        if (result && result.success) {
+                                            renderActionAnalysis(analysisBox, analysis, { saved: true });
+                                        } else {
+                                            analysisBox.className = 'action-analysis error';
+                                            analysisBox.textContent = (result && result.error) || '儲存失敗。';
+                                        }
+                                    });
+                                },
+                            });
+                            return;
+                        }
+                        if (!analysis.valid || !persist) {
+                            renderActionAnalysis(analysisBox, analysis);
+                            return;
+                        }
+                        input.value = analysis.normalized;
+                        featData[field.key] = analysis.normalized;
+                        save(result => {
+                            if (result && result.success) {
+                                renderActionAnalysis(analysisBox, analysis, { saved: true });
+                            } else {
+                                analysisBox.className = 'action-analysis error';
+                                analysisBox.textContent = (result && result.error) || '儲存失敗。';
+                            }
+                        });
+                    } catch (error) {
+                        if (currentRevision !== revision) return;
+                        analysisBox.className = 'action-analysis error';
+                        analysisBox.textContent = `無法檢查動作：${error.message}`;
+                    }
+                }
+
+                input.addEventListener('input', () => {
+                    clearTimeout(previewTimer);
+                    previewTimer = setTimeout(() => previewAction(input.value, true), 350);
+                });
+                editor.appendChild(input);
+                editor.appendChild(datalist);
+                editor.appendChild(analysisBox);
+                row.appendChild(editor);
+                if (cur) previewAction(cur, false);
             } else {
                 const input = document.createElement('input');
                 input.type = 'text';

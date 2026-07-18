@@ -289,6 +289,28 @@ def api_set_settings(guild_id):
     except (ValueError, TypeError) as e:
         return jsonify({"error": str(e)}), 400
 
+    if setting.get("type") == "automod_config":
+        from Moderate import analyze_action_string
+
+        for feature_name, feature_config in (value or {}).items():
+            if not isinstance(feature_config, dict):
+                continue
+            action = feature_config.get("action")
+            if action is None or not str(action).strip():
+                continue
+            analysis = analyze_action_string(str(action), gid)
+            if not analysis["valid"]:
+                return jsonify({
+                    "error": f"{feature_name} 動作指令無效：{analysis['error']}",
+                    "action_analysis": analysis,
+                }), 400
+            if analysis["requires_confirmation"]:
+                return jsonify({
+                    "error": analysis["confirmation"],
+                    "action_analysis": analysis,
+                }), 400
+            feature_config["action"] = analysis["normalized"]
+
     if setting.get("type") == "autoreply_list":
         autoreply_limit = int(get_server_config(gid, "autoreply_limit", 50) or 50)
         if len(value or []) > autoreply_limit:
@@ -314,6 +336,17 @@ def api_set_settings(guild_id):
         module_name="GuildPanel",
     )
     return jsonify({"success": True, "value": value})
+
+
+@app.route("/api/panel/guild/<guild_id>/action-preview", methods=["POST"])
+@_require_auth
+@_require_guild
+def api_action_preview(guild_id):
+    payload = request.get_json(silent=True) or {}
+    action = str(payload.get("action") or "")
+    from Moderate import analyze_action_string
+
+    return jsonify(analyze_action_string(action, int(guild_id)))
 
 
 @app.route("/api/panel/guild/<guild_id>/channels")

@@ -13,6 +13,7 @@ import aiohttp
 from logger import log
 import logging
 import re
+import sys
 from datetime import datetime
 
 DEFAULT_AUTOREPLY_CONFIG_LIMIT = 50
@@ -2712,6 +2713,10 @@ class AutoReply(commands.GroupCog, name="autoreply"):
     @app_commands.command(name="builder", description="用互動式介面建立自動回覆")
     @app_commands.default_permissions(manage_guild=True)
     async def autoreply_builder(self, interaction: discord.Interaction):
+        getting_started_module = sys.modules.get("gettingstarted")
+        if getting_started_module is not None:
+            await getting_started_module.start_autoreply_builder(interaction)
+            return
         view = AutoReplyBuilderView(self, interaction)
         await interaction.response.send_message(embed=view.build_embed(), view=view, ephemeral=True)
         view.message = await interaction.original_response()

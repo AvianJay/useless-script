@@ -7,6 +7,30 @@ from logger import log
 import logging
 
 
+async def find_bot_inviter(guild: discord.Guild, bot_user_id: int | None = None):
+    """Return the user who added the bot, when the audit log is available."""
+    target_bot_id = bot_user_id or (bot.user.id if bot.user else None)
+    if target_bot_id is None:
+        return None
+
+    try:
+        me = getattr(guild, "me", None)
+        permissions = getattr(me, "guild_permissions", None)
+        if permissions is not None and not permissions.view_audit_log:
+            return None
+        async for entry in guild.audit_logs(limit=10, action=discord.AuditLogAction.bot_add):
+            target = getattr(entry, "target", None)
+            if target is not None and target.id == target_bot_id:
+                return entry.user
+    except (discord.Forbidden, discord.HTTPException):
+        pass
+    return None
+
+
+async def get_join_prompt_recipient(guild: discord.Guild, bot_user_id: int | None = None):
+    return await find_bot_inviter(guild, bot_user_id) or guild.owner
+
+
 async def get_update_channel() -> discord.TextChannel | None:
     try:
         channel_id = int(config("update_channel_id", 0))
@@ -223,15 +247,7 @@ class JoinNotify(commands.Cog):
 
     @commands.Cog.listener()
     async def on_guild_join(self, guild: discord.Guild):
-        # try to find who invited the bot using the audit logs
-        inviter = None
-        try:
-            async for entry in guild.audit_logs(limit=10, action=discord.AuditLogAction.bot_add):
-                if entry.target.id == self.bot.user.id:
-                    inviter = entry.user
-                    break
-        except (discord.Forbidden, discord.HTTPException):
-            pass
+        inviter = await find_bot_inviter(guild, self.bot.user.id)
 
         prompt_recipient = inviter or guild.owner
         if prompt_recipient:

@@ -13,11 +13,25 @@ import io
 import json
 from logger import log
 import logging
+import sys
 
 if "Moderate" in modules:
     import Moderate
 else:
     log("Moderate module not found", level=logging.ERROR, module_name="AutoModerate")
+
+ACTION_INPUT_SUGGESTIONS = (
+    Moderate.ACTION_INPUT_SUGGESTIONS
+    if "Moderate" in modules
+    else [
+        ("刪除訊息", "delete"),
+        ("公開警告", "warn {user}，請注意你的行為。"),
+        ("禁言 10 分鐘", "mute 10m 違規"),
+        ("禁言 1 小時", "mute 1h 違規"),
+        ("踢出", "kick 違規"),
+        ("永久封禁", "ban 0 0 違規"),
+    ]
+)
 
 
 all_settings = [
@@ -185,6 +199,73 @@ async def settings_autocomplete(interaction: discord.Interaction, current: str):
         for key in all_settings if current.lower() in key.lower()
     ][:25]  # Discord 限制最多 25 個選項
 
+
+async def action_value_autocomplete(interaction: discord.Interaction, current: str):
+    setting = str(getattr(interaction.namespace, "setting", "") or "")
+    if not setting.endswith("-action"):
+        return []
+
+    choices = []
+    current_text = current.strip()
+    if current_text.isdigit():
+        minutes = int(current_text)
+        if 0 < minutes <= 40320:
+            choices.append(
+                app_commands.Choice(
+                    name=f"禁言 {minutes} 分鐘",
+                    value=f"mute {minutes}m",
+                )
+            )
+
+    lowered = current_text.casefold()
+    for label, value in ACTION_INPUT_SUGGESTIONS:
+        if lowered and lowered not in label.casefold() and lowered not in value.casefold():
+            continue
+        if any(choice.value == value for choice in choices):
+            continue
+        choices.append(app_commands.Choice(name=label, value=value))
+    return choices[:25]
+
+
+async def action_autocomplete(interaction: discord.Interaction, current: str):
+    choices = []
+    current_text = current.strip()
+    if current_text.isdigit():
+        minutes = int(current_text)
+        if 0 < minutes <= 40320:
+            choices.append(app_commands.Choice(name=f"禁言 {minutes} 分鐘", value=f"mute {minutes}m"))
+    lowered = current_text.casefold()
+    for label, value in ACTION_INPUT_SUGGESTIONS:
+        if lowered and lowered not in label.casefold() and lowered not in value.casefold():
+            continue
+        if any(choice.value == value for choice in choices):
+            continue
+        choices.append(app_commands.Choice(name=label, value=value))
+    return choices[:25]
+
+
+def build_action_preview_embed(analysis: dict, *, title: str = "動作預覽", saved: bool = False) -> discord.Embed:
+    if not analysis.get("valid"):
+        return discord.Embed(
+            title="動作指令無效",
+            description=analysis.get("error") or "無法解析動作指令。",
+            color=discord.Color.red(),
+        )
+
+    embed = discord.Embed(
+        title=title,
+        description="設定已儲存。" if saved else (analysis.get("confirmation") or "請確認解析結果。"),
+        color=discord.Color.green() if saved else discord.Color.orange(),
+    )
+    embed.add_field(name="實際儲存的指令", value=f"```text\n{analysis['normalized']}\n```", inline=False)
+    preview = analysis.get("preview") or []
+    embed.add_field(
+        name="執行預覽",
+        value="\n".join(f"{index}. {line}" for index, line in enumerate(preview, 1)) or "沒有可執行的動作",
+        inline=False,
+    )
+    return embed
+
 async def do_action_str(action: str, guild: Optional[discord.Guild] = None, user: Optional[discord.Member] = None, message: Optional[discord.Message] = None):
     """AutoModerate wrapper：以機器人身份執行動作，委派給 Moderate.do_action_str。"""
     # 以 bot 本身作為 moderator，讓 send_mod_message 能在自動處置中正常運作
@@ -194,17 +275,41 @@ async def do_action_str(action: str, guild: Optional[discord.Guild] = None, user
 
 # 快速設定的處置預設選項（value 為 __custom__ 時會跳出 Modal 讓使用者輸入）
 ACTION_PRESETS = [
-    ("刪除訊息", "delete"),
-    ("刪除＋警告", "delete {user}，請注意你的行為。"),
-    ("公開警告", "warn {user}，請注意你的行為。"),
-    ("禁言 10 分鐘", "mute 10m 違規"),
-    ("禁言 1 小時", "mute 1h 違規"),
-    ("踢出", "kick 違規"),
-    ("封禁", "ban 0 0 違規"),
-    ("封禁 1 分鐘並刪除 7 天訊息", "ban 1m 7d 違規"),
-    ("強制驗證 1 天", "force_verify 1d"),
+    *ACTION_INPUT_SUGGESTIONS,
     ("自訂...", "__custom__"),
 ]
+
+
+class QuickSetupActionConfirmationView(discord.ui.View):
+    def __init__(self, quick_setup_view: "QuickSetupView", analysis: dict, owner_id: int):
+        super().__init__(timeout=120)
+        self.quick_setup_view = quick_setup_view
+        self.analysis = analysis
+        self.owner_id = owner_id
+
+        confirm = discord.ui.Button(label="是，使用這個動作", style=discord.ButtonStyle.success)
+        confirm.callback = self.confirm
+        self.add_item(confirm)
+        retry = discord.ui.Button(label="不是，重新輸入", style=discord.ButtonStyle.secondary)
+        retry.callback = self.retry
+        self.add_item(retry)
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if interaction.user.id == self.owner_id:
+            return True
+        await interaction.response.send_message("只有原本設定的人可以確認。", ephemeral=True)
+        return False
+
+    async def confirm(self, interaction: discord.Interaction):
+        self.quick_setup_view.config["action"] = self.analysis["normalized"]
+        self.stop()
+        await interaction.response.edit_message(
+            embed=self.quick_setup_view._get_embed(interaction.guild),
+            view=self.quick_setup_view,
+        )
+
+    async def retry(self, interaction: discord.Interaction):
+        await interaction.response.send_modal(CustomActionModal(self.quick_setup_view))
 
 
 class CustomActionModal(discord.ui.Modal, title="自訂處置動作"):
@@ -221,11 +326,19 @@ class CustomActionModal(discord.ui.Modal, title="自訂處置動作"):
         self.quick_setup_view = view
 
     async def on_submit(self, interaction: discord.Interaction):
-        self.quick_setup_view.config["action"] = self.action_input.value.strip()
-        await interaction.response.edit_message(
-            embed=self.quick_setup_view._get_embed(interaction.guild),
-            view=self.quick_setup_view,
-        )
+        analysis = Moderate.analyze_action_string(self.action_input.value, interaction.guild_id)
+        if not analysis["valid"]:
+            await interaction.response.send_message(analysis["error"], ephemeral=True)
+            return
+        if analysis["requires_confirmation"]:
+            view = QuickSetupActionConfirmationView(self.quick_setup_view, analysis, interaction.user.id)
+            await interaction.response.edit_message(
+                embed=build_action_preview_embed(analysis, title="確認你的意思"),
+                view=view,
+            )
+            return
+        self.quick_setup_view.config["action"] = analysis["normalized"]
+        await interaction.response.edit_message(embed=build_action_preview_embed(analysis), view=self.quick_setup_view)
 
 
 class QuickSetupView(discord.ui.View):
@@ -593,6 +706,37 @@ def parse_mention_to_id(mention: str) -> str:
     if match:
         return match.group(1)
     return mention  # 如果不是提及格式，直接返回原字符串
+
+
+class SaveActionConfirmationView(discord.ui.View):
+    def __init__(self, guild_id: int, feature: str, analysis: dict, owner_id: int):
+        super().__init__(timeout=120)
+        self.guild_id = guild_id
+        self.feature = feature
+        self.analysis = analysis
+        self.owner_id = owner_id
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if interaction.user.id == self.owner_id:
+            return True
+        await interaction.response.send_message("只有原本設定的人可以確認。", ephemeral=True)
+        return False
+
+    @discord.ui.button(label="是，儲存這個動作", style=discord.ButtonStyle.success)
+    async def confirm(self, interaction: discord.Interaction, button: discord.ui.Button):
+        automod_settings = get_server_config(self.guild_id, "automod", {})
+        automod_settings.setdefault(self.feature, {})["action"] = self.analysis["normalized"]
+        set_server_config(self.guild_id, "automod", automod_settings)
+        self.stop()
+        await interaction.response.edit_message(
+            embed=build_action_preview_embed(self.analysis, title="動作設定完成", saved=True),
+            view=None,
+        )
+
+    @discord.ui.button(label="取消", style=discord.ButtonStyle.secondary)
+    async def cancel(self, interaction: discord.Interaction, button: discord.ui.Button):
+        self.stop()
+        await interaction.response.edit_message(content="已取消，沒有變更動作設定。", embed=None, view=None)
     
 
 
@@ -665,6 +809,10 @@ class AutoModerate(commands.GroupCog, name=app_commands.locale_str("automod")):
 
     @app_commands.command(name=app_commands.locale_str("quick-setup"), description="互動式快速設定精靈（選單引導）")
     async def quick_setup_automod(self, interaction: discord.Interaction):
+        getting_started_module = sys.modules.get("gettingstarted")
+        if getting_started_module is not None:
+            await getting_started_module.start_automod_quick_setup(interaction)
+            return
         guild_id = interaction.guild.id if interaction.guild else 0
         view = QuickSetupView(guild_id)
         view._update_components_step1()
@@ -679,7 +827,7 @@ class AutoModerate(commands.GroupCog, name=app_commands.locale_str("automod")):
         setting="要設定的自動管理選項",
         value="選項的值"
     )
-    @app_commands.autocomplete(setting=settings_autocomplete)
+    @app_commands.autocomplete(setting=settings_autocomplete, value=action_value_autocomplete)
     async def set_automod_setting(self, interaction: discord.Interaction, setting: str, value: str):
         guild_id = interaction.guild.id if interaction.guild else None
         automod_settings = get_server_config(guild_id, "automod", {})
@@ -687,6 +835,28 @@ class AutoModerate(commands.GroupCog, name=app_commands.locale_str("automod")):
         setting_key = setting.split("-")[1] if len(setting.split("-")) > 1 else None
         if setting_base not in automod_settings:
             automod_settings[setting_base] = {}
+        action_analysis = None
+        if setting_key == "action":
+            action_analysis = Moderate.analyze_action_string(value, guild_id)
+            if not action_analysis["valid"]:
+                await interaction.response.send_message(
+                    embed=build_action_preview_embed(action_analysis),
+                    ephemeral=True,
+                )
+                return
+            if action_analysis["requires_confirmation"]:
+                await interaction.response.send_message(
+                    embed=build_action_preview_embed(action_analysis, title="確認你的意思"),
+                    view=SaveActionConfirmationView(
+                        guild_id,
+                        setting_base,
+                        action_analysis,
+                        interaction.user.id,
+                    ),
+                    ephemeral=True,
+                )
+                return
+            value = action_analysis["normalized"]
         value = parse_mention_to_id(value) if setting_key in ["channel_id", "log_channel"] else value
         if setting_key == "allow_current_server":
             normalized_value = str(value).strip().lower()
@@ -745,20 +915,25 @@ class AutoModerate(commands.GroupCog, name=app_commands.locale_str("automod")):
                 return
         automod_settings[setting_base][setting_key] = value
         set_server_config(guild_id, "automod", automod_settings)
-        await interaction.response.send_message(f"已將自動管理設定 '{setting}' 設為 {value}。")
+        if action_analysis is not None:
+            await interaction.response.send_message(
+                embed=build_action_preview_embed(action_analysis, title="動作設定完成", saved=True),
+            )
+        else:
+            await interaction.response.send_message(f"已將自動管理設定 '{setting}' 設為 {value}。")
     
     @app_commands.command(name=app_commands.locale_str("check-action"), description="檢查自動管理動作指令是否有效")
     @app_commands.describe(action="要檢查的動作指令")
+    @app_commands.autocomplete(action=action_autocomplete)
     async def check_automod_action(self, interaction: discord.Interaction, action: str):
-        try:
-            actions = await do_action_str(action)
-        except Exception as e:
-            await interaction.response.send_message(f"無法解析動作指令: {e}", ephemeral=True)
-            return
-        actions = [f"- {a}" for a in actions]
-        actions_str = "\n".join(actions) if actions else "無動作"
-        msg = f"指令有效，解析出的動作:\n{actions_str}"
-        await interaction.response.send_message(content=msg)
+        analysis = Moderate.analyze_action_string(action, interaction.guild_id)
+        await interaction.response.send_message(
+            embed=build_action_preview_embed(
+                analysis,
+                title="確認你的意思" if analysis["requires_confirmation"] else "動作檢查結果",
+            ),
+            ephemeral=not analysis["valid"],
+        )
 
     @app_commands.command(name=app_commands.locale_str("action-builder"), description="產生動作指令字串")
     @app_commands.describe(

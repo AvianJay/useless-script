@@ -15,6 +15,7 @@ import asyncio
 import sqlite3
 import re
 import json
+import sys
 from typing import Union
 from datetime import datetime, timezone
 from urllib.parse import urlencode
@@ -440,6 +441,10 @@ class ServerWebVerify(commands.GroupCog, name="webverify", description="伺服�
     @app_commands.command(name="quick_setup", description="使用互動式精靈快速設定網頁驗證")
     @app_commands.default_permissions(administrator=True)
     async def quick_setup(self, interaction: discord.Interaction):
+        getting_started_module = sys.modules.get("gettingstarted")
+        if getting_started_module is not None:
+            await getting_started_module.start_webverify_quick_setup(interaction)
+            return
         view = WebVerifySetupWizard(interaction, self.bot)
         await interaction.response.send_message(embed=await view.get_embed(), view=view)
 

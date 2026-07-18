@@ -14,9 +14,28 @@ import re
 
 ignore_message_ids = set()  # 用於暫時忽略特定訊息的處理（例如剛剛被刪除的訊息）
 BUILTIN_ACTIONS = {
-    "ban", "kick", "mute", "timeout", "unban", "unmute", "untimeout",
+    "ban", "kick", "mute", "timeout", "to", "unban", "unmute", "untimeout",
     "delete", "warn", "send_mod_message", "smm", "force_verify"
 }
+
+ACTION_INPUT_SUGGESTIONS = [
+    ("刪除訊息", "delete"),
+    ("刪除訊息並公開警告", "delete {user}，請注意你的行為。"),
+    ("公開警告", "warn {user}，請注意你的行為。"),
+    ("禁言 10 分鐘", "mute 10m 違規"),
+    ("禁言 10 分鐘（to 短寫）", "to 10m 違規"),
+    ("禁言 1 小時", "mute 1h 違規"),
+    ("踢出", "kick 違規"),
+    ("永久封禁", "ban 0 0 違規"),
+    ("封禁 1 天並刪除 7 天訊息", "ban 1d 7d 違規"),
+    ("強制驗證 1 天", "force_verify 1d"),
+    ("發送懲處公告", "smm"),
+]
+
+_DURATION_TOKEN_RE = re.compile(
+    r"^(?:0|(?:\d+(?:seconds?|minutes?|hours?|days?|weeks?|months?|years?|s|m|h|d|w|M|y|秒|分|分鐘|小時|天|週|月|個月|年))+)$"
+)
+MAX_TIMEOUT_SECONDS = 28 * 24 * 60 * 60
 
 
 def timestr_to_seconds(timestr: str) -> int:
@@ -53,18 +72,27 @@ def timestr_to_seconds(timestr: str) -> int:
         'years': 31536000,
         '年': 31536000,
     }
+    text = str(timestr or '').strip()
+    if not text:
+        return 0
+
+    unit_pattern = '|'.join(sorted((re.escape(unit) for unit in units), key=len, reverse=True))
+    part_pattern = re.compile(rf'(\d+)\s*({unit_pattern})?')
     total_seconds = 0
-    num = ''
-    for char in timestr:
-        if not char.strip():
+    position = 0
+    while position < len(text):
+        if text[position].isspace():
+            position += 1
             continue
-        if char.isdigit():
-            num += char
-        elif char in units and num:
-            total_seconds += int(num) * units[char]
-            num = ''
-    if num:  # 如果字串以數字結尾，則算為秒數
-        total_seconds += int(num)
+        match = part_pattern.match(text, position)
+        if match is None:
+            return 0
+        amount = int(match.group(1))
+        unit = match.group(2)
+        if unit is None and match.end() != len(text):
+            return 0
+        total_seconds += amount * (units[unit] if unit else 1)
+        position = match.end()
     return total_seconds
 
 
@@ -315,6 +343,304 @@ def _expand_custom_action_aliases(action: str, custom_actions: dict[str, str]) -
     return expanded_actions
 
 
+def _format_preview_duration(seconds: int, *, permanent_text: str = "永久") -> str:
+    if seconds == 0:
+        return permanent_text
+    return get_time_text(seconds) or f"{seconds} 秒"
+
+
+def _parse_action_duration(token: str, *, allow_zero: bool = True) -> tuple[int | None, str | None]:
+    token = str(token or "").strip()
+    if not _DURATION_TOKEN_RE.fullmatch(token):
+        return None, f"無法辨識時間 `{token}`；請加上單位，例如 `10m`、`2h`、`7d`。"
+    seconds = timestr_to_seconds(token)
+    if seconds == 0 and token != "0":
+        return None, f"時間 `{token}` 必須大於 0。"
+    if seconds == 0 and not allow_zero:
+        return None, "時間必須大於 0。"
+    return seconds, None
+
+
+def _suggest_shorthand_action(action: str) -> tuple[str | None, str | None]:
+    chunks = _split_action_chunks(action)
+    changed = False
+    confirmation = None
+    normalized_chunks = []
+
+    for chunk in chunks:
+        tokens = chunk.split()
+        if len(tokens) == 1 and tokens[0].isdigit():
+            minutes = int(tokens[0])
+            if minutes <= 0:
+                return None, "禁言分鐘數必須大於 0。"
+            if minutes * 60 > MAX_TIMEOUT_SECONDS:
+                return None, "Discord 禁言最長為 28 天（40320 分鐘）。"
+            normalized_chunks.append(f"mute {minutes}m")
+            confirmation = f"你的意思是禁言 {minutes} 分鐘嗎？"
+            changed = True
+            continue
+
+        if len(tokens) == 1 and _DURATION_TOKEN_RE.fullmatch(tokens[0]) and tokens[0] != "0":
+            seconds, error = _parse_action_duration(tokens[0], allow_zero=False)
+            if error:
+                return None, error
+            if seconds > MAX_TIMEOUT_SECONDS:
+                return None, "Discord 禁言最長為 28 天。"
+            normalized_chunks.append(f"mute {tokens[0]}")
+            confirmation = f"你的意思是禁言 {_format_preview_duration(seconds)}嗎？"
+            changed = True
+            continue
+
+        if tokens and tokens[0].lower() in ("mute", "timeout", "to") and len(tokens) >= 2 and tokens[1].isdigit():
+            minutes = int(tokens[1])
+            if minutes <= 0:
+                return None, "禁言分鐘數必須大於 0。"
+            if minutes * 60 > MAX_TIMEOUT_SECONDS:
+                return None, "Discord 禁言最長為 28 天（40320 分鐘）。"
+            tokens[1] = f"{minutes}m"
+            normalized_chunks.append(" ".join(tokens))
+            confirmation = f"你輸入的 `{minutes}` 沒有時間單位；你的意思是禁言 {minutes} 分鐘嗎？"
+            changed = True
+            continue
+
+        normalized_chunks.append(chunk)
+
+    if not changed:
+        return None, None
+    return ", ".join(normalized_chunks), confirmation
+
+
+def analyze_action_string(action: str, guild_id: Optional[int] = None, *, infer_shorthand: bool = True) -> dict:
+    raw_action = str(action or "").strip()
+    result = {
+        "valid": False,
+        "normalized": raw_action,
+        "requires_confirmation": False,
+        "confirmation": None,
+        "preview": [],
+        "error": None,
+        "suggestions": [
+            {"label": label, "value": value}
+            for label, value in ACTION_INPUT_SUGGESTIONS
+        ],
+    }
+    if not raw_action:
+        result["error"] = "動作指令不得為空。"
+        return result
+    if len(raw_action) > 500:
+        result["error"] = "動作指令不得超過 500 個字元。"
+        return result
+
+    if infer_shorthand:
+        suggested, confirmation_or_error = _suggest_shorthand_action(raw_action)
+        if suggested is not None:
+            analyzed = analyze_action_string(suggested, guild_id, infer_shorthand=False)
+            if not analyzed["valid"]:
+                return analyzed
+            analyzed["requires_confirmation"] = True
+            analyzed["confirmation"] = confirmation_or_error
+            return analyzed
+        if confirmation_or_error is not None:
+            result["error"] = confirmation_or_error
+            return result
+
+    custom_actions = _load_custom_action_strings(guild_id)
+    try:
+        actions = _expand_custom_action_aliases(raw_action, custom_actions)
+    except ValueError as error:
+        result["error"] = str(error)
+        return result
+    if not actions:
+        result["error"] = "至少需要一個動作。"
+        return result
+    if len(actions) > 5:
+        result["error"] = "一次只能執行最多 5 個動作。"
+        return result
+
+    previews = []
+    last_reason = "管理執行"
+    for chunk in actions:
+        tokens = chunk.split()
+        command = tokens[0].lower() if tokens else ""
+        if command not in BUILTIN_ACTIONS:
+            available = "、".join(sorted(BUILTIN_ACTIONS))
+            result["error"] = f"不支援的動作 `{command or chunk}`。可用動作：{available}。"
+            return result
+
+        args = tokens[1:]
+        if command == "ban":
+            if not args or not args[0][0].isdigit():
+                duration_seconds = 0
+                delete_seconds = 0
+                reason = " ".join(args) or last_reason
+            else:
+                duration_seconds, error = _parse_action_duration(args[0])
+                if error:
+                    result["error"] = error
+                    return result
+                if len(args) >= 2 and args[1][0].isdigit():
+                    delete_seconds, error = _parse_action_duration(args[1])
+                    if error:
+                        result["error"] = error
+                        return result
+                    reason = " ".join(args[2:]) or last_reason
+                elif len(args) >= 2:
+                    result["error"] = (
+                        "封禁動作在時長後還需要「刪除訊息時長」。"
+                        f"你的意思可能是 `ban {args[0]} 0 {' '.join(args[1:])}`。"
+                    )
+                    return result
+                else:
+                    delete_seconds = 0
+                    reason = last_reason
+            last_reason = reason
+            previews.append(
+                f"封禁：{_format_preview_duration(duration_seconds)}；"
+                f"刪除訊息範圍：{_format_preview_duration(delete_seconds, permanent_text='不刪除')}；原因：{reason}"
+            )
+        elif command == "kick":
+            reason = " ".join(args) or last_reason
+            previews.append(f"踢出；原因：{reason}")
+        elif command in ("mute", "timeout", "to"):
+            if not args or not args[0][0].isdigit():
+                duration_seconds = 3600
+                reason = " ".join(args) or last_reason
+            else:
+                duration_seconds, error = _parse_action_duration(args[0], allow_zero=False)
+                if error:
+                    result["error"] = error
+                    return result
+                if duration_seconds > MAX_TIMEOUT_SECONDS:
+                    result["error"] = "Discord 禁言最長為 28 天。"
+                    return result
+                reason = " ".join(args[1:]) or last_reason
+            previews.append(f"禁言 {_format_preview_duration(duration_seconds)}；原因：{reason}")
+        elif command == "unban":
+            previews.append(f"解除封禁；原因：{' '.join(args) or last_reason}")
+        elif command in ("unmute", "untimeout"):
+            previews.append(f"解除禁言；原因：{' '.join(args) or last_reason}")
+        elif command == "delete":
+            message_text = " ".join(args)
+            previews.append("刪除觸發訊息" + (f"，並公開提示：{message_text}" if message_text else ""))
+        elif command == "warn":
+            previews.append(f"公開警告：{' '.join(args) or '{user}，請注意你的行為。'}")
+        elif command in ("send_mod_message", "smm"):
+            previews.append("發送懲處公告")
+        elif command == "force_verify":
+            if args:
+                duration_seconds, error = _parse_action_duration(args[0], allow_zero=False)
+                if error:
+                    result["error"] = error
+                    return result
+                previews.append(f"強制網頁驗證 {_format_preview_duration(duration_seconds)}")
+            else:
+                previews.append("強制網頁驗證")
+
+    result["valid"] = True
+    result["preview"] = previews
+    return result
+
+
+def action_autocomplete_choices(current: str) -> list[app_commands.Choice[str]]:
+    choices = []
+    current_text = str(current or "").strip()
+    if current_text.isdigit():
+        minutes = int(current_text)
+        if 0 < minutes <= MAX_TIMEOUT_SECONDS // 60:
+            choices.append(
+                app_commands.Choice(
+                    name=f"禁言 {minutes} 分鐘",
+                    value=f"mute {minutes}m",
+                )
+            )
+
+    lowered = current_text.casefold()
+    for label, value in ACTION_INPUT_SUGGESTIONS:
+        if lowered and lowered not in label.casefold() and lowered not in value.casefold():
+            continue
+        if any(choice.value == value for choice in choices):
+            continue
+        choices.append(app_commands.Choice(name=label, value=value))
+    return choices[:25]
+
+
+async def action_input_autocomplete(interaction: discord.Interaction, current: str):
+    return action_autocomplete_choices(current)
+
+
+def build_action_preview_embed(
+    analysis: dict,
+    *,
+    title: str = "動作預覽",
+    saved: bool = False,
+) -> discord.Embed:
+    if not analysis.get("valid"):
+        return discord.Embed(
+            title="動作指令無效",
+            description=analysis.get("error") or "無法解析動作指令。",
+            color=discord.Color.red(),
+        )
+
+    embed = discord.Embed(
+        title=title,
+        description="設定已儲存。" if saved else (analysis.get("confirmation") or "請確認解析結果。"),
+        color=discord.Color.green() if saved else discord.Color.orange(),
+    )
+    embed.add_field(
+        name="實際儲存的指令",
+        value=f"```text\n{analysis['normalized']}\n```",
+        inline=False,
+    )
+    preview = analysis.get("preview") or []
+    embed.add_field(
+        name="執行預覽",
+        value="\n".join(f"{index}. {line}" for index, line in enumerate(preview, 1))
+        or "沒有可執行的動作",
+        inline=False,
+    )
+    return embed
+
+
+class ActionConfirmationView(discord.ui.View):
+    def __init__(
+        self,
+        owner_id: int,
+        analysis: dict,
+        confirm_callback,
+        *,
+        cancel_callback=None,
+        timeout: float = 120,
+    ):
+        super().__init__(timeout=timeout)
+        self.owner_id = owner_id
+        self.analysis = analysis
+        self.confirm_callback = confirm_callback
+        self.cancel_callback = cancel_callback
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if interaction.user.id == self.owner_id:
+            return True
+        await interaction.response.send_message("只有原本設定的人可以確認。", ephemeral=True)
+        return False
+
+    @discord.ui.button(label="是，使用這個動作", style=discord.ButtonStyle.success)
+    async def confirm(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await self.confirm_callback(interaction, self.analysis)
+        self.stop()
+
+    @discord.ui.button(label="取消", style=discord.ButtonStyle.secondary)
+    async def cancel(self, interaction: discord.Interaction, button: discord.ui.Button):
+        self.stop()
+        if self.cancel_callback is not None:
+            await self.cancel_callback(interaction)
+            return
+        await interaction.response.edit_message(
+            content="已取消，沒有變更動作設定。",
+            embed=None,
+            view=None,
+        )
+
+
 async def do_action_str(action: str, guild: Optional[discord.Guild] = None, user: Optional[discord.Member] = None, message: Optional[discord.Message] = None, moderator: Optional[discord.Member] = None):
     # if user is none just check if action is valid
     custom_actions = _load_custom_action_strings(guild.id if guild else None)
@@ -379,7 +705,7 @@ async def do_action_str(action: str, guild: Optional[discord.Guild] = None, user
             else:
                 logs.append(f"踢出用戶，原因: {reason}")
             actions_json.append({"action": "kick", "reason": reason})
-        elif cmd[0] == "mute" or cmd[0] == "timeout":
+        elif cmd[0] in ("mute", "timeout", "to"):
             # mute <duration> <reason>
             if len(cmd) == 1:
                 cmd.append("1h")
@@ -391,7 +717,7 @@ async def do_action_str(action: str, guild: Optional[discord.Guild] = None, user
                 cmd[1], cmd[2] = "1h", cmd[1]
 
             duration_seconds = timestr_to_seconds(cmd[1]) if cmd[1] != "0" else 0
-            cmd.pop(0)  # remove "mute" or "timeout"
+            cmd.pop(0)  # remove the timeout action name
             cmd.pop(0)  # remove duration
             reason = " ".join(cmd) if cmd else last_reason
             if user:
@@ -1192,6 +1518,7 @@ class Moderate(commands.Cog):
     @app_commands.default_permissions(administrator=True)
     @app_commands.allowed_installs(guilds=True, users=False)
     @app_commands.allowed_contexts(guilds=True, dms=False, private_channels=False)
+    @app_commands.autocomplete(action=action_input_autocomplete)
     async def custom_action_add(self, interaction: discord.Interaction, name: str, action: str):
         await interaction.response.defer(ephemeral=True)
         guild = interaction.guild
@@ -1220,28 +1547,62 @@ class Moderate(commands.Cog):
             await interaction.followup.send("每個伺服器最多只能設定 10 個自訂指令。", ephemeral=True)
             return
 
-        # 預先驗證展開後的動作是否合法（最多 5 個、避免循環）
-        test_actions = dict(custom_actions)
-        if existed_key and existed_key != alias_name:
-            test_actions.pop(existed_key, None)
-        test_actions[alias_name] = action_str
-        try:
-            expanded = _expand_custom_action_aliases(alias_name, test_actions)
-        except ValueError as e:
-            await interaction.followup.send(f"無法儲存自訂指令：{e}", ephemeral=True)
-            return
-        if len(expanded) > 5:
-            await interaction.followup.send("此自訂指令展開後超過 5 個動作，請精簡內容。", ephemeral=True)
+        analysis = analyze_action_string(action_str, guild.id)
+        if not analysis["valid"]:
+            await interaction.followup.send(
+                embed=build_action_preview_embed(analysis),
+                ephemeral=True,
+            )
             return
 
-        if existed_key and existed_key != alias_name:
-            custom_actions.pop(existed_key, None)
-        custom_actions[alias_name] = action_str
-        set_server_config(guild.id, "custom_action_strings", custom_actions)
+        def persist_action(normalized_action: str) -> tuple[str | None, str | None]:
+            test_actions = dict(custom_actions)
+            if existed_key and existed_key != alias_name:
+                test_actions.pop(existed_key, None)
+            test_actions[alias_name] = normalized_action
+            try:
+                expanded = _expand_custom_action_aliases(alias_name, test_actions)
+            except ValueError as error:
+                return None, f"無法儲存自訂指令：{error}"
+            if len(expanded) > 5:
+                return None, "此自訂指令展開後超過 5 個動作，請精簡內容。"
 
-        action_text = "更新" if existed_key is not None else "新增"
+            if existed_key and existed_key != alias_name:
+                custom_actions.pop(existed_key, None)
+            custom_actions[alias_name] = normalized_action
+            set_server_config(guild.id, "custom_action_strings", custom_actions)
+            action_text = "更新" if existed_key is not None else "新增"
+            return (
+                f"已{action_text}自訂指令 `{alias_name}`；目前數量：{len(custom_actions)}/10",
+                None,
+            )
+
+        if analysis["requires_confirmation"]:
+            async def confirm_action(confirm_interaction: discord.Interaction, confirmed: dict):
+                message, error = persist_action(confirmed["normalized"])
+                if error:
+                    await confirm_interaction.response.edit_message(content=error, embed=None, view=None)
+                    return
+                await confirm_interaction.response.edit_message(
+                    content=message,
+                    embed=build_action_preview_embed(confirmed, title="自訂動作設定完成", saved=True),
+                    view=None,
+                )
+
+            await interaction.followup.send(
+                embed=build_action_preview_embed(analysis, title="確認你的意思"),
+                view=ActionConfirmationView(interaction.user.id, analysis, confirm_action),
+                ephemeral=True,
+            )
+            return
+
+        message, error = persist_action(analysis["normalized"])
+        if error:
+            await interaction.followup.send(error, ephemeral=True)
+            return
         await interaction.followup.send(
-            f"已{action_text}自訂指令 `{alias_name}`\n- 動作：`{action_str}`\n- 目前數量：{len(custom_actions)}/10",
+            content=message,
+            embed=build_action_preview_embed(analysis, title="自訂動作設定完成", saved=True),
             ephemeral=True,
         )
 

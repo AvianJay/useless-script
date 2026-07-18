@@ -22,6 +22,7 @@ SUPPORTED_ACTION_PREFIXES = {
     "kick",
     "mute",
     "timeout",
+    "to",
     "unban",
     "unmute",
     "untimeout",
@@ -658,6 +659,7 @@ class AntiBeast(commands.GroupCog, name="antibeast"):
         time_window="時間窗口秒數（5-3600）",
         action="Moderate 動作指令，留空則保留目前設定",
     )
+    @app_commands.autocomplete(action=Moderate.action_input_autocomplete)
     async def settings(
         self,
         interaction: discord.Interaction,
@@ -669,6 +671,7 @@ class AntiBeast(commands.GroupCog, name="antibeast"):
         config = self._get_config(interaction.guild.id)
         kick_config = dict(config["kick"])
         changed = False
+        action_analysis = None
 
         if enable is not None:
             kick_config["enabled"] = enable
@@ -690,16 +693,18 @@ class AntiBeast(commands.GroupCog, name="antibeast"):
 
         if action is not None:
             action = action.strip()
-            _, error = self._expand_action_string(action, interaction.guild.id)
-            if error:
-                await interaction.response.send_message(f"⚠️ action 無效：{error}", ephemeral=True)
+            action_analysis = Moderate.analyze_action_string(action, interaction.guild.id)
+            if not action_analysis["valid"]:
+                await interaction.response.send_message(
+                    embed=Moderate.build_action_preview_embed(action_analysis),
+                    ephemeral=True,
+                )
                 return
-            kick_config["action"] = action
+            kick_config["action"] = action_analysis["normalized"]
             changed = True
 
         kick_config = self._normalize_kick_config(kick_config)
         config["kick"] = kick_config
-        set_server_config(interaction.guild.id, "antibeast", config)
 
         if not kick_config["enabled"]:
             status = "❌ 停用"
@@ -709,18 +714,55 @@ class AntiBeast(commands.GroupCog, name="antibeast"):
                 f"`{kick_config['action']}`"
             )
 
-        log(
-            f"AntiBeast 自動處置設定更新: {kick_config}",
-            module_name="AntiBeast",
-            guild=interaction.guild,
-            user=interaction.user,
-        )
         prefix = "已更新設定。" if changed else "目前設定："
-        await interaction.response.send_message(
-            f"{prefix}\n自動處置：{status}",
-            ephemeral=True,
-            allowed_mentions=discord.AllowedMentions.none(),
-        )
+
+        def persist(actor):
+            set_server_config(interaction.guild.id, "antibeast", config)
+            log(
+                f"AntiBeast 自動處置設定更新: {kick_config}",
+                module_name="AntiBeast",
+                guild=interaction.guild,
+                user=actor,
+            )
+
+        if action_analysis is not None and action_analysis["requires_confirmation"]:
+            async def confirm_action(confirm_interaction: discord.Interaction, confirmed: dict):
+                persist(confirm_interaction.user)
+                await confirm_interaction.response.edit_message(
+                    content=f"{prefix}\n自動處置：{status}",
+                    embed=Moderate.build_action_preview_embed(
+                        confirmed,
+                        title="AntiBeast 動作設定完成",
+                        saved=True,
+                    ),
+                    view=None,
+                    allowed_mentions=discord.AllowedMentions.none(),
+                )
+
+            await interaction.response.send_message(
+                embed=Moderate.build_action_preview_embed(action_analysis, title="確認你的意思"),
+                view=Moderate.ActionConfirmationView(
+                    interaction.user.id,
+                    action_analysis,
+                    confirm_action,
+                ),
+                ephemeral=True,
+            )
+            return
+
+        persist(interaction.user)
+        response_kwargs = {
+            "content": f"{prefix}\n自動處置：{status}",
+            "ephemeral": True,
+            "allowed_mentions": discord.AllowedMentions.none(),
+        }
+        if action_analysis is not None:
+            response_kwargs["embed"] = Moderate.build_action_preview_embed(
+                action_analysis,
+                title="AntiBeast 動作設定完成",
+                saved=True,
+            )
+        await interaction.response.send_message(**response_kwargs)
 
     @app_commands.command(name="list", description="列出 AntiBeast 設定")
     @app_commands.default_permissions(administrator=True)
@@ -945,6 +987,18 @@ class AntiBeastSetupView(discord.ui.View):
 
         embed = self.cog._build_config_embed(self.guild, self.config)
         embed.title = "AntiBeast 已啟用"
+        kick_config = self.config["kick"]
+        if kick_config["enabled"]:
+            analysis = Moderate.analyze_action_string(kick_config["action"], self.guild.id)
+            if analysis["valid"]:
+                embed.add_field(
+                    name="動作執行預覽",
+                    value="\n".join(
+                        f"{index}. {line}"
+                        for index, line in enumerate(analysis.get("preview", []), 1)
+                    ),
+                    inline=False,
+                )
         set_server_config(self.guild.id, "antibeast", self.config)
         log(
             "AntiBeast 已透過 setup 啟用",
@@ -1097,19 +1151,44 @@ class AntiBeastActionModal(discord.ui.Modal, title="AntiBeast 處置設定"):
             return
 
         action = str(self.action.value).strip()
-        _, error = self.setup_view.cog._expand_action_string(action, self.setup_view.guild.id)
-        if error:
-            await interaction.response.send_message(f"⚠️ action 無效：{error}", ephemeral=True)
+        analysis = Moderate.analyze_action_string(action, self.setup_view.guild.id)
+        if not analysis["valid"]:
+            await interaction.response.send_message(
+                embed=Moderate.build_action_preview_embed(analysis),
+                ephemeral=True,
+            )
             return
 
-        self.setup_view.config["kick"] = self.setup_view.cog._normalize_kick_config(
-            {
-                "enabled": True,
-                "threshold": threshold,
-                "time_window": time_window,
-                "action": action,
-            }
-        )
+        def apply_action(normalized_action: str):
+            self.setup_view.config["kick"] = self.setup_view.cog._normalize_kick_config(
+                {
+                    "enabled": True,
+                    "threshold": threshold,
+                    "time_window": time_window,
+                    "action": normalized_action,
+                }
+            )
+
+        if analysis["requires_confirmation"]:
+            async def confirm_action(confirm_interaction: discord.Interaction, confirmed: dict):
+                apply_action(confirmed["normalized"])
+                await self.setup_view.show_confirm(confirm_interaction)
+
+            async def cancel_action(cancel_interaction: discord.Interaction):
+                await self.setup_view.show_action(cancel_interaction)
+
+            await interaction.response.edit_message(
+                embed=Moderate.build_action_preview_embed(analysis, title="確認你的意思"),
+                view=Moderate.ActionConfirmationView(
+                    interaction.user.id,
+                    analysis,
+                    confirm_action,
+                    cancel_callback=cancel_action,
+                ),
+            )
+            return
+
+        apply_action(analysis["normalized"])
         await self.setup_view.show_confirm(interaction)
 
 
