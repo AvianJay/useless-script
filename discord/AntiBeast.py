@@ -14,6 +14,7 @@ from logger import log
 RULE_NAME = "AntiBeast - block everyone/here and roles"
 LEGACY_RULE_NAMES = {"AntiBeast - block everyone/here"}
 BASE_KEYWORD_FILTER = ["@everyone", "@here"]
+EVERYONE_HERE_KEYWORDS = {"@everyone", "@here"}
 BLOCK_MESSAGE = "AntiBeast 已阻擋 everyone/here 或受保護身分組提及。"
 DEFAULT_TRIGGER_ACTION = "kick AntiBeast: {time_window} 秒內觸發 {trigger_count} 次"
 AUTOMOD_RULE_LIMIT_ERROR_CODES = {30034}
@@ -59,6 +60,7 @@ class AntiBeast(commands.GroupCog, name="antibeast"):
                 "threshold": 2,
                 "time_window": 10,
                 "action": DEFAULT_TRIGGER_ACTION,
+                "only_everyone_here": False,
             },
         }
 
@@ -109,7 +111,14 @@ class AntiBeast(commands.GroupCog, name="antibeast"):
             "threshold": min(max(threshold, 1), 20),
             "time_window": min(max(time_window, 5), 3600),
             "action": str(kick_config.get("action") or DEFAULT_TRIGGER_ACTION).strip()[:500],
+            "only_everyone_here": bool(kick_config.get("only_everyone_here", False)),
         }
+
+    @staticmethod
+    def _format_action_scope(kick_config: dict) -> str:
+        if kick_config.get("only_everyone_here", False):
+            return "只處理 @everyone / @here"
+        return "處理 @everyone / @here 與未繞過身分組提及"
 
     @staticmethod
     def _expand_action_string(action: str, guild_id: int | None) -> tuple[list[str], str | None]:
@@ -406,6 +415,20 @@ class AntiBeast(commands.GroupCog, name="antibeast"):
         except (discord.HTTPException, discord.NotFound):
             return None
 
+    @staticmethod
+    def _execution_mentions_everyone_or_here(execution: discord.AutoModAction) -> bool:
+        for value in (
+            getattr(execution, "matched_keyword", None),
+            getattr(execution, "matched_content", None),
+            getattr(execution, "content", None),
+        ):
+            if not isinstance(value, str):
+                continue
+            lowered = value.casefold()
+            if any(keyword in lowered for keyword in EVERYONE_HERE_KEYWORDS):
+                return True
+        return False
+
     def _record_trigger(self, guild_id: int, user_id: int, kick_config: dict) -> int:
         now = time.monotonic()
         time_window = kick_config["time_window"]
@@ -545,9 +568,10 @@ class AntiBeast(commands.GroupCog, name="antibeast"):
         kick_config = config["kick"]
         kick_text = (
             f"✅ 啟用，{kick_config['time_window']} 秒內觸發 {kick_config['threshold']} 次後執行："
-            f"`{kick_config['action']}`"
+            f"`{kick_config['action']}`\n"
+            f"範圍：{self._format_action_scope(kick_config)}"
             if kick_config["enabled"]
-            else "❌ 停用"
+            else f"❌ 停用\n範圍：{self._format_action_scope(kick_config)}"
         )
         embed.add_field(name="連續觸發處置", value=kick_text, inline=False)
         embed.add_field(
@@ -658,6 +682,7 @@ class AntiBeast(commands.GroupCog, name="antibeast"):
         threshold="時間窗口內觸發幾次後處置（1-20）",
         time_window="時間窗口秒數（5-3600）",
         action="Moderate 動作指令，留空則保留目前設定",
+        only_everyone_here="是否只處理提及 @everyone 或 @here 的成員",
     )
     @app_commands.autocomplete(action=Moderate.action_input_autocomplete)
     async def settings(
@@ -667,6 +692,7 @@ class AntiBeast(commands.GroupCog, name="antibeast"):
         threshold: int = None,
         time_window: int = None,
         action: str = None,
+        only_everyone_here: bool = None,
     ):
         config = self._get_config(interaction.guild.id)
         kick_config = dict(config["kick"])
@@ -703,15 +729,20 @@ class AntiBeast(commands.GroupCog, name="antibeast"):
             kick_config["action"] = action_analysis["normalized"]
             changed = True
 
+        if only_everyone_here is not None:
+            kick_config["only_everyone_here"] = only_everyone_here
+            changed = True
+
         kick_config = self._normalize_kick_config(kick_config)
         config["kick"] = kick_config
 
         if not kick_config["enabled"]:
-            status = "❌ 停用"
+            status = f"❌ 停用\n範圍：{self._format_action_scope(kick_config)}"
         else:
             status = (
                 f"✅ 啟用，{kick_config['time_window']} 秒內觸發 {kick_config['threshold']} 次後執行："
-                f"`{kick_config['action']}`"
+                f"`{kick_config['action']}`\n"
+                f"範圍：{self._format_action_scope(kick_config)}"
             )
 
         prefix = "已更新設定。" if changed else "目前設定："
@@ -840,6 +871,9 @@ class AntiBeast(commands.GroupCog, name="antibeast"):
         if not is_antibeast_execution:
             return
 
+        if kick_config["only_everyone_here"] and not self._execution_mentions_everyone_or_here(execution):
+            return
+
         set_server_config(guild.id, "antibeast", config)
         trigger_count = self._record_trigger(guild.id, execution.user_id, kick_config)
         if trigger_count < kick_config["threshold"]:
@@ -914,10 +948,12 @@ class AntiBeastSetupView(discord.ui.View):
         await interaction.response.edit_message(embed=embed, view=self, allowed_mentions=discord.AllowedMentions.none())
 
     async def show_action(self, interaction: discord.Interaction):
+        kick_config = self.config["kick"]
         self.clear_items()
         self.add_item(AntiBeastDefaultActionButton())
         self.add_item(AntiBeastCustomActionButton())
         self.add_item(AntiBeastDisableActionButton())
+        self.add_item(AntiBeastToggleEveryoneHereOnlyButton(kick_config["only_everyone_here"]))
         self.add_item(AntiBeastBackToBypassButton())
         embed = discord.Embed(
             title="AntiBeast Setup: 連續觸發處置",
@@ -927,13 +963,17 @@ class AntiBeastSetupView(discord.ui.View):
             ),
             color=discord.Color.blurple(),
         )
-        kick_config = self.config["kick"]
         status = (
             f"{kick_config['time_window']} 秒內 {kick_config['threshold']} 次，執行 `{kick_config['action']}`"
             if kick_config["enabled"]
             else "目前停用連續觸發處置"
         )
         embed.add_field(name="目前處置", value=status, inline=False)
+        embed.add_field(
+            name="處置範圍",
+            value=self.cog._format_action_scope(kick_config),
+            inline=False,
+        )
         embed.add_field(
             name="可用變數",
             value="`{time_window}`、`{trigger_count}` 會在執行前替換成實際數值。",
@@ -961,9 +1001,10 @@ class AntiBeastSetupView(discord.ui.View):
         embed.add_field(
             name="連續觸發處置",
             value=(
-                f"{kick_config['time_window']} 秒內 {kick_config['threshold']} 次，執行 `{kick_config['action']}`"
+                f"{kick_config['time_window']} 秒內 {kick_config['threshold']} 次，執行 `{kick_config['action']}`\n"
+                f"範圍：{self.cog._format_action_scope(kick_config)}"
                 if kick_config["enabled"]
-                else "停用"
+                else f"停用\n範圍：{self.cog._format_action_scope(kick_config)}"
             ),
             inline=False,
         )
@@ -1059,6 +1100,7 @@ class AntiBeastDefaultActionButton(discord.ui.Button):
                 "threshold": 2,
                 "time_window": 10,
                 "action": DEFAULT_TRIGGER_ACTION,
+                "only_everyone_here": self.view.config["kick"]["only_everyone_here"],
             }
         )
         await self.view.show_confirm(interaction)
@@ -1081,6 +1123,19 @@ class AntiBeastDisableActionButton(discord.ui.Button):
         kick_config["enabled"] = False
         self.view.config["kick"] = self.view.cog._normalize_kick_config(kick_config)
         await self.view.show_confirm(interaction)
+
+
+class AntiBeastToggleEveryoneHereOnlyButton(discord.ui.Button):
+    def __init__(self, enabled: bool):
+        label = "僅處理 everyone/here：開" if enabled else "僅處理 everyone/here：關"
+        style = discord.ButtonStyle.primary if enabled else discord.ButtonStyle.secondary
+        super().__init__(label=label, style=style, row=1)
+
+    async def callback(self, interaction: discord.Interaction):
+        kick_config = dict(self.view.config["kick"])
+        kick_config["only_everyone_here"] = not kick_config["only_everyone_here"]
+        self.view.config["kick"] = self.view.cog._normalize_kick_config(kick_config)
+        await self.view.show_action(interaction)
 
 
 class AntiBeastBackToBypassButton(discord.ui.Button):
@@ -1166,6 +1221,7 @@ class AntiBeastActionModal(discord.ui.Modal, title="AntiBeast 處置設定"):
                     "threshold": threshold,
                     "time_window": time_window,
                     "action": normalized_action,
+                    "only_everyone_here": self.setup_view.config["kick"]["only_everyone_here"],
                 }
             )
 

@@ -768,6 +768,7 @@ translations = {
     "scratchcard": "刮刮樂",
     "number": "數字",
     "bet_type": "賭注類型",
+    "only_everyone_here": "只有所有人提及"
 }
 class CommandNameTranslator(app_commands.Translator):
     async def translate(
