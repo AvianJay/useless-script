@@ -267,6 +267,7 @@ DEFAULT_FIXLINK_CONFIG = {
     "enabled": False,
     "remove_tracker": False,
     "webhook_mode": False,
+    "webhook_only_with_tracker": False,
     "disabled_platforms": [],
     "preferred_fixers": dict(DEFAULT_PREFERRED_FIXERS),
     "custom_platforms": [],
@@ -289,6 +290,7 @@ class LinkMatch:
     end: int
     fixers: tuple[tuple[str, str], ...]
     primary_url: str
+    has_tracker: bool = False
     username: str | None = None
     profile_url: str | None = None
 
@@ -527,6 +529,11 @@ def normalize_fixlink_config(raw) -> dict:
         "enabled": raw.get("enabled") if isinstance(raw.get("enabled"), bool) else False,
         "remove_tracker": raw.get("remove_tracker") if isinstance(raw.get("remove_tracker"), bool) else False,
         "webhook_mode": raw.get("webhook_mode") if isinstance(raw.get("webhook_mode"), bool) else False,
+        "webhook_only_with_tracker": (
+            raw.get("webhook_only_with_tracker")
+            if isinstance(raw.get("webhook_only_with_tracker"), bool)
+            else False
+        ),
         "disabled_platforms": _unique_strings(raw.get("disabled_platforms", []), limit=50)
         if isinstance(raw.get("disabled_platforms", []), list)
         else [],
@@ -648,6 +655,15 @@ def build_builtin_match_urls(
     return source_url, tuple(fixers)
 
 
+def builtin_url_has_tracker(platform: dict, parsed) -> bool:
+    allowed_query_keys = set(platform.get("keep_query_keys", []))
+    has_extra_query = any(
+        key not in allowed_query_keys
+        for key, _ in parse_qsl(parsed.query, keep_blank_values=True)
+    )
+    return bool(parsed.fragment or has_extra_query)
+
+
 def get_builtin_profile(platform_name: str, path: str) -> tuple[str | None, str | None]:
     decoded_path = unquote(path or "/")
     patterns = {
@@ -744,6 +760,17 @@ def build_custom_source_url(url: str, *, remove_tracker: bool, keep_query_keys: 
     return urlunsplit((parsed.scheme, parsed.netloc, parsed.path, query, parsed.fragment))
 
 
+def custom_url_has_tracker(url: str, keep_query_keys: list[str]) -> bool:
+    if not keep_query_keys:
+        return False
+    allowed_query_keys = set(keep_query_keys)
+    parsed = urlsplit(url)
+    return any(
+        key not in allowed_query_keys
+        for key, _ in parse_qsl(parsed.query, keep_blank_values=True)
+    )
+
+
 def build_custom_fixer_url(platform: dict, source_url: str) -> str:
     fixer = platform["fixer"]
     endpoint = urlsplit(fixer["endpoint"])
@@ -822,7 +849,7 @@ class FixLinkDeleteButton(
         self.author_id = int(author_id)
         super().__init__(
             discord.ui.Button(
-                label="刪除",
+                # label="刪除",
                 style=discord.ButtonStyle.danger,
                 emoji=emoji,
                 custom_id=f"fixlink_delete:{self.author_id}",
@@ -961,6 +988,11 @@ class FixLinkSettingsView(discord.ui.View):
         self.toggle_tracker.style = discord.ButtonStyle.primary if self.config["remove_tracker"] else discord.ButtonStyle.secondary
         self.toggle_webhook.label = "Webhook\uff1a\u958b" if self.config["webhook_mode"] else "Webhook\uff1a\u95dc"
         self.toggle_webhook.style = discord.ButtonStyle.primary if self.config["webhook_mode"] else discord.ButtonStyle.secondary
+        tracker_only = self.config["webhook_only_with_tracker"]
+        self.toggle_webhook_tracker.label = "Webhook：僅追蹤碼" if tracker_only else "Webhook：全部連結"
+        self.toggle_webhook_tracker.style = (
+            discord.ButtonStyle.primary if tracker_only else discord.ButtonStyle.secondary
+        )
         if self.selected_builtin_name not in supported_platforms:
             self.selected_builtin_name = "Threads"
         self.builtin_select.options = [
@@ -1018,11 +1050,17 @@ class FixLinkSettingsView(discord.ui.View):
     def build_embed(self) -> discord.Embed:
         embed = discord.Embed(title="FixLink \u8a2d\u5b9a", color=discord.Color.blurple())
         mode = "Webhook \u66ff\u63db" if self.config["webhook_mode"] else "\u4e00\u822c\u56de\u8986"
+        webhook_condition = (
+            "僅含追蹤碼的連結"
+            if self.config["webhook_only_with_tracker"]
+            else "全部支援連結"
+        )
         enabled_text = "\u555f\u7528" if self.config["enabled"] else "\u505c\u7528"
         tracker_text = "\u555f\u7528" if self.config["remove_tracker"] else "\u505c\u7528"
         embed.description = (
             f"\u529f\u80fd\uff1a**{enabled_text}**\n"
             f"\u6a21\u5f0f\uff1a**{mode}**\n"
+            f"Webhook 條件：**{webhook_condition}**\n"
             f"\u79fb\u9664\u8ffd\u8e64\uff1a**{tracker_text}**"
         )
         platform = supported_platforms[self.selected_builtin_name]
@@ -1114,6 +1152,21 @@ class FixLinkSettingsView(discord.ui.View):
         await self.mutate_config(
             interaction,
             lambda config: config.__setitem__("webhook_mode", not config["webhook_mode"]),
+        )
+
+    @discord.ui.button(
+        label="Webhook：全部連結",
+        style=discord.ButtonStyle.secondary,
+        row=0,
+        custom_id="fixlink_toggle_webhook_tracker",
+    )
+    async def toggle_webhook_tracker(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await self.mutate_config(
+            interaction,
+            lambda config: config.__setitem__(
+                "webhook_only_with_tracker",
+                not config["webhook_only_with_tracker"],
+            ),
         )
 
     @discord.ui.button(
@@ -1501,6 +1554,7 @@ class FixLink(commands.GroupCog, name="fixlink", description="\u9023\u7d50\u4fee
                 end=extracted.end,
                 fixers=tuple(fixers),
                 primary_url=primary_url,
+                has_tracker=bool(urlsplit(extracted.url).query or urlsplit(extracted.url).fragment),
                 username=username,
                 profile_url=f"https://www.threads.com/@{username}" if username else None,
             )
@@ -1533,6 +1587,7 @@ class FixLink(commands.GroupCog, name="fixlink", description="\u9023\u7d50\u4fee
                 end=extracted.end,
                 fixers=fixers,
                 primary_url=primary_url,
+                has_tracker=builtin_url_has_tracker(platform, parsed),
                 username=username,
                 profile_url=profile_url,
             )
@@ -1556,6 +1611,7 @@ class FixLink(commands.GroupCog, name="fixlink", description="\u9023\u7d50\u4fee
             end=extracted.end,
             fixers=((custom["fixer"]["name"], fixed_url),),
             primary_url=fixed_url,
+            has_tracker=custom_url_has_tracker(extracted.url, custom["keep_query_keys"]),
         )
 
     async def match_message(self, content: str, config: dict) -> list[LinkMatch]:
@@ -1821,7 +1877,11 @@ class FixLink(commands.GroupCog, name="fixlink", description="\u9023\u7d50\u4fee
         matches = await self.match_message(message.content, config)
         if not matches:
             return
-        if config["webhook_mode"] and await self.replace_with_webhook(message, matches):
+        should_use_webhook = config["webhook_mode"] and (
+            not config["webhook_only_with_tracker"]
+            or any(match.has_tracker for match in matches)
+        )
+        if should_use_webhook and await self.replace_with_webhook(message, matches):
             return
         await self.send_normal_reply(message, matches)
 

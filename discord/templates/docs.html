@@ -1246,12 +1246,13 @@
                 </div>
                 <table class="cmd-table">
                     <tr><th>指令</th><th>說明</th></tr>
-                    <tr><td><code>/fixlink settings</code></td><td>管理開關、Threads fixer、Webhook 與自訂平台</td></tr>
+                    <tr><td><code>/fixlink settings</code></td><td>管理開關、Threads fixer、Webhook 條件與自訂平台</td></tr>
                 </table>
                 <div class="doc-note">
                     <strong>內建平台：</strong>Threads、Twitter/X、Instagram、TikTok、Reddit、Facebook、Bilibili、Pixiv、Pinterest、YouTube、Twitch、Bluesky、Spotify、DeviantArt、Imgur、Weibo、Newgrounds、PTT、Roblox 與 Fur Affinity。可在面板中分別啟停並選擇主要 fixer。<br>
                     <strong>服務來源：</strong>參考 <a href="https://github.com/Kyrela/FixTweetBot#awesome-fixers" target="_blank" rel="noopener noreferrer">FixTweetBot Awesome Fixers</a>，未納入非官方惡搞網域與已棄用服務。<br>
                     <strong>預覽確認：</strong>一般回覆在 7 秒後沒有 embed 會自動刪除；預覽成功時會收起原訊息的 embed。Webhook 預覽失敗時會改回原文，並附上只有原作者能使用的持久化刪除按鈕。<br>
+                    <strong>Webhook 條件：</strong>可選擇處理全部支援連結，或只在連結包含追蹤 query / fragment 時替換；乾淨連結會改用一般回覆，平台必要參數（例如 YouTube <code>v</code>、<code>t</code>）不算追蹤碼。<br>
                     <strong>略過處理：</strong>使用 <code>&lt;https://example.com/...&gt;</code> 包住連結時，FixLink 不會處理該連結。
                 </div>
             </div>

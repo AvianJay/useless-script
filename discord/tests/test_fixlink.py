@@ -107,6 +107,26 @@ class URLHelperTests(unittest.TestCase):
             "https://social.example.com/post/1?id=42&utm_source=test#section",
         )
 
+    def test_builtin_tracker_detection_ignores_required_query_keys(self):
+        youtube = FixLink.supported_platforms["YouTube"]
+        clean = urlsplit("https://www.youtube.com/watch?v=abc_DEF-12&t=30")
+        tracked = urlsplit(
+            "https://www.youtube.com/watch?v=abc_DEF-12&t=30&utm_source=test"
+        )
+        fragmented = urlsplit("https://www.youtube.com/watch?v=abc_DEF-12#share")
+
+        self.assertFalse(FixLink.builtin_url_has_tracker(youtube, clean))
+        self.assertTrue(FixLink.builtin_url_has_tracker(youtube, tracked))
+        self.assertTrue(FixLink.builtin_url_has_tracker(youtube, fragmented))
+
+    def test_custom_tracker_detection_uses_keep_query_keys(self):
+        clean = "https://social.example.com/post/1?id=42"
+        tracked = f"{clean}&utm_source=test"
+
+        self.assertFalse(FixLink.custom_url_has_tracker(clean, ["id"]))
+        self.assertTrue(FixLink.custom_url_has_tracker(tracked, ["id"]))
+        self.assertFalse(FixLink.custom_url_has_tracker(tracked, []))
+
     def test_custom_endpoint_validation_rejects_unsafe_shapes(self):
         invalid_endpoints = [
             "http://fix.example.com/embed",
@@ -192,10 +212,17 @@ class URLHelperTests(unittest.TestCase):
         )
         self.assertTrue(config["enabled"])
         self.assertFalse(config["remove_tracker"])
+        self.assertFalse(config["webhook_only_with_tracker"])
         self.assertEqual(config["preferred_fixers"]["Threads"], "FixEmbed")
         self.assertEqual(config["preferred_fixers"]["Twitter"], "FxTwitter")
         self.assertEqual(set(config["preferred_fixers"]), set(FixLink.supported_platforms))
         self.assertEqual(len(config["custom_platforms"]), 1)
+
+        preserved = FixLink.normalize_fixlink_config(
+            {"webhook_mode": True, "webhook_only_with_tracker": True}
+        )
+        self.assertTrue(preserved["webhook_mode"])
+        self.assertTrue(preserved["webhook_only_with_tracker"])
 
     def test_chunk_lines_respects_discord_limit(self):
         chunks = FixLink.chunk_lines(["a" * 1000, "b" * 1000, "c" * 100])
@@ -219,6 +246,10 @@ class MatchTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(dict(match.fixers)["FixEmbed"], FIXEMBED_DIRECT_URL)
         self.assertEqual(match.username, "tzu_tiao_pi_wai")
         self.assertEqual(match.primary_url, FZ_DIRECT_URL)
+        self.assertTrue(match.has_tracker)
+
+        clean_matches = await self.cog.match_message(CLEAN_DIRECT_URL, config)
+        self.assertFalse(clean_matches[0].has_tracker)
 
     async def test_builtin_platform_table(self):
         cases = [
@@ -399,6 +430,13 @@ class MatchTests(unittest.IsolatedAsyncioTestCase):
             fixed_query["url"],
             ["https://social.example.com/post/1?id=42"],
         )
+        self.assertTrue(matches[0].has_tracker)
+
+        clean_matches = await self.cog.match_message(
+            "https://social.example.com/post/1?id=42",
+            config,
+        )
+        self.assertFalse(clean_matches[0].has_tracker)
 
 
 class FakeResponseContext:
@@ -570,10 +608,95 @@ class SettingsViewTests(unittest.IsolatedAsyncioTestCase):
             {"FxTwitter", "VxTwitter"},
         )
         self.assertEqual(view.toggle_builtin.label, "停用 Twitter")
+        self.assertEqual(view.toggle_webhook_tracker.label, "Webhook：全部連結")
         row_counts = {}
         for child in view.children:
             row_counts[child.row] = row_counts.get(child.row, 0) + 1
         self.assertTrue(all(count <= 5 for count in row_counts.values()))
+
+
+class MessageRoutingTests(unittest.IsolatedAsyncioTestCase):
+    async def asyncSetUp(self):
+        self.cog = FixLink.FixLink(FixLink.bot)
+        self.message = SimpleNamespace(
+            guild=SimpleNamespace(id=2),
+            author=SimpleNamespace(bot=False),
+            webhook_id=None,
+            content=CLEAN_DIRECT_URL,
+        )
+
+    async def test_tracker_only_webhook_uses_normal_reply_for_clean_link(self):
+        match = FixLink.LinkMatch(
+            platform_key="Threads",
+            platform_name="Threads",
+            source_url=CLEAN_DIRECT_URL,
+            start=0,
+            end=len(CLEAN_DIRECT_URL),
+            fixers=(("FzThreads", FZ_DIRECT_URL),),
+            primary_url=FZ_DIRECT_URL,
+            has_tracker=False,
+        )
+        config = FixLink.normalize_fixlink_config(
+            {
+                "enabled": True,
+                "webhook_mode": True,
+                "webhook_only_with_tracker": True,
+            }
+        )
+        with (
+            patch.object(self.cog, "get_config", return_value=config),
+            patch.object(self.cog, "match_message", new=AsyncMock(return_value=[match])),
+            patch.object(self.cog, "replace_with_webhook", new=AsyncMock()) as replace,
+            patch.object(self.cog, "send_normal_reply", new=AsyncMock()) as reply,
+        ):
+            await self.cog.on_message(self.message)
+
+        replace.assert_not_awaited()
+        reply.assert_awaited_once_with(self.message, [match])
+
+    async def test_tracker_only_webhook_replaces_when_any_link_is_tracked(self):
+        clean_match = FixLink.LinkMatch(
+            platform_key="Threads",
+            platform_name="Threads",
+            source_url=CLEAN_DIRECT_URL,
+            start=0,
+            end=len(CLEAN_DIRECT_URL),
+            fixers=(("FzThreads", FZ_DIRECT_URL),),
+            primary_url=FZ_DIRECT_URL,
+            has_tracker=False,
+        )
+        tracked_match = FixLink.LinkMatch(
+            platform_key="Twitter",
+            platform_name="Twitter",
+            source_url="https://x.com/discord/status/1234567890",
+            start=len(CLEAN_DIRECT_URL) + 1,
+            end=len(CLEAN_DIRECT_URL) + 60,
+            fixers=(("FxTwitter", "https://fxtwitter.com/discord/status/1234567890"),),
+            primary_url="https://fxtwitter.com/discord/status/1234567890",
+            has_tracker=True,
+        )
+        matches = [clean_match, tracked_match]
+        config = FixLink.normalize_fixlink_config(
+            {
+                "enabled": True,
+                "webhook_mode": True,
+                "webhook_only_with_tracker": True,
+            }
+        )
+        with (
+            patch.object(self.cog, "get_config", return_value=config),
+            patch.object(self.cog, "match_message", new=AsyncMock(return_value=matches)),
+            patch.object(
+                self.cog,
+                "replace_with_webhook",
+                new=AsyncMock(return_value=True),
+            ) as replace,
+            patch.object(self.cog, "send_normal_reply", new=AsyncMock()) as reply,
+        ):
+            await self.cog.on_message(self.message)
+
+        replace.assert_awaited_once_with(self.message, matches)
+        reply.assert_not_awaited()
 
 
 class WebhookTransactionTests(unittest.IsolatedAsyncioTestCase):

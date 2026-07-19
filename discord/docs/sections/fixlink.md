@@ -10,6 +10,8 @@ FixLink 會偵測伺服器中的內建與管理員設定的自訂平台連結，
 
 - **一般回覆**：由 bot 回覆原始連結、作者頁與可用的 fixer。7 秒後若修復訊息沒有預覽會自動刪除；預覽成功時會收起原訊息的 embed。
 - **Webhook 替換**：使用發文者名稱與頭像重送修復後的訊息。若 7 秒後沒有預覽，會將 Webhook 訊息改回原文；完成後才刪除原訊息。
+- Webhook 模式可設為「全部連結」或「僅追蹤碼」；後者只在至少一個支援連結含額外 query 或 fragment 時替換，乾淨連結仍使用一般回覆。
+- 平台識別內容必需的 query 不算追蹤碼，例如 YouTube `v`、`t`、Instagram `img_index` 與 Bilibili `p`。
 - Webhook 訊息會附上持久化型刪除按鈕，只有原訊息作者可使用。
 - Webhook 無法保留回覆關係、貼圖、投票或語音訊息時，會保留原文並改用一般回覆。
 
@@ -35,6 +37,7 @@ FixLink 會偵測伺服器中的內建與管理員設定的自訂平台連結，
 - 只允許結構化 query fixer：HTTPS endpoint、來源 URL 參數名與靜態 query。
 - 不接受 wildcard、regex、IP endpoint、`{url}` 範本或網域替換。
 - 啟用移除追蹤時，可設定必須保留的來源 query keys；未設定時會保留全部 query。
+- 「僅追蹤碼」Webhook 只會對已設定 `keep_query_keys` 的自訂平台判定額外 query；未設定保留鍵時不會猜測哪些參數是追蹤碼。
 
 ## 略過處理
 
