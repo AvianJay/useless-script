@@ -558,6 +558,29 @@ class NormalReplyPreviewTests(unittest.IsolatedAsyncioTestCase):
         sent.delete.assert_awaited_once_with()
         message.edit.assert_not_awaited()
 
+    def test_normal_reply_formats_only_the_primary_fixer(self):
+        match = FixLink.LinkMatch(
+            platform_key="Threads",
+            platform_name="Threads",
+            source_url=CLEAN_DIRECT_URL,
+            start=0,
+            end=len(DIRECT_URL),
+            fixers=(
+                ("FzThreads", FZ_DIRECT_URL),
+                ("FixEmbed", FIXEMBED_DIRECT_URL),
+            ),
+            primary_url=FIXEMBED_DIRECT_URL,
+            username="tzu_tiao_pi_wai",
+            profile_url="https://www.threads.com/@tzu_tiao_pi_wai",
+        )
+
+        line = FixLink.format_match_line(match)
+
+        self.assertIn("FixEmbed", line)
+        self.assertIn(FIXEMBED_DIRECT_URL, line)
+        self.assertNotIn("FzThreads", line)
+        self.assertNotIn(FZ_DIRECT_URL, line)
+
 
 class DeleteButtonTests(unittest.IsolatedAsyncioTestCase):
     async def test_persistent_button_only_allows_original_author(self):

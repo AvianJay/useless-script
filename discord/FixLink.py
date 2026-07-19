@@ -829,7 +829,13 @@ def format_match_line(match: LinkMatch) -> str:
     parts = [f"[{_escape_label(match.platform_name)}](<{match.source_url}>)"]
     if match.username and match.profile_url:
         parts.append(f"[@{_escape_label(match.username)}](<{match.profile_url}>)")
-    parts.extend(f"[{_escape_label(name)}]({url})" for name, url in match.fixers)
+    primary_fixer = next(
+        ((name, url) for name, url in match.fixers if url == match.primary_url),
+        match.fixers[0] if match.fixers else None,
+    )
+    if primary_fixer is not None:
+        name, _ = primary_fixer
+        parts.append(f"[{_escape_label(name)}]({match.primary_url})")
     return " \u2022 ".join(parts)
 
 
