@@ -158,7 +158,9 @@ async function render() {
 function buildSettingRow(mod, s, value, channels, roles, autoreplyLimit) {
     const row = document.createElement('div');
     row.className = 'setting-row';
-    if (s.type === 'autoreply_list' || s.type === 'automod_config' || s.type === 'webverify_config') row.classList.add('setting-row-column');
+    if (['autoreply_list', 'automod_config', 'webverify_config', 'fixlink_config', 'antibeast_config'].includes(s.type)) {
+        row.classList.add('setting-row-column');
+    }
 
     const id = `${mod}::${s.database_key}`;
 
@@ -195,6 +197,12 @@ function buildSettingRow(mod, s, value, channels, roles, autoreplyLimit) {
             break;
         case 'webverify_config':
             ctrl.appendChild(buildWebverifyConfigEditor(mod, s, value, channels, roles));
+            break;
+        case 'fixlink_config':
+            ctrl.appendChild(buildFixlinkConfigEditor(mod, s, value));
+            break;
+        case 'antibeast_config':
+            ctrl.appendChild(buildAntibeastConfigEditor(mod, s, value, roles));
             break;
         case 'boolean':
             ctrl.appendChild(buildToggle(mod, s, value));
@@ -1139,6 +1147,452 @@ function buildAutomodConfigEditor(mod, s, value, channels) {
         container.appendChild(card);
     }
 
+    return container;
+}
+
+function cloneConfig(value) {
+    return JSON.parse(JSON.stringify(value || {}));
+}
+
+function buildCompoundField(labelText, control) {
+    const row = document.createElement('div');
+    row.className = 'compound-field-row';
+    const label = document.createElement('label');
+    label.className = 'compound-field-label';
+    label.textContent = labelText;
+    row.appendChild(label);
+    row.appendChild(control);
+    return row;
+}
+
+function buildCompoundToggle(labelText, checked, onChange) {
+    const wrap = document.createElement('label');
+    wrap.className = 'toggle';
+    const input = document.createElement('input');
+    input.type = 'checkbox';
+    input.checked = !!checked;
+    input.addEventListener('change', () => onChange(input.checked));
+    const slider = document.createElement('span');
+    slider.className = 'toggle-slider';
+    wrap.appendChild(input);
+    wrap.appendChild(slider);
+    return buildCompoundField(labelText, wrap);
+}
+
+function buildFixlinkConfigEditor(mod, s, value) {
+    let config = cloneConfig(value);
+    config.disabled_platforms = Array.isArray(config.disabled_platforms) ? config.disabled_platforms.map(String) : [];
+    config.preferred_fixers = config.preferred_fixers || {};
+    config.custom_platforms = Array.isArray(config.custom_platforms) ? config.custom_platforms : [];
+    const platforms = Array.isArray(s.platforms) ? s.platforms : [];
+    const maxCustom = parseInt(s.max_custom_platforms, 10) || 10;
+    const container = document.createElement('div');
+    container.className = 'compound-config-editor fixlink-config-editor';
+
+    function save(delay = 150, onComplete = null) {
+        debounceSave(mod, s.database_key, cloneConfig(config), delay, result => {
+            if (result && result.success && result.value) config = cloneConfig(result.value);
+            if (onComplete) onComplete(result);
+        });
+    }
+
+    const general = document.createElement('div');
+    general.className = 'compound-section';
+    general.appendChild(buildCompoundToggle('啟用 FixLink', config.enabled, checked => { config.enabled = checked; save(); }));
+    general.appendChild(buildCompoundToggle('移除追蹤參數', config.remove_tracker, checked => { config.remove_tracker = checked; save(); }));
+    general.appendChild(buildCompoundToggle('使用 Webhook 替換訊息', config.webhook_mode, checked => { config.webhook_mode = checked; save(); }));
+    general.appendChild(buildCompoundToggle('Webhook 僅處理含追蹤碼連結', config.webhook_only_with_tracker, checked => {
+        config.webhook_only_with_tracker = checked;
+        save();
+    }));
+    container.appendChild(general);
+
+    const builtinSection = document.createElement('div');
+    builtinSection.className = 'compound-section';
+    const builtinTitle = document.createElement('div');
+    builtinTitle.className = 'compound-section-title';
+    builtinTitle.textContent = '內建平台';
+    builtinSection.appendChild(builtinTitle);
+    const builtinGrid = document.createElement('div');
+    builtinGrid.className = 'compound-card-grid';
+    for (const platform of platforms) {
+        const card = document.createElement('div');
+        card.className = 'compound-card compact';
+        const heading = document.createElement('div');
+        heading.className = 'compound-card-header';
+        const name = document.createElement('strong');
+        name.textContent = platform.name;
+        heading.appendChild(name);
+        const enabled = !config.disabled_platforms.includes(platform.name);
+        const toggle = buildCompoundToggle('啟用', enabled, checked => {
+            const disabled = new Set(config.disabled_platforms);
+            if (checked) disabled.delete(platform.name);
+            else disabled.add(platform.name);
+            config.disabled_platforms = [...disabled];
+            save();
+        });
+        toggle.classList.add('compound-inline-toggle');
+        heading.appendChild(toggle);
+        card.appendChild(heading);
+        const select = document.createElement('select');
+        select.className = 'form-select';
+        for (const fixer of (platform.fixers || [])) {
+            const option = document.createElement('option');
+            option.value = fixer;
+            option.textContent = fixer;
+            option.selected = fixer === (config.preferred_fixers[platform.name] || platform.default_fixer);
+            select.appendChild(option);
+        }
+        select.addEventListener('change', () => {
+            config.preferred_fixers[platform.name] = select.value;
+            save();
+        });
+        card.appendChild(buildCompoundField('主要修復服務', select));
+        builtinGrid.appendChild(card);
+    }
+    builtinSection.appendChild(builtinGrid);
+    container.appendChild(builtinSection);
+
+    const customSection = document.createElement('div');
+    customSection.className = 'compound-section';
+    const customHeader = document.createElement('div');
+    customHeader.className = 'compound-section-header';
+    const customTitle = document.createElement('div');
+    customTitle.className = 'compound-section-title';
+    customTitle.textContent = `自訂平台 (${config.custom_platforms.length}/${maxCustom})`;
+    const addButton = document.createElement('button');
+    addButton.type = 'button';
+    addButton.className = 'compound-button primary';
+    addButton.textContent = '新增自訂平台';
+    customHeader.appendChild(customTitle);
+    customHeader.appendChild(addButton);
+    customSection.appendChild(customHeader);
+    const customList = document.createElement('div');
+    customList.className = 'compound-list';
+    customSection.appendChild(customList);
+    container.appendChild(customSection);
+    let newDrafts = [];
+
+    function textControl(value, { multiline = false, placeholder = '' } = {}) {
+        const input = document.createElement(multiline ? 'textarea' : 'input');
+        if (!multiline) input.type = 'text';
+        input.className = multiline ? 'form-textarea' : 'form-input';
+        input.value = value || '';
+        input.placeholder = placeholder;
+        return input;
+    }
+
+    function renderCustomPlatforms() {
+        customList.innerHTML = '';
+        customTitle.textContent = `自訂平台 (${config.custom_platforms.length}/${maxCustom})`;
+        addButton.disabled = config.custom_platforms.length + newDrafts.length >= maxCustom;
+        const entries = [
+            ...config.custom_platforms.map(item => ({ item: cloneConfig(item), isNew: false })),
+            ...newDrafts.map(item => ({ item, isNew: true })),
+        ];
+        if (entries.length === 0) {
+            const empty = document.createElement('div');
+            empty.className = 'compound-empty';
+            empty.textContent = '尚未新增自訂平台。';
+            customList.appendChild(empty);
+            return;
+        }
+        entries.forEach(({ item, isNew }, entryIndex) => {
+            item.fixer = item.fixer || {};
+            const card = document.createElement('div');
+            card.className = 'compound-card';
+            const heading = document.createElement('div');
+            heading.className = 'compound-card-header';
+            const title = document.createElement('strong');
+            title.textContent = isNew ? '新增自訂平台' : (item.name || '未命名平台');
+            heading.appendChild(title);
+            card.appendChild(heading);
+
+            const nameInput = textControl(item.name, { placeholder: '平台名稱' });
+            const originsInput = textControl((item.origins || []).join('\n'), { multiline: true, placeholder: 'example.com' });
+            const pathsInput = textControl((item.path_prefixes || []).join('\n'), { multiline: true, placeholder: '/post/' });
+            const keepInput = textControl((item.keep_query_keys || []).join('\n'), { multiline: true, placeholder: 'id\nlang' });
+            const fixerNameInput = textControl(item.fixer.name, { placeholder: 'Fixer 名稱' });
+            const endpointInput = textControl(item.fixer.endpoint, { placeholder: 'https://fix.example.com/embed' });
+            const sourceParamInput = textControl(item.fixer.source_param || 'url', { placeholder: 'url' });
+            const staticQuery = item.fixer.static_query || {};
+            const staticInput = textControl(Object.entries(staticQuery).map(([key, val]) => `${key}=${val}`).join('\n'), {
+                multiline: true,
+                placeholder: 'v=1\nmode=embed',
+            });
+            card.appendChild(buildCompoundField('平台名稱', nameInput));
+            card.appendChild(buildCompoundField('來源網域 (每行一個)', originsInput));
+            card.appendChild(buildCompoundField('路徑前綴 (每行一個)', pathsInput));
+            card.appendChild(buildCompoundField('保留 query keys', keepInput));
+            card.appendChild(buildCompoundField('Fixer 名稱', fixerNameInput));
+            card.appendChild(buildCompoundField('HTTPS endpoint', endpointInput));
+            card.appendChild(buildCompoundField('來源 URL 參數名', sourceParamInput));
+            card.appendChild(buildCompoundField('靜態 query', staticInput));
+
+            const actions = document.createElement('div');
+            actions.className = 'compound-actions';
+            const saveButton = document.createElement('button');
+            saveButton.type = 'button';
+            saveButton.className = 'compound-button primary';
+            saveButton.textContent = '儲存平台';
+            saveButton.addEventListener('click', async () => {
+                const candidate = {
+                    id: item.id || undefined,
+                    name: nameInput.value,
+                    origins: originsInput.value,
+                    path_prefixes: pathsInput.value,
+                    keep_query_keys: keepInput.value,
+                    fixer: {
+                        name: fixerNameInput.value,
+                        endpoint: endpointInput.value,
+                        source_param: sourceParamInput.value,
+                        static_query: staticInput.value,
+                    },
+                };
+                const next = cloneConfig(config);
+                if (isNew) next.custom_platforms.push(candidate);
+                else next.custom_platforms = next.custom_platforms.map(existing => existing.id === item.id ? candidate : existing);
+                const result = await doSave(mod, s.database_key, next);
+                if (result && result.success) {
+                    config = cloneConfig(result.value);
+                    if (isNew) newDrafts = newDrafts.filter(draft => draft !== item);
+                    renderCustomPlatforms();
+                }
+            });
+            actions.appendChild(saveButton);
+
+            if (!isNew) {
+                const customKey = `custom:${item.id}`;
+                const enabledToggle = buildCompoundToggle('啟用平台', !config.disabled_platforms.includes(customKey), checked => {
+                    const disabled = new Set(config.disabled_platforms);
+                    if (checked) disabled.delete(customKey);
+                    else disabled.add(customKey);
+                    config.disabled_platforms = [...disabled];
+                    save();
+                });
+                enabledToggle.classList.add('compound-inline-toggle');
+                actions.appendChild(enabledToggle);
+            }
+
+            const removeButton = document.createElement('button');
+            removeButton.type = 'button';
+            removeButton.className = 'compound-button danger';
+            removeButton.textContent = isNew ? '取消' : '刪除';
+            removeButton.addEventListener('click', async () => {
+                if (isNew) {
+                    newDrafts = newDrafts.filter(draft => draft !== item);
+                    renderCustomPlatforms();
+                    return;
+                }
+                const next = cloneConfig(config);
+                next.custom_platforms = next.custom_platforms.filter(existing => existing.id !== item.id);
+                next.disabled_platforms = next.disabled_platforms.filter(key => key !== `custom:${item.id}`);
+                const result = await doSave(mod, s.database_key, next);
+                if (result && result.success) {
+                    config = cloneConfig(result.value);
+                    renderCustomPlatforms();
+                }
+            });
+            actions.appendChild(removeButton);
+            card.appendChild(actions);
+            customList.appendChild(card);
+        });
+    }
+
+    addButton.addEventListener('click', () => {
+        if (config.custom_platforms.length + newDrafts.length >= maxCustom) return;
+        newDrafts.push({ fixer: { source_param: 'url' } });
+        renderCustomPlatforms();
+    });
+    renderCustomPlatforms();
+    return container;
+}
+
+function buildAntibeastConfigEditor(mod, s, value, roles) {
+    const config = cloneConfig(value);
+    config.bypass_roles = Array.isArray(config.bypass_roles) ? config.bypass_roles.map(String) : [];
+    config.kick = config.kick || {};
+    if (!config.kick.action) config.kick.action = 'kick AntiBeast: {time_window} 秒內觸發 {trigger_count} 次';
+    const container = document.createElement('div');
+    container.className = 'compound-config-editor antibeast-config-editor';
+
+    function save(delay = 150, onComplete = null) {
+        debounceSave(mod, s.database_key, cloneConfig(config), delay, onComplete);
+    }
+
+    const general = document.createElement('div');
+    general.className = 'compound-section';
+    general.appendChild(buildCompoundToggle('啟用 AntiBeast', config.enabled, checked => { config.enabled = checked; save(); }));
+    general.appendChild(buildCompoundToggle('啟用連續觸發處置', config.kick.enabled, checked => { config.kick.enabled = checked; save(); }));
+    general.appendChild(buildCompoundToggle('處置只計算 @everyone / @here', config.kick.only_everyone_here, checked => {
+        config.kick.only_everyone_here = checked;
+        save();
+    }));
+    container.appendChild(general);
+
+    const limits = document.createElement('div');
+    limits.className = 'compound-section';
+    const threshold = document.createElement('input');
+    threshold.type = 'number';
+    threshold.className = 'form-input';
+    threshold.min = '1';
+    threshold.max = '20';
+    threshold.value = String(config.kick.threshold || 2);
+    threshold.addEventListener('change', () => {
+        config.kick.threshold = Math.max(1, Math.min(20, parseInt(threshold.value, 10) || 2));
+        threshold.value = String(config.kick.threshold);
+        save();
+    });
+    limits.appendChild(buildCompoundField('時間窗口內觸發次數', threshold));
+    const windowInput = document.createElement('input');
+    windowInput.type = 'number';
+    windowInput.className = 'form-input';
+    windowInput.min = '5';
+    windowInput.max = '3600';
+    windowInput.value = String(config.kick.time_window || 10);
+    windowInput.addEventListener('change', () => {
+        config.kick.time_window = Math.max(5, Math.min(3600, parseInt(windowInput.value, 10) || 10));
+        windowInput.value = String(config.kick.time_window);
+        save();
+    });
+    limits.appendChild(buildCompoundField('時間窗口 (秒)', windowInput));
+    container.appendChild(limits);
+
+    const roleSection = document.createElement('div');
+    roleSection.className = 'compound-section';
+    const roleTitle = document.createElement('div');
+    roleTitle.className = 'compound-section-title';
+    roleTitle.textContent = '繞過身分組';
+    roleSection.appendChild(roleTitle);
+    const tags = document.createElement('div');
+    tags.className = 'role-tags';
+    const roleSelect = document.createElement('select');
+    roleSelect.className = 'form-select';
+    roleSection.appendChild(tags);
+    roleSection.appendChild(roleSelect);
+    container.appendChild(roleSection);
+
+    function renderRoles() {
+        tags.innerHTML = '';
+        if (!config.bypass_roles.length) {
+            const empty = document.createElement('span');
+            empty.className = 'role-tag-empty';
+            empty.textContent = '尚未設定繞過身分組';
+            tags.appendChild(empty);
+        }
+        for (const roleId of config.bypass_roles) {
+            const role = roles.find(item => String(item.id) === String(roleId));
+            const tag = document.createElement('span');
+            tag.className = 'role-tag';
+            tag.textContent = role ? role.name : `ID: ${roleId}`;
+            const remove = document.createElement('button');
+            remove.type = 'button';
+            remove.className = 'role-tag-remove';
+            remove.textContent = '×';
+            remove.addEventListener('click', () => {
+                config.bypass_roles = config.bypass_roles.filter(item => item !== roleId);
+                renderRoles();
+                save();
+            });
+            tag.appendChild(remove);
+            tags.appendChild(tag);
+        }
+        roleSelect.innerHTML = '<option value="">新增繞過身分組...</option>';
+        for (const role of roles) {
+            if (config.bypass_roles.includes(String(role.id))) continue;
+            const option = document.createElement('option');
+            option.value = role.id;
+            option.textContent = role.name;
+            roleSelect.appendChild(option);
+        }
+    }
+    roleSelect.addEventListener('change', () => {
+        if (!roleSelect.value) return;
+        config.bypass_roles.push(String(roleSelect.value));
+        renderRoles();
+        save();
+    });
+    renderRoles();
+
+    const actionSection = document.createElement('div');
+    actionSection.className = 'compound-section';
+    const actionTitle = document.createElement('div');
+    actionTitle.className = 'compound-section-title';
+    actionTitle.textContent = 'Moderate 動作指令';
+    actionSection.appendChild(actionTitle);
+    const actionEditor = document.createElement('div');
+    actionEditor.className = 'action-input-editor';
+    const actionInput = document.createElement('input');
+    actionInput.type = 'text';
+    actionInput.className = 'form-input';
+    actionInput.value = config.kick.action;
+    actionInput.placeholder = '選擇建議或輸入，例如 mute 10m 違規';
+    const listId = 'antibeast-action-suggestions';
+    actionInput.setAttribute('list', listId);
+    const datalist = document.createElement('datalist');
+    datalist.id = listId;
+    for (const suggestion of ACTION_INPUT_SUGGESTIONS) {
+        const option = document.createElement('option');
+        option.value = suggestion.value;
+        option.label = suggestion.label;
+        datalist.appendChild(option);
+    }
+    const analysisBox = document.createElement('div');
+    analysisBox.className = 'action-analysis';
+    let previewTimer = null;
+    let revision = 0;
+
+    async function previewAction(raw, persist) {
+        const currentRevision = ++revision;
+        const clean = raw.trim();
+        if (!clean) {
+            analysisBox.className = 'action-analysis error';
+            analysisBox.textContent = '動作指令不能留空。';
+            return;
+        }
+        analysisBox.className = 'action-analysis loading';
+        analysisBox.textContent = '正在解析動作...';
+        try {
+            const analysis = await analyzeActionInput(clean);
+            if (currentRevision !== revision) return;
+            if (analysis.requires_confirmation) {
+                renderActionAnalysis(analysisBox, analysis, {
+                    onConfirm: () => {
+                        actionInput.value = analysis.normalized;
+                        config.kick.action = analysis.normalized;
+                        save(0, result => {
+                            if (result && result.success) renderActionAnalysis(analysisBox, analysis, { saved: true });
+                            else renderActionAnalysis(analysisBox, { valid: false, error: (result && result.error) || '儲存失敗。' });
+                        });
+                    },
+                });
+                return;
+            }
+            if (!analysis.valid || !persist) {
+                renderActionAnalysis(analysisBox, analysis);
+                return;
+            }
+            actionInput.value = analysis.normalized;
+            config.kick.action = analysis.normalized;
+            save(0, result => {
+                if (result && result.success) renderActionAnalysis(analysisBox, analysis, { saved: true });
+                else renderActionAnalysis(analysisBox, { valid: false, error: (result && result.error) || '儲存失敗。' });
+            });
+        } catch (error) {
+            if (currentRevision !== revision) return;
+            renderActionAnalysis(analysisBox, { valid: false, error: `無法檢查動作：${error.message}` });
+        }
+    }
+    actionInput.addEventListener('input', () => {
+        clearTimeout(previewTimer);
+        previewTimer = setTimeout(() => previewAction(actionInput.value, true), 350);
+    });
+    actionEditor.appendChild(actionInput);
+    actionEditor.appendChild(datalist);
+    actionEditor.appendChild(analysisBox);
+    actionSection.appendChild(actionEditor);
+    container.appendChild(actionSection);
+    previewAction(config.kick.action, false);
     return container;
 }
 

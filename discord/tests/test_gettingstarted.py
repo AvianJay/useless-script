@@ -1,5 +1,6 @@
 import sys
 import unittest
+import copy
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -332,6 +333,64 @@ class ComplexSchemaTests(unittest.TestCase):
 
         view.draft["webverify_country_alert"]["countries"] = ["TW"]
         self.assertIsNone(view.validate())
+
+    def test_fixlink_gettingstarted_view_reuses_native_editor_and_adds_back(self):
+        import FixLink
+
+        guild = MagicMock()
+        guild.id = 1
+        guild.name = "Guild"
+        session = gs.GettingStartedSession(guild, 10)
+        interaction = SimpleNamespace(
+            guild_id=1,
+            user=SimpleNamespace(id=10),
+        )
+        cog = SimpleNamespace(
+            get_config=lambda guild_id: FixLink.normalize_fixlink_config({}),
+            save_config=MagicMock(return_value=True),
+        )
+        with (
+            patch.object(gs, "FixLinkModule", FixLink),
+            patch.object(gs.bot, "get_cog", return_value=cog),
+        ):
+            view = gs.build_gettingstarted_fixlink_view(session, "FixLink", interaction)
+        self.assertIsInstance(view, FixLink.FixLinkSettingsView)
+        self.assertIn("返回設定中心", {getattr(item, "label", None) for item in view.children})
+
+    def test_antibeast_gettingstarted_view_covers_runtime_settings(self):
+        config = {
+            "enabled": True,
+            "bypass_roles": [10],
+            "rule_id": 99,
+            "everyone_mention_before": False,
+            "kick": {
+                "enabled": True,
+                "threshold": 3,
+                "time_window": 30,
+                "action": "to 10m 刷頻",
+                "only_everyone_here": True,
+            },
+        }
+        cog = SimpleNamespace(
+            _get_config=lambda guild_id: copy.deepcopy(config),
+            _format_action_scope=lambda kick: "只處理 @everyone / @here",
+            _normalize_kick_config=lambda kick: kick,
+        )
+        role = SimpleNamespace(id=10, mention="<@&10>")
+        guild = MagicMock()
+        guild.id = 1
+        guild.name = "Guild"
+        guild.get_role.side_effect = lambda role_id: role if role_id == 10 else None
+        session = gs.GettingStartedSession(guild, 10)
+        with patch.object(gs, "get_antibeast_cog", return_value=cog):
+            view = gs.AntiBeastManagerView(session, "AntiBeast")
+            embed = view.build_embed()
+            action_view = gs.AntiBeastActionView(session, "AntiBeast")
+        self.assertIn("AntiBeast", embed.title)
+        self.assertIn("to 10m", embed.fields[0].value)
+        labels = {getattr(item, "label", None) for item in action_view.children}
+        self.assertIn("編輯門檻與動作", labels)
+        self.assertIn("僅 everyone/here：開", labels)
 
 
 if __name__ == "__main__":

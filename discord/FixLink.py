@@ -1274,6 +1274,8 @@ class CustomPlatformSourceModal(discord.ui.Modal, title="\u81ea\u8a02\u5e73\u53f
             self.add_item(item)
 
     async def on_submit(self, interaction: discord.Interaction):
+        if not await self.settings_view.interaction_check(interaction):
+            return
         config = self.settings_view.cog.get_config(self.settings_view.guild_id)
         existing_id = self.existing["id"] if self.existing else None
         try:
@@ -1307,10 +1309,7 @@ class CustomFixerDraftView(discord.ui.View):
         self.existing = existing
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
-        if interaction.user.id != self.settings_view.owner_id or interaction.guild_id != self.settings_view.guild_id:
-            await interaction.response.send_message("\u9019\u4e0d\u662f\u4f60\u7684 FixLink \u8a2d\u5b9a\u6d41\u7a0b\u3002", ephemeral=True)
-            return False
-        return True
+        return await self.settings_view.interaction_check(interaction)
 
     @discord.ui.button(label="\u8a2d\u5b9a Query fixer", style=discord.ButtonStyle.primary)
     async def configure(self, interaction: discord.Interaction, button: discord.ui.Button):
@@ -1356,6 +1355,8 @@ class CustomFixerModal(discord.ui.Modal, title="\u81ea\u8a02 Query fixer"):
             self.add_item(item)
 
     async def on_submit(self, interaction: discord.Interaction):
+        if not await self.settings_view.interaction_check(interaction):
+            return
         config = self.settings_view.cog.get_config(self.settings_view.guild_id)
         existing_id = self.existing["id"] if self.existing else None
         try:
@@ -1395,10 +1396,7 @@ class CustomDeleteConfirmView(discord.ui.View):
         self.platform_id = platform_id
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
-        if interaction.user.id != self.settings_view.owner_id or interaction.guild_id != self.settings_view.guild_id:
-            await interaction.response.send_message("\u9019\u4e0d\u662f\u4f60\u7684 FixLink \u8a2d\u5b9a\u6d41\u7a0b\u3002", ephemeral=True)
-            return False
-        return True
+        return await self.settings_view.interaction_check(interaction)
 
     @discord.ui.button(label="\u78ba\u5b9a\u522a\u9664", style=discord.ButtonStyle.danger)
     async def confirm(self, interaction: discord.Interaction, button: discord.ui.Button):

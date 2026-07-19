@@ -12,6 +12,7 @@ from flask import request, redirect, session, jsonify, render_template, url_for
 import requests as http_requests
 import os
 import json
+import importlib
 import urllib.parse
 import re
 import discord
@@ -26,6 +27,201 @@ settings = panel_settings
 # Re-export for convenience: modules loaded AFTER GuildPanel can do
 #   from GuildPanel import register_settings
 register_settings = register_panel_settings
+
+ANTIBEAST_DEFAULT_ACTION = "kick AntiBeast: {time_window} 秒內觸發 {trigger_count} 次"
+
+
+def _coerce_bool(value, *, default=False):
+    if value is None:
+        return default
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)) and value in (0, 1):
+        return bool(value)
+    if isinstance(value, str):
+        normalized = value.strip().lower()
+        if normalized in ("true", "1", "yes", "on"):
+            return True
+        if normalized in ("false", "0", "no", "off", ""):
+            return False
+    raise ValueError("布林設定值無效。")
+
+
+def _fixlink_module():
+    return importlib.import_module("FixLink")
+
+
+def _serialize_fixlink_config(value):
+    return _fixlink_module().normalize_fixlink_config(value)
+
+
+def _coerce_fixlink_config(value):
+    if not isinstance(value, dict):
+        raise ValueError("FixLink 設定必須是 object。")
+
+    fixlink = _fixlink_module()
+    custom_platforms = []
+    raw_custom_platforms = value.get("custom_platforms", [])
+    if not isinstance(raw_custom_platforms, list):
+        raise ValueError("FixLink 自訂平台必須是清單。")
+    if len(raw_custom_platforms) > fixlink.MAX_CUSTOM_PLATFORMS:
+        raise ValueError(f"每個伺服器最多 {fixlink.MAX_CUSTOM_PLATFORMS} 個自訂平台。")
+    for raw_platform in raw_custom_platforms:
+        custom_platforms.append(
+            fixlink.normalize_custom_platform(raw_platform, custom_platforms)
+        )
+
+    preferred_fixers = dict(fixlink.DEFAULT_PREFERRED_FIXERS)
+    raw_preferred = value.get("preferred_fixers", {})
+    if not isinstance(raw_preferred, dict):
+        raise ValueError("FixLink 主要修復服務設定必須是 object。")
+    for platform_name, fixer_name in raw_preferred.items():
+        if platform_name not in fixlink.supported_platforms:
+            raise ValueError(f"未知的 FixLink 內建平台：{platform_name}")
+        if fixer_name not in fixlink.supported_platforms[platform_name]["fixers"]:
+            raise ValueError(f"{platform_name} 不支援修復服務：{fixer_name}")
+        preferred_fixers[platform_name] = fixer_name
+
+    raw_disabled = value.get("disabled_platforms", [])
+    if not isinstance(raw_disabled, list):
+        raise ValueError("FixLink 停用平台必須是清單。")
+    allowed_disabled = set(fixlink.supported_platforms)
+    allowed_disabled.update(f"custom:{item['id']}" for item in custom_platforms)
+    disabled_platforms = []
+    for item in raw_disabled:
+        item = str(item).strip()
+        if not item or item in disabled_platforms:
+            continue
+        if item in allowed_disabled:
+            disabled_platforms.append(item)
+
+    return {
+        "enabled": _coerce_bool(value.get("enabled"), default=False),
+        "remove_tracker": _coerce_bool(value.get("remove_tracker"), default=False),
+        "webhook_mode": _coerce_bool(value.get("webhook_mode"), default=False),
+        "webhook_only_with_tracker": _coerce_bool(
+            value.get("webhook_only_with_tracker"),
+            default=False,
+        ),
+        "disabled_platforms": disabled_platforms,
+        "preferred_fixers": preferred_fixers,
+        "custom_platforms": custom_platforms,
+    }
+
+
+def _serialize_antibeast_config(value):
+    value = value if isinstance(value, dict) else {}
+    kick = value.get("kick") if isinstance(value.get("kick"), dict) else {}
+    raw_roles = value.get("bypass_roles")
+    if not isinstance(raw_roles, list):
+        raw_roles = []
+    try:
+        threshold = int(kick.get("threshold", 2))
+    except (TypeError, ValueError):
+        threshold = 2
+    try:
+        time_window = int(kick.get("time_window", 10))
+    except (TypeError, ValueError):
+        time_window = 10
+    return {
+        "enabled": bool(value.get("enabled", False)),
+        "bypass_roles": [str(role_id) for role_id in raw_roles],
+        "kick": {
+            "enabled": bool(kick.get("enabled", False)),
+            "threshold": min(max(threshold, 1), 20),
+            "time_window": min(max(time_window, 5), 3600),
+            "action": str(kick.get("action") or ANTIBEAST_DEFAULT_ACTION),
+            "only_everyone_here": bool(kick.get("only_everyone_here", False)),
+        },
+    }
+
+
+def _coerce_antibeast_config(value, guild_id=None):
+    if not isinstance(value, dict):
+        raise ValueError("AntiBeast 設定必須是 object。")
+
+    current = get_server_config(guild_id, "antibeast", {}) if guild_id is not None else {}
+    if not isinstance(current, dict):
+        current = {}
+
+    raw_roles = value.get("bypass_roles", [])
+    if not isinstance(raw_roles, list):
+        raise ValueError("AntiBeast 繞過身分組必須是清單。")
+    bypass_roles = []
+    for raw_role_id in raw_roles:
+        try:
+            role_id = int(raw_role_id)
+        except (TypeError, ValueError) as error:
+            raise ValueError("AntiBeast 繞過身分組 ID 無效。") from error
+        if role_id not in bypass_roles:
+            bypass_roles.append(role_id)
+
+    raw_kick = value.get("kick", {})
+    if not isinstance(raw_kick, dict):
+        raise ValueError("AntiBeast 連續觸發處置設定必須是 object。")
+    try:
+        threshold = int(raw_kick.get("threshold", 2))
+        time_window = int(raw_kick.get("time_window", 10))
+    except (TypeError, ValueError) as error:
+        raise ValueError("AntiBeast 觸發次數與時間窗口必須是整數。") from error
+    if not 1 <= threshold <= 20:
+        raise ValueError("AntiBeast 觸發次數必須介於 1 到 20。")
+    if not 5 <= time_window <= 3600:
+        raise ValueError("AntiBeast 時間窗口必須介於 5 到 3600 秒。")
+
+    action = str(raw_kick.get("action") or ANTIBEAST_DEFAULT_ACTION).strip()
+    from Moderate import analyze_action_string
+
+    analysis = analyze_action_string(action, guild_id)
+    if not analysis["valid"]:
+        raise ValueError(f"AntiBeast 動作指令無效：{analysis['error']}")
+    if analysis["requires_confirmation"]:
+        raise ValueError(analysis["confirmation"])
+
+    return {
+        "enabled": _coerce_bool(value.get("enabled"), default=False),
+        "bypass_roles": bypass_roles,
+        "rule_id": current.get("rule_id"),
+        "everyone_mention_before": current.get("everyone_mention_before"),
+        "kick": {
+            "enabled": _coerce_bool(raw_kick.get("enabled"), default=False),
+            "threshold": threshold,
+            "time_window": time_window,
+            "action": analysis["normalized"],
+            "only_everyone_here": _coerce_bool(
+                raw_kick.get("only_everyone_here"),
+                default=False,
+            ),
+        },
+    }
+
+
+async def _apply_antibeast_panel_config(guild_id, value):
+    cog = bot.get_cog("antibeast")
+    if cog is None:
+        importlib.import_module("AntiBeast")
+        cog = bot.get_cog("antibeast")
+    if cog is None:
+        raise RuntimeError("AntiBeast 模組尚未載入。")
+
+    guild = bot.get_guild(int(guild_id))
+    if guild is None:
+        raise RuntimeError("找不到要套用 AntiBeast 的伺服器。")
+
+    config = cog._get_config(int(guild_id))
+    should_sync = (
+        config["enabled"]
+        or config.get("rule_id") is not None
+        or config.get("everyone_mention_before") is not None
+    )
+    if should_sync:
+        await cog._apply_state(
+            guild,
+            config,
+            enabled=config["enabled"],
+            reason="AntiBeast updated from server settings panel",
+        )
+    set_server_config(int(guild_id), "antibeast", config)
 
 # ============= Flask session secret =============
 app.secret_key = os.environ.get(
@@ -285,7 +481,7 @@ def api_set_settings(guild_id):
         return jsonify({"error": "Unknown setting"}), 400
 
     try:
-        value = _coerce(value, setting.get("type", "string"))
+        value = _coerce(value, setting.get("type", "string"), guild_id=gid)
     except (ValueError, TypeError) as e:
         return jsonify({"error": str(e)}), 400
 
@@ -335,7 +531,10 @@ def api_set_settings(guild_id):
         f"(Guild: {gid}, User: {user.get('username', '?') if user else '?'})",
         module_name="GuildPanel",
     )
-    return jsonify({"success": True, "value": value})
+    return jsonify({
+        "success": True,
+        "value": _serialize(value, setting.get("type", "string"), guild_id=gid),
+    })
 
 
 @app.route("/api/panel/guild/<guild_id>/action-preview", methods=["POST"])
@@ -425,12 +624,16 @@ def _serialize(value, stype, guild_id=None):
                 "random_chance": int(item.get("random_chance", 100)),
             })
         return out
+    if stype == "fixlink_config":
+        return _serialize_fixlink_config(value)
+    if stype == "antibeast_config":
+        return _serialize_antibeast_config(value)
     return value
 
 
 # ============= Value coercion =============
 
-def _coerce(value, stype):
+def _coerce(value, stype, guild_id=None):
     if value is None or value == "" or value == "none":
         return None
 
@@ -446,6 +649,12 @@ def _coerce(value, stype):
         if isinstance(value, list):
             return [int(v) for v in value if v]
         return []
+
+    if stype == "fixlink_config":
+        return _coerce_fixlink_config(value)
+
+    if stype == "antibeast_config":
+        return _coerce_antibeast_config(value, guild_id=guild_id)
 
     if stype == "autoreply_list":
         if not isinstance(value, list):
@@ -748,6 +957,32 @@ def _register_all():
             {"display": "自動管理規則", "description": "詐騙陷阱、邀請連結、逃避懲處、標題/表情過多、防突襲、防刷頻、AutoMod 偵測等功能的啟用與參數", "database_key": "automod", "type": "automod_config", "default": {}},
         ], description="自動管理相關設定（含邀請連結偵測）", icon="🛡️")
 
+    if "FixLink" in modules:
+        try:
+            fixlink = _fixlink_module()
+        except Exception as error:
+            log(f"無法載入 FixLink 面板 schema: {error}", module_name="GuildPanel")
+        else:
+            platform_schema = [
+                {
+                    "name": name,
+                    "fixers": list(platform["fixers"]),
+                    "default_fixer": platform["default_fixer"],
+                }
+                for name, platform in fixlink.supported_platforms.items()
+            ]
+            register_settings("FixLink", "連結修復", [
+                {
+                    "display": "FixLink 設定",
+                    "description": "啟用狀態、追蹤碼移除、Webhook 模式、內建修復服務與自訂平台",
+                    "database_key": "fixlink",
+                    "type": "fixlink_config",
+                    "default": fixlink.DEFAULT_FIXLINK_CONFIG,
+                    "platforms": platform_schema,
+                    "max_custom_platforms": fixlink.MAX_CUSTOM_PLATFORMS,
+                },
+            ], description="修復社群平台連結並移除不必要的追蹤參數", icon="🔗")
+
     if "CustomPrefix" in modules:
         register_settings("CustomPrefix", "自訂前綴", [
             {"display": "指令前綴", "description": "此伺服器專用的指令前綴，留空使用預設", "database_key": "custom_prefix", "type": "string", "default": config("prefix", "!")},
@@ -793,6 +1028,28 @@ def _register_all():
             {"display": "忽略機器人", "database_key": "stickyrole_ignore_bots", "type": "boolean", "default": True},
             {"display": "日誌頻道", "description": "角色還原時發送通知的頻道", "database_key": "stickyrole_log_channel", "type": "channel", "default": None},
         ], description="角色記憶功能設定", icon="📌")
+
+    if "AntiBeast" in modules:
+        register_settings("AntiBeast", "AntiBeast", [
+            {
+                "display": "AntiBeast 設定",
+                "description": "AutoMod 防大量提及、繞過身分組及連續觸發處置",
+                "database_key": "antibeast",
+                "type": "antibeast_config",
+                "default": {
+                    "enabled": False,
+                    "bypass_roles": [],
+                    "kick": {
+                        "enabled": False,
+                        "threshold": 2,
+                        "time_window": 10,
+                        "action": ANTIBEAST_DEFAULT_ACTION,
+                        "only_everyone_here": False,
+                    },
+                },
+                "trigger": _apply_antibeast_panel_config,
+            },
+        ], description="阻擋 everyone/here 與受保護身分組提及", icon="🛡️")
 
 
 _register_all()

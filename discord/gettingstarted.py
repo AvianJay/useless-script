@@ -51,6 +51,15 @@ if AutoReplyBuilderView is None:
             super().__init__(timeout=900)
 
 
+if "FixLink" in modules:
+    try:
+        import FixLink as FixLinkModule
+    except Exception:
+        FixLinkModule = None
+else:
+    FixLinkModule = None
+
+
 if "JoinNotify" in modules:
     try:
         from JoinNotify import get_join_prompt_recipient
@@ -117,11 +126,11 @@ def find_setup_channel(guild: discord.Guild, recipient) -> discord.TextChannel |
     candidates = []
     if guild.system_channel is not None:
         candidates.append(guild.system_channel)
-    # candidates.extend(
-    #     channel
-    #     for channel in sorted(guild.text_channels, key=lambda item: (item.position, item.id))
-    #     if channel not in candidates
-    # )
+    candidates.extend(
+        channel
+        for channel in sorted(guild.text_channels, key=lambda item: (item.position, item.id))
+        if channel not in candidates
+    )
 
     for channel in candidates:
         bot_permissions = channel.permissions_for(bot_member)
@@ -419,6 +428,17 @@ class SettingSelect(discord.ui.Select):
             target = AutoModerateManagerView(self.parent_view.session, self.parent_view.module_name)
         elif stype == "webverify_config":
             target = WebVerifySetupView(self.parent_view.session, self.parent_view.module_name)
+        elif stype == "fixlink_config":
+            target = build_gettingstarted_fixlink_view(
+                self.parent_view.session,
+                self.parent_view.module_name,
+                interaction,
+            )
+        elif stype == "antibeast_config":
+            target = AntiBeastManagerView(
+                self.parent_view.session,
+                self.parent_view.module_name,
+            )
         elif stype in ("channel_list", "role_list"):
             target = ListSettingView(
                 self.parent_view.session,
@@ -517,6 +537,452 @@ class ModuleSettingsView(SetupView):
             embed=GettingStartedHubView.build_embed(self.session),
             view=target,
         )
+
+
+class CompoundSettingUnavailableView(SetupView):
+    def __init__(self, session: GettingStartedSession, module_name: str, message: str):
+        super().__init__(session)
+        self.module_name = module_name
+        self.message = message
+        back = discord.ui.Button(label="返回", style=discord.ButtonStyle.secondary)
+        back.callback = self.back
+        self.add_item(back)
+
+    def build_embed(self) -> discord.Embed:
+        return discord.Embed(
+            title="無法開啟設定",
+            description=self.message,
+            color=discord.Color.red(),
+        )
+
+    async def back(self, interaction: discord.Interaction):
+        target = ModuleSettingsView(self.session, self.module_name)
+        await self.session.render(interaction, embed=target.build_embed(self.session, self.module_name), view=target)
+
+
+def build_gettingstarted_fixlink_view(
+    session: GettingStartedSession,
+    module_name: str,
+    interaction: discord.Interaction,
+):
+    fixlink = FixLinkModule
+    if fixlink is None:
+        try:
+            import FixLink as fixlink
+        except Exception:
+            return CompoundSettingUnavailableView(session, module_name, "FixLink 模組尚未載入。")
+
+    cog = bot.get_cog("fixlink")
+    if cog is None:
+        return CompoundSettingUnavailableView(session, module_name, "找不到正在執行的 FixLink 模組。")
+
+    class GettingStartedFixLinkSettingsView(fixlink.FixLinkSettingsView):
+        def __init__(self):
+            super().__init__(cog, interaction)
+            self.session = session
+            self.module_name = module_name
+            self.initial_config = copy.deepcopy(self.config)
+            self.message = session.message
+            back = discord.ui.Button(
+                label="返回設定中心",
+                style=discord.ButtonStyle.secondary,
+                row=0,
+            )
+            back.callback = self.back_to_settings
+            self.add_item(back)
+
+        async def interaction_check(self, current: discord.Interaction) -> bool:
+            return await self.session.ensure_owner(current)
+
+        def record_change(self):
+            if self.config != self.initial_config:
+                self.session.mark_changed(self.module_name, "fixlink")
+
+        async def mutate_config(self, current: discord.Interaction, mutator):
+            await super().mutate_config(current, mutator)
+            self.record_change()
+
+        async def refresh_message(self):
+            await super().refresh_message()
+            self.record_change()
+
+        async def back_to_settings(self, current: discord.Interaction):
+            self.record_change()
+            target = ModuleSettingsView(self.session, self.module_name)
+            await self.session.render(
+                current,
+                embed=target.build_embed(self.session, self.module_name),
+                view=target,
+            )
+
+    return GettingStartedFixLinkSettingsView()
+
+
+def get_antibeast_cog():
+    return bot.get_cog("antibeast")
+
+
+def get_antibeast_setting(module_name: str) -> dict:
+    return next(
+        setting
+        for setting in panel_settings[module_name]["settings"]
+        if setting["database_key"] == "antibeast"
+    )
+
+
+def load_antibeast_config(guild_id: int) -> dict:
+    cog = get_antibeast_cog()
+    if cog is None:
+        raise RuntimeError("AntiBeast 模組尚未載入。")
+    return cog._get_config(guild_id)
+
+
+async def save_antibeast_config(
+    session: GettingStartedSession,
+    interaction: discord.Interaction,
+    module_name: str,
+    config_value: dict,
+) -> bool:
+    return await session.save(
+        interaction,
+        module_name,
+        get_antibeast_setting(module_name),
+        config_value,
+    )
+
+
+class AntiBeastManagerView(SetupView):
+    def __init__(self, session: GettingStartedSession, module_name: str):
+        super().__init__(session)
+        self.module_name = module_name
+        try:
+            self.config = load_antibeast_config(session.guild.id)
+        except RuntimeError:
+            self.config = None
+            back = discord.ui.Button(label="返回", style=discord.ButtonStyle.secondary)
+            back.callback = self.back
+            self.add_item(back)
+            return
+
+        toggle = discord.ui.Button(
+            label="停用 AntiBeast" if self.config["enabled"] else "啟用 AntiBeast",
+            style=discord.ButtonStyle.danger if self.config["enabled"] else discord.ButtonStyle.success,
+            row=0,
+        )
+        toggle.callback = self.toggle_enabled
+        self.add_item(toggle)
+        bypass = discord.ui.Button(label="繞過身分組", style=discord.ButtonStyle.primary, row=0)
+        bypass.callback = self.open_bypass
+        self.add_item(bypass)
+        action = discord.ui.Button(label="連續觸發處置", style=discord.ButtonStyle.primary, row=0)
+        action.callback = self.open_action
+        self.add_item(action)
+        back = discord.ui.Button(label="返回", style=discord.ButtonStyle.secondary, row=1)
+        back.callback = self.back
+        self.add_item(back)
+
+    def build_embed(self) -> discord.Embed:
+        if self.config is None:
+            return discord.Embed(
+                title="AntiBeast 設定",
+                description="AntiBeast 模組尚未載入。",
+                color=discord.Color.red(),
+            )
+        cog = get_antibeast_cog()
+        kick = self.config["kick"]
+        roles = [
+            self.session.guild.get_role(role_id)
+            for role_id in self.config["bypass_roles"]
+        ]
+        roles = [role for role in roles if role is not None]
+        action_status = (
+            f"{kick['time_window']} 秒內 {kick['threshold']} 次後執行 `{kick['action']}`"
+            if kick["enabled"]
+            else "停用"
+        )
+        embed = discord.Embed(
+            title="🛡️ AntiBeast 設定",
+            description=(
+                "已啟用，AutoMod 規則會阻擋受保護提及。"
+                if self.config["enabled"]
+                else "目前停用。你仍可先完成其他設定再啟用。"
+            ),
+            color=discord.Color.green() if self.config["enabled"] else discord.Color.blurple(),
+        )
+        embed.add_field(name="連續觸發處置", value=action_status, inline=False)
+        embed.add_field(
+            name="處置範圍",
+            value=cog._format_action_scope(kick) if cog is not None else "未知",
+            inline=False,
+        )
+        embed.add_field(
+            name="繞過身分組",
+            value="、".join(role.mention for role in roles) if roles else "尚未設定",
+            inline=False,
+        )
+        return embed
+
+    async def toggle_enabled(self, interaction: discord.Interaction):
+        config_value = copy.deepcopy(load_antibeast_config(self.session.guild.id))
+        config_value["enabled"] = not config_value["enabled"]
+        if await save_antibeast_config(self.session, interaction, self.module_name, config_value):
+            target = AntiBeastManagerView(self.session, self.module_name)
+            await self.session.render(interaction, embed=target.build_embed(), view=target)
+
+    async def open_bypass(self, interaction: discord.Interaction):
+        target = AntiBeastBypassView(self.session, self.module_name)
+        await self.session.render(interaction, embed=target.build_embed(), view=target)
+
+    async def open_action(self, interaction: discord.Interaction):
+        target = AntiBeastActionView(self.session, self.module_name)
+        await self.session.render(interaction, embed=target.build_embed(), view=target)
+
+    async def back(self, interaction: discord.Interaction):
+        target = ModuleSettingsView(self.session, self.module_name)
+        await self.session.render(
+            interaction,
+            embed=target.build_embed(self.session, self.module_name),
+            view=target,
+        )
+
+
+class AntiBeastBypassRoleSelect(discord.ui.RoleSelect):
+    def __init__(self, parent: "AntiBeastBypassView"):
+        self.parent_view = parent
+        super().__init__(
+            placeholder="選擇要繞過的身分組（會取代目前清單）",
+            min_values=1,
+            max_values=25,
+            row=0,
+        )
+
+    async def callback(self, interaction: discord.Interaction):
+        role_ids = [role.id for role in self.values if not role.is_default()]
+        await self.parent_view.save_roles(interaction, role_ids)
+
+
+class AntiBeastBypassView(SetupView):
+    def __init__(self, session: GettingStartedSession, module_name: str):
+        super().__init__(session)
+        self.module_name = module_name
+        self.config = load_antibeast_config(session.guild.id)
+        self.add_item(AntiBeastBypassRoleSelect(self))
+        clear = discord.ui.Button(label="全部清除", style=discord.ButtonStyle.danger, row=1)
+        clear.callback = self.clear
+        self.add_item(clear)
+        back = discord.ui.Button(label="返回 AntiBeast", style=discord.ButtonStyle.secondary, row=1)
+        back.callback = self.back
+        self.add_item(back)
+
+    def build_embed(self) -> discord.Embed:
+        roles = [self.session.guild.get_role(role_id) for role_id in self.config["bypass_roles"]]
+        roles = [role for role in roles if role is not None]
+        return discord.Embed(
+            title="AntiBeast 繞過身分組",
+            description=(
+                "這些身分組的 mention token 不會加入 AntiBeast 關鍵字規則。\n\n"
+                + ("目前：" + "、".join(role.mention for role in roles) if roles else "目前沒有繞過身分組。")
+            ),
+            color=discord.Color.blurple(),
+        )
+
+    async def save_roles(self, interaction: discord.Interaction, role_ids: list[int]):
+        config_value = copy.deepcopy(load_antibeast_config(self.session.guild.id))
+        config_value["bypass_roles"] = role_ids
+        if await save_antibeast_config(self.session, interaction, self.module_name, config_value):
+            target = AntiBeastBypassView(self.session, self.module_name)
+            await self.session.render(interaction, embed=target.build_embed(), view=target)
+
+    async def clear(self, interaction: discord.Interaction):
+        await self.save_roles(interaction, [])
+
+    async def back(self, interaction: discord.Interaction):
+        target = AntiBeastManagerView(self.session, self.module_name)
+        await self.session.render(interaction, embed=target.build_embed(), view=target)
+
+
+class AntiBeastActionPresetSelect(discord.ui.Select):
+    def __init__(self, parent: "AntiBeastActionView"):
+        self.parent_view = parent
+        options = [
+            discord.SelectOption(label=label, value=value)
+            for label, value in (Moderate.ACTION_INPUT_SUGGESTIONS if Moderate is not None else [])[:25]
+        ]
+        super().__init__(placeholder="選擇常用動作", options=options, row=0)
+
+    async def callback(self, interaction: discord.Interaction):
+        analysis = Moderate.analyze_action_string(self.values[0], self.parent_view.session.guild.id)
+        if not analysis["valid"]:
+            await interaction.response.send_message(analysis["error"], ephemeral=True)
+            return
+        kick = copy.deepcopy(self.parent_view.config["kick"])
+        kick["enabled"] = True
+        kick["action"] = analysis["normalized"]
+        await self.parent_view.save_kick(interaction, kick)
+
+
+class AntiBeastActionView(SetupView):
+    def __init__(self, session: GettingStartedSession, module_name: str):
+        super().__init__(session)
+        self.module_name = module_name
+        self.config = load_antibeast_config(session.guild.id)
+        if Moderate is not None and Moderate.ACTION_INPUT_SUGGESTIONS:
+            self.add_item(AntiBeastActionPresetSelect(self))
+        edit = discord.ui.Button(label="編輯門檻與動作", style=discord.ButtonStyle.primary, row=1)
+        edit.callback = self.edit
+        self.add_item(edit)
+        toggle = discord.ui.Button(
+            label="停用處置" if self.config["kick"]["enabled"] else "啟用處置",
+            style=discord.ButtonStyle.secondary,
+            row=1,
+        )
+        toggle.callback = self.toggle
+        self.add_item(toggle)
+        scope = discord.ui.Button(
+            label="僅 everyone/here：開" if self.config["kick"]["only_everyone_here"] else "僅 everyone/here：關",
+            style=discord.ButtonStyle.secondary,
+            row=1,
+        )
+        scope.callback = self.toggle_scope
+        self.add_item(scope)
+        back = discord.ui.Button(label="返回 AntiBeast", style=discord.ButtonStyle.secondary, row=2)
+        back.callback = self.back
+        self.add_item(back)
+
+    def build_embed(self, *, saved=False) -> discord.Embed:
+        kick = self.config["kick"]
+        cog = get_antibeast_cog()
+        embed = discord.Embed(
+            title="AntiBeast 連續觸發處置",
+            description="設定同一位使用者在時間窗口內多次觸發後要執行的 Moderate 動作。",
+            color=discord.Color.green() if saved else discord.Color.blurple(),
+        )
+        embed.add_field(name="狀態", value="啟用" if kick["enabled"] else "停用", inline=True)
+        embed.add_field(name="門檻", value=f"{kick['time_window']} 秒內 {kick['threshold']} 次", inline=True)
+        embed.add_field(
+            name="範圍",
+            value=cog._format_action_scope(kick) if cog is not None else "未知",
+            inline=False,
+        )
+        embed.add_field(name="動作", value=f"```text\n{kick['action']}\n```", inline=False)
+        if Moderate is not None:
+            analysis = Moderate.analyze_action_string(kick["action"], self.session.guild.id)
+            if analysis["valid"]:
+                embed.add_field(
+                    name="執行預覽",
+                    value="\n".join(
+                        f"{index}. {line}"
+                        for index, line in enumerate(analysis.get("preview", []), 1)
+                    ),
+                    inline=False,
+                )
+        return embed
+
+    async def save_kick(self, interaction: discord.Interaction, kick: dict):
+        cog = get_antibeast_cog()
+        config_value = copy.deepcopy(load_antibeast_config(self.session.guild.id))
+        config_value["kick"] = cog._normalize_kick_config(kick)
+        if await save_antibeast_config(self.session, interaction, self.module_name, config_value):
+            target = AntiBeastActionView(self.session, self.module_name)
+            await self.session.render(interaction, embed=target.build_embed(saved=True), view=target)
+
+    async def edit(self, interaction: discord.Interaction):
+        await interaction.response.send_modal(AntiBeastGettingStartedActionModal(self))
+
+    async def toggle(self, interaction: discord.Interaction):
+        kick = copy.deepcopy(self.config["kick"])
+        kick["enabled"] = not kick["enabled"]
+        await self.save_kick(interaction, kick)
+
+    async def toggle_scope(self, interaction: discord.Interaction):
+        kick = copy.deepcopy(self.config["kick"])
+        kick["only_everyone_here"] = not kick["only_everyone_here"]
+        await self.save_kick(interaction, kick)
+
+    async def back(self, interaction: discord.Interaction):
+        target = AntiBeastManagerView(self.session, self.module_name)
+        await self.session.render(interaction, embed=target.build_embed(), view=target)
+
+
+class AntiBeastGettingStartedActionModal(discord.ui.Modal, title="AntiBeast 處置設定"):
+    def __init__(self, parent: AntiBeastActionView):
+        super().__init__(timeout=300)
+        self.parent_view = parent
+        kick = parent.config["kick"]
+        self.threshold = discord.ui.TextInput(label="觸發次數 (1-20)", default=str(kick["threshold"]), max_length=2)
+        self.time_window = discord.ui.TextInput(label="時間窗口秒數 (5-3600)", default=str(kick["time_window"]), max_length=4)
+        self.action = discord.ui.TextInput(
+            label="Moderate 動作指令",
+            default=kick["action"],
+            style=discord.TextStyle.paragraph,
+            max_length=500,
+        )
+        self.add_item(self.threshold)
+        self.add_item(self.time_window)
+        self.add_item(self.action)
+
+    async def on_submit(self, interaction: discord.Interaction):
+        try:
+            threshold = int(self.threshold.value.strip())
+            time_window = int(self.time_window.value.strip())
+        except ValueError:
+            await interaction.response.send_message("觸發次數與時間窗口都必須是整數。", ephemeral=True)
+            return
+        if not 1 <= threshold <= 20:
+            await interaction.response.send_message("觸發次數必須介於 1 到 20。", ephemeral=True)
+            return
+        if not 5 <= time_window <= 3600:
+            await interaction.response.send_message("時間窗口必須介於 5 到 3600 秒。", ephemeral=True)
+            return
+        analysis = Moderate.analyze_action_string(self.action.value.strip(), self.parent_view.session.guild.id)
+        if not analysis["valid"]:
+            await interaction.response.send_message(
+                embed=Moderate.build_action_preview_embed(analysis),
+                ephemeral=True,
+            )
+            return
+        kick = copy.deepcopy(self.parent_view.config["kick"])
+        kick.update({
+            "enabled": True,
+            "threshold": threshold,
+            "time_window": time_window,
+            "action": analysis["normalized"],
+        })
+        if analysis["requires_confirmation"]:
+            target = AntiBeastActionConfirmView(self.parent_view, kick, analysis)
+            await self.parent_view.session.render(interaction, embed=target.build_embed(), view=target)
+            return
+        await self.parent_view.save_kick(interaction, kick)
+
+
+class AntiBeastActionConfirmView(SetupView):
+    def __init__(self, parent_view: AntiBeastActionView, kick: dict, analysis: dict):
+        super().__init__(parent_view.session, timeout=120)
+        self.parent_view = parent_view
+        self.kick = kick
+        self.analysis = analysis
+        confirm = discord.ui.Button(label="是，使用這個動作", style=discord.ButtonStyle.success)
+        confirm.callback = self.confirm
+        self.add_item(confirm)
+        retry = discord.ui.Button(label="不是，重新輸入", style=discord.ButtonStyle.secondary)
+        retry.callback = self.retry
+        self.add_item(retry)
+        cancel = discord.ui.Button(label="取消", style=discord.ButtonStyle.danger)
+        cancel.callback = self.cancel
+        self.add_item(cancel)
+
+    def build_embed(self) -> discord.Embed:
+        return Moderate.build_action_preview_embed(self.analysis, title="確認你的意思")
+
+    async def confirm(self, interaction: discord.Interaction):
+        await self.parent_view.save_kick(interaction, self.kick)
+
+    async def retry(self, interaction: discord.Interaction):
+        await interaction.response.send_modal(AntiBeastGettingStartedActionModal(self.parent_view))
+
+    async def cancel(self, interaction: discord.Interaction):
+        target = AntiBeastActionView(self.parent_view.session, self.parent_view.module_name)
+        await self.parent_view.session.render(interaction, embed=target.build_embed(), view=target)
 
 
 class ScalarSettingModal(discord.ui.Modal):

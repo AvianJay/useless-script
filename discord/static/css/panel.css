@@ -794,6 +794,122 @@ body {
     margin-bottom: 0.5rem;
 }
 
+/* ============= Compound Config Editors ============= */
+.compound-config-editor {
+    display: flex;
+    flex-direction: column;
+    gap: 0.8rem;
+    width: 100%;
+}
+
+.compound-section {
+    display: flex;
+    flex-direction: column;
+    gap: 0.6rem;
+    padding: 0.75rem;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--bg-secondary);
+}
+
+.compound-section-header,
+.compound-card-header,
+.compound-actions,
+.compound-field-row {
+    display: flex;
+    align-items: center;
+    gap: 0.65rem;
+}
+
+.compound-section-header,
+.compound-card-header {
+    justify-content: space-between;
+}
+
+.compound-section-title {
+    color: var(--text-white);
+    font-weight: 600;
+}
+
+.compound-card-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: 0.65rem;
+}
+
+.compound-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.7rem;
+}
+
+.compound-card {
+    display: flex;
+    flex-direction: column;
+    gap: 0.55rem;
+    padding: 0.75rem;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--bg-primary);
+}
+
+.compound-card.compact {
+    padding: 0.65rem;
+}
+
+.compound-field-row {
+    flex-wrap: wrap;
+}
+
+.compound-field-label {
+    min-width: 11rem;
+    color: var(--text-muted);
+    font-size: 0.86rem;
+}
+
+.compound-field-row > .form-input,
+.compound-field-row > .form-select,
+.compound-field-row > .form-textarea {
+    flex: 1;
+    min-width: 160px;
+}
+
+.compound-inline-toggle {
+    width: auto;
+    padding: 0;
+    border: 0;
+    background: transparent;
+}
+
+.compound-inline-toggle .compound-field-label {
+    min-width: 0;
+}
+
+.compound-actions {
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    padding-top: 0.25rem;
+}
+
+.compound-button {
+    border: 0;
+    border-radius: 6px;
+    padding: 0.48rem 0.72rem;
+    color: var(--text-white);
+    background: var(--bg-tertiary);
+    cursor: pointer;
+}
+
+.compound-button.primary { background: var(--accent); }
+.compound-button.primary:hover { background: var(--accent-hover); }
+.compound-button.danger { background: var(--danger); }
+.compound-button:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.compound-empty {
+    color: var(--text-muted);
+    font-size: 0.88rem;
+}
+
 /* ============= Responsive ============= */
 @media (max-width: 640px) {
     .panel-nav { flex-wrap: wrap; gap: 0.5rem; }
@@ -801,4 +917,6 @@ body {
     .setting-row { flex-direction: column; }
     .setting-control { min-width: 100%; }
     .guild-grid { grid-template-columns: 1fr; }
+    .compound-card-grid { grid-template-columns: 1fr; }
+    .compound-field-label { min-width: 100%; }
 }

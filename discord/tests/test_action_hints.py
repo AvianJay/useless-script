@@ -193,5 +193,152 @@ class GuildPanelActionValidationTests(unittest.TestCase):
         save.assert_called_once()
 
 
+class GuildPanelCompoundSettingsTests(unittest.TestCase):
+    def test_registry_includes_fixlink_and_antibeast(self):
+        with (
+            patch.object(GuildPanel, "modules", ["FixLink", "AntiBeast"]),
+            patch.dict(GuildPanel.settings, {}, clear=True),
+        ):
+            GuildPanel._register_all()
+            self.assertEqual(
+                GuildPanel.settings["FixLink"]["settings"][0]["type"],
+                "fixlink_config",
+            )
+            self.assertEqual(
+                GuildPanel.settings["AntiBeast"]["settings"][0]["type"],
+                "antibeast_config",
+            )
+            self.assertTrue(
+                callable(GuildPanel.settings["AntiBeast"]["settings"][0]["trigger"])
+            )
+
+    def test_fixlink_coercion_uses_canonical_custom_platform_validation(self):
+        value = {
+            "enabled": True,
+            "remove_tracker": True,
+            "webhook_mode": False,
+            "webhook_only_with_tracker": False,
+            "disabled_platforms": ["Twitter"],
+            "preferred_fixers": {"Threads": "FixEmbed"},
+            "custom_platforms": [{
+                "name": "Example",
+                "origins": ["example.com"],
+                "path_prefixes": ["/post/"],
+                "keep_query_keys": ["id"],
+                "fixer": {
+                    "name": "ExampleFix",
+                    "endpoint": "https://fix.example.com/embed",
+                    "source_param": "url",
+                    "static_query": {"v": "1"},
+                },
+            }],
+        }
+        result = GuildPanel._coerce_fixlink_config(value)
+        self.assertTrue(result["enabled"])
+        self.assertEqual(result["preferred_fixers"]["Threads"], "FixEmbed")
+        self.assertEqual(result["custom_platforms"][0]["origins"], ["example.com"])
+
+    def test_fixlink_rejects_builtin_origin_in_custom_platform(self):
+        value = {
+            "custom_platforms": [{
+                "name": "Fake Threads",
+                "origins": ["threads.com"],
+                "path_prefixes": ["/post/"],
+                "fixer": {
+                    "name": "ExampleFix",
+                    "endpoint": "https://fix.example.com/embed",
+                    "source_param": "url",
+                },
+            }],
+        }
+        with self.assertRaisesRegex(ValueError, "內建平台"):
+            GuildPanel._coerce_fixlink_config(value)
+
+    def test_fixlink_rejects_more_than_ten_custom_platforms(self):
+        value = {"custom_platforms": [{} for _ in range(11)]}
+        with self.assertRaisesRegex(ValueError, "最多 10"):
+            GuildPanel._coerce_fixlink_config(value)
+
+    def test_antibeast_coercion_preserves_internal_state_and_normalizes_action(self):
+        current = {"rule_id": 123, "everyone_mention_before": True}
+        value = {
+            "enabled": True,
+            "bypass_roles": ["10", 10, "20"],
+            "kick": {
+                "enabled": True,
+                "threshold": 3,
+                "time_window": 30,
+                "action": "to 10m 刷頻",
+                "only_everyone_here": True,
+            },
+        }
+        with patch.object(GuildPanel, "get_server_config", return_value=current):
+            result = GuildPanel._coerce_antibeast_config(value, guild_id=1)
+        self.assertEqual(result["bypass_roles"], [10, 20])
+        self.assertEqual(result["rule_id"], 123)
+        self.assertTrue(result["everyone_mention_before"])
+        self.assertEqual(result["kick"]["action"], "to 10m 刷頻")
+
+    def test_antibeast_numeric_shorthand_requires_confirmation(self):
+        value = {
+            "enabled": False,
+            "bypass_roles": [],
+            "kick": {
+                "enabled": True,
+                "threshold": 2,
+                "time_window": 10,
+                "action": "300",
+            },
+        }
+        with patch.object(GuildPanel, "get_server_config", return_value={}):
+            with self.assertRaisesRegex(ValueError, "禁言 300 分鐘"):
+                GuildPanel._coerce_antibeast_config(value, guild_id=1)
+
+
+class GuildPanelAntiBeastTriggerTests(unittest.IsolatedAsyncioTestCase):
+    async def test_disabled_uninitialized_config_does_not_change_guild_state(self):
+        cog = SimpleNamespace(
+            _get_config=lambda guild_id: {
+                "enabled": False,
+                "rule_id": None,
+                "everyone_mention_before": None,
+            },
+            _apply_state=AsyncMock(),
+        )
+        guild = SimpleNamespace(id=1)
+        with (
+            patch.object(GuildPanel.bot, "get_cog", return_value=cog),
+            patch.object(GuildPanel.bot, "get_guild", return_value=guild),
+            patch.object(GuildPanel, "set_server_config") as save,
+        ):
+            await GuildPanel._apply_antibeast_panel_config(1, {})
+        cog._apply_state.assert_not_awaited()
+        save.assert_called_once()
+
+    async def test_enabled_config_applies_runtime_state(self):
+        config = {
+            "enabled": True,
+            "rule_id": None,
+            "everyone_mention_before": None,
+        }
+        cog = SimpleNamespace(
+            _get_config=lambda guild_id: config,
+            _apply_state=AsyncMock(),
+        )
+        guild = SimpleNamespace(id=1)
+        with (
+            patch.object(GuildPanel.bot, "get_cog", return_value=cog),
+            patch.object(GuildPanel.bot, "get_guild", return_value=guild),
+            patch.object(GuildPanel, "set_server_config"),
+        ):
+            await GuildPanel._apply_antibeast_panel_config(1, config)
+        cog._apply_state.assert_awaited_once_with(
+            guild,
+            config,
+            enabled=True,
+            reason="AntiBeast updated from server settings panel",
+        )
+
+
 if __name__ == "__main__":
     unittest.main()
