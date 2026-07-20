@@ -581,6 +581,54 @@ class NormalReplyPreviewTests(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn("FzThreads", line)
         self.assertNotIn(FZ_DIRECT_URL, line)
 
+    def test_normal_reply_preserves_spoiler_wrapped_source_links(self):
+        match = FixLink.LinkMatch(
+            platform_key="Threads",
+            platform_name="Threads",
+            source_url=CLEAN_DIRECT_URL,
+            start=2,
+            end=2 + len(CLEAN_DIRECT_URL),
+            fixers=(("FzThreads", FZ_DIRECT_URL),),
+            primary_url=FZ_DIRECT_URL,
+        )
+
+        self.assertTrue(FixLink.is_spoiler_wrapped(f"||{CLEAN_DIRECT_URL}||", 2))
+        self.assertFalse(FixLink.is_spoiler_wrapped(CLEAN_DIRECT_URL, 0))
+        self.assertTrue(FixLink.format_match_line(match, spoiler=True).startswith("||"))
+        self.assertTrue(FixLink.format_match_line(match, spoiler=True).endswith("||"))
+
+    async def test_normal_reply_wraps_spoiler_source_in_spoiler(self):
+        match = FixLink.LinkMatch(
+            platform_key="Threads",
+            platform_name="Threads",
+            source_url=CLEAN_DIRECT_URL,
+            start=2,
+            end=2 + len(CLEAN_DIRECT_URL),
+            fixers=(("FzThreads", FZ_DIRECT_URL),),
+            primary_url=FZ_DIRECT_URL,
+        )
+        sent_channel = SimpleNamespace(
+            fetch_message=AsyncMock(return_value=SimpleNamespace(embeds=[object()]))
+        )
+        sent = SimpleNamespace(id=11, channel=sent_channel, delete=AsyncMock())
+        message = SimpleNamespace(
+            content=f"||{CLEAN_DIRECT_URL}||",
+            reply=AsyncMock(return_value=sent),
+            channel=SimpleNamespace(send=AsyncMock()),
+            edit=AsyncMock(),
+            guild=SimpleNamespace(id=2),
+            id=1,
+        )
+        with (
+            patch.object(self.cog, "_can_send", return_value=True),
+            patch.object(FixLink.asyncio, "sleep", new=AsyncMock()),
+        ):
+            await self.cog.send_normal_reply(message, [match])
+
+        sent_content = message.reply.await_args.args[0]
+        self.assertTrue(sent_content.startswith("||"))
+        self.assertTrue(sent_content.endswith("||"))
+
 
 class DeleteButtonTests(unittest.IsolatedAsyncioTestCase):
     async def test_persistent_button_only_allows_original_author(self):

@@ -825,7 +825,26 @@ def _escape_label(value: str) -> str:
     return discord.utils.escape_markdown(str(value), as_needed=True)
 
 
-def format_match_line(match: LinkMatch) -> str:
+def is_spoiler_wrapped(content: str, start: int) -> bool:
+    """Return whether the text at ``start`` is inside a Discord spoiler pair."""
+    spoiler_open = False
+    index = 0
+    while index < start:
+        if content.startswith("||", index):
+            backslashes = 0
+            escaped_index = index - 1
+            while escaped_index >= 0 and content[escaped_index] == "\\":
+                backslashes += 1
+                escaped_index -= 1
+            if backslashes % 2 == 0:
+                spoiler_open = not spoiler_open
+                index += 2
+                continue
+        index += 1
+    return spoiler_open
+
+
+def format_match_line(match: LinkMatch, *, spoiler: bool = False) -> str:
     parts = [f"[{_escape_label(match.platform_name)}](<{match.source_url}>)"]
     if match.username and match.profile_url:
         parts.append(f"[@{_escape_label(match.username)}](<{match.profile_url}>)")
@@ -836,7 +855,8 @@ def format_match_line(match: LinkMatch) -> str:
     if primary_fixer is not None:
         name, _ = primary_fixer
         parts.append(f"[{_escape_label(name)}]({match.primary_url})")
-    return " \u2022 ".join(parts)
+    line = " \u2022 ".join(parts)
+    return f"||{line}||" if spoiler else line
 
 
 async def get_trash_button_emoji():
@@ -1637,7 +1657,16 @@ class FixLink(commands.GroupCog, name="fixlink", description="\u9023\u7d50\u4fee
     async def send_normal_reply(self, message: discord.Message, matches: list[LinkMatch]):
         if not self._can_send(message):
             return
-        chunks = chunk_lines([format_match_line(match) for match in matches])
+        content = getattr(message, "content", "") or ""
+        chunks = chunk_lines(
+            [
+                format_match_line(
+                    match,
+                    spoiler=is_spoiler_wrapped(content, match.start),
+                )
+                for match in matches
+            ]
+        )
         sent_messages: list[discord.Message] = []
         for index, chunk in enumerate(chunks):
             try:
