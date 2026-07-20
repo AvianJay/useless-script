@@ -31,6 +31,7 @@ TRADE_FEE_PERCENT = 3      # 轉帳手續費 3%
 EXCHANGE_RATE_MIN = 0.01
 EXCHANGE_RATE_MAX = 100.0
 MAX_GLOBAL_BALANCE = 10_000_000.0  # 全域幣上限：1000萬
+MIN_GLOBAL_FLOW_HUMAN_MEMBERS = 15
 
 # 通膨/通縮權重
 ADMIN_INJECTION_WEIGHT = 0.015   # 管理員注入造成的貶值權重
@@ -44,6 +45,11 @@ GLOBAL_CURRENCY_NAME = "全域幣"
 GLOBAL_CURRENCY_EMOJI = "🌐"
 SERVER_CURRENCY_EMOJI = "🏦"
 ECONOMY_FLOW_BLACKLIST_KEY = "economy_flow_blacklist"
+ECONOMY_FLOW_MEMBER_OVERRIDE_KEY = "economy_flow_member_override"
+
+
+class GlobalFlowUnavailableError(RuntimeError):
+    pass
 
 # ==================== 防濫用機制說明 ====================
 # 1. 管理員物品追蹤：所有管理員給予的物品都會被標記
@@ -114,9 +120,80 @@ def get_sell_ratio(guild_id: int) -> float:
     return get_server_config(guild_id, "economy_sell_ratio", DEFAULT_SELL_RATIO)
 
 
-def get_allow_global_flow(guild_id: int) -> bool:
-    """取得是否允許伺服幣與全域幣流通（兌換、全域商店等）"""
+def get_configured_allow_global_flow(guild_id: int) -> bool:
+    """取得伺服器管理員設定的流通開關。"""
     return get_server_config(guild_id, "economy_allow_global_flow", True)
+
+
+def get_human_member_count(guild: discord.Guild | None) -> int:
+    if not guild:
+        return 0
+    return sum(1 for member in guild.members if not member.bot)
+
+
+def get_flow_member_override_info(guild_id: int) -> dict:
+    data = get_server_config(guild_id, ECONOMY_FLOW_MEMBER_OVERRIDE_KEY, {}) or {}
+    if isinstance(data, bool):
+        return {"enabled": True} if data else {}
+    if not isinstance(data, dict) or not data.get("enabled"):
+        return {}
+    return data
+
+
+def has_flow_member_override(guild_id: int) -> bool:
+    return bool(get_flow_member_override_info(guild_id))
+
+
+def set_flow_member_override(guild_id: int, actor_id: int | None = None):
+    set_server_config(
+        guild_id,
+        ECONOMY_FLOW_MEMBER_OVERRIDE_KEY,
+        {
+            "enabled": True,
+            "set_by": actor_id,
+            "set_at": datetime.now(timezone.utc).isoformat(),
+        },
+    )
+
+
+def clear_flow_member_override(guild_id: int):
+    set_server_config(guild_id, ECONOMY_FLOW_MEMBER_OVERRIDE_KEY, None)
+
+
+def meets_global_flow_member_requirement(guild_id: int, guild: discord.Guild | None = None) -> bool:
+    if has_flow_member_override(guild_id):
+        return True
+    guild = guild or bot.get_guild(guild_id)
+    return get_human_member_count(guild) >= MIN_GLOBAL_FLOW_HUMAN_MEMBERS
+
+
+def build_flow_member_requirement_notice(guild_id: int, guild: discord.Guild | None = None) -> str:
+    guild = guild or bot.get_guild(guild_id)
+    human_count = get_human_member_count(guild)
+    support_invite = str(config("support_server_invite", "") or "").strip()
+    lines = [
+        "## 此伺服器尚未達到全域幣流通資格",
+        (
+            f"> 至少需要 **{MIN_GLOBAL_FLOW_HUMAN_MEMBERS} 位真人成員**，"
+            f"目前偵測到 **{human_count} 位**。"
+        ),
+        "",
+        "為避免小型伺服器透過兌換或全域模式整體轉換影響全域經濟，目前無法開啟或使用全域幣流通功能。",
+    ]
+    if support_invite:
+        lines.append(f"如需例外開啟，請前往[支援伺服器]({support_invite})開單，由機器人擁有者審核。")
+    else:
+        lines.append("如需例外開啟，請聯繫機器人擁有者申請審核。")
+    return "\n".join(lines)
+
+
+def get_allow_global_flow(guild_id: int) -> bool:
+    """取得是否實際允許伺服幣與全域幣流通（兌換、全域商店等）。"""
+    return (
+        get_configured_allow_global_flow(guild_id)
+        and not is_flow_blacklisted(guild_id)
+        and meets_global_flow_member_requirement(guild_id)
+    )
 
 
 def set_allow_global_flow(guild_id: int, allow: bool):
@@ -175,6 +252,16 @@ def build_flow_blacklist_notice(guild_id: int) -> str:
     else:
         lines.append("如需申訴，請聯繫機器人管理員。")
     return "\n".join(lines)
+
+
+def get_global_flow_block_notice(guild_id: int, guild: discord.Guild | None = None) -> str | None:
+    if is_flow_blacklisted(guild_id):
+        return build_flow_blacklist_notice(guild_id)
+    if not meets_global_flow_member_requirement(guild_id, guild):
+        return build_flow_member_requirement_notice(guild_id, guild)
+    if not get_configured_allow_global_flow(guild_id):
+        return "❌ 此伺服器已關閉伺服幣與全域幣的流通功能。"
+    return None
 
 
 def get_total_supply(guild_id: int) -> float:
@@ -598,6 +685,10 @@ def queue_economy_audit_log(*args, **kwargs):
 
 
 async def migrate_guild_economy_to_global(guild_id: int) -> dict:
+    flow_block_notice = get_global_flow_block_notice(guild_id)
+    if flow_block_notice:
+        raise GlobalFlowUnavailableError(flow_block_notice)
+
     user_item_rows = get_all_user_data(guild_id, "items")
     user_balance_rows = get_all_user_data(guild_id, "economy_balance")
     affected_user_ids = set(user_item_rows.keys()) | set(user_balance_rows.keys())
@@ -1323,9 +1414,11 @@ class PurchaseModal(discord.ui.Modal):
         else:
             guild_id = interaction.guild.id
             scope = self.scope
-            if scope == "global" and not get_allow_global_flow(guild_id):
-                await interaction.response.send_message("❌ 此伺服器已關閉伺服幣與全域幣的流通功能，無法使用全域商店。", ephemeral=True)
-                return
+            if scope == "global":
+                flow_block_notice = get_global_flow_block_notice(guild_id, interaction.guild)
+                if flow_block_notice:
+                    await interaction.response.send_message(flow_block_notice, ephemeral=True)
+                    return
 
         user_id = interaction.user.id
         item = get_item_by_id(self.item["id"], guild_id if scope == "server" else 0)
@@ -1800,14 +1893,9 @@ class Economy(commands.GroupCog, name="economy", description="經濟系統指令
             return
 
         guild_id = interaction.guild.id
-        if is_flow_blacklisted(guild_id):
-            await interaction.response.send_message(
-                build_flow_blacklist_notice(guild_id),
-                ephemeral=True,
-            )
-            return
-        if not get_allow_global_flow(guild_id):
-            await interaction.response.send_message("❌ 此伺服器已關閉伺服幣與全域幣的流通功能。", ephemeral=True)
+        flow_block_notice = get_global_flow_block_notice(guild_id, interaction.guild)
+        if flow_block_notice:
+            await interaction.response.send_message(flow_block_notice, ephemeral=True)
             return
 
         user_id = interaction.user.id
@@ -1918,9 +2006,11 @@ class Economy(commands.GroupCog, name="economy", description="經濟系統指令
             guild_id = GLOBAL_GUILD_ID
         else:
             guild_id = interaction.guild.id
-            if scope == "global" and not get_allow_global_flow(guild_id):
-                await interaction.response.send_message("❌ 此伺服器已關閉伺服幣與全域幣的流通功能，無法使用全域商店。", ephemeral=True)
-                return
+            if scope == "global":
+                flow_block_notice = get_global_flow_block_notice(guild_id, interaction.guild)
+                if flow_block_notice:
+                    await interaction.response.send_message(flow_block_notice, ephemeral=True)
+                    return
         if amount <= 0:
             await interaction.response.send_message("❌ 數量必須大於 0。", ephemeral=True)
             return
@@ -2015,9 +2105,11 @@ class Economy(commands.GroupCog, name="economy", description="經濟系統指令
             guild_id = GLOBAL_GUILD_ID
         else:
             guild_id = interaction.guild.id
-            if scope == "global" and not get_allow_global_flow(guild_id):
-                await interaction.response.send_message("❌ 此伺服器已關閉伺服幣與全域幣的流通功能，無法使用全域商店。", ephemeral=True)
-                return
+            if scope == "global":
+                flow_block_notice = get_global_flow_block_notice(guild_id, interaction.guild)
+                if flow_block_notice:
+                    await interaction.response.send_message(flow_block_notice, ephemeral=True)
+                    return
         user_id = interaction.user.id
 
         item = get_item_by_id(item_id, guild_id if scope == "server" else 0)
@@ -2741,8 +2833,17 @@ class ConfirmGlobalModeView(discord.ui.View):
             await interaction.response.send_message("這個伺服器已經是全域模式了。", ephemeral=True)
             return
 
+        flow_block_notice = get_global_flow_block_notice(self.guild_id, interaction.guild)
+        if flow_block_notice:
+            await interaction.response.send_message(flow_block_notice, ephemeral=True)
+            return
+
         await interaction.response.defer(ephemeral=True, thinking=True)
-        migration = await migrate_guild_economy_to_global(self.guild_id)
+        try:
+            migration = await migrate_guild_economy_to_global(self.guild_id)
+        except GlobalFlowUnavailableError as exc:
+            await interaction.followup.send(str(exc), ephemeral=True)
+            return
         set_global_mode_enabled(self.guild_id, True)
 
         queue_economy_audit_log(
@@ -2941,11 +3042,9 @@ class EconomyMod(commands.GroupCog, name="economymod", description="經濟系統
             )
             return
 
-        if is_flow_blacklisted(guild_id):
-            await interaction.response.send_message(
-                build_flow_blacklist_notice(guild_id),
-                ephemeral=True,
-            )
+        flow_block_notice = get_global_flow_block_notice(guild_id, interaction.guild)
+        if flow_block_notice:
+            await interaction.response.send_message(flow_block_notice, ephemeral=True)
             return
 
         warning = discord.Embed(
@@ -2967,7 +3066,17 @@ class EconomyMod(commands.GroupCog, name="economymod", description="經濟系統
     @app_commands.command(name="toggle-flow", description="切換是否允許伺服幣與全域幣流通（兌換、全域商店等）")
     async def toggle_flow(self, interaction: discord.Interaction):
         guild_id = interaction.guild.id
-        current = get_allow_global_flow(guild_id)
+        if is_flow_blacklisted(guild_id):
+            await interaction.response.send_message(build_flow_blacklist_notice(guild_id), ephemeral=True)
+            return
+        if not meets_global_flow_member_requirement(guild_id, interaction.guild):
+            await interaction.response.send_message(
+                build_flow_member_requirement_notice(guild_id, interaction.guild),
+                ephemeral=True,
+            )
+            return
+
+        current = get_configured_allow_global_flow(guild_id)
         new_value = not current
         set_allow_global_flow(guild_id, new_value)
         status = "🔓 已開啟" if new_value else "🔒 已關閉"
@@ -3208,6 +3317,37 @@ async def dev_economy_flow_unblacklist(ctx, guild_id: int):
     await ctx.send(
         f"✅ 已將 **{guild_name}** (`{guild_id}`) 移出貨幣流通黑名單。\n"
         f"原原因：{info.get('reason', '未提供')}"
+    )
+
+
+@bot.command(
+    name="dev-economyflowoverride",
+    description="由機器人擁有者核准未滿 15 位真人的伺服器使用全域幣流通",
+    aliases=["defo", "deflowoverride"],
+)
+@is_owner()
+async def dev_economy_flow_override(ctx, guild_id: int, enabled: bool = True):
+    guild = bot.get_guild(guild_id)
+    guild_name = guild.name if guild else "未知伺服器"
+    human_count = get_human_member_count(guild)
+
+    if enabled:
+        set_flow_member_override(guild_id, actor_id=ctx.author.id)
+        set_allow_global_flow(guild_id, True)
+        status = "已核准並開啟"
+    else:
+        clear_flow_member_override(guild_id)
+        status = "已取消核准"
+
+    await ctx.send(
+        f"✅ **{guild_name}** (`{guild_id}`) 的真人數門檻例外{status}。\n"
+        f"目前偵測到 **{human_count}** 位真人；一般門檻為 **{MIN_GLOBAL_FLOW_HUMAN_MEMBERS}** 位。"
+    )
+    log(
+        f"Owner {ctx.author} set global flow member override to {enabled} in guild {guild_id}",
+        module_name="Economy",
+        user=ctx.author,
+        guild=guild,
     )
 
 
@@ -3727,9 +3867,11 @@ def make_cheque_use_callback(item_id: str, worth: int):
             return
 
         # 伺服器背包中兌現支票屬於全域幣流通，需檢查開關
-        if guild_id and guild_id != GLOBAL_GUILD_ID and not get_allow_global_flow(guild_id):
-            await interaction.response.send_message("❌ 此伺服器已關閉伺服幣與全域幣的流通功能，無法兌現支票。", ephemeral=True)
-            return
+        if guild_id and guild_id != GLOBAL_GUILD_ID:
+            flow_block_notice = get_global_flow_block_notice(guild_id, interaction.guild)
+            if flow_block_notice:
+                await interaction.response.send_message(flow_block_notice, ephemeral=True)
+                return
 
         removed = await remove_item_from_user(guild_id, user_id, item_id, 1)
         if removed < 1:
