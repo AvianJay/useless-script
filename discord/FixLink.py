@@ -207,6 +207,43 @@ supported_platforms = {
         },
         "default_fixer": "FxSpotify",
     },
+    "Mastodon": {
+        "origins": [
+            "mastodon.social",
+            "mstdn.jp",
+            "mastodon.cloud",
+            "mstdn.social",
+            "mastodon.world",
+            "mastodon.online",
+            "mas.to",
+            "techhub.social",
+            "mastodon.uno",
+            "infosec.exchange",
+        ],
+        "rules": [{"path": r"^/@[^/]+/[0-9]+/?$"}],
+        "fixers": {
+            "FxMastodon": {
+                "host": "fx.zillanlabs.tech",
+                "prepend_origin_to_path": True,
+            },
+        },
+        "default_fixer": "FxMastodon",
+    },
+    "Tumblr": {
+        "origins": ["tumblr.com"],
+        "origin_suffixes": ["tumblr.com"],
+        "rules": [
+            {"path": r"^/post/[0-9]+(?:/[^/]+)?/?$"},
+            {"hosts": ["tumblr.com"], "path": r"^/[^/]+/[0-9]+(?:/[^/]+)?/?$"},
+        ],
+        "fixers": {
+            "FxTumblr": {
+                "host": "tpmblr.com",
+                "preserve_origin_subdomain": "tumblr.com",
+            },
+        },
+        "default_fixer": "FxTumblr",
+    },
     "DeviantArt": {
         "origins": ["deviantart.com"],
         "rules": [{"path": r"^/(?:[^/]+/(?:art|journal)/[^/]+|deviation/[0-9]+)/?$"}],
@@ -262,13 +299,21 @@ DEFAULT_PREFERRED_FIXERS = {
     name: platform["default_fixer"] for name, platform in supported_platforms.items()
 }
 
+DEFAULT_DISABLED_PLATFORMS = (
+    "Spotify",
+    "Mastodon",
+    "Tumblr",
+    "Imgur",
+    "YouTube",
+)
+
 
 DEFAULT_FIXLINK_CONFIG = {
     "enabled": False,
     "remove_tracker": False,
     "webhook_mode": False,
     "webhook_only_with_tracker": False,
-    "disabled_platforms": [],
+    "disabled_platforms": list(DEFAULT_DISABLED_PLATFORMS),
     "preferred_fixers": dict(DEFAULT_PREFERRED_FIXERS),
     "custom_platforms": [],
 }
@@ -525,6 +570,7 @@ def normalize_custom_platform(raw: dict, existing: list[dict] | None = None, *, 
 
 def normalize_fixlink_config(raw) -> dict:
     raw = raw if isinstance(raw, dict) else {}
+    raw_disabled_platforms = raw.get("disabled_platforms")
     config = {
         "enabled": raw.get("enabled") if isinstance(raw.get("enabled"), bool) else False,
         "remove_tracker": raw.get("remove_tracker") if isinstance(raw.get("remove_tracker"), bool) else False,
@@ -534,9 +580,9 @@ def normalize_fixlink_config(raw) -> dict:
             if isinstance(raw.get("webhook_only_with_tracker"), bool)
             else False
         ),
-        "disabled_platforms": _unique_strings(raw.get("disabled_platforms", []), limit=50)
-        if isinstance(raw.get("disabled_platforms", []), list)
-        else [],
+        "disabled_platforms": _unique_strings(raw_disabled_platforms, limit=50)
+        if isinstance(raw_disabled_platforms, list)
+        else list(DEFAULT_DISABLED_PLATFORMS),
         "preferred_fixers": dict(DEFAULT_PREFERRED_FIXERS),
         "custom_platforms": [],
     }
@@ -649,7 +695,14 @@ def build_builtin_match_urls(
         target_host = fixer.get("host_map", {}).get(hostname, fixer.get("host"))
         if not target_host:
             continue
-        fixed_url = urlunsplit(("https", target_host, parsed.path, query, fragment))
+        preserved_suffix = fixer.get("preserve_origin_subdomain")
+        if preserved_suffix and hostname.endswith(f".{preserved_suffix}"):
+            source_subdomain = hostname[: -(len(preserved_suffix) + 1)]
+            target_host = f"{source_subdomain}.{target_host}"
+        target_path = parsed.path
+        if fixer.get("prepend_origin_to_path"):
+            target_path = f"/{hostname}{target_path}"
+        fixed_url = urlunsplit(("https", target_host, target_path, query, fragment))
         if len(fixed_url) <= MAX_GENERATED_URL_LENGTH:
             fixers.append((fixer_name, fixed_url))
     return source_url, tuple(fixers)

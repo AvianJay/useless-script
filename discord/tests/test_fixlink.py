@@ -213,6 +213,10 @@ class URLHelperTests(unittest.TestCase):
         self.assertTrue(config["enabled"])
         self.assertFalse(config["remove_tracker"])
         self.assertFalse(config["webhook_only_with_tracker"])
+        self.assertEqual(
+            config["disabled_platforms"],
+            list(FixLink.DEFAULT_DISABLED_PLATFORMS),
+        )
         self.assertEqual(config["preferred_fixers"]["Threads"], "FixEmbed")
         self.assertEqual(config["preferred_fixers"]["Twitter"], "FxTwitter")
         self.assertEqual(set(config["preferred_fixers"]), set(FixLink.supported_platforms))
@@ -223,6 +227,11 @@ class URLHelperTests(unittest.TestCase):
         )
         self.assertTrue(preserved["webhook_mode"])
         self.assertTrue(preserved["webhook_only_with_tracker"])
+
+        explicitly_enabled = FixLink.normalize_fixlink_config(
+            {"disabled_platforms": []}
+        )
+        self.assertEqual(explicitly_enabled["disabled_platforms"], [])
 
     def test_chunk_lines_respects_discord_limit(self):
         chunks = FixLink.chunk_lines(["a" * 1000, "b" * 1000, "c" * 100])
@@ -236,7 +245,7 @@ class MatchTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_direct_match_contains_both_fixers_and_author(self):
         config = FixLink.normalize_fixlink_config(
-            {"enabled": True, "remove_tracker": True}
+            {"enabled": True, "remove_tracker": True, "disabled_platforms": []}
         )
         matches = await self.cog.match_message(DIRECT_URL, config)
         self.assertEqual(len(matches), 1)
@@ -265,6 +274,8 @@ class MatchTests(unittest.IsolatedAsyncioTestCase):
             ("Twitch", "https://www.twitch.tv/example/clip/FancySlug?filter=clips", "fxtwitch.seria.moe"),
             ("Bluesky", "https://bsky.app/profile/example.com/post/3abc123?ref=share", "fxbsky.app"),
             ("Spotify", "https://open.spotify.com/track/abc123?si=tracking", "fxspotify.com"),
+            ("Mastodon", "https://mastodon.social/@Gargron/112233445566", "fx.zillanlabs.tech"),
+            ("Tumblr", "https://www.tumblr.com/example/123456789/example-post", "tpmblr.com"),
             ("DeviantArt", "https://www.deviantart.com/artist/art/example-123456", "fixdeviantart.com"),
             ("Imgur", "https://imgur.com/gallery/abc123?utm_source=test", "imgurez.com"),
             ("Weibo", "https://weibo.com/1234567890/AbCdEf?refer_flag=test", "weiboez.com"),
@@ -274,7 +285,7 @@ class MatchTests(unittest.IsolatedAsyncioTestCase):
             ("Fur Affinity", "https://www.furaffinity.net/view/12345678/?utm_source=test", "xfuraffinity.net"),
         ]
         config = FixLink.normalize_fixlink_config(
-            {"enabled": True, "remove_tracker": True}
+            {"enabled": True, "remove_tracker": True, "disabled_platforms": []}
         )
         for platform_name, source_url, primary_host in cases:
             with self.subTest(platform=platform_name):
@@ -296,6 +307,7 @@ class MatchTests(unittest.IsolatedAsyncioTestCase):
             {
                 "enabled": True,
                 "remove_tracker": True,
+                "disabled_platforms": [],
                 "preferred_fixers": {"Twitter": "VxTwitter"},
             }
         )
@@ -320,6 +332,38 @@ class MatchTests(unittest.IsolatedAsyncioTestCase):
             matches[0].primary_url,
             "https://fxtwitter.com/discord/status/1234567890?ref_src=test#fragment",
         )
+
+    async def test_mastodon_and_tumblr_fixer_shapes(self):
+        config = FixLink.normalize_fixlink_config(
+            {"enabled": True, "remove_tracker": True, "disabled_platforms": []}
+        )
+        matches = await self.cog.match_message(
+            "https://mastodon.social/@Gargron/112233445566 "
+            "https://staff.tumblr.com/post/123456789/example-post",
+            config,
+        )
+
+        self.assertEqual(
+            matches[0].primary_url,
+            "https://fx.zillanlabs.tech/mastodon.social/@Gargron/112233445566",
+        )
+        self.assertEqual(
+            matches[1].primary_url,
+            "https://staff.tpmblr.com/post/123456789/example-post",
+        )
+
+    async def test_default_disabled_platforms_are_not_matched(self):
+        config = FixLink.normalize_fixlink_config({"enabled": True})
+        matches = await self.cog.match_message(
+            "https://open.spotify.com/track/abc123 "
+            "https://mastodon.social/@Gargron/112233445566 "
+            "https://www.tumblr.com/example/123456789/example-post "
+            "https://imgur.com/gallery/abc123 "
+            "https://www.youtube.com/watch?v=abc_DEF-12",
+            config,
+        )
+
+        self.assertEqual(matches, [])
 
     async def test_builtin_rejects_unsupported_shapes_and_honors_disabled(self):
         config = FixLink.normalize_fixlink_config(

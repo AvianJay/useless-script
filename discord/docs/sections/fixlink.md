@@ -17,7 +17,8 @@ FixLink 會偵測伺服器中的內建與管理員設定的自訂平台連結，
 
 ## 內建平台
 
-- 支援 20 個內建平台：Threads、Twitter/X、Instagram、TikTok、Reddit、Facebook、Bilibili、Pixiv、Pinterest、YouTube、Twitch、Bluesky、Spotify、DeviantArt、Imgur、Weibo、Newgrounds、PTT、Roblox 與 Fur Affinity。
+- 支援 22 個內建平台：Threads、Twitter/X、Instagram、TikTok、Reddit、Facebook、Bilibili、Pixiv、Pinterest、YouTube、Twitch、Bluesky、Spotify、Mastodon、Tumblr、DeviantArt、Imgur、Weibo、Newgrounds、PTT、Roblox 與 Fur Affinity。
+- Spotify、Mastodon、Tumblr、Imgur 與 YouTube 預設停用，可由設定面板逐一開啟。
 - 設定面板可選擇內建平台，分別啟用、停用及指定 Webhook 使用的主要 fixer；一般模式會列出該平台所有可用 fixer。
 - 只採用程式內建的精確來源網域、路徑規則與 HTTPS fixer，不包含 Awesome Fixers 清單中的非官方惡搞網域或已棄用服務。
 - 服務選擇參考 [FixTweetBot Awesome Fixers](https://github.com/Kyrela/FixTweetBot#awesome-fixers)。
