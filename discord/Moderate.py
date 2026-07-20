@@ -1262,7 +1262,7 @@ class Moderate(commands.Cog):
     @app_commands.describe(user="選擇用戶", reason="處分原因", action="處分結果", moderator="執行管理員（可選）", direct="直接發送到公告頻道而不顯示設定介面")
     @app_commands.default_permissions(administrator=True)
     @app_commands.allowed_installs(guilds=True, users=False)
-    async def send_moderation_message(self, interaction: discord.Interaction, user: discord.Member, reason: str, action: str, moderator: discord.Member=None, direct: bool=False):
+    async def send_moderation_message(self, interaction: discord.Interaction, user: Union[discord.Member, discord.User], reason: str, action: str, moderator: discord.Member=None, direct: bool=False):
         await interaction.response.defer(ephemeral=True)
         guild = interaction.guild
         if guild is None:
