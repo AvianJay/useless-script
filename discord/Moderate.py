@@ -17,6 +17,7 @@ BUILTIN_ACTIONS = {
     "ban", "kick", "mute", "timeout", "to", "unban", "unmute", "untimeout",
     "delete", "warn", "send_mod_message", "smm", "force_verify"
 }
+REPLY_ACTION_ALIASES = {f"{action}r": action for action in BUILTIN_ACTIONS}
 
 ACTION_INPUT_SUGGESTIONS = [
     ("刪除訊息", "delete"),
@@ -1781,7 +1782,7 @@ class Moderate(commands.Cog):
         await ctx.send(msg)
         log(msg, module_name="Moderate", guild=ctx.guild)
     
-    @commands.command(aliases=["mr", "mod_reply"])
+    @commands.command(aliases=["mr", "mod_reply", *sorted(REPLY_ACTION_ALIASES)])
     @commands.has_permissions(ban_members=True, kick_members=True, moderate_members=True, manage_messages=True)
     async def moderate_reply(self, ctx: commands.Context, *, commands_str: str = ""):
         """對訊息發送者進行多重管理操作。
@@ -1798,7 +1799,12 @@ class Moderate(commands.Cog):
         
         範例：
         !moderate_reply ban 違規 1d 3600 , mute 30m 注意行為 , delete 請注意你的言論
+        !banr 1d 3600 違規
         """
+        invoked_action = REPLY_ACTION_ALIASES.get(ctx.invoked_with.lower())
+        if invoked_action:
+            commands_str = f"{invoked_action} {commands_str}".strip()
+
         # check bot permissions
         if not ctx.guild.me.guild_permissions.ban_members or not ctx.guild.me.guild_permissions.kick_members or not ctx.guild.me.guild_permissions.manage_messages or not ctx.guild.me.guild_permissions.moderate_members:
             await ctx.send("機器人缺少必要的權限，請確認機器人擁有封禁、踢出、管理訊息及禁言權限。")
