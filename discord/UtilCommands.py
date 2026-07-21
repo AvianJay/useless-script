@@ -385,10 +385,13 @@ def build_git_commits_embed() -> discord.Embed:
     return discord.Embed(title="機器人 git 提交記錄", description="\n".join(commit_logs), color=0x00ff00)
 
 
-def build_ping_embed(*, bot_latency: str | float, rest_latency: float) -> discord.Embed:
+def build_ping_embed(*, bot_latency: str | float, defer_latency: float = None, typing_latency: float = None) -> discord.Embed:
     embed = discord.Embed(title="機器人延遲", color=0x00ff00)
     embed.add_field(name="Websocket 延遲", value=f"{bot_latency}ms")
-    embed.add_field(name="REST API 延遲", value=f"{rest_latency}ms")
+    if defer_latency:
+        embed.add_field(name="REST API(Defer) 延遲", value=f"{defer_latency}ms")
+    if typing_latency:
+        embed.add_field(name="REST API(Typing) 延遲", value=f"{defer_latency}ms")
     return embed
 
 
@@ -714,7 +717,7 @@ async def ping_command(interaction: discord.Interaction):
     await interaction.response.defer()
     e = time.perf_counter()
     rest_latency = round((e - s) * 1000, 2)
-    embed = build_ping_embed(bot_latency=bot_latency, rest_latency=rest_latency)
+    embed = build_ping_embed(bot_latency=bot_latency, defer_latency=rest_latency)
     await interaction.followup.send(embed=embed)
 
 
@@ -729,7 +732,7 @@ async def ping(ctx: commands.Context):
     await ctx.typing()
     e = time.perf_counter()
     rest_latency = round((e - s) * 1000, 2)
-    embed = build_ping_embed(bot_latency=bot_latency, rest_latency=rest_latency)
+    embed = build_ping_embed(bot_latency=bot_latency, typing_latency=rest_latency)
     await ctx.send(embed=embed)
 
 
