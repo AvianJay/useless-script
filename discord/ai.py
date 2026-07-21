@@ -31,6 +31,7 @@ from urllib.parse import urlparse
 from uuid import uuid4
 from doc_markdown import read_markdown_file, extract_markdown_search_entries, load_docs_site
 from OwnerTools import is_owner
+from ai_math import render_display_math
 from ai_provider import (
     attach_image_to_messages as _attach_image_to_messages,
     coerce_ai_rate_dict as _coerce_ai_rate_dict,
@@ -586,6 +587,7 @@ TOOL_USAGE_PROMPT = """工具使用規則：
 TOOL_USAGE_PROMPT += """
 
 Response formatting helpers:
+- Put display math inside `$$...$$`. Supported expressions are rendered as inline images automatically.
 - Use the `image_analyze` tool when the user asks about an image URL. The URL must be on cdn.discordapp.com or media.discordapp.net.
 - To mention a slash command, write exactly: <command_mention>/autoreply list</command_mention>. The renderer will convert it to Discord's command mention when possible.
 - To show a Discord CDN image in the response body, write exactly: <image>https://cdn.discordapp.com/...</image> or <image>https://media.discordapp.net/...</image>.
@@ -684,6 +686,17 @@ class AIResponseBuilder:
     def _build_generated_image_refs(generated_image_attachments: list[dict] | None) -> list[str]:
         refs: list[str] = []
         for payload in generated_image_attachments or []:
+            if str((payload or {}).get("kind") or "generated") == "math":
+                continue
+            filename = str((payload or {}).get("filename") or "").strip()
+            if filename:
+                refs.append(f"attachment://{filename}")
+        return refs
+
+    @staticmethod
+    def _build_attachment_refs(image_attachments: list[dict] | None) -> list[str]:
+        refs: list[str] = []
+        for payload in image_attachments or []:
             filename = str((payload or {}).get("filename") or "").strip()
             if filename:
                 refs.append(f"attachment://{filename}")
@@ -702,6 +715,9 @@ class AIResponseBuilder:
         media_components = 0
         omitted_media = 0
         generated_refs = cls._build_generated_image_refs(generated_image_attachments)
+        attachment_refs = cls._build_attachment_refs(generated_image_attachments)
+        attachment_ref_set = set(attachment_refs)
+        used_attachment_refs: set[str] = set()
         generated_index = 0
 
         def add_text(raw_text: str):
@@ -717,13 +733,17 @@ class AIResponseBuilder:
             media_ref: str | None = None
             if tag_name == "generated_image":
                 inline_ref = str(match.group(3) or "").strip()
-                if inline_ref.startswith("attachment://"):
+                if inline_ref in attachment_ref_set and inline_ref not in used_attachment_refs:
                     media_ref = inline_ref
                 elif inline_ref:
                     media_ref = normalize_discord_image_url(inline_ref)
-                elif generated_index < len(generated_refs):
-                    media_ref = generated_refs[generated_index]
-                    generated_index += 1
+                else:
+                    while generated_index < len(generated_refs):
+                        candidate = generated_refs[generated_index]
+                        generated_index += 1
+                        if candidate not in used_attachment_refs:
+                            media_ref = candidate
+                            break
             else:
                 media_ref = normalize_discord_image_url(match.group(2))
 
@@ -734,17 +754,20 @@ class AIResponseBuilder:
                 omitted_media += 1
             else:
                 media_components += component_cost
+                if media_ref in attachment_ref_set:
+                    used_attachment_refs.add(media_ref)
                 items.append(("image" if tag_name == "generated_image" else tag_name, media_ref))
             cursor = match.end()
 
         add_text(text[cursor:])
-        while generated_index < len(generated_refs):
-            media_ref = generated_refs[generated_index]
-            generated_index += 1
+        for media_ref in attachment_refs:
+            if media_ref in used_attachment_refs:
+                continue
             if media_components + 1 > cls.RESPONSE_MAX_MEDIA_COMPONENTS:
                 omitted_media += 1
                 continue
             media_components += 1
+            used_attachment_refs.add(media_ref)
             items.append(("image", media_ref))
         if omitted_media:
             items.append(("text", cls._split_response_text_chunks(f"[省略 {omitted_media} 個圖片，避免超過 Discord 元件上限]")))
@@ -1925,6 +1948,17 @@ class AICommands(commands.Cog):
         display_response_text = resolved_response_text
         if pending_file_response:
             display_response_text = self._build_send_as_file_notice(resolved_response_text, pending_file_response)
+        else:
+            available_math_images = max(
+                0,
+                AIResponseBuilder.RESPONSE_MAX_MEDIA_COMPONENTS - len(pending_image_attachments),
+            )
+            display_response_text, math_attachments = await asyncio.to_thread(
+                render_display_math,
+                display_response_text,
+                max_images=min(6, available_math_images),
+            )
+            pending_image_attachments.extend(math_attachments)
 
         return resolved_response_text, display_response_text, pending_file_response, pending_image_attachments
 
@@ -6427,6 +6461,7 @@ class AICommands(commands.Cog):
         # 延遲回應（因為 AI 生成可能需要時間）
         await interaction.response.defer(thinking=True)
         pending_image_attachments: list[dict] = []
+        pending_images_delivered_inline = False
         tool_context: dict | None = None
 
         try:
@@ -6565,13 +6600,24 @@ class AICommands(commands.Cog):
             
             # 儲存對話歷史（圖片為一次性，不存入歷史）
             ConversationManager.add_message(user.id, "user", resolved_message, guild_id)
-            assistant_history_text = AIResponseBuilder.strip_media_tags_for_history(display_response_text)
+            has_math_attachments = any(
+                str(item.get("kind") or "") == "math"
+                for item in pending_image_attachments
+                if isinstance(item, dict)
+            )
+            history_response_text = response_text if has_math_attachments else display_response_text
+            assistant_history_text = AIResponseBuilder.strip_media_tags_for_history(history_response_text)
             if pending_file_response:
                 assistant_history_text += (
                     f"\n[file:{pending_file_response.get('filename')}, chars={file_output_chars}]"
                 )
-            if pending_image_attachments:
-                image_names = ", ".join(str(item.get("filename") or "image") for item in pending_image_attachments)
+            generated_image_attachments = [
+                item
+                for item in pending_image_attachments
+                if str(item.get("kind") or "generated") != "math"
+            ]
+            if generated_image_attachments:
+                image_names = ", ".join(str(item.get("filename") or "image") for item in generated_image_attachments)
                 assistant_history_text += f"\n[images:{image_names}]"
             ConversationManager.add_message(user.id, "assistant", assistant_history_text, guild_id)
             
@@ -6601,12 +6647,14 @@ class AICommands(commands.Cog):
                 file_attachment = self._build_pending_file_attachment(pending_file_response)
                 if image_files:
                     await interaction.edit_original_response(content=None, attachments=image_files, view=view)
+                    pending_images_delivered_inline = True
                 else:
                     await interaction.edit_original_response(content=None, view=view)
                 await interaction.followup.send(file=file_attachment, allowed_mentions=SAFE_MENTIONS)
             else:
                 if image_files:
                     await interaction.edit_original_response(content=None, attachments=image_files, view=view)
+                    pending_images_delivered_inline = True
                 else:
                     await interaction.edit_original_response(content=None, view=view)
 
@@ -6637,11 +6685,12 @@ class AICommands(commands.Cog):
             )
             await interaction.edit_original_response(content=None, view=view)
 
-        await self._deliver_pending_image_attachments(
-            pending_image_attachments,
-            send_files=lambda files: interaction.followup.send(files=files, allowed_mentions=SAFE_MENTIONS),
-            send_notice=lambda message: interaction.followup.send(content=message, allowed_mentions=SAFE_MENTIONS),
-        )
+        if not pending_images_delivered_inline:
+            await self._deliver_pending_image_attachments(
+                pending_image_attachments,
+                send_files=lambda files: interaction.followup.send(files=files, allowed_mentions=SAFE_MENTIONS),
+                send_notice=lambda message: interaction.followup.send(content=message, allowed_mentions=SAFE_MENTIONS),
+            )
 
     @app_commands.command(name="ai-clear", description="清除你的 AI 對話歷史")
     @app_commands.allowed_installs(guilds=True, users=True)
@@ -6972,6 +7021,7 @@ class AICommands(commands.Cog):
         # 顯示正在輸入
         tool_notice_message = None
         pending_image_attachments: list[dict] = []
+        pending_images_delivered_inline = False
         tool_context: dict | None = None
         async with ctx.typing():
             try:
@@ -7107,13 +7157,24 @@ class AICommands(commands.Cog):
                 
                 # 儲存對話歷史（圖片為一次性，不存入歷史）
                 ConversationManager.add_message(user.id, "user", final_message, guild_id)
-                assistant_history_text = AIResponseBuilder.strip_media_tags_for_history(display_response_text)
+                has_math_attachments = any(
+                    str(item.get("kind") or "") == "math"
+                    for item in pending_image_attachments
+                    if isinstance(item, dict)
+                )
+                history_response_text = response_text if has_math_attachments else display_response_text
+                assistant_history_text = AIResponseBuilder.strip_media_tags_for_history(history_response_text)
                 if pending_file_response:
                     assistant_history_text += (
                         f"\n[file:{pending_file_response.get('filename')}, chars={file_output_chars}]"
                     )
-                if pending_image_attachments:
-                    image_names = ", ".join(str(item.get("filename") or "image") for item in pending_image_attachments)
+                generated_image_attachments = [
+                    item
+                    for item in pending_image_attachments
+                    if str(item.get("kind") or "generated") != "math"
+                ]
+                if generated_image_attachments:
+                    image_names = ", ".join(str(item.get("filename") or "image") for item in generated_image_attachments)
                     assistant_history_text += f"\n[images:{image_names}]"
                 ConversationManager.add_message(user.id, "assistant", assistant_history_text, guild_id)
                 
@@ -7148,12 +7209,14 @@ class AICommands(commands.Cog):
                     file_attachment = self._build_pending_file_attachment(pending_file_response)
                     if image_files:
                         await ctx.reply(view=view, files=image_files, allowed_mentions=SAFE_MENTIONS)
+                        pending_images_delivered_inline = True
                     else:
                         await ctx.reply(view=view, allowed_mentions=SAFE_MENTIONS)
                     await ctx.send(file=file_attachment, allowed_mentions=SAFE_MENTIONS)
                 else:
                     if image_files:
                         await ctx.reply(view=view, files=image_files, allowed_mentions=SAFE_MENTIONS)
+                        pending_images_delivered_inline = True
                     else:
                         await ctx.reply(view=view, allowed_mentions=SAFE_MENTIONS)
 
@@ -7189,11 +7252,12 @@ class AICommands(commands.Cog):
                         pass
                 await ctx.reply(view=view, allowed_mentions=SAFE_MENTIONS)
 
-            await self._deliver_pending_image_attachments(
-                pending_image_attachments,
-                send_files=lambda files: ctx.send(files=files, allowed_mentions=SAFE_MENTIONS),
-                send_notice=lambda message: ctx.send(message, allowed_mentions=SAFE_MENTIONS),
-            )
+            if not pending_images_delivered_inline:
+                await self._deliver_pending_image_attachments(
+                    pending_image_attachments,
+                    send_files=lambda files: ctx.send(files=files, allowed_mentions=SAFE_MENTIONS),
+                    send_notice=lambda message: ctx.send(message, allowed_mentions=SAFE_MENTIONS),
+                )
 
     @commands.command(name="ai-new", aliases=["ainew", "newchat"])
     async def ai_new_conversation(self, ctx: commands.Context, *, message: str = None):
