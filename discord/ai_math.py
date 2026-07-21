@@ -4,7 +4,7 @@ import threading
 from functools import lru_cache
 from uuid import uuid4
 
-from PIL import Image
+from PIL import Image, ImageOps
 
 
 DISPLAY_MATH_PATTERN = re.compile(r"(?<!\\)\$\$(.+?)(?<!\\)\$\$", re.DOTALL)
@@ -12,6 +12,8 @@ CODE_PATTERN = re.compile(r"```.*?(?:```|\Z)|`[^`\n]*`", re.DOTALL)
 MAX_MATH_EXPRESSION_LENGTH = 1000
 MAX_MATH_IMAGE_WIDTH = 2400
 MAX_MATH_IMAGE_HEIGHT = 1200
+MATH_BACKGROUND_COLOR = (43, 45, 49, 255)
+MATH_FOREGROUND_COLOR = (242, 243, 245, 255)
 _MATH_RENDER_LOCK = threading.Lock()
 
 
@@ -34,17 +36,20 @@ def render_math_png(expression: str) -> bytes:
             prop=FontProperties(size=24),
             dpi=180,
             format="png",
-            color="#f2f3f5",
+            color="black",
         )
 
     rendered.seek(0)
     with Image.open(rendered) as source:
-        foreground = source.convert("RGBA")
+        grayscale = source.convert("L")
 
-    alpha_bbox = foreground.getchannel("A").getbbox()
-    if alpha_bbox is None:
+    glyph_mask = ImageOps.invert(grayscale)
+    mask_bbox = glyph_mask.getbbox()
+    if mask_bbox is None:
         raise ValueError("math expression rendered an empty image")
-    foreground = foreground.crop(alpha_bbox)
+    glyph_mask = glyph_mask.crop(mask_bbox)
+    foreground = Image.new("RGBA", glyph_mask.size, MATH_FOREGROUND_COLOR)
+    foreground.putalpha(glyph_mask)
 
     padding_x = 36
     padding_y = 28
@@ -66,7 +71,7 @@ def render_math_png(expression: str) -> bytes:
         width = foreground.width + padding_x * 2
         height = foreground.height + padding_y * 2
 
-    canvas = Image.new("RGBA", (width, height), (43, 45, 49, 255))
+    canvas = Image.new("RGBA", (width, height), MATH_BACKGROUND_COLOR)
     canvas.alpha_composite(foreground, dest=(padding_x, padding_y))
 
     output = io.BytesIO()

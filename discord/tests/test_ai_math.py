@@ -1,12 +1,20 @@
 import sys
 import unittest
+from io import BytesIO
 from pathlib import Path
+
+from PIL import Image
 
 
 DISCORD_DIR = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(DISCORD_DIR))
 
-from ai_math import render_display_math, render_math_png
+from ai_math import (
+    MATH_BACKGROUND_COLOR,
+    MATH_FOREGROUND_COLOR,
+    render_display_math,
+    render_math_png,
+)
 
 
 class AIMathRenderingTests(unittest.TestCase):
@@ -59,6 +67,24 @@ class AIMathRenderingTests(unittest.TestCase):
         image = render_math_png(r"\mathrm{DR} \approx 6.02 \times \mathrm{bit}")
 
         self.assertTrue(image.startswith(b"\x89PNG\r\n\x1a\n"))
+
+    def test_renderer_uses_dark_background_with_visible_light_glyphs(self):
+        image = render_math_png(r"f_{\text{max}} = \frac{f_s}{2}")
+
+        with Image.open(BytesIO(image)) as rendered:
+            pixels = list(rendered.convert("RGBA").getdata())
+
+        self.assertEqual(pixels[0], MATH_BACKGROUND_COLOR)
+        self.assertLess(sum(pixel[:3] == (255, 255, 255) for pixel in pixels), len(pixels) * 0.001)
+        self.assertGreater(
+            sum(
+                pixel[0] >= MATH_FOREGROUND_COLOR[0] - 5
+                and pixel[1] >= MATH_FOREGROUND_COLOR[1] - 5
+                and pixel[2] >= MATH_FOREGROUND_COLOR[2] - 5
+                for pixel in pixels
+            ),
+            100,
+        )
 
 
 if __name__ == "__main__":
