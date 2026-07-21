@@ -1733,7 +1733,7 @@ class Moderate(commands.Cog):
             pass
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
-    @commands.command(aliases=["mod", "m"])
+    @commands.command(aliases=["mod", "m", *sorted(BUILTIN_ACTIONS)])
     @commands.has_permissions(ban_members=True, kick_members=True, moderate_members=True, manage_messages=True)
     async def moderate(self, ctx: commands.Context, user: Union[discord.Member, discord.User, None] = None, *, commands_str: str = ""):
         """對用戶進行多重管理操作。
@@ -1750,7 +1750,12 @@ class Moderate(commands.Cog):
         
         範例：
         !moderate @User ban 違規 1d 3600 , mute 30m 注意行為 , delete 請注意你的言論
+        !ban @User 1d 3600 違規
         """
+        invoked_action = ctx.invoked_with.lower()
+        if invoked_action in BUILTIN_ACTIONS:
+            commands_str = f"{invoked_action} {commands_str}".strip()
+
         # check bot permissions
         if not ctx.guild.me.guild_permissions.ban_members or not ctx.guild.me.guild_permissions.kick_members or not ctx.guild.me.guild_permissions.manage_messages or not ctx.guild.me.guild_permissions.moderate_members:
             await ctx.send("機器人缺少必要的權限，請確認機器人擁有封禁、踢出、管理訊息及禁言權限。")
