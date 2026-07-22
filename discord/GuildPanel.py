@@ -1051,6 +1051,24 @@ def _register_all():
             },
         ], description="阻擋 everyone/here 與受保護身分組提及", icon="🛡️")
 
+    if "Ticket" in modules:
+        register_settings("Ticket", "票口系統", [
+            {"display": "啟用票口系統", "database_key": "ticket_enabled", "type": "boolean", "default": False},
+            {"display": "面板頻道", "description": "開票按鈕面板所在的頻道（設定後請用 /ticket panel 發布面板）", "database_key": "ticket_panel_channel", "type": "channel", "default": None},
+            {"display": "票口分類", "description": "新票口頻道會建立在此分類下", "database_key": "ticket_category", "type": "category", "default": None},
+            {"display": "沿用分類權限", "description": "開啟時票口頻道會繼承分類的權限設定並疊加開票者/客服權限；關閉時票口完全私人", "database_key": "ticket_inherit_category_permissions", "type": "boolean", "default": False},
+            {"display": "客服身分組", "description": "可查看、認領與關閉票口的身分組", "database_key": "ticket_staff_roles", "type": "role_list", "default": []},
+            {"display": "黑名單身分組", "description": "擁有這些身分組的用戶無法開啟票口", "database_key": "ticket_blacklist_roles", "type": "role_list", "default": []},
+            {"display": "紀錄頻道", "description": "票口關閉後逐字稿會發送到此頻道", "database_key": "ticket_log_channel", "type": "channel", "default": None},
+            {"display": "每人同時開啟上限", "database_key": "ticket_max_per_user", "type": "number", "default": 1, "min": 1, "max": 10},
+            {"display": "面板標題", "database_key": "ticket_panel_title", "type": "string", "default": "需要協助嗎？"},
+            {"display": "面板說明", "database_key": "ticket_panel_description", "type": "text", "default": "點擊下方按鈕開啟私人票口，我們的團隊將盡快協助你。"},
+            {"display": "面板顏色", "description": "面板 embed 的顏色（6 位 hex，例如 5865F2），留空使用預設", "database_key": "ticket_panel_color", "type": "string", "default": None},
+            {"display": "面板圖片網址", "description": "顯示在面板 embed 下方的大圖（http/https 網址），留空不顯示", "database_key": "ticket_panel_image", "type": "string", "default": None},
+            {"display": "開票歡迎訊息", "description": "可用 {user}、{subject} 佔位符", "database_key": "ticket_welcome_message", "type": "text", "default": "{user} 你好，感謝開啟票口！請詳細描述你的問題。"},
+            {"display": "頻道名稱範本", "description": "可用 {number}、{user} 佔位符", "database_key": "ticket_name_template", "type": "string", "default": "ticket-{number}"},
+        ], description="私人客服票口：開票、認領、關閉與 HTML 逐字稿", icon="🎫")
+
 
 _register_all()
 

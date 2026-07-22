@@ -376,6 +376,10 @@ async def reload_emojis_cache():
 translations = {
     "test": "測試",
     "admin": "管理",
+    "ticket": "票口",
+    "claim": "認領",
+    "close": "關閉",
+    "types": "類別",
     "multi-moderate": "多使用者懲處",
     "multi-moderate-action": "多重操作",
     "ban": "封禁",
