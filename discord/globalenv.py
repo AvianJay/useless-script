@@ -751,6 +751,7 @@ translations = {
     "bumped": "最近置頂",
     "builder": "建造器",
     "vote": "投票",
+    "request": "請求",
     "ai-set-response-view": "ai-設定回覆檢視",
     "container": "容器",
     "cost": "花費",
@@ -782,7 +783,8 @@ translations = {
     "scratchcard": "刮刮樂",
     "number": "數字",
     "bet_type": "賭注類型",
-    "only_everyone_here": "只有所有人提及"
+    "only_everyone_here": "只有所有人提及",
+    "request_to": "請求人",
 }
 class CommandNameTranslator(app_commands.Translator):
     async def translate(

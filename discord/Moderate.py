@@ -1840,5 +1840,585 @@ class Moderate(commands.Cog):
 asyncio.run(bot.add_cog(Moderate(bot)))
 
 
+# ====== /request 與 /vote 懲處系統 ======
+
+MOD_ACTION_DEFS = {
+    "ban":     {"perm": "ban_members",      "zh": "封禁"},
+    "kick":    {"perm": "kick_members",     "zh": "踢出"},
+    "timeout": {"perm": "moderate_members", "zh": "禁言"},
+}
+active_requests = set()   # (guild_id, target_id, action)
+active_votes = {}         # (guild_id, target_id) -> VoteView（None 表示建立中佔位）
+
+VOTE_MODERATION_KEY = "vote_moderation"
+VOTE_SETTING_DEFAULTS = {"enabled": False, "threshold": 0, "duration": 600}
+MAX_VOTE_DURATION_SECONDS = 86400
+
+
+def _get_vote_settings(guild_id: int, action: str) -> dict:
+    all_settings = get_server_config(guild_id, VOTE_MODERATION_KEY, {}) or {}
+    merged = dict(VOTE_SETTING_DEFAULTS)
+    merged.update(all_settings.get(action, {}))
+    return merged
+
+
+def _bot_side_target_check(guild: discord.Guild, target) -> tuple[bool, str]:
+    """僅檢查機器人端能否對目標操作（不含執行者階層）。"""
+    if not isinstance(target, discord.Member):
+        return True, ""
+    if target == guild.owner:
+        return False, "無法對伺服器擁有者執行此操作。"
+    if target.top_role >= guild.me.top_role:
+        return False, f"機器人無法對 {target.mention} 執行操作（對方身份組高於或等於機器人）。"
+    return True, ""
+
+
+async def _execute_moderation(
+    guild: discord.Guild,
+    action: str,
+    target_id: int,
+    reason: str,
+    duration_seconds: int = 0,
+    executor: Optional[discord.Member] = None,
+) -> tuple[bool, str]:
+    """執行 request / vote 通過後的懲處動作，回傳 (是否成功, 結果訊息)。
+
+    executor 為 None（投票）或與目標同人（自我懲處）時，跳過執行者階層檢查。
+    """
+    info = MOD_ACTION_DEFS[action]
+    member = guild.get_member(target_id)
+    if action == "ban":
+        target = member or bot.get_user(target_id)
+        if target is None:
+            try:
+                target = await bot.fetch_user(target_id)
+            except Exception:
+                return False, "找不到該用戶。"
+    else:
+        if member is None:
+            return False, "對象已不在伺服器中，無法執行。"
+        target = member
+
+    if not getattr(guild.me.guild_permissions, info["perm"], False):
+        return False, f"機器人缺少{info['zh']}所需的權限。"
+    ok, msg = _bot_side_target_check(guild, target)
+    if not ok:
+        return False, msg
+    if executor is not None and executor.id != target_id:
+        ok, msg = check_member_hierarchy(executor, target, guild.me)
+        if not ok:
+            return False, msg
+
+    if action == "ban":
+        ok = await ban_user(guild, target, reason, duration=duration_seconds, moderator=executor)
+        if not ok:
+            return False, "封禁時發生錯誤。"
+        suffix = f"，時長 {get_time_text(duration_seconds)}" if duration_seconds > 0 else ""
+        return True, f"已將 {target.mention} 封禁{suffix}。"
+    if action == "kick":
+        ModerationNotify.ignore_user(target_id)
+        try:
+            await ModerationNotify.notify_user(member, guild, "踢出", reason)
+        except Exception:
+            pass
+        try:
+            await member.kick(reason=reason)
+        except Exception as e:
+            return False, f"踢出時發生錯誤：{e}"
+        log(f"已踢出用戶 {member}，原因：{reason}", module_name="Moderate", guild=guild)
+        return True, f"已將 {member.mention} 踢出伺服器。"
+    # timeout
+    try:
+        await member.timeout(timedelta(seconds=duration_seconds), reason=reason)
+    except Exception as e:
+        return False, f"禁言時發生錯誤：{e}"
+    log(f"已禁言用戶 {member} {get_time_text(duration_seconds)}，原因：{reason}", module_name="Moderate", guild=guild)
+    return True, f"已對 {member.mention} 禁言 {get_time_text(duration_seconds)}。"
+
+
+class RequestView(discord.ui.View):
+    """/request 的確認視圖：僅 approver 可確認，requester / approver 可取消。"""
+
+    def __init__(self, *, guild: discord.Guild, requester_id: int, target_id: int,
+                 approver_id: int, action: str, reason: str, duration_seconds: int,
+                 embed: discord.Embed, timeout: float = 3600):
+        super().__init__(timeout=timeout)
+        self.guild = guild
+        self.requester_id = requester_id
+        self.target_id = target_id
+        self.approver_id = approver_id
+        self.action = action
+        self.reason = reason
+        self.duration_seconds = duration_seconds
+        self.embed = embed
+        self.message: Optional[discord.Message] = None
+        self.finished = False
+
+    def _release(self):
+        active_requests.discard((self.guild.id, self.target_id, self.action))
+
+    def _disable_buttons(self):
+        for child in self.children:
+            child.disabled = True
+
+    @discord.ui.button(label="確認", emoji="✅", style=discord.ButtonStyle.success)
+    async def confirm(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if self.finished:
+            await interaction.response.send_message("此請求已處理。", ephemeral=True)
+            return
+        if interaction.user.id != self.approver_id:
+            await interaction.response.send_message(f"只有 <@{self.approver_id}> 可以確認此請求。", ephemeral=True)
+            return
+        self.finished = True
+        await interaction.response.defer()
+        ok, msg = await _execute_moderation(
+            self.guild, self.action, self.target_id, self.reason,
+            self.duration_seconds, executor=interaction.user,
+        )
+        self._disable_buttons()
+        self.embed.color = discord.Color.green() if ok else discord.Color.red()
+        self.embed.add_field(name="結果", value=msg if ok else f"⚠️ {msg}", inline=False)
+        try:
+            await interaction.message.edit(embed=self.embed, view=self)
+        except Exception:
+            pass
+        self.stop()
+        self._release()
+
+    @discord.ui.button(label="取消", emoji="❌", style=discord.ButtonStyle.secondary)
+    async def cancel(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if self.finished:
+            await interaction.response.send_message("此請求已處理。", ephemeral=True)
+            return
+        if interaction.user.id not in (self.requester_id, self.approver_id):
+            await interaction.response.send_message("只有請求者或被請求者可以取消此請求。", ephemeral=True)
+            return
+        self.finished = True
+        self._disable_buttons()
+        self.embed.color = discord.Color.dark_grey()
+        self.embed.add_field(name="結果", value=f"已由 {interaction.user.mention} 取消。", inline=False)
+        await interaction.response.edit_message(embed=self.embed, view=self)
+        self.stop()
+        self._release()
+
+    async def on_timeout(self):
+        if self.finished:
+            return
+        self.finished = True
+        self._release()
+        self._disable_buttons()
+        self.embed.color = discord.Color.dark_grey()
+        self.embed.add_field(name="結果", value="⌛ 請求已逾時。", inline=False)
+        if self.message:
+            try:
+                await self.message.edit(embed=self.embed, view=self)
+            except Exception:
+                pass
+
+
+@app_commands.guild_only()
+@app_commands.allowed_installs(guilds=True, users=False)
+@app_commands.allowed_contexts(guilds=True, dms=False, private_channels=False)
+class ModerationRequest(commands.GroupCog, name=app_commands.locale_str("request")):
+    """請求目標本人或有權限的管理員確認執行懲處。"""
+
+    def __init__(self, bot: commands.Bot) -> None:
+        self.bot = bot
+        super().__init__()
+
+    async def _create_request(self, interaction: discord.Interaction, action: str,
+                              user: Union[discord.Member, discord.User],
+                              request_to: Optional[discord.Member],
+                              reason: Optional[str], duration_seconds: int):
+        guild = interaction.guild
+        if guild is None:
+            await interaction.response.send_message("此指令只能在伺服器中使用。", ephemeral=True)
+            return
+        info = MOD_ACTION_DEFS[action]
+        perm, zh = info["perm"], info["zh"]
+        reason_text = reason or "未提供"
+
+        if request_to is None:
+            if isinstance(user, discord.Member):
+                request_to = user
+            else:
+                await interaction.response.send_message(
+                    "對方不在伺服器中，請使用 request_to 指定一位管理員來確認。", ephemeral=True)
+                return
+        if request_to.bot:
+            await interaction.response.send_message("無法向機器人發送請求。", ephemeral=True)
+            return
+        if not (request_to.id == user.id
+                or getattr(request_to.guild_permissions, perm, False)
+                or request_to.guild_permissions.administrator):
+            await interaction.response.send_message(
+                f"{request_to.mention} 不是對方本人，也沒有{zh}權限，無法確認此請求。", ephemeral=True)
+            return
+        if not getattr(guild.me.guild_permissions, perm, False):
+            await interaction.response.send_message(f"機器人缺少{zh}所需的權限。", ephemeral=True)
+            return
+        ok, msg = _bot_side_target_check(guild, user)
+        if not ok:
+            await interaction.response.send_message(msg, ephemeral=True)
+            return
+
+        key = (guild.id, user.id, action)
+        if key in active_requests:
+            await interaction.response.send_message("已有針對該用戶的相同請求正在進行中。", ephemeral=True)
+            return
+        active_requests.add(key)
+
+        title = f"{interaction.user.name} 請求{zh} {user.name}"
+        if action == "timeout":
+            title += f" {get_time_text(duration_seconds)}"
+        embed = discord.Embed(title=title, description="按下方按鈕進行確認", color=discord.Color.orange())
+        embed.add_field(name="原因", value=reason_text, inline=False)
+        if action == "timeout":
+            embed.add_field(name="時間", value=get_time_text(duration_seconds), inline=False)
+        elif action == "ban":
+            embed.add_field(name="時間", value=get_time_text(duration_seconds) if duration_seconds > 0 else "永久", inline=False)
+
+        view = RequestView(
+            guild=guild, requester_id=interaction.user.id, target_id=user.id,
+            approver_id=request_to.id, action=action, reason=reason_text,
+            duration_seconds=duration_seconds, embed=embed,
+        )
+        try:
+            await interaction.response.send_message(
+                content=request_to.mention, embed=embed, view=view,
+                allowed_mentions=discord.AllowedMentions(users=True),
+            )
+            msg_obj = await interaction.original_response()
+        except Exception:
+            active_requests.discard(key)
+            raise
+        # 取得可長期編輯的 Message（webhook token 15 分鐘後失效，view 存活 60 分鐘）
+        try:
+            view.message = await msg_obj.channel.fetch_message(msg_obj.id)
+        except Exception:
+            view.message = msg_obj
+
+    @app_commands.command(name=app_commands.locale_str("ban"), description="請求封禁用戶")
+    @app_commands.describe(user="要封禁的用戶", request_to="請求誰來確認（預設為對方本人）",
+                           reason="封禁原因（可選）", duration="封禁時間（可選，預設永久）")
+    async def request_ban(self, interaction: discord.Interaction,
+                          user: Union[discord.Member, discord.User],
+                          request_to: Optional[discord.Member] = None,
+                          reason: Optional[str] = None, duration: Optional[str] = None):
+        duration_seconds = 0
+        if duration:
+            duration_seconds = timestr_to_seconds(duration)
+            if duration_seconds <= 0:
+                await interaction.response.send_message("無效的封禁時間，請使用類似 10m、2h、3d 的格式。", ephemeral=True)
+                return
+        await self._create_request(interaction, "ban", user, request_to, reason, duration_seconds)
+
+    @app_commands.command(name=app_commands.locale_str("kick"), description="請求踢出用戶")
+    @app_commands.describe(user="要踢出的用戶", request_to="請求誰來確認（預設為對方本人）", reason="踢出原因（可選）")
+    async def request_kick(self, interaction: discord.Interaction, user: discord.Member,
+                           request_to: Optional[discord.Member] = None,
+                           reason: Optional[str] = None):
+        await self._create_request(interaction, "kick", user, request_to, reason, 0)
+
+    @app_commands.command(name=app_commands.locale_str("timeout"), description="請求禁言用戶")
+    @app_commands.describe(user="要禁言的用戶", request_to="請求誰來確認（預設為對方本人）",
+                           reason="禁言原因（可選）", duration="禁言時間（預設10分鐘）")
+    async def request_timeout(self, interaction: discord.Interaction, user: discord.Member,
+                              request_to: Optional[discord.Member] = None,
+                              reason: Optional[str] = None, duration: str = "10m"):
+        duration_seconds = timestr_to_seconds(duration)
+        if duration_seconds <= 0:
+            await interaction.response.send_message("無效的禁言時間，請使用類似 10m、2h、3d 的格式。", ephemeral=True)
+            return
+        if duration_seconds > MAX_TIMEOUT_SECONDS:
+            await interaction.response.send_message("禁言時間不能超過 28 天。", ephemeral=True)
+            return
+        await self._create_request(interaction, "timeout", user, request_to, reason, duration_seconds)
+
+
+class VoteView(discord.ui.View):
+    """/vote 的投票視圖：同意達閾值即執行，逾時失敗，允許改票。"""
+
+    def __init__(self, *, guild: discord.Guild, initiator_id: int, target_id: int,
+                 action: str, reason: str, duration_seconds: int,
+                 threshold: int, embed: discord.Embed, timeout: float):
+        super().__init__(timeout=timeout)
+        self.guild = guild
+        self.initiator_id = initiator_id
+        self.target_id = target_id
+        self.action = action
+        self.reason = reason
+        self.duration_seconds = duration_seconds
+        self.threshold = threshold
+        self.embed = embed
+        self.agree = set()
+        self.disagree = set()
+        self.message: Optional[discord.Message] = None
+        self.finished = False
+
+    def _counts_text(self) -> str:
+        return f"✅ 同意：{len(self.agree)}/{self.threshold}\n❌ 不同意：{len(self.disagree)}"
+
+    async def _handle_vote(self, interaction: discord.Interaction, agree: bool):
+        if self.finished:
+            await interaction.response.send_message("投票已結束。", ephemeral=True)
+            return
+        uid = interaction.user.id
+        side = self.agree if agree else self.disagree
+        other = self.disagree if agree else self.agree
+        if uid in side:
+            await interaction.response.send_message("你已經投過這一票了，若要改票請按另一個按鈕。", ephemeral=True)
+            return
+        other.discard(uid)
+        side.add(uid)
+        self.embed.set_field_at(-1, name="目前票數", value=self._counts_text(), inline=False)
+        if len(self.agree) >= self.threshold:
+            self.finished = True
+            await interaction.response.defer()
+            await self._finish(success=True)
+        else:
+            await interaction.response.edit_message(embed=self.embed, view=self)
+
+    async def _finish(self, success: bool):
+        for child in self.children:
+            child.disabled = True
+        self.stop()
+        active_votes.pop((self.guild.id, self.target_id), None)
+        if success:
+            ok, msg = await _execute_moderation(
+                self.guild, self.action, self.target_id, self.reason, self.duration_seconds)
+            if ok:
+                self.embed.color = discord.Color.green()
+                self.embed.add_field(name="結果", value=f"✅ 投票通過！{msg}", inline=False)
+            else:
+                self.embed.color = discord.Color.red()
+                self.embed.add_field(name="結果", value=f"⚠️ 投票通過，但執行失敗：{msg}", inline=False)
+        else:
+            self.embed.color = discord.Color.dark_grey()
+            self.embed.add_field(name="結果", value=f"❌ 投票未通過（時限內未達 {self.threshold} 票同意）。", inline=False)
+        if self.message:
+            try:
+                await self.message.edit(embed=self.embed, view=self)
+            except Exception:
+                pass
+
+    async def on_timeout(self):
+        if self.finished:
+            return
+        self.finished = True
+        await self._finish(success=False)
+
+    @discord.ui.button(label="同意", emoji="👍", style=discord.ButtonStyle.success)
+    async def vote_agree(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await self._handle_vote(interaction, agree=True)
+
+    @discord.ui.button(label="不同意", emoji="👎", style=discord.ButtonStyle.danger)
+    async def vote_disagree(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await self._handle_vote(interaction, agree=False)
+
+
+@app_commands.guild_only()
+@app_commands.allowed_installs(guilds=True, users=False)
+@app_commands.allowed_contexts(guilds=True, dms=False, private_channels=False)
+class ModerationVote(commands.GroupCog, name=app_commands.locale_str("vote")):
+    """發起懲處投票，同意數達閾值即執行。"""
+
+    def __init__(self, bot: commands.Bot) -> None:
+        self.bot = bot
+        super().__init__()
+
+    async def _start_vote(self, interaction: discord.Interaction, action: str,
+                          user: Union[discord.Member, discord.User],
+                          reason: Optional[str], duration_seconds: int):
+        guild = interaction.guild
+        if guild is None:
+            await interaction.response.send_message("此指令只能在伺服器中使用。", ephemeral=True)
+            return
+        info = MOD_ACTION_DEFS[action]
+        perm, zh = info["perm"], info["zh"]
+        reason_text = reason or "未提供"
+        settings = _get_vote_settings(guild.id, action)
+
+        if not settings["enabled"]:
+            perms = interaction.user.guild_permissions
+            if not (perms.administrator or getattr(perms, perm, False)):
+                await interaction.response.send_message(f"此伺服器尚未啟用{zh}投票。", ephemeral=True)
+                return
+        if not getattr(guild.me.guild_permissions, perm, False):
+            await interaction.response.send_message(f"機器人缺少{zh}所需的權限。", ephemeral=True)
+            return
+        ok, msg = _bot_side_target_check(guild, user)
+        if not ok:
+            await interaction.response.send_message(msg, ephemeral=True)
+            return
+
+        key = (guild.id, user.id)
+        if key in active_votes:
+            await interaction.response.send_message("已有針對該用戶的投票正在進行中。", ephemeral=True)
+            return
+        active_votes[key] = None  # 佔位，避免併發重複發起
+
+        try:
+            await interaction.response.defer()
+
+            threshold = settings["threshold"]
+            if threshold <= 0:
+                # 以頻道近 50 則訊息的不同發言者數（非機器人）的一半為閾值，最低 2 票
+                try:
+                    authors = {m.author.id async for m in interaction.channel.history(limit=50) if not m.author.bot}
+                    threshold = max(2, (len(authors) + 1) // 2)
+                except Exception:
+                    threshold = 2
+
+            vote_timeout = settings["duration"]
+            deadline = datetime.now(timezone.utc) + timedelta(seconds=vote_timeout)
+
+            duration_suffix = ""
+            if action == "timeout" or (action == "ban" and duration_seconds > 0):
+                duration_suffix = f" {get_time_text(duration_seconds)}"
+            embed = discord.Embed(
+                title=f"{interaction.user.name} 發起{zh} {user.name}{duration_suffix} 的投票",
+                description=f"按下方按鈕進行投票，投票將於 {discord.utils.format_dt(deadline, 'R')} 結束",
+                color=discord.Color.orange(),
+            )
+            embed.add_field(name="原因", value=reason_text, inline=False)
+            if action == "timeout":
+                embed.add_field(name="時間", value=get_time_text(duration_seconds), inline=False)
+            elif action == "ban":
+                embed.add_field(name="時間", value=get_time_text(duration_seconds) if duration_seconds > 0 else "永久", inline=False)
+            embed.add_field(name="目前票數", value=f"✅ 同意：0/{threshold}\n❌ 不同意：0", inline=False)
+
+            view = VoteView(
+                guild=guild, initiator_id=interaction.user.id, target_id=user.id,
+                action=action, reason=reason_text, duration_seconds=duration_seconds,
+                threshold=threshold, embed=embed, timeout=vote_timeout,
+            )
+            msg_obj = await interaction.followup.send(embed=embed, view=view, wait=True)
+        except Exception:
+            active_votes.pop(key, None)
+            raise
+        active_votes[key] = view
+        try:
+            view.message = await msg_obj.channel.fetch_message(msg_obj.id)
+        except Exception:
+            view.message = msg_obj
+
+    @app_commands.command(name=app_commands.locale_str("ban"), description="發起封禁投票")
+    @app_commands.describe(user="要封禁的用戶", reason="封禁原因（可選）", duration="封禁時間（可選，預設永久）")
+    async def vote_ban(self, interaction: discord.Interaction,
+                       user: Union[discord.Member, discord.User],
+                       reason: Optional[str] = None, duration: Optional[str] = None):
+        duration_seconds = 0
+        if duration:
+            duration_seconds = timestr_to_seconds(duration)
+            if duration_seconds <= 0:
+                await interaction.response.send_message("無效的封禁時間，請使用類似 10m、2h、3d 的格式。", ephemeral=True)
+                return
+        await self._start_vote(interaction, "ban", user, reason, duration_seconds)
+
+    @app_commands.command(name=app_commands.locale_str("kick"), description="發起踢出投票")
+    @app_commands.describe(user="要踢出的用戶", reason="踢出原因（可選）")
+    async def vote_kick(self, interaction: discord.Interaction, user: discord.Member,
+                        reason: Optional[str] = None):
+        await self._start_vote(interaction, "kick", user, reason, 0)
+
+    @app_commands.command(name=app_commands.locale_str("timeout"), description="發起禁言投票")
+    @app_commands.describe(user="要禁言的用戶", reason="禁言原因（可選）", duration="禁言時間（預設10分鐘）")
+    async def vote_timeout(self, interaction: discord.Interaction, user: discord.Member,
+                           reason: Optional[str] = None, duration: str = "10m"):
+        duration_seconds = timestr_to_seconds(duration)
+        if duration_seconds <= 0:
+            await interaction.response.send_message("無效的禁言時間，請使用類似 10m、2h、3d 的格式。", ephemeral=True)
+            return
+        if duration_seconds > MAX_TIMEOUT_SECONDS:
+            await interaction.response.send_message("禁言時間不能超過 28 天。", ephemeral=True)
+            return
+        await self._start_vote(interaction, "timeout", user, reason, duration_seconds)
+
+    @app_commands.command(name=app_commands.locale_str("settings"), description="設定投票懲處功能（僅管理員）")
+    @app_commands.describe(action="要設定的動作", enabled="是否啟用",
+                           threshold="固定投票門檻（0 = 自動計算）", vote_duration="投票持續時間（例如 10m，預設 10 分鐘）")
+    @app_commands.choices(action=[
+        app_commands.Choice(name="封禁", value="ban"),
+        app_commands.Choice(name="踢出", value="kick"),
+        app_commands.Choice(name="禁言", value="timeout"),
+    ])
+    async def vote_settings(self, interaction: discord.Interaction,
+                            action: Optional[str] = None,
+                            enabled: Optional[bool] = None,
+                            threshold: Optional[app_commands.Range[int, 0, 100]] = None,
+                            vote_duration: Optional[str] = None):
+        guild = interaction.guild
+        if guild is None:
+            await interaction.response.send_message("此指令只能在伺服器中使用。", ephemeral=True)
+            return
+        if not interaction.user.guild_permissions.administrator:
+            await interaction.response.send_message("只有管理員可以使用此指令。", ephemeral=True)
+            return
+
+        if action is None:
+            if enabled is not None or threshold is not None or vote_duration is not None:
+                await interaction.response.send_message("請同時指定 action 才能修改設定。", ephemeral=True)
+                return
+            embed = discord.Embed(title="🗳️ 投票懲處設定", color=0x00b894)
+            for act, info in MOD_ACTION_DEFS.items():
+                s = _get_vote_settings(guild.id, act)
+                embed.add_field(
+                    name=info["zh"],
+                    value=(f"狀態：{'✅ 啟用' if s['enabled'] else '❌ 停用'}\n"
+                           f"門檻：{'自動計算' if s['threshold'] <= 0 else str(s['threshold']) + ' 票'}\n"
+                           f"投票時間：{get_time_text(s['duration'])}"),
+                    inline=True,
+                )
+            await interaction.response.send_message(embed=embed, ephemeral=True)
+            return
+
+        info = MOD_ACTION_DEFS[action]
+        if enabled and not getattr(guild.me.guild_permissions, info["perm"], False):
+            await interaction.response.send_message(
+                f"機器人缺少{info['zh']}所需的權限，無法啟用。請先授予權限後再試。", ephemeral=True)
+            return
+        duration_seconds = None
+        if vote_duration is not None:
+            duration_seconds = timestr_to_seconds(vote_duration)
+            if duration_seconds <= 0:
+                await interaction.response.send_message("無效的投票時間，請使用類似 10m、2h 的格式。", ephemeral=True)
+                return
+            if duration_seconds > MAX_VOTE_DURATION_SECONDS:
+                await interaction.response.send_message("投票時間不能超過 1 天。", ephemeral=True)
+                return
+
+        all_settings = get_server_config(guild.id, VOTE_MODERATION_KEY, {}) or {}
+        current = all_settings.setdefault(action, {})
+        changes = []
+        if enabled is not None:
+            current["enabled"] = enabled
+            changes.append(f"狀態：{'啟用' if enabled else '停用'}")
+        if threshold is not None:
+            current["threshold"] = threshold
+            changes.append(f"門檻：{'自動計算' if threshold == 0 else str(threshold) + ' 票'}")
+        if duration_seconds is not None:
+            current["duration"] = duration_seconds
+            changes.append(f"投票時間：{get_time_text(duration_seconds)}")
+
+        if not changes:
+            s = _get_vote_settings(guild.id, action)
+            await interaction.response.send_message(
+                (f"{info['zh']}投票目前設定：\n"
+                 f"- 狀態：{'✅ 啟用' if s['enabled'] else '❌ 停用'}\n"
+                 f"- 門檻：{'自動計算' if s['threshold'] <= 0 else str(s['threshold']) + ' 票'}\n"
+                 f"- 投票時間：{get_time_text(s['duration'])}"),
+                ephemeral=True)
+            return
+
+        set_server_config(guild.id, VOTE_MODERATION_KEY, all_settings)
+        await interaction.response.send_message(
+            f"已更新{info['zh']}投票設定：\n- " + "\n- ".join(changes), ephemeral=True)
+
+
+asyncio.run(bot.add_cog(ModerationRequest(bot)))
+asyncio.run(bot.add_cog(ModerationVote(bot)))
+
+
 if __name__ == "__main__":
     start_bot()
