@@ -9,6 +9,17 @@ from PIL import Image, ImageOps
 
 DISPLAY_MATH_PATTERN = re.compile(r"(?<!\\)\$\$(.+?)(?<!\\)\$\$", re.DOTALL)
 CODE_PATTERN = re.compile(r"```.*?(?:```|\Z)|`[^`\n]*`", re.DOTALL)
+ALIGN_ENV_PATTERN = re.compile(r"\\(?:begin|end)\{(?:aligned|align\*?|gathered|split)\}")
+ALIGN_LINE_BREAK_PATTERN = re.compile(r"\\\\(?:\s*\[[^\]]*\])?")
+MATH_TOKEN_PATTERN = r"(?:[A-Za-z0-9]|\\[A-Za-z]+)"
+FRAC_SHORTHAND_PATTERN = re.compile(
+    rf"\\frac\s*({MATH_TOKEN_PATTERN})\s*({MATH_TOKEN_PATTERN})"
+)
+SQRT_SHORTHAND_PATTERN = re.compile(
+    rf"\\sqrt(\[[^\]]+\])?\s*({MATH_TOKEN_PATTERN})"
+)
+BOXED_SHORTHAND_PATTERN = re.compile(rf"\\boxed\s*({MATH_TOKEN_PATTERN})")
+BOXED_SIMPLE_PATTERN = re.compile(r"\\boxed\s*\{([^{}]+)\}")
 MAX_MATH_EXPRESSION_LENGTH = 1000
 MAX_MATH_IMAGE_WIDTH = 2400
 MAX_MATH_IMAGE_HEIGHT = 1200
@@ -17,28 +28,63 @@ MATH_FOREGROUND_COLOR = (242, 243, 245, 255)
 _MATH_RENDER_LOCK = threading.Lock()
 
 
-@lru_cache(maxsize=128)
-def render_math_png(expression: str) -> bytes:
-    from matplotlib import mathtext
-    from matplotlib.font_manager import FontProperties
+def _normalize_math_line(expression: str) -> str:
+    normalized = str(expression or "").strip().replace("&", "")
+    normalized = re.sub(r"\\(?:dfrac|tfrac|cfrac)", r"\\frac", normalized)
+    normalized = re.sub(r"\\operatorname\s*\{([^{}]+)\}", r"\\mathrm{\1}", normalized)
 
-    normalized = str(expression or "").strip()
+    previous = None
+    while normalized != previous:
+        previous = normalized
+        normalized = FRAC_SHORTHAND_PATTERN.sub(r"\\frac{\1}{\2}", normalized)
+        normalized = SQRT_SHORTHAND_PATTERN.sub(
+            lambda match: rf"\sqrt{match.group(1) or ''}{{{match.group(2)}}}",
+            normalized,
+        )
+        normalized = BOXED_SHORTHAND_PATTERN.sub(r"\\boxed{\1}", normalized)
+
+    normalized = BOXED_SIMPLE_PATTERN.sub(
+        r"\\left[\\mathbf{\1}\\right]",
+        normalized,
+    )
     if normalized.startswith(r"\displaystyle"):
         normalized = normalized[len(r"\displaystyle"):].lstrip()
-    if not normalized:
-        raise ValueError("empty math expression")
+    return normalized.strip()
 
+
+def normalize_math_lines(expression: str) -> list[str]:
+    raw = str(expression or "").strip()
+    has_alignment_environment = bool(ALIGN_ENV_PATTERN.search(raw))
+    normalized = ALIGN_ENV_PATTERN.sub("", raw)
+    has_explicit_line_break = bool(ALIGN_LINE_BREAK_PATTERN.search(normalized))
+
+    if has_alignment_environment or has_explicit_line_break:
+        chunks = ALIGN_LINE_BREAK_PATTERN.split(normalized)
+        raw_lines = []
+        for chunk in chunks:
+            raw_lines.extend(chunk.splitlines())
+    else:
+        raw_lines = [" ".join(normalized.splitlines())]
+
+    lines = []
+    for raw_line in raw_lines:
+        line = re.sub(r"\\\s*$", "", raw_line.strip())
+        line = _normalize_math_line(line)
+        if line:
+            lines.append(line)
+    return lines
+
+
+def _render_math_mask(expression: str, mathtext, font_properties) -> Image.Image:
     rendered = io.BytesIO()
-    with _MATH_RENDER_LOCK:
-        mathtext.math_to_image(
-            f"${normalized}$",
-            rendered,
-            prop=FontProperties(size=24),
-            dpi=180,
-            format="png",
-            color="black",
-        )
-
+    mathtext.math_to_image(
+        f"${expression}$",
+        rendered,
+        prop=font_properties,
+        dpi=180,
+        format="png",
+        color="black",
+    )
     rendered.seek(0)
     with Image.open(rendered) as source:
         grayscale = source.convert("L")
@@ -47,9 +93,35 @@ def render_math_png(expression: str) -> bytes:
     mask_bbox = glyph_mask.getbbox()
     if mask_bbox is None:
         raise ValueError("math expression rendered an empty image")
-    glyph_mask = glyph_mask.crop(mask_bbox)
-    foreground = Image.new("RGBA", glyph_mask.size, MATH_FOREGROUND_COLOR)
-    foreground.putalpha(glyph_mask)
+    return glyph_mask.crop(mask_bbox)
+
+
+@lru_cache(maxsize=128)
+def render_math_png(expression: str) -> bytes:
+    from matplotlib import mathtext
+    from matplotlib.font_manager import FontProperties
+
+    lines = normalize_math_lines(expression)
+    if not lines:
+        raise ValueError("empty math expression")
+
+    with _MATH_RENDER_LOCK:
+        font_properties = FontProperties(size=24)
+        line_masks = [
+            _render_math_mask(line, mathtext, font_properties)
+            for line in lines
+        ]
+
+    line_gap = 18
+    foreground_width = max(mask.width for mask in line_masks)
+    foreground_height = sum(mask.height for mask in line_masks) + line_gap * (len(line_masks) - 1)
+    foreground = Image.new("RGBA", (foreground_width, foreground_height), (0, 0, 0, 0))
+    current_y = 0
+    for mask in line_masks:
+        line_image = Image.new("RGBA", mask.size, MATH_FOREGROUND_COLOR)
+        line_image.putalpha(mask)
+        foreground.alpha_composite(line_image, dest=(0, current_y))
+        current_y += mask.height + line_gap
 
     padding_x = 36
     padding_y = 28

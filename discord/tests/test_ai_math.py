@@ -12,6 +12,7 @@ sys.path.insert(0, str(DISCORD_DIR))
 from ai_math import (
     MATH_BACKGROUND_COLOR,
     MATH_FOREGROUND_COLOR,
+    normalize_math_lines,
     render_display_math,
     render_math_png,
 )
@@ -85,6 +86,35 @@ class AIMathRenderingTests(unittest.TestCase):
             ),
             100,
         )
+
+    def test_normalizes_common_latex_shorthand(self):
+        self.assertEqual(
+            normalize_math_lines(r"\frac12\log\frac{16}{125}+\sqrt[3]8+3\sqrt3"),
+            [r"\frac{1}{2}\log\frac{16}{125}+\sqrt[3]{8}+3\sqrt{3}"],
+        )
+
+    def test_renders_photo_transcription_shorthand(self):
+        response, attachments = render_display_math(
+            r"$$\frac12\log\frac{16}{125}+\log\frac{125}{\sqrt[3]8}-\log\frac52$$"
+        )
+
+        self.assertEqual(len(attachments), 1)
+        self.assertNotIn("$$", response)
+
+    def test_renders_aligned_equations_as_one_multiline_image(self):
+        expression = (
+            "$$\\begin{aligned}\n"
+            "6\\log_2\\sqrt2-\\frac32\\log_2 3+\\log_2(3\\sqrt3)\\\\\n"
+            "&=6\\cdot\\frac12-\\frac32\\log_2 3+\\frac32\\log_2 3\\\\\n"
+            "&=\\boxed3\n"
+            "\\end{aligned}$$"
+        )
+        response, attachments = render_display_math(expression)
+
+        self.assertEqual(len(attachments), 1)
+        self.assertNotIn(r"\begin{aligned}", response)
+        with Image.open(BytesIO(attachments[0]["content"])) as rendered:
+            self.assertGreater(rendered.height, 250)
 
 
 if __name__ == "__main__":
