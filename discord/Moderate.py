@@ -11,6 +11,7 @@ import ModerationNotify
 from logger import log
 import logging
 import re
+import time
 
 ignore_message_ids = set()  # 用於暫時忽略特定訊息的處理（例如剛剛被刪除的訊息）
 BUILTIN_ACTIONS = {
@@ -1847,11 +1848,17 @@ MOD_ACTION_DEFS = {
     "kick":    {"perm": "kick_members",     "zh": "踢出"},
     "timeout": {"perm": "moderate_members", "zh": "禁言"},
 }
-active_requests = set()   # (guild_id, target_id, action)
-active_votes = {}         # (guild_id, target_id) -> VoteView（None 表示建立中佔位）
+active_requests = set()            # (guild_id, target_id, action)
+active_votes = {}                  # (guild_id, target_id) -> VoteView（None 表示建立中佔位）
+active_request_initiators = set()  # (guild_id, requester_id)：無權限者同時只能有一個進行中的請求
+active_vote_initiators = set()     # (guild_id, initiator_id)：無權限者同時只能有一個進行中的投票
+mod_creation_cooldowns = {}        # (guild_id, user_id) -> monotonic 建立時間
+MOD_CREATE_COOLDOWN = 60
 
+REQUEST_MODERATION_KEY = "request_moderation"
+REQUEST_SETTING_DEFAULTS = {"enabled": False, "max_duration": 0}
 VOTE_MODERATION_KEY = "vote_moderation"
-VOTE_SETTING_DEFAULTS = {"enabled": False, "threshold": 0, "duration": 600}
+VOTE_SETTING_DEFAULTS = {"enabled": False, "threshold": 0, "duration": 600, "max_duration": 0}
 MAX_VOTE_DURATION_SECONDS = 86400
 
 
@@ -1860,6 +1867,56 @@ def _get_vote_settings(guild_id: int, action: str) -> dict:
     merged = dict(VOTE_SETTING_DEFAULTS)
     merged.update(all_settings.get(action, {}))
     return merged
+
+
+def _get_request_settings(guild_id: int, action: str) -> dict:
+    all_settings = get_server_config(guild_id, REQUEST_MODERATION_KEY, {}) or {}
+    merged = dict(REQUEST_SETTING_DEFAULTS)
+    merged.update(all_settings.get(action, {}))
+    return merged
+
+
+def _has_mod_bypass(member: discord.Member, perm: str) -> bool:
+    """有對應懲處權限或管理員權限者可繞過啟用狀態、冷卻與同時進行數限制。"""
+    perms = member.guild_permissions
+    return perms.administrator or getattr(perms, perm, False)
+
+
+def _check_creation_cooldown(guild_id: int, user_id: int) -> int:
+    """回傳剩餘冷卻秒數，0 表示可建立。"""
+    key = (guild_id, user_id)
+    last = mod_creation_cooldowns.get(key)
+    if last is None:
+        return 0
+    elapsed = time.monotonic() - last
+    if elapsed >= MOD_CREATE_COOLDOWN:
+        mod_creation_cooldowns.pop(key, None)
+        return 0
+    return int(MOD_CREATE_COOLDOWN - elapsed) + 1
+
+
+def _check_duration_limit(action: str, duration_seconds: int, max_seconds: int) -> Optional[str]:
+    """檢查時長是否超過伺服器設定的上限，回傳錯誤訊息或 None。"""
+    if max_seconds <= 0 or action == "kick":
+        return None
+    zh = MOD_ACTION_DEFS[action]["zh"]
+    if action == "ban" and duration_seconds <= 0:
+        return f"本伺服器限制{zh}時間最長 {get_time_text(max_seconds)}，無法永久封禁，請指定時間。"
+    if duration_seconds > max_seconds:
+        return f"本伺服器限制{zh}時間最長 {get_time_text(max_seconds)}。"
+    return None
+
+
+def _parse_max_duration_setting(text: str, action: str) -> tuple[Optional[int], Optional[str]]:
+    """解析最長時間設定，"0" 表示不限制。回傳 (秒數, 錯誤訊息)。"""
+    if text.strip() == "0":
+        return 0, None
+    seconds = timestr_to_seconds(text)
+    if seconds <= 0:
+        return None, "無效的時間格式，請使用類似 10m、2h、3d 的格式，或 0 表示不限制。"
+    if action == "timeout" and seconds > MAX_TIMEOUT_SECONDS:
+        return None, "禁言時間不能超過 28 天。"
+    return seconds, None
 
 
 def _bot_side_target_check(guild: discord.Guild, target) -> tuple[bool, str]:
@@ -1956,6 +2013,7 @@ class RequestView(discord.ui.View):
 
     def _release(self):
         active_requests.discard((self.guild.id, self.target_id, self.action))
+        active_request_initiators.discard((self.guild.id, self.requester_id))
 
     def _disable_buttons(self):
         for child in self.children:
@@ -2037,6 +2095,26 @@ class ModerationRequest(commands.GroupCog, name=app_commands.locale_str("request
         info = MOD_ACTION_DEFS[action]
         perm, zh = info["perm"], info["zh"]
         reason_text = reason or "未提供"
+        settings = _get_request_settings(guild.id, action)
+        bypass = _has_mod_bypass(interaction.user, perm)
+
+        if not settings["enabled"] and not bypass:
+            await interaction.response.send_message(f"此伺服器尚未啟用{zh}請求。", ephemeral=True)
+            return
+        err = _check_duration_limit(action, duration_seconds, settings["max_duration"])
+        if err and not bypass:
+            await interaction.response.send_message(err, ephemeral=True)
+            return
+        if not bypass:
+            remaining = _check_creation_cooldown(guild.id, interaction.user.id)
+            if remaining > 0:
+                await interaction.response.send_message(
+                    f"操作太頻繁，請在 {remaining} 秒後再試。", ephemeral=True)
+                return
+            if (guild.id, interaction.user.id) in active_request_initiators:
+                await interaction.response.send_message(
+                    "你已有一個進行中的請求，請先等待其完成或取消。", ephemeral=True)
+                return
 
         if request_to is None:
             if isinstance(user, discord.Member):
@@ -2067,6 +2145,8 @@ class ModerationRequest(commands.GroupCog, name=app_commands.locale_str("request
             await interaction.response.send_message("已有針對該用戶的相同請求正在進行中。", ephemeral=True)
             return
         active_requests.add(key)
+        active_request_initiators.add((guild.id, interaction.user.id))
+        mod_creation_cooldowns[(guild.id, interaction.user.id)] = time.monotonic()
 
         title = f"{interaction.user.name} 請求{zh} {user.name}"
         if action == "timeout":
@@ -2091,6 +2171,7 @@ class ModerationRequest(commands.GroupCog, name=app_commands.locale_str("request
             msg_obj = await interaction.original_response()
         except Exception:
             active_requests.discard(key)
+            active_request_initiators.discard((guild.id, interaction.user.id))
             raise
         # 取得可長期編輯的 Message（webhook token 15 分鐘後失效，view 存活 60 分鐘）
         try:
@@ -2134,6 +2215,77 @@ class ModerationRequest(commands.GroupCog, name=app_commands.locale_str("request
             await interaction.response.send_message("禁言時間不能超過 28 天。", ephemeral=True)
             return
         await self._create_request(interaction, "timeout", user, request_to, reason, duration_seconds)
+
+    @app_commands.command(name=app_commands.locale_str("settings"), description="設定請求懲處功能（僅管理員）")
+    @app_commands.describe(action="要設定的動作", enabled="是否啟用",
+                           max_duration="禁言/封禁最長時間（例如 1h，0 = 不限制）")
+    @app_commands.choices(action=[
+        app_commands.Choice(name="封禁", value="ban"),
+        app_commands.Choice(name="踢出", value="kick"),
+        app_commands.Choice(name="禁言", value="timeout"),
+    ])
+    async def request_settings(self, interaction: discord.Interaction,
+                               action: Optional[str] = None,
+                               enabled: Optional[bool] = None,
+                               max_duration: Optional[str] = None):
+        guild = interaction.guild
+        if guild is None:
+            await interaction.response.send_message("此指令只能在伺服器中使用。", ephemeral=True)
+            return
+        if not interaction.user.guild_permissions.administrator:
+            await interaction.response.send_message("只有管理員可以使用此指令。", ephemeral=True)
+            return
+
+        if action is None:
+            if enabled is not None or max_duration is not None:
+                await interaction.response.send_message("請同時指定 action 才能修改設定。", ephemeral=True)
+                return
+            embed = discord.Embed(title="📩 請求懲處設定", color=0x00b894)
+            for act, info in MOD_ACTION_DEFS.items():
+                s = _get_request_settings(guild.id, act)
+                value = f"狀態：{'✅ 啟用' if s['enabled'] else '❌ 停用'}"
+                if act != "kick":
+                    value += f"\n最長時間：{'不限制' if s['max_duration'] <= 0 else get_time_text(s['max_duration'])}"
+                embed.add_field(name=info["zh"], value=value, inline=True)
+            await interaction.response.send_message(embed=embed, ephemeral=True)
+            return
+
+        info = MOD_ACTION_DEFS[action]
+        if enabled and not getattr(guild.me.guild_permissions, info["perm"], False):
+            await interaction.response.send_message(
+                f"機器人缺少{info['zh']}所需的權限，無法啟用。請先授予權限後再試。", ephemeral=True)
+            return
+        max_seconds = None
+        if max_duration is not None:
+            if action == "kick":
+                await interaction.response.send_message("踢出沒有時間限制可設定。", ephemeral=True)
+                return
+            max_seconds, err = _parse_max_duration_setting(max_duration, action)
+            if err:
+                await interaction.response.send_message(err, ephemeral=True)
+                return
+
+        all_settings = get_server_config(guild.id, REQUEST_MODERATION_KEY, {}) or {}
+        current = all_settings.setdefault(action, {})
+        changes = []
+        if enabled is not None:
+            current["enabled"] = enabled
+            changes.append(f"狀態：{'啟用' if enabled else '停用'}")
+        if max_seconds is not None:
+            current["max_duration"] = max_seconds
+            changes.append(f"最長時間：{'不限制' if max_seconds == 0 else get_time_text(max_seconds)}")
+
+        if not changes:
+            s = _get_request_settings(guild.id, action)
+            lines = [f"{info['zh']}請求目前設定：", f"- 狀態：{'✅ 啟用' if s['enabled'] else '❌ 停用'}"]
+            if action != "kick":
+                lines.append(f"- 最長時間：{'不限制' if s['max_duration'] <= 0 else get_time_text(s['max_duration'])}")
+            await interaction.response.send_message("\n".join(lines), ephemeral=True)
+            return
+
+        set_server_config(guild.id, REQUEST_MODERATION_KEY, all_settings)
+        await interaction.response.send_message(
+            f"已更新{info['zh']}請求設定：\n- " + "\n- ".join(changes), ephemeral=True)
 
 
 class VoteView(discord.ui.View):
@@ -2184,6 +2336,7 @@ class VoteView(discord.ui.View):
             child.disabled = True
         self.stop()
         active_votes.pop((self.guild.id, self.target_id), None)
+        active_vote_initiators.discard((self.guild.id, self.initiator_id))
         if success:
             ok, msg = await _execute_moderation(
                 self.guild, self.action, self.target_id, self.reason, self.duration_seconds)
@@ -2238,11 +2391,24 @@ class ModerationVote(commands.GroupCog, name=app_commands.locale_str("vote")):
         perm, zh = info["perm"], info["zh"]
         reason_text = reason or "未提供"
         settings = _get_vote_settings(guild.id, action)
+        bypass = _has_mod_bypass(interaction.user, perm)
 
-        if not settings["enabled"]:
-            perms = interaction.user.guild_permissions
-            if not (perms.administrator or getattr(perms, perm, False)):
-                await interaction.response.send_message(f"此伺服器尚未啟用{zh}投票。", ephemeral=True)
+        if not settings["enabled"] and not bypass:
+            await interaction.response.send_message(f"此伺服器尚未啟用{zh}投票。", ephemeral=True)
+            return
+        err = _check_duration_limit(action, duration_seconds, settings["max_duration"])
+        if err and not bypass:
+            await interaction.response.send_message(err, ephemeral=True)
+            return
+        if not bypass:
+            remaining = _check_creation_cooldown(guild.id, interaction.user.id)
+            if remaining > 0:
+                await interaction.response.send_message(
+                    f"操作太頻繁，請在 {remaining} 秒後再試。", ephemeral=True)
+                return
+            if (guild.id, interaction.user.id) in active_vote_initiators:
+                await interaction.response.send_message(
+                    "你已有一個進行中的投票，請先等待其結束。", ephemeral=True)
                 return
         if not getattr(guild.me.guild_permissions, perm, False):
             await interaction.response.send_message(f"機器人缺少{zh}所需的權限。", ephemeral=True)
@@ -2257,6 +2423,8 @@ class ModerationVote(commands.GroupCog, name=app_commands.locale_str("vote")):
             await interaction.response.send_message("已有針對該用戶的投票正在進行中。", ephemeral=True)
             return
         active_votes[key] = None  # 佔位，避免併發重複發起
+        active_vote_initiators.add((guild.id, interaction.user.id))
+        mod_creation_cooldowns[(guild.id, interaction.user.id)] = time.monotonic()
 
         try:
             await interaction.response.defer()
@@ -2296,6 +2464,7 @@ class ModerationVote(commands.GroupCog, name=app_commands.locale_str("vote")):
             msg_obj = await interaction.followup.send(embed=embed, view=view, wait=True)
         except Exception:
             active_votes.pop(key, None)
+            active_vote_initiators.discard((guild.id, interaction.user.id))
             raise
         active_votes[key] = view
         try:
@@ -2337,7 +2506,8 @@ class ModerationVote(commands.GroupCog, name=app_commands.locale_str("vote")):
 
     @app_commands.command(name=app_commands.locale_str("settings"), description="設定投票懲處功能（僅管理員）")
     @app_commands.describe(action="要設定的動作", enabled="是否啟用",
-                           threshold="固定投票門檻（0 = 自動計算）", vote_duration="投票持續時間（例如 10m，預設 10 分鐘）")
+                           threshold="固定投票門檻（0 = 自動計算）", vote_duration="投票持續時間（例如 10m，預設 10 分鐘）",
+                           max_duration="禁言/封禁最長時間（例如 1h，0 = 不限制）")
     @app_commands.choices(action=[
         app_commands.Choice(name="封禁", value="ban"),
         app_commands.Choice(name="踢出", value="kick"),
@@ -2347,7 +2517,8 @@ class ModerationVote(commands.GroupCog, name=app_commands.locale_str("vote")):
                             action: Optional[str] = None,
                             enabled: Optional[bool] = None,
                             threshold: Optional[app_commands.Range[int, 0, 100]] = None,
-                            vote_duration: Optional[str] = None):
+                            vote_duration: Optional[str] = None,
+                            max_duration: Optional[str] = None):
         guild = interaction.guild
         if guild is None:
             await interaction.response.send_message("此指令只能在伺服器中使用。", ephemeral=True)
@@ -2357,19 +2528,18 @@ class ModerationVote(commands.GroupCog, name=app_commands.locale_str("vote")):
             return
 
         if action is None:
-            if enabled is not None or threshold is not None or vote_duration is not None:
+            if enabled is not None or threshold is not None or vote_duration is not None or max_duration is not None:
                 await interaction.response.send_message("請同時指定 action 才能修改設定。", ephemeral=True)
                 return
             embed = discord.Embed(title="🗳️ 投票懲處設定", color=0x00b894)
             for act, info in MOD_ACTION_DEFS.items():
                 s = _get_vote_settings(guild.id, act)
-                embed.add_field(
-                    name=info["zh"],
-                    value=(f"狀態：{'✅ 啟用' if s['enabled'] else '❌ 停用'}\n"
-                           f"門檻：{'自動計算' if s['threshold'] <= 0 else str(s['threshold']) + ' 票'}\n"
-                           f"投票時間：{get_time_text(s['duration'])}"),
-                    inline=True,
-                )
+                value = (f"狀態：{'✅ 啟用' if s['enabled'] else '❌ 停用'}\n"
+                         f"門檻：{'自動計算' if s['threshold'] <= 0 else str(s['threshold']) + ' 票'}\n"
+                         f"投票時間：{get_time_text(s['duration'])}")
+                if act != "kick":
+                    value += f"\n最長時間：{'不限制' if s['max_duration'] <= 0 else get_time_text(s['max_duration'])}"
+                embed.add_field(name=info["zh"], value=value, inline=True)
             await interaction.response.send_message(embed=embed, ephemeral=True)
             return
 
@@ -2387,6 +2557,15 @@ class ModerationVote(commands.GroupCog, name=app_commands.locale_str("vote")):
             if duration_seconds > MAX_VOTE_DURATION_SECONDS:
                 await interaction.response.send_message("投票時間不能超過 1 天。", ephemeral=True)
                 return
+        max_seconds = None
+        if max_duration is not None:
+            if action == "kick":
+                await interaction.response.send_message("踢出沒有時間限制可設定。", ephemeral=True)
+                return
+            max_seconds, err = _parse_max_duration_setting(max_duration, action)
+            if err:
+                await interaction.response.send_message(err, ephemeral=True)
+                return
 
         all_settings = get_server_config(guild.id, VOTE_MODERATION_KEY, {}) or {}
         current = all_settings.setdefault(action, {})
@@ -2400,15 +2579,19 @@ class ModerationVote(commands.GroupCog, name=app_commands.locale_str("vote")):
         if duration_seconds is not None:
             current["duration"] = duration_seconds
             changes.append(f"投票時間：{get_time_text(duration_seconds)}")
+        if max_seconds is not None:
+            current["max_duration"] = max_seconds
+            changes.append(f"最長時間：{'不限制' if max_seconds == 0 else get_time_text(max_seconds)}")
 
         if not changes:
             s = _get_vote_settings(guild.id, action)
-            await interaction.response.send_message(
-                (f"{info['zh']}投票目前設定：\n"
-                 f"- 狀態：{'✅ 啟用' if s['enabled'] else '❌ 停用'}\n"
-                 f"- 門檻：{'自動計算' if s['threshold'] <= 0 else str(s['threshold']) + ' 票'}\n"
-                 f"- 投票時間：{get_time_text(s['duration'])}"),
-                ephemeral=True)
+            lines = [f"{info['zh']}投票目前設定：",
+                     f"- 狀態：{'✅ 啟用' if s['enabled'] else '❌ 停用'}",
+                     f"- 門檻：{'自動計算' if s['threshold'] <= 0 else str(s['threshold']) + ' 票'}",
+                     f"- 投票時間：{get_time_text(s['duration'])}"]
+            if action != "kick":
+                lines.append(f"- 最長時間：{'不限制' if s['max_duration'] <= 0 else get_time_text(s['max_duration'])}")
+            await interaction.response.send_message("\n".join(lines), ephemeral=True)
             return
 
         set_server_config(guild.id, VOTE_MODERATION_KEY, all_settings)
