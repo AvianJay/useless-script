@@ -33,7 +33,7 @@ from urllib.parse import urlparse
 from uuid import uuid4
 from doc_markdown import read_markdown_file, extract_markdown_search_entries, load_docs_site
 from OwnerTools import is_owner
-from ai_math import render_display_math
+from ai_rich_media import render_rich_markdown_images
 from ai_provider import (
     attach_image_to_messages as _attach_image_to_messages,
     coerce_ai_rate_dict as _coerce_ai_rate_dict,
@@ -587,7 +587,7 @@ SYSTEM_PROMPT = """你是 Discord 群組裡的搞笑 AI，個性抽象。
 - 配合別人的玩笑（例如：誰說誰是雜魚 誰是男娘 誰是gay…之類的）
 - 用網路用語、迷因、顏文字都可以
 - 不用太正經，聊天室不是寫報告
-- 可以使用 Discord 支援的 Markdown（請注意: Discord 並不支援表格語法，以及類似 <br> 這種的 HTML 也不支援。）
+- 可以使用 Discord 支援的 Markdown；完整的頂層 Markdown 表格會由系統轉成圖片，但類似 <br> 的 HTML 不支援。
 - 當在問問題時要看出他到底是在開玩笑的問還是認真的問
 - 可以適量的使用 ID 提及其他用戶 （例如：<@[用戶ID]>），但是不要濫用，不要過度提及同一個人，避免造成騷擾
 
@@ -639,6 +639,7 @@ TOOL_USAGE_PROMPT += """
 Response formatting helpers:
 - Put display math inside `$$...$$`. Supported expressions are rendered as inline images automatically.
 - In LaTeX, use explicit balanced braces such as `\\frac{1}{2}`, `\\sqrt{2}`, and `\\sqrt[3]{8}`.
+- Complete top-level Markdown tables with a header separator are rendered as inline images automatically. Use tables when rows and columns make the answer easier to compare.
 - Use the `image_analyze` tool when the user asks about an image URL. The URL must be on cdn.discordapp.com or media.discordapp.net.
 - To mention a slash command, write exactly: <command_mention>/autoreply list</command_mention>. The renderer will convert it to Discord's command mention when possible.
 - To show a Discord CDN image in the response body, write exactly: <image>https://cdn.discordapp.com/...</image> or <image>https://media.discordapp.net/...</image>.
@@ -737,7 +738,7 @@ class AIResponseBuilder:
     def _build_generated_image_refs(generated_image_attachments: list[dict] | None) -> list[str]:
         refs: list[str] = []
         for payload in generated_image_attachments or []:
-            if str((payload or {}).get("kind") or "generated") == "math":
+            if str((payload or {}).get("kind") or "generated") != "generated":
                 continue
             filename = str((payload or {}).get("filename") or "").strip()
             if filename:
@@ -752,6 +753,52 @@ class AIResponseBuilder:
             if filename:
                 refs.append(f"attachment://{filename}")
         return refs
+
+    @classmethod
+    def count_reserved_media_components(
+        cls,
+        response_text: str,
+        image_attachments: list[dict] | None = None,
+    ) -> int:
+        text, _ = cls._protect_response_code_fences(str(response_text or ""))
+        attachment_refs = set(cls._build_attachment_refs(image_attachments))
+        reserved = len(attachment_refs)
+
+        for match in cls.RESPONSE_LAYOUT_TAG_PATTERN.finditer(text):
+            tag_name = (match.group(1) or "generated_image").lower()
+            if tag_name == "generated_image":
+                inline_ref = str(match.group(3) or "").strip()
+                if not inline_ref or inline_ref in attachment_refs:
+                    continue
+                if normalize_discord_image_url(inline_ref):
+                    reserved += 1
+                continue
+
+            if normalize_discord_image_url(match.group(2)):
+                reserved += 3 if tag_name == "thumbnail" else 1
+
+        return reserved
+
+    @classmethod
+    def filter_renderable_image_attachments(
+        cls,
+        response_text: str,
+        image_attachments: list[dict] | None,
+    ) -> list[dict]:
+        payloads = [payload for payload in image_attachments or [] if isinstance(payload, dict)]
+        if not payloads:
+            return []
+
+        rendered_refs = {
+            str(value)
+            for item_type, value in cls._iter_response_layout_items(response_text, payloads)
+            if item_type == "image" and str(value or "").startswith("attachment://")
+        }
+        return [
+            payload
+            for payload in payloads
+            if f"attachment://{str(payload.get('filename') or '').strip()}" in rendered_refs
+        ]
 
     @classmethod
     def _iter_response_layout_items(
@@ -2009,16 +2056,22 @@ class AICommands(commands.Cog):
         if pending_file_response:
             display_response_text = self._build_send_as_file_notice(resolved_response_text, pending_file_response)
         else:
-            available_math_images = max(
-                0,
-                AIResponseBuilder.RESPONSE_MAX_MEDIA_COMPONENTS - len(pending_image_attachments),
-            )
-            display_response_text, math_attachments = await asyncio.to_thread(
-                render_display_math,
+            reserved_media_components = AIResponseBuilder.count_reserved_media_components(
                 display_response_text,
-                max_images=min(6, available_math_images),
+                pending_image_attachments,
             )
-            pending_image_attachments.extend(math_attachments)
+            available_rich_images = max(
+                0,
+                AIResponseBuilder.RESPONSE_MAX_MEDIA_COMPONENTS - reserved_media_components,
+            )
+            display_response_text, rich_attachments = await asyncio.to_thread(
+                render_rich_markdown_images,
+                display_response_text,
+                max_images=available_rich_images,
+                max_tables=4,
+                max_math=6,
+            )
+            pending_image_attachments.extend(rich_attachments)
 
         return resolved_response_text, display_response_text, pending_file_response, pending_image_attachments
 
@@ -6969,6 +7022,10 @@ class AICommands(commands.Cog):
                 response_text,
                 tool_context,
             )
+            pending_image_attachments = AIResponseBuilder.filter_renderable_image_attachments(
+                display_response_text,
+                pending_image_attachments,
+            )
 
             raw_output_chars = len(response_text)
             file_output_chars = 0
@@ -7017,12 +7074,12 @@ class AICommands(commands.Cog):
             
             # 儲存對話歷史（圖片為一次性，不存入歷史）
             ConversationManager.add_message(user.id, "user", resolved_message, guild_id)
-            has_math_attachments = any(
-                str(item.get("kind") or "") == "math"
+            has_rendered_markdown_attachments = any(
+                str(item.get("kind") or "") in {"math", "table"}
                 for item in pending_image_attachments
                 if isinstance(item, dict)
             )
-            history_response_text = response_text if has_math_attachments else display_response_text
+            history_response_text = response_text if has_rendered_markdown_attachments else display_response_text
             assistant_history_text = AIResponseBuilder.strip_media_tags_for_history(history_response_text)
             if pending_file_response:
                 assistant_history_text += (
@@ -7031,7 +7088,7 @@ class AICommands(commands.Cog):
             generated_image_attachments = [
                 item
                 for item in pending_image_attachments
-                if str(item.get("kind") or "generated") != "math"
+                if str(item.get("kind") or "generated") == "generated"
             ]
             if generated_image_attachments:
                 image_names = ", ".join(str(item.get("filename") or "image") for item in generated_image_attachments)
@@ -7530,6 +7587,10 @@ class AICommands(commands.Cog):
                     response_text,
                     tool_context,
                 )
+                pending_image_attachments = AIResponseBuilder.filter_renderable_image_attachments(
+                    display_response_text,
+                    pending_image_attachments,
+                )
 
                 raw_output_chars = len(response_text)
                 file_output_chars = 0
@@ -7578,12 +7639,12 @@ class AICommands(commands.Cog):
                 
                 # 儲存對話歷史（圖片為一次性，不存入歷史）
                 ConversationManager.add_message(user.id, "user", final_message, guild_id)
-                has_math_attachments = any(
-                    str(item.get("kind") or "") == "math"
+                has_rendered_markdown_attachments = any(
+                    str(item.get("kind") or "") in {"math", "table"}
                     for item in pending_image_attachments
                     if isinstance(item, dict)
                 )
-                history_response_text = response_text if has_math_attachments else display_response_text
+                history_response_text = response_text if has_rendered_markdown_attachments else display_response_text
                 assistant_history_text = AIResponseBuilder.strip_media_tags_for_history(history_response_text)
                 if pending_file_response:
                     assistant_history_text += (
@@ -7592,7 +7653,7 @@ class AICommands(commands.Cog):
                 generated_image_attachments = [
                     item
                     for item in pending_image_attachments
-                    if str(item.get("kind") or "generated") != "math"
+                    if str(item.get("kind") or "generated") == "generated"
                 ]
                 if generated_image_attachments:
                     image_names = ", ".join(str(item.get("filename") or "image") for item in generated_image_attachments)
