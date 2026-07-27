@@ -785,6 +785,12 @@ translations = {
     "bet_type": "賭注類型",
     "only_everyone_here": "只有所有人提及",
     "request_to": "請求人",
+    # MentionLimit
+    "mentionlimit": "提及冷卻",
+    "cooldown": "冷卻秒數",
+    "automod_mode": "automod模式",
+    "count_admins": "計入管理員",
+    "announce": "冷卻公告",
 }
 class CommandNameTranslator(app_commands.Translator):
     async def translate(
