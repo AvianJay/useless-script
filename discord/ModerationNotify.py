@@ -1,6 +1,5 @@
 import time
 import discord
-import threading
 from discord import app_commands
 from discord.ext import commands
 from datetime import datetime, timedelta, timezone
@@ -10,17 +9,23 @@ import logging
 import asyncio
 
 
-ignore = []
-
-def _ingore_user(user_id: int):
-    if user_id not in ignore:
-        ignore.append(user_id)
-        time.sleep(10)  # 避免重複觸發
-        ignore.remove(user_id)
+ignore = {}
+IGNORE_WINDOW_SECONDS = 30
 
 def ignore_user(user_id: int):
-    threading.Thread(target=_ingore_user, args=(user_id,)).start()
-    
+    ignore[user_id] = time.time()
+
+def is_ignored(user_id: int) -> bool:
+    # 避免重複觸發通知
+    ts = ignore.get(user_id)
+    if ts is None:
+        return False
+    if time.time() - ts > IGNORE_WINDOW_SECONDS:
+        ignore.pop(user_id, None)
+        return False
+    return True
+
+
 
 ch2en_map = {
     "踢出": "kick",
@@ -213,7 +218,7 @@ async def notify_user(user: discord.User, guild: discord.Guild, action: str, rea
 async def on_member_remove(member: discord.Member):
     if member.bot:
         return
-    if member.id in ignore:
+    if is_ignored(member.id):
         return
     guild = member.guild
     # check bot permissions
@@ -247,7 +252,7 @@ async def on_member_update(before, after):
         return
     if not get_server_config(after.guild.id, "notify_user_on_mute", True):
         return
-    if after.id in ignore:
+    if is_ignored(after.id):
         return
     if before.timed_out_until != after.timed_out_until and after.timed_out_until is not None:
         # 檢查database的值避免重複

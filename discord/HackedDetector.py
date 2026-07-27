@@ -409,8 +409,16 @@ class HackedDetector(commands.Cog):
             await self._notify_unlock_in_channel(user, channel)
 
     async def handle_suspicious_user(self, member: discord.Member):
+        if member.is_timed_out():
+            log(f"Skip suspicious member {member.id}: already timed out in guild {member.guild.id}.", level=logging.DEBUG, module_name="HackedDetector", user=member, guild=member.guild)
+            return
         # mute user for 28 days
         until = self._timeout_until()
+        try:
+            ignore_user(member.id)
+        except Exception:
+            # ignore_user 失敗不應阻止後續流程
+            log(f"ignore_user failed for {member.id}", level=logging.DEBUG, module_name="HackedDetector", user=member, guild=member.guild)
         try:
             await member.timeout(until, reason="檢測到可疑帳號，預防性禁言。")
         except Exception as e:
