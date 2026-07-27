@@ -620,8 +620,8 @@ class HackedDetector(commands.Cog):
         if global_name and re.fullmatch(r"[A-Za-z0-9]+", global_name):
             score += 1
         # how many spaces in global name
-        if global_name and global_name.count(" ") > 0:
-            score += global_name.count(" ")
+        # if global_name and global_name.count(" ") > 0:
+        #     score += global_name.count(" ")
         # split words in global name and every word first is uppercase
         if global_name:
             words = global_name.split()
