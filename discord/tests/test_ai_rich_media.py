@@ -53,7 +53,8 @@ class AIRichMarkdownMediaTests(unittest.TestCase):
 
         self.assertEqual([item["kind"] for item in attachments], ["table"])
         self.assertEqual(response.count("<generated_image>"), 1)
-        self.assertIn("$$x$$", response)
+        self.assertIn("```latex\nx\n```", response)
+        self.assertNotIn("$$x$$", response)
 
     def test_math_inside_table_is_not_rendered_separately(self):
         original = "| Formula |\n|---|\n| $$x^2$$ |"
@@ -85,6 +86,50 @@ class AIRichMarkdownMediaTests(unittest.TestCase):
         self.assertEqual([item["kind"] for item in attachments], ["math"])
         self.assertIn("| A | B |", response)
         self.assertNotIn("$$x$$", response)
+
+    def test_single_dollar_math_uses_images_only_for_real_expressions(self):
+        original = (
+            "Variable $x$.\n"
+            "- $132=6 \\times 22$\n"
+            "- $7260=\\binom{6}{2}\\times 22^2+\\cdots$\n"
+            "Near $\\sqrt{2}$.\n"
+            "Use $x=22$.\n"
+            "$22^6 - 132 \\cdot 22^5 + 7260 \\cdot 22^4$\n"
+            "$$(x-8)(x-14)(x-22)(x-30)(x-36)(x-44)$$\n"
+            "Answer when $x$ is a listed root."
+        )
+
+        response, attachments = render_rich_markdown_images(original, max_images=9)
+
+        self.assertEqual([item["kind"] for item in attachments], ["math"] * 6)
+        self.assertEqual(response.count("<generated_image>"), 6)
+        self.assertEqual(response.count("`x`"), 2)
+        self.assertNotIn("$132", response)
+        self.assertNotIn("$$", response)
+
+    def test_single_dollar_math_falls_back_to_code_without_media_budget(self):
+        original = "Use $x$ and solve $x^2=4$."
+
+        response, attachments = render_rich_markdown_images(original, max_images=0)
+
+        self.assertEqual(attachments, [])
+        self.assertEqual(response, "Use `x` and solve `x^2=4`.")
+
+    def test_currency_like_dollar_range_is_not_treated_as_math(self):
+        original = "Tickets cost $5 to $10 today."
+
+        response, attachments = render_rich_markdown_images(original, max_images=9)
+
+        self.assertEqual(response, original)
+        self.assertEqual(attachments, [])
+
+    def test_single_dollar_math_inside_code_is_preserved(self):
+        original = "Use `$x^2$` or:\n```text\n$x=2$\n```"
+
+        response, attachments = render_rich_markdown_images(original, max_images=9)
+
+        self.assertEqual(response, original)
+        self.assertEqual(attachments, [])
 
 
 if __name__ == "__main__":

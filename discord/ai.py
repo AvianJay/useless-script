@@ -638,6 +638,7 @@ TOOL_USAGE_PROMPT += """
 
 Response formatting helpers:
 - Put display math inside `$$...$$`. Supported expressions are rendered as inline images automatically.
+- Use backticks for short variable mentions such as `x`. Do not use single-dollar LaTeX; the renderer only treats it as a compatibility fallback.
 - In LaTeX, use explicit balanced braces such as `\\frac{1}{2}`, `\\sqrt{2}`, and `\\sqrt[3]{8}`.
 - Complete top-level Markdown tables with a header separator are rendered as inline images automatically. Use tables when rows and columns make the answer easier to compare.
 - Use the `image_analyze` tool when the user asks about an image URL. The URL must be on cdn.discordapp.com or media.discordapp.net.
@@ -7079,7 +7080,12 @@ class AICommands(commands.Cog):
                 for item in pending_image_attachments
                 if isinstance(item, dict)
             )
-            history_response_text = response_text if has_rendered_markdown_attachments else display_response_text
+            has_normalized_math_markup = "$" in response_text and response_text != display_response_text
+            history_response_text = (
+                response_text
+                if has_rendered_markdown_attachments or has_normalized_math_markup
+                else display_response_text
+            )
             assistant_history_text = AIResponseBuilder.strip_media_tags_for_history(history_response_text)
             if pending_file_response:
                 assistant_history_text += (
@@ -7644,7 +7650,12 @@ class AICommands(commands.Cog):
                     for item in pending_image_attachments
                     if isinstance(item, dict)
                 )
-                history_response_text = response_text if has_rendered_markdown_attachments else display_response_text
+                has_normalized_math_markup = "$" in response_text and response_text != display_response_text
+                history_response_text = (
+                    response_text
+                    if has_rendered_markdown_attachments or has_normalized_math_markup
+                    else display_response_text
+                )
                 assistant_history_text = AIResponseBuilder.strip_media_tags_for_history(history_response_text)
                 if pending_file_response:
                     assistant_history_text += (

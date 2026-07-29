@@ -8,6 +8,9 @@ from PIL import Image, ImageOps
 
 
 DISPLAY_MATH_PATTERN = re.compile(r"(?<!\\)\$\$(.+?)(?<!\\)\$\$", re.DOTALL)
+INLINE_MATH_PATTERN = re.compile(
+    r"(?<!\\)(?<!\$)\$(?!\$)([^\n$]+?)(?<!\\)\$(?!\$)"
+)
 CODE_PATTERN = re.compile(r"```.*?(?:```|\Z)|`[^`\n]*`", re.DOTALL)
 ALIGN_ENV_PATTERN = re.compile(r"\\(?:begin|end)\{(?:aligned|align\*?|gathered|split)\}")
 ALIGN_LINE_BREAK_PATTERN = re.compile(r"\\\\(?:\s*\[[^\]]*\])?")
@@ -26,6 +29,26 @@ MAX_MATH_IMAGE_HEIGHT = 1200
 MATH_BACKGROUND_COLOR = (43, 45, 49, 255)
 MATH_FOREGROUND_COLOR = (242, 243, 245, 255)
 _MATH_RENDER_LOCK = threading.Lock()
+
+
+def looks_like_inline_math(expression: str) -> bool:
+    value = str(expression or "").strip()
+    if not value or len(value) > MAX_MATH_EXPRESSION_LENGTH:
+        return False
+    if re.search(r"[\\=+\-*/^_{}()\[\]<>]", value):
+        return True
+    return bool(re.fullmatch(r"[A-Za-z0-9]+", value))
+
+
+def should_render_inline_math(expression: str) -> bool:
+    value = str(expression or "").strip()
+    return bool(value and re.search(r"[\\=+\-*/^_{}()\[\]<>]", value))
+
+
+def iter_math_matches(text: str):
+    matches = [(match, False) for match in DISPLAY_MATH_PATTERN.finditer(text)]
+    matches.extend((match, True) for match in INLINE_MATH_PATTERN.finditer(text))
+    return sorted(matches, key=lambda item: item[0].start())
 
 
 def _normalize_math_line(expression: str) -> str:

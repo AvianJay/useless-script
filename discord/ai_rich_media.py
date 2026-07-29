@@ -3,9 +3,11 @@ from uuid import uuid4
 
 from ai_math import (
     CODE_PATTERN,
-    DISPLAY_MATH_PATTERN,
     MAX_MATH_EXPRESSION_LENGTH,
+    iter_math_matches,
+    looks_like_inline_math,
     render_math_png,
+    should_render_inline_math,
 )
 from ai_table import parse_markdown_tables, render_table_png
 
@@ -17,6 +19,7 @@ class _RichMediaCandidate:
     kind: str
     source: str
     value: object
+    inline: bool = False
 
 
 def _line_offsets(text: str) -> tuple[list[str], list[int]]:
@@ -58,9 +61,12 @@ def _math_candidates(
     blocked_ranges = excluded_ranges + code_ranges
     candidates: list[_RichMediaCandidate] = []
 
-    for match in DISPLAY_MATH_PATTERN.finditer(text):
+    for match, is_inline in iter_math_matches(text):
         start, end = match.span()
         if _overlaps(start, end, blocked_ranges):
+            continue
+        expression = str(match.group(1) or "").strip()
+        if is_inline and not looks_like_inline_math(expression):
             continue
         candidates.append(
             _RichMediaCandidate(
@@ -68,7 +74,8 @@ def _math_candidates(
                 end=end,
                 kind="math",
                 source=match.group(0),
-                value=str(match.group(1) or "").strip(),
+                value=expression,
+                inline=is_inline,
             )
         )
     return candidates
@@ -84,6 +91,13 @@ def _table_trailing_newline(source: str) -> str:
     return ""
 
 
+def _math_fallback(expression: str, *, inline: bool) -> str:
+    safe_expression = str(expression or "").strip().replace("`", "'")
+    if inline:
+        return f"`{safe_expression}`"
+    return f"```latex\n{safe_expression}\n```"
+
+
 def render_rich_markdown_images(
     markdown_text: str,
     *,
@@ -92,12 +106,12 @@ def render_rich_markdown_images(
     max_math: int = 6,
 ) -> tuple[str, list[dict]]:
     text = str(markdown_text or "")
-    if max_images <= 0 or ("|" not in text and "$$" not in text):
+    if "|" not in text and "$" not in text:
         return text, []
 
     tables = _table_candidates(text) if "|" in text else []
     table_ranges = [(candidate.start, candidate.end) for candidate in tables]
-    math = _math_candidates(text, table_ranges) if "$$" in text else []
+    math = _math_candidates(text, table_ranges) if "$" in text else []
     candidates = sorted((*tables, *math), key=lambda candidate: candidate.start)
     if not candidates:
         return text, []
@@ -110,9 +124,21 @@ def render_rich_markdown_images(
 
     for candidate in candidates:
         output_parts.append(text[cursor:candidate.start])
-        replacement = candidate.source
+        if candidate.kind == "math":
+            replacement = _math_fallback(str(candidate.value or ""), inline=candidate.inline)
+        else:
+            replacement = candidate.source
 
-        if len(attachments) < max_images and rendered_counts[candidate.kind] < limits[candidate.kind]:
+        should_render = (
+            candidate.kind != "math"
+            or not candidate.inline
+            or should_render_inline_math(str(candidate.value or ""))
+        )
+        if (
+            should_render
+            and len(attachments) < max(0, max_images)
+            and rendered_counts[candidate.kind] < limits[candidate.kind]
+        ):
             try:
                 if candidate.kind == "table":
                     image_bytes = render_table_png(candidate.value)
