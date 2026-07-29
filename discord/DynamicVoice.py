@@ -210,7 +210,8 @@ class DynamicVoice(commands.GroupCog, name=app_commands.locale_str("dynamic-voic
             new_channel = await member.guild.create_voice_channel(
                 name=channel_name_template.format(user=member.name),
                 category=channel_category,
-                bitrate=member.guild.bitrate_limit  # maximum bitrate
+                bitrate=member.guild.bitrate_limit,  # maximum bitrate
+                overwrites=channel_category.overwrites if channel_category else None
             )
             # give user permission to manage the channel
             await new_channel.set_permissions(member, manage_channels=True, create_events=True, use_embedded_activities=True)
