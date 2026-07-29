@@ -406,10 +406,26 @@ class MatchTests(unittest.IsolatedAsyncioTestCase):
             second = await self.cog.match_message(SHARE_URL, config)
         self.assertEqual(fetch.await_count, 1)
         self.assertEqual(first[0].source_url, CLEAN_DIRECT_URL)
-        self.assertEqual(dict(first[0].fixers)["FzThreads"], FZ_SHARE_URL)
+        self.assertEqual(dict(first[0].fixers)["FzThreads"], FZ_DIRECT_URL)
         self.assertEqual(dict(first[0].fixers)["FixEmbed"], FIXEMBED_DIRECT_URL)
         self.assertEqual(first[0].primary_url, FIXEMBED_DIRECT_URL)
+        self.assertTrue(first[0].has_tracker)
         self.assertEqual(first, second)
+
+    async def test_share_resolution_restores_canonical_fzthreads_primary_url(self):
+        config = FixLink.normalize_fixlink_config(
+            {"enabled": True, "remove_tracker": True}
+        )
+        with patch.object(
+            self.cog,
+            "_fetch_threads_redirect",
+            AsyncMock(return_value=DIRECT_URL),
+        ):
+            matches = await self.cog.match_message(SHARE_URL, config)
+
+        self.assertEqual(matches[0].primary_url, FZ_DIRECT_URL)
+        self.assertEqual(matches[0].source_url, CLEAN_DIRECT_URL)
+        self.assertTrue(matches[0].has_tracker)
 
     async def test_parallel_share_resolution_is_coalesced(self):
         async def delayed_fetch(url):
@@ -444,6 +460,7 @@ class MatchTests(unittest.IsolatedAsyncioTestCase):
             matches = await self.cog.match_message(SHARE_URL, config)
         self.assertEqual(matches[0].fixers, (("FzThreads", FZ_SHARE_URL),))
         self.assertEqual(matches[0].primary_url, FZ_SHARE_URL)
+        self.assertTrue(matches[0].has_tracker)
 
     async def test_non_threads_redirect_is_rejected(self):
         with patch.object(
@@ -525,6 +542,17 @@ class RedirectFetcherTests(unittest.IsolatedAsyncioTestCase):
         cog = FixLink.FixLink(FixLink.bot)
         session = FakeSession(
             FakeResponseContext(SimpleNamespace(status=405, url=SHARE_URL)),
+            FakeResponseContext(SimpleNamespace(status=200, url=DIRECT_URL)),
+        )
+        with patch.object(FixLink.aiohttp, "ClientSession", return_value=session):
+            resolved = await cog._fetch_threads_redirect(SHARE_URL)
+        self.assertEqual(resolved, DIRECT_URL)
+        session.get.assert_called_once()
+
+    async def test_head_still_on_share_url_falls_back_to_get(self):
+        cog = FixLink.FixLink(FixLink.bot)
+        session = FakeSession(
+            FakeResponseContext(SimpleNamespace(status=200, url=SHARE_URL)),
             FakeResponseContext(SimpleNamespace(status=200, url=DIRECT_URL)),
         )
         with patch.object(FixLink.aiohttp, "ClientSession", return_value=session):
@@ -811,6 +839,37 @@ class MessageRoutingTests(unittest.IsolatedAsyncioTestCase):
             await self.cog.on_message(self.message)
 
         replace.assert_awaited_once_with(self.message, matches)
+        reply.assert_not_awaited()
+
+    async def test_tracker_only_webhook_restores_threads_share_before_replace(self):
+        self.message.content = SHARE_URL
+        config = FixLink.normalize_fixlink_config(
+            {
+                "enabled": True,
+                "remove_tracker": True,
+                "webhook_mode": True,
+                "webhook_only_with_tracker": True,
+            }
+        )
+        with (
+            patch.object(self.cog, "get_config", return_value=config),
+            patch.object(
+                self.cog,
+                "_fetch_threads_redirect",
+                new=AsyncMock(return_value=DIRECT_URL),
+            ),
+            patch.object(
+                self.cog,
+                "replace_with_webhook",
+                new=AsyncMock(return_value=True),
+            ) as replace,
+            patch.object(self.cog, "send_normal_reply", new=AsyncMock()) as reply,
+        ):
+            await self.cog.on_message(self.message)
+
+        routed_matches = replace.await_args.args[1]
+        self.assertEqual(routed_matches[0].primary_url, FZ_DIRECT_URL)
+        self.assertTrue(routed_matches[0].has_tracker)
         reply.assert_not_awaited()
 
 

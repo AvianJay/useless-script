@@ -27,7 +27,8 @@ FixLink 會偵測伺服器中的內建與管理員設定的自訂平台連結，
 
 - 支援 `threads.com`、`threads.net`、`/@user/post/id` 及 `/share/code` 連結。
 - 一般模式同時顯示 FzThreads 與 FixEmbed；Webhook 模式可選擇主要服務。
-- `/share/code` 會受限制地解析至 Threads 正式文章網址，再產生 FixEmbed 連結。
+- `/share/code` 會受限制地解析至 Threads 正式文章網址，再產生正式文章路徑的 FzThreads 與 FixEmbed 連結；解析失敗時才退回 FzThreads share URL。
+- `/share/code` 視為追蹤型連結，因此「僅追蹤碼」Webhook 模式也會處理。
 - 啟用移除追蹤後，會刪除 Threads 網址的 query 與 fragment。
 
 其他內建平台啟用移除追蹤後，只會保留識別內容必需的 query，例如 YouTube `v`、Instagram `img_index` 或 Bilibili `p`。

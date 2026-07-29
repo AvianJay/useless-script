@@ -1546,7 +1546,12 @@ class FixLink(commands.GroupCog, name="fixlink", description="\u9023\u7d50\u4fee
             async with aiohttp.ClientSession(timeout=timeout, headers=headers) as session:
                 async with session.head(url, allow_redirects=True, max_redirects=5) as response:
                     final_url = str(response.url)
-                    if response.status not in {405, 501} and parse_threads_url(final_url):
+                    final_parts = parse_threads_url(final_url)
+                    if (
+                        response.status not in {405, 501}
+                        and final_parts
+                        and final_parts["kind"] == "post"
+                    ):
                         return final_url
                 async with session.get(
                     url,
@@ -1608,7 +1613,12 @@ class FixLink(commands.GroupCog, name="fixlink", description="\u9023\u7d50\u4fee
                 else:
                     parsed_source = urlsplit(extracted.url)
                     source_url = urlunsplit((parsed_source.scheme, parsed_source.netloc, parsed_source.path, "", ""))
-            fzthreads_url = build_fzthreads_url(extracted.url, remove_tracker=remove_tracker)
+            fixer_source_url = (
+                resolved_url
+                if direct_parts and direct_parts["kind"] == "post"
+                else extracted.url
+            )
+            fzthreads_url = build_fzthreads_url(fixer_source_url, remove_tracker=remove_tracker)
             fixers: list[tuple[str, str]] = []
             if fzthreads_url and len(fzthreads_url) <= MAX_GENERATED_URL_LENGTH:
                 fixers.append(("FzThreads", fzthreads_url))
@@ -1631,7 +1641,10 @@ class FixLink(commands.GroupCog, name="fixlink", description="\u9023\u7d50\u4fee
                 end=extracted.end,
                 fixers=tuple(fixers),
                 primary_url=primary_url,
-                has_tracker=bool(urlsplit(extracted.url).query or urlsplit(extracted.url).fragment),
+                has_tracker=(
+                    threads["kind"] == "share"
+                    or bool(urlsplit(extracted.url).query or urlsplit(extracted.url).fragment)
+                ),
                 username=username,
                 profile_url=f"https://www.threads.com/@{username}" if username else None,
             )
