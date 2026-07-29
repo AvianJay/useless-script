@@ -1,5 +1,13 @@
 # 更新日誌
 
+## 0.22.1
+* 更新連結修復 | /fixlink
+  * Threads `/share/code` 分享連結現在會先解析為正式文章網址，再產生對應文章路徑的 FzThreads 與 FixEmbed 連結；解析失敗時才會退回原本的 FzThreads 分享連結。
+  * Threads 分享連結現在視為追蹤型連結，因此啟用「僅處理追蹤碼」的 Webhook 模式時也會正常替換。
+  * Twitter/X 的 `/i/status/...` 連結現在會解析貼文的實際作者與個人檔案，不再將 `i` 誤認為作者名稱。
+* 更新 FixLink 相關文檔。
+* 修復一些 Bug。
+
 ## 0.22.0
 * 更新 AI
   * 支援表格渲染
