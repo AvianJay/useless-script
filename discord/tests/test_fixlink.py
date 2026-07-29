@@ -302,6 +302,45 @@ class MatchTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(twitter[0].username, "discord")
         self.assertEqual(twitter[0].profile_url, "https://x.com/discord")
 
+    async def test_twitter_i_status_resolves_actual_username(self):
+        config = FixLink.normalize_fixlink_config(
+            {"enabled": True, "remove_tracker": True, "disabled_platforms": []}
+        )
+        with patch.object(
+            self.cog,
+            "resolve_twitter_profile",
+            AsyncMock(return_value=("0xluffy", "https://x.com/0xluffy")),
+        ):
+            twitter = await self.cog.match_message(
+                "https://x.com/i/status/2079467021075632394",
+                config,
+            )
+
+        self.assertEqual(len(twitter), 1)
+        self.assertEqual(twitter[0].username, "0xluffy")
+        self.assertEqual(twitter[0].profile_url, "https://x.com/0xluffy")
+        self.assertEqual(
+            twitter[0].primary_url,
+            "https://fxtwitter.com/i/status/2079467021075632394",
+        )
+
+    async def test_twitter_i_status_omits_username_when_resolution_fails(self):
+        config = FixLink.normalize_fixlink_config(
+            {"enabled": True, "remove_tracker": True, "disabled_platforms": []}
+        )
+        with patch.object(
+            self.cog,
+            "resolve_twitter_profile",
+            AsyncMock(return_value=None),
+        ):
+            twitter = await self.cog.match_message(
+                "https://x.com/i/status/2079467021075632394",
+                config,
+            )
+
+        self.assertIsNone(twitter[0].username)
+        self.assertIsNone(twitter[0].profile_url)
+
     async def test_builtin_query_retention_and_preferred_fixer(self):
         config = FixLink.normalize_fixlink_config(
             {
@@ -569,6 +608,35 @@ class RedirectFetcherTests(unittest.IsolatedAsyncioTestCase):
         with patch.object(FixLink.aiohttp, "ClientSession", return_value=session):
             resolved = await cog._fetch_threads_redirect(SHARE_URL)
         self.assertIsNone(resolved)
+
+
+class TwitterProfileResolverTests(unittest.IsolatedAsyncioTestCase):
+    async def test_profile_resolution_is_cached(self):
+        cog = FixLink.FixLink(FixLink.bot)
+        profile = ("0xluffy", "https://x.com/0xluffy")
+        with patch.object(
+            cog,
+            "_fetch_twitter_profile",
+            AsyncMock(return_value=profile),
+        ) as fetch:
+            first = await cog.resolve_twitter_profile("2079467021075632394")
+            second = await cog.resolve_twitter_profile("2079467021075632394")
+
+        self.assertEqual(first, profile)
+        self.assertEqual(second, profile)
+        fetch.assert_awaited_once_with("2079467021075632394")
+
+    async def test_profile_resolution_rejects_non_numeric_status_id(self):
+        cog = FixLink.FixLink(FixLink.bot)
+        with patch.object(
+            cog,
+            "_fetch_twitter_profile",
+            AsyncMock(),
+        ) as fetch:
+            profile = await cog.resolve_twitter_profile("not-a-status")
+
+        self.assertIsNone(profile)
+        fetch.assert_not_awaited()
 
 
 def http_exception(status=403):

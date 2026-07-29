@@ -23,6 +23,7 @@ FIXLINK_CONFIG_KEY = "fixlink"
 FIXLINK_WEBHOOKS_KEY = "fixlink_webhooks"
 FIXEMBED_REVISION = "154"
 SHARE_CACHE_SECONDS = 600
+TWITTER_PROFILE_CACHE_SECONDS = 600
 MAX_CUSTOM_PLATFORMS = 10
 MAX_GENERATED_URL_LENGTH = 1800
 MAX_REPLY_CHUNK_LENGTH = 1900
@@ -733,6 +734,8 @@ def get_builtin_profile(platform_name: str, path: str) -> tuple[str | None, str 
     if match is None:
         return None, None
     username = match.group(1)
+    if platform_name == "Twitter" and username.casefold() == "i":
+        return None, None
     return username, profile[1].format(username=username)
 
 
@@ -1509,6 +1512,10 @@ class FixLink(commands.GroupCog, name="fixlink", description="\u9023\u7d50\u4fee
         self.default_config = DEFAULT_FIXLINK_CONFIG
         self._share_cache: dict[str, tuple[float, str | None]] = {}
         self._share_inflight: dict[str, asyncio.Task] = {}
+        self._twitter_profile_cache: dict[
+            str, tuple[float, tuple[str, str] | None]
+        ] = {}
+        self._twitter_profile_inflight: dict[str, asyncio.Task] = {}
         self._webhook_locks: dict[int, asyncio.Lock] = {}
         self._invalid_config_counts: dict[int, int] = {}
 
@@ -1596,6 +1603,60 @@ class FixLink(commands.GroupCog, name="fixlink", description="\u9023\u7d50\u4fee
             if self._share_inflight.get(cache_key) is inflight and inflight.done():
                 self._share_inflight.pop(cache_key, None)
 
+    async def _fetch_twitter_profile(self, status_id: str) -> tuple[str, str] | None:
+        if not status_id.isascii() or not status_id.isdigit():
+            return None
+        timeout = aiohttp.ClientTimeout(total=5)
+        headers = {"User-Agent": "Mozilla/5.0 (compatible; FixLink/1.0)"}
+        try:
+            async with aiohttp.ClientSession(timeout=timeout, headers=headers) as session:
+                async with session.get(
+                    f"https://api.fxtwitter.com/status/{status_id}"
+                ) as response:
+                    if response.status != 200:
+                        return None
+                    payload = await response.json(content_type=None)
+        except (aiohttp.ClientError, asyncio.TimeoutError, ValueError, TypeError):
+            return None
+
+        tweet = payload.get("tweet") if isinstance(payload, dict) else None
+        author = tweet.get("author") if isinstance(tweet, dict) else None
+        username = author.get("screen_name") if isinstance(author, dict) else None
+        if not isinstance(username, str) or not re.fullmatch(
+            r"[A-Za-z0-9_]{1,15}", username
+        ):
+            return None
+        return username, f"https://x.com/{username}"
+
+    async def resolve_twitter_profile(self, status_id: str) -> tuple[str, str] | None:
+        if not status_id.isascii() or not status_id.isdigit():
+            return None
+        cached = self._twitter_profile_cache.get(status_id)
+        now = time.monotonic()
+        if cached and cached[0] > now:
+            return cached[1]
+        inflight = self._twitter_profile_inflight.get(status_id)
+        if inflight is None:
+            async def resolve_uncached():
+                profile = await self._fetch_twitter_profile(status_id)
+                cache_seconds = TWITTER_PROFILE_CACHE_SECONDS if profile else 60
+                self._twitter_profile_cache[status_id] = (
+                    time.monotonic() + cache_seconds,
+                    profile,
+                )
+                return profile
+
+            inflight = asyncio.create_task(resolve_uncached())
+            self._twitter_profile_inflight[status_id] = inflight
+        try:
+            return await inflight
+        finally:
+            if (
+                self._twitter_profile_inflight.get(status_id) is inflight
+                and inflight.done()
+            ):
+                self._twitter_profile_inflight.pop(status_id, None)
+
     async def _match_url(self, extracted: ExtractedURL, config: dict) -> LinkMatch | None:
         threads = parse_threads_url(extracted.url)
         if threads:
@@ -1669,6 +1730,16 @@ class FixLink(commands.GroupCog, name="fixlink", description="\u9023\u7d50\u4fee
             )
             primary_url = next((url for name, url in fixers if name == preferred), fixers[0][1])
             username, profile_url = get_builtin_profile(platform_name, parsed.path)
+            if platform_name == "Twitter" and username is None:
+                status_match = re.match(
+                    r"^/i/(?:web/)?status/([0-9]+)(?:/.*)?$",
+                    unquote(parsed.path),
+                    flags=re.IGNORECASE,
+                )
+                if status_match is not None:
+                    profile = await self.resolve_twitter_profile(status_match.group(1))
+                    if profile is not None:
+                        username, profile_url = profile
             return LinkMatch(
                 platform_key=platform_name,
                 platform_name=platform_name,
