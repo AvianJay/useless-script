@@ -483,7 +483,7 @@ class MentionLimit(commands.GroupCog, name="mentionlimit"):
 
         if not config["count_admins"]:
             permissions = getattr(message.author, "guild_permissions", None)
-            if permissions is not None and permissions.administrator:
+            if permissions is not None and permissions.administrator and permissions.manage_guild:
                 return
 
         started: list[tuple[discord.Role, datetime]] = []
