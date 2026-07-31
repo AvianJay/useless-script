@@ -15,6 +15,9 @@ AI_DEFAULT_MODEL_CONFIG_KEY = "ai_default_model"
 AI_IMAGE_MODEL_CONFIG_KEY = "ai_image_model"
 AI_REVIEW_MODEL_CONFIG_KEY = "ai_review_model"
 AI_REPORT_MODEL_CONFIG_KEY = "ai_report_model"
+AI_TOOL_CALL_MODES_CONFIG_KEY = "ai_tool_call_modes"
+
+VALID_AI_TOOL_CALL_MODES = {"auto", "native", "emulated"}
 
 DEFAULT_AI_ENDPOINT = "https://api.poe.com/v1"
 DEFAULT_AI_MODELS = {
@@ -50,8 +53,12 @@ AI_GLOBAL_CONFIG_DEFAULTS = {
     AI_IMAGE_MODEL_CONFIG_KEY: DEFAULT_AI_IMAGE_MODEL,
     AI_REVIEW_MODEL_CONFIG_KEY: DEFAULT_AI_REVIEW_MODEL,
     AI_REPORT_MODEL_CONFIG_KEY: DEFAULT_AI_REPORT_MODEL,
+    AI_TOOL_CALL_MODES_CONFIG_KEY: {},
 }
 _GLOBAL_CONFIG_MISSING = object()
+
+# 原生 tool calling 在執行期偵測到不支援的模型（僅限本次進程，換 endpoint 或重啟後重新探測）
+_AI_NATIVE_TOOLS_RUNTIME_UNSUPPORTED: set = set()
 
 
 def ensure_ai_global_config_defaults():
@@ -85,6 +92,60 @@ def get_ai_endpoint() -> str:
 
 def set_ai_endpoint(endpoint: str):
     set_global_config(AI_ENDPOINT_CONFIG_KEY, str(endpoint or "").strip().rstrip("/"))
+    # 換 endpoint 後原生 tool calling 支援度可能不同，重新探測
+    clear_ai_native_tools_runtime_cache()
+
+
+def get_ai_tool_call_modes() -> dict:
+    ensure_ai_global_config_defaults()
+    raw_modes = get_global_config(AI_TOOL_CALL_MODES_CONFIG_KEY, {})
+    modes: dict = {}
+    if isinstance(raw_modes, dict):
+        for model, mode in raw_modes.items():
+            model_name = str(model or "").strip()
+            mode_value = str(mode or "").strip().lower()
+            if model_name and mode_value in ("native", "emulated"):
+                modes[model_name] = mode_value
+    return modes
+
+
+def set_ai_tool_call_mode(model: str, mode: str):
+    model_name = str(model or "").strip()
+    mode_value = str(mode or "").strip().lower()
+    if not model_name:
+        raise ValueError("model cannot be empty")
+    if mode_value not in VALID_AI_TOOL_CALL_MODES:
+        raise ValueError(f"mode must be one of {sorted(VALID_AI_TOOL_CALL_MODES)}")
+    modes = get_ai_tool_call_modes()
+    if mode_value == "auto":
+        modes.pop(model_name, None)
+    else:
+        modes[model_name] = mode_value
+    set_global_config(AI_TOOL_CALL_MODES_CONFIG_KEY, modes)
+
+
+def mark_ai_native_tools_unsupported(model: str):
+    model_name = str(model or "").strip()
+    if model_name:
+        _AI_NATIVE_TOOLS_RUNTIME_UNSUPPORTED.add(model_name)
+
+
+def get_ai_native_tools_runtime_unsupported() -> set:
+    return set(_AI_NATIVE_TOOLS_RUNTIME_UNSUPPORTED)
+
+
+def clear_ai_native_tools_runtime_cache():
+    _AI_NATIVE_TOOLS_RUNTIME_UNSUPPORTED.clear()
+
+
+def resolve_ai_tool_call_mode(model: str) -> str:
+    model_name = str(model or "").strip()
+    configured_mode = get_ai_tool_call_modes().get(model_name)
+    if configured_mode:
+        return configured_mode
+    if model_name in _AI_NATIVE_TOOLS_RUNTIME_UNSUPPORTED:
+        return "emulated"
+    return "native"
 
 
 def get_ai_api_key() -> str:

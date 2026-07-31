@@ -46,11 +46,15 @@ from ai_provider import (
     get_ai_image_model as _get_ai_image_model,
     get_ai_image_model_rates as _get_ai_image_model_rates,
     get_ai_model_rates as _get_ai_model_rates,
+    get_ai_native_tools_runtime_unsupported as _get_ai_native_tools_runtime_unsupported,
     get_ai_report_model as _get_ai_report_model,
     get_ai_review_model as _get_ai_review_model,
     get_ai_text_model_rate as _get_ai_text_model_rate,
+    get_ai_tool_call_modes as _get_ai_tool_call_modes,
     get_ai_video_model_rates as _get_ai_video_model_rates,
     is_ai_text_model as _is_ai_text_model,
+    mark_ai_native_tools_unsupported as _mark_ai_native_tools_unsupported,
+    resolve_ai_tool_call_mode as _resolve_ai_tool_call_mode,
     set_ai_api_key as _set_ai_api_key,
     set_ai_default_model as _set_ai_default_model,
     set_ai_endpoint as _set_ai_endpoint,
@@ -59,6 +63,7 @@ from ai_provider import (
     set_ai_model_rates as _set_ai_model_rates,
     set_ai_report_model as _set_ai_report_model,
     set_ai_review_model as _set_ai_review_model,
+    set_ai_tool_call_mode as _set_ai_tool_call_mode,
 )
 
 from Economy import log_transaction, send_economy_audit_log
@@ -1393,6 +1398,29 @@ class AICommands(commands.Cog):
         )
 
     @classmethod
+    def _is_native_tools_unsupported_error(cls, error: Exception) -> bool:
+        if error is None or cls._is_ai_rate_limit_error(error):
+            return False
+
+        status = None
+        for candidate in (
+            getattr(error, "status", None),
+            getattr(error, "status_code", None),
+            getattr(getattr(error, "response", None), "status", None),
+            getattr(getattr(error, "response", None), "status_code", None),
+        ):
+            try:
+                status = int(candidate)
+                break
+            except (TypeError, ValueError):
+                continue
+        if status not in (400, 404, 422, 501):
+            return False
+
+        message = str(error or "").lower()
+        return "tool" in message or "function" in message
+
+    @classmethod
     def _get_ai_retry_delay_seconds(cls, error: Exception, attempt_index: int) -> float:
         headers = getattr(getattr(error, "response", None), "headers", None) or getattr(error, "headers", None)
         if headers:
@@ -1521,7 +1549,7 @@ class AICommands(commands.Cog):
             tools = self._build_ai_tools() if active_tool_context else None
 
             for round_index in range(1, (self.MAX_TOOL_ITERATIONS if tools else 1) + 1):
-                response = await self._request_ai_completion(
+                response, used_native = await self._request_ai_completion(
                     working_messages,
                     model=model,
                     image=working_image,
@@ -1584,32 +1612,52 @@ class AICommands(commands.Cog):
                         }
                     )
 
-                requested_tools = ", ".join(result["name"] for result in tool_results if result.get("name"))
-                working_messages.append(
-                    {
-                        "role": "assistant",
-                        "content": response_text or f"[Tool request] {requested_tools}",
-                    }
-                )
-                tool_payload = {
-                    "tool_results": tool_results,
-                    "instructions": (
-                        "Use these tool results to answer the original user request. "
-                        "If more data is still required, you may call another tool."
-                    ),
-                }
-                working_messages.append(
-                    {
-                        "role": "user",
-                        "content": self._truncate_tool_text(
-                            "Tool results:\n" + json.dumps(tool_payload, ensure_ascii=False, default=str),
-                            max_len=self.MAX_TOOL_RESULT_LENGTH * 2,
+                if used_native:
+                    working_messages.append(
+                        {
+                            "role": "assistant",
+                            "content": response_text or "",
+                            "tool_calls": self._build_native_tool_call_entries(tool_calls),
+                        }
+                    )
+                    for entry in tool_results:
+                        working_messages.append(
+                            {
+                                "role": "tool",
+                                "tool_call_id": str(entry.get("id") or ""),
+                                "content": self._truncate_tool_text(
+                                    json.dumps(entry["result"], ensure_ascii=False, default=str),
+                                    max_len=self.MAX_TOOL_RESULT_LENGTH,
+                                ),
+                            }
+                        )
+                else:
+                    requested_tools = ", ".join(result["name"] for result in tool_results if result.get("name"))
+                    working_messages.append(
+                        {
+                            "role": "assistant",
+                            "content": response_text or f"[Tool request] {requested_tools}",
+                        }
+                    )
+                    tool_payload = {
+                        "tool_results": tool_results,
+                        "instructions": (
+                            "Use these tool results to answer the original user request. "
+                            "If more data is still required, you may call another tool."
                         ),
                     }
-                )
+                    working_messages.append(
+                        {
+                            "role": "user",
+                            "content": self._truncate_tool_text(
+                                "Tool results:\n" + json.dumps(tool_payload, ensure_ascii=False, default=str),
+                                max_len=self.MAX_TOOL_RESULT_LENGTH * 2,
+                            ),
+                        }
+                    )
                 working_image = None
 
-            final_response = await self._request_ai_completion(
+            final_response, _ = await self._request_ai_completion(
                 working_messages
                 + [
                     {
@@ -1765,6 +1813,25 @@ class AICommands(commands.Cog):
             if fallback_calls:
                 return fallback_calls
         return []
+
+    @staticmethod
+    def _build_native_tool_call_entries(tool_calls: list[dict]) -> list[dict]:
+        entries = []
+        for index, tool_call in enumerate(tool_calls, start=1):
+            arguments = tool_call.get("arguments")
+            if not isinstance(arguments, str):
+                arguments = json.dumps(arguments or {}, ensure_ascii=False, default=str)
+            entries.append(
+                {
+                    "id": str(tool_call.get("id") or f"call_{index}"),
+                    "type": "function",
+                    "function": {
+                        "name": str(tool_call.get("name") or ""),
+                        "arguments": arguments,
+                    },
+                }
+            )
+        return entries
 
     def _truncate_tool_text(self, text, max_len: int | None = None) -> str:
         max_len = max_len or self.MAX_TOOL_RESULT_LENGTH
@@ -6085,15 +6152,40 @@ class AICommands(commands.Cog):
         model: str,
         image: bytes = None,
         tools: list | None = None,
-    ):
-        request_messages = self._prepare_tool_emulation_messages(messages, tools) if tools else messages
-        kwargs = dict(
-            model=model,
-            messages=request_messages,
-        )
+    ) -> tuple:
+        """回傳 (response, used_native)：預設走原生 tool calling，不支援時退回模擬模式。"""
+        kwargs = dict(model=model)
         if image is not None:
             kwargs["image"] = image
-        return await self._generate_ai_completion(**kwargs)
+
+        if not tools:
+            response = await self._generate_ai_completion(messages=messages, **kwargs)
+            return response, False
+
+        if _resolve_ai_tool_call_mode(model) == "native":
+            try:
+                response = await self._generate_ai_completion(
+                    messages=messages,
+                    tools=tools,
+                    **kwargs,
+                )
+                return response, True
+            except Exception as error:
+                if not self._is_native_tools_unsupported_error(error):
+                    raise
+                _mark_ai_native_tools_unsupported(model)
+                log(
+                    (
+                        f"Native tool calling unsupported for model={model}, "
+                        f"falling back to emulated mode: {str(error)[:180]}"
+                    ),
+                    module_name="AI",
+                    level=logging.WARNING,
+                )
+
+        request_messages = self._prepare_tool_emulation_messages(messages, tools)
+        response = await self._generate_ai_completion(messages=request_messages, **kwargs)
+        return response, False
 
     @staticmethod
     def _component_attr(item, attr: str):
@@ -6546,10 +6638,22 @@ class AICommands(commands.Cog):
             f"- review_model: {_get_ai_review_model()}\n"
             f"- report_model: {_get_ai_report_model()}\n"
             f"- image_model: {_get_ai_image_model()}\n"
+            f"- tool_modes: {self._format_ai_tool_call_modes()}\n"
             f"- models:\n{_format_ai_models_for_display(models)}\n"
             f"- image_models:\n{_format_ai_models_for_display(image_models)}",
             allowed_mentions=SAFE_MENTIONS,
         )
+
+    @staticmethod
+    def _format_ai_tool_call_modes() -> str:
+        configured_modes = _get_ai_tool_call_modes()
+        parts = [f"{model}={mode}" for model, mode in sorted(configured_modes.items())]
+        parts.extend(
+            f"{model}=emulated (runtime)"
+            for model in sorted(_get_ai_native_tools_runtime_unsupported())
+            if model not in configured_modes
+        )
+        return ", ".join(parts) if parts else "(all auto/native)"
 
     @ai_config_text.command(name="endpoint")
     @is_owner()
@@ -6611,6 +6715,30 @@ class AICommands(commands.Cog):
         models[model] = price_value
         _set_ai_model_rates(models)
         await ctx.send(f"Updated model {model}: {price_value:.2f}/C", allowed_mentions=SAFE_MENTIONS)
+
+    @ai_config_text.command(name="tool-mode", aliases=["toolmode"])
+    @is_owner()
+    async def ai_config_tool_mode_text(self, ctx: commands.Context, model: str = None, mode: str = None):
+        if not model:
+            await ctx.send(
+                f"AI tool call modes: {self._format_ai_tool_call_modes()}\n"
+                "Usage: ai-config tool-mode <model> <auto|native|emulated>",
+                allowed_mentions=SAFE_MENTIONS,
+            )
+            return
+        if not mode:
+            resolved_mode = _resolve_ai_tool_call_mode(model.strip())
+            await ctx.send(f"{model.strip()}: {resolved_mode}", allowed_mentions=SAFE_MENTIONS)
+            return
+        try:
+            _set_ai_tool_call_mode(model, mode)
+        except ValueError as error:
+            await ctx.send(str(error), allowed_mentions=SAFE_MENTIONS)
+            return
+        await ctx.send(
+            f"Updated tool call mode for {model.strip()}: {mode.strip().lower()}",
+            allowed_mentions=SAFE_MENTIONS,
+        )
 
     @ai_config_text.command(name="default-model")
     @is_owner()
