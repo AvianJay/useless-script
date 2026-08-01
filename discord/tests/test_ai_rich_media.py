@@ -115,8 +115,34 @@ class AIRichMarkdownMediaTests(unittest.TestCase):
         self.assertEqual(attachments, [])
         self.assertEqual(response, "Use `x` and solve `x^2=4`.")
 
-    def test_currency_like_dollar_range_is_not_treated_as_math(self):
-        original = "Tickets cost $5 to $10 today."
+    def test_currency_prices_are_not_treated_as_math(self):
+        samples = [
+            "Kimi K3：$3 / $15（輸入／輸出，每百萬 token）",
+            "Price: $3.50 / $15.00 per million tokens",
+            "Budget: $1,000 / $2,000",
+            "Regional: NT$100 / US$3",
+            "A single price is $5$ today.",
+            "Tickets cost $5 to $10 today.",
+        ]
+
+        for original in samples:
+            with self.subTest(original=original):
+                response, attachments = render_rich_markdown_images(original, max_images=9)
+
+                self.assertEqual(response, original)
+                self.assertEqual(attachments, [])
+
+    def test_currency_pair_does_not_consume_later_inline_math(self):
+        original = "Kimi costs $3 / $15; solve $x=2$ next."
+
+        response, attachments = render_rich_markdown_images(original, max_images=9)
+
+        self.assertEqual(len(attachments), 1)
+        self.assertTrue(response.startswith("Kimi costs $3 / $15; solve "))
+        self.assertNotIn("$x=2$", response)
+
+    def test_currency_prices_inside_code_fence_are_preserved(self):
+        original = "```text\nKimi K3: $3 / $15 per million tokens\n```"
 
         response, attachments = render_rich_markdown_images(original, max_images=9)
 

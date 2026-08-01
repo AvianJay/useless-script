@@ -37,7 +37,7 @@ def looks_like_inline_math(expression: str) -> bool:
         return False
     if re.search(r"[\\=+\-*/^_{}()\[\]<>]", value):
         return True
-    return bool(re.fullmatch(r"[A-Za-z0-9]+", value))
+    return bool(re.fullmatch(r"[A-Za-z][A-Za-z0-9]*", value))
 
 
 def should_render_inline_math(expression: str) -> bool:
@@ -45,9 +45,25 @@ def should_render_inline_math(expression: str) -> bool:
     return bool(value and re.search(r"[\\=+\-*/^_{}()\[\]<>]", value))
 
 
+def _starts_currency_amount(text: str, dollar_index: int) -> bool:
+    following = text[dollar_index + 1:]
+    return bool(re.match(r"(?:\d[\d,]*(?:\.\d+)?|\.\d+)", following))
+
+
+def _is_currency_price_pair(text: str, match: re.Match) -> bool:
+    return _starts_currency_amount(text, match.start()) and _starts_currency_amount(
+        text,
+        match.end() - 1,
+    )
+
+
 def iter_math_matches(text: str):
     matches = [(match, False) for match in DISPLAY_MATH_PATTERN.finditer(text)]
-    matches.extend((match, True) for match in INLINE_MATH_PATTERN.finditer(text))
+    matches.extend(
+        (match, True)
+        for match in INLINE_MATH_PATTERN.finditer(text)
+        if not _is_currency_price_pair(text, match)
+    )
     return sorted(matches, key=lambda item: item[0].start())
 
 
