@@ -996,18 +996,110 @@
             <!-- ==================== AI 與聊天 ==================== -->
 
             <div class="doc-section" id="ai">
+                {% if docs_markdown and docs_markdown.get('ai') %}
+                <div class="markdown-doc">{{ docs_markdown.get('ai') | safe }}</div>
+                {% else %}
                 <h2><span class="module-icon"><i class="fa-solid fa-robot" aria-hidden="true"></i></span> ai — AI 聊天</h2>
                 <div class="module-desc">
-                    使用免費 AI 模型進行智能對話，支援多輪對話上下文記憶。
+                    使用可選模型與 AI 對話，支援圖片、多輪對話、工具、個人長期記憶與伺服器共享背景。AI 會依實際用量扣除 <strong>全域幣</strong>，不是免費功能。
                 </div>
+
+                <h3 style="margin-top: 1.5rem; color: var(--text-primary);">對話指令</h3>
                 <table class="cmd-table">
                     <tr><th>指令</th><th>說明</th></tr>
-                    <tr><td><code>/ai</code></td><td>與 AI 進行對話</td></tr>
-                    <tr><td><code>y!ai [訊息]</code></td><td>前綴版 AI 對話</td></tr>
-                    <tr><td><code>y!ai-new</code></td><td>開啟新的 AI 對話</td></tr>
-                    <tr><td><code>y!ai-clear</code></td><td>清除對話紀錄</td></tr>
-                    <tr><td><code>y!ai-history</code></td><td>查看對話歷史</td></tr>
+                    <tr><td><code>/ai message [image] [new_conversation] [model]</code></td><td>與 AI 對話；可附圖、開始新對話或指定模型</td></tr>
+                    <tr><td><code>/ai-clear</code></td><td>確認後清除目前伺服器／私訊範圍的對話歷史</td></tr>
+                    <tr><td><code>/ai-history</code></td><td>私密顯示目前範圍最近 10 筆對話</td></tr>
+                    <tr><td><code>/ai-set-default-model model</code></td><td>設定自己的跨伺服器預設文字模型</td></tr>
+                    <tr><td><code>/ai-set-response-view container cost model</code></td><td>設定容器、計費資訊與模型資訊是否顯示</td></tr>
+                    <tr><td><code>y!ai [模型] [訊息]</code></td><td>前綴版 AI 對話；開頭可放模型名稱</td></tr>
+                    <tr><td><code>y!ai-new [訊息]</code></td><td>清除目前範圍的歷史並開始新對話</td></tr>
+                    <tr><td><code>y!ai-clear</code></td><td>清除目前範圍的對話歷史</td></tr>
+                    <tr><td><code>y!ai-history</code></td><td>查看目前範圍的對話歷史</td></tr>
                 </table>
+
+                <p><code>y!</code> 是預設前綴；若伺服器已變更前綴，請改用該伺服器目前的前綴。</p>
+
+                <h3 style="margin-top: 1.5rem; color: var(--text-primary);">記憶與跨伺服器上下文</h3>
+                <p>AI 使用三種不同的上下文，清除其中一種不會連帶清除其他資料：</p>
+                <table class="cmd-table">
+                    <tr><th>類型</th><th>範圍與行為</th></tr>
+                    <tr><td>對話歷史</td><td>依目前伺服器分開保存；私訊使用全域／DM 範圍。<code>/ai-clear</code> 與 <code>y!ai-clear</code> 只清除此範圍的對話歷史。</td></tr>
+                    <tr><td><code>user_global</code> 個人記憶</td><td>綁定目前使用者，跨伺服器共用。AI 會自動帶入相關記憶，也可在使用者清楚表達穩定、低風險的偏好或個人事實時主動更新。</td></tr>
+                    <tr><td><code>guild_shared</code> 伺服器記憶</td><td>只在目前伺服器共用，用於伺服器氛圍、共同偏好、常用清單或共同梗。只有具管理伺服器／管理員權限者明確要求時才能修改。</td></tr>
+                </table>
+                <ul>
+                    <li>單筆長期記憶最多 2,000 字、每個記憶空間最多保留 80 筆；過長內容會要求拆成多筆，不會靜默截斷。</li>
+                    <li>系統會優先把與本次訊息相關、其次為最近更新的記憶放入模型上下文；未直接放入的內容仍可由 AI 記憶工具按需搜尋。</li>
+                    <li>可以直接說「記住我偏好……」、「更新剛才的偏好……」或「忘記……」。刪除記憶一定要由使用者明確提出。</li>
+                    <li>當使用者明確要求回想其他伺服器或全域／私訊中的既有 AI 對話時，AI 可按需搜尋，但只能讀取該名使用者自己的紀錄；其他伺服器的共享記憶不會被帶出。</li>
+                    <li>請勿要求記住密碼、Token、API key、精準金流、身分證資料、醫療／法律隱私或其他高敏感資訊。</li>
+                </ul>
+
+                <h3 style="margin-top: 1.5rem; color: var(--text-primary);">計費方式</h3>
+                <h4>文字對話</h4>
+                <p><code>輸入費用 = 實際輸入字數 × 所選模型每字費率</code><br>
+                    <code>輸出費用 = 實際輸出字數 × 所選模型每字費率</code><br>
+                    <code>總費用 = 輸入費用 + 輸出費用 + 另外使用的付費圖片工具</code></p>
+                <ul>
+                    <li>輸入費用會在送出模型前扣款；全域幣不足以支付輸入時不會送出請求。</li>
+                    <li>輸出完成後依實際回覆字數扣款；若 AI 使用 <code>send_as_file</code>，完整檔案內容字數也會計入輸出。</li>
+                    <li>一般回覆預設會顯示費率、輸入／輸出字數與實際總扣款；使用 <code>/ai-set-response-view</code> 隱藏計費資訊只會隱藏畫面，不會停止扣款。</li>
+                    <li>模型呼叫失敗時會退回已扣的輸入費用。</li>
+                </ul>
+
+                <h4>預設文字模型費率</h4>
+                <p>下表是程式內建預設值，單位為「全域幣／字」。Bot 擁有者可即時調整模型與費率，因此實際請以 AI 回覆顯示的費率為準。</p>
+                <table class="cmd-table">
+                    <tr><th>模型</th><th>預設費率</th></tr>
+                    <tr><td><code>openai-fast</code></td><td>0.05／字</td></tr>
+                    <tr><td><code>openai</code></td><td>0.10／字</td></tr>
+                    <tr><td><code>gpt-5-mini</code></td><td>0.10／字</td></tr>
+                    <tr><td><code>openai-large</code></td><td>0.45／字</td></tr>
+                    <tr><td><code>perplexity-fast</code></td><td>0.10／字</td></tr>
+                    <tr><td><code>claude-fast</code></td><td>0.15／字</td></tr>
+                    <tr><td><code>kimi-k2.6</code></td><td>0.05／字</td></tr>
+                    <tr><td><code>gemma-4-31b</code></td><td>0.10／字</td></tr>
+                    <tr><td><code>glm-5.1-t</code></td><td>0.10／字</td></tr>
+                    <tr><td><code>qwen3.5-397b-a17b-t</code></td><td>0.15／字</td></tr>
+                </table>
+                <p>內建全域預設模型為 <code>kimi-k2.6</code>；使用者可用 <code>/ai-set-default-model</code> 自行更改。</p>
+
+                <h4>圖片工具費用</h4>
+                <table class="cmd-table">
+                    <tr><th>功能</th><th>內建預設費用</th><th>補充</th></tr>
+                    <tr><td><code>/ai</code> 直接附加圖片</td><td>無額外固定費</td><td>仍依所選文字模型計算輸入與輸出字數</td></tr>
+                    <tr><td>分析 Discord CDN 圖片網址</td><td>25 全域幣／次</td><td>AI 需要呼叫圖片分析工具時另外扣除</td></tr>
+                    <tr><td>AI 圖片生成</td><td><code>gpt-image-2</code>：250 全域幣／張</td><td>依實際模型費率 × 要求張數；少交付會退回缺少張數的費用</td></tr>
+                    <tr><td>AI 影片生成</td><td>目前停用</td><td>停用狀態不會進入扣款流程</td></tr>
+                </table>
+                <p>付費圖片工具若執行失敗會退回該工具已扣費用。</p>
+
+                <h3 style="margin-top: 1.5rem; color: var(--text-primary);">伺服器付款人</h3>
+                <p>預設由每位提出 AI 請求的使用者從自己的全域幣餘額付款。具「管理伺服器」或「管理員」權限者可將自己設為本伺服器的統一付款人；設定後，該伺服器內其他人的文字與付費圖片工具也會改扣指定付款人的全域幣。</p>
+                <table class="cmd-table">
+                    <tr><th>指令</th><th>說明</th></tr>
+                    <tr><td><code>/ai-admin billing set</code></td><td>將本伺服器 AI 付款人設為自己</td></tr>
+                    <tr><td><code>/ai-admin billing view</code></td><td>查看目前付款方式／付款人</td></tr>
+                    <tr><td><code>/ai-admin billing clear</code></td><td>清除指定付款人並恢復各自付款</td></tr>
+                    <tr><td><code>y!ai-server-billing</code></td><td>查看目前付款方式／付款人</td></tr>
+                    <tr><td><code>y!ai-server-billing set</code></td><td>將付款人設為自己</td></tr>
+                    <tr><td><code>y!ai-server-billing clear</code></td><td>清除指定付款人</td></tr>
+                </table>
+                <p>目前不能把其他成員指定為付款人；<code>set</code> 只會設定執行指令的管理員本人。</p>
+
+                <h3 style="margin-top: 1.5rem; color: var(--text-primary);">伺服器自訂 AI Prompt</h3>
+                <p>管理員可提供伺服器背景、回覆風格或偏好，最多 1,800 字。這和 <code>guild_shared</code> 記憶不同：自訂 Prompt 是固定指示，伺服器記憶則是 AI 可搜尋與更新的長期資料。</p>
+                <table class="cmd-table">
+                    <tr><th>指令</th><th>說明</th></tr>
+                    <tr><td><code>/ai-admin prompt set prompt</code></td><td>設定伺服器自訂 AI Prompt</td></tr>
+                    <tr><td><code>/ai-admin prompt view</code></td><td>查看目前 Prompt</td></tr>
+                    <tr><td><code>/ai-admin prompt clear</code></td><td>清除目前 Prompt</td></tr>
+                    <tr><td><code>y!ai-server-prompt</code></td><td>查看目前 Prompt</td></tr>
+                    <tr><td><code>y!ai-server-prompt [內容]</code></td><td>設定 Prompt</td></tr>
+                    <tr><td><code>y!ai-server-prompt clear</code></td><td>清除 Prompt</td></tr>
+                </table>
+                {% endif %}
             </div>
 
             <div class="doc-section" id="AutoReply">
