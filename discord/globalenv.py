@@ -791,6 +791,7 @@ translations = {
     "automod_mode": "automod模式",
     "count_admins": "計入管理員",
     "announce": "冷卻公告",
+    "mention-mode": "提及模式",
 }
 class CommandNameTranslator(app_commands.Translator):
     async def translate(

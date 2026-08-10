@@ -1238,6 +1238,9 @@ class AICommands(commands.Cog):
     AI_RETRY_MAX_DELAY_SECONDS = 12.0
     AI_GUILD_BILLING_USER_KEY = "ai_guild_billing_user_id"
     AI_GUILD_CUSTOM_PROMPT_KEY = "ai_guild_custom_prompt"
+    AI_GUILD_MENTION_MODE_KEY = "ai_guild_mention_mode"
+    AI_MENTION_MESSAGE_CACHE_TTL_SECONDS = 24 * 60 * 60
+    AI_MENTION_MESSAGE_CACHE_MAX_PER_GUILD = 200
     MAX_AI_GUILD_CUSTOM_PROMPT_LENGTH = 1800
     AI_USER_GLOBAL_MEMORY_KEY = "ai_user_global_memory"
     AI_GUILD_SHARED_MEMORY_KEY = "ai_guild_shared_memory"
@@ -1344,6 +1347,7 @@ class AICommands(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
         self.rate_limits = {}  # 簡單的速率限制
+        self._ai_response_message_ids: dict[int, dict[int, float]] = {}
         self._docs_search_cache = None
         self._docs_feature_prompt_cache = None
         self._application_emoji_cache = None
@@ -3118,6 +3122,80 @@ class AICommands(commands.Cog):
             return ""
         value = self._get_server_config_fallback(guild_id, self.AI_GUILD_CUSTOM_PROMPT_KEY, "") or ""
         return self._sanitize_guild_ai_custom_prompt(value)
+
+    def _get_guild_ai_mention_mode(self, guild_id) -> bool:
+        if not guild_id:
+            return False
+        value = self._get_server_config_fallback(guild_id, self.AI_GUILD_MENTION_MODE_KEY, False)
+        return self._coerce_bool(value, False)
+
+    def _prune_ai_response_message_cache(self, guild_id: int, now: float | None = None) -> dict[int, float]:
+        cache = self._ai_response_message_ids.get(int(guild_id))
+        if not cache:
+            return {}
+        current_time = time.monotonic() if now is None else now
+        cutoff = current_time - self.AI_MENTION_MESSAGE_CACHE_TTL_SECONDS
+        expired_ids = [message_id for message_id, cached_at in cache.items() if cached_at < cutoff]
+        for message_id in expired_ids:
+            cache.pop(message_id, None)
+        if not cache:
+            self._ai_response_message_ids.pop(int(guild_id), None)
+            return {}
+        return cache
+
+    def _remember_ai_response_message(self, guild_id, message_id) -> None:
+        try:
+            if not guild_id or not message_id or not self._get_guild_ai_mention_mode(guild_id):
+                return
+            guild_key = int(guild_id)
+            now = time.monotonic()
+            cache = self._prune_ai_response_message_cache(guild_key, now)
+            if not cache:
+                cache = self._ai_response_message_ids.setdefault(guild_key, {})
+            cache[int(message_id)] = now
+            overflow = len(cache) - self.AI_MENTION_MESSAGE_CACHE_MAX_PER_GUILD
+            if overflow > 0:
+                oldest_ids = sorted(cache, key=cache.get)[:overflow]
+                for oldest_id in oldest_ids:
+                    cache.pop(oldest_id, None)
+        except Exception as e:
+            log(f"Failed to cache AI response message ID: {e}", module_name="AI", level=logging.WARNING)
+
+    def _is_cached_ai_response_message(self, guild_id, message_id) -> bool:
+        if not guild_id or not message_id:
+            return False
+        cache = self._prune_ai_response_message_cache(int(guild_id))
+        return int(message_id) in cache
+
+    @staticmethod
+    def _strip_bot_mention(content: str, bot_user_id) -> str:
+        if not bot_user_id:
+            return str(content or "").strip()
+        pattern = rf"<@!?{re.escape(str(bot_user_id))}>"
+        return re.sub(pattern, "", str(content or "")).strip()
+
+    def _extract_mention_mode_request(self, message) -> str | None:
+        guild_id = getattr(getattr(message, "guild", None), "id", None)
+        bot_user_id = getattr(getattr(self.bot, "user", None), "id", None)
+        content = str(getattr(message, "content", "") or "")
+        if not guild_id or not bot_user_id or not content:
+            return None
+
+        mention_pattern = rf"<@!?{re.escape(str(bot_user_id))}>"
+        directly_mentions_bot = re.search(mention_pattern, content) is not None
+        reference = getattr(message, "reference", None)
+        reference_type = getattr(reference, "type", None)
+        reference_message_id = getattr(reference, "message_id", None)
+        replies_to_ai = (
+            reference is not None
+            and reference_type != discord.MessageReferenceType.forward
+            and self._is_cached_ai_response_message(guild_id, reference_message_id)
+        )
+        if not directly_mentions_bot and not replies_to_ai:
+            return None
+
+        request_text = self._strip_bot_mention(content, bot_user_id)
+        return request_text or None
 
     def _build_guild_ai_custom_prompt_context(self, tool_context: dict | None = None) -> str:
         guild = (tool_context or {}).get("guild")
@@ -8179,17 +8257,21 @@ class AICommands(commands.Cog):
             if pending_file_response:
                 file_attachment = self._build_pending_file_attachment(pending_file_response)
                 if image_files:
-                    await interaction.edit_original_response(content=None, attachments=image_files, view=view)
+                    response_message = await interaction.edit_original_response(content=None, attachments=image_files, view=view)
                     pending_images_delivered_inline = True
                 else:
-                    await interaction.edit_original_response(content=None, view=view)
+                    response_message = await interaction.edit_original_response(content=None, view=view)
                 await interaction.followup.send(file=file_attachment, allowed_mentions=SAFE_MENTIONS)
             else:
                 if image_files:
-                    await interaction.edit_original_response(content=None, attachments=image_files, view=view)
+                    response_message = await interaction.edit_original_response(content=None, attachments=image_files, view=view)
                     pending_images_delivered_inline = True
                 else:
-                    await interaction.edit_original_response(content=None, view=view)
+                    response_message = await interaction.edit_original_response(content=None, view=view)
+            self._remember_ai_response_message(
+                getattr(interaction.guild, "id", None),
+                getattr(response_message, "id", None),
+            )
 
         except Exception as e:
             if not pending_image_attachments:
@@ -8303,6 +8385,35 @@ class AICommands(commands.Cog):
 
         await self._set_default_model(user.id, model)
         await interaction.response.send_message(f"✅ 已設定預設模型為：{model}", ephemeral=True, allowed_mentions=SAFE_MENTIONS)
+
+    @ai_admin.command(name="mention-mode", description="設定提及 Bot 或回覆 AI 訊息時是否自動回應")
+    @app_commands.describe(enabled="開啟或關閉提及與回覆觸發；預設關閉")
+    @app_commands.allowed_installs(guilds=True, users=False)
+    @app_commands.allowed_contexts(guilds=True, dms=False, private_channels=False)
+    async def ai_mention_mode(self, interaction: discord.Interaction, enabled: bool):
+        guild = interaction.guild
+        user = interaction.user
+        if guild is None:
+            await interaction.response.send_message("❌ 此指令只能在伺服器中使用。", ephemeral=True, allowed_mentions=SAFE_MENTIONS)
+            return
+        if not self._can_manage_guild_ai_memory(user, guild):
+            await interaction.response.send_message("❌ 你需要管理伺服器或管理員權限才能設定 AI 提及模式。", ephemeral=True, allowed_mentions=SAFE_MENTIONS)
+            return
+
+        set_server_config(guild.id, self.AI_GUILD_MENTION_MODE_KEY, bool(enabled))
+        if not enabled:
+            self._ai_response_message_ids.pop(int(guild.id), None)
+        status = "開啟" if enabled else "關閉"
+        detail = (
+            "提及 Bot 或回覆本功能啟用後的 AI 回覆時，只要移除 Bot mention 後仍有文字，就會觸發 AI。"
+            if enabled
+            else "提及 Bot 或回覆 AI 訊息不會再自動觸發 AI。"
+        )
+        await interaction.response.send_message(
+            f"✅ 已{status}本伺服器的 AI 提及模式。{detail}",
+            ephemeral=True,
+            allowed_mentions=SAFE_MENTIONS,
+        )
 
     @ai_admin_prompt.command(name="set", description="設定這個伺服器的 AI 自訂 prompt")
     @app_commands.describe(
@@ -8419,6 +8530,28 @@ class AICommands(commands.Cog):
     # ============================================
     # 文字指令
     # ============================================
+
+    @commands.Cog.listener()
+    async def on_message(self, message: discord.Message):
+        guild = getattr(message, "guild", None)
+        author = getattr(message, "author", None)
+        if (
+            guild is None
+            or author is None
+            or getattr(author, "bot", False)
+            or getattr(message, "webhook_id", None) is not None
+            or not self._get_guild_ai_mention_mode(getattr(guild, "id", None))
+        ):
+            return
+
+        request_text = self._extract_mention_mode_request(message)
+        if not request_text:
+            return
+
+        ctx = await self.bot.get_context(message)
+        if getattr(ctx, "valid", False):
+            return
+        await self.ai_text_command(ctx, message=request_text)
     
     @commands.command(name="ai", aliases=["ask", "chat"])
     @commands.cooldown(1, 5.0, commands.BucketType.user)
@@ -8535,7 +8668,10 @@ class AICommands(commands.Cog):
                 replied_msg = await ctx.channel.fetch_message(ctx.message.reference.message_id)
                 if replied_msg:
                     replied_author = replied_msg.author.display_name
-                    replied_content = replied_msg.content
+                    replied_content = replied_msg.content or self._extract_component_text(
+                        getattr(replied_msg, "components", None),
+                        max_chars=500,
+                    )
                     
                     # 處理回覆訊息中的提及
                     replied_content = await MentionResolver.resolve_mentions(replied_content, guild, self.bot)
@@ -8758,17 +8894,21 @@ class AICommands(commands.Cog):
                 if pending_file_response:
                     file_attachment = self._build_pending_file_attachment(pending_file_response)
                     if image_files:
-                        await ctx.reply(view=view, files=image_files, allowed_mentions=SAFE_MENTIONS)
+                        response_message = await ctx.reply(view=view, files=image_files, allowed_mentions=SAFE_MENTIONS)
                         pending_images_delivered_inline = True
                     else:
-                        await ctx.reply(view=view, allowed_mentions=SAFE_MENTIONS)
+                        response_message = await ctx.reply(view=view, allowed_mentions=SAFE_MENTIONS)
                     await ctx.send(file=file_attachment, allowed_mentions=SAFE_MENTIONS)
                 else:
                     if image_files:
-                        await ctx.reply(view=view, files=image_files, allowed_mentions=SAFE_MENTIONS)
+                        response_message = await ctx.reply(view=view, files=image_files, allowed_mentions=SAFE_MENTIONS)
                         pending_images_delivered_inline = True
                     else:
-                        await ctx.reply(view=view, allowed_mentions=SAFE_MENTIONS)
+                        response_message = await ctx.reply(view=view, allowed_mentions=SAFE_MENTIONS)
+                self._remember_ai_response_message(
+                    getattr(guild, "id", None),
+                    getattr(response_message, "id", None),
+                )
 
             except Exception as e:
                 if not pending_image_attachments:
