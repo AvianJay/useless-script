@@ -1,6 +1,6 @@
 import lava_lyra
 import discord
-from globalenv import bot, config, on_close_tasks, get_server_config, set_server_config, get_command_mention
+from globalenv import bot, config, on_close_tasks, get_server_config, set_server_config, get_all_server_config_key
 from discord.ext import commands
 from discord import app_commands
 from logger import log
@@ -14,6 +14,7 @@ import aiohttp
 import html
 import re
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from urllib.parse import urlparse, quote
 
 ALLOWED_DOMAINS = [
@@ -27,6 +28,9 @@ ALLOWED_DOMAINS = [
     "twitch.tv",
     "vimeo.com",
 ]
+
+MUSIC_SAVED_STATE_KEY = "music_saved_queue"
+MUSIC_SAVED_STATE_VERSION = 2
 
 aiohttp.client_reqrep.ClientRequest.DEFAULT_HEADERS["Accept-Encoding"] = "gzip, deflate"
 
@@ -127,6 +131,329 @@ class Music(commands.GroupCog, group_name=app_commands.locale_str("music")):
         }
         self._radio_last_announced: dict[int, str] = {}
         self._notification_tasks: set[asyncio.Task] = set()
+        self._restore_task: Optional[asyncio.Task] = None
+        self._restore_started = False
+        self._shutdown_started = False
+
+    @staticmethod
+    def _serialize_track(track: Optional[lava_lyra.Track], *, position_ms: Optional[int] = None) -> Optional[dict[str, Any]]:
+        if not track:
+            return None
+
+        descriptor = {
+            "encoded": getattr(track, "track_id", None),
+            "uri": getattr(track, "uri", None),
+        }
+        if position_ms is not None:
+            descriptor["position_ms"] = max(0, int(position_ms))
+
+        if not descriptor["encoded"] and not descriptor["uri"]:
+            return None
+        return descriptor
+
+    @staticmethod
+    def _saved_track_descriptors(saved: dict[str, Any]) -> tuple[Optional[dict[str, Any]], list[dict[str, Any]]]:
+        """Return current/queue descriptors for both v2 and legacy snapshots."""
+        if saved.get("version") == MUSIC_SAVED_STATE_VERSION:
+            current = saved.get("current")
+            if not isinstance(current, dict):
+                current = None
+            raw_queue = saved.get("queue")
+            queue = [item for item in raw_queue if isinstance(item, dict)] if isinstance(raw_queue, list) else []
+            return current, queue
+
+        raw_uris = saved.get("uris")
+        uris = [uri for uri in raw_uris if isinstance(uri, str) and uri] if isinstance(raw_uris, list) else []
+        if not uris:
+            return None, []
+        return {"uri": uris[0], "position_ms": 0}, [{"uri": uri} for uri in uris[1:]]
+
+    def _build_music_snapshot(self, guild: discord.Guild, player: lava_lyra.Player) -> Optional[dict[str, Any]]:
+        voice_channel = getattr(player, "channel", None)
+        if not voice_channel:
+            return None
+
+        guild_id = guild.id
+        radio_station = radio_modes.get(guild_id)
+        queue = get_queue(guild_id)
+        current = None
+        queued_tracks: list[dict[str, Any]] = []
+
+        if not radio_station:
+            try:
+                position_ms = int(player.position) if player.current else 0
+            except (TypeError, ValueError, AttributeError):
+                position_ms = 0
+            current = self._serialize_track(player.current, position_ms=position_ms)
+            queued_tracks = [
+                descriptor
+                for track in queue
+                if (descriptor := self._serialize_track(track)) is not None
+            ]
+            if not current and not queued_tracks:
+                return None
+
+        text_channel = text_channels.get(guild_id)
+        loop_mode = loop_modes.get(guild_id, LoopMode.OFF)
+        return {
+            "version": MUSIC_SAVED_STATE_VERSION,
+            "mode": "radio" if radio_station else "track",
+            "voice_channel_id": voice_channel.id,
+            "text_channel_id": getattr(text_channel, "id", None),
+            "saved_at": datetime.now(timezone.utc).isoformat(),
+            "current": current,
+            "queue": queued_tracks,
+            "volume": max(0, min(100, int(getattr(player, "volume", 100)))),
+            "paused": bool(getattr(player, "is_paused", False)),
+            "loop_mode": loop_mode.value,
+            "radio_station": radio_station,
+        }
+
+    @staticmethod
+    def _voice_restore_error(guild: discord.Guild, channel: discord.abc.Connectable) -> Optional[str]:
+        if not isinstance(channel, (discord.VoiceChannel, discord.StageChannel)):
+            return "保存的語音頻道類型不支援自動還原"
+
+        bot_member = guild.me
+        if not bot_member:
+            return "無法取得機器人在伺服器中的成員資料"
+
+        permissions = channel.permissions_for(bot_member)
+        missing = [
+            name
+            for name in ("view_channel", "connect", "speak")
+            if not getattr(permissions, name, False)
+        ]
+        if missing:
+            return f"缺少語音頻道權限：{', '.join(missing)}"
+
+        user_limit = int(getattr(channel, "user_limit", 0) or 0)
+        if user_limit and len(getattr(channel, "members", [])) >= user_limit and not getattr(permissions, "move_members", False):
+            return "語音頻道已滿，且機器人沒有略過人數限制的權限"
+
+        if isinstance(channel, discord.StageChannel) and not getattr(permissions, "mute_members", False):
+            return "舞台頻道需要 mute_members 權限才能自動成為講者"
+        return None
+
+    async def _resolve_restore_text_channel(self, guild: discord.Guild, channel_id: Any):
+        try:
+            channel_id = int(channel_id)
+        except (TypeError, ValueError):
+            return None
+
+        channel = self.bot.get_channel(channel_id)
+        if channel is None:
+            get_channel_or_thread = getattr(guild, "get_channel_or_thread", None)
+            channel = get_channel_or_thread(channel_id) if get_channel_or_thread else guild.get_channel(channel_id)
+        if channel is None:
+            try:
+                channel = await self.bot.fetch_channel(channel_id)
+            except (discord.DiscordException, AttributeError):
+                return None
+
+        if getattr(getattr(channel, "guild", None), "id", guild.id) != guild.id or not hasattr(channel, "send"):
+            return None
+
+        try:
+            permissions = channel.permissions_for(guild.me)
+            can_send = getattr(permissions, "send_messages_in_threads", False) if isinstance(channel, discord.Thread) else getattr(permissions, "send_messages", False)
+            if not getattr(permissions, "view_channel", False) or not can_send:
+                return None
+        except (AttributeError, TypeError):
+            return None
+        return channel
+
+    async def _load_saved_track(self, source, descriptor: dict[str, Any]) -> lava_lyra.Track:
+        encoded = descriptor.get("encoded")
+        uri = descriptor.get("uri")
+        encoded_error: Optional[Exception] = None
+
+        if encoded:
+            node = getattr(source, "node", source)
+            try:
+                return await node.build_track(encoded)
+            except Exception as e:
+                encoded_error = e
+
+        if uri:
+            try:
+                results = await source.get_tracks(uri)
+                if results:
+                    return results.tracks[0] if isinstance(results, lava_lyra.Playlist) else results[0]
+            except Exception as e:
+                if encoded_error:
+                    raise RuntimeError(f"encoded track 與 URI 都無法載入: {uri}") from e
+                raise
+
+        if encoded_error:
+            raise RuntimeError("encoded track 無法解碼，且沒有可用 URI") from encoded_error
+        raise RuntimeError("保存的歌曲缺少 encoded track 與 URI")
+
+    async def _send_restore_status(self, channel, message: str, guild: discord.Guild, *, level: int = logging.INFO):
+        log(message, level=level, module_name="Music", guild=guild)
+        if not channel:
+            return
+        try:
+            await channel.send(message)
+        except Exception as e:
+            log(f"無法發送音樂還原通知: {e}", level=logging.WARNING, module_name="Music", guild=guild)
+
+    async def _discard_restore_player(self, guild_id: int, player: Optional[lava_lyra.Player]):
+        if player:
+            try:
+                await player.stop()
+            except Exception:
+                pass
+            try:
+                await player.destroy()
+            except Exception:
+                pass
+        await self._cleanup_player(guild_id)
+
+    def _start_empty_channel_timer(self, guild: discord.Guild, player: lava_lyra.Player):
+        channel = getattr(player, "channel", None)
+        if not channel:
+            return
+        human_count = sum(1 for member in channel.members if not member.bot)
+        if human_count == 0 and guild.id not in leave_timers:
+            leave_timers[guild.id] = asyncio.create_task(self._auto_leave_after_timeout(guild.id, player))
+
+    async def _restore_saved_session(self, guild: discord.Guild, saved: dict[str, Any]) -> bool:
+        text_channel = await self._resolve_restore_text_channel(guild, saved.get("text_channel_id"))
+        voice_channel = guild.get_channel(saved.get("voice_channel_id"))
+        if voice_channel is None:
+            await self._send_restore_status(text_channel, "⚠️ 保存的語音頻道已不存在，播放狀態已保留供稍後重試。", guild, level=logging.WARNING)
+            return False
+
+        permission_error = self._voice_restore_error(guild, voice_channel)
+        if permission_error:
+            await self._send_restore_status(text_channel, f"⚠️ 無法自動還原音樂：{permission_error}。播放狀態已保留。", guild, level=logging.WARNING)
+            return False
+
+        if guild.voice_client:
+            await self._send_restore_status(text_channel, "⚠️ 機器人已連接其他語音工作階段，保存的播放狀態已保留。", guild, level=logging.WARNING)
+            return False
+
+        mode = saved.get("mode", "track")
+        loaded_current = None
+        loaded_queue: list[lava_lyra.Track] = []
+        current_descriptor, queue_descriptors = self._saved_track_descriptors(saved)
+
+        try:
+            if mode == "track":
+                if not current_descriptor and not queue_descriptors:
+                    raise RuntimeError("保存的播放狀態沒有任何歌曲")
+                node = lava_lyra.NodePool.get_node()
+                if current_descriptor:
+                    loaded_current = await self._load_saved_track(node, current_descriptor)
+                for descriptor in queue_descriptors:
+                    loaded_queue.append(await self._load_saved_track(node, descriptor))
+            elif mode == "radio":
+                if saved.get("radio_station") not in RADIO_STATIONS:
+                    raise RuntimeError("保存的電台不存在")
+            else:
+                raise RuntimeError(f"不支援的播放模式: {mode}")
+        except Exception as e:
+            await self._send_restore_status(text_channel, f"⚠️ 無法預先載入保存的音樂：{e}。播放狀態已保留。", guild, level=logging.WARNING)
+            return False
+
+        player: Optional[lava_lyra.Player] = None
+        try:
+            player = await voice_channel.connect(cls=lava_lyra.Player)
+            if isinstance(voice_channel, discord.StageChannel):
+                await guild.me.edit(suppress=False)
+
+            if text_channel:
+                text_channels[guild.id] = text_channel
+
+            volume = max(0, min(100, int(saved.get("volume", 100))))
+            await player.set_volume(volume)
+
+            if mode == "radio":
+                station = RADIO_STATIONS[saved["radio_station"]]
+                await self._activate_radio_mode(guild, text_channel, player, station)
+                if saved.get("paused"):
+                    await player.set_pause(True)
+            else:
+                try:
+                    loop_modes[guild.id] = LoopMode(int(saved.get("loop_mode", LoopMode.OFF.value)))
+                except (TypeError, ValueError):
+                    loop_modes[guild.id] = LoopMode.OFF
+
+                queue = get_queue(guild.id)
+                queue.clear()
+                start_position = 0
+                track_to_play = loaded_current
+                if track_to_play and current_descriptor:
+                    saved_position = max(0, int(current_descriptor.get("position_ms", 0) or 0))
+                    length = int(getattr(track_to_play, "length", 0) or 0)
+                    if length > 0 and saved_position >= length:
+                        track_to_play = None
+                    elif getattr(track_to_play, "is_seekable", False):
+                        start_position = saved_position
+
+                remaining_tracks = list(loaded_queue)
+                if track_to_play is None and remaining_tracks:
+                    track_to_play = remaining_tracks.pop(0)
+                if track_to_play is None:
+                    if not set_server_config(guild.id, MUSIC_SAVED_STATE_KEY, None):
+                        raise RuntimeError("無法清除已播放完畢的保存狀態")
+                    await self._discard_restore_player(guild.id, player)
+                    await self._send_restore_status(text_channel, "✅ 保存的歌曲已經播放完畢，已清除播放狀態。", guild)
+                    return True
+
+                for track in remaining_tracks:
+                    queue.add(track)
+                await player.play(track_to_play, start=start_position)
+                if saved.get("paused"):
+                    await player.set_pause(True)
+
+            if not set_server_config(guild.id, MUSIC_SAVED_STATE_KEY, None):
+                raise RuntimeError("無法清除已還原的保存狀態")
+            self._start_empty_channel_timer(guild, player)
+            await self._send_restore_status(text_channel, "✅ 已自動還原關機前的音樂播放狀態。", guild)
+            return True
+        except Exception as e:
+            await self._discard_restore_player(guild.id, player)
+            await self._send_restore_status(text_channel, f"⚠️ 自動還原音樂失敗：{e}。播放狀態已保留。", guild, level=logging.WARNING)
+            return False
+
+    async def _restore_saved_sessions(self):
+        saved_states = get_all_server_config_key(MUSIC_SAVED_STATE_KEY)
+        for guild_id, saved in saved_states.items():
+            if not isinstance(saved, dict):
+                continue
+            if saved.get("version") != MUSIC_SAVED_STATE_VERSION:
+                if saved.get("uris"):
+                    guild = self.bot.get_guild(guild_id)
+                    log("找到舊版音樂隊列；因缺少語音頻道 ID，請使用 /music restore-queue 手動還原。", level=logging.WARNING, module_name="Music", guild=guild)
+                continue
+
+            guild = self.bot.get_guild(guild_id)
+            if not guild:
+                log(f"找不到保存音樂狀態的伺服器 {guild_id}，已保留資料。", level=logging.WARNING, module_name="Music")
+                continue
+            try:
+                await self._restore_saved_session(guild, saved)
+            except Exception as e:
+                log(f"還原伺服器音樂狀態時發生未預期錯誤: {e}", level=logging.ERROR, module_name="Music", guild=guild)
+
+    def _schedule_saved_sessions_restore(self):
+        if self._restore_started:
+            return
+        self._restore_started = True
+        self._restore_task = asyncio.create_task(self._restore_saved_sessions())
+
+        def _restore_finished(task: asyncio.Task):
+            if self._restore_task is task:
+                self._restore_task = None
+            if task.cancelled():
+                return
+            error = task.exception()
+            if error:
+                log(f"自動還原音樂背景任務失敗: {error}", level=logging.ERROR, module_name="Music")
+
+        self._restore_task.add_done_callback(_restore_finished)
     
     async def _ensure_voice(self, ctx: commands.Context) -> Optional[lava_lyra.Player]:
         """確保使用者在語音頻道並返回播放器"""
@@ -618,6 +945,7 @@ class Music(commands.GroupCog, group_name=app_commands.locale_str("music")):
             log("所有 Lavalink 節點均無法連接", level=logging.ERROR, module_name="Music")
         else:
             log(f"已成功連接 {connected}/{len(lavalink_nodes)} 個 Lavalink 節點", module_name="Music")
+            self._schedule_saved_sessions_restore()
         on_close_tasks.add(self.music_quit_task)
         on_close_tasks.add(self._shutdown_radio_tasks)
 
@@ -867,50 +1195,55 @@ class Music(commands.GroupCog, group_name=app_commands.locale_str("music")):
             )
     
     async def music_quit_task(self):
-        """機器人關閉時的清理任務"""
-        for guild_id, channel in list(text_channels.items()):
+        """機器人關閉時，先保存所有播放工作階段再清理播放器。"""
+        if self._shutdown_started:
+            return
+        self._shutdown_started = True
+
+        restore_task = self._restore_task
+        if restore_task and not restore_task.done() and restore_task is not asyncio.current_task():
+            restore_task.cancel()
+            await asyncio.gather(restore_task, return_exceptions=True)
+
+        active_sessions = []
+        for guild in list(self.bot.guilds):
+            player: lava_lyra.Player = guild.voice_client
+            if not player:
+                continue
+
             try:
-                guild = self.bot.get_guild(guild_id)
-                if not guild:
-                    continue
-
-                player: lava_lyra.Player = guild.voice_client
-                if not player:
-                    continue
-
-                queue = get_queue(guild_id)
-                uris = []
-                is_radio_mode = self._is_radio_mode(guild_id)
-
-                # 保存當前播放和隊列
-                if player.current and not is_radio_mode:
-                    uris.append(player.current.uri)
-                if not is_radio_mode:
-                    for track in queue:
-                        uris.append(track.uri)
-
-                if uris:
-                    set_server_config(guild_id, "music_saved_queue", {"uris": uris})
-
-                restore_mention = await get_command_mention("music", "restore-queue")
-                restore_hint = f"重啟後可使用 {restore_mention or '`/music restore-queue`'} 回復儲存的播放隊列。" if uris else ""
-
-                embed = discord.Embed(
-                    title="🔴 機器人即將離開語音頻道",
-                    description=f"機器人正在關機或重啟。\n{(' ' + restore_hint) if restore_hint else ''}",
-                    color=0x95a5a6
-                )
-                await channel.send(embed=embed)
-
-                # 清理播放器
-                try:
-                    await player.stop()
-                    await player.destroy()
-                except:
-                    pass
-
+                snapshot = self._build_music_snapshot(guild, player)
+                snapshot_saved = False
+                if snapshot:
+                    snapshot_saved = set_server_config(guild.id, MUSIC_SAVED_STATE_KEY, snapshot)
+                    if not snapshot_saved:
+                        log("保存音樂播放狀態失敗", level=logging.ERROR, module_name="Music", guild=guild)
+                active_sessions.append((guild, player, text_channels.get(guild.id), snapshot_saved))
             except Exception as e:
-                log(f"關機清理時出錯: {e}", level=logging.ERROR, module_name="Music")
+                log(f"建立關機音樂快照時出錯: {e}", level=logging.ERROR, module_name="Music", guild=guild)
+                active_sessions.append((guild, player, text_channels.get(guild.id), False))
+
+        # 所有 guild 都完成同步寫入後，才開始任何網路通知或播放器清理。
+        for guild, player, channel, snapshot_saved in active_sessions:
+            if channel:
+                try:
+                    description = "機器人正在關機或重啟。"
+                    if snapshot_saved:
+                        description += "\n開機後會自動加入原語音頻道並還原播放狀態。"
+                    embed = discord.Embed(
+                        title="🔴 機器人即將離開語音頻道",
+                        description=description,
+                        color=0x95a5a6,
+                    )
+                    await channel.send(embed=embed)
+                except Exception as e:
+                    log(f"無法發送關機音樂通知: {e}", level=logging.WARNING, module_name="Music", guild=guild)
+
+            try:
+                await player.stop()
+                await player.destroy()
+            except Exception as e:
+                log(f"關機時清理播放器失敗: {e}", level=logging.WARNING, module_name="Music", guild=guild)
     
     async def search_autocomplete(
         self,
@@ -1410,72 +1743,155 @@ class Music(commands.GroupCog, group_name=app_commands.locale_str("music")):
         embed.set_footer(text=f"隊列中共有 {len(queue)} 首歌曲")
         await interaction.followup.send(embed=embed)
     
-    @app_commands.command(name=app_commands.locale_str("restore-queue"), description="回復重啟前儲存的播放隊列")
+    @app_commands.command(name=app_commands.locale_str("restore-queue"), description="回復重啟前儲存的播放狀態")
     @app_commands.guild_only()
     @app_commands.allowed_installs(guilds=True, users=False)
     @app_commands.allowed_contexts(guilds=True, dms=False, private_channels=False)
     @app_commands.checks.bot_has_permissions(connect=True, speak=True)
     async def restore_queue(self, interaction: discord.Interaction):
-        """回復重啟前儲存的播放隊列"""
+        """回復重啟前儲存的完整播放狀態，並相容舊版 URI 隊列。"""
         await interaction.response.defer()
 
         if not await self._ensure_not_radio_mode(interaction, interaction.guild.id):
             return
 
-        saved = get_server_config(interaction.guild.id, "music_saved_queue")
-        if not saved or not saved.get("uris"):
-            await interaction.followup.send("❌ 沒有儲存的播放隊列可回復。", ephemeral=True)
+        saved = get_server_config(interaction.guild.id, MUSIC_SAVED_STATE_KEY)
+        if not isinstance(saved, dict):
+            await interaction.followup.send("❌ 沒有儲存的播放狀態可回復。", ephemeral=True)
+            return
+
+        mode = saved.get("mode", "track") if saved.get("version") == MUSIC_SAVED_STATE_VERSION else "track"
+        if mode not in ("track", "radio"):
+            await interaction.followup.send(f"❌ 不支援的保存播放模式：{mode}", ephemeral=True)
+            return
+        current_descriptor, queue_descriptors = self._saved_track_descriptors(saved)
+        if mode == "track" and not current_descriptor and not queue_descriptors:
+            await interaction.followup.send("❌ 沒有儲存的播放狀態可回復。", ephemeral=True)
+            return
+        if mode == "radio" and saved.get("radio_station") not in RADIO_STATIONS:
+            await interaction.followup.send("❌ 儲存的電台已不存在，無法回復。", ephemeral=True)
             return
 
         if not interaction.user.voice or not interaction.user.voice.channel:
             await interaction.followup.send("❌ 你必須加入語音頻道才能使用此指令", ephemeral=True)
             return
 
-        player: lava_lyra.Player = interaction.guild.voice_client
+        guild = interaction.guild
+        voice_channel = interaction.user.voice.channel
+        permission_error = self._voice_restore_error(guild, voice_channel)
+        if permission_error:
+            await interaction.followup.send(f"❌ 無法在此語音頻道回復播放狀態：{permission_error}", ephemeral=True)
+            return
+
+        player: Optional[lava_lyra.Player] = guild.voice_client
+        if player and voice_channel.id != player.channel.id:
+            await interaction.followup.send("❌ 你必須與機器人在同一語音頻道才能使用此指令", ephemeral=True)
+            return
+        if mode == "radio" and player and (player.is_playing or player.current):
+            await interaction.followup.send("❌ 請先停止目前的播放工作階段，再回復保存的電台。", ephemeral=True)
+            return
+
+        guild_id = guild.id
+        loaded_entries: list[tuple[dict[str, Any], lava_lyra.Track, bool]] = []
+        failed = 0
+        if mode == "track":
+            try:
+                source = player or lava_lyra.NodePool.get_node()
+            except Exception as e:
+                await interaction.followup.send(f"❌ 目前沒有可用的 Lavalink 節點，播放狀態已保留: {e}", ephemeral=True)
+                return
+            descriptors = []
+            if current_descriptor:
+                descriptors.append((current_descriptor, True))
+            descriptors.extend((descriptor, False) for descriptor in queue_descriptors)
+
+            for descriptor, is_current in descriptors:
+                try:
+                    loaded_entries.append((descriptor, await self._load_saved_track(source, descriptor), is_current))
+                except Exception as e:
+                    identifier = descriptor.get("uri") or "encoded track"
+                    log(f"無法載入保存的歌曲 {identifier}: {e}", level=logging.WARNING, module_name="Music", guild=guild)
+                    failed += 1
+
+            if not loaded_entries:
+                await interaction.followup.send(f"❌ 所有保存的歌曲都無法載入，播放狀態已保留供稍後重試。（失敗 {failed} 首）", ephemeral=True)
+                return
+
+        created_player = False
         if not player:
             try:
-                player = await interaction.user.voice.channel.connect(cls=lava_lyra.Player)
-                text_channels[interaction.guild.id] = interaction.channel
+                player = await voice_channel.connect(cls=lava_lyra.Player)
+                created_player = True
+                if isinstance(voice_channel, discord.StageChannel):
+                    await guild.me.edit(suppress=False)
             except Exception as e:
                 await interaction.followup.send(f"❌ 無法連接到語音頻道: {e}", ephemeral=True)
                 return
-        elif interaction.user.voice.channel.id != player.channel.id:
-            await interaction.followup.send("❌ 你必須與機器人在同一語音頻道才能使用此指令", ephemeral=True)
+
+        text_channels[guild_id] = interaction.channel
+        queue = get_queue(guild_id)
+        added = len(loaded_entries)
+
+        try:
+            if saved.get("version") == MUSIC_SAVED_STATE_VERSION:
+                await player.set_volume(max(0, min(100, int(saved.get("volume", 100)))))
+
+            if mode == "radio":
+                station = RADIO_STATIONS[saved["radio_station"]]
+                await self._activate_radio_mode(guild, interaction.channel, player, station)
+                if saved.get("paused"):
+                    await player.set_pause(True)
+                added = 1
+            else:
+                if saved.get("version") == MUSIC_SAVED_STATE_VERSION:
+                    try:
+                        loop_modes[guild_id] = LoopMode(int(saved.get("loop_mode", LoopMode.OFF.value)))
+                    except (TypeError, ValueError):
+                        loop_modes[guild_id] = LoopMode.OFF
+
+                if player.is_playing or player.current:
+                    for _, track, _ in loaded_entries:
+                        queue.add(track)
+                else:
+                    descriptor, track_to_play, is_saved_current = loaded_entries.pop(0)
+                    start_position = 0
+                    if is_saved_current:
+                        saved_position = max(0, int(descriptor.get("position_ms", 0) or 0))
+                        length = int(getattr(track_to_play, "length", 0) or 0)
+                        if length > 0 and saved_position >= length:
+                            added -= 1
+                            if loaded_entries:
+                                descriptor, track_to_play, is_saved_current = loaded_entries.pop(0)
+                            else:
+                                if not set_server_config(guild_id, MUSIC_SAVED_STATE_KEY, None):
+                                    raise RuntimeError("無法清除已播放完畢的保存狀態")
+                                if created_player:
+                                    await self._discard_restore_player(guild_id, player)
+                                await interaction.followup.send("✅ 保存的歌曲已經播放完畢，已清除播放狀態。")
+                                return
+                        elif getattr(track_to_play, "is_seekable", False):
+                            start_position = saved_position
+
+                    await player.play(track_to_play, start=start_position)
+                    for _, track, _ in loaded_entries:
+                        queue.add(track)
+                    if saved.get("paused"):
+                        await player.set_pause(True)
+
+            if not set_server_config(guild_id, MUSIC_SAVED_STATE_KEY, None):
+                raise RuntimeError("無法清除已還原的保存狀態")
+            self._start_empty_channel_timer(guild, player)
+        except Exception as e:
+            if created_player:
+                await self._discard_restore_player(guild_id, player)
+            log(f"手動回復播放狀態失敗: {e}", level=logging.ERROR, module_name="Music", guild=guild)
+            await interaction.followup.send(f"⚠️ 回復播放狀態失敗，保存資料已保留: {e}")
             return
 
-        guild_id = interaction.guild.id
-        queue = get_queue(guild_id)
-        added = 0
-        failed = 0
-
-        for uri in saved["uris"]:
-            try:
-                results = await player.get_tracks(uri)
-                if not results:
-                    failed += 1
-                    continue
-                track = results.tracks[0] if isinstance(results, lava_lyra.Playlist) else results[0]
-                queue.add(track)
-                added += 1
-            except Exception as e:
-                log(f"無法載入歌曲 {uri}: {e}", level=logging.WARNING, module_name="Music", guild=interaction.guild)
-                failed += 1
-
-        # 清除已保存的隊列
-        set_server_config(guild_id, "music_saved_queue", None)
-
-        # 開始播放
-        if not player.is_playing and added > 0:
-            next_track = queue.get()
-            if next_track:
-                try:
-                    await player.play(next_track)
-                except Exception as e:
-                    log(f"回復隊列後播放失敗: {e}", level=logging.ERROR, module_name="Music", guild=interaction.guild)
-                    await interaction.followup.send(f"⚠️ 已回復 {added} 首歌曲，但播放失敗: {e}")
-                    return
-
-        msg = f"✅ 已回復 {added} 首歌曲到隊列。"
+        if mode == "radio":
+            msg = f"✅ 已回復 {RADIO_STATIONS[saved['radio_station']].display_name} 電台播放狀態。"
+        else:
+            msg = f"✅ 已回復 {added} 首歌曲。"
         if failed:
             msg += f"（{failed} 首無法載入）"
         await interaction.followup.send(msg)
