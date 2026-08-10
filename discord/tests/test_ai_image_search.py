@@ -235,6 +235,106 @@ class AIImageSearchTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("圖片來源：<https://example.com/source>", display_text)
         self.assertEqual(attachments[0]["kind"], "searched")
 
+    def test_fetch_raw_is_exposed_with_larger_tool_budget(self):
+        tool_names = {item["function"]["name"] for item in self.cog._build_ai_tools()}
+
+        self.assertIn("fetch_raw", tool_names)
+        self.assertEqual(
+            self.cog._tool_result_max_length("fetch_raw"),
+            self.cog.RAW_FETCH_TOOL_RESULT_MAX_LENGTH,
+        )
+
+    async def test_fetch_raw_rejects_private_url_without_request(self):
+        with patch.object(self.cog, "_create_ai_fetch_connector") as connector:
+            result = await self.cog._tool_fetch_raw(
+                {"url": "http://127.0.0.1/private"},
+                {},
+            )
+
+        self.assertIn("error", result)
+        connector.assert_not_called()
+
+    async def test_fetch_raw_returns_unmodified_text_and_metadata(self):
+        class FakeContent:
+            async def iter_chunked(self, _):
+                yield b'{"ok": true, "source": "raw"}'
+
+        class FakeResponse:
+            status = 200
+            headers = {"Content-Type": "application/json; charset=utf-8"}
+            content = FakeContent()
+
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, *_):
+                return False
+
+        class FakeSession:
+            def __init__(self, **_):
+                pass
+
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, *_):
+                return False
+
+            def get(self, *_args, **_kwargs):
+                return FakeResponse()
+
+        with (
+            patch("ai.aiohttp.ClientSession", FakeSession),
+            patch.object(self.cog, "_create_ai_fetch_connector", return_value=object()),
+            patch.object(self.cog, "_validate_public_fetch_target", AsyncMock(return_value=None)),
+        ):
+            result = await self.cog._tool_fetch_raw(
+                {"url": "https://example.com/data.json", "max_chars": 1000},
+                {},
+            )
+
+        self.assertEqual(result["status"], 200)
+        self.assertEqual(result["content_type"], "application/json")
+        self.assertEqual(result["charset"], "utf-8")
+        self.assertEqual(result["content"], '{"ok": true, "source": "raw"}')
+        self.assertFalse(result["truncated"])
+
+    async def test_fetch_raw_rejects_binary_content_type(self):
+        class FakeResponse:
+            status = 200
+            headers = {"Content-Type": "application/octet-stream"}
+
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, *_):
+                return False
+
+        class FakeSession:
+            def __init__(self, **_):
+                pass
+
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, *_):
+                return False
+
+            def get(self, *_args, **_kwargs):
+                return FakeResponse()
+
+        with (
+            patch("ai.aiohttp.ClientSession", FakeSession),
+            patch.object(self.cog, "_create_ai_fetch_connector", return_value=object()),
+            patch.object(self.cog, "_validate_public_fetch_target", AsyncMock(return_value=None)),
+        ):
+            result = await self.cog._tool_fetch_raw(
+                {"url": "https://example.com/archive.bin"},
+                {},
+            )
+
+        self.assertIn("textual content types", result["error"])
+
 
 if __name__ == "__main__":
     unittest.main()

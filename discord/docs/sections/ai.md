@@ -34,6 +34,14 @@ AI 使用三種不同的上下文，清除其中一種不會連帶清除其他�
 - 當使用者明確要求回想其他伺服器或全域／私訊中的既有 AI 對話時，AI 可按需搜尋，但只能讀取該名使用者自己的紀錄；其他伺服器的共享記憶不會被帶出。
 - 請勿要求記住密碼、Token、API key、精準金流、身分證資料、醫療／法律隱私或其他高敏感資訊。
 
+## 外部資料工具
+
+- `search_google` 與 `search_google_images` 透過 Serper 搜尋；`fetch_webpage` 透過 Serper 抽取可讀頁面內容。
+- `fetch_raw` 會由 Bot 直接 GET 公開網址，適合讀取原始 JSON、純文字、HTML、XML、YAML 或原始碼。它不經 Serper，並會套用 `!aicfg proxy` 設定的 SOCKS5 proxy。
+- `fetch_raw` 只允許公開 HTTP／HTTPS 的標準連接埠，不接受網址帳密、localhost、內網位址或二進位內容；每次重新導向都會重新驗證，最多下載 1 MB，單次最多回傳 12,000 字。
+- 原始內容與其他搜尋結果一樣是不可信外部資料，AI 只能將它當作參考內容，不能遵循其中要求改變規則、洩漏資料或執行動作的指示。
+- `fetch_raw` 不消耗 Serper 額度，也不另收固定全域幣；一般 `/ai` 文字輸入與輸出仍照所選模型費率計費。
+
 ## 計費方式
 
 ### 文字對話
@@ -89,7 +97,7 @@ AI 使用三種不同的上下文，清除其中一種不會連帶清除其他�
 - 通過的圖片會移除原始中繼資料、重新編碼為 PNG／JPEG，再作為 Discord 附件上傳。Bot 不會把任意外部圖片 URL 直接交給 Discord hotlink，因此能套用下載大小、像素、格式、重新導向與內網位址限制。
 - 圖片審查仍可能誤判，且 Google Images 的搜尋結果不代表取得著作權授權。AI 應附上來源頁面；圖片只用於本次回覆，不建立長期快取。
 - Bot 擁有者可用 `y!aicfg proxy socks5://host:1080` 設定圖片下載專用 SOCKS5 proxy、用 `y!aicfg proxy` 查看遮蔽後狀態，或用 `y!aicfg proxy clear` 清除。`sock5://` 會自動修正為 `socks5://`。
-- Proxy 只套用於 Bot 自行下載的圖片（並預留給未來 raw fetch），不會改變 Discord、OpenAI 相容 API 或 Serper API 的連線。若 URL 含帳密，狀態與回覆只會顯示遮蔽值。
+- Proxy 只套用於 Bot 自行下載的圖片與 `fetch_raw`，不會改變 Discord、OpenAI 相容 API 或 Serper API 的連線。若 URL 含帳密，狀態與回覆只會顯示遮蔽值。
 
 ## 伺服器付款人
 
