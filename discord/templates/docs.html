@@ -1063,7 +1063,7 @@
                     <tr><td><code>glm-5.1-t</code></td><td>0.10／字</td></tr>
                     <tr><td><code>qwen3.5-397b-a17b-t</code></td><td>0.15／字</td></tr>
                 </table>
-                <p>內建全域預設模型為 <code>kimi-k2.6</code>；使用者可用 <code>/ai-set-default-model</code> 自行更改。</p>
+                <p>內建全域預設模型為 <code>kimi-k2.6</code>（會依模型可用情況切換）；使用者可用 <code>/ai-set-default-model</code> 自行更改。</p>
 
                 <h4>圖片工具費用</h4>
                 <table class="cmd-table">
@@ -1071,9 +1071,20 @@
                     <tr><td><code>/ai</code> 直接附加圖片</td><td>無額外固定費</td><td>仍依所選文字模型計算輸入與輸出字數</td></tr>
                     <tr><td>分析 Discord CDN 圖片網址</td><td>25 全域幣／次</td><td>AI 需要呼叫圖片分析工具時另外扣除</td></tr>
                     <tr><td>AI 圖片生成</td><td><code>gpt-image-2</code>：250 全域幣／張</td><td>依實際模型費率 × 要求張數；少交付會退回缺少張數的費用</td></tr>
+                    <tr><td>Google 圖片搜尋</td><td>無額外固定全域幣費用</td><td>一般文字輸入／輸出仍照所選模型計費；系統最多下載並審查 3 個候選，只附加一張通過審查的圖片</td></tr>
                     <tr><td>AI 影片生成</td><td>目前停用</td><td>停用狀態不會進入扣款流程</td></tr>
                 </table>
                 <p>付費圖片工具若執行失敗會退回該工具已扣費用。</p>
+
+                <h4>Google 圖片搜尋與安全性</h4>
+                <ul>
+                    <li>AI 可透過 Serper Images 搜尋公開圖片。由於該 endpoint 沒有 SafeSearch 選項，Bot 會依序下載最多 3 個候選並交給目前設定的 AI 審查模型；審查逾時、格式錯誤或無法確定時一律不顯示。</li>
+                    <li>每次搜尋會消耗 Bot 擁有者的 Serper API 額度，候選審查也會產生審查模型的供應商用量；目前兩者都不另扣使用者固定全域幣，但 <code>/ai</code> 的一般文字輸入與輸出仍照所選模型費率計費。</li>
+                    <li>通過的圖片會移除原始中繼資料、重新編碼為 PNG／JPEG，再作為 Discord 附件上傳。Bot 不會把任意外部圖片 URL 直接交給 Discord hotlink，因此能套用下載大小、像素、格式、重新導向與內網位址限制。</li>
+                    <li>圖片審查仍可能誤判，且 Google Images 的搜尋結果不代表取得著作權授權。AI 應附上來源頁面；圖片只用於本次回覆，不建立長期快取。</li>
+                    <li>Bot 擁有者可用 <code>y!aicfg proxy socks5://host:1080</code> 設定圖片下載專用 SOCKS5 proxy、用 <code>y!aicfg proxy</code> 查看遮蔽後狀態，或用 <code>y!aicfg proxy clear</code> 清除。<code>sock5://</code> 會自動修正為 <code>socks5://</code>。</li>
+                    <li>Proxy 只套用於 Bot 自行下載的圖片（並預留給未來 raw fetch），不會改變 Discord、OpenAI 相容 API 或 Serper API 的連線。若 URL 含帳密，狀態與回覆只會顯示遮蔽值。</li>
+                </ul>
 
                 <h3 style="margin-top: 1.5rem; color: var(--text-primary);">伺服器付款人</h3>
                 <p>預設由每位提出 AI 請求的使用者從自己的全域幣餘額付款。具「管理伺服器」或「管理員」權限者可將自己設為本伺服器的統一付款人；設定後，該伺服器內其他人的文字與付費圖片工具也會改扣指定付款人的全域幣。</p>
