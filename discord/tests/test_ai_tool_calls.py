@@ -2,7 +2,7 @@ import sys
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 
 DISCORD_DIR = Path(__file__).resolve().parents[1]
@@ -25,7 +25,7 @@ class AIToolCallParsingTests(unittest.IsolatedAsyncioTestCase):
             tool_calls=None,
         )
 
-        calls = self.cog._extract_tool_calls(message)
+        calls = self.cog._extract_emulated_tool_calls(message)
 
         self.assertEqual(
             calls,
@@ -50,8 +50,8 @@ class AIToolCallParsingTests(unittest.IsolatedAsyncioTestCase):
             tool_calls=None,
         )
 
-        self.assertEqual(self.cog._extract_tool_calls(message), [])
-        progress_text = self.cog._extract_tool_progress_text(message.content)
+        self.assertEqual(self.cog._extract_emulated_tool_calls(message), [])
+        progress_text = self.cog._extract_emulated_tool_progress_text(message.content)
         self.assertIn("反覆重啟人生模擬器", progress_text)
         self.assertIn("Genshin Impact 啟動", progress_text)
 
@@ -70,7 +70,7 @@ class AIToolCallParsingTests(unittest.IsolatedAsyncioTestCase):
         )
 
         self.assertEqual(
-            self.cog._extract_tool_calls(message),
+            self.cog._extract_native_tool_calls(message),
             [
                 {
                     "id": "native-call-1",
@@ -86,10 +86,10 @@ class AIToolCallParsingTests(unittest.IsolatedAsyncioTestCase):
             tool_calls=None,
         )
 
-        self.assertEqual(self.cog._extract_tool_calls(message), [])
+        self.assertEqual(self.cog._extract_emulated_tool_calls(message), [])
 
-    async def test_activity_json_reaches_user_without_executing_tools(self):
-        content = '[{"type":"playing","name":"角蛙 yt.ai"}]'
+    async def test_native_response_never_parses_emulated_json_from_content(self):
+        content = '{"tool_calls":[{"name":"get_bot_status","arguments":{}}]}'
         response = SimpleNamespace(
             model="test-model",
             choices=[
@@ -107,7 +107,7 @@ class AIToolCallParsingTests(unittest.IsolatedAsyncioTestCase):
             patch.object(
                 self.cog,
                 "_request_ai_completion",
-                new=AsyncMock(return_value=(response, False)),
+                new=AsyncMock(return_value=(response, "native")),
             ),
             patch.object(
                 self.cog,
@@ -124,6 +124,142 @@ class AIToolCallParsingTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(response_text, content)
         self.assertEqual(model, "test-model")
         execute_tool.assert_not_awaited()
+
+    async def test_native_success_does_not_prepare_emulation_prompt(self):
+        messages = [{"role": "user", "content": "bot 在線嗎"}]
+        tools = [{"type": "function", "function": {"name": "get_bot_status"}}]
+        response = SimpleNamespace(model="test-model", choices=[])
+
+        with (
+            patch("ai._resolve_ai_tool_call_mode", return_value="native"),
+            patch.object(
+                self.cog,
+                "_generate_ai_completion",
+                new=AsyncMock(return_value=response),
+            ) as generate,
+            patch.object(
+                self.cog,
+                "_prepare_tool_emulation_messages",
+                new=MagicMock(),
+            ) as prepare_emulation,
+        ):
+            actual_response, mode = await self.cog._request_ai_completion(
+                messages,
+                model="test-model",
+                tools=tools,
+            )
+
+        self.assertIs(actual_response, response)
+        self.assertEqual(mode, "native")
+        prepare_emulation.assert_not_called()
+        generate.assert_awaited_once_with(
+            messages=messages,
+            model="test-model",
+            tools=tools,
+        )
+
+    async def test_unsupported_native_tools_error_falls_back_to_emulation(self):
+        class NativeToolsUnsupportedError(Exception):
+            status_code = 400
+
+        messages = [{"role": "user", "content": "bot 在線嗎"}]
+        tools = [{"type": "function", "function": {"name": "get_bot_status"}}]
+        emulated_messages = messages + [{"role": "system", "content": "tool protocol"}]
+        response = SimpleNamespace(model="test-model", choices=[])
+        generate = AsyncMock(
+            side_effect=[
+                NativeToolsUnsupportedError("tools are not supported"),
+                response,
+            ]
+        )
+
+        with (
+            patch("ai._resolve_ai_tool_call_mode", return_value="native"),
+            patch.object(self.cog, "_generate_ai_completion", new=generate),
+            patch.object(
+                self.cog,
+                "_prepare_tool_emulation_messages",
+                new=MagicMock(return_value=emulated_messages),
+            ) as prepare_emulation,
+            patch("ai._mark_ai_native_tools_unsupported") as mark_unsupported,
+        ):
+            actual_response, mode = await self.cog._request_ai_completion(
+                messages,
+                model="test-model",
+                tools=tools,
+            )
+
+        self.assertIs(actual_response, response)
+        self.assertEqual(mode, "emulated")
+        prepare_emulation.assert_called_once_with(messages, tools)
+        mark_unsupported.assert_called_once_with("test-model")
+        self.assertEqual(generate.await_count, 2)
+        self.assertEqual(generate.await_args_list[0].kwargs["messages"], messages)
+        self.assertIs(generate.await_args_list[0].kwargs["tools"], tools)
+        self.assertEqual(generate.await_args_list[1].kwargs["messages"], emulated_messages)
+        self.assertNotIn("tools", generate.await_args_list[1].kwargs)
+
+    async def test_unrelated_native_error_does_not_enable_emulation(self):
+        class NativeServerError(Exception):
+            status_code = 500
+
+        messages = [{"role": "user", "content": "bot 在線嗎"}]
+        tools = [{"type": "function", "function": {"name": "get_bot_status"}}]
+
+        with (
+            patch("ai._resolve_ai_tool_call_mode", return_value="native"),
+            patch.object(
+                self.cog,
+                "_generate_ai_completion",
+                new=AsyncMock(side_effect=NativeServerError("tool backend failed")),
+            ),
+            patch.object(
+                self.cog,
+                "_prepare_tool_emulation_messages",
+                new=MagicMock(),
+            ) as prepare_emulation,
+        ):
+            with self.assertRaises(NativeServerError):
+                await self.cog._request_ai_completion(
+                    messages,
+                    model="test-model",
+                    tools=tools,
+                )
+
+        prepare_emulation.assert_not_called()
+
+    async def test_explicit_emulated_mode_prepares_protocol_without_native_request(self):
+        messages = [{"role": "user", "content": "bot 在線嗎"}]
+        tools = [{"type": "function", "function": {"name": "get_bot_status"}}]
+        emulated_messages = messages + [{"role": "system", "content": "tool protocol"}]
+        response = SimpleNamespace(model="test-model", choices=[])
+
+        with (
+            patch("ai._resolve_ai_tool_call_mode", return_value="emulated"),
+            patch.object(
+                self.cog,
+                "_generate_ai_completion",
+                new=AsyncMock(return_value=response),
+            ) as generate,
+            patch.object(
+                self.cog,
+                "_prepare_tool_emulation_messages",
+                new=MagicMock(return_value=emulated_messages),
+            ) as prepare_emulation,
+        ):
+            actual_response, mode = await self.cog._request_ai_completion(
+                messages,
+                model="test-model",
+                tools=tools,
+            )
+
+        self.assertIs(actual_response, response)
+        self.assertEqual(mode, "emulated")
+        prepare_emulation.assert_called_once_with(messages, tools)
+        generate.assert_awaited_once_with(
+            messages=emulated_messages,
+            model="test-model",
+        )
 
 
 if __name__ == "__main__":

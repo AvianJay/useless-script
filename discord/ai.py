@@ -1664,7 +1664,7 @@ class AICommands(commands.Cog):
             tools = self._build_ai_tools() if active_tool_context else None
 
             for round_index in range(1, (self.MAX_TOOL_ITERATIONS if tools else 1) + 1):
-                response, used_native = await self._request_ai_completion(
+                response, tool_call_mode = await self._request_ai_completion(
                     working_messages,
                     model=model,
                     image=working_image,
@@ -1672,7 +1672,6 @@ class AICommands(commands.Cog):
                 )
                 message = response.choices[0].message
                 response_text = str(getattr(message, "content", "") or "").strip()
-                tool_progress_text = self._extract_tool_progress_text(response_text)
                 generated_images = self._queue_message_generated_images(message, active_tool_context)
                 if generated_images and not response_text:
                     response_text = "生好了，圖在下面。"
@@ -1681,7 +1680,15 @@ class AICommands(commands.Cog):
                         f"AI native image output detected: model={getattr(response, 'model', model)} count={len(generated_images)}",
                         module_name="AI",
                     )
-                tool_calls = self._extract_tool_calls(message)
+                if tool_call_mode == "native":
+                    tool_calls = self._extract_native_tool_calls(message)
+                    tool_progress_text = self._normalize_tool_progress_text(response_text)
+                elif tool_call_mode == "emulated":
+                    tool_calls = self._extract_emulated_tool_calls(message)
+                    tool_progress_text = self._extract_emulated_tool_progress_text(response_text)
+                else:
+                    tool_calls = []
+                    tool_progress_text = ""
 
                 if not tool_calls:
                     end_time = time.perf_counter()
@@ -1727,7 +1734,7 @@ class AICommands(commands.Cog):
                             "result": result,
                         }
                     )
-                if used_native:
+                if tool_call_mode == "native":
                     working_messages.append(
                         {
                             "role": "assistant",
@@ -1857,7 +1864,8 @@ class AICommands(commands.Cog):
                 return parsed
         return {}
 
-    def _extract_tool_calls(self, message) -> list[dict]:
+    @staticmethod
+    def _extract_native_tool_calls(message) -> list[dict]:
         normalized = []
         raw_tool_calls = getattr(message, "tool_calls", None) or []
         for index, tool_call in enumerate(raw_tool_calls, start=1):
@@ -1880,9 +1888,10 @@ class AICommands(commands.Cog):
                     "arguments": arguments,
                 }
             )
-        if normalized:
-            return normalized
+        return normalized
 
+    @staticmethod
+    def _extract_emulated_tool_calls(message) -> list[dict]:
         content = getattr(message, "content", None)
         if not isinstance(content, str):
             return []
@@ -2362,7 +2371,7 @@ class AICommands(commands.Cog):
         )
 
     @classmethod
-    def _extract_tool_progress_text(cls, response_text: str | None) -> str:
+    def _extract_emulated_tool_progress_text(cls, response_text: str | None) -> str:
         raw = str(response_text or "").strip()
         if not raw:
             return ""
@@ -2389,6 +2398,11 @@ class AICommands(commands.Cog):
                 ).strip()
                 break
 
+        return cls._normalize_tool_progress_text(raw)
+
+    @classmethod
+    def _normalize_tool_progress_text(cls, progress_text: str | None) -> str:
+        raw = str(progress_text or "").strip()
         if not raw:
             return ""
         raw = re.sub(r"\s+", " ", raw).strip()
@@ -2420,7 +2434,7 @@ class AICommands(commands.Cog):
         except Exception:
             loading_emoji = ":loading:"
 
-        progress_text = cls._extract_tool_progress_text(progress_text)
+        progress_text = cls._normalize_tool_progress_text(progress_text)
         if progress_text:
             return f"{loading_emoji} {progress_text}"
 
@@ -7094,14 +7108,14 @@ class AICommands(commands.Cog):
         image: bytes = None,
         tools: list | None = None,
     ) -> tuple:
-        """回傳 (response, used_native)：預設走原生 tool calling，不支援時退回模擬模式。"""
+        """回傳 (response, tool_call_mode)：只在原生不支援或明確設定時使用模擬模式。"""
         kwargs = dict(model=model)
         if image is not None:
             kwargs["image"] = image
 
         if not tools:
             response = await self._generate_ai_completion(messages=messages, **kwargs)
-            return response, False
+            return response, None
 
         if _resolve_ai_tool_call_mode(model) == "native":
             try:
@@ -7110,7 +7124,7 @@ class AICommands(commands.Cog):
                     tools=tools,
                     **kwargs,
                 )
-                return response, True
+                return response, "native"
             except Exception as error:
                 if not self._is_native_tools_unsupported_error(error):
                     raise
@@ -7126,7 +7140,7 @@ class AICommands(commands.Cog):
 
         request_messages = self._prepare_tool_emulation_messages(messages, tools)
         response = await self._generate_ai_completion(messages=request_messages, **kwargs)
-        return response, False
+        return response, "emulated"
 
     @staticmethod
     def _component_attr(item, attr: str):
