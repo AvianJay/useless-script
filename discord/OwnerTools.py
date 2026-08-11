@@ -1,7 +1,9 @@
 import ast
+import builtins
 import io
 import json
 import subprocess
+import traceback
 import discord
 import globalenv
 from globalenv import bot, start_bot, get_user_data, set_user_data, config, get_server_config, set_server_config, _config, default_config, get_all_user_data, db, on_close_tasks, reload_config
@@ -1217,7 +1219,141 @@ async def owner_userinfo(ctx, user: Union[discord.User, discord.Member] = None):
     await ctx.send(embed=embed, view=view)
 
 
-@bot.command(aliases=["eval"])
+EVAL_FUNCTION_NAME = "__owner_eval__"
+EVAL_INLINE_LIMIT = 1900
+EVAL_NO_OUTPUT_MESSAGE = "執行完成，沒有輸出。"
+_eval_last_results = {}
+
+
+def cleanup_eval_code(code: str) -> str:
+    """Remove an optional Discord code fence from owner eval input."""
+    cleaned = (code or "").strip()
+    if not (cleaned.startswith("```") and cleaned.endswith("```")):
+        return cleaned
+
+    inner = cleaned[3:-3]
+    if inner.startswith("\r\n"):
+        inner = inner[2:]
+    elif inner.startswith("\n"):
+        inner = inner[1:]
+    else:
+        first_line, separator, remainder = inner.partition("\n")
+        if separator and first_line.strip().lower() in {"py", "python"}:
+            inner = remainder
+
+    return inner.strip()
+
+
+def compile_eval_code(code: str):
+    """Compile owner eval input into an async function."""
+    parsed = ast.parse(code, filename="<owner eval>", mode="exec")
+    if parsed.body and isinstance(parsed.body[-1], ast.Expr):
+        parsed.body[-1] = ast.copy_location(
+            ast.Return(value=parsed.body[-1].value),
+            parsed.body[-1],
+        )
+
+    wrapper = ast.parse(
+        f"async def {EVAL_FUNCTION_NAME}():\n    pass",
+        filename="<owner eval>",
+        mode="exec",
+    )
+    function_node = wrapper.body[0]
+    function_node.body = parsed.body or [ast.Pass()]
+    ast.fix_missing_locations(wrapper)
+    return compile(wrapper, "<owner eval>", "exec")
+
+
+def safe_eval_repr(value) -> str:
+    try:
+        return repr(value)
+    except Exception as error:
+        return f"<repr() failed: {type(error).__name__}>"
+
+
+def create_eval_environment(ctx, output: io.StringIO) -> dict:
+    def eval_print(*values, sep=" ", end="\n", file=None, flush=False):
+        return builtins.print(
+            *values,
+            sep=sep,
+            end=end,
+            file=output if file is None else file,
+            flush=flush,
+        )
+
+    environment = globals().copy()
+    environment.update({
+        "__builtins__": builtins.__dict__,
+        "bot": bot,
+        "ctx": ctx,
+        "message": ctx.message,
+        "author": ctx.author,
+        "channel": ctx.channel,
+        "guild": ctx.guild,
+        "discord": discord,
+        "get_user_data": get_user_data,
+        "set_user_data": set_user_data,
+        "get_server_config": get_server_config,
+        "set_server_config": set_server_config,
+        "config": config,
+        "_config": _config,
+        "default_config": default_config,
+        "db": db,
+        "asyncio": asyncio,
+        "_": _eval_last_results.get(ctx.author.id),
+        "print": eval_print,
+    })
+    return environment
+
+
+async def run_owner_eval(ctx, code: str) -> tuple[str, bool]:
+    output = io.StringIO()
+    environment = create_eval_environment(ctx, output)
+
+    try:
+        compiled = compile_eval_code(cleanup_eval_code(code))
+        exec(compiled, environment)
+        result = await environment[EVAL_FUNCTION_NAME]()
+    except Exception:
+        printed = output.getvalue().rstrip("\n")
+        trace = traceback.format_exc().strip()
+        return "\n".join(part for part in (printed, trace) if part), True
+
+    parts = []
+    printed = output.getvalue().rstrip("\n")
+    if printed:
+        parts.append(printed)
+    if result is not None:
+        _eval_last_results[ctx.author.id] = result
+        parts.append(safe_eval_repr(result))
+
+    return "\n".join(parts) if parts else EVAL_NO_OUTPUT_MESSAGE, False
+
+
+async def send_eval_response(ctx, content: str, *, is_error: bool):
+    heading = "執行代碼時發生錯誤：" if is_error else "結果："
+    allowed_mentions = discord.AllowedMentions.none()
+
+    if len(content) <= EVAL_INLINE_LIMIT and "```" not in content:
+        await ctx.send(
+            f"{heading}\n```py\n{content}\n```",
+            allowed_mentions=allowed_mentions,
+        )
+        return
+
+    filename = "eval_error.txt" if is_error else "eval_output.txt"
+    attachment = discord.File(
+        fp=io.BytesIO(content.encode("utf-8")),
+        filename=filename,
+    )
+    await ctx.send(
+        f"{heading}輸出已附加為檔案。",
+        file=attachment,
+        allowed_mentions=allowed_mentions,
+    )
+
+
+@bot.command(name="eval", aliases=["eval_command"])
 @is_owner()
 async def eval_command(ctx, *, code: str):
     """執行 Python 代碼，僅限機器人擁有者使用。
@@ -1225,28 +1361,8 @@ async def eval_command(ctx, *, code: str):
     用法： eval [代碼]
     例如： eval 1 + 1
     """
-    try:
-        # Create a local scope with commonly used variables
-        local_scope = {
-            "bot": bot,
-            "ctx": ctx,
-            "discord": discord,
-            "get_user_data": get_user_data,
-            "set_user_data": set_user_data,
-            "get_server_config": get_server_config,
-            "set_server_config": set_server_config,
-            "config": config,
-            "_config": _config,
-            "default_config": default_config,
-            "db": db,
-            "asyncio": asyncio
-        }
-        result = eval(code, {"__builtins__": {}}, local_scope)
-        if asyncio.iscoroutine(result):
-            result = await result
-        await ctx.send(f"結果：```{result}```")
-    except Exception as e:
-        await ctx.send(f"執行代碼時發生錯誤：```{e}```")
+    content, is_error = await run_owner_eval(ctx, code)
+    await send_eval_response(ctx, content, is_error=is_error)
 
 
 @bot.event
