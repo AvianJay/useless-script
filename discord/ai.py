@@ -513,6 +513,13 @@ class ConversationManager:
     HISTORY_SUMMARY_MAX_CHARS = 2200
     HISTORY_SUMMARY_HEAD_MESSAGES = 6
     HISTORY_SUMMARY_TAIL_MESSAGES = 12
+    LEGACY_TOOL_USAGE_HISTORY_LINE_PATTERN = re.compile(
+        r"(?im)^[ \t]*\[used tools:[^\r\n]*\][ \t]*(?:\r?\n|$)"
+    )
+
+    @classmethod
+    def strip_legacy_tool_usage_history(cls, content: str | None) -> str:
+        return cls.LEGACY_TOOL_USAGE_HISTORY_LINE_PATTERN.sub("", str(content or "")).strip()
     
     @staticmethod
     def get_conversation_key(user_id: int, guild_id: int = None) -> str:
@@ -528,13 +535,29 @@ class ConversationManager:
         history = get_user_data(guild_id or 0, user_id, key, [])
         if not isinstance(history, list):
             return []
-        return history[-cls.MAX_HISTORY_LENGTH:]
+        cleaned_history = []
+        for message in history[-cls.MAX_HISTORY_LENGTH:]:
+            if not isinstance(message, dict):
+                continue
+            cleaned_message = dict(message)
+            if str(cleaned_message.get("role") or "").strip().lower() == "assistant":
+                cleaned_message["content"] = cls.strip_legacy_tool_usage_history(
+                    cleaned_message.get("content")
+                )
+                if not cleaned_message["content"]:
+                    continue
+            cleaned_history.append(cleaned_message)
+        return cleaned_history
     
     @classmethod
     def add_message(cls, user_id: int, role: str, content: str, guild_id: int = None):
         """添加訊息到歷史"""
         key = cls.get_conversation_key(user_id, guild_id)
         history = cls.get_history(user_id, guild_id)
+        if str(role or "").strip().lower() == "assistant":
+            content = cls.strip_legacy_tool_usage_history(content)
+            if not content:
+                return
         
         # 截斷過長的訊息
         if len(content) > cls.MAX_MESSAGE_LENGTH:
@@ -609,6 +632,8 @@ class ConversationManager:
                 continue
             role = str(msg.get("role") or "").strip().lower()
             content = str(msg.get("content") or "")
+            if role == "assistant":
+                content = cls.strip_legacy_tool_usage_history(content)
             if role not in {"user", "assistant"} or not content:
                 continue
             normalized.append({"role": role, "content": content})
@@ -702,7 +727,7 @@ TOOL_USAGE_PROMPT = """工具使用規則：
 - 先用最少的工具解決問題，不要無意義地重複呼叫同一個工具。
 - 如果工具回傳資料不足或該資料目前沒有被結構化儲存，就直接說明限制，不要編造。
 - 正常回答時把工具結果整理成人話，不要把 JSON 原樣貼給使用者，除非使用者特別要求。
-- 對話歷史中的 `[used tools: ...]` 標記表示你先前那則回覆用過哪些工具；工具結果不會保留，需要當時的資料時用相同參數重新呼叫工具，不要憑印象編造先前的結果。"""
+- 工具結果只在當輪使用；後續若需要最新或先前查詢的資料，重新呼叫適合的工具，不要模仿或輸出工具呼叫紀錄。"""
 
 TOOL_USAGE_PROMPT += """
 
@@ -1230,8 +1255,6 @@ class AICommands(commands.Cog):
     MAX_EMOJI_CONTEXT_COUNT = 80
     MAX_TOOL_ITERATIONS = 4
     MAX_TOOL_RESULT_LENGTH = 3500
-    TOOL_USAGE_HISTORY_MAX_ENTRIES = 10
-    TOOL_USAGE_HISTORY_ARG_MAX_CHARS = 48
     TOOL_PROGRESS_TEXT_MAX_LENGTH = 180
     AI_RETRY_MAX_ATTEMPTS = 4
     AI_RETRY_BASE_DELAY_SECONDS = 1.5
@@ -1662,6 +1685,7 @@ class AICommands(commands.Cog):
 
                 if not tool_calls:
                     end_time = time.perf_counter()
+                    response_text = ConversationManager.strip_legacy_tool_usage_history(response_text)
                     return response_text, getattr(response, "model", model), f"{end_time - start_time:.2f}s"
 
                 self._log_tool_request_batch(
@@ -1703,8 +1727,6 @@ class AICommands(commands.Cog):
                             "result": result,
                         }
                     )
-                self._record_tool_usage_history(active_tool_context, tool_results)
-
                 if used_native:
                     working_messages.append(
                         {
@@ -1774,6 +1796,7 @@ class AICommands(commands.Cog):
                     f"AI native image output detected: model={getattr(final_response, 'model', model)} count={len(final_generated_images)}",
                     module_name="AI",
                 )
+            final_text = ConversationManager.strip_legacy_tool_usage_history(final_text)
             return final_text, getattr(final_response, "model", model), f"{end_time - start_time:.2f}s"
         except Exception as e:
             log(f"AI tool response error: {e}", module_name="AI", level=logging.ERROR)
@@ -2041,48 +2064,6 @@ class AICommands(commands.Cog):
         if not isinstance(pending, list):
             return []
         return [item for item in pending if isinstance(item, dict)]
-
-    @classmethod
-    def _record_tool_usage_history(cls, tool_context: dict | None, tool_results: list[dict]):
-        if not isinstance(tool_context, dict):
-            return
-        usage_log = tool_context.setdefault("tool_usage_log", [])
-        for entry in tool_results or []:
-            name = str(entry.get("name") or "").strip()
-            if not name:
-                continue
-            arguments = entry.get("arguments")
-            argument_parts = []
-            if isinstance(arguments, dict):
-                for key, value in list(arguments.items())[:2]:
-                    text = re.sub(r"\s+", " ", str(value or "")).strip()
-                    if not text:
-                        continue
-                    if len(text) > cls.TOOL_USAGE_HISTORY_ARG_MAX_CHARS:
-                        text = text[: cls.TOOL_USAGE_HISTORY_ARG_MAX_CHARS - 1] + "…"
-                    argument_parts.append(f'{key}="{text}"')
-            usage_log.append(f"{name}({', '.join(argument_parts)})" if argument_parts else name)
-
-    @classmethod
-    def _pop_tool_usage_history_line(cls, tool_context: dict | None) -> str:
-        """取出本輪工具使用紀錄，格式化成附加在歷史 assistant 訊息尾端的單行摘要。
-
-        只留工具名與關鍵參數、不留結果——讓模型記得查過什麼並能重查，
-        但不把很快過期的查詢結果留在對話歷史裡。
-        """
-        if not isinstance(tool_context, dict):
-            return ""
-        usage_log = tool_context.pop("tool_usage_log", [])
-        if not isinstance(usage_log, list) or not usage_log:
-            return ""
-        entries = [str(item) for item in usage_log if str(item or "").strip()]
-        if not entries:
-            return ""
-        overflow = len(entries) - cls.TOOL_USAGE_HISTORY_MAX_ENTRIES
-        if overflow > 0:
-            entries = entries[: cls.TOOL_USAGE_HISTORY_MAX_ENTRIES]
-            entries.append(f"+{overflow} more")
-        return f"[used tools: {', '.join(entries)}]"
 
     @staticmethod
     def _build_pending_file_attachment(file_payload: dict) -> discord.File:
@@ -8227,9 +8208,6 @@ class AICommands(commands.Cog):
             if generated_image_attachments:
                 image_names = ", ".join(str(item.get("filename") or "image") for item in generated_image_attachments)
                 assistant_history_text += f"\n[images:{image_names}]"
-            tool_usage_line = self._pop_tool_usage_history_line(tool_context)
-            if tool_usage_line:
-                assistant_history_text += f"\n{tool_usage_line}"
             ConversationManager.add_message(user.id, "assistant", assistant_history_text, guild_id)
             
             # 建立回應
@@ -8859,9 +8837,6 @@ class AICommands(commands.Cog):
                 if generated_image_attachments:
                     image_names = ", ".join(str(item.get("filename") or "image") for item in generated_image_attachments)
                     assistant_history_text += f"\n[images:{image_names}]"
-                tool_usage_line = self._pop_tool_usage_history_line(tool_context)
-                if tool_usage_line:
-                    assistant_history_text += f"\n{tool_usage_line}"
                 ConversationManager.add_message(user.id, "assistant", assistant_history_text, guild_id)
                 
                 # 建立回應（使用 Component V2 避免 @everyone/@here 攻擊）
