@@ -25,12 +25,13 @@ class AIMentionModeTests(unittest.IsolatedAsyncioTestCase):
         self.guild = SimpleNamespace(id=100, owner_id=1)
         self.author = SimpleNamespace(id=42, bot=False)
 
-    def _message(self, content, *, reference=None, webhook_id=None):
+    def _message(self, content, *, reference=None, mentions=None, webhook_id=None):
         return SimpleNamespace(
             content=content,
             guild=self.guild,
             author=self.author,
             reference=reference,
+            mentions=list(mentions or []),
             webhook_id=webhook_id,
         )
 
@@ -57,7 +58,10 @@ class AIMentionModeTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_direct_mention_triggers_with_bot_mention_removed(self):
         command = AsyncMock()
-        message = self._message(f"<@{self.bot_user.id}>   你好")
+        message = self._message(
+            f"<@{self.bot_user.id}>   你好",
+            mentions=[self.bot_user],
+        )
 
         with (
             patch.object(self.cog, "_get_guild_ai_mention_mode", return_value=True),
@@ -69,7 +73,26 @@ class AIMentionModeTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_mention_without_remaining_text_is_ignored(self):
         command = AsyncMock()
-        message = self._message(f"  <@!{self.bot_user.id}>  ")
+        message = self._message(
+            f"  <@!{self.bot_user.id}>  ",
+            mentions=[self.bot_user],
+        )
+
+        with (
+            patch.object(self.cog, "_get_guild_ai_mention_mode", return_value=True),
+            patch.object(self.cog, "ai_text_command", command),
+        ):
+            await self.cog.on_message(message)
+
+        command.assert_not_awaited()
+        self.bot.get_context.assert_not_awaited()
+
+    async def test_direct_mention_after_text_is_ignored(self):
+        command = AsyncMock()
+        message = self._message(
+            f"你好 <@{self.bot_user.id}>",
+            mentions=[self.bot_user],
+        )
 
         with (
             patch.object(self.cog, "_get_guild_ai_mention_mode", return_value=True),
@@ -86,7 +109,11 @@ class AIMentionModeTests(unittest.IsolatedAsyncioTestCase):
             message_id=777,
             type=discord.MessageReferenceType.reply,
         )
-        message = self._message("繼續說明", reference=reference)
+        message = self._message(
+            "繼續說明",
+            reference=reference,
+            mentions=[self.bot_user],
+        )
 
         with (
             patch.object(self.cog, "_get_guild_ai_mention_mode", return_value=True),
@@ -97,6 +124,24 @@ class AIMentionModeTests(unittest.IsolatedAsyncioTestCase):
 
         command.assert_awaited_once_with(self.context, message="繼續說明")
 
+    async def test_reply_to_cached_ai_message_without_bot_mention_is_ignored(self):
+        command = AsyncMock()
+        reference = SimpleNamespace(
+            message_id=777,
+            type=discord.MessageReferenceType.reply,
+        )
+        message = self._message("繼續說明", reference=reference)
+
+        with (
+            patch.object(self.cog, "_get_guild_ai_mention_mode", return_value=True),
+            patch.object(self.cog, "ai_text_command", command),
+        ):
+            self.cog._remember_ai_response_message(self.guild.id, 777)
+            await self.cog.on_message(message)
+
+        command.assert_not_awaited()
+        self.bot.get_context.assert_not_awaited()
+
     async def test_components_v2_without_cached_id_does_not_trigger(self):
         command = AsyncMock()
         reference = SimpleNamespace(
@@ -104,7 +149,11 @@ class AIMentionModeTests(unittest.IsolatedAsyncioTestCase):
             type=discord.MessageReferenceType.reply,
             resolved=SimpleNamespace(components=[object()]),
         )
-        message = self._message("這是一般 Bot 元件訊息", reference=reference)
+        message = self._message(
+            "這是一般 Bot 元件訊息",
+            reference=reference,
+            mentions=[self.bot_user],
+        )
 
         with (
             patch.object(self.cog, "_get_guild_ai_mention_mode", return_value=True),
@@ -133,7 +182,11 @@ class AIMentionModeTests(unittest.IsolatedAsyncioTestCase):
             message_id=777,
             type=discord.MessageReferenceType.reply,
         )
-        message = self._message("y!ai 繼續", reference=reference)
+        message = self._message(
+            "y!ai 繼續",
+            reference=reference,
+            mentions=[self.bot_user],
+        )
 
         with (
             patch.object(self.cog, "_get_guild_ai_mention_mode", return_value=True),

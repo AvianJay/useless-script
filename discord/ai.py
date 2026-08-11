@@ -3163,13 +3163,18 @@ class AICommands(commands.Cog):
             return None
 
         mention_pattern = rf"<@!?{re.escape(str(bot_user_id))}>"
-        directly_mentions_bot = re.search(mention_pattern, content) is not None
+        directly_mentions_bot = re.match(rf"^\s*{mention_pattern}", content) is not None
+        mentioned_user_ids = {
+            getattr(mentioned_user, "id", None)
+            for mentioned_user in (getattr(message, "mentions", None) or [])
+        }
         reference = getattr(message, "reference", None)
         reference_type = getattr(reference, "type", None)
         reference_message_id = getattr(reference, "message_id", None)
         replies_to_ai = (
             reference is not None
             and reference_type != discord.MessageReferenceType.forward
+            and bot_user_id in mentioned_user_ids
             and self._is_cached_ai_response_message(guild_id, reference_message_id)
         )
         if not directly_mentions_bot and not replies_to_ai:
@@ -8383,7 +8388,7 @@ class AICommands(commands.Cog):
             self._ai_response_message_ids.pop(int(guild.id), None)
         status = "開啟" if enabled else "關閉"
         detail = (
-            "提及 Bot 或回覆本功能啟用後的 AI 回覆時，只要移除 Bot mention 後仍有文字，就會觸發 AI。"
+            "Bot mention 位於訊息開頭，或回覆本功能啟用後的 AI 回覆且保留提及 Bot 時，只要仍有文字就會觸發 AI。"
             if enabled
             else "提及 Bot 或回覆 AI 訊息不會再自動觸發 AI。"
         )
