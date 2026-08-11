@@ -1893,9 +1893,6 @@ class AICommands(commands.Cog):
         object_match = re.search(r"\{[\s\S]*\}", raw)
         if object_match:
             candidates.append(object_match.group(0))
-        list_match = re.search(r"\[[\s\S]*\]", raw)
-        if list_match:
-            candidates.append(list_match.group(0))
 
         for candidate in candidates:
             try:
@@ -1903,26 +1900,24 @@ class AICommands(commands.Cog):
             except Exception:
                 continue
 
-            if isinstance(payload, dict) and isinstance(payload.get("tool_calls"), list):
-                raw_calls = payload["tool_calls"]
-            elif isinstance(payload, list):
-                raw_calls = payload
-            elif isinstance(payload, dict) and (payload.get("name") or payload.get("tool")):
-                raw_calls = [payload]
-            else:
+            # Emulated tool calls have one explicit envelope.  Treating arbitrary
+            # JSON arrays or objects with a `name` field as calls breaks normal
+            # answers such as Discord activity/status configuration lists.
+            if not isinstance(payload, dict) or not isinstance(payload.get("tool_calls"), list):
                 continue
+            raw_calls = payload["tool_calls"]
 
             fallback_calls = []
             for index, tool_call in enumerate(raw_calls, start=1):
                 if not isinstance(tool_call, dict):
                     continue
                 name = tool_call.get("name") or tool_call.get("tool")
-                if not name:
+                if not isinstance(name, str) or not name.strip():
                     continue
                 fallback_calls.append(
                     {
                         "id": tool_call.get("id") or f"call_{index}",
-                        "name": name,
+                        "name": name.strip(),
                         "arguments": tool_call.get("arguments", {}),
                     }
                 )
@@ -2381,18 +2376,10 @@ class AICommands(commands.Cog):
             except (TypeError, ValueError, json.JSONDecodeError):
                 continue
 
-            is_tool_payload = False
-            if isinstance(payload, dict):
-                is_tool_payload = bool(
-                    isinstance(payload.get("tool_calls"), list)
-                    or payload.get("name")
-                    or payload.get("tool")
-                )
-            elif isinstance(payload, list):
-                is_tool_payload = any(
-                    isinstance(item, dict) and (item.get("name") or item.get("tool"))
-                    for item in payload
-                )
+            is_tool_payload = (
+                isinstance(payload, dict)
+                and isinstance(payload.get("tool_calls"), list)
+            )
             if is_tool_payload:
                 raw = re.sub(
                     r"```(?:json)?\s*$",
