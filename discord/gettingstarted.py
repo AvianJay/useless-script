@@ -1815,6 +1815,36 @@ AUTOMOD_FEATURE_SCHEMAS = [
             {"key": "filter_action_type", "label": "動作類型過濾", "type": "string", "default": ""},
         ],
     },
+    {
+        "id": "flagged_user",
+        "label": "標記用戶加入",
+        "description": "合併本機標記資料與 Blacklist API，在成員加入時通知並可執行處置。",
+        "fields": [
+            {"key": "log_channel", "label": "通知頻道", "type": "channel", "required": True},
+            {"key": "action", "label": "處置動作", "type": "string", "default": "", "action_context": "member_join"},
+            {
+                "key": "action_source",
+                "label": "處置來源",
+                "type": "select",
+                "default": "both",
+                "options": [
+                    {"label": "本機與 API", "value": "both"},
+                    {"label": "僅本機", "value": "local"},
+                    {"label": "僅 API", "value": "api"},
+                ],
+            },
+            {
+                "key": "local_match_mode",
+                "label": "本機命中模式",
+                "type": "select",
+                "default": "active",
+                "options": [
+                    {"label": "僅目前標記", "value": "active"},
+                    {"label": "三個月內所有紀錄", "value": "history"},
+                ],
+            },
+        ],
+    },
 ]
 AUTOMOD_FEATURE_MAP = {item["id"]: item for item in AUTOMOD_FEATURE_SCHEMAS}
 
@@ -1833,8 +1863,13 @@ def get_automod_config(guild_id: int) -> dict:
 
 
 def get_automod_feature_data(guild_id: int, feature_id: str) -> dict:
-    stored = get_automod_config(guild_id).get(feature_id, {})
+    automod = get_automod_config(guild_id)
+    stored = automod.get(feature_id, {})
     stored = copy.deepcopy(stored) if isinstance(stored, dict) else {}
+    if feature_id == "flagged_user" and "flagged_user" not in automod:
+        legacy_channel = get_server_config(guild_id, "flagged_user_onjoin_channel")
+        if legacy_channel:
+            stored.update({"enabled": True, "log_channel": str(legacy_channel)})
     schema = AUTOMOD_FEATURE_MAP[feature_id]
     for field_schema in schema["fields"]:
         if field_schema["key"] not in stored and "default" in field_schema:
@@ -1878,6 +1913,10 @@ def format_automod_field(guild: discord.Guild, field_schema: dict, value: Any) -
         if len(values) > 15:
             mentions.append(f"... 共 {len(values)} 項")
         return "、".join(mentions) if mentions else "無"
+    if field_type == "select":
+        for option in field_schema.get("options", []):
+            if str(option.get("value")) == str(value):
+                return str(option.get("label", value))
     return truncate(value, 900)
 
 
@@ -1903,7 +1942,12 @@ class AutoModerateManagerView(SetupView):
         automod = get_automod_config(session.guild.id)
         options = []
         for feature in current:
-            enabled = bool(automod.get(feature["id"], {}).get("enabled", False))
+            feature_data = (
+                get_automod_feature_data(session.guild.id, feature["id"])
+                if feature["id"] == "flagged_user"
+                else automod.get(feature["id"], {})
+            )
+            enabled = bool(feature_data.get("enabled", False))
             options.append(
                 discord.SelectOption(
                     label=feature["label"],
@@ -1928,7 +1972,16 @@ class AutoModerateManagerView(SetupView):
 
     def build_embed(self) -> discord.Embed:
         automod = get_automod_config(self.session.guild.id)
-        enabled = sum(bool(automod.get(item["id"], {}).get("enabled", False)) for item in AUTOMOD_FEATURE_SCHEMAS)
+        enabled = sum(
+            bool(
+                (
+                    get_automod_feature_data(self.session.guild.id, item["id"])
+                    if item["id"] == "flagged_user"
+                    else automod.get(item["id"], {})
+                ).get("enabled", False)
+            )
+            for item in AUTOMOD_FEATURE_SCHEMAS
+        )
         embed = discord.Embed(
             title="自動管理規則",
             description="選擇功能後可調整完整參數並啟用或停用。",
@@ -2077,7 +2130,12 @@ class AutoModerateFieldModal(discord.ui.Modal):
         raw = self.value_input.value.strip()
         field_schema = self.parent_view.field_schema
         if field_schema.get("key") == "action" and Moderate is not None:
-            analysis = Moderate.analyze_action_string(raw, self.parent_view.session.guild.id)
+            analyzer = (
+                Moderate.analyze_member_join_action
+                if field_schema.get("action_context") == "member_join"
+                else Moderate.analyze_action_string
+            )
+            analysis = analyzer(raw, self.parent_view.session.guild.id)
             if not analysis["valid"]:
                 await interaction.response.send_message(analysis["error"], ephemeral=True)
                 return
@@ -2141,14 +2199,27 @@ class AutoModerateChannelSelect(discord.ui.ChannelSelect):
 class AutoModerateActionPresetSelect(discord.ui.Select):
     def __init__(self, parent: "AutoModerateFieldView"):
         self.parent_view = parent
+        field_schema = getattr(parent, "field_schema", {})
+        suggestions = Moderate.ACTION_INPUT_SUGGESTIONS if Moderate is not None else []
+        if field_schema.get("action_context") == "member_join" and Moderate is not None:
+            suggestions = [
+                (label, value)
+                for label, value in suggestions
+                if Moderate.analyze_member_join_action(value, parent.session.guild.id)["valid"]
+            ]
         options = [
             discord.SelectOption(label=label, value=value)
-            for label, value in (Moderate.ACTION_INPUT_SUGGESTIONS if Moderate is not None else [])
+            for label, value in suggestions
         ]
         super().__init__(placeholder="選擇常用動作", options=options, row=0)
 
     async def callback(self, interaction: discord.Interaction):
-        analysis = Moderate.analyze_action_string(self.values[0], self.parent_view.session.guild.id)
+        analyzer = (
+            Moderate.analyze_member_join_action
+            if self.parent_view.field_schema.get("action_context") == "member_join"
+            else Moderate.analyze_action_string
+        )
+        analysis = analyzer(self.values[0], self.parent_view.session.guild.id)
         if not analysis["valid"]:
             await interaction.response.send_message(analysis["error"], ephemeral=True)
             return
@@ -2268,7 +2339,12 @@ class AutoModerateFieldView(SetupView):
             color=discord.Color.green() if self.saved else discord.Color.blurple(),
         )
         if self.field_schema["key"] == "action" and value and Moderate is not None:
-            analysis = Moderate.analyze_action_string(str(value), self.session.guild.id)
+            analyzer = (
+                Moderate.analyze_member_join_action
+                if self.field_schema.get("action_context") == "member_join"
+                else Moderate.analyze_action_string
+            )
+            analysis = analyzer(str(value), self.session.guild.id)
             if analysis["valid"]:
                 embed.add_field(
                     name="執行預覽",

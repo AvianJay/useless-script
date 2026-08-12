@@ -29,6 +29,25 @@ settings = panel_settings
 register_settings = register_panel_settings
 
 ANTIBEAST_DEFAULT_ACTION = "kick AntiBeast: {time_window} 秒內觸發 {trigger_count} 次"
+AUTOMOD_FEATURE_IDS = (
+    "scamtrap",
+    "escape_punish",
+    "too_many_h1",
+    "too_many_emojis",
+    "anti_invite_link",
+    "anti_uispam",
+    "anti_raid",
+    "anti_spam",
+    "automod_detect",
+    "flagged_user",
+)
+
+
+def _analyze_automod_action(feature_name, action, guild_id):
+    from Moderate import analyze_action_string, analyze_member_join_action
+
+    analyzer = analyze_member_join_action if feature_name == "flagged_user" else analyze_action_string
+    return analyzer(action, guild_id)
 
 
 def _coerce_bool(value, *, default=False):
@@ -453,6 +472,18 @@ def api_get_settings(guild_id):
         ms = {}
         for s in data["settings"]:
             val = get_server_config(gid, s["database_key"], s.get("default"))
+            if s.get("type") == "automod_config":
+                val = dict(val) if isinstance(val, dict) else {}
+                if "flagged_user" not in val:
+                    legacy_channel = get_server_config(gid, "flagged_user_onjoin_channel")
+                    if legacy_channel:
+                        val["flagged_user"] = {
+                            "enabled": True,
+                            "log_channel": str(legacy_channel),
+                            "action": "",
+                            "action_source": "both",
+                            "local_match_mode": "active",
+                        }
             ms[s["database_key"]] = _serialize(val, s.get("type", "string"), guild_id=gid)
         result[mod] = ms
     return jsonify(result)
@@ -486,15 +517,13 @@ def api_set_settings(guild_id):
         return jsonify({"error": str(e)}), 400
 
     if setting.get("type") == "automod_config":
-        from Moderate import analyze_action_string
-
         for feature_name, feature_config in (value or {}).items():
             if not isinstance(feature_config, dict):
                 continue
             action = feature_config.get("action")
             if action is None or not str(action).strip():
                 continue
-            analysis = analyze_action_string(str(action), gid)
+            analysis = _analyze_automod_action(feature_name, str(action), gid)
             if not analysis["valid"]:
                 return jsonify({
                     "error": f"{feature_name} 動作指令無效：{analysis['error']}",
@@ -543,9 +572,8 @@ def api_set_settings(guild_id):
 def api_action_preview(guild_id):
     payload = request.get_json(silent=True) or {}
     action = str(payload.get("action") or "")
-    from Moderate import analyze_action_string
-
-    return jsonify(analyze_action_string(action, int(guild_id)))
+    feature = str(payload.get("feature") or "")
+    return jsonify(_analyze_automod_action(feature, action, int(guild_id)))
 
 
 @app.route("/api/panel/guild/<guild_id>/channels")
@@ -623,6 +651,30 @@ def _serialize(value, stype, guild_id=None):
                 "channels": [str(c) for c in (item.get("channels") or [])],
                 "random_chance": int(item.get("random_chance", 100)),
             })
+        return out
+    if stype == "automod_config":
+        if not isinstance(value, dict):
+            return {}
+        out = {}
+        for feat in AUTOMOD_FEATURE_IDS:
+            data = value.get(feat)
+            if not isinstance(data, dict):
+                out[feat] = {"enabled": False}
+                continue
+            row = {"enabled": bool(data.get("enabled", False))}
+            for key, item_value in data.items():
+                if key == "enabled" or item_value is None:
+                    continue
+                if key == "allow_current_server":
+                    row[key] = _coerce_bool(item_value)
+                elif key == "ignore_channels":
+                    raw_channels = item_value if isinstance(item_value, list) else re.findall(r"\d+", str(item_value))
+                    row[key] = [str(channel_id) for channel_id in raw_channels if str(channel_id).isdigit()]
+                elif key in ("channel_id", "log_channel"):
+                    row[key] = str(item_value)
+                else:
+                    row[key] = item_value
+            out[feat] = row
         return out
     if stype == "fixlink_config":
         return _serialize_fixlink_config(value)
@@ -703,7 +755,7 @@ def _coerce(value, stype, guild_id=None):
         if not isinstance(value, dict):
             return {}
         out = {}
-        for feat in ("scamtrap", "escape_punish", "too_many_h1", "too_many_emojis", "anti_invite_link", "anti_uispam", "anti_raid", "anti_spam", "automod_detect"):
+        for feat in AUTOMOD_FEATURE_IDS:
             data = value.get(feat)
             if not isinstance(data, dict):
                 out[feat] = {"enabled": False}
@@ -729,8 +781,15 @@ def _coerce(value, stype, guild_id=None):
                 row[k] = str(v) if not isinstance(v, str) else v
             if feat == "scamtrap" and "channel_id" in row:
                 row["channel_id"] = str(row["channel_id"])
-            if feat == "automod_detect" and "log_channel" in row:
+            if feat in ("automod_detect", "flagged_user") and "log_channel" in row:
                 row["log_channel"] = str(row["log_channel"])
+            if feat == "flagged_user":
+                row.setdefault("action_source", "both")
+                row.setdefault("local_match_mode", "active")
+                if row["action_source"] not in ("local", "api", "both"):
+                    raise ValueError("flagged_user.action_source 只接受 local、api 或 both")
+                if row["local_match_mode"] not in ("active", "history"):
+                    raise ValueError("flagged_user.local_match_mode 只接受 active 或 history")
             out[feat] = row
         return out
 
@@ -785,35 +844,6 @@ def _coerce(value, stype, guild_id=None):
 
     if stype in ("string", "text", "select"):
         return str(value) if value is not None else None
-
-    if stype == "automod_config":
-        if not isinstance(value, dict):
-            return {}
-        out = {}
-        for feat in ("scamtrap", "escape_punish", "too_many_h1", "too_many_emojis", "anti_invite_link", "anti_uispam", "anti_raid", "anti_spam", "automod_detect"):
-            data = value.get(feat)
-            if not isinstance(data, dict):
-                out[feat] = {"enabled": False}
-                continue
-            row = {"enabled": bool(data.get("enabled", False))}
-            for k, v in data.items():
-                if k == "enabled":
-                    continue
-                if v is None or (isinstance(v, str) and v.strip() == ""):
-                    continue
-                if k == "allow_current_server":
-                    if isinstance(v, bool):
-                        row[k] = v
-                    else:
-                        row[k] = str(v).strip().lower() in ("true", "1", "yes", "on")
-                    continue
-                row[k] = str(v).strip() if v is not None else ""
-            if row.get("channel_id"):
-                row["channel_id"] = str(int(row["channel_id"])) if str(row["channel_id"]).isdigit() else str(row["channel_id"])
-            if row.get("log_channel"):
-                row["log_channel"] = str(int(row["log_channel"])) if str(row["log_channel"]).isdigit() else str(row["log_channel"])
-            out[feat] = row
-        return out
 
     if stype == "webverify_config":
         if not isinstance(value, dict):
@@ -953,8 +983,7 @@ def _register_all():
 
     if "AutoModerate" in modules:
         register_settings("AutoModerate", "自動管理", [
-            {"display": "標記用戶加入通知頻道", "description": "當被標記的用戶加入伺服器時，於此頻道發送通知", "database_key": "flagged_user_onjoin_channel", "type": "channel", "default": None},
-            {"display": "自動管理規則", "description": "詐騙陷阱、邀請連結、逃避懲處、標題/表情過多、防突襲、防刷頻、AutoMod 偵測等功能的啟用與參數", "database_key": "automod", "type": "automod_config", "default": {}},
+            {"display": "自動管理規則", "description": "詐騙陷阱、邀請連結、逃避懲處、標記用戶加入、防突襲、防刷頻、AutoMod 偵測等功能的啟用與參數", "database_key": "automod", "type": "automod_config", "default": {}},
         ], description="自動管理相關設定（含邀請連結偵測）", icon="🛡️")
 
     if "FixLink" in modules:

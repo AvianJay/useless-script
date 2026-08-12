@@ -736,11 +736,11 @@ const ACTION_INPUT_SUGGESTIONS = [
     { label: '發送懲處公告', value: 'smm' },
 ];
 
-async function analyzeActionInput(action) {
+async function analyzeActionInput(action, feature = '') {
     const response = await fetch(`/api/panel/guild/${GUILD_ID}/action-preview`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action }),
+        body: JSON.stringify({ action, feature }),
     });
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     return response.json();
@@ -831,6 +831,19 @@ const AUTOMOD_FEATURES = [
         { key: 'action', label: '額外處置動作', type: 'string', default: '', placeholder: '可選，例: mute 10m 違規' },
         { key: 'filter_rule', label: '規則名稱過濾', type: 'string', default: '', placeholder: '多個用 | 分隔，留空=全部' },
         { key: 'filter_action_type', label: '動作類型過濾', type: 'string', default: '', placeholder: 'block|alert|timeout|block_interactions' },
+    ]},
+    { id: 'flagged_user', label: '🚩 標記用戶加入', desc: '合併本機三個月內標記資料與 Blacklist API 快取，加入時通知並可處置', fields: [
+        { key: 'log_channel', label: '通知頻道', type: 'channel', default: '' },
+        { key: 'action', label: '處置動作', type: 'string', default: '', placeholder: '可選，例: mute 10m 標記用戶加入' },
+        { key: 'action_source', label: '處置來源', type: 'select', default: 'both', options: [
+            { value: 'both', label: '本機與 API' },
+            { value: 'local', label: '僅本機' },
+            { value: 'api', label: '僅 API' },
+        ]},
+        { key: 'local_match_mode', label: '本機命中模式', type: 'select', default: 'active', options: [
+            { value: 'active', label: '僅目前標記' },
+            { value: 'history', label: '三個月內所有紀錄' },
+        ]},
     ]},
 ];
 
@@ -1082,7 +1095,7 @@ function buildAutomodConfigEditor(mod, s, value, channels) {
                     analysisBox.className = 'action-analysis loading';
                     analysisBox.textContent = '正在解析動作...';
                     try {
-                        const analysis = await analyzeActionInput(clean);
+                        const analysis = await analyzeActionInput(clean, feat.id);
                         if (currentRevision !== revision) return;
                         if (analysis.requires_confirmation) {
                             renderActionAnalysis(analysisBox, analysis, {

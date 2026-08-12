@@ -151,7 +151,7 @@ class ActionConfirmationViewTests(unittest.IsolatedAsyncioTestCase):
 
 
 class GuildPanelActionValidationTests(unittest.TestCase):
-    def _post_settings(self, action):
+    def _post_settings(self, action, feature="anti_spam"):
         schema = {
             "AutoModerate": {
                 "settings": [
@@ -166,7 +166,7 @@ class GuildPanelActionValidationTests(unittest.TestCase):
         payload = {
             "module": "AutoModerate",
             "key": "automod",
-            "value": {"anti_spam": {"enabled": True, "action": action}},
+            "value": {feature: {"enabled": True, "action": action}},
         }
         with GuildPanel.app.test_request_context(json=payload):
             with patch.dict(GuildPanel.settings, schema, clear=True):
@@ -192,8 +192,69 @@ class GuildPanelActionValidationTests(unittest.TestCase):
         self.assertTrue(response.get_json()["success"])
         save.assert_called_once()
 
+    def test_flagged_user_rejects_message_dependent_action(self):
+        (response, status), save = self._post_settings("warn hi", feature="flagged_user")
+        self.assertEqual(status, 400)
+        self.assertIn("`warn`", response.get_json()["error"])
+        save.assert_not_called()
+
 
 class GuildPanelCompoundSettingsTests(unittest.TestCase):
+    def test_automod_panel_reads_legacy_flagged_channel_as_new_config(self):
+        schema = {
+            "AutoModerate": {
+                "settings": [
+                    {"database_key": "automod", "type": "automod_config", "default": {}},
+                ],
+            },
+        }
+        route = GuildPanel.api_get_settings
+        while hasattr(route, "__wrapped__"):
+            route = route.__wrapped__
+
+        def get_config(_guild_id, key, default=None):
+            if key == "automod":
+                return {}
+            if key == "flagged_user_onjoin_channel":
+                return 555
+            return default
+
+        with GuildPanel.app.test_request_context():
+            with (
+                patch.dict(GuildPanel.settings, schema, clear=True),
+                patch.object(GuildPanel, "get_server_config", side_effect=get_config),
+            ):
+                response = route("1")
+        flagged = response.get_json()["AutoModerate"]["automod"]["flagged_user"]
+        self.assertTrue(flagged["enabled"])
+        self.assertEqual(flagged["log_channel"], "555")
+        self.assertEqual(flagged["action"], "")
+
+    def test_automod_flagged_user_coercion_validates_selects(self):
+        value = {"flagged_user": {"enabled": True, "action_source": "both", "local_match_mode": "active"}}
+        result = GuildPanel._coerce(value, "automod_config", guild_id=1)
+        self.assertEqual(result["flagged_user"]["action_source"], "both")
+        with self.assertRaisesRegex(ValueError, "action_source"):
+            GuildPanel._coerce(
+                {"flagged_user": {"enabled": True, "action_source": "invalid"}},
+                "automod_config",
+                guild_id=1,
+            )
+
+    def test_automod_flagged_user_schema_round_trip_keeps_empty_action(self):
+        value = {
+            "flagged_user": {
+                "enabled": True,
+                "log_channel": "123",
+                "action": "",
+                "action_source": "api",
+                "local_match_mode": "history",
+            },
+        }
+        coerced = GuildPanel._coerce(value, "automod_config", guild_id=1)
+        serialized = GuildPanel._serialize(coerced, "automod_config", guild_id=1)
+        self.assertEqual(serialized["flagged_user"], value["flagged_user"])
+
     def test_registry_includes_fixlink_and_antibeast(self):
         with (
             patch.object(GuildPanel, "modules", ["FixLink", "AntiBeast"]),

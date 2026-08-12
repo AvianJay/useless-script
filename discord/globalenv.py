@@ -14,7 +14,7 @@ from pathlib import Path
 
 
 # Global configuration for backward compatibility
-config_version = 33
+config_version = 34
 config_path = 'config.json'
 
 default_config = {
@@ -30,6 +30,7 @@ default_config = {
     "r34_user_id": "",
     "r34_api_key": "",
     "flagged_database_path": "flagged_data.db",
+    "blacklist_api_key": "",
     "default_favorite_stops_limit": 2,
     "default_favorite_youbike_limit": 2,
     "log_channel_id": 123456789012345678,

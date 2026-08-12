@@ -543,6 +543,51 @@ def analyze_action_string(action: str, guild_id: Optional[int] = None, *, infer_
     return result
 
 
+MEMBER_JOIN_ACTIONS = {
+    "ban",
+    "kick",
+    "mute",
+    "timeout",
+    "to",
+    "force_verify",
+    "send_mod_message",
+    "smm",
+}
+
+
+def analyze_member_join_action(action: str, guild_id: Optional[int] = None) -> dict:
+    """Validate an action that runs without a triggering Discord message."""
+    analysis = analyze_action_string(action, guild_id)
+    if not analysis["valid"]:
+        return analysis
+
+    try:
+        expanded = _expand_custom_action_aliases(
+            str(analysis["normalized"] or ""),
+            _load_custom_action_strings(guild_id),
+        )
+    except ValueError as error:
+        analysis["valid"] = False
+        analysis["error"] = str(error)
+        return analysis
+
+    unsupported = []
+    for chunk in expanded:
+        command = chunk.split(maxsplit=1)[0].lower() if chunk.strip() else ""
+        if command not in MEMBER_JOIN_ACTIONS and command not in unsupported:
+            unsupported.append(command)
+    if unsupported:
+        analysis["valid"] = False
+        analysis["requires_confirmation"] = False
+        analysis["confirmation"] = None
+        analysis["error"] = (
+            "標記用戶加入事件沒有觸發訊息，不能使用以下動作："
+            + "、".join(f"`{command}`" for command in unsupported)
+            + "。請改用 ban、kick、mute、force_verify 或 send_mod_message。"
+        )
+    return analysis
+
+
 def action_autocomplete_choices(current: str) -> list[app_commands.Choice[str]]:
     choices = []
     current_text = str(current or "").strip()

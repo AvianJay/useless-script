@@ -303,6 +303,7 @@ class ComplexSchemaTests(unittest.TestCase):
             "anti_raid",
             "anti_spam",
             "automod_detect",
+            "flagged_user",
         }
         self.assertEqual(set(gs.AUTOMOD_FEATURE_MAP), expected)
         automod_detect_fields = {
@@ -312,6 +313,29 @@ class ComplexSchemaTests(unittest.TestCase):
             automod_detect_fields,
             {"log_channel", "action", "filter_rule", "filter_action_type"},
         )
+        flagged_user_fields = {
+            field["key"] for field in gs.AUTOMOD_FEATURE_MAP["flagged_user"]["fields"]
+        }
+        self.assertEqual(
+            flagged_user_fields,
+            {"log_channel", "action", "action_source", "local_match_mode"},
+        )
+
+    def test_flagged_user_quick_settings_inherit_legacy_channel(self):
+        def get_config(_guild_id, key, default=None):
+            if key == "automod":
+                return {}
+            if key == "flagged_user_onjoin_channel":
+                return 555
+            return default
+
+        with patch.object(gs, "get_server_config", side_effect=get_config):
+            data = gs.get_automod_feature_data(1, "flagged_user")
+        self.assertTrue(data["enabled"])
+        self.assertEqual(data["log_channel"], "555")
+        self.assertEqual(data["action"], "")
+        self.assertEqual(data["action_source"], "both")
+        self.assertEqual(data["local_match_mode"], "active")
 
     def test_webverify_validation_requires_channels_and_countries(self):
         guild = MagicMock()

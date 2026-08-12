@@ -6501,6 +6501,22 @@ class AICommands(commands.Cog):
         feature = str(args.get("feature", "overview") or "overview").strip().lower()
         autoreplies = self._get_server_config_fallback(guild_id, "autoreplies", []) or []
         automod = self._get_server_config_fallback(guild_id, "automod", {}) or {}
+        automod = automod if isinstance(automod, dict) else {}
+        if "flagged_user" not in automod:
+            legacy_flagged_channel = self._get_server_config_fallback(
+                guild_id,
+                "flagged_user_onjoin_channel",
+                None,
+            )
+            if legacy_flagged_channel:
+                automod = dict(automod)
+                automod["flagged_user"] = {
+                    "enabled": True,
+                    "log_channel": str(legacy_flagged_channel),
+                    "action": "",
+                    "action_source": "both",
+                    "local_match_mode": "active",
+                }
         webverify = self._get_server_config_fallback(guild_id, "webverify_config", {}) or {}
         dynamic_voice_channel = self._get_server_config_fallback(guild_id, "dynamic_voice_channel", None)
         dynamic_voice_category = self._get_server_config_fallback(guild_id, "dynamic_voice_channel_category", None)
@@ -6566,7 +6582,11 @@ class AICommands(commands.Cog):
                     "enabled_features": automod_enabled_features,
                     "notify_channel": self._format_channel_ref(
                         guild,
-                        self._get_server_config_fallback(guild_id, "flagged_user_onjoin_channel", None),
+                        (
+                            automod.get("flagged_user", {}).get("log_channel")
+                            if isinstance(automod.get("flagged_user"), dict)
+                            else None
+                        ),
                     ),
                     "settings": {
                         key: value

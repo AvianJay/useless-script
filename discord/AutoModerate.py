@@ -1,5 +1,5 @@
 import discord
-from discord.ext import commands
+from discord.ext import commands, tasks
 from discord import app_commands
 from globalenv import bot, start_bot, get_user_data, set_user_data, get_all_user_data, get_server_config, set_server_config, modules, config, get_command_mention
 from datetime import datetime, timezone, timedelta
@@ -9,11 +9,20 @@ from difflib import SequenceMatcher
 import re
 import emoji
 import sqlite3
+import aiohttp
 import io
 import json
 from logger import log
 import logging
 import sys
+from contextlib import closing
+
+
+BLACKLIST_API_URL = "https://kurokusa.nkhost.dev/api/v1/blacklist?status=1"
+BLACKLIST_SYNC_INTERVAL_MINUTES = 30
+LOCAL_FLAG_LOOKBACK_MONTHS = 3
+FLAGGED_USER_ACTION_SOURCES = {"local", "api", "both"}
+FLAGGED_USER_LOCAL_MATCH_MODES = {"active", "history"}
 
 if "Moderate" in modules:
     import Moderate
@@ -31,6 +40,15 @@ ACTION_INPUT_SUGGESTIONS = (
         ("踢出", "kick 違規"),
         ("永久封禁", "ban 0 0 違規"),
     ]
+)
+FLAGGED_USER_ACTION_INPUT_SUGGESTIONS = (
+    [
+        (label, value)
+        for label, value in Moderate.ACTION_INPUT_SUGGESTIONS
+        if Moderate.analyze_member_join_action(value)["valid"]
+    ]
+    if "Moderate" in modules
+    else []
 )
 
 
@@ -64,6 +82,10 @@ all_settings = [
     "automod_detect-action",
     "automod_detect-filter_rule",
     "automod_detect-filter_action_type",
+    "flagged_user-log_channel",
+    "flagged_user-action",
+    "flagged_user-action_source",
+    "flagged_user-local_match_mode",
 ]
 
 # 用於追蹤 user install spam 的記憶體字典
@@ -91,6 +113,184 @@ AUTOMOD_IGNORE_CHANNEL_FEATURES = {
     "anti_uispam",
     "anti_spam",
 }
+
+
+def _subtract_calendar_months(value: datetime, months: int) -> datetime:
+    target_month = value.month - months
+    year = value.year + (target_month - 1) // 12
+    month = (target_month - 1) % 12 + 1
+    if month == 12:
+        next_month = datetime(year + 1, 1, 1, tzinfo=value.tzinfo)
+    else:
+        next_month = datetime(year, month + 1, 1, tzinfo=value.tzinfo)
+    last_day = (next_month - timedelta(days=1)).day
+    return value.replace(year=year, month=month, day=min(value.day, last_day))
+
+
+def _normalize_blacklist_payload(payload: object) -> dict[int, list[dict]]:
+    if not isinstance(payload, dict):
+        raise ValueError("API 回應不是 JSON 物件")
+    if payload.get("code") != 200:
+        raise ValueError("API 回應 code 不是 200")
+    data = payload.get("data")
+    if not isinstance(data, dict) or not isinstance(data.get("items"), list):
+        raise ValueError("API 回應缺少 data.items")
+
+    normalized: dict[int, list[dict]] = {}
+    for item in data["items"]:
+        if not isinstance(item, dict):
+            raise ValueError("API 黑名單項目格式錯誤")
+        raw_user_id = str(item.get("userid", "")).strip()
+        if not raw_user_id.isdigit() or int(raw_user_id) <= 0:
+            raise ValueError("API 黑名單包含無效 userid")
+        try:
+            status = int(item.get("status", 1))
+        except (TypeError, ValueError) as error:
+            raise ValueError("API 黑名單包含無效 status") from error
+        if status != 1:
+            raise ValueError("status=1 查詢回傳了非有效紀錄")
+        reason = item.get("reason")
+        reported_at = item.get("reported_at")
+        reporter = item.get("reporter")
+        if not isinstance(reason, str) or not reason.strip():
+            raise ValueError("API 黑名單包含空白 reason")
+        if not isinstance(reported_at, str) or not reported_at.strip():
+            raise ValueError("API 黑名單包含無效 reported_at")
+        try:
+            datetime.fromisoformat(reported_at.strip().replace("Z", "+00:00"))
+        except ValueError as error:
+            raise ValueError("API 黑名單包含無效 reported_at") from error
+        if not isinstance(reporter, dict):
+            raise ValueError("API 黑名單包含無效 reporter")
+        reporter_id = str(reporter.get("id", "")).strip()
+        reporter_name = reporter.get("name")
+        if not reporter_id.isdigit() or not isinstance(reporter_name, str) or not reporter_name.strip():
+            raise ValueError("API 黑名單包含無效 reporter 資料")
+
+        user_id = int(raw_user_id)
+        normalized.setdefault(user_id, []).append({
+            "record_id": item.get("id"),
+            "reason": reason.strip(),
+            "reported_at": reported_at.strip(),
+            "reporter_id": reporter_id,
+            "reporter_name": reporter_name.strip(),
+        })
+    return normalized
+
+
+def _normalize_flagged_user_config(guild_id: int) -> dict:
+    automod = get_server_config(guild_id, "automod", {})
+    if isinstance(automod, dict) and "flagged_user" in automod:
+        raw = automod.get("flagged_user")
+        raw = raw if isinstance(raw, dict) else {}
+        action_source = str(raw.get("action_source", "both")).strip().lower()
+        local_match_mode = str(raw.get("local_match_mode", "active")).strip().lower()
+        return {
+            "enabled": _is_truthy(raw.get("enabled", False)),
+            "log_channel": raw.get("log_channel"),
+            "action": str(raw.get("action", "") or "").strip(),
+            "action_source": action_source if action_source in FLAGGED_USER_ACTION_SOURCES else "both",
+            "local_match_mode": local_match_mode if local_match_mode in FLAGGED_USER_LOCAL_MATCH_MODES else "active",
+            "legacy": False,
+        }
+
+    legacy_channel = get_server_config(guild_id, "flagged_user_onjoin_channel")
+    return {
+        "enabled": bool(legacy_channel),
+        "log_channel": legacy_channel,
+        "action": "",
+        "action_source": "both",
+        "local_match_mode": "active",
+        "legacy": bool(legacy_channel),
+    }
+
+
+def _ensure_flagged_user_settings(automod: dict, guild_id: int) -> dict:
+    if "flagged_user" in automod:
+        current = automod.get("flagged_user")
+        if isinstance(current, dict):
+            return current
+        legacy_channel = None
+    else:
+        legacy_channel = get_server_config(guild_id, "flagged_user_onjoin_channel")
+    current = {
+        "enabled": bool(legacy_channel),
+        "log_channel": str(legacy_channel) if legacy_channel else "",
+        "action": "",
+        "action_source": "both",
+        "local_match_mode": "active",
+    }
+    automod["flagged_user"] = current
+    return current
+
+
+def _load_local_flagged_records(
+    user_ids: set[int] | None = None,
+    *,
+    match_mode: str = "active",
+    now: datetime | None = None,
+) -> dict[int, list[dict]]:
+    if match_mode not in FLAGGED_USER_LOCAL_MATCH_MODES:
+        match_mode = "active"
+    cutoff = _subtract_calendar_months(now or datetime.now(timezone.utc), LOCAL_FLAG_LOOKBACK_MONTHS)
+    database_file = config("flagged_database_path", "flagged_data.db")
+    query = (
+        "SELECT f.user_id, f.guild_id, f.flagged_at, f.flagged_role, g.name "
+        "FROM flagged_users AS f LEFT JOIN guilds AS g ON g.id = f.guild_id "
+        "WHERE datetime(f.flagged_at) >= datetime(?)"
+    )
+    params: list[object] = [cutoff.astimezone(timezone.utc).replace(tzinfo=None).isoformat(sep=" ")]
+    if match_mode == "active":
+        query += " AND f.flagged_role = 1"
+
+    records: dict[int, list[dict]] = {}
+    with closing(sqlite3.connect(database_file)) as conn:
+        conn.row_factory = sqlite3.Row
+        with closing(conn.execute(query, params)) as cursor:
+            for row in cursor:
+                user_id = int(row["user_id"])
+                if user_ids is not None and user_id not in user_ids:
+                    continue
+                records.setdefault(user_id, []).append({
+                    "guild_id": row["guild_id"],
+                    "guild_name": row["name"] or "未知伺服器",
+                    "flagged_at": str(row["flagged_at"]),
+                    "flagged_role": bool(row["flagged_role"]),
+                })
+    return records
+
+
+def _action_matches_sources(action_source: str, *, has_local: bool, has_api: bool) -> bool:
+    return (
+        (action_source == "local" and has_local)
+        or (action_source == "api" and has_api)
+        or (action_source == "both" and (has_local or has_api))
+    )
+
+
+def _format_embed_record_lines(lines: list[str], *, limit: int = 1024) -> str:
+    output: list[str] = []
+    used = 0
+    omitted = 0
+    for index, raw_line in enumerate(lines):
+        line = str(raw_line).replace("\x00", "").strip()
+        remaining = limit - used - (1 if output else 0)
+        if remaining <= 0:
+            omitted = len(lines) - index
+            break
+        if len(line) > remaining:
+            line = line[: max(0, remaining - 1)].rstrip() + "…"
+            omitted = len(lines) - index - 1
+        output.append(line)
+        used += len(line) + (1 if len(output) > 1 else 0)
+        if index < len(lines) - 1 and used >= limit:
+            omitted = len(lines) - index - 1
+            break
+    if omitted > 0:
+        suffix = f"\n…另有 {omitted} 筆紀錄未顯示。"
+        joined = "\n".join(output)
+        return joined[: max(0, limit - len(suffix))].rstrip() + suffix
+    return "\n".join(output) or "無"
 
 
 def _is_truthy(value, default: bool = False) -> bool:
@@ -218,7 +418,12 @@ async def action_value_autocomplete(interaction: discord.Interaction, current: s
             )
 
     lowered = current_text.casefold()
-    for label, value in ACTION_INPUT_SUGGESTIONS:
+    suggestions = (
+        [("只通知（清除處置）", "clear"), *FLAGGED_USER_ACTION_INPUT_SUGGESTIONS]
+        if setting == "flagged_user-action"
+        else ACTION_INPUT_SUGGESTIONS
+    )
+    for label, value in suggestions:
         if lowered and lowered not in label.casefold() and lowered not in value.casefold():
             continue
         if any(choice.value == value for choice in choices):
@@ -326,7 +531,12 @@ class CustomActionModal(discord.ui.Modal, title="自訂處置動作"):
         self.quick_setup_view = view
 
     async def on_submit(self, interaction: discord.Interaction):
-        analysis = Moderate.analyze_action_string(self.action_input.value, interaction.guild_id)
+        analyzer = (
+            Moderate.analyze_member_join_action
+            if self.quick_setup_view.feature == "flagged_user"
+            else Moderate.analyze_action_string
+        )
+        analysis = analyzer(self.action_input.value, interaction.guild_id)
         if not analysis["valid"]:
             await interaction.response.send_message(analysis["error"], ephemeral=True)
             return
@@ -378,6 +588,7 @@ class QuickSetupView(discord.ui.View):
                 "anti_raid": "🚨 防突襲",
                 "anti_spam": "🔁 防刷頻",
                 "automod_detect": "🛡️ AutoMod 偵測",
+                "flagged_user": "🚩 標記用戶加入",
             }
             embed.description = f"正在設定 **{feat_names.get(self.feature, self.feature)}**\n請完成下方選項後點擊「完成設定」。"
             if self.config:
@@ -410,6 +621,7 @@ class QuickSetupView(discord.ui.View):
             discord.SelectOption(label="防突襲", value="anti_raid", description="大量加入偵測"),
             discord.SelectOption(label="防刷頻", value="anti_spam", description="相似訊息刷頻"),
             discord.SelectOption(label="AutoMod 偵測", value="automod_detect", description="偵測 Discord 原生 AutoMod 觸發"),
+            discord.SelectOption(label="標記用戶加入", value="flagged_user", description="本機與 API 標記命中"),
         ]
         sel = discord.ui.Select(placeholder="選擇功能", options=opts)
         sel.callback = self._on_feature_select
@@ -530,6 +742,28 @@ class QuickSetupView(discord.ui.View):
             )
             ch_sel.callback = self._on_automod_detect_channel
             self.add_item(ch_sel)
+        elif self.feature == "flagged_user":
+            ch_sel = discord.ui.ChannelSelect(
+                placeholder="選擇通知頻道",
+                channel_types=[discord.ChannelType.text, discord.ChannelType.news],
+                min_values=1,
+                max_values=1,
+            )
+            ch_sel.callback = self._on_automod_detect_channel
+            self.add_item(ch_sel)
+            source_sel = discord.ui.Select(placeholder="選擇處置來源", options=[
+                discord.SelectOption(label="本機與 API", value="both"),
+                discord.SelectOption(label="僅本機", value="local"),
+                discord.SelectOption(label="僅 API", value="api"),
+            ])
+            source_sel.callback = self._on_flagged_action_source_select
+            self.add_item(source_sel)
+            mode_sel = discord.ui.Select(placeholder="選擇本機命中模式", options=[
+                discord.SelectOption(label="僅目前標記", value="active"),
+                discord.SelectOption(label="三個月內所有紀錄", value="history"),
+            ])
+            mode_sel.callback = self._on_flagged_local_match_mode_select
+            self.add_item(mode_sel)
 
         if self.feature in AUTOMOD_IGNORE_CHANNEL_FEATURES:
             ignore_sel = discord.ui.ChannelSelect(
@@ -540,7 +774,12 @@ class QuickSetupView(discord.ui.View):
             ignore_sel.callback = self._on_ignore_channels_select
             self.add_item(ignore_sel)
 
-        action_opts = [discord.SelectOption(label=l, value=v) for l, v in ACTION_PRESETS]
+        action_presets = (
+            [*FLAGGED_USER_ACTION_INPUT_SUGGESTIONS, ("自訂...", "__custom__")]
+            if self.feature == "flagged_user"
+            else ACTION_PRESETS
+        )
+        action_opts = [discord.SelectOption(label=l, value=v) for l, v in action_presets]
         action_sel = discord.ui.Select(placeholder="處置動作（選一個）", options=action_opts)
         action_sel.callback = self._on_action_select
         self.add_item(action_sel)
@@ -562,6 +801,7 @@ class QuickSetupView(discord.ui.View):
             "anti_spam": {"max_messages": "5", "time_window": "30", "similarity": "75"},
             "escape_punish": {"punishment": "ban", "duration": "0"},
             "automod_detect": {},
+            "flagged_user": {"action_source": "both", "local_match_mode": "active"},
         }
         self.config = feat_defaults.get(self.feature, {}).copy()
         self._update_components_step2(interaction.guild)
@@ -637,6 +877,16 @@ class QuickSetupView(discord.ui.View):
         await interaction.response.defer()
         await interaction.message.edit(embed=self._get_embed(interaction.guild), view=self)
 
+    async def _on_flagged_action_source_select(self, interaction: discord.Interaction):
+        self.config["action_source"] = interaction.data["values"][0]
+        await interaction.response.defer()
+        await interaction.message.edit(embed=self._get_embed(interaction.guild), view=self)
+
+    async def _on_flagged_local_match_mode_select(self, interaction: discord.Interaction):
+        self.config["local_match_mode"] = interaction.data["values"][0]
+        await interaction.response.defer()
+        await interaction.message.edit(embed=self._get_embed(interaction.guild), view=self)
+
     async def _on_ignore_channels_select(self, interaction: discord.Interaction):
         self.config["ignore_channels"] = _normalize_channel_id_list(interaction.data.get("values", []))
         await interaction.response.defer()
@@ -653,7 +903,7 @@ class QuickSetupView(discord.ui.View):
         await interaction.message.edit(embed=self._get_embed(interaction.guild), view=self)
 
     async def _on_finish(self, interaction: discord.Interaction):
-        if self.feature not in ("scamtrap", "escape_punish", "too_many_h1", "too_many_emojis", "anti_invite_link", "anti_uispam", "anti_raid", "anti_spam", "automod_detect"):
+        if self.feature not in ("scamtrap", "escape_punish", "too_many_h1", "too_many_emojis", "anti_invite_link", "anti_uispam", "anti_raid", "anti_spam", "automod_detect", "flagged_user"):
             await interaction.response.send_message("無效的功能。", ephemeral=True)
             return
         if self.feature == "scamtrap" and "channel_id" not in self.config:
@@ -661,6 +911,9 @@ class QuickSetupView(discord.ui.View):
             return
         if self.feature == "automod_detect" and "log_channel" not in self.config:
             await interaction.response.send_message("AutoMod 偵測請先選擇通知頻道。", ephemeral=True)
+            return
+        if self.feature == "flagged_user" and "log_channel" not in self.config:
+            await interaction.response.send_message("標記用戶加入偵測請先選擇通知頻道。", ephemeral=True)
             return
         if "action" not in self.config and self.feature in ("scamtrap", "too_many_h1", "too_many_emojis", "anti_invite_link", "anti_uispam", "anti_raid", "anti_spam"):
             await interaction.response.send_message("請選擇處置動作。", ephemeral=True)
@@ -682,7 +935,8 @@ class QuickSetupView(discord.ui.View):
         feat_names = {"scamtrap": "詐騙陷阱", "escape_punish": "逃避責任懲處", "too_many_h1": "標題過多",
                       "too_many_emojis": "表情符號過多", "anti_invite_link": "邀請連結",
                       "anti_uispam": "用戶安裝應用程式濫用",
-                      "anti_raid": "防突襲", "anti_spam": "防刷頻", "automod_detect": "AutoMod 偵測"}
+                      "anti_raid": "防突襲", "anti_spam": "防刷頻", "automod_detect": "AutoMod 偵測",
+                      "flagged_user": "標記用戶加入"}
         self.stop()
         await interaction.response.edit_message(
             embed=discord.Embed(title="✅ 設定完成", color=0x00ff00,
@@ -725,7 +979,13 @@ class SaveActionConfirmationView(discord.ui.View):
     @discord.ui.button(label="是，儲存這個動作", style=discord.ButtonStyle.success)
     async def confirm(self, interaction: discord.Interaction, button: discord.ui.Button):
         automod_settings = get_server_config(self.guild_id, "automod", {})
-        automod_settings.setdefault(self.feature, {})["action"] = self.analysis["normalized"]
+        if not isinstance(automod_settings, dict):
+            automod_settings = {}
+        if self.feature == "flagged_user":
+            feature_settings = _ensure_flagged_user_settings(automod_settings, self.guild_id)
+        else:
+            feature_settings = automod_settings.setdefault(self.feature, {})
+        feature_settings["action"] = self.analysis["normalized"]
         set_server_config(self.guild_id, "automod", automod_settings)
         self.stop()
         await interaction.response.edit_message(
@@ -747,12 +1007,110 @@ class SaveActionConfirmationView(discord.ui.View):
 class AutoModerate(commands.GroupCog, name=app_commands.locale_str("automod")):
     def __init__(self, bot: commands.Bot) -> None:
         self.bot = bot
+        self._blacklist_cache: dict[int, list[dict]] = {}
+        self._blacklist_last_success: datetime | None = None
+        self._blacklist_last_error: str | None = None
+        self._blacklist_session: aiohttp.ClientSession | None = None
+        self._missing_blacklist_key_logged = False
         super().__init__()
+
+    async def _get_blacklist_session(self) -> aiohttp.ClientSession:
+        if self._blacklist_session is None or self._blacklist_session.closed:
+            self._blacklist_session = aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=15))
+        return self._blacklist_session
+
+    async def _fetch_blacklist_snapshot(self) -> dict[int, list[dict]]:
+        api_key = str(config("blacklist_api_key", "") or "").strip()
+        if not api_key:
+            raise RuntimeError("尚未設定 blacklist_api_key")
+
+        session = await self._get_blacklist_session()
+        headers = {
+            "Authorization": f"Bearer {api_key}",
+            "Accept": "application/json",
+        }
+        for attempt in range(2):
+            async with session.get(BLACKLIST_API_URL, headers=headers) as response:
+                if response.status == 429 and attempt == 0:
+                    try:
+                        retry_after = max(0.0, min(float(response.headers.get("Retry-After", "2")), 60.0))
+                    except (TypeError, ValueError):
+                        retry_after = 2.0
+                    await asyncio.sleep(retry_after)
+                    continue
+                if response.status >= 400:
+                    raise RuntimeError(f"Blacklist API 回傳 HTTP {response.status}")
+                try:
+                    payload = await response.json()
+                except (aiohttp.ContentTypeError, json.JSONDecodeError) as error:
+                    raise ValueError("Blacklist API 回應不是有效 JSON") from error
+                return _normalize_blacklist_payload(payload)
+        raise RuntimeError("Blacklist API 超過呼叫頻率限制")
+
+    async def sync_blacklist_cache(self) -> bool:
+        if not str(config("blacklist_api_key", "") or "").strip():
+            self._blacklist_last_error = "尚未設定 API key"
+            if not self._missing_blacklist_key_logged:
+                log(
+                    "Blacklist API 同步未啟用：尚未在 config.json 設定 blacklist_api_key。",
+                    level=logging.WARNING,
+                    module_name="AutoModerate",
+                )
+                self._missing_blacklist_key_logged = True
+            return False
+        self._missing_blacklist_key_logged = False
+        try:
+            snapshot = await self._fetch_blacklist_snapshot()
+        except Exception as error:
+            self._blacklist_last_error = f"{type(error).__name__}: {error}"
+            log(
+                f"Blacklist API 同步失敗，保留最後成功快取: {error}",
+                level=logging.ERROR,
+                module_name="AutoModerate",
+            )
+            return False
+
+        self._blacklist_cache = snapshot
+        self._blacklist_last_success = datetime.now(timezone.utc)
+        self._blacklist_last_error = None
+        record_count = sum(len(records) for records in snapshot.values())
+        log(
+            f"Blacklist API 同步完成：{len(snapshot)} 位用戶、{record_count} 筆有效紀錄。",
+            module_name="AutoModerate",
+        )
+        return True
+
+    @tasks.loop(minutes=BLACKLIST_SYNC_INTERVAL_MINUTES)
+    async def blacklist_sync_task(self):
+        await self.sync_blacklist_cache()
+
+    @blacklist_sync_task.before_loop
+    async def before_blacklist_sync_task(self):
+        await self.bot.wait_until_ready()
+
+    @commands.Cog.listener()
+    async def on_ready(self):
+        if not self.blacklist_sync_task.is_running():
+            self.blacklist_sync_task.start()
+
+    async def cog_unload(self):
+        self.blacklist_sync_task.cancel()
+        if self._blacklist_session is not None and not self._blacklist_session.closed:
+            await self._blacklist_session.close()
         
     @app_commands.command(name=app_commands.locale_str("view"), description="查看自動管理設定")
     async def view_automod_settings(self, interaction: discord.Interaction):
         guild_id = interaction.guild.id if interaction.guild else None
         automod_settings = get_server_config(guild_id, "automod", {})
+        if not isinstance(automod_settings, dict):
+            automod_settings = {}
+        if "flagged_user" not in automod_settings:
+            flagged_config = _normalize_flagged_user_config(guild_id)
+            if flagged_config["legacy"]:
+                automod_settings = dict(automod_settings)
+                automod_settings["flagged_user"] = {
+                    key: value for key, value in flagged_config.items() if key != "legacy"
+                }
         if not automod_settings:
             await interaction.response.send_message("自動管理尚未啟用。", ephemeral=True)
             return
@@ -780,6 +1138,7 @@ class AutoModerate(commands.GroupCog, name=app_commands.locale_str("automod")):
             app_commands.Choice(name="防突襲（大量加入偵測）", value="anti_raid"),
             app_commands.Choice(name="防刷頻", value="anti_spam"),
             app_commands.Choice(name="AutoMod 偵測（原生 AutoMod 觸發）", value="automod_detect"),
+            app_commands.Choice(name="標記用戶加入", value="flagged_user"),
         ],
         enable=[
             app_commands.Choice(name="啟用", value="True"),
@@ -789,7 +1148,13 @@ class AutoModerate(commands.GroupCog, name=app_commands.locale_str("automod")):
     async def toggle_automod_setting(self, interaction: discord.Interaction, setting: str, enable: str):
         guild_id = interaction.guild.id if interaction.guild else None
         automod_settings = get_server_config(guild_id, "automod", {})
-        automod_settings.setdefault(setting, {})["enabled"] = (enable == "True")
+        if not isinstance(automod_settings, dict):
+            automod_settings = {}
+        if setting == "flagged_user":
+            feature_settings = _ensure_flagged_user_settings(automod_settings, guild_id)
+        else:
+            feature_settings = automod_settings.setdefault(setting, {})
+        feature_settings["enabled"] = (enable == "True")
         set_server_config(guild_id, "automod", automod_settings)
         await interaction.response.send_message(f"已將自動管理設定 '{setting}' 設為 {'啟用' if enable == 'True' else '停用'}。")
         
@@ -803,6 +1168,14 @@ class AutoModerate(commands.GroupCog, name=app_commands.locale_str("automod")):
         if setting == "automod_detect" and enable == "True":
             if "log_channel" not in automod_settings.get("automod_detect", {}):
                 await interaction.followup.send(f"請注意，AutoMod 偵測已啟用，但尚未設定通知頻道。請使用 {await get_command_mention('automod', 'settings')} 來設定 `automod_detect-log_channel`。", ephemeral=True)
+        if setting == "flagged_user" and enable == "True":
+            if not automod_settings.get("flagged_user", {}).get("log_channel"):
+                legacy_channel = get_server_config(guild_id, "flagged_user_onjoin_channel")
+                if not legacy_channel:
+                    await interaction.followup.send(
+                        f"請注意，標記用戶加入偵測已啟用，但尚未設定通知頻道。請使用 {await get_command_mention('automod', 'settings')} 設定 `flagged_user-log_channel`。",
+                        ephemeral=True,
+                    )
         if setting == "anti_invite_link" and enable == "True":
             if "action" not in automod_settings.get("anti_invite_link", {}):
                 await interaction.followup.send(f"請注意，邀請連結偵測已啟用，但尚未設定動作指令。請使用 {await get_command_mention('automod', 'settings')} 來設定 `anti_invite_link-action`。", ephemeral=True)
@@ -831,32 +1204,45 @@ class AutoModerate(commands.GroupCog, name=app_commands.locale_str("automod")):
     async def set_automod_setting(self, interaction: discord.Interaction, setting: str, value: str):
         guild_id = interaction.guild.id if interaction.guild else None
         automod_settings = get_server_config(guild_id, "automod", {})
+        if not isinstance(automod_settings, dict):
+            automod_settings = {}
         setting_base = setting.split("-")[0]
         setting_key = setting.split("-")[1] if len(setting.split("-")) > 1 else None
         if setting_base not in automod_settings:
-            automod_settings[setting_base] = {}
+            if setting_base == "flagged_user":
+                _ensure_flagged_user_settings(automod_settings, guild_id)
+            else:
+                automod_settings[setting_base] = {}
         action_analysis = None
         if setting_key == "action":
-            action_analysis = Moderate.analyze_action_string(value, guild_id)
-            if not action_analysis["valid"]:
-                await interaction.response.send_message(
-                    embed=build_action_preview_embed(action_analysis),
-                    ephemeral=True,
-                )
-                return
-            if action_analysis["requires_confirmation"]:
-                await interaction.response.send_message(
-                    embed=build_action_preview_embed(action_analysis, title="確認你的意思"),
-                    view=SaveActionConfirmationView(
-                        guild_id,
-                        setting_base,
-                        action_analysis,
-                        interaction.user.id,
-                    ),
-                    ephemeral=True,
-                )
-                return
-            value = action_analysis["normalized"]
+            clear_action = (
+                setting_base == "flagged_user"
+                and str(value).strip().lower() in {"none", "null", "clear", "無", "清空"}
+            )
+            if clear_action:
+                value = ""
+            else:
+                analyzer = Moderate.analyze_member_join_action if setting_base == "flagged_user" else Moderate.analyze_action_string
+                action_analysis = analyzer(value, guild_id)
+                if not action_analysis["valid"]:
+                    await interaction.response.send_message(
+                        embed=build_action_preview_embed(action_analysis),
+                        ephemeral=True,
+                    )
+                    return
+                if action_analysis["requires_confirmation"]:
+                    await interaction.response.send_message(
+                        embed=build_action_preview_embed(action_analysis, title="確認你的意思"),
+                        view=SaveActionConfirmationView(
+                            guild_id,
+                            setting_base,
+                            action_analysis,
+                            interaction.user.id,
+                        ),
+                        ephemeral=True,
+                    )
+                    return
+                value = action_analysis["normalized"]
         value = parse_mention_to_id(value) if setting_key in ["channel_id", "log_channel"] else value
         if setting_key == "allow_current_server":
             normalized_value = str(value).strip().lower()
@@ -864,6 +1250,16 @@ class AutoModerate(commands.GroupCog, name=app_commands.locale_str("automod")):
                 await interaction.response.send_message("`allow_current_server` 只接受 true / false。", ephemeral=True)
                 return
             value = _is_truthy(normalized_value)
+        if setting_base == "flagged_user" and setting_key == "action_source":
+            value = str(value).strip().lower()
+            if value not in FLAGGED_USER_ACTION_SOURCES:
+                await interaction.response.send_message("`action_source` 只接受 local / api / both。", ephemeral=True)
+                return
+        if setting_base == "flagged_user" and setting_key == "local_match_mode":
+            value = str(value).strip().lower()
+            if value not in FLAGGED_USER_LOCAL_MATCH_MODES:
+                await interaction.response.send_message("`local_match_mode` 只接受 active / history。", ephemeral=True)
+                return
         if setting_key == "ignore_channels":
             raw_text = str(value or "").strip()
             if raw_text.lower() in {"none", "null", "clear", "[]"} or raw_text in {"無", "清空"}:
@@ -1018,57 +1414,56 @@ class AutoModerate(commands.GroupCog, name=app_commands.locale_str("automod")):
             pass
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
-    @app_commands.command(name=app_commands.locale_str("scan-flagged-users"), description="掃描並更新伺服器中的標記用戶")
+    @app_commands.command(name=app_commands.locale_str("scan-flagged-users"), description="掃描伺服器中的標記用戶")
     @app_commands.default_permissions(administrator=True)
     @app_commands.describe(user="要掃描的用戶，若不指定則掃描所有用戶")
     async def scan_flagged_users(self, interaction: discord.Interaction, user: discord.User = None):
-        await interaction.response.send_message("開始掃描標記用戶...")
-        database_file = config("flagged_database_path", "flagged_data.db")
-        conn = sqlite3.connect(database_file)
-        cursor = conn.cursor()
-        flagged_user = {}
-        if user:
-            cursor.execute('SELECT user_id, guild_id, flagged_at, flagged_role FROM flagged_users WHERE user_id = ?', (user.id,))
-            results = cursor.fetchall()
-            results = [dict(zip([column[0] for column in cursor.description], row)) for row in results]
-            if results:
-                for result in results:
-                    cursor.execute('SELECT name FROM guilds WHERE id = ?', (result['guild_id'],))
-                    guild_info = cursor.fetchone()
-                    result['guild_name'] = guild_info[0] if guild_info else "未知伺服器"
-                flagged_user[result['user_id']] = results
-        else:
-            for member in interaction.guild.members:
-                cursor.execute('SELECT user_id, guild_id, flagged_at, flagged_role FROM flagged_users WHERE user_id = ?', (member.id,))
-                results = cursor.fetchall()
-                # convert to dict
-                results = [dict(zip([column[0] for column in cursor.description], row)) for row in results]
-                # get server info
-                if results:
-                    for result in results:
-                        cursor.execute('SELECT name FROM guilds WHERE id = ?', (result['guild_id'],))
-                        guild_info = cursor.fetchone()
-                        result["user_name"] = member.name
-                        result['guild_name'] = guild_info[0] if guild_info else "未知伺服器"
-                    flagged_user[member.id] = results
-        conn.close()
-        if flagged_user:
-            msg_lines = []
-            for user_id, fu in flagged_user.items():
-                member = interaction.guild.get_member(user_id)
-                user_name = member.name if member else "未知用戶"
-                msg_lines.append(f"用戶: {user_name} (ID: {user_id})")
-                for entry in fu:
-                    guild_name = entry.get('guild_name', '未知伺服器')
-                    flagged_at = entry.get('flagged_at', '未知時間')
-                    flagged_role = entry.get('flagged_role', 0)
-                    msg_lines.append(f" - 伺服器: {guild_name}, 標記時間: {flagged_at}{', 擁有被標記的身份組' if flagged_role else ''}")
-                msg_lines.append("")  # 空行分隔不同用戶
-            msg = "\n".join(msg_lines)
-            file = discord.File(io.StringIO(msg), filename="flagged_users.txt")
-            await interaction.followup.send(file=file)
-        else:
-            await interaction.followup.send("掃描完成！未找到任何標記用戶。")
+        await interaction.response.defer(ephemeral=True)
+        feature_config = _normalize_flagged_user_config(interaction.guild.id)
+        member_ids = {user.id} if user else {member.id for member in interaction.guild.members}
+        try:
+            local_records = _load_local_flagged_records(
+                member_ids,
+                match_mode=feature_config["local_match_mode"],
+            )
+            local_error = None
+        except (sqlite3.Error, OSError) as error:
+            local_records = {}
+            local_error = type(error).__name__
+
+        matched_ids = member_ids & (set(local_records) | set(self._blacklist_cache))
+        status_lines = [
+            f"本機資料：{'讀取失敗 (' + local_error + ')' if local_error else '已套用三個月內 / ' + feature_config['local_match_mode']}",
+            "API 快取：" + (
+                "最後成功同步 " + self._blacklist_last_success.astimezone(timezone.utc).isoformat()
+                if self._blacklist_last_success
+                else "尚未成功同步"
+            ),
+            "API 最近狀態：" + (
+                self._blacklist_last_error
+                or ("成功" if self._blacklist_last_success else "尚無同步結果")
+            ),
+            "",
+        ]
+        for user_id in sorted(matched_ids):
+            member = interaction.guild.get_member(user_id)
+            status_lines.append(f"用戶: {member.name if member else '未知用戶'} (ID: {user_id})")
+            for entry in local_records.get(user_id, []):
+                active_text = "目前標記" if entry["flagged_role"] else "歷史紀錄"
+                status_lines.append(
+                    f" - [本機/{active_text}] {entry['guild_name']}，標記時間: {entry['flagged_at']}"
+                )
+            for entry in self._blacklist_cache.get(user_id, []):
+                status_lines.append(
+                    f" - [API] {entry['reason']}；回報者: {entry['reporter_name']} ({entry['reporter_id']})；時間: {entry['reported_at']}"
+                )
+            status_lines.append("")
+
+        if not matched_ids:
+            await interaction.followup.send("\n".join(status_lines) + "掃描完成，未找到標記用戶。", ephemeral=True)
+            return
+        file = discord.File(io.StringIO("\n".join(status_lines)), filename="flagged_users.txt")
+        await interaction.followup.send(content=f"掃描完成，共找到 {len(matched_ids)} 位標記用戶。", file=file, ephemeral=True)
 
     @app_commands.command(name=app_commands.locale_str("flagged-user-alert-channel"), description="設置用戶加入伺服器時的通知頻道")
     @app_commands.describe(channel="用於接收用戶加入通知的頻道")
@@ -1077,7 +1472,18 @@ class AutoModerate(commands.GroupCog, name=app_commands.locale_str("automod")):
         if not (perms.view_channel and perms.send_messages):
             await interaction.response.send_message(f"⚠️ 機器人在 {channel.mention} 沒有檢視頻道或發送訊息的權限，請先調整後再設定。", ephemeral=True)
             return
-        set_server_config(interaction.guild.id, "flagged_user_onjoin_channel", channel.id)
+        automod_settings = get_server_config(interaction.guild.id, "automod", {})
+        if not isinstance(automod_settings, dict):
+            automod_settings = {}
+        flagged_user = _ensure_flagged_user_settings(automod_settings, interaction.guild.id)
+        flagged_user.update({
+            "enabled": True,
+            "log_channel": str(channel.id),
+            "action": str(flagged_user.get("action", "") or ""),
+            "action_source": str(flagged_user.get("action_source", "both") or "both"),
+            "local_match_mode": str(flagged_user.get("local_match_mode", "active") or "active"),
+        })
+        set_server_config(interaction.guild.id, "automod", automod_settings)
         await interaction.response.send_message(f"已將用戶加入通知頻道設置為 {channel.mention}。")
     
     @app_commands.command(name=app_commands.locale_str("info"), description="查看自動管理功能介紹")
@@ -1145,6 +1551,13 @@ class AutoModerate(commands.GroupCog, name=app_commands.locale_str("automod")):
                   "設定項: `log_channel`（通知頻道）、`action`（額外處置動作，可選）\n"
                   "過濾條件: `filter_rule`（規則名稱過濾，支援多個用 `|` 分隔）、`filter_action_type`（動作類型過濾: block/alert/timeout/block_interactions，支援多個用 `|` 分隔）",
             inline=False
+        )
+        embed.add_field(
+            name="🚩 標記用戶加入 (flagged_user)",
+            value="合併本機三個月內標記資料與 Blacklist API 快取，在標記用戶加入時通知並可執行處置。\n"
+                  "設定項: `log_channel`（通知頻道）、`action`（可選）、"
+                  "`action_source`（local/api/both）、`local_match_mode`（active/history）",
+            inline=False,
         )
         embed.add_field(
             name="⚙️ 動作指令語法",
@@ -1303,29 +1716,117 @@ class AutoModerate(commands.GroupCog, name=app_commands.locale_str("automod")):
                 # 重置追蹤器避免重複處罰
                 join_list.clear()
 
-        channel_id = get_server_config(guild_id, "flagged_user_onjoin_channel")
-        if not channel_id:
+        flagged_config = _normalize_flagged_user_config(guild_id)
+        if not flagged_config["enabled"]:
             return
-        database_file = config("flagged_database_path", "flagged_data.db")
-        conn = sqlite3.connect(database_file)
-        cursor = conn.cursor()
-        cursor.execute('SELECT user_id, guild_id, flagged_at, flagged_role FROM flagged_users WHERE user_id = ?', (member.id,))
-        results = cursor.fetchall()
-        results = [dict(zip([column[0] for column in cursor.description], row)) for row in results]
-        if results:
-            log(f"被標記的用戶 {member} ({len(results)}) 加入伺服器，發送通知。", module_name="AutoModerate", user=member, guild=member.guild)
-            channel = member.guild.get_channel(channel_id)
-            if channel:
-                embed = discord.Embed(title="標記用戶加入伺服器", color=0xff0000)
-                embed.add_field(name="用戶", value=f"{member.mention} (ID: {member.id})", inline=False)
-                for result in results:
-                    cursor.execute('SELECT name FROM guilds WHERE id = ?', (result['guild_id'],))
-                    guild_info = cursor.fetchone()
-                    guild_name = guild_info[0] if guild_info else "未知伺服器"
-                    flagged_at = result.get('flagged_at', '未知時間')
-                    embed.add_field(name=guild_name, value=f"標記時間: {flagged_at}{', 擁有被標記的身份組' if result.get('flagged_role', 0) else ''}", inline=False)
-                await channel.send(embed=embed)
-        conn.close()
+        try:
+            local_results = _load_local_flagged_records(
+                {member.id},
+                match_mode=flagged_config["local_match_mode"],
+            ).get(member.id, [])
+        except (sqlite3.Error, OSError) as error:
+            local_results = []
+            log(
+                f"讀取本機標記資料失敗: {type(error).__name__}: {error}",
+                level=logging.ERROR,
+                module_name="AutoModerate",
+                user=member,
+                guild=member.guild,
+            )
+        api_results = list(self._blacklist_cache.get(member.id, []))
+        if not local_results and not api_results:
+            return
+
+        action_result = "未設定自動處置。"
+        action = flagged_config["action"]
+        should_act = bool(action) and _action_matches_sources(
+            flagged_config["action_source"],
+            has_local=bool(local_results),
+            has_api=bool(api_results),
+        )
+        if should_act:
+            analysis = Moderate.analyze_member_join_action(action, guild_id)
+            if not analysis["valid"] or analysis["requires_confirmation"]:
+                action_result = "處置未執行：已儲存的動作不適用於成員加入事件。"
+                log(
+                    f"標記用戶加入處置設定無效: {analysis.get('error') or analysis.get('confirmation')}",
+                    level=logging.ERROR,
+                    module_name="AutoModerate",
+                    user=member,
+                    guild=member.guild,
+                )
+            else:
+                try:
+                    result_lines = await do_action_str(action, guild=member.guild, user=member)
+                    action_result = "\n".join(result_lines) or "處置已執行。"
+                    log(
+                        f"標記用戶加入處置完成: {action_result}",
+                        module_name="AutoModerate",
+                        user=member,
+                        guild=member.guild,
+                    )
+                except Exception as error:
+                    action_result = f"處置失敗：{type(error).__name__}"
+                    log(
+                        f"標記用戶加入處置失敗: {error}",
+                        level=logging.ERROR,
+                        module_name="AutoModerate",
+                        user=member,
+                        guild=member.guild,
+                    )
+        elif action:
+            action_result = f"動作來源設定為 {flagged_config['action_source']}，本次來源不符合，未執行。"
+
+        embed = discord.Embed(title="🚩 標記用戶加入伺服器", color=0xff0000)
+        embed.add_field(name="用戶", value=f"{member.mention} (ID: {member.id})", inline=False)
+        if local_results:
+            embed.add_field(
+                name=f"本機資料（{len(local_results)} 筆）",
+                value=_format_embed_record_lines([
+                    "• "
+                    + str(result["guild_name"])
+                    + f"｜{result['flagged_at']}｜"
+                    + ("目前標記" if result["flagged_role"] else "歷史紀錄")
+                    for result in local_results
+                ]),
+                inline=False,
+            )
+        if api_results:
+            embed.add_field(
+                name=f"Blacklist API（{len(api_results)} 筆）",
+                value=_format_embed_record_lines([
+                    f"• {result['reason']}｜回報者: {result['reporter_name']} "
+                    f"({result['reporter_id']})｜{result['reported_at']}"
+                    for result in api_results
+                ]),
+                inline=False,
+            )
+        embed.add_field(name="處置結果", value=action_result[:1024], inline=False)
+
+        channel_id = flagged_config["log_channel"]
+        try:
+            channel = member.guild.get_channel(int(channel_id)) if channel_id else None
+        except (TypeError, ValueError):
+            channel = None
+        if channel is None:
+            log(
+                f"標記用戶通知頻道無效: {channel_id}",
+                level=logging.ERROR,
+                module_name="AutoModerate",
+                user=member,
+                guild=member.guild,
+            )
+            return
+        try:
+            await channel.send(embed=embed)
+        except Exception as error:
+            log(
+                f"無法傳送標記用戶加入通知到頻道 {channel_id}: {error}",
+                level=logging.ERROR,
+                module_name="AutoModerate",
+                user=member,
+                guild=member.guild,
+            )
                 
 
     @commands.Cog.listener()
