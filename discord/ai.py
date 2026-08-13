@@ -82,6 +82,10 @@ SERPER_SEARCH_ENDPOINT = "https://google.serper.dev/search"
 SERPER_IMAGES_ENDPOINT = "https://google.serper.dev/images"
 SERPER_SCRAPE_ENDPOINT = "https://scrape.serper.dev"
 AI_FETCH_PROXY_CONFIG_KEY = "ai_fetch_proxy"
+AI_GUILD_CUSTOM_PROMPT_LIMIT_CONFIG_KEY = "ai_guild_custom_prompt_limit"
+DEFAULT_AI_GUILD_CUSTOM_PROMPT_LIMIT = 1800
+MIN_AI_GUILD_CUSTOM_PROMPT_LIMIT = 1
+MAX_AI_GUILD_CUSTOM_PROMPT_LIMIT = 6000
 
 
 def _get_serper_api_key() -> str:
@@ -1269,7 +1273,6 @@ class AICommands(commands.Cog):
     AI_GUILD_MENTION_MODE_KEY = "ai_guild_mention_mode"
     AI_MENTION_MESSAGE_CACHE_TTL_SECONDS = 24 * 60 * 60
     AI_MENTION_MESSAGE_CACHE_MAX_PER_GUILD = 200
-    MAX_AI_GUILD_CUSTOM_PROMPT_LENGTH = 1800
     AI_USER_GLOBAL_MEMORY_KEY = "ai_user_global_memory"
     AI_GUILD_SHARED_MEMORY_KEY = "ai_guild_shared_memory"
     MAX_AI_MEMORY_ENTRIES = 80
@@ -3413,15 +3416,42 @@ class AICommands(commands.Cog):
             or getattr(permissions, "manage_guild", False)
         )
 
-    @classmethod
-    def _sanitize_guild_ai_custom_prompt(cls, value: str) -> str:
-        return re.sub(r"\s+", " ", str(value or "")).strip()[:cls.MAX_AI_GUILD_CUSTOM_PROMPT_LENGTH]
+    def _get_guild_ai_custom_prompt_limit(self, guild_id) -> int:
+        if not guild_id:
+            return DEFAULT_AI_GUILD_CUSTOM_PROMPT_LIMIT
+        raw_value = self._get_server_config_fallback(
+            guild_id,
+            AI_GUILD_CUSTOM_PROMPT_LIMIT_CONFIG_KEY,
+            DEFAULT_AI_GUILD_CUSTOM_PROMPT_LIMIT,
+        )
+        try:
+            limit = int(raw_value)
+        except (TypeError, ValueError):
+            limit = DEFAULT_AI_GUILD_CUSTOM_PROMPT_LIMIT
+        return max(MIN_AI_GUILD_CUSTOM_PROMPT_LIMIT, min(limit, MAX_AI_GUILD_CUSTOM_PROMPT_LIMIT))
+
+    def _sanitize_guild_ai_custom_prompt(self, value: str, guild_id) -> str:
+        prompt_limit = self._get_guild_ai_custom_prompt_limit(guild_id)
+        return re.sub(r"\s+", " ", str(value or "")).strip()[:prompt_limit]
+
+    def _build_guild_ai_custom_prompt_display(self, custom_prompt: str, guild_id) -> tuple[str, discord.File | None]:
+        prompt_limit = self._get_guild_ai_custom_prompt_limit(guild_id)
+        header = f"目前的 AI 自訂 prompt（{len(custom_prompt)}/{prompt_limit} 字）"
+        message = f"{header}：\n```text\n{custom_prompt}\n```"
+        if len(message) <= 2000 and "```" not in custom_prompt:
+            return message, None
+
+        prompt_file = discord.File(
+            io.BytesIO(custom_prompt.encode("utf-8")),
+            filename="ai_custom_prompt.txt",
+        )
+        return f"{header}，內容已附加為文字檔。", prompt_file
 
     def _get_guild_ai_custom_prompt(self, guild_id) -> str:
         if not guild_id:
             return ""
         value = self._get_server_config_fallback(guild_id, self.AI_GUILD_CUSTOM_PROMPT_KEY, "") or ""
-        return self._sanitize_guild_ai_custom_prompt(value)
+        return self._sanitize_guild_ai_custom_prompt(value, guild_id)
 
     def _get_guild_ai_mention_mode(self, guild_id) -> bool:
         if not guild_id:
@@ -8697,6 +8727,44 @@ class AICommands(commands.Cog):
             allowed_mentions=SAFE_MENTIONS,
         )
 
+    @ai_config_text.command(
+        name="server-prompt-limit",
+        aliases=["guild-prompt-limit", "prompt-limit"],
+    )
+    @is_owner()
+    async def ai_config_server_prompt_limit_text(
+        self,
+        ctx: commands.Context,
+        guild_id: int = None,
+        limit: int = None,
+    ):
+        if guild_id is None or guild_id <= 0:
+            await ctx.send(
+                "Usage: ai-config server-prompt-limit <guild_id> [limit]",
+                allowed_mentions=SAFE_MENTIONS,
+            )
+            return
+        if limit is None:
+            current_limit = self._get_guild_ai_custom_prompt_limit(guild_id)
+            await ctx.send(
+                f"Guild {guild_id} AI custom prompt limit: {current_limit}",
+                allowed_mentions=SAFE_MENTIONS,
+            )
+            return
+        if not MIN_AI_GUILD_CUSTOM_PROMPT_LIMIT <= limit <= MAX_AI_GUILD_CUSTOM_PROMPT_LIMIT:
+            await ctx.send(
+                "Server prompt limit must be between "
+                f"{MIN_AI_GUILD_CUSTOM_PROMPT_LIMIT} and {MAX_AI_GUILD_CUSTOM_PROMPT_LIMIT}.",
+                allowed_mentions=SAFE_MENTIONS,
+            )
+            return
+
+        set_server_config(guild_id, AI_GUILD_CUSTOM_PROMPT_LIMIT_CONFIG_KEY, int(limit))
+        await ctx.send(
+            f"Updated guild {guild_id} AI custom prompt limit: {limit}",
+            allowed_mentions=SAFE_MENTIONS,
+        )
+
     @ai_config_text.command(name="models")
     @is_owner()
     async def ai_config_models_text(self, ctx: commands.Context):
@@ -9441,14 +9509,15 @@ class AICommands(commands.Cog):
             await interaction.response.send_message("❌ 你需要管理伺服器或管理員權限才能設定 AI 自訂 prompt。", ephemeral=True, allowed_mentions=SAFE_MENTIONS)
             return
 
-        sanitized_prompt = self._sanitize_guild_ai_custom_prompt(prompt)
+        sanitized_prompt = self._sanitize_guild_ai_custom_prompt(prompt, guild.id)
         if not sanitized_prompt:
             await interaction.response.send_message("❌ 自訂 prompt 不能是空的。", ephemeral=True, allowed_mentions=SAFE_MENTIONS)
             return
 
         set_server_config(guild.id, self.AI_GUILD_CUSTOM_PROMPT_KEY, sanitized_prompt)
+        prompt_limit = self._get_guild_ai_custom_prompt_limit(guild.id)
         await interaction.response.send_message(
-            f"✅ 已更新這個伺服器的 AI 自訂 prompt（{len(sanitized_prompt)}/{self.MAX_AI_GUILD_CUSTOM_PROMPT_LENGTH} 字）。",
+            f"✅ 已更新這個伺服器的 AI 自訂 prompt（{len(sanitized_prompt)}/{prompt_limit} 字）。",
             ephemeral=True,
             allowed_mentions=SAFE_MENTIONS,
         )
@@ -9467,11 +9536,14 @@ class AICommands(commands.Cog):
             await interaction.response.send_message("目前這個伺服器還沒有設定 AI 自訂 prompt。", ephemeral=True, allowed_mentions=SAFE_MENTIONS)
             return
 
-        await interaction.response.send_message(
-            f"目前的 AI 自訂 prompt（{len(custom_prompt)}/{self.MAX_AI_GUILD_CUSTOM_PROMPT_LENGTH} 字）：\n```text\n{custom_prompt}\n```",
-            ephemeral=True,
-            allowed_mentions=SAFE_MENTIONS,
-        )
+        message, prompt_file = self._build_guild_ai_custom_prompt_display(custom_prompt, guild.id)
+        response_kwargs = {
+            "ephemeral": True,
+            "allowed_mentions": SAFE_MENTIONS,
+        }
+        if prompt_file is not None:
+            response_kwargs["file"] = prompt_file
+        await interaction.response.send_message(message, **response_kwargs)
 
     @ai_admin_prompt.command(name="clear", description="清除這個伺服器的 AI 自訂 prompt")
     @app_commands.allowed_installs(guilds=True, users=False)
@@ -10067,10 +10139,11 @@ class AICommands(commands.Cog):
             if not current_prompt:
                 await ctx.reply("目前這個伺服器還沒有設定 AI 自訂 prompt。", allowed_mentions=SAFE_MENTIONS)
                 return
-            await ctx.reply(
-                f"目前的 AI 自訂 prompt（{len(current_prompt)}/{self.MAX_AI_GUILD_CUSTOM_PROMPT_LENGTH} 字）：\n```text\n{current_prompt}\n```",
-                allowed_mentions=SAFE_MENTIONS,
-            )
+            message, prompt_file = self._build_guild_ai_custom_prompt_display(current_prompt, guild.id)
+            reply_kwargs = {"allowed_mentions": SAFE_MENTIONS}
+            if prompt_file is not None:
+                reply_kwargs["file"] = prompt_file
+            await ctx.reply(message, **reply_kwargs)
             return
 
         if not self._can_manage_guild_ai_memory(user, guild):
@@ -10082,14 +10155,15 @@ class AICommands(commands.Cog):
             await ctx.reply("✅ 已清除這個伺服器的 AI 自訂 prompt。", allowed_mentions=SAFE_MENTIONS)
             return
 
-        sanitized_prompt = self._sanitize_guild_ai_custom_prompt(prompt)
+        sanitized_prompt = self._sanitize_guild_ai_custom_prompt(prompt, guild.id)
         if not sanitized_prompt:
             await ctx.reply("❌ 自訂 prompt 不能是空的。", allowed_mentions=SAFE_MENTIONS)
             return
 
         set_server_config(guild.id, self.AI_GUILD_CUSTOM_PROMPT_KEY, sanitized_prompt)
+        prompt_limit = self._get_guild_ai_custom_prompt_limit(guild.id)
         await ctx.reply(
-            f"✅ 已更新這個伺服器的 AI 自訂 prompt（{len(sanitized_prompt)}/{self.MAX_AI_GUILD_CUSTOM_PROMPT_LENGTH} 字）。",
+            f"✅ 已更新這個伺服器的 AI 自訂 prompt（{len(sanitized_prompt)}/{prompt_limit} 字）。",
             allowed_mentions=SAFE_MENTIONS,
         )
 
