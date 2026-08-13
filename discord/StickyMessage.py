@@ -28,12 +28,13 @@ MIN_LIMIT = 1
 MAX_LIMIT = 25
 DEFAULT_QUIET_SECONDS = 10
 DEFAULT_MIN_INTERVAL_SECONDS = 30
-MIN_QUIET_SECONDS = 5
+MIN_QUIET_SECONDS = 0
 MAX_QUIET_SECONDS = 300
-MIN_INTERVAL_SECONDS = 30
+MIN_INTERVAL_SECONDS = 5
 MAX_INTERVAL_SECONDS = 3600
 MAX_CONTENT_LENGTH = 2000
 MAX_HTTP_RETRIES = 4
+API_REQUEST_INTERVAL_SECONDS = 0.25
 
 DEFAULT_CONFIG = {
     "quiet_seconds": DEFAULT_QUIET_SECONDS,
@@ -259,6 +260,7 @@ class StickyMessage(commands.GroupCog, group_name=app_commands.locale_str("stick
         self._wake_events: dict[tuple[int, int], asyncio.Event] = {}
         self._last_activity: dict[tuple[int, int], float] = {}
         self._api_lock = asyncio.Lock()
+        self._next_api_request_at = 0.0
 
     def cog_unload(self) -> None:
         for task in list(self._channel_tasks.values()):
@@ -368,11 +370,30 @@ class StickyMessage(commands.GroupCog, group_name=app_commands.locale_str("stick
         except (TypeError, ValueError):
             return min(30.0, (2 ** attempt) + random.random())
 
+    async def _wait_for_api_slot(self) -> None:
+        delay = self._next_api_request_at - time.monotonic()
+        if delay > 0:
+            await asyncio.sleep(delay)
+        self._next_api_request_at = time.monotonic() + API_REQUEST_INTERVAL_SECONDS
+
+    def _defer_api_after_http_error(self, error: discord.HTTPException, attempt: int) -> float:
+        delay = self._retry_after(error, attempt)
+        self._next_api_request_at = max(
+            self._next_api_request_at,
+            time.monotonic() + delay,
+        )
+        return delay
+
+    async def _wait_after_http_error(self, error: discord.HTTPException, attempt: int) -> None:
+        delay = self._defer_api_after_http_error(error, attempt)
+        await asyncio.sleep(delay)
+
     async def _delete_previous(self, channel: discord.abc.Messageable, message_id: int | None) -> None:
         if not message_id:
             return
         for attempt in range(MAX_HTTP_RETRIES):
             try:
+                await self._wait_for_api_slot()
                 await channel.get_partial_message(message_id).delete()
                 return
             except discord.NotFound:
@@ -383,8 +404,9 @@ class StickyMessage(commands.GroupCog, group_name=app_commands.locale_str("stick
                 if error.status != 429 and error.status < 500:
                     raise
                 if attempt >= MAX_HTTP_RETRIES - 1:
+                    self._defer_api_after_http_error(error, attempt)
                     raise
-                await asyncio.sleep(self._retry_after(error, attempt))
+                await self._wait_after_http_error(error, attempt)
 
     async def _send_with_retry(
         self,
@@ -395,6 +417,7 @@ class StickyMessage(commands.GroupCog, group_name=app_commands.locale_str("stick
         last_error: discord.HTTPException | None = None
         for attempt in range(MAX_HTTP_RETRIES):
             try:
+                await self._wait_for_api_slot()
                 return await channel.send(content, allowed_mentions=allowed_mentions)
             except (discord.Forbidden, discord.NotFound):
                 raise
@@ -403,8 +426,9 @@ class StickyMessage(commands.GroupCog, group_name=app_commands.locale_str("stick
                 if error.status != 429 and error.status < 500:
                     raise
                 if attempt >= MAX_HTTP_RETRIES - 1:
+                    self._defer_api_after_http_error(error, attempt)
                     raise
-                await asyncio.sleep(self._retry_after(error, attempt))
+                await self._wait_after_http_error(error, attempt)
         raise last_error or RuntimeError("發送置底訊息失敗。")
 
     async def publish_entry(

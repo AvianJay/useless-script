@@ -1007,13 +1007,13 @@ class StickyMessageEditorView(SetupView):
 
 class StickyMessageTimingModal(discord.ui.Modal, title="StickyMessage 時間設定"):
     quiet_seconds = discord.ui.TextInput(
-        label="無新訊息多久後置底（5–300 秒）",
+        label="無新訊息多久後置底（0–300 秒）",
         min_length=1,
         max_length=3,
     )
     min_interval_seconds = discord.ui.TextInput(
-        label="同頻道最短間隔（30–3600 秒）",
-        min_length=2,
+        label="同頻道最短間隔（5–3600 秒）",
+        min_length=1,
         max_length=4,
     )
 

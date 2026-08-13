@@ -56,10 +56,14 @@ class StickyMessageConfigTests(unittest.TestCase):
             sticky.normalize_config({"entries": [{"channel_id": 1, "content": "x" * 2001}]}, strict=True)
 
     def test_strict_config_validates_timing_ranges(self):
+        self.assertEqual(
+            sticky.normalize_config({"quiet_seconds": 0, "min_interval_seconds": 5}, strict=True),
+            {"quiet_seconds": 0, "min_interval_seconds": 5, "entries": []},
+        )
         with self.assertRaisesRegex(ValueError, "quiet_seconds"):
-            sticky.normalize_config({"quiet_seconds": 4}, strict=True)
+            sticky.normalize_config({"quiet_seconds": -1}, strict=True)
         with self.assertRaisesRegex(ValueError, "min_interval_seconds"):
-            sticky.normalize_config({"min_interval_seconds": 29}, strict=True)
+            sticky.normalize_config({"min_interval_seconds": 4}, strict=True)
 
     def test_limit_defaults_and_clamps(self):
         with patch.object(sticky, "get_server_config", return_value="invalid"):
@@ -91,6 +95,7 @@ class StickyMessageRuntimeTests(unittest.IsolatedAsyncioTestCase):
         cog._wake_events = {}
         cog._last_activity = {}
         cog._api_lock = asyncio.Lock()
+        cog._next_api_request_at = 0.0
         return cog
 
     async def test_on_message_only_schedules_human_guild_messages(self):
@@ -329,6 +334,50 @@ class StickyMessageRuntimeTests(unittest.IsolatedAsyncioTestCase):
         error = SimpleNamespace(retry_after=2.5, response=None)
         self.assertEqual(sticky.StickyMessage._retry_after(error, 0), 2.5)
 
+    async def test_api_throttle_is_shared_across_consecutive_requests(self):
+        cog = self.make_cog()
+        clock = [100.0]
+
+        async def advance_clock(delay):
+            clock[0] += delay
+
+        with (
+            patch.object(sticky.time, "monotonic", side_effect=lambda: clock[0]),
+            patch.object(sticky.asyncio, "sleep", side_effect=advance_clock) as sleep,
+        ):
+            await sticky.StickyMessage._wait_for_api_slot(cog)
+            await sticky.StickyMessage._wait_for_api_slot(cog)
+
+        sleep.assert_awaited_once_with(sticky.API_REQUEST_INTERVAL_SECONDS)
+        self.assertAlmostEqual(cog._next_api_request_at, 100.5)
+
+    async def test_retry_after_delays_the_shared_api_queue(self):
+        cog = self.make_cog()
+        clock = [100.0]
+
+        async def advance_clock(delay):
+            clock[0] += delay
+
+        error = SimpleNamespace(retry_after=2.5, response=None)
+        with (
+            patch.object(sticky.time, "monotonic", side_effect=lambda: clock[0]),
+            patch.object(sticky.asyncio, "sleep", side_effect=advance_clock) as sleep,
+        ):
+            await sticky.StickyMessage._wait_after_http_error(cog, error, 0)
+
+        sleep.assert_awaited_once_with(2.5)
+        self.assertEqual(cog._next_api_request_at, 102.5)
+
+    async def test_final_http_failure_still_defers_the_shared_queue(self):
+        cog = self.make_cog()
+        error = SimpleNamespace(retry_after=3.0, response=None)
+
+        with patch.object(sticky.time, "monotonic", return_value=100.0):
+            delay = sticky.StickyMessage._defer_api_after_http_error(cog, error, 3)
+
+        self.assertEqual(delay, 3.0)
+        self.assertEqual(cog._next_api_request_at, 103.0)
+
 
 class StickyMessageCommandTests(unittest.TestCase):
     def test_group_contains_expected_commands(self):
@@ -339,6 +388,11 @@ class StickyMessageCommandTests(unittest.TestCase):
         )
         payloads = [command.to_dict(sticky.bot.tree) for command in sticky.StickyMessage.__cog_app_commands__]
         self.assertTrue(all(payload["name"] in command_names for payload in payloads))
+
+        timing = next(payload for payload in payloads if payload["name"] == "timing")
+        options = {option["name"]: option for option in timing["options"]}
+        self.assertEqual(options["quiet_seconds"]["min_value"], 0)
+        self.assertEqual(options["min_interval_seconds"]["min_value"], 5)
 
 
 if __name__ == "__main__":

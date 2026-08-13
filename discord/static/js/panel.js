@@ -423,9 +423,11 @@ function buildChannelListSelect(mod, s, value, channels) {
 
 function buildStickymessageConfigEditor(mod, s, value, channels, limit = 5) {
     const allowedChannels = channels.filter(ch => ['text', 'news'].includes(ch.type));
+    const parsedQuietSeconds = parseInt(value && value.quiet_seconds, 10);
+    const parsedMinIntervalSeconds = parseInt(value && value.min_interval_seconds, 10);
     const config = {
-        quiet_seconds: Math.max(5, Math.min(300, parseInt(value && value.quiet_seconds, 10) || 10)),
-        min_interval_seconds: Math.max(30, Math.min(3600, parseInt(value && value.min_interval_seconds, 10) || 30)),
+        quiet_seconds: Math.max(0, Math.min(300, Number.isFinite(parsedQuietSeconds) ? parsedQuietSeconds : 10)),
+        min_interval_seconds: Math.max(5, Math.min(3600, Number.isFinite(parsedMinIntervalSeconds) ? parsedMinIntervalSeconds : 30)),
         entries: Array.isArray(value && value.entries) ? value.entries.map(entry => ({
             channel_id: String(entry.channel_id || ''),
             content: String(entry.content || ''),
@@ -439,13 +441,13 @@ function buildStickymessageConfigEditor(mod, s, value, channels, limit = 5) {
     timing.className = 'stickymessage-timing';
     const quietInput = document.createElement('input');
     quietInput.type = 'number';
-    quietInput.min = '5';
+    quietInput.min = '0';
     quietInput.max = '300';
     quietInput.className = 'form-input';
     quietInput.value = config.quiet_seconds;
     const intervalInput = document.createElement('input');
     intervalInput.type = 'number';
-    intervalInput.min = '30';
+    intervalInput.min = '5';
     intervalInput.max = '3600';
     intervalInput.className = 'form-input';
     intervalInput.value = config.min_interval_seconds;
@@ -458,8 +460,8 @@ function buildStickymessageConfigEditor(mod, s, value, channels, limit = 5) {
         config.min_interval_seconds = parseInt(intervalInput.value, 10);
         await saveConfig();
     });
-    timing.appendChild(makeLabeledControl('無新訊息多久後置底（5–300 秒）', quietInput));
-    timing.appendChild(makeLabeledControl('同頻道最短重貼間隔（30–3600 秒）', intervalInput));
+    timing.appendChild(makeLabeledControl('無新訊息多久後置底（0–300 秒）', quietInput));
+    timing.appendChild(makeLabeledControl('同頻道最短重貼間隔（5–3600 秒）', intervalInput));
     timing.appendChild(timingSave);
     container.appendChild(timing);
 
