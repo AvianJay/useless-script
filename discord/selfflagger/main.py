@@ -13,9 +13,10 @@ from config_manager import (
 import asyncio
 import random
 from datetime import datetime, timezone
+from pathlib import Path
 
 config_version = CONFIG_VERSION
-config_path = 'config.json'
+config_path = Path(__file__).resolve().with_name('config.json')
 try:
     _config, config_needs_save = load_config_file(config_path)
 except ConfigError as error:
@@ -44,9 +45,13 @@ def config(key, value=None, mode="r"):
 
 bot = commands.Bot(
     command_prefix=config("prefix", "!"),
-    self_bot=True,
+    # self_bot=True only parses messages sent by the token account itself.
+    # user_bot=True parses user messages, while command_access() below limits
+    # execution to the token account or configured owner in the allowed guild.
+    user_bot=True,
     owner_id=config("owner_id", 0) or None,
     help_command=None,
+    strip_after_prefix=True,
 )
 database.init_db()
 conn = database.get_db_connection()
@@ -509,6 +514,14 @@ async def updateflags(ctx):
 
 
 @bot.event
+async def on_command(ctx):
+    print(
+        f"[+] Command '{ctx.command.qualified_name}' received from "
+        f"user {ctx.author.id} in guild {getattr(ctx.guild, 'id', None)}."
+    )
+
+
+@bot.event
 async def on_command_error(ctx, error):
     if isinstance(error, commands.CommandNotFound):
         return
@@ -519,14 +532,26 @@ async def on_command_error(ctx, error):
             if user_id
         }
         if ctx.author.id not in allowed_authors:
+            print(
+                f"[!] Rejected command from unauthorized user {ctx.author.id} "
+                f"in guild {getattr(ctx.guild, 'id', None)}."
+            )
             return
         if ctx.guild is None:
             await ctx.send("Selfflagger 指令不能在私訊使用。")
             return
         allowed_guild_id = config("command_guild_id", 0)
         if allowed_guild_id and ctx.guild.id != allowed_guild_id:
+            print(
+                f"[!] Rejected command in guild {ctx.guild.id}; "
+                f"configured command guild is {allowed_guild_id}."
+            )
             await ctx.send(f"Selfflagger 指令只能在伺服器 `{allowed_guild_id}` 使用。")
         return
+    print(
+        f"[!] Command '{getattr(ctx.command, 'qualified_name', 'unknown')}' failed: "
+        f"{type(error).__name__}: {error}"
+    )
     await ctx.send(f"指令執行失敗：`{type(error).__name__}: {error}`")
 
 @bot.event
@@ -534,6 +559,11 @@ async def on_ready():
     global scan_task
     print(f'Logged in as {bot.user} (ID: {bot.user.id})')
     print('------')
+    print(
+        f"[+] Command control: prefix={config('prefix', '>')!r}, "
+        f"token_user_id={bot.user.id}, owner_id={config('owner_id', 0)}, "
+        f"command_guild_id={config('command_guild_id', 0)}"
+    )
     _, missing_guild_ids = await subscribe_configured_guilds()
     for guild_id in missing_guild_ids:
         print(f'[!] Could not find guild with ID: {guild_id}')

@@ -105,6 +105,7 @@ def load_config_file(path, *, allow_missing=True):
 
 
 def save_config_file(path, config):
+    path = os.fspath(path)
     temporary_path = f"{path}.tmp"
     try:
         with open(temporary_path, "w", encoding="utf-8") as config_file:

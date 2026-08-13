@@ -8,6 +8,8 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 
+from selfcord.ext import commands
+
 
 SELFFLAGGER_DIR = Path(__file__).resolve().parents[1] / "selfflagger"
 
@@ -62,6 +64,12 @@ class DatabaseTests(unittest.TestCase):
 
         self.assertEqual(record[2:], (1, 1))
 
+    def test_default_database_path_is_next_to_selfflagger_module(self):
+        self.assertEqual(
+            Path(database.__file__).resolve().with_name("flagged_data.db"),
+            Path(database.DEFAULT_DB_PATH),
+        )
+
     def test_existing_database_is_migrated_without_losing_rows(self):
         with closing(sqlite3.connect(self.db_path)) as conn:
             conn.executescript("""
@@ -94,6 +102,15 @@ class DatabaseTests(unittest.TestCase):
 
 
 class ConfigManagerTests(unittest.TestCase):
+    def test_user_bot_mode_does_not_drop_configured_owner_messages(self):
+        bot = commands.Bot(
+            command_prefix=">",
+            user_bot=True,
+            help_command=None,
+        )
+
+        self.assertFalse(bot._skip_check(200, 100))
+
     def test_old_config_is_migrated_and_ids_are_normalized(self):
         normalized = config_manager.normalize_config({
             "prefix": "!",

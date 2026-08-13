@@ -1,9 +1,11 @@
 import sqlite3
 from contextlib import closing
+from pathlib import Path
 
 import selfcord
 
-DB_PATH = 'flagged_data.db'
+DEFAULT_DB_PATH = Path(__file__).resolve().with_name('flagged_data.db')
+DB_PATH = DEFAULT_DB_PATH
 
 def get_db_connection():
     return sqlite3.connect(DB_PATH)
