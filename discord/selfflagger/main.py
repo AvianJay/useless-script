@@ -3,11 +3,12 @@ from selfcord.ext import commands
 import os
 import json
 import database
+from channel_selection import member_is_admin, select_most_visible_channel
 import asyncio
 import random
 from datetime import datetime, timezone
 
-config_version = 4
+config_version = 5
 config_path = 'config.json'
 default_config = {
     "prefix": ">",
@@ -17,7 +18,6 @@ default_config = {
         {
             "id": 0,
             "flagged_roles": [0],
-            "viewable_channels": [0],
             "check_channels": [0]
         }
     ],
@@ -54,6 +54,10 @@ if _config.get("config_version", 0) < config_version:
     for k in default_config.keys():
         if _config.get(k) is None:
             _config[k] = default_config[k]
+    if _config.get("config_version", 0) < 5:
+        for guild_info in _config.get("scan_guilds", []):
+            if isinstance(guild_info, dict):
+                guild_info.pop("viewable_channels", None)
     _config["config_version"] = config_version
     print("[+] Saving...")
     json.dump(_config, open(config_path, "w", encoding="utf-8"), indent=4)
@@ -90,9 +94,19 @@ async def update_flagged_users():
         count_flagged = 0
         print(f"[+] Fetching members for guild {guild.name}...")
         try:
-            viewable_channels_id = guild_info.get("viewable_channels", [])
-            viewable_channels = [guild.get_channel(cid) for cid in viewable_channels_id if guild.get_channel(cid) is not None]
-            members = await guild.fetch_members(channels=viewable_channels)
+            selection = select_most_visible_channel(guild)
+            if selection is None:
+                print(
+                    f"[!] No text channel visible to this account was found "
+                    f"for guild {guild.name} (ID: {guild_id})."
+                )
+                continue
+            viewable_channel, visible_count, cached_member_count = selection
+            print(
+                f"[+] Selected #{viewable_channel.name} (ID: {viewable_channel.id}); "
+                f"visible to {visible_count}/{cached_member_count} cached members."
+            )
+            members = await guild.fetch_members(channels=[viewable_channel])
             for member in members:
                 if member.bot:
                     # check bot verified
@@ -108,7 +122,13 @@ async def update_flagged_users():
                     this_time_added_count += 1
                     if is_flagged:
                         this_time_added_and_flagged_count += 1
-                database.add_flagged_user(conn, member.id, guild_id, is_flagged)
+                database.add_flagged_user(
+                    conn,
+                    member.id,
+                    guild_id,
+                    is_flagged,
+                    member_is_admin(member),
+                )
                 count += 1
                 if is_flagged:
                     count_flagged += 1
@@ -141,7 +161,13 @@ async def on_message(message: selfcord.Message):
         return
     flagged_roles = guild_info.get("flagged_roles", [])
     is_flagged = any(role.id in flagged_roles for role in message.author.roles)
-    database.add_flagged_user(conn, message.author.id, message.guild.id, is_flagged)
+    database.add_flagged_user(
+        conn,
+        message.author.id,
+        message.guild.id,
+        is_flagged,
+        member_is_admin(message.author),
+    )
     print(f"[+] Updated flagged status for user {message.author} (ID: {message.author.id}) in guild {message.guild.name} (ID: {message.guild.id}): {'Flagged' if is_flagged else 'Not Flagged'}")
 
 @bot.event
@@ -164,7 +190,13 @@ async def on_member_join(member):
         return
     flagged_roles = guild_info.get("flagged_roles", [])
     is_flagged = any(role.id in flagged_roles for role in member.roles)
-    database.add_flagged_user(conn, member.id, member.guild.id, is_flagged)
+    database.add_flagged_user(
+        conn,
+        member.id,
+        member.guild.id,
+        is_flagged,
+        member_is_admin(member),
+    )
     print(f"[+] Updated flagged status for user {member} (ID: {member.id}) in guild {member.guild.name} (ID: {member.guild.id}): {'Flagged' if is_flagged else 'Not Flagged'}")
 
 @bot.event
@@ -188,9 +220,22 @@ async def on_member_update(before, after):
     flagged_roles = guild_info.get("flagged_roles", [])
     before_flagged = any(role.id in flagged_roles for role in before.roles)
     after_flagged = any(role.id in flagged_roles for role in after.roles)
-    if before_flagged != after_flagged:
-        database.add_flagged_user(conn, after.id, after.guild.id, after_flagged)
-        print(f"[+] Updated flagged status for user {after} (ID: {after.id}) in guild {after.guild.name} (ID: {after.guild.id}): {'Flagged' if after_flagged else 'Not Flagged'}")
+    before_admin = member_is_admin(before)
+    after_admin = member_is_admin(after)
+    if before_flagged != after_flagged or before_admin != after_admin:
+        database.add_flagged_user(
+            conn,
+            after.id,
+            after.guild.id,
+            after_flagged,
+            after_admin,
+        )
+        print(
+            f"[+] Updated status for user {after} (ID: {after.id}) in guild "
+            f"{after.guild.name} (ID: {after.guild.id}): "
+            f"{'Flagged' if after_flagged else 'Not Flagged'}, "
+            f"{'Admin' if after_admin else 'Not Admin'}"
+        )
 
 last_update_users = {}
 
@@ -232,7 +277,13 @@ async def on_presence_update(before: selfcord.Relationship, after: selfcord.Memb
         if member is None:
             return
         flagged = any(role.id in flagged_roles for role in member.roles)
-        database.add_flagged_user(conn, member.id, mutual_guild.id, flagged)
+        database.add_flagged_user(
+            conn,
+            member.id,
+            mutual_guild.id,
+            flagged,
+            member_is_admin(member),
+        )
         print(f"[+] Updated flagged status for user {member} (ID: {member.id}) in guild {mutual_guild.guild.name} (ID: {mutual_guild.id}): {'Flagged' if flagged else 'Not Flagged'}")
 
 def is_owner():
