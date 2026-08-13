@@ -19,6 +19,7 @@ import aiohttp
 from aiohttp_socks import ProxyConnector
 import asyncio
 import base64
+import emoji as emoji_lib
 import html
 import ipaddress
 import io
@@ -35,7 +36,7 @@ import logging
 from pathlib import Path
 from urllib.parse import urljoin, urlparse
 from uuid import uuid4
-from PIL import Image, ImageOps, UnidentifiedImageError
+from PIL import Image, ImageDraw, ImageOps, UnidentifiedImageError
 from doc_markdown import read_markdown_file, extract_markdown_search_entries, load_docs_site
 from OwnerTools import is_owner
 from ai_rich_media import render_rich_markdown_images
@@ -708,6 +709,10 @@ TOOL_USAGE_PROMPT = """工具使用規則：
 - 只要使用者在問機器人目前狀態、是否在線、延遲、版本、安裝量、用了多少指令、進了幾個伺服器，優先使用 `get_bot_status`。
 - 如果使用者要你讀某個頻道最近內容、讀某一則訊息、確認某個使用者資訊或檢查某人在某個頻道的權限，優先使用 `read_channel`、`read_message`、`get_user`。
 - `read_channel`、`read_message`、`get_user` 只能讀取目前伺服器或目前私訊中，本來就對當前使用者與 bot 可見的資料；不要嘗試繞過隱藏頻道、私人討論串或其他看不到的內容。
+- 如果使用者在沒有明確引用訊息時問「上面在講什麼」、「剛剛聊什麼」、「前面發生什麼」或同義問題，一律先使用 `read_channel` 讀取頻道歷史；不要只依賴自動附帶的少量近期訊息。
+- 使用者要查看可見頻道時使用 `list_channels`；此工具只會列出當前使用者與 bot 都可見的頻道。
+- 訊息裡的 Unicode、自訂表情、反應與貼圖會先提供名稱/ID/URL及快取描述；需要實際理解未分析過的視覺內容時使用 `analyze_message_emojis`。
+- 使用者要你查看某人的頭像或橫幅內容時使用 `analyze_user_profile_media`，不要只憑圖片網址猜測。
 - 如果使用者明確要求「直接幫我生成影片 / 動畫 / 廣告短片」，優先使用 `generate_video`。
 - Discord 原始訊息內容有 2000 字限制；如果完整回覆、程式碼、清單、日誌或文件可能超過這個上限，優先使用 `send_as_file`，最後只留簡短摘要。
 - AI 會自動看到目前使用者的共通 profile 和這個伺服器的共通氛圍 profile；優先直接使用已注入的記憶，不必先呼叫工具重讀。
@@ -1323,9 +1328,14 @@ class AICommands(commands.Cog):
     IMAGE_ANALYZE_MAX_BYTES = 8_000_000
     IMAGE_ANALYZE_DEFAULT_MAX_CHARS = 700
     IMAGE_ANALYZE_MAX_CHARS = 1800
+    VISUAL_DESCRIPTION_ANALYSIS_VERSION = 1
+    VISUAL_DESCRIPTION_MAX_ASSETS = 8
+    VISUAL_DESCRIPTION_PROFILE_TTL_SECONDS = 24 * 60 * 60
+    VISUAL_DESCRIPTION_MAX_CHARS = 600
     CHANNEL_TOOL_DEFAULT_LIMIT = 20
     CHANNEL_TOOL_MAX_LIMIT = 100
     CHANNEL_TOOL_AROUND_DEFAULT = 10
+    CHANNEL_LIST_TOOL_RESULT_MAX_LENGTH = 16000
     MESSAGE_SEARCH_DEFAULT_LIMIT = 10
     MESSAGE_SEARCH_MAX_LIMIT = 25
     USER_TOOL_MAX_ROLE_PREVIEW = 15
@@ -1350,6 +1360,9 @@ class AICommands(commands.Cog):
         "read_message": "讀取單則訊息",
         "search_message": "搜尋訊息",
         "get_user": "查詢使用者資訊",
+        "analyze_message_emojis": "分析訊息表情與貼圖",
+        "analyze_user_profile_media": "分析使用者頭像與橫幅",
+        "list_channels": "列出可見頻道",
         "get_dsize_context": "取得 dsize 資料",
         "get_inventory_context": "取得背包資料",
         "get_economy_context": "取得經濟資料",
@@ -1374,6 +1387,7 @@ class AICommands(commands.Cog):
         self._docs_search_cache = None
         self._docs_feature_prompt_cache = None
         self._application_emoji_cache = None
+        self._visual_description_cache_fill_lock = asyncio.Lock()
 
     @staticmethod
     def _parse_model_prefix(message: str, default: str = "openai-fast") -> tuple[str, str]:
@@ -1972,6 +1986,8 @@ class AICommands(commands.Cog):
             return cls.MAX_AI_CONTEXT_TOOL_RESULT_LENGTH
         if tool_name == "fetch_raw":
             return cls.RAW_FETCH_TOOL_RESULT_MAX_LENGTH
+        if tool_name == "list_channels":
+            return cls.CHANNEL_LIST_TOOL_RESULT_MAX_LENGTH
         return cls.MAX_TOOL_RESULT_LENGTH
 
     @classmethod
@@ -2685,6 +2701,304 @@ class AICommands(commands.Cog):
             "bot_permissions": bot_permissions,
         }
 
+    @staticmethod
+    def _visual_asset_url(asset) -> str | None:
+        url = str(getattr(asset, "url", "") or "").strip()
+        return normalize_discord_image_url(url)
+
+    @staticmethod
+    def _custom_emoji_url(emoji_id: int, animated: bool = False) -> str:
+        extension = "gif" if animated else "png"
+        return f"https://cdn.discordapp.com/emojis/{int(emoji_id)}.{extension}?size=256&quality=lossless"
+
+    @staticmethod
+    def _unicode_emoji_description(value: str) -> str:
+        demojized = emoji_lib.demojize(str(value or ""), language="en")
+        if demojized.startswith(":") and demojized.endswith(":"):
+            demojized = demojized[1:-1]
+        return demojized.replace("_", " ").strip()
+
+    def _ensure_visual_description_cache_table(self, conn) -> None:
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS ai_visual_description_cache (
+                cache_key TEXT PRIMARY KEY,
+                asset_type TEXT NOT NULL,
+                description TEXT NOT NULL,
+                model TEXT,
+                analysis_version INTEGER NOT NULL,
+                created_at REAL NOT NULL
+            )
+            """
+        )
+        conn.commit()
+
+    def _get_visual_description_cache(self, cache_keys: list[str]) -> dict[str, dict]:
+        normalized_keys = list(dict.fromkeys(str(key) for key in cache_keys if key))
+        if not normalized_keys:
+            return {}
+        conn = get_db_connection()
+        try:
+            self._ensure_visual_description_cache_table(conn)
+            conn.execute(
+                """
+                DELETE FROM ai_visual_description_cache
+                WHERE analysis_version <> ?
+                   OR (cache_key LIKE 'profile:%' AND created_at <= ?)
+                """,
+                (
+                    self.VISUAL_DESCRIPTION_ANALYSIS_VERSION,
+                    time.time() - self.VISUAL_DESCRIPTION_PROFILE_TTL_SECONDS,
+                ),
+            )
+            conn.commit()
+            placeholders = ",".join("?" for _ in normalized_keys)
+            rows = conn.execute(
+                f"""
+                SELECT cache_key, asset_type, description, model, analysis_version, created_at
+                FROM ai_visual_description_cache
+                WHERE cache_key IN ({placeholders}) AND analysis_version = ?
+                """,
+                (*normalized_keys, self.VISUAL_DESCRIPTION_ANALYSIS_VERSION),
+            ).fetchall()
+            now = time.time()
+            results = {}
+            expired_keys = []
+            for cache_key, asset_type, description, model, analysis_version, created_at in rows:
+                if str(cache_key).startswith("profile:") and now - float(created_at or 0) >= self.VISUAL_DESCRIPTION_PROFILE_TTL_SECONDS:
+                    expired_keys.append(str(cache_key))
+                    continue
+                results[str(cache_key)] = {
+                    "asset_type": asset_type,
+                    "description": description,
+                    "model": model,
+                    "analysis_version": analysis_version,
+                    "created_at": created_at,
+                }
+            if expired_keys:
+                expired_placeholders = ",".join("?" for _ in expired_keys)
+                conn.execute(
+                    f"DELETE FROM ai_visual_description_cache WHERE cache_key IN ({expired_placeholders})",
+                    expired_keys,
+                )
+                conn.commit()
+            return results
+        finally:
+            conn.close()
+
+    def _set_visual_description_cache(self, entries: list[dict]) -> None:
+        rows = [
+            (
+                str(entry.get("cache_key") or ""),
+                str(entry.get("asset_type") or "image"),
+                self._truncate_tool_text(entry.get("description") or "", max_len=self.VISUAL_DESCRIPTION_MAX_CHARS),
+                str(entry.get("model") or ""),
+                self.VISUAL_DESCRIPTION_ANALYSIS_VERSION,
+                float(entry.get("created_at") or time.time()),
+            )
+            for entry in entries
+            if entry.get("cache_key") and entry.get("description")
+        ]
+        if not rows:
+            return
+        conn = get_db_connection()
+        try:
+            self._ensure_visual_description_cache_table(conn)
+            for cache_key, _asset_type, _description, _model, _version, _created_at in rows:
+                if cache_key.startswith("profile:"):
+                    prefix = cache_key.rsplit(":", 1)[0] + ":%"
+                    conn.execute(
+                        "DELETE FROM ai_visual_description_cache WHERE cache_key LIKE ? AND cache_key <> ?",
+                        (prefix, cache_key),
+                    )
+            conn.executemany(
+                """
+                INSERT OR REPLACE INTO ai_visual_description_cache
+                (cache_key, asset_type, description, model, analysis_version, created_at)
+                VALUES (?, ?, ?, ?, ?, ?)
+                """,
+                rows,
+            )
+            conn.commit()
+        finally:
+            conn.close()
+
+    def _build_text_emoji_metadata(self, text: str, *, source: str = "content") -> list[dict]:
+        text = str(text or "")
+        items: list[dict] = []
+        seen: set[str] = set()
+        custom_spans: list[tuple[int, int]] = []
+        for match in MentionResolver.EMOJI_MENTION.finditer(text):
+            animated = bool(match.group(1))
+            emoji_id = int(match.group(3))
+            dedupe_key = f"emoji:{emoji_id}"
+            custom_spans.append(match.span())
+            if dedupe_key in seen:
+                continue
+            seen.add(dedupe_key)
+            items.append(
+                {
+                    "kind": "custom_emoji",
+                    "source": source,
+                    "id": emoji_id,
+                    "name": match.group(2),
+                    "animated": animated,
+                    "url": self._custom_emoji_url(emoji_id, animated),
+                    "cache_key": dedupe_key,
+                    "analyzable": True,
+                }
+            )
+
+        for entry in emoji_lib.emoji_list(text):
+            start = int(entry.get("match_start", -1))
+            end = int(entry.get("match_end", -1))
+            if any(start >= span_start and end <= span_end for span_start, span_end in custom_spans):
+                continue
+            value = str(entry.get("emoji") or "")
+            dedupe_key = f"unicode:{value}"
+            if not value or dedupe_key in seen:
+                continue
+            seen.add(dedupe_key)
+            items.append(
+                {
+                    "kind": "unicode_emoji",
+                    "source": source,
+                    "emoji": value,
+                    "name": self._unicode_emoji_description(value),
+                    "analyzable": False,
+                }
+            )
+        return items
+
+    def _build_reaction_emoji_metadata(self, reaction) -> dict | None:
+        value = getattr(reaction, "emoji", reaction)
+        count = getattr(reaction, "count", None)
+        emoji_id = getattr(value, "id", None)
+        if emoji_id is not None:
+            animated = bool(getattr(value, "animated", False))
+            return {
+                "kind": "custom_emoji",
+                "source": "reaction",
+                "id": int(emoji_id),
+                "name": getattr(value, "name", None),
+                "animated": animated,
+                "url": self._visual_asset_url(value) or self._custom_emoji_url(emoji_id, animated),
+                "cache_key": f"emoji:{int(emoji_id)}",
+                "analyzable": True,
+                "count": count,
+            }
+        raw = str(value or "")
+        if not raw:
+            return None
+        custom_match = MentionResolver.EMOJI_MENTION.fullmatch(raw)
+        if custom_match:
+            emoji_id = int(custom_match.group(3))
+            animated = bool(custom_match.group(1))
+            return {
+                "kind": "custom_emoji",
+                "source": "reaction",
+                "id": emoji_id,
+                "name": custom_match.group(2),
+                "animated": animated,
+                "url": self._custom_emoji_url(emoji_id, animated),
+                "cache_key": f"emoji:{emoji_id}",
+                "analyzable": True,
+                "count": count,
+            }
+        return {
+            "kind": "unicode_emoji",
+            "source": "reaction",
+            "emoji": raw,
+            "name": self._unicode_emoji_description(raw),
+            "analyzable": False,
+            "count": count,
+        }
+
+    def _build_sticker_metadata(self, sticker) -> dict:
+        sticker_id = int(getattr(sticker, "id", 0) or 0)
+        format_type = getattr(sticker, "format", None) or getattr(sticker, "format_type", None)
+        format_name = getattr(format_type, "name", None) or str(format_type or "unknown")
+        return {
+            "kind": "sticker",
+            "source": "sticker",
+            "id": sticker_id,
+            "name": getattr(sticker, "name", None),
+            "format": format_name,
+            "url": self._visual_asset_url(sticker),
+            "cache_key": f"sticker:{sticker_id}" if sticker_id else None,
+            "analyzable": format_name.lower() != "lottie" and bool(self._visual_asset_url(sticker)),
+        }
+
+    def _apply_cached_visual_descriptions(self, items: list[dict]) -> list[dict]:
+        cached = self._get_visual_description_cache([item.get("cache_key") for item in items])
+        for item in items:
+            cache_entry = cached.get(str(item.get("cache_key") or ""))
+            if cache_entry:
+                item["description"] = cache_entry["description"]
+                item["description_cached"] = True
+        return items
+
+    def _build_message_visual_metadata(self, message) -> dict:
+        items = self._build_text_emoji_metadata(getattr(message, "content", "") or "")
+        seen = {
+            str(item.get("cache_key") or f"unicode:{item.get('emoji')}")
+            for item in items
+        }
+        for reaction in getattr(message, "reactions", []) or []:
+            item = self._build_reaction_emoji_metadata(reaction)
+            if item is None:
+                continue
+            dedupe_key = str(item.get("cache_key") or f"unicode:{item.get('emoji')}")
+            if dedupe_key in seen:
+                for existing in items:
+                    existing_key = str(existing.get("cache_key") or f"unicode:{existing.get('emoji')}")
+                    if existing_key == dedupe_key and item.get("count") is not None:
+                        existing["reaction_count"] = item["count"]
+                continue
+            seen.add(dedupe_key)
+            items.append(item)
+        for sticker in getattr(message, "stickers", []) or []:
+            item = self._build_sticker_metadata(sticker)
+            dedupe_key = str(item.get("cache_key") or f"sticker-name:{item.get('name')}")
+            if dedupe_key in seen:
+                continue
+            seen.add(dedupe_key)
+            items.append(item)
+
+        truncated = len(items) > self.VISUAL_DESCRIPTION_MAX_ASSETS
+        items = items[: self.VISUAL_DESCRIPTION_MAX_ASSETS]
+        self._apply_cached_visual_descriptions(items)
+        return {"items": items, "truncated": truncated, "total_distinct": len(seen)}
+
+    def _build_text_visual_metadata(self, text: str) -> dict:
+        items = self._build_text_emoji_metadata(text)
+        total_distinct = len(items)
+        truncated = total_distinct > self.VISUAL_DESCRIPTION_MAX_ASSETS
+        items = items[: self.VISUAL_DESCRIPTION_MAX_ASSETS]
+        self._apply_cached_visual_descriptions(items)
+        return {"items": items, "truncated": truncated, "total_distinct": total_distinct}
+
+    @staticmethod
+    def _format_visual_metadata_for_context(metadata: dict) -> str:
+        labels = []
+        for item in metadata.get("items", []):
+            kind = item.get("kind")
+            if kind == "unicode_emoji":
+                label = f"Unicode emoji {item.get('emoji')} ({item.get('name')})"
+            elif kind == "custom_emoji":
+                label = f"custom emoji :{item.get('name')}: (ID:{item.get('id')})"
+            else:
+                label = f"sticker {item.get('name')} (ID:{item.get('id')}, format:{item.get('format')})"
+            if item.get("reaction_count") is not None or item.get("source") == "reaction":
+                label += f", reactions:{item.get('reaction_count', item.get('count'))}"
+            if item.get("description"):
+                label += f", visual description: {item['description']}"
+            labels.append(label)
+        if not labels:
+            return ""
+        suffix = "; additional visual items omitted" if metadata.get("truncated") else ""
+        return "[Emoji/sticker context: " + "; ".join(labels) + suffix + "]"
+
     def _serialize_channel_for_tool(self, channel, access: dict | None = None) -> dict:
         payload = {
             "id": getattr(channel, "id", None),
@@ -2756,12 +3070,14 @@ class AICommands(commands.Cog):
         *,
         truncate: bool = True
     ) -> dict:
+        visual_metadata = self._build_message_visual_metadata(message)
         formatted = await self._format_msg_for_context(
             message,
             guild,
             self.bot,
             self_id=getattr(getattr(self.bot, "user", None), "id", None),
             truncate=truncate,
+            visual_metadata=visual_metadata,
         )
         content = ""
         if message.content:
@@ -2843,6 +3159,7 @@ class AICommands(commands.Cog):
                             "message_id": getattr(resolved_reference, "id", None),
                             "author": await self._resolve_user_display(getattr(getattr(resolved_reference, "author", None), "id", None), guild),
                             "content_preview": self._truncate_tool_text(reference_content or "[圖片/附件]", max_len=120),
+                            "emoji_sticker_context": self._build_message_visual_metadata(resolved_reference),
                         }
                     else:
                         # 回覆的訊息已被刪除
@@ -2889,6 +3206,7 @@ class AICommands(commands.Cog):
             "attachments": attachments,
             "embed_summaries": embed_summaries,
             "reaction_summaries": reaction_summaries,
+            "emoji_sticker_context": visual_metadata,
             "reply_to": reference_preview,
             "has_components": bool(getattr(message, "components", None)),
             "has_stickers": bool(getattr(message, "stickers", None)),
@@ -4060,6 +4378,58 @@ class AICommands(commands.Cog):
             {
                 "type": "function",
                 "function": {
+                    "name": "analyze_message_emojis",
+                    "description": (
+                        "Analyze the custom emojis, reactions, and stickers visible in one accessible message. "
+                        "Cached descriptions are free; up to eight uncached supported assets are combined into one paid visual analysis. "
+                        "If no target is provided, the current request's replied-to message is used first, then the current request message."
+                    ),
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "message_id": {"type": "integer"},
+                            "channel_id": {"type": "integer"},
+                            "message_link": {"type": "string"},
+                        },
+                    },
+                },
+            },
+            {
+                "type": "function",
+                "function": {
+                    "name": "analyze_user_profile_media",
+                    "description": (
+                        "Fetch and visually analyze a visible user's avatar, banner, or both. "
+                        "Guild avatar/banner are preferred; a global banner is fetched when needed. Cached asset hashes are free."
+                    ),
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "user_id": {"type": "integer"},
+                            "media": {"type": "string", "enum": ["avatar", "banner", "both"]},
+                        },
+                    },
+                },
+            },
+            {
+                "type": "function",
+                "function": {
+                    "name": "list_channels",
+                    "description": (
+                        "List channels in the current guild that both the current requester and bot can view. "
+                        "Optionally include accessible active threads. Hidden channel names and counts are never returned."
+                    ),
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "include_threads": {"type": "boolean"},
+                        },
+                    },
+                },
+            },
+            {
+                "type": "function",
+                "function": {
                     "name": "get_dsize_context",
                     "description": "Get dsize stats, recent history, and optional leaderboard context for a user.",
                     "parameters": {
@@ -4257,6 +4627,8 @@ class AICommands(commands.Cog):
                 "If the user is asking about the bot's current status, uptime, latency, version, install count, command totals, or server count, call get_bot_status.",
                 "If the user asks to inspect channel history, a specific message, a user's visible profile, or a member's channel permissions, call read_channel, read_message, or get_user as appropriate.",
                 "read_channel, read_message, and get_user are permission-aware. They only work for the current guild or current DM and must not be used to bypass hidden channels, private threads, or other inaccessible content.",
+                "If the user asks what people above, earlier, or just now were talking about without explicitly replying to a message, always call read_channel first even though a small recent-message block may already be present.",
+                "Use list_channels to list only channels visible to both the requester and bot. Use analyze_message_emojis for the visual meaning of a message's custom emojis, reactions, or stickers, and analyze_user_profile_media for avatar/banner contents.",
                 "If the user explicitly asks to generate a video, animation clip, or ad clip, call generate_video.",
                 f"Discord message content is limited to about {self.DISCORD_MESSAGE_CHAR_LIMIT} characters. If the full answer, code, logs, list, or document would exceed that, call send_as_file.",
                 "After calling send_as_file, keep the final answer short and do not repeat the full file contents in the final message.",
@@ -5404,6 +5776,286 @@ class AICommands(commands.Cog):
             return None, "image response was empty"
         return image_bytes, None
 
+    @classmethod
+    def _build_visual_contact_sheet(cls, assets: list[tuple[dict, bytes]]) -> bytes:
+        frames: list[tuple[dict, Image.Image]] = []
+        for asset, image_bytes in assets[: cls.VISUAL_DESCRIPTION_MAX_ASSETS]:
+            try:
+                with Image.open(io.BytesIO(image_bytes)) as image:
+                    try:
+                        image.seek(0)
+                    except EOFError:
+                        pass
+                    frame = ImageOps.exif_transpose(image).convert("RGBA")
+                    frame.thumbnail((320, 320), Image.Resampling.LANCZOS)
+                    background = Image.new("RGBA", frame.size, "white")
+                    background.alpha_composite(frame)
+                    frames.append((asset, background.convert("RGB")))
+            except (UnidentifiedImageError, OSError, ValueError) as error:
+                raise ValueError(f"unsupported or invalid image for {asset.get('cache_key')}") from error
+        if not frames:
+            raise ValueError("no supported images could be decoded")
+
+        columns = min(4, len(frames))
+        rows = math.ceil(len(frames) / columns)
+        cell_width = 340
+        cell_height = 370
+        sheet = Image.new("RGB", (columns * cell_width, rows * cell_height), "white")
+        draw = ImageDraw.Draw(sheet)
+        for index, (_asset, frame) in enumerate(frames, start=1):
+            column = (index - 1) % columns
+            row = (index - 1) // columns
+            origin_x = column * cell_width
+            origin_y = row * cell_height
+            draw.text((origin_x + 10, origin_y + 8), f"ITEM {index}", fill="black")
+            image_x = origin_x + (cell_width - frame.width) // 2
+            image_y = origin_y + 38 + (320 - frame.height) // 2
+            sheet.paste(frame, (image_x, image_y))
+            draw.rectangle(
+                (origin_x, origin_y, origin_x + cell_width - 1, origin_y + cell_height - 1),
+                outline="#999999",
+                width=1,
+            )
+        output = io.BytesIO()
+        sheet.save(output, format="JPEG", quality=88, optimize=True)
+        return output.getvalue()
+
+    @classmethod
+    def _parse_visual_description_response(cls, text: str, assets: list[dict]) -> list[dict]:
+        raw = str(text or "").strip()
+        fenced = re.fullmatch(r"```(?:json)?\s*(.*?)\s*```", raw, re.IGNORECASE | re.DOTALL)
+        if fenced:
+            raw = fenced.group(1).strip()
+        try:
+            payload = json.loads(raw)
+        except (json.JSONDecodeError, TypeError):
+            return []
+        values = payload.get("items") if isinstance(payload, dict) else payload
+        if not isinstance(values, list):
+            return []
+        results = []
+        used_indexes = set()
+        for value in values:
+            if not isinstance(value, dict):
+                continue
+            raw_label = value.get("label", value.get("index"))
+            try:
+                index = int(raw_label) - 1
+            except (TypeError, ValueError):
+                continue
+            if index < 0 or index >= len(assets) or index in used_indexes:
+                continue
+            description = re.sub(r"\s+", " ", str(value.get("description") or "")).strip()
+            if not description:
+                continue
+            used_indexes.add(index)
+            results.append(
+                {
+                    "asset": assets[index],
+                    "description": description[: cls.VISUAL_DESCRIPTION_MAX_CHARS],
+                }
+            )
+        return results
+
+    async def _analyze_visual_assets(self, assets: list[dict], tool_context: dict) -> dict:
+        unique_assets = []
+        seen = set()
+        for asset in assets:
+            cache_key = str(asset.get("cache_key") or "")
+            if not cache_key or cache_key in seen:
+                continue
+            seen.add(cache_key)
+            unique_assets.append(dict(asset))
+            if len(unique_assets) >= self.VISUAL_DESCRIPTION_MAX_ASSETS:
+                break
+        if not unique_assets:
+            return {"items": [], "cost": 0.0, "all_cached": True}
+
+        cached = self._get_visual_description_cache([asset["cache_key"] for asset in unique_assets])
+        results = []
+        for asset in unique_assets:
+            cache_entry = cached.get(asset["cache_key"])
+            if cache_entry:
+                item = dict(asset)
+                item["description"] = cache_entry["description"]
+                item["cached"] = True
+                results.append(item)
+
+        analyzable_missing = [
+            asset for asset in unique_assets
+            if asset["cache_key"] not in cached and asset.get("analyzable") and asset.get("url")
+        ]
+        unavailable = [
+            dict(asset, cached=False, analysis_unavailable=True)
+            for asset in unique_assets
+            if asset["cache_key"] not in cached and asset not in analyzable_missing
+        ]
+        if not analyzable_missing:
+            return {"items": [*results, *unavailable], "cost": 0.0, "all_cached": not unavailable}
+
+        async with self._visual_description_cache_fill_lock:
+            cached_after_lock = self._get_visual_description_cache(
+                [asset["cache_key"] for asset in analyzable_missing]
+            )
+            still_missing = []
+            for asset in analyzable_missing:
+                cache_entry = cached_after_lock.get(asset["cache_key"])
+                if cache_entry:
+                    item = dict(asset)
+                    item["description"] = cache_entry["description"]
+                    item["cached"] = True
+                    results.append(item)
+                else:
+                    still_missing.append(asset)
+            if not still_missing:
+                return {"items": [*results, *unavailable], "cost": 0.0, "all_cached": not unavailable}
+
+            requester = (tool_context or {}).get("user")
+            guild = (tool_context or {}).get("guild")
+            requester_id = getattr(requester, "id", None)
+            if requester_id is None:
+                return {"error": "unable to resolve requester id", "items": [*results, *unavailable]}
+            requested_model = str((tool_context or {}).get("model") or "").strip()
+            if not _is_ai_text_model(requested_model):
+                requested_model = await self._get_default_model(requester_id)
+
+            billing_target = await self._resolve_ai_billing_target(requester, guild)
+            payer_id = billing_target["payer_id"]
+            payer_name = billing_target["display_name"]
+            billing_actor = billing_target["payer_user"] or requester
+            billing_detail_suffix = self._build_ai_billing_detail_suffix(requester_id, payer_id)
+            charge_amount = float(self.IMAGE_ANALYZE_COST)
+            balance_before_charge = self._get_global_balance(payer_id)
+            if balance_before_charge < charge_amount:
+                return {
+                    "error": (
+                        f"insufficient {GLOBAL_CURRENCY_NAME}: need {charge_amount:.2f}, "
+                        f"current {balance_before_charge:.2f}, payer {payer_name}"
+                    ),
+                    "items": [*results, *unavailable],
+                }
+            charged_amount, balance_after_charge = self._charge_global_balance(payer_id, charge_amount)
+            if charged_amount < charge_amount:
+                return {"error": "failed to charge currency for visual analysis", "items": [*results, *unavailable]}
+            self._log_economy_transaction(
+                payer_id,
+                "AI visual description analysis",
+                -charged_amount,
+                f"model={requested_model} assets={len(still_missing)}{billing_detail_suffix}",
+            )
+            self._queue_economy_audit_log(
+                user=billing_actor,
+                action="ai_visual_description_charge",
+                amount=charged_amount,
+                detail=f"model={requested_model} assets={len(still_missing)}{billing_detail_suffix}",
+                balance_before=balance_before_charge,
+                balance_after=balance_after_charge,
+                color=0x3498DB,
+            )
+
+            try:
+                downloaded = []
+                download_failures = []
+                for asset in still_missing:
+                    image_bytes, fetch_error = await self._fetch_discord_image_bytes(asset["url"])
+                    if fetch_error:
+                        download_failures.append(dict(asset, error=fetch_error))
+                        continue
+                    downloaded.append((asset, image_bytes))
+                if not downloaded:
+                    raise RuntimeError("no analyzable visual assets could be downloaded")
+                sheet_bytes = await asyncio.to_thread(self._build_visual_contact_sheet, downloaded)
+                prompt_items = [
+                    {
+                        "label": index,
+                        "type": asset.get("asset_type") or asset.get("kind") or "image",
+                        "name": asset.get("name"),
+                        "id": asset.get("id"),
+                    }
+                    for index, (asset, _image_bytes) in enumerate(downloaded, start=1)
+                ]
+                response = await self._generate_ai_completion(
+                    model=requested_model,
+                    messages=[
+                        {
+                            "role": "system",
+                            "content": (
+                                "Analyze each numbered Discord visual asset independently and objectively. "
+                                "Describe visible subject, expression, action, symbols, and readable text. "
+                                "Do not infer identity or sensitive traits. Return only JSON: "
+                                '{"items":[{"label":1,"description":"..."}]}'
+                            ),
+                        },
+                        {
+                            "role": "user",
+                            "content": "Assets:\n" + json.dumps(prompt_items, ensure_ascii=False),
+                        },
+                    ],
+                    image=sheet_bytes,
+                    max_tokens=max(300, min(1600, len(downloaded) * 180)),
+                )
+                raw_text = str(getattr(response.choices[0].message, "content", "") or "").strip()
+                model_name = str(getattr(response, "model", requested_model) or requested_model)
+                parsed = self._parse_visual_description_response(
+                    raw_text,
+                    [asset for asset, _image_bytes in downloaded],
+                )
+                if not parsed:
+                    raise RuntimeError("visual analysis returned no valid labeled descriptions")
+                self._set_visual_description_cache(
+                    [
+                        {
+                            "cache_key": entry["asset"]["cache_key"],
+                            "asset_type": entry["asset"].get("asset_type") or entry["asset"].get("kind"),
+                            "description": entry["description"],
+                            "model": model_name,
+                        }
+                        for entry in parsed
+                    ]
+                )
+                described_keys = set()
+                for entry in parsed:
+                    item = dict(entry["asset"])
+                    item["description"] = entry["description"]
+                    item["cached"] = False
+                    described_keys.add(item["cache_key"])
+                    results.append(item)
+                for asset, _image_bytes in downloaded:
+                    if asset["cache_key"] not in described_keys:
+                        results.append(dict(asset, cached=False, analysis_unavailable=True))
+                results.extend(download_failures)
+                return {
+                    "items": [*results, *unavailable],
+                    "cost": charged_amount,
+                    "currency": GLOBAL_CURRENCY_NAME,
+                    "analysis_model": model_name,
+                    "all_cached": False,
+                }
+            except Exception as error:
+                balance_before_refund = self._get_global_balance(payer_id)
+                balance_after_refund = self._refund_global_balance(payer_id, charged_amount)
+                self._log_economy_transaction(
+                    payer_id,
+                    "AI visual description analysis refund",
+                    charged_amount,
+                    f"model={requested_model} refund_on_error{billing_detail_suffix}",
+                )
+                self._queue_economy_audit_log(
+                    user=billing_actor,
+                    action="ai_visual_description_refund",
+                    amount=charged_amount,
+                    detail=f"model={requested_model} refund_on_error{billing_detail_suffix}",
+                    balance_before=balance_before_refund,
+                    balance_after=balance_after_refund,
+                    color=0x27AE60,
+                )
+                return {
+                    "error": f"visual analysis failed: {error}",
+                    "items": [*results, *unavailable],
+                    "refunded": charged_amount,
+                    "currency": GLOBAL_CURRENCY_NAME,
+                }
+
     async def _tool_image_analyze(self, args: dict, tool_context: dict) -> dict:
         image_url = str(args.get("image_url") or args.get("url") or "").strip()
         normalized_url = normalize_discord_image_url(image_url)
@@ -6000,6 +6652,8 @@ class AICommands(commands.Cog):
                 item["embed_summaries"] = serialized.get("embed_summaries")
             if serialized.get("component_text"):
                 item["component_text"] = serialized.get("component_text")
+            if serialized.get("emoji_sticker_context", {}).get("items"):
+                item["emoji_sticker_context"] = serialized.get("emoji_sticker_context")
             messages.append(item)
 
         return {
@@ -6223,6 +6877,339 @@ class AICommands(commands.Cog):
             }
 
         return result
+
+    async def _resolve_message_for_visual_tool(self, args: dict, tool_context: dict):
+        message_link = args.get("message_link")
+        parsed_link = self._parse_message_link(message_link)
+        channel_id = args.get("channel_id")
+        message_id = args.get("message_id")
+        guild = (tool_context or {}).get("guild")
+        current_channel = (tool_context or {}).get("channel")
+
+        if parsed_link is not None:
+            current_guild_token = str(getattr(guild, "id", "@me")) if guild else "@me"
+            if parsed_link["guild_token"] != current_guild_token:
+                return None, None, "message_link must point to the current guild or current DM channel."
+            channel_id = parsed_link["channel_id"]
+            message_id = parsed_link["message_id"]
+        elif message_link:
+            return None, None, "message_link is invalid"
+
+        if message_id in (None, ""):
+            request_message = (tool_context or {}).get("message")
+            reference = getattr(request_message, "reference", None)
+            resolved = getattr(reference, "resolved", None)
+            if resolved is not None and hasattr(resolved, "id") and hasattr(resolved, "author"):
+                target_message = resolved
+                target_channel = getattr(target_message, "channel", None) or current_channel
+                if target_channel is None:
+                    return None, None, "unable to resolve the replied-to message channel"
+                access_error, access = self._validate_channel_tool_access(
+                    target_channel,
+                    tool_context,
+                    require_history=True,
+                )
+                if access_error:
+                    return None, None, access_error
+                return target_message, access, None
+            reference_message_id = getattr(reference, "message_id", None)
+            reference_channel_id = getattr(reference, "channel_id", None)
+            if reference_message_id is not None:
+                message_id = reference_message_id
+                channel_id = reference_channel_id or getattr(current_channel, "id", None)
+            elif request_message is not None and hasattr(request_message, "id"):
+                target_channel = getattr(request_message, "channel", None) or current_channel
+                access_error, access = self._validate_channel_tool_access(
+                    target_channel,
+                    tool_context,
+                    require_history=True,
+                )
+                if access_error:
+                    return None, None, access_error
+                return request_message, access, None
+            else:
+                return None, None, "message_id, message_link, or a current request message is required"
+
+        channel, error = self._resolve_tool_channel(
+            channel_id,
+            tool_context,
+            require_messageable=True,
+        )
+        if error:
+            return None, None, error
+        access_error, access = self._validate_channel_tool_access(
+            channel,
+            tool_context,
+            require_history=True,
+        )
+        if access_error:
+            return None, None, access_error
+        try:
+            resolved_message_id = int(message_id)
+        except (TypeError, ValueError):
+            return None, None, "message_id must be an integer"
+        fetch_message = getattr(channel, "fetch_message", None)
+        if not callable(fetch_message):
+            return None, None, "This channel does not support fetching a specific message."
+        try:
+            return await fetch_message(resolved_message_id), access, None
+        except discord.NotFound:
+            return None, None, "message not found"
+        except (discord.Forbidden, discord.HTTPException) as error:
+            return None, None, f"failed to fetch message: {error}"
+
+    async def _tool_analyze_message_emojis(self, args: dict, tool_context: dict) -> dict:
+        if not any(args.get(key) not in (None, "") for key in ("message_id", "channel_id", "message_link")):
+            request_message = (tool_context or {}).get("message")
+            reference = getattr(request_message, "reference", None)
+            if request_message is None and reference is None:
+                metadata = (tool_context or {}).get("request_visual_metadata") or {"items": []}
+                analyzable_assets = [
+                    dict(item, asset_type=item.get("kind"))
+                    for item in metadata.get("items", [])
+                    if item.get("cache_key")
+                ]
+                analysis = await self._analyze_visual_assets(analyzable_assets, tool_context)
+                description_by_key = {
+                    item.get("cache_key"): item
+                    for item in analysis.get("items", [])
+                    if item.get("cache_key")
+                }
+                items = []
+                for item in metadata.get("items", []):
+                    merged = dict(item)
+                    analyzed = description_by_key.get(item.get("cache_key"))
+                    if analyzed:
+                        for key in ("description", "cached", "analysis_unavailable", "error"):
+                            if key in analyzed:
+                                merged[key] = analyzed[key]
+                    items.append(merged)
+                result = {
+                    "source": "current_request",
+                    "items": items,
+                    "truncated": metadata.get("truncated", False),
+                    "total_distinct": metadata.get("total_distinct", len(items)),
+                    "cost": analysis.get("cost", 0.0),
+                    "currency": analysis.get("currency", GLOBAL_CURRENCY_NAME),
+                    "all_cached": analysis.get("all_cached", False),
+                }
+                if analysis.get("analysis_model"):
+                    result["analysis_model"] = analysis["analysis_model"]
+                if analysis.get("error"):
+                    result["error"] = analysis["error"]
+                if analysis.get("refunded"):
+                    result["refunded"] = analysis["refunded"]
+                return result
+        message, access, error = await self._resolve_message_for_visual_tool(args, tool_context)
+        if error:
+            return {"error": error}
+        metadata = self._build_message_visual_metadata(message)
+        analyzable_assets = [
+            dict(item, asset_type=item.get("kind"))
+            for item in metadata.get("items", [])
+            if item.get("cache_key")
+        ]
+        analysis = await self._analyze_visual_assets(analyzable_assets, tool_context)
+        description_by_key = {
+            item.get("cache_key"): item
+            for item in analysis.get("items", [])
+            if item.get("cache_key")
+        }
+        final_items = []
+        for item in metadata.get("items", []):
+            merged = dict(item)
+            analyzed = description_by_key.get(item.get("cache_key"))
+            if analyzed:
+                for key in ("description", "cached", "analysis_unavailable", "error"):
+                    if key in analyzed:
+                        merged[key] = analyzed[key]
+            final_items.append(merged)
+        result = {
+            "message_id": getattr(message, "id", None),
+            "channel": self._serialize_channel_for_tool(getattr(message, "channel", None), access),
+            "jump_url": getattr(message, "jump_url", None),
+            "items": final_items,
+            "truncated": metadata.get("truncated", False),
+            "total_distinct": metadata.get("total_distinct", len(final_items)),
+            "cost": analysis.get("cost", 0.0),
+            "currency": analysis.get("currency", GLOBAL_CURRENCY_NAME),
+            "all_cached": analysis.get("all_cached", False),
+        }
+        if analysis.get("analysis_model"):
+            result["analysis_model"] = analysis["analysis_model"]
+        if analysis.get("error"):
+            result["error"] = analysis["error"]
+        if analysis.get("refunded"):
+            result["refunded"] = analysis["refunded"]
+        return result
+
+    async def _tool_analyze_user_profile_media(self, args: dict, tool_context: dict) -> dict:
+        current_user = (tool_context or {}).get("user")
+        guild = (tool_context or {}).get("guild")
+        target_user_id = args.get("user_id") or getattr(current_user, "id", None)
+        target_user, error = await self._resolve_visible_user_for_tool(target_user_id, tool_context)
+        if error:
+            return {"error": error}
+        media = str(args.get("media") or "both").strip().lower()
+        if media not in {"avatar", "banner", "both"}:
+            return {"error": "media must be avatar, banner, or both"}
+
+        member = target_user if isinstance(target_user, discord.Member) else None
+        user_id = int(getattr(target_user, "id", 0) or 0)
+        requested_types = ["avatar", "banner"] if media == "both" else [media]
+        assets = []
+        availability = {}
+
+        if "avatar" in requested_types:
+            avatar = getattr(member, "guild_avatar", None) if member is not None else None
+            avatar = avatar or getattr(target_user, "display_avatar", None) or getattr(target_user, "avatar", None)
+            avatar_url = self._visual_asset_url(avatar)
+            if avatar_url:
+                asset_hash = str(getattr(avatar, "key", "") or urlparse(avatar_url).path.rsplit("/", 1)[-1])
+                assets.append(
+                    {
+                        "kind": "profile_media",
+                        "asset_type": "avatar",
+                        "name": "avatar",
+                        "user_id": user_id,
+                        "url": avatar_url,
+                        "cache_key": f"profile:{user_id}:avatar:{asset_hash}",
+                        "analyzable": True,
+                    }
+                )
+                availability["avatar"] = {"available": True, "url": avatar_url}
+            else:
+                availability["avatar"] = {"available": False}
+
+        if "banner" in requested_types:
+            banner = getattr(member, "guild_banner", None) if member is not None else None
+            if banner is None:
+                fetched_user = None
+                fetch_user = getattr(self.bot, "fetch_user", None)
+                if callable(fetch_user):
+                    try:
+                        fetched_user = await fetch_user(user_id)
+                    except (discord.NotFound, discord.Forbidden, discord.HTTPException):
+                        fetched_user = None
+                banner = getattr(fetched_user, "banner", None)
+            banner_url = self._visual_asset_url(banner)
+            if banner_url:
+                asset_hash = str(getattr(banner, "key", "") or urlparse(banner_url).path.rsplit("/", 1)[-1])
+                assets.append(
+                    {
+                        "kind": "profile_media",
+                        "asset_type": "banner",
+                        "name": "banner",
+                        "user_id": user_id,
+                        "url": banner_url,
+                        "cache_key": f"profile:{user_id}:banner:{asset_hash}",
+                        "analyzable": True,
+                    }
+                )
+                availability["banner"] = {"available": True, "url": banner_url}
+            else:
+                availability["banner"] = {"available": False}
+
+        analysis = await self._analyze_visual_assets(assets, tool_context) if assets else {
+            "items": [],
+            "cost": 0.0,
+            "all_cached": True,
+        }
+        for item in analysis.get("items", []):
+            media_entry = availability.get(item.get("asset_type"))
+            if media_entry is None:
+                continue
+            for key in ("description", "cached", "analysis_unavailable", "error"):
+                if key in item:
+                    media_entry[key] = item[key]
+        result = {
+            "user": await self._resolve_user_display(user_id, guild),
+            "media": availability,
+            "cost": analysis.get("cost", 0.0),
+            "currency": analysis.get("currency", GLOBAL_CURRENCY_NAME),
+            "all_cached": analysis.get("all_cached", False),
+        }
+        if analysis.get("analysis_model"):
+            result["analysis_model"] = analysis["analysis_model"]
+        if analysis.get("error"):
+            result["error"] = analysis["error"]
+        if analysis.get("refunded"):
+            result["refunded"] = analysis["refunded"]
+        return result
+
+    @staticmethod
+    def _private_thread_visible_to_member(thread, member, permissions) -> bool:
+        is_private = getattr(thread, "is_private", None)
+        if not callable(is_private) or not is_private():
+            return True
+        if bool(getattr(permissions, "manage_threads", False)):
+            return True
+        member_id = getattr(member, "id", None)
+        return any(getattr(thread_member, "id", None) == member_id for thread_member in getattr(thread, "members", []) or [])
+
+    async def _tool_list_channels(self, args: dict, tool_context: dict) -> dict:
+        guild = (tool_context or {}).get("guild")
+        current_user = (tool_context or {}).get("user")
+        if guild is None:
+            return {"error": "Channel lists are only available in the current guild."}
+        requester = current_user if isinstance(current_user, discord.Member) and getattr(current_user, "guild", None) == guild else None
+        if requester is None and getattr(current_user, "id", None) is not None:
+            requester = guild.get_member(current_user.id)
+        bot_member = self._get_guild_bot_member(guild)
+        if requester is None or bot_member is None:
+            return {"error": "Unable to resolve requester or bot member in the current guild."}
+
+        include_threads = self._coerce_bool(args.get("include_threads"), True)
+        candidates = list(getattr(guild, "channels", []) or [])
+        if include_threads:
+            candidates.extend(list(getattr(guild, "threads", []) or []))
+        visible_channels = []
+        seen_ids = set()
+        for channel in candidates:
+            channel_id = getattr(channel, "id", None)
+            if channel_id is None or channel_id in seen_ids:
+                continue
+            seen_ids.add(channel_id)
+            permissions_for = getattr(channel, "permissions_for", None)
+            if not callable(permissions_for):
+                continue
+            try:
+                requester_permissions = permissions_for(requester)
+                bot_permissions = permissions_for(bot_member)
+            except (discord.ClientException, AttributeError):
+                continue
+            if not (
+                getattr(requester_permissions, "view_channel", False)
+                and getattr(bot_permissions, "view_channel", False)
+            ):
+                continue
+            if isinstance(channel, discord.Thread):
+                if not self._private_thread_visible_to_member(channel, requester, requester_permissions):
+                    continue
+                if not self._private_thread_visible_to_member(channel, bot_member, bot_permissions):
+                    continue
+            payload = self._serialize_channel_for_tool(
+                channel,
+                {
+                    "requester_permissions": requester_permissions,
+                    "bot_permissions": bot_permissions,
+                },
+            )
+            payload.pop("requester_permissions", None)
+            payload.pop("bot_permissions", None)
+            payload["requester_can_read_history"] = bool(
+                getattr(requester_permissions, "read_message_history", False)
+            )
+            payload["bot_can_read_history"] = bool(
+                getattr(bot_permissions, "read_message_history", False)
+            )
+            visible_channels.append(payload)
+        return {
+            "guild_id": getattr(guild, "id", None),
+            "include_threads": include_threads,
+            "returned_count": len(visible_channels),
+            "channels": visible_channels,
+        }
 
     async def _tool_get_dsize_context(self, args: dict, tool_context: dict) -> dict:
         guild = (tool_context or {}).get("guild")
@@ -7096,6 +8083,9 @@ class AICommands(commands.Cog):
             "read_message": self._tool_read_message,
             "search_message": self._tool_search_message,
             "get_user": self._tool_get_user,
+            "analyze_message_emojis": self._tool_analyze_message_emojis,
+            "analyze_user_profile_media": self._tool_analyze_user_profile_media,
+            "list_channels": self._tool_list_channels,
             "get_dsize_context": self._tool_get_dsize_context,
             "get_inventory_context": self._tool_get_inventory_context,
             "get_economy_context": self._tool_get_economy_context,
@@ -7274,15 +8264,16 @@ class AICommands(commands.Cog):
             parts.append(f"{field.name}: {field.value[:60]}" if field.value else field.name)
         return " | ".join(parts)
 
-    @staticmethod
     async def _format_msg_for_context(
+        self,
         msg: discord.Message,
         guild: discord.Guild,
         bot: commands.Bot,
         skip_id: int = None,
         self_id: int = None,
         *,
-        truncate: bool = True
+        truncate: bool = True,
+        visual_metadata: dict | None = None,
     ) -> str | None:
         """
         將單則訊息格式化為頻道上下文字串。
@@ -7297,6 +8288,8 @@ class AICommands(commands.Cog):
         max_forward_length = 100 if truncate else 400
 
         component_text = AICommands._extract_component_text(getattr(msg, "components", None), max_chars=320, max_items=16)
+        visual_metadata = visual_metadata or self._build_message_visual_metadata(msg)
+        visual_context = self._format_visual_metadata_for_context(visual_metadata)
 
         if msg.author.bot:
             # ── 本機器人的訊息 ──
@@ -7312,6 +8305,8 @@ class AICommands(commands.Cog):
                     parts.append(f"[Embed: {summary}]" if summary else "[Embed]")
                 if msg.components:
                     parts.append(f"[Components: {component_text}]" if component_text else "[包含互動元件]")
+                if visual_context:
+                    parts.append(visual_context)
                 if not parts:
                     return None
                 body = " ".join(parts)
@@ -7349,6 +8344,8 @@ class AICommands(commands.Cog):
                     label += f" → {summary}"
             if component_text:
                 label += f" → Components: {component_text}"
+            if visual_context:
+                label += f" → {visual_context}"
             return f"{msg.author.display_name} (ID: {msg.author.id}): {label}"
 
         # ── 一般用戶訊息 ──
@@ -7420,6 +8417,8 @@ class AICommands(commands.Cog):
             extra_parts.append("[圖片/附件]")
         if msg.stickers:
             extra_parts.append("[貼圖]")
+        if visual_context:
+            extra_parts.append(visual_context)
 
         # Embed 摘要
         if msg.embeds:
@@ -8010,6 +9009,11 @@ class AICommands(commands.Cog):
         # 處理提及文字
         guild = interaction.guild
         resolved_message = await MentionResolver.resolve_mentions(sanitized_message, guild, self.bot)
+        request_visual_metadata = self._build_text_visual_metadata(sanitized_message)
+        request_visual_context = self._format_visual_metadata_for_context(request_visual_metadata)
+        ai_request_message = (
+            f"{resolved_message}\n{request_visual_context}" if request_visual_context else resolved_message
+        )
 
         selected_model = model if model and _is_ai_text_model(model) else await self._get_default_model(user.id)
         rate_per_char = _get_ai_text_model_rate(selected_model)
@@ -8075,8 +9079,10 @@ class AICommands(commands.Cog):
                 "user": user,
                 "guild": interaction.guild,
                 "channel": interaction.channel,
+                "message": getattr(interaction, "message", None),
                 "model": selected_model,
                 "request_text": resolved_message,
+                "request_visual_metadata": request_visual_metadata,
             }
             tool_notice_text = None
 
@@ -8137,7 +9143,7 @@ class AICommands(commands.Cog):
             messages.extend(ConversationManager.format_for_api(history))
             if recent_messages_block:
                 messages.append({"role": "user", "content": recent_messages_block})
-            messages.append({"role": "user", "content": resolved_message})
+            messages.append({"role": "user", "content": ai_request_message})
             
             # 下載圖片 bytes（若有）
             image_bytes = None
@@ -8667,10 +9673,12 @@ class AICommands(commands.Cog):
             color=0xE67E22,
         )
         reply_context = ""
+        replied_visual_metadata = None
         if ctx.message.reference:
             try:
                 replied_msg = await ctx.channel.fetch_message(ctx.message.reference.message_id)
                 if replied_msg:
+                    replied_visual_metadata = self._build_message_visual_metadata(replied_msg)
                     replied_author = replied_msg.author.display_name
                     replied_content = replied_msg.content or self._extract_component_text(
                         getattr(replied_msg, "components", None),
@@ -8689,7 +9697,34 @@ class AICommands(commands.Cog):
                 log(f"獲取回覆訊息失敗: {e}", module_name="AI", level=logging.WARNING)
         
         # 組合最終訊息
+        current_visual_metadata = self._build_message_visual_metadata(ctx.message)
+        if replied_visual_metadata and replied_visual_metadata.get("items"):
+            combined_items = [
+                *replied_visual_metadata.get("items", []),
+                *current_visual_metadata.get("items", []),
+            ]
+            seen_visual_keys = set()
+            deduplicated_items = []
+            for item in combined_items:
+                visual_key = str(item.get("cache_key") or f"unicode:{item.get('emoji')}")
+                if visual_key in seen_visual_keys:
+                    continue
+                seen_visual_keys.add(visual_key)
+                deduplicated_items.append(item)
+            current_visual_metadata = {
+                "items": deduplicated_items[: self.VISUAL_DESCRIPTION_MAX_ASSETS],
+                "truncated": (
+                    len(deduplicated_items) > self.VISUAL_DESCRIPTION_MAX_ASSETS
+                    or replied_visual_metadata.get("truncated", False)
+                    or current_visual_metadata.get("truncated", False)
+                ),
+                "total_distinct": len(deduplicated_items),
+            }
+        current_visual_context = self._format_visual_metadata_for_context(current_visual_metadata)
         final_message = f"{reply_context}{sanitized_message}"
+        ai_request_message = (
+            f"{final_message}\n{current_visual_context}" if current_visual_context else final_message
+        )
         
         # 顯示正在輸入
         tool_notice_message = None
@@ -8703,8 +9738,10 @@ class AICommands(commands.Cog):
                     "user": user,
                     "guild": guild,
                     "channel": ctx.channel,
+                    "message": ctx.message,
                     "model": selected_model,
                     "request_text": final_message,
+                    "request_visual_metadata": current_visual_metadata,
                 }
                 tool_notice_text = None
 
@@ -8766,7 +9803,7 @@ class AICommands(commands.Cog):
                 messages.extend(ConversationManager.format_for_api(history))
                 if recent_messages_block:
                     messages.append({"role": "user", "content": recent_messages_block})
-                messages.append({"role": "user", "content": final_message})
+                messages.append({"role": "user", "content": ai_request_message})
                 
                 # 下載圖片 bytes（若有）
                 image_bytes = None
