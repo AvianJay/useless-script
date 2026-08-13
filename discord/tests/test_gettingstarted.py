@@ -247,6 +247,24 @@ class SettingPersistenceTests(unittest.IsolatedAsyncioTestCase):
             warning = await gs.apply_registered_setting(1, "Module", setting, True)
         self.assertIn("設定已儲存", warning)
 
+    async def test_apply_registered_setting_can_pass_previous_value(self):
+        trigger = AsyncMock()
+        setting = {
+            "database_key": "stickymessage",
+            "trigger": trigger,
+            "trigger_with_previous": True,
+            "default": {},
+        }
+        old = {"entries": [{"channel_id": 1, "content": "old"}]}
+        new = {"entries": [{"channel_id": 1, "content": "new"}]}
+        with (
+            patch.object(gs, "get_server_config", return_value=old),
+            patch.object(gs, "set_server_config", return_value=True),
+        ):
+            warning = await gs.apply_registered_setting(1, "StickyMessage", setting, new)
+        self.assertIsNone(warning)
+        trigger.assert_awaited_once_with(1, new, old)
+
 
 class FakeAutoReplyCog:
     def __init__(self):
@@ -415,6 +433,41 @@ class ComplexSchemaTests(unittest.TestCase):
         labels = {getattr(item, "label", None) for item in action_view.children}
         self.assertIn("編輯門檻與動作", labels)
         self.assertIn("僅 everyone/here：開", labels)
+
+    def test_stickymessage_gettingstarted_uses_dedicated_manager(self):
+        setting = {
+            "display": "置底訊息設定",
+            "database_key": "stickymessage",
+            "type": "stickymessage_config",
+            "default": {},
+        }
+        guild = MagicMock()
+        guild.id = 1
+        guild.name = "Guild"
+        guild.get_channel.return_value = SimpleNamespace(name="general")
+        session = gs.GettingStartedSession(guild, 10)
+        with (
+            patch.object(gs, "StickyMessageModule", SimpleNamespace(
+                CONFIG_KEY="stickymessage",
+                DEFAULT_CONFIG={},
+                normalize_config=lambda value: {
+                    "quiet_seconds": 10,
+                    "min_interval_seconds": 30,
+                    "entries": [],
+                },
+                get_stickymessage_limit=lambda guild_id: 5,
+            )),
+            patch.object(gs, "get_server_config", return_value={}),
+            patch.dict(gs.panel_settings, {
+                "StickyMessage": {
+                    "display_name": "置底訊息",
+                    "settings": [setting],
+                },
+            }, clear=True),
+        ):
+            view = gs.StickyMessageManagerView(session, "StickyMessage")
+        self.assertIn("置底訊息", view.build_embed().title)
+        self.assertIn("新增", {getattr(item, "label", None) for item in view.children})
 
 
 if __name__ == "__main__":

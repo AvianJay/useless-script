@@ -2,7 +2,9 @@ import sys
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
+
+import discord
 
 
 DISCORD_DIR = Path(__file__).resolve().parents[1]
@@ -272,6 +274,28 @@ class GuildPanelCompoundSettingsTests(unittest.TestCase):
             self.assertTrue(
                 callable(GuildPanel.settings["AntiBeast"]["settings"][0]["trigger"])
             )
+
+    def test_stickymessage_schema_round_trip_and_channel_validation(self):
+        value = {
+            "quiet_seconds": 15,
+            "min_interval_seconds": 60,
+            "entries": [{
+                "channel_id": "123",
+                "content": "hello",
+                "allow_mentions": True,
+            }],
+        }
+        channel = MagicMock(spec=discord.TextChannel)
+        channel.type = discord.ChannelType.text
+        guild = SimpleNamespace(get_channel=lambda channel_id: channel if channel_id == 123 else None)
+        with patch.object(GuildPanel.bot, "get_guild", return_value=guild):
+            coerced = GuildPanel._coerce(value, "stickymessage_config", guild_id=1)
+        serialized = GuildPanel._serialize(coerced, "stickymessage_config", guild_id=1)
+        self.assertEqual(serialized, value)
+
+        with patch.object(GuildPanel.bot, "get_guild", return_value=SimpleNamespace(get_channel=lambda channel_id: None)):
+            with self.assertRaisesRegex(ValueError, "不是這個伺服器"):
+                GuildPanel._coerce(value, "stickymessage_config", guild_id=1)
 
     def test_fixlink_coercion_uses_canonical_custom_platform_validation(self):
         value = {

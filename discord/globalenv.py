@@ -793,6 +793,13 @@ translations = {
     "count_admins": "計入管理員",
     "announce": "冷卻公告",
     "mention-mode": "提及模式",
+    # StickyMessage
+    "stickymessage": "置底訊息",
+    "timing": "時間設定",
+    "move": "移動",
+    "allow_mentions": "允許提及",
+    "quiet_seconds": "安靜秒數",
+    "min_interval_seconds": "最短間隔秒數",
 }
 class CommandNameTranslator(app_commands.Translator):
     async def translate(

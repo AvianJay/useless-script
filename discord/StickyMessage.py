@@ -1,0 +1,761 @@
+from __future__ import annotations
+
+import asyncio
+import hashlib
+import logging
+import random
+import time
+from typing import Any
+
+import discord
+from discord import app_commands
+from discord.ext import commands
+
+from globalenv import (
+    bot,
+    get_server_config,
+    register_panel_settings,
+    set_server_config,
+)
+from logger import log
+
+
+CONFIG_KEY = "stickymessage"
+STATE_KEY = "stickymessage_state"
+LIMIT_KEY = "stickymessage_limit"
+DEFAULT_LIMIT = 5
+MIN_LIMIT = 1
+MAX_LIMIT = 25
+DEFAULT_QUIET_SECONDS = 10
+DEFAULT_MIN_INTERVAL_SECONDS = 30
+MIN_QUIET_SECONDS = 5
+MAX_QUIET_SECONDS = 300
+MIN_INTERVAL_SECONDS = 30
+MAX_INTERVAL_SECONDS = 3600
+MAX_CONTENT_LENGTH = 2000
+MAX_HTTP_RETRIES = 4
+
+DEFAULT_CONFIG = {
+    "quiet_seconds": DEFAULT_QUIET_SECONDS,
+    "min_interval_seconds": DEFAULT_MIN_INTERVAL_SECONDS,
+    "entries": [],
+}
+
+NO_MENTIONS = discord.AllowedMentions(
+    everyone=False,
+    users=False,
+    roles=False,
+    replied_user=False,
+)
+ALL_MENTIONS = discord.AllowedMentions(
+    everyone=True,
+    users=True,
+    roles=True,
+    replied_user=False,
+)
+
+
+def _bounded_int(value: Any, default: int, minimum: int, maximum: int) -> int:
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError):
+        return default
+    return min(max(parsed, minimum), maximum)
+
+
+def get_stickymessage_limit(guild_id: int) -> int:
+    return _bounded_int(
+        get_server_config(guild_id, LIMIT_KEY, DEFAULT_LIMIT),
+        DEFAULT_LIMIT,
+        MIN_LIMIT,
+        MAX_LIMIT,
+    )
+
+
+def content_digest(content: str) -> str:
+    return hashlib.sha256(content.encode("utf-8")).hexdigest()[:16]
+
+
+def normalize_entry(raw: Any, *, strict: bool = False) -> dict[str, Any] | None:
+    if not isinstance(raw, dict):
+        if strict:
+            raise ValueError("每則置底訊息都必須是 object。")
+        return None
+
+    raw_channel_id = raw.get("channel_id")
+    try:
+        channel_id = int(raw_channel_id)
+    except (TypeError, ValueError):
+        if strict:
+            raise ValueError("置底訊息的頻道 ID 無效。")
+        return None
+    if channel_id <= 0:
+        if strict:
+            raise ValueError("置底訊息的頻道 ID 無效。")
+        return None
+
+    content = str(raw.get("content") or "").strip()
+    if not content:
+        if strict:
+            raise ValueError("置底訊息內容不可為空。")
+        return None
+    if len(content) > MAX_CONTENT_LENGTH:
+        if strict:
+            raise ValueError(f"置底訊息內容不可超過 {MAX_CONTENT_LENGTH} 字。")
+        content = content[:MAX_CONTENT_LENGTH]
+
+    return {
+        "channel_id": channel_id,
+        "content": content,
+        "allow_mentions": bool(raw.get("allow_mentions", False)),
+    }
+
+
+def normalize_config(raw: Any, *, strict: bool = False) -> dict[str, Any]:
+    if raw is None:
+        raw = {}
+    if not isinstance(raw, dict):
+        if strict:
+            raise ValueError("StickyMessage 設定必須是 object。")
+        raw = {}
+
+    quiet_seconds = _bounded_int(
+        raw.get("quiet_seconds", DEFAULT_QUIET_SECONDS),
+        DEFAULT_QUIET_SECONDS,
+        MIN_QUIET_SECONDS,
+        MAX_QUIET_SECONDS,
+    )
+    min_interval_seconds = _bounded_int(
+        raw.get("min_interval_seconds", DEFAULT_MIN_INTERVAL_SECONDS),
+        DEFAULT_MIN_INTERVAL_SECONDS,
+        MIN_INTERVAL_SECONDS,
+        MAX_INTERVAL_SECONDS,
+    )
+    if strict:
+        for key, value, minimum, maximum in (
+            ("quiet_seconds", raw.get("quiet_seconds", DEFAULT_QUIET_SECONDS), MIN_QUIET_SECONDS, MAX_QUIET_SECONDS),
+            (
+                "min_interval_seconds",
+                raw.get("min_interval_seconds", DEFAULT_MIN_INTERVAL_SECONDS),
+                MIN_INTERVAL_SECONDS,
+                MAX_INTERVAL_SECONDS,
+            ),
+        ):
+            try:
+                parsed = int(value)
+            except (TypeError, ValueError) as error:
+                raise ValueError(f"{key} 必須是整數。") from error
+            if parsed < minimum or parsed > maximum:
+                raise ValueError(f"{key} 必須介於 {minimum} 到 {maximum}。")
+
+    raw_entries = raw.get("entries", [])
+    if not isinstance(raw_entries, list):
+        if strict:
+            raise ValueError("StickyMessage entries 必須是清單。")
+        raw_entries = []
+
+    entries: list[dict[str, Any]] = []
+    seen_channels: set[int] = set()
+    for raw_entry in raw_entries:
+        entry = normalize_entry(raw_entry, strict=strict)
+        if entry is None:
+            continue
+        channel_id = entry["channel_id"]
+        if channel_id in seen_channels:
+            if strict:
+                raise ValueError("同一個頻道只能設定一則置底訊息。")
+            continue
+        seen_channels.add(channel_id)
+        entries.append(entry)
+
+    if len(entries) > MAX_LIMIT:
+        if strict:
+            raise ValueError(f"StickyMessage 最多保留 {MAX_LIMIT} 則設定。")
+        entries = entries[:MAX_LIMIT]
+
+    return {
+        "quiet_seconds": quiet_seconds,
+        "min_interval_seconds": min_interval_seconds,
+        "entries": entries,
+    }
+
+
+def normalize_state(raw: Any) -> dict[str, dict[str, Any]]:
+    if not isinstance(raw, dict):
+        return {}
+    normalized: dict[str, dict[str, Any]] = {}
+    for raw_channel_id, raw_state in raw.items():
+        if not str(raw_channel_id).isdigit() or not isinstance(raw_state, dict):
+            continue
+        state: dict[str, Any] = {}
+        message_id = raw_state.get("message_id")
+        if message_id is not None and str(message_id).isdigit():
+            state["message_id"] = int(message_id)
+        try:
+            state["last_sent_at"] = float(raw_state.get("last_sent_at", 0) or 0)
+        except (TypeError, ValueError):
+            state["last_sent_at"] = 0.0
+        digest = str(raw_state.get("content_digest") or "")
+        if digest:
+            state["content_digest"] = digest
+        normalized[str(int(raw_channel_id))] = state
+    return normalized
+
+
+def active_entries(config: dict[str, Any], limit: int) -> list[dict[str, Any]]:
+    return list(config.get("entries", []))[:limit]
+
+
+def find_entry(config: dict[str, Any], channel_id: int) -> tuple[int, dict[str, Any] | None]:
+    for index, entry in enumerate(config.get("entries", [])):
+        if entry["channel_id"] == channel_id:
+            return index, entry
+    return -1, None
+
+
+async def apply_stickymessage_config(
+    guild_id: int,
+    value: Any,
+    previous_value: Any = None,
+) -> None:
+    cog = bot.get_cog("StickyMessage")
+    if cog is not None:
+        await cog.apply_config(
+            guild_id,
+            normalize_config(value),
+            normalize_config(previous_value),
+        )
+
+
+register_panel_settings(
+    "StickyMessage",
+    "置底訊息",
+    [
+        {
+            "display": "置底訊息設定",
+            "description": "設定頻道、訊息內容、提及方式與重新置底間隔",
+            "database_key": CONFIG_KEY,
+            "type": "stickymessage_config",
+            "default": DEFAULT_CONFIG,
+            "trigger": apply_stickymessage_config,
+            "trigger_with_previous": True,
+        },
+    ],
+    description="在頻道有新對話後，自動把指定訊息重新移到最底部",
+    icon="📌",
+)
+
+
+@app_commands.guild_only()
+@app_commands.default_permissions(manage_guild=True)
+@app_commands.allowed_installs(guilds=True, users=False)
+@app_commands.allowed_contexts(guilds=True, dms=False, private_channels=False)
+class StickyMessage(commands.GroupCog, group_name=app_commands.locale_str("stickymessage")):
+    """管理伺服器的置底訊息。"""
+
+    def __init__(self, client: commands.Bot):
+        self.bot = client
+        self._channel_tasks: dict[tuple[int, int], asyncio.Task] = {}
+        self._wake_events: dict[tuple[int, int], asyncio.Event] = {}
+        self._last_activity: dict[tuple[int, int], float] = {}
+        self._api_lock = asyncio.Lock()
+
+    def cog_unload(self) -> None:
+        for task in list(self._channel_tasks.values()):
+            task.cancel()
+        self._channel_tasks.clear()
+        self._wake_events.clear()
+
+    def get_config(self, guild_id: int) -> dict[str, Any]:
+        return normalize_config(get_server_config(guild_id, CONFIG_KEY, DEFAULT_CONFIG))
+
+    def get_state(self, guild_id: int) -> dict[str, dict[str, Any]]:
+        return normalize_state(get_server_config(guild_id, STATE_KEY, {}))
+
+    def save_config(self, guild_id: int, config: dict[str, Any]) -> bool:
+        return set_server_config(guild_id, CONFIG_KEY, normalize_config(config, strict=True))
+
+    def save_state(self, guild_id: int, state: dict[str, dict[str, Any]]) -> bool:
+        return set_server_config(guild_id, STATE_KEY, normalize_state(state))
+
+    def _active_channel_ids(self, guild_id: int, config: dict[str, Any] | None = None) -> set[int]:
+        config = config or self.get_config(guild_id)
+        return {
+            entry["channel_id"]
+            for entry in active_entries(config, get_stickymessage_limit(guild_id))
+        }
+
+    def _cancel_channel_task(self, guild_id: int, channel_id: int) -> asyncio.Task | None:
+        key = (guild_id, channel_id)
+        task = self._channel_tasks.pop(key, None)
+        self._wake_events.pop(key, None)
+        if task is not None and task is not asyncio.current_task():
+            task.cancel()
+        return task
+
+    def schedule_refresh(self, guild_id: int, channel_id: int, *, activity_at: float | None = None) -> None:
+        if channel_id not in self._active_channel_ids(guild_id):
+            self._cancel_channel_task(guild_id, channel_id)
+            return
+        key = (guild_id, channel_id)
+        self._last_activity[key] = activity_at or time.time()
+        existing = self._channel_tasks.get(key)
+        if existing is not None and not existing.done():
+            self._wake_events.setdefault(key, asyncio.Event()).set()
+            return
+        self._wake_events[key] = asyncio.Event()
+        self._channel_tasks[key] = asyncio.create_task(
+            self._wait_and_refresh(guild_id, channel_id),
+            name=f"stickymessage:{guild_id}:{channel_id}",
+        )
+
+    async def _wait_and_refresh(self, guild_id: int, channel_id: int) -> None:
+        key = (guild_id, channel_id)
+        try:
+            while True:
+                config = self.get_config(guild_id)
+                if channel_id not in self._active_channel_ids(guild_id, config):
+                    return
+                state = self.get_state(guild_id).get(str(channel_id), {})
+                quiet_due = self._last_activity.get(key, time.time()) + config["quiet_seconds"]
+                interval_due = float(state.get("last_sent_at", 0) or 0) + config["min_interval_seconds"]
+                delay = max(quiet_due, interval_due) - time.time()
+                if delay > 0:
+                    wake_event = self._wake_events.setdefault(key, asyncio.Event())
+                    wake_event.clear()
+                    try:
+                        await asyncio.wait_for(wake_event.wait(), timeout=delay)
+                        continue
+                    except asyncio.TimeoutError:
+                        pass
+                publish_started = time.time()
+                publish_task = asyncio.create_task(
+                    self.publish_entry(guild_id, channel_id, notify_mentions=False)
+                )
+                try:
+                    await asyncio.shield(publish_task)
+                except asyncio.CancelledError:
+                    try:
+                        await publish_task
+                    except Exception:
+                        pass
+                    raise
+                if self._last_activity.get(key, 0) > publish_started:
+                    continue
+                return
+        except asyncio.CancelledError:
+            raise
+        except Exception as error:
+            log(
+                f"置底排程失敗 ({channel_id}): {error}",
+                level=logging.ERROR,
+                module_name="StickyMessage",
+            )
+        finally:
+            if self._channel_tasks.get(key) is asyncio.current_task():
+                self._channel_tasks.pop(key, None)
+                self._wake_events.pop(key, None)
+
+    @staticmethod
+    def _retry_after(error: discord.HTTPException, attempt: int) -> float:
+        retry_after = getattr(error, "retry_after", None)
+        if retry_after is None:
+            response = getattr(error, "response", None)
+            headers = getattr(response, "headers", {}) if response is not None else {}
+            retry_after = headers.get("Retry-After") if headers else None
+        try:
+            return max(0.25, float(retry_after))
+        except (TypeError, ValueError):
+            return min(30.0, (2 ** attempt) + random.random())
+
+    async def _delete_previous(self, channel: discord.abc.Messageable, message_id: int | None) -> None:
+        if not message_id:
+            return
+        for attempt in range(MAX_HTTP_RETRIES):
+            try:
+                await channel.get_partial_message(message_id).delete()
+                return
+            except discord.NotFound:
+                return
+            except discord.Forbidden:
+                raise
+            except discord.HTTPException as error:
+                if error.status != 429 and error.status < 500:
+                    raise
+                if attempt >= MAX_HTTP_RETRIES - 1:
+                    raise
+                await asyncio.sleep(self._retry_after(error, attempt))
+
+    async def _send_with_retry(
+        self,
+        channel: discord.TextChannel,
+        content: str,
+        allowed_mentions: discord.AllowedMentions,
+    ) -> discord.Message:
+        last_error: discord.HTTPException | None = None
+        for attempt in range(MAX_HTTP_RETRIES):
+            try:
+                return await channel.send(content, allowed_mentions=allowed_mentions)
+            except (discord.Forbidden, discord.NotFound):
+                raise
+            except discord.HTTPException as error:
+                last_error = error
+                if error.status != 429 and error.status < 500:
+                    raise
+                if attempt >= MAX_HTTP_RETRIES - 1:
+                    raise
+                await asyncio.sleep(self._retry_after(error, attempt))
+        raise last_error or RuntimeError("發送置底訊息失敗。")
+
+    async def publish_entry(
+        self,
+        guild_id: int,
+        channel_id: int,
+        *,
+        notify_mentions: bool,
+    ) -> discord.Message:
+        guild = self.bot.get_guild(guild_id)
+        if guild is None:
+            raise ValueError("找不到伺服器。")
+        channel = guild.get_channel(channel_id)
+        if not isinstance(channel, discord.TextChannel) or channel.type not in (
+            discord.ChannelType.text,
+            discord.ChannelType.news,
+        ):
+            raise ValueError("找不到指定的文字或公告頻道。")
+
+        config = self.get_config(guild_id)
+        index, entry = find_entry(config, channel_id)
+        if entry is None:
+            raise ValueError("這個頻道尚未設定置底訊息。")
+        if index >= get_stickymessage_limit(guild_id):
+            raise ValueError("這則設定目前超過伺服器額度，已暫停運作。")
+
+        bot_member = guild.me
+        permissions = channel.permissions_for(bot_member) if bot_member else None
+        if permissions is None or not permissions.view_channel or not permissions.send_messages:
+            raise ValueError("我沒有權限查看頻道或發送訊息。")
+
+        async with self._api_lock:
+            state = self.get_state(guild_id)
+            channel_state = state.get(str(channel_id), {})
+            await self._delete_previous(channel, channel_state.get("message_id"))
+            channel_state.pop("message_id", None)
+            state[str(channel_id)] = channel_state
+            self.save_state(guild_id, state)
+
+            allowed_mentions = (
+                ALL_MENTIONS
+                if notify_mentions and entry["allow_mentions"]
+                else NO_MENTIONS
+            )
+            sent = await self._send_with_retry(channel, entry["content"], allowed_mentions)
+            state = self.get_state(guild_id)
+            state[str(channel_id)] = {
+                "message_id": sent.id,
+                "last_sent_at": time.time(),
+                "content_digest": content_digest(entry["content"]),
+            }
+            self.save_state(guild_id, state)
+            return sent
+
+    async def remove_published_message(self, guild_id: int, channel_id: int) -> None:
+        task = self._cancel_channel_task(guild_id, channel_id)
+        if task is not None and task is not asyncio.current_task():
+            try:
+                await task
+            except asyncio.CancelledError:
+                pass
+        guild = self.bot.get_guild(guild_id)
+        state = self.get_state(guild_id)
+        channel_state = state.pop(str(channel_id), None)
+        self.save_state(guild_id, state)
+        if guild is None or not channel_state:
+            return
+        channel = guild.get_channel(channel_id)
+        if not isinstance(channel, discord.TextChannel):
+            return
+        try:
+            async with self._api_lock:
+                await self._delete_previous(channel, channel_state.get("message_id"))
+        except (discord.Forbidden, discord.HTTPException) as error:
+            log(
+                f"移除舊置底訊息失敗 ({channel_id}): {error}",
+                level=logging.WARNING,
+                module_name="StickyMessage",
+            )
+
+    async def apply_config(
+        self,
+        guild_id: int,
+        config: dict[str, Any],
+        previous_config: dict[str, Any],
+    ) -> None:
+        config = normalize_config(config)
+        previous_config = normalize_config(previous_config)
+        old_by_channel = {entry["channel_id"]: entry for entry in previous_config["entries"]}
+        new_by_channel = {entry["channel_id"]: entry for entry in config["entries"]}
+        old_active_ids = {
+            entry["channel_id"]
+            for entry in active_entries(previous_config, get_stickymessage_limit(guild_id))
+        }
+
+        active_ids = self._active_channel_ids(guild_id, config)
+        for channel_id in (
+            (old_by_channel.keys() - new_by_channel.keys())
+            | (old_active_ids - active_ids)
+        ):
+            await self.remove_published_message(guild_id, channel_id)
+
+        for channel_id in old_by_channel.keys() | new_by_channel.keys():
+            if channel_id not in active_ids:
+                self._cancel_channel_task(guild_id, channel_id)
+
+        timing_changed = (
+            config["quiet_seconds"] != previous_config["quiet_seconds"]
+            or config["min_interval_seconds"] != previous_config["min_interval_seconds"]
+        )
+        if timing_changed:
+            for guild_channel, activity_at in list(self._last_activity.items()):
+                if guild_channel[0] == guild_id and guild_channel[1] in active_ids:
+                    self.schedule_refresh(guild_id, guild_channel[1], activity_at=activity_at)
+
+        publish_errors = []
+        for channel_id, entry in new_by_channel.items():
+            old_entry = old_by_channel.get(channel_id)
+            if channel_id not in active_ids:
+                continue
+            if (
+                old_entry is None
+                or old_entry["content"] != entry["content"]
+                or channel_id not in old_active_ids
+            ):
+                try:
+                    await self.publish_entry(guild_id, channel_id, notify_mentions=True)
+                except (ValueError, discord.Forbidden, discord.HTTPException) as error:
+                    publish_errors.append(f"<#{channel_id}>：{error}")
+                    log(
+                        f"設定已儲存，但即時發布失敗 ({channel_id}): {error}",
+                        level=logging.WARNING,
+                        module_name="StickyMessage",
+                    )
+        if publish_errors:
+            raise RuntimeError(
+                "設定已儲存，但即時發布失敗：" + "；".join(publish_errors[:3])
+            )
+
+    async def reconcile_limit(self, guild_id: int, previous_limit: int) -> None:
+        config = self.get_config(guild_id)
+        entries = config["entries"]
+        old_active_ids = {entry["channel_id"] for entry in entries[:previous_limit]}
+        new_active_ids = {
+            entry["channel_id"]
+            for entry in entries[:get_stickymessage_limit(guild_id)]
+        }
+        for channel_id in old_active_ids - new_active_ids:
+            await self.remove_published_message(guild_id, channel_id)
+        for channel_id in new_active_ids - old_active_ids:
+            try:
+                await self.publish_entry(guild_id, channel_id, notify_mentions=False)
+            except (ValueError, discord.Forbidden, discord.HTTPException) as error:
+                log(
+                    f"額度調整後恢復置底訊息失敗 ({channel_id}): {error}",
+                    level=logging.WARNING,
+                    module_name="StickyMessage",
+                )
+
+    async def _save_and_apply(self, guild_id: int, config: dict[str, Any]) -> None:
+        previous = self.get_config(guild_id)
+        normalized = normalize_config(config, strict=True)
+        if not set_server_config(guild_id, CONFIG_KEY, normalized):
+            raise RuntimeError("儲存 StickyMessage 設定失敗。")
+        await self.apply_config(guild_id, normalized, previous)
+
+    @commands.Cog.listener()
+    async def on_message(self, message: discord.Message) -> None:
+        if (
+            message.guild is None
+            or message.author.bot
+            or message.webhook_id is not None
+        ):
+            return
+        if message.channel.id not in self._active_channel_ids(message.guild.id):
+            return
+        self.schedule_refresh(message.guild.id, message.channel.id)
+
+    @commands.Cog.listener()
+    async def on_raw_message_delete(self, payload: discord.RawMessageDeleteEvent) -> None:
+        if payload.guild_id is None:
+            return
+        state = self.get_state(payload.guild_id)
+        channel_state = state.get(str(payload.channel_id))
+        if not channel_state or channel_state.get("message_id") != payload.message_id:
+            return
+        channel_state.pop("message_id", None)
+        state[str(payload.channel_id)] = channel_state
+        self.save_state(payload.guild_id, state)
+
+    async def _respond_error(self, interaction: discord.Interaction, error: Exception) -> None:
+        message = str(error) or "操作失敗。"
+        if interaction.response.is_done():
+            await interaction.followup.send(message, ephemeral=True)
+        else:
+            await interaction.response.send_message(message, ephemeral=True)
+
+    @app_commands.command(name=app_commands.locale_str("add"), description="新增一則頻道置底訊息")
+    @app_commands.describe(channel="要設定的文字或公告頻道", content="置底訊息內容", allow_mentions="首次與手動發布時是否允許提及")
+    @app_commands.checks.has_permissions(manage_guild=True)
+    async def add(
+        self,
+        interaction: discord.Interaction,
+        channel: discord.TextChannel,
+        content: app_commands.Range[str, 1, MAX_CONTENT_LENGTH],
+        allow_mentions: bool = False,
+    ) -> None:
+        try:
+            if channel.type not in (discord.ChannelType.text, discord.ChannelType.news):
+                raise ValueError("只能選擇文字或公告頻道。")
+            config = self.get_config(interaction.guild_id)
+            _, existing = find_entry(config, channel.id)
+            if existing is not None:
+                raise ValueError("這個頻道已經有置底訊息，請使用 edit。")
+            limit = get_stickymessage_limit(interaction.guild_id)
+            if len(config["entries"]) >= limit:
+                raise ValueError(f"這個伺服器最多可設定 {limit} 則置底訊息。")
+            config["entries"].append({
+                "channel_id": channel.id,
+                "content": content,
+                "allow_mentions": allow_mentions,
+            })
+            await interaction.response.defer(ephemeral=True)
+            await self._save_and_apply(interaction.guild_id, config)
+            await interaction.followup.send(f"已新增並發布 {channel.mention} 的置底訊息。", ephemeral=True)
+        except Exception as error:
+            await self._respond_error(interaction, error)
+
+    @app_commands.command(name=app_commands.locale_str("edit"), description="編輯一則頻道置底訊息")
+    @app_commands.describe(channel="已設定的文字或公告頻道", content="新的置底訊息內容", allow_mentions="首次與手動發布時是否允許提及")
+    @app_commands.checks.has_permissions(manage_guild=True)
+    async def edit(
+        self,
+        interaction: discord.Interaction,
+        channel: discord.TextChannel,
+        content: app_commands.Range[str, 1, MAX_CONTENT_LENGTH],
+        allow_mentions: bool = False,
+    ) -> None:
+        try:
+            config = self.get_config(interaction.guild_id)
+            index, entry = find_entry(config, channel.id)
+            if entry is None:
+                raise ValueError("這個頻道尚未設定置底訊息。")
+            config["entries"][index] = {
+                "channel_id": channel.id,
+                "content": content,
+                "allow_mentions": allow_mentions,
+            }
+            await interaction.response.defer(ephemeral=True)
+            await self._save_and_apply(interaction.guild_id, config)
+            await interaction.followup.send(f"已更新並重新發布 {channel.mention} 的置底訊息。", ephemeral=True)
+        except Exception as error:
+            await self._respond_error(interaction, error)
+
+    @app_commands.command(name=app_commands.locale_str("remove"), description="移除一則頻道置底訊息")
+    @app_commands.describe(channel="要移除置底訊息的頻道")
+    @app_commands.checks.has_permissions(manage_guild=True)
+    async def remove(self, interaction: discord.Interaction, channel: discord.TextChannel) -> None:
+        try:
+            config = self.get_config(interaction.guild_id)
+            index, entry = find_entry(config, channel.id)
+            if entry is None:
+                raise ValueError("這個頻道尚未設定置底訊息。")
+            config["entries"].pop(index)
+            await interaction.response.defer(ephemeral=True)
+            await self._save_and_apply(interaction.guild_id, config)
+            await interaction.followup.send(f"已移除 {channel.mention} 的置底訊息設定。", ephemeral=True)
+        except Exception as error:
+            await self._respond_error(interaction, error)
+
+    @app_commands.command(name=app_commands.locale_str("list"), description="列出目前的置底訊息設定")
+    @app_commands.checks.has_permissions(manage_guild=True)
+    async def list_entries(self, interaction: discord.Interaction) -> None:
+        config = self.get_config(interaction.guild_id)
+        limit = get_stickymessage_limit(interaction.guild_id)
+        lines = []
+        for index, entry in enumerate(config["entries"]):
+            content = entry["content"].replace("\n", " ")
+            if len(content) > 80:
+                content = content[:77] + "..."
+            status = "運作中" if index < limit else "超額暫停"
+            lines.append(
+                f"{index + 1}. <#{entry['channel_id']}> · {status} · "
+                f"提及{'開' if entry['allow_mentions'] else '關'}\n{content}"
+            )
+        embed = discord.Embed(
+            title="StickyMessage 設定",
+            description="\n\n".join(lines) if lines else "尚未設定任何置底訊息。",
+            color=discord.Color.blurple(),
+        )
+        embed.add_field(name="額度", value=f"{len(config['entries'])} / {limit}", inline=True)
+        embed.add_field(name="安靜時間", value=f"{config['quiet_seconds']} 秒", inline=True)
+        embed.add_field(name="最短間隔", value=f"{config['min_interval_seconds']} 秒", inline=True)
+        await interaction.response.send_message(embed=embed, ephemeral=True, allowed_mentions=NO_MENTIONS)
+
+    @app_commands.command(name=app_commands.locale_str("publish"), description="立即重新發布一則置底訊息")
+    @app_commands.describe(channel="要立即重新發布置底訊息的頻道")
+    @app_commands.checks.has_permissions(manage_guild=True)
+    async def publish(self, interaction: discord.Interaction, channel: discord.TextChannel) -> None:
+        try:
+            await interaction.response.defer(ephemeral=True)
+            await self.publish_entry(interaction.guild_id, channel.id, notify_mentions=True)
+            await interaction.followup.send(f"已重新發布 {channel.mention} 的置底訊息。", ephemeral=True)
+        except Exception as error:
+            await self._respond_error(interaction, error)
+
+    @app_commands.command(name=app_commands.locale_str("move"), description="調整置底訊息順序；順序同時決定額度優先級")
+    @app_commands.describe(channel="要移動的置底訊息頻道", position="新的順序位置")
+    @app_commands.checks.has_permissions(manage_guild=True)
+    async def move(
+        self,
+        interaction: discord.Interaction,
+        channel: discord.TextChannel,
+        position: app_commands.Range[int, 1, MAX_LIMIT],
+    ) -> None:
+        try:
+            config = self.get_config(interaction.guild_id)
+            index, entry = find_entry(config, channel.id)
+            if entry is None:
+                raise ValueError("這個頻道尚未設定置底訊息。")
+            if position > len(config["entries"]):
+                raise ValueError(f"位置不可超過目前的 {len(config['entries'])} 則設定。")
+            config["entries"].pop(index)
+            config["entries"].insert(position - 1, entry)
+            await interaction.response.defer(ephemeral=True)
+            await self._save_and_apply(interaction.guild_id, config)
+            await interaction.followup.send(f"已將 {channel.mention} 移到第 {position} 位。", ephemeral=True)
+        except Exception as error:
+            await self._respond_error(interaction, error)
+
+    @app_commands.command(name=app_commands.locale_str("timing"), description="設定重新置底的安靜時間與最短間隔")
+    @app_commands.describe(quiet_seconds="最後一則真人訊息後等待秒數", min_interval_seconds="同頻道兩次自動重貼的最短間隔")
+    @app_commands.checks.has_permissions(manage_guild=True)
+    async def timing(
+        self,
+        interaction: discord.Interaction,
+        quiet_seconds: app_commands.Range[int, MIN_QUIET_SECONDS, MAX_QUIET_SECONDS],
+        min_interval_seconds: app_commands.Range[int, MIN_INTERVAL_SECONDS, MAX_INTERVAL_SECONDS],
+    ) -> None:
+        try:
+            config = self.get_config(interaction.guild_id)
+            config["quiet_seconds"] = quiet_seconds
+            config["min_interval_seconds"] = min_interval_seconds
+            await interaction.response.defer(ephemeral=True)
+            await self._save_and_apply(interaction.guild_id, config)
+            await interaction.followup.send(
+                f"已設定安靜時間 {quiet_seconds} 秒、最短間隔 {min_interval_seconds} 秒。",
+                ephemeral=True,
+            )
+        except Exception as error:
+            await self._respond_error(interaction, error)
+
+
+asyncio.run(bot.add_cog(StickyMessage(bot)))

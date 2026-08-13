@@ -70,6 +70,10 @@ def _fixlink_module():
     return importlib.import_module("FixLink")
 
 
+def _stickymessage_module():
+    return importlib.import_module("StickyMessage")
+
+
 def _serialize_fixlink_config(value):
     return _fixlink_module().normalize_fixlink_config(value)
 
@@ -153,6 +157,42 @@ def _serialize_antibeast_config(value):
             "only_everyone_here": bool(kick.get("only_everyone_here", False)),
         },
     }
+
+
+def _serialize_stickymessage_config(value):
+    stickymessage = _stickymessage_module()
+    config_value = stickymessage.normalize_config(value)
+    return {
+        "quiet_seconds": config_value["quiet_seconds"],
+        "min_interval_seconds": config_value["min_interval_seconds"],
+        "entries": [
+            {
+                "channel_id": str(entry["channel_id"]),
+                "content": entry["content"],
+                "allow_mentions": bool(entry.get("allow_mentions", False)),
+            }
+            for entry in config_value["entries"]
+        ],
+    }
+
+
+def _coerce_stickymessage_config(value, guild_id=None):
+    stickymessage = _stickymessage_module()
+    normalized = stickymessage.normalize_config(value, strict=True)
+    if guild_id is None:
+        return normalized
+
+    guild = bot.get_guild(int(guild_id))
+    if guild is None:
+        raise ValueError("找不到伺服器。")
+    for entry in normalized["entries"]:
+        channel = guild.get_channel(entry["channel_id"])
+        if not isinstance(channel, discord.TextChannel) or channel.type not in (
+            discord.ChannelType.text,
+            discord.ChannelType.news,
+        ):
+            raise ValueError(f"頻道 {entry['channel_id']} 不是這個伺服器的文字或公告頻道。")
+    return normalized
 
 
 def _coerce_antibeast_config(value, guild_id=None):
@@ -511,6 +551,8 @@ def api_set_settings(guild_id):
     if setting is None:
         return jsonify({"error": "Unknown setting"}), 400
 
+    previous_value = get_server_config(gid, key, setting.get("default"))
+
     try:
         value = _coerce(value, setting.get("type", "string"), guild_id=gid)
     except (ValueError, TypeError) as e:
@@ -541,16 +583,30 @@ def api_set_settings(guild_id):
         if len(value or []) > autoreply_limit:
             return jsonify({"error": f"AutoReply rules are limited to {autoreply_limit} items."}), 400
 
-    set_server_config(gid, key, value)
+    if setting.get("type") == "stickymessage_config":
+        stickymessage = _stickymessage_module()
+        current = stickymessage.normalize_config(previous_value)
+        current_channels = {entry["channel_id"] for entry in current["entries"]}
+        submitted_channels = {entry["channel_id"] for entry in value["entries"]}
+        added_channels = submitted_channels - current_channels
+        limit = stickymessage.get_stickymessage_limit(gid)
+        if added_channels and len(value["entries"]) > limit:
+            return jsonify({
+                "error": f"這個伺服器最多可設定 {limit} 則置底訊息；請先移除項目再新增。",
+            }), 400
+
+    if not set_server_config(gid, key, value):
+        return jsonify({"error": "儲存伺服器設定失敗。"}), 500
 
     trigger = setting.get("trigger")
     if callable(trigger):
         try:
             import asyncio, inspect
+            trigger_args = (gid, value, previous_value) if setting.get("trigger_with_previous") else (gid, value)
             if inspect.iscoroutinefunction(trigger):
-                asyncio.run_coroutine_threadsafe(trigger(gid, value), bot.loop)
+                asyncio.run_coroutine_threadsafe(trigger(*trigger_args), bot.loop)
             else:
-                trigger(gid, value)
+                trigger(*trigger_args)
         except Exception as e:
             log(f"Trigger error {mod_name}.{key}: {e}", module_name="GuildPanel")
 
@@ -623,6 +679,35 @@ def api_autoreply_limit(guild_id):
     return jsonify({"limit": limit})
 
 
+@app.route("/api/panel/guild/<guild_id>/stickymessage_limit")
+@_require_auth
+@_require_guild
+def api_stickymessage_limit(guild_id):
+    return jsonify({"limit": _stickymessage_module().get_stickymessage_limit(int(guild_id))})
+
+
+@app.route("/api/panel/guild/<guild_id>/stickymessage/publish", methods=["POST"])
+@_require_auth
+@_require_guild
+def api_publish_stickymessage(guild_id):
+    payload = request.get_json(silent=True) or {}
+    raw_channel_id = payload.get("channel_id")
+    if raw_channel_id is None or not str(raw_channel_id).isdigit():
+        return jsonify({"error": "頻道 ID 無效。"}), 400
+    cog = bot.get_cog("StickyMessage")
+    if cog is None:
+        return jsonify({"error": "StickyMessage 模組目前無法使用。"}), 503
+    try:
+        future = asyncio.run_coroutine_threadsafe(
+            cog.publish_entry(int(guild_id), int(raw_channel_id), notify_mentions=True),
+            bot.loop,
+        )
+        future.result(timeout=30)
+    except Exception as error:
+        return jsonify({"error": str(error) or "發布置底訊息失敗。"}), 400
+    return jsonify({"success": True})
+
+
 # ============= Value serialization =============
 
 def _serialize(value, stype, guild_id=None):
@@ -680,6 +765,8 @@ def _serialize(value, stype, guild_id=None):
         return _serialize_fixlink_config(value)
     if stype == "antibeast_config":
         return _serialize_antibeast_config(value)
+    if stype == "stickymessage_config":
+        return _serialize_stickymessage_config(value)
     return value
 
 
@@ -707,6 +794,9 @@ def _coerce(value, stype, guild_id=None):
 
     if stype == "antibeast_config":
         return _coerce_antibeast_config(value, guild_id=guild_id)
+
+    if stype == "stickymessage_config":
+        return _coerce_stickymessage_config(value, guild_id=guild_id)
 
     if stype == "autoreply_list":
         if not isinstance(value, list):
@@ -1057,6 +1147,20 @@ def _register_all():
             {"display": "忽略機器人", "database_key": "stickyrole_ignore_bots", "type": "boolean", "default": True},
             {"display": "日誌頻道", "description": "角色還原時發送通知的頻道", "database_key": "stickyrole_log_channel", "type": "channel", "default": None},
         ], description="角色記憶功能設定", icon="📌")
+
+    if "StickyMessage" in modules:
+        stickymessage = _stickymessage_module()
+        register_settings("StickyMessage", "置底訊息", [
+            {
+                "display": "置底訊息設定",
+                "description": "設定頻道、訊息內容、提及方式與重新置底間隔",
+                "database_key": stickymessage.CONFIG_KEY,
+                "type": "stickymessage_config",
+                "default": stickymessage.DEFAULT_CONFIG,
+                "trigger": stickymessage.apply_stickymessage_config,
+                "trigger_with_previous": True,
+            },
+        ], description="在頻道有新對話後，自動把指定訊息重新移到最底部", icon="📌")
 
     if "AntiBeast" in modules:
         register_settings("AntiBeast", "AntiBeast", [

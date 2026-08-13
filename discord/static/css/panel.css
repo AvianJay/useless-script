@@ -635,6 +635,63 @@ body {
 }
 .btn-autoreply-remove:hover { opacity: 0.9; }
 
+/* ============= StickyMessage Editor ============= */
+.stickymessage-editor,
+.stickymessage-list,
+.stickymessage-card,
+.stickymessage-field {
+    display: flex;
+    flex-direction: column;
+}
+
+.stickymessage-editor,
+.stickymessage-list { gap: 1rem; }
+
+.stickymessage-timing {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(180px, 1fr)) auto;
+    gap: 0.75rem;
+    align-items: end;
+}
+
+.stickymessage-field { gap: 0.35rem; }
+.stickymessage-field > span,
+.stickymessage-status,
+.stickymessage-mentions {
+    color: var(--text-muted);
+    font-size: 0.85rem;
+}
+
+.stickymessage-card {
+    gap: 0.75rem;
+    padding: 1rem;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+}
+
+.stickymessage-card.is-paused { border-color: var(--warning); opacity: 0.8; }
+.stickymessage-card-heading,
+.stickymessage-actions {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+}
+.stickymessage-card-heading span,
+.stickymessage-actions { display: flex; gap: 0.5rem; }
+.stickymessage-empty {
+    padding: 1rem;
+    border: 1px dashed var(--border);
+    border-radius: var(--radius);
+    color: var(--text-muted);
+}
+
+@media (max-width: 720px) {
+    .stickymessage-timing { grid-template-columns: 1fr; }
+    .stickymessage-actions { align-items: stretch; flex-direction: column; }
+}
+
 /* ============= Automod Config Editor ============= */
 .automod-config-editor {
     display: flex;

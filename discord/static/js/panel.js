@@ -5,6 +5,7 @@ let currentValues = {};
 let channelsCache = null;
 let rolesCache = null;
 let autoreplyLimitCache = null;
+let stickymessageLimitCache = null;
 
 // ---- Data fetching ----
 
@@ -55,6 +56,13 @@ function debounceSave(module, key, value, delay = 600, onComplete = null) {
     }, delay);
 }
 
+async function loadStickymessageLimit() {
+    if (stickymessageLimitCache !== null) return stickymessageLimitCache;
+    const data = await fetchJSON(`/api/panel/guild/${GUILD_ID}/stickymessage_limit`);
+    stickymessageLimitCache = Math.max(1, Math.min(25, parseInt(data && data.limit, 10) || 5));
+    return stickymessageLimitCache;
+}
+
 async function doSave(module, key, value) {
     const id = `${module}::${key}`;
     try {
@@ -98,11 +106,12 @@ async function render() {
     wrapper.innerHTML = '<div class="loading-spinner">正在載入設定...</div>';
 
     // Load all data in parallel
-    const [settings, channels, roles, autoreplyLimit] = await Promise.all([
+    const [settings, channels, roles, autoreplyLimit, stickymessageLimit] = await Promise.all([
         loadSettings(),
         loadChannels(),
         loadRoles(),
         loadAutoreplyLimit(),
+        SETTINGS_SCHEMA.StickyMessage ? loadStickymessageLimit() : Promise.resolve(5),
     ]);
 
     if (!settings) { wrapper.innerHTML = '<div class="loading-spinner">載入失敗</div>'; return; }
@@ -142,7 +151,7 @@ async function render() {
 
         for (const s of schema.settings) {
             const val = settings[mod] ? settings[mod][s.database_key] : s.default;
-            const row = buildSettingRow(mod, s, val, channels, roles, autoreplyLimit);
+            const row = buildSettingRow(mod, s, val, channels, roles, autoreplyLimit, stickymessageLimit);
             body.appendChild(row);
         }
 
@@ -155,10 +164,10 @@ async function render() {
     if (first) first.classList.add('open');
 }
 
-function buildSettingRow(mod, s, value, channels, roles, autoreplyLimit) {
+function buildSettingRow(mod, s, value, channels, roles, autoreplyLimit, stickymessageLimit) {
     const row = document.createElement('div');
     row.className = 'setting-row';
-    if (['autoreply_list', 'automod_config', 'webverify_config', 'fixlink_config', 'antibeast_config'].includes(s.type)) {
+    if (['autoreply_list', 'automod_config', 'webverify_config', 'fixlink_config', 'antibeast_config', 'stickymessage_config'].includes(s.type)) {
         row.classList.add('setting-row-column');
     }
 
@@ -203,6 +212,9 @@ function buildSettingRow(mod, s, value, channels, roles, autoreplyLimit) {
             break;
         case 'antibeast_config':
             ctrl.appendChild(buildAntibeastConfigEditor(mod, s, value, roles));
+            break;
+        case 'stickymessage_config':
+            ctrl.appendChild(buildStickymessageConfigEditor(mod, s, value, channels, stickymessageLimit));
             break;
         case 'boolean':
             ctrl.appendChild(buildToggle(mod, s, value));
@@ -406,6 +418,239 @@ function buildChannelListSelect(mod, s, value, channels) {
 
     renderTags();
     rebuildOptions();
+    return container;
+}
+
+function buildStickymessageConfigEditor(mod, s, value, channels, limit = 5) {
+    const allowedChannels = channels.filter(ch => ['text', 'news'].includes(ch.type));
+    const config = {
+        quiet_seconds: Math.max(5, Math.min(300, parseInt(value && value.quiet_seconds, 10) || 10)),
+        min_interval_seconds: Math.max(30, Math.min(3600, parseInt(value && value.min_interval_seconds, 10) || 30)),
+        entries: Array.isArray(value && value.entries) ? value.entries.map(entry => ({
+            channel_id: String(entry.channel_id || ''),
+            content: String(entry.content || ''),
+            allow_mentions: !!entry.allow_mentions,
+        })) : [],
+    };
+    const container = document.createElement('div');
+    container.className = 'stickymessage-editor';
+
+    const timing = document.createElement('div');
+    timing.className = 'stickymessage-timing';
+    const quietInput = document.createElement('input');
+    quietInput.type = 'number';
+    quietInput.min = '5';
+    quietInput.max = '300';
+    quietInput.className = 'form-input';
+    quietInput.value = config.quiet_seconds;
+    const intervalInput = document.createElement('input');
+    intervalInput.type = 'number';
+    intervalInput.min = '30';
+    intervalInput.max = '3600';
+    intervalInput.className = 'form-input';
+    intervalInput.value = config.min_interval_seconds;
+    const timingSave = document.createElement('button');
+    timingSave.type = 'button';
+    timingSave.className = 'btn-autoreply-add';
+    timingSave.textContent = '儲存時間設定';
+    timingSave.addEventListener('click', async () => {
+        config.quiet_seconds = parseInt(quietInput.value, 10);
+        config.min_interval_seconds = parseInt(intervalInput.value, 10);
+        await saveConfig();
+    });
+    timing.appendChild(makeLabeledControl('無新訊息多久後置底（5–300 秒）', quietInput));
+    timing.appendChild(makeLabeledControl('同頻道最短重貼間隔（30–3600 秒）', intervalInput));
+    timing.appendChild(timingSave);
+    container.appendChild(timing);
+
+    const status = document.createElement('div');
+    status.className = 'stickymessage-status';
+    container.appendChild(status);
+    const cards = document.createElement('div');
+    cards.className = 'stickymessage-list';
+    container.appendChild(cards);
+    const addButton = document.createElement('button');
+    addButton.type = 'button';
+    addButton.className = 'btn-autoreply-add';
+    addButton.textContent = '＋ 新增置底訊息';
+    container.appendChild(addButton);
+
+    function makeLabeledControl(labelText, control) {
+        const wrap = document.createElement('label');
+        wrap.className = 'stickymessage-field';
+        const label = document.createElement('span');
+        label.textContent = labelText;
+        wrap.appendChild(label);
+        wrap.appendChild(control);
+        return wrap;
+    }
+
+    function payload() {
+        return {
+            quiet_seconds: parseInt(config.quiet_seconds, 10),
+            min_interval_seconds: parseInt(config.min_interval_seconds, 10),
+            entries: config.entries.map(entry => ({
+                channel_id: entry.channel_id,
+                content: entry.content.trim(),
+                allow_mentions: !!entry.allow_mentions,
+            })),
+        };
+    }
+
+    async function saveConfig() {
+        const result = await doSave(mod, s.database_key, payload());
+        if (result.success && result.value) {
+            config.quiet_seconds = result.value.quiet_seconds;
+            config.min_interval_seconds = result.value.min_interval_seconds;
+            config.entries = result.value.entries.map(entry => ({
+                channel_id: String(entry.channel_id),
+                content: String(entry.content),
+                allow_mentions: !!entry.allow_mentions,
+            }));
+            renderCards();
+        }
+        return result;
+    }
+
+    async function publish(channelId, button) {
+        button.disabled = true;
+        const originalText = button.textContent;
+        button.textContent = '發布中...';
+        try {
+            const response = await fetch(`/api/panel/guild/${GUILD_ID}/stickymessage/publish`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ channel_id: channelId }),
+            });
+            const data = await response.json();
+            if (!data.success) throw new Error(data.error || '發布失敗');
+            showToast('置底訊息已發布', 'success');
+        } catch (error) {
+            showToast('發布失敗: ' + error.message, 'error');
+        } finally {
+            button.disabled = false;
+            button.textContent = originalText;
+        }
+    }
+
+    function channelSelect(entry, index) {
+        const select = document.createElement('select');
+        select.className = 'form-select';
+        select.innerHTML = '<option value="">選擇文字頻道...</option>';
+        for (const channel of allowedChannels) {
+            if (config.entries.some((other, otherIndex) => otherIndex !== index && other.channel_id === String(channel.id))) continue;
+            const option = document.createElement('option');
+            option.value = channel.id;
+            option.textContent = `${channel.category ? `[${channel.category}] ` : ''}# ${channel.name}`;
+            if (entry.channel_id === String(channel.id)) option.selected = true;
+            select.appendChild(option);
+        }
+        select.addEventListener('change', () => { entry.channel_id = select.value; });
+        return select;
+    }
+
+    function renderCards() {
+        cards.innerHTML = '';
+        status.textContent = `目前 ${config.entries.length} / ${limit} 則；第 ${limit + 1} 則起會保留但暫停運作。`;
+        addButton.disabled = config.entries.length >= limit || config.entries.length >= 25;
+        if (config.entries.length === 0) {
+            const empty = document.createElement('div');
+            empty.className = 'stickymessage-empty';
+            empty.textContent = '尚未設定任何置底訊息。';
+            cards.appendChild(empty);
+            return;
+        }
+
+        config.entries.forEach((entry, index) => {
+            const card = document.createElement('div');
+            card.className = 'stickymessage-card';
+            if (index >= limit) card.classList.add('is-paused');
+
+            const heading = document.createElement('div');
+            heading.className = 'stickymessage-card-heading';
+            const title = document.createElement('strong');
+            title.textContent = `第 ${index + 1} 則${index >= limit ? '（超額暫停）' : ''}`;
+            heading.appendChild(title);
+            const moveWrap = document.createElement('span');
+            const up = document.createElement('button');
+            up.type = 'button';
+            up.className = 'btn-autoreply-add';
+            up.textContent = '↑';
+            up.disabled = index === 0;
+            up.addEventListener('click', async () => {
+                [config.entries[index - 1], config.entries[index]] = [config.entries[index], config.entries[index - 1]];
+                await saveConfig();
+            });
+            const down = document.createElement('button');
+            down.type = 'button';
+            down.className = 'btn-autoreply-add';
+            down.textContent = '↓';
+            down.disabled = index === config.entries.length - 1;
+            down.addEventListener('click', async () => {
+                [config.entries[index + 1], config.entries[index]] = [config.entries[index], config.entries[index + 1]];
+                await saveConfig();
+            });
+            moveWrap.appendChild(up);
+            moveWrap.appendChild(down);
+            heading.appendChild(moveWrap);
+            card.appendChild(heading);
+
+            card.appendChild(makeLabeledControl('頻道', channelSelect(entry, index)));
+            const textarea = document.createElement('textarea');
+            textarea.className = 'form-textarea';
+            textarea.maxLength = 2000;
+            textarea.rows = 4;
+            textarea.value = entry.content;
+            textarea.addEventListener('input', () => { entry.content = textarea.value; });
+            card.appendChild(makeLabeledControl('訊息內容（最多 2000 字）', textarea));
+
+            const mentionLabel = document.createElement('label');
+            mentionLabel.className = 'stickymessage-mentions';
+            const mentionInput = document.createElement('input');
+            mentionInput.type = 'checkbox';
+            mentionInput.checked = entry.allow_mentions;
+            mentionInput.addEventListener('change', () => { entry.allow_mentions = mentionInput.checked; });
+            mentionLabel.appendChild(mentionInput);
+            mentionLabel.appendChild(document.createTextNode(' 首次、內容修改或手動發布時允許提及（自動重貼不通知）'));
+            card.appendChild(mentionLabel);
+
+            const actions = document.createElement('div');
+            actions.className = 'stickymessage-actions';
+            const save = document.createElement('button');
+            save.type = 'button';
+            save.className = 'btn-autoreply-add';
+            save.textContent = '儲存並發布';
+            save.addEventListener('click', saveConfig);
+            const publishButton = document.createElement('button');
+            publishButton.type = 'button';
+            publishButton.className = 'btn-autoreply-add';
+            publishButton.textContent = '手動發布';
+            publishButton.disabled = !entry.channel_id || index >= limit;
+            publishButton.addEventListener('click', () => publish(entry.channel_id, publishButton));
+            const remove = document.createElement('button');
+            remove.type = 'button';
+            remove.className = 'btn-autoreply-remove';
+            remove.textContent = '刪除';
+            remove.addEventListener('click', async () => {
+                if (!window.confirm('確定要刪除這則置底訊息設定嗎？')) return;
+                config.entries.splice(index, 1);
+                await saveConfig();
+            });
+            actions.appendChild(save);
+            actions.appendChild(publishButton);
+            actions.appendChild(remove);
+            card.appendChild(actions);
+            cards.appendChild(card);
+        });
+    }
+
+    addButton.addEventListener('click', () => {
+        if (config.entries.length >= limit || config.entries.length >= 25) return;
+        config.entries.push({ channel_id: '', content: '', allow_mentions: false });
+        renderCards();
+    });
+
+    renderCards();
     return container;
 }
 

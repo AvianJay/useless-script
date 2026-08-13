@@ -860,7 +860,24 @@ async def serverconfig(ctx, guild_id: int=None, key: str=None, value: str=None):
             set_server_config(guild_id, main_key, data)
             await ctx.send(f"已更新伺服器 {guild_id} 的 {key} 為 {value}。")
         else:
-            set_server_config(guild_id, key, value)
+            if key == "stickymessage_limit":
+                try:
+                    import StickyMessage
+
+                    previous_limit = StickyMessage.get_stickymessage_limit(guild_id)
+                    value = max(
+                        StickyMessage.MIN_LIMIT,
+                        min(StickyMessage.MAX_LIMIT, int(value)),
+                    )
+                except ValueError:
+                    await ctx.send("stickymessage_limit 必須是 1 到 25 的整數。")
+                    return
+                set_server_config(guild_id, key, value)
+                cog = bot.get_cog("StickyMessage")
+                if cog is not None:
+                    await cog.reconcile_limit(guild_id, previous_limit)
+            else:
+                set_server_config(guild_id, key, value)
             await ctx.send(f"已更新伺服器 {guild_id} 的 {key} 為 {value}。")
 
 

@@ -69,6 +69,15 @@ else:
     get_join_prompt_recipient = None
 
 
+if "StickyMessage" in modules:
+    try:
+        import StickyMessage as StickyMessageModule
+    except Exception:
+        StickyMessageModule = None
+else:
+    StickyMessageModule = None
+
+
 if get_join_prompt_recipient is None:
     async def get_join_prompt_recipient(guild: discord.Guild, bot_user_id: int | None = None):
         target_bot_id = bot_user_id or (bot.user.id if bot.user else None)
@@ -168,6 +177,9 @@ def format_setting_value(guild: discord.Guild, setting: dict, value: Any) -> str
         return "、".join(mentions) if mentions else "空清單"
     if stype == "boolean":
         return "啟用" if bool(value) else "停用"
+    if stype == "stickymessage_config":
+        entries = value.get("entries", []) if isinstance(value, dict) else []
+        return f"已設定 {len(entries)} 則"
     if isinstance(value, (dict, list)):
         return f"已設定 {len(value)} 項"
     return truncate(value, 900)
@@ -204,6 +216,7 @@ async def apply_registered_setting(
     setting: dict,
     value: Any,
 ) -> str | None:
+    previous_value = get_server_config(guild_id, setting["database_key"], setting.get("default"))
     if not set_server_config(guild_id, setting["database_key"], value):
         raise RuntimeError("寫入伺服器設定失敗。")
 
@@ -212,7 +225,12 @@ async def apply_registered_setting(
         return None
 
     try:
-        result = trigger(guild_id, value)
+        trigger_args = (
+            (guild_id, value, previous_value)
+            if setting.get("trigger_with_previous")
+            else (guild_id, value)
+        )
+        result = trigger(*trigger_args)
         if inspect.isawaitable(result):
             await result
     except Exception as error:
@@ -439,6 +457,11 @@ class SettingSelect(discord.ui.Select):
                 self.parent_view.session,
                 self.parent_view.module_name,
             )
+        elif stype == "stickymessage_config":
+            target = StickyMessageManagerView(
+                self.parent_view.session,
+                self.parent_view.module_name,
+            )
         elif stype in ("channel_list", "role_list"):
             target = ListSettingView(
                 self.parent_view.session,
@@ -616,6 +639,410 @@ def build_gettingstarted_fixlink_view(
             )
 
     return GettingStartedFixLinkSettingsView()
+
+
+def get_stickymessage_module():
+    global StickyMessageModule
+    if StickyMessageModule is None:
+        try:
+            import StickyMessage as StickyMessageModule
+        except Exception:
+            return None
+    return StickyMessageModule
+
+
+def get_stickymessage_setting(module_name: str) -> dict:
+    return next(
+        setting
+        for setting in panel_settings[module_name]["settings"]
+        if setting["database_key"] == "stickymessage"
+    )
+
+
+def load_stickymessage_config(guild_id: int) -> dict:
+    module = get_stickymessage_module()
+    if module is None:
+        return {"quiet_seconds": 10, "min_interval_seconds": 30, "entries": []}
+    return module.normalize_config(get_server_config(guild_id, module.CONFIG_KEY, module.DEFAULT_CONFIG))
+
+
+class StickyMessageEntrySelect(discord.ui.Select):
+    def __init__(self, parent: "StickyMessageManagerView", options: list[discord.SelectOption]):
+        self.parent_view = parent
+        super().__init__(placeholder="選擇要管理的置底訊息", options=options, row=0)
+
+    async def callback(self, interaction: discord.Interaction):
+        index = int(self.values[0])
+        target = StickyMessageEditorView(
+            self.parent_view.session,
+            self.parent_view.module_name,
+            index=index,
+        )
+        await self.parent_view.session.render(interaction, embed=target.build_embed(), view=target)
+
+
+class StickyMessageManagerView(SetupView):
+    def __init__(self, session: GettingStartedSession, module_name: str):
+        super().__init__(session)
+        self.module_name = module_name
+        config_value = load_stickymessage_config(session.guild.id)
+        module = get_stickymessage_module()
+        limit = module.get_stickymessage_limit(session.guild.id) if module else 5
+        options = []
+        for index, entry in enumerate(config_value["entries"][:PAGE_SIZE]):
+            channel = session.guild.get_channel(entry["channel_id"])
+            channel_name = f"#{channel.name}" if channel else f"頻道 {entry['channel_id']}"
+            content = entry["content"].replace("\n", " ")
+            options.append(discord.SelectOption(
+                label=truncate(f"{index + 1}. {channel_name}", 100),
+                value=str(index),
+                description=truncate(
+                    ("超額暫停 · " if index >= limit else "運作中 · ") + content,
+                    100,
+                ),
+            ))
+        if options:
+            self.add_item(StickyMessageEntrySelect(self, options))
+
+        add = discord.ui.Button(
+            label="新增",
+            style=discord.ButtonStyle.success,
+            row=1,
+            disabled=len(config_value["entries"]) >= limit,
+        )
+        add.callback = self.add_entry
+        self.add_item(add)
+        timing = discord.ui.Button(label="時間設定", style=discord.ButtonStyle.primary, row=1)
+        timing.callback = self.edit_timing
+        self.add_item(timing)
+        back = discord.ui.Button(label="返回設定", style=discord.ButtonStyle.secondary, row=1)
+        back.callback = self.back
+        self.add_item(back)
+
+    def build_embed(self) -> discord.Embed:
+        config_value = load_stickymessage_config(self.session.guild.id)
+        module = get_stickymessage_module()
+        limit = module.get_stickymessage_limit(self.session.guild.id) if module else 5
+        lines = []
+        for index, entry in enumerate(config_value["entries"]):
+            status = "運作中" if index < limit else "超額暫停"
+            lines.append(f"{index + 1}. <#{entry['channel_id']}> · {status}")
+        embed = discord.Embed(
+            title="📌 置底訊息",
+            description="\n".join(lines) if lines else "尚未設定任何置底訊息。",
+            color=discord.Color.blurple(),
+        )
+        embed.add_field(name="額度", value=f"{len(config_value['entries'])} / {limit}", inline=True)
+        embed.add_field(name="安靜時間", value=f"{config_value['quiet_seconds']} 秒", inline=True)
+        embed.add_field(name="最短間隔", value=f"{config_value['min_interval_seconds']} 秒", inline=True)
+        embed.set_footer(text="只有首次、內容修改或手動發布會依設定發送提及。")
+        return embed
+
+    async def add_entry(self, interaction: discord.Interaction):
+        target = StickyMessageChannelPickerView(self.session, self.module_name)
+        await self.session.render(interaction, embed=target.build_embed(), view=target)
+
+    async def edit_timing(self, interaction: discord.Interaction):
+        await interaction.response.send_modal(StickyMessageTimingModal(self.session, self.module_name))
+
+    async def back(self, interaction: discord.Interaction):
+        target = ModuleSettingsView(self.session, self.module_name)
+        await self.session.render(
+            interaction,
+            embed=ModuleSettingsView.build_embed(self.session, self.module_name),
+            view=target,
+        )
+
+
+class StickyMessageChannelSelect(discord.ui.ChannelSelect):
+    def __init__(self, parent: "StickyMessageChannelPickerView"):
+        self.parent_view = parent
+        super().__init__(
+            placeholder="選擇文字或公告頻道",
+            channel_types=[discord.ChannelType.text, discord.ChannelType.news],
+            min_values=1,
+            max_values=1,
+            row=0,
+        )
+
+    async def callback(self, interaction: discord.Interaction):
+        selected = resolve_select_value(self.values[0])
+        channel_id = selected.id if selected is not None else int(interaction.data["values"][0])
+        config_value = load_stickymessage_config(self.parent_view.session.guild.id)
+        if any(entry["channel_id"] == channel_id for entry in config_value["entries"]):
+            await interaction.response.send_message("這個頻道已經有置底訊息。", ephemeral=True)
+            return
+        target = StickyMessageEditorView(
+            self.parent_view.session,
+            self.parent_view.module_name,
+            channel_id=channel_id,
+        )
+        await self.parent_view.session.render(interaction, embed=target.build_embed(), view=target)
+
+
+class StickyMessageChannelPickerView(SetupView):
+    def __init__(self, session: GettingStartedSession, module_name: str):
+        super().__init__(session)
+        self.module_name = module_name
+        self.add_item(StickyMessageChannelSelect(self))
+        back = discord.ui.Button(label="返回", style=discord.ButtonStyle.secondary, row=1)
+        back.callback = self.back
+        self.add_item(back)
+
+    def build_embed(self) -> discord.Embed:
+        return discord.Embed(
+            title="新增置底訊息",
+            description="先選擇要設定的文字或公告頻道。每個頻道只能有一則置底訊息。",
+            color=discord.Color.blurple(),
+        )
+
+    async def back(self, interaction: discord.Interaction):
+        target = StickyMessageManagerView(self.session, self.module_name)
+        await self.session.render(interaction, embed=target.build_embed(), view=target)
+
+
+class StickyMessageContentModal(discord.ui.Modal, title="編輯置底訊息內容"):
+    content = discord.ui.TextInput(
+        label="訊息內容",
+        style=discord.TextStyle.paragraph,
+        min_length=1,
+        max_length=2000,
+        required=True,
+    )
+
+    def __init__(self, parent: "StickyMessageEditorView"):
+        super().__init__()
+        self.parent_view = parent
+        self.content.default = parent.entry["content"]
+
+    async def on_submit(self, interaction: discord.Interaction):
+        self.parent_view.entry["content"] = str(self.content.value).strip()
+        target = StickyMessageEditorView(
+            self.parent_view.session,
+            self.parent_view.module_name,
+            index=self.parent_view.index,
+            channel_id=self.parent_view.entry["channel_id"],
+            entry=self.parent_view.entry,
+        )
+        await self.parent_view.session.render(
+            interaction,
+            embed=target.build_embed(),
+            view=target,
+        )
+
+
+class StickyMessageEditorView(SetupView):
+    def __init__(
+        self,
+        session: GettingStartedSession,
+        module_name: str,
+        *,
+        index: int | None = None,
+        channel_id: int | None = None,
+        entry: dict | None = None,
+    ):
+        super().__init__(session)
+        self.module_name = module_name
+        self.index = index
+        config_value = load_stickymessage_config(session.guild.id)
+        if entry is not None:
+            self.entry = copy.deepcopy(entry)
+        elif index is None:
+            self.entry = {"channel_id": int(channel_id), "content": "", "allow_mentions": False}
+        else:
+            self.entry = copy.deepcopy(config_value["entries"][index])
+
+        content = discord.ui.Button(label="編輯內容", style=discord.ButtonStyle.primary, row=0)
+        content.callback = self.edit_content
+        self.add_item(content)
+        mentions = discord.ui.Button(
+            label=f"首次提及：{'開' if self.entry['allow_mentions'] else '關'}",
+            style=discord.ButtonStyle.danger if self.entry["allow_mentions"] else discord.ButtonStyle.secondary,
+            row=0,
+        )
+        mentions.callback = self.toggle_mentions
+        self.add_item(mentions)
+        save = discord.ui.Button(
+            label="儲存並發布",
+            style=discord.ButtonStyle.success,
+            row=1,
+            disabled=not bool(self.entry["content"]),
+        )
+        save.callback = self.save
+        self.add_item(save)
+        if index is not None:
+            publish = discord.ui.Button(label="手動發布", style=discord.ButtonStyle.primary, row=1)
+            publish.callback = self.publish
+            self.add_item(publish)
+            up = discord.ui.Button(label="上移", style=discord.ButtonStyle.secondary, row=2, disabled=index == 0)
+            up.callback = self.move_up
+            self.add_item(up)
+            down = discord.ui.Button(
+                label="下移",
+                style=discord.ButtonStyle.secondary,
+                row=2,
+                disabled=index >= len(config_value["entries"]) - 1,
+            )
+            down.callback = self.move_down
+            self.add_item(down)
+            remove = discord.ui.Button(label="刪除", style=discord.ButtonStyle.danger, row=2)
+            remove.callback = self.remove
+            self.add_item(remove)
+        back = discord.ui.Button(label="返回", style=discord.ButtonStyle.secondary, row=3)
+        back.callback = self.back
+        self.add_item(back)
+
+    def build_embed(self) -> discord.Embed:
+        preview = self.entry["content"] or "尚未輸入內容，請先點選「編輯內容」。"
+        embed = discord.Embed(
+            title="編輯置底訊息" if self.index is not None else "新增置底訊息",
+            description=truncate(preview, 4000),
+            color=discord.Color.blurple(),
+        )
+        embed.add_field(name="頻道", value=f"<#{self.entry['channel_id']}>", inline=True)
+        embed.add_field(
+            name="首次／手動提及",
+            value="允許" if self.entry["allow_mentions"] else "抑制",
+            inline=True,
+        )
+        embed.set_footer(text="自動重新置底永遠不會發送提及通知。")
+        return embed
+
+    async def edit_content(self, interaction: discord.Interaction):
+        await interaction.response.send_modal(StickyMessageContentModal(self))
+
+    async def toggle_mentions(self, interaction: discord.Interaction):
+        self.entry["allow_mentions"] = not self.entry["allow_mentions"]
+        target = StickyMessageEditorView(
+            self.session,
+            self.module_name,
+            index=self.index,
+            channel_id=self.entry["channel_id"],
+            entry=self.entry,
+        )
+        await self.session.render(interaction, embed=target.build_embed(), view=target)
+
+    async def save(self, interaction: discord.Interaction):
+        if not self.entry["content"].strip():
+            await interaction.response.send_message("請先輸入置底訊息內容。", ephemeral=True)
+            return
+        module = get_stickymessage_module()
+        config_value = load_stickymessage_config(self.session.guild.id)
+        if self.index is None:
+            limit = module.get_stickymessage_limit(self.session.guild.id) if module else 5
+            if len(config_value["entries"]) >= limit:
+                await interaction.response.send_message(f"這個伺服器最多可設定 {limit} 則置底訊息。", ephemeral=True)
+                return
+            config_value["entries"].append(copy.deepcopy(self.entry))
+        else:
+            if self.index >= len(config_value["entries"]):
+                await interaction.response.send_message("這則設定已不存在，請重新開啟管理畫面。", ephemeral=True)
+                return
+            config_value["entries"][self.index] = copy.deepcopy(self.entry)
+        if not await self.session.save(
+            interaction,
+            self.module_name,
+            get_stickymessage_setting(self.module_name),
+            module.normalize_config(config_value, strict=True) if module else config_value,
+        ):
+            return
+        target = StickyMessageManagerView(self.session, self.module_name)
+        await self.session.render(interaction, embed=target.build_embed(), view=target)
+
+    async def publish(self, interaction: discord.Interaction):
+        cog = bot.get_cog("StickyMessage")
+        if cog is None:
+            await interaction.response.send_message("StickyMessage 模組目前無法使用。", ephemeral=True)
+            return
+        try:
+            await interaction.response.defer(ephemeral=True)
+            await cog.publish_entry(self.session.guild.id, self.entry["channel_id"], notify_mentions=True)
+            await interaction.followup.send("已手動發布置底訊息。", ephemeral=True)
+        except Exception as error:
+            await interaction.followup.send(str(error) or "發布失敗。", ephemeral=True)
+
+    async def _move(self, interaction: discord.Interaction, offset: int):
+        module = get_stickymessage_module()
+        config_value = load_stickymessage_config(self.session.guild.id)
+        target_index = self.index + offset
+        if self.index is None or target_index < 0 or target_index >= len(config_value["entries"]):
+            return
+        config_value["entries"][self.index], config_value["entries"][target_index] = (
+            config_value["entries"][target_index],
+            config_value["entries"][self.index],
+        )
+        if await self.session.save(
+            interaction,
+            self.module_name,
+            get_stickymessage_setting(self.module_name),
+            module.normalize_config(config_value, strict=True) if module else config_value,
+        ):
+            target = StickyMessageEditorView(self.session, self.module_name, index=target_index)
+            await self.session.render(interaction, embed=target.build_embed(), view=target)
+
+    async def move_up(self, interaction: discord.Interaction):
+        await self._move(interaction, -1)
+
+    async def move_down(self, interaction: discord.Interaction):
+        await self._move(interaction, 1)
+
+    async def remove(self, interaction: discord.Interaction):
+        module = get_stickymessage_module()
+        config_value = load_stickymessage_config(self.session.guild.id)
+        if self.index is not None and self.index < len(config_value["entries"]):
+            config_value["entries"].pop(self.index)
+        if await self.session.save(
+            interaction,
+            self.module_name,
+            get_stickymessage_setting(self.module_name),
+            module.normalize_config(config_value, strict=True) if module else config_value,
+        ):
+            target = StickyMessageManagerView(self.session, self.module_name)
+            await self.session.render(interaction, embed=target.build_embed(), view=target)
+
+    async def back(self, interaction: discord.Interaction):
+        target = StickyMessageManagerView(self.session, self.module_name)
+        await self.session.render(interaction, embed=target.build_embed(), view=target)
+
+
+class StickyMessageTimingModal(discord.ui.Modal, title="StickyMessage 時間設定"):
+    quiet_seconds = discord.ui.TextInput(
+        label="無新訊息多久後置底（5–300 秒）",
+        min_length=1,
+        max_length=3,
+    )
+    min_interval_seconds = discord.ui.TextInput(
+        label="同頻道最短間隔（30–3600 秒）",
+        min_length=2,
+        max_length=4,
+    )
+
+    def __init__(self, session: GettingStartedSession, module_name: str):
+        super().__init__()
+        self.session = session
+        self.module_name = module_name
+        config_value = load_stickymessage_config(session.guild.id)
+        self.quiet_seconds.default = str(config_value["quiet_seconds"])
+        self.min_interval_seconds.default = str(config_value["min_interval_seconds"])
+
+    async def on_submit(self, interaction: discord.Interaction):
+        module = get_stickymessage_module()
+        config_value = load_stickymessage_config(self.session.guild.id)
+        try:
+            config_value["quiet_seconds"] = int(str(self.quiet_seconds.value).strip())
+            config_value["min_interval_seconds"] = int(str(self.min_interval_seconds.value).strip())
+            normalized = module.normalize_config(config_value, strict=True) if module else config_value
+        except (TypeError, ValueError) as error:
+            await interaction.response.send_message(str(error) or "請輸入有效秒數。", ephemeral=True)
+            return
+        if await self.session.save(
+            interaction,
+            self.module_name,
+            get_stickymessage_setting(self.module_name),
+            normalized,
+        ):
+            target = StickyMessageManagerView(self.session, self.module_name)
+            await self.session.render(interaction, embed=target.build_embed(), view=target)
 
 
 def get_antibeast_cog():
