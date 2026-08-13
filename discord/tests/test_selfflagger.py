@@ -1,4 +1,5 @@
 import importlib.util
+import json
 import sqlite3
 import tempfile
 import unittest
@@ -25,6 +26,10 @@ channel_selection = load_module(
 database = load_module(
     "selfflagger_database",
     SELFFLAGGER_DIR / "database.py",
+)
+config_manager = load_module(
+    "selfflagger_config_manager",
+    SELFFLAGGER_DIR / "config_manager.py",
 )
 
 
@@ -86,6 +91,97 @@ class DatabaseTests(unittest.TestCase):
             record = database.get_flagged_user(conn, 10, 20)[0]
         self.assertIn("is_admin", columns)
         self.assertEqual(record[2:], (1, 0))
+
+
+class ConfigManagerTests(unittest.TestCase):
+    def test_old_config_is_migrated_and_ids_are_normalized(self):
+        normalized = config_manager.normalize_config({
+            "prefix": "!",
+            "token": "secret",
+            "owner_id": "10",
+            "command_guild_id": "20",
+            "ignored_users": ["30"],
+            "scan_guilds": [{
+                "id": "40",
+                "flagged_roles": ["50"],
+                "viewable_channels": [60],
+            }],
+            "config_version": 5,
+        })
+
+        self.assertEqual(normalized["config_version"], 6)
+        self.assertEqual(normalized["owner_id"], 10)
+        self.assertEqual(normalized["command_guild_id"], 20)
+        self.assertEqual(normalized["ignored_users"], [30])
+        self.assertEqual(normalized["scan_guilds"][0]["id"], 40)
+        self.assertEqual(normalized["scan_guilds"][0]["flagged_roles"], [50])
+        self.assertNotIn("viewable_channels", normalized["scan_guilds"][0])
+
+    def test_invalid_reload_does_not_return_a_replacement_config(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            config_path = Path(temp_dir) / "config.json"
+            config_path.write_text("{broken", encoding="utf-8")
+            with self.assertRaises(config_manager.ConfigError):
+                config_manager.load_config_file(config_path)
+
+    def test_reload_rejects_missing_file_instead_of_using_open_defaults(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            config_path = Path(temp_dir) / "config.json"
+            with self.assertRaises(config_manager.ConfigError):
+                config_manager.load_config_file(config_path, allow_missing=False)
+
+    def test_save_and_load_round_trip(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            config_path = Path(temp_dir) / "config.json"
+            expected = config_manager.normalize_config({
+                "token": "secret",
+                "scan_guilds": [],
+                "command_guild_id": 123,
+            })
+            config_manager.save_config_file(config_path, expected)
+            loaded, needs_save = config_manager.load_config_file(config_path)
+
+            self.assertEqual(loaded, expected)
+            self.assertFalse(needs_save)
+            self.assertEqual(json.loads(config_path.read_text(encoding="utf-8")), expected)
+
+    def test_command_access_requires_owner_and_configured_guild(self):
+        allowed = config_manager.command_access_allowed
+        self.assertTrue(allowed(
+            author_id=1,
+            self_user_id=1,
+            owner_id=0,
+            guild_id=100,
+            command_guild_id=100,
+        ))
+        self.assertTrue(allowed(
+            author_id=1,
+            self_user_id=1,
+            owner_id=999,
+            guild_id=100,
+            command_guild_id=100,
+        ))
+        self.assertTrue(allowed(
+            author_id=999,
+            self_user_id=1,
+            owner_id=999,
+            guild_id=100,
+            command_guild_id=0,
+        ))
+        self.assertFalse(allowed(
+            author_id=1,
+            self_user_id=1,
+            owner_id=0,
+            guild_id=101,
+            command_guild_id=100,
+        ))
+        self.assertFalse(allowed(
+            author_id=1,
+            self_user_id=1,
+            owner_id=0,
+            guild_id=None,
+            command_guild_id=0,
+        ))
 
 
 class ChannelSelectionTests(unittest.TestCase):
