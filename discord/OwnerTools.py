@@ -12,6 +12,7 @@ from typing import Callable, Union
 import chat_exporter
 from logger import log
 import logging
+import math
 import time
 import asyncio
 from pathlib import Path
@@ -876,6 +877,23 @@ async def serverconfig(ctx, guild_id: int=None, key: str=None, value: str=None):
                 cog = bot.get_cog("StickyMessage")
                 if cog is not None:
                     await cog.reconcile_limit(guild_id, previous_limit)
+            elif key in {"economy_exchange_rate", "economy_total_supply"}:
+                try:
+                    numeric_value = float(value)
+                except (TypeError, ValueError):
+                    await ctx.send(f"{key} 必須是有限數值。")
+                    return
+                if not math.isfinite(numeric_value):
+                    await ctx.send(f"{key} 必須是有限數值。")
+                    return
+                if key == "economy_exchange_rate" and not (0.01 <= numeric_value <= 100.0):
+                    await ctx.send("economy_exchange_rate 必須介於 0.01 到 100。")
+                    return
+                if key == "economy_total_supply" and numeric_value < 0:
+                    await ctx.send("economy_total_supply 不能小於 0。")
+                    return
+                value = round(numeric_value, 6 if key == "economy_exchange_rate" else 2)
+                set_server_config(guild_id, key, value)
             else:
                 set_server_config(guild_id, key, value)
             await ctx.send(f"已更新伺服器 {guild_id} 的 {key} 為 {value}。")

@@ -14,6 +14,7 @@ from Economy import (
     add_balance,
     remove_balance,
     mutate_balance_atomic,
+    mutate_balances_atomic,
     get_currency_name,
     record_transaction,
     log_transaction,
@@ -3154,39 +3155,18 @@ class MiniGamesCog(commands.GroupCog, group_name="games", description="迷你遊
                     f"以下玩家餘額不足 **{g.stake:,.0f}** {currency}：{names}",
                     ephemeral=True,
                 )
-            collected: List[int] = []
+            try:
+                settlements = mutate_balances_atomic(
+                    g.guild_id,
+                    {p.user_id: -g.stake for p in g.players},
+                )
+            except Exception:
+                return await interaction.response.send_message(
+                    "扣款失敗，所有玩家餘額均未變更。",
+                    ephemeral=True,
+                )
             for p in g.players:
-                balance_before = get_balance(g.guild_id, p.user_id)
-                if not remove_balance(g.guild_id, p.user_id, g.stake):
-                    for uid in collected:
-                        refund_before = get_balance(g.guild_id, uid)
-                        add_balance(g.guild_id, uid, g.stake)
-                        refund_after = get_balance(g.guild_id, uid)
-                        self._log_economy_history(
-                            g.guild_id,
-                            uid,
-                            "大老二退款",
-                            g.stake,
-                            f"房間開局扣款失敗，退還賭注 {g.stake:,.0f} {currency}",
-                        )
-                        queue_economy_audit_log(
-                            "big2_refund",
-                            guild_id=g.guild_id,
-                            actor=interaction.user,
-                            target=self._resolve_audit_user(g.guild_id, uid),
-                            interaction=interaction,
-                            currency=currency,
-                            amount=g.stake,
-                            balance_before=refund_before,
-                            balance_after=refund_after,
-                            detail=f"Refunded Big2 stake because player {p.user_id} deduction failed.",
-                            color=0x95A5A6,
-                        )
-                    return await interaction.response.send_message(
-                        f"<@{p.user_id}> 扣款失敗，已退還已扣玩家。",
-                        ephemeral=True,
-                    )
-                balance_after = get_balance(g.guild_id, p.user_id)
+                balance_before, balance_after = settlements[p.user_id]
                 self._log_economy_history(
                     g.guild_id,
                     p.user_id,
@@ -3207,7 +3187,6 @@ class MiniGamesCog(commands.GroupCog, group_name="games", description="迷你遊
                     detail=f"Collected Big2 stake from player {p.user_id}.",
                     color=0xF39C12,
                 )
-                collected.append(p.user_id)
             if g.guild_id != GLOBAL_GUILD_ID:
                 record_transaction(g.guild_id)
 

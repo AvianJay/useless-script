@@ -18,6 +18,7 @@ from ItemSystem import (
     admin_action_callbacks, get_item_by_id, get_all_items_for_guild
 )
 from OwnerTools import is_owner
+import economy_integrity as economy_db
 
 
 # ==================== Constants ====================
@@ -70,7 +71,7 @@ def get_balance(guild_id: int, user_id: int) -> float:
 
 def set_balance(guild_id: int, user_id: int, amount: float):
     """設定用戶在特定伺服器的餘額"""
-    set_user_data(guild_id, user_id, "economy_balance", round(amount, 2))
+    economy_db.set_balance_atomic(db.db_path, guild_id, user_id, amount)
 
 
 def get_global_balance(user_id: int) -> float:
@@ -80,11 +81,7 @@ def get_global_balance(user_id: int) -> float:
 
 def set_global_balance(user_id: int, amount: float):
     """設定用戶的全域幣餘額（有上限保護）"""
-    if amount > MAX_GLOBAL_BALANCE:
-        log(f"Global balance cap applied for user {user_id}: {amount:.2f} -> {MAX_GLOBAL_BALANCE:.2f}",
-            module_name="Economy", level=logging.WARNING)
-        amount = MAX_GLOBAL_BALANCE
-    set_user_data(GLOBAL_GUILD_ID, user_id, "economy_balance", round(amount, 2))
+    economy_db.set_balance_atomic(db.db_path, GLOBAL_GUILD_ID, user_id, amount)
 
 
 def get_exchange_rate(guild_id: int) -> float:
@@ -212,6 +209,9 @@ def get_flow_blacklist_info(guild_id: int) -> dict:
         "reason": reason,
         "set_by": data.get("set_by"),
         "set_at": data.get("set_at"),
+        "source": data.get("source", "manual"),
+        "trigger": data.get("trigger"),
+        "observed": data.get("observed"),
     }
 
 
@@ -228,6 +228,7 @@ def set_flow_blacklist(guild_id: int, reason: str, actor_id: int | None = None):
         ECONOMY_FLOW_BLACKLIST_KEY,
         {
             "reason": reason,
+            "source": "manual",
             "set_by": actor_id,
             "set_at": datetime.now(timezone.utc).isoformat(),
         }
@@ -297,37 +298,7 @@ def apply_inflation(guild_id: int, amount: float, weight: float = ADMIN_INJECTIO
     - 大額注入（1000倍+）= 嚴重貶值
     - 重複濫權 = 複利懲罰，經濟加速崩潰
     """
-    rate = get_exchange_rate(guild_id)
-    supply = get_total_supply(guild_id)
-    admin_injected = get_admin_injected(guild_id)
-    daily_amount = get_daily_amount(guild_id)
-
-    # 有機經濟規模 = 總供給 - 管理員注入，至少為 daily*100
-    # 這樣管理員注入不會「稀釋」自己的影響
-    organic = max(supply - admin_injected, daily_amount * 100, 1)
-
-    # 注入相對於有機經濟的比例
-    ratio = abs(amount) / organic
-
-    # 對數縮放：大額注入依然有顯著影響
-    # log2(2)=1, log2(11)=3.46, log2(101)=6.66, log2(10001)=13.3
-    log_impact = math.log2(1 + ratio)
-    base_impact = log_impact * weight
-
-    # 濫權複利懲罰：管理員注入佔總供給越多，每次新注入懲罰越重
-    if supply > 0:
-        abuse_fraction = admin_injected / supply
-    else:
-        abuse_fraction = 1.0
-    # 10% → 1.08x, 50% → 3x, 80% → 6.1x, 100% → 9x
-    abuse_penalty = 1 + (abuse_fraction ** 2) * 8
-
-    # 最終影響：單次最多 60% 貶值（不再是 10%）
-    impact = min(base_impact * abuse_penalty, 0.6)
-
-    rate *= (1 - impact)
-    set_exchange_rate(guild_id, rate)
-    return rate
+    return economy_db.record_inflation_event_atomic(db.db_path, guild_id, amount, weight)
 
 
 def apply_deflation(guild_id: int, weight: float = TRADE_HEALTH_WEIGHT):
@@ -380,17 +351,15 @@ def apply_market_inflation(guild_id: int, amount: float, weight: float = SALE_IN
 
 def record_admin_injection(guild_id: int, amount: float):
     """記錄管理員注入並觸發通膨"""
-    current = get_admin_injected(guild_id)
-    set_server_config(guild_id, "economy_admin_injected", round(current + abs(amount), 2))
-    new_rate = apply_inflation(guild_id, amount)
+    new_rate = economy_db.record_admin_injection_atomic(
+        db.db_path, guild_id, amount, ADMIN_INJECTION_WEIGHT,
+    )
     log(f"Admin injection of {amount} in guild {guild_id}, rate now {new_rate:.6f}", module_name="Economy")
 
 
 def record_transaction(guild_id: int):
-    """記錄一筆交易並增加交易次數（手續費銷毀 → 通縮）"""
-    count = get_transaction_count(guild_id)
-    set_server_config(guild_id, "economy_transaction_count", count + 1)
-    apply_deflation(guild_id, TRADE_HEALTH_WEIGHT)
+    """記錄一筆交易；一般交易本身不再固定推高匯率。"""
+    economy_db.increment_transaction_atomic(db.db_path, guild_id)
 
 
 def record_purchase(guild_id: int, amount: float):
@@ -684,6 +653,32 @@ def queue_economy_audit_log(*args, **kwargs):
         pass
 
 
+def queue_economy_risk_log(
+    guild_id: int,
+    exc: economy_db.EconomyRiskError,
+    *,
+    actor=None,
+    interaction=None,
+    ctx=None,
+):
+    """發送自動風控事件；只有首次建立黑名單時才告警。"""
+    if not exc.blacklist_created:
+        return
+    queue_economy_audit_log(
+        "economy_risk_auto_blacklist",
+        guild_id=guild_id,
+        actor=actor,
+        interaction=interaction,
+        ctx=ctx,
+        detail=f"trigger={exc.trigger}; observed={exc.observed!r}",
+        color=0xE74C3C,
+        extra_fields=[
+            ("Risk Trigger", exc.trigger, False),
+            ("Observed", repr(exc.observed)[:1000], False),
+        ],
+    )
+
+
 async def migrate_guild_economy_to_global(guild_id: int) -> dict:
     flow_block_notice = get_global_flow_block_notice(guild_id)
     if flow_block_notice:
@@ -691,17 +686,34 @@ async def migrate_guild_economy_to_global(guild_id: int) -> dict:
 
     user_item_rows = get_all_user_data(guild_id, "items")
     user_balance_rows = get_all_user_data(guild_id, "economy_balance")
-    affected_user_ids = set(user_item_rows.keys()) | set(user_balance_rows.keys())
+    user_admin_item_rows = get_all_user_data(guild_id, "admin_items")
+    affected_user_ids = (
+        set(user_item_rows.keys())
+        | set(user_balance_rows.keys())
+        | set(user_admin_item_rows.keys())
+    )
 
     total_server_balance_converted = 0.0
     total_server_item_value = 0.0
     total_global_added = 0.0
     sold_item_units = 0
-    rate = get_exchange_rate(guild_id)
+    migration_credits = {}
+    per_user_summary = {}
+    expected_server_state = {}
+    try:
+        rate = economy_db.guard_cross_domain(db.db_path, guild_id)
+    except economy_db.EconomyRiskError as exc:
+        queue_economy_risk_log(guild_id, exc)
+        raise GlobalFlowUnavailableError(build_flow_blacklist_notice(guild_id)) from exc
 
     for user_id in affected_user_ids:
-        user_items = get_user_data(guild_id, user_id, "items", {}) or {}
-        admin_items = get_user_data(guild_id, user_id, "admin_items", {}) or {}
+        user_items = economy_db.item_mapping(
+            get_user_data(guild_id, user_id, "items", {}) or {}, field="migration items",
+        )
+        admin_items = economy_db.item_mapping(
+            get_user_data(guild_id, user_id, "admin_items", {}) or {},
+            field="migration admin items",
+        )
         sell_total = 0.0
         user_sold_units = 0
 
@@ -711,23 +723,79 @@ async def migrate_guild_economy_to_global(guild_id: int) -> dict:
             normal_amount = max(0, amount - admin_items.get(item_id, 0))
             if normal_amount <= 0:
                 continue
-            sell_price = get_item_sell_price(item_id, guild_id)
+            item = get_item_by_id(item_id, guild_id)
+            raw_worth = (item or {}).get("worth", 0)
+            raw_sell_ratio = get_sell_ratio(guild_id)
+            try:
+                economy_db.guard_cross_domain(
+                    db.db_path,
+                    guild_id,
+                    observed_values={
+                        "migration_item_worth": raw_worth,
+                        "migration_sell_ratio": raw_sell_ratio,
+                    },
+                )
+            except economy_db.EconomyRiskError as exc:
+                queue_economy_risk_log(guild_id, exc)
+                raise GlobalFlowUnavailableError(build_flow_blacklist_notice(guild_id)) from exc
+            worth = economy_db.finite_number(
+                raw_worth, field="migration item worth",
+            )
+            sell_ratio = economy_db.finite_number(raw_sell_ratio, field="migration sell ratio")
+            if str(item_id).startswith("custom_"):
+                sell_price = round(worth * sell_ratio, 2)
+            else:
+                sell_price = round(worth * sell_ratio / rate, 2)
             if sell_price > 0:
                 sell_total += sell_price * normal_amount
             user_sold_units += normal_amount
 
-        if user_items:
-            set_user_data(guild_id, user_id, "items", {})
-        set_user_data(guild_id, user_id, "admin_items", {})
-
-        server_balance = float(get_balance(guild_id, user_id) or 0.0)
-        if server_balance > 0:
-            set_balance(guild_id, user_id, 0.0)
+        raw_server_balance = get_balance(guild_id, user_id)
+        try:
+            economy_db.guard_cross_domain(
+                db.db_path,
+                guild_id,
+                observed_values={"migration_server_balance": raw_server_balance},
+            )
+        except economy_db.EconomyRiskError as exc:
+            queue_economy_risk_log(guild_id, exc)
+            raise GlobalFlowUnavailableError(build_flow_blacklist_notice(guild_id)) from exc
+        server_balance = economy_db.money(raw_server_balance, field="server balance", allow_zero=True)
+        expected_server_state[user_id] = {
+            "balance": server_balance,
+            "items": user_items,
+            "admin_items": admin_items,
+        }
 
         total_server_value = round(server_balance + sell_total, 2)
         if total_server_value > 0:
             converted_global = round(total_server_value * rate, 2)
-            set_global_balance(user_id, get_global_balance(user_id) + converted_global)
+            migration_credits[user_id] = converted_global
+            total_global_added += converted_global
+        else:
+            migration_credits[user_id] = 0.0
+        per_user_summary[user_id] = (total_server_value, migration_credits[user_id])
+
+        total_server_balance_converted += server_balance
+        total_server_item_value += round(sell_total, 2)
+        sold_item_units += user_sold_units
+
+    try:
+        economy_db.settle_global_migration(
+            db.db_path,
+            guild_id,
+            migration_credits,
+            expected_rate=rate,
+            expected_server_state=expected_server_state,
+            global_mode_key=ECONOMY_GLOBAL_MODE_CONFIG_KEY,
+        )
+    except economy_db.EconomyRiskError as exc:
+        queue_economy_risk_log(guild_id, exc)
+        raise GlobalFlowUnavailableError(build_flow_blacklist_notice(guild_id)) from exc
+    except economy_db.EconomyIntegrityError as exc:
+        raise GlobalFlowUnavailableError("匯率或經濟資料在結算前發生變動，請重新操作。") from exc
+    for user_id, (total_server_value, converted_global) in per_user_summary.items():
+        if converted_global:
             log_transaction(
                 GLOBAL_GUILD_ID,
                 user_id,
@@ -736,15 +804,6 @@ async def migrate_guild_economy_to_global(guild_id: int) -> dict:
                 GLOBAL_CURRENCY_NAME,
                 f"From guild {guild_id}, server value {total_server_value:,.2f}",
             )
-            total_global_added += converted_global
-
-        total_server_balance_converted += server_balance
-        total_server_item_value += round(sell_total, 2)
-        sold_item_units += user_sold_units
-
-    set_server_config(guild_id, "economy_total_supply", 0.0)
-    set_server_config(guild_id, "economy_admin_injected", 0.0)
-    set_server_config(guild_id, "economy_transaction_count", 0)
 
     return {
         "affected_users": len(affected_user_ids),
@@ -1060,16 +1119,12 @@ def _owner_build_history_detail_view(target_user: discord.User, guild_id: int, l
 
 def add_balance(guild_id: int, user_id: int, amount: float):
     """增加用戶餘額並追蹤供給量"""
-    success, _, _ = mutate_balance_atomic(guild_id, user_id, amount)
-    if success and guild_id != GLOBAL_GUILD_ID:
-        adjust_supply(guild_id, amount)
+    mutate_balance_atomic(guild_id, user_id, amount)
 
 
 def remove_balance(guild_id: int, user_id: int, amount: float) -> bool:
     """扣除用戶餘額，餘額不足時回傳 False"""
     success, _, _ = mutate_balance_atomic(guild_id, user_id, -amount)
-    if success and guild_id != GLOBAL_GUILD_ID:
-        adjust_supply(guild_id, -amount)
     return success
 
 
@@ -1080,67 +1135,27 @@ def mutate_balance_atomic(
     *,
     connection=None,
 ) -> tuple[bool, float, float]:
-    """Atomically change a balance, optionally inside the caller's transaction.
-
-    Returns ``(success, balance_before, balance_after)``. A negative result is
-    rejected without modifying the row. Passing ``connection`` lets callers
-    update game state and balance in the same SQLite transaction.
-    """
-    guild_id = int(guild_id or GLOBAL_GUILD_ID)
-    user_id = int(user_id)
-    delta = round(float(delta), 2)
-    owns_connection = connection is None
-    conn = connection or sqlite3.connect(db.db_path, timeout=30)
+    """原子調整餘額，並在同一交易中同步伺服器總供給。"""
     try:
-        if owns_connection:
-            conn.execute("BEGIN IMMEDIATE")
-        row = conn.execute(
-            """
-            SELECT data_value
-            FROM user_data
-            WHERE user_id = ? AND guild_id = ? AND data_key = 'economy_balance'
-            """,
-            (user_id, guild_id),
-        ).fetchone()
-        try:
-            balance_before = float(row[0]) if row else 0.0
-        except (TypeError, ValueError):
-            balance_before = 0.0
-        requested_balance = round(balance_before + delta, 2)
-        if requested_balance < 0:
-            if owns_connection:
-                conn.rollback()
-            return False, balance_before, balance_before
-
-        balance_after = requested_balance
-        if guild_id == GLOBAL_GUILD_ID and balance_after > MAX_GLOBAL_BALANCE:
-            log(
-                f"Global balance cap reached for user {user_id}: "
-                f"{balance_after:.2f} -> {MAX_GLOBAL_BALANCE:.2f}",
-                module_name="Economy",
-                level=logging.WARNING,
-            )
-            balance_after = MAX_GLOBAL_BALANCE
-
-        conn.execute(
-            """
-            INSERT INTO user_data (user_id, guild_id, data_key, data_value)
-            VALUES (?, ?, 'economy_balance', ?)
-            ON CONFLICT(user_id, guild_id, data_key)
-            DO UPDATE SET data_value = excluded.data_value
-            """,
-            (user_id, guild_id, str(round(balance_after, 2))),
+        return economy_db.mutate_balance_atomic(
+            db.db_path,
+            guild_id,
+            user_id,
+            delta,
+            connection=connection,
         )
-        if owns_connection:
-            conn.commit()
-        return True, balance_before, balance_after
-    except Exception:
-        if owns_connection:
-            conn.rollback()
+    except economy_db.EconomyRiskError as exc:
+        queue_economy_risk_log(guild_id, exc)
         raise
-    finally:
-        if owns_connection:
-            conn.close()
+
+
+def mutate_balances_atomic(guild_id: int, deltas_by_user: dict[int, float]):
+    """同一 SQLite 交易中調整多名用戶餘額。"""
+    try:
+        return economy_db.mutate_many_atomic(db.db_path, guild_id, deltas_by_user)
+    except economy_db.EconomyRiskError as exc:
+        queue_economy_risk_log(guild_id, exc)
+        raise
 
 
 # ==================== Admin Action Callback ====================
@@ -1229,6 +1244,58 @@ def get_item_sell_price(item_id: str, guild_id: int) -> float:
         return round(worth * sell_ratio, 2)
     rate = get_exchange_rate(guild_id)
     return round(worth * sell_ratio / rate, 2)
+
+
+def get_guarded_server_item_quote(
+    item_id: str,
+    guild_id: int,
+    quantity: int,
+    *,
+    selling: bool = False,
+) -> tuple[float, float, float | None]:
+    """Return a validated server-shop quote before any balance or item mutation."""
+    quantity = economy_db.positive_item_quantity(quantity)
+    item = get_item_by_id(item_id, guild_id)
+    if not item:
+        raise economy_db.EconomyIntegrityError("unknown item")
+    raw_worth = item.get("worth", 0)
+    raw_sell_ratio = get_sell_ratio(guild_id) if selling else 1.0
+    expected_rate = None
+    if not str(item_id).startswith("custom_"):
+        expected_rate = economy_db.guard_cross_domain(
+            db.db_path,
+            guild_id,
+            observed_values={"item_worth": raw_worth, "sell_ratio": raw_sell_ratio},
+        )
+    worth = economy_db.finite_number(raw_worth, field="item worth")
+    sell_ratio = economy_db.finite_number(raw_sell_ratio, field="sell ratio")
+    if worth <= 0:
+        raise economy_db.EconomyIntegrityError("item worth must be positive")
+    if sell_ratio <= 0:
+        raise economy_db.EconomyIntegrityError("sell ratio must be positive")
+
+    if expected_rate is None:
+        raw_unit_price = worth * sell_ratio
+    else:
+        raw_unit_price = worth * sell_ratio / expected_rate
+
+    try:
+        price_per = economy_db.money(raw_unit_price, field="item unit price")
+        total_price = economy_db.money(price_per * quantity, field="item total price")
+    except economy_db.EconomyIntegrityError:
+        if expected_rate is not None:
+            # Non-finite calculated values are risk events; sub-cent prices remain
+            # ordinary validation failures.
+            economy_db.guard_cross_domain(
+                db.db_path,
+                guild_id,
+                observed_values={
+                    "item_unit_price": raw_unit_price,
+                    "item_total_price": raw_unit_price * quantity,
+                },
+            )
+        raise
+    return price_per, total_price, expected_rate
 
 
 # ==================== Autocomplete ====================
@@ -1419,6 +1486,10 @@ class PurchaseModal(discord.ui.Modal):
                 if flow_block_notice:
                     await interaction.response.send_message(flow_block_notice, ephemeral=True)
                     return
+        if scope not in ("server", "global"):
+            await interaction.response.send_message("❌ 無效的商店類型。", ephemeral=True)
+            return
+        settlement_guild_id = guild_id if scope == "server" else GLOBAL_GUILD_ID
 
         user_id = interaction.user.id
         item = get_item_by_id(self.item["id"], guild_id if scope == "server" else 0)
@@ -1428,38 +1499,57 @@ class PurchaseModal(discord.ui.Modal):
             return
 
         worth = item.get("worth", 0)
-        if worth <= 0:
-            await interaction.response.send_message("❌ 這個物品無法購買。", ephemeral=True)
-            return
 
-        if scope == "server":
-            currency_name = get_currency_name(guild_id)
-            price_per = get_item_buy_price(self.item["id"], guild_id)
-            total_price = round(price_per * amount, 2)
-            bal = get_balance(guild_id, user_id)
-            if bal < total_price:
-                await interaction.response.send_message(
-                    f"❌ 餘額不足。需要 **{total_price:,.2f}** {currency_name}，但只有 **{bal:,.2f}**。",
-                    ephemeral=True
+        try:
+            if scope == "server":
+                currency_name = get_currency_name(guild_id)
+                price_per, total_price, expected_rate = get_guarded_server_item_quote(
+                    self.item["id"], guild_id, amount,
                 )
-                return
-            set_balance(guild_id, user_id, bal - total_price)
-            adjust_supply(guild_id, -total_price)
-            await give_item_to_user(guild_id, user_id, self.item["id"], amount)
-            record_purchase(guild_id, total_price)
-        else:
-            currency_name = GLOBAL_CURRENCY_NAME
-            price_per = worth
-            total_price = round(price_per * amount, 2)
-            bal = get_global_balance(user_id)
-            if bal < total_price:
-                await interaction.response.send_message(
-                    f"❌ 餘額不足。需要 **{total_price:,.2f}** {currency_name}，但只有 **{bal:,.2f}**。",
-                    ephemeral=True
+            else:
+                currency_name = GLOBAL_CURRENCY_NAME
+                expected_rate = (
+                    economy_db.guard_cross_domain(
+                        db.db_path,
+                        guild_id,
+                        observed_values={"item_worth": worth},
+                    )
+                    if interaction_uses_server_scope(interaction) else None
                 )
-                return
-            set_global_balance(user_id, bal - total_price)
-            await give_item_to_user(0, user_id, self.item["id"], amount)
+                price_per = economy_db.money(worth, field="item unit price")
+                raw_total_price = price_per * amount
+                if interaction_uses_server_scope(interaction):
+                    expected_rate = economy_db.guard_cross_domain(
+                        db.db_path,
+                        guild_id,
+                        observed_values={"item_total_price": raw_total_price},
+                    )
+                total_price = economy_db.money(raw_total_price, field="item total price")
+            settlement = economy_db.buy_item(
+                db.db_path,
+                settlement_guild_id,
+                user_id,
+                self.item["id"],
+                amount,
+                total_price,
+                market_weight=(PURCHASE_DEFLATION_WEIGHT if scope == "server" else 0.0),
+                expected_rate=expected_rate,
+                risk_guild_id=(guild_id if scope == "global" and interaction_uses_server_scope(interaction) else None),
+            )
+        except economy_db.EconomyRiskError as exc:
+            queue_economy_risk_log(guild_id, exc, actor=interaction.user, interaction=interaction)
+            await interaction.response.send_message(build_flow_blacklist_notice(guild_id), ephemeral=True)
+            return
+        except economy_db.EconomyInsufficientFunds:
+            available = get_balance(settlement_guild_id, user_id)
+            await interaction.response.send_message(
+                f"❌ 餘額不足。需要 **{total_price:,.2f}** {currency_name}，但只有 **{available:,.2f}**。",
+                ephemeral=True,
+            )
+            return
+        except economy_db.EconomyIntegrityError:
+            await interaction.response.send_message("❌ 數量或商品價格無效，購買已取消。", ephemeral=True)
+            return
 
         scope_label = "伺服器" if scope == "server" else "全域"
         embed = discord.Embed(
@@ -1469,7 +1559,7 @@ class PurchaseModal(discord.ui.Modal):
         )
         embed.add_field(name="單價", value=f"{price_per:,.2f} {currency_name}", inline=True)
         embed.add_field(name="總價", value=f"{total_price:,.2f} {currency_name}", inline=True)
-        remaining = get_balance(guild_id, user_id) if scope == "server" else get_global_balance(user_id)
+        remaining = settlement.balance_after
         dest = "伺服器背包" if scope == "server" else "全域背包"
         embed.set_footer(text=f"剩餘餘額：{remaining:,.2f} {currency_name} | 物品已放入{dest}")
         buy_guild = guild_id if scope == "server" else GLOBAL_GUILD_ID
@@ -1481,8 +1571,8 @@ class PurchaseModal(discord.ui.Modal):
             interaction=interaction,
             currency=currency_name,
             amount=total_price,
-            balance_before=remaining + total_price,
-            balance_after=remaining,
+            balance_before=settlement.balance_before,
+            balance_after=settlement.balance_after,
             item_name=item["name"],
             item_amount=amount,
             detail=f"Shop modal purchase via {scope} scope.",
@@ -1568,18 +1658,28 @@ class Economy(commands.GroupCog, name="economy", description="經濟系統指令
         # 使用日期檢測（台灣時間）
         now = datetime.now(timezone(timedelta(hours=8))).date()
         
-        last_daily = get_user_data(guild_id, user_id, "economy_last_daily")
-        if last_daily is not None and not isinstance(last_daily, datetime):
-            try:
-                last_daily = datetime.fromisoformat(str(last_daily)).date()
-            except Exception:
-                last_daily = None
-        elif isinstance(last_daily, datetime):
-            last_daily = last_daily.date()
-        
-        # 檢查是否今天已簽到
-        if last_daily == now:
-            # 計算明天的時間
+        daily_amount = get_daily_amount(guild_id)
+        currency_name = get_currency_name(guild_id)
+        support_bonus_count = _get_support_guild_bonus_count(user_id, interaction, guild_id)
+        try:
+            reward = economy_db.claim_daily(
+                db.db_path,
+                guild_id,
+                user_id,
+                now,
+                daily_amount,
+                support_bonus_count,
+                inflation_weight=DAILY_INFLATION_WEIGHT,
+            )
+        except economy_db.EconomyRiskError as exc:
+            queue_economy_risk_log(guild_id, exc, actor=interaction.user, interaction=interaction)
+            await interaction.response.send_message(build_flow_blacklist_notice(guild_id), ephemeral=True)
+            return
+        except economy_db.EconomyIntegrityError:
+            await interaction.response.send_message("❌ 經濟資料異常，本次獎勵未發放。", ephemeral=True)
+            return
+
+        if reward.already_claimed:
             tomorrow = now + timedelta(days=1)
             next_checkin = datetime.combine(tomorrow, datetime.min.time()).replace(tzinfo=timezone(timedelta(hours=8)))
             next_checkin_utc = next_checkin.astimezone(timezone.utc)
@@ -1589,37 +1689,12 @@ class Economy(commands.GroupCog, name="economy", description="經濟系統指令
                 ephemeral=True
             )
             return
-
-        daily_amount = get_daily_amount(guild_id)
-        currency_name = get_currency_name(guild_id)
-        balance_before = get_balance(guild_id, user_id)
-
-        # 發放獎勵
-        add_balance(guild_id, user_id, daily_amount)
-        set_user_data(guild_id, user_id, "economy_last_daily", now.isoformat())
-
-        # 每日獎勵造成的微量通膨（全域不需要通膨計算）
-        if guild_id != GLOBAL_GUILD_ID:
-            apply_inflation(guild_id, daily_amount, DAILY_INFLATION_WEIGHT)
-
-        # 連續登入
-        streak = get_user_data(guild_id, user_id, "economy_daily_streak", 0)
-        if last_daily is not None and last_daily == now - timedelta(days=1):  # 昨天簽到 = 連續
-            streak += 1
-        else:
-            streak = 1
-        set_user_data(guild_id, user_id, "economy_daily_streak", streak)
-
-        bonus = 0
-        if streak >= 7:
-            bonus = int(daily_amount * 0.5 + ((streak - 7) // 3) * 10)  # 7天以上額外獎勵
-            add_balance(guild_id, user_id, bonus)
-
-        support_bonus_count = _get_support_guild_bonus_count(user_id, interaction, guild_id)
-        support_bonus = round((daily_amount + bonus) * (0.1 * support_bonus_count), 2)
-        if support_bonus > 0:
-            add_balance(guild_id, user_id, support_bonus)
-
+        balance_before = reward.balance_before
+        balance_after = reward.balance_after
+        streak = reward.streak
+        bonus = reward.streak_bonus
+        support_bonus = reward.support_bonus
+        total_earned = round(balance_after - balance_before, 2)
         scope_label = "全域" if guild_id == GLOBAL_GUILD_ID else "伺服器"
         support_invite = str(config("support_server_invite", "") or "")
         support_bonus_notice = (
@@ -1652,8 +1727,6 @@ class Economy(commands.GroupCog, name="economy", description="經濟系統指令
         )
         embed.set_footer(text=f"連續登入：{streak} 天")
         embed.timestamp = datetime.now(timezone(timedelta(hours=8)))
-        balance_after = get_balance(guild_id, user_id)
-        total_earned = balance_after - balance_before
         detail_parts = [f"連續 {streak} 天"]
         if bonus > 0:
             detail_parts.append(f"含連續獎勵 {bonus:,.0f}")
@@ -1692,49 +1765,39 @@ class Economy(commands.GroupCog, name="economy", description="經濟系統指令
         now = datetime.now(timezone(timedelta(hours=8)))
         current_hour = now.replace(minute=0, second=0, microsecond=0)
         
-        last_hourly = get_user_data(guild_id, user_id, "economy_last_hourly")
-        if last_hourly is not None and not isinstance(last_hourly, datetime):
-            try:
-                last_hourly = datetime.fromisoformat(str(last_hourly))
-            except Exception:
-                last_hourly = None
-        elif isinstance(last_hourly, str):
-            try:
-                last_hourly = datetime.fromisoformat(last_hourly)
-            except Exception:
-                last_hourly = None
-        
-        # 檢查是否同一小時已簽到
-        if last_hourly is not None:
-            last_hourly_hour = last_hourly.replace(minute=0, second=0, microsecond=0) if isinstance(last_hourly, datetime) else None
-            if last_hourly_hour == current_hour:
-                # 計算下一小時的時間
-                next_hour = current_hour + timedelta(hours=1)
-                next_hour_utc = next_hour.astimezone(timezone.utc)
-                timestamp_next = int(next_hour_utc.timestamp())
-                await interaction.response.send_message(
-                    f"⏰ 你已經領取過每小時獎勵了！請在 <t:{timestamp_next}:R> 再來。",
-                    ephemeral=True
-                )
-                return
-
         hourly_amount = get_hourly_amount(guild_id)
         currency_name = get_currency_name(guild_id)
-        balance_before = get_balance(guild_id, user_id)
-
-        # 發放獎勵
-        add_balance(guild_id, user_id, hourly_amount)
-        set_user_data(guild_id, user_id, "economy_last_hourly", current_hour.isoformat())
-
-        # 每小時獎勵造成的極小通膨（全域不需要通膨計算）
-        if guild_id != GLOBAL_GUILD_ID:
-            apply_inflation(guild_id, hourly_amount, HOURLY_INFLATION_WEIGHT)
-
         support_bonus_count = _get_support_guild_bonus_count(user_id, interaction, guild_id)
-        support_bonus = round(hourly_amount * (0.1 * support_bonus_count), 2)
-        if support_bonus > 0:
-            add_balance(guild_id, user_id, support_bonus)
-
+        try:
+            reward = economy_db.claim_hourly(
+                db.db_path,
+                guild_id,
+                user_id,
+                current_hour,
+                hourly_amount,
+                support_bonus_count,
+                inflation_weight=HOURLY_INFLATION_WEIGHT,
+            )
+        except economy_db.EconomyRiskError as exc:
+            queue_economy_risk_log(guild_id, exc, actor=interaction.user, interaction=interaction)
+            await interaction.response.send_message(build_flow_blacklist_notice(guild_id), ephemeral=True)
+            return
+        except economy_db.EconomyIntegrityError:
+            await interaction.response.send_message("❌ 經濟資料異常，本次獎勵未發放。", ephemeral=True)
+            return
+        if reward.already_claimed:
+            next_hour = current_hour + timedelta(hours=1)
+            next_hour_utc = next_hour.astimezone(timezone.utc)
+            timestamp_next = int(next_hour_utc.timestamp())
+            await interaction.response.send_message(
+                f"⏰ 你已經領取過每小時獎勵了！請在 <t:{timestamp_next}:R> 再來。",
+                ephemeral=True,
+            )
+            return
+        balance_before = reward.balance_before
+        balance_after = reward.balance_after
+        support_bonus = reward.support_bonus
+        total_earned = round(balance_after - balance_before, 2)
         scope_label = "全域" if guild_id == GLOBAL_GUILD_ID else "伺服器"
         support_invite = str(config("support_server_invite", "") or "")
         support_bonus_notice = (
@@ -1761,8 +1824,6 @@ class Economy(commands.GroupCog, name="economy", description="經濟系統指令
         )
         # embed.set_footer(text="AwA")
         embed.timestamp = now
-        balance_after = get_balance(guild_id, user_id)
-        total_earned = balance_after - balance_before
         detail = f"支援伺服器加成 {support_bonus:,.0f}" if support_bonus > 0 else ""
         log_transaction(guild_id, user_id, "每小時簽到", total_earned, currency_name, detail)
         queue_economy_audit_log(
@@ -1791,7 +1852,9 @@ class Economy(commands.GroupCog, name="economy", description="經濟系統指令
             currency = "global"
         elif currency is None:
             currency = "server"
-        if amount <= 0:
+        try:
+            amount = economy_db.money(amount)
+        except economy_db.EconomyIntegrityError:
             await interaction.response.send_message("❌ 金額必須大於 0。", ephemeral=True)
             return
         if user.id == interaction.user.id:
@@ -1807,40 +1870,45 @@ class Economy(commands.GroupCog, name="economy", description="經濟系統指令
         receiver_id = user.id
 
         fee = round(amount * TRADE_FEE_PERCENT / 100, 2)
-        total_deduct = round(amount + fee, 2)
-        
+        guild_id = GLOBAL_GUILD_ID
         if currency == "server" and interaction_uses_server_scope(interaction):
             guild_id = interaction.guild.id
             currency_name = get_currency_name(guild_id)
-            sender_bal = get_balance(guild_id, sender_id)
-            if sender_bal < total_deduct:
-                await interaction.followup.send(
-                    f"❌ 餘額不足。需要 **{total_deduct:,.2f}** {currency_name}"
-                    f"（含 {TRADE_FEE_PERCENT}% 手續費），但只有 **{sender_bal:,.2f}**。",
-                    ephemeral=True
-                )
-                return
-            set_balance(guild_id, sender_id, sender_bal - total_deduct)
-            add_balance(guild_id, receiver_id, amount)
-            adjust_supply(guild_id, -fee)  # 手續費銷毀
-        else:
+        elif currency == "global":
             currency_name = GLOBAL_CURRENCY_NAME
-            sender_bal = get_global_balance(sender_id)
-            if sender_bal < total_deduct:
-                await interaction.followup.send(
-                    f"❌ 餘額不足。需要 **{total_deduct:,.2f}** {currency_name}"
-                    f"（含 {TRADE_FEE_PERCENT}% 手續費），但只有 **{sender_bal:,.2f}**。",
-                    ephemeral=True
-                )
-                return
-            set_global_balance(sender_id, sender_bal - total_deduct)
-            set_global_balance(receiver_id, get_global_balance(receiver_id) + amount)
+        else:
+            await interaction.followup.send("❌ 無效的貨幣類型。", ephemeral=True)
+            return
 
-        if interaction_uses_server_scope(interaction):
-            record_transaction(interaction.guild.id)
+        try:
+            result = economy_db.settle_transfer(
+                db.db_path,
+                guild_id,
+                sender_id,
+                receiver_id,
+                amount,
+                fee,
+                market_weight=(TRADE_HEALTH_WEIGHT if guild_id != GLOBAL_GUILD_ID else 0.0),
+            )
+        except economy_db.EconomyRiskError as exc:
+            queue_economy_risk_log(guild_id, exc, actor=interaction.user, interaction=interaction)
+            await interaction.followup.send(build_flow_blacklist_notice(guild_id), ephemeral=True)
+            return
+        except economy_db.EconomyInsufficientFunds:
+            needed = round(amount + fee, 2)
+            available = get_balance(guild_id, sender_id)
+            await interaction.followup.send(
+                f"❌ 餘額不足。需要 **{needed:,.2f}** {currency_name}"
+                f"（含 {TRADE_FEE_PERCENT}% 手續費），但只有 **{available:,.2f}**。",
+                ephemeral=True,
+            )
+            return
+        except economy_db.EconomyIntegrityError:
+            await interaction.followup.send("❌ 金額或帳戶資料無效，交易已取消。", ephemeral=True)
+            return
 
         # 記錄雙方交易紀錄
-        pay_guild = guild_id if (currency == "server" and interaction_uses_server_scope(interaction)) else GLOBAL_GUILD_ID
+        pay_guild = guild_id
         log_transaction(pay_guild, sender_id, "轉帳支出", -(amount + fee), currency_name, f"→ {user.display_name}，手續費 {fee:,.2f}")
         log_transaction(pay_guild, receiver_id, "轉帳收入", amount, currency_name, f"← {interaction.user.display_name}")
 
@@ -1849,7 +1917,6 @@ class Economy(commands.GroupCog, name="economy", description="經濟系統指令
         embed.add_field(name="金額", value=f"{amount:,.2f} {currency_name}", inline=True)
         embed.add_field(name="手續費", value=f"{fee:,.2f} {currency_name} ({TRADE_FEE_PERCENT}%)", inline=True)
         embed.set_footer(text=f"交易由 {interaction.user.display_name} 發起")
-        receiver_after = get_balance(pay_guild, receiver_id) if pay_guild != GLOBAL_GUILD_ID else get_global_balance(receiver_id)
         queue_economy_audit_log(
             "pay",
             guild_id=pay_guild,
@@ -1859,10 +1926,10 @@ class Economy(commands.GroupCog, name="economy", description="經濟系統指令
             currency=currency_name,
             amount=amount,
             fee=fee,
-            balance_before=sender_bal,
-            balance_after=sender_bal - total_deduct,
-            target_balance_before=receiver_after - amount,
-            target_balance_after=receiver_after,
+            balance_before=result.sender_before,
+            balance_after=result.sender_after,
+            target_balance_before=result.receiver_before,
+            target_balance_after=result.receiver_after,
             detail=f"Transfer completed. Fee rate={TRADE_FEE_PERCENT}%",
             color=0x2ECC71,
         )
@@ -1884,8 +1951,8 @@ class Economy(commands.GroupCog, name="economy", description="經濟系統指令
         app_commands.Choice(name="全域幣 → 伺服幣", value="to_server"),
     ])
     async def exchange(self, interaction: discord.Interaction, amount: float, direction: str):
-        if amount <= 0:
-            await interaction.response.send_message("❌ 金額必須大於 0。", ephemeral=True)
+        if direction not in ("to_global", "to_server"):
+            await interaction.response.send_message("❌ 無效的兌換方向。", ephemeral=True)
             return
         
         if not interaction_uses_server_scope(interaction):
@@ -1899,42 +1966,42 @@ class Economy(commands.GroupCog, name="economy", description="經濟系統指令
             return
 
         user_id = interaction.user.id
-        rate = get_exchange_rate(guild_id)
         currency_name = get_currency_name(guild_id)
         fee_percent = EXCHANGE_FEE_PERCENT
+        try:
+            result = economy_db.settle_exchange(
+                db.db_path,
+                guild_id,
+                user_id,
+                amount,
+                direction,
+                fee_percent,
+                market_weight=TRADE_HEALTH_WEIGHT,
+            )
+        except economy_db.EconomyRiskError as exc:
+            queue_economy_risk_log(guild_id, exc, actor=interaction.user, interaction=interaction)
+            await interaction.response.send_message(
+                build_flow_blacklist_notice(guild_id), ephemeral=True,
+            )
+            return
+        except economy_db.EconomyInsufficientFunds:
+            source = currency_name if direction == "to_global" else GLOBAL_CURRENCY_NAME
+            await interaction.response.send_message(f"❌ {source}餘額不足。", ephemeral=True)
+            return
+        except economy_db.EconomyIntegrityError:
+            await interaction.response.send_message("❌ 兌換金額或經濟資料無效，交易已取消。", ephemeral=True)
+            return
 
+        amount = result.spent
+        rate = result.rate
+        fee = result.fee
+        received = result.received
+        embed = discord.Embed(title="💱 兌換成功", color=0x3498db)
         if direction == "to_global":
-            server_bal = get_balance(guild_id, user_id)
-            if server_bal < amount:
-                await interaction.response.send_message(f"❌ {currency_name}餘額不足。", ephemeral=True)
-                return
-
-            global_amount = amount * rate
-            fee = round(global_amount * fee_percent / 100, 2)
-            received = round(global_amount - fee, 2)
-
-            set_balance(guild_id, user_id, server_bal - amount)
-            set_global_balance(user_id, get_global_balance(user_id) + received)
-            adjust_supply(guild_id, -amount)
-
-            embed = discord.Embed(title="💱 兌換成功", color=0x3498db)
             embed.add_field(name="支出", value=f"{amount:,.2f} {currency_name}", inline=True)
             embed.add_field(name="獲得", value=f"{received:,.2f} {GLOBAL_CURRENCY_NAME}", inline=True)
             embed.add_field(name="手續費", value=f"{fee:,.2f} {GLOBAL_CURRENCY_NAME} ({fee_percent}%)", inline=True)
-        else:  # to_server
-            global_bal = get_global_balance(user_id)
-            if global_bal < amount:
-                await interaction.response.send_message(f"❌ {GLOBAL_CURRENCY_NAME}餘額不足。", ephemeral=True)
-                return
-
-            server_amount = amount / rate
-            fee = round(server_amount * fee_percent / 100, 2)
-            received = round(server_amount - fee, 2)
-
-            set_global_balance(user_id, global_bal - amount)
-            add_balance(guild_id, user_id, received)
-
-            embed = discord.Embed(title="💱 兌換成功", color=0x3498db)
+        else:
             embed.add_field(name="支出", value=f"{amount:,.2f} {GLOBAL_CURRENCY_NAME}", inline=True)
             embed.add_field(name="獲得", value=f"{received:,.2f} {currency_name}", inline=True)
             embed.add_field(name="手續費", value=f"{fee:,.2f} {currency_name} ({fee_percent}%)", inline=True)
@@ -1945,7 +2012,6 @@ class Economy(commands.GroupCog, name="economy", description="經濟系統指令
             inline=False
         )
 
-        record_transaction(guild_id)
         if direction == "to_global":
             queue_economy_audit_log(
                 "exchange_to_global",
@@ -1955,10 +2021,10 @@ class Economy(commands.GroupCog, name="economy", description="經濟系統指令
                 currency=currency_name,
                 amount=amount,
                 fee=fee,
-                balance_before=server_bal,
-                balance_after=server_bal - amount,
-                target_balance_before=get_global_balance(user_id) - received,
-                target_balance_after=get_global_balance(user_id),
+                balance_before=result.source_before,
+                balance_after=result.source_after,
+                target_balance_before=result.target_before,
+                target_balance_after=result.target_after,
                 rate_before=rate,
                 rate_after=get_exchange_rate(guild_id),
                 detail=f"Server currency exchanged to global. Received {received:,.2f} {GLOBAL_CURRENCY_NAME}.",
@@ -1973,10 +2039,10 @@ class Economy(commands.GroupCog, name="economy", description="經濟系統指令
                 currency=currency_name,
                 amount=received,
                 fee=fee,
-                balance_before=get_balance(guild_id, user_id) - received,
-                balance_after=get_balance(guild_id, user_id),
-                target_balance_before=global_bal,
-                target_balance_after=global_bal - amount,
+                balance_before=result.target_before,
+                balance_after=result.target_after,
+                target_balance_before=result.source_before,
+                target_balance_after=result.source_after,
                 rate_before=rate,
                 rate_after=get_exchange_rate(guild_id),
                 detail=f"Global currency exchanged to server. Spent {amount:,.2f} {GLOBAL_CURRENCY_NAME}.",
@@ -2011,7 +2077,13 @@ class Economy(commands.GroupCog, name="economy", description="經濟系統指令
                 if flow_block_notice:
                     await interaction.response.send_message(flow_block_notice, ephemeral=True)
                     return
-        if amount <= 0:
+        if scope not in ("server", "global"):
+            await interaction.response.send_message("❌ 無效的商店類型。", ephemeral=True)
+            return
+        settlement_guild_id = guild_id if scope == "server" else GLOBAL_GUILD_ID
+        try:
+            amount = economy_db.positive_item_quantity(amount)
+        except economy_db.EconomyIntegrityError:
             await interaction.response.send_message("❌ 數量必須大於 0。", ephemeral=True)
             return
 
@@ -2023,41 +2095,57 @@ class Economy(commands.GroupCog, name="economy", description="經濟系統指令
             return
 
         worth = item.get("worth", 0)
-        if worth <= 0:
-            await interaction.response.send_message("❌ 這個物品無法購買。", ephemeral=True)
-            return
 
-        if scope == "server":
-            currency_name = get_currency_name(guild_id)
-            price_per = get_item_buy_price(item_id, guild_id)
-            total_price = round(price_per * amount, 2)
-            bal = get_balance(guild_id, user_id)
-            if bal < total_price:
-                await interaction.response.send_message(
-                    f"❌ 餘額不足。需要 **{total_price:,.2f}** {currency_name}，但只有 **{bal:,.2f}**。",
-                    ephemeral=True
+        try:
+            if scope == "server":
+                currency_name = get_currency_name(guild_id)
+                price_per, total_price, expected_rate = get_guarded_server_item_quote(
+                    item_id, guild_id, amount,
                 )
-                return
-            set_balance(guild_id, user_id, bal - total_price)
-            adjust_supply(guild_id, -total_price)
-            # 伺服器商店：物品到伺服器背包
-            await give_item_to_user(guild_id, user_id, item_id, amount)
-            record_purchase(guild_id, total_price)
-        else:
-            currency_name = GLOBAL_CURRENCY_NAME
-            price_per = worth
-            total_price = round(price_per * amount, 2)
-            bal = get_global_balance(user_id)
-            if bal < total_price:
-                await interaction.response.send_message(
-                    f"❌ 餘額不足。需要 **{total_price:,.2f}** {currency_name}，但只有 **{bal:,.2f}**。",
-                    ephemeral=True
+            else:
+                currency_name = GLOBAL_CURRENCY_NAME
+                expected_rate = (
+                    economy_db.guard_cross_domain(
+                        db.db_path,
+                        guild_id,
+                        observed_values={"item_worth": worth},
+                    )
+                    if interaction_uses_server_scope(interaction) else None
                 )
-                return
-            new_balance = bal - total_price
-            set_global_balance(user_id, new_balance)
-            # 全域商店：物品到全域背包 (guild_id=0)
-            await give_item_to_user(0, user_id, item_id, amount)
+                price_per = economy_db.money(worth, field="item unit price")
+                raw_total_price = price_per * amount
+                if interaction_uses_server_scope(interaction):
+                    expected_rate = economy_db.guard_cross_domain(
+                        db.db_path,
+                        guild_id,
+                        observed_values={"item_total_price": raw_total_price},
+                    )
+                total_price = economy_db.money(raw_total_price, field="item total price")
+            settlement = economy_db.buy_item(
+                db.db_path,
+                settlement_guild_id,
+                user_id,
+                item_id,
+                amount,
+                total_price,
+                market_weight=(PURCHASE_DEFLATION_WEIGHT if scope == "server" else 0.0),
+                expected_rate=expected_rate,
+                risk_guild_id=(guild_id if scope == "global" and interaction_uses_server_scope(interaction) else None),
+            )
+        except economy_db.EconomyRiskError as exc:
+            queue_economy_risk_log(guild_id, exc, actor=interaction.user, interaction=interaction)
+            await interaction.response.send_message(build_flow_blacklist_notice(guild_id), ephemeral=True)
+            return
+        except economy_db.EconomyInsufficientFunds:
+            available = get_balance(settlement_guild_id, user_id)
+            await interaction.response.send_message(
+                f"❌ 餘額不足。需要 **{total_price:,.2f}** {currency_name}，但只有 **{available:,.2f}**。",
+                ephemeral=True,
+            )
+            return
+        except economy_db.EconomyIntegrityError:
+            await interaction.response.send_message("❌ 數量或商品價格無效，購買已取消。", ephemeral=True)
+            return
 
         scope_label = "伺服器" if scope == "server" else "全域"
         embed = discord.Embed(
@@ -2067,7 +2155,7 @@ class Economy(commands.GroupCog, name="economy", description="經濟系統指令
         )
         embed.add_field(name="單價", value=f"{price_per:,.2f} {currency_name}", inline=True)
         embed.add_field(name="總價", value=f"{total_price:,.2f} {currency_name}", inline=True)
-        remaining = get_balance(guild_id, user_id) if scope == "server" else get_global_balance(user_id)
+        remaining = settlement.balance_after
         dest = "伺服器背包" if scope == "server" else "全域背包"
         embed.set_footer(text=f"剩餘餘額：{remaining:,.2f} {currency_name} | 物品已放入{dest}")
         buy_guild = guild_id if scope == "server" else GLOBAL_GUILD_ID
@@ -2079,8 +2167,8 @@ class Economy(commands.GroupCog, name="economy", description="經濟系統指令
             interaction=interaction,
             currency=currency_name,
             amount=total_price,
-            balance_before=remaining + total_price,
-            balance_after=remaining,
+            balance_before=settlement.balance_before,
+            balance_after=settlement.balance_after,
             item_name=item["name"],
             item_amount=amount,
             detail=f"Slash command purchase via {scope} scope.",
@@ -2096,7 +2184,9 @@ class Economy(commands.GroupCog, name="economy", description="經濟系統指令
     ])
     @app_commands.autocomplete(item_id=sellable_items_autocomplete)
     async def sell(self, interaction: discord.Interaction, item_id: str, amount: int = 1, scope: str = "server"):
-        if amount <= 0:
+        try:
+            amount = economy_db.positive_item_quantity(amount)
+        except economy_db.EconomyIntegrityError:
             await interaction.response.send_message("❌ 數量必須大於 0。", ephemeral=True)
             return
 
@@ -2110,19 +2200,20 @@ class Economy(commands.GroupCog, name="economy", description="經濟系統指令
                 if flow_block_notice:
                     await interaction.response.send_message(flow_block_notice, ephemeral=True)
                     return
+        if scope not in ("server", "global"):
+            await interaction.response.send_message("❌ 無效的商店類型。", ephemeral=True)
+            return
+        settlement_guild_id = guild_id if scope == "server" else GLOBAL_GUILD_ID
         user_id = interaction.user.id
 
-        item = get_item_by_id(item_id, guild_id if scope == "server" else 0)
+        item = get_item_by_id(item_id, settlement_guild_id)
         if not item:
             await interaction.response.send_message("❌ 無效的物品 ID。", ephemeral=True)
             return
 
         worth = item.get("worth", 0)
-        if worth <= 0:
-            await interaction.response.send_message("❌ 這個物品無法賣出。", ephemeral=True)
-            return
 
-        user_item_count = await get_user_items(guild_id, user_id, item_id)
+        user_item_count = await get_user_items(settlement_guild_id, user_id, item_id)
         sellable_count = user_item_count
         if scope == "server":
             sellable_count = max(0, user_item_count - get_admin_item_count(guild_id, user_id, item_id))
@@ -2133,22 +2224,62 @@ class Economy(commands.GroupCog, name="economy", description="經濟系統指令
             )
             return
 
-        removed = await remove_item_from_user(guild_id, user_id, item_id, amount)
-
-        currency_name = get_currency_name(guild_id) if scope == "server" else GLOBAL_CURRENCY_NAME
-        sell_ratio = get_sell_ratio(guild_id)
-        if scope == "server":
-            price_per = get_item_sell_price(item_id, guild_id)
-        else:
-            # 全域商店也要套用折扣
-            price_per = round(item.get("worth", 0) * sell_ratio, 2)
-        total_price = round(price_per * removed, 2)
-
-        if scope == "server":
-            add_balance(guild_id, user_id, total_price)
-            record_sale(guild_id, total_price, is_admin_item=False)
-        else:
-            set_global_balance(user_id, get_global_balance(user_id) + total_price)
+        try:
+            currency_name = get_currency_name(guild_id) if scope == "server" else GLOBAL_CURRENCY_NAME
+            sell_ratio = economy_db.finite_number(get_sell_ratio(guild_id), field="sell ratio")
+            if scope == "server":
+                price_per, total_price, expected_rate = get_guarded_server_item_quote(
+                    item_id, guild_id, amount, selling=True,
+                )
+            else:
+                # 全域商店也要套用折扣。
+                expected_rate = (
+                    economy_db.guard_cross_domain(
+                        db.db_path,
+                        guild_id,
+                        observed_values={
+                            "item_worth": item.get("worth", 0),
+                            "sell_ratio": get_sell_ratio(guild_id),
+                        },
+                    )
+                    if interaction_uses_server_scope(interaction) else None
+                )
+                sell_ratio = economy_db.finite_number(get_sell_ratio(guild_id), field="sell ratio")
+                price_per = economy_db.money(
+                    economy_db.finite_number(item.get("worth", 0), field="item worth") * sell_ratio,
+                    field="item unit price",
+                )
+                raw_total_price = price_per * amount
+                if interaction_uses_server_scope(interaction):
+                    expected_rate = economy_db.guard_cross_domain(
+                        db.db_path,
+                        guild_id,
+                        observed_values={"item_total_price": raw_total_price},
+                    )
+                total_price = economy_db.money(raw_total_price, field="item total price")
+            settlement = economy_db.sell_item(
+                db.db_path,
+                settlement_guild_id,
+                user_id,
+                item_id,
+                amount,
+                total_price,
+                exclude_admin_items=(scope == "server"),
+                market_weight=(SALE_INFLATION_WEIGHT if scope == "server" else 0.0),
+                expected_rate=expected_rate,
+                risk_guild_id=(guild_id if scope == "global" and interaction_uses_server_scope(interaction) else None),
+            )
+        except economy_db.EconomyRiskError as exc:
+            queue_economy_risk_log(guild_id, exc, actor=interaction.user, interaction=interaction)
+            await interaction.response.send_message(build_flow_blacklist_notice(guild_id), ephemeral=True)
+            return
+        except economy_db.EconomyInsufficientFunds:
+            await interaction.response.send_message("❌ 可賣出的物品數量不足。", ephemeral=True)
+            return
+        except economy_db.EconomyIntegrityError:
+            await interaction.response.send_message("❌ 數量或商品價格無效，賣出已取消。", ephemeral=True)
+            return
+        removed = settlement.quantity
 
         embed = discord.Embed(
             title="💰 賣出成功",
@@ -2159,7 +2290,12 @@ class Economy(commands.GroupCog, name="economy", description="經濟系統指令
         embed.add_field(name="總收入", value=f"{total_price:,.2f} {currency_name}", inline=True)
 
         if scope == "server":
-            buy_price = get_item_buy_price(item_id, guild_id)
+            buy_price = economy_db.money(
+                economy_db.finite_number(item.get("worth", 0), field="item worth")
+                if expected_rate is None
+                else economy_db.finite_number(item.get("worth", 0), field="item worth") / expected_rate,
+                field="item buy price",
+            )
         else:
             buy_price = item.get("worth", 0)
         embed.set_footer(
@@ -2168,7 +2304,6 @@ class Economy(commands.GroupCog, name="economy", description="經濟系統指令
         embed.timestamp = datetime.now(timezone.utc)
         sell_guild = guild_id if scope == "server" else GLOBAL_GUILD_ID
         log_transaction(sell_guild, user_id, "賣出物品", total_price, currency_name, f"{item['name']} x{removed}")
-        remaining_balance = get_balance(guild_id, user_id) if scope == "server" else get_global_balance(user_id)
         queue_economy_audit_log(
             "sell_item",
             guild_id=sell_guild,
@@ -2176,8 +2311,8 @@ class Economy(commands.GroupCog, name="economy", description="經濟系統指令
             interaction=interaction,
             currency=currency_name,
             amount=total_price,
-            balance_before=remaining_balance - total_price,
-            balance_after=remaining_balance,
+            balance_before=settlement.balance_before,
+            balance_after=settlement.balance_after,
             item_name=item["name"],
             item_amount=removed,
             detail=f"Item sold via {scope} scope.",
@@ -2275,6 +2410,18 @@ class Economy(commands.GroupCog, name="economy", description="經濟系統指令
                     request_item: str = None, request_item_amount: int = 1,
                     request_money: float = 0.0,
                     global_trade: bool = False):
+        try:
+            offer_money = economy_db.money(offer_money, field="offer money", allow_zero=True)
+            request_money = economy_db.money(request_money, field="request money", allow_zero=True)
+            if offer_item:
+                offer_item_amount = economy_db.positive_item_quantity(offer_item_amount)
+            if request_item:
+                request_item_amount = economy_db.positive_item_quantity(request_item_amount)
+        except economy_db.EconomyIntegrityError:
+            await interaction.response.send_message(
+                "❌ 金額必須是有限值，物品數量必須至少為 1。", ephemeral=True,
+            )
+            return
         if user.id == interaction.user.id:
             await interaction.response.send_message("❌ 你不能跟自己交易。", ephemeral=True)
             return
@@ -2366,6 +2513,8 @@ class Economy(commands.GroupCog, name="economy", description="經濟系統指令
         class TradeView(discord.ui.View):
             def __init__(self):
                 super().__init__(timeout=120)
+                self._settlement_lock = asyncio.Lock()
+                self._consumed = False
 
             async def on_timeout(self):
                 for child in self.children:
@@ -2381,63 +2530,43 @@ class Economy(commands.GroupCog, name="economy", description="經濟系統指令
                     await btn_interaction.response.send_message("❌ 只有交易對象才能接受。", ephemeral=True)
                     return
 
-                td = trade_data
-                errors = []
-
-                # 重新驗證雙方資源
-                if td["offer_item"]:
-                    count = await get_user_items(td["guild_id"], td["initiator_id"], td["offer_item"])
-                    if count < td["offer_item_amount"]:
-                        errors.append("發起者的物品數量不足")
-                if td["offer_money"] > 0:
-                    if get_balance(td["guild_id"], td["initiator_id"]) < td["offer_money"]:
-                        errors.append("發起者的餘額不足")
-                if td["request_item"]:
-                    count = await get_user_items(td["guild_id"], td["target_id"], td["request_item"])
-                    if count < td["request_item_amount"]:
-                        errors.append("你的物品數量不足")
-                if td["request_money"] > 0:
-                    if get_balance(td["guild_id"], td["target_id"]) < td["request_money"]:
-                        errors.append("你的餘額不足")
-
-                if errors:
-                    await btn_interaction.response.send_message(
-                        "❌ 交易失敗：\n" + "\n".join(f"• {e}" for e in errors),
-                        ephemeral=True
-                    )
-                    return
-
-                # 執行交易
-                if td["offer_item"]:
-                    await remove_item_from_user(td["guild_id"], td["initiator_id"], td["offer_item"], td["offer_item_amount"])
-                    await give_item_to_user(td["guild_id"], td["target_id"], td["offer_item"], td["offer_item_amount"])
-                    # 轉移管理員物品標記
-                    admin_count = get_admin_item_count(td["guild_id"], td["initiator_id"], td["offer_item"])
-                    if admin_count > 0:
-                        transferred = min(admin_count, td["offer_item_amount"])
-                        remove_admin_item(td["guild_id"], td["initiator_id"], td["offer_item"], transferred)
-                        add_admin_item(td["guild_id"], td["target_id"], td["offer_item"], transferred)
-                if td["offer_money"] > 0:
-                    set_balance(td["guild_id"], td["initiator_id"],
-                                get_balance(td["guild_id"], td["initiator_id"]) - td["offer_money"])
-                    add_balance(td["guild_id"], td["target_id"], td["offer_money"])
-                if td["request_item"]:
-                    await remove_item_from_user(td["guild_id"], td["target_id"], td["request_item"], td["request_item_amount"])
-                    await give_item_to_user(td["guild_id"], td["initiator_id"], td["request_item"], td["request_item_amount"])
-                    # 轉移管理員物品標記
-                    admin_count = get_admin_item_count(td["guild_id"], td["target_id"], td["request_item"])
-                    if admin_count > 0:
-                        transferred = min(admin_count, td["request_item_amount"])
-                        remove_admin_item(td["guild_id"], td["target_id"], td["request_item"], transferred)
-                        add_admin_item(td["guild_id"], td["initiator_id"], td["request_item"], transferred)
-                if td["request_money"] > 0:
-                    set_balance(td["guild_id"], td["target_id"],
-                                get_balance(td["guild_id"], td["target_id"]) - td["request_money"])
-                    add_balance(td["guild_id"], td["initiator_id"], td["request_money"])
-
-                if td["guild_id"] != GLOBAL_GUILD_ID:
-                    record_transaction(td["guild_id"])
-                    record_transaction(td["guild_id"])  # 兩方交易 = 兩筆經濟活動
+                async with self._settlement_lock:
+                    if self._consumed:
+                        await btn_interaction.response.send_message("ℹ️ 這筆交易已經處理完成。", ephemeral=True)
+                        return
+                    td = trade_data
+                    try:
+                        settlement = economy_db.settle_trade(
+                            db.db_path,
+                            td["guild_id"],
+                            td["initiator_id"],
+                            td["target_id"],
+                            offer_item=td["offer_item"],
+                            offer_item_amount=td["offer_item_amount"],
+                            offer_money=td["offer_money"],
+                            request_item=td["request_item"],
+                            request_item_amount=td["request_item_amount"],
+                            request_money=td["request_money"],
+                        )
+                    except economy_db.EconomyRiskError as exc:
+                        queue_economy_risk_log(
+                            td["guild_id"], exc, actor=btn_interaction.user, interaction=btn_interaction,
+                        )
+                        await btn_interaction.response.send_message(
+                            build_flow_blacklist_notice(td["guild_id"]), ephemeral=True,
+                        )
+                        return
+                    except economy_db.EconomyInsufficientFunds:
+                        await btn_interaction.response.send_message(
+                            "❌ 交易失敗：接受時其中一方的餘額或物品不足。", ephemeral=True,
+                        )
+                        return
+                    except economy_db.EconomyIntegrityError:
+                        await btn_interaction.response.send_message(
+                            "❌ 交易資料無效，未變更任何資產。", ephemeral=True,
+                        )
+                        return
+                    self._consumed = True
 
                 for child in self.children:
                     child.disabled = True
@@ -2467,8 +2596,6 @@ class Economy(commands.GroupCog, name="economy", description="經濟系統指令
                     log_transaction(td["guild_id"], td["target_id"], "交易收入", td["offer_money"], trade_currency, f"提供: {request_str} → 換取: {offer_str}")
 
                 await btn_interaction.response.edit_message(content="✅ 交易完成！", view=self)
-                initiator_after = get_balance(td["guild_id"], td["initiator_id"])
-                target_after = get_balance(td["guild_id"], td["target_id"])
                 queue_economy_audit_log(
                     "trade_completed",
                     guild_id=td["guild_id"],
@@ -2477,10 +2604,10 @@ class Economy(commands.GroupCog, name="economy", description="經濟系統指令
                     interaction=btn_interaction,
                     currency=trade_currency,
                     amount=td["offer_money"] + td["request_money"],
-                    balance_before=initiator_after + td["offer_money"] - td["request_money"],
-                    balance_after=initiator_after,
-                    target_balance_before=target_after - td["offer_money"] + td["request_money"],
-                    target_balance_after=target_after,
+                    balance_before=settlement.initiator_before,
+                    balance_after=settlement.initiator_after,
+                    target_balance_before=settlement.target_before,
+                    target_balance_after=settlement.target_after,
                     detail=f"Trade completed. Offer={offer_str} | Request={request_str}",
                     color=0xF39C12,
                     extra_fields=[
@@ -2497,10 +2624,15 @@ class Economy(commands.GroupCog, name="economy", description="經濟系統指令
                 if btn_interaction.user.id not in (initiator_id, target_id):
                     await btn_interaction.response.send_message("❌ 只有交易雙方才能取消。", ephemeral=True)
                     return
-                for child in self.children:
-                    child.disabled = True
-                who = "發起者" if btn_interaction.user.id == initiator_id else "對方"
-                await btn_interaction.response.edit_message(content=f"❌ 交易已被{who}取消。", view=self)
+                async with self._settlement_lock:
+                    if self._consumed:
+                        await btn_interaction.response.send_message("ℹ️ 這筆交易已經處理完成。", ephemeral=True)
+                        return
+                    self._consumed = True
+                    for child in self.children:
+                        child.disabled = True
+                    who = "發起者" if btn_interaction.user.id == initiator_id else "對方"
+                    await btn_interaction.response.edit_message(content=f"❌ 交易已被{who}取消。", view=self)
 
         await interaction.response.send_message(content=user.mention, embed=embed, view=TradeView(), allowed_mentions=discord.AllowedMentions(users=True, roles=False, everyone=False))
 
@@ -2813,6 +2945,8 @@ class ConfirmGlobalModeView(discord.ui.View):
         super().__init__(timeout=180)
         self.guild_id = guild_id
         self.actor_id = actor_id
+        self._settlement_lock = asyncio.Lock()
+        self._consumed = False
 
     async def _reject_if_not_actor(self, interaction: discord.Interaction) -> bool:
         if interaction.user.id != self.actor_id:
@@ -2828,23 +2962,23 @@ class ConfirmGlobalModeView(discord.ui.View):
     async def confirm(self, interaction: discord.Interaction, button: discord.ui.Button):
         if await self._reject_if_not_actor(interaction):
             return
+        async with self._settlement_lock:
+            if self._consumed or is_global_mode_enabled(self.guild_id):
+                await interaction.response.send_message("這個伺服器已經是全域模式了。", ephemeral=True)
+                return
 
-        if is_global_mode_enabled(self.guild_id):
-            await interaction.response.send_message("這個伺服器已經是全域模式了。", ephemeral=True)
-            return
+            flow_block_notice = get_global_flow_block_notice(self.guild_id, interaction.guild)
+            if flow_block_notice:
+                await interaction.response.send_message(flow_block_notice, ephemeral=True)
+                return
 
-        flow_block_notice = get_global_flow_block_notice(self.guild_id, interaction.guild)
-        if flow_block_notice:
-            await interaction.response.send_message(flow_block_notice, ephemeral=True)
-            return
-
-        await interaction.response.defer(ephemeral=True, thinking=True)
-        try:
-            migration = await migrate_guild_economy_to_global(self.guild_id)
-        except GlobalFlowUnavailableError as exc:
-            await interaction.followup.send(str(exc), ephemeral=True)
-            return
-        set_global_mode_enabled(self.guild_id, True)
+            await interaction.response.defer(ephemeral=True, thinking=True)
+            try:
+                migration = await migrate_guild_economy_to_global(self.guild_id)
+            except GlobalFlowUnavailableError as exc:
+                await interaction.followup.send(str(exc), ephemeral=True)
+                return
+            self._consumed = True
 
         queue_economy_audit_log(
             "global_mode_enabled",
@@ -3251,6 +3385,9 @@ asyncio.run(bot.add_cog(EconomyMod()))
 async def dev_economy_history(ctx, user: discord.User, scope: str = "server", server_id: int = None):
     scope = (scope or "server").lower()
     if scope == "global":
+        if target_amount > MAX_GLOBAL_BALANCE:
+            await ctx.send(f"❌ 全域餘額不能超過 {MAX_GLOBAL_BALANCE:,.2f}。")
+            return
         guild_id = GLOBAL_GUILD_ID
     elif scope == "server":
         if server_id:
@@ -3370,12 +3507,20 @@ async def dev_economy_flow_blacklist_info(ctx, guild_id: int = None):
 
     actor_id = info.get("set_by")
     set_at = info.get("set_at") or "未知時間"
-    actor_text = f"<@{actor_id}> (`{actor_id}`)" if actor_id else "未知"
+    source = info.get("source", "manual")
+    actor_text = f"<@{actor_id}> (`{actor_id}`)" if actor_id else ("自動風控" if source == "automatic" else "未知")
+    risk_detail = ""
+    if source == "automatic":
+        risk_detail = (
+            f"\n觸發條件：`{info.get('trigger') or '未知'}`"
+            f"\n觀測值：`{repr(info.get('observed'))[:800]}`"
+        )
     await ctx.send(
         f"🚫 **{guild_name}** (`{guild_id}`) 目前已停用貨幣流通。\n"
         f"原因：{info.get('reason', '未提供')}\n"
+        f"來源：{'自動風控' if source == 'automatic' else '人工設定'}\n"
         f"設定者：{actor_text}\n"
-        f"設定時間：{set_at}"
+        f"設定時間：{set_at}{risk_detail}"
     )
 
 
@@ -3396,8 +3541,12 @@ async def dev_economy_flow_blacklist_list(ctx):
         guild_name = guild.name if guild else "未知伺服器"
         lines.append(f"[{parsed_guild_id}] {guild_name}")
         lines.append(f"  原因          {info.get('reason', '未提供')}")
+        lines.append(f"  來源          {info.get('source', 'manual')}")
         lines.append(f"  設定者        {info.get('set_by') or '未知'}")
         lines.append(f"  設定時間      {info.get('set_at') or '未知'}")
+        if info.get("source") == "automatic":
+            lines.append(f"  觸發條件      {info.get('trigger') or '未知'}")
+            lines.append(f"  觀測值        {repr(info.get('observed'))[:500]}")
         lines.append("")
 
     if not lines:
@@ -3415,7 +3564,9 @@ async def dev_economy_flow_blacklist_list(ctx):
 @bot.command(name="dev-economygive", description="開發者直接加錢給用戶", aliases=["deg", "degive"])
 @is_owner()
 async def dev_economy_give(ctx, user: discord.User, amount: float, scope: str = "server", server_id: int = None):
-    if amount <= 0:
+    try:
+        amount = economy_db.money(amount)
+    except economy_db.EconomyIntegrityError:
         await ctx.send("❌ 金額必須大於 0。")
         return
 
@@ -3475,7 +3626,9 @@ async def dev_economy_give(ctx, user: discord.User, amount: float, scope: str = 
 @bot.command(name="dev-economyremove", description="開發者直接扣錢給用戶", aliases=["der", "deremove"])
 @is_owner()
 async def dev_economy_remove(ctx, user: discord.User, amount: float, scope: str = "server", server_id: int = None):
-    if amount <= 0:
+    try:
+        amount = economy_db.money(amount)
+    except economy_db.EconomyIntegrityError:
         await ctx.send("❌ 金額必須大於 0。")
         return
 
@@ -3500,7 +3653,6 @@ async def dev_economy_remove(ctx, user: discord.User, amount: float, scope: str 
         before = get_balance(guild_id, user.id)
         removed = min(before, amount)
         set_balance(guild_id, user.id, before - removed)
-        adjust_supply(guild_id, -removed)
         after = get_balance(guild_id, user.id)
     else:
         await ctx.send("❌ 範圍必須是 'server' 或 'global'。")
@@ -3538,7 +3690,9 @@ async def dev_economy_remove(ctx, user: discord.User, amount: float, scope: str 
 @bot.command(name="dev-economyset", description="開發者直接設定用戶餘額", aliases=["des", "deset"])
 @is_owner()
 async def dev_economy_set(ctx, user: discord.User, target_amount: float, scope: str = "server", server_id: int = None):
-    if target_amount < 0:
+    try:
+        target_amount = economy_db.money(target_amount, field="target amount", allow_zero=True)
+    except economy_db.EconomyIntegrityError:
         await ctx.send("❌ 目標餘額不能小於 0。")
         return
 
@@ -3561,7 +3715,6 @@ async def dev_economy_set(ctx, user: discord.User, target_amount: float, scope: 
         currency_name = get_currency_name(guild_id)
         before = get_balance(guild_id, user.id)
         set_balance(guild_id, user.id, target_amount)
-        adjust_supply(guild_id, target_amount - before)
         after = get_balance(guild_id, user.id)
     else:
         await ctx.send("❌ 範圍必須是 'server' 或 'global'。")
@@ -3856,16 +4009,6 @@ def make_cheque_use_callback(item_id: str, worth: int):
         guild_id = getattr(interaction, "guild_id", 0)
         user_id = interaction.user.id
 
-        # 檢查是否為管理員給予的支票
-        admin_count = get_admin_item_count(guild_id, user_id, item_id)
-        if admin_count > 0:
-            await interaction.response.send_message(
-                "❌ 這張支票是管理員給予的，無法兌現。\n"
-                "管理員給予的物品不能轉換為貨幣，以防止經濟系統被濫用。",
-                ephemeral=True
-            )
-            return
-
         # 伺服器背包中兌現支票屬於全域幣流通，需檢查開關
         if guild_id and guild_id != GLOBAL_GUILD_ID:
             flow_block_notice = get_global_flow_block_notice(guild_id, interaction.guild)
@@ -3873,19 +4016,37 @@ def make_cheque_use_callback(item_id: str, worth: int):
                 await interaction.response.send_message(flow_block_notice, ephemeral=True)
                 return
 
-        removed = await remove_item_from_user(guild_id, user_id, item_id, 1)
-        if removed < 1:
+        is_server_cheque = guild_id not in (None, GLOBAL_GUILD_ID)
+        # 伺服器支票在原子結算內重新讀取及驗證匯率。
+        rate = get_exchange_rate(guild_id) if is_server_cheque else None
+        payout = float(worth)
+        try:
+            settlement = economy_db.cash_cheque(
+                db.db_path,
+                guild_id,
+                user_id,
+                item_id,
+                payout,
+                enforce_rate_guard=is_server_cheque,
+                observed_values={"cheque_worth": worth},
+            )
+        except economy_db.EconomyRiskError as exc:
+            queue_economy_risk_log(guild_id, exc, actor=interaction.user, interaction=interaction)
+            await interaction.response.send_message(build_flow_blacklist_notice(guild_id), ephemeral=True)
+            return
+        except economy_db.EconomyInsufficientFunds:
             await interaction.response.send_message("你沒有這張支票。", ephemeral=True)
             return
-
-        # 支票面額是全域幣，兌現到伺服器時需依匯率轉換，避免套利洗錢
-        if guild_id and guild_id != GLOBAL_GUILD_ID:
-            rate = get_exchange_rate(guild_id)
-            payout = round(worth / rate, 2)
-        else:
-            payout = float(worth)
-        balance_before = get_balance(guild_id, user_id)
-        add_balance(guild_id, user_id, payout)
+        except economy_db.EconomyIntegrityError as exc:
+            message = (
+                "❌ 這張支票是管理員給予的，無法兌現。\n"
+                "管理員給予的物品不能轉換為貨幣，以防止經濟系統被濫用。"
+                if "admin cheque" in str(exc)
+                else "❌ 支票或經濟資料無效，本次未兌現。"
+            )
+            await interaction.response.send_message(message, ephemeral=True)
+            return
+        payout = settlement.total
         currency_name = get_currency_name(guild_id)
         queue_economy_audit_log(
             "cheque_cashout",
@@ -3894,8 +4055,8 @@ def make_cheque_use_callback(item_id: str, worth: int):
             interaction=interaction,
             currency=currency_name,
             amount=payout,
-            balance_before=balance_before,
-            balance_after=get_balance(guild_id, user_id),
+            balance_before=settlement.balance_before,
+            balance_after=settlement.balance_after,
             rate_before=(rate if guild_id and guild_id != GLOBAL_GUILD_ID else None),
             rate_after=(get_exchange_rate(guild_id) if guild_id and guild_id != GLOBAL_GUILD_ID else None),
             item_name=item_id,
