@@ -15,6 +15,11 @@ import logging
 import re
 import sys
 from datetime import datetime
+from embed_template import (
+    build_embed_from_tokens as build_shared_embed_from_tokens,
+    extract_embed_tokens as extract_shared_embed_tokens,
+    parse_embed_color,
+)
 
 DEFAULT_AUTOREPLY_CONFIG_LIMIT = 50
 AUTOREPLY_RATE_LIMIT_COUNT = 3
@@ -1045,20 +1050,7 @@ class AutoReply(commands.GroupCog, name="autoreply"):
         return embed
 
     def _parse_embed_color(self, value: str):
-        raw_value = str(value).strip().lower()
-        if not raw_value:
-            return None
-        if raw_value.startswith("#"):
-            raw_value = raw_value[1:]
-        elif raw_value.startswith("0x"):
-            raw_value = raw_value[2:]
-        try:
-            color_value = int(raw_value, 16)
-        except ValueError:
-            return None
-        if 0 <= color_value <= 0xFFFFFF:
-            return color_value
-        return None
+        return parse_embed_color(value)
 
     def _parse_bool(self, value: str) -> bool:
         return str(value).strip().lower() in {"1", "true", "yes", "y", "on"}
@@ -1678,87 +1670,7 @@ class AutoReply(commands.GroupCog, name="autoreply"):
         return "".join(output)
 
     def _extract_embed_tokens(self, response: str):
-        directives = {
-            "embedtitle:": "title",
-            "embeddescription:": "description",
-            "embedurl:": "url",
-            "embedimage:": "image",
-            "embedcolor:": "color",
-            "embedthumbnail:": "thumbnail",
-            "embedfooter:": "footer",
-            "embedfooterimage:": "footer_image",
-            "embedauthor:": "author",
-            "embedauthorurl:": "author_url",
-            "embedauthorimage:": "author_image",
-            "embedtime:": "time",
-            "embedfield:": "field",
-        }
-        extracted = {
-            "title": None,
-            "description": None,
-            "url": None,
-            "image": None,
-            "color": None,
-            "thumbnail": None,
-            "footer": None,
-            "footer_image": None,
-            "author": None,
-            "author_url": None,
-            "author_image": None,
-            "time": None,
-            "fields": [],
-        }
-        output = []
-        index = 0
-        response_length = len(response)
-
-        while index < response_length:
-            if response[index] != "{":
-                output.append(response[index])
-                index += 1
-                continue
-
-            matched_prefix = None
-            matched_key = None
-            remaining = response[index + 1:].lower()
-            for prefix, key in directives.items():
-                if remaining.startswith(prefix):
-                    matched_prefix = prefix
-                    matched_key = key
-                    break
-
-            if matched_prefix is None:
-                output.append(response[index])
-                index += 1
-                continue
-
-            value_start = index + 1 + len(matched_prefix)
-            cursor = value_start
-            depth = 1
-            while cursor < response_length:
-                if response[cursor] == "{":
-                    depth += 1
-                elif response[cursor] == "}":
-                    depth -= 1
-                    if depth == 0:
-                        break
-                cursor += 1
-
-            if cursor >= response_length or depth != 0:
-                output.append(response[index])
-                index += 1
-                continue
-
-            payload = response[value_start:cursor]
-            if matched_key == "field":
-                field_name, field_value = self._split_top_level(payload)
-                if field_value is not None:
-                    extracted["fields"].append((field_name, field_value))
-            else:
-                extracted[matched_key] = payload
-            index = cursor + 1
-
-        return "".join(output), extracted
+        return extract_shared_embed_tokens(response)
 
     async def _resolve_response_variables(self, response: str, message: discord.Message, context: dict) -> str:
         if not response:
@@ -1932,106 +1844,14 @@ class AutoReply(commands.GroupCog, name="autoreply"):
         return "".join(output)
 
     async def _build_embed_from_tokens(self, extracted: dict, message: discord.Message, context: dict):
-        embed_requested = any(
-            extracted[key] is not None
-            for key in (
-                "title",
-                "description",
-                "url",
-                "image",
-                "color",
-                "thumbnail",
-                "footer",
-                "footer_image",
-                "author",
-                "author_url",
-                "author_image",
-                "time",
-            )
-        ) or bool(extracted["fields"])
-        if not embed_requested:
-            return None
+        async def resolver(value: str) -> str:
+            return await self._resolve_response_variables(value, message, context)
 
-        embed = discord.Embed()
-
-        if extracted["title"] is not None:
-            title = (await self._resolve_response_variables(extracted["title"], message, context)).strip()
-            if title:
-                embed.title = title
-
-        if extracted["description"] is not None:
-            description = (await self._resolve_response_variables(extracted["description"], message, context)).strip()
-            if description:
-                embed.description = description
-
-        if extracted["url"] is not None:
-            embed_url = (await self._resolve_response_variables(extracted["url"], message, context)).strip()
-            if embed_url:
-                embed.url = embed_url
-
-        if extracted["image"] is not None:
-            image_url = (await self._resolve_response_variables(extracted["image"], message, context)).strip()
-            if image_url:
-                embed.set_image(url=image_url)
-
-        if extracted["thumbnail"] is not None:
-            thumbnail_url = (await self._resolve_response_variables(extracted["thumbnail"], message, context)).strip()
-            if thumbnail_url:
-                embed.set_thumbnail(url=thumbnail_url)
-
-        if extracted["footer"] is not None:
-            footer_text = (await self._resolve_response_variables(extracted["footer"], message, context)).strip()
-        else:
-            footer_text = ""
-
-        if extracted["footer_image"] is not None:
-            footer_image_url = (await self._resolve_response_variables(extracted["footer_image"], message, context)).strip()
-        else:
-            footer_image_url = ""
-
-        if footer_text or footer_image_url:
-            embed.set_footer(text=footer_text or "\u200b", icon_url=footer_image_url or None)
-
-        if extracted["author"] is not None:
-            author_name = (await self._resolve_response_variables(extracted["author"], message, context)).strip()
-        else:
-            author_name = ""
-
-        if extracted["author_url"] is not None:
-            author_url = (await self._resolve_response_variables(extracted["author_url"], message, context)).strip()
-        else:
-            author_url = ""
-
-        if extracted["author_image"] is not None:
-            author_icon_url = (await self._resolve_response_variables(extracted["author_image"], message, context)).strip()
-        else:
-            author_icon_url = ""
-
-        if author_name or author_url or author_icon_url:
-            embed.set_author(
-                name=author_name or "\u200b",
-                url=author_url or None,
-                icon_url=author_icon_url or None,
-            )
-
-        if extracted["color"] is not None:
-            color_value = (await self._resolve_response_variables(extracted["color"], message, context)).strip()
-            parsed_color = self._parse_embed_color(color_value)
-            if parsed_color is not None:
-                embed.color = discord.Colour(parsed_color)
-
-        if extracted["time"] is not None:
-            time_value = (await self._resolve_response_variables(extracted["time"], message, context)).strip()
-            if self._parse_bool(time_value):
-                embed.timestamp = context["now"]
-
-        for field_name, field_value in extracted["fields"][:25]:
-            resolved_name = (await self._resolve_response_variables(field_name, message, context)).strip()
-            resolved_value = (await self._resolve_response_variables(field_value, message, context)).strip()
-            if resolved_name and resolved_value:
-                embed.add_field(name=resolved_name, value=resolved_value, inline=False)
-
-        return embed
+        return await build_shared_embed_from_tokens(
+            extracted,
+            resolver,
+            now=context["now"],
+        )
 
     def _build_template_context(self) -> dict:
         return {

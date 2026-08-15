@@ -11,7 +11,18 @@ import ModerationNotify
 from logger import log
 import logging
 import re
+import shlex
+import string
 import time
+from collections import defaultdict
+from embed_template import (
+    EmbedTemplateSyntaxError,
+    build_embed_from_tokens,
+    extract_embed_tokens,
+    parse_embed_color,
+    validate_embed_output,
+    validate_embed_template,
+)
 
 ignore_message_ids = set()  # 用於暫時忽略特定訊息的處理（例如剛剛被刪除的訊息）
 BUILTIN_ACTIONS = {
@@ -38,6 +49,38 @@ _DURATION_TOKEN_RE = re.compile(
     r"^(?:0|(?:\d+(?:seconds?|minutes?|hours?|days?|weeks?|months?|years?|s|m|h|d|w|M|y|秒|分|分鐘|小時|天|週|月|個月|年))+)$"
 )
 MAX_TIMEOUT_SECONDS = 28 * 24 * 60 * 60
+MODERATION_ANNOUNCEMENT_CONFIG_KEY = "moderation_announcement_config"
+MODERATION_CASE_STATE_KEY = "moderation_case_state"
+DEFAULT_MODERATION_CASE_ID_FORMAT = "{roc_year}{sequence:04d}"
+DEFAULT_MODERATION_ANNOUNCEMENT_TEMPLATE = """### ⛔ 違規處分
+> - 被處分者：{user}{report_context}
+> - 處分原因：{reason}
+> - 處分結果：{action}
+> - 裁判字號：{case_id}
+> - 處分執行：{moderator}
+{ai_note}"""
+MODERATION_TEMPLATE_VARIABLES = {
+    "user",
+    "user_name",
+    "user_id",
+    "user_avatar",
+    "moderator",
+    "moderator_name",
+    "moderator_id",
+    "moderator_avatar",
+    "reason",
+    "action",
+    "case_id",
+    "guild",
+    "guild_id",
+    "guild_icon",
+    "reported_message",
+    "report_context",
+    "ai_note",
+}
+TAIPEI_TIMEZONE = timezone(timedelta(hours=8))
+_case_id_locks = defaultdict(asyncio.Lock)
+_LEGACY_CASE_ID_RE = re.compile(r"裁判字號\s*[：:]\s*(?P<roc_year>\d{3})(?P<sequence>\d{4,9})(?!\d)")
 
 
 def timestr_to_seconds(timestr: str) -> int:
@@ -149,34 +192,230 @@ def guess_role(guild: discord.Guild, role_name: str):
     return None
 
 
-async def get_case_id(guild: discord.Guild) -> int:
-    channel_id = get_server_config(guild.id, "MODERATION_MESSAGE_CHANNEL_ID")
-    channel = guild.get_channel(channel_id)
-    if channel is None:
-        return int(f"{current_roc_year()}0001")
-
-    current_year = current_roc_year()
-
-    async for message in channel.history(limit=25):
-        m = re.search(r"裁判字號：\s*(\d{7})", message.content)
-        if not m:
-            continue
-
-        case_id = m.group(1)
-        case_year = int(case_id[:3])
-        case_no = int(case_id[3:])
-
-        if case_year != current_year:
-            return int(f"{current_year}0001")
-
-        return int(f"{current_year}{case_no + 1:04d}")
-
-    # 完全沒找到任何裁判字號
-    return int(f"{current_year}0001")
+def _taipei_now() -> datetime:
+    return datetime.now(TAIPEI_TIMEZONE)
 
 
 def current_roc_year() -> int:
-    return datetime.now().year - 1911
+    return _taipei_now().year - 1911
+
+
+def default_moderation_announcement_config() -> dict[str, str]:
+    return {
+        "template": DEFAULT_MODERATION_ANNOUNCEMENT_TEMPLATE,
+        "case_id_format": DEFAULT_MODERATION_CASE_ID_FORMAT,
+    }
+
+
+def _parse_case_id_format(case_id_format: str) -> list[tuple[str, str | None, str, str | None]]:
+    if not isinstance(case_id_format, str):
+        raise ValueError("裁判字號格式必須是文字。")
+    case_id_format = case_id_format.strip()
+    if not case_id_format:
+        raise ValueError("裁判字號格式不得為空。")
+    if len(case_id_format) > 100:
+        raise ValueError("裁判字號格式不得超過 100 字。")
+
+    try:
+        parsed = list(string.Formatter().parse(case_id_format))
+    except ValueError as error:
+        raise ValueError(f"裁判字號格式無效：{error}") from error
+
+    fields = []
+    for _, field_name, format_spec, conversion in parsed:
+        if field_name is None:
+            continue
+        if field_name not in {"year", "roc_year", "sequence"}:
+            raise ValueError(f"不支援的裁判字號變數 `{{{field_name}}}`。")
+        if conversion is not None:
+            raise ValueError("裁判字號格式不支援 `!` 轉換。")
+        if field_name == "sequence":
+            if format_spec not in {"", "d"} and not re.fullmatch(r"0[1-9]d", format_spec):
+                raise ValueError("sequence 只支援 `{sequence}`、`{sequence:d}` 或 `{sequence:04d}` 這類補零格式。")
+        elif format_spec not in {"", "d"}:
+            raise ValueError(f"{field_name} 只支援空白格式或 `:d`。")
+        fields.append(field_name)
+    if "sequence" not in fields:
+        raise ValueError("裁判字號格式必須包含 `{sequence}`。")
+    return parsed
+
+
+def format_case_id(case_id_format: str, year: int, sequence: int) -> str:
+    _parse_case_id_format(case_id_format)
+    try:
+        return case_id_format.format(
+            year=int(year),
+            roc_year=int(year) - 1911,
+            sequence=int(sequence),
+        )
+    except (KeyError, ValueError) as error:
+        raise ValueError(f"無法產生裁判字號：{error}") from error
+
+
+def _compile_case_id_regex(case_id_format: str) -> re.Pattern:
+    parsed = _parse_case_id_format(case_id_format)
+    pattern_parts = []
+    seen_fields = set()
+    for literal, field_name, format_spec, _ in parsed:
+        pattern_parts.append(re.escape(literal))
+        if field_name is None:
+            continue
+        if field_name in seen_fields:
+            pattern_parts.append(f"(?P={field_name})")
+            continue
+        seen_fields.add(field_name)
+        if field_name == "year":
+            field_pattern = r"\d{4}"
+        elif field_name == "roc_year":
+            field_pattern = r"\d{3,4}"
+        else:
+            width_match = re.fullmatch(r"0([1-9])d", format_spec or "")
+            minimum_width = int(width_match.group(1)) if width_match else 1
+            field_pattern = rf"\d{{{minimum_width},9}}"
+        pattern_parts.append(f"(?P<{field_name}>{field_pattern})")
+    return re.compile(r"(?<!\d)" + "".join(pattern_parts) + r"(?!\d)")
+
+
+def normalize_moderation_announcement_config(value) -> dict[str, str]:
+    defaults = default_moderation_announcement_config()
+    raw = value if isinstance(value, dict) else {}
+    template = raw.get("template", defaults["template"])
+    case_id_format = raw.get("case_id_format", defaults["case_id_format"])
+    template = str(template if template is not None else defaults["template"])
+    case_id_format = str(case_id_format if case_id_format is not None else defaults["case_id_format"]).strip()
+    if not template.strip():
+        raise ValueError("懲處公告模板不得為空。")
+    if len(template) > 4000:
+        raise ValueError("懲處公告模板不得超過 4000 字。")
+    try:
+        validate_embed_template(template, MODERATION_TEMPLATE_VARIABLES)
+    except EmbedTemplateSyntaxError as error:
+        raise ValueError(f"懲處公告模板無效：{error}") from error
+    _parse_case_id_format(case_id_format)
+    _, extracted = extract_embed_tokens(template)
+    if len(extracted["fields"]) > 25:
+        raise ValueError("懲處公告模板最多只能包含 25 個 Embed 欄位。")
+    return {"template": template, "case_id_format": case_id_format}
+
+
+def get_moderation_announcement_config(guild_id: int) -> dict[str, str]:
+    raw = get_server_config(guild_id, MODERATION_ANNOUNCEMENT_CONFIG_KEY, {})
+    try:
+        return normalize_moderation_announcement_config(raw)
+    except ValueError:
+        return default_moderation_announcement_config()
+
+
+def _message_case_texts(message: discord.Message) -> list[str]:
+    texts = [str(getattr(message, "content", "") or "")]
+    for embed in getattr(message, "embeds", []) or []:
+        data = embed.to_dict()
+        texts.extend(
+            str(value)
+            for value in (
+                data.get("title"),
+                data.get("description"),
+                data.get("author", {}).get("name"),
+                data.get("footer", {}).get("text"),
+            )
+            if value
+        )
+        for field in data.get("fields", []):
+            if field.get("name"):
+                texts.append(str(field["name"]))
+            if field.get("value"):
+                texts.append(str(field["value"]))
+    return texts
+
+
+def _case_candidates_from_message(message: discord.Message, case_id_format: str) -> set[tuple[int, int]]:
+    format_regex = _compile_case_id_regex(case_id_format)
+    created_at = getattr(message, "created_at", _taipei_now())
+    if created_at.tzinfo is None:
+        created_at = created_at.replace(tzinfo=timezone.utc)
+    message_year = created_at.astimezone(TAIPEI_TIMEZONE).year
+    candidates = set()
+
+    for text in _message_case_texts(message):
+        legacy_matches = list(_LEGACY_CASE_ID_RE.finditer(text))
+        if case_id_format == DEFAULT_MODERATION_CASE_ID_FORMAT and legacy_matches:
+            matches = legacy_matches
+            legacy_only = True
+        else:
+            matches = list(format_regex.finditer(text))
+            legacy_only = False
+        for match in matches:
+            groups = match.groupdict()
+            if legacy_only:
+                year = int(groups["roc_year"]) + 1911
+            elif groups.get("year"):
+                year = int(groups["year"])
+            elif groups.get("roc_year"):
+                year = int(groups["roc_year"]) + 1911
+            else:
+                year = message_year
+            candidates.add((year, int(groups["sequence"])))
+        if not legacy_only:
+            for match in legacy_matches:
+                candidates.add((int(match.group("roc_year")) + 1911, int(match.group("sequence"))))
+    return candidates
+
+
+async def _find_previous_case(channel: discord.TextChannel, guild: discord.Guild, case_id_format: str):
+    try:
+        permissions = channel.permissions_for(guild.me)
+        if not permissions.read_message_history:
+            return None
+        async for message in channel.history(limit=1000):
+            candidates = _case_candidates_from_message(message, case_id_format)
+            if len(candidates) == 1:
+                return next(iter(candidates))
+            if len(candidates) > 1:
+                continue
+    except (discord.Forbidden, discord.HTTPException, AttributeError):
+        return None
+    return None
+
+
+def _fallback_case_state(guild_id: int, current_year: int) -> tuple[int, int]:
+    raw = get_server_config(guild_id, MODERATION_CASE_STATE_KEY, {})
+    if not isinstance(raw, dict):
+        return current_year, 0
+    try:
+        year = int(raw.get("year", current_year))
+        sequence = max(0, int(raw.get("sequence", 0)))
+    except (TypeError, ValueError):
+        return current_year, 0
+    return (year, sequence) if year == current_year else (current_year, 0)
+
+
+async def _next_case_components(
+    guild: discord.Guild,
+    channel: Optional[discord.TextChannel],
+    *,
+    case_id_format: Optional[str] = None,
+) -> tuple[int, int]:
+    current_year = _taipei_now().year
+    if case_id_format is None:
+        case_id_format = get_moderation_announcement_config(guild.id)["case_id_format"]
+    previous = await _find_previous_case(channel, guild, case_id_format) if channel else None
+    if previous is not None:
+        previous_year, previous_sequence = previous
+        return (current_year, previous_sequence + 1) if previous_year == current_year else (current_year, 1)
+    _, fallback_sequence = _fallback_case_state(guild.id, current_year)
+    return current_year, fallback_sequence + 1
+
+
+async def get_case_id(guild: discord.Guild) -> str:
+    channel_id = get_server_config(guild.id, "MODERATION_MESSAGE_CHANNEL_ID")
+    channel = guild.get_channel(channel_id) if channel_id else None
+    config_value = get_moderation_announcement_config(guild.id)
+    year, sequence = await _next_case_components(
+        guild,
+        channel,
+        case_id_format=config_value["case_id_format"],
+    )
+    return format_case_id(config_value["case_id_format"], year, sequence)
 
 
 def check_member_hierarchy(
@@ -323,20 +562,86 @@ def _split_action_chunks(action: str) -> list[str]:
     return [a.strip() for a in action.split(",") if a.strip()]
 
 
+_CUSTOM_ACTION_ARGUMENT_RE = re.compile(r"\{([1-9])(?::([^{}]*))?\}")
+
+
+def _split_custom_action_tokens(value: str) -> list[str]:
+    lexer = shlex.shlex(value, posix=True)
+    lexer.whitespace_split = True
+    lexer.commenters = ""
+    lexer.quotes = '"'
+    return list(lexer)
+
+
+def _quote_custom_action_argument(value: str) -> str:
+    escaped = value.replace("\\", "\\\\").replace('"', '\\"')
+    return f'"{escaped}"'
+
+
+def _custom_action_argument_count(template: str) -> int:
+    matches = list(_CUSTOM_ACTION_ARGUMENT_RE.finditer(template))
+    indexes = sorted({int(match.group(1)) for match in matches})
+    if indexes and indexes != list(range(1, indexes[-1] + 1)):
+        raise ValueError("自訂指令參數必須從 `{1}` 開始連續編號。")
+    for match in matches:
+        fallback = match.group(2)
+        if fallback is not None and "," in fallback:
+            raise ValueError("自訂指令參數的 fallback 不可包含逗號；逗號保留為動作分隔符。")
+    malformed = re.search(r"\{(?:0|[1-9]\d+)(?::[^{}]*)?\}", template)
+    remaining = _CUSTOM_ACTION_ARGUMENT_RE.sub("", template)
+    if malformed or re.search(r"\{\d", remaining):
+        raise ValueError("自訂指令參數只支援 `{1}` 至 `{9}`。")
+    return indexes[-1] if indexes else 0
+
+
+def _substitute_custom_action_arguments(template: str, args: list[str]) -> str:
+    argument_count = _custom_action_argument_count(template)
+    if len(args) > argument_count:
+        raise ValueError(f"自訂指令最多接受 {argument_count} 個參數，但收到 {len(args)} 個。")
+
+    def replace_argument(match: re.Match) -> str:
+        index = int(match.group(1))
+        if index <= len(args):
+            value = args[index - 1]
+            return _quote_custom_action_argument(value) if any(char.isspace() for char in value) else value
+        fallback = match.group(2)
+        if fallback is not None:
+            return _quote_custom_action_argument(fallback) if any(char.isspace() for char in fallback) else fallback
+        raise ValueError(f"自訂指令缺少第 {index} 個必要參數 `{{{index}}}`。")
+
+    return _CUSTOM_ACTION_ARGUMENT_RE.sub(replace_argument, template)
+
+
+def _custom_action_sample_invocation(alias_name: str, template: str) -> str:
+    argument_count = _custom_action_argument_count(template)
+    if argument_count == 0:
+        return alias_name
+    return alias_name + " " + " ".join("1m" for _ in range(argument_count))
+
+
 def _expand_custom_action_aliases(action: str, custom_actions: dict[str, str]) -> list[str]:
     alias_map = {k.lower(): v for k, v in custom_actions.items()}
 
     def expand_chunk(chunk: str, chain: list[str]) -> list[str]:
-        parts = chunk.split(" ", 1)
-        cmd_name = parts[0].strip().lower() if parts else ""
-        # 自訂別名僅在「單獨一個 token」時展開，避免干擾原生指令參數
-        if len(parts) == 1 and cmd_name in alias_map:
+        first_token = chunk.split(maxsplit=1)[0].strip().lower() if chunk.strip() else ""
+        if first_token in alias_map:
+            try:
+                parts = _split_custom_action_tokens(chunk)
+            except ValueError as error:
+                raise ValueError(f"自訂指令參數引號無效：{error}") from error
+            cmd_name = parts[0].lower() if parts else ""
             if cmd_name in chain:
                 raise ValueError(f"自訂指令循環引用：{' -> '.join(chain + [cmd_name])}")
+            rendered = _substitute_custom_action_arguments(alias_map[cmd_name], parts[1:])
             expanded = []
-            for sub in _split_action_chunks(alias_map[cmd_name]):
+            for sub in _split_action_chunks(rendered):
                 expanded.extend(expand_chunk(sub, chain + [cmd_name]))
             return expanded
+        if chain and ("'" in chunk or '"' in chunk):
+            try:
+                return [" ".join(_split_custom_action_tokens(chunk))]
+            except ValueError as error:
+                raise ValueError(f"自訂指令展開後的引號無效：{error}") from error
         return [chunk]
 
     expanded_actions = []
@@ -412,7 +717,13 @@ def _suggest_shorthand_action(action: str) -> tuple[str | None, str | None]:
     return ", ".join(normalized_chunks), confirmation
 
 
-def analyze_action_string(action: str, guild_id: Optional[int] = None, *, infer_shorthand: bool = True) -> dict:
+def analyze_action_string(
+    action: str,
+    guild_id: Optional[int] = None,
+    *,
+    infer_shorthand: bool = True,
+    custom_actions_override: Optional[dict[str, str]] = None,
+) -> dict:
     raw_action = str(action or "").strip()
     result = {
         "valid": False,
@@ -436,7 +747,12 @@ def analyze_action_string(action: str, guild_id: Optional[int] = None, *, infer_
     if infer_shorthand:
         suggested, confirmation_or_error = _suggest_shorthand_action(raw_action)
         if suggested is not None:
-            analyzed = analyze_action_string(suggested, guild_id, infer_shorthand=False)
+            analyzed = analyze_action_string(
+                suggested,
+                guild_id,
+                infer_shorthand=False,
+                custom_actions_override=custom_actions_override,
+            )
             if not analyzed["valid"]:
                 return analyzed
             analyzed["requires_confirmation"] = True
@@ -446,7 +762,11 @@ def analyze_action_string(action: str, guild_id: Optional[int] = None, *, infer_
             result["error"] = confirmation_or_error
             return result
 
-    custom_actions = _load_custom_action_strings(guild_id)
+    custom_actions = (
+        custom_actions_override
+        if custom_actions_override is not None
+        else _load_custom_action_strings(guild_id)
+    )
     try:
         actions = _expand_custom_action_aliases(raw_action, custom_actions)
     except ValueError as error:
@@ -697,11 +1017,19 @@ async def do_action_str(action: str, guild: Optional[discord.Guild] = None, user
         return [f"錯誤：{e}"]
     if len(actions) > 5:
         return ["錯誤：一次只能執行最多5個動作。"]
+    validation = analyze_action_string(
+        ", ".join(actions),
+        infer_shorthand=False,
+        custom_actions_override={},
+    )
+    if not validation["valid"]:
+        return [f"錯誤：{validation['error']}"]
     logs = []
     last_reason = "管理執行"
     actions_json = []
     for a in actions:
         cmd = a.split(" ")
+        cmd[0] = cmd[0].lower()
         if cmd[0] == "ban":
             # ban <delete_messages> <duration> <reason>
             if len(cmd) == 1:
@@ -883,8 +1211,174 @@ async def do_action_str(action: str, guild: Optional[discord.Guild] = None, user
     return logs
 
 
+def _entity_name(entity, fallback: str) -> str:
+    return str(
+        getattr(entity, "display_name", None)
+        or getattr(entity, "name", None)
+        or fallback
+    )
+
+
+def _entity_avatar_url(entity) -> str:
+    avatar = getattr(entity, "display_avatar", None)
+    return str(getattr(avatar, "url", "") or "")
+
+
+def build_moderation_template_values(
+    guild: discord.Guild,
+    user,
+    moderator,
+    *,
+    reason: str,
+    action_text: str,
+    case_id: str,
+    reported_message: str = "",
+    report_context: str = "",
+    ai_note: str = "",
+) -> dict[str, str]:
+    user_name = _entity_name(user, "用戶")
+    moderator_name = _entity_name(moderator, "系統自動") if moderator else "系統自動"
+    return {
+        "user": str(getattr(user, "mention", user_name)),
+        "user_name": user_name,
+        "user_id": str(getattr(user, "id", "")),
+        "user_avatar": _entity_avatar_url(user),
+        "moderator": str(getattr(moderator, "mention", moderator_name)) if moderator else "系統自動",
+        "moderator_name": moderator_name,
+        "moderator_id": str(getattr(moderator, "id", "")) if moderator else "",
+        "moderator_avatar": _entity_avatar_url(moderator) if moderator else "",
+        "reason": str(reason or "無"),
+        "action": str(action_text or "無"),
+        "case_id": str(case_id),
+        "guild": str(getattr(guild, "name", "伺服器")),
+        "guild_id": str(getattr(guild, "id", "")),
+        "guild_icon": str(getattr(getattr(guild, "icon", None), "url", "") or ""),
+        "reported_message": str(reported_message or ""),
+        "report_context": str(report_context or ""),
+        "ai_note": str(ai_note or ""),
+    }
+
+
+async def render_moderation_announcement(
+    config_value: dict,
+    values: dict[str, str],
+) -> tuple[str | None, discord.Embed | None]:
+    normalized = normalize_moderation_announcement_config(config_value)
+    content_template, extracted = extract_embed_tokens(normalized["template"])
+
+    async def resolver(value: str) -> str:
+        rendered = str(value)
+        for key in MODERATION_TEMPLATE_VARIABLES:
+            rendered = rendered.replace(f"{{{key}}}", str(values.get(key, "")))
+        return rendered
+
+    if extracted["color"] is not None:
+        resolved_color = (await resolver(extracted["color"])).strip()
+        if resolved_color and parse_embed_color(resolved_color) is None:
+            raise ValueError("Embed 顏色必須是 0 到 FFFFFF 的十六進位色碼。")
+
+    content = (await resolver(content_template)).strip() or None
+    embed = await build_embed_from_tokens(
+        extracted,
+        resolver,
+        now=_taipei_now(),
+    )
+    validate_embed_output(content, embed)
+    return content, embed
+
+
+async def preview_moderation_announcement(
+    guild: discord.Guild,
+    *,
+    config_value: Optional[dict] = None,
+    user=None,
+    moderator=None,
+    reason: str = "違規原因範例",
+    action_text: str = "禁言 10 分鐘",
+    reported_message: str = "",
+    report_context: str = "",
+    ai_note: str = "",
+) -> tuple[str | None, discord.Embed | None, str]:
+    normalized = normalize_moderation_announcement_config(
+        config_value if config_value is not None else get_moderation_announcement_config(guild.id)
+    )
+    channel_id = get_server_config(guild.id, "MODERATION_MESSAGE_CHANNEL_ID")
+    channel = guild.get_channel(channel_id) if channel_id else None
+    year, sequence = await _next_case_components(
+        guild,
+        channel,
+        case_id_format=normalized["case_id_format"],
+    )
+    case_id = format_case_id(normalized["case_id_format"], year, sequence)
+    sample_user = user or getattr(guild, "me", None)
+    sample_moderator = moderator or getattr(guild, "me", None)
+    values = build_moderation_template_values(
+        guild,
+        sample_user,
+        sample_moderator,
+        reason=reason,
+        action_text=action_text,
+        case_id=case_id,
+        reported_message=reported_message,
+        report_context=report_context,
+        ai_note=ai_note,
+    )
+    content, embed = await render_moderation_announcement(normalized, values)
+    return content, embed, case_id
+
+
+async def send_moderation_announcement(
+    guild: discord.Guild,
+    channel: discord.TextChannel,
+    user,
+    moderator,
+    *,
+    reason: str,
+    action_text: str,
+    reported_message: str = "",
+    report_context: str = "",
+    ai_note: str = "",
+) -> tuple[discord.Message, str]:
+    async with _case_id_locks[guild.id]:
+        config_value = get_moderation_announcement_config(guild.id)
+        year, sequence = await _next_case_components(
+            guild,
+            channel,
+            case_id_format=config_value["case_id_format"],
+        )
+        case_id = format_case_id(config_value["case_id_format"], year, sequence)
+        values = build_moderation_template_values(
+            guild,
+            user,
+            moderator,
+            reason=reason,
+            action_text=action_text,
+            case_id=case_id,
+            reported_message=reported_message,
+            report_context=report_context,
+            ai_note=ai_note,
+        )
+        content, embed = await render_moderation_announcement(config_value, values)
+        sent_message = await channel.send(
+            content=content,
+            embed=embed,
+            allowed_mentions=discord.AllowedMentions(users=True, roles=False, everyone=False),
+        )
+        set_server_config(
+            guild.id,
+            MODERATION_CASE_STATE_KEY,
+            {"year": year, "sequence": sequence},
+        )
+        return sent_message, case_id
+
+
 async def moderation_message_settings(interaction: Optional[discord.Interaction], user: discord.Member, moderator: discord.Member, actions: list, direct: bool = False, guild: Optional[discord.Guild] = None):
-    # generate message
+    resolved_guild = guild if guild else (interaction.guild if interaction else None)
+    if resolved_guild is None:
+        if interaction:
+            await interaction.followup.send("此功能只能在伺服器中使用。", ephemeral=True)
+        return
+
     action_texts = []
     for action in actions:
         if action["action"] == "ban":
@@ -905,105 +1399,146 @@ async def moderation_message_settings(interaction: Optional[discord.Interaction]
         elif action["action"] == "custom":
             action_texts.append(action.get("custom_action", "無"))
     action_text = "+".join(action_texts) if action_texts else "無"
-    # get reason
-    reason = None
+    reason = "無"
     for action in actions:
         if 'reason' in action:
-            reason = action['reason']
+            reason = action['reason'] or "無"
             break
-    async def generate_message():
-        resolved_guild = guild if guild else (interaction.guild if interaction else None)
-        case_id = await get_case_id(resolved_guild) if resolved_guild else f"{current_roc_year()}0001"
-        executor_mention = moderator.mention if moderator else "系統自動"
-        return f"""
-### ⛔ 違規處分
-> - 被處分者：{user.mention}
-> - 處分原因：{reason}
-> - 處分結果：{action_text}
-> - 裁判字號：{case_id}
-> - 處分執行：{executor_mention}
-"""
 
-    async def send_message():
-        nonlocal guild
-        if interaction:
-            guild = interaction.guild
-        channel_id = get_server_config(guild.id, "MODERATION_MESSAGE_CHANNEL_ID")
+    async def render_preview():
+        content, announcement_embed, _ = await preview_moderation_announcement(
+            resolved_guild,
+            user=user,
+            moderator=moderator,
+            reason=reason,
+            action_text=action_text,
+        )
+        return content, announcement_embed
+
+    async def send_feedback(target_interaction: discord.Interaction, message: str):
+        if target_interaction.response.is_done():
+            await target_interaction.followup.send(message, ephemeral=True)
+        else:
+            await target_interaction.response.send_message(message, ephemeral=True)
+
+    async def send_message(feedback_interaction: Optional[discord.Interaction] = None):
+        channel_id = get_server_config(resolved_guild.id, "MODERATION_MESSAGE_CHANNEL_ID")
         if channel_id is None:
-            if interaction:
-                await interaction.followup.send("伺服器未設定公告頻道，請先設定後再嘗試。", ephemeral=True)
+            if feedback_interaction:
+                await send_feedback(feedback_interaction, "伺服器未設定公告頻道，請先設定後再嘗試。")
             return
-        channel = guild.get_channel(channel_id)
+        channel = resolved_guild.get_channel(channel_id)
         if channel is None:
-            if interaction:
-                await interaction.followup.send("找不到公告頻道，請確認頻道是否存在。", ephemeral=True)
+            if feedback_interaction:
+                await send_feedback(feedback_interaction, "找不到公告頻道，請確認頻道是否存在。")
             return
         try:
-            await channel.send(await generate_message())
-            if interaction:
-                await interaction.followup.send("已發送公告到公告頻道。", ephemeral=True)
-            log(f"已發送公告到 {channel.name} 頻道。", module_name="Moderate", guild=guild)
+            _, case_id = await send_moderation_announcement(
+                resolved_guild,
+                channel,
+                user,
+                moderator,
+                reason=reason,
+                action_text=action_text,
+            )
+            if feedback_interaction:
+                await send_feedback(feedback_interaction, f"已發送公告到公告頻道；裁判字號：`{case_id}`。")
+            log(f"已發送公告到 {channel.name} 頻道。", module_name="Moderate", guild=resolved_guild)
         except discord.Forbidden:
-            if interaction:
-                await interaction.followup.send("無法在公告頻道發送訊息，機器人缺少權限。", ephemeral=True)
-            log(f"無法在公告頻道發送訊息，機器人缺少權限。", level=logging.ERROR, module_name="Moderate", guild=guild)
+            if feedback_interaction:
+                await send_feedback(feedback_interaction, "無法在公告頻道發送訊息，機器人缺少權限。")
+            log("無法在公告頻道發送訊息，機器人缺少權限。", level=logging.ERROR, module_name="Moderate", guild=resolved_guild)
         except Exception as e:
-            if interaction:
-                await interaction.followup.send(f"發送公告時發生錯誤：{e}", ephemeral=True)
-            log(f"發送公告時發生錯誤：{e}", level=logging.ERROR, module_name="Moderate", guild=guild)
-    embed = discord.Embed(title="公告設定", color=0xff0000)
-    embed.add_field(name="公告內容", value="```\n" + await generate_message() + "\n```", inline=False)
+            if feedback_interaction:
+                await send_feedback(feedback_interaction, f"發送公告時發生錯誤：{e}")
+            log(f"發送公告時發生錯誤：{e}", level=logging.ERROR, module_name="Moderate", guild=resolved_guild)
+
     class MessageButtons(discord.ui.View):
-        def __init__(self):
-            super().__init__()
-        
+        def __init__(self, owner_id: int):
+            super().__init__(timeout=300)
+            self.owner_id = owner_id
+
+        async def interaction_check(self, component_interaction: discord.Interaction) -> bool:
+            if component_interaction.user.id == self.owner_id:
+                return True
+            await component_interaction.response.send_message("只有開啟預覽的管理員可以操作。", ephemeral=True)
+            return False
+
         @discord.ui.button(label="更改原因", style=discord.ButtonStyle.primary, row=0)
-        async def change_reason_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        async def change_reason_button(self, component_interaction: discord.Interaction, button: discord.ui.Button):
+            parent_view = self
+
             class ReasonModal(discord.ui.Modal, title="更改原因"):
-                nonlocal reason
-                reason = discord.ui.TextInput(label="處分原因", placeholder="請輸入處分原因", required=True, max_length=100)
-                async def on_submit(self, interaction: discord.Interaction):
+                reason_input = discord.ui.TextInput(
+                    label="處分原因",
+                    placeholder="請輸入處分原因",
+                    default=str(reason),
+                    required=True,
+                    max_length=100,
+                )
+
+                async def on_submit(self, modal_interaction: discord.Interaction):
                     nonlocal reason
-                    if not interaction.user.guild_permissions.administrator:
-                        await interaction.response.send_message("你沒有權限執行此操作。", ephemeral=True)
-                        return
-                    reason = self.reason.value
+                    reason = self.reason_input.value
                     for action in actions:
                         if 'reason' in action:
                             action['reason'] = reason
-                    embed.set_field_at(0, name="公告內容", value="```\n" + await generate_message() + "\n```", inline=False)
-                    await interaction.response.edit_message(embed=embed, view=self.view)
-            await interaction.response.send_modal(ReasonModal())
-                    
+                    content, announcement_embed = await render_preview()
+                    await modal_interaction.response.edit_message(
+                        content=content,
+                        embed=announcement_embed,
+                        view=parent_view,
+                    )
+            await component_interaction.response.send_modal(ReasonModal())
+
         @discord.ui.button(label="更改結果", style=discord.ButtonStyle.primary, row=0)
-        async def change_actions_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        async def change_actions_button(self, component_interaction: discord.Interaction, button: discord.ui.Button):
+            parent_view = self
+
             class ActionModal(discord.ui.Modal, title="更改結果"):
-                nonlocal action_text
-                new_actions = discord.ui.TextInput(label="處分結果", placeholder="請輸入處分結果", required=True, max_length=200)
-                async def on_submit(self, interaction: discord.Interaction):
+                new_actions = discord.ui.TextInput(
+                    label="處分結果",
+                    placeholder="請輸入處分結果",
+                    default=action_text,
+                    required=True,
+                    max_length=200,
+                )
+
+                async def on_submit(self, modal_interaction: discord.Interaction):
                     nonlocal action_text
-                    if not interaction.user.guild_permissions.administrator:
-                        await interaction.response.send_message("你沒有權限執行此操作。", ephemeral=True)
-                        return
                     action_text = self.new_actions.value
-                    embed.set_field_at(0, name="公告內容", value="```\n" + await generate_message() + "\n```", inline=False)
-                    await interaction.response.edit_message(embed=embed, view=self.view)
-            await interaction.response.send_modal(ActionModal())
-        
+                    content, announcement_embed = await render_preview()
+                    await modal_interaction.response.edit_message(
+                        content=content,
+                        embed=announcement_embed,
+                        view=parent_view,
+                    )
+            await component_interaction.response.send_modal(ActionModal())
+
         @discord.ui.button(label="確認並發送", style=discord.ButtonStyle.success, row=1)
-        async def confirm_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-            if not interaction.user.guild_permissions.administrator:
-                await interaction.response.send_message("你沒有權限執行此操作。", ephemeral=True)
-                return
+        async def confirm_button(self, component_interaction: discord.Interaction, button: discord.ui.Button):
             self.stop()
-            # send message to channel
-            await send_message()
-    
+            await component_interaction.response.defer(ephemeral=True)
+            await send_message(component_interaction)
+            try:
+                await component_interaction.message.edit(view=None)
+            except discord.HTTPException:
+                pass
+
     if direct:
-        await send_message()
-    else:
-        if interaction:
-            await interaction.followup.send(embed=embed, view=MessageButtons(), ephemeral=True)
+        await send_message(interaction)
+    elif interaction:
+        try:
+            content, announcement_embed = await render_preview()
+            await interaction.followup.send(
+                content=content,
+                embed=announcement_embed,
+                view=MessageButtons(interaction.user.id),
+                ephemeral=True,
+                allowed_mentions=discord.AllowedMentions(users=True, roles=False, everyone=False),
+            )
+        except Exception as error:
+            await interaction.followup.send(f"無法產生公告預覽：{error}", ephemeral=True)
             
 
 @app_commands.guild_only()
@@ -1558,7 +2093,103 @@ class Moderate(commands.Cog):
             await interaction.followup.send("機器人在該頻道沒有發送訊息的權限，請先調整權限後再嘗試。")
             return
         set_server_config(interaction.guild.id, "MODERATION_MESSAGE_CHANNEL_ID", channel.id)
-        await interaction.followup.send(f"已設定懲處公告頻道為 {channel.mention}。")
+        warning = ""
+        if not permissions.read_message_history:
+            warning = (
+                "\n⚠️ 機器人缺少「讀取訊息歷史」權限；仍已保存頻道，"
+                "但跨機器人裁判字號只能使用本機備援狀態。"
+            )
+        await interaction.followup.send(f"已設定懲處公告頻道為 {channel.mention}。{warning}")
+
+    @app_commands.command(name=app_commands.locale_str("moderation-message-format"), description="設定懲處公告模板與裁判字號格式")
+    @app_commands.default_permissions(administrator=True)
+    @app_commands.allowed_installs(guilds=True, users=False)
+    @app_commands.allowed_contexts(guilds=True, dms=False, private_channels=False)
+    async def set_moderation_message_format(self, interaction: discord.Interaction):
+        guild = interaction.guild
+        if guild is None:
+            await interaction.response.send_message("此指令只能在伺服器中使用。", ephemeral=True)
+            return
+        current = get_moderation_announcement_config(guild.id)
+        owner_id = interaction.user.id
+
+        class ResetFormatView(discord.ui.View):
+            def __init__(self):
+                super().__init__(timeout=300)
+
+            async def interaction_check(self, reset_interaction: discord.Interaction) -> bool:
+                if reset_interaction.user.id == owner_id:
+                    return True
+                await reset_interaction.response.send_message("只有原本設定的管理員可以重設。", ephemeral=True)
+                return False
+
+            @discord.ui.button(label="恢復目前預設格式", style=discord.ButtonStyle.danger)
+            async def reset(self, reset_interaction: discord.Interaction, button: discord.ui.Button):
+                defaults = default_moderation_announcement_config()
+                try:
+                    content, announcement_embed, _ = await preview_moderation_announcement(
+                        guild,
+                        config_value=defaults,
+                        user=reset_interaction.user,
+                        moderator=reset_interaction.user,
+                    )
+                except Exception as error:
+                    await reset_interaction.response.send_message(f"無法產生預設預覽：{error}", ephemeral=True)
+                    return
+                set_server_config(guild.id, MODERATION_ANNOUNCEMENT_CONFIG_KEY, defaults)
+                await reset_interaction.response.edit_message(
+                    content=content,
+                    embed=announcement_embed,
+                    view=self,
+                )
+                await reset_interaction.followup.send("已恢復目前的預設公告與裁判字號格式。", ephemeral=True)
+
+        class FormatModal(discord.ui.Modal, title="懲處公告格式"):
+            template_input = discord.ui.TextInput(
+                label="公告模板",
+                style=discord.TextStyle.paragraph,
+                default=current["template"],
+                required=True,
+                max_length=4000,
+            )
+            case_format_input = discord.ui.TextInput(
+                label="裁判字號格式",
+                placeholder="例如 {roc_year}-{sequence:04d}",
+                default=current["case_id_format"],
+                required=True,
+                max_length=100,
+            )
+
+            async def on_submit(self, modal_interaction: discord.Interaction):
+                proposed = {
+                    "template": self.template_input.value,
+                    "case_id_format": self.case_format_input.value,
+                }
+                try:
+                    normalized = normalize_moderation_announcement_config(proposed)
+                    content, announcement_embed, case_id = await preview_moderation_announcement(
+                        guild,
+                        config_value=normalized,
+                        user=modal_interaction.user,
+                        moderator=modal_interaction.user,
+                    )
+                except Exception as error:
+                    await modal_interaction.response.send_message(f"格式無效：{error}", ephemeral=True)
+                    return
+                set_server_config(guild.id, MODERATION_ANNOUNCEMENT_CONFIG_KEY, normalized)
+                await modal_interaction.response.send_message(
+                    f"已儲存懲處公告格式；下個預估裁判字號：`{case_id}`。",
+                    ephemeral=True,
+                )
+                await modal_interaction.followup.send(
+                    content=content,
+                    embed=announcement_embed,
+                    view=ResetFormatView(),
+                    ephemeral=True,
+                    allowed_mentions=discord.AllowedMentions(users=True, roles=False, everyone=False),
+                )
+
+        await interaction.response.send_modal(FormatModal())
 
     @app_commands.command(name=app_commands.locale_str("custom-action-add"), description="新增或更新伺服器自訂管理動作")
     @app_commands.describe(name="自訂指令名稱（例如 ad）", action="要執行的動作字串（例如 mute 1h 在非宣傳區宣傳, smm）")
@@ -1594,7 +2225,22 @@ class Moderate(commands.Cog):
             await interaction.followup.send("每個伺服器最多只能設定 10 個自訂指令。", ephemeral=True)
             return
 
-        analysis = analyze_action_string(action_str, guild.id)
+        test_actions = dict(custom_actions)
+        if existed_key and existed_key != alias_name:
+            test_actions.pop(existed_key, None)
+        test_actions[alias_name] = action_str
+        try:
+            sample_invocation = _custom_action_sample_invocation(alias_name, action_str)
+        except ValueError as error:
+            await interaction.followup.send(f"自訂指令參數無效：{error}", ephemeral=True)
+            return
+        analysis = analyze_action_string(
+            sample_invocation,
+            guild.id,
+            infer_shorthand=False,
+            custom_actions_override=test_actions,
+        )
+        analysis["normalized"] = action_str
         if not analysis["valid"]:
             await interaction.followup.send(
                 embed=build_action_preview_embed(analysis),
@@ -1608,7 +2254,8 @@ class Moderate(commands.Cog):
                 test_actions.pop(existed_key, None)
             test_actions[alias_name] = normalized_action
             try:
-                expanded = _expand_custom_action_aliases(alias_name, test_actions)
+                sample_invocation = _custom_action_sample_invocation(alias_name, normalized_action)
+                expanded = _expand_custom_action_aliases(sample_invocation, test_actions)
             except ValueError as error:
                 return None, f"無法儲存自訂指令：{error}"
             if len(expanded) > 5:

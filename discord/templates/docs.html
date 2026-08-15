@@ -623,6 +623,9 @@
                     <tr><td><code>y!moderate_reply</code> <code>y!mr</code></td><td>對被回覆訊息進行管理</td></tr>
                     <tr><td><code>/action-builder</code></td><td>建立自訂的管理動作組合</td></tr>
                     <tr><td><code>/send-moderation-message</code></td><td>手動發送懲處公告</td></tr>
+                    <tr><td><code>/moderation-message-channel</code></td><td>設定公告頻道；讀取訊息歷史權限可讓裁判字號接續其他機器人的公告</td></tr>
+                    <tr><td><code>/moderation-message-format</code></td><td>編輯、預覽或重設公告模板與裁判字號格式</td></tr>
+                    <tr><td><code>/custom-action-add</code> / <code>remove</code> / <code>list</code></td><td>管理伺服器自訂管理動作</td></tr>
                 </table>
                 <div class="doc-note">
                     <strong>時間格式：</strong>支援 <code>s</code> / <code>秒</code>、<code>m</code> / <code>分鐘</code>、<code>h</code> / <code>小時</code>、<code>d</code> / <code>天</code>、<code>w</code> / <code>週</code>、<code>M</code> / <code>月</code>、<code>y</code> / <code>年</code>，可組合使用如 <code>1d12h</code>。
@@ -652,6 +655,32 @@
                     <code>mute 30m 注意行為, warn {user} 請注意你的發言</code> — 禁言 30 分鐘並公開警告<br>
                     <code>delete_dm 你的訊息已被刪除, mute 1h 違規內容</code> — 刪除訊息 + 私訊通知 + 禁言 1 小時<br>
                     <code>ban 0 0 嚴重違規, smm</code> — 永久封禁並發送懲處公告
+                </div>
+
+                <h3 style="margin-top: 1.5rem; color: var(--text-primary);">自訂管理動作參數</h3>
+                <div class="module-desc">
+                    自訂動作可使用 <code>{1}</code> 至 <code>{9}</code> 取得必要的位置參數，或以 <code>{1:預設值}</code> 提供 fallback。參數必須從 1 連續編號；引號可將含空白文字視為單一參數，逗號仍固定作為動作分隔符。
+                </div>
+                <div class="doc-note">
+                    <code>/custom-action-add name:spam action:mute {1:10m} {2:洗版}, smm</code><br>
+                    呼叫 <code>spam 30m "重複洗版"</code> 會展開成 <code>mute 30m 重複洗版, smm</code>。缺少／多餘參數、循環引用或超過 5 個動作時，整組操作會在執行前取消。
+                </div>
+
+                <h3 style="margin-top: 1.5rem; color: var(--text-primary);">懲處公告模板與 Embed</h3>
+                <div class="module-desc">
+                    未設定時沿用目前的 Markdown 公告。管理員可透過 <code>/moderation-message-format</code> 或網頁面板改成一般文字、單一 Embed 或混合輸出。可用變數包含 <code>{user}</code>、<code>{moderator}</code>、<code>{reason}</code>、<code>{action}</code>、<code>{case_id}</code>、guild 資訊，以及 ReportSystem 的 <code>{reported_message}</code>、<code>{report_context}</code>、<code>{ai_note}</code>。
+                </div>
+                <div class="doc-note">
+                    支援 AutoReply Embed 指令子集：<code>{embedtitle:...}</code>、<code>{embeddescription:...}</code>、<code>{embedfield:名稱:內容}</code>、URL、image、thumbnail、color、author、footer 與 time。管理公告不執行 AutoReply 的反應、條件、延遲、數學或狀態副作用。<br><br>
+                    <code>{embedtitle:⛔ 違規處分}{embeddescription:被處分者：{user} 原因：{reason} 結果：{action}}{embedfield:裁判字號:{case_id}}{embedcolor:ED4245}</code>
+                </div>
+
+                <h3 style="margin-top: 1.5rem; color: var(--text-primary);">裁判字號與多機器人接續</h3>
+                <div class="module-desc">
+                    預設格式為 <code>{roc_year}{sequence:04d}</code>，也可組合 <code>{year}</code>、<code>{roc_year}</code>、<code>{sequence}</code>，例如 <code>CASE-{year}-{sequence:04d}</code>；格式必須包含 sequence。
+                </div>
+                <div class="doc-note">
+                    bot 會由新到舊檢查公告頻道最多 1000 則訊息的純文字，以及 Embed 的標題、描述、欄位、作者與 footer。辨識時先套用目前的字號格式，再相容舊式 <code>裁判字號：1150001</code>；同一則訊息若有互相衝突的多個字號會略過。搜尋不限制發送者，因此能接續其他使用相同格式的機器人。無法讀取或找不到時才使用本機伺服器狀態。不同機器人沒有共用鎖；若同時產生公告仍可能競爭同一號碼，完全避免撞號需要共用資料庫或鎖服務。
                 </div>
             </div>
 

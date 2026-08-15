@@ -962,6 +962,82 @@ body {
 .compound-button.danger { background: var(--danger); }
 .compound-button:disabled { opacity: 0.5; cursor: not-allowed; }
 
+.moderation-template-input {
+    min-height: 15rem;
+    font-family: var(--font-mono, monospace);
+}
+
+.moderation-template-help {
+    line-height: 1.55;
+}
+
+.moderation-announcement-preview {
+    display: flex;
+    flex-direction: column;
+    gap: 0.65rem;
+    margin-top: 0.75rem;
+}
+
+.moderation-announcement-preview.error {
+    color: var(--danger);
+}
+
+.moderation-preview-content {
+    margin: 0;
+    padding: 0.75rem;
+    border-radius: 6px;
+    background: var(--bg-tertiary);
+    color: var(--text-primary);
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+}
+
+.moderation-preview-embed {
+    max-width: 520px;
+    padding: 0.85rem 1rem;
+    border-left: 4px solid var(--accent);
+    border-radius: 4px;
+    background: var(--bg-tertiary);
+    color: var(--text-primary);
+}
+
+.moderation-preview-author,
+.moderation-preview-field-name {
+    font-size: 0.84rem;
+    font-weight: 700;
+}
+
+.moderation-preview-title {
+    margin-top: 0.25rem;
+    font-size: 1rem;
+    font-weight: 700;
+}
+
+.moderation-preview-description,
+.moderation-preview-field-value {
+    margin-top: 0.25rem;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+}
+
+.moderation-preview-field {
+    margin-top: 0.7rem;
+}
+
+.moderation-preview-footer {
+    margin-top: 0.7rem;
+    color: var(--text-muted);
+    font-size: 0.75rem;
+}
+
+.moderation-preview-image {
+    display: block;
+    max-width: 100%;
+    max-height: 320px;
+    margin-top: 0.75rem;
+    border-radius: 4px;
+}
+
 .compound-empty {
     color: var(--text-muted);
     font-size: 0.88rem;

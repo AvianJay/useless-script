@@ -216,6 +216,9 @@ function buildSettingRow(mod, s, value, channels, roles, autoreplyLimit, stickym
         case 'stickymessage_config':
             ctrl.appendChild(buildStickymessageConfigEditor(mod, s, value, channels, stickymessageLimit));
             break;
+        case 'moderation_announcement_config':
+            ctrl.appendChild(buildModerationAnnouncementEditor(mod, s, value));
+            break;
         case 'boolean':
             ctrl.appendChild(buildToggle(mod, s, value));
             break;
@@ -1423,6 +1426,164 @@ function buildCompoundField(labelText, control) {
     row.appendChild(label);
     row.appendChild(control);
     return row;
+}
+
+function buildModerationAnnouncementEditor(mod, s, value) {
+    const defaults = cloneConfig(s.default || {});
+    const config = {
+        template: value && value.template != null ? String(value.template) : String(defaults.template || ''),
+        case_id_format: value && value.case_id_format != null
+            ? String(value.case_id_format)
+            : String(defaults.case_id_format || '{roc_year}{sequence:04d}'),
+    };
+    const container = document.createElement('div');
+    container.className = 'compound-editor moderation-announcement-editor';
+
+    const templateInput = document.createElement('textarea');
+    templateInput.className = 'form-textarea moderation-template-input';
+    templateInput.rows = 12;
+    templateInput.maxLength = 4000;
+    templateInput.value = config.template;
+    container.appendChild(buildCompoundField('公告模板', templateInput));
+
+    const caseFormatInput = document.createElement('input');
+    caseFormatInput.type = 'text';
+    caseFormatInput.className = 'form-input';
+    caseFormatInput.maxLength = 100;
+    caseFormatInput.value = config.case_id_format;
+    caseFormatInput.placeholder = '{roc_year}-{sequence:04d}';
+    container.appendChild(buildCompoundField('裁判字號格式', caseFormatInput));
+
+    const help = document.createElement('div');
+    help.className = 'compound-empty moderation-template-help';
+    help.textContent = '公告變數：{user}、{moderator}、{reason}、{action}、{case_id}、{guild}、{reported_message}、{report_context}、{ai_note}。支援 AutoReply 的 embedtitle、embeddescription、embedfield、embedcolor、圖片、作者、footer 與時間指令。';
+    container.appendChild(help);
+
+    const actions = document.createElement('div');
+    actions.className = 'compound-actions';
+    const previewButton = document.createElement('button');
+    previewButton.type = 'button';
+    previewButton.className = 'compound-button primary';
+    previewButton.textContent = '預覽公告';
+    const resetButton = document.createElement('button');
+    resetButton.type = 'button';
+    resetButton.className = 'compound-button danger';
+    resetButton.textContent = '恢復目前預設';
+    actions.appendChild(previewButton);
+    actions.appendChild(resetButton);
+    container.appendChild(actions);
+
+    const preview = document.createElement('div');
+    preview.className = 'moderation-announcement-preview';
+    container.appendChild(preview);
+
+    function currentConfig() {
+        return {
+            template: templateInput.value,
+            case_id_format: caseFormatInput.value,
+        };
+    }
+
+    function save() {
+        Object.assign(config, currentConfig());
+        debounceSave(mod, s.database_key, cloneConfig(config));
+    }
+
+    function appendTextBlock(text) {
+        if (!text) return;
+        const block = document.createElement('pre');
+        block.className = 'moderation-preview-content';
+        block.textContent = text;
+        preview.appendChild(block);
+    }
+
+    function appendEmbedCard(embed) {
+        if (!embed) return;
+        const card = document.createElement('div');
+        card.className = 'moderation-preview-embed';
+        const color = Number.isFinite(embed.color) ? embed.color : 0x5865F2;
+        card.style.borderLeftColor = '#' + color.toString(16).padStart(6, '0');
+        if (embed.author && embed.author.name) {
+            const author = document.createElement('div');
+            author.className = 'moderation-preview-author';
+            author.textContent = embed.author.name;
+            card.appendChild(author);
+        }
+        if (embed.title) {
+            const title = document.createElement('div');
+            title.className = 'moderation-preview-title';
+            title.textContent = embed.title;
+            card.appendChild(title);
+        }
+        if (embed.description) appendPreviewText(card, embed.description, 'moderation-preview-description');
+        for (const field of (embed.fields || [])) {
+            const fieldWrap = document.createElement('div');
+            fieldWrap.className = 'moderation-preview-field';
+            appendPreviewText(fieldWrap, field.name || '', 'moderation-preview-field-name');
+            appendPreviewText(fieldWrap, field.value || '', 'moderation-preview-field-value');
+            card.appendChild(fieldWrap);
+        }
+        if (embed.image && embed.image.url) {
+            const image = document.createElement('img');
+            image.className = 'moderation-preview-image';
+            image.src = embed.image.url;
+            image.alt = 'Embed image preview';
+            card.appendChild(image);
+        }
+        if (embed.footer && embed.footer.text) {
+            appendPreviewText(card, embed.footer.text, 'moderation-preview-footer');
+        }
+        preview.appendChild(card);
+    }
+
+    function appendPreviewText(parent, text, className) {
+        const element = document.createElement('div');
+        element.className = className;
+        element.textContent = text;
+        parent.appendChild(element);
+    }
+
+    async function renderPreview() {
+        previewButton.disabled = true;
+        preview.textContent = '正在產生預覽...';
+        try {
+            const response = await fetch(`/api/panel/guild/${GUILD_ID}/moderation-announcement-preview`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(currentConfig()),
+            });
+            const data = await response.json();
+            preview.innerHTML = '';
+            if (!response.ok || !data.success) {
+                preview.textContent = data.error || '無法產生預覽。';
+                preview.classList.add('error');
+                return;
+            }
+            preview.classList.remove('error');
+            const caseInfo = document.createElement('div');
+            caseInfo.className = 'compound-empty';
+            caseInfo.textContent = `預估下一個裁判字號：${data.case_id}`;
+            preview.appendChild(caseInfo);
+            appendTextBlock(data.content);
+            appendEmbedCard(data.embed);
+        } catch (error) {
+            preview.textContent = '預覽失敗：' + error.message;
+            preview.classList.add('error');
+        } finally {
+            previewButton.disabled = false;
+        }
+    }
+
+    templateInput.addEventListener('input', save);
+    caseFormatInput.addEventListener('input', save);
+    previewButton.addEventListener('click', renderPreview);
+    resetButton.addEventListener('click', () => {
+        templateInput.value = String(defaults.template || '');
+        caseFormatInput.value = String(defaults.case_id_format || '{roc_year}{sequence:04d}');
+        save();
+        renderPreview();
+    });
+    return container;
 }
 
 function buildCompoundToggle(labelText, checked, onChange) {

@@ -94,6 +94,72 @@ class ActionAnalysisTests(unittest.TestCase):
         self.assertEqual(len(analysis["preview"]), 2)
         self.assertEqual(analysis["normalized"], "spam")
 
+    def test_custom_action_alias_supports_required_and_fallback_arguments(self):
+        custom_actions = {"spam": "mute {1:10m} {2:洗版}, smm"}
+        analysis = Moderate.analyze_action_string(
+            'spam 30m "重複洗版"',
+            custom_actions_override=custom_actions,
+        )
+        self.assertTrue(analysis["valid"])
+        self.assertEqual(len(analysis["preview"]), 2)
+        self.assertIn("禁言 30 分鐘", analysis["preview"][0])
+        self.assertIn("重複洗版", analysis["preview"][0])
+
+    def test_custom_action_alias_uses_fallbacks_when_arguments_are_omitted(self):
+        expanded = Moderate._expand_custom_action_aliases(
+            "spam",
+            {"spam": "mute {1:10m} {2:洗版}, smm"},
+        )
+        self.assertEqual(expanded, ["mute 10m 洗版", "smm"])
+
+    def test_custom_action_alias_rejects_missing_and_extra_arguments(self):
+        with self.assertRaisesRegex(ValueError, "缺少第 1 個必要參數"):
+            Moderate._expand_custom_action_aliases("spam", {"spam": "mute {1}"})
+        with self.assertRaisesRegex(ValueError, "最多接受 1 個參數"):
+            Moderate._expand_custom_action_aliases("spam 10m extra", {"spam": "mute {1}"})
+
+    def test_custom_action_alias_rejects_non_contiguous_parameters(self):
+        with self.assertRaisesRegex(ValueError, "連續編號"):
+            Moderate._custom_action_argument_count("mute {2:10m}")
+
+    def test_custom_action_alias_keeps_apostrophes_as_plain_text(self):
+        expanded = Moderate._expand_custom_action_aliases(
+            "spam 10m don't",
+            {"spam": "mute {1} {2}"},
+        )
+        self.assertEqual(expanded, ["mute 10m don't"])
+
+    def test_custom_action_alias_rejects_malformed_or_out_of_range_placeholders(self):
+        with self.assertRaisesRegex(ValueError, "只支援"):
+            Moderate._custom_action_argument_count("mute {1:")
+        with self.assertRaisesRegex(ValueError, "只支援"):
+            Moderate._custom_action_argument_count("mute {10}")
+
+    def test_parameterized_alias_can_call_another_alias(self):
+        expanded = Moderate._expand_custom_action_aliases(
+            'outer "重複 洗版"',
+            {
+                "outer": "inner 30m {1}",
+                "inner": "mute {1} {2}",
+            },
+        )
+        self.assertEqual(expanded, ["mute 30m 重複 洗版"])
+
+    def test_custom_action_alias_rejects_cycles_and_more_than_five_actions(self):
+        with self.assertRaisesRegex(ValueError, "循環引用"):
+            Moderate._expand_custom_action_aliases(
+                "first",
+                {"first": "second", "second": "first"},
+            )
+        analysis = Moderate.analyze_action_string(
+            "bulk",
+            custom_actions_override={
+                "bulk": "warn 1, warn 2, warn 3, warn 4, warn 5, warn 6",
+            },
+        )
+        self.assertFalse(analysis["valid"])
+        self.assertIn("5 個動作", analysis["error"])
+
     def test_saved_preview_no_longer_repeats_confirmation_question(self):
         analysis = Moderate.analyze_action_string("300")
         embed = Moderate.build_action_preview_embed(analysis, saved=True)
@@ -135,6 +201,13 @@ class ActionExecutionTests(unittest.IsolatedAsyncioTestCase):
             logs = await Moderate.do_action_str("spam")
         self.assertIn("持續秒數: 600秒", logs[0])
         self.assertEqual(logs[1], "刪除訊息")
+
+    async def test_all_actions_are_validated_before_any_side_effect(self):
+        message = SimpleNamespace(reply=AsyncMock(), channel=SimpleNamespace(send=AsyncMock()))
+        logs = await Moderate.do_action_str("warn hi, explode", message=message)
+        self.assertIn("錯誤", logs[0])
+        message.reply.assert_not_awaited()
+        message.channel.send.assert_not_awaited()
 
 
 class ActionConfirmationViewTests(unittest.IsolatedAsyncioTestCase):
@@ -202,6 +275,56 @@ class GuildPanelActionValidationTests(unittest.TestCase):
 
 
 class GuildPanelCompoundSettingsTests(unittest.TestCase):
+    def test_moderation_announcement_schema_round_trip(self):
+        value = {
+            "template": "通知 {user}{embedtitle:裁判字號 {case_id}}",
+            "case_id_format": "CASE-{year}-{sequence:04d}",
+        }
+        coerced = GuildPanel._coerce(
+            value,
+            "moderation_announcement_config",
+            guild_id=1,
+        )
+        serialized = GuildPanel._serialize(
+            coerced,
+            "moderation_announcement_config",
+            guild_id=1,
+        )
+        self.assertEqual(serialized, value)
+
+    def test_moderation_announcement_preview_api_returns_rendered_payload(self):
+        route = GuildPanel.api_moderation_announcement_preview
+        while hasattr(route, "__wrapped__"):
+            route = route.__wrapped__
+
+        guild = SimpleNamespace(id=1)
+        embed = discord.Embed(title="預覽")
+        preview = AsyncMock(return_value=("通知", embed, "CASE-2026-0001"))
+        payload = {
+            "template": "通知{embedtitle:預覽}",
+            "case_id_format": "CASE-{year}-{sequence:04d}",
+        }
+        with GuildPanel.app.test_request_context(json=payload):
+            with (
+                patch.object(GuildPanel.bot, "get_guild", return_value=guild),
+                patch.object(Moderate, "preview_moderation_announcement", new=preview),
+            ):
+                response = route("1")
+
+        body = response.get_json()
+        self.assertTrue(body["success"])
+        self.assertEqual(body["content"], "通知")
+        self.assertEqual(body["embed"]["title"], "預覽")
+        self.assertEqual(body["case_id"], "CASE-2026-0001")
+        preview.assert_awaited_once()
+
+    def test_panel_coroutine_falls_back_when_bot_loop_is_a_sentinel(self):
+        async def sample():
+            return "ok"
+
+        with patch.object(GuildPanel, "bot", SimpleNamespace(loop=SimpleNamespace())):
+            self.assertEqual(GuildPanel._run_panel_coroutine(sample()), "ok")
+
     def test_automod_panel_reads_legacy_flagged_channel_as_new_config(self):
         schema = {
             "AutoModerate": {

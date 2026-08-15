@@ -400,6 +400,7 @@ translations = {
     "kick": "踢出",
     "send-moderation-message": "發送懲處公告",
     "moderation-message-channel": "懲處公告頻道",
+    "moderation-message-format": "懲處公告格式",
     "settings-punishment-notify": "設定-懲罰通知",
     "dsize-leaderboard": "dsize-排行榜",
     "dsize-battle": "dsize-對決",

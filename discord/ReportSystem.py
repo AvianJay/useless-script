@@ -190,25 +190,25 @@ async def send_moderation_message(user: discord.Member, moderator: discord.Membe
     # replace user mentions with blank name to anonymize
     message_content = re.sub(r"<@!?(\d+)>", r"<@\1>", message_content)
     original_action_text = f"\n> - 訊息內容： {message_content}" if not bl else ""
-    # print("[DEBUG] Action Text:", action_text)
-    text = f"""
-### ⛔ 違規處分
-> - 被處分者： {user.mention}{original_action_text}
-> - 處分原因：{reason}
-> - 處分結果：{action_text}
-> - 裁判字號： {await Moderate.get_case_id(moderator.guild)}
-> - 處分執行： {moderator.mention}
-"""
-    if is_ai:
-        text += "\n-# 此處分為 AI 建議的處分。"
-    
+    ai_note = "-# 此處分為 AI 建議的處分。" if is_ai else ""
+
     # Get server-specific moderation channel
     guild_id = moderator.guild.id
     moderation_channel_id = get_server_config(guild_id, "MODERATION_MESSAGE_CHANNEL_ID")
     if moderation_channel_id:
         mod_channel = bot.get_channel(moderation_channel_id)
         if mod_channel:
-            await mod_channel.send(text, allowed_mentions=discord.AllowedMentions(users=True, roles=False, everyone=False))
+            await Moderate.send_moderation_announcement(
+                moderator.guild,
+                mod_channel,
+                user,
+                moderator,
+                reason=reason,
+                action_text=action_text,
+                reported_message=message_content if not bl else "",
+                report_context=original_action_text,
+                ai_note=ai_note,
+            )
 
 
 class doModerationActions(discord.ui.View):

@@ -74,6 +74,18 @@ def _stickymessage_module():
     return importlib.import_module("StickyMessage")
 
 
+def _moderate_module():
+    return importlib.import_module("Moderate")
+
+
+def _run_panel_coroutine(coroutine, *, timeout=15):
+    loop = getattr(bot, "loop", None)
+    is_running = getattr(loop, "is_running", None)
+    if callable(is_running) and is_running():
+        return asyncio.run_coroutine_threadsafe(coroutine, loop).result(timeout=timeout)
+    return asyncio.run(coroutine)
+
+
 def _serialize_fixlink_config(value):
     return _fixlink_module().normalize_fixlink_config(value)
 
@@ -595,6 +607,20 @@ def api_set_settings(guild_id):
                 "error": f"這個伺服器最多可設定 {limit} 則置底訊息；請先移除項目再新增。",
             }), 400
 
+    if setting.get("type") == "moderation_announcement_config":
+        guild = bot.get_guild(gid)
+        if guild is None:
+            return jsonify({"error": "找不到伺服器，無法預覽懲處公告。"}), 400
+        try:
+            _run_panel_coroutine(
+                _moderate_module().preview_moderation_announcement(
+                    guild,
+                    config_value=value,
+                )
+            )
+        except Exception as error:
+            return jsonify({"error": str(error)}), 400
+
     if not set_server_config(gid, key, value):
         return jsonify({"error": "儲存伺服器設定失敗。"}), 500
 
@@ -630,6 +656,32 @@ def api_action_preview(guild_id):
     action = str(payload.get("action") or "")
     feature = str(payload.get("feature") or "")
     return jsonify(_analyze_automod_action(feature, action, int(guild_id)))
+
+
+@app.route("/api/panel/guild/<guild_id>/moderation-announcement-preview", methods=["POST"])
+@_require_auth
+@_require_guild
+def api_moderation_announcement_preview(guild_id):
+    payload = request.get_json(silent=True) or {}
+    guild = bot.get_guild(int(guild_id))
+    if guild is None:
+        return jsonify({"error": "找不到伺服器。"}), 404
+    try:
+        config_value = _moderate_module().normalize_moderation_announcement_config(payload)
+        content, embed, case_id = _run_panel_coroutine(
+            _moderate_module().preview_moderation_announcement(
+                guild,
+                config_value=config_value,
+            )
+        )
+    except Exception as error:
+        return jsonify({"error": str(error)}), 400
+    return jsonify({
+        "success": True,
+        "content": content,
+        "embed": embed.to_dict() if embed else None,
+        "case_id": case_id,
+    })
 
 
 @app.route("/api/panel/guild/<guild_id>/channels")
@@ -767,6 +819,8 @@ def _serialize(value, stype, guild_id=None):
         return _serialize_antibeast_config(value)
     if stype == "stickymessage_config":
         return _serialize_stickymessage_config(value)
+    if stype == "moderation_announcement_config":
+        return _moderate_module().normalize_moderation_announcement_config(value)
     return value
 
 
@@ -797,6 +851,9 @@ def _coerce(value, stype, guild_id=None):
 
     if stype == "stickymessage_config":
         return _coerce_stickymessage_config(value, guild_id=guild_id)
+
+    if stype == "moderation_announcement_config":
+        return _moderate_module().normalize_moderation_announcement_config(value)
 
     if stype == "autoreply_list":
         if not isinstance(value, list):
@@ -1013,8 +1070,16 @@ def _register_all():
         ], description="管理檢舉相關設定", icon="📋")
 
     if "Moderate" in modules:
+        moderate = _moderate_module()
         register_settings("Moderate", "管理系統", [
             {"display": "懲處公告頻道", "description": "自動發送懲處公告的頻道", "database_key": "MODERATION_MESSAGE_CHANNEL_ID", "type": "channel", "default": None},
+            {
+                "display": "懲處公告格式",
+                "description": "編輯公告模板、AutoReply Embed 指令與裁判字號格式",
+                "database_key": moderate.MODERATION_ANNOUNCEMENT_CONFIG_KEY,
+                "type": "moderation_announcement_config",
+                "default": moderate.default_moderation_announcement_config(),
+            },
         ], description="管理懲處相關設定", icon="🔨")
 
     if "ModerationNotify" in modules:
