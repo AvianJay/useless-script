@@ -723,11 +723,11 @@ class DCTWDetailView(discord.ui.LayoutView):
 
 @app_commands.allowed_installs(guilds=True, users=True)
 @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
-class DCTW(commands.GroupCog, name="dctw", description="DCTW 瀏覽器！"):
-    dctw_bot = app_commands.Group(name="bot", description="Bot 相關指令")
-    dctw_server = app_commands.Group(name="server", description="Server 相關指令")
-    dctw_template = app_commands.Group(name="template", description="Template 相關指令")
-    dctw_key = app_commands.Group(name="key", description="管理你的 DCTW API key")
+class DCTW(commands.GroupCog, name=app_commands.locale_str("dctw", i18n_key="cmd.dctw.dctw.root.name"), description=app_commands.locale_str("The DCTW browser!", i18n_key="cmd.dctw.dctw.root.desc")):
+    dctw_bot = app_commands.Group(name=app_commands.locale_str("bot", i18n_key="cmd.dctw.bot.root.name"), description=app_commands.locale_str("Bot commands", i18n_key="cmd.dctw.bot.root.desc"))
+    dctw_server = app_commands.Group(name=app_commands.locale_str("server", i18n_key="cmd.dctw.server.root.name"), description=app_commands.locale_str("Server commands", i18n_key="cmd.dctw.server.root.desc"))
+    dctw_template = app_commands.Group(name=app_commands.locale_str("template", i18n_key="cmd.dctw.template.root.name"), description=app_commands.locale_str("Template commands", i18n_key="cmd.dctw.template.root.desc"))
+    dctw_key = app_commands.Group(name=app_commands.locale_str("key", i18n_key="cmd.dctw.key.root.name"), description=app_commands.locale_str("Manage your DCTW API key", i18n_key="cmd.dctw.key.root.desc"))
 
     def __init__(self, bot_: commands.Bot):
         self.bot = bot_
@@ -1053,17 +1053,17 @@ class DCTW(commands.GroupCog, name="dctw", description="DCTW 瀏覽器！"):
 
         await interaction.followup.send(f"✅ 已對 {resource}:{listing_id} 執行 {action}。", ephemeral=True, allowed_mentions=SAFE_MENTIONS)
 
-    @dctw_key.command(name="set", description="設定你的 DCTW API key")
+    @dctw_key.command(name=app_commands.locale_str("set", i18n_key="cmd.dctw.key.set.name"), description=app_commands.locale_str("Set your DCTW API key", i18n_key="cmd.dctw.key.set.desc"))
     async def key_set(self, interaction: discord.Interaction, api_key: str):
         set_user_data(0, interaction.user.id, USER_KEY_NAME, api_key.strip())
         await interaction.response.send_message("✅ 已儲存你的 DCTW API key。", ephemeral=True, allowed_mentions=SAFE_MENTIONS)
 
-    @dctw_key.command(name="clear", description="清除你的 DCTW API key")
+    @dctw_key.command(name=app_commands.locale_str("clear", i18n_key="cmd.dctw.key.clear.name"), description=app_commands.locale_str("Clear your DCTW API key", i18n_key="cmd.dctw.key.clear.desc"))
     async def key_clear(self, interaction: discord.Interaction):
         set_user_data(0, interaction.user.id, USER_KEY_NAME, "")
         await interaction.response.send_message("✅ 已清除你的 DCTW API key。", ephemeral=True, allowed_mentions=SAFE_MENTIONS)
 
-    @dctw_key.command(name="show", description="查看是否已設定 DCTW API key")
+    @dctw_key.command(name=app_commands.locale_str("show", i18n_key="cmd.dctw.key.show.name"), description=app_commands.locale_str("Check whether a DCTW API key is set", i18n_key="cmd.dctw.key.show.desc"))
     async def key_show(self, interaction: discord.Interaction):
         api_key = self._get_user_key(interaction.user.id)
         if not api_key:
@@ -1072,7 +1072,7 @@ class DCTW(commands.GroupCog, name="dctw", description="DCTW 瀏覽器！"):
         masked = api_key[:4] + "*" * max(0, len(api_key) - 8) + api_key[-4:]
         await interaction.response.send_message(f"目前 key: {masked}", ephemeral=True, allowed_mentions=SAFE_MENTIONS)
 
-    @dctw_key.command(name="help", description="說明如何取得 DCTW API key")
+    @dctw_key.command(name=app_commands.locale_str("help", i18n_key="cmd.dctw.key.help.name"), description=app_commands.locale_str("How to get a DCTW API key", i18n_key="cmd.dctw.key.help.desc"))
     async def key_help(self, interaction: discord.Interaction):
         embed = discord.Embed(title="如何獲取 DCTW API Key", color=discord.Colour.blue())
         embed.add_field(
@@ -1098,93 +1098,93 @@ class DCTW(commands.GroupCog, name="dctw", description="DCTW 瀏覽器！"):
         embed.set_footer(text="請勿將 API key 洩露給他人，以免被濫用。\n官方文檔: https://dctw.xyz/docs/?tags=api")
         await interaction.response.send_message(embed=embed, ephemeral=True, allowed_mentions=SAFE_MENTIONS)
 
-    @dctw_bot.command(name="browse", description="瀏覽機器人清單")
+    @dctw_bot.command(name=app_commands.locale_str("browse", i18n_key="cmd.dctw.bot.browse.name"), description=app_commands.locale_str("Browse the bot list", i18n_key="cmd.dctw.bot.browse.desc"))
     @app_commands.choices(
         sort=[
-            app_commands.Choice(name="newest", value="newest"),
-            app_commands.Choice(name="votes", value="votes"),
-            app_commands.Choice(name="servers", value="servers"),
-            app_commands.Choice(name="bumped", value="bumped"),
+            app_commands.Choice(name=app_commands.locale_str("Newest", i18n_key="cmd.dctw.bot.browse.choice.newest"), value="newest"),
+            app_commands.Choice(name=app_commands.locale_str("Votes", i18n_key="cmd.dctw.bot.browse.choice.votes"), value="votes"),
+            app_commands.Choice(name=app_commands.locale_str("Servers", i18n_key="cmd.dctw.bot.browse.choice.servers"), value="servers"),
+            app_commands.Choice(name=app_commands.locale_str("Bumped", i18n_key="cmd.dctw.bot.browse.choice.bumped"), value="bumped"),
         ]
     )
     async def bot_browse(self, interaction: discord.Interaction, sort: app_commands.Choice[str] | None = None):
         await self._send_browse(interaction, "bots", sort.value if sort else "bumped")
 
-    @dctw_server.command(name="browse", description="瀏覽伺服器清單")
+    @dctw_server.command(name=app_commands.locale_str("browse", i18n_key="cmd.dctw.server.browse.name"), description=app_commands.locale_str("Browse the server list", i18n_key="cmd.dctw.server.browse.desc"))
     @app_commands.choices(
         sort=[
-            app_commands.Choice(name="newest", value="newest"),
-            app_commands.Choice(name="votes", value="votes"),
-            app_commands.Choice(name="members", value="members"),
-            app_commands.Choice(name="bumped", value="bumped"),
+            app_commands.Choice(name=app_commands.locale_str("Newest", i18n_key="cmd.dctw.server.browse.choice.newest"), value="newest"),
+            app_commands.Choice(name=app_commands.locale_str("Votes", i18n_key="cmd.dctw.server.browse.choice.votes"), value="votes"),
+            app_commands.Choice(name=app_commands.locale_str("Members", i18n_key="cmd.dctw.server.browse.choice.members"), value="members"),
+            app_commands.Choice(name=app_commands.locale_str("Bumped", i18n_key="cmd.dctw.server.browse.choice.bumped"), value="bumped"),
         ]
     )
     async def server_browse(self, interaction: discord.Interaction, sort: app_commands.Choice[str] | None = None):
         await self._send_browse(interaction, "servers", sort.value if sort else "bumped")
 
-    @dctw_template.command(name="browse", description="瀏覽模板清單")
+    @dctw_template.command(name=app_commands.locale_str("browse", i18n_key="cmd.dctw.template.browse.name"), description=app_commands.locale_str("Browse the template list", i18n_key="cmd.dctw.template.browse.desc"))
     @app_commands.choices(
         sort=[
-            app_commands.Choice(name="newest", value="newest"),
-            app_commands.Choice(name="votes", value="votes"),
-            app_commands.Choice(name="bumped", value="bumped"),
+            app_commands.Choice(name=app_commands.locale_str("Newest", i18n_key="cmd.dctw.template.browse.choice.newest"), value="newest"),
+            app_commands.Choice(name=app_commands.locale_str("Votes", i18n_key="cmd.dctw.template.browse.choice.votes"), value="votes"),
+            app_commands.Choice(name=app_commands.locale_str("Bumped", i18n_key="cmd.dctw.template.browse.choice.bumped"), value="bumped"),
         ]
     )
     async def template_browse(self, interaction: discord.Interaction, sort: app_commands.Choice[str] | None = None):
         await self._send_browse(interaction, "templates", sort.value if sort else "bumped")
 
-    @dctw_bot.command(name="search", description="搜尋 bot")
+    @dctw_bot.command(name=app_commands.locale_str("search", i18n_key="cmd.dctw.bot.search.name"), description=app_commands.locale_str("Search bots", i18n_key="cmd.dctw.bot.search.desc"))
     @app_commands.choices(
         sort=[
-            app_commands.Choice(name="newest", value="newest"),
-            app_commands.Choice(name="votes", value="votes"),
-            app_commands.Choice(name="servers", value="servers"),
-            app_commands.Choice(name="bumped", value="bumped"),
+            app_commands.Choice(name=app_commands.locale_str("Newest", i18n_key="cmd.dctw.bot.search.choice.newest"), value="newest"),
+            app_commands.Choice(name=app_commands.locale_str("Votes", i18n_key="cmd.dctw.bot.search.choice.votes"), value="votes"),
+            app_commands.Choice(name=app_commands.locale_str("Servers", i18n_key="cmd.dctw.bot.search.choice.servers"), value="servers"),
+            app_commands.Choice(name=app_commands.locale_str("Bumped", i18n_key="cmd.dctw.bot.search.choice.bumped"), value="bumped"),
         ]
     )
     async def bot_search(self, interaction: discord.Interaction, keyword: str, sort: app_commands.Choice[str] | None = None):
         await self._send_search(interaction, "bots", keyword, sort.value if sort else "bumped")
 
-    @dctw_server.command(name="search", description="搜尋 server")
+    @dctw_server.command(name=app_commands.locale_str("search", i18n_key="cmd.dctw.server.search.name"), description=app_commands.locale_str("Search servers", i18n_key="cmd.dctw.server.search.desc"))
     @app_commands.choices(
         sort=[
-            app_commands.Choice(name="newest", value="newest"),
-            app_commands.Choice(name="votes", value="votes"),
-            app_commands.Choice(name="members", value="members"),
-            app_commands.Choice(name="bumped", value="bumped"),
+            app_commands.Choice(name=app_commands.locale_str("Newest", i18n_key="cmd.dctw.server.search.choice.newest"), value="newest"),
+            app_commands.Choice(name=app_commands.locale_str("Votes", i18n_key="cmd.dctw.server.search.choice.votes"), value="votes"),
+            app_commands.Choice(name=app_commands.locale_str("Members", i18n_key="cmd.dctw.server.search.choice.members"), value="members"),
+            app_commands.Choice(name=app_commands.locale_str("Bumped", i18n_key="cmd.dctw.server.search.choice.bumped"), value="bumped"),
         ]
     )
     async def server_search(self, interaction: discord.Interaction, keyword: str, sort: app_commands.Choice[str] | None = None):
         await self._send_search(interaction, "servers", keyword, sort.value if sort else "bumped")
 
-    @dctw_template.command(name="search", description="搜尋 template")
+    @dctw_template.command(name=app_commands.locale_str("search", i18n_key="cmd.dctw.template.search.name"), description=app_commands.locale_str("Search templates", i18n_key="cmd.dctw.template.search.desc"))
     @app_commands.choices(
         sort=[
-            app_commands.Choice(name="newest", value="newest"),
-            app_commands.Choice(name="votes", value="votes"),
-            app_commands.Choice(name="bumped", value="bumped"),
+            app_commands.Choice(name=app_commands.locale_str("Newest", i18n_key="cmd.dctw.template.search.choice.newest"), value="newest"),
+            app_commands.Choice(name=app_commands.locale_str("Votes", i18n_key="cmd.dctw.template.search.choice.votes"), value="votes"),
+            app_commands.Choice(name=app_commands.locale_str("Bumped", i18n_key="cmd.dctw.template.search.choice.bumped"), value="bumped"),
         ]
     )
     async def template_search(self, interaction: discord.Interaction, keyword: str, sort: app_commands.Choice[str] | None = None):
         await self._send_search(interaction, "templates", keyword, sort.value if sort else "bumped")
 
-    @app_commands.command(name="bumpall", description="一次置頂你擁有的全部資源")
+    @app_commands.command(name=app_commands.locale_str("bumpall", i18n_key="cmd.dctw.dctw.bumpall.name"), description=app_commands.locale_str("Bump everything you own at once", i18n_key="cmd.dctw.dctw.bumpall.desc"))
     async def bumpall(self, interaction: discord.Interaction):
         await self._do_bumpall(interaction, ["bots", "servers", "templates"])
 
-    @dctw_bot.command(name="bumpall", description="一次置頂你擁有的全部 bots")
+    @dctw_bot.command(name=app_commands.locale_str("bumpall", i18n_key="cmd.dctw.bot.bumpall.name"), description=app_commands.locale_str("Bump all bots you own at once", i18n_key="cmd.dctw.bot.bumpall.desc"))
     async def bot_bumpall(self, interaction: discord.Interaction):
         await self._do_bumpall(interaction, ["bots"])
 
-    @dctw_server.command(name="bumpall", description="一次置頂你擁有的全部 servers")
+    @dctw_server.command(name=app_commands.locale_str("bumpall", i18n_key="cmd.dctw.server.bumpall.name"), description=app_commands.locale_str("Bump all servers you own at once", i18n_key="cmd.dctw.server.bumpall.desc"))
     async def server_bumpall(self, interaction: discord.Interaction):
         await self._do_bumpall(interaction, ["servers"])
 
-    @dctw_template.command(name="bumpall", description="一次置頂你擁有的全部 templates")
+    @dctw_template.command(name=app_commands.locale_str("bumpall", i18n_key="cmd.dctw.template.bumpall.name"), description=app_commands.locale_str("Bump all templates you own at once", i18n_key="cmd.dctw.template.bumpall.desc"))
     async def template_bumpall(self, interaction: discord.Interaction):
         await self._do_bumpall(interaction, ["templates"])
 
-    @dctw_bot.command(name="vote", description="對指定 bot 投票")
+    @dctw_bot.command(name=app_commands.locale_str("vote", i18n_key="cmd.dctw.bot.vote.name"), description=app_commands.locale_str("Vote for a specific bot", i18n_key="cmd.dctw.bot.vote.desc"))
     async def bot_vote(self, interaction: discord.Interaction, target: str):
         bot_id = _parse_user_mention_or_id(target)
         if bot_id is None:
@@ -1192,7 +1192,7 @@ class DCTW(commands.GroupCog, name="dctw", description="DCTW 瀏覽器！"):
             return
         await self._do_post_action(interaction, "bots", bot_id, "vote")
 
-    @dctw_bot.command(name="bump", description="對指定 bot 置頂")
+    @dctw_bot.command(name=app_commands.locale_str("bump", i18n_key="cmd.dctw.bot.bump.name"), description=app_commands.locale_str("Bump a specific bot", i18n_key="cmd.dctw.bot.bump.desc"))
     async def bot_bump(self, interaction: discord.Interaction, target: str):
         bot_id = _parse_user_mention_or_id(target)
         if bot_id is None:
@@ -1200,7 +1200,7 @@ class DCTW(commands.GroupCog, name="dctw", description="DCTW 瀏覽器！"):
             return
         await self._do_post_action(interaction, "bots", bot_id, "bump")
 
-    @dctw_server.command(name="vote", description="對指定 server 投票")
+    @dctw_server.command(name=app_commands.locale_str("vote", i18n_key="cmd.dctw.server.vote.name"), description=app_commands.locale_str("Vote for a specific server", i18n_key="cmd.dctw.server.vote.desc"))
     async def server_vote(self, interaction: discord.Interaction, target: str):
         server_id = _parse_numeric_id(target)
         if server_id is None:
@@ -1208,7 +1208,7 @@ class DCTW(commands.GroupCog, name="dctw", description="DCTW 瀏覽器！"):
             return
         await self._do_post_action(interaction, "servers", server_id, "vote")
 
-    @dctw_server.command(name="bump", description="對指定 server 置頂")
+    @dctw_server.command(name=app_commands.locale_str("bump", i18n_key="cmd.dctw.server.bump.name"), description=app_commands.locale_str("Bump a specific server", i18n_key="cmd.dctw.server.bump.desc"))
     async def server_bump(self, interaction: discord.Interaction, target: str):
         server_id = _parse_numeric_id(target)
         if server_id is None:
@@ -1216,7 +1216,7 @@ class DCTW(commands.GroupCog, name="dctw", description="DCTW 瀏覽器！"):
             return
         await self._do_post_action(interaction, "servers", server_id, "bump")
 
-    @dctw_template.command(name="vote", description="對指定 template 投票")
+    @dctw_template.command(name=app_commands.locale_str("vote", i18n_key="cmd.dctw.template.vote.name"), description=app_commands.locale_str("Vote for a specific template", i18n_key="cmd.dctw.template.vote.desc"))
     async def template_vote(self, interaction: discord.Interaction, target: str):
         template_id = _parse_numeric_id(target)
         if template_id is None:
@@ -1224,7 +1224,7 @@ class DCTW(commands.GroupCog, name="dctw", description="DCTW 瀏覽器！"):
             return
         await self._do_post_action(interaction, "templates", template_id, "vote")
 
-    @dctw_template.command(name="bump", description="對指定 template 置頂")
+    @dctw_template.command(name=app_commands.locale_str("bump", i18n_key="cmd.dctw.template.bump.name"), description=app_commands.locale_str("Bump a specific template", i18n_key="cmd.dctw.template.bump.desc"))
     async def template_bump(self, interaction: discord.Interaction, target: str):
         template_id = _parse_numeric_id(target)
         if template_id is None:
@@ -1232,7 +1232,7 @@ class DCTW(commands.GroupCog, name="dctw", description="DCTW 瀏覽器！"):
             return
         await self._do_post_action(interaction, "templates", template_id, "bump")
 
-    @app_commands.command(name="cache-stats", description="查看 DCTW 快取狀態")
+    @app_commands.command(name=app_commands.locale_str("cache-stats", i18n_key="cmd.dctw.dctw.cache_stats.name"), description=app_commands.locale_str("View DCTW cache status", i18n_key="cmd.dctw.dctw.cache_stats.desc"))
     async def cache_stats(self, interaction: discord.Interaction):
         total = self._cache_hits + self._cache_misses
         hit_rate = (self._cache_hits / total * 100.0) if total else 0.0

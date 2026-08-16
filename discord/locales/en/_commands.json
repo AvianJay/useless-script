@@ -228,6 +228,33 @@
                 "desc": "View auto-moderation settings",
                 "name": "view"
             }
+        },
+        "setting": {
+            "anti_invite_link-action": "anti_invite_link-action",
+            "anti_invite_link-allow_current_server": "anti_invite_link-allow_current_server",
+            "anti_invite_link-ignore_channels": "anti_invite_link-ignore_channels",
+            "anti_raid-action": "anti_raid-action",
+            "anti_raid-max_joins": "anti_raid-max_joins",
+            "anti_raid-time_window": "anti_raid-time_window",
+            "anti_spam-action": "anti_spam-action",
+            "anti_spam-ignore_channels": "anti_spam-ignore_channels",
+            "anti_spam-max_messages": "anti_spam-max_messages",
+            "anti_spam-similarity": "anti_spam-similarity",
+            "anti_spam-time_window": "anti_spam-time_window",
+            "anti_uispam-action": "anti_uispam-action",
+            "anti_uispam-ignore_channels": "anti_uispam-ignore_channels",
+            "anti_uispam-max_count": "anti_uispam-max_count",
+            "anti_uispam-time_window": "anti_uispam-time_window",
+            "escape_punish-duration": "escape_punish-duration",
+            "escape_punish-punishment": "escape_punish-punishment",
+            "scamtrap-action": "scamtrap-action",
+            "scamtrap-channel_id": "scamtrap-channel_id",
+            "too_many_emojis-action": "too_many_emojis-action",
+            "too_many_emojis-ignore_channels": "too_many_emojis-ignore_channels",
+            "too_many_emojis-max_emojis": "too_many_emojis-max_emojis",
+            "too_many_h1-action": "too_many_h1-action",
+            "too_many_h1-ignore_channels": "too_many_h1-ignore_channels",
+            "too_many_h1-max_length": "too_many_h1-max_length"
         }
     },
     "autopublish": {
@@ -943,6 +970,12 @@
             "root": {
                 "desc": "Manage custom banned words for the Explore chat",
                 "name": "banned-words"
+            }
+        },
+        "ctx": {
+            "activity_entry": {
+                "desc": "Launch the Explore space",
+                "name": "explore space"
             }
         },
         "explore": {
@@ -1718,6 +1751,10 @@
                 "desc": "Resume playback",
                 "name": "resume"
             },
+            "root": {
+                "desc": "Music commands",
+                "name": "music"
+            },
             "search": {
                 "desc": "Search for and play music",
                 "name": "search",
@@ -2072,6 +2109,10 @@
                     "channel": "The channel whose sticky message to remove"
                 }
             },
+            "root": {
+                "desc": "Manage this server's sticky messages",
+                "name": "stickymessage"
+            },
             "timing": {
                 "desc": "Configure quiet time and minimum repost interval",
                 "name": "timing",
@@ -2123,6 +2164,10 @@
                 "param": {
                     "role": "The role to remove from the allow list"
                 }
+            },
+            "root": {
+                "desc": "Restore previously held roles when users rejoin",
+                "name": "stickyrole"
             },
             "set_log_channel": {
                 "desc": "Set the StickyRole log channel",

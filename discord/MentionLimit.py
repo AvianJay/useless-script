@@ -36,7 +36,7 @@ AUTOMOD_RULE_LIMIT_ERROR_CODES = {30034}
 @app_commands.allowed_installs(guilds=True, users=False)
 @app_commands.allowed_contexts(guilds=True, dms=False, private_channels=False)
 @app_commands.default_permissions(manage_guild=True, manage_roles=True)
-class MentionLimit(commands.GroupCog, name="mentionlimit"):
+class MentionLimit(commands.GroupCog, name=app_commands.locale_str("mentionlimit", i18n_key="cmd.mentionlimit.mentionlimit.root.name")):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
         self._last_trigger: dict[tuple[int, int], float] = {}
@@ -898,20 +898,20 @@ class MentionLimit(commands.GroupCog, name="mentionlimit"):
 
     # ---------- 指令 ----------
 
-    @app_commands.command(name="about", description="關於 MentionLimit")
+    @app_commands.command(name=app_commands.locale_str("about", i18n_key="cmd.mentionlimit.mentionlimit.about.name"), description=app_commands.locale_str("About MentionLimit", i18n_key="cmd.mentionlimit.mentionlimit.about.desc"))
     async def about(self, interaction: discord.Interaction):
         await interaction.response.send_message(embed=self._build_about_embed(), ephemeral=True)
 
-    @app_commands.command(name="setup", description="互動式設定並啟用 MentionLimit")
+    @app_commands.command(name=app_commands.locale_str("setup", i18n_key="cmd.mentionlimit.mentionlimit.setup.name"), description=app_commands.locale_str("Interactively configure and enable MentionLimit", i18n_key="cmd.mentionlimit.mentionlimit.setup.desc"))
     @app_commands.default_permissions(administrator=True)
     async def setup(self, interaction: discord.Interaction):
         config = self._get_config(interaction.guild.id)
         view = MentionLimitSetupView(self, interaction.user, interaction.guild, config)
         await view.send_about(interaction)
 
-    @app_commands.command(name="toggle", description="啟用/停用 MentionLimit")
+    @app_commands.command(name=app_commands.locale_str("toggle", i18n_key="cmd.mentionlimit.mentionlimit.toggle.name"), description=app_commands.locale_str("Enable/disable MentionLimit", i18n_key="cmd.mentionlimit.mentionlimit.toggle.desc"))
     @app_commands.default_permissions(administrator=True)
-    @app_commands.describe(enable="留空則切換目前狀態")
+    @app_commands.describe(enable=app_commands.locale_str("Leave empty to toggle the current state", i18n_key="cmd.mentionlimit.mentionlimit.toggle.param.enable"))
     async def toggle(self, interaction: discord.Interaction, enable: bool = None):
         await interaction.response.defer(ephemeral=True)
         guild = interaction.guild
@@ -960,9 +960,9 @@ class MentionLimit(commands.GroupCog, name="mentionlimit"):
             allowed_mentions=discord.AllowedMentions.none(),
         )
 
-    @app_commands.command(name="add", description="新增或更新受管理身分組的提及冷卻")
+    @app_commands.command(name=app_commands.locale_str("add", i18n_key="cmd.mentionlimit.mentionlimit.add.name"), description=app_commands.locale_str("Add or update mention cooldown for a managed role", i18n_key="cmd.mentionlimit.mentionlimit.add.desc"))
     @app_commands.default_permissions(administrator=True)
-    @app_commands.describe(role="要管理的身分組", cooldown="冷卻秒數（10-86400，預設 600）")
+    @app_commands.describe(role=app_commands.locale_str("The role to manage", i18n_key="cmd.mentionlimit.mentionlimit.add.param.role"), cooldown=app_commands.locale_str("Cooldown seconds (10-86400, default 600)", i18n_key="cmd.mentionlimit.mentionlimit.add.param.cooldown"))
     async def add_role(
         self,
         interaction: discord.Interaction,
@@ -1037,9 +1037,9 @@ class MentionLimit(commands.GroupCog, name="mentionlimit"):
             allowed_mentions=discord.AllowedMentions.none(),
         )
 
-    @app_commands.command(name="remove", description="移除受管理的身分組")
+    @app_commands.command(name=app_commands.locale_str("remove", i18n_key="cmd.mentionlimit.mentionlimit.remove.name"), description=app_commands.locale_str("Remove a managed role", i18n_key="cmd.mentionlimit.mentionlimit.remove.desc"))
     @app_commands.default_permissions(administrator=True)
-    @app_commands.describe(role="要移除管理的身分組")
+    @app_commands.describe(role=app_commands.locale_str("The role to stop managing", i18n_key="cmd.mentionlimit.mentionlimit.remove.param.role"))
     async def remove(self, interaction: discord.Interaction, role: discord.Role):
         guild = interaction.guild
         await interaction.response.defer(ephemeral=True)
@@ -1090,12 +1090,12 @@ class MentionLimit(commands.GroupCog, name="mentionlimit"):
             allowed_mentions=discord.AllowedMentions.none(),
         )
 
-    @app_commands.command(name="settings", description="設定 MentionLimit 模式與選項")
+    @app_commands.command(name=app_commands.locale_str("settings", i18n_key="cmd.mentionlimit.mentionlimit.settings.name"), description=app_commands.locale_str("Configure MentionLimit mode and options", i18n_key="cmd.mentionlimit.mentionlimit.settings.desc"))
     @app_commands.default_permissions(administrator=True)
     @app_commands.describe(
-        automod_mode="AutoMod 模式：冷卻期間用 AutoMod 規則封鎖，身分組保持可提及",
-        count_admins="管理員的提及是否也觸發冷卻",
-        announce="進入冷卻時是否在該頻道公告",
+        automod_mode=app_commands.locale_str("AutoMod mode: block with an AutoMod rule during cooldown, role stays mentionable", i18n_key="cmd.mentionlimit.mentionlimit.settings.param.automod_mode"),
+        count_admins=app_commands.locale_str("Whether admin mentions also trigger the cooldown", i18n_key="cmd.mentionlimit.mentionlimit.settings.param.count_admins"),
+        announce=app_commands.locale_str("Announce in the channel when a cooldown starts", i18n_key="cmd.mentionlimit.mentionlimit.settings.param.announce"),
     )
     async def settings(
         self,
@@ -1173,7 +1173,7 @@ class MentionLimit(commands.GroupCog, name="mentionlimit"):
             allowed_mentions=discord.AllowedMentions.none(),
         )
 
-    @app_commands.command(name="list", description="列出 MentionLimit 設定")
+    @app_commands.command(name=app_commands.locale_str("list", i18n_key="cmd.mentionlimit.mentionlimit.list.name"), description=app_commands.locale_str("List MentionLimit settings", i18n_key="cmd.mentionlimit.mentionlimit.list.desc"))
     @app_commands.default_permissions(administrator=True)
     async def list_config(self, interaction: discord.Interaction):
         config = self._get_config(interaction.guild.id)

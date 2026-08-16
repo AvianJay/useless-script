@@ -725,7 +725,7 @@ class AutoReplyBuilderView(discord.ui.View):
 @app_commands.default_permissions(manage_guild=True)
 @app_commands.allowed_installs(guilds=True, users=False)
 @app_commands.allowed_contexts(guilds=True, dms=False, private_channels=False)
-class AutoReply(commands.GroupCog, name="autoreply"):
+class AutoReply(commands.GroupCog, name=app_commands.locale_str("autoreply", i18n_key="cmd.autoreply.autoreply.root.name"), description=app_commands.locale_str("Auto-reply configuration commands", i18n_key="cmd.autoreply.autoreply.root.desc")):
     """自動回覆設定指令群組"""
 
     def __init__(self, bot):
@@ -2057,32 +2057,32 @@ class AutoReply(commands.GroupCog, name="autoreply"):
 
         return final_response, sticker, embed, allowed_mentions, delayed_actions
 
-    @app_commands.command(name="add", description="新增自動回覆")
+    @app_commands.command(name=app_commands.locale_str("add", i18n_key="cmd.autoreply.autoreply.add.name"), description=app_commands.locale_str("Add an auto-reply", i18n_key="cmd.autoreply.autoreply.add.desc"))
     @app_commands.describe(
-        mode="回覆模式",
-        trigger="觸發字串 (使用 , 分隔多個觸發字串)",
-        response="回覆內容 (使用 , 分隔多個回覆，隨機選擇一個回覆)",
-        reply="回覆原訊息",
-        channel_mode="指定頻道模式",
-        channels="指定頻道 ID (使用 , 分隔多個頻道 ID)",
-        random_chance="隨機回覆機率 (1-100)"
+        mode=app_commands.locale_str("Reply mode", i18n_key="cmd.autoreply.autoreply.add.param.mode"),
+        trigger=app_commands.locale_str("Trigger string (separate multiple with ,)", i18n_key="cmd.autoreply.autoreply.add.param.trigger"),
+        response=app_commands.locale_str("Reply content (separate multiple with , to pick one at random)", i18n_key="cmd.autoreply.autoreply.add.param.response"),
+        reply=app_commands.locale_str("Reply to the original message", i18n_key="cmd.autoreply.autoreply.add.param.reply"),
+        channel_mode=app_commands.locale_str("Channel filter mode", i18n_key="cmd.autoreply.autoreply.add.param.channel_mode"),
+        channels=app_commands.locale_str("Channel IDs (separate multiple IDs with ,)", i18n_key="cmd.autoreply.autoreply.add.param.channels"),
+        random_chance=app_commands.locale_str("Random reply chance (1-100)", i18n_key="cmd.autoreply.autoreply.add.param.random_chance")
     )
     @app_commands.choices(
         mode=[
-            app_commands.Choice(name="包含", value="contains"),
-            app_commands.Choice(name="完全匹配", value="equals"),
-            app_commands.Choice(name="開始於", value="starts_with"),
-            app_commands.Choice(name="結束於", value="ends_with"),
-            app_commands.Choice(name="正規表達式", value="regex"),
+            app_commands.Choice(name=app_commands.locale_str("Contains", i18n_key="cmd.autoreply.autoreply.add.choice.contains"), value="contains"),
+            app_commands.Choice(name=app_commands.locale_str("Exact match", i18n_key="cmd.autoreply.autoreply.add.choice.equals"), value="equals"),
+            app_commands.Choice(name=app_commands.locale_str("Starts with", i18n_key="cmd.autoreply.autoreply.add.choice.starts_with"), value="starts_with"),
+            app_commands.Choice(name=app_commands.locale_str("Ends with", i18n_key="cmd.autoreply.autoreply.add.choice.ends_with"), value="ends_with"),
+            app_commands.Choice(name=app_commands.locale_str("Regular expression", i18n_key="cmd.autoreply.autoreply.add.choice.regex"), value="regex"),
         ],
         reply=[
-            app_commands.Choice(name="是", value="True"),
-            app_commands.Choice(name="否", value="False"),
+            app_commands.Choice(name=app_commands.locale_str("Yes", i18n_key="cmd.autoreply.autoreply.add.choice.true"), value="True"),
+            app_commands.Choice(name=app_commands.locale_str("No", i18n_key="cmd.autoreply.autoreply.add.choice.false"), value="False"),
         ],
         channel_mode=[
-            app_commands.Choice(name="所有頻道", value="all"),
-            app_commands.Choice(name="白名單", value="whitelist"),
-            app_commands.Choice(name="黑名單", value="blacklist"),
+            app_commands.Choice(name=app_commands.locale_str("All channels", i18n_key="cmd.autoreply.autoreply.add.choice.all"), value="all"),
+            app_commands.Choice(name=app_commands.locale_str("Whitelist", i18n_key="cmd.autoreply.autoreply.add.choice.whitelist"), value="whitelist"),
+            app_commands.Choice(name=app_commands.locale_str("Blacklist", i18n_key="cmd.autoreply.autoreply.add.choice.blacklist"), value="blacklist"),
         ]
     )
     @app_commands.default_permissions(manage_guild=True)
@@ -2145,9 +2145,9 @@ class AutoReply(commands.GroupCog, name="autoreply"):
         trigger_str = ", ".join(trigger)
         log(f"自動回覆被新增：`{trigger_str[:10]}{'...' if len(trigger_str) > 10 else ''}`。", module_name="AutoReply", level=logging.INFO, user=interaction.user, guild=interaction.guild)
 
-    @app_commands.command(name="remove", description="移除自動回覆")
+    @app_commands.command(name=app_commands.locale_str("remove", i18n_key="cmd.autoreply.autoreply.remove.name"), description=app_commands.locale_str("Remove an auto-reply", i18n_key="cmd.autoreply.autoreply.remove.desc"))
     @app_commands.describe(
-        trigger="觸發字串"
+        trigger=app_commands.locale_str("Trigger string", i18n_key="cmd.autoreply.autoreply.remove.param.trigger")
     )
     @app_commands.autocomplete(trigger=list_autoreply_autocomplete)
     @app_commands.default_permissions(manage_guild=True)
@@ -2164,7 +2164,7 @@ class AutoReply(commands.GroupCog, name="autoreply"):
                 return
         await interaction.response.send_message(f"找不到觸發字串 `{trigger}` 的自動回覆。")
     
-    @app_commands.command(name="list", description="列出所有自動回覆")
+    @app_commands.command(name=app_commands.locale_str("list", i18n_key="cmd.autoreply.autoreply.list.name"), description=app_commands.locale_str("List all auto-replies", i18n_key="cmd.autoreply.autoreply.list.desc"))
     @app_commands.default_permissions(manage_guild=True)
     async def list_autoreplies(self, interaction: discord.Interaction):
         guild_id = interaction.guild.id
@@ -2189,7 +2189,7 @@ class AutoReply(commands.GroupCog, name="autoreply"):
         embed = discord.Embed(title="自動回覆列表", description=description, color=0x00ff00)
         await interaction.response.send_message(embed=embed)
 
-    @app_commands.command(name="clear", description="清除所有自動回覆")
+    @app_commands.command(name=app_commands.locale_str("clear", i18n_key="cmd.autoreply.autoreply.clear.name"), description=app_commands.locale_str("Clear all auto-replies", i18n_key="cmd.autoreply.autoreply.clear.desc"))
     @app_commands.default_permissions(manage_guild=True)
     async def clear_autoreplies(self, interaction: discord.Interaction):
         guild_id = interaction.guild.id
@@ -2226,33 +2226,33 @@ class AutoReply(commands.GroupCog, name="autoreply"):
 
         await interaction.response.send_message(f"您確定要清除所有自動回覆嗎？\n目前有 {len(autoreplies)} 筆自動回覆。", view=Confirm())
 
-    @app_commands.command(name="edit", description="編輯自動回覆")
+    @app_commands.command(name=app_commands.locale_str("edit", i18n_key="cmd.autoreply.autoreply.edit.name"), description=app_commands.locale_str("Edit an auto-reply", i18n_key="cmd.autoreply.autoreply.edit.desc"))
     @app_commands.describe(
-        trigger="觸發字串",
-        new_mode="新的回覆模式",
-        new_trigger="新的觸發字串",
-        new_response="回覆內容",
-        reply="是否回覆原訊息",
-        channel_mode="指定頻道模式",
-        channels="指定頻道 ID (使用 , 分隔多個頻道 ID)",
-        random_chance="隨機回覆機率 (1-100)"
+        trigger=app_commands.locale_str("Trigger string", i18n_key="cmd.autoreply.autoreply.edit.param.trigger"),
+        new_mode=app_commands.locale_str("New reply mode", i18n_key="cmd.autoreply.autoreply.edit.param.new_mode"),
+        new_trigger=app_commands.locale_str("New trigger string", i18n_key="cmd.autoreply.autoreply.edit.param.new_trigger"),
+        new_response=app_commands.locale_str("Reply content", i18n_key="cmd.autoreply.autoreply.edit.param.new_response"),
+        reply=app_commands.locale_str("Whether to reply to the original message", i18n_key="cmd.autoreply.autoreply.edit.param.reply"),
+        channel_mode=app_commands.locale_str("Channel filter mode", i18n_key="cmd.autoreply.autoreply.edit.param.channel_mode"),
+        channels=app_commands.locale_str("Channel IDs (separate multiple IDs with ,)", i18n_key="cmd.autoreply.autoreply.edit.param.channels"),
+        random_chance=app_commands.locale_str("Random reply chance (1-100)", i18n_key="cmd.autoreply.autoreply.edit.param.random_chance")
     )
     @app_commands.choices(
         new_mode=[
-            app_commands.Choice(name="包含", value="contains"),
-            app_commands.Choice(name="完全匹配", value="equals"),
-            app_commands.Choice(name="開始於", value="starts_with"),
-            app_commands.Choice(name="結束於", value="ends_with"),
-            app_commands.Choice(name="正規表達式", value="regex"),
+            app_commands.Choice(name=app_commands.locale_str("Contains", i18n_key="cmd.autoreply.autoreply.edit.choice.contains"), value="contains"),
+            app_commands.Choice(name=app_commands.locale_str("Exact match", i18n_key="cmd.autoreply.autoreply.edit.choice.equals"), value="equals"),
+            app_commands.Choice(name=app_commands.locale_str("Starts with", i18n_key="cmd.autoreply.autoreply.edit.choice.starts_with"), value="starts_with"),
+            app_commands.Choice(name=app_commands.locale_str("Ends with", i18n_key="cmd.autoreply.autoreply.edit.choice.ends_with"), value="ends_with"),
+            app_commands.Choice(name=app_commands.locale_str("Regular expression", i18n_key="cmd.autoreply.autoreply.edit.choice.regex"), value="regex"),
         ],
         reply=[
-            app_commands.Choice(name="是", value="True"),
-            app_commands.Choice(name="否", value="False"),
+            app_commands.Choice(name=app_commands.locale_str("Yes", i18n_key="cmd.autoreply.autoreply.edit.choice.true"), value="True"),
+            app_commands.Choice(name=app_commands.locale_str("No", i18n_key="cmd.autoreply.autoreply.edit.choice.false"), value="False"),
         ],
         channel_mode=[
-            app_commands.Choice(name="所有頻道", value="all"),
-            app_commands.Choice(name="白名單", value="whitelist"),
-            app_commands.Choice(name="黑名單", value="blacklist"),
+            app_commands.Choice(name=app_commands.locale_str("All channels", i18n_key="cmd.autoreply.autoreply.edit.choice.all"), value="all"),
+            app_commands.Choice(name=app_commands.locale_str("Whitelist", i18n_key="cmd.autoreply.autoreply.edit.choice.whitelist"), value="whitelist"),
+            app_commands.Choice(name=app_commands.locale_str("Blacklist", i18n_key="cmd.autoreply.autoreply.edit.choice.blacklist"), value="blacklist"),
         ]
     )
     @app_commands.autocomplete(trigger=list_autoreply_autocomplete)
@@ -2307,11 +2307,11 @@ class AutoReply(commands.GroupCog, name="autoreply"):
                 return
         await interaction.response.send_message(f"找不到觸發字串 `{trigger}` 的自動回覆。")
     
-    @app_commands.command(name="quickadd", description="快速新增自動回覆，合併現有的自動回覆")
+    @app_commands.command(name=app_commands.locale_str("quickadd", i18n_key="cmd.autoreply.autoreply.quickadd.name"), description=app_commands.locale_str("Quickly add an auto-reply, merging with existing ones", i18n_key="cmd.autoreply.autoreply.quickadd.desc"))
     @app_commands.describe(
-        trigger="觸發字串",
-        new_trigger="新的觸發字串",
-        new_response="新的回覆內容"
+        trigger=app_commands.locale_str("Trigger string", i18n_key="cmd.autoreply.autoreply.quickadd.param.trigger"),
+        new_trigger=app_commands.locale_str("New trigger string", i18n_key="cmd.autoreply.autoreply.quickadd.param.new_trigger"),
+        new_response=app_commands.locale_str("New reply content", i18n_key="cmd.autoreply.autoreply.quickadd.param.new_response")
     )
     @app_commands.autocomplete(trigger=list_autoreply_autocomplete)
     @app_commands.default_permissions(manage_guild=True)
@@ -2367,12 +2367,12 @@ class AutoReply(commands.GroupCog, name="autoreply"):
                 return
         await interaction.response.send_message(f"找不到觸發字串 `{trigger}` 的自動回覆。")
 
-    @app_commands.command(name="template", description="套用內建自動回覆範本包")
-    @app_commands.describe(pack="要套用的範本包", merge="是否與現有規則合併")
+    @app_commands.command(name=app_commands.locale_str("template", i18n_key="cmd.autoreply.autoreply.template.name"), description=app_commands.locale_str("Apply a built-in auto-reply template pack", i18n_key="cmd.autoreply.autoreply.template.desc"))
+    @app_commands.describe(pack=app_commands.locale_str("The template pack to apply", i18n_key="cmd.autoreply.autoreply.template.param.pack"), merge=app_commands.locale_str("Whether to merge with existing rules", i18n_key="cmd.autoreply.autoreply.template.param.merge"))
     @app_commands.choices(
         merge=[
-            app_commands.Choice(name="是", value="True"),
-            app_commands.Choice(name="否（覆蓋現有規則）", value="False"),
+            app_commands.Choice(name=app_commands.locale_str("Yes", i18n_key="cmd.autoreply.autoreply.template.choice.true"), value="True"),
+            app_commands.Choice(name=app_commands.locale_str("No (overwrite existing rules)", i18n_key="cmd.autoreply.autoreply.template.choice.false"), value="False"),
         ]
     )
     @app_commands.autocomplete(pack=list_template_pack_autocomplete)
@@ -2445,7 +2445,7 @@ class AutoReply(commands.GroupCog, name="autoreply"):
             guild=interaction.guild
         )
     
-    @app_commands.command(name="export", description="匯出自動回覆設定為 JSON")
+    @app_commands.command(name=app_commands.locale_str("export", i18n_key="cmd.autoreply.autoreply.export.name"), description=app_commands.locale_str("Export auto-reply settings as JSON", i18n_key="cmd.autoreply.autoreply.export.desc"))
     @app_commands.default_permissions(administrator=True)
     async def export_autoreplies(self, interaction: discord.Interaction):
         guild_id = interaction.guild.id
@@ -2458,12 +2458,12 @@ class AutoReply(commands.GroupCog, name="autoreply"):
         await interaction.response.send_message("以下是此伺服器的自動回覆設定 JSON 檔案：", file=file)
         log(f"自動回覆設定被匯出。", module_name="AutoReply", level=logging.INFO, user=interaction.user, guild=interaction.guild)
     
-    @app_commands.command(name="import", description="從 JSON 檔案匯入自動回覆設定")
-    @app_commands.describe(file="要匯入的 JSON 檔案", merge="是否與現有設定合併")
+    @app_commands.command(name=app_commands.locale_str("import", i18n_key="cmd.autoreply.autoreply.import.name"), description=app_commands.locale_str("Import auto-reply settings from a JSON file", i18n_key="cmd.autoreply.autoreply.import.desc"))
+    @app_commands.describe(file=app_commands.locale_str("The JSON file to import", i18n_key="cmd.autoreply.autoreply.import.param.file"), merge=app_commands.locale_str("Whether to merge with existing settings", i18n_key="cmd.autoreply.autoreply.import.param.merge"))
     @app_commands.choices(
         merge=[
-            app_commands.Choice(name="是", value="True"),
-            app_commands.Choice(name="否", value="False")
+            app_commands.Choice(name=app_commands.locale_str("Yes", i18n_key="cmd.autoreply.autoreply.import.choice.true"), value="True"),
+            app_commands.Choice(name=app_commands.locale_str("No", i18n_key="cmd.autoreply.autoreply.import.choice.false"), value="False")
         ]
     )
     @app_commands.default_permissions(administrator=True)
@@ -2499,15 +2499,15 @@ class AutoReply(commands.GroupCog, name="autoreply"):
         await interaction.followup.send("已匯入自動回覆設定。")
         log(f"自動回覆設定被匯入。", module_name="AutoReply", level=logging.INFO, user=interaction.user, guild=interaction.guild)
     
-    @app_commands.command(name="ignore", description="設定忽略的頻道")
+    @app_commands.command(name=app_commands.locale_str("ignore", i18n_key="cmd.autoreply.autoreply.ignore.name"), description=app_commands.locale_str("Configure ignored channels", i18n_key="cmd.autoreply.autoreply.ignore.desc"))
     @app_commands.describe(
-        mode="忽略頻道模式",
-        channels="頻道 ID (使用 , 分隔多個頻道 ID)"
+        mode=app_commands.locale_str("Ignore channel mode", i18n_key="cmd.autoreply.autoreply.ignore.param.mode"),
+        channels=app_commands.locale_str("Channel IDs (separate multiple IDs with ,)", i18n_key="cmd.autoreply.autoreply.ignore.param.channels")
     )
     @app_commands.choices(
         mode=[
-            app_commands.Choice(name="忽略清單", value="blacklist"),
-            app_commands.Choice(name="僅限清單", value="whitelist"),
+            app_commands.Choice(name=app_commands.locale_str("Ignore list", i18n_key="cmd.autoreply.autoreply.ignore.choice.blacklist"), value="blacklist"),
+            app_commands.Choice(name=app_commands.locale_str("Allow list only", i18n_key="cmd.autoreply.autoreply.ignore.choice.whitelist"), value="whitelist"),
         ]
     )
     @app_commands.default_permissions(manage_guild=True)
@@ -2525,8 +2525,8 @@ class AutoReply(commands.GroupCog, name="autoreply"):
         await interaction.response.send_message(f"已設定忽略頻道模式為 `{mode}`，頻道列表：`{', '.join(map(str, valid_channels)) if valid_channels else '無'}`。")
         log(f"忽略頻道設定被更新。模式：{mode}，頻道：{valid_channels}", module_name="AutoReply", level=logging.INFO, user=interaction.user, guild=interaction.guild)
     
-    @app_commands.command(name="test", description="測試自動回覆內容的變數替換")
-    @app_commands.describe(response="要測試的回覆內容")
+    @app_commands.command(name=app_commands.locale_str("test", i18n_key="cmd.autoreply.autoreply.test.name"), description=app_commands.locale_str("Test variable substitution in auto-reply content", i18n_key="cmd.autoreply.autoreply.test.desc"))
+    @app_commands.describe(response=app_commands.locale_str("The reply content to test", i18n_key="cmd.autoreply.autoreply.test.param.response"))
     @app_commands.default_permissions(manage_guild=True)
     async def test_autoreply_response(self, interaction: discord.Interaction, response: str):
         guild = interaction.guild
@@ -2566,7 +2566,7 @@ class AutoReply(commands.GroupCog, name="autoreply"):
             allowed_mentions=self._build_allowed_mentions(),
         )
 
-    @app_commands.command(name="builder", description="用互動式介面建立自動回覆")
+    @app_commands.command(name=app_commands.locale_str("builder", i18n_key="cmd.autoreply.autoreply.builder.name"), description=app_commands.locale_str("Build auto-replies with an interactive interface", i18n_key="cmd.autoreply.autoreply.builder.desc"))
     @app_commands.default_permissions(manage_guild=True)
     async def autoreply_builder(self, interaction: discord.Interaction):
         getting_started_module = sys.modules.get("gettingstarted")
@@ -2577,7 +2577,7 @@ class AutoReply(commands.GroupCog, name="autoreply"):
         await interaction.response.send_message(embed=view.build_embed(), view=view, ephemeral=True)
         view.message = await interaction.original_response()
     
-    @app_commands.command(name="help", description="顯示自動回覆的使用說明")
+    @app_commands.command(name=app_commands.locale_str("help", i18n_key="cmd.autoreply.autoreply.help.name"), description=app_commands.locale_str("Show auto-reply usage instructions", i18n_key="cmd.autoreply.autoreply.help.desc"))
     async def autoreply_help(self, interaction: discord.Interaction):
         # vibe coding is fun lol
         await interaction.response.defer()
@@ -2669,7 +2669,7 @@ class AutoReply(commands.GroupCog, name="autoreply"):
 
         await interaction.followup.send(embed=embed, view=HelpView())
 
-    @app_commands.command(name="help", description="顯示自動回覆功能說明")
+    @app_commands.command(name=app_commands.locale_str("help", i18n_key="cmd.autoreply.autoreply.help.name"), description=app_commands.locale_str("Show auto-reply usage instructions", i18n_key="cmd.autoreply.autoreply.help.desc"))
     async def autoreply_help(self, interaction: discord.Interaction):
         await interaction.response.defer()
         embed = discord.Embed(

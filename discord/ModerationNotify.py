@@ -277,15 +277,15 @@ class ModerationNotify(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
-    @app_commands.command(name=app_commands.locale_str("settings-punishment-notify"), description="設定是否通知被懲罰的用戶")
+    @app_commands.command(name=app_commands.locale_str("settings-punishment-notify", i18n_key="cmd.moderationnotify.settings_punishment_notify.name"), description=app_commands.locale_str("Configure whether punished users are notified", i18n_key="cmd.moderationnotify.settings_punishment_notify.desc"))
     @app_commands.describe(
-        action="選擇要設定的懲罰類型",
-        enable="是否啟用通知"
+        action=app_commands.locale_str("The punishment type to configure", i18n_key="cmd.moderationnotify.settings_punishment_notify.param.action"),
+        enable=app_commands.locale_str("Whether to enable notifications", i18n_key="cmd.moderationnotify.settings_punishment_notify.param.enable")
     )
     @app_commands.choices(action=[
-        app_commands.Choice(name="踢出", value="kick"),
-        app_commands.Choice(name="封禁", value="ban"),
-        app_commands.Choice(name="禁言", value="mute"),
+        app_commands.Choice(name=app_commands.locale_str("Kick", i18n_key="cmd.moderationnotify.settings_punishment_notify.choice.kick"), value="kick"),
+        app_commands.Choice(name=app_commands.locale_str("Ban", i18n_key="cmd.moderationnotify.settings_punishment_notify.choice.ban"), value="ban"),
+        app_commands.Choice(name=app_commands.locale_str("Mute", i18n_key="cmd.moderationnotify.settings_punishment_notify.choice.mute"), value="mute"),
     ])
     @app_commands.guild_only()
     @app_commands.default_permissions(manage_guild=True)
@@ -301,8 +301,8 @@ class ModerationNotify(commands.Cog):
         await interaction.response.send_message(f"已將 {action} 通知設定為{'啟用' if enable else '禁用'}。", ephemeral=True)
         log(f"已將 {action} 通知設定為{'啟用' if enable else '禁用'}。", module_name="ModerationNotify", guild=guild)
     
-    @app_commands.command(name=app_commands.locale_str("user-appeal-channel"), description="設置用戶申訴頻道，若未設置則關閉。")
-    @app_commands.describe(channel="要設置的用戶申訴頻道，留空則關閉申訴功能。")
+    @app_commands.command(name=app_commands.locale_str("user-appeal-channel", i18n_key="cmd.moderationnotify.user_appeal_channel.name"), description=app_commands.locale_str("Set the appeal channel; appeals are disabled if unset.", i18n_key="cmd.moderationnotify.user_appeal_channel.desc"))
+    @app_commands.describe(channel=app_commands.locale_str("The appeal channel; leave empty to disable appeals.", i18n_key="cmd.moderationnotify.user_appeal_channel.param.channel"))
     @app_commands.guild_only()
     @app_commands.default_permissions(manage_guild=True)
     @app_commands.allowed_installs(guilds=True, users=False)
@@ -322,10 +322,10 @@ class ModerationNotify(commands.Cog):
             await interaction.response.send_message("用戶申訴功能已被禁用。", ephemeral=True)
             log("禁用用戶申訴功能", module_name="ModerationNotify", guild=guild)
     
-    @app_commands.command(name=app_commands.locale_str("user-appeal-blacklist"), description="管理用戶申訴黑名單")
+    @app_commands.command(name=app_commands.locale_str("user-appeal-blacklist", i18n_key="cmd.moderationnotify.user_appeal_blacklist.name"), description=app_commands.locale_str("Manage the appeal blacklist", i18n_key="cmd.moderationnotify.user_appeal_blacklist.desc"))
     @app_commands.describe(
-        user="要加入或移除黑名單的用戶",
-        reason="加入黑名單的理由(選填)"
+        user=app_commands.locale_str("User to add to or remove from the blacklist", i18n_key="cmd.moderationnotify.user_appeal_blacklist.param.user"),
+        reason=app_commands.locale_str("Reason for blacklisting (optional)", i18n_key="cmd.moderationnotify.user_appeal_blacklist.param.reason")
     )
     @app_commands.guild_only()
     @app_commands.default_permissions(manage_guild=True)
@@ -388,7 +388,7 @@ class ModerationNotify(commands.Cog):
 
         log(f"將 {user} ({user.id}) 加入申訴黑名單，理由：{reason}", module_name="ModerationNotify", guild=guild)
 
-    @app_commands.command(name=app_commands.locale_str("view-appeal-blacklist"), description="查看申訴黑名單")
+    @app_commands.command(name=app_commands.locale_str("view-appeal-blacklist", i18n_key="cmd.moderationnotify.view_appeal_blacklist.name"), description=app_commands.locale_str("View the appeal blacklist", i18n_key="cmd.moderationnotify.view_appeal_blacklist.desc"))
     @app_commands.guild_only()
     @app_commands.default_permissions(manage_guild=True)
     @app_commands.allowed_installs(guilds=True, users=False)

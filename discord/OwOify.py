@@ -101,8 +101,8 @@ class OwOify(commands.Cog):
 
     @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
     @app_commands.allowed_installs(guilds=True, users=True)
-    @app_commands.command(name="owoify", description="文字也能變可愛！")
-    @app_commands.describe(text="要變可愛的文字", english="是否英文版？")
+    @app_commands.command(name=app_commands.locale_str("owoify", i18n_key="cmd.owoify.owoify.name"), description=app_commands.locale_str("Make text cute!", i18n_key="cmd.owoify.owoify.desc"))
+    @app_commands.describe(text=app_commands.locale_str("The text to cutify", i18n_key="cmd.owoify.owoify.param.text"), english=app_commands.locale_str("English version?", i18n_key="cmd.owoify.owoify.param.english"))
     async def owoify(self, interaction: discord.Interaction, text: str, english: bool = False):
         if english:
             owoified_text = owoify(text)

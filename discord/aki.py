@@ -30,7 +30,7 @@ class Aki(commands.Cog):
 
     @app_commands.allowed_installs(guilds=True, users=True)
     @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
-    @app_commands.command(name="aki", description="與 Akinator 進行遊戲")
+    @app_commands.command(name=app_commands.locale_str("aki", i18n_key="cmd.aki.aki.name"), description=app_commands.locale_str("Play a game with Akinator", i18n_key="cmd.aki.aki.desc"))
     async def aki_command(self, interaction: discord.Interaction):
         await interaction.response.defer()
         if interaction.user.id in in_game_sessions:

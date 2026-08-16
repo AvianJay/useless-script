@@ -7,7 +7,7 @@ import asyncio
 
 semaphore = Semaphore()
 
-class Statistics(commands.GroupCog, name="stats"):
+class Statistics(commands.GroupCog, name=app_commands.locale_str("stats", i18n_key="cmd.statistics.stats.root.name")):
     def __init__(self, bot: commands.Bot) -> None:
         self.bot = bot
         super().__init__()
@@ -15,8 +15,8 @@ class Statistics(commands.GroupCog, name="stats"):
     
     @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
     @app_commands.allowed_installs(guilds=True, users=True)
-    @app_commands.command(name="command", description="查看指令使用統計")
-    @app_commands.describe(full="是否顯示完整統計數據")
+    @app_commands.command(name=app_commands.locale_str("command", i18n_key="cmd.statistics.stats.command.name"), description=app_commands.locale_str("View command usage statistics", i18n_key="cmd.statistics.stats.command.desc"))
+    @app_commands.describe(full=app_commands.locale_str("Show full statistics", i18n_key="cmd.statistics.stats.command.param.full"))
     async def command_stats(self, interaction: discord.Interaction, full: bool = False):
         command_stats = get_global_config("command_usage_stats", {})
         command_error_stats = get_global_config("command_error_stats", {})
@@ -50,7 +50,7 @@ class Statistics(commands.GroupCog, name="stats"):
 
         await interaction.response.send_message(embed=embed)
 
-    @app_commands.command(name="petpet-stats", description="查看你使用 petpet 指令的次數")
+    @app_commands.command(name=app_commands.locale_str("petpet-stats", i18n_key="cmd.statistics.stats.petpet_stats.name"), description=app_commands.locale_str("See how many times you've used petpet", i18n_key="cmd.statistics.stats.petpet_stats.desc"))
     async def petpet_stats(self, interaction: discord.Interaction):
         petpet_count = get_user_data(None, interaction.user.id, "petpet_count", 0)
         get_petpet_count = get_user_data(None, interaction.user.id, "get_petpet_count", 0)

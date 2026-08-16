@@ -230,10 +230,10 @@ class JoinNotify(commands.Cog):
                 guild=guild,
             )
 
-    @app_commands.command(name="joinnotify", description="設定是否在你邀請我加入伺服器時私訊")
+    @app_commands.command(name=app_commands.locale_str("joinnotify", i18n_key="cmd.joinnotify.joinnotify.name"), description=app_commands.locale_str("Choose whether I DM you when you invite me to a server", i18n_key="cmd.joinnotify.joinnotify.desc"))
     @app_commands.choices(option=[
-        app_commands.Choice(name="好啊", value="enable"),
-        app_commands.Choice(name="不要", value="disable")
+        app_commands.Choice(name=app_commands.locale_str("Sure", i18n_key="cmd.joinnotify.joinnotify.choice.enable"), value="enable"),
+        app_commands.Choice(name=app_commands.locale_str("No thanks", i18n_key="cmd.joinnotify.joinnotify.choice.disable"), value="disable")
     ])
     @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
     @app_commands.allowed_installs(guilds=True, users=True)

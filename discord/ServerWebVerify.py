@@ -409,7 +409,7 @@ async def check_unlock_force_verify():
 @app_commands.default_permissions(manage_guild=True)
 @app_commands.allowed_installs(guilds=True, users=False)
 @app_commands.allowed_contexts(guilds=True, dms=False, private_channels=False)
-class ServerWebVerify(commands.GroupCog, name="webverify", description="伺服器網頁驗證設定指令"):
+class ServerWebVerify(commands.GroupCog, name=app_commands.locale_str("webverify", i18n_key="cmd.serverwebverify.webverify.root.name"), description=app_commands.locale_str("Server web verification commands", i18n_key="cmd.serverwebverify.webverify.root.desc")):
     def __init__(self, bot):
         self.bot = bot
         self.force_ctx_menu = app_commands.ContextMenu(name="強制用戶驗證", callback=self.force_user_verify_context_menu)
@@ -417,7 +417,7 @@ class ServerWebVerify(commands.GroupCog, name="webverify", description="伺服�
         self.manual_ctx_menu = app_commands.ContextMenu(name="手動驗證用戶", callback=self.manual_verify_user_context_menu)
         bot.tree.add_command(self.manual_ctx_menu)
     
-    @app_commands.command(name="setup", description="設定伺服器的網頁驗證功能")
+    @app_commands.command(name=app_commands.locale_str("setup", i18n_key="cmd.serverwebverify.webverify.setup.name"), description=app_commands.locale_str("Set up web verification for this server", i18n_key="cmd.serverwebverify.webverify.setup.desc"))
     @app_commands.default_permissions(administrator=True)
     async def setup(self, interaction: discord.Interaction):
         guild_id = interaction.guild.id
@@ -438,7 +438,7 @@ class ServerWebVerify(commands.GroupCog, name="webverify", description="伺服�
         set_server_config(guild_id, "webverify_config", default_config)
         await interaction.response.send_message(f"伺服器的網頁驗證功能已設定完成。請記得設定未驗證成員的角色({get_command_mention('webverify', 'set_unverified_role')})。")
 
-    @app_commands.command(name="quick_setup", description="使用互動式精靈快速設定網頁驗證")
+    @app_commands.command(name=app_commands.locale_str("quick_setup", i18n_key="cmd.serverwebverify.webverify.quick_setup.name"), description=app_commands.locale_str("Quickly set up web verification with an interactive wizard", i18n_key="cmd.serverwebverify.webverify.quick_setup.desc"))
     @app_commands.default_permissions(administrator=True)
     async def quick_setup(self, interaction: discord.Interaction):
         getting_started_module = sys.modules.get("gettingstarted")
@@ -449,7 +449,7 @@ class ServerWebVerify(commands.GroupCog, name="webverify", description="伺服�
         await interaction.response.send_message(embed=await view.get_embed(), view=view)
 
     
-    @app_commands.command(name="disable", description="停用伺服器的網頁驗證功能")
+    @app_commands.command(name=app_commands.locale_str("disable", i18n_key="cmd.serverwebverify.webverify.disable.name"), description=app_commands.locale_str("Disable web verification for this server", i18n_key="cmd.serverwebverify.webverify.disable.desc"))
     @app_commands.default_permissions(administrator=True)
     async def disable(self, interaction: discord.Interaction):
         guild_id = interaction.guild.id
@@ -461,7 +461,7 @@ class ServerWebVerify(commands.GroupCog, name="webverify", description="伺服�
         set_server_config(guild_id, "webverify_config", guild_config)
         await interaction.response.send_message("伺服器的網頁驗證功能已停用。")
     
-    @app_commands.command(name="enable", description="啟用伺服器的網頁驗證功能")
+    @app_commands.command(name=app_commands.locale_str("enable", i18n_key="cmd.serverwebverify.webverify.enable.name"), description=app_commands.locale_str("Enable web verification for this server", i18n_key="cmd.serverwebverify.webverify.enable.desc"))
     @app_commands.default_permissions(administrator=True)
     async def enable(self, interaction: discord.Interaction):
         guild_id = interaction.guild.id
@@ -473,12 +473,12 @@ class ServerWebVerify(commands.GroupCog, name="webverify", description="伺服�
         set_server_config(guild_id, "webverify_config", guild_config)
         await interaction.response.send_message("伺服器的網頁驗證功能已啟用。")
     
-    @app_commands.command(name="set_captcha", description="設定網頁驗證使用的 CAPTCHA 提供者")
-    @app_commands.describe(captcha_provider="選擇 CAPTCHA 提供者")
+    @app_commands.command(name=app_commands.locale_str("set_captcha", i18n_key="cmd.serverwebverify.webverify.set_captcha.name"), description=app_commands.locale_str("Set the CAPTCHA provider used for web verification", i18n_key="cmd.serverwebverify.webverify.set_captcha.desc"))
+    @app_commands.describe(captcha_provider=app_commands.locale_str("Choose a CAPTCHA provider", i18n_key="cmd.serverwebverify.webverify.set_captcha.param.captcha_provider"))
     @app_commands.choices(captcha_provider=[
-        app_commands.Choice(name="無", value="none"),
-        app_commands.Choice(name="Cloudflare Turnstile", value="turnstile"),
-        app_commands.Choice(name="Google reCAPTCHA", value="recaptcha")
+        app_commands.Choice(name=app_commands.locale_str("None", i18n_key="cmd.serverwebverify.webverify.set_captcha.choice.none"), value="none"),
+        app_commands.Choice(name=app_commands.locale_str("Cloudflare Turnstile", i18n_key="cmd.serverwebverify.webverify.set_captcha.choice.turnstile"), value="turnstile"),
+        app_commands.Choice(name=app_commands.locale_str("Google reCAPTCHA", i18n_key="cmd.serverwebverify.webverify.set_captcha.choice.recaptcha"), value="recaptcha")
     ])
     @app_commands.default_permissions(administrator=True)
     async def set_captcha(self, interaction: discord.Interaction, captcha_provider: str):
@@ -494,8 +494,8 @@ class ServerWebVerify(commands.GroupCog, name="webverify", description="伺服�
         set_server_config(guild_id, "webverify_config", guild_config)
         await interaction.response.send_message(f"網頁驗證的 CAPTCHA 類型已設定為 {captcha_provider}。" if captcha_provider != 'none' else "已關閉 CAPTCHA 驗證。")
     
-    @app_commands.command(name="set_unverified_role", description="設定未驗證成員的角色")
-    @app_commands.describe(role="選擇未驗證成員的角色")
+    @app_commands.command(name=app_commands.locale_str("set_unverified_role", i18n_key="cmd.serverwebverify.webverify.set_unverified_role.name"), description=app_commands.locale_str("Set the unverified-member role", i18n_key="cmd.serverwebverify.webverify.set_unverified_role.desc"))
+    @app_commands.describe(role=app_commands.locale_str("The role for unverified members", i18n_key="cmd.serverwebverify.webverify.set_unverified_role.param.role"))
     @app_commands.default_permissions(administrator=True)
     async def set_unverified_role(self, interaction: discord.Interaction, role: discord.Role):
         guild_id = interaction.guild.id
@@ -507,7 +507,7 @@ class ServerWebVerify(commands.GroupCog, name="webverify", description="伺服�
         set_server_config(guild_id, "webverify_config", guild_config)
         await interaction.response.send_message(f"未驗證成員的角色已設定為 {role.name}。")
     
-    @app_commands.command(name="status", description="查看伺服器的網頁驗證設定狀態")
+    @app_commands.command(name=app_commands.locale_str("status", i18n_key="cmd.serverwebverify.webverify.status.name"), description=app_commands.locale_str("View this server's web verification status", i18n_key="cmd.serverwebverify.webverify.status.desc"))
     async def status(self, interaction: discord.Interaction):
         guild_id = interaction.guild.id
         guild_config = get_server_config(guild_id, "webverify_config")
@@ -521,12 +521,12 @@ class ServerWebVerify(commands.GroupCog, name="webverify", description="伺服�
         )
         await interaction.response.send_message(status_msg)
     
-    @app_commands.command(name="verify_notify", description="設定驗證通知的方式")
-    @app_commands.describe(type="選擇要如何提示", channel="選擇要發送驗證訊息的頻道", title="自訂 Embed 標題", message="自訂驗證訊息內容")
+    @app_commands.command(name=app_commands.locale_str("verify_notify", i18n_key="cmd.serverwebverify.webverify.verify_notify.name"), description=app_commands.locale_str("Configure how verification notices are sent", i18n_key="cmd.serverwebverify.webverify.verify_notify.desc"))
+    @app_commands.describe(type=app_commands.locale_str("How to notify", i18n_key="cmd.serverwebverify.webverify.verify_notify.param.type"), channel=app_commands.locale_str("The channel for verification messages", i18n_key="cmd.serverwebverify.webverify.verify_notify.param.channel"), title=app_commands.locale_str("Custom embed title", i18n_key="cmd.serverwebverify.webverify.verify_notify.param.title"), message=app_commands.locale_str("Custom verification message", i18n_key="cmd.serverwebverify.webverify.verify_notify.param.message"))
     @app_commands.choices(type=[
-        app_commands.Choice(name="在頻道內", value="channel"),
-        app_commands.Choice(name="私訊", value="dm"),
-        app_commands.Choice(name="都要", value="both")
+        app_commands.Choice(name=app_commands.locale_str("In the channel", i18n_key="cmd.serverwebverify.webverify.verify_notify.choice.channel"), value="channel"),
+        app_commands.Choice(name=app_commands.locale_str("Direct message", i18n_key="cmd.serverwebverify.webverify.verify_notify.choice.dm"), value="dm"),
+        app_commands.Choice(name=app_commands.locale_str("Both", i18n_key="cmd.serverwebverify.webverify.verify_notify.choice.both"), value="both")
     ])
     @app_commands.default_permissions(administrator=True)
     async def verify_notify(self, interaction: discord.Interaction, type: str = "channel", channel: discord.TextChannel = None, title: str = "伺服器網頁驗證", message: str = "請點擊下方按鈕進行網頁驗證："):
@@ -555,8 +555,8 @@ class ServerWebVerify(commands.GroupCog, name="webverify", description="伺服�
         elif type == "dm":
             await interaction.response.send_message("已設定驗證通知方式為私訊。")
     
-    @app_commands.command(name="check_relation", description="檢查用戶的關聯帳號")
-    @app_commands.describe(user="要檢查的用戶")
+    @app_commands.command(name=app_commands.locale_str("check_relation", i18n_key="cmd.serverwebverify.webverify.check_relation.name"), description=app_commands.locale_str("Check a user's related accounts", i18n_key="cmd.serverwebverify.webverify.check_relation.desc"))
+    @app_commands.describe(user=app_commands.locale_str("The user to check", i18n_key="cmd.serverwebverify.webverify.check_relation.param.user"))
     @app_commands.default_permissions(administrator=True)
     async def check_relation(self, interaction: discord.Interaction, user: discord.User):
         with get_db_connection() as conn:
@@ -589,8 +589,8 @@ class ServerWebVerify(commands.GroupCog, name="webverify", description="伺服�
             
             await interaction.response.send_message(embed=embed, ephemeral=True)
     
-    @app_commands.command(name="relation_action", description="對用戶及其關聯帳號進行操作")
-    @app_commands.describe(user="選擇用戶", action="要執行的操作 (格式與 !moderate 相同)")
+    @app_commands.command(name=app_commands.locale_str("relation_action", i18n_key="cmd.serverwebverify.webverify.relation_action.name"), description=app_commands.locale_str("Act on a user and their related accounts", i18n_key="cmd.serverwebverify.webverify.relation_action.desc"))
+    @app_commands.describe(user=app_commands.locale_str("Choose a user", i18n_key="cmd.serverwebverify.webverify.relation_action.param.user"), action=app_commands.locale_str("The action to run (same format as !moderate)", i18n_key="cmd.serverwebverify.webverify.relation_action.param.action"))
     @app_commands.default_permissions(administrator=True)
     async def relation_action(self, interaction: discord.Interaction, user: discord.Member, action: str):
         if "Moderate" not in modules:
@@ -662,14 +662,14 @@ class ServerWebVerify(commands.GroupCog, name="webverify", description="伺服�
             else:
                 await interaction.followup.send(chunk)
     
-    @app_commands.command(name="autorole", description="設定自動為新成員分配未驗證角色")
-    @app_commands.describe(enable="啟用或停用自動分配未驗證角色", trigger="選擇給予身分組條件")
+    @app_commands.command(name=app_commands.locale_str("autorole", i18n_key="cmd.serverwebverify.webverify.autorole.name"), description=app_commands.locale_str("Automatically assign the unverified role to new members", i18n_key="cmd.serverwebverify.webverify.autorole.desc"))
+    @app_commands.describe(enable=app_commands.locale_str("Enable or disable automatic role assignment", i18n_key="cmd.serverwebverify.webverify.autorole.param.enable"), trigger=app_commands.locale_str("Condition for assigning the role", i18n_key="cmd.serverwebverify.webverify.autorole.param.trigger"))
     @app_commands.choices(trigger=[
-        app_commands.Choice(name="總是給予", value="always"),
-        app_commands.Choice(name="帳號年齡過小", value="age_check"),
-        app_commands.Choice(name="無驗證紀錄", value="no_history"),
-        app_commands.Choice(name="帳號曾經被標記過", value="has_flagged_history"),
-        app_commands.Choice(name="曾經退出過伺服器", value="left_guild_before")
+        app_commands.Choice(name=app_commands.locale_str("Always assign", i18n_key="cmd.serverwebverify.webverify.autorole.choice.always"), value="always"),
+        app_commands.Choice(name=app_commands.locale_str("Account too new", i18n_key="cmd.serverwebverify.webverify.autorole.choice.age_check"), value="age_check"),
+        app_commands.Choice(name=app_commands.locale_str("No verification history", i18n_key="cmd.serverwebverify.webverify.autorole.choice.no_history"), value="no_history"),
+        app_commands.Choice(name=app_commands.locale_str("Account was flagged before", i18n_key="cmd.serverwebverify.webverify.autorole.choice.has_flagged_history"), value="has_flagged_history"),
+        app_commands.Choice(name=app_commands.locale_str("Left the server before", i18n_key="cmd.serverwebverify.webverify.autorole.choice.left_guild_before"), value="left_guild_before")
     ])
     @app_commands.default_permissions(administrator=True)
     async def autorole(self, interaction: discord.Interaction, enable: bool, trigger: str):
@@ -696,8 +696,8 @@ class ServerWebVerify(commands.GroupCog, name="webverify", description="伺服�
         status = "已啟用" if enable else "已停用"
         await interaction.response.send_message(f"自動分配未驗證角色功能{status}，觸發條件：{guild_config['autorole_trigger']}。")
     
-    @app_commands.command(name="create_unverified_role", description="自動建立並設定未驗證成員的身分組")
-    @app_commands.describe(name="未驗證成員身分組名稱")
+    @app_commands.command(name=app_commands.locale_str("create_unverified_role", i18n_key="cmd.serverwebverify.webverify.create_unverified_role.name"), description=app_commands.locale_str("Automatically create and configure the unverified-member role", i18n_key="cmd.serverwebverify.webverify.create_unverified_role.desc"))
+    @app_commands.describe(name=app_commands.locale_str("Name for the unverified-member role", i18n_key="cmd.serverwebverify.webverify.create_unverified_role.param.name"))
     @app_commands.default_permissions(administrator=True)
     async def create_unverified_role(self, interaction: discord.Interaction, name: str = "未驗證成員"):
         guild = interaction.guild
@@ -717,8 +717,8 @@ class ServerWebVerify(commands.GroupCog, name="webverify", description="伺服�
         set_server_config(guild.id, "webverify_config", guild_config)
         await interaction.followup.send(f"已建立角色 '{name}' 並將所有文字頻道權限關閉且設定為未驗證成員角色。")
     
-    @app_commands.command(name="minage", description="定義最小帳號年齡")
-    @app_commands.describe(min_age="最小帳號年齡（天）")
+    @app_commands.command(name=app_commands.locale_str("minage", i18n_key="cmd.serverwebverify.webverify.minage.name"), description=app_commands.locale_str("Define the minimum account age", i18n_key="cmd.serverwebverify.webverify.minage.desc"))
+    @app_commands.describe(min_age=app_commands.locale_str("Minimum account age (days)", i18n_key="cmd.serverwebverify.webverify.minage.param.min_age"))
     @app_commands.default_permissions(administrator=True)
     async def minage(self, interaction: discord.Interaction, min_age: int):
         guild_config = get_server_config(interaction.guild.id, "webverify_config")
@@ -728,16 +728,16 @@ class ServerWebVerify(commands.GroupCog, name="webverify", description="伺服�
         set_server_config(interaction.guild.id, "webverify_config", guild_config)
         await interaction.response.send_message(f"最小帳號年齡已設定為 {min_age} 天。")
     
-    @app_commands.command(name="country-alert", description="設定驗證地區警示")
+    @app_commands.command(name=app_commands.locale_str("country-alert", i18n_key="cmd.serverwebverify.webverify.country_alert.name"), description=app_commands.locale_str("Configure verification region alerts", i18n_key="cmd.serverwebverify.webverify.country_alert.desc"))
     @app_commands.describe(
-        enable="啟用或停用地區警示功能",
-        mode="選擇警示模式",
-        countries="輸入國家代碼，使用逗號分隔 (例如: US,CN,RU)",
-        channel="選擇接收警示的頻道"
+        enable=app_commands.locale_str("Enable or disable region alerts", i18n_key="cmd.serverwebverify.webverify.country_alert.param.enable"),
+        mode=app_commands.locale_str("Alert mode", i18n_key="cmd.serverwebverify.webverify.country_alert.param.mode"),
+        countries=app_commands.locale_str("Country codes, comma separated (e.g. US,CN,RU)", i18n_key="cmd.serverwebverify.webverify.country_alert.param.countries"),
+        channel=app_commands.locale_str("The channel that receives alerts", i18n_key="cmd.serverwebverify.webverify.country_alert.param.channel")
     )
     @app_commands.choices(mode=[
-        app_commands.Choice(name="封鎖清單模式", value="blocklist"),
-        app_commands.Choice(name="允許清單模式", value="allowlist")
+        app_commands.Choice(name=app_commands.locale_str("Blocklist mode", i18n_key="cmd.serverwebverify.webverify.country_alert.choice.blocklist"), value="blocklist"),
+        app_commands.Choice(name=app_commands.locale_str("Allowlist mode", i18n_key="cmd.serverwebverify.webverify.country_alert.choice.allowlist"), value="allowlist")
     ])
     @app_commands.default_permissions(administrator=True)
     async def country_alert(self, interaction: discord.Interaction, enable: bool, mode: str, countries: str, channel: discord.TextChannel):
@@ -755,8 +755,8 @@ class ServerWebVerify(commands.GroupCog, name="webverify", description="伺服�
         status = "已啟用" if enable else "已停用"
         await interaction.response.send_message(f"地區警示功能{status}。模式：{mode}，國家代碼：{', '.join(country_list)}，警示頻道：{channel.mention}。")
     
-    @app_commands.command(name="manual-check-country", description="手動檢查用戶的地理位置")
-    @app_commands.describe(user="選擇用戶")
+    @app_commands.command(name=app_commands.locale_str("manual-check-country", i18n_key="cmd.serverwebverify.webverify.manual_check_country.name"), description=app_commands.locale_str("Manually check a user's region", i18n_key="cmd.serverwebverify.webverify.manual_check_country.desc"))
+    @app_commands.describe(user=app_commands.locale_str("Choose a user", i18n_key="cmd.serverwebverify.webverify.manual_check_country.param.user"))
     @app_commands.default_permissions(administrator=True)
     async def manual_check_country(self, interaction: discord.Interaction, user: discord.Member = None):
         await interaction.response.defer()
@@ -808,8 +808,8 @@ class ServerWebVerify(commands.GroupCog, name="webverify", description="伺服�
             chunk = report_lines[i:i+20]
             await interaction.followup.send("```" + "\n".join(chunk) + "```")
     
-    @app_commands.command(name="force-verify", description="強制用戶進行驗證")
-    @app_commands.describe(user="選擇要強制驗證的用戶")
+    @app_commands.command(name=app_commands.locale_str("force-verify", i18n_key="cmd.serverwebverify.webverify.force_verify.name"), description=app_commands.locale_str("Force a user to verify", i18n_key="cmd.serverwebverify.webverify.force_verify.desc"))
+    @app_commands.describe(user=app_commands.locale_str("The user to force-verify", i18n_key="cmd.serverwebverify.webverify.force_verify.param.user"))
     @app_commands.default_permissions(administrator=True)
     async def force_verify(self, interaction: discord.Interaction, user: discord.Member):
         success, message = await force_verify_user(interaction.guild, user)
@@ -818,8 +818,8 @@ class ServerWebVerify(commands.GroupCog, name="webverify", description="伺服�
         else:
             await interaction.response.send_message(f"無法強制驗證 {user.mention}：{message}")
     
-    @app_commands.command(name="start-force-verify", description="開始對所有新加入的成員強制驗證")
-    @app_commands.describe(duration="強制驗證持續的時間（?h?m?s...）")
+    @app_commands.command(name=app_commands.locale_str("start-force-verify", i18n_key="cmd.serverwebverify.webverify.start_force_verify.name"), description=app_commands.locale_str("Start forcing verification for all newly joined members", i18n_key="cmd.serverwebverify.webverify.start_force_verify.desc"))
+    @app_commands.describe(duration=app_commands.locale_str("How long forced verification lasts (?h?m?s...)", i18n_key="cmd.serverwebverify.webverify.start_force_verify.param.duration"))
     @app_commands.default_permissions(administrator=True)
     async def start_force_verify(self, interaction: discord.Interaction, duration: str):
         try:

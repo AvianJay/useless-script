@@ -839,7 +839,7 @@ class HackedDetector(commands.Cog):
     async def cog_unload(self):
         self.expired_unverified_kick_task.cancel()
 
-    @app_commands.command(name="imhacked", description="開始解除被盜帳戶的流程")
+    @app_commands.command(name=app_commands.locale_str("imhacked", i18n_key="cmd.hackeddetector.imhacked.name"), description=app_commands.locale_str("Start the compromised-account recovery flow", i18n_key="cmd.hackeddetector.imhacked.desc"))
     async def imhacked(self, interaction: discord.Interaction):
         user = interaction.user
         timed_out = self._get_hacked_user_data(user.id, "hacked_timed_out_channel", [])

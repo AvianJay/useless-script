@@ -227,12 +227,12 @@ async def review_bio(bio_text: str) -> dict:
 @app_commands.default_permissions(manage_guild=True)
 @app_commands.allowed_installs(guilds=True, users=False)
 @app_commands.allowed_contexts(guilds=True, dms=False, private_channels=False)
-class BotCustomizer(commands.GroupCog, name="change"):
+class BotCustomizer(commands.GroupCog, name=app_commands.locale_str("change", i18n_key="cmd.botcustomizer.change.root.name")):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
 
-    @app_commands.command(name=app_commands.locale_str("avatar"), description="更換機器人的頭像（不指定則恢復預設頭像）")
-    @app_commands.describe(image="新的頭像圖片")
+    @app_commands.command(name=app_commands.locale_str("avatar", i18n_key="cmd.botcustomizer.change.avatar.name"), description=app_commands.locale_str("Change the bot's avatar (omit to restore the default)", i18n_key="cmd.botcustomizer.change.avatar.desc"))
+    @app_commands.describe(image=app_commands.locale_str("The new avatar image", i18n_key="cmd.botcustomizer.change.avatar.param.image"))
     @app_commands.default_permissions(administrator=True)
     @app_commands.allowed_installs(guilds=True, users=False)
     @app_commands.allowed_contexts(guilds=True, dms=False, private_channels=False)
@@ -314,8 +314,8 @@ class BotCustomizer(commands.GroupCog, name="change"):
             traceback.print_exc()
 
 
-    @app_commands.command(name=app_commands.locale_str("banner"), description="更換機器人的橫幅（不指定則恢復預設橫幅）")
-    @app_commands.describe(image="新的橫幅圖片")
+    @app_commands.command(name=app_commands.locale_str("banner", i18n_key="cmd.botcustomizer.change.banner.name"), description=app_commands.locale_str("Change the bot's banner (omit to restore the default)", i18n_key="cmd.botcustomizer.change.banner.desc"))
+    @app_commands.describe(image=app_commands.locale_str("The new banner image", i18n_key="cmd.botcustomizer.change.banner.param.image"))
     @app_commands.default_permissions(administrator=True)
     @app_commands.allowed_installs(guilds=True, users=False)
     @app_commands.allowed_contexts(guilds=True, dms=False, private_channels=False)
@@ -397,8 +397,8 @@ class BotCustomizer(commands.GroupCog, name="change"):
             traceback.print_exc()
 
 
-    @app_commands.command(name=app_commands.locale_str("bio"), description="更改機器人的關於我（不指定則恢復預設）")
-    @app_commands.describe(bio="新的介紹（\\n 代表換行）（最多 100 字）")
+    @app_commands.command(name=app_commands.locale_str("bio", i18n_key="cmd.botcustomizer.change.bio.name"), description=app_commands.locale_str("Change the bot's About Me (omit to restore the default)", i18n_key="cmd.botcustomizer.change.bio.desc"))
+    @app_commands.describe(bio=app_commands.locale_str("The new bio (\\n for line breaks, max 100 characters)", i18n_key="cmd.botcustomizer.change.bio.param.bio"))
     @app_commands.default_permissions(administrator=True)
     async def changebio_command(self, interaction: discord.Interaction, bio: str = None):
         guild_id = interaction.guild.id if interaction.guild else None

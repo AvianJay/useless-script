@@ -701,13 +701,13 @@ async def refresh_panel(guild: discord.Guild) -> bool:
 @app_commands.default_permissions(manage_guild=True)
 @app_commands.allowed_installs(guilds=True, users=False)
 @app_commands.allowed_contexts(guilds=True, dms=False, private_channels=False)
-class TicketCog(commands.GroupCog, name=app_commands.locale_str("ticket")):
+class TicketCog(commands.GroupCog, name=app_commands.locale_str("ticket", i18n_key="cmd.ticket.ticket.root.name")):
     def __init__(self, bot):
         self.bot = bot
         self.persistent_views_registered = False
 
-    @app_commands.command(name=app_commands.locale_str("panel"), description="發布票口面板訊息")
-    @app_commands.describe(channel="要發布面板的頻道（省略時使用設定的面板頻道）")
+    @app_commands.command(name=app_commands.locale_str("panel", i18n_key="cmd.ticket.ticket.panel.name"), description=app_commands.locale_str("Publish the ticket panel message", i18n_key="cmd.ticket.ticket.panel.desc"))
+    @app_commands.describe(channel=app_commands.locale_str("Channel to publish the panel in (defaults to the configured panel channel)", i18n_key="cmd.ticket.ticket.panel.param.channel"))
     @app_commands.checks.has_permissions(manage_guild=True)
     async def panel(self, interaction: discord.Interaction, channel: discord.TextChannel = None):
         await interaction.response.defer(ephemeral=True)
@@ -725,13 +725,13 @@ class TicketCog(commands.GroupCog, name=app_commands.locale_str("ticket")):
             return
         await interaction.followup.send(f"✅ 票口面板已發布到 {channel.mention}。", ephemeral=True)
 
-    @app_commands.command(name=app_commands.locale_str("setup"), description="快速設定票口系統")
+    @app_commands.command(name=app_commands.locale_str("setup", i18n_key="cmd.ticket.ticket.setup.name"), description=app_commands.locale_str("Quickly set up the ticket system", i18n_key="cmd.ticket.ticket.setup.desc"))
     @app_commands.describe(
-        category="票口頻道建立的分類",
-        panel_channel="開票按鈕面板所在的頻道",
-        staff_role="客服身分組（更多身分組可到伺服器面板設定）",
-        log_channel="票口關閉後逐字稿發送的頻道（省略則不保存逐字稿）",
-        publish="是否立即發布面板訊息（預設是）",
+        category=app_commands.locale_str("Category where ticket channels are created", i18n_key="cmd.ticket.ticket.setup.param.category"),
+        panel_channel=app_commands.locale_str("Channel for the ticket panel with its open button", i18n_key="cmd.ticket.ticket.setup.param.panel_channel"),
+        staff_role=app_commands.locale_str("Staff role (add more roles in the server panel)", i18n_key="cmd.ticket.ticket.setup.param.staff_role"),
+        log_channel=app_commands.locale_str("Channel for transcripts after closing (omit to skip transcripts)", i18n_key="cmd.ticket.ticket.setup.param.log_channel"),
+        publish=app_commands.locale_str("Publish the panel message immediately (default: yes)", i18n_key="cmd.ticket.ticket.setup.param.publish"),
     )
     @app_commands.checks.has_permissions(manage_guild=True)
     async def setup(
@@ -786,8 +786,8 @@ class TicketCog(commands.GroupCog, name=app_commands.locale_str("ticket")):
         lines.append("其他選項（歡迎訊息、黑名單、每人上限等）可到伺服器面板調整。")
         await interaction.followup.send("\n".join(lines), ephemeral=True)
 
-    @app_commands.command(name=app_commands.locale_str("close"), description="關閉目前的票口")
-    @app_commands.describe(reason="關閉原因（會記錄在逐字稿摘要中）")
+    @app_commands.command(name=app_commands.locale_str("close", i18n_key="cmd.ticket.ticket.close.name"), description=app_commands.locale_str("Close the current ticket", i18n_key="cmd.ticket.ticket.close.desc"))
+    @app_commands.describe(reason=app_commands.locale_str("Close reason (recorded in the transcript summary)", i18n_key="cmd.ticket.ticket.close.param.reason"))
     async def close(self, interaction: discord.Interaction, reason: str = None):
         entry = resolve_ticket(interaction.guild.id, interaction.channel)
         if entry is None:
@@ -802,7 +802,7 @@ class TicketCog(commands.GroupCog, name=app_commands.locale_str("ticket")):
             ephemeral=True,
         )
 
-    @app_commands.command(name=app_commands.locale_str("claim"), description="認領目前的票口")
+    @app_commands.command(name=app_commands.locale_str("claim", i18n_key="cmd.ticket.ticket.claim.name"), description=app_commands.locale_str("Claim the current ticket", i18n_key="cmd.ticket.ticket.claim.desc"))
     async def claim(self, interaction: discord.Interaction):
         error = await claim_ticket(interaction)
         if error:
@@ -810,8 +810,8 @@ class TicketCog(commands.GroupCog, name=app_commands.locale_str("ticket")):
         else:
             await interaction.response.send_message("✅ 已認領此票口。", ephemeral=True)
 
-    @app_commands.command(name=app_commands.locale_str("add"), description="將用戶加入目前的票口")
-    @app_commands.describe(member="要加入的用戶")
+    @app_commands.command(name=app_commands.locale_str("add", i18n_key="cmd.ticket.ticket.add.name"), description=app_commands.locale_str("Add a user to the current ticket", i18n_key="cmd.ticket.ticket.add.desc"))
+    @app_commands.describe(member=app_commands.locale_str("The user to add", i18n_key="cmd.ticket.ticket.add.param.member"))
     async def add(self, interaction: discord.Interaction, member: discord.Member):
         entry = find_ticket(interaction.guild.id, interaction.channel.id)
         if entry is None:
@@ -831,8 +831,8 @@ class TicketCog(commands.GroupCog, name=app_commands.locale_str("ticket")):
             return
         await interaction.response.send_message(f"✅ 已將 {member.mention} 加入此票口。")
 
-    @app_commands.command(name=app_commands.locale_str("remove"), description="將用戶移出目前的票口")
-    @app_commands.describe(member="要移出的用戶")
+    @app_commands.command(name=app_commands.locale_str("remove", i18n_key="cmd.ticket.ticket.remove.name"), description=app_commands.locale_str("Remove a user from the current ticket", i18n_key="cmd.ticket.ticket.remove.desc"))
+    @app_commands.describe(member=app_commands.locale_str("The user to remove", i18n_key="cmd.ticket.ticket.remove.param.member"))
     async def remove(self, interaction: discord.Interaction, member: discord.Member):
         entry = find_ticket(interaction.guild.id, interaction.channel.id)
         if entry is None:
@@ -854,8 +854,8 @@ class TicketCog(commands.GroupCog, name=app_commands.locale_str("ticket")):
     # ============= Ticket types =============
 
     types_group = app_commands.Group(
-        name=app_commands.locale_str("types"),
-        description="管理票口類別（面板上的多個開票按鈕）",
+        name=app_commands.locale_str("types", i18n_key="cmd.ticket.types.root.name"),
+        description=app_commands.locale_str("Manage ticket types (multiple open buttons on the panel)", i18n_key="cmd.ticket.types.root.desc"),
     )
 
     async def _type_id_autocomplete(self, interaction: discord.Interaction, current: str):
@@ -865,20 +865,20 @@ class TicketCog(commands.GroupCog, name=app_commands.locale_str("ticket")):
             if current.lower() in str(t.get("label", "")).lower()
         ][:25]
 
-    @types_group.command(name=app_commands.locale_str("add"), description="新增票口類別")
+    @types_group.command(name=app_commands.locale_str("add", i18n_key="cmd.ticket.types.add.name"), description=app_commands.locale_str("Add a ticket type", i18n_key="cmd.ticket.types.add.desc"))
     @app_commands.describe(
-        label="按鈕文字（例如：技術支援）",
-        emoji="按鈕 emoji（選填）",
-        style="按鈕顏色（預設藍色）",
-        category="此類別專屬的頻道分類（省略時使用全域設定）",
-        staff_role="此類別額外的客服身分組（省略時只用全域客服）",
-        welcome="此類別專屬的歡迎訊息，可用 {user}、{subject}（省略時使用全域設定）",
+        label=app_commands.locale_str("Button label (e.g. Technical Support)", i18n_key="cmd.ticket.types.add.param.label"),
+        emoji=app_commands.locale_str("Button emoji (optional)", i18n_key="cmd.ticket.types.add.param.emoji"),
+        style=app_commands.locale_str("Button color (default: blue)", i18n_key="cmd.ticket.types.add.param.style"),
+        category=app_commands.locale_str("Dedicated channel category for this type (defaults to the global setting)", i18n_key="cmd.ticket.types.add.param.category"),
+        staff_role=app_commands.locale_str("Extra staff role for this type (defaults to global staff only)", i18n_key="cmd.ticket.types.add.param.staff_role"),
+        welcome=app_commands.locale_str("Dedicated welcome message; {user} and {subject} supported (defaults to global)", i18n_key="cmd.ticket.types.add.param.welcome"),
     )
     @app_commands.choices(style=[
-        app_commands.Choice(name="藍色", value="primary"),
-        app_commands.Choice(name="灰色", value="secondary"),
-        app_commands.Choice(name="綠色", value="success"),
-        app_commands.Choice(name="紅色", value="danger"),
+        app_commands.Choice(name=app_commands.locale_str("Blue", i18n_key="cmd.ticket.types.add.choice.primary"), value="primary"),
+        app_commands.Choice(name=app_commands.locale_str("Gray", i18n_key="cmd.ticket.types.add.choice.secondary"), value="secondary"),
+        app_commands.Choice(name=app_commands.locale_str("Green", i18n_key="cmd.ticket.types.add.choice.success"), value="success"),
+        app_commands.Choice(name=app_commands.locale_str("Red", i18n_key="cmd.ticket.types.add.choice.danger"), value="danger"),
     ])
     @app_commands.checks.has_permissions(manage_guild=True)
     async def types_add(self, interaction: discord.Interaction, label: str,
@@ -905,21 +905,21 @@ class TicketCog(commands.GroupCog, name=app_commands.locale_str("ticket")):
             ephemeral=True,
         )
 
-    @types_group.command(name=app_commands.locale_str("edit"), description="編輯票口類別")
+    @types_group.command(name=app_commands.locale_str("edit", i18n_key="cmd.ticket.types.edit.name"), description=app_commands.locale_str("Edit a ticket type", i18n_key="cmd.ticket.types.edit.desc"))
     @app_commands.describe(
-        type="要編輯的類別",
-        label="新的按鈕文字",
-        emoji="新的按鈕 emoji（輸入 - 可清除）",
-        style="新的按鈕顏色",
-        category="新的專屬分類（選擇後覆寫）",
-        staff_role="新的額外客服身分組（選擇後覆寫）",
-        welcome="新的專屬歡迎訊息（輸入 - 可清除改用全域設定）",
+        type=app_commands.locale_str("The type to edit", i18n_key="cmd.ticket.types.edit.param.type"),
+        label=app_commands.locale_str("New button label", i18n_key="cmd.ticket.types.edit.param.label"),
+        emoji=app_commands.locale_str("New button emoji (enter - to clear)", i18n_key="cmd.ticket.types.edit.param.emoji"),
+        style=app_commands.locale_str("New button color", i18n_key="cmd.ticket.types.edit.param.style"),
+        category=app_commands.locale_str("New dedicated category (overrides when chosen)", i18n_key="cmd.ticket.types.edit.param.category"),
+        staff_role=app_commands.locale_str("New extra staff role (overrides when chosen)", i18n_key="cmd.ticket.types.edit.param.staff_role"),
+        welcome=app_commands.locale_str("New dedicated welcome message (enter - to clear and use the global one)", i18n_key="cmd.ticket.types.edit.param.welcome"),
     )
     @app_commands.choices(style=[
-        app_commands.Choice(name="藍色", value="primary"),
-        app_commands.Choice(name="灰色", value="secondary"),
-        app_commands.Choice(name="綠色", value="success"),
-        app_commands.Choice(name="紅色", value="danger"),
+        app_commands.Choice(name=app_commands.locale_str("Blue", i18n_key="cmd.ticket.types.edit.choice.primary"), value="primary"),
+        app_commands.Choice(name=app_commands.locale_str("Gray", i18n_key="cmd.ticket.types.edit.choice.secondary"), value="secondary"),
+        app_commands.Choice(name=app_commands.locale_str("Green", i18n_key="cmd.ticket.types.edit.choice.success"), value="success"),
+        app_commands.Choice(name=app_commands.locale_str("Red", i18n_key="cmd.ticket.types.edit.choice.danger"), value="danger"),
     ])
     @app_commands.autocomplete(type=_type_id_autocomplete)
     @app_commands.checks.has_permissions(manage_guild=True)
@@ -951,8 +951,8 @@ class TicketCog(commands.GroupCog, name=app_commands.locale_str("ticket")):
             ephemeral=True,
         )
 
-    @types_group.command(name=app_commands.locale_str("remove"), description="移除票口類別")
-    @app_commands.describe(type="要移除的類別")
+    @types_group.command(name=app_commands.locale_str("remove", i18n_key="cmd.ticket.types.remove.name"), description=app_commands.locale_str("Remove a ticket type", i18n_key="cmd.ticket.types.remove.desc"))
+    @app_commands.describe(type=app_commands.locale_str("The type to remove", i18n_key="cmd.ticket.types.remove.param.type"))
     @app_commands.autocomplete(type=_type_id_autocomplete)
     @app_commands.checks.has_permissions(manage_guild=True)
     async def types_remove(self, interaction: discord.Interaction, type: str):
@@ -968,7 +968,7 @@ class TicketCog(commands.GroupCog, name=app_commands.locale_str("ticket")):
             ephemeral=True,
         )
 
-    @types_group.command(name=app_commands.locale_str("list"), description="列出所有票口類別")
+    @types_group.command(name=app_commands.locale_str("list", i18n_key="cmd.ticket.types.list.name"), description=app_commands.locale_str("List all ticket types", i18n_key="cmd.ticket.types.list.desc"))
     @app_commands.checks.has_permissions(manage_guild=True)
     async def types_list(self, interaction: discord.Interaction):
         types = get_ticket_types(interaction.guild.id)

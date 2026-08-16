@@ -50,7 +50,7 @@ class CatalogTranslatorTests(unittest.TestCase):
             i18n._catalogs = self._saved
             i18n._resolved.clear()
         self.addCleanup(restore)
-        self.translator = i18n.CatalogTranslator(legacy_map={"ban": "封禁"})
+        self.translator = i18n.CatalogTranslator()
 
     def test_description_translated_to_zh(self):
         s = app_commands.locale_str("Ban a user", i18n_key="cmd.x.ban.desc")
@@ -93,25 +93,13 @@ class CatalogTranslatorTests(unittest.TestCase):
             _run(self.translator.translate(
                 s, discord.Locale.taiwan_chinese, _ctx(location)))
 
-    def test_legacy_bridge_taiwan_only(self):
+    def test_no_i18n_key_returns_none(self):
         s = app_commands.locale_str("ban")  # 無 i18n_key
         data = SimpleNamespace(name="ban")
-        result = _run(self.translator.translate(
-            s, discord.Locale.taiwan_chinese,
-            _ctx(TranslationContextLocation.command_name, data)))
-        self.assertEqual(result, "封禁")
-        result = _run(self.translator.translate(
-            s, discord.Locale.american_english,
-            _ctx(TranslationContextLocation.command_name, data)))
-        self.assertIsNone(result)
-
-    def test_legacy_bridge_excludes_descriptions(self):
-        s = app_commands.locale_str("ban")
-        data = SimpleNamespace(name="ban")
-        result = _run(self.translator.translate(
-            s, discord.Locale.taiwan_chinese,
-            _ctx(TranslationContextLocation.command_description, data)))
-        self.assertIsNone(result)
+        for locale in (discord.Locale.taiwan_chinese, discord.Locale.american_english):
+            result = _run(self.translator.translate(
+                s, locale, _ctx(TranslationContextLocation.command_name, data)))
+            self.assertIsNone(result)
 
 
 class CommandNameCatalogTests(unittest.TestCase):
@@ -122,6 +110,10 @@ class CommandNameCatalogTests(unittest.TestCase):
         pattern = re.compile(r"^cmd\..+\.name$")
         for locale, catalog in i18n._catalogs.items():
             for key, value in catalog.items():
+                # .param./.choice. 底下的 name 是「參數叫 name」的描述；
+                # .ctx. 是 context menu 名稱（允許空白與大寫）
+                if ".param." in key or ".choice." in key or ".ctx." in key:
+                    continue
                 if pattern.fullmatch(key) and isinstance(value, str):
                     self.assertTrue(
                         i18n._valid_command_name(value),

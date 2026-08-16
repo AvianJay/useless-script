@@ -13,12 +13,12 @@ import logging
 @app_commands.checks.bot_has_permissions(manage_channels=True, move_members=True)
 @app_commands.allowed_installs(guilds=True, users=False)
 @app_commands.allowed_contexts(guilds=True, dms=False, private_channels=False)
-class DynamicVoice(commands.GroupCog, name=app_commands.locale_str("dynamic-voice")):
+class DynamicVoice(commands.GroupCog, name=app_commands.locale_str("dynamic-voice", i18n_key="cmd.dynamicvoice.dynamic_voice.root.name")):
     def __init__(self, bot):
         self.bot = bot
         self.playing_voice_guilds = set()
-    @app_commands.command(name=app_commands.locale_str("setup"), description="設置動態語音頻道")
-    @app_commands.describe(channel="選擇頻道", channel_category="選擇頻道類別", channel_name="選擇頻道名稱模板 (使用 {user} 代表用戶名稱)")
+    @app_commands.command(name=app_commands.locale_str("setup", i18n_key="cmd.dynamicvoice.dynamic_voice.setup.name"), description=app_commands.locale_str("Set up dynamic voice channels", i18n_key="cmd.dynamicvoice.dynamic_voice.setup.desc"))
+    @app_commands.describe(channel=app_commands.locale_str("Choose a channel", i18n_key="cmd.dynamicvoice.dynamic_voice.setup.param.channel"), channel_category=app_commands.locale_str("Choose a channel category", i18n_key="cmd.dynamicvoice.dynamic_voice.setup.param.channel_category"), channel_name=app_commands.locale_str("Channel name template ({user} inserts the user's name)", i18n_key="cmd.dynamicvoice.dynamic_voice.setup.param.channel_name"))
     @app_commands.checks.has_permissions(administrator=True)
     async def setup(self, interaction: discord.Interaction, channel: discord.VoiceChannel, channel_category: discord.CategoryChannel, channel_name: str = "{user} 的頻道"):
         await interaction.response.defer(ephemeral=True)
@@ -43,7 +43,7 @@ class DynamicVoice(commands.GroupCog, name=app_commands.locale_str("dynamic-voic
         log(f"已設置動態語音頻道在伺服器 {guild_id}，頻道 {channel.id}，類別 {channel_category.id}，名稱 {channel_name}", module_name="DynamicVoice", guild=interaction.guild)
         await interaction.followup.send(f"動態語音頻道已設置在 '{channel.mention}' 下，將自動創建頻道於 '{channel_category.name}' 中。\n- {warn}", ephemeral=True)
 
-    @app_commands.command(name=app_commands.locale_str("disable"), description="禁用動態語音頻道")
+    @app_commands.command(name=app_commands.locale_str("disable", i18n_key="cmd.dynamicvoice.dynamic_voice.disable.name"), description=app_commands.locale_str("Disable dynamic voice channels", i18n_key="cmd.dynamicvoice.dynamic_voice.disable.desc"))
     @app_commands.checks.has_permissions(administrator=True)
     async def disable(self, interaction: discord.Interaction):
         await interaction.response.defer(ephemeral=True)
@@ -55,11 +55,11 @@ class DynamicVoice(commands.GroupCog, name=app_commands.locale_str("dynamic-voic
         log(f"動態語音頻道被禁用", module_name="DynamicVoice", guild=interaction.guild)
         await interaction.followup.send("動態語音頻道已被禁用。", ephemeral=True)
     
-    @app_commands.command(name=app_commands.locale_str("play-audio"), description="動態語音頻道切換前先播放音效")
-    @app_commands.describe(enable="是否啟用進入頻道前播放音效")
+    @app_commands.command(name=app_commands.locale_str("play-audio", i18n_key="cmd.dynamicvoice.dynamic_voice.play_audio.name"), description=app_commands.locale_str("Play a sound before switching dynamic voice channels", i18n_key="cmd.dynamicvoice.dynamic_voice.play_audio.desc"))
+    @app_commands.describe(enable=app_commands.locale_str("Whether to play a sound before entering the channel", i18n_key="cmd.dynamicvoice.dynamic_voice.play_audio.param.enable"))
     @app_commands.choices(enable=[
-        app_commands.Choice(name="啟用", value="True"),
-        app_commands.Choice(name="禁用", value="False")
+        app_commands.Choice(name=app_commands.locale_str("Enable", i18n_key="cmd.dynamicvoice.dynamic_voice.play_audio.choice.true"), value="True"),
+        app_commands.Choice(name=app_commands.locale_str("Disable", i18n_key="cmd.dynamicvoice.dynamic_voice.play_audio.choice.false"), value="False")
     ])
     @app_commands.checks.has_permissions(administrator=True)
     async def play_audio(self, interaction: discord.Interaction, enable: str):
@@ -131,7 +131,7 @@ class DynamicVoice(commands.GroupCog, name=app_commands.locale_str("dynamic-voic
     #     set_server_config(guild_id, "dynamic_voice_blacklist", blacklisted_users)
     #     await interaction.followup.send("已將該用戶移除黑名單。", ephemeral=True)
     
-    @app_commands.command(name=app_commands.locale_str("blacklist-role"), description="設定動態語音頻道黑名單身分組")
+    @app_commands.command(name=app_commands.locale_str("blacklist-role", i18n_key="cmd.dynamicvoice.dynamic_voice.blacklist_role.name"), description=app_commands.locale_str("Set a dynamic voice channel blacklist role", i18n_key="cmd.dynamicvoice.dynamic_voice.blacklist_role.desc"))
     async def blacklist_role(self, interaction: discord.Interaction, role: discord.Role):
         await interaction.response.defer(ephemeral=True)
         guild_id = interaction.guild.id
@@ -144,7 +144,7 @@ class DynamicVoice(commands.GroupCog, name=app_commands.locale_str("dynamic-voic
         await interaction.followup.send("已將該身分組加入黑名單。", ephemeral=True)
         log(f"身分組 {role.name} 被加入黑名單", module_name="DynamicVoice", user=interaction.user, guild=interaction.guild)
     
-    @app_commands.command(name=app_commands.locale_str("unblacklist-role"), description="移除動態語音頻道黑名單身分組")
+    @app_commands.command(name=app_commands.locale_str("unblacklist-role", i18n_key="cmd.dynamicvoice.dynamic_voice.unblacklist_role.name"), description=app_commands.locale_str("Remove a dynamic voice channel blacklist role", i18n_key="cmd.dynamicvoice.dynamic_voice.unblacklist_role.desc"))
     async def unblacklist_role(self, interaction: discord.Interaction, role: discord.Role):
         await interaction.response.defer(ephemeral=True)
         guild_id = interaction.guild.id
@@ -157,7 +157,7 @@ class DynamicVoice(commands.GroupCog, name=app_commands.locale_str("dynamic-voic
         await interaction.followup.send("已將該身分組移除黑名單。", ephemeral=True)
         log(f"身分組 {role.name} 被移除黑名單", module_name="DynamicVoice", user=interaction.user, guild=interaction.guild)
     
-    @app_commands.command(name=app_commands.locale_str("view-blacklist-roles"), description="查看動態語音頻道黑名單身分組")
+    @app_commands.command(name=app_commands.locale_str("view-blacklist-roles", i18n_key="cmd.dynamicvoice.dynamic_voice.view_blacklist_roles.name"), description=app_commands.locale_str("View dynamic voice channel blacklist roles", i18n_key="cmd.dynamicvoice.dynamic_voice.view_blacklist_roles.desc"))
     async def view_blacklist_roles(self, interaction: discord.Interaction):
         await interaction.response.defer(ephemeral=True)
         guild_id = interaction.guild.id

@@ -121,11 +121,11 @@ def fetch_and_parse_nds(url: str = DEFAULT_URL, timeout: int = 10) -> Dict[str, 
 
 @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
 @app_commands.allowed_installs(guilds=True, users=True)
-class nds(commands.GroupCog, description="天然災害停止上班及上課情形查詢"):
+class nds(commands.GroupCog, description=app_commands.locale_str("Look up natural-disaster work and school suspensions", i18n_key="cmd.dgpa.nds.root.desc")):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
 
-    @app_commands.command(name="view", description="取得最新天然災害停止上班及上課情形")
+    @app_commands.command(name=app_commands.locale_str("view", i18n_key="cmd.dgpa.nds.view.name"), description=app_commands.locale_str("Get the latest natural-disaster work/school suspension status", i18n_key="cmd.dgpa.nds.view.desc"))
     async def nds_command(self, interaction: discord.Interaction):
         await interaction.response.defer()  # 延遲回應
         try:
@@ -147,8 +147,8 @@ class nds(commands.GroupCog, description="天然災害停止上班及上課情�
     
     @app_commands.default_permissions(administrator=True)
     @app_commands.guild_only()
-    @app_commands.command(name="follow", description="追蹤天然災害停止上班及上課情形變更 (測試版)")
-    @app_commands.describe(channel="要發送通知的頻道")
+    @app_commands.command(name=app_commands.locale_str("follow", i18n_key="cmd.dgpa.nds.follow.name"), description=app_commands.locale_str("Follow natural-disaster work/school suspension updates (beta)", i18n_key="cmd.dgpa.nds.follow.desc"))
+    @app_commands.describe(channel=app_commands.locale_str("Channel to send notifications to", i18n_key="cmd.dgpa.nds.follow.param.channel"))
     async def nds_follow(self, interaction: discord.Interaction, channel: discord.TextChannel = None):
         if not interaction.is_guild_integration():
             await interaction.response.send_message("此指令只能在伺服器中使用。", ephemeral=True)

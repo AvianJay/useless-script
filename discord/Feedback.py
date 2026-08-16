@@ -44,7 +44,7 @@ class ReplyFeedbackView(discord.ui.View):
         await interaction.response.send_modal(modal)
 
 class FeedbackCog(commands.Cog):
-    @app_commands.command(name="feedback", description="提供回饋給機器人開發者")
+    @app_commands.command(name=app_commands.locale_str("feedback", i18n_key="cmd.feedback.feedback.name"), description=app_commands.locale_str("Send feedback to the bot developers", i18n_key="cmd.feedback.feedback.desc"))
     @app_commands.checks.cooldown(1, 30, key=lambda i: i.user.id)
     async def feedback_command(self, interaction: discord.Interaction):
         class FeedbackModal(discord.ui.Modal, title="提供回饋給機器人開發者"):

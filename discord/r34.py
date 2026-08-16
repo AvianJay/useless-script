@@ -98,16 +98,16 @@ async def r34_tags_autocomplete(interaction: discord.Interaction, current: str):
     return [app_commands.Choice(name=f"{al} {i['value']}", value=f"{al} {i['value']}") for i in res.json()]
 
 
-@bot.tree.command(name="r34", description="從rule34.xxx隨機取得一張圖片", nsfw=True)
-@app_commands.describe(tags="標籤", pid="頁數", spoilers="是否標記為暴雷內容", ai="是否包含AI生成的圖片")
+@bot.tree.command(name=app_commands.locale_str("r34", i18n_key="cmd.r34.r34.name"), description=app_commands.locale_str("Get a random image from rule34.xxx", i18n_key="cmd.r34.r34.desc"), nsfw=True)
+@app_commands.describe(tags=app_commands.locale_str("Tags", i18n_key="cmd.r34.r34.param.tags"), pid=app_commands.locale_str("Page number", i18n_key="cmd.r34.r34.param.pid"), spoilers=app_commands.locale_str("Mark as a spoiler", i18n_key="cmd.r34.r34.param.spoilers"), ai=app_commands.locale_str("Include AI-generated images", i18n_key="cmd.r34.r34.param.ai"))
 @app_commands.choices(
     spoilers=[
-        app_commands.Choice(name="是", value="True"),
-        app_commands.Choice(name="否", value="False"),
+        app_commands.Choice(name=app_commands.locale_str("Yes", i18n_key="cmd.r34.r34.choice.true"), value="True"),
+        app_commands.Choice(name=app_commands.locale_str("No", i18n_key="cmd.r34.r34.choice.false"), value="False"),
     ],
     ai=[
-        app_commands.Choice(name="是", value="True"),
-        app_commands.Choice(name="否", value="False"),
+        app_commands.Choice(name=app_commands.locale_str("Yes", i18n_key="cmd.r34.r34.choice.true"), value="True"),
+        app_commands.Choice(name=app_commands.locale_str("No", i18n_key="cmd.r34.r34.choice.false"), value="False"),
     ]
 )
 @app_commands.autocomplete(tags=r34_tags_autocomplete)
@@ -134,8 +134,8 @@ async def r34_command(interaction: discord.Interaction, tags: str = None, pid: i
         await interaction.followup.send(embed=embed, files=[attachment] if spoilers else [])
 
 
-@bot.tree.command(name="r34tags", description="從rule34.xxx搜尋標籤", nsfw=True)
-@app_commands.describe(query="搜尋關鍵字")
+@bot.tree.command(name=app_commands.locale_str("r34tags", i18n_key="cmd.r34.r34tags.name"), description=app_commands.locale_str("Search tags on rule34.xxx", i18n_key="cmd.r34.r34tags.desc"), nsfw=True)
+@app_commands.describe(query=app_commands.locale_str("Search keyword", i18n_key="cmd.r34.r34tags.param.query"))
 async def r34tags_command(interaction: discord.Interaction, query: str = None):
     await interaction.response.defer()
     tags = r34tags(query)

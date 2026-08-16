@@ -708,14 +708,6 @@ _NAME_LOCATIONS = (
     TranslationContextLocation.parameter_name,
 )
 
-_LEGACY_LOCATIONS = (
-    TranslationContextLocation.command_name,
-    TranslationContextLocation.group_name,
-    TranslationContextLocation.choice_name,
-    TranslationContextLocation.parameter_name,
-)
-
-
 def _valid_command_name(value: str) -> bool:
     return bool(_DISCORD_NAME_RE.fullmatch(value)) and value == value.lower()
 
@@ -726,12 +718,8 @@ class CatalogTranslator(app_commands.Translator):
     宣告形式：
         name=app_commands.locale_str("ban", i18n_key="cmd.moderate.ban.name")
 
-    未帶 i18n_key 的 locale_str 走 legacy bridge（舊 translations dict），
-    batch 1 完成後 legacy bridge 移除。
+    未帶 i18n_key 的 locale_str 不翻譯（保留原文）。
     """
-
-    def __init__(self, legacy_map: dict | None = None):
-        self.legacy_map = legacy_map or {}
 
     async def load(self) -> None:
         ensure_loaded()
@@ -740,7 +728,7 @@ class CatalogTranslator(app_commands.Translator):
                         context: TranslationContext) -> str | None:
         key = string.extras.get("i18n_key")
         if key is None:
-            return self._legacy(string, locale, context)
+            return None
 
         target = _METADATA_LOCALE_MAP.get(locale.value)
         if target is None:
@@ -757,18 +745,6 @@ class CatalogTranslator(app_commands.Translator):
                              value, key)
                 return None
         return value
-
-    def _legacy(self, string: locale_str, locale: discord.Locale,
-                context: TranslationContext) -> str | None:
-        # 舊 CommandNameTranslator 的行為，逐字保留（batch 1 結束時刪除）
-        if locale != discord.Locale.taiwan_chinese:
-            return None
-        if context.location not in _LEGACY_LOCATIONS:
-            return None
-        try:
-            return self.legacy_map.get(context.data.name, None)
-        except Exception:
-            return None
 
 
 # ============= class body 用的延遲解析 =============

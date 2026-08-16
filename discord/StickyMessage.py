@@ -251,7 +251,9 @@ register_panel_settings(
 @app_commands.default_permissions(manage_guild=True)
 @app_commands.allowed_installs(guilds=True, users=False)
 @app_commands.allowed_contexts(guilds=True, dms=False, private_channels=False)
-class StickyMessage(commands.GroupCog, group_name=app_commands.locale_str("stickymessage")):
+class StickyMessage(commands.GroupCog,
+                    group_name=app_commands.locale_str("stickymessage", i18n_key="cmd.stickymessage.stickymessage.root.name"),
+                    group_description=app_commands.locale_str("Manage this server's sticky messages", i18n_key="cmd.stickymessage.stickymessage.root.desc")):
     """管理伺服器的置底訊息。"""
 
     def __init__(self, client: commands.Bot):
@@ -626,8 +628,8 @@ class StickyMessage(commands.GroupCog, group_name=app_commands.locale_str("stick
         else:
             await interaction.response.send_message(message, ephemeral=True)
 
-    @app_commands.command(name=app_commands.locale_str("add"), description="新增一則頻道置底訊息")
-    @app_commands.describe(channel="要設定的文字或公告頻道", content="置底訊息內容", allow_mentions="首次與手動發布時是否允許提及")
+    @app_commands.command(name=app_commands.locale_str("add", i18n_key="cmd.stickymessage.stickymessage.add.name"), description=app_commands.locale_str("Add a sticky message to a channel", i18n_key="cmd.stickymessage.stickymessage.add.desc"))
+    @app_commands.describe(channel=app_commands.locale_str("The text or announcement channel to configure", i18n_key="cmd.stickymessage.stickymessage.add.param.channel"), content=app_commands.locale_str("Sticky message content", i18n_key="cmd.stickymessage.stickymessage.add.param.content"), allow_mentions=app_commands.locale_str("Allow mentions on first and manual posts", i18n_key="cmd.stickymessage.stickymessage.add.param.allow_mentions"))
     @app_commands.checks.has_permissions(manage_guild=True)
     async def add(
         self,
@@ -657,8 +659,8 @@ class StickyMessage(commands.GroupCog, group_name=app_commands.locale_str("stick
         except Exception as error:
             await self._respond_error(interaction, error)
 
-    @app_commands.command(name=app_commands.locale_str("edit"), description="編輯一則頻道置底訊息")
-    @app_commands.describe(channel="已設定的文字或公告頻道", content="新的置底訊息內容", allow_mentions="首次與手動發布時是否允許提及")
+    @app_commands.command(name=app_commands.locale_str("edit", i18n_key="cmd.stickymessage.stickymessage.edit.name"), description=app_commands.locale_str("Edit a channel's sticky message", i18n_key="cmd.stickymessage.stickymessage.edit.desc"))
+    @app_commands.describe(channel=app_commands.locale_str("The configured text or announcement channel", i18n_key="cmd.stickymessage.stickymessage.edit.param.channel"), content=app_commands.locale_str("New sticky message content", i18n_key="cmd.stickymessage.stickymessage.edit.param.content"), allow_mentions=app_commands.locale_str("Allow mentions on first and manual posts", i18n_key="cmd.stickymessage.stickymessage.edit.param.allow_mentions"))
     @app_commands.checks.has_permissions(manage_guild=True)
     async def edit(
         self,
@@ -683,8 +685,8 @@ class StickyMessage(commands.GroupCog, group_name=app_commands.locale_str("stick
         except Exception as error:
             await self._respond_error(interaction, error)
 
-    @app_commands.command(name=app_commands.locale_str("remove"), description="移除一則頻道置底訊息")
-    @app_commands.describe(channel="要移除置底訊息的頻道")
+    @app_commands.command(name=app_commands.locale_str("remove", i18n_key="cmd.stickymessage.stickymessage.remove.name"), description=app_commands.locale_str("Remove a channel's sticky message", i18n_key="cmd.stickymessage.stickymessage.remove.desc"))
+    @app_commands.describe(channel=app_commands.locale_str("The channel whose sticky message to remove", i18n_key="cmd.stickymessage.stickymessage.remove.param.channel"))
     @app_commands.checks.has_permissions(manage_guild=True)
     async def remove(self, interaction: discord.Interaction, channel: discord.TextChannel) -> None:
         try:
@@ -699,7 +701,7 @@ class StickyMessage(commands.GroupCog, group_name=app_commands.locale_str("stick
         except Exception as error:
             await self._respond_error(interaction, error)
 
-    @app_commands.command(name=app_commands.locale_str("list"), description="列出目前的置底訊息設定")
+    @app_commands.command(name=app_commands.locale_str("list", i18n_key="cmd.stickymessage.stickymessage.list.name"), description=app_commands.locale_str("List current sticky message settings", i18n_key="cmd.stickymessage.stickymessage.list.desc"))
     @app_commands.checks.has_permissions(manage_guild=True)
     async def list_entries(self, interaction: discord.Interaction) -> None:
         config = self.get_config(interaction.guild_id)
@@ -724,8 +726,8 @@ class StickyMessage(commands.GroupCog, group_name=app_commands.locale_str("stick
         embed.add_field(name="最短間隔", value=f"{config['min_interval_seconds']} 秒", inline=True)
         await interaction.response.send_message(embed=embed, ephemeral=True, allowed_mentions=NO_MENTIONS)
 
-    @app_commands.command(name=app_commands.locale_str("publish"), description="立即重新發布一則置底訊息")
-    @app_commands.describe(channel="要立即重新發布置底訊息的頻道")
+    @app_commands.command(name=app_commands.locale_str("publish", i18n_key="cmd.stickymessage.stickymessage.publish.name"), description=app_commands.locale_str("Repost a sticky message immediately", i18n_key="cmd.stickymessage.stickymessage.publish.desc"))
+    @app_commands.describe(channel=app_commands.locale_str("The channel whose sticky message to repost now", i18n_key="cmd.stickymessage.stickymessage.publish.param.channel"))
     @app_commands.checks.has_permissions(manage_guild=True)
     async def publish(self, interaction: discord.Interaction, channel: discord.TextChannel) -> None:
         try:
@@ -735,8 +737,8 @@ class StickyMessage(commands.GroupCog, group_name=app_commands.locale_str("stick
         except Exception as error:
             await self._respond_error(interaction, error)
 
-    @app_commands.command(name=app_commands.locale_str("move"), description="調整置底訊息順序；順序同時決定額度優先級")
-    @app_commands.describe(channel="要移動的置底訊息頻道", position="新的順序位置")
+    @app_commands.command(name=app_commands.locale_str("move", i18n_key="cmd.stickymessage.stickymessage.move.name"), description=app_commands.locale_str("Reorder sticky messages; order also sets quota priority", i18n_key="cmd.stickymessage.stickymessage.move.desc"))
+    @app_commands.describe(channel=app_commands.locale_str("The sticky message channel to move", i18n_key="cmd.stickymessage.stickymessage.move.param.channel"), position=app_commands.locale_str("New position", i18n_key="cmd.stickymessage.stickymessage.move.param.position"))
     @app_commands.checks.has_permissions(manage_guild=True)
     async def move(
         self,
@@ -759,8 +761,8 @@ class StickyMessage(commands.GroupCog, group_name=app_commands.locale_str("stick
         except Exception as error:
             await self._respond_error(interaction, error)
 
-    @app_commands.command(name=app_commands.locale_str("timing"), description="設定重新置底的安靜時間與最短間隔")
-    @app_commands.describe(quiet_seconds="最後一則真人訊息後等待秒數", min_interval_seconds="同頻道兩次自動重貼的最短間隔")
+    @app_commands.command(name=app_commands.locale_str("timing", i18n_key="cmd.stickymessage.stickymessage.timing.name"), description=app_commands.locale_str("Configure quiet time and minimum repost interval", i18n_key="cmd.stickymessage.stickymessage.timing.desc"))
+    @app_commands.describe(quiet_seconds=app_commands.locale_str("Seconds to wait after the last human message", i18n_key="cmd.stickymessage.stickymessage.timing.param.quiet_seconds"), min_interval_seconds=app_commands.locale_str("Minimum interval between two automatic reposts in a channel", i18n_key="cmd.stickymessage.stickymessage.timing.param.min_interval_seconds"))
     @app_commands.checks.has_permissions(manage_guild=True)
     async def timing(
         self,

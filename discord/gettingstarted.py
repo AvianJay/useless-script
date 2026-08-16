@@ -3680,7 +3680,7 @@ class GettingStarted(commands.Cog):
             )
             await self.send_dm_fallback(guild, recipient)
 
-    @app_commands.command(name="gettingstarted", description="開啟伺服器快速設定中心")
+    @app_commands.command(name=app_commands.locale_str("gettingstarted", i18n_key="cmd.gettingstarted.gettingstarted.name"), description=app_commands.locale_str("Open the server quick-setup center", i18n_key="cmd.gettingstarted.gettingstarted.desc"))
     @app_commands.guild_only()
     @app_commands.default_permissions(manage_guild=True)
     @app_commands.allowed_installs(guilds=True, users=False)

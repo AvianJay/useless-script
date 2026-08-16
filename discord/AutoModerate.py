@@ -395,7 +395,10 @@ def _text_similarity(a: str, b: str) -> float:
 
 async def settings_autocomplete(interaction: discord.Interaction, current: str):
     return [
-        app_commands.Choice(name=app_commands.locale_str(key), value=key)
+        app_commands.Choice(
+            name=app_commands.locale_str(key, i18n_key=f"cmd.automoderate.setting.{key}"),
+            value=key,
+        )
         for key in all_settings if current.lower() in key.lower()
     ][:25]  # Discord 限制最多 25 個選項
 
@@ -1004,7 +1007,7 @@ class SaveActionConfirmationView(discord.ui.View):
 @app_commands.default_permissions(administrator=True)
 @app_commands.allowed_installs(guilds=True, users=False)
 @app_commands.allowed_contexts(guilds=True, dms=False, private_channels=False)
-class AutoModerate(commands.GroupCog, name=app_commands.locale_str("automod")):
+class AutoModerate(commands.GroupCog, name=app_commands.locale_str("automod", i18n_key="cmd.automoderate.automod.root.name")):
     def __init__(self, bot: commands.Bot) -> None:
         self.bot = bot
         self._blacklist_cache: dict[int, list[dict]] = {}
@@ -1098,7 +1101,7 @@ class AutoModerate(commands.GroupCog, name=app_commands.locale_str("automod")):
         if self._blacklist_session is not None and not self._blacklist_session.closed:
             await self._blacklist_session.close()
         
-    @app_commands.command(name=app_commands.locale_str("view"), description="查看自動管理設定")
+    @app_commands.command(name=app_commands.locale_str("view", i18n_key="cmd.automoderate.automod.view.name"), description=app_commands.locale_str("View auto-moderation settings", i18n_key="cmd.automoderate.automod.view.desc"))
     async def view_automod_settings(self, interaction: discord.Interaction):
         guild_id = interaction.guild.id if interaction.guild else None
         automod_settings = get_server_config(guild_id, "automod", {})
@@ -1125,24 +1128,24 @@ class AutoModerate(commands.GroupCog, name=app_commands.locale_str("automod")):
         embed.description = desc
         await interaction.response.send_message(embed=embed)
 
-    @app_commands.command(name=app_commands.locale_str("toggle"), description="啟用或停用自動管理設定")
-    @app_commands.describe(setting="要啟用或停用的自動管理設定名稱", enable="是否啟用該設定")
+    @app_commands.command(name=app_commands.locale_str("toggle", i18n_key="cmd.automoderate.automod.toggle.name"), description=app_commands.locale_str("Enable or disable an auto-moderation setting", i18n_key="cmd.automoderate.automod.toggle.desc"))
+    @app_commands.describe(setting=app_commands.locale_str("Name of the auto-moderation setting to toggle", i18n_key="cmd.automoderate.automod.toggle.param.setting"), enable=app_commands.locale_str("Whether to enable the setting", i18n_key="cmd.automoderate.automod.toggle.param.enable"))
     @app_commands.choices(
         setting=[
-            app_commands.Choice(name="詐騙陷阱", value="scamtrap"),
-            app_commands.Choice(name="逃避責任懲處", value="escape_punish"),
-            app_commands.Choice(name="標題過多", value="too_many_h1"),
-            app_commands.Choice(name="表情符號過多", value="too_many_emojis"),
-            app_commands.Choice(name="邀請連結", value="anti_invite_link"),
-            app_commands.Choice(name="用戶安裝應用程式濫用", value="anti_uispam"),
-            app_commands.Choice(name="防突襲（大量加入偵測）", value="anti_raid"),
-            app_commands.Choice(name="防刷頻", value="anti_spam"),
-            app_commands.Choice(name="AutoMod 偵測（原生 AutoMod 觸發）", value="automod_detect"),
-            app_commands.Choice(name="標記用戶加入", value="flagged_user"),
+            app_commands.Choice(name=app_commands.locale_str("Scam trap", i18n_key="cmd.automoderate.automod.toggle.choice.scamtrap"), value="scamtrap"),
+            app_commands.Choice(name=app_commands.locale_str("Punishment evasion", i18n_key="cmd.automoderate.automod.toggle.choice.escape_punish"), value="escape_punish"),
+            app_commands.Choice(name=app_commands.locale_str("Too many headings", i18n_key="cmd.automoderate.automod.toggle.choice.too_many_h1"), value="too_many_h1"),
+            app_commands.Choice(name=app_commands.locale_str("Too many emojis", i18n_key="cmd.automoderate.automod.toggle.choice.too_many_emojis"), value="too_many_emojis"),
+            app_commands.Choice(name=app_commands.locale_str("Invite links", i18n_key="cmd.automoderate.automod.toggle.choice.anti_invite_link"), value="anti_invite_link"),
+            app_commands.Choice(name=app_commands.locale_str("User-installed app abuse", i18n_key="cmd.automoderate.automod.toggle.choice.anti_uispam"), value="anti_uispam"),
+            app_commands.Choice(name=app_commands.locale_str("Anti-raid (mass-join detection)", i18n_key="cmd.automoderate.automod.toggle.choice.anti_raid"), value="anti_raid"),
+            app_commands.Choice(name=app_commands.locale_str("Anti-spam", i18n_key="cmd.automoderate.automod.toggle.choice.anti_spam"), value="anti_spam"),
+            app_commands.Choice(name=app_commands.locale_str("AutoMod detection (native AutoMod triggers)", i18n_key="cmd.automoderate.automod.toggle.choice.automod_detect"), value="automod_detect"),
+            app_commands.Choice(name=app_commands.locale_str("Flagged user joins", i18n_key="cmd.automoderate.automod.toggle.choice.flagged_user"), value="flagged_user"),
         ],
         enable=[
-            app_commands.Choice(name="啟用", value="True"),
-            app_commands.Choice(name="停用", value="False"),
+            app_commands.Choice(name=app_commands.locale_str("Enable", i18n_key="cmd.automoderate.automod.toggle.choice.true"), value="True"),
+            app_commands.Choice(name=app_commands.locale_str("Disable", i18n_key="cmd.automoderate.automod.toggle.choice.false"), value="False"),
         ]
     )
     async def toggle_automod_setting(self, interaction: discord.Interaction, setting: str, enable: str):
@@ -1180,7 +1183,7 @@ class AutoModerate(commands.GroupCog, name=app_commands.locale_str("automod")):
             if "action" not in automod_settings.get("anti_invite_link", {}):
                 await interaction.followup.send(f"請注意，邀請連結偵測已啟用，但尚未設定動作指令。請使用 {await get_command_mention('automod', 'settings')} 來設定 `anti_invite_link-action`。", ephemeral=True)
 
-    @app_commands.command(name=app_commands.locale_str("quick-setup"), description="互動式快速設定精靈（選單引導）")
+    @app_commands.command(name=app_commands.locale_str("quick-setup", i18n_key="cmd.automoderate.automod.quick_setup.name"), description=app_commands.locale_str("Interactive quick-setup wizard (menu guided)", i18n_key="cmd.automoderate.automod.quick_setup.desc"))
     async def quick_setup_automod(self, interaction: discord.Interaction):
         getting_started_module = sys.modules.get("gettingstarted")
         if getting_started_module is not None:
@@ -1195,10 +1198,10 @@ class AutoModerate(commands.GroupCog, name=app_commands.locale_str("automod")):
             ephemeral=True,
         )
 
-    @app_commands.command(name=app_commands.locale_str("settings"), description="設定自動管理選項")
+    @app_commands.command(name=app_commands.locale_str("settings", i18n_key="cmd.automoderate.automod.settings.name"), description=app_commands.locale_str("Configure auto-moderation options", i18n_key="cmd.automoderate.automod.settings.desc"))
     @app_commands.describe(
-        setting="要設定的自動管理選項",
-        value="選項的值"
+        setting=app_commands.locale_str("The auto-moderation option to configure", i18n_key="cmd.automoderate.automod.settings.param.setting"),
+        value=app_commands.locale_str("The option's value", i18n_key="cmd.automoderate.automod.settings.param.value")
     )
     @app_commands.autocomplete(setting=settings_autocomplete, value=action_value_autocomplete)
     async def set_automod_setting(self, interaction: discord.Interaction, setting: str, value: str):
@@ -1318,8 +1321,8 @@ class AutoModerate(commands.GroupCog, name=app_commands.locale_str("automod")):
         else:
             await interaction.response.send_message(f"已將自動管理設定 '{setting}' 設為 {value}。")
     
-    @app_commands.command(name=app_commands.locale_str("check-action"), description="檢查自動管理動作指令是否有效")
-    @app_commands.describe(action="要檢查的動作指令")
+    @app_commands.command(name=app_commands.locale_str("check-action", i18n_key="cmd.automoderate.automod.check_action.name"), description=app_commands.locale_str("Check whether an automod action command is valid", i18n_key="cmd.automoderate.automod.check_action.desc"))
+    @app_commands.describe(action=app_commands.locale_str("The action command to check", i18n_key="cmd.automoderate.automod.check_action.param.action"))
     @app_commands.autocomplete(action=action_autocomplete)
     async def check_automod_action(self, interaction: discord.Interaction, action: str):
         analysis = Moderate.analyze_action_string(action, interaction.guild_id)
@@ -1331,26 +1334,26 @@ class AutoModerate(commands.GroupCog, name=app_commands.locale_str("automod")):
             ephemeral=not analysis["valid"],
         )
 
-    @app_commands.command(name=app_commands.locale_str("action-builder"), description="產生動作指令字串")
+    @app_commands.command(name=app_commands.locale_str("action-builder", i18n_key="cmd.automoderate.automod.action_builder.name"), description=app_commands.locale_str("Build an action command string", i18n_key="cmd.automoderate.automod.action_builder.desc"))
     @app_commands.describe(
-        action_type="動作類型",
-        duration="時長（mute/ban/force_verify 用），如 10m、7d、0 表示永久",
-        delete_message_duration="ban 專用：刪除該用戶最近多少時間的訊息，如 1d、0 表示不刪",
-        reason="原因（mute/kick/ban 用）",
-        message="警告訊息（delete/warn 用），可用 {user} 代表用戶",
-        prepend="要接在此動作前面的既有指令（用逗號分隔多個動作時）",
+        action_type=app_commands.locale_str("Action type", i18n_key="cmd.automoderate.automod.action_builder.param.action_type"),
+        duration=app_commands.locale_str("Duration (for mute/ban/force_verify), e.g. 10m, 7d; 0 = permanent", i18n_key="cmd.automoderate.automod.action_builder.param.duration"),
+        delete_message_duration=app_commands.locale_str("Ban only: delete the user's messages from this period, e.g. 1d; 0 = none", i18n_key="cmd.automoderate.automod.action_builder.param.delete_message_duration"),
+        reason=app_commands.locale_str("Reason (for mute/kick/ban)", i18n_key="cmd.automoderate.automod.action_builder.param.reason"),
+        message=app_commands.locale_str("Warning message (for delete/warn); {user} inserts the user", i18n_key="cmd.automoderate.automod.action_builder.param.message"),
+        prepend=app_commands.locale_str("Existing command to prepend before this action (comma-separated actions)", i18n_key="cmd.automoderate.automod.action_builder.param.prepend"),
     )
     @app_commands.choices(
         action_type=[
-            app_commands.Choice(name="刪除訊息", value="delete"),
-            app_commands.Choice(name="刪除訊息＋私訊警告", value="delete_dm"),
-            app_commands.Choice(name="公開警告", value="warn"),
-            app_commands.Choice(name="私訊警告", value="warn_dm"),
-            app_commands.Choice(name="禁言", value="mute"),
-            app_commands.Choice(name="踢出", value="kick"),
-            app_commands.Choice(name="封禁", value="ban"),
-            app_commands.Choice(name="傳送管理通知", value="send_mod_message"),
-            app_commands.Choice(name="強制驗證", value="force_verify"),
+            app_commands.Choice(name=app_commands.locale_str("Delete message", i18n_key="cmd.automoderate.automod.action_builder.choice.delete"), value="delete"),
+            app_commands.Choice(name=app_commands.locale_str("Delete message + DM warning", i18n_key="cmd.automoderate.automod.action_builder.choice.delete_dm"), value="delete_dm"),
+            app_commands.Choice(name=app_commands.locale_str("Public warning", i18n_key="cmd.automoderate.automod.action_builder.choice.warn"), value="warn"),
+            app_commands.Choice(name=app_commands.locale_str("DM warning", i18n_key="cmd.automoderate.automod.action_builder.choice.warn_dm"), value="warn_dm"),
+            app_commands.Choice(name=app_commands.locale_str("Mute", i18n_key="cmd.automoderate.automod.action_builder.choice.mute"), value="mute"),
+            app_commands.Choice(name=app_commands.locale_str("Kick", i18n_key="cmd.automoderate.automod.action_builder.choice.kick"), value="kick"),
+            app_commands.Choice(name=app_commands.locale_str("Ban", i18n_key="cmd.automoderate.automod.action_builder.choice.ban"), value="ban"),
+            app_commands.Choice(name=app_commands.locale_str("Send moderation notice", i18n_key="cmd.automoderate.automod.action_builder.choice.send_mod_message"), value="send_mod_message"),
+            app_commands.Choice(name=app_commands.locale_str("Force verification", i18n_key="cmd.automoderate.automod.action_builder.choice.force_verify"), value="force_verify"),
         ],
     )
     async def action_builder(
@@ -1414,9 +1417,9 @@ class AutoModerate(commands.GroupCog, name=app_commands.locale_str("automod")):
             pass
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
-    @app_commands.command(name=app_commands.locale_str("scan-flagged-users"), description="掃描伺服器中的標記用戶")
+    @app_commands.command(name=app_commands.locale_str("scan-flagged-users", i18n_key="cmd.automoderate.automod.scan_flagged_users.name"), description=app_commands.locale_str("Scan the server for flagged users", i18n_key="cmd.automoderate.automod.scan_flagged_users.desc"))
     @app_commands.default_permissions(administrator=True)
-    @app_commands.describe(user="要掃描的用戶，若不指定則掃描所有用戶")
+    @app_commands.describe(user=app_commands.locale_str("The user to scan; scans everyone if omitted", i18n_key="cmd.automoderate.automod.scan_flagged_users.param.user"))
     async def scan_flagged_users(self, interaction: discord.Interaction, user: discord.User = None):
         await interaction.response.defer(ephemeral=True)
         feature_config = _normalize_flagged_user_config(interaction.guild.id)
@@ -1465,8 +1468,8 @@ class AutoModerate(commands.GroupCog, name=app_commands.locale_str("automod")):
         file = discord.File(io.StringIO("\n".join(status_lines)), filename="flagged_users.txt")
         await interaction.followup.send(content=f"掃描完成，共找到 {len(matched_ids)} 位標記用戶。", file=file, ephemeral=True)
 
-    @app_commands.command(name=app_commands.locale_str("flagged-user-alert-channel"), description="設置用戶加入伺服器時的通知頻道")
-    @app_commands.describe(channel="用於接收用戶加入通知的頻道")
+    @app_commands.command(name=app_commands.locale_str("flagged-user-alert-channel", i18n_key="cmd.automoderate.automod.flagged_user_alert_channel.name"), description=app_commands.locale_str("Set the notification channel for when users join the server", i18n_key="cmd.automoderate.automod.flagged_user_alert_channel.desc"))
+    @app_commands.describe(channel=app_commands.locale_str("Channel that receives user-join notifications", i18n_key="cmd.automoderate.automod.flagged_user_alert_channel.param.channel"))
     async def set_flagged_user_onjoin_channel(self, interaction: discord.Interaction, channel: discord.TextChannel):
         perms = channel.permissions_for(interaction.guild.me)
         if not (perms.view_channel and perms.send_messages):
@@ -1486,7 +1489,7 @@ class AutoModerate(commands.GroupCog, name=app_commands.locale_str("automod")):
         set_server_config(interaction.guild.id, "automod", automod_settings)
         await interaction.response.send_message(f"已將用戶加入通知頻道設置為 {channel.mention}。")
     
-    @app_commands.command(name=app_commands.locale_str("info"), description="查看自動管理功能介紹")
+    @app_commands.command(name=app_commands.locale_str("info", i18n_key="cmd.automoderate.automod.info.name"), description=app_commands.locale_str("View an introduction to auto-moderation features", i18n_key="cmd.automoderate.automod.info.desc"))
     async def automod_info(self, interaction: discord.Interaction):
         embed = discord.Embed(title="自動管理功能介紹", color=0x5865F2)
         embed.description = (

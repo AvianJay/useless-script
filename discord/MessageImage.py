@@ -531,8 +531,8 @@ class UpvoteView(discord.ui.View):
             await interaction.response.edit_message(view=self)
 
 
-@bot.tree.command(name="upvoteboard", description="設定有料板子，當超過 5 個人點擊將會傳送在該頻道。")
-@app_commands.describe(channel="要設置的頻道（若未設置則清除設定）")
+@bot.tree.command(name=app_commands.locale_str("upvoteboard", i18n_key="cmd.messageimage.upvoteboard.name"), description=app_commands.locale_str("Set up the upvote board; posts here once 5 people upvote a message.", i18n_key="cmd.messageimage.upvoteboard.desc"))
+@app_commands.describe(channel=app_commands.locale_str("The channel to use (omit to clear the setting)", i18n_key="cmd.messageimage.upvoteboard.param.channel"))
 @app_commands.allowed_contexts(guilds=True, dms=False, private_channels=False)
 @app_commands.allowed_installs(guilds=True, users=False)
 @app_commands.default_permissions(manage_guild=True)
@@ -569,7 +569,7 @@ class BadQuoteView(UpvoteView):
             await interaction.followup.send(f"無法上傳圖片！\n生成的圖片達到了 Discord 上傳大小的限制。", ephemeral=True)
 
 
-@bot.tree.context_menu(name="糟糕的Make it a Quote")
+@bot.tree.context_menu(name=app_commands.locale_str("Terrible Make it a Quote", i18n_key="cmd.messageimage.ctx.make_it_a_quote.name"))
 @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
 @app_commands.allowed_installs(guilds=True, users=True)
 async def make_it_a_quote(interaction: discord.Interaction, message: discord.Message):
@@ -691,7 +691,7 @@ async def screenshot(message: discord.Message):
     return io.BytesIO(image_bytes)
 
 
-@bot.tree.context_menu(name="截圖生成器")
+@bot.tree.context_menu(name=app_commands.locale_str("Screenshot Generator", i18n_key="cmd.messageimage.ctx.screenshot_generator.name"))
 @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
 @app_commands.allowed_installs(guilds=True, users=True)
 async def screenshot_generator(interaction: discord.Interaction, message: discord.Message):
@@ -1046,7 +1046,7 @@ class WhatIsThisGuyTalkingView(UpvoteView):
             await interaction.followup.send(f"重新生成失敗: {e}", ephemeral=True)
 
 
-@bot.tree.context_menu(name="這傢伙在說什麼呢")
+@bot.tree.context_menu(name=app_commands.locale_str("What is this guy talking about", i18n_key="cmd.messageimage.ctx.whatisthisguytalking.name"))
 @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
 @app_commands.allowed_installs(guilds=True, users=True)
 async def whatisthisguytalking(interaction: discord.Interaction, message: discord.Message):

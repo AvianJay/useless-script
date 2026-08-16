@@ -1550,8 +1550,8 @@ class Moderate(commands.Cog):
         self.bot = bot
     
     
-    @app_commands.command(name=app_commands.locale_str("multi-moderate"), description="對多個用戶進行懲處")
-    @app_commands.describe(users="選擇用戶 (提及或是 ID，使用逗號、空格或換行分隔多個用戶)", action="輸入懲處指令，使用逗號分隔多個指令，例如：ban 1d spamming, mute 10m")
+    @app_commands.command(name=app_commands.locale_str("multi-moderate", i18n_key="cmd.moderate.multi_moderate.name"), description=app_commands.locale_str("Take action on multiple users", i18n_key="cmd.moderate.multi_moderate.desc"))
+    @app_commands.describe(users=app_commands.locale_str("Users (mentions or IDs, separated by commas, spaces, or newlines)", i18n_key="cmd.moderate.multi_moderate.param.users"), action=app_commands.locale_str("Action commands, comma separated, e.g. ban 1d spamming, mute 10m", i18n_key="cmd.moderate.multi_moderate.param.action"))
     @app_commands.default_permissions(administrator=True)
     @app_commands.allowed_installs(guilds=True, users=False)
     @app_commands.allowed_contexts(guilds=True, dms=False, private_channels=False)
@@ -1649,8 +1649,8 @@ class Moderate(commands.Cog):
         await send_chunked(output_parts)
     
     
-    @app_commands.command(name=app_commands.locale_str("multi-moderate-action"), description="對用戶進行多重操作")
-    @app_commands.describe(user="選擇用戶")
+    @app_commands.command(name=app_commands.locale_str("multi-moderate-action", i18n_key="cmd.moderate.multi_moderate_action.name"), description=app_commands.locale_str("Take multiple actions on one user", i18n_key="cmd.moderate.multi_moderate_action.desc"))
+    @app_commands.describe(user=app_commands.locale_str("Choose a user", i18n_key="cmd.moderate.multi_moderate_action.param.user"))
     @app_commands.default_permissions(administrator=True)
     @app_commands.allowed_installs(guilds=True, users=False)
     @app_commands.allowed_contexts(guilds=True, dms=False, private_channels=False)
@@ -1840,8 +1840,8 @@ class Moderate(commands.Cog):
         message = await interaction.response.send_message(embed=embed, view=view)
 
 
-    @app_commands.command(name=app_commands.locale_str("send-moderation-message"), description="手動發送懲處公告")
-    @app_commands.describe(user="選擇用戶", reason="處分原因", action="處分結果", moderator="執行管理員（可選）", direct="直接發送到公告頻道而不顯示設定介面")
+    @app_commands.command(name=app_commands.locale_str("send-moderation-message", i18n_key="cmd.moderate.send_moderation_message.name"), description=app_commands.locale_str("Manually send a moderation announcement", i18n_key="cmd.moderate.send_moderation_message.desc"))
+    @app_commands.describe(user=app_commands.locale_str("Choose a user", i18n_key="cmd.moderate.send_moderation_message.param.user"), reason=app_commands.locale_str("Reason for the action", i18n_key="cmd.moderate.send_moderation_message.param.reason"), action=app_commands.locale_str("Action taken", i18n_key="cmd.moderate.send_moderation_message.param.action"), moderator=app_commands.locale_str("Acting moderator (optional)", i18n_key="cmd.moderate.send_moderation_message.param.moderator"), direct=app_commands.locale_str("Send directly to the announcement channel without the settings UI", i18n_key="cmd.moderate.send_moderation_message.param.direct"))
     @app_commands.default_permissions(administrator=True)
     @app_commands.allowed_installs(guilds=True, users=False)
     async def send_moderation_message(self, interaction: discord.Interaction, user: Union[discord.Member, discord.User], reason: str, action: str, moderator: discord.Member=None, direct: bool=False):
@@ -1856,8 +1856,8 @@ class Moderate(commands.Cog):
         await moderation_message_settings(interaction, user, moderator, actions, direct=direct, guild=guild)
 
 
-    @app_commands.command(name=app_commands.locale_str("ban"), description="封禁用戶")
-    @app_commands.describe(user="選擇用戶", reason="封禁原因（可選）", duration="封禁時間（可選，預設永久）", delete_message="刪除訊息時間（可選，預設不刪除）", send_moderation_message="是否同步發送處分通知")
+    @app_commands.command(name=app_commands.locale_str("ban", i18n_key="cmd.moderate.ban.name"), description=app_commands.locale_str("Ban a user", i18n_key="cmd.moderate.ban.desc"))
+    @app_commands.describe(user=app_commands.locale_str("Choose a user", i18n_key="cmd.moderate.ban.param.user"), reason=app_commands.locale_str("Ban reason (optional)", i18n_key="cmd.moderate.ban.param.reason"), duration=app_commands.locale_str("Ban duration (optional, default: permanent)", i18n_key="cmd.moderate.ban.param.duration"), delete_message=app_commands.locale_str("Message deletion period (optional, default: none)", i18n_key="cmd.moderate.ban.param.delete_message"), send_moderation_message=app_commands.locale_str("Also send a moderation announcement", i18n_key="cmd.moderate.ban.param.send_moderation_message"))
     @app_commands.allowed_installs(guilds=True, users=False)
     @app_commands.default_permissions(ban_members=True)
     async def ban_user(self, interaction: discord.Interaction, user: Union[discord.Member, discord.User], reason: str = "無", duration: str = "", delete_message: str = "", send_moderation_message: bool = False):
@@ -1914,8 +1914,8 @@ class Moderate(commands.Cog):
         await interaction.followup.send("\n".join(parts))
 
 
-    @app_commands.command(name=app_commands.locale_str("unban"), description="解封用戶")
-    @app_commands.describe(user="選擇用戶")
+    @app_commands.command(name=app_commands.locale_str("unban", i18n_key="cmd.moderate.unban.name"), description=app_commands.locale_str("Unban a user", i18n_key="cmd.moderate.unban.desc"))
+    @app_commands.describe(user=app_commands.locale_str("Choose a user", i18n_key="cmd.moderate.unban.param.user"))
     @app_commands.default_permissions(ban_members=True)
     @app_commands.allowed_installs(guilds=True, users=False)
     async def unban_user(self, interaction: discord.Interaction, user: discord.User):
@@ -1943,8 +1943,8 @@ class Moderate(commands.Cog):
         await interaction.followup.send(f"已將 <@{user_id}> 解封。")
 
 
-    @app_commands.command(name=app_commands.locale_str("kick"), description="踢出用戶")
-    @app_commands.describe(user="選擇用戶（@或ID）", reason="踢出原因（可選）", send_moderation_message="是否同步發送處分通知")
+    @app_commands.command(name=app_commands.locale_str("kick", i18n_key="cmd.moderate.kick.name"), description=app_commands.locale_str("Kick a user", i18n_key="cmd.moderate.kick.desc"))
+    @app_commands.describe(user=app_commands.locale_str("Choose a user (@mention or ID)", i18n_key="cmd.moderate.kick.param.user"), reason=app_commands.locale_str("Kick reason (optional)", i18n_key="cmd.moderate.kick.param.reason"), send_moderation_message=app_commands.locale_str("Also send a moderation announcement", i18n_key="cmd.moderate.kick.param.send_moderation_message"))
     @app_commands.default_permissions(kick_members=True)
     @app_commands.allowed_installs(guilds=True, users=False)
     async def kick_user(self, interaction: discord.Interaction, user: discord.Member, reason: str = "無", send_moderation_message: bool = False):
@@ -1994,8 +1994,8 @@ class Moderate(commands.Cog):
         await interaction.followup.send(f"已將 {user.mention} 踢出伺服器。{suffix}")
 
 
-    @app_commands.command(name=app_commands.locale_str("timeout"), description="禁言用戶")
-    @app_commands.describe(user="選擇用戶", reason="禁言原因（可選）", duration="禁言時間（可選，預設10分鐘）", send_moderation_message="是否同步發送處分通知")
+    @app_commands.command(name=app_commands.locale_str("timeout", i18n_key="cmd.moderate.timeout.name"), description=app_commands.locale_str("Time out a user", i18n_key="cmd.moderate.timeout.desc"))
+    @app_commands.describe(user=app_commands.locale_str("Choose a user", i18n_key="cmd.moderate.timeout.param.user"), reason=app_commands.locale_str("Timeout reason (optional)", i18n_key="cmd.moderate.timeout.param.reason"), duration=app_commands.locale_str("Timeout duration (optional, default: 10 minutes)", i18n_key="cmd.moderate.timeout.param.duration"), send_moderation_message=app_commands.locale_str("Also send a moderation announcement", i18n_key="cmd.moderate.timeout.param.send_moderation_message"))
     @app_commands.default_permissions(mute_members=True)
     @app_commands.allowed_installs(guilds=True, users=False)
     async def timeout_user(self, interaction: discord.Interaction, user: discord.Member, reason: str = "無", duration: str = "10m", send_moderation_message: bool = False):
@@ -2046,8 +2046,8 @@ class Moderate(commands.Cog):
         suffix = f"\n- 原因：{reason}" if reason != "無" else ""
         await interaction.followup.send(f"已對 {user.mention} 禁言 {get_time_text(duration_seconds)}。{suffix}")
         
-    @app_commands.command(name=app_commands.locale_str("untimeout"), description="解除用戶禁言")
-    @app_commands.describe(user="選擇用戶")
+    @app_commands.command(name=app_commands.locale_str("untimeout", i18n_key="cmd.moderate.untimeout.name"), description=app_commands.locale_str("Remove a user's timeout", i18n_key="cmd.moderate.untimeout.desc"))
+    @app_commands.describe(user=app_commands.locale_str("Choose a user", i18n_key="cmd.moderate.untimeout.param.user"))
     @app_commands.default_permissions(mute_members=True)
     async def untimeout_user(self, interaction: discord.Interaction, user: discord.Member):
         await interaction.response.defer()
@@ -2081,8 +2081,8 @@ class Moderate(commands.Cog):
 
         await interaction.followup.send(f"已對 {user.mention} 解除禁言。")
         
-    @app_commands.command(name=app_commands.locale_str("moderation-message-channel"), description="設定懲處公告頻道")
-    @app_commands.describe(channel="選擇頻道")
+    @app_commands.command(name=app_commands.locale_str("moderation-message-channel", i18n_key="cmd.moderate.moderation_message_channel.name"), description=app_commands.locale_str("Set the moderation announcement channel", i18n_key="cmd.moderate.moderation_message_channel.desc"))
+    @app_commands.describe(channel=app_commands.locale_str("Choose a channel", i18n_key="cmd.moderate.moderation_message_channel.param.channel"))
     @app_commands.default_permissions(manage_channels=True)
     @app_commands.allowed_installs(guilds=True, users=False)
     @app_commands.allowed_contexts(guilds=True, dms=False, private_channels=False)
@@ -2101,7 +2101,7 @@ class Moderate(commands.Cog):
             )
         await interaction.followup.send(f"已設定懲處公告頻道為 {channel.mention}。{warning}")
 
-    @app_commands.command(name=app_commands.locale_str("moderation-message-format"), description="設定懲處公告模板與裁判字號格式")
+    @app_commands.command(name=app_commands.locale_str("moderation-message-format", i18n_key="cmd.moderate.moderation_message_format.name"), description=app_commands.locale_str("Configure the announcement template and case-ID format", i18n_key="cmd.moderate.moderation_message_format.desc"))
     @app_commands.default_permissions(administrator=True)
     @app_commands.allowed_installs(guilds=True, users=False)
     @app_commands.allowed_contexts(guilds=True, dms=False, private_channels=False)
@@ -2191,8 +2191,8 @@ class Moderate(commands.Cog):
 
         await interaction.response.send_modal(FormatModal())
 
-    @app_commands.command(name=app_commands.locale_str("custom-action-add"), description="新增或更新伺服器自訂管理動作")
-    @app_commands.describe(name="自訂指令名稱（例如 ad）", action="要執行的動作字串（例如 mute 1h 在非宣傳區宣傳, smm）")
+    @app_commands.command(name=app_commands.locale_str("custom-action-add", i18n_key="cmd.moderate.custom_action_add.name"), description=app_commands.locale_str("Add or update a server custom moderation action", i18n_key="cmd.moderate.custom_action_add.desc"))
+    @app_commands.describe(name=app_commands.locale_str("Custom command name (e.g. ad)", i18n_key="cmd.moderate.custom_action_add.param.name"), action=app_commands.locale_str("The action string to run (e.g. mute 1h advertising, smm)", i18n_key="cmd.moderate.custom_action_add.param.action"))
     @app_commands.default_permissions(administrator=True)
     @app_commands.allowed_installs(guilds=True, users=False)
     @app_commands.allowed_contexts(guilds=True, dms=False, private_channels=False)
@@ -2300,8 +2300,8 @@ class Moderate(commands.Cog):
             ephemeral=True,
         )
 
-    @app_commands.command(name=app_commands.locale_str("custom-action-remove"), description="刪除伺服器自訂管理動作")
-    @app_commands.describe(name="要刪除的自訂指令名稱")
+    @app_commands.command(name=app_commands.locale_str("custom-action-remove", i18n_key="cmd.moderate.custom_action_remove.name"), description=app_commands.locale_str("Delete a server custom moderation action", i18n_key="cmd.moderate.custom_action_remove.desc"))
+    @app_commands.describe(name=app_commands.locale_str("Name of the custom command to delete", i18n_key="cmd.moderate.custom_action_remove.param.name"))
     @app_commands.default_permissions(administrator=True)
     @app_commands.allowed_installs(guilds=True, users=False)
     @app_commands.allowed_contexts(guilds=True, dms=False, private_channels=False)
@@ -2325,7 +2325,7 @@ class Moderate(commands.Cog):
             ephemeral=True,
         )
 
-    @app_commands.command(name=app_commands.locale_str("custom-action-list"), description="查看伺服器自訂管理動作")
+    @app_commands.command(name=app_commands.locale_str("custom-action-list", i18n_key="cmd.moderate.custom_action_list.name"), description=app_commands.locale_str("View server custom moderation actions", i18n_key="cmd.moderate.custom_action_list.desc"))
     @app_commands.default_permissions(administrator=True)
     @app_commands.allowed_installs(guilds=True, users=False)
     @app_commands.allowed_contexts(guilds=True, dms=False, private_channels=False)
@@ -2345,25 +2345,25 @@ class Moderate(commands.Cog):
         embed.description = "\n".join(lines)
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
-    @app_commands.command(name=app_commands.locale_str("action-builder"), description="產生懲處動作指令字串")
+    @app_commands.command(name=app_commands.locale_str("action-builder", i18n_key="cmd.moderate.action_builder.name"), description=app_commands.locale_str("Build a moderation action command string", i18n_key="cmd.moderate.action_builder.desc"))
     @app_commands.describe(
-        action_type="動作類型",
-        duration="時長（mute/ban 用），如 10m、7d、0 表示永久",
-        delete_message_duration="ban 專用：刪除該用戶最近多少時間的訊息，如 1d、0 表示不刪",
-        reason="原因（mute/kick/ban 用）",
-        message="警告訊息（delete/warn 用），可用 {user} 代表用戶",
-        prepend="要接在此動作前面的既有指令（用逗號分隔多個動作時）",
+        action_type=app_commands.locale_str("Action type", i18n_key="cmd.moderate.action_builder.param.action_type"),
+        duration=app_commands.locale_str("Duration (for mute/ban), e.g. 10m, 7d; 0 = permanent", i18n_key="cmd.moderate.action_builder.param.duration"),
+        delete_message_duration=app_commands.locale_str("Ban only: delete the user's messages from this period, e.g. 1d; 0 = none", i18n_key="cmd.moderate.action_builder.param.delete_message_duration"),
+        reason=app_commands.locale_str("Reason (for mute/kick/ban)", i18n_key="cmd.moderate.action_builder.param.reason"),
+        message=app_commands.locale_str("Warning message (for delete/warn); {user} inserts the user", i18n_key="cmd.moderate.action_builder.param.message"),
+        prepend=app_commands.locale_str("Existing command to prepend before this action (comma-separated actions)", i18n_key="cmd.moderate.action_builder.param.prepend"),
     )
     @app_commands.choices(
         action_type=[
-            app_commands.Choice(name="刪除訊息", value="delete"),
+            app_commands.Choice(name=app_commands.locale_str("Delete message", i18n_key="cmd.moderate.action_builder.choice.delete"), value="delete"),
             # app_commands.Choice(name="刪除訊息＋私訊警告", value="delete_dm"),
-            app_commands.Choice(name="公開警告", value="warn"),
+            app_commands.Choice(name=app_commands.locale_str("Public warning", i18n_key="cmd.moderate.action_builder.choice.warn"), value="warn"),
             # app_commands.Choice(name="私訊警告", value="warn_dm"),
-            app_commands.Choice(name="禁言", value="mute"),
-            app_commands.Choice(name="踢出", value="kick"),
-            app_commands.Choice(name="封禁", value="ban"),
-            app_commands.Choice(name="傳送管理通知", value="send_mod_message"),
+            app_commands.Choice(name=app_commands.locale_str("Mute", i18n_key="cmd.moderate.action_builder.choice.mute"), value="mute"),
+            app_commands.Choice(name=app_commands.locale_str("Kick", i18n_key="cmd.moderate.action_builder.choice.kick"), value="kick"),
+            app_commands.Choice(name=app_commands.locale_str("Ban", i18n_key="cmd.moderate.action_builder.choice.ban"), value="ban"),
+            app_commands.Choice(name=app_commands.locale_str("Send moderation notice", i18n_key="cmd.moderate.action_builder.choice.send_mod_message"), value="send_mod_message"),
         ],
     )
     async def action_builder(
@@ -2769,7 +2769,7 @@ class RequestView(discord.ui.View):
 @app_commands.guild_only()
 @app_commands.allowed_installs(guilds=True, users=False)
 @app_commands.allowed_contexts(guilds=True, dms=False, private_channels=False)
-class ModerationRequest(commands.GroupCog, name=app_commands.locale_str("request")):
+class ModerationRequest(commands.GroupCog, name=app_commands.locale_str("request", i18n_key="cmd.moderate.request.root.name"), description=app_commands.locale_str("Request confirmation from the target or an authorized admin before acting.", i18n_key="cmd.moderate.request.root.desc")):
     """請求目標本人或有權限的管理員確認執行懲處。"""
 
     def __init__(self, bot: commands.Bot) -> None:
@@ -2871,9 +2871,9 @@ class ModerationRequest(commands.GroupCog, name=app_commands.locale_str("request
         except Exception:
             view.message = msg_obj
 
-    @app_commands.command(name=app_commands.locale_str("ban"), description="請求封禁用戶")
-    @app_commands.describe(user="要封禁的用戶", request_to="請求誰來確認（預設為對方本人）",
-                           reason="封禁原因（可選）", duration="封禁時間（可選，預設永久）")
+    @app_commands.command(name=app_commands.locale_str("ban", i18n_key="cmd.moderate.request.ban.name"), description=app_commands.locale_str("Request a user ban", i18n_key="cmd.moderate.request.ban.desc"))
+    @app_commands.describe(user=app_commands.locale_str("The user to ban", i18n_key="cmd.moderate.request.ban.param.user"), request_to=app_commands.locale_str("Who confirms the request (default: the target)", i18n_key="cmd.moderate.request.ban.param.request_to"),
+                           reason=app_commands.locale_str("Ban reason (optional)", i18n_key="cmd.moderate.request.ban.param.reason"), duration=app_commands.locale_str("Ban duration (optional, default: permanent)", i18n_key="cmd.moderate.request.ban.param.duration"))
     async def request_ban(self, interaction: discord.Interaction,
                           user: Union[discord.Member, discord.User],
                           request_to: Optional[discord.Member] = None,
@@ -2886,16 +2886,16 @@ class ModerationRequest(commands.GroupCog, name=app_commands.locale_str("request
                 return
         await self._create_request(interaction, "ban", user, request_to, reason, duration_seconds)
 
-    @app_commands.command(name=app_commands.locale_str("kick"), description="請求踢出用戶")
-    @app_commands.describe(user="要踢出的用戶", request_to="請求誰來確認（預設為對方本人）", reason="踢出原因（可選）")
+    @app_commands.command(name=app_commands.locale_str("kick", i18n_key="cmd.moderate.request.kick.name"), description=app_commands.locale_str("Request a user kick", i18n_key="cmd.moderate.request.kick.desc"))
+    @app_commands.describe(user=app_commands.locale_str("The user to kick", i18n_key="cmd.moderate.request.kick.param.user"), request_to=app_commands.locale_str("Who confirms the request (default: the target)", i18n_key="cmd.moderate.request.kick.param.request_to"), reason=app_commands.locale_str("Kick reason (optional)", i18n_key="cmd.moderate.request.kick.param.reason"))
     async def request_kick(self, interaction: discord.Interaction, user: discord.Member,
                            request_to: Optional[discord.Member] = None,
                            reason: Optional[str] = None):
         await self._create_request(interaction, "kick", user, request_to, reason, 0)
 
-    @app_commands.command(name=app_commands.locale_str("timeout"), description="請求禁言用戶")
-    @app_commands.describe(user="要禁言的用戶", request_to="請求誰來確認（預設為對方本人）",
-                           reason="禁言原因（可選）", duration="禁言時間（預設10分鐘）")
+    @app_commands.command(name=app_commands.locale_str("timeout", i18n_key="cmd.moderate.request.timeout.name"), description=app_commands.locale_str("Request a user timeout", i18n_key="cmd.moderate.request.timeout.desc"))
+    @app_commands.describe(user=app_commands.locale_str("The user to time out", i18n_key="cmd.moderate.request.timeout.param.user"), request_to=app_commands.locale_str("Who confirms the request (default: the target)", i18n_key="cmd.moderate.request.timeout.param.request_to"),
+                           reason=app_commands.locale_str("Timeout reason (optional)", i18n_key="cmd.moderate.request.timeout.param.reason"), duration=app_commands.locale_str("Timeout duration (default: 10 minutes)", i18n_key="cmd.moderate.request.timeout.param.duration"))
     async def request_timeout(self, interaction: discord.Interaction, user: discord.Member,
                               request_to: Optional[discord.Member] = None,
                               reason: Optional[str] = None, duration: str = "10m"):
@@ -2908,13 +2908,13 @@ class ModerationRequest(commands.GroupCog, name=app_commands.locale_str("request
             return
         await self._create_request(interaction, "timeout", user, request_to, reason, duration_seconds)
 
-    @app_commands.command(name=app_commands.locale_str("settings"), description="設定請求懲處功能（僅管理員）")
-    @app_commands.describe(action="要設定的動作", enabled="是否啟用",
-                           max_duration="禁言/封禁最長時間（例如 1h，0 = 不限制）")
+    @app_commands.command(name=app_commands.locale_str("settings", i18n_key="cmd.moderate.request.settings.name"), description=app_commands.locale_str("Configure the request feature (admins only)", i18n_key="cmd.moderate.request.settings.desc"))
+    @app_commands.describe(action=app_commands.locale_str("The action to configure", i18n_key="cmd.moderate.request.settings.param.action"), enabled=app_commands.locale_str("Whether to enable it", i18n_key="cmd.moderate.request.settings.param.enabled"),
+                           max_duration=app_commands.locale_str("Maximum timeout/ban duration (e.g. 1h, 0 = unlimited)", i18n_key="cmd.moderate.request.settings.param.max_duration"))
     @app_commands.choices(action=[
-        app_commands.Choice(name="封禁", value="ban"),
-        app_commands.Choice(name="踢出", value="kick"),
-        app_commands.Choice(name="禁言", value="timeout"),
+        app_commands.Choice(name=app_commands.locale_str("Ban", i18n_key="cmd.moderate.request.settings.choice.ban"), value="ban"),
+        app_commands.Choice(name=app_commands.locale_str("Kick", i18n_key="cmd.moderate.request.settings.choice.kick"), value="kick"),
+        app_commands.Choice(name=app_commands.locale_str("Timeout", i18n_key="cmd.moderate.request.settings.choice.timeout"), value="timeout"),
     ])
     async def request_settings(self, interaction: discord.Interaction,
                                action: Optional[str] = None,
@@ -3065,7 +3065,7 @@ class VoteView(discord.ui.View):
 @app_commands.guild_only()
 @app_commands.allowed_installs(guilds=True, users=False)
 @app_commands.allowed_contexts(guilds=True, dms=False, private_channels=False)
-class ModerationVote(commands.GroupCog, name=app_commands.locale_str("vote")):
+class ModerationVote(commands.GroupCog, name=app_commands.locale_str("vote", i18n_key="cmd.moderate.vote.root.name"), description=app_commands.locale_str("Start a moderation vote; the action runs once approvals reach the threshold.", i18n_key="cmd.moderate.vote.root.desc")):
     """發起懲處投票，同意數達閾值即執行。"""
 
     def __init__(self, bot: commands.Bot) -> None:
@@ -3164,8 +3164,8 @@ class ModerationVote(commands.GroupCog, name=app_commands.locale_str("vote")):
         except Exception:
             view.message = msg_obj
 
-    @app_commands.command(name=app_commands.locale_str("ban"), description="發起封禁投票")
-    @app_commands.describe(user="要封禁的用戶", reason="封禁原因（可選）", duration="封禁時間（可選，預設永久）")
+    @app_commands.command(name=app_commands.locale_str("ban", i18n_key="cmd.moderate.vote.ban.name"), description=app_commands.locale_str("Start a ban vote", i18n_key="cmd.moderate.vote.ban.desc"))
+    @app_commands.describe(user=app_commands.locale_str("The user to ban", i18n_key="cmd.moderate.vote.ban.param.user"), reason=app_commands.locale_str("Ban reason (optional)", i18n_key="cmd.moderate.vote.ban.param.reason"), duration=app_commands.locale_str("Ban duration (optional, default: permanent)", i18n_key="cmd.moderate.vote.ban.param.duration"))
     async def vote_ban(self, interaction: discord.Interaction,
                        user: Union[discord.Member, discord.User],
                        reason: Optional[str] = None, duration: Optional[str] = None):
@@ -3177,14 +3177,14 @@ class ModerationVote(commands.GroupCog, name=app_commands.locale_str("vote")):
                 return
         await self._start_vote(interaction, "ban", user, reason, duration_seconds)
 
-    @app_commands.command(name=app_commands.locale_str("kick"), description="發起踢出投票")
-    @app_commands.describe(user="要踢出的用戶", reason="踢出原因（可選）")
+    @app_commands.command(name=app_commands.locale_str("kick", i18n_key="cmd.moderate.vote.kick.name"), description=app_commands.locale_str("Start a kick vote", i18n_key="cmd.moderate.vote.kick.desc"))
+    @app_commands.describe(user=app_commands.locale_str("The user to kick", i18n_key="cmd.moderate.vote.kick.param.user"), reason=app_commands.locale_str("Kick reason (optional)", i18n_key="cmd.moderate.vote.kick.param.reason"))
     async def vote_kick(self, interaction: discord.Interaction, user: discord.Member,
                         reason: Optional[str] = None):
         await self._start_vote(interaction, "kick", user, reason, 0)
 
-    @app_commands.command(name=app_commands.locale_str("timeout"), description="發起禁言投票")
-    @app_commands.describe(user="要禁言的用戶", reason="禁言原因（可選）", duration="禁言時間（預設10分鐘）")
+    @app_commands.command(name=app_commands.locale_str("timeout", i18n_key="cmd.moderate.vote.timeout.name"), description=app_commands.locale_str("Start a timeout vote", i18n_key="cmd.moderate.vote.timeout.desc"))
+    @app_commands.describe(user=app_commands.locale_str("The user to time out", i18n_key="cmd.moderate.vote.timeout.param.user"), reason=app_commands.locale_str("Timeout reason (optional)", i18n_key="cmd.moderate.vote.timeout.param.reason"), duration=app_commands.locale_str("Timeout duration (default: 10 minutes)", i18n_key="cmd.moderate.vote.timeout.param.duration"))
     async def vote_timeout(self, interaction: discord.Interaction, user: discord.Member,
                            reason: Optional[str] = None, duration: str = "10m"):
         duration_seconds = timestr_to_seconds(duration)
@@ -3196,14 +3196,14 @@ class ModerationVote(commands.GroupCog, name=app_commands.locale_str("vote")):
             return
         await self._start_vote(interaction, "timeout", user, reason, duration_seconds)
 
-    @app_commands.command(name=app_commands.locale_str("settings"), description="設定投票懲處功能（僅管理員）")
-    @app_commands.describe(action="要設定的動作", enabled="是否啟用",
-                           threshold="固定投票門檻（0 = 自動計算）", vote_duration="投票持續時間（例如 10m，預設 10 分鐘）",
-                           max_duration="禁言/封禁最長時間（例如 1h，0 = 不限制）")
+    @app_commands.command(name=app_commands.locale_str("settings", i18n_key="cmd.moderate.vote.settings.name"), description=app_commands.locale_str("Configure vote moderation (admins only)", i18n_key="cmd.moderate.vote.settings.desc"))
+    @app_commands.describe(action=app_commands.locale_str("The action to configure", i18n_key="cmd.moderate.vote.settings.param.action"), enabled=app_commands.locale_str("Whether to enable it", i18n_key="cmd.moderate.vote.settings.param.enabled"),
+                           threshold=app_commands.locale_str("Fixed vote threshold (0 = automatic)", i18n_key="cmd.moderate.vote.settings.param.threshold"), vote_duration=app_commands.locale_str("Vote duration (e.g. 10m, default 10 minutes)", i18n_key="cmd.moderate.vote.settings.param.vote_duration"),
+                           max_duration=app_commands.locale_str("Maximum timeout/ban duration (e.g. 1h, 0 = unlimited)", i18n_key="cmd.moderate.vote.settings.param.max_duration"))
     @app_commands.choices(action=[
-        app_commands.Choice(name="封禁", value="ban"),
-        app_commands.Choice(name="踢出", value="kick"),
-        app_commands.Choice(name="禁言", value="timeout"),
+        app_commands.Choice(name=app_commands.locale_str("Ban", i18n_key="cmd.moderate.vote.settings.choice.ban"), value="ban"),
+        app_commands.Choice(name=app_commands.locale_str("Kick", i18n_key="cmd.moderate.vote.settings.choice.kick"), value="kick"),
+        app_commands.Choice(name=app_commands.locale_str("Timeout", i18n_key="cmd.moderate.vote.settings.choice.timeout"), value="timeout"),
     ])
     async def vote_settings(self, interaction: discord.Interaction,
                             action: Optional[str] = None,

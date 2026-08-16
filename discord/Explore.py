@@ -115,7 +115,10 @@ except Exception:
     _economy_mod = None
     _economy_available = False
 
-activity_entry = ActivityEntry(name=app_commands.locale_str("explore space"), description="開啟探索空間")
+activity_entry = ActivityEntry(
+    name=app_commands.locale_str("explore space", i18n_key="cmd.explore.ctx.activity_entry.name"),
+    description=app_commands.locale_str("Launch the Explore space", i18n_key="cmd.explore.ctx.activity_entry.desc"),
+)
 
 EXPLORE_SAVE_DATA_KEY = "explore_save_data"
 EXPLORE_SAVE_ALLOWED_SWITCH_IDS = (
@@ -2442,7 +2445,7 @@ bot.add_view(PlayView())
 
 @app_commands.allowed_installs(guilds=True, users=True)
 @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
-@bot.tree.command(name="explore", description="啟動探索空間")
+@bot.tree.command(name=app_commands.locale_str("explore", i18n_key="cmd.explore.explore.name"), description=app_commands.locale_str("Launch the Explore space", i18n_key="cmd.explore.explore.desc"))
 async def explore_command(interaction: discord.Interaction):
     await interaction.response.launch_activity()
     embed = discord.Embed(
@@ -2456,7 +2459,7 @@ async def explore_command(interaction: discord.Interaction):
 @app_commands.allowed_installs(guilds=True, users=False)
 @app_commands.allowed_contexts(guilds=True, dms=False, private_channels=False)
 @app_commands.default_permissions(manage_guild=True)
-class ExplorerCommands(commands.GroupCog, name="explore-settings"):
+class ExplorerCommands(commands.GroupCog, name=app_commands.locale_str("explore-settings", i18n_key="cmd.explore.explore_settings.root.name")):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
 
@@ -2481,27 +2484,27 @@ class ExplorerCommands(commands.GroupCog, name="explore-settings"):
         _append_chat_history(gid, chat_message)
         await sio.emit("chat_message", chat_message, room=gid)
 
-    @app_commands.command(name="setup", description="啟用或設定探索空間")
+    @app_commands.command(name=app_commands.locale_str("setup", i18n_key="cmd.explore.explore_settings.setup.name"), description=app_commands.locale_str("Enable or configure the Explore space", i18n_key="cmd.explore.explore_settings.setup.desc"))
     @app_commands.choices(enabled=[
-        app_commands.Choice(name="啟用", value=1),
-        app_commands.Choice(name="停用", value=0),
+        app_commands.Choice(name=app_commands.locale_str("Enable", i18n_key="cmd.explore.explore_settings.setup.choice.1"), value=1),
+        app_commands.Choice(name=app_commands.locale_str("Disable", i18n_key="cmd.explore.explore_settings.setup.choice.0"), value=0),
     ])
     async def setup(self, interaction: discord.Interaction, enabled: int):
         toggle_explore_server(interaction.guild.id, bool(enabled))
         status = "啟用" if enabled else "停用"
         await interaction.response.send_message(f"已{status}本伺服器的探索空間。")
 
-    @app_commands.command(name="privacy", description="設定伺服器是否在探索大廳公開")
+    @app_commands.command(name=app_commands.locale_str("privacy", i18n_key="cmd.explore.explore_settings.privacy.name"), description=app_commands.locale_str("Set whether this server is listed in the Explore lobby", i18n_key="cmd.explore.explore_settings.privacy.desc"))
     @app_commands.choices(public=[
-        app_commands.Choice(name="公開", value=1),
-        app_commands.Choice(name="私人", value=0),
+        app_commands.Choice(name=app_commands.locale_str("Public", i18n_key="cmd.explore.explore_settings.privacy.choice.1"), value=1),
+        app_commands.Choice(name=app_commands.locale_str("Private", i18n_key="cmd.explore.explore_settings.privacy.choice.0"), value=0),
     ])
     async def privacy(self, interaction: discord.Interaction, public: int):
         set_explore_privacy(interaction.guild.id, bool(public))
         status = "公開" if public else "私人"
         await interaction.response.send_message(f"已將本伺服器設定為{status}（在探索大廳{'可見' if public else '不可見'}）。")
 
-    @app_commands.command(name="require-join", description="設定是否必須先加入伺服器才能進入 Explore")
+    @app_commands.command(name=app_commands.locale_str("require-join", i18n_key="cmd.explore.explore_settings.require_join.name"), description=app_commands.locale_str("Require joining the server before entering Explore", i18n_key="cmd.explore.explore_settings.require_join.desc"))
     async def require_join(
         self,
         interaction: discord.Interaction,
@@ -2539,7 +2542,7 @@ class ExplorerCommands(commands.GroupCog, name="explore-settings"):
             f"已啟用先加入伺服器才能進入 Explore。{source_text}：{resolved_link}"
         )
 
-    @app_commands.command(name="chat-channel", description="設定 Explore 聊天室橋接的 Discord 文字頻道")
+    @app_commands.command(name=app_commands.locale_str("chat-channel", i18n_key="cmd.explore.explore_settings.chat_channel.name"), description=app_commands.locale_str("Set the Discord text channel bridged to the Explore chat", i18n_key="cmd.explore.explore_settings.chat_channel.desc"))
     async def chat_channel(
         self,
         interaction: discord.Interaction,
@@ -2569,9 +2572,9 @@ class ExplorerCommands(commands.GroupCog, name="explore-settings"):
             f"已將 Explore 聊天室橋接到 {channel.mention}。遊戲內訊息會轉發到這裡,頻道訊息也會出現在遊戲內。"
         )
 
-    banned_words = app_commands.Group(name="banned-words", description="管理 Explore 聊天室的自訂禁字")
+    banned_words = app_commands.Group(name=app_commands.locale_str("banned-words", i18n_key="cmd.explore.banned_words.root.name"), description=app_commands.locale_str("Manage custom banned words for the Explore chat", i18n_key="cmd.explore.banned_words.root.desc"))
 
-    @banned_words.command(name="add", description="新增一個自訂禁字")
+    @banned_words.command(name=app_commands.locale_str("add", i18n_key="cmd.explore.banned_words.add.name"), description=app_commands.locale_str("Add a custom banned word", i18n_key="cmd.explore.banned_words.add.desc"))
     async def banned_words_add(self, interaction: discord.Interaction, word: str):
         if interaction.guild is None:
             await interaction.response.send_message("這個指令只能在伺服器內使用。", ephemeral=True)
@@ -2591,7 +2594,7 @@ class ExplorerCommands(commands.GroupCog, name="explore-settings"):
         set_server_config(interaction.guild.id, CHAT_BLOCKLIST_CONFIG_KEY, words)
         await interaction.response.send_message(f"已新增禁字「{word}」。目前共 {len(words)} 個自訂禁字。", ephemeral=True)
 
-    @banned_words.command(name="remove", description="移除一個自訂禁字")
+    @banned_words.command(name=app_commands.locale_str("remove", i18n_key="cmd.explore.banned_words.remove.name"), description=app_commands.locale_str("Remove a custom banned word", i18n_key="cmd.explore.banned_words.remove.desc"))
     async def banned_words_remove(self, interaction: discord.Interaction, word: str):
         if interaction.guild is None:
             await interaction.response.send_message("這個指令只能在伺服器內使用。", ephemeral=True)
@@ -2605,7 +2608,7 @@ class ExplorerCommands(commands.GroupCog, name="explore-settings"):
         set_server_config(interaction.guild.id, CHAT_BLOCKLIST_CONFIG_KEY, remaining)
         await interaction.response.send_message(f"已移除禁字「{word}」。目前共 {len(remaining)} 個自訂禁字。", ephemeral=True)
 
-    @banned_words.command(name="list", description="列出所有自訂禁字")
+    @banned_words.command(name=app_commands.locale_str("list", i18n_key="cmd.explore.banned_words.list.name"), description=app_commands.locale_str("List all custom banned words", i18n_key="cmd.explore.banned_words.list.desc"))
     async def banned_words_list(self, interaction: discord.Interaction):
         if interaction.guild is None:
             await interaction.response.send_message("這個指令只能在伺服器內使用。", ephemeral=True)

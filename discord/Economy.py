@@ -1585,12 +1585,12 @@ class PurchaseModal(discord.ui.Modal):
 
 @app_commands.allowed_installs(guilds=True, users=True)
 @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
-class Economy(commands.GroupCog, name="economy", description="經濟系統指令"):
+class Economy(commands.GroupCog, name=app_commands.locale_str("economy", i18n_key="cmd.economy.economy.root.name"), description=app_commands.locale_str("Economy system commands", i18n_key="cmd.economy.economy.root.desc")):
     def __init__(self):
         super().__init__()
 
-    @app_commands.command(name="balance", description="查看餘額")
-    @app_commands.describe(user="查看其他用戶的餘額")
+    @app_commands.command(name=app_commands.locale_str("balance", i18n_key="cmd.economy.economy.balance.name"), description=app_commands.locale_str("Check your balance", i18n_key="cmd.economy.economy.balance.desc"))
+    @app_commands.describe(user=app_commands.locale_str("Check another user's balance", i18n_key="cmd.economy.economy.balance.param.user"))
     async def balance(self, interaction: discord.Interaction, user: discord.User = None):
         target = user or interaction.user
         global_bal = get_global_balance(target.id)
@@ -1641,8 +1641,8 @@ class Economy(commands.GroupCog, name="economy", description="經濟系統指令
         embed.set_thumbnail(url=target.display_avatar.url)
         await interaction.response.send_message(embed=embed)
 
-    @app_commands.command(name="daily", description="領取每日獎勵")
-    @app_commands.describe(global_daily="是否領取全域獎勵")
+    @app_commands.command(name=app_commands.locale_str("daily", i18n_key="cmd.economy.economy.daily.name"), description=app_commands.locale_str("Claim your daily reward", i18n_key="cmd.economy.economy.daily.desc"))
+    @app_commands.describe(global_daily=app_commands.locale_str("Claim the global reward instead", i18n_key="cmd.economy.economy.daily.param.global_daily"))
     async def daily(self, interaction: discord.Interaction, global_daily: bool = False):
         from datetime import datetime, timezone, timedelta
         
@@ -1747,8 +1747,8 @@ class Economy(commands.GroupCog, name="economy", description="經濟系統指令
         )
         await interaction.response.send_message(embed=embed)
 
-    @app_commands.command(name="hourly", description="領取每小時獎勵")
-    @app_commands.describe(global_hourly="是否領取全域獎勵")
+    @app_commands.command(name=app_commands.locale_str("hourly", i18n_key="cmd.economy.economy.hourly.name"), description=app_commands.locale_str("Claim your hourly reward", i18n_key="cmd.economy.economy.hourly.desc"))
+    @app_commands.describe(global_hourly=app_commands.locale_str("Claim the global reward instead", i18n_key="cmd.economy.economy.hourly.param.global_hourly"))
     async def hourly(self, interaction: discord.Interaction, global_hourly: bool = False):
         from datetime import datetime, timezone, timedelta
         
@@ -1840,11 +1840,11 @@ class Economy(commands.GroupCog, name="economy", description="經濟系統指令
         )
         await interaction.response.send_message(embed=embed)
 
-    @app_commands.command(name="pay", description="轉帳給其他用戶")
-    @app_commands.describe(user="收款人", amount="金額", currency="貨幣類型")
+    @app_commands.command(name=app_commands.locale_str("pay", i18n_key="cmd.economy.economy.pay.name"), description=app_commands.locale_str("Transfer money to another user", i18n_key="cmd.economy.economy.pay.desc"))
+    @app_commands.describe(user=app_commands.locale_str("Recipient", i18n_key="cmd.economy.economy.pay.param.user"), amount=app_commands.locale_str("Amount", i18n_key="cmd.economy.economy.pay.param.amount"), currency=app_commands.locale_str("Currency type", i18n_key="cmd.economy.economy.pay.param.currency"))
     @app_commands.choices(currency=[
-        app_commands.Choice(name="伺服幣", value="server"),
-        app_commands.Choice(name="全域幣", value="global"),
+        app_commands.Choice(name=app_commands.locale_str("Server currency", i18n_key="cmd.economy.economy.pay.choice.server"), value="server"),
+        app_commands.Choice(name=app_commands.locale_str("Global currency", i18n_key="cmd.economy.economy.pay.choice.global"), value="global"),
     ])
     async def pay(self, interaction: discord.Interaction, user: discord.User, amount: float, currency: str = None):
         # 非伺服器上下文時強制全域幣；伺服器上下文未指定時預設伺服幣
@@ -1943,12 +1943,12 @@ class Economy(commands.GroupCog, name="economy", description="經濟系統指令
         except Exception:
             pass
 
-    @app_commands.command(name="exchange", description="兌換伺服幣和全域幣")
+    @app_commands.command(name=app_commands.locale_str("exchange", i18n_key="cmd.economy.economy.exchange.name"), description=app_commands.locale_str("Exchange between server and global currency", i18n_key="cmd.economy.economy.exchange.desc"))
     @app_commands.guild_only()
-    @app_commands.describe(amount="金額", direction="兌換方向")
+    @app_commands.describe(amount=app_commands.locale_str("Amount", i18n_key="cmd.economy.economy.exchange.param.amount"), direction=app_commands.locale_str("Exchange direction", i18n_key="cmd.economy.economy.exchange.param.direction"))
     @app_commands.choices(direction=[
-        app_commands.Choice(name="伺服幣 → 全域幣", value="to_global"),
-        app_commands.Choice(name="全域幣 → 伺服幣", value="to_server"),
+        app_commands.Choice(name=app_commands.locale_str("Server currency → global currency", i18n_key="cmd.economy.economy.exchange.choice.to_global"), value="to_global"),
+        app_commands.Choice(name=app_commands.locale_str("Global currency → server currency", i18n_key="cmd.economy.economy.exchange.choice.to_server"), value="to_server"),
     ])
     async def exchange(self, interaction: discord.Interaction, amount: float, direction: str):
         if direction not in ("to_global", "to_server"):
@@ -2058,12 +2058,12 @@ class Economy(commands.GroupCog, name="economy", description="經濟系統指令
 
         await interaction.response.send_message(embed=embed)
 
-    @app_commands.command(name="buy", description="從商店購買物品")
-    @app_commands.describe(item_id="要購買的物品", amount="購買數量", scope="商店類型")
+    @app_commands.command(name=app_commands.locale_str("buy", i18n_key="cmd.economy.economy.buy.name"), description=app_commands.locale_str("Buy items from the shop", i18n_key="cmd.economy.economy.buy.desc"))
+    @app_commands.describe(item_id=app_commands.locale_str("The item to buy", i18n_key="cmd.economy.economy.buy.param.item_id"), amount=app_commands.locale_str("How many to buy", i18n_key="cmd.economy.economy.buy.param.amount"), scope=app_commands.locale_str("Shop type", i18n_key="cmd.economy.economy.buy.param.scope"))
     @app_commands.autocomplete(item_id=purchasable_items_autocomplete)
     @app_commands.choices(scope=[
-        app_commands.Choice(name="伺服器商店（伺服幣）", value="server"),
-        app_commands.Choice(name="全域商店（全域幣）", value="global"),
+        app_commands.Choice(name=app_commands.locale_str("Server shop (server currency)", i18n_key="cmd.economy.economy.buy.choice.server"), value="server"),
+        app_commands.Choice(name=app_commands.locale_str("Global shop (global currency)", i18n_key="cmd.economy.economy.buy.choice.global"), value="global"),
     ])
     async def buy(self, interaction: discord.Interaction, item_id: str, amount: int = 1, scope: str = "server"):
         # 全域安裝時強制使用全域商店
@@ -2176,11 +2176,11 @@ class Economy(commands.GroupCog, name="economy", description="經濟系統指令
         )
         await interaction.response.send_message(embed=embed)
 
-    @app_commands.command(name="sell", description="賣出物品給商店")
-    @app_commands.describe(item_id="要賣出的物品", amount="賣出數量", scope="商店類型")
+    @app_commands.command(name=app_commands.locale_str("sell", i18n_key="cmd.economy.economy.sell.name"), description=app_commands.locale_str("Sell items to the shop", i18n_key="cmd.economy.economy.sell.desc"))
+    @app_commands.describe(item_id=app_commands.locale_str("The item to sell", i18n_key="cmd.economy.economy.sell.param.item_id"), amount=app_commands.locale_str("How many to sell", i18n_key="cmd.economy.economy.sell.param.amount"), scope=app_commands.locale_str("Shop type", i18n_key="cmd.economy.economy.sell.param.scope"))
     @app_commands.choices(scope=[
-        app_commands.Choice(name="伺服器商店（伺服幣）", value="server"),
-        app_commands.Choice(name="全域商店（全域幣）", value="global"),
+        app_commands.Choice(name=app_commands.locale_str("Server shop (server currency)", i18n_key="cmd.economy.economy.sell.choice.server"), value="server"),
+        app_commands.Choice(name=app_commands.locale_str("Global shop (global currency)", i18n_key="cmd.economy.economy.sell.choice.global"), value="global"),
     ])
     @app_commands.autocomplete(item_id=sellable_items_autocomplete)
     async def sell(self, interaction: discord.Interaction, item_id: str, amount: int = 1, scope: str = "server"):
@@ -2320,7 +2320,7 @@ class Economy(commands.GroupCog, name="economy", description="經濟系統指令
         )
         await interaction.response.send_message(embed=embed)
 
-    @app_commands.command(name="shop", description="查看商店")
+    @app_commands.command(name=app_commands.locale_str("shop", i18n_key="cmd.economy.economy.shop.name"), description=app_commands.locale_str("View the shop", i18n_key="cmd.economy.economy.shop.desc"))
     async def shop(self, interaction: discord.Interaction):
         if interaction_uses_server_scope(interaction):
             purchasable = [item for item in get_all_items_for_guild(interaction.guild.id) if item.get("worth", 0) > 0]
@@ -2392,16 +2392,16 @@ class Economy(commands.GroupCog, name="economy", description="經濟系統指令
         view = ShopView(interaction, purchasable)
         await interaction.response.send_message(embed=embed, view=view)
 
-    @app_commands.command(name="trade", description="與其他用戶交易")
+    @app_commands.command(name=app_commands.locale_str("trade", i18n_key="cmd.economy.economy.trade.name"), description=app_commands.locale_str("Trade with another user", i18n_key="cmd.economy.economy.trade.desc"))
     @app_commands.describe(
-        user="交易對象",
-        offer_item="你要提供的物品",
-        offer_item_amount="提供的物品數量",
-        offer_money="你要提供的金額",
-        request_item="你想要的物品",
-        request_item_amount="想要的物品數量",
-        request_money="你想要的金額",
-        global_trade="使用全域幣/全域物品交易（跨伺服器）"
+        user=app_commands.locale_str("Trading partner", i18n_key="cmd.economy.economy.trade.param.user"),
+        offer_item=app_commands.locale_str("The item you offer", i18n_key="cmd.economy.economy.trade.param.offer_item"),
+        offer_item_amount=app_commands.locale_str("How many of the item you offer", i18n_key="cmd.economy.economy.trade.param.offer_item_amount"),
+        offer_money=app_commands.locale_str("The amount of money you offer", i18n_key="cmd.economy.economy.trade.param.offer_money"),
+        request_item=app_commands.locale_str("The item you want", i18n_key="cmd.economy.economy.trade.param.request_item"),
+        request_item_amount=app_commands.locale_str("How many of the item you want", i18n_key="cmd.economy.economy.trade.param.request_item_amount"),
+        request_money=app_commands.locale_str("The amount of money you want", i18n_key="cmd.economy.economy.trade.param.request_money"),
+        global_trade=app_commands.locale_str("Trade with global currency/items (cross-server)", i18n_key="cmd.economy.economy.trade.param.global_trade")
     )
     @app_commands.autocomplete(offer_item=get_user_items_autocomplete, request_item=all_items_autocomplete)
     async def trade(self, interaction: discord.Interaction, user: discord.User,
@@ -2636,12 +2636,12 @@ class Economy(commands.GroupCog, name="economy", description="經濟系統指令
 
         await interaction.response.send_message(content=user.mention, embed=embed, view=TradeView(), allowed_mentions=discord.AllowedMentions(users=True, roles=False, everyone=False))
 
-    @app_commands.command(name="leaderboard", description="查看財富排行榜")
-    @app_commands.describe(currency="排行類型")
+    @app_commands.command(name=app_commands.locale_str("leaderboard", i18n_key="cmd.economy.economy.leaderboard.name"), description=app_commands.locale_str("View the wealth leaderboard", i18n_key="cmd.economy.economy.leaderboard.desc"))
+    @app_commands.describe(currency=app_commands.locale_str("Leaderboard type", i18n_key="cmd.economy.economy.leaderboard.param.currency"))
     @app_commands.choices(currency=[
-        app_commands.Choice(name="伺服幣", value="server"),
-        app_commands.Choice(name="全域幣", value="global"),
-        app_commands.Choice(name="總資產", value="total"),
+        app_commands.Choice(name=app_commands.locale_str("Server currency", i18n_key="cmd.economy.economy.leaderboard.choice.server"), value="server"),
+        app_commands.Choice(name=app_commands.locale_str("Global currency", i18n_key="cmd.economy.economy.leaderboard.choice.global"), value="global"),
+        app_commands.Choice(name=app_commands.locale_str("Total assets", i18n_key="cmd.economy.economy.leaderboard.choice.total"), value="total"),
     ])
     async def leaderboard(self, interaction: discord.Interaction, currency: str = "server"):
         # 全域安裝時強制使用全域幣
@@ -2721,7 +2721,7 @@ class Economy(commands.GroupCog, name="economy", description="經濟系統指令
         )
         await interaction.followup.send(embed=embed)
 
-    @app_commands.command(name="info", description="查看伺服器經濟資訊")
+    @app_commands.command(name=app_commands.locale_str("info", i18n_key="cmd.economy.economy.info.name"), description=app_commands.locale_str("View server economy information", i18n_key="cmd.economy.economy.info.desc"))
     @app_commands.guild_only()
     async def info(self, interaction: discord.Interaction):
         if not interaction_uses_server_scope(interaction):
@@ -2811,7 +2811,7 @@ class Economy(commands.GroupCog, name="economy", description="經濟系統指令
         )
         await interaction.response.send_message(embed=embed)
 
-    @app_commands.command(name="adminitems", description="查看你擁有的管理員給予物品")
+    @app_commands.command(name=app_commands.locale_str("adminitems", i18n_key="cmd.economy.economy.adminitems.name"), description=app_commands.locale_str("View items given to you by admins", i18n_key="cmd.economy.economy.adminitems.desc"))
     async def adminitems(self, interaction: discord.Interaction):
         if not interaction_uses_server_scope(interaction):
             await interaction.response.send_message("❌ 此指令只能在伺服器中使用。", ephemeral=True)
@@ -2864,11 +2864,11 @@ class Economy(commands.GroupCog, name="economy", description="經濟系統指令
 
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
-    @app_commands.command(name="history", description="查看個人交易紀錄")
-    @app_commands.describe(scope="查看範圍", page="頁數")
+    @app_commands.command(name=app_commands.locale_str("history", i18n_key="cmd.economy.economy.history.name"), description=app_commands.locale_str("View your transaction history", i18n_key="cmd.economy.economy.history.desc"))
+    @app_commands.describe(scope=app_commands.locale_str("Scope to view", i18n_key="cmd.economy.economy.history.param.scope"), page=app_commands.locale_str("Page number", i18n_key="cmd.economy.economy.history.param.page"))
     @app_commands.choices(scope=[
-        app_commands.Choice(name="伺服器", value="server"),
-        app_commands.Choice(name="全域", value="global"),
+        app_commands.Choice(name=app_commands.locale_str("Server", i18n_key="cmd.economy.economy.history.choice.server"), value="server"),
+        app_commands.Choice(name=app_commands.locale_str("Global", i18n_key="cmd.economy.economy.history.choice.global"), value="global"),
     ])
     async def history(self, interaction: discord.Interaction, scope: str = None, page: int = 1):
         user_id = interaction.user.id
@@ -3024,7 +3024,7 @@ class ConfirmGlobalModeView(discord.ui.View):
 @app_commands.default_permissions(manage_guild=True)
 @app_commands.allowed_installs(guilds=True, users=False)
 @app_commands.allowed_contexts(guilds=True, dms=False, private_channels=False)
-class EconomyMod(commands.GroupCog, name="economymod", description="經濟系統管理指令"):
+class EconomyMod(commands.GroupCog, name=app_commands.locale_str("economymod", i18n_key="cmd.economy.economymod.root.name"), description=app_commands.locale_str("Economy admin commands", i18n_key="cmd.economy.economymod.root.desc")):
     def __init__(self):
         super().__init__()
 
@@ -3149,8 +3149,8 @@ class EconomyMod(commands.GroupCog, name="economymod", description="經濟系統
     #     log(f"Admin {interaction.user} cleared admin item markers for {user} in guild {guild_id}",
     #         module_name="Economy", user=interaction.user, guild=interaction.guild)
 
-    @app_commands.command(name="global-mode", description="切換這個伺服器是否強制使用全域經濟/物品/dsize")
-    @app_commands.describe(enabled="True = 強制全域，False = 恢復伺服器模式")
+    @app_commands.command(name=app_commands.locale_str("global-mode", i18n_key="cmd.economy.economymod.global_mode.name"), description=app_commands.locale_str("Toggle forcing this server to use the global economy/items/dsize", i18n_key="cmd.economy.economymod.global_mode.desc"))
+    @app_commands.describe(enabled=app_commands.locale_str("True = force global, False = restore server mode", i18n_key="cmd.economy.economymod.global_mode.param.enabled"))
     async def global_mode(self, interaction: discord.Interaction, enabled: bool):
         guild_id = interaction.guild.id
         current = is_global_mode_enabled(guild_id)
@@ -3197,7 +3197,7 @@ class EconomyMod(commands.GroupCog, name="economymod", description="經濟系統
             ephemeral=True,
         )
 
-    @app_commands.command(name="toggle-flow", description="切換是否允許伺服幣與全域幣流通（兌換、全域商店等）")
+    @app_commands.command(name=app_commands.locale_str("toggle-flow", i18n_key="cmd.economy.economymod.toggle_flow.name"), description=app_commands.locale_str("Toggle flow between server and global currency (exchange, global shop, etc.)", i18n_key="cmd.economy.economymod.toggle_flow.desc"))
     async def toggle_flow(self, interaction: discord.Interaction):
         guild_id = interaction.guild.id
         if is_flow_blacklisted(guild_id):
@@ -3226,8 +3226,8 @@ class EconomyMod(commands.GroupCog, name="economymod", description="經濟系統
         log(f"Admin {interaction.user} toggled global flow to {new_value} in guild {guild_id}",
             module_name="Economy", user=interaction.user, guild=interaction.guild)
 
-    @app_commands.command(name="setname", description="設定伺服器貨幣名稱")
-    @app_commands.describe(name="新的貨幣名稱")
+    @app_commands.command(name=app_commands.locale_str("setname", i18n_key="cmd.economy.economymod.setname.name"), description=app_commands.locale_str("Set the server currency name", i18n_key="cmd.economy.economymod.setname.desc"))
+    @app_commands.describe(name=app_commands.locale_str("The new currency name", i18n_key="cmd.economy.economymod.setname.param.name"))
     async def setname(self, interaction: discord.Interaction, name: str):
         if len(name) > 20:
             await interaction.response.send_message("❌ 貨幣名稱不能超過 20 個字元。", ephemeral=True)
@@ -3259,7 +3259,7 @@ class EconomyMod(commands.GroupCog, name="economymod", description="經濟系統
     #     set_server_config(guild_id, "economy_sell_ratio", ratio)
     #     await interaction.response.send_message(f"✅ 賣出比率已設定為 **{ratio*100:.0f}%**。", ephemeral=True)
 
-    @app_commands.command(name="info", description="詳細經濟管理面板")
+    @app_commands.command(name=app_commands.locale_str("info", i18n_key="cmd.economy.economymod.info.name"), description=app_commands.locale_str("Detailed economy admin panel", i18n_key="cmd.economy.economymod.info.desc"))
     async def mod_info(self, interaction: discord.Interaction):
         guild_id = interaction.guild.id
         rate = get_exchange_rate(guild_id)

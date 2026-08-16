@@ -223,6 +223,33 @@
                 "desc": "查看自動管理設定",
                 "name": "查看"
             }
+        },
+        "setting": {
+            "anti_invite_link-action": "邀請連結-執行動作",
+            "anti_invite_link-allow_current_server": "邀請連結-允許本伺服器連結",
+            "anti_invite_link-ignore_channels": "邀請連結-忽略頻道",
+            "anti_raid-action": "防突襲（大量加入偵測）-執行動作",
+            "anti_raid-max_joins": "防突襲（大量加入偵測）-最大加入數量",
+            "anti_raid-time_window": "防突襲（大量加入偵測）-時間窗口",
+            "anti_spam-action": "防刷頻-執行動作",
+            "anti_spam-ignore_channels": "防刷頻-忽略頻道",
+            "anti_spam-max_messages": "防刷頻-最大訊息數量",
+            "anti_spam-similarity": "防刷頻-相似度",
+            "anti_spam-time_window": "防刷頻-時間窗口",
+            "anti_uispam-action": "反用戶安裝垃圾訊息-執行動作",
+            "anti_uispam-ignore_channels": "反用戶安裝垃圾訊息-忽略頻道",
+            "anti_uispam-max_count": "反用戶安裝垃圾訊息-最大數量",
+            "anti_uispam-time_window": "反用戶安裝垃圾訊息-時間窗口",
+            "escape_punish-duration": "逃避責任懲處-持續時間",
+            "escape_punish-punishment": "逃避責任懲處-懲處",
+            "scamtrap-action": "詐騙陷阱-執行動作",
+            "scamtrap-channel_id": "詐騙陷阱-頻道ID",
+            "too_many_emojis-action": "過多表情符號-執行動作",
+            "too_many_emojis-ignore_channels": "過多表情符號-忽略頻道",
+            "too_many_emojis-max_emojis": "過多表情符號-偵測數量",
+            "too_many_h1-action": "過多標題-執行動作",
+            "too_many_h1-ignore_channels": "過多標題-忽略頻道",
+            "too_many_h1-max_length": "過多標題-最大允許長度"
         }
     },
     "autopublish": {
@@ -936,6 +963,12 @@
             "root": {
                 "desc": "管理 Explore 聊天室的自訂禁字",
                 "name": "禁字"
+            }
+        },
+        "ctx": {
+            "activity_entry": {
+                "desc": "開啟探索空間",
+                "name": "探索空間"
             }
         },
         "explore": {
@@ -1708,6 +1741,10 @@
                 "desc": "繼續播放",
                 "name": "繼續"
             },
+            "root": {
+                "desc": "音樂指令",
+                "name": "音樂"
+            },
             "search": {
                 "desc": "搜尋並播放音樂",
                 "name": "搜尋",
@@ -2060,6 +2097,10 @@
                     "channel": "要移除置底訊息的頻道"
                 }
             },
+            "root": {
+                "desc": "管理伺服器的置底訊息",
+                "name": "置底訊息"
+            },
             "timing": {
                 "desc": "設定重新置底的安靜時間與最短間隔",
                 "name": "時間設定",
@@ -2111,6 +2152,10 @@
                 "param": {
                     "role": "要從允許清單移除的身份組"
                 }
+            },
+            "root": {
+                "desc": "當用戶重新加入時自動恢復先前的身份組",
+                "name": "黏黏的身份組"
             },
             "set_log_channel": {
                 "desc": "設定 StickyRole 日誌頻道",

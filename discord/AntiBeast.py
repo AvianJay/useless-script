@@ -43,7 +43,7 @@ class AntiBeastPermissionError(RuntimeError):
 @app_commands.allowed_installs(guilds=True, users=False)
 @app_commands.allowed_contexts(guilds=True, dms=False, private_channels=False)
 @app_commands.default_permissions(manage_guild=True, manage_roles=True)
-class AntiBeast(commands.GroupCog, name="antibeast"):
+class AntiBeast(commands.GroupCog, name=app_commands.locale_str("antibeast", i18n_key="cmd.antibeast.antibeast.root.name")):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
         self._trigger_history: dict[tuple[int, int], list[float]] = {}
@@ -581,20 +581,20 @@ class AntiBeast(commands.GroupCog, name="antibeast"):
         )
         return embed
 
-    @app_commands.command(name="about", description="關於 AntiBeast")
+    @app_commands.command(name=app_commands.locale_str("about", i18n_key="cmd.antibeast.antibeast.about.name"), description=app_commands.locale_str("About AntiBeast", i18n_key="cmd.antibeast.antibeast.about.desc"))
     async def about(self, interaction: discord.Interaction):
         await interaction.response.send_message(embed=self._build_about_embed(), ephemeral=True)
 
-    @app_commands.command(name="setup", description="互動式設定並啟用 AntiBeast")
+    @app_commands.command(name=app_commands.locale_str("setup", i18n_key="cmd.antibeast.antibeast.setup.name"), description=app_commands.locale_str("Interactively configure and enable AntiBeast", i18n_key="cmd.antibeast.antibeast.setup.desc"))
     @app_commands.default_permissions(administrator=True)
     async def setup(self, interaction: discord.Interaction):
         config = self._get_config(interaction.guild.id)
         view = AntiBeastSetupView(self, interaction.user, interaction.guild, config)
         await view.send_about(interaction)
 
-    @app_commands.command(name="toggle", description="啟用/停用 AntiBeast")
+    @app_commands.command(name=app_commands.locale_str("toggle", i18n_key="cmd.antibeast.antibeast.toggle.name"), description=app_commands.locale_str("Enable/disable AntiBeast", i18n_key="cmd.antibeast.antibeast.toggle.desc"))
     @app_commands.default_permissions(administrator=True)
-    @app_commands.describe(enable="留空則切換目前狀態")
+    @app_commands.describe(enable=app_commands.locale_str("Leave empty to toggle the current state", i18n_key="cmd.antibeast.antibeast.toggle.param.enable"))
     async def toggle(self, interaction: discord.Interaction, enable: bool = None):
         await interaction.response.defer(ephemeral=True)
 
@@ -629,9 +629,9 @@ class AntiBeast(commands.GroupCog, name="antibeast"):
             allowed_mentions=discord.AllowedMentions.none(),
         )
 
-    @app_commands.command(name="bypass", description="新增/移除想要被繞過的身分組")
+    @app_commands.command(name=app_commands.locale_str("bypass", i18n_key="cmd.antibeast.antibeast.bypass.name"), description=app_commands.locale_str("Add/remove roles that bypass AntiBeast", i18n_key="cmd.antibeast.antibeast.bypass.desc"))
     @app_commands.default_permissions(administrator=True)
-    @app_commands.describe(role="要切換繞過狀態的身分組")
+    @app_commands.describe(role=app_commands.locale_str("The role to toggle bypass for", i18n_key="cmd.antibeast.antibeast.bypass.param.role"))
     async def bypass(self, interaction: discord.Interaction, role: discord.Role):
         if role.is_default():
             await interaction.response.send_message("⚠️ 不能把 @everyone 加入繞過清單。", ephemeral=True)
@@ -675,14 +675,14 @@ class AntiBeast(commands.GroupCog, name="antibeast"):
             allowed_mentions=discord.AllowedMentions.none(),
         )
 
-    @app_commands.command(name="settings", description="設定 AntiBeast 短時間多次觸發時的處置動作")
+    @app_commands.command(name=app_commands.locale_str("settings", i18n_key="cmd.antibeast.antibeast.settings.name"), description=app_commands.locale_str("Configure what AntiBeast does after repeated triggers in a short time", i18n_key="cmd.antibeast.antibeast.settings.desc"))
     @app_commands.default_permissions(administrator=True)
     @app_commands.describe(
-        enable="是否啟用自動處置",
-        threshold="時間窗口內觸發幾次後處置（1-20）",
-        time_window="時間窗口秒數（5-3600）",
-        action="Moderate 動作指令，留空則保留目前設定",
-        only_everyone_here="是否只處理提及 @everyone 或 @here 的成員",
+        enable=app_commands.locale_str("Enable automatic action", i18n_key="cmd.antibeast.antibeast.settings.param.enable"),
+        threshold=app_commands.locale_str("Act after this many triggers within the window (1-20)", i18n_key="cmd.antibeast.antibeast.settings.param.threshold"),
+        time_window=app_commands.locale_str("Time window in seconds (5-3600)", i18n_key="cmd.antibeast.antibeast.settings.param.time_window"),
+        action=app_commands.locale_str("Moderate action command; leave empty to keep the current setting", i18n_key="cmd.antibeast.antibeast.settings.param.action"),
+        only_everyone_here=app_commands.locale_str("Only act on members who mention @everyone or @here", i18n_key="cmd.antibeast.antibeast.settings.param.only_everyone_here"),
     )
     @app_commands.autocomplete(action=Moderate.action_input_autocomplete)
     async def settings(
@@ -795,7 +795,7 @@ class AntiBeast(commands.GroupCog, name="antibeast"):
             )
         await interaction.response.send_message(**response_kwargs)
 
-    @app_commands.command(name="list", description="列出 AntiBeast 設定")
+    @app_commands.command(name=app_commands.locale_str("list", i18n_key="cmd.antibeast.antibeast.list.name"), description=app_commands.locale_str("List AntiBeast settings", i18n_key="cmd.antibeast.antibeast.list.desc"))
     @app_commands.default_permissions(administrator=True)
     async def list_config(self, interaction: discord.Interaction):
         config = self._get_config(interaction.guild.id)

@@ -1505,7 +1505,7 @@ class CustomDeleteConfirmView(discord.ui.View):
 @app_commands.allowed_contexts(guilds=True, dms=False, private_channels=False)
 @app_commands.allowed_installs(guilds=True, users=False)
 @app_commands.default_permissions(manage_guild=True, manage_webhooks=True)
-class FixLink(commands.GroupCog, name="fixlink", description="\u9023\u7d50\u4fee\u5fa9\u5668"):
+class FixLink(commands.GroupCog, name=app_commands.locale_str("fixlink", i18n_key="cmd.fixlink.fixlink.root.name"), description=app_commands.locale_str("Link fixer", i18n_key="cmd.fixlink.fixlink.root.desc")):
     def __init__(self, client: commands.Bot):
         super().__init__()
         self.bot = client
@@ -1537,7 +1537,7 @@ class FixLink(commands.GroupCog, name="fixlink", description="\u9023\u7d50\u4fee
     def save_config(self, guild_id: int, config: dict) -> bool:
         return bool(set_server_config(guild_id, FIXLINK_CONFIG_KEY, normalize_fixlink_config(config)))
 
-    @app_commands.command(name="settings", description="\u958b\u555f FixLink \u4e92\u52d5\u5f0f\u8a2d\u5b9a\u9762\u677f")
+    @app_commands.command(name=app_commands.locale_str("settings", i18n_key="cmd.fixlink.fixlink.settings.name"), description=app_commands.locale_str("Open the FixLink interactive settings panel", i18n_key="cmd.fixlink.fixlink.settings.desc"))
     async def settings(self, interaction: discord.Interaction):
         if interaction.guild is None:
             await interaction.response.send_message("\u6b64\u6307\u4ee4\u53ea\u80fd\u5728\u4f3a\u670d\u5668\u4e2d\u4f7f\u7528\u3002", ephemeral=True)

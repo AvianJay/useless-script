@@ -1276,7 +1276,7 @@ class GuildPanel(commands.Cog):
 
     @app_commands.allowed_installs(guilds=True, users=True)
     @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
-    @app_commands.command(name="panel", description="打開伺服器面板")
+    @app_commands.command(name=app_commands.locale_str("panel", i18n_key="cmd.guildpanel.panel.name"), description=app_commands.locale_str("Open the server panel", i18n_key="cmd.guildpanel.panel.desc"))
     async def panel(self, interaction: discord.Interaction):
         button = discord.ui.Button(label="打開面板", style=discord.ButtonStyle.link, url=_get_oauth2_url())
         view = discord.ui.View()

@@ -12,12 +12,12 @@ from datetime import datetime, timezone
 @app_commands.default_permissions(manage_guild=True)
 @app_commands.allowed_installs(guilds=True, users=False)
 @app_commands.allowed_contexts(guilds=True, dms=False, private_channels=False)
-class AutoPublish(commands.GroupCog, name=app_commands.locale_str("autopublish")):
+class AutoPublish(commands.GroupCog, name=app_commands.locale_str("autopublish", i18n_key="cmd.autopublish.autopublish.root.name")):
     def __init__(self, bot: commands.Bot) -> None:
         self.bot = bot
         super().__init__()
 
-    @app_commands.command(name=app_commands.locale_str("view"), description="查看公告自動發布設定")
+    @app_commands.command(name=app_commands.locale_str("view", i18n_key="cmd.autopublish.autopublish.view.name"), description=app_commands.locale_str("View announcement auto-publish settings", i18n_key="cmd.autopublish.autopublish.view.desc"))
     async def view_autopublish_settings(self, interaction: discord.Interaction):
         guild_id = interaction.guild.id if interaction.guild else None
         autopublish_settings = get_server_config(guild_id, "autopublish", {})
@@ -25,11 +25,11 @@ class AutoPublish(commands.GroupCog, name=app_commands.locale_str("autopublish")
         await interaction.response.send_message(f"自動發布{'已啟用' if autopublish_settings.get('enabled', False) else '未啟用'}。", ephemeral=True)
         return
 
-    @app_commands.command(name=app_commands.locale_str("settings"), description="設定自動發布")
-    @app_commands.describe(enable="是否啟用自動發布")
+    @app_commands.command(name=app_commands.locale_str("settings", i18n_key="cmd.autopublish.autopublish.settings.name"), description=app_commands.locale_str("Configure auto-publishing", i18n_key="cmd.autopublish.autopublish.settings.desc"))
+    @app_commands.describe(enable=app_commands.locale_str("Whether to enable auto-publishing", i18n_key="cmd.autopublish.autopublish.settings.param.enable"))
     @app_commands.choices(enable=[
-        app_commands.Choice(name="啟用", value="True"),
-        app_commands.Choice(name="停用", value="False"),
+        app_commands.Choice(name=app_commands.locale_str("Enable", i18n_key="cmd.autopublish.autopublish.settings.choice.true"), value="True"),
+        app_commands.Choice(name=app_commands.locale_str("Disable", i18n_key="cmd.autopublish.autopublish.settings.choice.false"), value="False"),
     ])
     @app_commands.guild_only()
     @app_commands.default_permissions(administrator=True)

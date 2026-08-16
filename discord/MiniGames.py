@@ -1208,7 +1208,7 @@ class BlackjackView(discord.ui.View):
 
 @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
 @app_commands.allowed_installs(guilds=True, users=True)
-class MiniGamesCog(commands.GroupCog, group_name="games", description="迷你遊戲"):
+class MiniGamesCog(commands.GroupCog, group_name="games", description=app_commands.locale_str("Minigames", i18n_key="cmd.minigames.minigamescog.root.desc")):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
         self.games: Dict[int, Game] = {}
@@ -1672,21 +1672,21 @@ class MiniGamesCog(commands.GroupCog, group_name="games", description="迷你遊
     async def before_lottery_draw_task(self):
         await self.bot.wait_until_ready()
 
-    @app_commands.command(name="roulette", description="俄羅斯輪盤：選擇投注方式並下注")
+    @app_commands.command(name=app_commands.locale_str("roulette", i18n_key="cmd.minigames.minigamescog.roulette.name"), description=app_commands.locale_str("Roulette: pick a bet type and place your bet", i18n_key="cmd.minigames.minigamescog.roulette.desc"))
     @app_commands.describe(
-        bet="賭注金額（50～2000）",
-        bet_type="投注方式",
-        number="單號投注時選擇 0～36",
-        use_global="是否使用全域幣（預設依伺服器設定）",
+        bet=app_commands.locale_str("Bet amount (50-2000)", i18n_key="cmd.minigames.minigamescog.roulette.param.bet"),
+        bet_type=app_commands.locale_str("Bet type", i18n_key="cmd.minigames.minigamescog.roulette.param.bet_type"),
+        number=app_commands.locale_str("Pick 0-36 for single-number bets", i18n_key="cmd.minigames.minigamescog.roulette.param.number"),
+        use_global=app_commands.locale_str("Use global currency (defaults to the server setting)", i18n_key="cmd.minigames.minigamescog.roulette.param.use_global"),
     )
     @app_commands.choices(bet_type=[
-        app_commands.Choice(name="紅色", value="red"),
-        app_commands.Choice(name="黑色", value="black"),
-        app_commands.Choice(name="單數", value="odd"),
-        app_commands.Choice(name="雙數", value="even"),
-        app_commands.Choice(name="小（1～18）", value="low"),
-        app_commands.Choice(name="大（19～36）", value="high"),
-        app_commands.Choice(name="單一號碼", value="number"),
+        app_commands.Choice(name=app_commands.locale_str("Red", i18n_key="cmd.minigames.minigamescog.roulette.choice.red"), value="red"),
+        app_commands.Choice(name=app_commands.locale_str("Black", i18n_key="cmd.minigames.minigamescog.roulette.choice.black"), value="black"),
+        app_commands.Choice(name=app_commands.locale_str("Odd", i18n_key="cmd.minigames.minigamescog.roulette.choice.odd"), value="odd"),
+        app_commands.Choice(name=app_commands.locale_str("Even", i18n_key="cmd.minigames.minigamescog.roulette.choice.even"), value="even"),
+        app_commands.Choice(name=app_commands.locale_str("Low (1-18)", i18n_key="cmd.minigames.minigamescog.roulette.choice.low"), value="low"),
+        app_commands.Choice(name=app_commands.locale_str("High (19-36)", i18n_key="cmd.minigames.minigamescog.roulette.choice.high"), value="high"),
+        app_commands.Choice(name=app_commands.locale_str("Single number", i18n_key="cmd.minigames.minigamescog.roulette.choice.number"), value="number"),
     ])
     async def roulette(
         self,
@@ -1771,8 +1771,8 @@ class MiniGamesCog(commands.GroupCog, group_name="games", description="迷你遊
         except (discord.NotFound, discord.HTTPException):
             pass
 
-    @app_commands.command(name="dice", description="骰子遊戲：猜中 1～6 的點數")
-    @app_commands.describe(bet="賭注金額（50～2000）")
+    @app_commands.command(name=app_commands.locale_str("dice", i18n_key="cmd.minigames.minigamescog.dice.name"), description=app_commands.locale_str("Dice game: guess the roll from 1-6", i18n_key="cmd.minigames.minigamescog.dice.desc"))
+    @app_commands.describe(bet=app_commands.locale_str("Bet amount (50-2000)", i18n_key="cmd.minigames.minigamescog.dice.param.bet"))
     async def dice(self, interaction: discord.Interaction, bet: int):
         err = self._validate_bet(bet)
         if err:
@@ -1873,8 +1873,8 @@ class MiniGamesCog(commands.GroupCog, group_name="games", description="迷你遊
         except (discord.NotFound, discord.HTTPException):
             pass
 
-    @app_commands.command(name="coinflip", description="擲硬幣：猜正面或反面")
-    @app_commands.describe(bet="賭注金額（50～2000）")
+    @app_commands.command(name=app_commands.locale_str("coinflip", i18n_key="cmd.minigames.minigamescog.coinflip.name"), description=app_commands.locale_str("Coin flip: call heads or tails", i18n_key="cmd.minigames.minigamescog.coinflip.desc"))
+    @app_commands.describe(bet=app_commands.locale_str("Bet amount (50-2000)", i18n_key="cmd.minigames.minigamescog.coinflip.param.bet"))
     async def coinflip(self, interaction: discord.Interaction, bet: int):
         err = self._validate_bet(bet)
         if err:
@@ -1977,10 +1977,10 @@ class MiniGamesCog(commands.GroupCog, group_name="games", description="迷你遊
         except (discord.NotFound, discord.HTTPException):
             pass
 
-    @app_commands.command(name="scratchcard", description="購買並刮開一張 3x3 刮刮樂")
+    @app_commands.command(name=app_commands.locale_str("scratchcard", i18n_key="cmd.minigames.minigamescog.scratchcard.name"), description=app_commands.locale_str("Buy and scratch a 3x3 scratch card", i18n_key="cmd.minigames.minigamescog.scratchcard.desc"))
     @app_commands.describe(
-        bet="賭注金額（50～2000）",
-        use_global="是否使用全域幣（預設依伺服器設定）",
+        bet=app_commands.locale_str("Bet amount (50-2000)", i18n_key="cmd.minigames.minigamescog.scratchcard.param.bet"),
+        use_global=app_commands.locale_str("Use global currency (defaults to the server setting)", i18n_key="cmd.minigames.minigamescog.scratchcard.param.use_global"),
     )
     async def scratchcard(self, interaction: discord.Interaction, bet: int, use_global: bool = False):
         err = self._validate_bet(bet)
@@ -2103,11 +2103,11 @@ class MiniGamesCog(commands.GroupCog, group_name="games", description="迷你遊
                     pass
             view.stop()
 
-    @app_commands.command(name="lottery", description="購買 00～99 彩票或查看目前獎池")
+    @app_commands.command(name=app_commands.locale_str("lottery", i18n_key="cmd.minigames.minigamescog.lottery.name"), description=app_commands.locale_str("Buy a 00-99 lottery ticket or view the current pot", i18n_key="cmd.minigames.minigamescog.lottery.desc"))
     @app_commands.describe(
-        bet="每張票的投注金額（50～2000；查詢狀態時留空）",
-        number="選擇 00～99（查詢狀態時留空）",
-        use_global="是否使用全域幣（預設依伺服器設定）",
+        bet=app_commands.locale_str("Bet per ticket (50-2000; leave empty to check status)", i18n_key="cmd.minigames.minigamescog.lottery.param.bet"),
+        number=app_commands.locale_str("Pick 00-99 (leave empty to check status)", i18n_key="cmd.minigames.minigamescog.lottery.param.number"),
+        use_global=app_commands.locale_str("Use global currency (defaults to the server setting)", i18n_key="cmd.minigames.minigamescog.lottery.param.use_global"),
     )
     async def lottery(
         self,
@@ -2240,8 +2240,8 @@ class MiniGamesCog(commands.GroupCog, group_name="games", description="迷你遊
             embed.set_footer(text="中獎者依命中號碼的投注額比例分配 95% 獎池。")
             await interaction.response.send_message(embed=embed)
 
-    @app_commands.command(name="big2", description="建立一桌大老二")
-    @app_commands.describe(use_global="是否使用全域幣（預設依伺服器設定）")
+    @app_commands.command(name=app_commands.locale_str("big2", i18n_key="cmd.minigames.minigamescog.big2.name"), description=app_commands.locale_str("Start a table of Big Two", i18n_key="cmd.minigames.minigamescog.big2.desc"))
+    @app_commands.describe(use_global=app_commands.locale_str("Use global currency (defaults to the server setting)", i18n_key="cmd.minigames.minigamescog.big2.param.use_global"))
     async def startbig2(self, interaction: discord.Interaction, use_global: bool = False):
         cid = interaction.channel_id
         if cid in self.games:
@@ -2264,8 +2264,8 @@ class MiniGamesCog(commands.GroupCog, group_name="games", description="迷你遊
     # Tower 遊戲
     # -----------------------------
 
-    @app_commands.command(name="tower", description="爬塔遊戲")
-    @app_commands.describe(bet="賭注金額（50～2000）", use_global="是否使用全域幣（預設依伺服器設定）")
+    @app_commands.command(name=app_commands.locale_str("tower", i18n_key="cmd.minigames.minigamescog.tower.name"), description=app_commands.locale_str("Tower climbing game", i18n_key="cmd.minigames.minigamescog.tower.desc"))
+    @app_commands.describe(bet=app_commands.locale_str("Bet amount (50-2000)", i18n_key="cmd.minigames.minigamescog.tower.param.bet"), use_global=app_commands.locale_str("Use global currency (defaults to the server setting)", i18n_key="cmd.minigames.minigamescog.tower.param.use_global"))
     async def tower(self, interaction: discord.Interaction, bet: int, use_global: bool = False):
         err = self._validate_bet(bet)
         if err:
@@ -2566,8 +2566,8 @@ class MiniGamesCog(commands.GroupCog, group_name="games", description="迷你遊
     # Slots 拉霸機
     # -----------------------------
 
-    @app_commands.command(name="slots", description="拉霸機")
-    @app_commands.describe(bet="賭注金額（50～2000）", use_global="是否使用全域幣（預設依伺服器設定）")
+    @app_commands.command(name=app_commands.locale_str("slots", i18n_key="cmd.minigames.minigamescog.slots.name"), description=app_commands.locale_str("Slot machine", i18n_key="cmd.minigames.minigamescog.slots.desc"))
+    @app_commands.describe(bet=app_commands.locale_str("Bet amount (50-2000)", i18n_key="cmd.minigames.minigamescog.slots.param.bet"), use_global=app_commands.locale_str("Use global currency (defaults to the server setting)", i18n_key="cmd.minigames.minigamescog.slots.param.use_global"))
     async def slots(self, interaction: discord.Interaction, bet: int, use_global: bool = False):
         err = self._validate_bet(bet)
         if err:
@@ -2669,8 +2669,8 @@ class MiniGamesCog(commands.GroupCog, group_name="games", description="迷你遊
     # HighLow 比大小
     # -----------------------------
 
-    @app_commands.command(name="highlow", description="比大小：猜下一張牌較大或較小")
-    @app_commands.describe(bet="賭注金額（50～2000）", use_global="是否使用全域幣（預設依伺服器設定）")
+    @app_commands.command(name=app_commands.locale_str("highlow", i18n_key="cmd.minigames.minigamescog.highlow.name"), description=app_commands.locale_str("High-low: guess if the next card is higher or lower", i18n_key="cmd.minigames.minigamescog.highlow.desc"))
+    @app_commands.describe(bet=app_commands.locale_str("Bet amount (50-2000)", i18n_key="cmd.minigames.minigamescog.highlow.param.bet"), use_global=app_commands.locale_str("Use global currency (defaults to the server setting)", i18n_key="cmd.minigames.minigamescog.highlow.param.use_global"))
     async def highlow(self, interaction: discord.Interaction, bet: int, use_global: bool = False):
         err = self._validate_bet(bet)
         if err:
@@ -2859,8 +2859,8 @@ class MiniGamesCog(commands.GroupCog, group_name="games", description="迷你遊
     # Blackjack 21點
     # -----------------------------
 
-    @app_commands.command(name="blackjack", description="21點：對抗莊家")
-    @app_commands.describe(bet="賭注金額（50～2000）", use_global="是否使用全域幣（預設依伺服器設定）")
+    @app_commands.command(name=app_commands.locale_str("blackjack", i18n_key="cmd.minigames.minigamescog.blackjack.name"), description=app_commands.locale_str("Blackjack: play against the dealer", i18n_key="cmd.minigames.minigamescog.blackjack.desc"))
+    @app_commands.describe(bet=app_commands.locale_str("Bet amount (50-2000)", i18n_key="cmd.minigames.minigamescog.blackjack.param.bet"), use_global=app_commands.locale_str("Use global currency (defaults to the server setting)", i18n_key="cmd.minigames.minigamescog.blackjack.param.use_global"))
     async def blackjack(self, interaction: discord.Interaction, bet: int, use_global: bool = False):
         err = self._validate_bet(bet)
         if err:
@@ -3338,7 +3338,7 @@ class MiniGamesCog(commands.GroupCog, group_name="games", description="迷你遊
     # DOOM Command
     # -----------------------------
 
-    @app_commands.command(name="doom", description="開始玩 DOOM")
+    @app_commands.command(name=app_commands.locale_str("doom", i18n_key="cmd.minigames.minigamescog.doom.name"), description=app_commands.locale_str("Play DOOM", i18n_key="cmd.minigames.minigamescog.doom.desc"))
     async def doom(self, interaction: discord.Interaction):
         link = "https://doom.p2r3.com/i.webp"
         user = interaction.user

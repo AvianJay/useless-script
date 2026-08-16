@@ -867,19 +867,19 @@ def _build_error_view(message: str) -> discord.ui.LayoutView:
 
 
 class BaziCog(commands.Cog):
-    @app_commands.command(name="bazi", description="使用生日時間進行八字排盤")
+    @app_commands.command(name=app_commands.locale_str("bazi", i18n_key="cmd.bazi.bazi.name"), description=app_commands.locale_str("Cast a BaZi (Four Pillars) chart from your birth date and time", i18n_key="cmd.bazi.bazi.desc"))
     @app_commands.describe(
-        year="出生年（西元）",
-        month="出生月（1-12）",
-        day="出生日（1-31）",
-        hour="出生小時（24 小時制 0-23）",
-        gender="性別",
-        public="是否公開此排盤結果（預設為私密）",
+        year=app_commands.locale_str("Year of birth (Gregorian)", i18n_key="cmd.bazi.bazi.param.year"),
+        month=app_commands.locale_str("Month of birth (1-12)", i18n_key="cmd.bazi.bazi.param.month"),
+        day=app_commands.locale_str("Day of birth (1-31)", i18n_key="cmd.bazi.bazi.param.day"),
+        hour=app_commands.locale_str("Hour of birth (24-hour, 0-23)", i18n_key="cmd.bazi.bazi.param.hour"),
+        gender=app_commands.locale_str("Gender", i18n_key="cmd.bazi.bazi.param.gender"),
+        public=app_commands.locale_str("Make this chart public (private by default)", i18n_key="cmd.bazi.bazi.param.public"),
     )
     @app_commands.choices(
         gender=[
-            app_commands.Choice(name="男", value="男"),
-            app_commands.Choice(name="女", value="女"),
+            app_commands.Choice(name=app_commands.locale_str("Male", i18n_key="cmd.bazi.bazi.choice.c0"), value="男"),
+            app_commands.Choice(name=app_commands.locale_str("Female", i18n_key="cmd.bazi.bazi.choice.c1"), value="女"),
         ]
     )
     @app_commands.checks.cooldown(1, 10, key=lambda i: i.user.id)

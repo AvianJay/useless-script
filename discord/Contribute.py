@@ -847,11 +847,11 @@ def contribute_feed_grass():
 
 @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
 @app_commands.allowed_installs(guilds=True, users=True)
-class Contribute(commands.GroupCog, description="投稿圖片"):
+class Contribute(commands.GroupCog, description=app_commands.locale_str("Submit images", i18n_key="cmd.contribute.contribute.root.desc")):
     def __init__(self, bot):
         self.bot = bot
     
-    @app_commands.command(name="feedgrass", description="投稿 dsize 的草飼圖")
+    @app_commands.command(name=app_commands.locale_str("feedgrass", i18n_key="cmd.contribute.contribute.feedgrass.name"), description=app_commands.locale_str("Submit a feedgrass image for dsize", i18n_key="cmd.contribute.contribute.feedgrass.desc"))
     async def contribute_feed_grass(self, interaction: discord.Interaction):
         redirect_uri = config('website_url') + "/contribute-feed-grass"
         url = f"https://discord.com/oauth2/authorize?client_id={self.bot.application.id}&response_type=code&scope=identify&prompt=none&{urlencode({'redirect_uri': redirect_uri})}"
@@ -861,7 +861,7 @@ class Contribute(commands.GroupCog, description="投稿圖片"):
         view.add_item(link_btn)
         await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
     
-    @app_commands.command(name="what-is-this-guy-talking-about", description="投稿「這傢伙在說什麼呢」圖片")
+    @app_commands.command(name=app_commands.locale_str("what-is-this-guy-talking-about", i18n_key="cmd.contribute.contribute.what_is_this_guy_talking_about.name"), description=app_commands.locale_str("Submit a \"What is this guy talking about\" image", i18n_key="cmd.contribute.contribute.what_is_this_guy_talking_about.desc"))
     async def what_is_this_guy_talking_about(self, interaction: discord.Interaction, image: discord.Attachment):
         # Rate Limit Check
         current_time = time.time()
@@ -913,8 +913,8 @@ class Contribute(commands.GroupCog, description="投稿圖片"):
         contribution_cooldowns[user_id] = time.time()
         await interaction.response.send_message("感謝您的投稿！我們會盡快審核您的圖片。", ephemeral=True)
     
-    @app_commands.command(name="dynamic-voice-audio", description="投稿動態語音頻道的進入音效")
-    @app_commands.describe(audio="音檔（MP3、WAV、OGG 格式，最大 5MB，建議 3-10 秒）")
+    @app_commands.command(name=app_commands.locale_str("dynamic-voice-audio", i18n_key="cmd.contribute.contribute.dynamic_voice_audio.name"), description=app_commands.locale_str("Submit a join sound for dynamic voice channels", i18n_key="cmd.contribute.contribute.dynamic_voice_audio.desc"))
+    @app_commands.describe(audio=app_commands.locale_str("Audio file (MP3/WAV/OGG, max 5MB, 3-10 seconds recommended)", i18n_key="cmd.contribute.contribute.dynamic_voice_audio.param.audio"))
     async def dynamic_voice_audio(self, interaction: discord.Interaction, audio: discord.Attachment):
         # Rate Limit Check
         current_time = time.time()

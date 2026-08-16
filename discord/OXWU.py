@@ -83,7 +83,7 @@ def cwa_get_cached_link() -> Optional[str]:
 
 @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
 @app_commands.allowed_installs(guilds=True, users=True)
-class OXWU(commands.GroupCog, name="earthquake", description="OXWU 地震監測系統"):
+class OXWU(commands.GroupCog, name=app_commands.locale_str("earthquake", i18n_key="cmd.oxwu.earthquake.root.name"), description=app_commands.locale_str("OXWU earthquake monitoring system", i18n_key="cmd.oxwu.earthquake.root.desc")):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
         self.api_url = config("oxwu_api") or "http://127.0.0.1:5000"
@@ -658,8 +658,8 @@ class OXWU(commands.GroupCog, name="earthquake", description="OXWU 地震監測�
     #         set_server_config(interaction.guild_id, "oxwu_warning_channel_text", None)
     #         await interaction.response.send_message("✅ 已移除速報頻道設定", ephemeral=True)
     
-    @app_commands.command(name="set-report-channel", description="設定接收地震報告的頻道")
-    @app_commands.describe(channel="要接收報告的頻道", text="可選的附加文字訊息")
+    @app_commands.command(name=app_commands.locale_str("set-report-channel", i18n_key="cmd.oxwu.earthquake.set_report_channel.name"), description=app_commands.locale_str("Set the channel that receives earthquake reports", i18n_key="cmd.oxwu.earthquake.set_report_channel.desc"))
+    @app_commands.describe(channel=app_commands.locale_str("The channel to receive reports", i18n_key="cmd.oxwu.earthquake.set_report_channel.param.channel"), text=app_commands.locale_str("Optional extra text message", i18n_key="cmd.oxwu.earthquake.set_report_channel.param.text"))
     @app_commands.default_permissions(manage_guild=True)
     @app_commands.allowed_contexts(guilds=True, dms=False, private_channels=False)
     @app_commands.allowed_installs(guilds=True, users=False)
@@ -684,7 +684,7 @@ class OXWU(commands.GroupCog, name="earthquake", description="OXWU 地震監測�
             set_server_config(interaction.guild_id, "oxwu_report_channel_text", None)
             await interaction.response.send_message("✅ 已移除報告頻道設定", ephemeral=True)
     
-    @app_commands.command(name="query-report", description="查詢最近一次的地震報告")
+    @app_commands.command(name=app_commands.locale_str("query-report", i18n_key="cmd.oxwu.earthquake.query_report.name"), description=app_commands.locale_str("Get the latest earthquake report", i18n_key="cmd.oxwu.earthquake.query_report.desc"))
     @app_commands.allowed_contexts(guilds=True, dms=False, private_channels=False)
     @app_commands.allowed_installs(guilds=True, users=False)
     async def query_report(self, interaction: discord.Interaction):
@@ -712,7 +712,7 @@ class OXWU(commands.GroupCog, name="earthquake", description="OXWU 地震監測�
         
         await interaction.followup.send(embed=embed, view=view)
     
-    @app_commands.command(name="query-warning", description="查詢目前的地震速報狀態")
+    @app_commands.command(name=app_commands.locale_str("query-warning", i18n_key="cmd.oxwu.earthquake.query_warning.name"), description=app_commands.locale_str("Check the current earthquake early-warning status", i18n_key="cmd.oxwu.earthquake.query_warning.desc"))
     async def query_warning(self, interaction: discord.Interaction):
         await interaction.response.defer()
         
@@ -727,7 +727,7 @@ class OXWU(commands.GroupCog, name="earthquake", description="OXWU 地震監測�
         embed = self._create_warning_embed(info, screenshot_url)
         await interaction.followup.send(embed=embed)
     
-    @app_commands.command(name="screenshot", description="取得 OXWU 目前的畫面截圖")
+    @app_commands.command(name=app_commands.locale_str("screenshot", i18n_key="cmd.oxwu.earthquake.screenshot.name"), description=app_commands.locale_str("Get a screenshot of the current OXWU display", i18n_key="cmd.oxwu.earthquake.screenshot.desc"))
     async def get_screenshot(self, interaction: discord.Interaction):
         await interaction.response.defer()
         
@@ -739,7 +739,7 @@ class OXWU(commands.GroupCog, name="earthquake", description="OXWU 地震監測�
         file = discord.File(BytesIO(screenshot), filename="oxwu_screenshot.png")
         await interaction.followup.send(file=file)
     
-    @app_commands.command(name="status", description="查看 OXWU 連線狀態")
+    @app_commands.command(name=app_commands.locale_str("status", i18n_key="cmd.oxwu.earthquake.status.name"), description=app_commands.locale_str("View OXWU connection status", i18n_key="cmd.oxwu.earthquake.status.desc"))
     async def check_status(self, interaction: discord.Interaction):
         embed = discord.Embed(title="🔌 OXWU 連線狀態", color=discord.Color.blue())
         proxy_connected = bool(getattr(self.proxy_client, "_socket", None) and self.proxy_client._socket.connected)

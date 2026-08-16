@@ -336,11 +336,11 @@ async def handle_checkin_rewards(interaction: discord.Interaction, user: Union[d
         await interaction.followup.send(user.mention, embeds=[embed, noteEmbed], view=GoalSelectionView())
 
 
-@bot.tree.command(name="dsize", description="量屌長")
-@app_commands.describe(global_dsize="是否使用全域紀錄 (預設否)")
+@bot.tree.command(name=app_commands.locale_str("dsize", i18n_key="cmd.dsize.dsize.name"), description=app_commands.locale_str("Measure your dick length", i18n_key="cmd.dsize.dsize.desc"))
+@app_commands.describe(global_dsize=app_commands.locale_str("Use the global record (default: no)", i18n_key="cmd.dsize.dsize.param.global_dsize"))
 @app_commands.choices(global_dsize=[
-    app_commands.Choice(name="否", value="False"),
-    app_commands.Choice(name="是", value="True"),
+    app_commands.Choice(name=app_commands.locale_str("No", i18n_key="cmd.dsize.dsize.choice.false"), value="False"),
+    app_commands.Choice(name=app_commands.locale_str("Yes", i18n_key="cmd.dsize.dsize.choice.true"), value="True"),
 ])
 @app_commands.allowed_installs(guilds=True, users=True)
 @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
@@ -677,16 +677,16 @@ async def dsize(interaction: discord.Interaction, global_dsize: str = "False"):
                     item_use_command = await get_command_mention("item", "use")
                     await msg.edit(content=f"{interaction.user.mention}\n你撿到了一把生鏽的手術刀！\n使用 {item_use_command} 生鏽的手術刀 可以進行手術。")
 
-@bot.tree.command(name=app_commands.locale_str("dsize-leaderboard"), description="查看屌長排行榜")
-@app_commands.describe(limit="顯示前幾名 (預設10)", global_leaderboard="顯示全域排行榜 (預設否)", reverse="反轉排行榜 (預設否)")
+@bot.tree.command(name=app_commands.locale_str("dsize-leaderboard", i18n_key="cmd.dsize.dsize_leaderboard.name"), description=app_commands.locale_str("View the dick-length leaderboard", i18n_key="cmd.dsize.dsize_leaderboard.desc"))
+@app_commands.describe(limit=app_commands.locale_str("How many top entries to show (default 10)", i18n_key="cmd.dsize.dsize_leaderboard.param.limit"), global_leaderboard=app_commands.locale_str("Show the global leaderboard (default: no)", i18n_key="cmd.dsize.dsize_leaderboard.param.global_leaderboard"), reverse=app_commands.locale_str("Reverse the leaderboard (default: no)", i18n_key="cmd.dsize.dsize_leaderboard.param.reverse"))
 @app_commands.choices(
     global_leaderboard=[
-        app_commands.Choice(name="否", value="False"),
-        app_commands.Choice(name="是", value="True"),
+        app_commands.Choice(name=app_commands.locale_str("No", i18n_key="cmd.dsize.dsize_leaderboard.choice.false"), value="False"),
+        app_commands.Choice(name=app_commands.locale_str("Yes", i18n_key="cmd.dsize.dsize_leaderboard.choice.true"), value="True"),
     ],
     reverse=[
-        app_commands.Choice(name="否", value="False"),
-        app_commands.Choice(name="是", value="True"),
+        app_commands.Choice(name=app_commands.locale_str("No", i18n_key="cmd.dsize.dsize_leaderboard.choice.false"), value="False"),
+        app_commands.Choice(name=app_commands.locale_str("Yes", i18n_key="cmd.dsize.dsize_leaderboard.choice.true"), value="True"),
     ]
 )
 @app_commands.allowed_installs(guilds=True, users=True)
@@ -786,14 +786,14 @@ def release_dsize_battle_lock(*user_ids: int):
     for locked_user_id in user_ids:
         user_using_dsize_battle.discard(locked_user_id)
 
-@bot.tree.command(name=app_commands.locale_str("dsize-battle"), description="比屌長(需要雙方今天沒有量過)")
+@bot.tree.command(name=app_commands.locale_str("dsize-battle", i18n_key="cmd.dsize.dsize_battle.name"), description=app_commands.locale_str("Dick-length battle (both sides must not have measured today)", i18n_key="cmd.dsize.dsize_battle.desc"))
 @app_commands.allowed_installs(guilds=True, users=True)
 @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
-@app_commands.describe(opponent="要比屌長的對象")
+@app_commands.describe(opponent=app_commands.locale_str("Who to battle", i18n_key="cmd.dsize.dsize_battle.param.opponent"))
 async def dsize_battle_command(interaction: discord.Interaction, opponent: Union[discord.User, discord.Member]):
     await dsize_battle(interaction, opponent)
 
-@bot.tree.context_menu(name="跟他 dsize 對決")
+@bot.tree.context_menu(name=app_commands.locale_str("dsize battle with them", i18n_key="cmd.dsize.ctx.dsize_battle_context.name"))
 @app_commands.allowed_installs(guilds=True, users=True)
 @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
 async def dsize_battle_context(interaction: discord.Interaction, opponent: Union[discord.User, discord.Member]):
@@ -1155,13 +1155,13 @@ async def dsize_battle(interaction: discord.Interaction, opponent: Union[discord
 
 
 # server settings command
-@bot.tree.command(name=app_commands.locale_str("dsize-settings"), description="設定dsize")
-@app_commands.describe(setting="要設定的項目", value="設定的值")
+@bot.tree.command(name=app_commands.locale_str("dsize-settings", i18n_key="cmd.dsize.dsize_settings.name"), description=app_commands.locale_str("Configure dsize", i18n_key="cmd.dsize.dsize_settings.desc"))
+@app_commands.describe(setting=app_commands.locale_str("The setting to change", i18n_key="cmd.dsize.dsize_settings.param.setting"), value=app_commands.locale_str("The value to set", i18n_key="cmd.dsize.dsize_settings.param.value"))
 @app_commands.choices(setting=[
-    app_commands.Choice(name="最大長度", value="dsize_max"),
-    app_commands.Choice(name="手術機率(%)", value="dsize_surgery_percent"),
-    app_commands.Choice(name="手術最大長度", value="dsize_surgery_max"),
-    app_commands.Choice(name="撿到物品機率(%)", value="dsize_drop_item_chance"),
+    app_commands.Choice(name=app_commands.locale_str("Maximum length", i18n_key="cmd.dsize.dsize_settings.choice.dsize_max"), value="dsize_max"),
+    app_commands.Choice(name=app_commands.locale_str("Surgery chance (%)", i18n_key="cmd.dsize.dsize_settings.choice.dsize_surgery_percent"), value="dsize_surgery_percent"),
+    app_commands.Choice(name=app_commands.locale_str("Surgery maximum length", i18n_key="cmd.dsize.dsize_settings.choice.dsize_surgery_max"), value="dsize_surgery_max"),
+    app_commands.Choice(name=app_commands.locale_str("Item drop chance (%)", i18n_key="cmd.dsize.dsize_settings.choice.dsize_drop_item_chance"), value="dsize_drop_item_chance"),
 ])
 @app_commands.default_permissions(manage_guild=True)
 @app_commands.allowed_installs(guilds=True, users=False)
@@ -1199,7 +1199,7 @@ async def dsize_settings(interaction: discord.Interaction, setting: str, value: 
     log(f"Set {setting} to {value} in guild {guild_key}", module_name="dsize", user=interaction.user, guild=interaction.guild)
 
 
-@bot.tree.command(name=app_commands.locale_str("dsize-stats"), description="查看你的屌長統計資料")
+@bot.tree.command(name=app_commands.locale_str("dsize-stats", i18n_key="cmd.dsize.dsize_stats.name"), description=app_commands.locale_str("View your dick-length statistics", i18n_key="cmd.dsize.dsize_stats.desc"))
 @app_commands.allowed_installs(guilds=True, users=True)
 @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
 async def dsize_stats(interaction: discord.Interaction):
@@ -1242,14 +1242,14 @@ async def dsize_stats(interaction: discord.Interaction):
     await interaction.response.send_message(embed=embed)
 
 
-@bot.tree.command(name=app_commands.locale_str("dsize-history"), description="查看歷史紀錄")
+@bot.tree.command(name=app_commands.locale_str("dsize-history", i18n_key="cmd.dsize.dsize_history.name"), description=app_commands.locale_str("View history", i18n_key="cmd.dsize.dsize_history.desc"))
 @app_commands.describe(
-    user="查看指定用戶的歷史紀錄 (預設為自己)",
-    global_history="是否顯示全域紀錄 (預設否)"
+    user=app_commands.locale_str("View a specific user's history (default: yourself)", i18n_key="cmd.dsize.dsize_history.param.user"),
+    global_history=app_commands.locale_str("Show the global record (default: no)", i18n_key="cmd.dsize.dsize_history.param.global_history")
 )
 @app_commands.choices(global_history=[
-    app_commands.Choice(name="否", value="False"),
-    app_commands.Choice(name="是", value="True"),
+    app_commands.Choice(name=app_commands.locale_str("No", i18n_key="cmd.dsize.dsize_history.choice.false"), value="False"),
+    app_commands.Choice(name=app_commands.locale_str("Yes", i18n_key="cmd.dsize.dsize_history.choice.true"), value="True"),
 ])
 @app_commands.allowed_installs(guilds=True, users=True)
 @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
@@ -1323,11 +1323,11 @@ async def dsize_history(interaction: discord.Interaction, user: discord.User = N
     log(f"查看了 {target_user.display_name} 的歷史紀錄", module_name="dsize", user=interaction.user, guild=interaction.guild)
 
 
-@bot.tree.command(name=app_commands.locale_str("dsize-feedgrass"), description="草飼男娘")
-@app_commands.describe(user="要草飼的對象", global_feedgrass="是否草飼全域排行榜上的男娘 (預設否)")
+@bot.tree.command(name=app_commands.locale_str("dsize-feedgrass", i18n_key="cmd.dsize.dsize_feedgrass.name"), description=app_commands.locale_str("Feed grass to a femboy", i18n_key="cmd.dsize.dsize_feedgrass.desc"))
+@app_commands.describe(user=app_commands.locale_str("Who to feed", i18n_key="cmd.dsize.dsize_feedgrass.param.user"), global_feedgrass=app_commands.locale_str("Feed a femboy from the global leaderboard (default: no)", i18n_key="cmd.dsize.dsize_feedgrass.param.global_feedgrass"))
 @app_commands.choices(global_feedgrass=[
-    app_commands.Choice(name="否", value="False"),
-    app_commands.Choice(name="是", value="True"),
+    app_commands.Choice(name=app_commands.locale_str("No", i18n_key="cmd.dsize.dsize_feedgrass.choice.false"), value="False"),
+    app_commands.Choice(name=app_commands.locale_str("Yes", i18n_key="cmd.dsize.dsize_feedgrass.choice.true"), value="True"),
 ])
 @app_commands.allowed_installs(guilds=True, users=True)
 @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
@@ -1335,11 +1335,11 @@ async def dsize_feedgrass_command(interaction: discord.Interaction, user: Union[
     await dsize_feedgrass(interaction, user, global_feedgrass, nsfw=False)
 
 
-@bot.tree.command(name=app_commands.locale_str("dsize-feedgrass-nsfw"), description="草飼男娘 (NSFW)", nsfw=True)
-@app_commands.describe(user="要草飼的對象", global_feedgrass="是否草飼全域排行榜上的男娘 (預設否)")
+@bot.tree.command(name=app_commands.locale_str("dsize-feedgrass-nsfw", i18n_key="cmd.dsize.dsize_feedgrass_nsfw.name"), description=app_commands.locale_str("Feed grass to a femboy (NSFW)", i18n_key="cmd.dsize.dsize_feedgrass_nsfw.desc"), nsfw=True)
+@app_commands.describe(user=app_commands.locale_str("Who to feed", i18n_key="cmd.dsize.dsize_feedgrass_nsfw.param.user"), global_feedgrass=app_commands.locale_str("Feed a femboy from the global leaderboard (default: no)", i18n_key="cmd.dsize.dsize_feedgrass_nsfw.param.global_feedgrass"))
 @app_commands.choices(global_feedgrass=[
-    app_commands.Choice(name="否", value="False"),
-    app_commands.Choice(name="是", value="True"),
+    app_commands.Choice(name=app_commands.locale_str("No", i18n_key="cmd.dsize.dsize_feedgrass_nsfw.choice.false"), value="False"),
+    app_commands.Choice(name=app_commands.locale_str("Yes", i18n_key="cmd.dsize.dsize_feedgrass_nsfw.choice.true"), value="True"),
 ])
 @app_commands.allowed_installs(guilds=True, users=True)
 @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
@@ -1357,7 +1357,7 @@ async def dsize_feedgrass_nsfw_command(interaction: discord.Interaction, user: U
 
 
 # option to let user control allow/deny nsfw feedgrass
-@bot.tree.command(name=app_commands.locale_str("dsize-feedgrass-nsfw-toggle"), description="切換是否允許 NSFW 草飼")
+@bot.tree.command(name=app_commands.locale_str("dsize-feedgrass-nsfw-toggle", i18n_key="cmd.dsize.dsize_feedgrass_nsfw_toggle.name"), description=app_commands.locale_str("Toggle whether NSFW feedgrass is allowed", i18n_key="cmd.dsize.dsize_feedgrass_nsfw_toggle.desc"))
 @app_commands.allowed_installs(guilds=True, users=True)
 @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
 async def dsize_feedgrass_nsfw_toggle(interaction: discord.Interaction):
@@ -1370,7 +1370,7 @@ async def dsize_feedgrass_nsfw_toggle(interaction: discord.Interaction):
     log(f"切換 NSFW 草飼設定為 {status}", module_name="dsize", user=interaction.user, guild=interaction.guild)
 
 
-@bot.tree.context_menu(name="草飼他")
+@bot.tree.context_menu(name=app_commands.locale_str("Feed them grass", i18n_key="cmd.dsize.ctx.dsize_feedgrass_context.name"))
 @app_commands.allowed_installs(guilds=True, users=True)
 @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
 async def dsize_feedgrass_context(interaction: discord.Interaction, user: Union[discord.User, discord.Member]):

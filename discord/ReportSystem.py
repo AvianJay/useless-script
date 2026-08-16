@@ -386,7 +386,7 @@ class doModerationActions(discord.ui.View):
         await interaction.response.send_modal(ReasonModal())
 
 
-@bot.tree.context_menu(name="檢舉訊息")
+@bot.tree.context_menu(name=app_commands.locale_str("Report Message", i18n_key="cmd.reportsystem.ctx.report_message.name"))
 @app_commands.allowed_installs(guilds=True, users=False)
 @app_commands.allowed_contexts(guilds=True, dms=False, private_channels=False)
 async def report_message(interaction: discord.Interaction, message: discord.Message):
@@ -514,22 +514,22 @@ async def report_message(interaction: discord.Interaction, message: discord.Mess
 @app_commands.allowed_installs(guilds=True, users=False)
 @app_commands.allowed_contexts(guilds=True, dms=False, private_channels=False)
 @app_commands.default_permissions(manage_guild=True)
-class ReportSettings(commands.GroupCog, name=app_commands.locale_str("report")):
+class ReportSettings(commands.GroupCog, name=app_commands.locale_str("report", i18n_key="cmd.reportsystem.report.root.name")):
     def __init__(self, bot):
         self.bot = bot
         super().__init__()
 
-    @app_commands.command(name=app_commands.locale_str("settings"), description="設定伺服器的檢舉系統配置")
+    @app_commands.command(name=app_commands.locale_str("settings", i18n_key="cmd.reportsystem.report.settings.name"), description=app_commands.locale_str("Configure this server's report system", i18n_key="cmd.reportsystem.report.settings.desc"))
     @app_commands.describe(
-        setting="要設定的項目",
-        value="設定的值 (對於頻道，請使用 #頻道名稱 或頻道ID)"
+        setting=app_commands.locale_str("The setting to change", i18n_key="cmd.reportsystem.report.settings.param.setting"),
+        value=app_commands.locale_str("The value (for channels use #channel-name or a channel ID)", i18n_key="cmd.reportsystem.report.settings.param.value")
     )
     @app_commands.choices(setting=[
-        app_commands.Choice(name="檢舉通知頻道", value="REPORT_CHANNEL_ID"),
-        app_commands.Choice(name="處分通知頻道", value="MODERATION_MESSAGE_CHANNEL_ID"),
-        app_commands.Choice(name="檢舉回覆訊息", value="REPORTED_MESSAGE"),
-        app_commands.Choice(name="檢舉頻率限制(秒)", value="REPORT_RATE_LIMIT"),
-        app_commands.Choice(name="檢舉通知訊息", value="REPORT_MESSAGE"),
+        app_commands.Choice(name=app_commands.locale_str("Report notification channel", i18n_key="cmd.reportsystem.report.settings.choice.report_channel_id"), value="REPORT_CHANNEL_ID"),
+        app_commands.Choice(name=app_commands.locale_str("Moderation notice channel", i18n_key="cmd.reportsystem.report.settings.choice.moderation_message_channel_id"), value="MODERATION_MESSAGE_CHANNEL_ID"),
+        app_commands.Choice(name=app_commands.locale_str("Reply sent to reporters", i18n_key="cmd.reportsystem.report.settings.choice.reported_message"), value="REPORTED_MESSAGE"),
+        app_commands.Choice(name=app_commands.locale_str("Report rate limit (seconds)", i18n_key="cmd.reportsystem.report.settings.choice.report_rate_limit"), value="REPORT_RATE_LIMIT"),
+        app_commands.Choice(name=app_commands.locale_str("Report notification message", i18n_key="cmd.reportsystem.report.settings.choice.report_message"), value="REPORT_MESSAGE"),
     ])
     @app_commands.allowed_installs(guilds=True, users=False)
     @app_commands.allowed_contexts(guilds=True, dms=False, private_channels=False)
@@ -661,15 +661,15 @@ class ReportSettings(commands.GroupCog, name=app_commands.locale_str("report")):
             else:
                 await interaction.response.send_message("❌ 設定失敗，請稍後再試。", ephemeral=True)
 
-    @app_commands.command(name=app_commands.locale_str("blacklist-role"), description="管理檢舉黑名單身分組")
+    @app_commands.command(name=app_commands.locale_str("blacklist-role", i18n_key="cmd.reportsystem.report.blacklist_role.name"), description=app_commands.locale_str("Manage report blacklist roles", i18n_key="cmd.reportsystem.report.blacklist_role.desc"))
     @app_commands.describe(
-        action="要執行的動作",
-        role="身分組"
+        action=app_commands.locale_str("The action to perform", i18n_key="cmd.reportsystem.report.blacklist_role.param.action"),
+        role=app_commands.locale_str("Role", i18n_key="cmd.reportsystem.report.blacklist_role.param.role")
     )
     @app_commands.choices(action=[
-        app_commands.Choice(name="新增", value="add"),
-        app_commands.Choice(name="移除", value="remove"),
-        app_commands.Choice(name="查看", value="view"),
+        app_commands.Choice(name=app_commands.locale_str("Add", i18n_key="cmd.reportsystem.report.blacklist_role.choice.add"), value="add"),
+        app_commands.Choice(name=app_commands.locale_str("Remove", i18n_key="cmd.reportsystem.report.blacklist_role.choice.remove"), value="remove"),
+        app_commands.Choice(name=app_commands.locale_str("View", i18n_key="cmd.reportsystem.report.blacklist_role.choice.view"), value="view"),
     ])
     @app_commands.allowed_installs(guilds=True, users=False)
     @app_commands.allowed_contexts(guilds=True, dms=False, private_channels=False)
@@ -727,9 +727,9 @@ class ReportSettings(commands.GroupCog, name=app_commands.locale_str("report")):
             else:
                 await interaction.response.send_message("❌ 設定失敗，請稍後再試。", ephemeral=True)
     
-    @app_commands.command(name=app_commands.locale_str("set-server-rules"), description="設定伺服器規則內容")
+    @app_commands.command(name=app_commands.locale_str("set-server-rules", i18n_key="cmd.reportsystem.report.set_server_rules.name"), description=app_commands.locale_str("Set the server rules text", i18n_key="cmd.reportsystem.report.set_server_rules.desc"))
     @app_commands.describe(
-        rules="伺服器規則內容，多行請用 \\n 來換行"
+        rules=app_commands.locale_str("Server rules; use \\n for line breaks", i18n_key="cmd.reportsystem.report.set_server_rules.param.rules")
     )
     async def set_server_rules(self, interaction: discord.Interaction, rules: str):
         guild_id = interaction.guild.id

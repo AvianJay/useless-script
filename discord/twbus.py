@@ -845,13 +845,13 @@ def make_bus_text(payload: dict) -> tuple[str, str]:
 @app_commands.guild_only()
 @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
 @app_commands.allowed_installs(guilds=True, users=True)
-class TWBus(commands.GroupCog, name=app_commands.locale_str("bus")):
+class TWBus(commands.GroupCog, name=app_commands.locale_str("bus", i18n_key="cmd.twbus.bus.root.name")):
     def __init__(self, bot: commands.Bot) -> None:
         self.bot = bot
         super().__init__()
 
-    @app_commands.command(name=app_commands.locale_str("getroute"), description="查詢指定的路線")
-    @app_commands.describe(route_key="路線ID")
+    @app_commands.command(name=app_commands.locale_str("getroute", i18n_key="cmd.twbus.bus.getroute.name"), description=app_commands.locale_str("Look up a bus route", i18n_key="cmd.twbus.bus.getroute.desc"))
+    @app_commands.describe(route_key=app_commands.locale_str("Route ID", i18n_key="cmd.twbus.bus.getroute.param.route_key"))
     @app_commands.autocomplete(route_key=bus_route_autocomplete)
     @rate_limit(10)
     async def get_route(self, interaction: discord.Interaction, route_key: str):
@@ -876,8 +876,8 @@ class TWBus(commands.GroupCog, name=app_commands.locale_str("bus")):
             await interaction.followup.send(f"發生錯誤：{e}", ephemeral=True)
             traceback.print_exc()
 
-    @app_commands.command(name=app_commands.locale_str("getstop"), description="查詢指定的站牌")
-    @app_commands.describe(route_key="路線ID", stop_id="站牌ID")
+    @app_commands.command(name=app_commands.locale_str("getstop", i18n_key="cmd.twbus.bus.getstop.name"), description=app_commands.locale_str("Look up a bus stop", i18n_key="cmd.twbus.bus.getstop.desc"))
+    @app_commands.describe(route_key=app_commands.locale_str("Route ID", i18n_key="cmd.twbus.bus.getstop.param.route_key"), stop_id=app_commands.locale_str("Stop ID", i18n_key="cmd.twbus.bus.getstop.param.stop_id"))
     @app_commands.autocomplete(route_key=bus_route_autocomplete, stop_id=get_stop_autocomplete)
     @rate_limit(10)
     async def get_stop(self, interaction: discord.Interaction, route_key: str, stop_id: str):
@@ -899,8 +899,8 @@ class TWBus(commands.GroupCog, name=app_commands.locale_str("bus")):
             await interaction.followup.send(f"發生錯誤：{e}", ephemeral=True)
             traceback.print_exc()
 
-    @app_commands.command(name=app_commands.locale_str("youbike"), description="查詢指定的YouBike站點")
-    @app_commands.describe(station_name="YouBike站點名稱")
+    @app_commands.command(name=app_commands.locale_str("youbike", i18n_key="cmd.twbus.bus.youbike.name"), description=app_commands.locale_str("Look up a YouBike station", i18n_key="cmd.twbus.bus.youbike.desc"))
+    @app_commands.describe(station_name=app_commands.locale_str("YouBike station name", i18n_key="cmd.twbus.bus.youbike.param.station_name"))
     @app_commands.autocomplete(station_name=youbike_station_autocomplete)
     @rate_limit(10)
     async def youbike(self, interaction: discord.Interaction, station_name: str):
@@ -945,7 +945,7 @@ class TWBus(commands.GroupCog, name=app_commands.locale_str("bus")):
             await interaction.followup.send(f"發生錯誤：{e}", ephemeral=True)
             traceback.print_exc()
 
-    @app_commands.command(name=app_commands.locale_str("favorites"), description="你的最愛站牌與YouBike站點")
+    @app_commands.command(name=app_commands.locale_str("favorites", i18n_key="cmd.twbus.bus.favorites.name"), description=app_commands.locale_str("Your favorite bus stops and YouBike stations", i18n_key="cmd.twbus.bus.favorites.desc"))
     @rate_limit(10)
     async def favorites(self, interaction: discord.Interaction):
         await interaction.response.defer()

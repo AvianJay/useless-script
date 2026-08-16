@@ -103,8 +103,12 @@ def check_catalogs(report: Report) -> dict[str, int]:
                 if locale.split("-")[0] == "en" and "one" not in value:
                     report.warning("plural-en-one", f"{locale}:{key} has no \"one\" form")
 
-            # 指令名稱合法性
-            if key.startswith("cmd.") and key.endswith(".name") and isinstance(value, str):
+            # 指令名稱合法性（排除 .param./.choice. 底下叫 name 的參數描述，
+            # 與 .ctx. 的 context menu 名稱——後者允許空白與大寫）
+            if key.startswith("cmd.") and key.endswith(".name") and \
+                    isinstance(value, str) and \
+                    ".param." not in key and ".choice." not in key and \
+                    ".ctx." not in key:
                 if not i18n._valid_command_name(value):
                     report.error("cmd-name", f"{locale}:{key} = {value!r}")
 
@@ -289,6 +293,13 @@ def check_unused(report: Report):
                 if name == "t_enum" and node.args and \
                         isinstance(node.args[0], ast.Constant):
                     enum_prefixes.add(node.args[0].value + ".")
+            # f-string 動態 key（如 i18n_key=f"cmd.automoderate.setting.{key}"）
+            # 以開頭的常數部分作為前綴白名單
+            if isinstance(node, ast.JoinedStr) and node.values:
+                first = node.values[0]
+                if isinstance(first, ast.Constant) and \
+                        isinstance(first.value, str) and "." in first.value:
+                    enum_prefixes.add(first.value)
     source = i18n._catalogs.get(i18n.SOURCE_LOCALE, {})
     for key in source:
         if key in referenced:

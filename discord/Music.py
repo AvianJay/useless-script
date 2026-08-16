@@ -117,7 +117,9 @@ def get_queue(guild_id: int) -> MusicQueue:
 
 @app_commands.allowed_installs(guilds=True, users=False)
 @app_commands.allowed_contexts(guilds=True, dms=False, private_channels=False)
-class Music(commands.GroupCog, group_name=app_commands.locale_str("music")):
+class Music(commands.GroupCog,
+            group_name=app_commands.locale_str("music", i18n_key="cmd.music.music.root.name"),
+            group_description=app_commands.locale_str("Music commands", i18n_key="cmd.music.music.root.desc")):
     def __init__(self, bot):
         super().__init__()
         self.bot = bot
@@ -1301,8 +1303,8 @@ class Music(commands.GroupCog, group_name=app_commands.locale_str("music")):
             log(f"自動完成搜尋出錯: {e}", level=logging.WARNING, module_name="Music")
             return []
 
-    @app_commands.command(name=app_commands.locale_str("search"), description="搜尋並播放音樂")
-    @app_commands.describe(query="搜尋歌曲（支援自動完成）")
+    @app_commands.command(name=app_commands.locale_str("search", i18n_key="cmd.music.music.search.name"), description=app_commands.locale_str("Search for and play music", i18n_key="cmd.music.music.search.desc"))
+    @app_commands.describe(query=app_commands.locale_str("Search for a track (autocomplete supported)", i18n_key="cmd.music.music.search.param.query"))
     @app_commands.autocomplete(query=search_autocomplete)
     @app_commands.guild_only()
     @app_commands.allowed_installs(guilds=True, users=False)
@@ -1405,8 +1407,8 @@ class Music(commands.GroupCog, group_name=app_commands.locale_str("music")):
             log(f"搜尋播放出錯: {e}", level=logging.ERROR, module_name="Music", guild=interaction.guild)
             await interaction.followup.send(f"❌ 搜尋播放出錯: {e}", ephemeral=True)
 
-    @app_commands.command(name=app_commands.locale_str("play"), description="播放音樂")
-    @app_commands.describe(query="歌曲名稱或 URL")
+    @app_commands.command(name=app_commands.locale_str("play", i18n_key="cmd.music.music.play.name"), description=app_commands.locale_str("Play music", i18n_key="cmd.music.music.play.desc"))
+    @app_commands.describe(query=app_commands.locale_str("Track name or URL", i18n_key="cmd.music.music.play.param.query"))
     @app_commands.guild_only()
     @app_commands.allowed_installs(guilds=True, users=False)
     @app_commands.allowed_contexts(guilds=True, dms=False, private_channels=False)
@@ -1504,11 +1506,11 @@ class Music(commands.GroupCog, group_name=app_commands.locale_str("music")):
             log(f"播放出錯: {e}", level=logging.ERROR, module_name="Music", guild=interaction.guild)
             await interaction.followup.send(f"❌ 播放出錯: {e}", ephemeral=True)
 
-    @app_commands.command(name="radio", description="切換到電台模式")
-    @app_commands.describe(station="要播放的電台")
+    @app_commands.command(name=app_commands.locale_str("radio", i18n_key="cmd.music.music.radio.name"), description=app_commands.locale_str("Switch to radio mode", i18n_key="cmd.music.music.radio.desc"))
+    @app_commands.describe(station=app_commands.locale_str("The station to play", i18n_key="cmd.music.music.radio.param.station"))
     @app_commands.choices(station=[
-        app_commands.Choice(name="LISTEN.moe", value="listenmoe"),
-        app_commands.Choice(name="R/a/dio", value="r-a-dio"),
+        app_commands.Choice(name=app_commands.locale_str("LISTEN.moe", i18n_key="cmd.music.music.radio.choice.listenmoe"), value="listenmoe"),
+        app_commands.Choice(name=app_commands.locale_str("R/a/dio", i18n_key="cmd.music.music.radio.choice.r_a_dio"), value="r-a-dio"),
     ])
     @app_commands.guild_only()
     @app_commands.allowed_installs(guilds=True, users=False)
@@ -1555,7 +1557,7 @@ class Music(commands.GroupCog, group_name=app_commands.locale_str("music")):
             log(f"切換電台模式失敗: {e}", level=logging.ERROR, module_name="Music", guild=interaction.guild)
             await interaction.followup.send(f"❌ 切換到 {station_info.display_name} 失敗: {e}", ephemeral=True)
     
-    @app_commands.command(name=app_commands.locale_str("pause"), description="暫停播放")
+    @app_commands.command(name=app_commands.locale_str("pause", i18n_key="cmd.music.music.pause.name"), description=app_commands.locale_str("Pause playback", i18n_key="cmd.music.music.pause.desc"))
     @app_commands.guild_only()
     @app_commands.allowed_installs(guilds=True, users=False)
     @app_commands.allowed_contexts(guilds=True, dms=False, private_channels=False)
@@ -1583,7 +1585,7 @@ class Music(commands.GroupCog, group_name=app_commands.locale_str("music")):
         except Exception as e:
             await interaction.followup.send(f"❌ 暫停出錯: {e}", ephemeral=True)
     
-    @app_commands.command(name=app_commands.locale_str("resume"), description="繼續播放")
+    @app_commands.command(name=app_commands.locale_str("resume", i18n_key="cmd.music.music.resume.name"), description=app_commands.locale_str("Resume playback", i18n_key="cmd.music.music.resume.desc"))
     @app_commands.guild_only()
     @app_commands.allowed_installs(guilds=True, users=False)
     @app_commands.allowed_contexts(guilds=True, dms=False, private_channels=False)
@@ -1611,7 +1613,7 @@ class Music(commands.GroupCog, group_name=app_commands.locale_str("music")):
         except Exception as e:
             await interaction.followup.send(f"❌ 繼續播放出錯: {e}", ephemeral=True)
     
-    @app_commands.command(name=app_commands.locale_str("stop"), description="停止播放並斷開連接")
+    @app_commands.command(name=app_commands.locale_str("stop", i18n_key="cmd.music.music.stop.name"), description=app_commands.locale_str("Stop playback and disconnect", i18n_key="cmd.music.music.stop.desc"))
     @app_commands.guild_only()
     @app_commands.allowed_installs(guilds=True, users=False)
     @app_commands.allowed_contexts(guilds=True, dms=False, private_channels=False)
@@ -1637,7 +1639,7 @@ class Music(commands.GroupCog, group_name=app_commands.locale_str("music")):
         except Exception as e:
             await interaction.followup.send(f"❌ 停止出錯: {e}", ephemeral=True)
     
-    @app_commands.command(name=app_commands.locale_str("skip"), description="跳過當前歌曲")
+    @app_commands.command(name=app_commands.locale_str("skip", i18n_key="cmd.music.music.skip.name"), description=app_commands.locale_str("Skip the current track", i18n_key="cmd.music.music.skip.desc"))
     @app_commands.guild_only()
     @app_commands.allowed_installs(guilds=True, users=False)
     @app_commands.allowed_contexts(guilds=True, dms=False, private_channels=False)
@@ -1682,7 +1684,7 @@ class Music(commands.GroupCog, group_name=app_commands.locale_str("music")):
         except Exception as e:
             await interaction.followup.send(f"❌ 跳過出錯: {e}", ephemeral=True)
     
-    @app_commands.command(name=app_commands.locale_str("queue"), description="查看播放隊列")
+    @app_commands.command(name=app_commands.locale_str("queue", i18n_key="cmd.music.music.queue.name"), description=app_commands.locale_str("View the playback queue", i18n_key="cmd.music.music.queue.desc"))
     @app_commands.guild_only()
     @app_commands.allowed_installs(guilds=True, users=False)
     @app_commands.allowed_contexts(guilds=True, dms=False, private_channels=False)
@@ -1743,7 +1745,7 @@ class Music(commands.GroupCog, group_name=app_commands.locale_str("music")):
         embed.set_footer(text=f"隊列中共有 {len(queue)} 首歌曲")
         await interaction.followup.send(embed=embed)
     
-    @app_commands.command(name=app_commands.locale_str("restore-queue"), description="回復重啟前儲存的播放狀態")
+    @app_commands.command(name=app_commands.locale_str("restore-queue", i18n_key="cmd.music.music.restore_queue.name"), description=app_commands.locale_str("Restore the playback state saved before restart", i18n_key="cmd.music.music.restore_queue.desc"))
     @app_commands.guild_only()
     @app_commands.allowed_installs(guilds=True, users=False)
     @app_commands.allowed_contexts(guilds=True, dms=False, private_channels=False)
@@ -1896,12 +1898,12 @@ class Music(commands.GroupCog, group_name=app_commands.locale_str("music")):
             msg += f"（{failed} 首無法載入）"
         await interaction.followup.send(msg)
 
-    @app_commands.command(name=app_commands.locale_str("loop"), description="設定循環播放模式")
-    @app_commands.describe(mode="循環模式")
+    @app_commands.command(name=app_commands.locale_str("loop", i18n_key="cmd.music.music.loop.name"), description=app_commands.locale_str("Set the loop mode", i18n_key="cmd.music.music.loop.desc"))
+    @app_commands.describe(mode=app_commands.locale_str("Loop mode", i18n_key="cmd.music.music.loop.param.mode"))
     @app_commands.choices(mode=[
-        app_commands.Choice(name="關閉循環", value=0),
-        app_commands.Choice(name="單曲循環", value=1),
-        app_commands.Choice(name="隊列循環", value=2),
+        app_commands.Choice(name=app_commands.locale_str("Loop off", i18n_key="cmd.music.music.loop.choice.0"), value=0),
+        app_commands.Choice(name=app_commands.locale_str("Loop track", i18n_key="cmd.music.music.loop.choice.1"), value=1),
+        app_commands.Choice(name=app_commands.locale_str("Loop queue", i18n_key="cmd.music.music.loop.choice.2"), value=2),
     ])
     @app_commands.guild_only()
     @app_commands.allowed_installs(guilds=True, users=False)
@@ -1944,7 +1946,7 @@ class Music(commands.GroupCog, group_name=app_commands.locale_str("music")):
         mode_display = {LoopMode.OFF: "▶️ 關閉循環", LoopMode.TRACK: "🔂 單曲循環", LoopMode.QUEUE: "🔁 隊列循環"}
         await interaction.followup.send(mode_display[new_mode])
 
-    @app_commands.command(name=app_commands.locale_str("now-playing"), description="查看當前播放的歌曲")
+    @app_commands.command(name=app_commands.locale_str("now-playing", i18n_key="cmd.music.music.now_playing.name"), description=app_commands.locale_str("Show the currently playing track", i18n_key="cmd.music.music.now_playing.desc"))
     @app_commands.guild_only()
     @app_commands.allowed_installs(guilds=True, users=False)
     @app_commands.allowed_contexts(guilds=True, dms=False, private_channels=False)
@@ -1995,8 +1997,8 @@ class Music(commands.GroupCog, group_name=app_commands.locale_str("music")):
         
         await interaction.followup.send(embed=embed)
     
-    @app_commands.command(name=app_commands.locale_str("volume"), description="調整音量")
-    @app_commands.describe(level="音量等級 (0-100)")
+    @app_commands.command(name=app_commands.locale_str("volume", i18n_key="cmd.music.music.volume.name"), description=app_commands.locale_str("Adjust the volume", i18n_key="cmd.music.music.volume.desc"))
+    @app_commands.describe(level=app_commands.locale_str("Volume level (0-100)", i18n_key="cmd.music.music.volume.param.level"))
     @app_commands.guild_only()
     @app_commands.allowed_installs(guilds=True, users=False)
     @app_commands.allowed_contexts(guilds=True, dms=False, private_channels=False)
@@ -2024,7 +2026,7 @@ class Music(commands.GroupCog, group_name=app_commands.locale_str("music")):
         except Exception as e:
             await interaction.followup.send(f"❌ 設置音量出錯: {e}", ephemeral=True)
     
-    @app_commands.command(name=app_commands.locale_str("shuffle"), description="隨機打亂隊列")
+    @app_commands.command(name=app_commands.locale_str("shuffle", i18n_key="cmd.music.music.shuffle.name"), description=app_commands.locale_str("Shuffle the queue", i18n_key="cmd.music.music.shuffle.desc"))
     @app_commands.guild_only()
     @app_commands.allowed_installs(guilds=True, users=False)
     @app_commands.allowed_contexts(guilds=True, dms=False, private_channels=False)
@@ -2061,8 +2063,8 @@ class Music(commands.GroupCog, group_name=app_commands.locale_str("music")):
         except Exception as e:
             await interaction.followup.send(f"❌ 打亂隊列出錯: {e}", ephemeral=True)
     
-    @app_commands.command(name=app_commands.locale_str("recommend"), description="根據當前播放的歌曲推薦相似歌曲")
-    @app_commands.describe(count="要添加的推薦歌曲數量 (1-10，預設 5)")
+    @app_commands.command(name=app_commands.locale_str("recommend", i18n_key="cmd.music.music.recommend.name"), description=app_commands.locale_str("Recommend similar tracks based on the current one", i18n_key="cmd.music.music.recommend.desc"))
+    @app_commands.describe(count=app_commands.locale_str("How many recommendations to add (1-10, default 5)", i18n_key="cmd.music.music.recommend.param.count"))
     @app_commands.guild_only()
     @app_commands.allowed_installs(guilds=True, users=False)
     @app_commands.allowed_contexts(guilds=True, dms=False, private_channels=False)
@@ -2130,7 +2132,7 @@ class Music(commands.GroupCog, group_name=app_commands.locale_str("music")):
             log(f"推薦歌曲出錯: {e}", level=logging.ERROR, module_name="Music", guild=interaction.guild)
             await interaction.followup.send(f"❌ 推薦歌曲出錯: {e}", ephemeral=True)
     
-    @app_commands.command(name=app_commands.locale_str("nodes"), description="查看 Lavalink 節點狀態")
+    @app_commands.command(name=app_commands.locale_str("nodes", i18n_key="cmd.music.music.nodes.name"), description=app_commands.locale_str("View Lavalink node status", i18n_key="cmd.music.music.nodes.desc"))
     async def nodes_command(self, interaction: discord.Interaction):
         """查看 Lavalink 節點狀態"""
         await interaction.response.defer()

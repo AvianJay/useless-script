@@ -99,8 +99,8 @@ class FakeUser(commands.Cog):
     
     @app_commands.allowed_installs(guilds=True, users=False)
     @app_commands.allowed_contexts(guilds=True, dms=False, private_channels=False)
-    @app_commands.command(name="fake", description="假冒用戶說話")
-    @app_commands.describe(user="要假冒的用戶", message="要發送的訊息內容")
+    @app_commands.command(name=app_commands.locale_str("fake", i18n_key="cmd.fakeuser.fake.name"), description=app_commands.locale_str("Speak as another user", i18n_key="cmd.fakeuser.fake.desc"))
+    @app_commands.describe(user=app_commands.locale_str("The user to impersonate", i18n_key="cmd.fakeuser.fake.param.user"), message=app_commands.locale_str("The message to send", i18n_key="cmd.fakeuser.fake.param.message"))
     async def fake(self, interaction: discord.Interaction, user: Union[discord.User, discord.Member], message: str):
         await interaction.response.defer(ephemeral=True)
         if interaction.channel.permissions_for(interaction.guild.me).manage_webhooks is False:
@@ -225,8 +225,8 @@ class FakeUser(commands.Cog):
     
     @app_commands.allowed_installs(guilds=True, users=False)
     @app_commands.allowed_contexts(guilds=True, dms=False, private_channels=False)
-    @app_commands.command(name="fake-blacklist", description="假冒用戶黑名單管理")
-    @app_commands.describe(user="要加入或移除黑名單的用戶 (若指定本機器人代表所有人)")
+    @app_commands.command(name=app_commands.locale_str("fake-blacklist", i18n_key="cmd.fakeuser.fake_blacklist.name"), description=app_commands.locale_str("Manage the fake-user blacklist", i18n_key="cmd.fakeuser.fake_blacklist.desc"))
+    @app_commands.describe(user=app_commands.locale_str("User to add/remove from the blacklist (pick this bot to mean everyone)", i18n_key="cmd.fakeuser.fake_blacklist.param.user"))
     async def fake_blacklist(self, interaction: discord.Interaction, user: Union[discord.User, discord.Member]):
         guild_id = interaction.guild.id if interaction.guild else None
         blacklist = get_user_data(guild_id, interaction.user.id, "fake_user_blacklist", [])
@@ -249,7 +249,7 @@ asyncio.run(bot.add_cog(FakeUser(bot)))
 @app_commands.allowed_contexts(guilds=True, dms=False, private_channels=False)
 @app_commands.allowed_installs(guilds=True, users=False)
 @app_commands.default_permissions(manage_guild=True)
-class FakeAdmin(commands.GroupCog, name="fake-admin", description="假冒用戶管理指令"):
+class FakeAdmin(commands.GroupCog, name=app_commands.locale_str("fake-admin", i18n_key="cmd.fakeuser.fake_admin.root.name"), description=app_commands.locale_str("Fake-user admin commands", i18n_key="cmd.fakeuser.fake_admin.root.desc")):
     def __init__(self, bot):
         self.bot = bot
 
@@ -258,12 +258,12 @@ class FakeAdmin(commands.GroupCog, name="fake-admin", description="假冒用戶�
         filters = get_server_config(guild_id, "fake_user_filters", [])
         return [app_commands.Choice(name=f, value=f) for f in filters if current.lower() in f.lower()]
 
-    @app_commands.command(name="filter", description="設定假冒用戶功能的過濾器")
-    @app_commands.describe(mode="要做什麼？", regex="要過濾的正則表達式，僅在選擇添加或移除模式時需要")
+    @app_commands.command(name=app_commands.locale_str("filter", i18n_key="cmd.fakeuser.fake_admin.filter.name"), description=app_commands.locale_str("Configure filters for the fake-user feature", i18n_key="cmd.fakeuser.fake_admin.filter.desc"))
+    @app_commands.describe(mode=app_commands.locale_str("What do you want to do?", i18n_key="cmd.fakeuser.fake_admin.filter.param.mode"), regex=app_commands.locale_str("Regex to filter; only needed for add or remove", i18n_key="cmd.fakeuser.fake_admin.filter.param.regex"))
     @app_commands.choices(mode=[
-        app_commands.Choice(name="添加過濾器", value="add"),
-        app_commands.Choice(name="移除過濾器", value="remove"),
-        app_commands.Choice(name="查看過濾器", value="view")
+        app_commands.Choice(name=app_commands.locale_str("Add filter", i18n_key="cmd.fakeuser.fake_admin.filter.choice.add"), value="add"),
+        app_commands.Choice(name=app_commands.locale_str("Remove filter", i18n_key="cmd.fakeuser.fake_admin.filter.choice.remove"), value="remove"),
+        app_commands.Choice(name=app_commands.locale_str("View filters", i18n_key="cmd.fakeuser.fake_admin.filter.choice.view"), value="view")
     ])
     @app_commands.autocomplete(regex=filter_autocomplete)
     async def filter(self, interaction: discord.Interaction, mode: str, regex: str = None):
@@ -307,8 +307,8 @@ class FakeAdmin(commands.GroupCog, name="fake-admin", description="假冒用戶�
     @app_commands.allowed_installs(guilds=True, users=False)
     @app_commands.allowed_contexts(guilds=True, dms=False, private_channels=False)
     @app_commands.default_permissions(manage_guild=True)
-    @app_commands.command(name="log-channel", description="設置假冒用戶紀錄的頻道")
-    @app_commands.describe(channel="要設置的假冒用戶紀錄頻道，留空以查看當前頻道")
+    @app_commands.command(name=app_commands.locale_str("log-channel", i18n_key="cmd.fakeuser.fake_admin.log_channel.name"), description=app_commands.locale_str("Set the fake-user log channel", i18n_key="cmd.fakeuser.fake_admin.log_channel.desc"))
+    @app_commands.describe(channel=app_commands.locale_str("The log channel to set; leave empty to view the current one", i18n_key="cmd.fakeuser.fake_admin.log_channel.param.channel"))
     async def fakeuser(self, interaction: discord.Interaction, channel: discord.TextChannel = None):
         guild_id = str(interaction.guild.id) if interaction.guild else None
         if channel:

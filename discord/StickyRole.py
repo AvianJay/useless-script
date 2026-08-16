@@ -11,7 +11,9 @@ import asyncio
 @app_commands.default_permissions(manage_roles=True)
 @app_commands.allowed_installs(guilds=True, users=False)
 @app_commands.allowed_contexts(guilds=True, dms=False, private_channels=False)
-class StickyRole(commands.GroupCog, group_name=app_commands.locale_str("stickyrole")):
+class StickyRole(commands.GroupCog,
+                 group_name=app_commands.locale_str("stickyrole", i18n_key="cmd.stickyrole.stickyrole.root.name"),
+                 group_description=app_commands.locale_str("Restore previously held roles when users rejoin", i18n_key="cmd.stickyrole.stickyrole.root.desc")):
     """當用戶離開伺服器後重新加入時，自動恢復先前擁有的身份組。"""
 
     def __init__(self, bot: commands.Bot):
@@ -19,11 +21,11 @@ class StickyRole(commands.GroupCog, group_name=app_commands.locale_str("stickyro
 
     # ── 管理指令 ──────────────────────────────────────────────
 
-    @app_commands.command(name=app_commands.locale_str("toggle"), description="啟用或停用 StickyRole 功能")
-    @app_commands.describe(enable="是否啟用 StickyRole 功能")
+    @app_commands.command(name=app_commands.locale_str("toggle", i18n_key="cmd.stickyrole.stickyrole.toggle.name"), description=app_commands.locale_str("Enable or disable StickyRole", i18n_key="cmd.stickyrole.stickyrole.toggle.desc"))
+    @app_commands.describe(enable=app_commands.locale_str("Whether to enable StickyRole", i18n_key="cmd.stickyrole.stickyrole.toggle.param.enable"))
     @app_commands.choices(enable=[
-        app_commands.Choice(name="啟用", value="True"),
-        app_commands.Choice(name="停用", value="False"),
+        app_commands.Choice(name=app_commands.locale_str("Enable", i18n_key="cmd.stickyrole.stickyrole.toggle.choice.true"), value="True"),
+        app_commands.Choice(name=app_commands.locale_str("Disable", i18n_key="cmd.stickyrole.stickyrole.toggle.choice.false"), value="False"),
     ])
     @app_commands.checks.has_permissions(administrator=True)
     async def toggle(self, interaction: discord.Interaction, enable: str):
@@ -36,8 +38,8 @@ class StickyRole(commands.GroupCog, group_name=app_commands.locale_str("stickyro
         log(f"StickyRole 已{status}", module_name="StickyRole", guild=interaction.guild, user=interaction.user)
         await interaction.response.send_message(f"✅ StickyRole 功能已 **{status}**。", ephemeral=True)
 
-    @app_commands.command(name=app_commands.locale_str("add"), description="新增允許記憶的身份組（留空代表記憶所有身份組）")
-    @app_commands.describe(role="要加入允許清單的身份組")
+    @app_commands.command(name=app_commands.locale_str("add", i18n_key="cmd.stickyrole.stickyrole.add.name"), description=app_commands.locale_str("Add a role to the remember list (empty list = remember all roles)", i18n_key="cmd.stickyrole.stickyrole.add.desc"))
+    @app_commands.describe(role=app_commands.locale_str("The role to add to the allow list", i18n_key="cmd.stickyrole.stickyrole.add.param.role"))
     @app_commands.checks.has_permissions(administrator=True)
     async def add_role(self, interaction: discord.Interaction, role: discord.Role):
         guild_id = interaction.guild.id
@@ -56,8 +58,8 @@ class StickyRole(commands.GroupCog, group_name=app_commands.locale_str("stickyro
         log(f"允許清單新增 {role.name} ({role.id})", module_name="StickyRole", guild=interaction.guild, user=interaction.user)
         await interaction.response.send_message(f"✅ 已將 {role.mention} 加入 StickyRole 允許清單。", ephemeral=True)
 
-    @app_commands.command(name=app_commands.locale_str("remove"), description="從允許清單中移除身份組")
-    @app_commands.describe(role="要從允許清單移除的身份組")
+    @app_commands.command(name=app_commands.locale_str("remove", i18n_key="cmd.stickyrole.stickyrole.remove.name"), description=app_commands.locale_str("Remove a role from the allow list", i18n_key="cmd.stickyrole.stickyrole.remove.desc"))
+    @app_commands.describe(role=app_commands.locale_str("The role to remove from the allow list", i18n_key="cmd.stickyrole.stickyrole.remove.param.role"))
     @app_commands.checks.has_permissions(administrator=True)
     async def remove_role(self, interaction: discord.Interaction, role: discord.Role):
         guild_id = interaction.guild.id
@@ -70,7 +72,7 @@ class StickyRole(commands.GroupCog, group_name=app_commands.locale_str("stickyro
         log(f"允許清單移除 {role.name} ({role.id})", module_name="StickyRole", guild=interaction.guild, user=interaction.user)
         await interaction.response.send_message(f"✅ 已將 {role.mention} 從 StickyRole 允許清單中移除。", ephemeral=True)
 
-    @app_commands.command(name=app_commands.locale_str("list"), description="查看目前允許清單與功能狀態")
+    @app_commands.command(name=app_commands.locale_str("list", i18n_key="cmd.stickyrole.stickyrole.list.name"), description=app_commands.locale_str("View the current allow list and feature status", i18n_key="cmd.stickyrole.stickyrole.list.desc"))
     @app_commands.checks.has_permissions(administrator=True)
     async def list_config(self, interaction: discord.Interaction):
         guild_id = interaction.guild.id
@@ -103,18 +105,18 @@ class StickyRole(commands.GroupCog, group_name=app_commands.locale_str("stickyro
 
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
-    @app_commands.command(name=app_commands.locale_str("clear"), description="清空允許清單（恢復為記憶所有身份組）")
+    @app_commands.command(name=app_commands.locale_str("clear", i18n_key="cmd.stickyrole.stickyrole.clear.name"), description=app_commands.locale_str("Clear the allow list (back to remembering all roles)", i18n_key="cmd.stickyrole.stickyrole.clear.desc"))
     @app_commands.checks.has_permissions(administrator=True)
     async def clear_roles(self, interaction: discord.Interaction):
         set_server_config(interaction.guild.id, "stickyrole_allowed_roles", [])
         log("允許清單已清空", module_name="StickyRole", guild=interaction.guild, user=interaction.user)
         await interaction.response.send_message("✅ 已清空允許清單，StickyRole 將記憶所有可指派的身份組。", ephemeral=True)
 
-    @app_commands.command(name=app_commands.locale_str("ignore-bots"), description="設定是否忽略機器人帳號")
-    @app_commands.describe(enable="是否忽略機器人帳號")
+    @app_commands.command(name=app_commands.locale_str("ignore-bots", i18n_key="cmd.stickyrole.stickyrole.ignore_bots.name"), description=app_commands.locale_str("Configure whether bot accounts are ignored", i18n_key="cmd.stickyrole.stickyrole.ignore_bots.desc"))
+    @app_commands.describe(enable=app_commands.locale_str("Whether to ignore bot accounts", i18n_key="cmd.stickyrole.stickyrole.ignore_bots.param.enable"))
     @app_commands.choices(enable=[
-        app_commands.Choice(name="是（忽略機器人）", value="True"),
-        app_commands.Choice(name="否（包含機器人）", value="False"),
+        app_commands.Choice(name=app_commands.locale_str("Yes (ignore bots)", i18n_key="cmd.stickyrole.stickyrole.ignore_bots.choice.true"), value="True"),
+        app_commands.Choice(name=app_commands.locale_str("No (include bots)", i18n_key="cmd.stickyrole.stickyrole.ignore_bots.choice.false"), value="False"),
     ])
     @app_commands.checks.has_permissions(administrator=True)
     async def ignore_bots(self, interaction: discord.Interaction, enable: str):
@@ -122,8 +124,8 @@ class StickyRole(commands.GroupCog, group_name=app_commands.locale_str("stickyro
         set_server_config(interaction.guild.id, "stickyrole_ignore_bots", val)
         await interaction.response.send_message(f"✅ 已{'啟用' if val else '停用'}忽略機器人帳號。", ephemeral=True)
 
-    @app_commands.command(name=app_commands.locale_str("set-log-channel"), description="設定 StickyRole 日誌頻道")
-    @app_commands.describe(channel="用於記錄 StickyRole 操作的頻道（留空則取消設定）")
+    @app_commands.command(name=app_commands.locale_str("set-log-channel", i18n_key="cmd.stickyrole.stickyrole.set_log_channel.name"), description=app_commands.locale_str("Set the StickyRole log channel", i18n_key="cmd.stickyrole.stickyrole.set_log_channel.desc"))
+    @app_commands.describe(channel=app_commands.locale_str("Channel for StickyRole logs (leave empty to unset)", i18n_key="cmd.stickyrole.stickyrole.set_log_channel.param.channel"))
     @app_commands.checks.has_permissions(administrator=True)
     async def set_log_channel(self, interaction: discord.Interaction, channel: discord.TextChannel = None):
         guild_id = interaction.guild.id
@@ -138,8 +140,8 @@ class StickyRole(commands.GroupCog, group_name=app_commands.locale_str("stickyro
             set_server_config(guild_id, "stickyrole_log_channel", None)
             await interaction.response.send_message("✅ 已取消 StickyRole 日誌頻道設定。", ephemeral=True)
 
-    @app_commands.command(name=app_commands.locale_str("view"), description="查看指定用戶先前儲存的身份組")
-    @app_commands.describe(user="要查看的用戶")
+    @app_commands.command(name=app_commands.locale_str("view", i18n_key="cmd.stickyrole.stickyrole.view.name"), description=app_commands.locale_str("View a user's previously saved roles", i18n_key="cmd.stickyrole.stickyrole.view.desc"))
+    @app_commands.describe(user=app_commands.locale_str("The user to view", i18n_key="cmd.stickyrole.stickyrole.view.param.user"))
     @app_commands.checks.has_permissions(administrator=True)
     async def view_user(self, interaction: discord.Interaction, user: discord.User):
         guild_id = interaction.guild.id
@@ -155,8 +157,8 @@ class StickyRole(commands.GroupCog, group_name=app_commands.locale_str("stickyro
         embed.add_field(name="儲存的身份組", value="\n".join(role_mentions), inline=False)
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
-    @app_commands.command(name=app_commands.locale_str("clear-user"), description="清除指定用戶的 StickyRole 紀錄")
-    @app_commands.describe(user="要清除紀錄的用戶")
+    @app_commands.command(name=app_commands.locale_str("clear-user", i18n_key="cmd.stickyrole.stickyrole.clear_user.name"), description=app_commands.locale_str("Clear a user's StickyRole records", i18n_key="cmd.stickyrole.stickyrole.clear_user.desc"))
+    @app_commands.describe(user=app_commands.locale_str("The user whose records to clear", i18n_key="cmd.stickyrole.stickyrole.clear_user.param.user"))
     @app_commands.checks.has_permissions(administrator=True)
     async def clear_user(self, interaction: discord.Interaction, user: discord.User):
         guild_id = interaction.guild.id

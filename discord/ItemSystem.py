@@ -382,15 +382,15 @@ async def convert_item_list_to_dict():
 
 @app_commands.allowed_installs(guilds=True, users=True)
 @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
-class ItemSystem(commands.GroupCog, name="item", description="物品系統指令"):
+class ItemSystem(commands.GroupCog, name=app_commands.locale_str("item", i18n_key="cmd.itemsystem.item.root.name"), description=app_commands.locale_str("Item system commands", i18n_key="cmd.itemsystem.item.root.desc")):
     def __init__(self):
         super().__init__()
     
-    @app_commands.command(name="list", description="查看你擁有的物品")
-    @app_commands.describe(scope="查看範圍（預設自動偵測）")
+    @app_commands.command(name=app_commands.locale_str("list", i18n_key="cmd.itemsystem.item.list.name"), description=app_commands.locale_str("View the items you own", i18n_key="cmd.itemsystem.item.list.desc"))
+    @app_commands.describe(scope=app_commands.locale_str("Scope to view (auto-detected by default)", i18n_key="cmd.itemsystem.item.list.param.scope"))
     @app_commands.choices(scope=[
-        app_commands.Choice(name="伺服器", value="server"),
-        app_commands.Choice(name="全域", value="global"),
+        app_commands.Choice(name=app_commands.locale_str("Server", i18n_key="cmd.itemsystem.item.list.choice.server"), value="server"),
+        app_commands.Choice(name=app_commands.locale_str("Global", i18n_key="cmd.itemsystem.item.list.choice.global"), value="global"),
     ])
     async def list_items(self, interaction: discord.Interaction, scope: str = None):
         user_id = interaction.user.id
@@ -425,12 +425,12 @@ class ItemSystem(commands.GroupCog, name="item", description="物品系統指令
         
         await interaction.response.send_message(embed=embed)
     
-    @app_commands.command(name="use", description="使用一個物品")
-    @app_commands.describe(item_id="你想使用的物品ID", scope="使用範圍（預設自動偵測）")
+    @app_commands.command(name=app_commands.locale_str("use", i18n_key="cmd.itemsystem.item.use.name"), description=app_commands.locale_str("Use an item", i18n_key="cmd.itemsystem.item.use.desc"))
+    @app_commands.describe(item_id=app_commands.locale_str("The item ID to use", i18n_key="cmd.itemsystem.item.use.param.item_id"), scope=app_commands.locale_str("Scope to use in (auto-detected by default)", i18n_key="cmd.itemsystem.item.use.param.scope"))
     @app_commands.autocomplete(item_id=get_user_items_scoped_autocomplete)
     @app_commands.choices(scope=[
-        app_commands.Choice(name="伺服器", value="server"),
-        app_commands.Choice(name="全域", value="global"),
+        app_commands.Choice(name=app_commands.locale_str("Server", i18n_key="cmd.itemsystem.item.use.choice.server"), value="server"),
+        app_commands.Choice(name=app_commands.locale_str("Global", i18n_key="cmd.itemsystem.item.use.choice.global"), value="global"),
     ])
     async def use_item(self, interaction: discord.Interaction, item_id: str, scope: str = None):
         user_id = interaction.user.id
@@ -457,21 +457,21 @@ class ItemSystem(commands.GroupCog, name="item", description="物品系統指令
         else:
             await interaction.response.send_message("這個物品無法使用。", ephemeral=True)
     
-    @app_commands.command(name="drop", description="丟棄一個物品")
-    @app_commands.describe(item_id="你想丟棄的物品ID", amount="你想丟棄的數量", can_pickup="其他人可以撿起這個物品嗎？", pickup_duration="物品可以被撿起的時間（秒）", pickup_only_once="物品只能被撿起一次嗎？", scope="物品來源範圍（預設自動偵測）")
+    @app_commands.command(name=app_commands.locale_str("drop", i18n_key="cmd.itemsystem.item.drop.name"), description=app_commands.locale_str("Drop an item", i18n_key="cmd.itemsystem.item.drop.desc"))
+    @app_commands.describe(item_id=app_commands.locale_str("The item ID to drop", i18n_key="cmd.itemsystem.item.drop.param.item_id"), amount=app_commands.locale_str("How many to drop", i18n_key="cmd.itemsystem.item.drop.param.amount"), can_pickup=app_commands.locale_str("Can others pick this item up?", i18n_key="cmd.itemsystem.item.drop.param.can_pickup"), pickup_duration=app_commands.locale_str("How long the item can be picked up (seconds)", i18n_key="cmd.itemsystem.item.drop.param.pickup_duration"), pickup_only_once=app_commands.locale_str("Can the item only be picked up once?", i18n_key="cmd.itemsystem.item.drop.param.pickup_only_once"), scope=app_commands.locale_str("Item scope (auto-detected by default)", i18n_key="cmd.itemsystem.item.drop.param.scope"))
     @app_commands.autocomplete(item_id=get_user_items_scoped_autocomplete)
     @app_commands.choices(
         can_pickup=[
-            app_commands.Choice(name="是", value="True"),
-            app_commands.Choice(name="否", value="False")
+            app_commands.Choice(name=app_commands.locale_str("Yes", i18n_key="cmd.itemsystem.item.drop.choice.true"), value="True"),
+            app_commands.Choice(name=app_commands.locale_str("No", i18n_key="cmd.itemsystem.item.drop.choice.false"), value="False")
         ],
         pickup_only_once=[
-            app_commands.Choice(name="是", value="True"),
-            app_commands.Choice(name="否", value="False")
+            app_commands.Choice(name=app_commands.locale_str("Yes", i18n_key="cmd.itemsystem.item.drop.choice.true"), value="True"),
+            app_commands.Choice(name=app_commands.locale_str("No", i18n_key="cmd.itemsystem.item.drop.choice.false"), value="False")
         ],
         scope=[
-            app_commands.Choice(name="伺服器", value="server"),
-            app_commands.Choice(name="全域", value="global"),
+            app_commands.Choice(name=app_commands.locale_str("Server", i18n_key="cmd.itemsystem.item.drop.choice.server"), value="server"),
+            app_commands.Choice(name=app_commands.locale_str("Global", i18n_key="cmd.itemsystem.item.drop.choice.global"), value="global"),
         ]
     )
     async def drop_item(self, interaction: discord.Interaction, item_id: str, amount: int = 1, can_pickup: str = "True", pickup_duration: int = 60, pickup_only_once: str = "False", scope: str = None):
@@ -608,12 +608,12 @@ class ItemSystem(commands.GroupCog, name="item", description="物品系統指令
     #     log(f"{interaction.user} transferred {target_item['name']} x{actual} from global in guild {guild_id}",
     #         module_name="ItemSystem", user=interaction.user, guild=interaction.guild)
 
-    @app_commands.command(name="give", description="給予另一個用戶一個物品")
-    @app_commands.describe(user="你想給予物品的用戶", item_id="你想給予的物品ID", amount="數量", scope="物品來源範圍（預設自動偵測）")
+    @app_commands.command(name=app_commands.locale_str("give", i18n_key="cmd.itemsystem.item.give.name"), description=app_commands.locale_str("Give an item to another user", i18n_key="cmd.itemsystem.item.give.desc"))
+    @app_commands.describe(user=app_commands.locale_str("The user to give the item to", i18n_key="cmd.itemsystem.item.give.param.user"), item_id=app_commands.locale_str("The item ID to give", i18n_key="cmd.itemsystem.item.give.param.item_id"), amount=app_commands.locale_str("Amount", i18n_key="cmd.itemsystem.item.give.param.amount"), scope=app_commands.locale_str("Item scope (auto-detected by default)", i18n_key="cmd.itemsystem.item.give.param.scope"))
     @app_commands.autocomplete(item_id=get_user_items_scoped_autocomplete)
     @app_commands.choices(scope=[
-        app_commands.Choice(name="伺服器", value="server"),
-        app_commands.Choice(name="全域", value="global"),
+        app_commands.Choice(name=app_commands.locale_str("Server", i18n_key="cmd.itemsystem.item.give.choice.server"), value="server"),
+        app_commands.Choice(name=app_commands.locale_str("Global", i18n_key="cmd.itemsystem.item.give.choice.global"), value="global"),
     ])
     async def give_item(self, interaction: discord.Interaction, user: discord.User, item_id: str, amount: int = 1, scope: str = None):
         await interaction.response.defer()
@@ -674,12 +674,12 @@ asyncio.run(bot.add_cog(ItemSystem()))
 @app_commands.default_permissions(manage_guild=True)
 @app_commands.allowed_installs(guilds=True, users=False)
 @app_commands.allowed_contexts(guilds=True, dms=False, private_channels=False)
-class ItemModerate(commands.GroupCog, name="itemmod", description="物品系統管理指令"):
+class ItemModerate(commands.GroupCog, name=app_commands.locale_str("itemmod", i18n_key="cmd.itemsystem.itemmod.root.name"), description=app_commands.locale_str("Item system admin commands", i18n_key="cmd.itemsystem.itemmod.root.desc")):
     def __init__(self):
         super().__init__()
     
-    @app_commands.command(name="give", description="給予用戶一個物品（可能會影響經濟）")
-    @app_commands.describe(user="你想給予物品的用戶", item_id="你想給予的物品ID", amount="你想給予的數量")
+    @app_commands.command(name=app_commands.locale_str("give", i18n_key="cmd.itemsystem.itemmod.give.name"), description=app_commands.locale_str("Give a user an item (may affect the economy)", i18n_key="cmd.itemsystem.itemmod.give.desc"))
+    @app_commands.describe(user=app_commands.locale_str("The user to give the item to", i18n_key="cmd.itemsystem.itemmod.give.param.user"), item_id=app_commands.locale_str("The item ID to give", i18n_key="cmd.itemsystem.itemmod.give.param.item_id"), amount=app_commands.locale_str("How many to give", i18n_key="cmd.itemsystem.itemmod.give.param.amount"))
     @app_commands.autocomplete(item_id=all_items_autocomplete)
     async def admin_give_item(self, interaction: discord.Interaction, user: discord.User, item_id: str, amount: int = 1):
         await interaction.response.defer()
@@ -719,8 +719,8 @@ class ItemModerate(commands.GroupCog, name="itemmod", description="物品系統�
 
         await interaction.followup.send(f"你給了 {user.display_name}(`{user.name}`) {amount} 個 {item['name']}。", allowed_mentions=discord.AllowedMentions.none())
 
-    @app_commands.command(name="remove", description="移除用戶的一個物品")
-    @app_commands.describe(user="你想移除物品的用戶", item_id="你想移除的物品ID", amount="你想移除的數量")
+    @app_commands.command(name=app_commands.locale_str("remove", i18n_key="cmd.itemsystem.itemmod.remove.name"), description=app_commands.locale_str("Remove an item from a user", i18n_key="cmd.itemsystem.itemmod.remove.desc"))
+    @app_commands.describe(user=app_commands.locale_str("The user to remove the item from", i18n_key="cmd.itemsystem.itemmod.remove.param.user"), item_id=app_commands.locale_str("The item ID to remove", i18n_key="cmd.itemsystem.itemmod.remove.param.item_id"), amount=app_commands.locale_str("How many to remove", i18n_key="cmd.itemsystem.itemmod.remove.param.amount"))
     @app_commands.autocomplete(item_id=all_items_autocomplete)
     async def admin_remove_item(self, interaction: discord.Interaction, user: discord.User, item_id: str, amount: int):
         if not interaction_uses_guild_scope(interaction):
@@ -746,7 +746,7 @@ class ItemModerate(commands.GroupCog, name="itemmod", description="物品系統�
 
         await interaction.response.send_message(f"你移除了 {user.display_name}(`{user.name}`) 的 {removed_count} 個 {item_name}。", ephemeral=True, allowed_mentions=discord.AllowedMentions.none())
 
-    @app_commands.command(name="list", description="列出所有可用的物品")
+    @app_commands.command(name=app_commands.locale_str("list", i18n_key="cmd.itemsystem.itemmod.list.name"), description=app_commands.locale_str("List all available items", i18n_key="cmd.itemsystem.itemmod.list.desc"))
     async def admin_list_items(self, interaction: discord.Interaction):
         all_items_list = get_all_items_for_guild(interaction.guild.id)
         if not all_items_list:
@@ -765,8 +765,8 @@ class ItemModerate(commands.GroupCog, name="itemmod", description="物品系統�
         
         await interaction.response.send_message(embed=embed)
     
-    @app_commands.command(name="listuser", description="列出用戶擁有的物品")
-    @app_commands.describe(user="你想查詢的用戶")
+    @app_commands.command(name=app_commands.locale_str("listuser", i18n_key="cmd.itemsystem.itemmod.listuser.name"), description=app_commands.locale_str("List the items a user owns", i18n_key="cmd.itemsystem.itemmod.listuser.desc"))
+    @app_commands.describe(user=app_commands.locale_str("The user to look up", i18n_key="cmd.itemsystem.itemmod.listuser.param.user"))
     async def admin_list_user_items(self, interaction: discord.Interaction, user: discord.User):
         if user.bot:
             await interaction.response.send_message("機器人沒有物品。", ephemeral=True)
@@ -794,16 +794,16 @@ class ItemModerate(commands.GroupCog, name="itemmod", description="物品系統�
 
         await interaction.response.send_message(embed=embed)
 
-    @app_commands.command(name="addcustom", description="新增伺服器自定義物品")
+    @app_commands.command(name=app_commands.locale_str("addcustom", i18n_key="cmd.itemsystem.itemmod.addcustom.name"), description=app_commands.locale_str("Add a server custom item", i18n_key="cmd.itemsystem.itemmod.addcustom.desc"))
     @app_commands.describe(
-        name="物品名稱",
-        content="使用物品時要傳送的文字內容，可使用 AutoReply 變數",
-        description="物品說明（可選，預設為「自定義物品」）",
-        list_in_shop="是否上架伺服器商店",
-        price="商店定價（伺服幣，僅在「上架商店」為是時有效）",
-        remove_after_use="使用後是否自動移除物品",
-        ephemeral_response="是否以隱藏訊息方式回應使用者",
-        revenue_share_user="分潤用戶，物品被使用後會獲得 90% 價值",
+        name=app_commands.locale_str("Item name", i18n_key="cmd.itemsystem.itemmod.addcustom.param.name"),
+        content=app_commands.locale_str("Text sent when the item is used; AutoReply variables supported", i18n_key="cmd.itemsystem.itemmod.addcustom.param.content"),
+        description=app_commands.locale_str("Item description (optional, defaults to \"Custom item\")", i18n_key="cmd.itemsystem.itemmod.addcustom.param.description"),
+        list_in_shop=app_commands.locale_str("List it in the server shop", i18n_key="cmd.itemsystem.itemmod.addcustom.param.list_in_shop"),
+        price=app_commands.locale_str("Shop price (server currency; only used when listed in shop)", i18n_key="cmd.itemsystem.itemmod.addcustom.param.price"),
+        remove_after_use=app_commands.locale_str("Remove the item automatically after use", i18n_key="cmd.itemsystem.itemmod.addcustom.param.remove_after_use"),
+        ephemeral_response=app_commands.locale_str("Respond to the user with a hidden (ephemeral) message", i18n_key="cmd.itemsystem.itemmod.addcustom.param.ephemeral_response"),
+        revenue_share_user=app_commands.locale_str("Revenue-share user; receives 90% of the value when the item is used", i18n_key="cmd.itemsystem.itemmod.addcustom.param.revenue_share_user"),
     )
     async def addcustom(self, interaction: discord.Interaction, name: str, content: str, description: str = None, list_in_shop: bool = False, price: float = None, remove_after_use: bool = True, ephemeral_response: bool = False, revenue_share_user: discord.User = None):
         if not interaction_uses_guild_scope(interaction):
@@ -871,8 +871,8 @@ class ItemModerate(commands.GroupCog, name="itemmod", description="物品系統�
         await interaction.response.send_message(msg, ephemeral=True)
         log(f"Custom item {item_id} ({name}) added in guild {guild_id}", module_name="ItemSystem", user=interaction.user, guild=interaction.guild)
 
-    @app_commands.command(name="removecustom", description="移除伺服器自定義物品")
-    @app_commands.describe(item_id="要移除的自定義物品")
+    @app_commands.command(name=app_commands.locale_str("removecustom", i18n_key="cmd.itemsystem.itemmod.removecustom.name"), description=app_commands.locale_str("Remove a server custom item", i18n_key="cmd.itemsystem.itemmod.removecustom.desc"))
+    @app_commands.describe(item_id=app_commands.locale_str("The custom item to remove", i18n_key="cmd.itemsystem.itemmod.removecustom.param.item_id"))
     @app_commands.autocomplete(item_id=custom_items_autocomplete)
     async def removecustom(self, interaction: discord.Interaction, item_id: str):
         if not interaction_uses_guild_scope(interaction):
@@ -889,16 +889,16 @@ class ItemModerate(commands.GroupCog, name="itemmod", description="物品系統�
         await interaction.response.send_message(f"✅ 已移除自定義物品 **{item_name}**。", ephemeral=True)
         log(f"Custom item {item_id} ({item_name}) removed in guild {guild_id}", module_name="ItemSystem", user=interaction.user, guild=interaction.guild)
 
-    @app_commands.command(name="editcustom", description="編輯自定義物品的商店上架與定價")
+    @app_commands.command(name=app_commands.locale_str("editcustom", i18n_key="cmd.itemsystem.itemmod.editcustom.name"), description=app_commands.locale_str("Edit a custom item's shop listing and price", i18n_key="cmd.itemsystem.itemmod.editcustom.desc"))
     @app_commands.describe(
-        item_id="要編輯的自定義物品",
-        name="物品名稱",
-        description="物品說明",
-        content="使用物品時要傳送的文字內容，可使用 AutoReply 變數",
-        list_in_shop="是否上架伺服器商店",
-        remove_after_use="使用後是否自動移除物品",
-        ephemeral_response="是否以隱藏訊息方式回應使用者",
-        revenue_share_user="分潤用戶，物品被使用後會獲得 90% 價值",
+        item_id=app_commands.locale_str("The custom item to edit", i18n_key="cmd.itemsystem.itemmod.editcustom.param.item_id"),
+        name=app_commands.locale_str("Item name", i18n_key="cmd.itemsystem.itemmod.editcustom.param.name"),
+        description=app_commands.locale_str("Item description", i18n_key="cmd.itemsystem.itemmod.editcustom.param.description"),
+        content=app_commands.locale_str("Text sent when the item is used; AutoReply variables supported", i18n_key="cmd.itemsystem.itemmod.editcustom.param.content"),
+        list_in_shop=app_commands.locale_str("List it in the server shop", i18n_key="cmd.itemsystem.itemmod.editcustom.param.list_in_shop"),
+        remove_after_use=app_commands.locale_str("Remove the item automatically after use", i18n_key="cmd.itemsystem.itemmod.editcustom.param.remove_after_use"),
+        ephemeral_response=app_commands.locale_str("Respond to the user with a hidden (ephemeral) message", i18n_key="cmd.itemsystem.itemmod.editcustom.param.ephemeral_response"),
+        revenue_share_user=app_commands.locale_str("Revenue-share user; receives 90% of the value when the item is used", i18n_key="cmd.itemsystem.itemmod.editcustom.param.revenue_share_user"),
     )
     @app_commands.autocomplete(item_id=custom_items_autocomplete)
     async def editcustom(self, interaction: discord.Interaction, item_id: str, name: str = None, description: str = None, content: str = None, list_in_shop: bool = None, remove_after_use: bool = None, ephemeral_response: bool = None, revenue_share_user: discord.User = None):
@@ -955,7 +955,7 @@ class ItemModerate(commands.GroupCog, name="itemmod", description="物品系統�
         status = f"已上架商店，定價 **{worth:,.2f}** 伺服幣" if worth else "未上架商店"
         await interaction.response.send_message(f"✅ 已更新 **{data['name']}**：{status}。", ephemeral=True)
 
-    @app_commands.command(name="listcustom", description="列出本伺服器的自定義物品")
+    @app_commands.command(name=app_commands.locale_str("listcustom", i18n_key="cmd.itemsystem.itemmod.listcustom.name"), description=app_commands.locale_str("List this server's custom items", i18n_key="cmd.itemsystem.itemmod.listcustom.desc"))
     async def listcustom(self, interaction: discord.Interaction):
         if not interaction_uses_guild_scope(interaction):
             await interaction.response.send_message("❌ 伺服器啟用了全域模式，無法使用此指令。", ephemeral=True)

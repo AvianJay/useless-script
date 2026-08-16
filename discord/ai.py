@@ -1253,14 +1253,14 @@ class ClearHistoryView(discord.ui.LayoutView):
 class AICommands(commands.Cog):
     """AI 聊天機器人指令"""
     ai_admin = app_commands.Group(
-        name="ai-admin",
-        description="AI 管理指令",
+        name=app_commands.locale_str("ai-admin", i18n_key="cmd.ai.ai_admin.root.name"),
+        description=app_commands.locale_str("AI admin commands", i18n_key="cmd.ai.ai_admin.root.desc"),
         allowed_contexts=app_commands.AppCommandContext(guild=True, dm_channel=False, private_channel=False),
         allowed_installs=app_commands.AppInstallationType(guild=True, user=False),
         default_permissions=discord.Permissions(manage_guild=True)
     )
-    ai_admin_prompt = app_commands.Group(name="prompt", description="管理伺服器的 AI 自訂 prompt", parent=ai_admin)
-    ai_admin_billing = app_commands.Group(name="billing", description="管理伺服器的 AI 付款設定", parent=ai_admin)
+    ai_admin_prompt = app_commands.Group(name=app_commands.locale_str("prompt", i18n_key="cmd.ai.ai_admin.prompt.root.name"), description=app_commands.locale_str("Manage this server's custom AI prompt", i18n_key="cmd.ai.ai_admin.prompt.root.desc"), parent=ai_admin)
+    ai_admin_billing = app_commands.Group(name=app_commands.locale_str("billing", i18n_key="cmd.ai.ai_admin.billing.root.name"), description=app_commands.locale_str("Manage this server's AI billing settings", i18n_key="cmd.ai.ai_admin.billing.root.desc"), parent=ai_admin)
     MAX_EMOJI_CONTEXT_COUNT = 80
     MAX_TOOL_ITERATIONS = 4
     MAX_TOOL_RESULT_LENGTH = 3500
@@ -9019,12 +9019,12 @@ class AICommands(commands.Cog):
     #         allowed_mentions=SAFE_MENTIONS,
     #     )
 
-    @app_commands.command(name="ai", description="與 AI 助手對話")
+    @app_commands.command(name=app_commands.locale_str("ai", i18n_key="cmd.ai.ai.name"), description=app_commands.locale_str("Chat with the AI assistant", i18n_key="cmd.ai.ai.desc"))
     @app_commands.describe(
-        message="你想問 AI 的問題或訊息",
-        image="傳入圖片讓 AI 分析（選用）",
-        new_conversation="是否開始新對話（清除之前的對話歷史）",
-        model="選擇 AI 模型（預設 openai）"
+        message=app_commands.locale_str("The question or message you want to ask the AI", i18n_key="cmd.ai.ai.param.message"),
+        image=app_commands.locale_str("Attach an image for the AI to analyze (optional)", i18n_key="cmd.ai.ai.param.image"),
+        new_conversation=app_commands.locale_str("Start a new conversation (clears previous history)", i18n_key="cmd.ai.ai.param.new_conversation"),
+        model=app_commands.locale_str("Choose an AI model (default: openai)", i18n_key="cmd.ai.ai.param.model")
     )
     @app_commands.autocomplete(model=model_select_autocomplete)
     @app_commands.allowed_installs(guilds=True, users=True)
@@ -9385,7 +9385,7 @@ class AICommands(commands.Cog):
                 send_notice=lambda message: interaction.followup.send(content=message, allowed_mentions=SAFE_MENTIONS),
             )
 
-    @app_commands.command(name="ai-clear", description="清除你的 AI 對話歷史")
+    @app_commands.command(name=app_commands.locale_str("ai-clear", i18n_key="cmd.ai.ai_clear.name"), description=app_commands.locale_str("Clear your AI conversation history", i18n_key="cmd.ai.ai_clear.desc"))
     @app_commands.allowed_installs(guilds=True, users=True)
     @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
     async def ai_clear(self, interaction: discord.Interaction):
@@ -9397,7 +9397,7 @@ class AICommands(commands.Cog):
         confirm_view = ClearHistoryView(user.id, guild_id)
         await interaction.response.send_message(view=confirm_view, ephemeral=True, allowed_mentions=SAFE_MENTIONS)
     
-    @app_commands.command(name="ai-history", description="查看你的 AI 對話歷史")
+    @app_commands.command(name=app_commands.locale_str("ai-history", i18n_key="cmd.ai.ai_history.name"), description=app_commands.locale_str("View your AI conversation history", i18n_key="cmd.ai.ai_history.desc"))
     @app_commands.allowed_installs(guilds=True, users=True)
     @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
     async def ai_history(self, interaction: discord.Interaction):
@@ -9419,11 +9419,11 @@ class AICommands(commands.Cog):
         
         await interaction.response.send_message(view=view, ephemeral=True, allowed_mentions=SAFE_MENTIONS)
 
-    @app_commands.command(name="ai-set-response-view", description="設定你使用 AI 指令的回應顯示方式")
+    @app_commands.command(name=app_commands.locale_str("ai-set-response-view", i18n_key="cmd.ai.ai_set_response_view.name"), description=app_commands.locale_str("Set how AI command responses are displayed for you", i18n_key="cmd.ai.ai_set_response_view.desc"))
     @app_commands.describe(
-        container="是否使用 Container 容器顯示回應",
-        cost="是否顯示計費資訊",
-        model="是否顯示模型名稱與時間資訊"
+        container=app_commands.locale_str("Display responses in a container", i18n_key="cmd.ai.ai_set_response_view.param.container"),
+        cost=app_commands.locale_str("Show billing information", i18n_key="cmd.ai.ai_set_response_view.param.cost"),
+        model=app_commands.locale_str("Show model name and timing information", i18n_key="cmd.ai.ai_set_response_view.param.model")
     )
     @app_commands.allowed_installs(guilds=True, users=True)
     @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
@@ -9445,9 +9445,9 @@ class AICommands(commands.Cog):
             allowed_mentions=SAFE_MENTIONS,
         )
 
-    @app_commands.command(name="ai-set-default-model", description="設定你使用 AI 指令的預設模型")
+    @app_commands.command(name=app_commands.locale_str("ai-set-default-model", i18n_key="cmd.ai.ai_set_default_model.name"), description=app_commands.locale_str("Set your default model for AI commands", i18n_key="cmd.ai.ai_set_default_model.desc"))
     @app_commands.describe(
-        model="選擇預設 AI 模型"
+        model=app_commands.locale_str("Choose a default AI model", i18n_key="cmd.ai.ai_set_default_model.param.model")
     )
     @app_commands.autocomplete(model=model_select_autocomplete)
     @app_commands.allowed_installs(guilds=True, users=True)
@@ -9464,8 +9464,8 @@ class AICommands(commands.Cog):
         await self._set_default_model(user.id, model)
         await interaction.response.send_message(f"✅ 已設定預設模型為：{model}", ephemeral=True, allowed_mentions=SAFE_MENTIONS)
 
-    @ai_admin.command(name="mention-mode", description="設定提及 Bot 或回覆 AI 訊息時是否自動回應")
-    @app_commands.describe(enabled="開啟或關閉提及與回覆觸發；預設關閉")
+    @ai_admin.command(name=app_commands.locale_str("mention-mode", i18n_key="cmd.ai.ai_admin.mention_mode.name"), description=app_commands.locale_str("Set whether the AI auto-responds to mentions and replies", i18n_key="cmd.ai.ai_admin.mention_mode.desc"))
+    @app_commands.describe(enabled=app_commands.locale_str("Enable or disable mention/reply triggers; off by default", i18n_key="cmd.ai.ai_admin.mention_mode.param.enabled"))
     @app_commands.allowed_installs(guilds=True, users=False)
     @app_commands.allowed_contexts(guilds=True, dms=False, private_channels=False)
     async def ai_mention_mode(self, interaction: discord.Interaction, enabled: bool):
@@ -9493,9 +9493,9 @@ class AICommands(commands.Cog):
             allowed_mentions=SAFE_MENTIONS,
         )
 
-    @ai_admin_prompt.command(name="set", description="設定這個伺服器的 AI 自訂 prompt")
+    @ai_admin_prompt.command(name=app_commands.locale_str("set", i18n_key="cmd.ai.ai_admin.prompt.set.name"), description=app_commands.locale_str("Set this server's custom AI prompt", i18n_key="cmd.ai.ai_admin.prompt.set.desc"))
     @app_commands.describe(
-        prompt="提供給 AI 的額外伺服器背景、風格描述或回覆偏好"
+        prompt=app_commands.locale_str("Extra server context, style guidance, or response preferences for the AI", i18n_key="cmd.ai.ai_admin.prompt.set.param.prompt")
     )
     @app_commands.allowed_installs(guilds=True, users=False)
     @app_commands.allowed_contexts(guilds=True, dms=False, private_channels=False)
@@ -9522,7 +9522,7 @@ class AICommands(commands.Cog):
             allowed_mentions=SAFE_MENTIONS,
         )
 
-    @ai_admin_prompt.command(name="view", description="查看這個伺服器目前的 AI 自訂 prompt")
+    @ai_admin_prompt.command(name=app_commands.locale_str("view", i18n_key="cmd.ai.ai_admin.prompt.view.name"), description=app_commands.locale_str("View this server's current custom AI prompt", i18n_key="cmd.ai.ai_admin.prompt.view.desc"))
     @app_commands.allowed_installs(guilds=True, users=False)
     @app_commands.allowed_contexts(guilds=True, dms=False, private_channels=False)
     async def ai_server_prompt_view(self, interaction: discord.Interaction):
@@ -9545,7 +9545,7 @@ class AICommands(commands.Cog):
             response_kwargs["file"] = prompt_file
         await interaction.response.send_message(message, **response_kwargs)
 
-    @ai_admin_prompt.command(name="clear", description="清除這個伺服器的 AI 自訂 prompt")
+    @ai_admin_prompt.command(name=app_commands.locale_str("clear", i18n_key="cmd.ai.ai_admin.prompt.clear.name"), description=app_commands.locale_str("Clear this server's custom AI prompt", i18n_key="cmd.ai.ai_admin.prompt.clear.desc"))
     @app_commands.allowed_installs(guilds=True, users=False)
     @app_commands.allowed_contexts(guilds=True, dms=False, private_channels=False)
     async def ai_server_prompt_clear(self, interaction: discord.Interaction):
@@ -9561,7 +9561,7 @@ class AICommands(commands.Cog):
         set_server_config(guild.id, self.AI_GUILD_CUSTOM_PROMPT_KEY, "")
         await interaction.response.send_message("✅ 已清除這個伺服器的 AI 自訂 prompt。", ephemeral=True, allowed_mentions=SAFE_MENTIONS)
 
-    @ai_admin_billing.command(name="set", description="將這個伺服器的 AI 付款人設成自己")
+    @ai_admin_billing.command(name=app_commands.locale_str("set", i18n_key="cmd.ai.ai_admin.billing.set.name"), description=app_commands.locale_str("Set yourself as this server's AI payer", i18n_key="cmd.ai.ai_admin.billing.set.desc"))
     @app_commands.allowed_installs(guilds=True, users=False)
     @app_commands.allowed_contexts(guilds=True, dms=False, private_channels=False)
     async def ai_server_billing_set(self, interaction: discord.Interaction):
@@ -9581,7 +9581,7 @@ class AICommands(commands.Cog):
             allowed_mentions=SAFE_MENTIONS,
         )
 
-    @ai_admin_billing.command(name="view", description="查看這個伺服器 AI 目前由誰付款")
+    @ai_admin_billing.command(name=app_commands.locale_str("view", i18n_key="cmd.ai.ai_admin.billing.view.name"), description=app_commands.locale_str("See who currently pays for AI on this server", i18n_key="cmd.ai.ai_admin.billing.view.desc"))
     @app_commands.allowed_installs(guilds=True, users=False)
     @app_commands.allowed_contexts(guilds=True, dms=False, private_channels=False)
     async def ai_server_billing_view(self, interaction: discord.Interaction):
@@ -9593,7 +9593,7 @@ class AICommands(commands.Cog):
         _, description = await self._describe_guild_ai_billing(guild)
         await interaction.response.send_message(description, ephemeral=True, allowed_mentions=SAFE_MENTIONS)
 
-    @ai_admin_billing.command(name="clear", description="清除這個伺服器的 AI 指定付款人")
+    @ai_admin_billing.command(name=app_commands.locale_str("clear", i18n_key="cmd.ai.ai_admin.billing.clear.name"), description=app_commands.locale_str("Clear this server's designated AI payer", i18n_key="cmd.ai.ai_admin.billing.clear.desc"))
     @app_commands.allowed_installs(guilds=True, users=False)
     @app_commands.allowed_contexts(guilds=True, dms=False, private_channels=False)
     async def ai_server_billing_clear(self, interaction: discord.Interaction):

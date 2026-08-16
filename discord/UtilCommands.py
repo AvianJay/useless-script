@@ -424,8 +424,8 @@ async def info(ctx: commands.Context, full: bool = False):
     await ctx.send(content=INFO_COMMAND_WARNING, embed=embed)
 
 
-@bot.tree.command(name=app_commands.locale_str("randomnumber"), description="生成一個隨機數字")
-@app_commands.describe(min="最小值", max="最大值")
+@bot.tree.command(name=app_commands.locale_str("randomnumber", i18n_key="cmd.utilcommands.randomnumber.name"), description=app_commands.locale_str("Generate a random number", i18n_key="cmd.utilcommands.randomnumber.desc"))
+@app_commands.describe(min=app_commands.locale_str("Minimum value", i18n_key="cmd.utilcommands.randomnumber.param.min"), max=app_commands.locale_str("Maximum value", i18n_key="cmd.utilcommands.randomnumber.param.max"))
 @app_commands.allowed_installs(guilds=True, users=True)
 @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
 async def randomnumber_command(interaction: discord.Interaction, min: int = 1, max: int = 100):
@@ -446,13 +446,13 @@ async def randomnumber(ctx: commands.Context, min: int = 1, max: int = 100):
     await ctx.send(f"隨機數字：{number}\n-# 範圍：{min} - {max}")
 
 
-@bot.tree.command(name=app_commands.locale_str("randomuser"), description="從在目前頻道的發言者中隨機選擇一人")
+@bot.tree.command(name=app_commands.locale_str("randomuser", i18n_key="cmd.utilcommands.randomuser.name"), description=app_commands.locale_str("Pick a random recent speaker in this channel", i18n_key="cmd.utilcommands.randomuser.desc"))
 @app_commands.allowed_installs(guilds=True, users=False)
 @app_commands.allowed_contexts(guilds=True, dms=False, private_channels=False)
-@app_commands.describe(mention="是否提及該用戶")
+@app_commands.describe(mention=app_commands.locale_str("Whether to mention the chosen user", i18n_key="cmd.utilcommands.randomuser.param.mention"))
 @app_commands.choices(mention=[
-    app_commands.Choice(name="是", value="True"),
-    app_commands.Choice(name="否", value="False"),
+    app_commands.Choice(name=app_commands.locale_str("Yes", i18n_key="cmd.utilcommands.randomuser.choice.true"), value="True"),
+    app_commands.Choice(name=app_commands.locale_str("No", i18n_key="cmd.utilcommands.randomuser.choice.false"), value="False"),
 ])
 async def randomuser_command(interaction: discord.Interaction, mention: str = "False"):
     mention = mention == "True"
@@ -593,8 +593,8 @@ async def get_cmd_mention(interaction: discord.Interaction, command: str, subcom
     await interaction.response.send_message(f"{mention}", allowed_mentions=discord.AllowedMentions.none())
 
 
-@bot.tree.command(name=app_commands.locale_str("textlength"), description="計算輸入文字的長度")
-@app_commands.describe(text="要計算長度的文字")
+@bot.tree.command(name=app_commands.locale_str("textlength", i18n_key="cmd.utilcommands.textlength.name"), description=app_commands.locale_str("Count the length of the given text", i18n_key="cmd.utilcommands.textlength.desc"))
+@app_commands.describe(text=app_commands.locale_str("The text to measure", i18n_key="cmd.utilcommands.textlength.param.text"))
 @app_commands.allowed_installs(guilds=True, users=True)
 @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
 async def textlength_command(interaction: discord.Interaction, text: str):
@@ -616,8 +616,8 @@ async def length(ctx: commands.Context, *, text: str = ""):
     await ctx.send(f"{length} 個字。")
 
 
-@bot.tree.command(name=app_commands.locale_str("httpcat"), description="貓咪好可愛")
-@app_commands.describe(status_code="HTTP 狀態碼（例如 404）")
+@bot.tree.command(name=app_commands.locale_str("httpcat", i18n_key="cmd.utilcommands.httpcat.name"), description=app_commands.locale_str("Cats are adorable", i18n_key="cmd.utilcommands.httpcat.desc"))
+@app_commands.describe(status_code=app_commands.locale_str("HTTP status code (e.g. 404)", i18n_key="cmd.utilcommands.httpcat.param.status_code"))
 @app_commands.allowed_installs(guilds=True, users=True)
 @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
 async def httpcat_command(interaction: discord.Interaction, status_code: int):
@@ -852,9 +852,9 @@ class NitroClaimView(discord.ui.View):
         self.stop()
 
 
-@bot.tree.command(name=app_commands.locale_str("nitro"), description="我不想要被機器人幹走尼戳")
+@bot.tree.command(name=app_commands.locale_str("nitro", i18n_key="cmd.utilcommands.nitro.name"), description=app_commands.locale_str("I don't want bots stealing my Nitro", i18n_key="cmd.utilcommands.nitro.desc"))
 @app_commands.describe(
-    need_message="是否只有近期發過訊息的用戶才能領取（最近 50 條訊息的作者）"
+    need_message=app_commands.locale_str("Only recent speakers can claim (authors of the last 50 messages)", i18n_key="cmd.utilcommands.nitro.param.need_message")
 )
 @app_commands.allowed_installs(guilds=True, users=True)
 @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
@@ -1049,7 +1049,7 @@ class EmojiInfoView(StealView):
 
 @app_commands.allowed_installs(guilds=True, users=True)
 @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
-@bot.tree.context_menu(name="表情符號資訊")
+@bot.tree.context_menu(name=app_commands.locale_str("Emoji Info", i18n_key="cmd.utilcommands.ctx.emoji_info_context.name"))
 async def emoji_info_context(interaction: discord.Interaction, message: discord.Message):
     emojis = _collect_custom_emojis_from_message(message)
     if not emojis:
@@ -1066,7 +1066,7 @@ async def emoji_info_context(interaction: discord.Interaction, message: discord.
 # context menu for sticker info
 @app_commands.allowed_installs(guilds=True, users=True)
 @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
-@bot.tree.context_menu(name="貼圖資訊")
+@bot.tree.context_menu(name=app_commands.locale_str("Sticker Info", i18n_key="cmd.utilcommands.ctx.sticker_info_context.name"))
 async def sticker_info_context(interaction: discord.Interaction, message: discord.Message):
     if message.stickers:
         sticker = message.stickers[0]
@@ -1330,62 +1330,62 @@ async def help_command_autocomplete(interaction: discord.Interaction, current: s
 
 @app_commands.allowed_installs(guilds=True, users=True)
 @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
-class InfoCommands(commands.GroupCog, name=app_commands.locale_str("info")):
+class InfoCommands(commands.GroupCog, name=app_commands.locale_str("info", i18n_key="cmd.utilcommands.info.root.name")):
     def __init__(self, bot_: commands.Bot) -> None:
         self.bot = bot_
         super().__init__()
 
-    @app_commands.command(name=app_commands.locale_str("bot"), description="顯示機器人資訊")
-    @app_commands.describe(full="是否顯示完整模組列表與載入失敗模組")
+    @app_commands.command(name=app_commands.locale_str("bot", i18n_key="cmd.utilcommands.info.bot.name"), description=app_commands.locale_str("Show bot information", i18n_key="cmd.utilcommands.info.bot.desc"))
+    @app_commands.describe(full=app_commands.locale_str("Show the full module list including failed modules", i18n_key="cmd.utilcommands.info.bot.param.full"))
     async def show_bot_info(self, interaction: discord.Interaction, full: bool = False):
         await info_command(interaction, full)
 
-    @app_commands.command(name=app_commands.locale_str("user"), description="顯示用戶資訊")
-    @app_commands.describe(user="要查詢的用戶")
+    @app_commands.command(name=app_commands.locale_str("user", i18n_key="cmd.utilcommands.info.user.name"), description=app_commands.locale_str("Show user information", i18n_key="cmd.utilcommands.info.user.desc"))
+    @app_commands.describe(user=app_commands.locale_str("The user to look up", i18n_key="cmd.utilcommands.info.user.param.user"))
     async def user_info(self, interaction: discord.Interaction, user: Union[discord.User, discord.Member]):
         await userinfo_command(interaction, user)
 
-    @app_commands.command(name=app_commands.locale_str("server"), description="顯示目前所在伺服器資訊")
+    @app_commands.command(name=app_commands.locale_str("server", i18n_key="cmd.utilcommands.info.server.name"), description=app_commands.locale_str("Show information about this server", i18n_key="cmd.utilcommands.info.server.desc"))
     @app_commands.allowed_installs(guilds=True, users=False)
     @app_commands.allowed_contexts(guilds=True, dms=False, private_channels=False)
     async def server_info(self, interaction: discord.Interaction):
         await serverinfo_command(interaction)
 
-    @app_commands.command(name=app_commands.locale_str("avatar"), description="取得用戶頭像")
-    @app_commands.describe(user="要查詢的用戶")
+    @app_commands.command(name=app_commands.locale_str("avatar", i18n_key="cmd.utilcommands.info.avatar.name"), description=app_commands.locale_str("Get a user's avatar", i18n_key="cmd.utilcommands.info.avatar.desc"))
+    @app_commands.describe(user=app_commands.locale_str("The user to look up", i18n_key="cmd.utilcommands.info.avatar.param.user"))
     async def avatar_info(self, interaction: discord.Interaction, user: Union[discord.User, discord.Member] = None):
         await avatar_command(interaction, user)
 
-    @app_commands.command(name=app_commands.locale_str("banner"), description="取得用戶橫幅")
-    @app_commands.describe(user="要查詢的用戶")
+    @app_commands.command(name=app_commands.locale_str("banner", i18n_key="cmd.utilcommands.info.banner.name"), description=app_commands.locale_str("Get a user's banner", i18n_key="cmd.utilcommands.info.banner.desc"))
+    @app_commands.describe(user=app_commands.locale_str("The user to look up", i18n_key="cmd.utilcommands.info.banner.param.user"))
     async def banner_info(self, interaction: discord.Interaction, user: Union[discord.User, discord.Member] = None):
         await banner_command(interaction, user)
 
-    @app_commands.command(name=app_commands.locale_str("mention"), description="取得指令的提及格式")
-    @app_commands.describe(command="指令名稱", subcommand="子指令名稱（可選）")
+    @app_commands.command(name=app_commands.locale_str("mention", i18n_key="cmd.utilcommands.info.mention.name"), description=app_commands.locale_str("Get a command's mention format", i18n_key="cmd.utilcommands.info.mention.desc"))
+    @app_commands.describe(command=app_commands.locale_str("Command name", i18n_key="cmd.utilcommands.info.mention.param.command"), subcommand=app_commands.locale_str("Subcommand name (optional)", i18n_key="cmd.utilcommands.info.mention.param.subcommand"))
     @app_commands.autocomplete(command=command_autocomplete, subcommand=subcommand_autocomplete)
     async def mention_info(self, interaction: discord.Interaction, command: str, subcommand: str = None):
         await get_cmd_mention(interaction, command, subcommand)
 
-    @app_commands.command(name=app_commands.locale_str("commits"), description="顯示機器人的 git 提交記錄")
+    @app_commands.command(name=app_commands.locale_str("commits", i18n_key="cmd.utilcommands.info.commits.name"), description=app_commands.locale_str("Show the bot's git commit history", i18n_key="cmd.utilcommands.info.commits.desc"))
     async def commits_info(self, interaction: discord.Interaction):
         await changelogs_command(interaction)
 
-    @app_commands.command(name=app_commands.locale_str("changelog"), description="顯示機器人更新日誌")
+    @app_commands.command(name=app_commands.locale_str("changelog", i18n_key="cmd.utilcommands.info.changelog.name"), description=app_commands.locale_str("Show the bot changelog", i18n_key="cmd.utilcommands.info.changelog.desc"))
     async def changelog_info(self, interaction: discord.Interaction):
         await changelog_command(interaction)
 
-    @app_commands.command(name=app_commands.locale_str("ping"), description="檢查機器人延遲")
+    @app_commands.command(name=app_commands.locale_str("ping", i18n_key="cmd.utilcommands.info.ping.name"), description=app_commands.locale_str("Check the bot's latency", i18n_key="cmd.utilcommands.info.ping.desc"))
     async def ping_info(self, interaction: discord.Interaction):
         await ping_command(interaction)
 
-    @app_commands.command(name=app_commands.locale_str("help"), description="顯示指令幫助與說明")
-    @app_commands.describe(command="要查詢的指令名稱")
+    @app_commands.command(name=app_commands.locale_str("help", i18n_key="cmd.utilcommands.info.help.name"), description=app_commands.locale_str("Show command help and usage", i18n_key="cmd.utilcommands.info.help.desc"))
+    @app_commands.describe(command=app_commands.locale_str("The command to look up", i18n_key="cmd.utilcommands.info.help.param.command"))
     @app_commands.autocomplete(command=help_command_autocomplete)
     async def help_info(self, interaction: discord.Interaction, command: str = None):
         await help_slash_command(interaction, command)
 
-    @app_commands.command(name=app_commands.locale_str("tutorial"), description="機器人使用教學")
+    @app_commands.command(name=app_commands.locale_str("tutorial", i18n_key="cmd.utilcommands.info.tutorial.name"), description=app_commands.locale_str("Bot usage tutorial", i18n_key="cmd.utilcommands.info.tutorial.desc"))
     async def tutorial_info(self, interaction: discord.Interaction):
         await tutorial_command(interaction)
 
