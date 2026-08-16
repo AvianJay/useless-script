@@ -671,11 +671,38 @@ class NormalReplyPreviewTests(unittest.IsolatedAsyncioTestCase):
         )
         with (
             patch.object(self.cog, "_can_send", return_value=True),
-            patch.object(FixLink.asyncio, "sleep", new=AsyncMock()) as sleep,
+            patch.object(FixLink, "EMBED_PREVIEW_TIMEOUT_SECONDS", 0),
         ):
             await self.cog.send_normal_reply(message, [self.match])
 
-        sleep.assert_awaited_once_with(FixLink.EMBED_PREVIEW_DELAY_SECONDS)
+        sent_channel.fetch_message.assert_awaited_once_with(11)
+        self.assertEqual(self.cog._embed_update_waiters, {})
+        sent.delete.assert_not_awaited()
+        message.edit.assert_awaited_once_with(suppress=True)
+
+    async def test_embed_update_skips_the_timeout_and_the_fetch(self):
+        sent_channel = SimpleNamespace(fetch_message=AsyncMock())
+        sent = SimpleNamespace(id=11, channel=sent_channel, delete=AsyncMock())
+        message = SimpleNamespace(
+            reply=AsyncMock(return_value=sent),
+            channel=SimpleNamespace(send=AsyncMock()),
+            edit=AsyncMock(),
+            guild=SimpleNamespace(id=2),
+            id=1,
+        )
+
+        def watch_and_update(message_id):
+            event = FixLink.FixLink._watch_embed_update(self.cog, message_id)
+            event.set()
+            return event
+
+        with (
+            patch.object(self.cog, "_can_send", return_value=True),
+            patch.object(self.cog, "_watch_embed_update", side_effect=watch_and_update),
+        ):
+            await self.cog.send_normal_reply(message, [self.match])
+
+        sent_channel.fetch_message.assert_not_awaited()
         sent.delete.assert_not_awaited()
         message.edit.assert_awaited_once_with(suppress=True)
 
@@ -691,12 +718,31 @@ class NormalReplyPreviewTests(unittest.IsolatedAsyncioTestCase):
         )
         with (
             patch.object(self.cog, "_can_send", return_value=True),
-            patch.object(FixLink.asyncio, "sleep", new=AsyncMock()),
+            patch.object(FixLink, "EMBED_PREVIEW_TIMEOUT_SECONDS", 0),
         ):
             await self.cog.send_normal_reply(message, [self.match])
 
         sent.delete.assert_awaited_once_with()
         message.edit.assert_not_awaited()
+
+    async def test_raw_message_edit_only_wakes_watched_embed_updates(self):
+        waiter = self.cog._watch_embed_update(11)
+
+        await self.cog.on_raw_message_edit(SimpleNamespace(message_id=11, data={"content": "hi"}))
+        self.assertFalse(waiter.is_set())
+
+        await self.cog.on_raw_message_edit(
+            SimpleNamespace(message_id=99, data={"embeds": [{"type": "link"}]})
+        )
+        self.assertFalse(waiter.is_set())
+
+        await self.cog.on_raw_message_edit(
+            SimpleNamespace(message_id=11, data={"embeds": [{"type": "link"}]})
+        )
+        self.assertTrue(waiter.is_set())
+
+        await self.cog._wait_for_embed_updates({11: waiter})
+        self.assertEqual(self.cog._embed_update_waiters, {})
 
     def test_normal_reply_formats_only_the_primary_fixer(self):
         match = FixLink.LinkMatch(
@@ -761,7 +807,7 @@ class NormalReplyPreviewTests(unittest.IsolatedAsyncioTestCase):
         )
         with (
             patch.object(self.cog, "_can_send", return_value=True),
-            patch.object(FixLink.asyncio, "sleep", new=AsyncMock()),
+            patch.object(FixLink, "EMBED_PREVIEW_TIMEOUT_SECONDS", 0),
         ):
             await self.cog.send_normal_reply(message, [match])
 
@@ -988,7 +1034,7 @@ class WebhookTransactionTests(unittest.IsolatedAsyncioTestCase):
         with (
             patch.object(self.cog, "_can_webhook_replace", return_value=True),
             patch.object(self.cog, "_send_webhook_clone", side_effect=send_clone),
-            patch.object(FixLink.asyncio, "sleep", new=AsyncMock()),
+            patch.object(FixLink, "EMBED_PREVIEW_TIMEOUT_SECONDS", 0),
             patch.object(FixLink, "get_trash_button_emoji", new=AsyncMock(return_value="🗑️")),
         ):
             replaced = await self.cog.replace_with_webhook(message, [self.match])
@@ -1017,7 +1063,7 @@ class WebhookTransactionTests(unittest.IsolatedAsyncioTestCase):
         with (
             patch.object(self.cog, "_can_webhook_replace", return_value=True),
             patch.object(self.cog, "_send_webhook_clone", return_value=(webhook, clone)),
-            patch.object(FixLink.asyncio, "sleep", new=AsyncMock()),
+            patch.object(FixLink, "EMBED_PREVIEW_TIMEOUT_SECONDS", 0),
             patch.object(FixLink, "get_trash_button_emoji", new=AsyncMock(return_value="🗑️")),
         ):
             replaced = await self.cog.replace_with_webhook(message, [self.match])
@@ -1056,12 +1102,44 @@ class WebhookTransactionTests(unittest.IsolatedAsyncioTestCase):
         with (
             patch.object(self.cog, "_can_webhook_replace", return_value=True),
             patch.object(self.cog, "_send_webhook_clone", side_effect=send_clone),
-            patch.object(FixLink.asyncio, "sleep", new=AsyncMock()),
+            patch.object(FixLink, "EMBED_PREVIEW_TIMEOUT_SECONDS", 0),
             patch.object(FixLink, "get_trash_button_emoji", new=AsyncMock(return_value="🗑️")),
         ):
             replaced = await self.cog.replace_with_webhook(message, [self.match])
         self.assertFalse(replaced)
         self.assertEqual(events, ["send", "rollback"])
+
+    async def test_webhook_embed_update_skips_the_timeout_and_the_fetch(self):
+        webhook = SimpleNamespace(fetch_message=AsyncMock())
+        clone = SimpleNamespace(id=10, delete=AsyncMock())
+        clone.edit = AsyncMock(return_value=clone)
+        message = SimpleNamespace(
+            content=DIRECT_URL,
+            delete=AsyncMock(),
+            id=1,
+            guild=SimpleNamespace(id=2),
+            channel=SimpleNamespace(),
+            author=SimpleNamespace(id=123),
+        )
+
+        def watch_and_update(message_id):
+            event = FixLink.FixLink._watch_embed_update(self.cog, message_id)
+            event.set()
+            return event
+
+        with (
+            patch.object(self.cog, "_can_webhook_replace", return_value=True),
+            patch.object(self.cog, "_send_webhook_clone", return_value=(webhook, clone)),
+            patch.object(self.cog, "_watch_embed_update", side_effect=watch_and_update),
+            patch.object(FixLink, "get_trash_button_emoji", new=AsyncMock(return_value="🗑️")),
+        ):
+            replaced = await self.cog.replace_with_webhook(message, [self.match])
+
+        self.assertTrue(replaced)
+        webhook.fetch_message.assert_not_awaited()
+        self.assertNotIn("content", clone.edit.await_args.kwargs)
+        clone.delete.assert_not_awaited()
+        message.delete.assert_awaited_once_with()
 
 
 if __name__ == "__main__":

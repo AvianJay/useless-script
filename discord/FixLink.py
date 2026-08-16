@@ -27,7 +27,7 @@ TWITTER_PROFILE_CACHE_SECONDS = 600
 MAX_CUSTOM_PLATFORMS = 10
 MAX_GENERATED_URL_LENGTH = 1800
 MAX_REPLY_CHUNK_LENGTH = 1900
-EMBED_PREVIEW_DELAY_SECONDS = 7
+EMBED_PREVIEW_TIMEOUT_SECONDS = 7
 THREADS_HOSTS = {"threads.com", "threads.net"}
 TRASH_EMOJI_FALLBACK = "🗑️"
 TRAILING_URL_PUNCTUATION = ".,!?;:)]}\uff0c\u3002\uff01\uff1f\uff1b\uff1a\uff09\u3011\u300b\u300d\u300f"
@@ -1518,6 +1518,7 @@ class FixLink(commands.GroupCog, name="fixlink", description="\u9023\u7d50\u4fee
         self._twitter_profile_inflight: dict[str, asyncio.Task] = {}
         self._webhook_locks: dict[int, asyncio.Lock] = {}
         self._invalid_config_counts: dict[int, int] = {}
+        self._embed_update_waiters: dict[int, asyncio.Event] = {}
 
     def get_config(self, guild_id: int) -> dict:
         raw = get_server_config(guild_id, FIXLINK_CONFIG_KEY, DEFAULT_FIXLINK_CONFIG)
@@ -1791,6 +1792,26 @@ class FixLink(commands.GroupCog, name="fixlink", description="\u9023\u7d50\u4fee
             return permissions.view_channel and permissions.send_messages_in_threads
         return permissions.view_channel and permissions.send_messages
 
+    def _watch_embed_update(self, message_id: int) -> asyncio.Event:
+        """Start listening for the MESSAGE_UPDATE Discord sends once a link preview lands."""
+        event = asyncio.Event()
+        self._embed_update_waiters[message_id] = event
+        return event
+
+    async def _wait_for_embed_updates(self, waiters: dict[int, asyncio.Event]):
+        """Wait until every watched message reports an embed, or the timeout elapses."""
+        try:
+            await asyncio.wait_for(
+                asyncio.gather(*(event.wait() for event in waiters.values())),
+                timeout=EMBED_PREVIEW_TIMEOUT_SECONDS,
+            )
+        except asyncio.TimeoutError:
+            pass
+        finally:
+            for message_id, event in waiters.items():
+                if self._embed_update_waiters.get(message_id) is event:
+                    del self._embed_update_waiters[message_id]
+
     async def send_normal_reply(self, message: discord.Message, matches: list[LinkMatch]):
         if not self._can_send(message):
             return
@@ -1805,6 +1826,7 @@ class FixLink(commands.GroupCog, name="fixlink", description="\u9023\u7d50\u4fee
             ]
         )
         sent_messages: list[discord.Message] = []
+        waiters: dict[int, asyncio.Event] = {}
         for index, chunk in enumerate(chunks):
             try:
                 if index == 0:
@@ -1815,6 +1837,7 @@ class FixLink(commands.GroupCog, name="fixlink", description="\u9023\u7d50\u4fee
                     )
                 else:
                     sent = await message.channel.send(chunk, allowed_mentions=discord.AllowedMentions.none())
+                waiters[sent.id] = self._watch_embed_update(sent.id)
                 sent_messages.append(sent)
             except discord.HTTPException as error:
                 log(
@@ -1827,9 +1850,12 @@ class FixLink(commands.GroupCog, name="fixlink", description="\u9023\u7d50\u4fee
         if not sent_messages:
             return
 
-        await asyncio.sleep(EMBED_PREVIEW_DELAY_SECONDS)
+        await self._wait_for_embed_updates(waiters)
         has_preview = False
         for sent in sent_messages:
+            if waiters[sent.id].is_set():
+                has_preview = True
+                continue
             try:
                 refreshed = await sent.channel.fetch_message(sent.id)
             except discord.NotFound:
@@ -1996,13 +2022,18 @@ class FixLink(commands.GroupCog, name="fixlink", description="\u9023\u7d50\u4fee
                 guild=message.guild,
             )
             return False
+        waiter = self._watch_embed_update(clone.id)
 
-        await asyncio.sleep(EMBED_PREVIEW_DELAY_SECONDS)
+        await self._wait_for_embed_updates({clone.id: waiter})
         try:
-            fetch_kwargs = {"thread": message.channel} if isinstance(message.channel, discord.Thread) else {}
-            refreshed = await webhook.fetch_message(clone.id, **fetch_kwargs)
+            if waiter.is_set():
+                has_preview = True
+            else:
+                fetch_kwargs = {"thread": message.channel} if isinstance(message.channel, discord.Thread) else {}
+                refreshed = await webhook.fetch_message(clone.id, **fetch_kwargs)
+                has_preview = bool(refreshed.embeds)
             delete_view = FixLinkDeleteView(message.author.id, emoji=await get_trash_button_emoji())
-            if refreshed.embeds:
+            if has_preview:
                 clone = await clone.edit(view=delete_view)
             else:
                 clone = await clone.edit(
@@ -2054,6 +2085,12 @@ class FixLink(commands.GroupCog, name="fixlink", description="\u9023\u7d50\u4fee
         if should_use_webhook and await self.replace_with_webhook(message, matches):
             return
         await self.send_normal_reply(message, matches)
+
+    @commands.Cog.listener()
+    async def on_raw_message_edit(self, payload: discord.RawMessageUpdateEvent):
+        event = self._embed_update_waiters.get(payload.message_id)
+        if event is not None and payload.data.get("embeds"):
+            event.set()
 
 
 bot.add_dynamic_items(FixLinkDeleteButton)
