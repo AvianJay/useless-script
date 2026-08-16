@@ -1,0 +1,17 @@
+{
+    "language": {
+        "root": { "name": "語言", "desc": "語言設定" },
+        "show": { "name": "顯示", "desc": "顯示目前的語言設定與判定過程" },
+        "set": {
+            "name": "設定",
+            "desc": "設定你個人的語言",
+            "param": { "language": "語言（自動 = 依你的 Discord 客戶端語言）" }
+        },
+        "server": {
+            "name": "伺服器",
+            "desc": "設定此伺服器的預設語言",
+            "param": { "language": "語言（自動 = 依使用者的 Discord 客戶端語言）" }
+        },
+        "choice": { "auto": "自動" }
+    }
+}

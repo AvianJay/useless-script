@@ -7,6 +7,7 @@ import sys
 from discord.ext import commands
 from discord import app_commands
 from database import db
+import i18n
 import traceback
 import logging
 from datetime import datetime
@@ -247,7 +248,7 @@ intents = discord.Intents.default()
 intents.message_content = True
 intents.members = True
 intents.guilds = True
-bot = commands.Bot(command_prefix=config("prefix", "!"), intents=intents, chunk_guilds_at_startup=False, enable_debug_events=True)
+bot = commands.Bot(command_prefix=config("prefix", "!"), intents=intents, chunk_guilds_at_startup=False, enable_debug_events=True, tree_cls=i18n.I18nCommandTree)
 configure_runtime_logging()
 
 
@@ -802,34 +803,12 @@ translations = {
     "quiet_seconds": "安靜秒數",
     "min_interval_seconds": "最短間隔秒數",
 }
-class CommandNameTranslator(app_commands.Translator):
-    async def translate(
-        self,
-        string: app_commands.locale_str,
-        locale: discord.Locale,
-        context: app_commands.TranslationContext
-    ):
-        if locale == discord.Locale.taiwan_chinese:
-            # print("DEBUG: Translate", type(context.data))
-            # print("[DEBUG] Translating command/group:", context.data.name)
-            # print("[DEBUG] Translated to:", translations.get(context.data.name, None))
-            allowed_locations = [
-                app_commands.TranslationContextLocation.command_name,
-                app_commands.TranslationContextLocation.group_name,
-                app_commands.TranslationContextLocation.choice_name,
-                app_commands.TranslationContextLocation.parameter_name,
-            ]
-            if context.location not in allowed_locations:
-                return None
-            try:
-                return translations.get(context.data.name, None)
-            except Exception as e:
-                pass
-        return None
-
-
+# 舊 CommandNameTranslator 已由 i18n.CatalogTranslator 取代：
+# - 帶 i18n_key 的 locale_str 走語言檔（全部 8 個 TranslationContextLocation）
+# - 未帶 i18n_key 的走 legacy bridge（上面的 translations dict），
+#   batch 1（指令 metadata 全面遷移）完成後 translations 與 bridge 一併移除
 async def setup_hook():
-    await bot.tree.set_translator(CommandNameTranslator())
+    await bot.tree.set_translator(i18n.CatalogTranslator(legacy_map=translations))
     log("指令翻譯器已設定。", module_name="Main")
 
 

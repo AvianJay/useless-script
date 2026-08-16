@@ -1,0 +1,17 @@
+{
+    "language": {
+        "root": { "name": "language", "desc": "Language settings" },
+        "show": { "name": "show", "desc": "Show your current language and how it was determined" },
+        "set": {
+            "name": "set",
+            "desc": "Set your personal language",
+            "param": { "language": "Language (auto = follow your Discord client language)" }
+        },
+        "server": {
+            "name": "server",
+            "desc": "Set the default language for this server",
+            "param": { "language": "Language (auto = follow each user's Discord client language)" }
+        },
+        "choice": { "auto": "Auto" }
+    }
+}

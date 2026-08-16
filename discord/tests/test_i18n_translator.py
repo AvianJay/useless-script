@@ -1,0 +1,132 @@
+import asyncio
+import re
+import sys
+import unittest
+from pathlib import Path
+from types import SimpleNamespace
+
+import discord
+from discord import app_commands
+from discord.app_commands.translator import (
+    TranslationContext,
+    TranslationContextLocation,
+)
+
+DISCORD_DIR = Path(__file__).resolve().parents[1]
+if str(DISCORD_DIR) not in sys.path:
+    sys.path.insert(0, str(DISCORD_DIR))
+
+import i18n
+
+
+def _ctx(location, data=None):
+    return TranslationContext(location=location, data=data)
+
+
+def _run(coro):
+    return asyncio.run(coro)
+
+
+class CatalogTranslatorTests(unittest.TestCase):
+    def setUp(self):
+        i18n.ensure_loaded()
+        self._saved = i18n._catalogs
+        i18n._catalogs = {
+            "zh-TW": {
+                "cmd.x.ban.name": "ban",
+                "cmd.x.ban.desc": "封禁一位用戶",
+                "cmd.x.ban.param.user": "目標用戶",
+                "cmd.x.bad.name": "大寫BAD",
+            },
+            "en": {
+                "cmd.x.ban.name": "ban",
+                "cmd.x.ban.desc": "Ban a user",
+            },
+        }
+        i18n._resolved.clear()
+        i18n._loaded = True
+
+        def restore():
+            i18n._catalogs = self._saved
+            i18n._resolved.clear()
+        self.addCleanup(restore)
+        self.translator = i18n.CatalogTranslator(legacy_map={"ban": "封禁"})
+
+    def test_description_translated_to_zh(self):
+        s = app_commands.locale_str("Ban a user", i18n_key="cmd.x.ban.desc")
+        result = _run(self.translator.translate(
+            s, discord.Locale.taiwan_chinese,
+            _ctx(TranslationContextLocation.command_description)))
+        self.assertEqual(result, "封禁一位用戶")
+
+    def test_identical_to_base_returns_none(self):
+        s = app_commands.locale_str("Ban a user", i18n_key="cmd.x.ban.desc")
+        result = _run(self.translator.translate(
+            s, discord.Locale.american_english,
+            _ctx(TranslationContextLocation.command_description)))
+        self.assertIsNone(result)
+
+    def test_unknown_key_returns_none(self):
+        s = app_commands.locale_str("Foo", i18n_key="cmd.x.nope.desc")
+        result = _run(self.translator.translate(
+            s, discord.Locale.taiwan_chinese,
+            _ctx(TranslationContextLocation.command_description)))
+        self.assertIsNone(result)
+
+    def test_unmapped_locale_returns_none(self):
+        s = app_commands.locale_str("Ban a user", i18n_key="cmd.x.ban.desc")
+        result = _run(self.translator.translate(
+            s, discord.Locale.japanese,
+            _ctx(TranslationContextLocation.command_description)))
+        self.assertIsNone(result)
+
+    def test_invalid_name_localization_rejected(self):
+        s = app_commands.locale_str("bad", i18n_key="cmd.x.bad.name")
+        result = _run(self.translator.translate(
+            s, discord.Locale.taiwan_chinese,
+            _ctx(TranslationContextLocation.command_name)))
+        self.assertIsNone(result)  # 含大寫英文，不符合 Discord 名稱規則
+
+    def test_all_eight_locations_no_crash(self):
+        s = app_commands.locale_str("Ban a user", i18n_key="cmd.x.ban.desc")
+        for location in TranslationContextLocation:
+            _run(self.translator.translate(
+                s, discord.Locale.taiwan_chinese, _ctx(location)))
+
+    def test_legacy_bridge_taiwan_only(self):
+        s = app_commands.locale_str("ban")  # 無 i18n_key
+        data = SimpleNamespace(name="ban")
+        result = _run(self.translator.translate(
+            s, discord.Locale.taiwan_chinese,
+            _ctx(TranslationContextLocation.command_name, data)))
+        self.assertEqual(result, "封禁")
+        result = _run(self.translator.translate(
+            s, discord.Locale.american_english,
+            _ctx(TranslationContextLocation.command_name, data)))
+        self.assertIsNone(result)
+
+    def test_legacy_bridge_excludes_descriptions(self):
+        s = app_commands.locale_str("ban")
+        data = SimpleNamespace(name="ban")
+        result = _run(self.translator.translate(
+            s, discord.Locale.taiwan_chinese,
+            _ctx(TranslationContextLocation.command_description, data)))
+        self.assertIsNone(result)
+
+
+class CommandNameCatalogTests(unittest.TestCase):
+    """真實語言檔中所有 cmd.*.name 都必須是合法的 Discord 指令名稱。"""
+
+    def test_all_name_keys_valid(self):
+        i18n.reload_catalogs()
+        pattern = re.compile(r"^cmd\..+\.name$")
+        for locale, catalog in i18n._catalogs.items():
+            for key, value in catalog.items():
+                if pattern.fullmatch(key) and isinstance(value, str):
+                    self.assertTrue(
+                        i18n._valid_command_name(value),
+                        f"{locale}:{key} = {value!r} is not a valid command name")
+
+
+if __name__ == "__main__":
+    unittest.main()

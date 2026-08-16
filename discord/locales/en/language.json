@@ -1,0 +1,26 @@
+{
+    "msg": {
+        "user_set": "✅ Your language has been set to {language}.",
+        "user_auto": "✅ Your language is now auto-detected.",
+        "guild_set": "✅ This server's language has been set to {language}.",
+        "guild_auto": "✅ This server's language is now auto-detected.",
+        "invalid": "❌ Unsupported language: {value}",
+        "metadata_note": "-# Note: command names and descriptions in the picker follow your Discord client language. This setting only affects the bot's responses."
+    },
+    "show": {
+        "title": "Language settings",
+        "user": "Your setting",
+        "guild": "Server setting",
+        "discord": "Discord client",
+        "effective": "Effective",
+        "auto": "Auto",
+        "not_applicable": "—"
+    },
+    "panel": {
+        "module_display": "Language",
+        "module_description": "Language used for bot responses",
+        "display": "Server language",
+        "description": "The language the bot replies in on this server (auto = follow each user's Discord client language)",
+        "option_auto": "Auto"
+    }
+}

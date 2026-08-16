@@ -1,0 +1,26 @@
+{
+    "msg": {
+        "user_set": "✅ 你的語言已設定為 {language}。",
+        "user_auto": "✅ 你的語言已設為自動偵測。",
+        "guild_set": "✅ 此伺服器的語言已設定為 {language}。",
+        "guild_auto": "✅ 此伺服器的語言已設為自動偵測。",
+        "invalid": "❌ 不支援的語言：{value}",
+        "metadata_note": "-# 註：指令選單中的名稱與描述由你的 Discord 客戶端語言決定，此設定只影響機器人的回覆內容。"
+    },
+    "show": {
+        "title": "語言設定",
+        "user": "個人設定",
+        "guild": "伺服器設定",
+        "discord": "Discord 客戶端",
+        "effective": "實際使用",
+        "auto": "自動",
+        "not_applicable": "—"
+    },
+    "panel": {
+        "module_display": "語言",
+        "module_description": "機器人回覆使用的語言",
+        "display": "伺服器語言",
+        "description": "機器人在此伺服器的回覆語言（自動 = 依使用者的 Discord 客戶端語言）",
+        "option_auto": "自動"
+    }
+}
