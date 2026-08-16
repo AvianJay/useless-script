@@ -1,0 +1,73 @@
+{
+    "scope": {
+        "global": "Global",
+        "unknown_guild": "Unknown server",
+        "dm": "Direct messages"
+    },
+    "btn": {
+        "pick_up": "Pick up"
+    },
+    "embed": {
+        "inventory_title": "{user}'s items ({scope})",
+        "all_items_title": "All available items",
+        "custom_items_title": "Server custom items"
+    },
+    "msg": {
+        "item_used": "Item used.",
+        "custom_item_desc": "Custom item. Sends its stored text when used.",
+        "no_items": "You have no items in {scope}.",
+        "worth": "\n💰 Worth: {worth}",
+        "dropped": "{user} dropped {item} x{amount}!",
+        "dropped_gone": "{user} dropped {item} x{amount}, but it vanished instantly.",
+        "drop_expired": "{user} dropped {item} x{amount}!\nThe item disappeared!",
+        "drop_all_picked": "{user} dropped {item} x{amount}!\nAll of them have been picked up!",
+        "picked_up": "You picked up {item}.",
+        "gave": { "one": "You gave {user} {count} {item}.", "other": "You gave {user} {count}x {item}." },
+        "received": { "one": "You received {count} {item} from {sender}!\n-# Server: {scope}", "other": "You received {count}x {item} from {sender}!\n-# Server: {scope}" },
+        "removed": { "one": "You removed {count} {item} from {user}.", "other": "You removed {count}x {item} from {user}." },
+        "no_items_exist": "There are no items yet.",
+        "custom_tag": " [custom]",
+        "user_no_items": "{user} has no items in {scope}.",
+        "unknown_item": "Unknown item",
+        "custom_added": "✅ Added custom item **{name}**",
+        "custom_added_hint": "Use `/itemmod give` to send it to users.",
+        "listed_in_shop": "🏪 Listed in the server shop at **{price}** {currency}.",
+        "revenue_user": "💸 Revenue share: {user} | 90%",
+        "custom_removed": "✅ Removed custom item **{name}**.",
+        "custom_updated": "✅ Updated **{name}**: {status}.",
+        "status_listed": "listed in the shop at **{price}** {currency}",
+        "status_unlisted": "not listed in the shop",
+        "no_custom_items": "This server has no custom items yet.",
+        "shop_price": "🏪 Shop price: **{price}** {currency}",
+        "shop_unlisted": "🏪 Not listed in the shop",
+        "content_preview": "Preview: {preview}"
+    },
+    "err": {
+        "not_owned": "You don't have this item.",
+        "invalid_item": "Invalid item ID.",
+        "not_usable": "This item cannot be used.",
+        "amount_positive": "The amount must be greater than 0.",
+        "dm_global_only": "❌ Use the global scope in DMs.",
+        "pickup_duration_range": "Error: pickup duration must be between 1 and 86400 seconds.",
+        "already_picked": "You already picked this item up.\n-# The owner set it to single pickup.",
+        "all_picked": "All of them have been picked up!",
+        "give_self": "You can't give items to yourself.",
+        "give_bot": "You can't give items to bots.",
+        "global_mode": "This server has global mode enabled; this command is unavailable.",
+        "item_unavailable": "Could not fetch this item.",
+        "remove_bot": "You can't remove items from bots.",
+        "user_not_owned": "{user} doesn't have this item.",
+        "bot_has_no_items": "Bots don't have items.",
+        "name_empty": "The item name cannot be empty.",
+        "content_empty": "The text content cannot be empty.",
+        "content_too_long": "The text content cannot exceed 2000 characters.",
+        "template_syntax": "❌ AutoReply template syntax error in the content: {error}",
+        "name_too_long": "The item name cannot exceed 100 characters.",
+        "price_required": "Set a price greater than 0 when listing in the shop.",
+        "revenue_bot": "The revenue-share target cannot be a bot.",
+        "revenue_once_only": "Only single-use custom items can have revenue share.",
+        "revenue_needs_price": "Revenue-share items must be listed with a price first; the share is 90% of the price.",
+        "custom_not_found": "Custom item not found.",
+        "cannot_reprice": "This command cannot change the price; delete and recreate the item to reprice it."
+    }
+}

@@ -12,6 +12,9 @@ from discord import app_commands
 from discord.ext import commands
 from logger import log
 
+import i18n
+from i18n import t
+
 
 # item example:
 # {"id": "some_unique_id", "name": "Item Name", "description": "Item Description", "callback": some_function, "additional_data": Any}
@@ -42,11 +45,11 @@ def _build_item_template_guild(interaction: discord.Interaction, scope_guild_id:
         return source_guild
 
     if scope_guild_id == 0:
-        guild_name = "全域"
+        guild_name = t("itemsystem.scope.global")
     elif source_guild is not None:
         guild_name = source_guild.name
     else:
-        guild_name = "未知伺服器"
+        guild_name = t("itemsystem.scope.unknown_guild")
 
     return SimpleNamespace(
         id=scope_guild_id,
@@ -168,7 +171,7 @@ async def _send_custom_item_content(interaction: discord.Interaction, item_id: s
         await interaction.response.defer(ephemeral=ephemeral_response, thinking=True)
     else:
         await interaction.response.send_message(
-            "已使用物品。",
+            t("itemsystem.msg.item_used"),
             ephemeral=ephemeral_response,
             allowed_mentions=_get_item_template_allowed_mentions(),
         )
@@ -188,7 +191,7 @@ def _make_custom_text_callback(item_id: str, content: str, remove_after_use: boo
         
         removed = await remove_item_from_user(guild_id, user_id, item_id, 1)
         if removed <= 0:
-            await interaction.response.send_message("你沒有這個物品。", ephemeral=True)
+            await interaction.response.send_message(t("itemsystem.err.not_owned"), ephemeral=True)
             return
         if remove_after_use:
             # 分潤
@@ -237,7 +240,7 @@ def get_item_by_id(item_id: str, guild_id: int = None):
             return {
                 "id": item_id,
                 "name": data["name"],
-                "description": data.get("description", "自定義物品。使用時會傳送儲存的文字內容。"),
+                "description": data.get("description") or t("itemsystem.msg.custom_item_desc"),
                 "callback": _make_custom_text_callback(
                     item_id,
                     data["content"],
@@ -273,7 +276,7 @@ def get_all_items_for_guild(guild_id: int = None) -> list:
             result.append({
                 "id": item_id,
                 "name": data["name"],
-                "description": data.get("description", "自定義物品。使用時會傳送儲存的文字內容。"),
+                "description": data.get("description") or t("itemsystem.msg.custom_item_desc"),
                 "worth": float(data.get("worth", 0)) if data.get("worth") is not None else 0,
                 "remove_after_use": data.get("remove_after_use", True),
                 "ephemeral_response": data.get("ephemeral_response", False),
@@ -398,28 +401,28 @@ class ItemSystem(commands.GroupCog, name=app_commands.locale_str("item", i18n_ke
             scope = "server" if interaction_uses_guild_scope(interaction) else "global"
         if scope == "global":
             guild_id = 0
-            scope_name = "全域"
+            scope_name = t("itemsystem.scope.global")
         else:
             if not interaction_uses_guild_scope(interaction):
-                await interaction.response.send_message("❌ 在私訊中請使用全域範圍。", ephemeral=True)
+                await interaction.response.send_message(t("itemsystem.err.dm_global_only"), ephemeral=True)
                 return
             guild_id = interaction.guild.id
             scope_name = interaction.guild.name
         user_items = get_user_data(guild_id, user_id, "items", {})
         
         if not user_items or all(v <= 0 for v in user_items.values()):
-            await interaction.response.send_message(f"你在 {scope_name} 沒有任何物品。", ephemeral=True)
+            await interaction.response.send_message(t("itemsystem.msg.no_items", scope=scope_name), ephemeral=True)
             return
-        embed = discord.Embed(title=f"{interaction.user.display_name} 的物品（{scope_name}）", color=0x00ff00)
+        embed = discord.Embed(title=t("itemsystem.embed.inventory_title", user=interaction.user.display_name, scope=scope_name), color=0x00ff00)
         for item_id, amount in user_items.items():
             if amount <= 0:
                 continue
             item = get_item_by_id(item_id, guild_id if scope == "server" else None)
             if item:
-                worth_text = f"\n💰 價值: {item['worth']}" if item.get("worth", 0) > 0 else ""
+                worth_text = t("itemsystem.msg.worth", worth=item["worth"]) if item.get("worth", 0) > 0 else ""
                 embed.add_field(name=f"{item['name']} x{amount}", value=f"{item['description']}{worth_text}", inline=False)
         embed.set_footer(
-            text=scope_name if scope == "global" else (interaction.guild.name if interaction.guild else "未知"),
+            text=scope_name if scope == "global" else (interaction.guild.name if interaction.guild else t("itemsystem.scope.unknown_guild")),
             icon_url=interaction.guild.icon.url if interaction.guild and interaction.guild.icon else None
         )
         
@@ -440,12 +443,12 @@ class ItemSystem(commands.GroupCog, name=app_commands.locale_str("item", i18n_ke
         user_items = get_user_data(guild_id, user_id, "items", {})
         
         if item_id not in user_items.keys() or user_items[item_id] <= 0:
-            await interaction.response.send_message("你沒有這個物品。", ephemeral=True)
+            await interaction.response.send_message(t("itemsystem.err.not_owned"), ephemeral=True)
             return
         
         item = get_item_by_id(item_id, guild_id)
         if not item:
-            await interaction.response.send_message("無效的物品ID。", ephemeral=True)
+            await interaction.response.send_message(t("itemsystem.err.invalid_item"), ephemeral=True)
             return
         
         # Pass scope to callback via interaction attribute
@@ -455,7 +458,7 @@ class ItemSystem(commands.GroupCog, name=app_commands.locale_str("item", i18n_ke
         if "callback" in item and callable(item["callback"]):
             await item["callback"](interaction)
         else:
-            await interaction.response.send_message("這個物品無法使用。", ephemeral=True)
+            await interaction.response.send_message(t("itemsystem.err.not_usable"), ephemeral=True)
     
     @app_commands.command(name=app_commands.locale_str("drop", i18n_key="cmd.itemsystem.item.drop.name"), description=app_commands.locale_str("Drop an item", i18n_key="cmd.itemsystem.item.drop.desc"))
     @app_commands.describe(item_id=app_commands.locale_str("The item ID to drop", i18n_key="cmd.itemsystem.item.drop.param.item_id"), amount=app_commands.locale_str("How many to drop", i18n_key="cmd.itemsystem.item.drop.param.amount"), can_pickup=app_commands.locale_str("Can others pick this item up?", i18n_key="cmd.itemsystem.item.drop.param.can_pickup"), pickup_duration=app_commands.locale_str("How long the item can be picked up (seconds)", i18n_key="cmd.itemsystem.item.drop.param.pickup_duration"), pickup_only_once=app_commands.locale_str("Can the item only be picked up once?", i18n_key="cmd.itemsystem.item.drop.param.pickup_only_once"), scope=app_commands.locale_str("Item scope (auto-detected by default)", i18n_key="cmd.itemsystem.item.drop.param.scope"))
@@ -480,20 +483,20 @@ class ItemSystem(commands.GroupCog, name=app_commands.locale_str("item", i18n_ke
         can_pickup = (can_pickup == "True")
         pickup_only_once = (pickup_only_once == "True")
         if amount <= 0:
-            await interaction.response.send_message("數量必須大於 0。", ephemeral=True)
+            await interaction.response.send_message(t("itemsystem.err.amount_positive"), ephemeral=True)
             return
         user_id = interaction.user.id
         guild_id = 0 if scope == "global" else get_interaction_scope_guild_id(interaction)
         user_item_count = await get_user_items(guild_id, user_id, item_id)
 
         if user_item_count <= 0:
-            await interaction.response.send_message("你沒有這個物品。", ephemeral=True)
+            await interaction.response.send_message(t("itemsystem.err.not_owned"), ephemeral=True)
             return
         target_item = get_item_by_id(item_id, guild_id if guild_id else None)
         
         if can_pickup:
             if pickup_duration <= 0 or pickup_duration > 86400:
-                await interaction.response.send_message("錯誤：撿起持續時間必須在 1 到 86400 秒之間。", ephemeral=True)
+                await interaction.response.send_message(t("itemsystem.err.pickup_duration_range"), ephemeral=True)
                 return
 
         amount = await remove_item_from_user(guild_id, user_id, item_id, min(amount, user_item_count))
@@ -516,17 +519,17 @@ class ItemSystem(commands.GroupCog, name=app_commands.locale_str("item", i18n_ke
             async def on_timeout(self):
                 for child in self.children:
                     child.disabled = True
-                await self.interaction.edit_original_response(content=f"{self.interaction.user.display_name} 丟棄了 {target_item['name']} x{amount}！\n物品消失了！", view=self)
+                await self.interaction.edit_original_response(content=t("itemsystem.msg.drop_expired", user=self.interaction.user.display_name, item=target_item["name"], amount=amount), view=self)
 
-            @discord.ui.button(label="撿起物品", style=discord.ButtonStyle.green, custom_id="pick_up_item")
+            @discord.ui.button(label=t("itemsystem.btn.pick_up"), style=discord.ButtonStyle.green, custom_id="pick_up_item")
             async def pick_up(self, interaction: discord.Interaction, button: discord.ui.Button):
                 nonlocal remaining_count, remaining_admin_count
                 if pickup_only_once and interaction.user.id in picked_up:
-                    await interaction.response.send_message("你已經撿起過這個物品了。\n-# 原物主設定了僅能撿起一次。", ephemeral=True)
+                    await interaction.response.send_message(t("itemsystem.err.already_picked"), ephemeral=True)
                     return
                 picked_up.add(interaction.user.id)
                 if remaining_count <= 0:
-                    await interaction.response.send_message("物品已經被撿光了！", ephemeral=True)
+                    await interaction.response.send_message(t("itemsystem.err.all_picked"), ephemeral=True)
                     return
                 user_id = interaction.user.id
                 other_user_items = get_user_data(guild_id, user_id, "items", {})
@@ -537,17 +540,17 @@ class ItemSystem(commands.GroupCog, name=app_commands.locale_str("item", i18n_ke
                     add_admin_item(guild_id, user_id, item_id, 1)
                     remaining_admin_count -= 1
                 log(f"{interaction.user} picked up {target_item['id']} in guild {guild_id}", module_name="ItemSystem")
-                await interaction.response.send_message(f"你撿起了 {target_item['name']}。", ephemeral=True)
+                await interaction.response.send_message(t("itemsystem.msg.picked_up", item=target_item["name"]), ephemeral=True)
                 if remaining_count <= 0:
-                    await self.interaction.edit_original_response(content=f"{self.interaction.user.display_name} 丟棄了 {target_item['name']} x{amount}！\n物品已經被撿光了！", view=None)
+                    await self.interaction.edit_original_response(content=t("itemsystem.msg.drop_all_picked", user=self.interaction.user.display_name, item=target_item["name"], amount=amount), view=None)
                     self.stop()
 
         if can_pickup:
-            await interaction.response.send_message(f"{interaction.user.display_name} 丟棄了 {target_item['name']} x{amount}！", view=DropView())
+            await interaction.response.send_message(t("itemsystem.msg.dropped", user=interaction.user.display_name, item=target_item["name"], amount=amount), view=DropView())
             # print(f"[ItemSystem] {interaction.user} dropped {target_item['name']} x{amount} in guild {guild_id}")
             log(f"{interaction.user} dropped {target_item['name']} x{amount} in guild {guild_id}", module_name="ItemSystem", user=interaction.user, guild=interaction.guild)
         else:
-            await interaction.response.send_message(f"{interaction.user.display_name} 丟棄了 {target_item['name']} x{amount}，但是物品馬上不見了。")
+            await interaction.response.send_message(t("itemsystem.msg.dropped_gone", user=interaction.user.display_name, item=target_item["name"], amount=amount))
             log(f"{interaction.user} dropped {target_item['name']} x{amount} (no pickup) in guild {guild_id}", module_name="ItemSystem", user=interaction.user, guild=interaction.guild)
 
     # @app_commands.command(name="to-global", description="將物品從伺服器背包轉移到全域背包")
@@ -564,7 +567,7 @@ class ItemSystem(commands.GroupCog, name=app_commands.locale_str("item", i18n_ke
     #     user_id = interaction.user.id
     #     user_item_count = await get_user_items(guild_id, user_id, item_id)
     #     if user_item_count <= 0:
-    #         await interaction.response.send_message("你沒有這個物品。", ephemeral=True)
+    #         await interaction.response.send_message(t("itemsystem.err.not_owned"), ephemeral=True)
     #         return
     #     target_item = get_item_by_id(item_id)
     #     if not target_item:
@@ -620,28 +623,28 @@ class ItemSystem(commands.GroupCog, name=app_commands.locale_str("item", i18n_ke
         if scope is None:
             scope = "server" if interaction_uses_guild_scope(interaction) else "global"
         if amount <= 0:
-            await interaction.followup.send("數量必須大於 0。")
+            await interaction.followup.send(t("itemsystem.err.amount_positive"))
             return
         giver_id = interaction.user.id
         receiver_id = user.id
         guild_id = 0 if scope == "global" else get_interaction_scope_guild_id(interaction)
         
         if giver_id == receiver_id:
-            await interaction.followup.send("你不能給自己物品。")
+            await interaction.followup.send(t("itemsystem.err.give_self"))
             return
 
         if user.bot:
-            await interaction.followup.send("你不能給機器人物品。")
+            await interaction.followup.send(t("itemsystem.err.give_bot"))
             return
         
         giver_item_count = await get_user_items(guild_id, giver_id, item_id)
         if giver_item_count <= 0:
-            await interaction.followup.send("你沒有這個物品。")
+            await interaction.followup.send(t("itemsystem.err.not_owned"))
             return
         
         item = get_item_by_id(item_id, guild_id if guild_id else None)
         if not item:
-            await interaction.followup.send("無效的物品ID。")
+            await interaction.followup.send(t("itemsystem.err.invalid_item"))
             return
 
         # Remove from giver
@@ -658,11 +661,12 @@ class ItemSystem(commands.GroupCog, name=app_commands.locale_str("item", i18n_ke
                 remove_admin_item(guild_id, giver_id, item_id, transferred)
                 add_admin_item(guild_id, receiver_id, item_id, transferred)
         
-        await interaction.followup.send(f"你給了 {user.display_name}(`{user.name}`) {removed} 個 {item['name']}。", allowed_mentions=discord.AllowedMentions.none())
+        await interaction.followup.send(t("itemsystem.msg.gave", user=f"{user.display_name}(`{user.name}`)", count=removed, item=item["name"]), allowed_mentions=discord.AllowedMentions.none())
         # dm the receiver
         try:
-            scope_name = interaction.guild.name if interaction_uses_guild_scope(interaction) and interaction.guild else "私人訊息"
-            await user.send(f"你從 {interaction.user.display_name}(`{interaction.user.name}`) 那裡收到了 {amount} 個 {item['name']}！\n-# 伺服器: {scope_name}", allowed_mentions=discord.AllowedMentions.none())
+            recipient_loc = i18n.resolve_locale(user_id=user.id)
+            scope_name = interaction.guild.name if interaction_uses_guild_scope(interaction) and interaction.guild else t("itemsystem.scope.dm", locale=recipient_loc)
+            await user.send(t("itemsystem.msg.received", locale=recipient_loc, sender=f"{interaction.user.display_name}(`{interaction.user.name}`)", count=amount, item=item["name"], scope=scope_name), allowed_mentions=discord.AllowedMentions.none())
         except Exception:
             pass
 
@@ -685,15 +689,15 @@ class ItemModerate(commands.GroupCog, name=app_commands.locale_str("itemmod", i1
         await interaction.response.defer()
 
         if amount <= 0:
-            await interaction.followup.send("數量必須大於 0")
+            await interaction.followup.send(t("itemsystem.err.amount_positive"))
             return
 
         if not interaction_uses_guild_scope(interaction):
-            await interaction.followup.send("伺服器啟用了全域模式，無法使用此指令。")
+            await interaction.followup.send(t("itemsystem.err.global_mode"))
             return
 
         if user.bot:
-            await interaction.followup.send("你不能給機器人物品。")
+            await interaction.followup.send(t("itemsystem.err.give_bot"))
             return
         
         receiver_id = user.id
@@ -701,11 +705,11 @@ class ItemModerate(commands.GroupCog, name=app_commands.locale_str("itemmod", i1
         
         item = get_item_by_id(item_id, interaction.guild.id)
         if not item:
-            await interaction.followup.send("無效的物品ID。")
+            await interaction.followup.send(t("itemsystem.err.invalid_item"))
             return
 
         if item.get("worth", 0) == 0:
-            await interaction.followup.send("無法取得此物品。")
+            await interaction.followup.send(t("itemsystem.err.item_unavailable"))
             return
         
         await give_item_to_user(guild_id, receiver_id, item_id, amount)
@@ -717,20 +721,20 @@ class ItemModerate(commands.GroupCog, name=app_commands.locale_str("itemmod", i1
             except Exception as e:
                 log(f"Error in admin action callback: {e}", module_name="ItemSystem", level=logging.ERROR)
 
-        await interaction.followup.send(f"你給了 {user.display_name}(`{user.name}`) {amount} 個 {item['name']}。", allowed_mentions=discord.AllowedMentions.none())
+        await interaction.followup.send(t("itemsystem.msg.gave", user=f"{user.display_name}(`{user.name}`)", count=amount, item=item["name"]), allowed_mentions=discord.AllowedMentions.none())
 
     @app_commands.command(name=app_commands.locale_str("remove", i18n_key="cmd.itemsystem.itemmod.remove.name"), description=app_commands.locale_str("Remove an item from a user", i18n_key="cmd.itemsystem.itemmod.remove.desc"))
     @app_commands.describe(user=app_commands.locale_str("The user to remove the item from", i18n_key="cmd.itemsystem.itemmod.remove.param.user"), item_id=app_commands.locale_str("The item ID to remove", i18n_key="cmd.itemsystem.itemmod.remove.param.item_id"), amount=app_commands.locale_str("How many to remove", i18n_key="cmd.itemsystem.itemmod.remove.param.amount"))
     @app_commands.autocomplete(item_id=all_items_autocomplete)
     async def admin_remove_item(self, interaction: discord.Interaction, user: discord.User, item_id: str, amount: int):
         if not interaction_uses_guild_scope(interaction):
-            await interaction.response.send_message("伺服器啟用了全域模式，無法使用此指令。", ephemeral=True)
+            await interaction.response.send_message(t("itemsystem.err.global_mode"), ephemeral=True)
             return
         if amount <= 0:
-            await interaction.response.send_message("數量必須大於 0。", ephemeral=True)
+            await interaction.response.send_message(t("itemsystem.err.amount_positive"), ephemeral=True)
             return
         if user.bot:
-            await interaction.response.send_message("你不能移除機器人物品。", ephemeral=True)
+            await interaction.response.send_message(t("itemsystem.err.remove_bot"), ephemeral=True)
             return
 
         receiver_id = user.id
@@ -738,28 +742,28 @@ class ItemModerate(commands.GroupCog, name=app_commands.locale_str("itemmod", i1
         
         removed_count = await remove_item_from_user(guild_id, receiver_id, item_id, amount)
         if removed_count == 0:
-            await interaction.response.send_message(f"{user.name} 沒有這個物品。", ephemeral=True, allowed_mentions=discord.AllowedMentions.none())
+            await interaction.response.send_message(t("itemsystem.err.user_not_owned", user=user.name), ephemeral=True, allowed_mentions=discord.AllowedMentions.none())
             return
         
         item = get_item_by_id(item_id, guild_id)
-        item_name = item['name'] if item else "未知物品"
+        item_name = item["name"] if item else t("itemsystem.msg.unknown_item")
 
-        await interaction.response.send_message(f"你移除了 {user.display_name}(`{user.name}`) 的 {removed_count} 個 {item_name}。", ephemeral=True, allowed_mentions=discord.AllowedMentions.none())
+        await interaction.response.send_message(t("itemsystem.msg.removed", user=f"{user.display_name}(`{user.name}`)", count=removed_count, item=item_name), ephemeral=True, allowed_mentions=discord.AllowedMentions.none())
 
     @app_commands.command(name=app_commands.locale_str("list", i18n_key="cmd.itemsystem.itemmod.list.name"), description=app_commands.locale_str("List all available items", i18n_key="cmd.itemsystem.itemmod.list.desc"))
     async def admin_list_items(self, interaction: discord.Interaction):
         all_items_list = get_all_items_for_guild(interaction.guild.id)
         if not all_items_list:
-            await interaction.response.send_message("目前沒有任何物品。", ephemeral=True, allowed_mentions=discord.AllowedMentions.none())
+            await interaction.response.send_message(t("itemsystem.msg.no_items_exist"), ephemeral=True, allowed_mentions=discord.AllowedMentions.none())
             return
 
         if not interaction_uses_guild_scope(interaction):
-            await interaction.response.send_message("伺服器啟用了全域模式，無法使用此指令。", ephemeral=True)
+            await interaction.response.send_message(t("itemsystem.err.global_mode"), ephemeral=True)
             return
 
-        embed = discord.Embed(title="所有可用的物品", color=0x0000ff)
+        embed = discord.Embed(title=t("itemsystem.embed.all_items_title"), color=0x0000ff)
         for item in all_items_list:
-            custom_tag = " [自定義]" if item["id"].startswith("custom_") else ""
+            custom_tag = t("itemsystem.msg.custom_tag") if item["id"].startswith("custom_") else ""
             embed.add_field(name=f"{item['name']}{custom_tag}", value=item["description"], inline=False)
         embed.set_footer(text=interaction.guild.name, icon_url=interaction.guild.icon.url if interaction.guild.icon else None)
         
@@ -769,11 +773,11 @@ class ItemModerate(commands.GroupCog, name=app_commands.locale_str("itemmod", i1
     @app_commands.describe(user=app_commands.locale_str("The user to look up", i18n_key="cmd.itemsystem.itemmod.listuser.param.user"))
     async def admin_list_user_items(self, interaction: discord.Interaction, user: discord.User):
         if user.bot:
-            await interaction.response.send_message("機器人沒有物品。", ephemeral=True)
+            await interaction.response.send_message(t("itemsystem.err.bot_has_no_items"), ephemeral=True)
             return
 
         if not interaction_uses_guild_scope(interaction):
-            await interaction.response.send_message("伺服器啟用了全域模式，無法使用此指令。", ephemeral=True)
+            await interaction.response.send_message(t("itemsystem.err.global_mode"), ephemeral=True)
             return
 
         guild_id = interaction.guild.id
@@ -782,10 +786,10 @@ class ItemModerate(commands.GroupCog, name=app_commands.locale_str("itemmod", i1
         user_items = {item_id: count for item_id, count in user_items.items() if count > 0}
 
         if not user_items:
-            await interaction.response.send_message(f"{user.name} 在 {scope_name} 目前沒有任何物品。", ephemeral=True)
+            await interaction.response.send_message(t("itemsystem.msg.user_no_items", user=user.name, scope=scope_name), ephemeral=True)
             return
 
-        embed = discord.Embed(title=f"{user.name} 擁有的物品（{scope_name}）", color=0x00ff00)
+        embed = discord.Embed(title=t("itemsystem.embed.inventory_title", user=user.name, scope=scope_name), color=0x00ff00)
         for item_id, amount in user_items.items():
             item = get_item_by_id(item_id, guild_id)
             if item:
@@ -807,41 +811,41 @@ class ItemModerate(commands.GroupCog, name=app_commands.locale_str("itemmod", i1
     )
     async def addcustom(self, interaction: discord.Interaction, name: str, content: str, description: str = None, list_in_shop: bool = False, price: float = None, remove_after_use: bool = True, ephemeral_response: bool = False, revenue_share_user: discord.User = None):
         if not interaction_uses_guild_scope(interaction):
-            await interaction.response.send_message("❌ 伺服器啟用了全域模式，無法使用此指令。", ephemeral=True)
+            await interaction.response.send_message(t("itemsystem.err.global_mode"), ephemeral=True)
             return
         if not name or len(name.strip()) < 1:
-            await interaction.response.send_message("物品名稱不能為空。", ephemeral=True)
+            await interaction.response.send_message(t("itemsystem.err.name_empty"), ephemeral=True)
             return
         if not content or len(content.strip()) < 1:
-            await interaction.response.send_message("文字內容不能為空。", ephemeral=True)
+            await interaction.response.send_message(t("itemsystem.err.content_empty"), ephemeral=True)
             return
         if len(content) > 2000:
-            await interaction.response.send_message("文字內容不可超過 2000 字元。", ephemeral=True)
+            await interaction.response.send_message(t("itemsystem.err.content_too_long"), ephemeral=True)
             return
         try:
             _validate_custom_item_template(content.strip())
         except Exception as e:
-            await interaction.response.send_message(f"❌ 文字內容的 AutoReply 模板語法錯誤: {e}", ephemeral=True)
+            await interaction.response.send_message(t("itemsystem.err.template_syntax", error=e), ephemeral=True)
             return
         if len(name) > 100:
-            await interaction.response.send_message("物品名稱不可超過 100 字元。", ephemeral=True)
+            await interaction.response.send_message(t("itemsystem.err.name_too_long"), ephemeral=True)
             return
         if list_in_shop:
             if price is None or price <= 0:
-                await interaction.response.send_message("上架商店時請設定大於 0 的定價。", ephemeral=True)
+                await interaction.response.send_message(t("itemsystem.err.price_required"), ephemeral=True)
                 return
             price = round(float(price), 2)
         else:
             price = None
         if revenue_share_user is not None:
             if revenue_share_user.bot:
-                await interaction.response.send_message("分潤對象不能是機器人。", ephemeral=True)
+                await interaction.response.send_message(t("itemsystem.err.revenue_bot"), ephemeral=True)
                 return
             if not remove_after_use:
-                await interaction.response.send_message("只有一次性自訂物品才能設定分潤。", ephemeral=True)
+                await interaction.response.send_message(t("itemsystem.err.revenue_once_only"), ephemeral=True)
                 return
             if price is None or price <= 0:
-                await interaction.response.send_message("設定分潤的自訂物品必須先上架並有價格，分潤金額會是價格的 90%。", ephemeral=True)
+                await interaction.response.send_message(t("itemsystem.err.revenue_needs_price"), ephemeral=True)
                 return
 
         guild_id = interaction.guild.id
@@ -849,7 +853,7 @@ class ItemModerate(commands.GroupCog, name=app_commands.locale_str("itemmod", i1
         item_id = f"custom_{secrets.token_hex(4)}"
         custom_items[item_id] = {
             "name": name.strip()[:100],
-            "description": (description or "自定義物品。使用時會傳送儲存的文字內容。")[:500],
+            "description": (description or t("itemsystem.msg.custom_item_desc"))[:500],
             "content": content.strip()[:2000],
             "remove_after_use": remove_after_use,
             "ephemeral_response": ephemeral_response
@@ -860,14 +864,15 @@ class ItemModerate(commands.GroupCog, name=app_commands.locale_str("itemmod", i1
             custom_items[item_id]["revenue_share_user_id"] = revenue_share_user.id
         set_custom_items(guild_id, custom_items)
         msg = (
-            f"✅ 已新增自定義物品 **{name.strip()}**\n"
-            f"ID: `{item_id}`\n"
-            f"使用 `/itemmod give` 可發送給用戶。"
+            t("itemsystem.msg.custom_added", name=name.strip()) + "\n"
+            + f"ID: `{item_id}`\n"
+            + t("itemsystem.msg.custom_added_hint")
         )
         if list_in_shop:
-            msg += f"\n🏪 已上架伺服器商店，定價 **{price:,.2f}** 伺服幣。"
+            from Economy import get_currency_name
+            msg += "\n" + t("itemsystem.msg.listed_in_shop", price=i18n.fmt_num(price, decimals=2), currency=get_currency_name(guild_id))
         if revenue_share_user is not None:
-            msg += f"\n💸 分潤用戶: {revenue_share_user.mention} (`{revenue_share_user.id}`) | 90%"
+            msg += "\n" + t("itemsystem.msg.revenue_user", user=f"{revenue_share_user.mention} (`{revenue_share_user.id}`)")
         await interaction.response.send_message(msg, ephemeral=True)
         log(f"Custom item {item_id} ({name}) added in guild {guild_id}", module_name="ItemSystem", user=interaction.user, guild=interaction.guild)
 
@@ -876,17 +881,17 @@ class ItemModerate(commands.GroupCog, name=app_commands.locale_str("itemmod", i1
     @app_commands.autocomplete(item_id=custom_items_autocomplete)
     async def removecustom(self, interaction: discord.Interaction, item_id: str):
         if not interaction_uses_guild_scope(interaction):
-            await interaction.response.send_message("❌ 伺服器啟用了全域模式，無法使用此指令。", ephemeral=True)
+            await interaction.response.send_message(t("itemsystem.err.global_mode"), ephemeral=True)
             return
         guild_id = interaction.guild.id
         custom_items = get_custom_items(guild_id)
         if item_id not in custom_items:
-            await interaction.response.send_message("找不到此自定義物品。", ephemeral=True)
+            await interaction.response.send_message(t("itemsystem.err.custom_not_found"), ephemeral=True)
             return
         item_name = custom_items[item_id]["name"]
         del custom_items[item_id]
         set_custom_items(guild_id, custom_items)
-        await interaction.response.send_message(f"✅ 已移除自定義物品 **{item_name}**。", ephemeral=True)
+        await interaction.response.send_message(t("itemsystem.msg.custom_removed", name=item_name), ephemeral=True)
         log(f"Custom item {item_id} ({item_name}) removed in guild {guild_id}", module_name="ItemSystem", user=interaction.user, guild=interaction.guild)
 
     @app_commands.command(name=app_commands.locale_str("editcustom", i18n_key="cmd.itemsystem.itemmod.editcustom.name"), description=app_commands.locale_str("Edit a custom item's shop listing and price", i18n_key="cmd.itemsystem.itemmod.editcustom.desc"))
@@ -903,17 +908,17 @@ class ItemModerate(commands.GroupCog, name=app_commands.locale_str("itemmod", i1
     @app_commands.autocomplete(item_id=custom_items_autocomplete)
     async def editcustom(self, interaction: discord.Interaction, item_id: str, name: str = None, description: str = None, content: str = None, list_in_shop: bool = None, remove_after_use: bool = None, ephemeral_response: bool = None, revenue_share_user: discord.User = None):
         if not interaction_uses_guild_scope(interaction):
-            await interaction.response.send_message("❌ 伺服器啟用了全域模式，無法使用此指令。", ephemeral=True)
+            await interaction.response.send_message(t("itemsystem.err.global_mode"), ephemeral=True)
             return
         guild_id = interaction.guild.id
         custom_items = get_custom_items(guild_id)
         if item_id not in custom_items:
-            await interaction.response.send_message("找不到此自定義物品。", ephemeral=True)
+            await interaction.response.send_message(t("itemsystem.err.custom_not_found"), ephemeral=True)
             return
         data = custom_items[item_id]
         if name is not None:
             if len(name.strip()) > 100:
-                await interaction.response.send_message("物品名稱不可超過 100 字元。", ephemeral=True)
+                await interaction.response.send_message(t("itemsystem.err.name_too_long"), ephemeral=True)
                 return
             data["name"] = name.strip()
         if description is not None:
@@ -922,7 +927,7 @@ class ItemModerate(commands.GroupCog, name=app_commands.locale_str("itemmod", i1
             try:
                 _validate_custom_item_template(content.strip())
             except Exception as e:
-                await interaction.response.send_message(f"❌ 文字內容的 AutoReply 模板語法錯誤: {e}", ephemeral=True)
+                await interaction.response.send_message(t("itemsystem.err.template_syntax", error=e), ephemeral=True)
                 return
             data["content"] = content.strip()[:2000]
         if remove_after_use is not None:
@@ -933,46 +938,47 @@ class ItemModerate(commands.GroupCog, name=app_commands.locale_str("itemmod", i1
             if list_in_shop:
                 current_worth = data.get("worth")
                 if current_worth is None or current_worth <= 0:
-                    await interaction.response.send_message("這個指令不能改價格；如果要重新定價，請刪除後重新建立。", ephemeral=True)
+                    await interaction.response.send_message(t("itemsystem.err.cannot_reprice"), ephemeral=True)
                     return
             else:
                 data.pop("worth", None)
         if revenue_share_user is not None:
             if revenue_share_user.bot:
-                await interaction.response.send_message("分潤對象不能是機器人。", ephemeral=True)
+                await interaction.response.send_message(t("itemsystem.err.revenue_bot"), ephemeral=True)
                 return
             if not data.get("remove_after_use", True):
-                await interaction.response.send_message("只有一次性自訂物品才能設定分潤。", ephemeral=True)
+                await interaction.response.send_message(t("itemsystem.err.revenue_once_only"), ephemeral=True)
                 return
             if data.get("worth") is None or data.get("worth", 0) <= 0:
-                await interaction.response.send_message("設定分潤的自訂物品必須先上架並有價格，分潤金額會是價格的 90%。", ephemeral=True)
+                await interaction.response.send_message(t("itemsystem.err.revenue_needs_price"), ephemeral=True)
                 return
             data["revenue_share_user_id"] = revenue_share_user.id
         if not data.get("remove_after_use", True) or data.get("worth") is None or data.get("worth", 0) <= 0:
             data.pop("revenue_share_user_id", None)
         set_custom_items(guild_id, custom_items)
         worth = data.get("worth")
-        status = f"已上架商店，定價 **{worth:,.2f}** 伺服幣" if worth else "未上架商店"
-        await interaction.response.send_message(f"✅ 已更新 **{data['name']}**：{status}。", ephemeral=True)
+        from Economy import get_currency_name
+        status = t("itemsystem.msg.status_listed", price=i18n.fmt_num(worth, decimals=2), currency=get_currency_name(scope_guild_id)) if worth else t("itemsystem.msg.status_unlisted")
+        await interaction.response.send_message(t("itemsystem.msg.custom_updated", name=data["name"], status=status), ephemeral=True)
 
     @app_commands.command(name=app_commands.locale_str("listcustom", i18n_key="cmd.itemsystem.itemmod.listcustom.name"), description=app_commands.locale_str("List this server's custom items", i18n_key="cmd.itemsystem.itemmod.listcustom.desc"))
     async def listcustom(self, interaction: discord.Interaction):
         if not interaction_uses_guild_scope(interaction):
-            await interaction.response.send_message("❌ 伺服器啟用了全域模式，無法使用此指令。", ephemeral=True)
+            await interaction.response.send_message(t("itemsystem.err.global_mode"), ephemeral=True)
             return
         guild_id = interaction.guild.id
         custom_items = get_custom_items(guild_id)
         if not custom_items:
-            await interaction.response.send_message("本伺服器目前沒有自定義物品。", ephemeral=True)
+            await interaction.response.send_message(t("itemsystem.msg.no_custom_items"), ephemeral=True)
             return
-        embed = discord.Embed(title="伺服器自定義物品", color=0x9b59b6)
+        embed = discord.Embed(title=t("itemsystem.embed.custom_items_title"), color=0x9b59b6)
         for item_id, data in custom_items.items():
             preview = data["content"][:100] + ("..." if len(data["content"]) > 100 else "")
             worth = data.get("worth")
-            shop_line = f"🏪 商店定價: **{worth:,.2f}** 伺服幣" if worth else "🏪 未上架商店"
+            shop_line = t("itemsystem.msg.shop_price", price=i18n.fmt_num(worth, decimals=2), currency=get_currency_name(scope_guild_id)) if worth else t("itemsystem.msg.shop_unlisted")
             embed.add_field(
                 name=f"{data['name']} (`{item_id}`)",
-                value=f"內容預覽: {preview}\n{data.get('description', '')}\n{shop_line}",
+                value=t("itemsystem.msg.content_preview", preview=preview) + f"\n{data.get('description', '')}\n{shop_line}",
                 inline=False
             )
         embed.set_footer(text=interaction.guild.name, icon_url=interaction.guild.icon.url if interaction.guild.icon else None)
