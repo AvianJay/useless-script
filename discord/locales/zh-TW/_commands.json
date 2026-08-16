@@ -1,17 +1,2396 @@
 {
-    "language": {
-        "root": { "name": "語言", "desc": "語言設定" },
-        "show": { "name": "顯示", "desc": "顯示目前的語言設定與判定過程" },
-        "set": {
-            "name": "設定",
-            "desc": "設定你個人的語言",
-            "param": { "language": "語言（自動 = 依你的 Discord 客戶端語言）" }
+    "ai": {
+        "ai": {
+            "desc": "與 AI 助手對話",
+            "param": {
+                "image": "傳入圖片讓 AI 分析（選用）",
+                "message": "你想問 AI 的問題或訊息",
+                "model": "選擇 AI 模型（預設 openai）",
+                "new_conversation": "是否開始新對話（清除之前的對話歷史）"
+            }
+        },
+        "ai_admin": {
+            "billing": {
+                "clear": {
+                    "desc": "清除這個伺服器的 AI 指定付款人",
+                    "name": "清除"
+                },
+                "root": {
+                    "desc": "管理伺服器的 AI 付款設定",
+                    "name": "付款"
+                },
+                "set": {
+                    "desc": "將這個伺服器的 AI 付款人設成自己",
+                    "name": "設定"
+                },
+                "view": {
+                    "desc": "查看這個伺服器 AI 目前由誰付款",
+                    "name": "查看"
+                }
+            },
+            "mention_mode": {
+                "desc": "設定提及 Bot 或回覆 AI 訊息時是否自動回應",
+                "name": "提及模式",
+                "param": {
+                    "enabled": "開啟或關閉提及與回覆觸發；預設關閉"
+                }
+            },
+            "prompt": {
+                "clear": {
+                    "desc": "清除這個伺服器的 AI 自訂 prompt",
+                    "name": "清除"
+                },
+                "root": {
+                    "desc": "管理伺服器的 AI 自訂 prompt",
+                    "name": "提示詞"
+                },
+                "set": {
+                    "desc": "設定這個伺服器的 AI 自訂 prompt",
+                    "name": "設定",
+                    "param": {
+                        "prompt": "提供給 AI 的額外伺服器背景、風格描述或回覆偏好"
+                    }
+                },
+                "view": {
+                    "desc": "查看這個伺服器目前的 AI 自訂 prompt",
+                    "name": "查看"
+                }
+            },
+            "root": {
+                "desc": "AI 管理指令",
+                "name": "ai-管理"
+            }
+        },
+        "ai_clear": {
+            "desc": "清除你的 AI 對話歷史",
+            "name": "ai-清除"
+        },
+        "ai_history": {
+            "desc": "查看你的 AI 對話歷史",
+            "name": "ai-歷史紀錄"
+        },
+        "ai_set_default_model": {
+            "desc": "設定你使用 AI 指令的預設模型",
+            "name": "ai-設定預設模型",
+            "param": {
+                "model": "選擇預設 AI 模型"
+            }
+        },
+        "ai_set_response_view": {
+            "desc": "設定你使用 AI 指令的回應顯示方式",
+            "name": "ai-設定回覆檢視",
+            "param": {
+                "container": "是否使用 Container 容器顯示回應",
+                "cost": "是否顯示計費資訊",
+                "model": "是否顯示模型名稱與時間資訊"
+            }
+        }
+    },
+    "aki": {
+        "aki": {
+            "desc": "與 Akinator 進行遊戲"
+        }
+    },
+    "antibeast": {
+        "antibeast": {
+            "about": {
+                "desc": "關於 AntiBeast",
+                "name": "關於"
+            },
+            "bypass": {
+                "desc": "新增/移除想要被繞過的身分組",
+                "name": "繞過",
+                "param": {
+                    "role": "要切換繞過狀態的身分組"
+                }
+            },
+            "list": {
+                "desc": "列出 AntiBeast 設定",
+                "name": "列出"
+            },
+            "settings": {
+                "desc": "設定 AntiBeast 短時間多次觸發時的處置動作",
+                "name": "設定",
+                "param": {
+                    "action": "Moderate 動作指令，留空則保留目前設定",
+                    "enable": "是否啟用自動處置",
+                    "only_everyone_here": "是否只處理提及 @everyone 或 @here 的成員",
+                    "threshold": "時間窗口內觸發幾次後處置（1-20）",
+                    "time_window": "時間窗口秒數（5-3600）"
+                }
+            },
+            "setup": {
+                "desc": "互動式設定並啟用 AntiBeast",
+                "name": "設置"
+            },
+            "toggle": {
+                "desc": "啟用/停用 AntiBeast",
+                "name": "切換",
+                "param": {
+                    "enable": "留空則切換目前狀態"
+                }
+            }
+        }
+    },
+    "automoderate": {
+        "automod": {
+            "action_builder": {
+                "choice": {
+                    "ban": "封禁",
+                    "delete": "刪除訊息",
+                    "delete_dm": "刪除訊息＋私訊警告",
+                    "force_verify": "強制驗證",
+                    "kick": "踢出",
+                    "mute": "禁言",
+                    "send_mod_message": "傳送管理通知",
+                    "warn": "公開警告",
+                    "warn_dm": "私訊警告"
+                },
+                "desc": "產生動作指令字串",
+                "name": "動作產生器",
+                "param": {
+                    "action_type": "動作類型",
+                    "delete_message_duration": "ban 專用：刪除該用戶最近多少時間的訊息，如 1d、0 表示不刪",
+                    "duration": "時長（mute/ban/force_verify 用），如 10m、7d、0 表示永久",
+                    "message": "警告訊息（delete/warn 用），可用 {user} 代表用戶",
+                    "prepend": "要接在此動作前面的既有指令（用逗號分隔多個動作時）",
+                    "reason": "原因（mute/kick/ban 用）"
+                }
+            },
+            "check_action": {
+                "desc": "檢查自動管理動作指令是否有效",
+                "name": "檢查動作",
+                "param": {
+                    "action": "要檢查的動作指令"
+                }
+            },
+            "flagged_user_alert_channel": {
+                "desc": "設置用戶加入伺服器時的通知頻道",
+                "name": "標記用戶警報頻道",
+                "param": {
+                    "channel": "用於接收用戶加入通知的頻道"
+                }
+            },
+            "info": {
+                "desc": "查看自動管理功能介紹",
+                "name": "資訊"
+            },
+            "quick_setup": {
+                "desc": "互動式快速設定精靈（選單引導）",
+                "name": "快速設定"
+            },
+            "root": {
+                "name": "自動管理"
+            },
+            "scan_flagged_users": {
+                "desc": "掃描伺服器中的標記用戶",
+                "name": "掃描標記用戶",
+                "param": {
+                    "user": "要掃描的用戶，若不指定則掃描所有用戶"
+                }
+            },
+            "settings": {
+                "desc": "設定自動管理選項",
+                "name": "設定",
+                "param": {
+                    "setting": "要設定的自動管理選項",
+                    "value": "選項的值"
+                }
+            },
+            "toggle": {
+                "choice": {
+                    "anti_invite_link": "邀請連結",
+                    "anti_raid": "防突襲（大量加入偵測）",
+                    "anti_spam": "防刷頻",
+                    "anti_uispam": "用戶安裝應用程式濫用",
+                    "automod_detect": "AutoMod 偵測（原生 AutoMod 觸發）",
+                    "escape_punish": "逃避責任懲處",
+                    "false": "停用",
+                    "flagged_user": "標記用戶加入",
+                    "scamtrap": "詐騙陷阱",
+                    "too_many_emojis": "表情符號過多",
+                    "too_many_h1": "標題過多",
+                    "true": "啟用"
+                },
+                "desc": "啟用或停用自動管理設定",
+                "name": "切換",
+                "param": {
+                    "enable": "是否啟用該設定",
+                    "setting": "要啟用或停用的自動管理設定名稱"
+                }
+            },
+            "view": {
+                "desc": "查看自動管理設定",
+                "name": "查看"
+            }
+        }
+    },
+    "autopublish": {
+        "autopublish": {
+            "root": {
+                "name": "公告自動發布"
+            },
+            "settings": {
+                "choice": {
+                    "false": "停用",
+                    "true": "啟用"
+                },
+                "desc": "設定自動發布",
+                "name": "設定",
+                "param": {
+                    "enable": "是否啟用自動發布"
+                }
+            },
+            "view": {
+                "desc": "查看公告自動發布設定",
+                "name": "查看"
+            }
+        }
+    },
+    "autoreply": {
+        "autoreply": {
+            "add": {
+                "choice": {
+                    "all": "所有頻道",
+                    "blacklist": "黑名單",
+                    "contains": "包含",
+                    "ends_with": "結束於",
+                    "equals": "完全匹配",
+                    "false": "否",
+                    "regex": "正規表達式",
+                    "starts_with": "開始於",
+                    "true": "是",
+                    "whitelist": "白名單"
+                },
+                "desc": "新增自動回覆",
+                "name": "新增",
+                "param": {
+                    "channel_mode": "指定頻道模式",
+                    "channels": "指定頻道 ID (使用 , 分隔多個頻道 ID)",
+                    "mode": "回覆模式",
+                    "random_chance": "隨機回覆機率 (1-100)",
+                    "reply": "回覆原訊息",
+                    "response": "回覆內容 (使用 , 分隔多個回覆，隨機選擇一個回覆)",
+                    "trigger": "觸發字串 (使用 , 分隔多個觸發字串)"
+                }
+            },
+            "builder": {
+                "desc": "用互動式介面建立自動回覆",
+                "name": "建造器"
+            },
+            "clear": {
+                "desc": "清除所有自動回覆",
+                "name": "清除"
+            },
+            "edit": {
+                "choice": {
+                    "all": "所有頻道",
+                    "blacklist": "黑名單",
+                    "contains": "包含",
+                    "ends_with": "結束於",
+                    "equals": "完全匹配",
+                    "false": "否",
+                    "regex": "正規表達式",
+                    "starts_with": "開始於",
+                    "true": "是",
+                    "whitelist": "白名單"
+                },
+                "desc": "編輯自動回覆",
+                "name": "編輯",
+                "param": {
+                    "channel_mode": "指定頻道模式",
+                    "channels": "指定頻道 ID (使用 , 分隔多個頻道 ID)",
+                    "new_mode": "新的回覆模式",
+                    "new_response": "回覆內容",
+                    "new_trigger": "新的觸發字串",
+                    "random_chance": "隨機回覆機率 (1-100)",
+                    "reply": "是否回覆原訊息",
+                    "trigger": "觸發字串"
+                }
+            },
+            "export": {
+                "desc": "匯出自動回覆設定為 JSON",
+                "name": "匯出"
+            },
+            "help": {
+                "desc": "顯示自動回覆的使用說明",
+                "name": "幫助"
+            },
+            "ignore": {
+                "choice": {
+                    "blacklist": "忽略清單",
+                    "whitelist": "僅限清單"
+                },
+                "desc": "設定忽略的頻道",
+                "name": "忽略",
+                "param": {
+                    "channels": "頻道 ID (使用 , 分隔多個頻道 ID)",
+                    "mode": "忽略頻道模式"
+                }
+            },
+            "import": {
+                "choice": {
+                    "false": "否",
+                    "true": "是"
+                },
+                "desc": "從 JSON 檔案匯入自動回覆設定",
+                "name": "匯入",
+                "param": {
+                    "file": "要匯入的 JSON 檔案",
+                    "merge": "是否與現有設定合併"
+                }
+            },
+            "list": {
+                "desc": "列出所有自動回覆",
+                "name": "列出"
+            },
+            "quickadd": {
+                "desc": "快速新增自動回覆，合併現有的自動回覆",
+                "name": "快速新增",
+                "param": {
+                    "new_response": "新的回覆內容",
+                    "new_trigger": "新的觸發字串",
+                    "trigger": "觸發字串"
+                }
+            },
+            "remove": {
+                "desc": "移除自動回覆",
+                "name": "移除",
+                "param": {
+                    "trigger": "觸發字串"
+                }
+            },
+            "root": {
+                "desc": "自動回覆設定指令群組",
+                "name": "自動回覆"
+            },
+            "template": {
+                "choice": {
+                    "false": "否（覆蓋現有規則）",
+                    "true": "是"
+                },
+                "desc": "套用內建自動回覆範本包",
+                "name": "模板",
+                "param": {
+                    "merge": "是否與現有規則合併",
+                    "pack": "要套用的範本包"
+                }
+            },
+            "test": {
+                "desc": "測試自動回覆內容的變數替換",
+                "name": "測試",
+                "param": {
+                    "response": "要測試的回覆內容"
+                }
+            }
+        }
+    },
+    "bazi": {
+        "bazi": {
+            "choice": {
+                "c0": "男",
+                "c1": "女"
+            },
+            "desc": "使用生日時間進行八字排盤",
+            "name": "八字排盤",
+            "param": {
+                "day": "出生日（1-31）",
+                "gender": "性別",
+                "hour": "出生小時（24 小時制 0-23）",
+                "month": "出生月（1-12）",
+                "public": "是否公開此排盤結果（預設為私密）",
+                "year": "出生年（西元）"
+            }
+        }
+    },
+    "botcustomizer": {
+        "change": {
+            "avatar": {
+                "desc": "更換機器人的頭像（不指定則恢復預設頭像）",
+                "name": "頭像",
+                "param": {
+                    "image": "新的頭像圖片"
+                }
+            },
+            "banner": {
+                "desc": "更換機器人的橫幅（不指定則恢復預設橫幅）",
+                "name": "橫幅",
+                "param": {
+                    "image": "新的橫幅圖片"
+                }
+            },
+            "bio": {
+                "desc": "更改機器人的關於我（不指定則恢復預設）",
+                "name": "介紹",
+                "param": {
+                    "bio": "新的介紹（\\n 代表換行）（最多 100 字）"
+                }
+            },
+            "root": {
+                "name": "更改"
+            }
+        }
+    },
+    "contribute": {
+        "contribute": {
+            "dynamic_voice_audio": {
+                "desc": "投稿動態語音頻道的進入音效",
+                "name": "動態語音音效",
+                "param": {
+                    "audio": "音檔（MP3、WAV、OGG 格式，最大 5MB，建議 3-10 秒）"
+                }
+            },
+            "feedgrass": {
+                "desc": "投稿 dsize 的草飼圖",
+                "name": "草飼"
+            },
+            "root": {
+                "desc": "投稿圖片"
+            },
+            "what_is_this_guy_talking_about": {
+                "desc": "投稿「這傢伙在說什麼呢」圖片",
+                "name": "這傢伙在說什麼呢"
+            }
+        }
+    },
+    "dctw": {
+        "bot": {
+            "browse": {
+                "choice": {
+                    "bumped": "bumped",
+                    "newest": "newest",
+                    "servers": "servers",
+                    "votes": "votes"
+                },
+                "desc": "瀏覽機器人清單",
+                "name": "瀏覽"
+            },
+            "bump": {
+                "desc": "對指定 bot 置頂",
+                "name": "置頂"
+            },
+            "bumpall": {
+                "desc": "一次置頂你擁有的全部 bots",
+                "name": "全部置頂"
+            },
+            "root": {
+                "desc": "Bot 相關指令",
+                "name": "機器人"
+            },
+            "search": {
+                "choice": {
+                    "bumped": "bumped",
+                    "newest": "newest",
+                    "servers": "servers",
+                    "votes": "votes"
+                },
+                "desc": "搜尋 bot",
+                "name": "搜尋"
+            },
+            "vote": {
+                "desc": "對指定 bot 投票",
+                "name": "投票"
+            }
+        },
+        "dctw": {
+            "bumpall": {
+                "desc": "一次置頂你擁有的全部資源",
+                "name": "全部置頂"
+            },
+            "cache_stats": {
+                "desc": "查看 DCTW 快取狀態",
+                "name": "快取統計"
+            },
+            "root": {
+                "desc": "DCTW 瀏覽器！"
+            }
+        },
+        "key": {
+            "clear": {
+                "desc": "清除你的 DCTW API key",
+                "name": "清除"
+            },
+            "help": {
+                "desc": "說明如何取得 DCTW API key",
+                "name": "幫助"
+            },
+            "root": {
+                "desc": "管理你的 DCTW API key",
+                "name": "金鑰"
+            },
+            "set": {
+                "desc": "設定你的 DCTW API key",
+                "name": "設定"
+            },
+            "show": {
+                "desc": "查看是否已設定 DCTW API key",
+                "name": "顯示"
+            }
         },
         "server": {
-            "name": "伺服器",
-            "desc": "設定此伺服器的預設語言",
-            "param": { "language": "語言（自動 = 依使用者的 Discord 客戶端語言）" }
+            "browse": {
+                "choice": {
+                    "bumped": "bumped",
+                    "members": "members",
+                    "newest": "newest",
+                    "votes": "votes"
+                },
+                "desc": "瀏覽伺服器清單",
+                "name": "瀏覽"
+            },
+            "bump": {
+                "desc": "對指定 server 置頂",
+                "name": "置頂"
+            },
+            "bumpall": {
+                "desc": "一次置頂你擁有的全部 servers",
+                "name": "全部置頂"
+            },
+            "root": {
+                "desc": "Server 相關指令",
+                "name": "伺服器"
+            },
+            "search": {
+                "choice": {
+                    "bumped": "bumped",
+                    "members": "members",
+                    "newest": "newest",
+                    "votes": "votes"
+                },
+                "desc": "搜尋 server",
+                "name": "搜尋"
+            },
+            "vote": {
+                "desc": "對指定 server 投票",
+                "name": "投票"
+            }
         },
-        "choice": { "auto": "自動" }
+        "template": {
+            "browse": {
+                "choice": {
+                    "bumped": "bumped",
+                    "newest": "newest",
+                    "votes": "votes"
+                },
+                "desc": "瀏覽模板清單",
+                "name": "瀏覽"
+            },
+            "bump": {
+                "desc": "對指定 template 置頂",
+                "name": "置頂"
+            },
+            "bumpall": {
+                "desc": "一次置頂你擁有的全部 templates",
+                "name": "全部置頂"
+            },
+            "root": {
+                "desc": "Template 相關指令",
+                "name": "模板"
+            },
+            "search": {
+                "choice": {
+                    "bumped": "bumped",
+                    "newest": "newest",
+                    "votes": "votes"
+                },
+                "desc": "搜尋 template",
+                "name": "搜尋"
+            },
+            "vote": {
+                "desc": "對指定 template 投票",
+                "name": "投票"
+            }
+        }
+    },
+    "dgpa": {
+        "nds": {
+            "follow": {
+                "desc": "追蹤天然災害停止上班及上課情形變更 (測試版)",
+                "name": "追蹤",
+                "param": {
+                    "channel": "要發送通知的頻道"
+                }
+            },
+            "root": {
+                "desc": "天然災害停止上班及上課情形查詢"
+            },
+            "view": {
+                "desc": "取得最新天然災害停止上班及上課情形",
+                "name": "查看"
+            }
+        }
+    },
+    "dsize": {
+        "ctx": {
+            "dsize_battle_context": {
+                "name": "跟他 dsize 對決"
+            },
+            "dsize_feedgrass_context": {
+                "name": "草飼他"
+            }
+        },
+        "dsize": {
+            "choice": {
+                "false": "否",
+                "true": "是"
+            },
+            "desc": "量屌長",
+            "param": {
+                "global_dsize": "是否使用全域紀錄 (預設否)"
+            }
+        },
+        "dsize_battle": {
+            "desc": "比屌長(需要雙方今天沒有量過)",
+            "name": "dsize-對決",
+            "param": {
+                "opponent": "要比屌長的對象"
+            }
+        },
+        "dsize_feedgrass": {
+            "choice": {
+                "false": "否",
+                "true": "是"
+            },
+            "desc": "草飼男娘",
+            "name": "dsize-草飼",
+            "param": {
+                "global_feedgrass": "是否草飼全域排行榜上的男娘 (預設否)",
+                "user": "要草飼的對象"
+            }
+        },
+        "dsize_feedgrass_nsfw": {
+            "choice": {
+                "false": "否",
+                "true": "是"
+            },
+            "desc": "草飼男娘 (NSFW)",
+            "name": "dsize-草飼-nsfw",
+            "param": {
+                "global_feedgrass": "是否草飼全域排行榜上的男娘 (預設否)",
+                "user": "要草飼的對象"
+            }
+        },
+        "dsize_feedgrass_nsfw_toggle": {
+            "desc": "切換是否允許 NSFW 草飼",
+            "name": "dsize-草飼-nsfw-切換"
+        },
+        "dsize_history": {
+            "choice": {
+                "false": "否",
+                "true": "是"
+            },
+            "desc": "查看歷史紀錄",
+            "name": "dsize-歷史紀錄",
+            "param": {
+                "global_history": "是否顯示全域紀錄 (預設否)",
+                "user": "查看指定用戶的歷史紀錄 (預設為自己)"
+            }
+        },
+        "dsize_leaderboard": {
+            "choice": {
+                "false": "否",
+                "true": "是"
+            },
+            "desc": "查看屌長排行榜",
+            "name": "dsize-排行榜",
+            "param": {
+                "global_leaderboard": "顯示全域排行榜 (預設否)",
+                "limit": "顯示前幾名 (預設10)",
+                "reverse": "反轉排行榜 (預設否)"
+            }
+        },
+        "dsize_settings": {
+            "choice": {
+                "dsize_drop_item_chance": "撿到物品機率(%)",
+                "dsize_max": "最大長度",
+                "dsize_surgery_max": "手術最大長度",
+                "dsize_surgery_percent": "手術機率(%)"
+            },
+            "desc": "設定dsize",
+            "name": "dsize-設定",
+            "param": {
+                "setting": "要設定的項目",
+                "value": "設定的值"
+            }
+        },
+        "dsize_stats": {
+            "desc": "查看你的屌長統計資料",
+            "name": "dsize-統計資料"
+        }
+    },
+    "dynamicvoice": {
+        "dynamic_voice": {
+            "blacklist_role": {
+                "desc": "設定動態語音頻道黑名單身分組",
+                "name": "黑名單身分組"
+            },
+            "disable": {
+                "desc": "禁用動態語音頻道",
+                "name": "禁用"
+            },
+            "play_audio": {
+                "choice": {
+                    "false": "禁用",
+                    "true": "啟用"
+                },
+                "desc": "動態語音頻道切換前先播放音效",
+                "name": "播放音效",
+                "param": {
+                    "enable": "是否啟用進入頻道前播放音效"
+                }
+            },
+            "root": {
+                "name": "動態語音"
+            },
+            "setup": {
+                "desc": "設置動態語音頻道",
+                "name": "設置",
+                "param": {
+                    "channel": "選擇頻道",
+                    "channel_category": "選擇頻道類別",
+                    "channel_name": "選擇頻道名稱模板 (使用 {user} 代表用戶名稱)"
+                }
+            },
+            "unblacklist_role": {
+                "desc": "移除動態語音頻道黑名單身分組",
+                "name": "解除黑名單身分組"
+            },
+            "view_blacklist_roles": {
+                "desc": "查看動態語音頻道黑名單身分組",
+                "name": "查看黑名單身分組"
+            }
+        }
+    },
+    "economy": {
+        "economy": {
+            "adminitems": {
+                "desc": "查看你擁有的管理員給予物品",
+                "name": "管理員物品"
+            },
+            "balance": {
+                "desc": "查看餘額",
+                "name": "餘額",
+                "param": {
+                    "user": "查看其他用戶的餘額"
+                }
+            },
+            "buy": {
+                "choice": {
+                    "global": "全域商店（全域幣）",
+                    "server": "伺服器商店（伺服幣）"
+                },
+                "desc": "從商店購買物品",
+                "name": "購買",
+                "param": {
+                    "amount": "購買數量",
+                    "item_id": "要購買的物品",
+                    "scope": "商店類型"
+                }
+            },
+            "daily": {
+                "desc": "領取每日獎勵",
+                "name": "每日獎勵",
+                "param": {
+                    "global_daily": "是否領取全域獎勵"
+                }
+            },
+            "exchange": {
+                "choice": {
+                    "to_global": "伺服幣 → 全域幣",
+                    "to_server": "全域幣 → 伺服幣"
+                },
+                "desc": "兌換伺服幣和全域幣",
+                "name": "兌換",
+                "param": {
+                    "amount": "金額",
+                    "direction": "兌換方向"
+                }
+            },
+            "history": {
+                "choice": {
+                    "global": "全域",
+                    "server": "伺服器"
+                },
+                "desc": "查看個人交易紀錄",
+                "name": "歷史紀錄",
+                "param": {
+                    "page": "頁數",
+                    "scope": "查看範圍"
+                }
+            },
+            "hourly": {
+                "desc": "領取每小時獎勵",
+                "name": "每小時獎勵",
+                "param": {
+                    "global_hourly": "是否領取全域獎勵"
+                }
+            },
+            "info": {
+                "desc": "查看伺服器經濟資訊",
+                "name": "資訊"
+            },
+            "leaderboard": {
+                "choice": {
+                    "global": "全域幣",
+                    "server": "伺服幣",
+                    "total": "總資產"
+                },
+                "desc": "查看財富排行榜",
+                "name": "排行榜",
+                "param": {
+                    "currency": "排行類型"
+                }
+            },
+            "pay": {
+                "choice": {
+                    "global": "全域幣",
+                    "server": "伺服幣"
+                },
+                "desc": "轉帳給其他用戶",
+                "name": "轉帳",
+                "param": {
+                    "amount": "金額",
+                    "currency": "貨幣類型",
+                    "user": "收款人"
+                }
+            },
+            "root": {
+                "desc": "經濟系統指令",
+                "name": "經濟"
+            },
+            "sell": {
+                "choice": {
+                    "global": "全域商店（全域幣）",
+                    "server": "伺服器商店（伺服幣）"
+                },
+                "desc": "賣出物品給商店",
+                "name": "賣出",
+                "param": {
+                    "amount": "賣出數量",
+                    "item_id": "要賣出的物品",
+                    "scope": "商店類型"
+                }
+            },
+            "shop": {
+                "desc": "查看商店",
+                "name": "商店"
+            },
+            "trade": {
+                "desc": "與其他用戶交易",
+                "name": "交易",
+                "param": {
+                    "global_trade": "使用全域幣/全域物品交易（跨伺服器）",
+                    "offer_item": "你要提供的物品",
+                    "offer_item_amount": "提供的物品數量",
+                    "offer_money": "你要提供的金額",
+                    "request_item": "你想要的物品",
+                    "request_item_amount": "想要的物品數量",
+                    "request_money": "你想要的金額",
+                    "user": "交易對象"
+                }
+            }
+        },
+        "economymod": {
+            "global_mode": {
+                "desc": "切換這個伺服器是否強制使用全域經濟/物品/dsize",
+                "name": "全域模式",
+                "param": {
+                    "enabled": "True = 強制全域，False = 恢復伺服器模式"
+                }
+            },
+            "info": {
+                "desc": "詳細經濟管理面板",
+                "name": "資訊"
+            },
+            "root": {
+                "desc": "經濟系統管理指令",
+                "name": "經濟管理"
+            },
+            "setname": {
+                "desc": "設定伺服器貨幣名稱",
+                "name": "設定名稱",
+                "param": {
+                    "name": "新的貨幣名稱"
+                }
+            },
+            "toggle_flow": {
+                "desc": "切換是否允許伺服幣與全域幣流通（兌換、全域商店等）",
+                "name": "切換流通"
+            }
+        }
+    },
+    "explore": {
+        "banned_words": {
+            "add": {
+                "desc": "新增一個自訂禁字",
+                "name": "新增"
+            },
+            "list": {
+                "desc": "列出所有自訂禁字",
+                "name": "列出"
+            },
+            "remove": {
+                "desc": "移除一個自訂禁字",
+                "name": "移除"
+            },
+            "root": {
+                "desc": "管理 Explore 聊天室的自訂禁字",
+                "name": "禁字"
+            }
+        },
+        "explore": {
+            "desc": "啟動探索空間",
+            "name": "探索"
+        },
+        "explore_settings": {
+            "chat_channel": {
+                "desc": "設定 Explore 聊天室橋接的 Discord 文字頻道",
+                "name": "聊天頻道"
+            },
+            "privacy": {
+                "choice": {
+                    "0": "私人",
+                    "1": "公開"
+                },
+                "desc": "設定伺服器是否在探索大廳公開",
+                "name": "隱私"
+            },
+            "require_join": {
+                "desc": "設定是否必須先加入伺服器才能進入 Explore",
+                "name": "必須加入"
+            },
+            "root": {
+                "name": "探索設定"
+            },
+            "setup": {
+                "choice": {
+                    "0": "停用",
+                    "1": "啟用"
+                },
+                "desc": "啟用或設定探索空間",
+                "name": "設置"
+            }
+        }
+    },
+    "fakeuser": {
+        "fake": {
+            "desc": "假冒用戶說話",
+            "name": "假冒",
+            "param": {
+                "message": "要發送的訊息內容",
+                "user": "要假冒的用戶"
+            }
+        },
+        "fake_admin": {
+            "filter": {
+                "choice": {
+                    "add": "添加過濾器",
+                    "remove": "移除過濾器",
+                    "view": "查看過濾器"
+                },
+                "desc": "設定假冒用戶功能的過濾器",
+                "name": "過濾",
+                "param": {
+                    "mode": "要做什麼？",
+                    "regex": "要過濾的正則表達式，僅在選擇添加或移除模式時需要"
+                }
+            },
+            "log_channel": {
+                "desc": "設置假冒用戶紀錄的頻道",
+                "name": "日誌頻道",
+                "param": {
+                    "channel": "要設置的假冒用戶紀錄頻道，留空以查看當前頻道"
+                }
+            },
+            "root": {
+                "desc": "假冒用戶管理指令",
+                "name": "假冒管理"
+            }
+        },
+        "fake_blacklist": {
+            "desc": "假冒用戶黑名單管理",
+            "name": "假冒黑名單",
+            "param": {
+                "user": "要加入或移除黑名單的用戶 (若指定本機器人代表所有人)"
+            }
+        }
+    },
+    "feedback": {
+        "feedback": {
+            "desc": "提供回饋給機器人開發者",
+            "name": "回饋箱"
+        }
+    },
+    "fixlink": {
+        "fixlink": {
+            "root": {
+                "desc": "連結修復器"
+            },
+            "settings": {
+                "desc": "開啟 FixLink 互動式設定面板",
+                "name": "設定"
+            }
+        }
+    },
+    "gettingstarted": {
+        "gettingstarted": {
+            "desc": "開啟伺服器快速設定中心"
+        }
+    },
+    "guildpanel": {
+        "panel": {
+            "desc": "打開伺服器面板",
+            "name": "面板"
+        }
+    },
+    "hackeddetector": {
+        "imhacked": {
+            "desc": "開始解除被盜帳戶的流程",
+            "name": "我被盜了"
+        }
+    },
+    "itemsystem": {
+        "item": {
+            "drop": {
+                "choice": {
+                    "false": "否",
+                    "global": "全域",
+                    "server": "伺服器",
+                    "true": "是"
+                },
+                "desc": "丟棄一個物品",
+                "name": "丟棄",
+                "param": {
+                    "amount": "你想丟棄的數量",
+                    "can_pickup": "其他人可以撿起這個物品嗎？",
+                    "item_id": "你想丟棄的物品ID",
+                    "pickup_duration": "物品可以被撿起的時間（秒）",
+                    "pickup_only_once": "物品只能被撿起一次嗎？",
+                    "scope": "物品來源範圍（預設自動偵測）"
+                }
+            },
+            "give": {
+                "choice": {
+                    "global": "全域",
+                    "server": "伺服器"
+                },
+                "desc": "給予另一個用戶一個物品",
+                "name": "給予",
+                "param": {
+                    "amount": "數量",
+                    "item_id": "你想給予的物品ID",
+                    "scope": "物品來源範圍（預設自動偵測）",
+                    "user": "你想給予物品的用戶"
+                }
+            },
+            "list": {
+                "choice": {
+                    "global": "全域",
+                    "server": "伺服器"
+                },
+                "desc": "查看你擁有的物品",
+                "name": "列出",
+                "param": {
+                    "scope": "查看範圍（預設自動偵測）"
+                }
+            },
+            "root": {
+                "desc": "物品系統指令",
+                "name": "物品"
+            },
+            "use": {
+                "choice": {
+                    "global": "全域",
+                    "server": "伺服器"
+                },
+                "desc": "使用一個物品",
+                "name": "使用",
+                "param": {
+                    "item_id": "你想使用的物品ID",
+                    "scope": "使用範圍（預設自動偵測）"
+                }
+            }
+        },
+        "itemmod": {
+            "addcustom": {
+                "desc": "新增伺服器自定義物品",
+                "name": "新增自定義物品",
+                "param": {
+                    "content": "使用物品時要傳送的文字內容，可使用 AutoReply 變數",
+                    "description": "物品說明（可選，預設為「自定義物品」）",
+                    "ephemeral_response": "是否以隱藏訊息方式回應使用者",
+                    "list_in_shop": "是否上架伺服器商店",
+                    "name": "物品名稱",
+                    "price": "商店定價（伺服幣，僅在「上架商店」為是時有效）",
+                    "remove_after_use": "使用後是否自動移除物品",
+                    "revenue_share_user": "分潤用戶，物品被使用後會獲得 90% 價值"
+                }
+            },
+            "editcustom": {
+                "desc": "編輯自定義物品的商店上架與定價",
+                "name": "編輯自定義物品",
+                "param": {
+                    "content": "使用物品時要傳送的文字內容，可使用 AutoReply 變數",
+                    "description": "物品說明",
+                    "ephemeral_response": "是否以隱藏訊息方式回應使用者",
+                    "item_id": "要編輯的自定義物品",
+                    "list_in_shop": "是否上架伺服器商店",
+                    "name": "物品名稱",
+                    "remove_after_use": "使用後是否自動移除物品",
+                    "revenue_share_user": "分潤用戶，物品被使用後會獲得 90% 價值"
+                }
+            },
+            "give": {
+                "desc": "給予用戶一個物品（可能會影響經濟）",
+                "name": "給予",
+                "param": {
+                    "amount": "你想給予的數量",
+                    "item_id": "你想給予的物品ID",
+                    "user": "你想給予物品的用戶"
+                }
+            },
+            "list": {
+                "desc": "列出所有可用的物品",
+                "name": "列出"
+            },
+            "listcustom": {
+                "desc": "列出本伺服器的自定義物品",
+                "name": "列出自定義物品"
+            },
+            "listuser": {
+                "desc": "列出用戶擁有的物品",
+                "name": "列出用戶",
+                "param": {
+                    "user": "你想查詢的用戶"
+                }
+            },
+            "remove": {
+                "desc": "移除用戶的一個物品",
+                "name": "移除",
+                "param": {
+                    "amount": "你想移除的數量",
+                    "item_id": "你想移除的物品ID",
+                    "user": "你想移除物品的用戶"
+                }
+            },
+            "removecustom": {
+                "desc": "移除伺服器自定義物品",
+                "name": "移除自定義物品",
+                "param": {
+                    "item_id": "要移除的自定義物品"
+                }
+            },
+            "root": {
+                "desc": "物品系統管理指令",
+                "name": "物品管理"
+            }
+        }
+    },
+    "joinnotify": {
+        "joinnotify": {
+            "choice": {
+                "disable": "不要",
+                "enable": "好啊"
+            },
+            "desc": "設定是否在你邀請我加入伺服器時私訊",
+            "name": "邀請機器人通知"
+        }
+    },
+    "language": {
+        "choice": {
+            "auto": "自動"
+        },
+        "root": {
+            "desc": "語言設定",
+            "name": "語言"
+        },
+        "server": {
+            "desc": "設定此伺服器的預設語言",
+            "name": "伺服器",
+            "param": {
+                "language": "語言（自動 = 依使用者的 Discord 客戶端語言）"
+            }
+        },
+        "set": {
+            "desc": "設定你個人的語言",
+            "name": "設定",
+            "param": {
+                "language": "語言（自動 = 依你的 Discord 客戶端語言）"
+            }
+        },
+        "show": {
+            "desc": "顯示目前的語言設定與判定過程",
+            "name": "顯示"
+        }
+    },
+    "mentionlimit": {
+        "mentionlimit": {
+            "about": {
+                "desc": "關於 MentionLimit",
+                "name": "關於"
+            },
+            "add": {
+                "desc": "新增或更新受管理身分組的提及冷卻",
+                "name": "新增",
+                "param": {
+                    "cooldown": "冷卻秒數（10-86400，預設 600）",
+                    "role": "要管理的身分組"
+                }
+            },
+            "list": {
+                "desc": "列出 MentionLimit 設定",
+                "name": "列出"
+            },
+            "remove": {
+                "desc": "移除受管理的身分組",
+                "name": "移除",
+                "param": {
+                    "role": "要移除管理的身分組"
+                }
+            },
+            "root": {
+                "name": "提及冷卻"
+            },
+            "settings": {
+                "desc": "設定 MentionLimit 模式與選項",
+                "name": "設定",
+                "param": {
+                    "announce": "進入冷卻時是否在該頻道公告",
+                    "automod_mode": "AutoMod 模式：冷卻期間用 AutoMod 規則封鎖，身分組保持可提及",
+                    "count_admins": "管理員的提及是否也觸發冷卻"
+                }
+            },
+            "setup": {
+                "desc": "互動式設定並啟用 MentionLimit",
+                "name": "設置"
+            },
+            "toggle": {
+                "desc": "啟用/停用 MentionLimit",
+                "name": "切換",
+                "param": {
+                    "enable": "留空則切換目前狀態"
+                }
+            }
+        }
+    },
+    "messageimage": {
+        "ctx": {
+            "make_it_a_quote": {
+                "name": "糟糕的Make it a Quote"
+            },
+            "screenshot_generator": {
+                "name": "截圖生成器"
+            },
+            "whatisthisguytalking": {
+                "name": "這傢伙在說什麼呢"
+            }
+        },
+        "upvoteboard": {
+            "desc": "設定有料板子，當超過 5 個人點擊將會傳送在該頻道。",
+            "name": "有料板子",
+            "param": {
+                "channel": "要設置的頻道（若未設置則清除設定）"
+            }
+        }
+    },
+    "minigames": {
+        "minigamescog": {
+            "big2": {
+                "desc": "建立一桌大老二",
+                "name": "大老二",
+                "param": {
+                    "use_global": "是否使用全域幣（預設依伺服器設定）"
+                }
+            },
+            "blackjack": {
+                "desc": "21點：對抗莊家",
+                "name": "二十一點",
+                "param": {
+                    "bet": "賭注金額（50～2000）",
+                    "use_global": "是否使用全域幣（預設依伺服器設定）"
+                }
+            },
+            "coinflip": {
+                "desc": "擲硬幣：猜正面或反面",
+                "name": "擲硬幣",
+                "param": {
+                    "bet": "賭注金額（50～2000）"
+                }
+            },
+            "dice": {
+                "desc": "骰子遊戲：猜中 1～6 的點數",
+                "name": "骰子",
+                "param": {
+                    "bet": "賭注金額（50～2000）"
+                }
+            },
+            "doom": {
+                "desc": "開始玩 DOOM"
+            },
+            "highlow": {
+                "desc": "比大小：猜下一張牌較大或較小",
+                "name": "比大小",
+                "param": {
+                    "bet": "賭注金額（50～2000）",
+                    "use_global": "是否使用全域幣（預設依伺服器設定）"
+                }
+            },
+            "lottery": {
+                "desc": "購買 00～99 彩票或查看目前獎池",
+                "name": "樂透",
+                "param": {
+                    "bet": "每張票的投注金額（50～2000；查詢狀態時留空）",
+                    "number": "選擇 00～99（查詢狀態時留空）",
+                    "use_global": "是否使用全域幣（預設依伺服器設定）"
+                }
+            },
+            "root": {
+                "desc": "迷你遊戲"
+            },
+            "roulette": {
+                "choice": {
+                    "black": "黑色",
+                    "even": "雙數",
+                    "high": "大（19～36）",
+                    "low": "小（1～18）",
+                    "number": "單一號碼",
+                    "odd": "單數",
+                    "red": "紅色"
+                },
+                "desc": "俄羅斯輪盤：選擇投注方式並下注",
+                "name": "輪盤",
+                "param": {
+                    "bet": "賭注金額（50～2000）",
+                    "bet_type": "投注方式",
+                    "number": "單號投注時選擇 0～36",
+                    "use_global": "是否使用全域幣（預設依伺服器設定）"
+                }
+            },
+            "scratchcard": {
+                "desc": "購買並刮開一張 3x3 刮刮樂",
+                "name": "刮刮樂",
+                "param": {
+                    "bet": "賭注金額（50～2000）",
+                    "use_global": "是否使用全域幣（預設依伺服器設定）"
+                }
+            },
+            "slots": {
+                "desc": "拉霸機",
+                "name": "拉霸機",
+                "param": {
+                    "bet": "賭注金額（50～2000）",
+                    "use_global": "是否使用全域幣（預設依伺服器設定）"
+                }
+            },
+            "tower": {
+                "desc": "爬塔遊戲",
+                "name": "爬塔",
+                "param": {
+                    "bet": "賭注金額（50～2000）",
+                    "use_global": "是否使用全域幣（預設依伺服器設定）"
+                }
+            }
+        }
+    },
+    "moderate": {
+        "action_builder": {
+            "choice": {
+                "ban": "封禁",
+                "delete": "刪除訊息",
+                "kick": "踢出",
+                "mute": "禁言",
+                "send_mod_message": "傳送管理通知",
+                "warn": "公開警告"
+            },
+            "desc": "產生懲處動作指令字串",
+            "name": "動作產生器",
+            "param": {
+                "action_type": "動作類型",
+                "delete_message_duration": "ban 專用：刪除該用戶最近多少時間的訊息，如 1d、0 表示不刪",
+                "duration": "時長（mute/ban 用），如 10m、7d、0 表示永久",
+                "message": "警告訊息（delete/warn 用），可用 {user} 代表用戶",
+                "prepend": "要接在此動作前面的既有指令（用逗號分隔多個動作時）",
+                "reason": "原因（mute/kick/ban 用）"
+            }
+        },
+        "ban": {
+            "desc": "封禁用戶",
+            "name": "封禁",
+            "param": {
+                "delete_message": "刪除訊息時間（可選，預設不刪除）",
+                "duration": "封禁時間（可選，預設永久）",
+                "reason": "封禁原因（可選）",
+                "send_moderation_message": "是否同步發送處分通知",
+                "user": "選擇用戶"
+            }
+        },
+        "custom_action_add": {
+            "desc": "新增或更新伺服器自訂管理動作",
+            "name": "自定義動作-新增",
+            "param": {
+                "action": "要執行的動作字串（例如 mute 1h 在非宣傳區宣傳, smm）",
+                "name": "自訂指令名稱（例如 ad）"
+            }
+        },
+        "custom_action_list": {
+            "desc": "查看伺服器自訂管理動作",
+            "name": "自定義動作-列出"
+        },
+        "custom_action_remove": {
+            "desc": "刪除伺服器自訂管理動作",
+            "name": "自定義動作-移除",
+            "param": {
+                "name": "要刪除的自訂指令名稱"
+            }
+        },
+        "kick": {
+            "desc": "踢出用戶",
+            "name": "踢出",
+            "param": {
+                "reason": "踢出原因（可選）",
+                "send_moderation_message": "是否同步發送處分通知",
+                "user": "選擇用戶（@或ID）"
+            }
+        },
+        "moderation_message_channel": {
+            "desc": "設定懲處公告頻道",
+            "name": "懲處公告頻道",
+            "param": {
+                "channel": "選擇頻道"
+            }
+        },
+        "moderation_message_format": {
+            "desc": "設定懲處公告模板與裁判字號格式",
+            "name": "懲處公告格式"
+        },
+        "multi_moderate": {
+            "desc": "對多個用戶進行懲處",
+            "name": "多使用者懲處",
+            "param": {
+                "action": "輸入懲處指令，使用逗號分隔多個指令，例如：ban 1d spamming, mute 10m",
+                "users": "選擇用戶 (提及或是 ID，使用逗號、空格或換行分隔多個用戶)"
+            }
+        },
+        "multi_moderate_action": {
+            "desc": "對用戶進行多重操作",
+            "name": "多重操作",
+            "param": {
+                "user": "選擇用戶"
+            }
+        },
+        "request": {
+            "ban": {
+                "desc": "請求封禁用戶",
+                "name": "封禁",
+                "param": {
+                    "duration": "封禁時間（可選，預設永久）",
+                    "reason": "封禁原因（可選）",
+                    "request_to": "請求誰來確認（預設為對方本人）",
+                    "user": "要封禁的用戶"
+                }
+            },
+            "kick": {
+                "desc": "請求踢出用戶",
+                "name": "踢出",
+                "param": {
+                    "reason": "踢出原因（可選）",
+                    "request_to": "請求誰來確認（預設為對方本人）",
+                    "user": "要踢出的用戶"
+                }
+            },
+            "root": {
+                "desc": "請求目標本人或有權限的管理員確認執行懲處。",
+                "name": "請求"
+            },
+            "settings": {
+                "choice": {
+                    "ban": "封禁",
+                    "kick": "踢出",
+                    "timeout": "禁言"
+                },
+                "desc": "設定請求懲處功能（僅管理員）",
+                "name": "設定",
+                "param": {
+                    "action": "要設定的動作",
+                    "enabled": "是否啟用",
+                    "max_duration": "禁言/封禁最長時間（例如 1h，0 = 不限制）"
+                }
+            },
+            "timeout": {
+                "desc": "請求禁言用戶",
+                "name": "禁言",
+                "param": {
+                    "duration": "禁言時間（預設10分鐘）",
+                    "reason": "禁言原因（可選）",
+                    "request_to": "請求誰來確認（預設為對方本人）",
+                    "user": "要禁言的用戶"
+                }
+            }
+        },
+        "send_moderation_message": {
+            "desc": "手動發送懲處公告",
+            "name": "發送懲處公告",
+            "param": {
+                "action": "處分結果",
+                "direct": "直接發送到公告頻道而不顯示設定介面",
+                "moderator": "執行管理員（可選）",
+                "reason": "處分原因",
+                "user": "選擇用戶"
+            }
+        },
+        "timeout": {
+            "desc": "禁言用戶",
+            "name": "禁言",
+            "param": {
+                "duration": "禁言時間（可選，預設10分鐘）",
+                "reason": "禁言原因（可選）",
+                "send_moderation_message": "是否同步發送處分通知",
+                "user": "選擇用戶"
+            }
+        },
+        "unban": {
+            "desc": "解封用戶",
+            "name": "解封",
+            "param": {
+                "user": "選擇用戶"
+            }
+        },
+        "untimeout": {
+            "desc": "解除用戶禁言",
+            "name": "解除禁言",
+            "param": {
+                "user": "選擇用戶"
+            }
+        },
+        "vote": {
+            "ban": {
+                "desc": "發起封禁投票",
+                "name": "封禁",
+                "param": {
+                    "duration": "封禁時間（可選，預設永久）",
+                    "reason": "封禁原因（可選）",
+                    "user": "要封禁的用戶"
+                }
+            },
+            "kick": {
+                "desc": "發起踢出投票",
+                "name": "踢出",
+                "param": {
+                    "reason": "踢出原因（可選）",
+                    "user": "要踢出的用戶"
+                }
+            },
+            "root": {
+                "desc": "發起懲處投票，同意數達閾值即執行。",
+                "name": "投票"
+            },
+            "settings": {
+                "choice": {
+                    "ban": "封禁",
+                    "kick": "踢出",
+                    "timeout": "禁言"
+                },
+                "desc": "設定投票懲處功能（僅管理員）",
+                "name": "設定",
+                "param": {
+                    "action": "要設定的動作",
+                    "enabled": "是否啟用",
+                    "max_duration": "禁言/封禁最長時間（例如 1h，0 = 不限制）",
+                    "threshold": "固定投票門檻（0 = 自動計算）",
+                    "vote_duration": "投票持續時間（例如 10m，預設 10 分鐘）"
+                }
+            },
+            "timeout": {
+                "desc": "發起禁言投票",
+                "name": "禁言",
+                "param": {
+                    "duration": "禁言時間（預設10分鐘）",
+                    "reason": "禁言原因（可選）",
+                    "user": "要禁言的用戶"
+                }
+            }
+        }
+    },
+    "moderationnotify": {
+        "settings_punishment_notify": {
+            "choice": {
+                "ban": "封禁",
+                "kick": "踢出",
+                "mute": "禁言"
+            },
+            "desc": "設定是否通知被懲罰的用戶",
+            "name": "設定-懲罰通知",
+            "param": {
+                "action": "選擇要設定的懲罰類型",
+                "enable": "是否啟用通知"
+            }
+        },
+        "user_appeal_blacklist": {
+            "desc": "管理用戶申訴黑名單",
+            "name": "用戶申訴黑名單",
+            "param": {
+                "reason": "加入黑名單的理由(選填)",
+                "user": "要加入或移除黑名單的用戶"
+            }
+        },
+        "user_appeal_channel": {
+            "desc": "設置用戶申訴頻道，若未設置則關閉。",
+            "name": "用戶申訴頻道",
+            "param": {
+                "channel": "要設置的用戶申訴頻道，留空則關閉申訴功能。"
+            }
+        },
+        "view_appeal_blacklist": {
+            "desc": "查看申訴黑名單",
+            "name": "查看用戶申訴黑名單"
+        }
+    },
+    "music": {
+        "music": {
+            "loop": {
+                "choice": {
+                    "0": "關閉循環",
+                    "1": "單曲循環",
+                    "2": "隊列循環"
+                },
+                "desc": "設定循環播放模式",
+                "name": "循環",
+                "param": {
+                    "mode": "循環模式"
+                }
+            },
+            "nodes": {
+                "desc": "查看 Lavalink 節點狀態",
+                "name": "節點"
+            },
+            "now_playing": {
+                "desc": "查看當前播放的歌曲",
+                "name": "正在播放"
+            },
+            "pause": {
+                "desc": "暫停播放",
+                "name": "暫停"
+            },
+            "play": {
+                "desc": "播放音樂",
+                "name": "播放",
+                "param": {
+                    "query": "歌曲名稱或 URL"
+                }
+            },
+            "queue": {
+                "desc": "查看播放隊列",
+                "name": "佇列"
+            },
+            "radio": {
+                "choice": {
+                    "listenmoe": "LISTEN.moe",
+                    "r_a_dio": "R/a/dio"
+                },
+                "desc": "切換到電台模式",
+                "name": "電台",
+                "param": {
+                    "station": "要播放的電台"
+                }
+            },
+            "recommend": {
+                "desc": "根據當前播放的歌曲推薦相似歌曲",
+                "name": "推薦",
+                "param": {
+                    "count": "要添加的推薦歌曲數量 (1-10，預設 5)"
+                }
+            },
+            "restore_queue": {
+                "desc": "回復重啟前儲存的播放狀態",
+                "name": "回復播放隊列"
+            },
+            "resume": {
+                "desc": "繼續播放",
+                "name": "繼續"
+            },
+            "search": {
+                "desc": "搜尋並播放音樂",
+                "name": "搜尋",
+                "param": {
+                    "query": "搜尋歌曲（支援自動完成）"
+                }
+            },
+            "shuffle": {
+                "desc": "隨機打亂隊列",
+                "name": "隨機"
+            },
+            "skip": {
+                "desc": "跳過當前歌曲",
+                "name": "跳過"
+            },
+            "stop": {
+                "desc": "停止播放並斷開連接",
+                "name": "停止"
+            },
+            "volume": {
+                "desc": "調整音量",
+                "name": "音量",
+                "param": {
+                    "level": "音量等級 (0-100)"
+                }
+            }
+        }
+    },
+    "owoify": {
+        "owoify": {
+            "desc": "文字也能變可愛！",
+            "name": "owo化",
+            "param": {
+                "english": "是否英文版？",
+                "text": "要變可愛的文字"
+            }
+        }
+    },
+    "oxwu": {
+        "earthquake": {
+            "query_report": {
+                "desc": "查詢最近一次的地震報告",
+                "name": "查詢報告"
+            },
+            "query_warning": {
+                "desc": "查詢目前的地震速報狀態",
+                "name": "查詢速報"
+            },
+            "root": {
+                "desc": "OXWU 地震監測系統",
+                "name": "地震"
+            },
+            "screenshot": {
+                "desc": "取得 OXWU 目前的畫面截圖",
+                "name": "截圖"
+            },
+            "set_report_channel": {
+                "desc": "設定接收地震報告的頻道",
+                "name": "設定報告頻道",
+                "param": {
+                    "channel": "要接收報告的頻道",
+                    "text": "可選的附加文字訊息"
+                }
+            },
+            "status": {
+                "desc": "查看 OXWU 連線狀態",
+                "name": "狀態"
+            }
+        }
+    },
+    "petpet": {
+        "petpet": {
+            "desc": "生成 PetPet GIF",
+            "param": {
+                "user": "要撫摸的使用者 (預設為自己)"
+            }
+        }
+    },
+    "r34": {
+        "r34": {
+            "choice": {
+                "false": "否",
+                "true": "是"
+            },
+            "desc": "從rule34.xxx隨機取得一張圖片",
+            "param": {
+                "ai": "是否包含AI生成的圖片",
+                "pid": "頁數",
+                "spoilers": "是否標記為暴雷內容",
+                "tags": "標籤"
+            }
+        },
+        "r34tags": {
+            "desc": "從rule34.xxx搜尋標籤",
+            "name": "r34標籤",
+            "param": {
+                "query": "搜尋關鍵字"
+            }
+        }
+    },
+    "reportsystem": {
+        "ctx": {
+            "report_message": {
+                "name": "檢舉訊息"
+            }
+        },
+        "report": {
+            "blacklist_role": {
+                "choice": {
+                    "add": "新增",
+                    "remove": "移除",
+                    "view": "查看"
+                },
+                "desc": "管理檢舉黑名單身分組",
+                "name": "黑名單身分組",
+                "param": {
+                    "action": "要執行的動作",
+                    "role": "身分組"
+                }
+            },
+            "root": {
+                "name": "檢舉系統"
+            },
+            "set_server_rules": {
+                "desc": "設定伺服器規則內容",
+                "name": "設定伺服器規則",
+                "param": {
+                    "rules": "伺服器規則內容，多行請用 \\n 來換行"
+                }
+            },
+            "settings": {
+                "choice": {
+                    "moderation_message_channel_id": "處分通知頻道",
+                    "report_channel_id": "檢舉通知頻道",
+                    "report_message": "檢舉通知訊息",
+                    "report_rate_limit": "檢舉頻率限制(秒)",
+                    "reported_message": "檢舉回覆訊息"
+                },
+                "desc": "設定伺服器的檢舉系統配置",
+                "name": "設定",
+                "param": {
+                    "setting": "要設定的項目",
+                    "value": "設定的值 (對於頻道，請使用 #頻道名稱 或頻道ID)"
+                }
+            }
+        }
+    },
+    "serverwebverify": {
+        "webverify": {
+            "autorole": {
+                "choice": {
+                    "age_check": "帳號年齡過小",
+                    "always": "總是給予",
+                    "has_flagged_history": "帳號曾經被標記過",
+                    "left_guild_before": "曾經退出過伺服器",
+                    "no_history": "無驗證紀錄"
+                },
+                "desc": "設定自動為新成員分配未驗證角色",
+                "name": "自動身分組",
+                "param": {
+                    "enable": "啟用或停用自動分配未驗證角色",
+                    "trigger": "選擇給予身分組條件"
+                }
+            },
+            "check_relation": {
+                "desc": "檢查用戶的關聯帳號",
+                "name": "檢查關聯帳號",
+                "param": {
+                    "user": "要檢查的用戶"
+                }
+            },
+            "country_alert": {
+                "choice": {
+                    "allowlist": "允許清單模式",
+                    "blocklist": "封鎖清單模式"
+                },
+                "desc": "設定驗證地區警示",
+                "name": "地區警示設定",
+                "param": {
+                    "channel": "選擇接收警示的頻道",
+                    "countries": "輸入國家代碼，使用逗號分隔 (例如: US,CN,RU)",
+                    "enable": "啟用或停用地區警示功能",
+                    "mode": "選擇警示模式"
+                }
+            },
+            "create_unverified_role": {
+                "desc": "自動建立並設定未驗證成員的身分組",
+                "name": "建立未驗證身分組",
+                "param": {
+                    "name": "未驗證成員身分組名稱"
+                }
+            },
+            "disable": {
+                "desc": "停用伺服器的網頁驗證功能",
+                "name": "禁用"
+            },
+            "enable": {
+                "desc": "啟用伺服器的網頁驗證功能",
+                "name": "啟用"
+            },
+            "force_verify": {
+                "desc": "強制用戶進行驗證",
+                "name": "強制驗證",
+                "param": {
+                    "user": "選擇要強制驗證的用戶"
+                }
+            },
+            "manual_check_country": {
+                "desc": "手動檢查用戶的地理位置",
+                "name": "手動檢查地區",
+                "param": {
+                    "user": "選擇用戶"
+                }
+            },
+            "minage": {
+                "desc": "定義最小帳號年齡",
+                "name": "最小帳號年齡",
+                "param": {
+                    "min_age": "最小帳號年齡（天）"
+                }
+            },
+            "quick_setup": {
+                "desc": "使用互動式精靈快速設定網頁驗證",
+                "name": "快速設定"
+            },
+            "relation_action": {
+                "desc": "對用戶及其關聯帳號進行操作",
+                "name": "關聯用戶動作",
+                "param": {
+                    "action": "要執行的操作 (格式與 !moderate 相同)",
+                    "user": "選擇用戶"
+                }
+            },
+            "root": {
+                "desc": "伺服器網頁驗證設定指令",
+                "name": "網頁驗證"
+            },
+            "set_captcha": {
+                "choice": {
+                    "none": "無",
+                    "recaptcha": "Google reCAPTCHA",
+                    "turnstile": "Cloudflare Turnstile"
+                },
+                "desc": "設定網頁驗證使用的 CAPTCHA 提供者",
+                "name": "設定人機驗證",
+                "param": {
+                    "captcha_provider": "選擇 CAPTCHA 提供者"
+                }
+            },
+            "set_unverified_role": {
+                "desc": "設定未驗證成員的角色",
+                "name": "設定未驗證身分組",
+                "param": {
+                    "role": "選擇未驗證成員的角色"
+                }
+            },
+            "setup": {
+                "desc": "設定伺服器的網頁驗證功能",
+                "name": "設置"
+            },
+            "start_force_verify": {
+                "desc": "開始對所有新加入的成員強制驗證",
+                "name": "開始強制驗證",
+                "param": {
+                    "duration": "強制驗證持續的時間（?h?m?s...）"
+                }
+            },
+            "status": {
+                "desc": "查看伺服器的網頁驗證設定狀態",
+                "name": "狀態"
+            },
+            "verify_notify": {
+                "choice": {
+                    "both": "都要",
+                    "channel": "在頻道內",
+                    "dm": "私訊"
+                },
+                "desc": "設定驗證通知的方式",
+                "name": "驗證通知",
+                "param": {
+                    "channel": "選擇要發送驗證訊息的頻道",
+                    "message": "自訂驗證訊息內容",
+                    "title": "自訂 Embed 標題",
+                    "type": "選擇要如何提示"
+                }
+            }
+        }
+    },
+    "statistics": {
+        "stats": {
+            "command": {
+                "desc": "查看指令使用統計",
+                "name": "指令",
+                "param": {
+                    "full": "是否顯示完整統計數據"
+                }
+            },
+            "petpet_stats": {
+                "desc": "查看你使用 petpet 指令的次數",
+                "name": "petpet-統計資料"
+            },
+            "root": {
+                "name": "統計資料"
+            }
+        }
+    },
+    "stickymessage": {
+        "stickymessage": {
+            "add": {
+                "desc": "新增一則頻道置底訊息",
+                "name": "新增",
+                "param": {
+                    "allow_mentions": "首次與手動發布時是否允許提及",
+                    "channel": "要設定的文字或公告頻道",
+                    "content": "置底訊息內容"
+                }
+            },
+            "edit": {
+                "desc": "編輯一則頻道置底訊息",
+                "name": "編輯",
+                "param": {
+                    "allow_mentions": "首次與手動發布時是否允許提及",
+                    "channel": "已設定的文字或公告頻道",
+                    "content": "新的置底訊息內容"
+                }
+            },
+            "list": {
+                "desc": "列出目前的置底訊息設定",
+                "name": "列出"
+            },
+            "move": {
+                "desc": "調整置底訊息順序；順序同時決定額度優先級",
+                "name": "移動",
+                "param": {
+                    "channel": "要移動的置底訊息頻道",
+                    "position": "新的順序位置"
+                }
+            },
+            "publish": {
+                "desc": "立即重新發布一則置底訊息",
+                "name": "發布",
+                "param": {
+                    "channel": "要立即重新發布置底訊息的頻道"
+                }
+            },
+            "remove": {
+                "desc": "移除一則頻道置底訊息",
+                "name": "移除",
+                "param": {
+                    "channel": "要移除置底訊息的頻道"
+                }
+            },
+            "timing": {
+                "desc": "設定重新置底的安靜時間與最短間隔",
+                "name": "時間設定",
+                "param": {
+                    "min_interval_seconds": "同頻道兩次自動重貼的最短間隔",
+                    "quiet_seconds": "最後一則真人訊息後等待秒數"
+                }
+            }
+        }
+    },
+    "stickyrole": {
+        "stickyrole": {
+            "add": {
+                "desc": "新增允許記憶的身份組（留空代表記憶所有身份組）",
+                "name": "新增",
+                "param": {
+                    "role": "要加入允許清單的身份組"
+                }
+            },
+            "clear": {
+                "desc": "清空允許清單（恢復為記憶所有身份組）",
+                "name": "清除"
+            },
+            "clear_user": {
+                "desc": "清除指定用戶的 StickyRole 紀錄",
+                "name": "清除用戶紀錄",
+                "param": {
+                    "user": "要清除紀錄的用戶"
+                }
+            },
+            "ignore_bots": {
+                "choice": {
+                    "false": "否（包含機器人）",
+                    "true": "是（忽略機器人）"
+                },
+                "desc": "設定是否忽略機器人帳號",
+                "name": "忽略機器人",
+                "param": {
+                    "enable": "是否忽略機器人帳號"
+                }
+            },
+            "list": {
+                "desc": "查看目前允許清單與功能狀態",
+                "name": "列出"
+            },
+            "remove": {
+                "desc": "從允許清單中移除身份組",
+                "name": "移除",
+                "param": {
+                    "role": "要從允許清單移除的身份組"
+                }
+            },
+            "set_log_channel": {
+                "desc": "設定 StickyRole 日誌頻道",
+                "name": "設定日誌頻道",
+                "param": {
+                    "channel": "用於記錄 StickyRole 操作的頻道（留空則取消設定）"
+                }
+            },
+            "toggle": {
+                "choice": {
+                    "false": "停用",
+                    "true": "啟用"
+                },
+                "desc": "啟用或停用 StickyRole 功能",
+                "name": "切換",
+                "param": {
+                    "enable": "是否啟用 StickyRole 功能"
+                }
+            },
+            "view": {
+                "desc": "查看指定用戶先前儲存的身份組",
+                "name": "查看",
+                "param": {
+                    "user": "要查看的用戶"
+                }
+            }
+        }
+    },
+    "ticket": {
+        "ticket": {
+            "add": {
+                "desc": "將用戶加入目前的票口",
+                "name": "新增",
+                "param": {
+                    "member": "要加入的用戶"
+                }
+            },
+            "claim": {
+                "desc": "認領目前的票口",
+                "name": "認領"
+            },
+            "close": {
+                "desc": "關閉目前的票口",
+                "name": "關閉",
+                "param": {
+                    "reason": "關閉原因（會記錄在逐字稿摘要中）"
+                }
+            },
+            "panel": {
+                "desc": "發布票口面板訊息",
+                "name": "面板",
+                "param": {
+                    "channel": "要發布面板的頻道（省略時使用設定的面板頻道）"
+                }
+            },
+            "remove": {
+                "desc": "將用戶移出目前的票口",
+                "name": "移除",
+                "param": {
+                    "member": "要移出的用戶"
+                }
+            },
+            "root": {
+                "name": "票口"
+            },
+            "setup": {
+                "desc": "快速設定票口系統",
+                "name": "設置",
+                "param": {
+                    "category": "票口頻道建立的分類",
+                    "log_channel": "票口關閉後逐字稿發送的頻道（省略則不保存逐字稿）",
+                    "panel_channel": "開票按鈕面板所在的頻道",
+                    "publish": "是否立即發布面板訊息（預設是）",
+                    "staff_role": "客服身分組（更多身分組可到伺服器面板設定）"
+                }
+            }
+        },
+        "types": {
+            "add": {
+                "choice": {
+                    "danger": "紅色",
+                    "primary": "藍色",
+                    "secondary": "灰色",
+                    "success": "綠色"
+                },
+                "desc": "新增票口類別",
+                "name": "新增",
+                "param": {
+                    "category": "此類別專屬的頻道分類（省略時使用全域設定）",
+                    "emoji": "按鈕 emoji（選填）",
+                    "label": "按鈕文字（例如：技術支援）",
+                    "staff_role": "此類別額外的客服身分組（省略時只用全域客服）",
+                    "style": "按鈕顏色（預設藍色）",
+                    "welcome": "此類別專屬的歡迎訊息，可用 {user}、{subject}（省略時使用全域設定）"
+                }
+            },
+            "edit": {
+                "choice": {
+                    "danger": "紅色",
+                    "primary": "藍色",
+                    "secondary": "灰色",
+                    "success": "綠色"
+                },
+                "desc": "編輯票口類別",
+                "name": "編輯",
+                "param": {
+                    "category": "新的專屬分類（選擇後覆寫）",
+                    "emoji": "新的按鈕 emoji（輸入 - 可清除）",
+                    "label": "新的按鈕文字",
+                    "staff_role": "新的額外客服身分組（選擇後覆寫）",
+                    "style": "新的按鈕顏色",
+                    "type": "要編輯的類別",
+                    "welcome": "新的專屬歡迎訊息（輸入 - 可清除改用全域設定）"
+                }
+            },
+            "list": {
+                "desc": "列出所有票口類別",
+                "name": "列出"
+            },
+            "remove": {
+                "desc": "移除票口類別",
+                "name": "移除",
+                "param": {
+                    "type": "要移除的類別"
+                }
+            },
+            "root": {
+                "desc": "管理票口類別（面板上的多個開票按鈕）",
+                "name": "類別"
+            }
+        }
+    },
+    "twbus": {
+        "bus": {
+            "favorites": {
+                "desc": "你的最愛站牌與YouBike站點",
+                "name": "最愛"
+            },
+            "getroute": {
+                "desc": "查詢指定的路線",
+                "name": "查詢路線",
+                "param": {
+                    "route_key": "路線ID"
+                }
+            },
+            "getstop": {
+                "desc": "查詢指定的站牌",
+                "name": "查詢站點",
+                "param": {
+                    "route_key": "路線ID",
+                    "stop_id": "站牌ID"
+                }
+            },
+            "root": {
+                "name": "公車"
+            },
+            "youbike": {
+                "desc": "查詢指定的YouBike站點",
+                "name": "微笑單車",
+                "param": {
+                    "station_name": "YouBike站點名稱"
+                }
+            }
+        }
+    },
+    "utilcommands": {
+        "ctx": {
+            "emoji_info_context": {
+                "name": "表情符號資訊"
+            },
+            "sticker_info_context": {
+                "name": "貼圖資訊"
+            }
+        },
+        "httpcat": {
+            "desc": "貓咪好可愛",
+            "name": "網路貓咪",
+            "param": {
+                "status_code": "HTTP 狀態碼（例如 404）"
+            }
+        },
+        "info": {
+            "avatar": {
+                "desc": "取得用戶頭像",
+                "name": "頭像",
+                "param": {
+                    "user": "要查詢的用戶"
+                }
+            },
+            "banner": {
+                "desc": "取得用戶橫幅",
+                "name": "橫幅",
+                "param": {
+                    "user": "要查詢的用戶"
+                }
+            },
+            "bot": {
+                "desc": "顯示機器人資訊",
+                "name": "機器人",
+                "param": {
+                    "full": "是否顯示完整模組列表與載入失敗模組"
+                }
+            },
+            "changelog": {
+                "desc": "顯示機器人更新日誌",
+                "name": "更新日誌"
+            },
+            "commits": {
+                "desc": "顯示機器人的 git 提交記錄",
+                "name": "提交紀錄"
+            },
+            "help": {
+                "desc": "顯示指令幫助與說明",
+                "name": "幫助",
+                "param": {
+                    "command": "要查詢的指令名稱"
+                }
+            },
+            "mention": {
+                "desc": "取得指令的提及格式",
+                "name": "提及",
+                "param": {
+                    "command": "指令名稱",
+                    "subcommand": "子指令名稱（可選）"
+                }
+            },
+            "ping": {
+                "desc": "檢查機器人延遲",
+                "name": "延遲"
+            },
+            "root": {
+                "name": "資訊"
+            },
+            "server": {
+                "desc": "顯示目前所在伺服器資訊",
+                "name": "伺服器"
+            },
+            "tutorial": {
+                "desc": "機器人使用教學",
+                "name": "使用教學"
+            },
+            "user": {
+                "desc": "顯示用戶資訊",
+                "name": "用戶",
+                "param": {
+                    "user": "要查詢的用戶"
+                }
+            }
+        },
+        "nitro": {
+            "desc": "我不想要被機器人幹走尼戳",
+            "param": {
+                "need_message": "是否只有近期發過訊息的用戶才能領取（最近 50 條訊息的作者）"
+            }
+        },
+        "randomnumber": {
+            "desc": "生成一個隨機數字",
+            "name": "隨機數字",
+            "param": {
+                "max": "最大值",
+                "min": "最小值"
+            }
+        },
+        "randomuser": {
+            "choice": {
+                "false": "否",
+                "true": "是"
+            },
+            "desc": "從在目前頻道的發言者中隨機選擇一人",
+            "name": "隨機用戶",
+            "param": {
+                "mention": "是否提及該用戶"
+            }
+        },
+        "textlength": {
+            "desc": "計算輸入文字的長度",
+            "name": "文字長度",
+            "param": {
+                "text": "要計算長度的文字"
+            }
+        }
     }
 }

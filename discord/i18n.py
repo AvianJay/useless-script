@@ -751,9 +751,11 @@ class CatalogTranslator(app_commands.Translator):
         if value == string.message:
             return None  # 與原文相同，不必上傳
         if context.location in _NAME_LOCATIONS and not _valid_command_name(value):
-            _log.warning("Rejected invalid command-name localization %r for key %s",
-                         value, key)
-            return None
+            # context menu 名稱允許空白與大寫，不受斜線指令名稱規則限制
+            if not isinstance(getattr(context, "data", None), app_commands.ContextMenu):
+                _log.warning("Rejected invalid command-name localization %r for key %s",
+                             value, key)
+                return None
         return value
 
     def _legacy(self, string: locale_str, locale: discord.Locale,
