@@ -1,0 +1,229 @@
+{
+  "groups": [
+    {
+      "title": "Quick Start",
+      "items": [
+        {
+          "id": "getting-started",
+          "label": "🚀 Getting Started",
+          "file": "getting-started"
+        },
+        {
+          "id": "prefix",
+          "label": "⌨️ Command Prefix",
+          "file": "prefix"
+        }
+      ]
+    },
+    {
+      "title": "🛡️ Moderation & Safety",
+      "items": [
+        {
+          "id": "Moderate",
+          "label": "Moderation Tools",
+          "file": "moderate"
+        },
+        {
+          "id": "AutoModerate",
+          "label": "Auto Moderation",
+          "file": "automoderate"
+        },
+        {
+          "id": "AntiBeast",
+          "label": "AntiBeast",
+          "file": "antibeast"
+        },
+        {
+          "id": "ReportSystem",
+          "label": "Report System",
+          "file": "reportsystem"
+        },
+        {
+          "id": "ModerationNotify",
+          "label": "Moderation Notify",
+          "file": "moderationnotify"
+        },
+        {
+          "id": "ServerWebVerify",
+          "label": "Web Verification",
+          "file": "serverwebverify"
+        },
+        {
+          "id": "StickyRole",
+          "label": "Sticky Roles",
+          "file": "stickyrole"
+        }
+      ]
+    },
+    {
+      "title": "🎮 Fun & Games",
+      "items": [
+        {
+          "id": "MiniGames",
+          "label": "Minigames",
+          "file": "minigames"
+        },
+        {
+          "id": "dsize",
+          "label": "dsize",
+          "file": "dsize"
+        },
+        {
+          "id": "doomcord",
+          "label": "DOOM",
+          "file": "doomcord"
+        },
+        {
+          "id": "aki",
+          "label": "Akinator",
+          "file": "aki"
+        },
+        {
+          "id": "petpet",
+          "label": "PetPet",
+          "file": "petpet"
+        },
+        {
+          "id": "OwOify",
+          "label": "OwOify",
+          "file": "owoify"
+        }
+      ]
+    },
+    {
+      "title": "💰 Economy & Items",
+      "items": [
+        {
+          "id": "Economy",
+          "label": "Economy",
+          "file": "economy"
+        },
+        {
+          "id": "ItemSystem",
+          "label": "Item System",
+          "file": "itemsystem"
+        }
+      ]
+    },
+    {
+      "title": "🎵 Media",
+      "items": [
+        {
+          "id": "Music",
+          "label": "Music Playback",
+          "file": "music"
+        },
+        {
+          "id": "MessageImage",
+          "label": "Message Screenshots",
+          "file": "messageimage"
+        }
+      ]
+    },
+    {
+      "title": "🤖 AI & Chat",
+      "items": [
+        {
+          "id": "ai",
+          "label": "AI Chat",
+          "file": "ai"
+        },
+        {
+          "id": "AutoReply",
+          "label": "Auto Reply",
+          "file": "autoreply"
+        }
+      ]
+    },
+    {
+      "title": "🔧 Tools & Automation",
+      "items": [
+        {
+          "id": "UtilCommands",
+          "label": "Utility Commands",
+          "file": "utilcommands"
+        },
+        {
+          "id": "AutoPublish",
+          "label": "Auto Publish",
+          "file": "autopublish"
+        },
+        {
+          "id": "FixLink",
+          "label": "🔗 Link Fixer",
+          "file": "fixlink"
+        },
+        {
+          "id": "DynamicVoice",
+          "label": "Dynamic Voice",
+          "file": "dynamicvoice"
+        },
+        {
+          "id": "CustomPrefix",
+          "label": "Custom Prefix",
+          "file": "customprefix"
+        },
+        {
+          "id": "FakeUser",
+          "label": "Fake User",
+          "file": "fakeuser"
+        },
+        {
+          "id": "Contribute",
+          "label": "Contributions",
+          "file": "contribute"
+        },
+        {
+          "id": "Feedback",
+          "label": "Feedback",
+          "file": "feedback"
+        },
+        {
+          "id": "Statistics",
+          "label": "Command Stats",
+          "file": "statistics"
+        },
+        {
+          "id": "JoinNotify",
+          "label": "Join Notify",
+          "file": "joinnotify"
+        }
+      ]
+    },
+    {
+      "title": "🌐 Info Services",
+      "items": [
+        {
+          "id": "twbus",
+          "label": "Bus / YouBike (Taiwan)",
+          "file": "twbus"
+        },
+        {
+          "id": "OXWU",
+          "label": "Earthquake Monitor",
+          "file": "oxwu"
+        },
+        {
+          "id": "dgpa",
+          "label": "Work/School Suspensions",
+          "file": "dgpa"
+        }
+      ]
+    },
+    {
+      "title": "⚙️ System",
+      "items": [
+        {
+          "id": "GuildPanel",
+          "label": "Web Panel",
+          "file": "guildpanel"
+        },
+        {
+          "id": "r34",
+          "label": "R34 Search",
+          "file": "r34"
+        }
+      ]
+    }
+  ]
+}

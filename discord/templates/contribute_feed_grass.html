@@ -1,10 +1,10 @@
 <!DOCTYPE html>
-<html lang="zh-TW">
+<html lang="{{ html_lang }}">
 
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>{{ bot.user.name }} - 草飼圖投稿</title>
+  <title>{{ bot.user.name }} - {{ t("web.feedgrass.title") }}</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
@@ -280,68 +280,68 @@
     <a href="/" class="navbar-brand">
       <span>{{ bot.user.name }}</span>
     </a>
-    <button class="nav-toggle" id="navToggle" aria-label="選單">☰</button>
+    <button class="nav-toggle" id="navToggle" aria-label="{{ t('web.nav.menu') }}">☰</button>
     <div class="nav-links" id="navLinks">
-      <a href="/">首頁</a>
-      <a href="/contribute-feed-grass">投稿草飼圖</a>
-      <a href="/privacy-policy">隱私政策</a>
-      <a href="/terms-of-service">使用條款</a>
+      <a href="/">{{ t('web.nav.home') }}</a>
+      <a href="/contribute-feed-grass">{{ t('web.nav.feedgrass') }}</a>
+      <a href="/privacy-policy">{{ t('web.nav.privacy') }}</a>
+      <a href="/terms-of-service">{{ t('web.nav.terms') }}</a>
     </div>
   </nav>
 
   <div class="editor-container">
     <div class="sidebar">
       <div class="control-group">
-        <label class="control-label">1. 上傳背景圖片</label>
+        <label class="control-label">{{ t('web.feedgrass.upload_bg') }}</label>
         <input id="bgFile" type="file" accept="image/*" />
       </div>
 
       <div class="layer-item">
         <div class="layer-header">
-          <div class="layer-title"><span class="badge">TARGET</span> 被草飼人</div>
+          <div class="layer-title"><span class="badge">TARGET</span> {{ t('web.feedgrass.target') }}</div>
           <span id="targetSizeVal" style="font-size: 0.8rem; color: #aaa;">80px</span>
         </div>
         <input id="targetFile" type="file" accept="image/*" style="margin-bottom: 8px;" />
-        <label style="font-size: 0.8rem; color: #aaa;">大小調整</label>
+        <label style="font-size: 0.8rem; color: #aaa;">{{ t('web.feedgrass.size') }}</label>
         <input id="targetSize" type="range" min="20" max="1000" value="80" />
       </div>
 
       <div class="layer-item">
         <div class="layer-header">
-          <div class="layer-title"><span class="badge">FEEDER</span> 草飼人</div>
+          <div class="layer-title"><span class="badge">FEEDER</span> {{ t('web.feedgrass.feeder') }}</div>
           <span id="feederSizeVal" style="font-size: 0.8rem; color: #aaa;">82px</span>
         </div>
         <input id="feederFile" type="file" accept="image/*" style="margin-bottom: 8px;" />
-        <label style="font-size: 0.8rem; color: #aaa;">大小調整</label>
+        <label style="font-size: 0.8rem; color: #aaa;">{{ t('web.feedgrass.size') }}</label>
         <input id="feederSize" type="range" min="20" max="1000" value="82" />
       </div>
 
       <div class="control-group">
         <div class="layer-header">
-          <div class="control-label" style="margin:0;">旁觀者 (Extras)</div>
-          <button id="addExtraBtn" class="btn btn-secondary" style="padding: 4px 8px; font-size: 0.8rem;">+ 新增</button>
+          <div class="control-label" style="margin:0;">{{ t('web.feedgrass.extras') }}</div>
+          <button id="addExtraBtn" class="btn btn-secondary" style="padding: 4px 8px; font-size: 0.8rem;">{{ t('web.feedgrass.add') }}</button>
         </div>
         <div id="extrasList" style="margin-top: 10px;"></div>
       </div>
 
       <div class="control-group">
-        <label class="control-label">選項</label>
+        <label class="control-label">{{ t('web.feedgrass.options') }}</label>
         <div class="row">
           <input id="selfCheck" type="checkbox" />
-          <label for="selfCheck">自己草飼自己 (Feeder = Target)</label>
+          <label for="selfCheck">{{ t('web.feedgrass.self_feed') }}</label>
         </div>
         <div class="row" style="margin-top: 8px;">
           <input id="nsfwCheck" type="checkbox" />
-          <label for="nsfwCheck">NSFW (包含成人內容)</label>
+          <label for="nsfwCheck">{{ t('web.feedgrass.nsfw') }}</label>
         </div>
       </div>
 
       <div class="action-bar">
         <div id="messageArea"></div>
         <!-- <textarea id="jsonOut" class="json-preview" readonly></textarea> -->
-        <button id="submitBtn" class="btn btn-primary">送出投稿</button>
+        <button id="submitBtn" class="btn btn-primary">{{ t('web.feedgrass.submit') }}</button>
         <div style="display: flex; gap: 10px;">
-          <button id="downloadPng" class="btn btn-secondary" style="flex:1;">預覽 PNG</button>
+          <button id="downloadPng" class="btn btn-secondary" style="flex:1;">{{ t('web.feedgrass.preview_png') }}</button>
           <!-- <button id="copyJson" class="btn btn-secondary" style="flex:1;">複製 JSON</button> -->
         </div>
       </div>
@@ -351,7 +351,7 @@
       <canvas id="canvas"></canvas>
       <div
         style="position: absolute; bottom: 20px; right: 20px; background: rgba(0,0,0,0.7); padding: 5px 10px; border-radius: 4px; font-size: 0.8rem; color: #aaa; pointer-events: none;">
-        拖曳圓圈可移動位置
+        {{ t('web.feedgrass.drag_hint') }}
       </div>
     </div>
   </div>
@@ -453,7 +453,7 @@
         ctx.fillStyle = '#99aab5';
         ctx.font = '20px Inter';
         ctx.textAlign = 'center';
-        ctx.fillText('請從左側上傳背景圖片', canvas.width / 2, canvas.height / 2);
+        ctx.fillText('{{ t('web.feedgrass.canvas_hint') }}', canvas.width / 2, canvas.height / 2);
         return;
       }
       ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -550,7 +550,7 @@
         topRow.innerHTML = `<div class="layer-title"><span class="badge">EXTRA #${idx + 1}</span></div>`;
 
         const removeBtn = document.createElement('button');
-        removeBtn.textContent = '移除';
+        removeBtn.textContent = '{{ t('web.feedgrass.remove') }}';
         removeBtn.className = 'btn btn-danger';
         removeBtn.onclick = () => {
           state.extras.splice(idx, 1);
@@ -580,7 +580,7 @@
         const sizeRow = document.createElement('div');
         sizeRow.className = 'row';
         const sizeLabel = document.createElement('label');
-        sizeLabel.textContent = '大小: ' + extra.size[0] + 'px';
+        sizeLabel.textContent = '{{ t('web.feedgrass.size') }}: ' + extra.size[0] + 'px';
         sizeLabel.style.fontSize = '0.8rem';
         sizeLabel.style.color = '#aaa';
 
@@ -591,7 +591,7 @@
         sizeRange.oninput = (e) => {
           const v = parseInt(e.target.value);
           extra.size = [v, v];
-          sizeLabel.textContent = '大小: ' + v + 'px';
+          sizeLabel.textContent = '{{ t('web.feedgrass.size') }}: ' + v + 'px';
           render();
         };
 
@@ -719,7 +719,7 @@
       msgArea.style.display = 'none';
 
       if (!state.bg.img) {
-        msgArea.innerText = "請先上傳背景圖片！";
+        msgArea.innerText = "{{ t('web.feedgrass.need_bg') }}";
         msgArea.className = "msg-error";
         msgArea.style.display = 'block';
         return;
@@ -764,7 +764,7 @@
 
         // Send
         document.getElementById('submitBtn').disabled = true;
-        document.getElementById('submitBtn').innerText = "提交中...";
+        document.getElementById('submitBtn').innerText = "{{ t('web.feedgrass.submitting') }}";
 
         try {
           const resp = await fetch('/contribute-feed-grass', {
@@ -774,27 +774,27 @@
           });
           const resText = await resp.text();
           if (resp.ok) {
-            msgArea.innerText = "投稿成功！" + resText;
+            msgArea.innerText = "{{ t('web.feedgrass.success') }}" + resText;
             msgArea.className = "msg-success";
             msgArea.style.display = 'block';
           } else {
-            msgArea.innerText = "投稿失敗：" + resText;
+            msgArea.innerText = "{{ t('web.feedgrass.failed') }}" + resText;
             msgArea.className = "msg-error";
             msgArea.style.display = 'block';
           }
         } catch (e) {
-          msgArea.innerText = "發生錯誤：" + e;
+          msgArea.innerText = "{{ t('web.feedgrass.error') }}" + e;
           msgArea.className = "msg-error";
           msgArea.style.display = 'block';
         } finally {
           document.getElementById('submitBtn').disabled = false;
-          document.getElementById('submitBtn').innerText = "送出投稿";
+          document.getElementById('submitBtn').innerText = "{{ t('web.feedgrass.submit') }}";
         }
       };
     });
 
     document.getElementById('downloadPng').addEventListener('click', () => {
-      if (!state.bg.img) return alert("沒有內容！");
+      if (!state.bg.img) return alert("{{ t('web.feedgrass.no_content') }}");
       const url = canvas.toDataURL('image/png');
       const a = document.createElement('a');
       a.href = url;

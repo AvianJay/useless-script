@@ -300,9 +300,19 @@ def check_unused(report: Report):
                 if isinstance(first, ast.Constant) and \
                         isinstance(first.value, str) and "." in first.value:
                     enum_prefixes.add(first.value)
+    # templates 與前端 JS 以原文比對（t('key') / t("key")）
+    web_blob = []
+    for pattern in ("templates/*.html", "static/js/*.js"):
+        for path in ROOT.glob(pattern):
+            try:
+                web_blob.append(path.read_text(encoding="utf-8"))
+            except OSError:
+                pass
+    web_blob = "\n".join(web_blob)
+
     source = i18n._catalogs.get(i18n.SOURCE_LOCALE, {})
     for key in source:
-        if key in referenced:
+        if key in referenced or key in web_blob:
             continue
         if any(key.startswith(prefix) for prefix in _WHITELIST_PREFIXES):
             continue

@@ -1,10 +1,10 @@
 <!DOCTYPE html>
-<html lang="zh-Hant">
+<html lang="{{ html_lang }}">
 
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{{ bot.user.name }} | 隱私政策</title>
+    <title>{{ bot.user.name }} | {{ t("web.nav.privacy") }}</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
@@ -27,12 +27,12 @@
                 style="width: 30px; height: 30px; border-radius: 50%; display: none;">
             <span id="nav-name">{{ bot.user.name }}</span>
         </a>
-        <button class="nav-toggle" id="navToggle" aria-label="選單">☰</button>
+        <button class="nav-toggle" id="navToggle" aria-label="{{ t('web.nav.menu') }}">☰</button>
         <div class="nav-links" id="navLinks">
-            <a href="/" class="active">首頁</a>
-            <a href="/contribute-feed-grass">投稿草飼圖</a>
-            <a href="/privacy-policy">隱私政策</a>
-            <a href="/terms-of-service">使用條款</a>
+            <a href="/" class="active">{{ t('web.nav.home') }}</a>
+            <a href="/contribute-feed-grass">{{ t('web.nav.feedgrass') }}</a>
+            <a href="/privacy-policy">{{ t('web.nav.privacy') }}</a>
+            <a href="/terms-of-service">{{ t('web.nav.terms') }}</a>
         </div>
     </nav>
 

@@ -111,9 +111,11 @@ def index():
 
 @app.route('/docs')
 def docs():
+    from flask import g
     og = _get_bot_og_data()
     base_dir = Path(__file__).resolve().parent
-    docs_sidebar_groups, docs_sections = load_docs_site(base_dir / "docs")
+    docs_sidebar_groups, docs_sections = load_docs_site(
+        base_dir / "docs", locale=getattr(g, "locale", None))
     return render_template(
         'docs.html',
         bot=bot,

@@ -327,12 +327,68 @@ def load_markdown_documents(directory: str | Path) -> dict[str, str]:
     return docs
 
 
-def load_docs_site(directory: str | Path) -> tuple[list[dict], list[dict]]:
+DOCS_SOURCE_LOCALE = "zh-TW"
+
+# per-locale 渲染快取：/docs 每個 request 都會重新渲染全部 markdown，
+# 以 (manifest 與各 md 檔的 mtime) 為簽章快取結果
+_docs_site_cache: dict[str, tuple[tuple, tuple[list, list]]] = {}
+
+
+def _docs_locale_dir(docs_dir: Path, locale: str | None) -> Path | None:
+    """回傳該 locale 的 docs 目錄；支援 legacy 扁平結構（manifest 在根目錄）。"""
+    if locale:
+        candidate = docs_dir / locale
+        if (candidate / "manifest.json").exists():
+            return candidate
+    if (docs_dir / DOCS_SOURCE_LOCALE / "manifest.json").exists():
+        return docs_dir / DOCS_SOURCE_LOCALE
+    if (docs_dir / "manifest.json").exists():
+        return docs_dir  # 遷移前的扁平結構
+    return None
+
+
+def _docs_signature(locale_dir: Path, fallback_dir: Path | None) -> tuple:
+    signature = []
+    for base in {locale_dir, fallback_dir or locale_dir}:
+        manifest = base / "manifest.json"
+        try:
+            signature.append((str(manifest), manifest.stat().st_mtime_ns))
+        except OSError:
+            pass
+        sections = base / "sections"
+        if sections.exists():
+            for path in sorted(sections.glob("*.md")):
+                try:
+                    signature.append((str(path), path.stat().st_mtime_ns))
+                except OSError:
+                    pass
+    return tuple(signature)
+
+
+def load_docs_site(directory: str | Path, locale: str | None = None) -> tuple[list[dict], list[dict]]:
+    """載入文件站台。
+
+    locale=None（預設）＝原文語言 zh-TW，行為與遷移前相同（ai.py 等
+    既有呼叫端不受影響）。指定 locale 時：manifest 與各節取自
+    docs/<locale>/，缺的節逐節 fallback 到 zh-TW 並標 translated=False
+    （不可能一次翻完 36 篇，逐節 fallback 是必要的）。
+    """
     docs_dir = Path(directory)
-    manifest_path = docs_dir / "manifest.json"
-    sections_dir = docs_dir / "sections"
-    if not manifest_path.exists():
+    locale_dir = _docs_locale_dir(docs_dir, locale)
+    if locale_dir is None:
         return [], []
+    fallback_dir = _docs_locale_dir(docs_dir, None)
+    is_fallback_locale = fallback_dir is None or locale_dir == fallback_dir
+
+    cache_key = str(locale_dir)
+    signature = _docs_signature(locale_dir, fallback_dir)
+    cached = _docs_site_cache.get(cache_key)
+    if cached is not None and cached[0] == signature:
+        return cached[1]
+
+    manifest_path = locale_dir / "manifest.json"
+    sections_dir = locale_dir / "sections"
+    fallback_sections_dir = (fallback_dir / "sections") if fallback_dir else None
 
     try:
         manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
@@ -354,8 +410,15 @@ def load_docs_site(directory: str | Path) -> tuple[list[dict], list[dict]]:
                 continue
             file_slug = str(raw_item.get("file") or section_id.lower()).strip()
             markdown_path = sections_dir / f"{file_slug}.md"
+            translated = True
             if not markdown_path.exists():
-                continue
+                # 該 locale 缺這一節：逐節 fallback 到原文
+                if is_fallback_locale or fallback_sections_dir is None:
+                    continue
+                markdown_path = fallback_sections_dir / f"{file_slug}.md"
+                if not markdown_path.exists():
+                    continue
+                translated = False
             item_icon, label = _extract_leading_doc_icon(raw_item.get("label") or section_id)
             html = render_markdown(read_markdown_file(markdown_path))
 
@@ -375,6 +438,7 @@ def load_docs_site(directory: str | Path) -> tuple[list[dict], list[dict]]:
                         "file": file_slug,
                         "icon": item_icon,
                         "html": html,
+                        "translated": translated,
                     }
                 )
                 seen_section_ids.add(section_id)
@@ -385,6 +449,7 @@ def load_docs_site(directory: str | Path) -> tuple[list[dict], list[dict]]:
                 group_entry["icon"] = group_icon
             groups.append(group_entry)
 
+    _docs_site_cache[cache_key] = (signature, (groups, sections))
     return groups, sections
 
 

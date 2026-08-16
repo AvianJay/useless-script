@@ -1,23 +1,23 @@
 <!DOCTYPE html>
-<html lang="zh-Hant">
+<html lang="{{ html_lang }}">
 
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{{ bot.user.name }} | Discord 機器人</title>
-    <meta name="description" content="{{ bot.user.name }} - 功能豐富的抽象 Discord 機器人，提供量長度、管理、娛樂、經濟、音樂等 40+ 模組。">
+    <title>{{ bot.user.name }} | {{ t("web.index.title") }}</title>
+    <meta name="description" content="{{ t('web.index.meta_desc', name=bot.user.name) }}">
     <!-- Open Graph / Discord Embed -->
     <meta property="og:type" content="website">
-    <meta property="og:title" content="{{ bot.user.name }} | Discord 機器人">
-    <meta property="og:description" content="功能豐富的抽象 Discord 機器人，搭載 {{ module_count }}+ 模組 — 量長度、管理、娛樂、經濟、音樂一應俱全。">
+    <meta property="og:title" content="{{ bot.user.name }} | {{ t('web.index.title') }}">
+    <meta property="og:description" content="{{ t('web.index.og_desc', count=module_count) }}">
     <meta property="og:url" content="{{ website_url }}">
     <meta property="og:image" content="{{ avatar_url }}">
     <meta property="og:site_name" content="{{ bot.user.name }}">
     <meta name="theme-color" content="#5865F2">
     <!-- Twitter Card -->
     <meta name="twitter:card" content="summary">
-    <meta name="twitter:title" content="{{ bot.user.name }} | Discord 機器人">
-    <meta name="twitter:description" content="功能豐富的抽象 Discord 機器人，搭載 {{ module_count }}+ 模組。">
+    <meta name="twitter:title" content="{{ bot.user.name }} | {{ t('web.index.title') }}">
+    <meta name="twitter:description" content="{{ t('web.index.twitter_desc', count=module_count) }}">
     <meta name="twitter:image" content="{{ avatar_url }}">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -42,26 +42,26 @@
                 style="width: 30px; height: 30px; border-radius: 50%; display: none;">
             <span id="nav-name">{{ bot.user.name }}</span>
         </a>
-        <button class="nav-toggle" id="navToggle" aria-label="選單"><i class="fa-solid fa-bars" aria-hidden="true"></i></button>
+        <button class="nav-toggle" id="navToggle" aria-label="{{ t('web.nav.menu') }}"><i class="fa-solid fa-bars" aria-hidden="true"></i></button>
         <div class="nav-links" id="navLinks">
-            <a href="/">首頁</a>
-            <a href="/docs">使用文檔</a>
-            <a href="/panel/">伺服器面板</a>
-            <a href="/contribute-feed-grass">投稿草飼圖</a>
-            <a href="/privacy-policy">隱私政策</a>
-            <a href="/terms-of-service">使用條款</a>
+            <a href="/">{{ t('web.nav.home') }}</a>
+            <a href="/docs">{{ t('web.nav.docs') }}</a>
+            <a href="/panel/">{{ t('web.nav.panel') }}</a>
+            <a href="/contribute-feed-grass">{{ t('web.nav.feedgrass') }}</a>
+            <a href="/privacy-policy">{{ t('web.nav.privacy') }}</a>
+            <a href="/terms-of-service">{{ t('web.nav.terms') }}</a>
         </div>
     </nav>
 
     <section class="hero">
         <img id="botavatar" class="bot-avatar" src="" alt="{{ bot.user.name }}">
         <h1 id="botname">{{ bot.user.name }}</h1>
-        <p class="hero-tagline">你的 Discord 伺服器抽象助手</p>
-        <div id="botstatus-badge" class="status-badge">載入中...</div>
+        <p class="hero-tagline">{{ t('web.index.hero_tagline') }}</p>
+        <div id="botstatus-badge" class="status-badge">{{ t('web.index.loading') }}</div>
         <br>
         <div class="hero-buttons">
-            <a id="invitebtn" href="#" target="_blank" class="btn-invite hidden" onclick="inviteBot(event)">邀請機器人</a>
-            <a href="/docs" class="btn-docs">查看文檔</a>
+            <a id="invitebtn" href="#" target="_blank" class="btn-invite hidden" onclick="inviteBot(event)">{{ t('web.index.invite_btn') }}</a>
+            <a href="/docs" class="btn-docs">{{ t('web.index.view_docs') }}</a>
         </div>
     </section>
 
@@ -69,166 +69,166 @@
         <div class="stats-grid">
             <div class="stat-card">
                 <div class="stat-value" id="stat-servers">-</div>
-                <div class="stat-label">伺服器</div>
+                <div class="stat-label">{{ t('web.index.stat.servers') }}</div>
             </div>
             <div class="stat-card">
                 <div class="stat-value" id="stat-users">-</div>
-                <div class="stat-label">總用戶</div>
+                <div class="stat-label">{{ t('web.index.stat.users') }}</div>
             </div>
             <div class="stat-card">
                 <div class="stat-value" id="stat-install">-</div>
-                <div class="stat-label">用戶安裝數</div>
+                <div class="stat-label">{{ t('web.index.stat.user_installs') }}</div>
             </div>
             <div class="stat-card">
                 <div class="stat-value" id="stat-ping">-</div>
-                <div class="stat-label">延遲</div>
+                <div class="stat-label">{{ t('web.index.stat.latency') }}</div>
             </div>
             <div class="stat-card">
                 <div class="stat-value" id="stat-uptime">-</div>
-                <div class="stat-label">運行時間</div>
+                <div class="stat-label">{{ t('web.index.stat.uptime') }}</div>
             </div>
             <div class="stat-card">
                 <div class="stat-value" id="stat-version">-</div>
-                <div class="stat-label">版本</div>
+                <div class="stat-label">{{ t('web.index.stat.version') }}</div>
             </div>
         </div>
     </div>
 
     <!-- Bot Introduction -->
     <div class="container">
-        <h2 class="section-title">關於機器人</h2>
-        <p class="section-desc">一個由我的手寫出來的多功能 Discord 機器人，搭載超過 <strong>40 個模組</strong>，涵蓋伺服器管理、自動化、經濟系統、音樂播放、小遊戲、AI 聊天等豐富功能。無論你是想打造一個安全有秩序的社群，還是讓伺服器充滿歡樂互動，這個機器人都能滿足你的需求。當然，就是一坨屎山代碼。</p>
+        <h2 class="section-title">{{ t('web.index.about_title') }}</h2>
+        <p class="section-desc">{{ t('web.index.about_desc') | safe }}</p>
     </div>
 
     <!-- Feature Highlights -->
     <div class="container">
-        <h2 class="section-title">功能亮點</h2>
+        <h2 class="section-title">{{ t('web.index.features_title') }}</h2>
         <div class="features-grid">
             <div class="feature-card">
                 <div class="feature-icon"><i class="fa-solid fa-ruler" aria-hidden="true"></i></div>
-                <h3>測量長度</h3>
-                <p>可以跟朋友一起量長度、比長度、甚至草飼他。</p>
+                <h3>{{ t('web.index.feature.dsize_title') }}</h3>
+                <p>{{ t('web.index.feature.dsize_desc') }}</p>
             </div>
             <div class="feature-card">
                 <div class="feature-icon"><i class="fa-solid fa-gamepad" aria-hidden="true"></i></div>
-                <h3>迷你遊戲</h3>
-                <p>大老二、爬塔、Akinator 猜謎、DOOM 等娛樂遊戲，還有趣味 dsize 對決與 PetPet 動圖。</p>
+                <h3>{{ t('web.index.feature.games_title') }}</h3>
+                <p>{{ t('web.index.feature.games_desc') }}</p>
             </div>
             <div class="feature-card">
                 <div class="feature-icon"><i class="fa-solid fa-coins" aria-hidden="true"></i></div>
-                <h3>經濟系統</h3>
-                <p>全域幣與伺服幣雙幣制，每日獎勵、商店買賣、轉帳、匯率、通膨模型，打造完整虛擬經濟。</p>
+                <h3>{{ t('web.index.feature.economy_title') }}</h3>
+                <p>{{ t('web.index.feature.economy_desc') }}</p>
             </div>
             <div class="feature-card">
                 <div class="feature-icon"><i class="fa-solid fa-robot" aria-hidden="true"></i></div>
-                <h3>AI 聊天</h3>
-                <p>整合免費 AI 模型，支援多輪對話、上下文記憶，讓機器人成為你的智能助手。</p>
+                <h3>{{ t('web.index.feature.ai_title') }}</h3>
+                <p>{{ t('web.index.feature.ai_desc') }}</p>
             </div>
             <div class="feature-card">
                 <div class="feature-icon"><i class="fa-solid fa-music" aria-hidden="true"></i></div>
-                <h3>音樂播放</h3>
-                <p>透過 Lavalink 高品質播放音樂，支援隊列管理、循環播放、隨機播放、推薦歌曲及多節點備援。</p>
+                <h3>{{ t('web.index.feature.music_title') }}</h3>
+                <p>{{ t('web.index.feature.music_desc') }}</p>
             </div>
             <div class="feature-card">
                 <div class="feature-icon"><i class="fa-solid fa-shield-halved" aria-hidden="true"></i></div>
-                <h3>伺服器管理</h3>
-                <p>踢出、封禁、禁言、黑名單等完整管理工具，支援批量操作與反垃圾訊息 / 反突襲自動化保護。</p>
+                <h3>{{ t('web.index.feature.moderation_title') }}</h3>
+                <p>{{ t('web.index.feature.moderation_desc') }}</p>
             </div>
             <div class="feature-card">
                 <div class="feature-icon"><i class="fa-solid fa-globe" aria-hidden="true"></i></div>
-                <h3>網頁面板</h3>
-                <p>透過 Discord OAuth2 登入管理面板，在網頁上輕鬆配置伺服器設定，所見即所得。</p>
+                <h3>{{ t('web.index.feature.panel_title') }}</h3>
+                <p>{{ t('web.index.feature.panel_desc') }}</p>
             </div>
             <div class="feature-card">
                 <div class="feature-icon"><i class="fa-solid fa-bus" aria-hidden="true"></i></div>
-                <h3>台灣公車 / YouBike</h3>
-                <p>即時查詢台灣公車到站資訊與 YouBike 站點狀態，通勤族的好幫手。</p>
+                <h3>{{ t('web.index.feature.twbus_title') }}</h3>
+                <p>{{ t('web.index.feature.twbus_desc') }}</p>
             </div>
             <div class="feature-card">
                 <div class="feature-icon"><i class="fa-solid fa-earth-asia" aria-hidden="true"></i></div>
-                <h3>地震速報</h3>
-                <p>整合 OXWU 與中央氣象署，即時接收地震速報與報告，第一時間推送至指定頻道。</p>
+                <h3>{{ t('web.index.feature.quake_title') }}</h3>
+                <p>{{ t('web.index.feature.quake_desc') }}</p>
             </div>
             <div class="feature-card">
                 <div class="feature-icon"><i class="fa-solid fa-circle-check" aria-hidden="true"></i></div>
-                <h3>網頁驗證</h3>
-                <p>支援 reCAPTCHA / Turnstile 的網頁驗證系統，有效防止機器人帳號與突襲入侵。</p>
+                <h3>{{ t('web.index.feature.webverify_title') }}</h3>
+                <p>{{ t('web.index.feature.webverify_desc') }}</p>
             </div>
         </div>
         <div style="text-align: center; margin-top: 2rem;">
-            <a href="/docs" class="btn-invite">查看完整功能文檔 →</a>
+            <a href="/docs" class="btn-invite">{{ t('web.index.features_more') }}</a>
         </div>
     </div>
 
     <!-- Module Overview -->
     <div class="container">
-        <h2 class="section-title">模組總覽</h2>
-        <p class="section-desc" style="margin-bottom: 1.5rem;">目前已載入 <strong>{{ module_count }}</strong> 個模組，涵蓋以下類別：</p>
+        <h2 class="section-title">{{ t('web.index.modules_title') }}</h2>
+        <p class="section-desc" style="margin-bottom: 1.5rem;">{{ t('web.index.modules_desc', count=module_count) | safe }}</p>
         <div class="module-categories">
             <div class="module-cat">
-                <h4><i class="fa-solid fa-gamepad" aria-hidden="true"></i> 娛樂與遊戲</h4>
+                <h4><i class="fa-solid fa-gamepad" aria-hidden="true"></i> {{ t('web.index.cat.games') }}</h4>
                 <ul>
-                    <li>dsize - 量長度</li>
-                    <li>MiniGames - 迷你遊戲</li>
-                    <li>doomcord - 玩 DOOM</li>
+                    <li>dsize - {{ t('web.index.module.dsize') }}</li>
+                    <li>MiniGames - {{ t('web.index.module.minigames') }}</li>
+                    <li>doomcord - {{ t('web.index.module.doomcord') }}</li>
                     <li>aki - Akinator</li>
-                    <li>petpet - PetPet 動圖</li>
-                    <li>OwOify - 可愛化文字</li>
+                    <li>petpet - {{ t('web.index.module.petpet') }}</li>
+                    <li>OwOify - {{ t('web.index.module.owoify') }}</li>
                 </ul>
             </div>
             <div class="module-cat">
-                <h4><i class="fa-solid fa-coins" aria-hidden="true"></i> 經濟與物品</h4>
+                <h4><i class="fa-solid fa-coins" aria-hidden="true"></i> {{ t('web.index.cat.economy') }}</h4>
                 <ul>
-                    <li>Economy - 經濟系統</li>
-                    <li>ItemSystem - 物品系統</li>
+                    <li>Economy - {{ t('web.index.module.economy') }}</li>
+                    <li>ItemSystem - {{ t('web.index.module.itemsystem') }}</li>
                 </ul>
             </div>
             <div class="module-cat">
-                <h4><i class="fa-solid fa-music" aria-hidden="true"></i> 媒體</h4>
+                <h4><i class="fa-solid fa-music" aria-hidden="true"></i> {{ t('web.index.cat.media') }}</h4>
                 <ul>
-                    <li>Music - 音樂播放</li>
-                    <li>MessageImage - 訊息截圖</li>
+                    <li>Music - {{ t('web.index.module.music') }}</li>
+                    <li>MessageImage - {{ t('web.index.module.messageimage') }}</li>
                 </ul>
             </div>
             <div class="module-cat">
-                <h4><i class="fa-solid fa-shield-halved" aria-hidden="true"></i> 管理與安全</h4>
+                <h4><i class="fa-solid fa-shield-halved" aria-hidden="true"></i> {{ t('web.index.cat.moderation') }}</h4>
                 <ul>
-                    <li>Moderate - 管理工具</li>
-                    <li>AutoModerate - 自動管理</li>
-                    <li>ReportSystem - 檢舉系統</li>
-                    <li>ModerationNotify - 懲處通知</li>
-                    <li>ServerWebVerify - 網頁驗證</li>
-                    <li>StickyRole - 黏性身份組</li>
+                    <li>Moderate - {{ t('web.index.module.moderate') }}</li>
+                    <li>AutoModerate - {{ t('web.index.module.automoderate') }}</li>
+                    <li>ReportSystem - {{ t('web.index.module.reportsystem') }}</li>
+                    <li>ModerationNotify - {{ t('web.index.module.moderationnotify') }}</li>
+                    <li>ServerWebVerify - {{ t('web.index.module.serverwebverify') }}</li>
+                    <li>StickyRole - {{ t('web.index.module.stickyrole') }}</li>
                 </ul>
             </div>
             <div class="module-cat">
-                <h4><i class="fa-solid fa-wrench" aria-hidden="true"></i> 工具與自動化</h4>
+                <h4><i class="fa-solid fa-wrench" aria-hidden="true"></i> {{ t('web.index.cat.tools') }}</h4>
                 <ul>
-                    <li>AutoReply - 自動回覆</li>
-                    <li>AutoPublish - 自動發布</li>
-                    <li>DynamicVoice - 動態語音</li>
-                    <li>CustomPrefix - 自定義前綴</li>
-                    <li>FakeUser - 假冒用戶</li>
-                    <li>Contribute - 投稿系統</li>
+                    <li>AutoReply - {{ t('web.index.module.autoreply') }}</li>
+                    <li>AutoPublish - {{ t('web.index.module.autopublish') }}</li>
+                    <li>DynamicVoice - {{ t('web.index.module.dynamicvoice') }}</li>
+                    <li>CustomPrefix - {{ t('web.index.module.customprefix') }}</li>
+                    <li>FakeUser - {{ t('web.index.module.fakeuser') }}</li>
+                    <li>Contribute - {{ t('web.index.module.contribute') }}</li>
                 </ul>
             </div>
             <div class="module-cat">
-                <h4><i class="fa-solid fa-globe" aria-hidden="true"></i> 資訊服務</h4>
+                <h4><i class="fa-solid fa-globe" aria-hidden="true"></i> {{ t('web.index.cat.info') }}</h4>
                 <ul>
-                    <li>twbus - 公車 / YouBike</li>
-                    <li>OXWU - 地震監測</li>
-                    <li>dgpa - 停班停課查詢</li>
-                    <li>ai - AI 聊天</li>
-                    <li>Explore - 探索</li>
+                    <li>twbus - {{ t('web.index.module.twbus') }}</li>
+                    <li>OXWU - {{ t('web.index.module.oxwu') }}</li>
+                    <li>dgpa - {{ t('web.index.module.dgpa') }}</li>
+                    <li>ai - {{ t('web.index.module.ai') }}</li>
+                    <li>Explore - {{ t('web.index.module.explore') }}</li>
                 </ul>
             </div>
         </div>
     </div>
 
     <div class="container updates-container" style="margin-top: 2rem;">
-        <h2 style="text-align: center; margin-bottom: 1rem; color: var(--text-primary);">更新記錄</h2>
+        <h2 style="text-align: center; margin-bottom: 1rem; color: var(--text-primary);">{{ t('web.index.changelog_title') }}</h2>
         <div id="commit-logs" class="commit-logs">
-            <div class="loading-spinner">正在載入更新記錄...</div>
+            <div class="loading-spinner">{{ t('web.index.changelog_loading') }}</div>
         </div>
     </div>
 

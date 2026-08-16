@@ -215,6 +215,25 @@ def coverage() -> dict[str, dict]:
     return result
 
 
+def catalog_subset(prefixes: tuple[str, ...] | list[str],
+                   locale: str | None = None) -> dict[str, Any]:
+    """回傳指定前綴的扁平 {key: value} 子集（給前端 window.I18N 用）。
+
+    以 source 的 key 集合為準，值取目標語言、缺則回退原文；
+    複數項（dict）原樣傳遞，由 JS 端 t() 做選擇。
+    """
+    ensure_loaded()
+    loc = locale or current_locale()
+    source = _catalogs.get(SOURCE_LOCALE, {})
+    target = _catalogs.get(loc, {})
+    result: dict[str, Any] = {}
+    for key, value in source.items():
+        if any(key.startswith(prefix) for prefix in prefixes):
+            target_value = target.get(key)
+            result[key] = target_value if target_value is not None else value
+    return result
+
+
 # ============= 查表 =============
 
 def _lookup_chain(key: str, locale: str) -> Any:

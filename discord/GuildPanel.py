@@ -515,6 +515,7 @@ def panel_guild_page(guild_id):
         user=user,
         guild=bg,
         settings_json=json.dumps(safe_settings, ensure_ascii=False),
+        web_i18n_json=json.dumps(i18n.catalog_subset(("web.js.",)), ensure_ascii=False),
         gtag=config("website_gtag", ""),
     )
 
