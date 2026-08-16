@@ -1,0 +1,29 @@
+{
+    "btn": {
+        "reply": "回覆"
+    },
+    "modal": {
+        "title": "提供回饋給機器人開發者",
+        "label": "請輸入您的回饋內容",
+        "placeholder": "在此輸入您的建議或回饋...",
+        "reply_title": "回覆使用者回饋",
+        "reply_label": "請輸入您的回覆內容",
+        "reply_placeholder": "在此輸入您的回覆..."
+    },
+    "embed": {
+        "title": "新的使用者回饋",
+        "user_id": "使用者ID",
+        "content": "回饋內容",
+        "reply_title": "來自開發者的回覆",
+        "reply_content": "回覆內容",
+        "reply_footer": "由於你先前提供了回饋而收到這則訊息。"
+    },
+    "msg": {
+        "sent": "已成功送出，感謝您的回饋！\n建議加入官方支援群來回饋或是回報問題！\n{invite}",
+        "send_failed": "無法送出回饋，請稍後再試。",
+        "channel_missing": "無法找到頻道，請稍後再試。",
+        "reply_sent": "已成功發送回覆給使用者！",
+        "reply_failed": "無法發送回覆，可能是使用者的隱私設定阻止了私訊：{error}",
+        "user_not_found": "無法找到使用者，可能是使用者已刪除帳號或更改了隱私設定。"
+    }
+}

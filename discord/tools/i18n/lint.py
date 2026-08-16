@@ -199,10 +199,27 @@ def check_hardcoded(report: Report):
             report.error("hardcoded", f"{path.name}: cannot parse ({e})")
             continue
         docstrings = _docstring_nodes(tree)
+        # dict 的 key 是查表資料（如中文動作詞 -> en key 的輸入正規化表），
+        # 與 extract.py 的 dict_key 規則一致，不視為需要翻譯的字面值
+        dict_keys = set()
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Dict):
+                for key_node in node.keys:
+                    if key_node is not None:
+                        dict_keys.add(id(key_node))
+        # 模組層級 ALL_CAPS 常數是 DSL / 領域資料 / AI prompt（排除清單），
+        # 與 extract.py 的 allcaps 規則一致
+        allcaps = set()
+        for node in tree.body:
+            if isinstance(node, ast.Assign):
+                for target in node.targets:
+                    if isinstance(target, ast.Name) and target.id.isupper():
+                        for child in ast.walk(node.value):
+                            allcaps.add(id(child))
         for node in ast.walk(tree):
             if not (isinstance(node, ast.Constant) and isinstance(node.value, str)):
                 continue
-            if id(node) in docstrings:
+            if id(node) in docstrings or id(node) in dict_keys or id(node) in allcaps:
                 continue
             if not _CJK_RE.search(node.value):
                 continue
