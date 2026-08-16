@@ -1,2 +1,4 @@
 # 已完成 i18n 遷移的模組（lint 的 hardcoded 規則會強制它們不得再有中文字面值）
 Language
+logger
+embed_template
