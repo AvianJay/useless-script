@@ -6,6 +6,8 @@ from urllib.parse import urlparse
 
 import discord
 
+from i18n import t
+
 
 class EmbedTemplateSyntaxError(ValueError):
     pass
@@ -57,14 +59,14 @@ def validate_embed_template(template: str, allowed_variables: set[str]) -> None:
         index = 0
         while index < len(segment):
             if segment[index] == "}":
-                raise EmbedTemplateSyntaxError("出現未配對的 `}`。")
+                raise EmbedTemplateSyntaxError(t("embed_template.err.unmatched_close"))
             if segment[index] != "{":
                 index += 1
                 continue
 
             closing_index = find_matching_brace(segment, index)
             if closing_index == -1:
-                raise EmbedTemplateSyntaxError("出現未閉合的 `{`。")
+                raise EmbedTemplateSyntaxError(t("embed_template.err.unclosed_open"))
 
             token = segment[index + 1 : closing_index]
             lowered = token.lower()
@@ -75,19 +77,21 @@ def validate_embed_template(template: str, allowed_variables: set[str]) -> None:
             if matched_prefix is not None:
                 payload = token[len(matched_prefix) :]
                 if not payload:
-                    raise EmbedTemplateSyntaxError(f"`{matched_prefix[:-1]}` 內容不得為空。")
+                    raise EmbedTemplateSyntaxError(
+                        t("embed_template.err.empty_directive", directive=matched_prefix[:-1]))
                 if matched_prefix == "embedfield:":
                     field_name, field_value = split_top_level(payload)
                     if field_value is None or not field_name or not field_value:
                         raise EmbedTemplateSyntaxError(
-                            "Embed 欄位格式必須是 `{embedfield:欄位名:欄位內容}`。"
+                            t("embed_template.err.field_format")
                         )
                     validate_segment(field_name)
                     validate_segment(field_value)
                 else:
                     validate_segment(payload)
             elif token not in allowed_variables:
-                raise EmbedTemplateSyntaxError(f"不支援的模板變數 `{{{token}}}`。")
+                raise EmbedTemplateSyntaxError(
+                    t("embed_template.err.unknown_variable", token="{" + token + "}"))
             index = closing_index + 1
 
     validate_segment(template)
@@ -272,31 +276,31 @@ def _valid_http_url(value: str) -> bool:
 
 def validate_embed_output(content: str | None, embed: discord.Embed | None) -> None:
     if content and len(content) > 2000:
-        raise ValueError("公告的一般訊息內容超過 Discord 的 2000 字限制。")
+        raise ValueError(t("embed_template.err.content_too_long"))
     if embed is None:
         if not content:
-            raise ValueError("公告模板必須產生一般文字或 Embed。")
+            raise ValueError(t("embed_template.err.empty_output"))
         return
 
     data = embed.to_dict()
     if len(str(data.get("title", ""))) > 256:
-        raise ValueError("Embed 標題超過 256 字。")
+        raise ValueError(t("embed_template.err.title_too_long"))
     if len(str(data.get("description", ""))) > 4096:
-        raise ValueError("Embed 內容超過 4096 字。")
+        raise ValueError(t("embed_template.err.description_too_long"))
     fields = data.get("fields", [])
     if len(fields) > 25:
-        raise ValueError("Embed 欄位超過 25 個。")
+        raise ValueError(t("embed_template.err.too_many_fields"))
     for field in fields:
         if len(str(field.get("name", ""))) > 256:
-            raise ValueError("Embed 欄位名稱超過 256 字。")
+            raise ValueError(t("embed_template.err.field_name_too_long"))
         if len(str(field.get("value", ""))) > 1024:
-            raise ValueError("Embed 欄位內容超過 1024 字。")
+            raise ValueError(t("embed_template.err.field_value_too_long"))
     if len(str(data.get("footer", {}).get("text", ""))) > 2048:
-        raise ValueError("Embed footer 超過 2048 字。")
+        raise ValueError(t("embed_template.err.footer_too_long"))
     if len(str(data.get("author", {}).get("name", ""))) > 256:
-        raise ValueError("Embed author 超過 256 字。")
+        raise ValueError(t("embed_template.err.author_too_long"))
     if len(embed) > 6000:
-        raise ValueError("Embed 總文字長度超過 6000 字。")
+        raise ValueError(t("embed_template.err.embed_too_long"))
 
     url_values = [
         data.get("url"),
@@ -307,6 +311,6 @@ def validate_embed_output(content: str | None, embed: discord.Embed | None) -> N
         data.get("author", {}).get("icon_url"),
     ]
     if any(value and len(str(value)) > 2048 for value in url_values):
-        raise ValueError("Embed 網址超過 Discord 的 2048 字限制。")
+        raise ValueError(t("embed_template.err.url_too_long"))
     if any(value and not _valid_http_url(str(value)) for value in url_values):
-        raise ValueError("Embed 網址必須是有效的 http 或 https 網址。")
+        raise ValueError(t("embed_template.err.invalid_url"))

@@ -1,0 +1,307 @@
+{
+    "antibeast": {
+        "_desc": "Block everyone/here and protected-role mentions",
+        "_display": "AntiBeast",
+        "antibeast": {
+            "desc": "AutoMod mass-mention protection, bypass roles, and repeated-trigger actions",
+            "display": "AntiBeast settings"
+        }
+    },
+    "automoderate": {
+        "_desc": "Auto-moderation settings (including invite-link detection)",
+        "_display": "Auto Moderation",
+        "automod": {
+            "desc": "Enable and configure scam trap, invite links, punishment evasion, flagged-user joins, anti-raid, anti-spam, AutoMod detection, and more",
+            "display": "Auto-moderation rules"
+        }
+    },
+    "autoreply": {
+        "_desc": "Basic auto-reply settings",
+        "_display": "Auto Reply",
+        "autoreplies": {
+            "desc": "Add, edit, or delete auto-reply rules; separate multiple triggers/replies with commas",
+            "display": "Rule list"
+        },
+        "autoreply_ignore_channels": {
+            "desc": "Channels to ignore (blacklist mode) or the only active channels (whitelist mode)",
+            "display": "Ignored / allowed channels"
+        },
+        "autoreply_ignore_mode": {
+            "desc": "Blacklist: ignore listed channels / Whitelist: only active in listed channels",
+            "display": "Ignore mode",
+            "option": {
+                "blacklist": "Blacklist",
+                "whitelist": "Whitelist"
+            }
+        }
+    },
+    "customprefix": {
+        "_desc": "Customize this server's command prefix",
+        "_display": "Custom Prefix",
+        "custom_prefix": {
+            "desc": "Command prefix for this server; leave empty for the default",
+            "display": "Command prefix"
+        }
+    },
+    "dgpa": {
+        "_desc": "NDS tracking notification settings",
+        "_display": "NDS Tracker",
+        "nds_follow_channel_id": {
+            "desc": "Channel where NDS tracking results are posted",
+            "display": "NDS notification channel"
+        }
+    },
+    "dsize": {
+        "_desc": "dsize value settings",
+        "_display": "dsize",
+        "dsize_drop_item_chance": {
+            "display": "Item drop chance (%)"
+        },
+        "dsize_max": {
+            "display": "Maximum size"
+        },
+        "dsize_surgery_max": {
+            "display": "Surgery result maximum"
+        },
+        "dsize_surgery_percent": {
+            "display": "Surgery success rate (%)"
+        }
+    },
+    "dynamicvoice": {
+        "_desc": "Automatically create/delete voice channels",
+        "_display": "Dynamic Voice",
+        "dynamic_voice_blacklist_roles": {
+            "desc": "Users with these roles cannot use dynamic voice channels",
+            "display": "Blacklist roles"
+        },
+        "dynamic_voice_channel": {
+            "desc": "Joining this channel automatically creates a dynamic channel",
+            "display": "Entry voice channel"
+        },
+        "dynamic_voice_channel_category": {
+            "desc": "Category that dynamic voice channels belong to",
+            "display": "Dynamic channel category"
+        },
+        "dynamic_voice_channel_name": {
+            "default": "{user}'s channel",
+            "desc": "Use {user} as a placeholder for the user's name",
+            "display": "Channel name template"
+        },
+        "dynamic_voice_play_audio": {
+            "display": "Play sound on join"
+        }
+    },
+    "economy": {
+        "_desc": "Manage server economy parameters",
+        "_display": "Economy",
+        "economy_allow_global_flow": {
+            "desc": "Allow flow between server and global currency (exchange, global shop, check cashing, etc.)",
+            "display": "Allow global currency flow"
+        },
+        "economy_currency_name": {
+            "default": "Server Coin",
+            "display": "Currency name"
+        }
+    },
+    "fakeuser": {
+        "_desc": "Fake-user notifications",
+        "_display": "Fake User",
+        "fake_user_log_channel": {
+            "desc": "Fake-user results are sent to this channel",
+            "display": "Fake-user log channel"
+        }
+    },
+    "fixlink": {
+        "_desc": "Fix social platform links and strip unnecessary tracking parameters",
+        "_display": "Link Fixer",
+        "fixlink": {
+            "desc": "Enable state, tracking removal, webhook mode, built-in fixers, and custom platforms",
+            "display": "FixLink settings"
+        }
+    },
+    "logger": {
+        "_desc": "Bot logging settings",
+        "_display": "Logging",
+        "log_channel_id": {
+            "desc": "Text channel for bot log output",
+            "display": "Log channel"
+        }
+    },
+    "messageimage": {
+        "_desc": "Server message board settings",
+        "_display": "Message Board",
+        "guild_board_channel_id": {
+            "desc": "Channel used by the server message board",
+            "display": "Message board channel"
+        }
+    },
+    "moderate": {
+        "_desc": "Moderation-related settings",
+        "_display": "Moderation",
+        "moderation_announcement_config": {
+            "desc": "Edit the announcement template, AutoReply embed directives, and case-ID format",
+            "display": "Announcement format"
+        },
+        "moderation_message_channel_id": {
+            "desc": "Channel where moderation announcements are posted automatically",
+            "display": "Announcement channel"
+        }
+    },
+    "moderationnotify": {
+        "_desc": "Control whether punished users are notified",
+        "_display": "Moderation Notify",
+        "notify_user_on_ban": {
+            "display": "Notify user on ban"
+        },
+        "notify_user_on_kick": {
+            "display": "Notify user on kick"
+        },
+        "notify_user_on_mute": {
+            "display": "Notify user on mute"
+        },
+        "user_appeal_channel": {
+            "desc": "When set, moderation notices include an appeal link",
+            "display": "Appeal channel"
+        }
+    },
+    "oxwu": {
+        "_desc": "Earthquake warning/report push settings",
+        "_display": "Earthquake Alerts",
+        "oxwu_report_channel": {
+            "display": "Report channel"
+        },
+        "oxwu_report_channel_text": {
+            "display": "Report extra text"
+        },
+        "oxwu_warning_channel": {
+            "display": "Warning channel"
+        },
+        "oxwu_warning_channel_text": {
+            "desc": "For example @everyone",
+            "display": "Warning extra text"
+        }
+    },
+    "reportsystem": {
+        "_desc": "Manage report-related settings",
+        "_display": "Report System",
+        "report_blacklist": {
+            "desc": "Users with these roles cannot report",
+            "display": "Report blacklist roles"
+        },
+        "report_channel_id": {
+            "desc": "Reports are sent to this channel",
+            "display": "Report channel"
+        },
+        "report_message": {
+            "desc": "Mention/notice text sent to the report channel",
+            "display": "Report channel mention text"
+        },
+        "report_rate_limit": {
+            "desc": "Cooldown between reports from the same user",
+            "display": "Report rate limit (seconds)"
+        },
+        "reported_message": {
+            "default": "Thank you for your report. We will handle it as soon as possible.",
+            "desc": "Reply sent to the reporter after a successful report",
+            "display": "Report reply message"
+        },
+        "server_rules": {
+            "desc": "Server rules used by AI review (one per line)",
+            "display": "Server rules"
+        }
+    },
+    "serverwebverify": {
+        "_desc": "Server web verification (initialize with /webverify setup or quick_setup first)",
+        "_display": "Web Verification",
+        "webverify_config": {
+            "desc": "Enablement, CAPTCHA, unverified role, auto-assignment, notifications, and region alerts",
+            "display": "Web verification settings"
+        }
+    },
+    "stickymessage": {
+        "_desc": "Automatically move a message back to the bottom after new activity",
+        "_display": "Sticky Messages",
+        "stickymessage": {
+            "desc": "Configure channels, content, mentions, and repost intervals",
+            "display": "Sticky message settings"
+        }
+    },
+    "stickyrole": {
+        "_desc": "Role memory settings",
+        "_display": "StickyRole",
+        "stickyrole_allowed_roles": {
+            "desc": "Only these roles are remembered and restored",
+            "display": "Remembered roles"
+        },
+        "stickyrole_enabled": {
+            "desc": "Automatically restore roles when users rejoin",
+            "display": "Enable role memory"
+        },
+        "stickyrole_ignore_bots": {
+            "display": "Ignore bots"
+        },
+        "stickyrole_log_channel": {
+            "desc": "Channel notified when roles are restored",
+            "display": "Log channel"
+        }
+    },
+    "ticket": {
+        "_desc": "Private support tickets: open, claim, close, and HTML transcripts",
+        "_display": "Tickets",
+        "ticket_blacklist_roles": {
+            "desc": "Users with these roles cannot open tickets",
+            "display": "Blacklist roles"
+        },
+        "ticket_category": {
+            "desc": "New ticket channels are created under this category",
+            "display": "Ticket category"
+        },
+        "ticket_enabled": {
+            "display": "Enable ticket system"
+        },
+        "ticket_inherit_category_permissions": {
+            "desc": "When on, ticket channels inherit category permissions plus opener/staff overrides; when off, tickets are fully private",
+            "display": "Inherit category permissions"
+        },
+        "ticket_log_channel": {
+            "desc": "Transcripts are sent here after a ticket closes",
+            "display": "Log channel"
+        },
+        "ticket_max_per_user": {
+            "display": "Max open tickets per user"
+        },
+        "ticket_name_template": {
+            "desc": "{number} and {user} placeholders supported",
+            "display": "Channel name template"
+        },
+        "ticket_panel_channel": {
+            "desc": "Channel for the ticket panel (publish with /ticket panel after setting)",
+            "display": "Panel channel"
+        },
+        "ticket_panel_color": {
+            "desc": "Panel embed color (6-digit hex, e.g. 5865F2); leave empty for the default",
+            "display": "Panel color"
+        },
+        "ticket_panel_description": {
+            "default": "Click the button below to open a private ticket. Our team will assist you shortly.",
+            "display": "Panel description"
+        },
+        "ticket_panel_image": {
+            "desc": "Large image shown below the panel embed (http/https URL); leave empty for none",
+            "display": "Panel image URL"
+        },
+        "ticket_panel_title": {
+            "default": "Need help?",
+            "display": "Panel title"
+        },
+        "ticket_staff_roles": {
+            "desc": "Roles that can view, claim, and close tickets",
+            "display": "Staff roles"
+        },
+        "ticket_welcome_message": {
+            "default": "Hi {user}, thanks for opening a ticket! Please describe your issue in detail.",
+            "desc": "{user} and {subject} placeholders supported",
+            "display": "Ticket welcome message"
+        }
+    }
+}

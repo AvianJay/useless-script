@@ -1,0 +1,30 @@
+{
+    "panel": {
+        "invalid_boolean": "Invalid boolean value.",
+        "save_failed": "Failed to save server settings.",
+        "guild_not_found": "Server not found.",
+        "guild_not_found_preview": "Server not found; cannot preview the moderation announcement.",
+        "invalid_channel_id": "Invalid channel ID.",
+        "automod_action_invalid": "Invalid {feature} action command: {error}",
+        "fixlink_not_object": "FixLink settings must be an object.",
+        "fixlink_custom_not_list": "FixLink custom platforms must be a list.",
+        "fixlink_custom_limit": { "one": "At most {count} custom platform per server.", "other": "At most {count} custom platforms per server." },
+        "fixlink_fixers_not_object": "FixLink preferred fixers must be an object.",
+        "fixlink_unknown_platform": "Unknown built-in FixLink platform: {platform}",
+        "fixlink_unsupported_fixer": "{platform} does not support fixer: {fixer}",
+        "fixlink_disabled_not_list": "FixLink disabled platforms must be a list.",
+        "antibeast_not_object": "AntiBeast settings must be an object.",
+        "antibeast_bypass_not_list": "AntiBeast bypass roles must be a list.",
+        "antibeast_bypass_invalid": "Invalid AntiBeast bypass role ID.",
+        "antibeast_kick_not_object": "AntiBeast repeated-trigger settings must be an object.",
+        "antibeast_numbers_invalid": "AntiBeast trigger count and time window must be integers.",
+        "antibeast_threshold_range": "AntiBeast trigger count must be between 1 and 20.",
+        "antibeast_window_range": "AntiBeast time window must be between 5 and 3600 seconds.",
+        "antibeast_action_invalid": "Invalid AntiBeast action command: {error}",
+        "antibeast_unavailable": "The AntiBeast module is not loaded.",
+        "sticky_invalid_channel": "Channel {channel} is not a text or announcement channel in this server.",
+        "sticky_limit": { "one": "This server allows at most {count} sticky message; remove one before adding.", "other": "This server allows at most {count} sticky messages; remove some before adding." },
+        "sticky_unavailable": "The StickyMessage module is currently unavailable.",
+        "sticky_publish_failed": "Failed to publish the sticky message."
+    }
+}

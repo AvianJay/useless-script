@@ -1,7 +1,8 @@
 from globalenv import (
-    bot, get_server_config, set_server_config,
+    bot, get_server_config, set_server_config, get_server_config_i18n,
     get_all_server_config_key, config, modules,
 )
+import i18n
 from logger import log
 import discord
 from discord import app_commands
@@ -122,9 +123,11 @@ def effective_staff_role_ids(guild_id: int, ticket_type: dict | None) -> list[in
 def effective_welcome(guild_id: int, ticket_type: dict | None) -> str:
     if ticket_type and ticket_type.get("welcome_message"):
         return str(ticket_type["welcome_message"])
-    return str(get_server_config(
+    # 歡迎訊息發在票口頻道（guild 共享），預設值以伺服器語言解析
+    return str(get_server_config_i18n(
         guild_id, "ticket_welcome_message",
-        "{user} 你好，感謝開啟票口！請詳細描述你的問題。",
+        "panel.ticket.ticket_welcome_message.default",
+        locale=i18n.resolve_locale(guild_id=guild_id),
     ) or "")
 
 
@@ -641,12 +644,15 @@ def build_panel_embed(guild_id: int) -> discord.Embed:
     raw_color = str(get_server_config(guild_id, "ticket_panel_color", "") or "").strip().lstrip("#")
     if re.fullmatch(r"[0-9a-fA-F]{6}", raw_color):
         color = discord.Color(int(raw_color, 16))
+    # 面板發佈到公開頻道（guild 共享），預設值以伺服器語言解析
+    guild_locale = i18n.resolve_locale(guild_id=guild_id)
     embed = discord.Embed(
-        title=str(get_server_config(guild_id, "ticket_panel_title", "需要協助嗎？") or "需要協助嗎？"),
-        description=str(get_server_config(
+        title=str(get_server_config_i18n(
+            guild_id, "ticket_panel_title",
+            "panel.ticket.ticket_panel_title.default", locale=guild_locale) or ""),
+        description=str(get_server_config_i18n(
             guild_id, "ticket_panel_description",
-            "點擊下方按鈕開啟私人票口，我們的團隊將盡快協助你。",
-        ) or ""),
+            "panel.ticket.ticket_panel_description.default", locale=guild_locale) or ""),
         color=color,
     )
     image_url = str(get_server_config(guild_id, "ticket_panel_image", "") or "").strip()

@@ -6,7 +6,7 @@ from discord import app_commands
 from discord.ext import commands
 import aiohttp
 from database import db
-from globalenv import bot, start_bot, db, get_server_config, set_server_config, modules, get_command_mention, config
+from globalenv import bot, start_bot, db, get_server_config, set_server_config, get_server_config_i18n, modules, get_command_mention, config
 from logger import log
 import logging
 import re
@@ -398,7 +398,7 @@ async def report_message(interaction: discord.Interaction, message: discord.Mess
     # Get server-specific configuration
     report_blacklist = get_server_config(guild_id, "REPORT_BLACKLIST", [])
     report_rate_limit = get_server_config(guild_id, "REPORT_RATE_LIMIT", 300)
-    reported_message = get_server_config(guild_id, "REPORTED_MESSAGE", "感謝您的檢舉，我們會盡快處理您的檢舉。")
+    reported_message = get_server_config_i18n(guild_id, "REPORTED_MESSAGE", "panel.reportsystem.reported_message.default")
     
     # check if the user's role is in the blacklist
     for role in interaction.user.roles:
@@ -562,8 +562,8 @@ class ReportSettings(commands.GroupCog, name=app_commands.locale_str("report", i
                 inline=False
             )
             embed.add_field(
-                name="檢舉回覆訊息", 
-                value=config.get("REPORTED_MESSAGE", "感謝您的檢舉，我們會盡快處理您的檢舉。"), 
+                name="檢舉回覆訊息",
+                value=get_server_config_i18n(guild_id, "REPORTED_MESSAGE", "panel.reportsystem.reported_message.default"),
                 inline=False
             )
             embed.add_field(

@@ -1,0 +1,26 @@
+{
+    "field": {
+        "user_id": "User ID",
+        "guild_id": "Server ID"
+    },
+    "msg": {
+        "log_channel_set": "Log channel set to: {channel}",
+        "log_channel_cleared": "Log channel setting cleared."
+    },
+    "err": {
+        "command_error": "❌ An error occurred while running the command!",
+        "generic": "❌ An error occurred: {error}",
+        "missing_permissions": "❌ You don't have permission to run this command! Missing: {missing}",
+        "bot_missing_permissions": "❌ I don't have enough permissions to do that! Missing: {missing}",
+        "cooldown": "❌ This command is on cooldown. Try again in {seconds} seconds.",
+        "check_failure": "❌ You don't meet the requirements to run this command.",
+        "owner_permission_joke": "-# Seriously? Being the developer doesn't mean you get to abuse power.",
+        "checkfail": {
+            "0": "❌ You don't meet the requirements to run this command!",
+            "1": "❌ Please submit a photo of you in a maid dress to unlock this command.",
+            "2": "❌ Please hand over Onion's **new** crossdressing photo to unlock this command.",
+            "3": "❌ Please hand over **Kinkin's crossdressing photo** to unlock this command.",
+            "4": "❌ What are you even doing?"
+        }
+    }
+}

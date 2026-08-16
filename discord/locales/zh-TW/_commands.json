@@ -1256,6 +1256,15 @@
             "name": "顯示"
         }
     },
+    "logger": {
+        "set_log_channel": {
+            "desc": "設置日誌頻道 (若不設置則不發送到頻道)",
+            "name": "設定日誌頻道",
+            "param": {
+                "channel": "選擇日誌頻道"
+            }
+        }
+    },
     "mentionlimit": {
         "mentionlimit": {
             "about": {

@@ -19,7 +19,8 @@
         "none": "None",
         "auto": "Auto",
         "unset": "Not set",
-        "default": "Default"
+        "default": "Default",
+        "default_value": "(default) {value}"
     },
     "btn": {
         "confirm": "Confirm",

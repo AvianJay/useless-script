@@ -2,6 +2,8 @@
 from discord.ext import commands
 from discord import app_commands
 from globalenv import config, bot, start_bot, modules, get_server_config, set_server_config, add_app_command_error_handler
+import i18n
+from i18n import t
 import asyncio
 import logging
 import traceback
@@ -47,12 +49,12 @@ def cleanup_old_logs(days=7):
             if file_time < cutoff_date:
                 log_file.unlink()
                 deleted_count += 1
-                print(f"[Logger] 已刪除舊日誌: {log_file.name}")
+                print(f"[Logger] Deleted old log: {log_file.name}")
         except Exception as e:
-            print(f"[Logger] 刪除日誌檔案時發生錯誤 {log_file.name}: {e}")
-    
+            print(f"[Logger] Failed to delete log file {log_file.name}: {e}")
+
     if deleted_count > 0:
-        print(f"[Logger] 共刪除 {deleted_count} 個舊日誌檔案")
+        print(f"[Logger] Deleted {deleted_count} old log file(s)")
 
 
 def _unique_guild_ids(*guild_ids):
@@ -109,12 +111,17 @@ def _build_log_embed(message: str, level: int, module_name: str, user: discord.U
     color = 0x00ff00 if level == logging.INFO else 0xffff00 if level == logging.WARNING else 0xff0000 if level == logging.ERROR else 0x0000ff
     embed = discord.Embed(title=module_name, description=message, color=color)
     embed.timestamp = datetime.now(timezone.utc)
+    # 欄位名以「該 guild 的語言」渲染——log embed 也會送到 guild 的日誌頻道，
+    # 主要讀者是該伺服器的管理員
+    embed_locale = i18n.resolve_locale(guild_id=guild.id) if guild else i18n.SOURCE_LOCALE
     if user:
-        embed.add_field(name="使用者ID", value=user.id, inline=False)
+        embed.add_field(name=t("logger.field.user_id", locale=embed_locale),
+                        value=user.id, inline=False)
         to_show_name = f"{user.display_name} ({user.name})" if user.display_name != user.name else user.name
         embed.set_author(name=to_show_name, icon_url=user.display_avatar.url if user.display_avatar else None)
     if guild:
-        embed.add_field(name="伺服器ID", value=guild.id, inline=False)
+        embed.add_field(name=t("logger.field.guild_id", locale=embed_locale),
+                        value=guild.id, inline=False)
         embed.set_footer(text=guild.name if guild.name else guild.id, icon_url=guild.icon.url if guild.icon else None)
     return embed
 
@@ -313,22 +320,22 @@ def _format_interaction_context(interaction: discord.Interaction):
 
     interaction_type = getattr(getattr(interaction, "type", None), "name", None)
     if interaction_type:
-        details.append(f"互動類型: {interaction_type}")
+        details.append(f"Interaction type: {interaction_type}")
 
     command = getattr(interaction, "command", None)
     if command:
         if isinstance(command, app_commands.ContextMenu):
-            details.append(f"指令: {command.qualified_name} ({command.type.name})")
+            details.append(f"Command: {command.qualified_name} ({command.type.name})")
         else:
-            details.append(f"指令: /{command.qualified_name}")
+            details.append(f"Command: /{command.qualified_name}")
     elif isinstance(getattr(interaction, "data", None), dict):
         interaction_name = interaction.data.get("name")
         if interaction_name:
-            details.append(f"互動名稱: {interaction_name}")
+            details.append(f"Interaction name: {interaction_name}")
 
     if interaction.channel:
         channel_name = getattr(interaction.channel, "name", type(interaction.channel).__name__)
-        details.append(f"頻道: {channel_name} ({interaction.channel.id})")
+        details.append(f"Channel: {channel_name} ({interaction.channel.id})")
 
     if hasattr(interaction, "namespace") and interaction.namespace:
         params = []
@@ -337,7 +344,7 @@ def _format_interaction_context(interaction: discord.Interaction):
                 continue
             params.append(f"{key}={value}")
         if params:
-            details.append(f"參數: {', '.join(params)}")
+            details.append(f"Params: {', '.join(params)}")
 
     return "\n".join(details)
 
@@ -358,15 +365,15 @@ def _log_interaction_exception(title: str, interaction: discord.Interaction, err
     if item is not None:
         item_name = getattr(item, "custom_id", None) or getattr(item, "label", None) or getattr(item, "placeholder", None)
         item_summary = item.__class__.__name__ if not item_name else f"{item.__class__.__name__} ({item_name})"
-        details = f"{details}\n元件: {item_summary}" if details else f"元件: {item_summary}"
+        details = f"{details}\nComponent: {item_summary}" if details else f"Component: {item_summary}"
 
     trace_text = _format_exception_trace(error)
     message = (
         f"{title}\n"
         f"{details}\n"
-        f"錯誤類型: {type(error).__name__}\n"
-        f"錯誤訊息: {error}\n"
-        f"堆疊追蹤:\n{trace_text}"
+        f"Error type: {type(error).__name__}\n"
+        f"Error message: {error}\n"
+        f"Traceback:\n{trace_text}"
     ).strip()
 
     log(
@@ -532,10 +539,10 @@ def install_ui_error_bridge():
         return
 
     async def _view_on_error(self, interaction: discord.Interaction, error: Exception, item):
-        _log_interaction_exception("互動元件發生錯誤", interaction, error, item=item)
+        _log_interaction_exception("UI component error", interaction, error, item=item)
 
     async def _modal_on_error(self, interaction: discord.Interaction, error: Exception):
-        _log_interaction_exception("Modal 互動發生錯誤", interaction, error)
+        _log_interaction_exception("Modal interaction error", interaction, error)
 
     discord.ui.View.on_error = _view_on_error
     discord.ui.Modal.on_error = _modal_on_error
@@ -577,13 +584,24 @@ class LoggerCog(commands.Cog):
     @app_commands.default_permissions(manage_guild=True, manage_webhooks=True)
     @app_commands.allowed_installs(guilds=True, users=False)
     @app_commands.allowed_contexts(guilds=True, dms=False, private_channels=False)
-    @app_commands.command(name="set-log-channel", description="設置日誌頻道 (若不設置則不發送到頻道)")
-    @app_commands.describe(channel="選擇日誌頻道")
+    @app_commands.command(
+        name=app_commands.locale_str("set-log-channel", i18n_key="cmd.logger.set_log_channel.name"),
+        description=app_commands.locale_str(
+            "Set the log channel (logs are not sent to a channel if unset)",
+            i18n_key="cmd.logger.set_log_channel.desc"))
+    @app_commands.describe(
+        channel=app_commands.locale_str(
+            "The log channel", i18n_key="cmd.logger.set_log_channel.param.channel"))
     async def set_log_channel(self, interaction: discord.Interaction, channel: discord.TextChannel = None):
         await interaction.response.defer(ephemeral=True)
         guild_id = interaction.guild.id
         set_server_config(guild_id, "log_channel_id", channel.id if channel else None)
-        await interaction.followup.send(f"日誌頻道已設置為: {channel.mention}", ephemeral=True)
+        if channel:
+            await interaction.followup.send(
+                t("logger.msg.log_channel_set", channel=channel.mention), ephemeral=True)
+        else:
+            await interaction.followup.send(
+                t("logger.msg.log_channel_cleared"), ephemeral=True)
 
     @commands.Cog.listener()
     async def on_message(self, message: discord.Message):
@@ -595,77 +613,72 @@ class LoggerCog(commands.Cog):
             recipient = message.channel.recipients[0] if message.channel.recipients else None
             content = message.content or ""
             if message.attachments:
-                content += " [附件: " + ", ".join(attachment.filename for attachment in message.attachments) + "]"
+                content += " [attachments: " + ", ".join(attachment.filename for attachment in message.attachments) + "]"
             if message.embeds:
-                content += " [嵌入內容]"
+                content += " [embeds]"
             if message.stickers:
-                content += " [貼圖]"
+                content += " [stickers]"
             if message.components:
-                content += " [互動元件]"
+                content += " [components]"
             message_cache_key = (message.channel.id, content)
             if message_cache_key in self.dm_message_log_cache:
                 return
             self.dm_message_log_cache[message_cache_key] = True
-            log(f"收到了私訊 {message.author}: {content}", module_name="Logger", level=logging.INFO, user=recipient)
-        # else:
-        #     await log(f"收到了訊息 {message.author}: {message.content}", module_name="Logger", level=logging.INFO, user=message.author, guild=message.guild)
+            log(f"DM received from {message.author}: {content}", module_name="Logger", level=logging.INFO, user=recipient)
 
     @commands.Cog.listener()
     async def on_command(self, ctx):
-        log(f"指令被觸發: {ctx.command} 由 {ctx.author}", module_name="Logger", level=logging.INFO, user=ctx.author, guild=ctx.guild)
+        log(f"Command triggered: {ctx.command} by {ctx.author}", module_name="Logger", level=logging.INFO, user=ctx.author, guild=ctx.guild)
 
     @commands.Cog.listener()
     async def on_command_error(self, ctx, error):
-        # 處理未知指令
+        # 未知指令：忽略
         if isinstance(error, commands.CommandNotFound):
-            return  # 忽略未知指令，不回應
-        
-        # 處理權限不足
-        if isinstance(error, commands.MissingPermissions):
-            missing = ', '.join(error.missing_permissions)
-            if ctx.author.id not in self.error_user_cache:
-                await ctx.send(f"❌ 你沒有執行此指令的權限！缺少權限: {missing}" + ('\n-# 你傻逼吧你以為你是開發者你就可以濫權？' if ctx.author.id in config('owners') else ''), allowed_mentions=discord.AllowedMentions.none())
-                self.error_user_cache[ctx.author.id] = True
-            log(f"指令 {ctx.command} 由 {ctx.author} 觸發時權限不足: {missing}", module_name="Logger", level=logging.WARNING, user=ctx.author, guild=ctx.guild)
             return
-        
-        if isinstance(error, commands.BotMissingPermissions):
-            missing = ', '.join(error.missing_permissions)
+
+        # text command 的 listener 不在 choke point 內，需顯式開 scope
+        # （使用者語言 > 伺服器語言 > last_locale）
+        async with i18n.guild_scope(ctx.guild.id if ctx.guild else None,
+                                    user_id=ctx.author.id):
+            if isinstance(error, commands.MissingPermissions):
+                missing = ', '.join(error.missing_permissions)
+                if ctx.author.id not in self.error_user_cache:
+                    message = t("logger.err.missing_permissions", missing=missing)
+                    if ctx.author.id in config('owners'):
+                        message += "\n" + t("logger.err.owner_permission_joke")
+                    await ctx.send(message, allowed_mentions=discord.AllowedMentions.none())
+                    self.error_user_cache[ctx.author.id] = True
+                log(f"Command {ctx.command} by {ctx.author} missing permissions: {missing}", module_name="Logger", level=logging.WARNING, user=ctx.author, guild=ctx.guild)
+                return
+
+            if isinstance(error, commands.BotMissingPermissions):
+                missing = ', '.join(error.missing_permissions)
+                if ctx.author.id not in self.error_user_cache:
+                    await ctx.send(t("logger.err.bot_missing_permissions", missing=missing), allowed_mentions=discord.AllowedMentions.none())
+                    self.error_user_cache[ctx.author.id] = True
+                log(f"Command {ctx.command} bot missing permissions: {missing}", module_name="Logger", level=logging.WARNING, user=ctx.author, guild=ctx.guild)
+                return
+
+            if isinstance(error, commands.CheckFailure):
+                if ctx.author.id not in self.error_user_cache:
+                    variant = random.randrange(5)
+                    await ctx.send(i18n.t_enum("logger.err.checkfail", str(variant)), allowed_mentions=discord.AllowedMentions.none())
+                    self.error_user_cache[ctx.author.id] = True
+                log(f"Command {ctx.command} by {ctx.author} failed a check: {error}", module_name="Logger", level=logging.WARNING, user=ctx.author, guild=ctx.guild)
+                return
+
             if ctx.author.id not in self.error_user_cache:
-                await ctx.send(f"❌ 我沒有足夠的權限執行此操作！缺少權限: {missing}", allowed_mentions=discord.AllowedMentions.none())
+                await ctx.send(t("logger.err.command_error"), allowed_mentions=discord.AllowedMentions.none())
                 self.error_user_cache[ctx.author.id] = True
-            log(f"指令 {ctx.command} 機器人權限不足: {missing}", module_name="Logger", level=logging.WARNING, user=ctx.author, guild=ctx.guild)
-            return
-        
-        # 處理 Check 失敗
-        if isinstance(error, commands.CheckFailure):
-            if ctx.author.id not in self.error_user_cache:
-                messages = [
-                    "❌ 你不符合執行此指令的條件！",
-                    "❌ 請支付你的女裝照來解鎖使用權限。",
-                    "❌ 請交出洋蔥的**新**女裝照來解鎖使用權限。",
-                    "❌ 請交出**小金金的女裝照**來解鎖使用權限。",
-                    "❌ 你在幹嘛？",
-                ]
-                await ctx.send(random.choice(messages), allowed_mentions=discord.AllowedMentions.none())
-                self.error_user_cache[ctx.author.id] = True
-            log(f"指令 {ctx.command} 由 {ctx.author} 觸發時 Check 失敗: {error}", module_name="Logger", level=logging.WARNING, user=ctx.author, guild=ctx.guild)
-            return
-        
-        # 處理其他錯誤
-        if ctx.author.id not in self.error_user_cache:
-            await ctx.send(f"❌ 執行指令時發生錯誤！", allowed_mentions=discord.AllowedMentions.none())
-            self.error_user_cache[ctx.author.id] = True
-        log(f"指令 {ctx.command} 由 {ctx.author} 觸發時發生錯誤: {error}", module_name="Logger", level=logging.ERROR, user=ctx.author, guild=ctx.guild)
-        # await ctx.send(f"糟糕！發生了一些錯誤: {error}")
+            log(f"Command {ctx.command} by {ctx.author} raised an error: {error}", module_name="Logger", level=logging.ERROR, user=ctx.author, guild=ctx.guild)
 
     @commands.Cog.listener()
     async def on_guild_join(self, guild):
-        log(f"加入了新的伺服器: {guild.name} (ID: {guild.id})", module_name="Logger", level=logging.INFO)
+        log(f"Joined guild: {guild.name} (ID: {guild.id})", module_name="Logger", level=logging.INFO)
 
     @commands.Cog.listener()
     async def on_guild_remove(self, guild):
-        log(f"離開了伺服器: {guild.name} (ID: {guild.id})", module_name="Logger", level=logging.INFO)
+        log(f"Left guild: {guild.name} (ID: {guild.id})", module_name="Logger", level=logging.INFO)
 
     @commands.Cog.listener()
     async def on_app_command_completion(self, interaction: discord.Interaction, application_command: discord.app_commands.Command):
@@ -674,12 +687,12 @@ class LoggerCog(commands.Cog):
         
         # 基本指令資訊
         if isinstance(application_command, discord.app_commands.ContextMenu):
-            details.append(f"類型: 右鍵選單 ({application_command.type.name})")
-            details.append(f"名稱: {application_command.qualified_name}")
+            details.append(f"Type: context menu ({application_command.type.name})")
+            details.append(f"Name: {application_command.qualified_name}")
         else:
-            details.append(f"類型: 斜線指令")
-            details.append(f"名稱: /{application_command.qualified_name}")
-        
+            details.append("Type: slash command")
+            details.append(f"Name: /{application_command.qualified_name}")
+
         # 指令參數
         if hasattr(interaction, 'namespace') and interaction.namespace:
             params = []
@@ -695,44 +708,41 @@ class LoggerCog(commands.Cog):
                     else:
                         params.append(f"{key}={value}")
             if params:
-                details.append(f"參數: {', '.join(params)}")
-        
+                details.append(f"Params: {', '.join(params)}")
+
         # 頻道資訊
         if interaction.channel:
             channel_type = type(interaction.channel).__name__
             if hasattr(interaction.channel, 'name'):
-                details.append(f"頻道: #{interaction.channel.name} ({channel_type}, ID: {interaction.channel.id})")
+                details.append(f"Channel: #{interaction.channel.name} ({channel_type}, ID: {interaction.channel.id})")
             else:
-                details.append(f"頻道: {channel_type} (ID: {interaction.channel.id})")
-        
+                details.append(f"Channel: {channel_type} (ID: {interaction.channel.id})")
+
         # 組合所有詳細資訊
-        log_message = "應用程式指令執行完成\n" + "\n".join(details)
+        log_message = "App command completed\n" + "\n".join(details)
         
         log(log_message, module_name="Logger", level=logging.INFO, user=interaction.user, guild=interaction.guild)
 
     async def on_app_command_error(self, interaction: discord.Interaction, error: app_commands.AppCommandError):
         """處理應用程式指令錯誤"""
         original_error = _unwrap_app_command_error(error)
-        _log_interaction_exception("應用程式指令錯誤", interaction, original_error)
-        
-        # 向用戶顯示友善的錯誤訊息
-        error_message = "❌ 執行指令時發生錯誤！"
-        
-        # 根據錯誤類型提供更具體的訊息
+        _log_interaction_exception("App command error", interaction, original_error)
+
+        # 向用戶顯示友善的錯誤訊息（error dispatch 與指令同 task，
+        # tree choke point 設定的 locale 仍然有效）
         if isinstance(error, app_commands.MissingPermissions):
             missing = ', '.join(error.missing_permissions)
-            error_message = f"❌ 你沒有執行此指令的權限！缺少權限: {missing}"
+            error_message = t("logger.err.missing_permissions", missing=missing)
         elif isinstance(error, app_commands.BotMissingPermissions):
             missing = ', '.join(error.missing_permissions)
-            error_message = f"❌ 我沒有足夠的權限執行此操作！缺少權限: {missing}"
+            error_message = t("logger.err.bot_missing_permissions", missing=missing)
         elif isinstance(error, app_commands.CommandOnCooldown):
-            error_message = f"❌ 此指令冷卻中，請在 {error.retry_after:.1f} 秒後再試。"
+            error_message = t("logger.err.cooldown", seconds=f"{error.retry_after:.1f}")
         elif isinstance(error, app_commands.CheckFailure):
-            error_message = "❌ 你不符合執行此指令的條件。"
+            error_message = t("logger.err.check_failure")
         else:
-            # 對於其他錯誤，顯示錯誤訊息
-            error_message = f"❌ 發生錯誤: {str(original_error)}"
-        
+            error_message = t("logger.err.generic", error=str(original_error))
+
         try:
             if interaction.response.is_done():
                 await interaction.followup.send(error_message, ephemeral=True)
@@ -741,7 +751,7 @@ class LoggerCog(commands.Cog):
         except Exception as e:
             # 如果無法發送錯誤訊息，至少記錄下來
             log(
-                f"無法向用戶發送錯誤訊息: {e}\n原始錯誤: {original_error}",
+                f"Failed to send error message to user: {e}\nOriginal error: {original_error}",
                 module_name="Logger",
                 level=logging.ERROR,
                 user=interaction.user,
@@ -756,7 +766,7 @@ class LoggerCog(commands.Cog):
     async def on_error(self, event_method, *args, **kwargs):
         user, guild = _extract_user_and_guild(*args, *kwargs.values())
         log(
-            f"事件 {event_method} 發生錯誤。\n堆疊追蹤:\n{traceback.format_exc().strip()}",
+            f"Error in event {event_method}.\nTraceback:\n{traceback.format_exc().strip()}",
             module_name="Logger",
             level=logging.ERROR,
             user=user,

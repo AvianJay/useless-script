@@ -19,7 +19,8 @@
         "none": "無",
         "auto": "自動",
         "unset": "未設定",
-        "default": "預設"
+        "default": "預設",
+        "default_value": "（預設）{value}"
     },
     "btn": {
         "confirm": "確認",

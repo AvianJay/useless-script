@@ -20,11 +20,14 @@ from globalenv import (
     failed_modules,
     get_command_mention,
     get_server_config,
+    localized_panel_settings,
     modules,
     panel_settings,
     set_server_config,
 )
 from logger import log
+import i18n
+from i18n import t
 
 
 if "Moderate" in modules:
@@ -120,9 +123,11 @@ def resolve_select_value(value):
 
 def available_panel_modules() -> list[tuple[str, dict]]:
     unavailable = set(failed_modules)
+    # 依當前 locale 取在地化後的 registry 拷貝（display/description/options）；
+    # 傳入本模組的 panel_settings binding，讓測試 patch 得到
     return [
         (module_name, data)
-        for module_name, data in panel_settings.items()
+        for module_name, data in localized_panel_settings(panel_settings).items()
         if module_name in modules and module_name not in unavailable
     ]
 
@@ -156,7 +161,11 @@ def find_setup_channel(guild: discord.Guild, recipient) -> discord.TextChannel |
 def format_setting_value(guild: discord.Guild, setting: dict, value: Any) -> str:
     stype = setting.get("type", "string")
     if value is None:
-        return "未設定"
+        # 有在地化預設值的設定：顯示渲染後的預設並標記（值本身仍是未設定）
+        if setting.get("default_i18n_key"):
+            return t("common.state.default_value",
+                     value=truncate(t(setting["default_i18n_key"]), 200))
+        return t("common.state.unset")
     if stype in ("channel", "voice_channel", "category"):
         channel = guild.get_channel(int(value)) if str(value).isdigit() else None
         return channel.mention if channel else f"未知頻道 ({value})"

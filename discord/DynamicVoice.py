@@ -1,6 +1,7 @@
 import discord
 from discord import app_commands
-from globalenv import bot, start_bot, set_server_config, get_server_config, on_ready_tasks
+from globalenv import bot, start_bot, set_server_config, get_server_config, get_server_config_i18n, on_ready_tasks
+import i18n
 from discord.ext import commands
 import asyncio
 import random
@@ -181,7 +182,11 @@ class DynamicVoice(commands.GroupCog, name=app_commands.locale_str("dynamic-voic
         guild_id = member.guild.id
         channel_id = get_server_config(guild_id, "dynamic_voice_channel")
         channel_category_id = get_server_config(guild_id, "dynamic_voice_channel_category")
-        channel_name_template = get_server_config(guild_id, "dynamic_voice_channel_name", "{user} 的頻道")
+        # 頻道名稱是 guild 共享的產物，以伺服器語言解析預設值（非觸發者個人語言）
+        channel_name_template = get_server_config_i18n(
+            guild_id, "dynamic_voice_channel_name",
+            "panel.dynamicvoice.dynamic_voice_channel_name.default",
+            locale=i18n.resolve_locale(guild_id=guild_id))
         play_audio_enabled = get_server_config(guild_id, "dynamic_voice_play_audio", False)
         created_channels = get_server_config(guild_id, "created_dynamic_channels", [])
         if not channel_id:

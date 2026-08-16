@@ -1265,6 +1265,15 @@
             "name": "show"
         }
     },
+    "logger": {
+        "set_log_channel": {
+            "desc": "Set the log channel (logs are not sent to a channel if unset)",
+            "name": "set-log-channel",
+            "param": {
+                "channel": "The log channel"
+            }
+        }
+    },
     "mentionlimit": {
         "mentionlimit": {
             "about": {

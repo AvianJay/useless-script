@@ -1,5 +1,6 @@
 ﻿from globalenv import (
-    bot, config, get_server_config, set_server_config, get_user_data, set_user_data,
+    bot, config, get_server_config, set_server_config, get_server_config_i18n,
+    get_user_data, set_user_data,
     get_all_user_data, get_all_server_config_key, interaction_uses_guild_scope, ECONOMY_GLOBAL_MODE_CONFIG_KEY, db,
 )
 import discord
@@ -99,7 +100,8 @@ def get_currency_name(guild_id: int) -> str:
     """取得伺服器的貨幣名稱"""
     if not guild_id:
         return GLOBAL_CURRENCY_NAME
-    return get_server_config(guild_id, "economy_currency_name", "伺服幣")
+    return get_server_config_i18n(guild_id, "economy_currency_name",
+                                  "panel.economy.economy_currency_name.default")
 
 
 def get_daily_amount(guild_id: int) -> int:

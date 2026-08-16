@@ -1,0 +1,21 @@
+{
+    "err": {
+        "unmatched_close": "Unmatched `}` found.",
+        "unclosed_open": "Unclosed `{` found.",
+        "empty_directive": "`{directive}` must not be empty.",
+        "field_format": "Embed fields must use the form `{embedfield:name:value}`.",
+        "unknown_variable": "Unsupported template variable `{token}`.",
+        "content_too_long": "The announcement text exceeds Discord's 2000-character limit.",
+        "empty_output": "The announcement template must produce plain text or an embed.",
+        "title_too_long": "The embed title exceeds 256 characters.",
+        "description_too_long": "The embed description exceeds 4096 characters.",
+        "too_many_fields": "The embed has more than 25 fields.",
+        "field_name_too_long": "An embed field name exceeds 256 characters.",
+        "field_value_too_long": "An embed field value exceeds 1024 characters.",
+        "footer_too_long": "The embed footer exceeds 2048 characters.",
+        "author_too_long": "The embed author exceeds 256 characters.",
+        "embed_too_long": "The embed's total length exceeds 6000 characters.",
+        "url_too_long": "An embed URL exceeds Discord's 2048-character limit.",
+        "invalid_url": "Embed URLs must be valid http or https URLs."
+    }
+}

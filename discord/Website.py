@@ -23,6 +23,47 @@ else:
 
 app = Flask(__name__, template_folder='templates', static_folder='static')
 
+# ============= i18n (choke point 4) =============
+# 每個 request 依 ?lang= > session > 面板登入者的個人語言 > Accept-Language
+# > zh-TW 解析 locale 並設進 ContextVar；template 可用 t()/html_lang。
+import i18n as _i18n
+
+app.jinja_env.globals.update(
+    t=_i18n.t, tn=_i18n.tn, fmt_num=_i18n.fmt_num, fmt_dt=_i18n.fmt_dt,
+)
+
+
+@app.before_request
+def _set_request_locale():
+    from flask import request as _request, session as _session, g
+    lang_param = _request.args.get("lang")
+    if lang_param and lang_param in _i18n.available_locales():
+        _session["lang"] = lang_param
+    stored = _session.get("lang")
+    panel_user = _session.get("panel_user") or {}
+    user_id = None
+    try:
+        user_id = int(panel_user.get("id")) if panel_user.get("id") else None
+    except (TypeError, ValueError):
+        user_id = None
+    locale = _i18n.push_locale_for_web(
+        user_id=user_id,
+        lang_param=stored,
+        accept_language=_request.headers.get("Accept-Language"),
+    )
+    g.locale = locale
+
+
+@app.context_processor
+def _inject_i18n_context():
+    from flask import g
+    locale = getattr(g, "locale", _i18n.DEFAULT_LOCALE)
+    return {
+        "html_lang": "zh-Hant" if locale == "zh-TW" else locale,
+        "locale": locale,
+        "available_locales": _i18n.available_locales(),
+    }
+
 @app.route('/api/status')
 def api_status():
     try:

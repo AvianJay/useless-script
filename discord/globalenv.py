@@ -1,4 +1,5 @@
 import os
+import re
 import json
 import discord
 import asyncio
@@ -244,6 +245,59 @@ def register_panel_settings(module_name: str, display_name: str, module_settings
     }
 
 
+def _panel_option_slug(value) -> str:
+    slug = re.sub(r"[^a-z0-9]+", "_", str(value).lower()).strip("_")
+    return slug or "x"
+
+
+def localized_panel_settings(source: dict | None = None) -> dict:
+    """回傳 panel_settings 的在地化淺拷貝（依當前 i18n locale）。
+
+    文字解析順序：條目內顯式的 display_key/description_key >
+    慣例 key（panel.<module>.<database_key>.display / .desc、
+    模組層級 panel.<module>._display / ._desc、選項
+    panel.<module>.<database_key>.option.<value>）> 內嵌中文原文。
+    語言檔缺 key 時回傳內嵌原文，行為與未在地化前完全相同。
+
+    source：預設用全域 panel_settings；消費端可傳入自己的 registry
+    （例如測試中被 patch 的 binding）。
+    """
+    result = {}
+    for module_name, data in (panel_settings if source is None else source).items():
+        ns = f"panel.{module_name.lower()}"
+        localized = {
+            "display_name": i18n.t(f"{ns}._display",
+                                   default=data.get("display_name", module_name)),
+            "description": i18n.t(f"{ns}._desc",
+                                  default=data.get("description", "")),
+            "icon": data.get("icon", "⚙️"),
+            "settings": [],
+        }
+        for setting in data["settings"]:
+            entry = dict(setting)
+            key_base = f"{ns}.{str(setting.get('database_key', '')).lower()}"
+            display_key = setting.get("display_key") or f"{key_base}.display"
+            entry["display"] = i18n.t(display_key,
+                                      default=setting.get("display",
+                                                          setting.get("database_key", "")))
+            if setting.get("description") or setting.get("description_key"):
+                description_key = setting.get("description_key") or f"{key_base}.desc"
+                entry["description"] = i18n.t(description_key,
+                                              default=setting.get("description", ""))
+            if setting.get("options"):
+                entry["options"] = [
+                    {**option,
+                     "label": i18n.t(
+                         option.get("label_key")
+                         or f"{key_base}.option.{_panel_option_slug(option.get('value'))}",
+                         default=option.get("label", str(option.get("value"))))}
+                    for option in setting["options"]
+                ]
+            localized["settings"].append(entry)
+        result[module_name] = localized
+    return result
+
+
 intents = discord.Intents.default()
 intents.message_content = True
 intents.members = True
@@ -283,6 +337,21 @@ def add_app_command_error_handler(handler):
 def get_server_config(guild_id: int, key: str, default=None):
     """Get server-specific configuration"""
     return db.get_server_config(guild_id, key, default)
+
+def get_server_config_i18n(guild_id: int, key: str, i18n_key: str, *, locale=None, **params):
+    """讀取伺服器設定；未設定（None/空字串）時回傳語言檔預設值。
+
+    給「預設值需要在地化」的設定用（如 REPORTED_MESSAGE、ticket 面板文字）。
+    guild 已儲存的值是使用者資料，原樣回傳、永不翻譯。
+
+    locale：guild 共享的產物（頻道名稱、公開面板）應傳
+    i18n.resolve_locale(guild_id=guild_id)，避免跟著觸發者的個人語言跑；
+    留空則用當前 scope 的語言（適合回覆訊息）。
+    """
+    raw = db.get_server_config(guild_id, key, None)
+    if raw is None or (isinstance(raw, str) and not raw.strip()):
+        return i18n.t(i18n_key, locale=locale, **params)
+    return raw
 
 def set_server_config(guild_id: int, key: str, value):
     """Set server-specific configuration"""

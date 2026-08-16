@@ -1,0 +1,307 @@
+{
+    "antibeast": {
+        "_desc": "阻擋 everyone/here 與受保護身分組提及",
+        "_display": "AntiBeast",
+        "antibeast": {
+            "desc": "AutoMod 防大量提及、繞過身分組及連續觸發處置",
+            "display": "AntiBeast 設定"
+        }
+    },
+    "automoderate": {
+        "_desc": "自動管理相關設定（含邀請連結偵測）",
+        "_display": "自動管理",
+        "automod": {
+            "desc": "詐騙陷阱、邀請連結、逃避懲處、標記用戶加入、防突襲、防刷頻、AutoMod 偵測等功能的啟用與參數",
+            "display": "自動管理規則"
+        }
+    },
+    "autoreply": {
+        "_desc": "自動回覆基本設定",
+        "_display": "自動回覆",
+        "autoreplies": {
+            "desc": "新增、編輯或刪除自動回覆規則；觸發與回覆可用逗號分隔多個",
+            "display": "設定清單"
+        },
+        "autoreply_ignore_channels": {
+            "desc": "黑名單時為忽略的頻道，白名單時為僅生效的頻道",
+            "display": "忽略／僅限頻道"
+        },
+        "autoreply_ignore_mode": {
+            "desc": "黑名單: 忽略指定頻道 / 白名單: 只在指定頻道生效",
+            "display": "忽略模式",
+            "option": {
+                "blacklist": "黑名單",
+                "whitelist": "白名單"
+            }
+        }
+    },
+    "customprefix": {
+        "_desc": "自訂此伺服器的指令前綴",
+        "_display": "自訂前綴",
+        "custom_prefix": {
+            "desc": "此伺服器專用的指令前綴，留空使用預設",
+            "display": "指令前綴"
+        }
+    },
+    "dgpa": {
+        "_desc": "NDS 追蹤通知設定",
+        "_display": "NDS 追蹤",
+        "nds_follow_channel_id": {
+            "desc": "NDS 追蹤結果發布的頻道",
+            "display": "NDS 通知頻道"
+        }
+    },
+    "dsize": {
+        "_desc": "dsize 數值設定",
+        "_display": "dsize",
+        "dsize_drop_item_chance": {
+            "display": "掉落物品機率 (%)"
+        },
+        "dsize_max": {
+            "display": "最大尺寸上限"
+        },
+        "dsize_surgery_max": {
+            "display": "手術結果最大值"
+        },
+        "dsize_surgery_percent": {
+            "display": "手術成功率 (%)"
+        }
+    },
+    "dynamicvoice": {
+        "_desc": "自動建立/刪除語音頻道",
+        "_display": "動態語音",
+        "dynamic_voice_blacklist_roles": {
+            "desc": "擁有這些身分組的用戶無法使用動態語音",
+            "display": "黑名單身分組"
+        },
+        "dynamic_voice_channel": {
+            "desc": "用戶加入此頻道時自動建立動態頻道",
+            "display": "入口語音頻道"
+        },
+        "dynamic_voice_channel_category": {
+            "desc": "動態語音頻道所屬的分類",
+            "display": "動態頻道分類"
+        },
+        "dynamic_voice_channel_name": {
+            "default": "{user} 的頻道",
+            "desc": "使用 {user} 作為用戶名稱佔位符",
+            "display": "頻道名稱範本"
+        },
+        "dynamic_voice_play_audio": {
+            "display": "加入時播放音效"
+        }
+    },
+    "economy": {
+        "_desc": "管理伺服器經濟參數",
+        "_display": "經濟系統",
+        "economy_allow_global_flow": {
+            "desc": "是否允許伺服幣與全域幣互相流通（兌換、全域商店買賣、支票兌現等）",
+            "display": "允許全域幣流通"
+        },
+        "economy_currency_name": {
+            "default": "伺服幣",
+            "display": "貨幣名稱"
+        }
+    },
+    "fakeuser": {
+        "_desc": "仿冒用戶通知",
+        "_display": "仿冒用戶",
+        "fake_user_log_channel": {
+            "desc": "仿冒用戶結果發送到此頻道",
+            "display": "仿冒日誌頻道"
+        }
+    },
+    "fixlink": {
+        "_desc": "修復社群平台連結並移除不必要的追蹤參數",
+        "_display": "連結修復",
+        "fixlink": {
+            "desc": "啟用狀態、追蹤碼移除、Webhook 模式、內建修復服務與自訂平台",
+            "display": "FixLink 設定"
+        }
+    },
+    "logger": {
+        "_desc": "機器人日誌設定",
+        "_display": "日誌系統",
+        "log_channel_id": {
+            "desc": "Bot 日誌輸出的文字頻道",
+            "display": "日誌頻道"
+        }
+    },
+    "messageimage": {
+        "_desc": "伺服器留言板設定",
+        "_display": "留言板",
+        "guild_board_channel_id": {
+            "desc": "伺服器留言板功能使用的頻道",
+            "display": "留言板頻道"
+        }
+    },
+    "moderate": {
+        "_desc": "管理懲處相關設定",
+        "_display": "管理系統",
+        "moderation_announcement_config": {
+            "desc": "編輯公告模板、AutoReply Embed 指令與裁判字號格式",
+            "display": "懲處公告格式"
+        },
+        "moderation_message_channel_id": {
+            "desc": "自動發送懲處公告的頻道",
+            "display": "懲處公告頻道"
+        }
+    },
+    "moderationnotify": {
+        "_desc": "控制懲處時是否通知被處分的用戶",
+        "_display": "懲處通知",
+        "notify_user_on_ban": {
+            "display": "封鎖時通知用戶"
+        },
+        "notify_user_on_kick": {
+            "display": "踢出時通知用戶"
+        },
+        "notify_user_on_mute": {
+            "display": "禁言時通知用戶"
+        },
+        "user_appeal_channel": {
+            "desc": "設定後懲處通知會包含申訴連結",
+            "display": "用戶申訴頻道"
+        }
+    },
+    "oxwu": {
+        "_desc": "地震警報/報告推送設定",
+        "_display": "地震警報",
+        "oxwu_report_channel": {
+            "display": "報告通知頻道"
+        },
+        "oxwu_report_channel_text": {
+            "display": "報告附加文字"
+        },
+        "oxwu_warning_channel": {
+            "display": "警報通知頻道"
+        },
+        "oxwu_warning_channel_text": {
+            "desc": "例如 @everyone",
+            "display": "警報附加文字"
+        }
+    },
+    "reportsystem": {
+        "_desc": "管理檢舉相關設定",
+        "_display": "檢舉系統",
+        "report_blacklist": {
+            "desc": "擁有這些身分組的用戶無法檢舉",
+            "display": "檢舉黑名單身分組"
+        },
+        "report_channel_id": {
+            "desc": "檢舉訊息將發送到此頻道",
+            "display": "檢舉通知頻道"
+        },
+        "report_message": {
+            "desc": "發送到檢舉頻道的提及/通知文字",
+            "display": "檢舉頻道提及文字"
+        },
+        "report_rate_limit": {
+            "desc": "同一用戶連續檢舉的冷卻時間",
+            "display": "檢舉頻率限制 (秒)"
+        },
+        "reported_message": {
+            "default": "感謝您的檢舉，我們會盡快處理您的檢舉。",
+            "desc": "檢舉成功後回覆給檢舉者的訊息",
+            "display": "檢舉成功回覆訊息"
+        },
+        "server_rules": {
+            "desc": "AI 審核使用的伺服器規則 (每行一條)",
+            "display": "伺服器規則"
+        }
+    },
+    "serverwebverify": {
+        "_desc": "伺服器網頁驗證（需先以 /webverify setup 或 quick_setup 初始化）",
+        "_display": "網頁驗證",
+        "webverify_config": {
+            "desc": "啟用、CAPTCHA、未驗證角色、自動分配、通知方式與地區警示",
+            "display": "網頁驗證設定"
+        }
+    },
+    "stickymessage": {
+        "_desc": "在頻道有新對話後，自動把指定訊息重新移到最底部",
+        "_display": "置底訊息",
+        "stickymessage": {
+            "desc": "設定頻道、訊息內容、提及方式與重新置底間隔",
+            "display": "置底訊息設定"
+        }
+    },
+    "stickyrole": {
+        "_desc": "角色記憶功能設定",
+        "_display": "StickyRole",
+        "stickyrole_allowed_roles": {
+            "desc": "只有這些身分組會被記憶並還原",
+            "display": "允許記憶的身分組"
+        },
+        "stickyrole_enabled": {
+            "desc": "用戶離開後重新加入時自動還原角色",
+            "display": "啟用角色記憶"
+        },
+        "stickyrole_ignore_bots": {
+            "display": "忽略機器人"
+        },
+        "stickyrole_log_channel": {
+            "desc": "角色還原時發送通知的頻道",
+            "display": "日誌頻道"
+        }
+    },
+    "ticket": {
+        "_desc": "私人客服票口：開票、認領、關閉與 HTML 逐字稿",
+        "_display": "票口系統",
+        "ticket_blacklist_roles": {
+            "desc": "擁有這些身分組的用戶無法開啟票口",
+            "display": "黑名單身分組"
+        },
+        "ticket_category": {
+            "desc": "新票口頻道會建立在此分類下",
+            "display": "票口分類"
+        },
+        "ticket_enabled": {
+            "display": "啟用票口系統"
+        },
+        "ticket_inherit_category_permissions": {
+            "desc": "開啟時票口頻道會繼承分類的權限設定並疊加開票者/客服權限；關閉時票口完全私人",
+            "display": "沿用分類權限"
+        },
+        "ticket_log_channel": {
+            "desc": "票口關閉後逐字稿會發送到此頻道",
+            "display": "紀錄頻道"
+        },
+        "ticket_max_per_user": {
+            "display": "每人同時開啟上限"
+        },
+        "ticket_name_template": {
+            "desc": "可用 {number}、{user} 佔位符",
+            "display": "頻道名稱範本"
+        },
+        "ticket_panel_channel": {
+            "desc": "開票按鈕面板所在的頻道（設定後請用 /ticket panel 發布面板）",
+            "display": "面板頻道"
+        },
+        "ticket_panel_color": {
+            "desc": "面板 embed 的顏色（6 位 hex，例如 5865F2），留空使用預設",
+            "display": "面板顏色"
+        },
+        "ticket_panel_description": {
+            "default": "點擊下方按鈕開啟私人票口，我們的團隊將盡快協助你。",
+            "display": "面板說明"
+        },
+        "ticket_panel_image": {
+            "desc": "顯示在面板 embed 下方的大圖（http/https 網址），留空不顯示",
+            "display": "面板圖片網址"
+        },
+        "ticket_panel_title": {
+            "default": "需要協助嗎？",
+            "display": "面板標題"
+        },
+        "ticket_staff_roles": {
+            "desc": "可查看、認領與關閉票口的身分組",
+            "display": "客服身分組"
+        },
+        "ticket_welcome_message": {
+            "default": "{user} 你好，感謝開啟票口！請詳細描述你的問題。",
+            "desc": "可用 {user}、{subject} 佔位符",
+            "display": "開票歡迎訊息"
+        }
+    }
+}
