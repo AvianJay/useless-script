@@ -226,12 +226,29 @@ def set_custom_items(guild_id: int, custom_items: dict):
     set_server_config(guild_id, CUSTOM_ITEMS_KEY, custom_items)
 
 
+def localize_builtin_item(item: dict) -> dict:
+    """內建物品的 name/description 依當前語言解析。
+
+    內建物品在 import 期建立，name/description 是原文；帶有 name_key /
+    desc_key 的項目會在讀取時以當前 locale 解析成淺拷貝。
+    伺服器自定義物品的名稱是 guild 資料，原樣通過。
+    """
+    if not item or not (item.get("name_key") or item.get("desc_key")):
+        return item
+    localized = dict(item)
+    if item.get("name_key"):
+        localized["name"] = t(item["name_key"])
+    if item.get("desc_key"):
+        localized["description"] = t(item["desc_key"])
+    return localized
+
+
 def get_item_by_id(item_id: str, guild_id: int = None):
     """Get an item definition by its ID. 若提供 guild_id，會一併檢查該伺服器的自定義物品。"""
     # 先檢查全域物品
     item = next((i for i in items if i["id"] == item_id), None)
     if item:
-        return item
+        return localize_builtin_item(item)
     # 再檢查伺服器自定義物品
     if guild_id and item_id.startswith("custom_"):
         custom_items = get_custom_items(guild_id)
@@ -270,7 +287,7 @@ async def custom_items_autocomplete(interaction: discord.Interaction, current: s
 
 def get_all_items_for_guild(guild_id: int = None) -> list:
     """取得所有可用的物品（含該伺服器的自定義物品）。用於 autocomplete 等情境。"""
-    result = list(items)
+    result = [localize_builtin_item(item) for item in items]
     if guild_id:
         for item_id, data in get_custom_items(guild_id).items():
             result.append({

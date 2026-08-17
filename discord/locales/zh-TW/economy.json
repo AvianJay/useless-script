@@ -1,0 +1,272 @@
+{
+    "abuse": {
+        "light": "🟡 輕度干預",
+        "moderate": "🟠 中度干預",
+        "normal": "🟢 正常",
+        "severe": "🔴 嚴重濫權"
+    },
+    "adminitems": {
+        "desc": "這些物品由管理員直接給予，受到以下限制：",
+        "limits_body": "• 賣出時會觸發嚴重通膨懲罰\n• 無法賣到全域商店\n• 支票無法兌現\n• 交易時會轉移管理員標記",
+        "limits_title": "🚫 限制說明",
+        "none": "✅ 你沒有任何管理員給予的物品。",
+        "title": "⚠️ 管理員給予的物品",
+        "value_line": "價值: {worth} x {count} = {total}"
+    },
+    "btn": {
+        "accept_trade": "接受交易",
+        "confirm_global": "確認改為全域",
+        "global_shop": "全域商店",
+        "reject_trade": "拒絕交易",
+        "server_shop": "伺服器商店"
+    },
+    "check": {
+        "admin_item": "❌ 這張支票是管理員給予的，無法兌現。\n管理員給予的物品不能轉換為貨幣，以防止經濟系統被濫用。",
+        "cashed": "你兌現了支票，獲得 **{amount}** {currency}。",
+        "invalid": "❌ 支票或經濟資料無效，本次未兌現。",
+        "not_owned": "你沒有這張支票。"
+    },
+    "currency": {
+        "global": "全域幣"
+    },
+    "err": {
+        "amount_positive": "❌ 數量必須大於 0。",
+        "currency_insufficient": "❌ 你的 {currency} 餘額不足。",
+        "currency_name_too_long": "❌ 貨幣名稱不能超過 20 個字元。",
+        "data_changed": "匯率或經濟資料在結算前發生變動，請重新操作。",
+        "exchange_invalid": "❌ 兌換金額或經濟資料無效，交易已取消。",
+        "guild_with_bot_only": "❌ 這個指令只能在**有邀請此機器人的伺服器**中使用。",
+        "initiator_only": "只有發起指令的人可以確認這次切換。",
+        "insufficient_balance": "❌ 餘額不足。需要 **{needed}** {currency}，但只有 **{available}**。",
+        "insufficient_with_fee": "❌ 餘額不足。需要 **{needed}** {currency}（含 {fee_percent}% 手續費），但只有 **{available}**。",
+        "invalid_amount": "❌ 請輸入有效的數量。",
+        "invalid_currency": "❌ 無效的貨幣類型。",
+        "invalid_direction": "❌ 無效的兌換方向。",
+        "invalid_item": "❌ 無效的物品。",
+        "invalid_item_id": "❌ 無效的物品 ID。",
+        "invalid_offer_item": "❌ 無效的提供物品。",
+        "invalid_request_item": "❌ 無效的要求物品。",
+        "invalid_shop_type": "❌ 無效的商店類型。",
+        "pay_bot": "❌ 你不能轉帳給機器人。",
+        "pay_invalid": "❌ 金額或帳戶資料無效，交易已取消。",
+        "pay_self": "❌ 你不能轉帳給自己。",
+        "purchase_invalid": "❌ 數量或商品價格無效，購買已取消。",
+        "reward_data_invalid": "❌ 經濟資料異常，本次獎勵未發放。",
+        "sell_insufficient": "❌ 可賣出的物品數量不足。",
+        "sell_invalid": "❌ 數量或商品價格無效，賣出已取消。",
+        "sell_not_enough": "❌ 你只有 **{count}** 個 {item} 可以賣出。\n-# 管理員給予的物品不能賣",
+        "source_insufficient": "❌ {source}餘額不足。",
+        "trade_bot": "❌ 你不能跟機器人交易。",
+        "trade_bounds": "❌ 金額必須是有限值，物品數量必須至少為 1。",
+        "trade_data_invalid": "❌ 交易資料無效，未變更任何資產。",
+        "trade_empty": "❌ 你需要提供或要求至少一樣東西。",
+        "trade_failed_insufficient": "❌ 交易失敗：接受時其中一方的餘額或物品不足。",
+        "trade_not_enough": "❌ 你只有 {count} 個 {item}。",
+        "trade_parties_only": "❌ 只有交易雙方才能取消。",
+        "trade_self": "❌ 你不能跟自己交易。",
+        "trade_target_only": "❌ 只有交易對象才能接受。"
+    },
+    "exchange": {
+        "success_title": "💱 兌換成功"
+    },
+    "field": {
+        "admin_injected": "🔧 管理員注入",
+        "amount": "金額",
+        "currency_name": "💵 貨幣名稱",
+        "current_balance": "📊 目前餘額",
+        "daily_reward": "📅 每日獎勵",
+        "fee": "手續費",
+        "health": "📈 經濟健康度",
+        "rate": "📊 匯率",
+        "rate_emoji": "💱 匯率",
+        "rate_factors": "ℹ️ 匯率影響因素",
+        "rate_plain": "匯率",
+        "received": "獲得",
+        "recipient": "收款人",
+        "sell_ratio": "🏪 賣出比率",
+        "spent": "支出",
+        "total_assets": "💎 總資產（全域幣計）",
+        "total_income": "總收入",
+        "total_price": "總價",
+        "total_supply": "💰 貨幣總供給",
+        "total_value": "📊 總價值",
+        "tx_count": "📊 交易次數",
+        "tx_count_plain": "交易次數",
+        "unit_price": "單價"
+    },
+    "flow": {
+        "blacklist_appeal": "如需申訴，請聯繫機器人管理員。",
+        "blacklist_appeal_link": "如需申訴，請前往支援伺服器開單：{invite}",
+        "blacklist_reason": "> 原因：{reason}",
+        "blacklist_title": "## 此伺服器的貨幣流通功能已被強制停用",
+        "disabled": "❌ 此伺服器已關閉伺服幣與全域幣的流通功能。",
+        "member_req_appeal": "如需例外開啟，請聯繫機器人擁有者申請審核。",
+        "member_req_appeal_link": "如需例外開啟，請前往[支援伺服器]({invite})開單，由機器人擁有者審核。",
+        "member_req_line": "> 至少需要 **{required} 位真人成員**，目前偵測到 **{current} 位**。",
+        "member_req_reason": "為避免小型伺服器透過兌換或全域模式整體轉換影響全域經濟，目前無法開啟或使用全域幣流通功能。",
+        "member_req_title": "## 此伺服器尚未達到全域幣流通資格",
+        "off": "🔒 已關閉",
+        "off_desc": "用戶無法使用兌換、全域商店買賣及支票兌現功能。",
+        "on": "🔓 已開啟",
+        "on_desc": "用戶可以使用兌換、全域商店買賣及支票兌現功能。",
+        "toggled": "✅ 全域幣流通已切換為 **{status}**"
+    },
+    "globalmode": {
+        "affected_users": "影響人數",
+        "already": "這個伺服器已經是全域模式了。",
+        "already_mode": "目前已經是{status}。",
+        "cancelled": "已取消切換全域模式。",
+        "disabled": "已關閉全域模式。之後這個伺服器會恢復使用伺服器經濟、物品與 dsize 範圍。",
+        "global_added": "轉入全域幣",
+        "item_value": "物品折現",
+        "mode_global": "全域模式",
+        "mode_server": "伺服器模式",
+        "no_undo": "不會自動還原",
+        "no_undo_body": "切回 False 只會恢復未來判斷，不會把已搬走的資料搬回來",
+        "rate_line": "1 伺服幣 = {rate} {global_currency}",
+        "server_balance": "原伺服幣",
+        "sold_items": "賣出物品數",
+        "switched_desc": "這個伺服器之後的經濟、物品、dsize 範圍都會強制走全域。",
+        "switched_title": "已切換為全域模式",
+        "warning_desc": "這會讓這個伺服器後續所有經濟、物品、dsize 的 guild 判斷都強制視為全域。\n系統也會自動把目前伺服器內所有使用者的物品賣掉換成伺服幣，再依目前匯率轉成全域幣。",
+        "warning_title": "警告：即將改為全域模式",
+        "what_happens": "會發生的事",
+        "what_happens_body": "伺服器物品清空、伺服幣清空、轉入全域幣"
+    },
+    "health": {
+        "collapsed": "💀 經濟崩潰",
+        "healthy": "🟢 健康",
+        "inflating": "🟠 通膨中",
+        "normal": "🟡 普通",
+        "severe_inflation": "🔴 嚴重通膨",
+        "very_healthy": "🟢 非常健康（強勢貨幣）"
+    },
+    "history": {
+        "empty": "📜 你在 {scope} 沒有任何交易紀錄。",
+        "footer": "第 {page}/{total} 頁 · 共 {count} 筆紀錄",
+        "title": "📜 {user} 的交易紀錄（{scope}）"
+    },
+    "info": {
+        "rate_factors_body": "**📉 通膨（貶值）因素：**\n• 管理員用 `/itemmod give` 送出物品\n• 每日/每小時獎勵導致貨幣增發\n• 賣出物品給商店（新幣進入流通）\n\n**📈 通縮（升值）因素：**\n• 從商店購買物品（貨幣被銷毀）\n• 玩家間交易（手續費銷毀貨幣）\n• 兌換貨幣（手續費銷毀）",
+        "title": "📊 {guild} 經濟報告"
+    },
+    "item": {
+        "cheque_100": {
+            "desc": "這是一張100元支票，可以用來支付給其他用戶。",
+            "name": "100元支票"
+        },
+        "cheque_1000": {
+            "desc": "這是一張1000元支票，可以用來支付給其他用戶。",
+            "name": "1000元支票"
+        },
+        "cheque_500": {
+            "desc": "這是一張500元支票，可以用來支付給其他用戶。",
+            "name": "500元支票"
+        }
+    },
+    "leaderboard": {
+        "empty": "目前沒有任何用戶有餘額。",
+        "title": "🏆 {currency} 排行榜",
+        "total_title": "🏆 總資產排行榜"
+    },
+    "mod": {
+        "abuse_level": "⚠️ 管理員干預程度",
+        "actual_supply": "實際供給量",
+        "admin_injected": "管理員注入（貨幣）",
+        "admin_item_value": "管理員物品價值",
+        "global_flow": "全域幣流通",
+        "global_mode": "全域模式",
+        "global_off": "🏦 已關閉",
+        "global_on": "🌐 已啟用",
+        "hint_body": "• 管理員給予的物品/金錢會被追蹤\n• 賣出管理員物品會觸發嚴重通膨\n• 管理員物品無法兌現為全域幣\n• 建議使用活動系統而非直接給予",
+        "hint_title": "💡 提示",
+        "supply_diff": "⚠️ 供給差異",
+        "supply_diff_value": "{diff}（正常應為 0）",
+        "title": "🔧 {guild} 經濟管理面板",
+        "tracked_supply": "追蹤供給量",
+        "user_count": "用戶數"
+    },
+    "msg": {
+        "currency_name_set": "✅ 貨幣名稱已更改為 **{name}**。",
+        "no_description": "無描述",
+        "not_provided": "未提供",
+        "unknown_tx": "未知",
+        "user_fallback": "用戶 {user_id}"
+    },
+    "pay": {
+        "footer": "交易由 {user} 發起",
+        "received_dm": "你從 **{sender}** 收到了 **{amount}** {currency}！",
+        "received_scope_global": "全域經濟系統",
+        "received_scope_guild": "伺服器: {guild}",
+        "success_title": "轉帳成功"
+    },
+    "reward": {
+        "daily_claimed": "⏰ 你已經領取過每日獎勵了！請在 {time} 再來。",
+        "daily_title": "📅 每日獎勵（{scope}）",
+        "earned_desc": "你獲得了 **{amount}** {currency}！",
+        "hourly_claimed": "⏰ 你已經領取過每小時獎勵了！請在 {time} 再來。",
+        "hourly_title": "⏱️ 每小時獎勵（{scope}）",
+        "streak_bonus": "🔥 連續登入獎勵",
+        "streak_footer": "連續登入：{streak} 天",
+        "streak_value": "+{bonus} {currency}（連續 {streak} 天）",
+        "support_bonus": "🎁 支援伺服器加成",
+        "support_hint": "-# 提示：加入[支援伺服器]({invite})可獲得額外加成！"
+    },
+    "scope": {
+        "global": "全域",
+        "global_inventory": "全域背包",
+        "server": "伺服器",
+        "server_inventory": "伺服器背包"
+    },
+    "sell": {
+        "footer": "賣出價為買入價的 {ratio}%（買入: {buy_price}）",
+        "success_desc": "你賣出了 **{item}** x{amount}！",
+        "success_title": "💰 賣出成功"
+    },
+    "shop": {
+        "amount_label": "數量",
+        "amount_ph": "輸入購買數量...",
+        "buy_footer": "剩餘餘額：{remaining} {currency} | 物品已放入{dest}",
+        "buy_modal_title": "購買 {item}",
+        "buy_success_desc": "你購買了 **{item}** x{amount}！",
+        "buy_success_title": "🛒 購買成功（{scope}）",
+        "buy_title": "🛒 購買 {item}",
+        "current_rate": "當前匯率: 1 {currency} = {rate} {global_currency}",
+        "empty": "🏪 商店目前沒有任何商品。",
+        "flow_off": "🔒 全域幣流通：已關閉",
+        "flow_on": "🔓 全域幣流通：已開啟",
+        "global_price": "🌐 全域商店: **{price}** {currency}",
+        "global_price_line": "**{price}** {currency}\n物品到全域背包",
+        "global_shop": "🌐 全域商店",
+        "global_shop_hint": "🌐 全域商店 = {currency}付款，物品到全域背包",
+        "global_title": "🏪 全域商店",
+        "global_title_plain": "全域商店",
+        "item_choice": "{item} x{count} - 💰{price}/個",
+        "pick_item_ph": "選擇要購買的商品...",
+        "price": "💰 價格: **{price}** {currency}",
+        "sell_price": "💰 賣出: **{price}** {currency}",
+        "sell_ratio_footer": "賣出價為買入價的 {ratio}%",
+        "server_price": "🏦 伺服器商店: **{price}** {currency}",
+        "server_price_line": "**{price}** {currency}\n物品到伺服器背包",
+        "server_shop": "🏦 伺服器商店",
+        "server_shop_hint": "🏦 伺服器商店 = {currency}付款，物品到伺服器背包",
+        "title": "🏪 商店"
+    },
+    "trade": {
+        "already_done": "ℹ️ 這筆交易已經處理完成。",
+        "cancelled_by": "❌ 交易已被{who}取消。",
+        "completed": "✅ 交易完成！",
+        "initiator": "發起者",
+        "offers": "📤 {user} 提供",
+        "other_party": "對方",
+        "request_desc": "{initiator} 想和 {target} 交易",
+        "request_title": "🤝 交易請求",
+        "requests": "📥 {user} 要求",
+        "timeout": "⏰ 交易已超時。"
+    },
+    "wallet": {
+        "global_footer": "全域用戶錢包",
+        "global_title": "💰 {user} 的全域錢包",
+        "title": "💰 {user} 的錢包"
+    }
+}

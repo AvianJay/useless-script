@@ -198,6 +198,17 @@ def check_hardcoded(report: Report):
         except SyntaxError as e:
             report.error("hardcoded", f"{path.name}: cannot parse ({e})")
             continue
+        # 區域標記：# i18n: skip-start / skip-end 之間整段跳過
+        # （擁有者導向的 dev-* 指令等，依約定保留中文）
+        skipped_lines = set()
+        in_skip = False
+        for lineno, line in enumerate(lines, start=1):
+            if "# i18n: skip-start" in line:
+                in_skip = True
+            if in_skip:
+                skipped_lines.add(lineno)
+            if "# i18n: skip-end" in line:
+                in_skip = False
         docstrings = _docstring_nodes(tree)
         # dict 的 key 是查表資料（如中文動作詞 -> en key 的輸入正規化表），
         # 與 extract.py 的 dict_key 規則一致，不視為需要翻譯的字面值
@@ -222,6 +233,8 @@ def check_hardcoded(report: Report):
             if id(node) in docstrings or id(node) in dict_keys or id(node) in allcaps:
                 continue
             if not _CJK_RE.search(node.value):
+                continue
+            if node.lineno in skipped_lines:
                 continue
             line = lines[node.lineno - 1] if node.lineno - 1 < len(lines) else ""
             if "# i18n: skip" in line:
