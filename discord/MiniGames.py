@@ -1,4 +1,4 @@
-from globalenv import (
+﻿from globalenv import (
     bot,
     start_bot,
     get_user_data,
@@ -15,7 +15,8 @@ from Economy import (
     remove_balance,
     mutate_balance_atomic,
     mutate_balances_atomic,
-    get_currency_name,
+    display_currency,
+    get_currency_name as _raw_currency_name,
     record_transaction,
     log_transaction,
     queue_economy_audit_log,
@@ -32,9 +33,7 @@ from casino_rules import (
     HL_RANK_NAMES,
     LOTTERY_CONFIG_KEY,
     LOTTERY_PAYOUT_RATIO,
-    ROULETTE_BET_LABELS,
     ROULETTE_RED_NUMBERS,
-    SCRATCH_PRIZE_TABLE,
     SCRATCH_SYMBOLS,
     SLOT_PAIR_PAYOUT,
     SLOT_SYMBOLS,
@@ -65,6 +64,7 @@ from casino_rules import (
     play_roulette,
     play_scratchcard,
     play_slots,
+    roulette_bet_label,
     roulette_color,
     roulette_is_win,
     scratch_grid_text,
@@ -85,6 +85,17 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from typing import List, Optional, Dict, Tuple, Any
 from collections import Counter
+
+import i18n
+from i18n import t
+
+
+def get_currency_name(guild_id: int) -> str:
+    """顯示用貨幣名稱；全域幣 token 依語言對映，guild 自訂名稱原樣通過。
+
+    寫進 DB 的 currency 欄位一律用 _raw_currency_name()。
+    """
+    return display_currency(_raw_currency_name(guild_id))
 
 
 # -----------------------------
@@ -282,7 +293,7 @@ def hand_signature(cards: List[Card], rules: Ruleset) -> Tuple[int, Any]:
 
     if n == 2:
         if cards_sorted[0].rank != cards_sorted[1].rank:
-            raise ValueError("不是對子")
+            raise ValueError(t("minigames.err.not_pair"))
         # compare by rank, then highest suit among the pair
         rank = r_value(cards_sorted[0].rank)
         high_suit = max(s_value(cards_sorted[0].suit), s_value(cards_sorted[1].suit))
@@ -290,13 +301,13 @@ def hand_signature(cards: List[Card], rules: Ruleset) -> Tuple[int, Any]:
 
     if n == 3:
         if not (cards_sorted[0].rank == cards_sorted[1].rank == cards_sorted[2].rank):
-            raise ValueError("不是三條")
+            raise ValueError(t("minigames.err.not_triple"))
         rank = r_value(cards_sorted[0].rank)
         high_suit = max(s_value(c.suit) for c in cards_sorted)
         return (HT_TRIPLE, (rank, high_suit))
 
     if n != 5:
-        raise ValueError("張數必須為 1/2/3/5")
+        raise ValueError(t("minigames.err.card_count"))
 
     # count ranks/suits
     rank_counts = Counter(c.rank for c in cards_sorted)
@@ -342,7 +353,7 @@ def hand_signature(cards: List[Card], rules: Ruleset) -> Tuple[int, Any]:
     if is_straight:
         return (HT_STRAIGHT, top.power)
 
-    raise ValueError("不是合法五張牌型（順/同花/葫蘆/鐵支/同花順）")
+    raise ValueError(t("minigames.err.not_five_card_hand"))
 
 def legal_size(cards: List[Card]) -> bool:
     return len(cards) in (1,2,3,5)
@@ -355,7 +366,7 @@ def must_follow_table(prev: Optional[List[Card]], new: List[Card]) -> bool:
 def can_pass(game: Game, player: PlayerState) -> Tuple[bool, str]:
     # cannot pass when table is empty (lead required)
     if game.table_cards is None:
-        return False, "空桌不能 Pass，必須先領出。"
+        return False, t("minigames.err.cannot_pass_empty")
     return True, ""
 
 def _has_3d(cards: List[Card]) -> bool:
@@ -365,7 +376,7 @@ def _has_3d(cards: List[Card]) -> bool:
 def is_first_move_requires_3d(game: Game, chosen: List[Card]) -> Tuple[bool, str]:
     if game.rules.must_start_with_3d and game.first_trick and game.table_cards is None:
         if not _has_3d(chosen):
-            return False, "首手必須包含 3♦。"
+            return False, t("minigames.err.first_move_3d")
     return True, ""
 
 def beats(prev: Optional[List[Card]], new: List[Card], rules: Ruleset) -> bool:
@@ -508,7 +519,7 @@ class BlackjackGame:
 # Discord Views
 # -----------------------------
 
-class LobbyView(discord.ui.View):
+class LobbyView(i18n.I18nView):
     def __init__(self, cog: "MiniGamesCog", game: Game):
         super().__init__(timeout=600)
         self.cog = cog
@@ -516,33 +527,33 @@ class LobbyView(discord.ui.View):
         self.message = None
 
         self.rule_select = discord.ui.Select(
-            placeholder="規則（房主可選）",
+            placeholder=i18n.K("minigames.bigtwo.select.rules_ph"),
             min_values=1,
             max_values=1,
             options=[
-                discord.SelectOption(label="一般規則（首手必含3♦，2不可成順）", value="classic"),
-                discord.SelectOption(label="自由先手（不強制3♦）", value="free_start"),
+                discord.SelectOption(label=t("minigames.bigtwo.rules.classic"), value="classic"),
+                discord.SelectOption(label=t("minigames.bigtwo.rules.free_start"), value="free_start"),
             ]
         )
         self.rule_select.callback = self.on_rule_change
         self.add_item(self.rule_select)
 
         self.stake_select = discord.ui.Select(
-            placeholder="賭注（房主可選）",
+            placeholder=i18n.K("minigames.bigtwo.select.stake_ph"),
             min_values=1,
             max_values=1,
             options=[
-                discord.SelectOption(label="不賭", value="0"),
-                discord.SelectOption(label="賭 10", value="10"),
-                discord.SelectOption(label="賭 50", value="50"),
-                discord.SelectOption(label="賭 100", value="100"),
-                discord.SelectOption(label="賭 500", value="500"),
+                discord.SelectOption(label=t("minigames.bigtwo.stake.none"), value="0"),
+                discord.SelectOption(label=t("minigames.bigtwo.stake.amount", amount=10), value="10"),
+                discord.SelectOption(label=t("minigames.bigtwo.stake.amount", amount=50), value="50"),
+                discord.SelectOption(label=t("minigames.bigtwo.stake.amount", amount=100), value="100"),
+                discord.SelectOption(label=t("minigames.bigtwo.stake.amount", amount=500), value="500"),
             ]
         )
         self.stake_select.callback = self.on_stake_change
         self.add_item(self.stake_select)
 
-    @discord.ui.button(label="📜 規則玩法", style=discord.ButtonStyle.secondary, row=1)
+    @discord.ui.button(label=i18n.K("minigames.btn.rules"), style=discord.ButtonStyle.secondary, row=1)
     async def rules_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
         await interaction.response.send_message(
             embed=self.cog.big2_rules_embed(),
@@ -551,7 +562,7 @@ class LobbyView(discord.ui.View):
 
     async def on_rule_change(self, interaction: discord.Interaction):
         if interaction.user.id != self.game.owner_id:
-            return await interaction.response.send_message("只有房主可以改規則。", ephemeral=True)
+            return await interaction.response.send_message(t("minigames.err.host_only_rules"), ephemeral=True)
 
         v = self.rule_select.values[0]
         if v == "classic":
@@ -559,31 +570,31 @@ class LobbyView(discord.ui.View):
         elif v == "free_start":
             self.game.rules.must_start_with_3d = False
 
-        await interaction.response.send_message("已更新規則。", ephemeral=True)
+        await interaction.response.send_message(t("minigames.msg.rules_updated"), ephemeral=True)
         await self.cog.edit_lobby_message(interaction, self.game)
 
     async def on_stake_change(self, interaction: discord.Interaction):
         if interaction.user.id != self.game.owner_id:
-            return await interaction.response.send_message("只有房主可以改賭注。", ephemeral=True)
+            return await interaction.response.send_message(t("minigames.err.host_only_stake"), ephemeral=True)
         v = self.stake_select.values[0]
         self.game.stake = float(v)
-        await interaction.response.send_message("已更新賭注。", ephemeral=True)
+        await interaction.response.send_message(t("minigames.msg.stake_updated"), ephemeral=True)
         await self.cog.edit_lobby_message(interaction, self.game)
 
-    @discord.ui.button(label="✅ 加入", style=discord.ButtonStyle.primary)
+    @discord.ui.button(label=i18n.K("minigames.btn.join"), style=discord.ButtonStyle.primary)
     async def join_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
         await self.cog.join(interaction, self.game)
 
-    @discord.ui.button(label="▶ 開始", style=discord.ButtonStyle.success)
+    @discord.ui.button(label=i18n.K("minigames.btn.start"), style=discord.ButtonStyle.success)
     async def start_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
         await self.cog.start(interaction, self.game)
 
-    @discord.ui.button(label="❌ 取消", style=discord.ButtonStyle.danger)
+    @discord.ui.button(label=i18n.K("minigames.btn.cancel"), style=discord.ButtonStyle.danger)
     async def cancel_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
         if interaction.user.id != self.game.owner_id:
-            return await interaction.response.send_message("只有房主可以取消。", ephemeral=True)
+            return await interaction.response.send_message(t("minigames.err.host_only_cancel"), ephemeral=True)
         self.cog.games.pop(self.game.channel_id, None)
-        await interaction.response.edit_message(content="此桌已取消。", embed=None, view=None)
+        await interaction.response.edit_message(content=t("minigames.bigtwo.table_cancelled"), embed=None, view=None)
         self.stop()
 
     async def on_timeout(self):
@@ -595,7 +606,7 @@ class LobbyView(discord.ui.View):
             child.disabled = True
         if self.game.lobby_message is not None:
             try:
-                await self.game.lobby_message.edit(content="大廳已逾時。", embed=None, view=self)
+                await self.game.lobby_message.edit(content=t("minigames.bigtwo.lobby_timeout"), embed=None, view=self)
             except (discord.NotFound, discord.HTTPException):
                 pass
         self.stop()
@@ -605,7 +616,7 @@ class LobbyView(discord.ui.View):
 # Tower Views
 # -----------------------------
 
-class TowerConfirmView(discord.ui.View):
+class TowerConfirmView(i18n.I18nView):
     """確認開始 Tower 遊戲"""
 
     def __init__(self, cog: "MiniGamesCog", guild_id: int, bet: float):
@@ -615,7 +626,7 @@ class TowerConfirmView(discord.ui.View):
         self.bet = bet
         self.message = None
 
-    @discord.ui.button(label="✅ 確認開始", style=discord.ButtonStyle.success)
+    @discord.ui.button(label=i18n.K("minigames.btn.confirm_start"), style=discord.ButtonStyle.success)
     async def confirm_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
         if await self.cog.start_tower(interaction, self.bet, self.guild_id):
             self.stop()
@@ -625,12 +636,12 @@ class TowerConfirmView(discord.ui.View):
             child.disabled = True
         if self.message is not None:
             try:
-                await self.message.edit(content="已逾時，請重新下指令開始。", embed=None, view=self)
+                await self.message.edit(content=t("minigames.tower.confirm_timeout"), embed=None, view=self)
             except (discord.NotFound, discord.HTTPException):
                 pass
 
 
-class TowerGameView(discord.ui.View):
+class TowerGameView(i18n.I18nView):
     """Tower 遊戲主介面：5 層按鈕恆顯 + 結束按鈕（第一層右邊）"""
 
     def __init__(self, cog: "MiniGamesCog", game: TowerGame):
@@ -661,7 +672,7 @@ class TowerGameView(discord.ui.View):
                 self.add_item(btn)
             if level == 1:
                 end_btn = discord.ui.Button(
-                    label="💰 結束",
+                    label=t("minigames.btn.tower_stop"),
                     custom_id="tower_end",
                     style=discord.ButtonStyle.success,
                     row=row_idx,
@@ -742,51 +753,51 @@ class TowerGameView(discord.ui.View):
             child.disabled = True
         if self.game.message is not None:
             try:
-                await self.game.message.edit(content="遊戲已逾時。", embed=None, view=self)
+                await self.game.message.edit(content=t("minigames.msg.game_timeout"), embed=None, view=self)
             except (discord.NotFound, discord.HTTPException):
                 pass
         self.stop()
 
 
-class TableView(discord.ui.View):
+class TableView(i18n.I18nView):
     def __init__(self, cog: "MiniGamesCog", game: Game):
         super().__init__(timeout=600)
         self.cog = cog
         self.game = game
         self.message = None
 
-    @discord.ui.button(label="🂠 我的手牌", style=discord.ButtonStyle.primary)
+    @discord.ui.button(label=i18n.K("minigames.btn.my_hand"), style=discord.ButtonStyle.primary)
     async def myhand_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
         if not self.game.started:
-            return await interaction.response.send_message("遊戲尚未開始。", ephemeral=True)
+            return await interaction.response.send_message(t("minigames.err.not_started"), ephemeral=True)
         if not any(p.user_id == interaction.user.id for p in self.game.players):
-            return await interaction.response.send_message("你不在這桌。", ephemeral=True)
+            return await interaction.response.send_message(t("minigames.err.not_at_table"), ephemeral=True)
 
         player = self.game.find_player(interaction.user.id)
         if player.finished:
-            return await interaction.response.send_message("你已經出完牌了。", ephemeral=True)
+            return await interaction.response.send_message(t("minigames.err.hand_empty"), ephemeral=True)
         if self.game.is_game_over():
-            return await interaction.response.send_message("遊戲已結束。", ephemeral=True)
+            return await interaction.response.send_message(t("minigames.err.game_over"), ephemeral=True)
 
         view = HandView(self.cog, self.game, player.user_id)
         view.build_options(player.hand)
 
         embed = discord.Embed(
-            title="🂠 你的手牌",
+            title=t("minigames.bigtwo.your_hand_title"),
             description=" ".join(map(str, player.hand)),
             color=discord.Color.gold(),
         )
-        embed.set_footer(text=f"共 {len(player.hand)} 張｜用下拉選牌後按「出牌」或直接「Pass」。")
+        embed.set_footer(text=t("minigames.bigtwo.hand_footer", count=len(player.hand)))
         await interaction.response.send_message(embed=embed, ephemeral=True, view=view)
         sent = await interaction.original_response()
         view.message = sent
 
-    @discord.ui.button(label="🛑 結束（房主）", style=discord.ButtonStyle.danger)
+    @discord.ui.button(label=i18n.K("minigames.btn.end_host"), style=discord.ButtonStyle.danger)
     async def end_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
         if interaction.user.id != self.game.owner_id:
-            return await interaction.response.send_message("只有房主可以結束。", ephemeral=True)
+            return await interaction.response.send_message(t("minigames.err.host_only_end"), ephemeral=True)
         self.cog.games.pop(self.game.channel_id, None)
-        await interaction.response.edit_message(content="此局已結束。", embed=None, view=None)
+        await interaction.response.edit_message(content=t("minigames.bigtwo.game_ended"), embed=None, view=None)
         self.stop()
 
     async def on_timeout(self):
@@ -798,14 +809,14 @@ class TableView(discord.ui.View):
             child.disabled = True
         if self.game.lobby_message is not None:
             try:
-                await self.game.lobby_message.edit(content="遊戲因超時而結束。", view=self)
+                await self.game.lobby_message.edit(content=t("minigames.msg.ended_by_timeout"), view=self)
                 self.cog.games.pop(self.game.channel_id, None)
             except (discord.NotFound, discord.HTTPException):
                 pass
         self.stop()
 
 
-class HandView(discord.ui.View):
+class HandView(i18n.I18nView):
     def __init__(self, cog: "MiniGamesCog", game: Game, player_id: int):
         super().__init__(timeout=60)
         self.cog = cog
@@ -815,7 +826,7 @@ class HandView(discord.ui.View):
         self.message = None
 
         self.select = discord.ui.Select(
-            placeholder="選牌（1/2/3/5張，最多 5）",
+            placeholder=t("minigames.bigtwo.select.cards_ph"),
             min_values=1,
             max_values=5,
             options=[]
@@ -867,33 +878,33 @@ class HandView(discord.ui.View):
         except (discord.NotFound, discord.HTTPException):
             await interaction.followup.send(text, ephemeral=True)
 
-    @discord.ui.button(label="出牌", style=discord.ButtonStyle.success)
+    @discord.ui.button(label=i18n.K("minigames.btn.play_cards"), style=discord.ButtonStyle.success)
     async def play_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
         await interaction.response.defer(ephemeral=True)
         async with self.game.lock:
             if interaction.user.id != self.player_id:
-                return await self._edit_ephemeral_result(interaction, "這不是你的介面。", is_error=True)
+                return await self._edit_ephemeral_result(interaction, t("minigames.err.not_your_ui"), is_error=True)
 
             if self.game.current_player().user_id != self.player_id:
-                return await self._edit_ephemeral_result(interaction, "還沒輪到你。", is_error=True)
+                return await self._edit_ephemeral_result(interaction, t("minigames.err.not_your_turn"), is_error=True)
 
             player = self.game.find_player(self.player_id)
 
             chosen = self.parse_selected_cards(player)
             if not chosen:
-                return await self._edit_ephemeral_result(interaction, "你還沒選牌。", is_error=True)
+                return await self._edit_ephemeral_result(interaction, t("minigames.err.no_cards_selected"), is_error=True)
 
             if not legal_size(chosen):
-                return await self._edit_ephemeral_result(interaction, "一次只能出 1 / 2 / 3 / 5 張。", is_error=True)
+                return await self._edit_ephemeral_result(interaction, t("minigames.err.card_count"), is_error=True)
 
             if not must_follow_table(self.game.table_cards, chosen):
-                return await self._edit_ephemeral_result(interaction, "必須跟桌面相同張數才能壓。", is_error=True)
+                return await self._edit_ephemeral_result(interaction, t("minigames.err.must_match_count"), is_error=True)
 
             # validate shape
             try:
                 _ = hand_signature(chosen, self.game.rules)
             except ValueError as e:
-                return await self._edit_ephemeral_result(interaction, f"牌型不合法：{e}", is_error=True)
+                return await self._edit_ephemeral_result(interaction, t("minigames.err.illegal_hand", reason=e), is_error=True)
 
             ok, reason = is_first_move_requires_3d(self.game, chosen)
             if not ok:
@@ -902,9 +913,9 @@ class HandView(discord.ui.View):
             # beat check
             try:
                 if not beats(self.game.table_cards, chosen, self.game.rules):
-                    return await self._edit_ephemeral_result(interaction, "你出的牌沒有壓過桌面。", is_error=True)
+                    return await self._edit_ephemeral_result(interaction, t("minigames.err.does_not_beat"), is_error=True)
             except ValueError as e:
-                return await self._edit_ephemeral_result(interaction, f"比較失敗：{e}", is_error=True)
+                return await self._edit_ephemeral_result(interaction, t("minigames.err.compare_failed", reason=e), is_error=True)
 
             # apply play
             for c in chosen:
@@ -928,7 +939,7 @@ class HandView(discord.ui.View):
                         self.game.finish_order.append(p.user_id)
                         break
 
-            await self._edit_ephemeral_result(interaction, f"✅ 你出了：{' '.join(map(str, chosen))}")
+            await self._edit_ephemeral_result(interaction, t("minigames.bigtwo.you_played", cards=' '.join(map(str, chosen))))
             await self.cog.update_table_message(interaction.channel, self.game)
             self.stop()
 
@@ -937,10 +948,10 @@ class HandView(discord.ui.View):
         await interaction.response.defer(ephemeral=True)
         async with self.game.lock:
             if interaction.user.id != self.player_id:
-                return await self._edit_ephemeral_result(interaction, "這不是你的介面。", is_error=True)
+                return await self._edit_ephemeral_result(interaction, t("minigames.err.not_your_ui"), is_error=True)
 
             if self.game.current_player().user_id != self.player_id:
-                return await self._edit_ephemeral_result(interaction, "還沒輪到你。", is_error=True)
+                return await self._edit_ephemeral_result(interaction, t("minigames.err.not_your_turn"), is_error=True)
 
             player = self.game.find_player(self.player_id)
             ok, reason = can_pass(self.game, player)
@@ -963,7 +974,7 @@ class HandView(discord.ui.View):
                                 self.game.finish_order.append(p.user_id)
                                 break
                     await self._edit_ephemeral_result(
-                        interaction, "所有人都 Pass，清空桌面，回到上一位出牌者領出。"
+                        interaction, t("minigames.bigtwo.all_passed")
                     )
                     await self.cog.update_table_message(interaction.channel, self.game)
                     self.stop()
@@ -976,7 +987,7 @@ class HandView(discord.ui.View):
                     if not p.finished:
                         self.game.finish_order.append(p.user_id)
                         break
-            await self._edit_ephemeral_result(interaction, "你選擇 Pass。")
+            await self._edit_ephemeral_result(interaction, t("minigames.bigtwo.you_passed"))
             await self.cog.update_table_message(interaction.channel, self.game)
             self.stop()
 
@@ -985,7 +996,7 @@ class HandView(discord.ui.View):
             child.disabled = True
         if self.message is not None:
             try:
-                await self.message.edit(content="選擇已逾時。", view=self)
+                await self.message.edit(content=t("minigames.msg.choice_timeout"), view=self)
             except (discord.NotFound, discord.HTTPException):
                 pass
 
@@ -995,7 +1006,7 @@ class HandView(discord.ui.View):
 # -----------------------------
 
 
-class DiceChoiceView(discord.ui.View):
+class DiceChoiceView(i18n.I18nView):
     def __init__(self, cog: "MiniGamesCog", user_id: int, guild_id: int, bet: float):
         super().__init__(timeout=60)
         self.cog = cog
@@ -1032,7 +1043,7 @@ class DiceChoiceView(discord.ui.View):
         self.stop()
 
 
-class CoinflipChoiceView(discord.ui.View):
+class CoinflipChoiceView(i18n.I18nView):
     def __init__(self, cog: "MiniGamesCog", user_id: int, guild_id: int, bet: float):
         super().__init__(timeout=60)
         self.cog = cog
@@ -1043,11 +1054,11 @@ class CoinflipChoiceView(discord.ui.View):
         self.resolved = False
         self.lock = asyncio.Lock()
 
-    @discord.ui.button(label="正面", emoji="🪙", style=discord.ButtonStyle.primary)
+    @discord.ui.button(label=i18n.K("minigames.coinflip.heads"), emoji="🪙", style=discord.ButtonStyle.primary)
     async def heads_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
         await self.cog.play_coinflip_choice(interaction, self, "heads")
 
-    @discord.ui.button(label="反面", emoji="🌙", style=discord.ButtonStyle.primary)
+    @discord.ui.button(label=i18n.K("minigames.coinflip.tails"), emoji="🌙", style=discord.ButtonStyle.primary)
     async def tails_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
         await self.cog.play_coinflip_choice(interaction, self, "tails")
 
@@ -1064,7 +1075,7 @@ class CoinflipChoiceView(discord.ui.View):
         self.stop()
 
 
-class BetAgainView(discord.ui.View):
+class BetAgainView(i18n.I18nView):
     def __init__(self, cog: "MiniGamesCog", game_type: str, user_id: int, guild_id: int, bet: float):
         super().__init__(timeout=60)
         self.cog = cog
@@ -1074,10 +1085,10 @@ class BetAgainView(discord.ui.View):
         self.bet = bet
         self.message = None
 
-    @discord.ui.button(label="再賭一次", emoji="🔁", style=discord.ButtonStyle.success)
+    @discord.ui.button(label=i18n.K("minigames.btn.bet_again"), emoji="🔁", style=discord.ButtonStyle.success)
     async def again_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
         if interaction.user.id != self.user_id:
-            return await interaction.response.send_message("這不是你的遊戲。", ephemeral=True)
+            return await interaction.response.send_message(t("minigames.err.not_your_game"), ephemeral=True)
         if self.game_type == "dice":
             await self.cog.show_dice_choices(interaction, self.guild_id, self.bet, edit=True)
         else:
@@ -1095,14 +1106,14 @@ class BetAgainView(discord.ui.View):
         self.stop()
 
 
-class ScratchcardView(discord.ui.View):
+class ScratchcardView(i18n.I18nView):
     def __init__(self, cog: "MiniGamesCog", game: ScratchcardGame):
         super().__init__(timeout=90)
         self.cog = cog
         self.game = game
         self.message = None
 
-    @discord.ui.button(label="🪙 刮開", style=discord.ButtonStyle.primary)
+    @discord.ui.button(label=i18n.K("minigames.btn.scratch"), style=discord.ButtonStyle.primary)
     async def reveal_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
         await self.cog.settle_scratchcard(interaction, self.game, self)
 
@@ -1113,7 +1124,7 @@ class ScratchcardView(discord.ui.View):
         self.stop()
 
 
-class SlotsAgainView(discord.ui.View):
+class SlotsAgainView(i18n.I18nView):
     """拉霸結果附「再轉一次」按鈕"""
 
     def __init__(self, cog: "MiniGamesCog", user_id: int, guild_id: int, bet: float):
@@ -1124,10 +1135,10 @@ class SlotsAgainView(discord.ui.View):
         self.bet = bet
         self.message = None
 
-    @discord.ui.button(label="🔁 再轉一次", style=discord.ButtonStyle.primary)
+    @discord.ui.button(label=i18n.K("minigames.btn.spin_again"), style=discord.ButtonStyle.primary)
     async def again_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
         if interaction.user.id != self.user_id:
-            return await interaction.response.send_message("這不是你的遊戲。", ephemeral=True)
+            return await interaction.response.send_message(t("minigames.err.not_your_game"), ephemeral=True)
         button.disabled = True
         await self.cog.do_slots_spin(interaction, self.guild_id, self.bet, edit=True)
         self.stop()
@@ -1142,7 +1153,7 @@ class SlotsAgainView(discord.ui.View):
                 pass
 
 
-class HighLowView(discord.ui.View):
+class HighLowView(i18n.I18nView):
     def __init__(self, cog: "MiniGamesCog", game: HighLowGame):
         super().__init__(timeout=120)
         self.cog = cog
@@ -1153,15 +1164,15 @@ class HighLowView(discord.ui.View):
         self.low_btn.disabled = p_low <= 0
         self.cashout_btn.disabled = game.streak < 1
 
-    @discord.ui.button(label="🔼 較大", style=discord.ButtonStyle.primary)
+    @discord.ui.button(label=i18n.K("minigames.btn.higher"), style=discord.ButtonStyle.primary)
     async def high_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
         await self.cog.highlow_guess(interaction, self.game, "high", self)
 
-    @discord.ui.button(label="🔽 較小", style=discord.ButtonStyle.primary)
+    @discord.ui.button(label=i18n.K("minigames.btn.lower"), style=discord.ButtonStyle.primary)
     async def low_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
         await self.cog.highlow_guess(interaction, self.game, "low", self)
 
-    @discord.ui.button(label="💰 提現", style=discord.ButtonStyle.success)
+    @discord.ui.button(label=i18n.K("minigames.btn.cashout"), style=discord.ButtonStyle.success)
     async def cashout_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
         await self.cog.highlow_cashout(interaction, self.game, self)
 
@@ -1173,7 +1184,7 @@ class HighLowView(discord.ui.View):
         self.stop()
 
 
-class BlackjackView(discord.ui.View):
+class BlackjackView(i18n.I18nView):
     def __init__(self, cog: "MiniGamesCog", game: BlackjackGame):
         super().__init__(timeout=120)
         self.cog = cog
@@ -1182,15 +1193,15 @@ class BlackjackView(discord.ui.View):
         # Double 僅首兩張可用
         self.double_btn.disabled = len(game.player_hand) != 2
 
-    @discord.ui.button(label="🎯 要牌 Hit", style=discord.ButtonStyle.primary)
+    @discord.ui.button(label=i18n.K("minigames.btn.hit"), style=discord.ButtonStyle.primary)
     async def hit_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
         await self.cog.bj_hit(interaction, self.game, self)
 
-    @discord.ui.button(label="✋ 停牌 Stand", style=discord.ButtonStyle.success)
+    @discord.ui.button(label=i18n.K("minigames.btn.stand"), style=discord.ButtonStyle.success)
     async def stand_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
         await self.cog.bj_stand(interaction, self.game, self)
 
-    @discord.ui.button(label="⏫ 加倍 Double", style=discord.ButtonStyle.danger)
+    @discord.ui.button(label=i18n.K("minigames.btn.double"), style=discord.ButtonStyle.danger)
     async def double_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
         await self.cog.bj_double(interaction, self.game, self)
 
@@ -1267,7 +1278,7 @@ class MiniGamesCog(commands.GroupCog, group_name="games", description=app_comman
         return self.bot.get_user(user_id)
 
     def _log_economy_history(self, guild_id: int, user_id: int, tx_type: str, amount: float, detail: str = "") -> str:
-        currency = get_currency_name(guild_id)
+        currency = _raw_currency_name(guild_id)  # i18n: skip (stored tx data)
         log_transaction(guild_id, user_id, tx_type, amount, currency, detail)
         return currency
 
@@ -1281,7 +1292,7 @@ class MiniGamesCog(commands.GroupCog, group_name="games", description=app_comman
         detail: str,
     ) -> bool:
         """扣注 + 記錄。回傳是否成功（餘額不足回 False）。"""
-        currency = get_currency_name(guild_id)
+        currency = _raw_currency_name(guild_id)  # 營運稽核頻道用原文
         success, balance_before, balance_after = mutate_balance_atomic(
             guild_id,
             interaction.user.id,
@@ -1320,7 +1331,7 @@ class MiniGamesCog(commands.GroupCog, group_name="games", description=app_comman
         """發放獎金 + 記錄。"""
         if amount <= 0:
             return
-        currency = get_currency_name(guild_id)
+        currency = _raw_currency_name(guild_id)  # 營運稽核頻道用原文
         _, balance_before, balance_after = mutate_balance_atomic(guild_id, user_id, amount)
         self._log_economy_history(guild_id, user_id, tx_label, amount, detail)
         queue_economy_audit_log(
@@ -1341,7 +1352,7 @@ class MiniGamesCog(commands.GroupCog, group_name="games", description=app_comman
     @staticmethod
     def _validate_bet(bet: int) -> Optional[str]:
         if bet < BET_MIN or bet > BET_MAX:
-            return f"❌ 賭注金額需介於 **{BET_MIN}**～**{BET_MAX}** 之間。"
+            return t("minigames.err.bet_range", min=BET_MIN, max=BET_MAX)
         return None
 
     @staticmethod
@@ -1375,10 +1386,10 @@ class MiniGamesCog(commands.GroupCog, group_name="games", description=app_comman
     @staticmethod
     def _lottery_payout_recorded(guild_id: int, user_id: int, round_id: str) -> bool:
         history = get_user_data(guild_id, user_id, "economy_history", []) or []
-        marker = f"彩票輪次 {round_id}"
+        marker = f"彩票輪次 {round_id}"  # i18n: skip (legacy history reader)
         return any(
             isinstance(entry, dict)
-            and entry.get("type") == "彩票派彩"
+            and entry.get("type") == "彩票派彩"  # i18n: skip (legacy history reader)
             and marker in str(entry.get("detail", ""))
             for entry in history
         )
@@ -1403,20 +1414,21 @@ class MiniGamesCog(commands.GroupCog, group_name="games", description=app_comman
         pending = state.get("pending_settlement")
         draw_at = parse_lottery_draw_at(state.get("draw_at"))
         if pending:
-            timing = "本輪正在結算，暫停購票。"
+            timing = t("minigames.lottery.timing.settling")
         elif draw_at is not None:
-            timing = f"開獎時間：<t:{int(draw_at.timestamp())}:F>（<t:{int(draw_at.timestamp())}:R>）"
+            timing = t("minigames.lottery.timing.scheduled", at=i18n.fmt_ts(draw_at, "F"), rel=i18n.fmt_ts(draw_at, "R"))
         elif jackpot > 0:
-            timing = "累積獎池等待下一張票；購票後 60 分鐘開獎。"
+            timing = t("minigames.lottery.timing.waiting")
         else:
-            timing = "尚未開始；第一張票售出後 60 分鐘開獎。"
+            timing = t("minigames.lottery.timing.not_started")
 
         embed = discord.Embed(
-            title="🎟️ 累積彩票",
+            title=t("minigames.lottery.title"),
             description=(
-                f"目前獎池：**{jackpot:,.2f}** {currency}\n"
-                f"本輪新增投注：**{current_stake:,.2f}** {currency}\n"
-                f"參與玩家：**{len(unique_users)}** 人\n{timing}"
+                t("minigames.lottery.status_desc",
+                  jackpot=i18n.fmt_num(jackpot, decimals=2), currency=currency,
+                  stake=i18n.fmt_num(current_stake, decimals=2),
+                  players=len(unique_users), timing=timing)
             ),
             color=discord.Color.gold(),
         )
@@ -1428,19 +1440,20 @@ class MiniGamesCog(commands.GroupCog, group_name="games", description=app_comman
             payout_total = float(last_result.get("payout_total", 0.0) or 0.0)
             if winner_count:
                 result_line = (
-                    f"中獎號碼：**{number}**\n中獎人數：**{winner_count}**\n"
-                    f"派彩總額：**{payout_total:,.2f}** {currency}"
+                    t("minigames.lottery.result_hit", number=number,
+                      winners=winner_count,
+                      total=i18n.fmt_num(payout_total, decimals=2), currency=currency)
                 )
             else:
                 result_line = (
-                    f"中獎號碼：**{number}**\n無人命中，"
-                    f"**{draw_jackpot:,.2f}** {currency} 已累積至下一輪。"
+                    t("minigames.lottery.result_rollover", number=number,
+                      jackpot=i18n.fmt_num(draw_jackpot, decimals=2), currency=currency)
                 )
             drawn_at = parse_lottery_draw_at(last_result.get("drawn_at"))
             if drawn_at is not None:
-                result_line += f"\n開獎時間：<t:{int(drawn_at.timestamp())}:f>"
-            embed.add_field(name="上期結果", value=result_line, inline=False)
-        embed.set_footer(text="票券每輪到期；若無人命中，只累積獎池，不保留舊票。")
+                result_line += "\n" + t("minigames.lottery.drawn_at", at=i18n.fmt_ts(drawn_at, "f"))
+            embed.add_field(name=t("minigames.lottery.field.last_result"), value=result_line, inline=False)
+        embed.set_footer(text=t("minigames.lottery.status_footer"))
         return embed
 
     async def _notify_lottery_winner(
@@ -1455,15 +1468,15 @@ class MiniGamesCog(commands.GroupCog, group_name="games", description=app_comman
         try:
             user = self.bot.get_user(user_id) or await self.bot.fetch_user(user_id)
             embed = discord.Embed(
-                title="🎉 彩票中獎！",
+                title=t("minigames.lottery.win_title"),
                 description=(
-                    f"中獎號碼：**{number}**\n"
-                    f"你的派彩：**{payout:,.2f}** {currency}\n"
-                    f"目前餘額：**{get_balance(guild_id, user_id):,.2f}** {currency}"
+                    t("minigames.lottery.win_desc", number=number,
+                      payout=i18n.fmt_num(payout, decimals=2), currency=currency,
+                      balance=i18n.fmt_num(get_balance(guild_id, user_id), decimals=2))
                 ),
                 color=discord.Color.gold(),
             )
-            embed.set_footer(text=f"輪次：{round_id}")
+            embed.set_footer(text=t("minigames.lottery.round_footer", round_id=round_id))
             await user.send(embed=embed)
         except (discord.Forbidden, discord.NotFound, discord.HTTPException, AttributeError) as exc:
             log(
@@ -1509,9 +1522,9 @@ class MiniGamesCog(commands.GroupCog, group_name="games", description=app_comman
                     guild_id,
                     user_id,
                     payout,
-                    "彩票派彩",
+                    "彩票派彩",  # i18n: skip (stored tx data)
                     "lottery_payout",
-                    f"彩票輪次 {round_id}，中獎號碼 {number}，派彩 {payout:,.2f} {currency}",
+                    f"彩票輪次 {round_id}，中獎號碼 {number}，派彩 {payout:,.2f} {currency}",  # i18n: skip (stored tx data)
                 )
             except Exception as exc:
                 log(
@@ -1700,9 +1713,9 @@ class MiniGamesCog(commands.GroupCog, group_name="games", description=app_comman
         if err:
             return await interaction.response.send_message(err, ephemeral=True)
         if bet_type.value == "number" and number is None:
-            return await interaction.response.send_message("❌ 單號投注必須選擇 0～36 的號碼。", ephemeral=True)
+            return await interaction.response.send_message(t("minigames.roulette.err.number_required"), ephemeral=True)
         if bet_type.value != "number" and number is not None:
-            return await interaction.response.send_message("❌ 只有單號投注需要填寫號碼。", ephemeral=True)
+            return await interaction.response.send_message(t("minigames.roulette.err.number_not_allowed"), ephemeral=True)
 
         guild_id = resolve_game_guild_id(interaction, use_global)
         currency = get_currency_name(guild_id)
@@ -1710,13 +1723,14 @@ class MiniGamesCog(commands.GroupCog, group_name="games", description=app_comman
             interaction,
             guild_id,
             float(bet),
-            "輪盤下注",
+            "輪盤下注",  # i18n: skip (stored tx data)
             "roulette_bet",
-            f"輪盤 {ROULETTE_BET_LABELS[bet_type.value]} 下注 {bet:,.0f} {currency}",
+            f"輪盤 {roulette_bet_label(bet_type.value)} 下注 {bet:,.0f} {currency}",  # i18n: skip (stored tx data)
         ):
             balance = get_balance(guild_id, interaction.user.id)
             return await interaction.response.send_message(
-                f"❌ 餘額不足！\n你的餘額：**{balance:,.0f}** {currency}\n所需賭注：**{bet:,.0f}** {currency}",
+                t("minigames.err.insufficient", balance=i18n.fmt_num(balance, decimals=0),
+                  currency=currency, needed=i18n.fmt_num(bet, decimals=0)),
                 ephemeral=True,
             )
 
@@ -1728,24 +1742,26 @@ class MiniGamesCog(commands.GroupCog, group_name="games", description=app_comman
         won = bool(roulette_result["won"])
         multiplier = float(roulette_result["multiplier"])
         payout = round(bet * multiplier, 2) if won else 0.0
-        selection = f"號碼 {int(number)}" if bet_type.value == "number" else ROULETTE_BET_LABELS[bet_type.value]
+        selection = (t("minigames.roulette.selection_number", number=int(number))
+                     if bet_type.value == "number" else roulette_bet_label(bet_type.value))
         if payout:
             self._pay_out(
                 guild_id,
                 interaction.user.id,
                 payout,
-                "輪盤派彩",
+                "輪盤派彩",  # i18n: skip (stored tx data)
                 "roulette_payout",
-                f"投注 {selection}，開出 {result}，倍率 x{multiplier:.0f}",
+                f"投注 {selection}，開出 {result}，倍率 x{multiplier:.0f}",  # i18n: skip (stored tx data)
                 interaction=interaction,
             )
 
         spinning = discord.Embed(
-            title="🎡 俄羅斯輪盤",
-            description="輪盤轉動中……",
+            title=t("minigames.roulette.title"),
+            description=t("minigames.roulette.spinning"),
             color=discord.Color.blurple(),
         )
-        spinning.set_footer(text=f"投注：{selection}｜下注：{bet:,.0f} {currency}")
+        spinning.set_footer(text=t("minigames.roulette.footer", selection=selection,
+                                   bet=i18n.fmt_num(bet, decimals=0), currency=currency))
         await interaction.response.send_message(embed=spinning)
         message = await interaction.original_response()
         await asyncio.sleep(1.5)
@@ -1753,19 +1769,23 @@ class MiniGamesCog(commands.GroupCog, group_name="games", description=app_comman
         profit = payout - bet
         if won:
             result_text = (
-                f"開出 {self._roulette_result_label(result)}\n\n🎉 **你贏了！**\n"
-                f"派彩：**{payout:,.2f}** {currency}（+{profit:,.2f}）"
+                t("minigames.roulette.won", result=self._roulette_result_label(result),
+                  payout=i18n.fmt_num(payout, decimals=2), currency=currency,
+                  profit=i18n.fmt_num(profit, decimals=2))
             )
             color = discord.Color.green()
         else:
             result_text = (
-                f"開出 {self._roulette_result_label(result)}\n\n💥 **未中獎**，"
-                f"損失 **{bet:,.0f}** {currency}"
+                t("minigames.roulette.lost", result=self._roulette_result_label(result),
+                  bet=i18n.fmt_num(bet, decimals=0), currency=currency)
             )
             color = discord.Color.red()
-        result_text += f"\n新餘額：**{get_balance(guild_id, interaction.user.id):,.2f}** {currency}"
-        embed = discord.Embed(title="🎡 俄羅斯輪盤", description=result_text, color=color)
-        embed.set_footer(text=f"投注：{selection}｜下注：{bet:,.0f} {currency}")
+        result_text += "\n" + t("minigames.line.new_balance",
+                                 balance=i18n.fmt_num(get_balance(guild_id, interaction.user.id), decimals=2),
+                                 currency=currency)
+        embed = discord.Embed(title=t("minigames.roulette.title"), description=result_text, color=color)
+        embed.set_footer(text=t("minigames.roulette.footer", selection=selection,
+                                bet=i18n.fmt_num(bet, decimals=0), currency=currency))
         try:
             await message.edit(embed=embed)
         except (discord.NotFound, discord.HTTPException):
@@ -1789,11 +1809,12 @@ class MiniGamesCog(commands.GroupCog, group_name="games", description=app_comman
     ):
         currency = get_currency_name(guild_id)
         embed = discord.Embed(
-            title="🎲 骰子遊戲",
-            description="選擇你要猜的骰子點數。",
+            title=t("minigames.dice.title"),
+            description=t("minigames.dice.pick_prompt"),
             color=discord.Color.blurple(),
         )
-        embed.set_footer(text=f"下注：{bet:,.0f} {currency}｜按下點數後才會扣款")
+        embed.set_footer(text=t("minigames.dice.pick_footer",
+                                bet=i18n.fmt_num(bet, decimals=0), currency=currency))
         view = DiceChoiceView(self, interaction.user.id, guild_id, bet)
         if edit:
             await interaction.response.edit_message(embed=embed, view=view)
@@ -1808,22 +1829,23 @@ class MiniGamesCog(commands.GroupCog, group_name="games", description=app_comman
         guess: int,
     ):
         if interaction.user.id != view.user_id:
-            return await interaction.response.send_message("這不是你的遊戲。", ephemeral=True)
+            return await interaction.response.send_message(t("minigames.err.not_your_game"), ephemeral=True)
         async with view.lock:
             if view.resolved:
-                return await interaction.response.send_message("這局已經結算。", ephemeral=True)
+                return await interaction.response.send_message(t("minigames.err.round_settled"), ephemeral=True)
             currency = get_currency_name(view.guild_id)
             if not self._charge_bet(
                 interaction,
                 view.guild_id,
                 view.bet,
-                "骰子下注",
+                "骰子下注",  # i18n: skip (stored tx data)
                 "dice_bet",
-                f"猜 {guess}，下注 {view.bet:,.0f} {currency}",
+                f"猜 {guess}，下注 {view.bet:,.0f} {currency}",  # i18n: skip (stored tx data)
             ):
                 balance = get_balance(view.guild_id, interaction.user.id)
                 return await interaction.response.send_message(
-                    f"❌ 餘額不足！\n你的餘額：**{balance:,.0f}** {currency}\n所需賭注：**{view.bet:,.0f}** {currency}",
+                    t("minigames.err.insufficient", balance=i18n.fmt_num(balance, decimals=0),
+                      currency=currency, needed=i18n.fmt_num(view.bet, decimals=0)),
                     ephemeral=True,
                 )
 
@@ -1836,16 +1858,18 @@ class MiniGamesCog(commands.GroupCog, group_name="games", description=app_comman
                     view.guild_id,
                     interaction.user.id,
                     payout,
-                    "骰子派彩",
+                    "骰子派彩",  # i18n: skip (stored tx data)
                     "dice_payout",
-                    f"猜中點數 {result}，倍率 x5.70",
+                    f"猜中點數 {result}，倍率 x5.70",  # i18n: skip (stored tx data)
                     interaction=interaction,
                 )
             view.resolved = True
             view.stop()
 
         await interaction.response.edit_message(
-            embed=discord.Embed(title="🎲 骰子遊戲", description="骰子滾動中……", color=discord.Color.blurple()),
+            embed=discord.Embed(title=t("minigames.dice.title"),
+                                description=t("minigames.dice.rolling"),
+                                color=discord.Color.blurple()),
             view=None,
         )
         message = await interaction.original_response()
@@ -1853,19 +1877,23 @@ class MiniGamesCog(commands.GroupCog, group_name="games", description=app_comman
         await asyncio.sleep(1.0)
         if won:
             text = (
-                f"你猜：**{guess}**｜骰子：# **{result}**\n\n🎉 **猜中了！**\n"
-                f"派彩：**{payout:,.2f}** {currency}（+{payout - view.bet:,.2f}）"
+                t("minigames.dice.won", guess=guess, result=result,
+                  payout=i18n.fmt_num(payout, decimals=2), currency=currency,
+                  profit=i18n.fmt_num(payout - view.bet, decimals=2))
             )
             color = discord.Color.green()
         else:
             text = (
-                f"你猜：**{guess}**｜骰子：# **{result}**\n\n💥 **猜錯了！** "
-                f"損失 **{view.bet:,.0f}** {currency}"
+                t("minigames.dice.lost", guess=guess, result=result,
+                  bet=i18n.fmt_num(view.bet, decimals=0), currency=currency)
             )
             color = discord.Color.red()
-        text += f"\n新餘額：**{get_balance(view.guild_id, interaction.user.id):,.2f}** {currency}"
-        embed = discord.Embed(title="🎲 骰子遊戲", description=text, color=color)
-        embed.set_footer(text=f"下注：{view.bet:,.0f} {currency}｜猜中倍率 x5.70")
+        text += "\n" + t("minigames.line.new_balance",
+                         balance=i18n.fmt_num(get_balance(view.guild_id, interaction.user.id), decimals=2),
+                         currency=currency)
+        embed = discord.Embed(title=t("minigames.dice.title"), description=text, color=color)
+        embed.set_footer(text=t("minigames.dice.result_footer",
+                                bet=i18n.fmt_num(view.bet, decimals=0), currency=currency))
         again_view = BetAgainView(self, "dice", interaction.user.id, view.guild_id, view.bet)
         try:
             await message.edit(embed=embed, view=again_view)
@@ -1891,11 +1919,12 @@ class MiniGamesCog(commands.GroupCog, group_name="games", description=app_comman
     ):
         currency = get_currency_name(guild_id)
         embed = discord.Embed(
-            title="🪙 擲硬幣",
-            description="選擇 **正面** 或 **反面**。",
+            title=t("minigames.coinflip.title"),
+            description=t("minigames.coinflip.pick_prompt"),
             color=discord.Color.blurple(),
         )
-        embed.set_footer(text=f"下注：{bet:,.0f} {currency}｜按下選項後才會扣款")
+        embed.set_footer(text=t("minigames.coinflip.pick_footer",
+                                bet=i18n.fmt_num(bet, decimals=0), currency=currency))
         view = CoinflipChoiceView(self, interaction.user.id, guild_id, bet)
         if edit:
             await interaction.response.edit_message(embed=embed, view=view)
@@ -1910,23 +1939,24 @@ class MiniGamesCog(commands.GroupCog, group_name="games", description=app_comman
         side: str,
     ):
         if interaction.user.id != view.user_id:
-            return await interaction.response.send_message("這不是你的遊戲。", ephemeral=True)
-        side_label = "正面" if side == "heads" else "反面"
+            return await interaction.response.send_message(t("minigames.err.not_your_game"), ephemeral=True)
+        side_label = t("minigames.coinflip.heads" if side == "heads" else "minigames.coinflip.tails")
         async with view.lock:
             if view.resolved:
-                return await interaction.response.send_message("這局已經結算。", ephemeral=True)
+                return await interaction.response.send_message(t("minigames.err.round_settled"), ephemeral=True)
             currency = get_currency_name(view.guild_id)
             if not self._charge_bet(
                 interaction,
                 view.guild_id,
                 view.bet,
-                "擲硬幣下注",
+                "擲硬幣下注",  # i18n: skip (stored tx data)
                 "coinflip_bet",
-                f"選擇 {side_label}，下注 {view.bet:,.0f} {currency}",
+                f"選擇 {side_label}，下注 {view.bet:,.0f} {currency}",  # i18n: skip (stored tx data)
             ):
                 balance = get_balance(view.guild_id, interaction.user.id)
                 return await interaction.response.send_message(
-                    f"❌ 餘額不足！\n你的餘額：**{balance:,.0f}** {currency}\n所需賭注：**{view.bet:,.0f}** {currency}",
+                    t("minigames.err.insufficient", balance=i18n.fmt_num(balance, decimals=0),
+                      currency=currency, needed=i18n.fmt_num(view.bet, decimals=0)),
                     ephemeral=True,
                 )
 
@@ -1934,22 +1964,24 @@ class MiniGamesCog(commands.GroupCog, group_name="games", description=app_comman
             result = str(coin_result["result"])
             won = bool(coin_result["won"])
             payout = round(view.bet * float(coin_result["multiplier"]), 2) if won else 0.0
-            result_label = "正面" if result == "heads" else "反面"
+            result_label = t("minigames.coinflip.heads" if result == "heads" else "minigames.coinflip.tails")
             if payout:
                 self._pay_out(
                     view.guild_id,
                     interaction.user.id,
                     payout,
-                    "擲硬幣派彩",
+                    "擲硬幣派彩",  # i18n: skip (stored tx data)
                     "coinflip_payout",
-                    f"選擇 {side_label}，開出 {result_label}，倍率 x1.90",
+                    f"選擇 {side_label}，開出 {result_label}，倍率 x1.90",  # i18n: skip (stored tx data)
                     interaction=interaction,
                 )
             view.resolved = True
             view.stop()
 
         await interaction.response.edit_message(
-            embed=discord.Embed(title="🪙 擲硬幣", description="硬幣翻轉中……", color=discord.Color.blurple()),
+            embed=discord.Embed(title=t("minigames.coinflip.title"),
+                                description=t("minigames.coinflip.flipping"),
+                                color=discord.Color.blurple()),
             view=None,
         )
         message = await interaction.original_response()
@@ -1957,19 +1989,23 @@ class MiniGamesCog(commands.GroupCog, group_name="games", description=app_comman
         await asyncio.sleep(1.0)
         if won:
             text = (
-                f"你選：**{side_label}**｜結果：# **{result_label}**\n\n🎉 **猜中了！**\n"
-                f"派彩：**{payout:,.2f}** {currency}（+{payout - view.bet:,.2f}）"
+                t("minigames.coinflip.won", side=side_label, result=result_label,
+                  payout=i18n.fmt_num(payout, decimals=2), currency=currency,
+                  profit=i18n.fmt_num(payout - view.bet, decimals=2))
             )
             color = discord.Color.green()
         else:
             text = (
-                f"你選：**{side_label}**｜結果：# **{result_label}**\n\n💥 **猜錯了！** "
-                f"損失 **{view.bet:,.0f}** {currency}"
+                t("minigames.coinflip.lost", side=side_label, result=result_label,
+                  bet=i18n.fmt_num(view.bet, decimals=0), currency=currency)
             )
             color = discord.Color.red()
-        text += f"\n新餘額：**{get_balance(view.guild_id, interaction.user.id):,.2f}** {currency}"
-        embed = discord.Embed(title="🪙 擲硬幣", description=text, color=color)
-        embed.set_footer(text=f"下注：{view.bet:,.0f} {currency}｜猜中倍率 x1.90")
+        text += "\n" + t("minigames.line.new_balance",
+                         balance=i18n.fmt_num(get_balance(view.guild_id, interaction.user.id), decimals=2),
+                         currency=currency)
+        embed = discord.Embed(title=t("minigames.coinflip.title"), description=text, color=color)
+        embed.set_footer(text=t("minigames.coinflip.result_footer",
+                                bet=i18n.fmt_num(view.bet, decimals=0), currency=currency))
         again_view = BetAgainView(self, "coinflip", interaction.user.id, view.guild_id, view.bet)
         try:
             await message.edit(embed=embed, view=again_view)
@@ -1988,7 +2024,7 @@ class MiniGamesCog(commands.GroupCog, group_name="games", description=app_comman
             return await interaction.response.send_message(err, ephemeral=True)
         key = (interaction.channel_id, interaction.user.id)
         if key in self.scratchcard_games:
-            return await interaction.response.send_message("你已經有一張尚未刮開的刮刮樂。", ephemeral=True)
+            return await interaction.response.send_message(t("minigames.scratch.err.already_holding"), ephemeral=True)
 
         guild_id = resolve_game_guild_id(interaction, use_global)
         currency = get_currency_name(guild_id)
@@ -1996,13 +2032,14 @@ class MiniGamesCog(commands.GroupCog, group_name="games", description=app_comman
             interaction,
             guild_id,
             float(bet),
-            "刮刮樂下注",
+            "刮刮樂下注",  # i18n: skip (stored tx data)
             "scratchcard_bet",
-            f"購買刮刮樂，下注 {bet:,.0f} {currency}",
+            f"購買刮刮樂，下注 {bet:,.0f} {currency}",  # i18n: skip (stored tx data)
         ):
             balance = get_balance(guild_id, interaction.user.id)
             return await interaction.response.send_message(
-                f"❌ 餘額不足！\n你的餘額：**{balance:,.0f}** {currency}\n所需賭注：**{bet:,.0f}** {currency}",
+                t("minigames.err.insufficient", balance=i18n.fmt_num(balance, decimals=0),
+                  currency=currency, needed=i18n.fmt_num(bet, decimals=0)),
                 ephemeral=True,
             )
 
@@ -2020,11 +2057,13 @@ class MiniGamesCog(commands.GroupCog, group_name="games", description=app_comman
         self.scratchcard_games[key] = game
         view = ScratchcardView(self, game)
         embed = discord.Embed(
-            title="🎫 刮刮樂",
-            description=f"# {scratch_grid_text(game.grid, hidden=True)}\n\n按下 **刮開** 揭曉票面。",
+            title=t("minigames.scratch.title"),
+            description=("# " + scratch_grid_text(game.grid, hidden=True) + "\n\n"
+                         + t("minigames.scratch.reveal_prompt")),
             color=discord.Color.gold(),
         )
-        embed.set_footer(text=f"下注：{bet:,.0f} {currency}｜逾時將自動刮開")
+        embed.set_footer(text=t("minigames.scratch.pending_footer",
+                                bet=i18n.fmt_num(bet, decimals=0), currency=currency))
         await interaction.response.send_message(embed=embed, view=view)
         message = await interaction.original_response()
         game.message = message
@@ -2043,28 +2082,33 @@ class MiniGamesCog(commands.GroupCog, group_name="games", description=app_comman
                 game.guild_id,
                 game.user_id,
                 payout,
-                "刮刮樂派彩",
+                "刮刮樂派彩",  # i18n: skip (stored tx data)
                 "scratchcard_payout",
-                f"{game.prize_name}，倍率 x{game.multiplier:.2f}，下注 {game.bet:,.0f} {currency}",
+                f"{game.prize_name}，倍率 x{game.multiplier:.2f}，下注 {game.bet:,.0f} {currency}",  # i18n: skip (stored tx data)
                 interaction=interaction,
                 color=0xF1C40F if game.prize_key == "jackpot" else 0x2ECC71,
             )
         profit = payout - game.bet
         if payout > 0:
             result = (
-                f"🎉 **{game.prize_name}！** 倍率 **x{game.multiplier:.2f}**\n"
-                f"派彩：**{payout:,.2f}** {currency}（{'+' if profit >= 0 else ''}{profit:,.2f}）"
+                t("minigames.scratch.won", prize=game.prize_name,
+                  multiplier=f"{game.multiplier:.2f}",
+                  payout=i18n.fmt_num(payout, decimals=2), currency=currency,
+                  profit=('+' if profit >= 0 else '') + i18n.fmt_num(profit, decimals=2))
             )
             color = discord.Color.gold() if game.prize_key == "jackpot" else discord.Color.green()
         else:
-            result = f"💥 **未中獎**，損失 **{game.bet:,.0f}** {currency}"
+            result = t("minigames.scratch.lost", bet=i18n.fmt_num(game.bet, decimals=0), currency=currency)
             color = discord.Color.red()
         description = (
             f"# {scratch_grid_text(game.grid)}\n\n{result}\n"
-            f"新餘額：**{get_balance(game.guild_id, game.user_id):,.2f}** {currency}"
+            + t("minigames.line.new_balance",
+                balance=i18n.fmt_num(get_balance(game.guild_id, game.user_id), decimals=2),
+                currency=currency)
         )
-        embed = discord.Embed(title="🎫 刮刮樂", description=description, color=color)
-        embed.set_footer(text=f"下注：{game.bet:,.0f} {currency}")
+        embed = discord.Embed(title=t("minigames.scratch.title"), description=description, color=color)
+        embed.set_footer(text=t("minigames.footer.bet",
+                                bet=i18n.fmt_num(game.bet, decimals=0), currency=currency))
         return embed
 
     async def settle_scratchcard(
@@ -2074,11 +2118,11 @@ class MiniGamesCog(commands.GroupCog, group_name="games", description=app_comman
         view: ScratchcardView,
     ):
         if interaction.user.id != game.user_id:
-            return await interaction.response.send_message("這不是你的刮刮樂。", ephemeral=True)
+            return await interaction.response.send_message(t("minigames.scratch.err.not_yours"), ephemeral=True)
         async with game.lock:
             key = (game.channel_id, game.user_id)
             if game.settled or self.scratchcard_games.get(key) is not game:
-                return await interaction.response.send_message("這張刮刮樂已經結算。", ephemeral=True)
+                return await interaction.response.send_message(t("minigames.scratch.err.settled"), ephemeral=True)
             game.settled = True
             game.active_view = None
             self.scratchcard_games.pop(key, None)
@@ -2095,7 +2139,7 @@ class MiniGamesCog(commands.GroupCog, group_name="games", description=app_comman
             game.active_view = None
             self.scratchcard_games.pop(key, None)
             embed = self._settle_scratchcard_finances(game)
-            embed.description += "\n\n⏰ 已逾時，自動刮開並結算。"
+            embed.description += "\n\n" + t("minigames.scratch.auto_revealed")
             if game.message is not None:
                 try:
                     await game.message.edit(embed=embed, view=None)
@@ -2118,7 +2162,7 @@ class MiniGamesCog(commands.GroupCog, group_name="games", description=app_comman
     ):
         if (bet is None) != (number is None):
             return await interaction.response.send_message(
-                "❌ 購票時必須同時填寫 `bet` 與 `number`；兩者都留空則查詢狀態。",
+                t("minigames.lottery.err.need_both"),
                 ephemeral=True,
             )
         guild_id = resolve_game_guild_id(interaction, use_global)
@@ -2158,45 +2202,45 @@ class MiniGamesCog(commands.GroupCog, group_name="games", description=app_comman
                 amount=float(bet),
                 balance_before=float(purchase["balance"]) + float(bet),
                 balance_after=float(purchase["balance"]),
-                detail=f"購買號碼 {number_key}，投注 {int(bet):,.0f} {currency}",
+                detail=f"購買號碼 {number_key}，投注 {int(bet):,.0f} {currency}",  # i18n: skip (stored tx data)
                 color=0xE67E22,
             )
             draw_text = (
-                f"<t:{int(draw_at.timestamp())}:F>（<t:{int(draw_at.timestamp())}:R>）"
-                if draw_at else "尚未排定"
+                t("minigames.lottery.draw_time", at=i18n.fmt_ts(draw_at, "F"), rel=i18n.fmt_ts(draw_at, "R"))
+                if draw_at else t("minigames.lottery.not_scheduled")
             )
             embed = discord.Embed(
-                title="🎟️ 彩票購買成功",
-                description=(
-                    f"號碼：# **{number_key}**\n"
-                    f"本次投注：**{int(bet):,.0f}** {currency}\n"
-                    f"你在此號碼的累積投注：**{my_stake:,.2f}** {currency}\n"
-                    f"目前獎池：**{float(lottery['jackpot']):,.2f}** {currency}\n"
-                    f"開獎時間：{draw_text}"
-                ),
+                title=t("minigames.lottery.bought_title"),
+                description=t("minigames.lottery.bought_desc",
+                              number=number_key,
+                              bet=i18n.fmt_num(int(bet), decimals=0), currency=currency,
+                              my_stake=i18n.fmt_num(my_stake, decimals=2),
+                              jackpot=i18n.fmt_num(float(lottery["jackpot"]), decimals=2),
+                              draw_at=draw_text),
                 color=discord.Color.gold(),
             )
-            embed.set_footer(text="中獎者依命中號碼的投注額比例分配 95% 獎池。")
+            embed.set_footer(text=t("minigames.lottery.bought_footer"))
             return await interaction.response.send_message(embed=embed)
 
         async with self._lottery_lock(guild_id):
             state = self._load_lottery_state(guild_id)
             draw_at = parse_lottery_draw_at(state.get("draw_at"))
             if state.get("pending_settlement") or (draw_at is not None and draw_at <= datetime.now(timezone.utc)):
-                return await interaction.response.send_message("本輪正在等待開獎或結算，請稍後再購票。", ephemeral=True)
+                return await interaction.response.send_message(t("minigames.lottery.err.round_closing"), ephemeral=True)
 
             currency = get_currency_name(guild_id)
             if not self._charge_bet(
                 interaction,
                 guild_id,
                 float(bet),
-                "彩票購票",
+                "彩票購票",  # i18n: skip (stored tx data)
                 "lottery_bet",
-                f"購買號碼 {int(number):02d}，投注 {int(bet):,.0f} {currency}",
+                f"購買號碼 {int(number):02d}，投注 {int(bet):,.0f} {currency}",  # i18n: skip (stored tx data)
             ):
                 balance = get_balance(guild_id, interaction.user.id)
                 return await interaction.response.send_message(
-                    f"❌ 餘額不足！\n你的餘額：**{balance:,.0f}** {currency}\n所需賭注：**{int(bet):,.0f}** {currency}",
+                    t("minigames.err.insufficient", balance=i18n.fmt_num(balance, decimals=0),
+                      currency=currency, needed=i18n.fmt_num(int(bet), decimals=0)),
                     ephemeral=True,
                 )
 
@@ -2218,26 +2262,26 @@ class MiniGamesCog(commands.GroupCog, group_name="games", description=app_comman
                     guild_id,
                     interaction.user.id,
                     float(bet),
-                    "彩票退款",
+                    "彩票退款",  # i18n: skip (stored tx data)
                     "lottery_refund",
-                    "彩票狀態寫入失敗，退還本次購票金額",
+                    "彩票狀態寫入失敗，退還本次購票金額",  # i18n: skip (stored tx data)
                     interaction=interaction,
                     color=0x95A5A6,
                 )
-                return await interaction.response.send_message("彩票狀態儲存失敗，已退還本次購票金額。", ephemeral=True)
+                return await interaction.response.send_message(t("minigames.lottery.err.save_failed"), ephemeral=True)
 
             embed = discord.Embed(
-                title="🎟️ 彩票購買成功",
-                description=(
-                    f"號碼：# **{number_key}**\n"
-                    f"本次投注：**{int(bet):,.0f}** {currency}\n"
-                    f"你在此號碼的累積投注：**{entries[user_key]:,.2f}** {currency}\n"
-                    f"目前獎池：**{state['jackpot']:,.2f}** {currency}\n"
-                    f"開獎時間：<t:{int(draw_at.timestamp())}:F>（<t:{int(draw_at.timestamp())}:R>）"
-                ),
+                title=t("minigames.lottery.bought_title"),
+                description=t("minigames.lottery.bought_desc",
+                              number=number_key,
+                              bet=i18n.fmt_num(int(bet), decimals=0), currency=currency,
+                              my_stake=i18n.fmt_num(entries[user_key], decimals=2),
+                              jackpot=i18n.fmt_num(state["jackpot"], decimals=2),
+                              draw_at=t("minigames.lottery.draw_time",
+                                        at=i18n.fmt_ts(draw_at, "F"), rel=i18n.fmt_ts(draw_at, "R"))),
                 color=discord.Color.gold(),
             )
-            embed.set_footer(text="中獎者依命中號碼的投注額比例分配 95% 獎池。")
+            embed.set_footer(text=t("minigames.lottery.bought_footer"))
             await interaction.response.send_message(embed=embed)
 
     @app_commands.command(name=app_commands.locale_str("big2", i18n_key="cmd.minigames.minigamescog.big2.name"), description=app_commands.locale_str("Start a table of Big Two", i18n_key="cmd.minigames.minigamescog.big2.desc"))
@@ -2245,7 +2289,7 @@ class MiniGamesCog(commands.GroupCog, group_name="games", description=app_comman
     async def startbig2(self, interaction: discord.Interaction, use_global: bool = False):
         cid = interaction.channel_id
         if cid in self.games:
-            return await interaction.response.send_message("此頻道已經有一桌了。", ephemeral=True)
+            return await interaction.response.send_message(t("minigames.bigtwo.err.table_exists"), ephemeral=True)
 
         guild_id = resolve_game_guild_id(interaction, use_global)
         g = Game(channel_id=cid, owner_id=interaction.user.id, guild_id=guild_id)
@@ -2273,7 +2317,7 @@ class MiniGamesCog(commands.GroupCog, group_name="games", description=app_comman
         bet_val = bet
         key = (interaction.channel_id, interaction.user.id)
         if key in self.tower_games:
-            return await interaction.response.send_message("你已經有一局 Tower 遊戲正在進行。", ephemeral=True)
+            return await interaction.response.send_message(t("minigames.tower.err.in_progress"), ephemeral=True)
 
         guild_id = resolve_game_guild_id(interaction, use_global)
         currency = get_currency_name(guild_id)
@@ -2282,24 +2326,23 @@ class MiniGamesCog(commands.GroupCog, group_name="games", description=app_comman
         # 檢查餘額
         if balance < bet_val:
             return await interaction.response.send_message(
-                f"❌ 餘額不足！\n你的餘額：**{balance:,.0f}** {currency}\n所需賭注：**{bet_val:,.0f}** {currency}",
+                t("minigames.err.insufficient", balance=i18n.fmt_num(balance, decimals=0),
+                  currency=currency, needed=i18n.fmt_num(bet_val, decimals=0)),
                 ephemeral=True,
             )
 
         # 顯示注意事項與確認
         notices = (
-            "• 每層 3 格中隨機 **2 格 🟦 安全**、**1 格 🌵 仙人掌**\n"
-            "• 踩到仙人掌 = **遊戲結束，失去全部賭注**\n"
-            "• 選到安全格可選擇 **繼續攀登**（倍率更高）或 **提現**（鎖定當前倍率獎金）\n"
-            "• 倍率：L1 x1.4 → L2 x1.8 → L3 x2.2 → L4 x2.6 → L5 x3.0\n"
-            "• 抵達頂層將自動提現"
+            t("minigames.tower.notices")
         )
         embed = discord.Embed(
-            title="🗼 爬塔",
-            description=f"賭注：**{bet_val:,.0f}** {currency}\n你的餘額：**{balance:,.0f}** {currency}\n\n**⚠️ 注意事項**\n{notices}",
+            title=t("minigames.tower.title"),
+            description=t("minigames.tower.confirm_desc",
+                          bet=i18n.fmt_num(bet_val, decimals=0), currency=currency,
+                          balance=i18n.fmt_num(balance, decimals=0), notices=notices),
             color=discord.Color.blue(),
         )
-        embed.set_footer(text="確認後將扣除賭注並開始遊戲")
+        embed.set_footer(text=t("minigames.tower.confirm_footer"))
         view = TowerConfirmView(self, guild_id, float(bet_val))
         await interaction.response.send_message(embed=embed, view=view)
         sent = await interaction.original_response()
@@ -2312,7 +2355,7 @@ class MiniGamesCog(commands.GroupCog, group_name="games", description=app_comman
         currency = get_currency_name(guild_id)
         key = (interaction.channel_id, interaction.user.id)
         if key in self.tower_games:
-            await interaction.response.send_message("你已經有一局 Tower 遊戲。", ephemeral=True)
+            await interaction.response.send_message(t("minigames.tower.err.already_playing"), ephemeral=True)
             return False
 
         success, balance_before, balance_after = mutate_balance_atomic(
@@ -2321,14 +2364,16 @@ class MiniGamesCog(commands.GroupCog, group_name="games", description=app_comman
             -bet,
         )
         if not success:
-            await interaction.response.send_message(f"餘額不足 {bet:,.0f} {currency}。", ephemeral=True)
+            await interaction.response.send_message(
+                t("minigames.tower.err.insufficient", bet=i18n.fmt_num(bet, decimals=0), currency=currency),
+                ephemeral=True)
             return False
         self._log_economy_history(
             guild_id,
             interaction.user.id,
-            "Tower 下注",
+            "Tower 下注",  # i18n: skip (stored tx data)
             -bet,
-            f"下注 {bet:,.0f} {currency}",
+            f"下注 {bet:,.0f} {currency}",  # i18n: skip (stored tx data)
         )
         queue_economy_audit_log(
             "tower_bet",
@@ -2373,51 +2418,54 @@ class MiniGamesCog(commands.GroupCog, group_name="games", description=app_comman
         mult = TOWER_MULTIPLIERS[safe] if phase == "cashout" else TOWER_MULTIPLIERS[level]
 
         if phase == "pick":
-            desc = f"**第 {level}/{TOWER_LEVELS} 層**\n選擇一個格子！\n可隨時點「💰 結束」提現（倍率 x{TOWER_MULTIPLIERS[safe]:.2f}）"
+            desc = t("minigames.tower.pick", level=level, total=TOWER_LEVELS,
+                     multiplier=f"{TOWER_MULTIPLIERS[safe]:.2f}")
         elif phase == "result_safe":
-            desc = f"**第 {level}/{TOWER_LEVELS} 層** ✅ 安全！\n點下一層繼續，或點「💰 結束」提現。"
+            desc = t("minigames.tower.safe", level=level, total=TOWER_LEVELS)
         elif phase == "result_cactus":
-            desc = f"🌵 踩到仙人掌！遊戲結束，損失 **{game.bet:,.0f}** {currency}"
+            desc = t("minigames.tower.cactus", bet=i18n.fmt_num(game.bet, decimals=0), currency=currency)
         elif phase == "cashout":
             mult_actual = TOWER_MULTIPLIERS[safe]
             payout = round(game.bet * mult_actual, 2)
             profit = round(payout - game.bet, 2)
             desc = (
-                f"**Cashed Out!**\n"
-                f"達到的關卡：**{safe}/{TOWER_LEVELS}**\n"
-                f"下注：**{game.bet:,.0f}** {currency}｜倍率：**x{mult_actual:.2f}**\n"
-                f"派彩：**{payout:,.0f}** {currency}｜利潤：**+{profit:,.0f}**\n"
-                f"新餘額：**{get_balance(game.guild_id, game.user_id):,.0f}** {currency}"
+                t("minigames.tower.cashout_desc", level=safe, total=TOWER_LEVELS,
+                  bet=i18n.fmt_num(game.bet, decimals=0), currency=currency,
+                  multiplier=f"{mult_actual:.2f}",
+                  payout=i18n.fmt_num(payout, decimals=0),
+                  profit=i18n.fmt_num(profit, decimals=0),
+                  balance=i18n.fmt_num(get_balance(game.guild_id, game.user_id), decimals=0))
             )
         else:
             desc = ""
 
         embed = discord.Embed(
-            title="🗼 爬塔",
+            title=t("minigames.tower.title"),
             description=desc,
             color=discord.Color.green() if phase in ("result_safe", "cashout") else discord.Color.red() if phase == "result_cactus" else discord.Color.blue(),
         )
-        embed.set_footer(text=f"下注：{game.bet:,.0f} {currency}")
+        embed.set_footer(text=t("minigames.footer.bet",
+                                bet=i18n.fmt_num(game.bet, decimals=0), currency=currency))
         return embed
 
     async def tower_pick_tile(self, interaction: discord.Interaction, game: TowerGame, level: int, tile_idx: int):
         if interaction.user.id != game.user_id:
-            return await interaction.response.send_message("這不是你的遊戲。", ephemeral=True)
+            return await interaction.response.send_message(t("minigames.err.not_your_game"), ephemeral=True)
         key = (game.channel_id, game.user_id)
         if key not in self.tower_games or self.tower_games[key] is not game:
-            return await interaction.response.send_message("遊戲已結束。", ephemeral=True)
+            return await interaction.response.send_message(t("minigames.err.game_over"), ephemeral=True)
 
         if level < 1 or level > TOWER_LEVELS or tile_idx < 0 or tile_idx >= TOWER_TILES_PER_LEVEL:
-            return await interaction.response.send_message("無效的選擇。", ephemeral=True)
+            return await interaction.response.send_message(t("minigames.err.invalid_choice"), ephemeral=True)
 
         if game.awaiting_continue:
             if level != game.current_level + 1:
-                return await interaction.response.send_message("請點擊下一層或結束。", ephemeral=True)
+                return await interaction.response.send_message(t("minigames.tower.err.pick_next"), ephemeral=True)
             game.awaiting_continue = False
             game.current_level = level
         else:
             if level != game.current_level:
-                return await interaction.response.send_message("請選擇當前層的格子。", ephemeral=True)
+                return await interaction.response.send_message(t("minigames.tower.err.pick_current_level"), ephemeral=True)
 
         is_cactus = game.grid[level - 1][tile_idx] == 1
         game.picked_per_level[level] = (tile_idx, is_cactus)
@@ -2453,9 +2501,9 @@ class MiniGamesCog(commands.GroupCog, group_name="games", description=app_comman
             self._log_economy_history(
                 game.guild_id,
                 game.user_id,
-                "Tower 提現",
+                "Tower 提現",  # i18n: skip (stored tx data)
                 payout,
-                f"通關自動提現，倍率 x{mult:.2f}，下注 {game.bet:,.0f} {currency}",
+                f"通關自動提現，倍率 x{mult:.2f}，下注 {game.bet:,.0f} {currency}",  # i18n: skip (stored tx data)
             )
             queue_economy_audit_log(
                 "tower_cashout",
@@ -2474,12 +2522,12 @@ class MiniGamesCog(commands.GroupCog, group_name="games", description=app_comman
             self.tower_games.pop(key, None)
             embed = self._tower_embed(game, phase="cashout")
             embed.description = (
-                f"**抵達頂層！** 自動提現！\n\n"
-                f"達到的關卡：**{TOWER_LEVELS}/{TOWER_LEVELS}**\n"
-                f"下注：**{game.bet:,.0f}** {get_currency_name(game.guild_id)}\n"
-                f"倍率：**x{mult:.2f}**\n"
-                f"派彩：**{payout:,.0f}** {get_currency_name(game.guild_id)}\n"
-                f"新餘額：**{get_balance(game.guild_id, game.user_id):,.0f}** {get_currency_name(game.guild_id)}"
+                t("minigames.tower.top_desc", total=TOWER_LEVELS,
+                  bet=i18n.fmt_num(game.bet, decimals=0),
+                  currency=get_currency_name(game.guild_id),
+                  multiplier=f"{mult:.2f}",
+                  payout=i18n.fmt_num(payout, decimals=0),
+                  balance=i18n.fmt_num(get_balance(game.guild_id, game.user_id), decimals=0))
             )
             view = TowerGameView(self, game)
             for child in view.children:
@@ -2512,10 +2560,10 @@ class MiniGamesCog(commands.GroupCog, group_name="games", description=app_comman
 
     async def tower_cashout(self, interaction: discord.Interaction, game: TowerGame):
         if interaction.user.id != game.user_id:
-            return await interaction.response.send_message("這不是你的遊戲。", ephemeral=True)
+            return await interaction.response.send_message(t("minigames.err.not_your_game"), ephemeral=True)
         key = (game.channel_id, game.user_id)
         if key not in self.tower_games or self.tower_games[key] is not game:
-            return await interaction.response.send_message("遊戲已結束。", ephemeral=True)
+            return await interaction.response.send_message(t("minigames.err.game_over"), ephemeral=True)
 
         game.game_over_reveal_all = True
         safe = game.safe_level()
@@ -2526,9 +2574,9 @@ class MiniGamesCog(commands.GroupCog, group_name="games", description=app_comman
         self._log_economy_history(
             game.guild_id,
             game.user_id,
-            "Tower 提現",
+            "Tower 提現",  # i18n: skip (stored tx data)
             payout,
-            f"手動提現，倍率 x{mult:.2f}，下注 {game.bet:,.0f} {currency}",
+            f"手動提現，倍率 x{mult:.2f}，下注 {game.bet:,.0f} {currency}",  # i18n: skip (stored tx data)
         )
         queue_economy_audit_log(
             "tower_cashout",
@@ -2579,15 +2627,16 @@ class MiniGamesCog(commands.GroupCog, group_name="games", description=app_comman
         currency = get_currency_name(guild_id)
         key = (interaction.channel_id, interaction.user.id)
         if key in self.slots_spinning:
-            return await interaction.response.send_message("拉霸機還在轉，等它停下來！", ephemeral=True)
+            return await interaction.response.send_message(t("minigames.slots.err.spinning"), ephemeral=True)
 
         if not self._charge_bet(
             interaction, guild_id, bet,
-            "拉霸下注", "slots_bet",
-            f"拉霸下注 {bet:,.0f} {currency}",
+            "拉霸下注", "slots_bet",  # i18n: skip (stored tx data)
+            f"拉霸下注 {bet:,.0f} {currency}",  # i18n: skip (stored tx data)
         ):
             balance = get_balance(guild_id, interaction.user.id)
-            msg = f"❌ 餘額不足！\n你的餘額：**{balance:,.0f}** {currency}\n所需賭注：**{bet:,.0f}** {currency}"
+            msg = t("minigames.err.insufficient", balance=i18n.fmt_num(balance, decimals=0),
+                    currency=currency, needed=i18n.fmt_num(bet, decimals=0))
             return await interaction.response.send_message(msg, ephemeral=True)
 
         self.slots_spinning.add(key)
@@ -2600,8 +2649,8 @@ class MiniGamesCog(commands.GroupCog, group_name="games", description=app_comman
             if payout > 0:
                 self._pay_out(
                     guild_id, interaction.user.id, payout,
-                    "拉霸派彩", "slots_payout",
-                    f"{prize_name}，倍率 x{mult:.2f}，下注 {bet:,.0f} {currency}",
+                    "拉霸派彩", "slots_payout",  # i18n: skip (stored tx data)
+                    f"{prize_name}，倍率 x{mult:.2f}，下注 {bet:,.0f} {currency}",  # i18n: skip (stored tx data)
                     interaction=interaction,
                 )
 
@@ -2618,11 +2667,12 @@ class MiniGamesCog(commands.GroupCog, group_name="games", description=app_comman
 
             def spin_embed(revealed: int) -> discord.Embed:
                 e = discord.Embed(
-                    title="🎰 拉霸機",
-                    description=f"# {reels_line(revealed)}\n\n🌀 轉動中…",
+                    title=t("minigames.slots.title"),
+                    description="# " + reels_line(revealed) + "\n\n" + t("minigames.slots.spinning"),
                     color=discord.Color.blurple(),
                 )
-                e.set_footer(text=f"下注：{bet:,.0f} {currency}")
+                e.set_footer(text=t("minigames.footer.bet",
+                                    bet=i18n.fmt_num(bet, decimals=0), currency=currency))
                 return e
 
             # 動畫：先全轉，再逐輪停下
@@ -2643,19 +2693,22 @@ class MiniGamesCog(commands.GroupCog, group_name="games", description=app_comman
             balance = get_balance(guild_id, interaction.user.id)
             final_line = " | ".join(reels)
             if payout > 0:
-                desc = (
-                    f"# {final_line}\n\n"
-                    f"🎉 **{prize_name}** 倍率 **x{mult:.2f}**\n"
-                    f"派彩：**{payout:,.0f}** {currency}（{'+' if profit >= 0 else ''}{profit:,.0f}）"
-                )
+                desc = "# " + final_line + "\n\n" + t(
+                    "minigames.slots.won", prize=prize_name, multiplier=f"{mult:.2f}",
+                    payout=i18n.fmt_num(payout, decimals=0), currency=currency,
+                    profit=('+' if profit >= 0 else '') + i18n.fmt_num(profit, decimals=0))
                 color = discord.Color.green()
             else:
-                desc = f"# {final_line}\n\n💥 **{prize_name}**，損失 **{bet:,.0f}** {currency}"
+                desc = "# " + final_line + "\n\n" + t(
+                    "minigames.slots.lost", prize=prize_name,
+                    bet=i18n.fmt_num(bet, decimals=0), currency=currency)
                 color = discord.Color.red()
-            desc += f"\n新餘額：**{balance:,.0f}** {currency}"
+            desc += "\n" + t("minigames.line.new_balance",
+                             balance=i18n.fmt_num(balance, decimals=0), currency=currency)
 
-            embed = discord.Embed(title="🎰 拉霸機", description=desc, color=color)
-            embed.set_footer(text=f"下注：{bet:,.0f} {currency}")
+            embed = discord.Embed(title=t("minigames.slots.title"), description=desc, color=color)
+            embed.set_footer(text=t("minigames.footer.bet",
+                                    bet=i18n.fmt_num(bet, decimals=0), currency=currency))
             view = SlotsAgainView(self, interaction.user.id, guild_id, bet)
             try:
                 await msg.edit(embed=embed, view=view)
@@ -2677,18 +2730,19 @@ class MiniGamesCog(commands.GroupCog, group_name="games", description=app_comman
             return await interaction.response.send_message(err, ephemeral=True)
         key = (interaction.channel_id, interaction.user.id)
         if key in self.highlow_games:
-            return await interaction.response.send_message("你已經有一局比大小正在進行。", ephemeral=True)
+            return await interaction.response.send_message(t("minigames.highlow.err.in_progress"), ephemeral=True)
 
         guild_id = resolve_game_guild_id(interaction, use_global)
         currency = get_currency_name(guild_id)
         if not self._charge_bet(
             interaction, guild_id, float(bet),
-            "比大小下注", "highlow_bet",
-            f"比大小下注 {bet:,.0f} {currency}",
+            "比大小下注", "highlow_bet",  # i18n: skip (stored tx data)
+            f"比大小下注 {bet:,.0f} {currency}",  # i18n: skip (stored tx data)
         ):
             balance = get_balance(guild_id, interaction.user.id)
             return await interaction.response.send_message(
-                f"❌ 餘額不足！\n你的餘額：**{balance:,.0f}** {currency}\n所需賭注：**{bet:,.0f}** {currency}",
+                t("minigames.err.insufficient", balance=i18n.fmt_num(balance, decimals=0),
+                  currency=currency, needed=i18n.fmt_num(bet, decimals=0)),
                 ephemeral=True,
             )
 
@@ -2719,34 +2773,37 @@ class MiniGamesCog(commands.GroupCog, group_name="games", description=app_comman
         lines = []
         if result_text:
             lines.append(result_text)
-        lines.append(f"目前的牌：# {card}")
-        lines.append(f"連勝：**{game.streak}**｜目前彩池：**{game.pot:,.1f}** {currency}")
+        lines.append(t("minigames.highlow.current_card", card=card))
+        lines.append(t("minigames.highlow.streak_pot", streak=game.streak,
+                       pot=i18n.fmt_num(game.pot, decimals=1), currency=currency))
         opts = []
         if p_high > 0:
-            opts.append(f"🔼 較大 → x{mult_high:.2f}")
+            opts.append(t("minigames.highlow.opt_high", multiplier=f"{mult_high:.2f}"))
         if p_low > 0:
-            opts.append(f"🔽 較小 → x{mult_low:.2f}")
+            opts.append(t("minigames.highlow.opt_low", multiplier=f"{mult_low:.2f}"))
         lines.append("｜".join(opts))
         embed = discord.Embed(
-            title="🃏 比大小",
+            title=t("minigames.highlow.title"),
             description="\n".join(lines),
             color=discord.Color.blue(),
         )
-        embed.set_footer(text=f"下注：{game.bet:,.0f} {currency}｜下一張必為不同點數（A 最小、K 最大）｜彩池上限 {HL_MAX_MULT:.0f}x 自動提現")
+        embed.set_footer(text=t("minigames.highlow.footer",
+                                bet=i18n.fmt_num(game.bet, decimals=0), currency=currency,
+                                cap=f"{HL_MAX_MULT:.0f}"))
         return embed
 
     async def highlow_guess(self, interaction: discord.Interaction, game: HighLowGame, guess: str, view: HighLowView):
         if interaction.user.id != game.user_id:
-            return await interaction.response.send_message("這不是你的遊戲。", ephemeral=True)
+            return await interaction.response.send_message(t("minigames.err.not_your_game"), ephemeral=True)
         key = (game.channel_id, game.user_id)
         if self.highlow_games.get(key) is not game:
-            return await interaction.response.send_message("遊戲已結束。", ephemeral=True)
+            return await interaction.response.send_message(t("minigames.err.game_over"), ephemeral=True)
 
         currency = get_currency_name(game.guild_id)
         p_high, p_low = hl_probs(game.current_rank)
         p_chosen = p_high if guess == "high" else p_low
         if p_chosen <= 0:
-            return await interaction.response.send_message("無效的選擇。", ephemeral=True)
+            return await interaction.response.send_message(t("minigames.err.invalid_choice"), ephemeral=True)
 
         previous_rank = game.current_rank
         next_rank = hl_draw_next(previous_rank)
@@ -2761,15 +2818,16 @@ class MiniGamesCog(commands.GroupCog, group_name="games", description=app_comman
             self.highlow_games.pop(key, None)
             game.active_view = None
             embed = discord.Embed(
-                title="🃏 比大小",
+                title=t("minigames.highlow.title"),
                 description=(
                     f"{old_card} → # {new_card}\n\n"
-                    f"💥 猜錯了！損失 **{game.pot:,.1f}** {currency}\n"
-                    f"連勝止於 **{game.streak}**"
+                    + t("minigames.highlow.lost", pot=i18n.fmt_num(game.pot, decimals=1),
+                        currency=currency, streak=game.streak)
                 ),
                 color=discord.Color.red(),
             )
-            embed.set_footer(text=f"下注：{game.bet:,.0f} {currency}")
+            embed.set_footer(text=t("minigames.footer.bet",
+                                bet=i18n.fmt_num(game.bet, decimals=0), currency=currency))
             await interaction.response.edit_message(embed=embed, view=None)
             view.stop()
             return
@@ -2781,7 +2839,7 @@ class MiniGamesCog(commands.GroupCog, group_name="games", description=app_comman
             await self._highlow_do_cashout(interaction, game, view, auto=True)
             return
 
-        result = f"✅ {old_card} → {new_card} 猜對了！"
+        result = t("minigames.highlow.correct", old=old_card, new=new_card)
         new_view = HighLowView(self, game)
         old_view = game.active_view
         await interaction.response.edit_message(embed=self._highlow_embed(game, result), view=new_view)
@@ -2794,12 +2852,12 @@ class MiniGamesCog(commands.GroupCog, group_name="games", description=app_comman
 
     async def highlow_cashout(self, interaction: discord.Interaction, game: HighLowGame, view: HighLowView):
         if interaction.user.id != game.user_id:
-            return await interaction.response.send_message("這不是你的遊戲。", ephemeral=True)
+            return await interaction.response.send_message(t("minigames.err.not_your_game"), ephemeral=True)
         key = (game.channel_id, game.user_id)
         if self.highlow_games.get(key) is not game:
-            return await interaction.response.send_message("遊戲已結束。", ephemeral=True)
+            return await interaction.response.send_message(t("minigames.err.game_over"), ephemeral=True)
         if game.streak < 1:
-            return await interaction.response.send_message("至少要猜對一次才能提現。", ephemeral=True)
+            return await interaction.response.send_message(t("minigames.highlow.err.cashout_streak"), ephemeral=True)
         await self._highlow_do_cashout(interaction, game, view, auto=False)
 
     async def _highlow_do_cashout(self, interaction: discord.Interaction, game: HighLowGame, view: HighLowView, auto: bool):
@@ -2810,22 +2868,23 @@ class MiniGamesCog(commands.GroupCog, group_name="games", description=app_comman
         payout = round(game.pot, 2)
         self._pay_out(
             game.guild_id, game.user_id, payout,
-            "比大小提現", "highlow_cashout",
-            f"{'達彩池上限自動' if auto else '手動'}提現，連勝 {game.streak}，下注 {game.bet:,.0f} {currency}",
+            "比大小提現", "highlow_cashout",  # i18n: skip (stored tx data)
+            f"{'達彩池上限自動' if auto else '手動'}提現，連勝 {game.streak}，下注 {game.bet:,.0f} {currency}",  # i18n: skip (stored tx data)
             interaction=interaction,
         )
         profit = payout - game.bet
         embed = discord.Embed(
-            title="🃏 比大小",
+            title=t("minigames.highlow.title"),
             description=(
-                f"💰 **{'達上限自動提現！' if auto else 'Cashed Out!'}**\n"
-                f"連勝：**{game.streak}**\n"
-                f"派彩：**{payout:,.1f}** {currency}｜利潤：**{'+' if profit >= 0 else ''}{profit:,.1f}**\n"
-                f"新餘額：**{get_balance(game.guild_id, game.user_id):,.0f}** {currency}"
+                t("minigames.highlow.cashout_auto" if auto else "minigames.highlow.cashout",
+                  streak=game.streak, payout=i18n.fmt_num(payout, decimals=1), currency=currency,
+                  profit=('+' if profit >= 0 else '') + i18n.fmt_num(profit, decimals=1),
+                  balance=i18n.fmt_num(get_balance(game.guild_id, game.user_id), decimals=0))
             ),
             color=discord.Color.green(),
         )
-        embed.set_footer(text=f"下注：{game.bet:,.0f} {currency}")
+        embed.set_footer(text=t("minigames.footer.bet",
+                                bet=i18n.fmt_num(game.bet, decimals=0), currency=currency))
         await interaction.response.edit_message(embed=embed, view=None)
         view.stop()
 
@@ -2838,16 +2897,18 @@ class MiniGamesCog(commands.GroupCog, group_name="games", description=app_comman
         currency = get_currency_name(game.guild_id)
         payout = round(game.pot, 2)
         if game.streak < 1:
-            label, detail = "比大小退還", f"超時退還賭注 {game.bet:,.0f} {currency}"
+            label, detail = "比大小退還", f"超時退還賭注 {game.bet:,.0f} {currency}"  # i18n: skip (stored tx data)
             event = "highlow_refund"
         else:
-            label, detail = "比大小提現", f"超時自動提現，連勝 {game.streak}，下注 {game.bet:,.0f} {currency}"
+            label, detail = "比大小提現", f"超時自動提現，連勝 {game.streak}，下注 {game.bet:,.0f} {currency}"  # i18n: skip (stored tx data)
             event = "highlow_cashout"
         self._pay_out(game.guild_id, game.user_id, payout, label, event, detail, color=0x95A5A6)
         if game.message is not None:
             embed = discord.Embed(
-                title="🃏 比大小",
-                description=f"⏰ 遊戲逾時，自動{'退還賭注' if game.streak < 1 else '提現'} **{payout:,.1f}** {currency}。",
+                title=t("minigames.highlow.title"),
+                description=t("minigames.highlow.timeout_refund" if game.streak < 1
+                              else "minigames.highlow.timeout_cashout",
+                              payout=i18n.fmt_num(payout, decimals=1), currency=currency),
                 color=discord.Color.light_grey(),
             )
             try:
@@ -2867,18 +2928,19 @@ class MiniGamesCog(commands.GroupCog, group_name="games", description=app_comman
             return await interaction.response.send_message(err, ephemeral=True)
         key = (interaction.channel_id, interaction.user.id)
         if key in self.blackjack_games:
-            return await interaction.response.send_message("你已經有一局 21 點正在進行。", ephemeral=True)
+            return await interaction.response.send_message(t("minigames.blackjack.err.in_progress"), ephemeral=True)
 
         guild_id = resolve_game_guild_id(interaction, use_global)
         currency = get_currency_name(guild_id)
         if not self._charge_bet(
             interaction, guild_id, float(bet),
-            "21點下注", "blackjack_bet",
-            f"21點下注 {bet:,.0f} {currency}",
+            "21點下注", "blackjack_bet",  # i18n: skip (stored tx data)
+            f"21點下注 {bet:,.0f} {currency}",  # i18n: skip (stored tx data)
         ):
             balance = get_balance(guild_id, interaction.user.id)
             return await interaction.response.send_message(
-                f"❌ 餘額不足！\n你的餘額：**{balance:,.0f}** {currency}\n所需賭注：**{bet:,.0f}** {currency}",
+                t("minigames.err.insufficient", balance=i18n.fmt_num(balance, decimals=0),
+                  currency=currency, needed=i18n.fmt_num(bet, decimals=0)),
                 ephemeral=True,
             )
 
@@ -2896,7 +2958,10 @@ class MiniGamesCog(commands.GroupCog, group_name="games", description=app_comman
 
         # 任一方 Blackjack：立即結算
         if bj_is_blackjack(game.player_hand) or bj_is_blackjack(game.dealer_hand):
-            await interaction.response.send_message(embed=discord.Embed(title="🂡 21點", description="發牌中…", color=discord.Color.blue()))
+            await interaction.response.send_message(embed=discord.Embed(
+                title=t("minigames.blackjack.title"),
+                description=t("minigames.blackjack.dealing"),
+                color=discord.Color.blue()))
             sent = await interaction.original_response()
             game.message = sent
             await self._bj_settle(interaction, game, view=None, immediate=True)
@@ -2912,34 +2977,39 @@ class MiniGamesCog(commands.GroupCog, group_name="games", description=app_comman
     async def _bj_embed(self, game: BlackjackGame, reveal: bool, result_text: str = "", color: Optional[discord.Color] = None) -> discord.Embed:
         currency = get_currency_name(game.guild_id)
         p_total, p_soft = bj_hand_value(game.player_hand)
-        p_label = f"{'軟 ' if p_soft else ''}{p_total}"
+        p_label = (t("minigames.blackjack.soft_total", total=p_total)
+                   if p_soft else str(p_total))
         if reveal:
             d_total, d_soft = bj_hand_value(game.dealer_hand)
-            dealer_line = f"{bj_hand_str(game.dealer_hand)}（{'軟 ' if d_soft else ''}{d_total}）"
+            dealer_line = "{} ({})".format(
+                bj_hand_str(game.dealer_hand),
+                t("minigames.blackjack.soft_total", total=d_total) if d_soft else d_total)
         else:
             back = await game_emoji("card_back", "🂠")
             up = game.dealer_hand[0]
             dealer_line = f"`{up[0]}{up[1]}` {back}"
         desc = (
-            f"**莊家**：{dealer_line}\n"
-            f"**你**：{bj_hand_str(game.player_hand)}（{p_label}）"
+            t("minigames.blackjack.hands", dealer=dealer_line,
+              player=bj_hand_str(game.player_hand), player_total=p_label)
         )
         if result_text:
             desc += f"\n\n{result_text}"
         embed = discord.Embed(
-            title="🂡 21點",
+            title=t("minigames.blackjack.title"),
             description=desc,
             color=color or discord.Color.blue(),
         )
-        embed.set_footer(text=f"下注：{game.bet:,.0f} {currency}" + ("（已加倍）" if game.doubled else ""))
+        embed.set_footer(text=t("minigames.blackjack.footer_doubled" if game.doubled
+                                else "minigames.footer.bet",
+                                bet=i18n.fmt_num(game.bet, decimals=0), currency=currency))
         return embed
 
     async def bj_hit(self, interaction: discord.Interaction, game: BlackjackGame, view: BlackjackView):
         if interaction.user.id != game.user_id:
-            return await interaction.response.send_message("這不是你的遊戲。", ephemeral=True)
+            return await interaction.response.send_message(t("minigames.err.not_your_game"), ephemeral=True)
         key = (game.channel_id, game.user_id)
         if self.blackjack_games.get(key) is not game:
-            return await interaction.response.send_message("遊戲已結束。", ephemeral=True)
+            return await interaction.response.send_message(t("minigames.err.game_over"), ephemeral=True)
 
         game.player_hand.append(game.deck.pop())
         total, _ = bj_hand_value(game.player_hand)
@@ -2960,31 +3030,32 @@ class MiniGamesCog(commands.GroupCog, group_name="games", description=app_comman
 
     async def bj_stand(self, interaction: discord.Interaction, game: BlackjackGame, view: BlackjackView):
         if interaction.user.id != game.user_id:
-            return await interaction.response.send_message("這不是你的遊戲。", ephemeral=True)
+            return await interaction.response.send_message(t("minigames.err.not_your_game"), ephemeral=True)
         key = (game.channel_id, game.user_id)
         if self.blackjack_games.get(key) is not game:
-            return await interaction.response.send_message("遊戲已結束。", ephemeral=True)
+            return await interaction.response.send_message(t("minigames.err.game_over"), ephemeral=True)
         await self._bj_settle(interaction, game, view)
 
     async def bj_double(self, interaction: discord.Interaction, game: BlackjackGame, view: BlackjackView):
         if interaction.user.id != game.user_id:
-            return await interaction.response.send_message("這不是你的遊戲。", ephemeral=True)
+            return await interaction.response.send_message(t("minigames.err.not_your_game"), ephemeral=True)
         key = (game.channel_id, game.user_id)
         if self.blackjack_games.get(key) is not game:
-            return await interaction.response.send_message("遊戲已結束。", ephemeral=True)
+            return await interaction.response.send_message(t("minigames.err.game_over"), ephemeral=True)
         if len(game.player_hand) != 2 or game.doubled:
-            return await interaction.response.send_message("只有首兩張牌時可以加倍。", ephemeral=True)
+            return await interaction.response.send_message(t("minigames.blackjack.err.double_first_two"), ephemeral=True)
 
         currency = get_currency_name(game.guild_id)
         extra = game.bet
         if not self._charge_bet(
             interaction, game.guild_id, extra,
-            "21點加倍", "blackjack_bet",
-            f"21點加倍，追加下注 {extra:,.0f} {currency}",
+            "21點加倍", "blackjack_bet",  # i18n: skip (stored tx data)
+            f"21點加倍，追加下注 {extra:,.0f} {currency}",  # i18n: skip (stored tx data)
         ):
             balance = get_balance(game.guild_id, interaction.user.id)
             return await interaction.response.send_message(
-                f"❌ 餘額不足以加倍！\n你的餘額：**{balance:,.0f}** {currency}\n加倍需要：**{extra:,.0f}** {currency}",
+                t("minigames.err.insufficient_double", balance=i18n.fmt_num(balance, decimals=0),
+                  currency=currency, needed=i18n.fmt_num(extra, decimals=0)),
                 ephemeral=True,
             )
         game.bet += extra
@@ -3011,14 +3082,16 @@ class MiniGamesCog(commands.GroupCog, group_name="games", description=app_comman
         settlement = bj_settle(game.player_hand, game.dealer_hand, game.deck, game.bet)
         payout = float(settlement["payout"])
         outcome = settlement["outcome"]
+        bet_text = i18n.fmt_num(game.bet, decimals=0)
+        payout_text = i18n.fmt_num(payout, decimals=0)
         result_map = {
-            "player_bust": (f"💥 **爆牌！** 損失 **{game.bet:,.0f}** {currency}", discord.Color.red()),
-            "push": ("🤝 **平手！** 退還賭注", discord.Color.light_grey()),
-            "blackjack": (f"🎉 **Blackjack！** 3:2 派彩 **{payout:,.0f}** {currency}", discord.Color.gold()),
-            "dealer_blackjack": (f"💥 **莊家 Blackjack！** 損失 **{game.bet:,.0f}** {currency}", discord.Color.red()),
-            "dealer_bust": (f"🎉 **莊家爆牌！** 獲得 **{payout:,.0f}** {currency}", discord.Color.green()),
-            "win": (f"🎉 **你贏了！** 獲得 **{payout:,.0f}** {currency}", discord.Color.green()),
-            "lose": (f"💥 **你輸了！** 損失 **{game.bet:,.0f}** {currency}", discord.Color.red()),
+            "player_bust": (t("minigames.blackjack.player_bust", bet=bet_text, currency=currency), discord.Color.red()),
+            "push": (t("minigames.blackjack.push"), discord.Color.light_grey()),
+            "blackjack": (t("minigames.blackjack.blackjack", payout=payout_text, currency=currency), discord.Color.gold()),
+            "dealer_blackjack": (t("minigames.blackjack.dealer_blackjack", bet=bet_text, currency=currency), discord.Color.red()),
+            "dealer_bust": (t("minigames.blackjack.dealer_bust", payout=payout_text, currency=currency), discord.Color.green()),
+            "win": (t("minigames.blackjack.win", payout=payout_text, currency=currency), discord.Color.green()),
+            "lose": (t("minigames.blackjack.lose", bet=bet_text, currency=currency), discord.Color.red()),
         }
         result, color = result_map[outcome]
 
@@ -3026,14 +3099,16 @@ class MiniGamesCog(commands.GroupCog, group_name="games", description=app_comman
             is_push = payout == game.bet
             self._pay_out(
                 game.guild_id, game.user_id, payout,
-                "21點退還" if is_push else "21點派彩",
+                "21點退還" if is_push else "21點派彩",  # i18n: skip (stored tx data)
                 "blackjack_push" if is_push else "blackjack_payout",
-                f"{'平手退還' if is_push else '勝利派彩'} {payout:,.0f} {currency}，下注 {game.bet:,.0f} {currency}",
+                f"{'平手退還' if is_push else '勝利派彩'} {payout:,.0f} {currency}，下注 {game.bet:,.0f} {currency}",  # i18n: skip (stored tx data)
                 interaction=interaction,
                 color=0x95A5A6 if is_push else 0x2ECC71,
             )
 
-        result += f"\n新餘額：**{get_balance(game.guild_id, game.user_id):,.0f}** {currency}"
+        result += "\n" + t("minigames.line.new_balance",
+                           balance=i18n.fmt_num(get_balance(game.guild_id, game.user_id), decimals=0),
+                           currency=currency)
         embed = await self._bj_embed(game, reveal=True, result_text=result, color=color)
 
         if interaction is not None and not interaction.response.is_done():
@@ -3056,53 +3131,50 @@ class MiniGamesCog(commands.GroupCog, group_name="games", description=app_comman
     def big2_rules_embed(self) -> discord.Embed:
         """大老二規則玩法說明（給規則按鈕用）"""
         embed = discord.Embed(
-            title="🎴 大老二 規則玩法",
+            title=t("minigames.bigtwo.rules_title"),
             color=discord.Color.blue(),
-            description="2～4 人，每人 13 張牌，先出完者勝。",
+            description=t("minigames.bigtwo.rules_desc"),
         )
         embed.add_field(
-            name="牌型大小",
+            name=t("minigames.bigtwo.rules.hand_ranks_title"),
             value=(
-                "單張、對子、三條、順子、同花、葫蘆、鐵支、同花順。\n"
-                "牌點：3～10、J、Q、K、A、2（2 最大）。\n"
-                "花色：♣ < ♦ < ♥ < ♠（同點數時比花色）。"
+                t("minigames.bigtwo.rules.hand_ranks_body")
             ),
             inline=False,
         )
         embed.add_field(
-            name="出牌",
+            name=t("minigames.bigtwo.rules.play_title"),
             value=(
-                "輪到你時可出 **1 / 2 / 3 / 5 張** 合法牌型，或 **Pass**。\n"
-                "出的牌必須 **壓過** 上一手（同牌型比大小）；空桌時任意合法牌型皆可領出。\n"
-                "所有人 Pass 則清空桌面，由上一手出牌者重新領出。"
+                t("minigames.bigtwo.rules.play_body")
             ),
             inline=False,
         )
         embed.add_field(
-            name="本桌規則",
+            name=t("minigames.bigtwo.rules.table_title"),
             value=(
-                "**一般規則**：首手必須包含 3♦，2 不可組成順子。\n"
-                "**自由先手**：不強制首手 3♦，房主可在大廳下拉選單切換。"
+                t("minigames.bigtwo.rules.table_body")
             ),
             inline=False,
         )
-        embed.set_footer(text="點「我的手牌」以選牌出牌。")
+        embed.set_footer(text=t("minigames.bigtwo.rules_footer"))
         return embed
 
     def lobby_embed(self, g: Game) -> discord.Embed:
-        rule = "必出3♦" if g.rules.must_start_with_3d else "自由先手"
-        plist = "\n".join([f"- <@{p.user_id}>" for p in g.players]) or "（無）"
-        desc = f"規則：**{rule}**｜人數：{len(g.players)}/4"
+        rule = t("minigames.bigtwo.rule_3d" if g.rules.must_start_with_3d
+                 else "minigames.bigtwo.rule_free")
+        plist = "\n".join([f"- <@{p.user_id}>" for p in g.players]) or t("minigames.bigtwo.none")
+        desc = t("minigames.bigtwo.lobby_desc", rule=rule, count=len(g.players))
         if g.stake > 0:
             currency = get_currency_name(g.guild_id)
-            desc += f"\n💰 賭注：每人 **{g.stake:,.0f}** {currency}"
+            desc += "\n" + t("minigames.bigtwo.lobby_stake",
+                             stake=i18n.fmt_num(g.stake, decimals=0), currency=currency)
         embed = discord.Embed(
-            title="🎴 大老二 開房中",
+            title=t("minigames.bigtwo.lobby_title"),
             color=discord.Color.green(),
             description=desc,
         )
-        embed.add_field(name="玩家", value=plist, inline=False)
-        embed.set_footer(text="按 ✅加入，房主按 ▶開始。")
+        embed.add_field(name=t("minigames.bigtwo.field.players"), value=plist, inline=False)
+        embed.set_footer(text=t("minigames.bigtwo.lobby_footer"))
         return embed
 
     async def edit_lobby_message(self, interaction: discord.Interaction, g: Game):
@@ -3124,23 +3196,23 @@ class MiniGamesCog(commands.GroupCog, group_name="games", description=app_comman
 
     async def join(self, interaction: discord.Interaction, g: Game):
         if g.started:
-            return await interaction.response.send_message("遊戲已開始，不能加入。", ephemeral=True)
+            return await interaction.response.send_message(t("minigames.bigtwo.err.already_started"), ephemeral=True)
         if any(p.user_id == interaction.user.id for p in g.players):
-            return await interaction.response.send_message("你已經在桌上了。", ephemeral=True)
+            return await interaction.response.send_message(t("minigames.bigtwo.err.already_joined"), ephemeral=True)
         if len(g.players) >= 4:
-            return await interaction.response.send_message("最多 4 人。", ephemeral=True)
+            return await interaction.response.send_message(t("minigames.bigtwo.err.table_full"), ephemeral=True)
 
         g.players.append(PlayerState(user_id=interaction.user.id))
-        await interaction.response.send_message("加入成功！", ephemeral=True)
+        await interaction.response.send_message(t("minigames.bigtwo.joined"), ephemeral=True)
         await self.edit_lobby_message(interaction, g)
 
     async def start(self, interaction: discord.Interaction, g: Game):
         if interaction.user.id != g.owner_id:
-            return await interaction.response.send_message("只有房主可以開始。", ephemeral=True)
+            return await interaction.response.send_message(t("minigames.err.host_only_start"), ephemeral=True)
         if g.started:
-            return await interaction.response.send_message("已開始。", ephemeral=True)
+            return await interaction.response.send_message(t("minigames.bigtwo.err.already_started_short"), ephemeral=True)
         if len(g.players) < 2:
-            return await interaction.response.send_message("至少需要 2 人才能開始。", ephemeral=True)
+            return await interaction.response.send_message(t("minigames.bigtwo.err.need_two"), ephemeral=True)
 
         # 有賭注時：檢查餘額並先扣款（失敗則全數退還）
         if g.stake > 0:
@@ -3152,7 +3224,8 @@ class MiniGamesCog(commands.GroupCog, group_name="games", description=app_comman
             if insufficient:
                 names = "、".join(f"<@{p.user_id}>" for p in insufficient)
                 return await interaction.response.send_message(
-                    f"以下玩家餘額不足 **{g.stake:,.0f}** {currency}：{names}",
+                    t("minigames.bigtwo.err.players_insufficient",
+                      stake=i18n.fmt_num(g.stake, decimals=0), currency=currency, players=names),
                     ephemeral=True,
                 )
             try:
@@ -3162,7 +3235,7 @@ class MiniGamesCog(commands.GroupCog, group_name="games", description=app_comman
                 )
             except Exception:
                 return await interaction.response.send_message(
-                    "扣款失敗，所有玩家餘額均未變更。",
+                    t("minigames.bigtwo.err.charge_failed"),
                     ephemeral=True,
                 )
             for p in g.players:
@@ -3170,9 +3243,9 @@ class MiniGamesCog(commands.GroupCog, group_name="games", description=app_comman
                 self._log_economy_history(
                     g.guild_id,
                     p.user_id,
-                    "大老二下注",
+                    "大老二下注",  # i18n: skip (stored tx data)
                     -g.stake,
-                    f"房主 {g.owner_id} 開局，下注 {g.stake:,.0f} {currency}",
+                    f"房主 {g.owner_id} 開局，下注 {g.stake:,.0f} {currency}",  # i18n: skip (stored tx data)
                 )
                 queue_economy_audit_log(
                     "big2_bet",
@@ -3216,7 +3289,7 @@ class MiniGamesCog(commands.GroupCog, group_name="games", description=app_comman
             g.turn_index = g.index_of(g.owner_id) if g.index_of(g.owner_id) >= 0 else 0
 
         # 用已存的 lobby_message 編輯，不 fetch，user-install 才穩
-        await interaction.response.send_message("遊戲開始！", ephemeral=True)
+        await interaction.response.send_message(t("minigames.bigtwo.started"), ephemeral=True)
         try:
             if g.lobby_message is not None:
                 view = TableView(self, g)
@@ -3227,57 +3300,61 @@ class MiniGamesCog(commands.GroupCog, group_name="games", description=app_comman
                 view = TableView(self, g)
                 await self._edit_game_message(g, msg, embed=self.table_embed(g), view=view)
             else:
-                await interaction.followup.send("無法取得桌面訊息。", ephemeral=True)
+                await interaction.followup.send(t("minigames.bigtwo.err.no_table_message"), ephemeral=True)
         except Exception:
-            await interaction.followup.send("無法更新桌面訊息。", ephemeral=True)
+            await interaction.followup.send(t("minigames.bigtwo.err.table_update_failed"), ephemeral=True)
 
     def table_embed(self, g: Game) -> discord.Embed:
         if g.is_game_over() and g.finish_order:
             # 遊戲結束：公布名次與獎金
             rank_text = "\n".join(
-                f"**第 {i} 名**：<@{uid}>"
+                t("minigames.bigtwo.rank_line", rank=i, user=f"<@{uid}>")
                 for i, uid in enumerate(g.finish_order, 1)
             )
             embed = discord.Embed(
-                title="🎴 大老二 遊戲結束",
+                title=t("minigames.bigtwo.over_title"),
                 color=discord.Color.gold(),
-                description="名次如下：",
+                description=t("minigames.bigtwo.over_desc"),
             )
-            embed.add_field(name="排名", value=rank_text, inline=False)
+            embed.add_field(name=t("minigames.bigtwo.field.ranking"), value=rank_text, inline=False)
             if g.stake > 0:
                 winner_id = g.finish_order[0]
                 prize = g.stake * len(g.players)
                 currency = get_currency_name(g.guild_id)
                 embed.add_field(
-                    name="💰 獎金",
-                    value=f"🏆 冠軍 <@{winner_id}> 獲得 **{prize:,.0f}** {currency}！",
+                    name=t("minigames.bigtwo.field.prize"),
+                    value=t("minigames.bigtwo.prize_line", user=f"<@{winner_id}>",
+                            prize=i18n.fmt_num(prize, decimals=0), currency=currency),
                     inline=False,
                 )
-            embed.set_footer(text="房主可再開新局。")
+            embed.set_footer(text=t("minigames.bigtwo.over_footer"))
             return embed
         cur = g.current_player().user_id
-        table = "（無）" if g.table_cards is None else " ".join(map(str, g.table_cards))
+        table = t("minigames.bigtwo.none") if g.table_cards is None else " ".join(map(str, g.table_cards))
         statuses = []
         for p in g.players:
-            tag = f"<@{p.user_id}> [{len(p.hand)}張]"
+            tag = t("minigames.bigtwo.player_tag", user=f"<@{p.user_id}>", count=len(p.hand))
             if p.finished:
                 tag += " ✅"
             elif p.passed:
                 tag += " ⛔"
             statuses.append(tag)
-        rule = "必出3♦" if g.rules.must_start_with_3d else "自由先手"
-        desc = f"規則：**{rule}**"
+        rule = t("minigames.bigtwo.rule_3d" if g.rules.must_start_with_3d
+                 else "minigames.bigtwo.rule_free")
+        desc = t("minigames.bigtwo.table_rule", rule=rule)
         if g.stake > 0:
-            desc += f"｜💰 賭注：{g.stake:,.0f} {get_currency_name(g.guild_id)}"
+            desc += t("minigames.bigtwo.table_stake",
+                      stake=i18n.fmt_num(g.stake, decimals=0),
+                      currency=get_currency_name(g.guild_id))
         embed = discord.Embed(
-            title="🎴 大老二 進行中",
+            title=t("minigames.bigtwo.table_title"),
             color=discord.Color.blue(),
             description=desc,
         )
-        embed.add_field(name="上一手", value=table, inline=False)
-        embed.add_field(name="輪到", value=f"<@{cur}>", inline=True)
-        embed.add_field(name="狀態", value=" ".join(statuses), inline=False)
-        embed.set_footer(text="點 🂠 我的手牌來出牌。")
+        embed.add_field(name=t("minigames.bigtwo.field.last_play"), value=table, inline=False)
+        embed.add_field(name=t("minigames.bigtwo.field.turn"), value=f"<@{cur}>", inline=True)
+        embed.add_field(name=t("minigames.bigtwo.field.status"), value=" ".join(statuses), inline=False)
+        embed.set_footer(text=t("minigames.bigtwo.table_footer"))
         return embed
 
     async def update_table_message(self, channel: discord.abc.Messageable, g: Game):
@@ -3295,9 +3372,9 @@ class MiniGamesCog(commands.GroupCog, group_name="games", description=app_comman
                 self._log_economy_history(
                     g.guild_id,
                     winner_id,
-                    "大老二獎金",
+                    "大老二獎金",  # i18n: skip (stored tx data)
                     prize,
-                    f"冠軍獎金，{len(g.players)} 人局，底注 {g.stake:,.0f} {currency}",
+                    f"冠軍獎金，{len(g.players)} 人局，底注 {g.stake:,.0f} {currency}",  # i18n: skip (stored tx data)
                 )
                 queue_economy_audit_log(
                     "big2_payout",
@@ -3351,7 +3428,7 @@ class MiniGamesCog(commands.GroupCog, group_name="games", description=app_comman
             async def callback(self, interaction: discord.Interaction):
                 nonlocal link
                 if interaction.user.id != user.id:
-                    await interaction.response.send_message("這不是你的遊戲。", ephemeral=True)
+                    await interaction.response.send_message(t("minigames.err.not_your_game"), ephemeral=True)
                     return
                 embed, link = generate_doom_embed(link=link, step=self.step)
                 await interaction.response.edit_message(embed=embed, view=self.view)
@@ -3363,11 +3440,11 @@ class MiniGamesCog(commands.GroupCog, group_name="games", description=app_comman
             async def callback(self, interaction: discord.Interaction):
                 user_id = str(interaction.user.id)
                 if interaction.user.id != user.id:
-                    await interaction.response.send_message("這不是你的遊戲。", ephemeral=True)
+                    await interaction.response.send_message(t("minigames.err.not_your_game"), ephemeral=True)
                     return
                 guild_id = None
                 set_user_data(guild_id, user_id, "doom_link", link)
-                await interaction.response.send_message("存檔成功！", ephemeral=True)
+                await interaction.response.send_message(t("minigames.doom.saved"), ephemeral=True)
 
         class LoadButton(discord.ui.Button):
             def __init__(self):
@@ -3376,18 +3453,18 @@ class MiniGamesCog(commands.GroupCog, group_name="games", description=app_comman
             async def callback(self, interaction: discord.Interaction):
                 user_id = str(interaction.user.id)
                 if interaction.user.id != user.id:
-                    await interaction.response.send_message("這不是你的遊戲。", ephemeral=True)
+                    await interaction.response.send_message(t("minigames.err.not_your_game"), ephemeral=True)
                     return
                 guild_id = None
                 saved_link = get_user_data(guild_id, user_id, "doom_link")
                 if not saved_link:
-                    await interaction.response.send_message("錯誤：沒有存檔。", ephemeral=True)
+                    await interaction.response.send_message(t("minigames.doom.no_save"), ephemeral=True)
                     return
                 nonlocal link
                 link = saved_link
                 embed, link = generate_doom_embed(link=link)
                 await interaction.response.edit_message(embed=embed, view=self.view)
-                await interaction.followup.send("讀檔成功！", ephemeral=True)
+                await interaction.followup.send(t("minigames.doom.loaded"), ephemeral=True)
 
         embed, link = generate_doom_embed()
 

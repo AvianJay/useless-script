@@ -1,0 +1,280 @@
+{
+    "bigtwo": {
+        "all_passed": "所有人都 Pass，清空桌面，回到上一位出牌者領出。",
+        "err": {
+            "already_joined": "你已經在桌上了。",
+            "already_started": "遊戲已開始，不能加入。",
+            "already_started_short": "已開始。",
+            "charge_failed": "扣款失敗，所有玩家餘額均未變更。",
+            "need_two": "至少需要 2 人才能開始。",
+            "no_table_message": "無法取得桌面訊息。",
+            "players_insufficient": "以下玩家餘額不足 **{stake}** {currency}：{players}",
+            "table_exists": "此頻道已經有一桌了。",
+            "table_full": "最多 4 人。",
+            "table_update_failed": "無法更新桌面訊息。"
+        },
+        "field": {
+            "last_play": "上一手",
+            "players": "玩家",
+            "prize": "💰 獎金",
+            "ranking": "排名",
+            "status": "狀態",
+            "turn": "輪到"
+        },
+        "game_ended": "此局已結束。",
+        "hand_footer": "共 {count} 張｜用下拉選牌後按「出牌」或直接「Pass」。",
+        "joined": "加入成功！",
+        "lobby_desc": "規則：**{rule}**｜人數：{count}/4",
+        "lobby_footer": "按 ✅加入，房主按 ▶開始。",
+        "lobby_stake": "💰 賭注：每人 **{stake}** {currency}",
+        "lobby_timeout": "大廳已逾時。",
+        "lobby_title": "🎴 大老二 開房中",
+        "none": "（無）",
+        "over_desc": "名次如下：",
+        "over_footer": "房主可再開新局。",
+        "over_title": "🎴 大老二 遊戲結束",
+        "player_tag": "{user} [{count}張]",
+        "prize_line": "🏆 冠軍 {user} 獲得 **{prize}** {currency}！",
+        "rank_line": "**第 {rank} 名**：{user}",
+        "rule_3d": "必出3♦",
+        "rule_free": "自由先手",
+        "rules": {
+            "classic": "一般規則（首手必含3♦，2不可成順）",
+            "free_start": "自由先手（不強制3♦）",
+            "hand_ranks_body": "單張、對子、三條、順子、同花、葫蘆、鐵支、同花順。\n牌點：3～10、J、Q、K、A、2（2 最大）。\n花色：♣ < ♦ < ♥ < ♠（同點數時比花色）。",
+            "hand_ranks_title": "牌型大小",
+            "play_body": "輪到你時可出 **1 / 2 / 3 / 5 張** 合法牌型，或 **Pass**。\n出的牌必須 **壓過** 上一手（同牌型比大小）；空桌時任意合法牌型皆可領出。\n所有人 Pass 則清空桌面，由上一手出牌者重新領出。",
+            "play_title": "出牌",
+            "table_body": "**一般規則**：首手必須包含 3♦，2 不可組成順子。\n**自由先手**：不強制首手 3♦，房主可在大廳下拉選單切換。",
+            "table_title": "本桌規則"
+        },
+        "rules_desc": "2～4 人，每人 13 張牌，先出完者勝。",
+        "rules_footer": "點「我的手牌」以選牌出牌。",
+        "rules_title": "🎴 大老二 規則玩法",
+        "select": {
+            "cards_ph": "選牌（1/2/3/5張，最多 5）",
+            "rules_ph": "規則（房主可選）",
+            "stake_ph": "賭注（房主可選）"
+        },
+        "stake": {
+            "amount": "賭 {amount}",
+            "none": "不賭"
+        },
+        "started": "遊戲開始！",
+        "table_cancelled": "此桌已取消。",
+        "table_footer": "點 🂠 我的手牌來出牌。",
+        "table_rule": "規則：**{rule}**",
+        "table_stake": "｜💰 賭注：{stake} {currency}",
+        "table_title": "🎴 大老二 進行中",
+        "you_passed": "你選擇 Pass。",
+        "you_played": "✅ 你出了：{cards}",
+        "your_hand_title": "🂠 你的手牌"
+    },
+    "blackjack": {
+        "blackjack": "🎉 **Blackjack！** 3:2 派彩 **{payout}** {currency}",
+        "dealer_blackjack": "💥 **莊家 Blackjack！** 損失 **{bet}** {currency}",
+        "dealer_bust": "🎉 **莊家爆牌！** 獲得 **{payout}** {currency}",
+        "dealing": "發牌中…",
+        "err": {
+            "double_first_two": "只有首兩張牌時可以加倍。",
+            "in_progress": "你已經有一局 21 點正在進行。"
+        },
+        "footer_doubled": "下注：{bet} {currency}（已加倍）",
+        "hands": "**莊家**：{dealer}\n**你**：{player}（{player_total}）",
+        "lose": "💥 **你輸了！** 損失 **{bet}** {currency}",
+        "player_bust": "💥 **爆牌！** 損失 **{bet}** {currency}",
+        "push": "🤝 **平手！** 退還賭注",
+        "soft_total": "軟 {total}",
+        "title": "🂡 21點",
+        "win": "🎉 **你贏了！** 獲得 **{payout}** {currency}"
+    },
+    "btn": {
+        "bet_again": "再賭一次",
+        "cancel": "❌ 取消",
+        "cashout": "💰 提現",
+        "confirm_start": "✅ 確認開始",
+        "double": "⏫ 加倍 Double",
+        "end_host": "🛑 結束（房主）",
+        "higher": "🔼 較大",
+        "hit": "🎯 要牌 Hit",
+        "join": "✅ 加入",
+        "lower": "🔽 較小",
+        "my_hand": "🂠 我的手牌",
+        "play_cards": "出牌",
+        "rules": "📜 規則玩法",
+        "scratch": "🪙 刮開",
+        "spin_again": "🔁 再轉一次",
+        "stand": "✋ 停牌 Stand",
+        "start": "▶ 開始",
+        "tower_stop": "💰 結束"
+    },
+    "coinflip": {
+        "flipping": "硬幣翻轉中……",
+        "heads": "正面",
+        "lost": "你選：**{side}**｜結果：# **{result}**\n\n💥 **猜錯了！** 損失 **{bet}** {currency}",
+        "pick_footer": "下注：{bet} {currency}｜按下選項後才會扣款",
+        "pick_prompt": "選擇 **正面** 或 **反面**。",
+        "result_footer": "下注：{bet} {currency}｜猜中倍率 x1.90",
+        "tails": "反面",
+        "title": "🪙 擲硬幣",
+        "won": "你選：**{side}**｜結果：# **{result}**\n\n🎉 **猜中了！**\n派彩：**{payout}** {currency}（+{profit}）"
+    },
+    "dice": {
+        "lost": "你猜：**{guess}**｜骰子：# **{result}**\n\n💥 **猜錯了！** 損失 **{bet}** {currency}",
+        "pick_footer": "下注：{bet} {currency}｜按下點數後才會扣款",
+        "pick_prompt": "選擇你要猜的骰子點數。",
+        "result_footer": "下注：{bet} {currency}｜猜中倍率 x5.70",
+        "rolling": "骰子滾動中……",
+        "title": "🎲 骰子遊戲",
+        "won": "你猜：**{guess}**｜骰子：# **{result}**\n\n🎉 **猜中了！**\n派彩：**{payout}** {currency}（+{profit}）"
+    },
+    "doom": {
+        "loaded": "讀檔成功！",
+        "no_save": "錯誤：沒有存檔。",
+        "saved": "存檔成功！"
+    },
+    "err": {
+        "bet_range": "❌ 賭注金額需介於 **{min}**～**{max}** 之間。",
+        "cannot_pass_empty": "空桌不能 Pass，必須先領出。",
+        "card_count": "一次只能出 1 / 2 / 3 / 5 張。",
+        "compare_failed": "比較失敗：{reason}",
+        "does_not_beat": "你出的牌沒有壓過桌面。",
+        "first_move_3d": "首手必須包含 3♦。",
+        "game_over": "遊戲已結束。",
+        "hand_empty": "你已經出完牌了。",
+        "host_only_cancel": "只有房主可以取消。",
+        "host_only_end": "只有房主可以結束。",
+        "host_only_rules": "只有房主可以改規則。",
+        "host_only_stake": "只有房主可以改賭注。",
+        "host_only_start": "只有房主可以開始。",
+        "illegal_hand": "牌型不合法：{reason}",
+        "insufficient": "❌ 餘額不足！\n你的餘額：**{balance}** {currency}\n所需賭注：**{needed}** {currency}",
+        "insufficient_double": "❌ 餘額不足以加倍！\n你的餘額：**{balance}** {currency}\n加倍需要：**{needed}** {currency}",
+        "invalid_choice": "無效的選擇。",
+        "must_match_count": "必須跟桌面相同張數才能壓。",
+        "no_cards_selected": "你還沒選牌。",
+        "not_at_table": "你不在這桌。",
+        "not_five_card_hand": "不是合法五張牌型（順/同花/葫蘆/鐵支/同花順）",
+        "not_pair": "不是對子",
+        "not_started": "遊戲尚未開始。",
+        "not_triple": "不是三條",
+        "not_your_game": "這不是你的遊戲。",
+        "not_your_turn": "還沒輪到你。",
+        "not_your_ui": "這不是你的介面。",
+        "round_settled": "這局已經結算。"
+    },
+    "footer": {
+        "bet": "下注：{bet} {currency}"
+    },
+    "highlow": {
+        "cashout": "💰 **Cashed Out!**\n連勝：**{streak}**\n派彩：**{payout}** {currency}｜利潤：**{profit}**\n新餘額：**{balance}** {currency}",
+        "cashout_auto": "💰 **達上限自動提現！**\n連勝：**{streak}**\n派彩：**{payout}** {currency}｜利潤：**{profit}**\n新餘額：**{balance}** {currency}",
+        "correct": "✅ {old} → {new} 猜對了！",
+        "current_card": "目前的牌：# {card}",
+        "err": {
+            "cashout_streak": "至少要猜對一次才能提現。",
+            "in_progress": "你已經有一局比大小正在進行。"
+        },
+        "footer": "下注：{bet} {currency}｜下一張必為不同點數（A 最小、K 最大）｜彩池上限 {cap}x 自動提現",
+        "lost": "💥 猜錯了！損失 **{pot}** {currency}\n連勝止於 **{streak}**",
+        "opt_high": "🔼 較大 → x{multiplier}",
+        "opt_low": "🔽 較小 → x{multiplier}",
+        "streak_pot": "連勝：**{streak}**｜目前彩池：**{pot}** {currency}",
+        "timeout_cashout": "⏰ 遊戲逾時，自動提現 **{payout}** {currency}。",
+        "timeout_refund": "⏰ 遊戲逾時，自動退還賭注 **{payout}** {currency}。",
+        "title": "🃏 比大小"
+    },
+    "line": {
+        "new_balance": "新餘額：**{balance}** {currency}"
+    },
+    "lottery": {
+        "bought_desc": "號碼：# **{number}**\n本次投注：**{bet}** {currency}\n你在此號碼的累積投注：**{my_stake}** {currency}\n目前獎池：**{jackpot}** {currency}\n開獎時間：{draw_at}",
+        "bought_footer": "中獎者依命中號碼的投注額比例分配 95% 獎池。",
+        "bought_title": "🎟️ 彩票購買成功",
+        "draw_time": "{at}（{rel}）",
+        "drawn_at": "開獎時間：{at}",
+        "err": {
+            "need_both": "❌ 購票時必須同時填寫 `bet` 與 `number`；兩者都留空則查詢狀態。",
+            "round_closing": "本輪正在等待開獎或結算，請稍後再購票。",
+            "save_failed": "彩票狀態儲存失敗，已退還本次購票金額。"
+        },
+        "field": {
+            "last_result": "上期結果"
+        },
+        "not_scheduled": "尚未排定",
+        "result_hit": "中獎號碼：**{number}**\n中獎人數：**{winners}**\n派彩總額：**{total}** {currency}",
+        "result_rollover": "中獎號碼：**{number}**\n無人命中，**{jackpot}** {currency} 已累積至下一輪。",
+        "round_footer": "輪次：{round_id}",
+        "status_desc": "目前獎池：**{jackpot}** {currency}\n本輪新增投注：**{stake}** {currency}\n參與玩家：**{players}** 人\n{timing}",
+        "status_footer": "票券每輪到期；若無人命中，只累積獎池，不保留舊票。",
+        "timing": {
+            "not_started": "尚未開始；第一張票售出後 60 分鐘開獎。",
+            "scheduled": "開獎時間：{at}（{rel}）",
+            "settling": "本輪正在結算，暫停購票。",
+            "waiting": "累積獎池等待下一張票；購票後 60 分鐘開獎。"
+        },
+        "title": "🎟️ 累積彩票",
+        "win_desc": "中獎號碼：**{number}**\n你的派彩：**{payout}** {currency}\n目前餘額：**{balance}** {currency}",
+        "win_title": "🎉 彩票中獎！"
+    },
+    "msg": {
+        "choice_timeout": "選擇已逾時。",
+        "ended_by_timeout": "遊戲因超時而結束。",
+        "game_timeout": "遊戲已逾時。",
+        "rules_updated": "已更新規則。",
+        "stake_updated": "已更新賭注。"
+    },
+    "roulette": {
+        "err": {
+            "number_not_allowed": "❌ 只有單號投注需要填寫號碼。",
+            "number_required": "❌ 單號投注必須選擇 0～36 的號碼。"
+        },
+        "footer": "投注：{selection}｜下注：{bet} {currency}",
+        "lost": "開出 {result}\n\n💥 **未中獎**，損失 **{bet}** {currency}",
+        "selection_number": "號碼 {number}",
+        "spinning": "輪盤轉動中……",
+        "title": "🎡 俄羅斯輪盤",
+        "won": "開出 {result}\n\n🎉 **你贏了！**\n派彩：**{payout}** {currency}（+{profit}）"
+    },
+    "scratch": {
+        "auto_revealed": "⏰ 已逾時，自動刮開並結算。",
+        "err": {
+            "already_holding": "你已經有一張尚未刮開的刮刮樂。",
+            "not_yours": "這不是你的刮刮樂。",
+            "settled": "這張刮刮樂已經結算。"
+        },
+        "lost": "💥 **未中獎**，損失 **{bet}** {currency}",
+        "pending_footer": "下注：{bet} {currency}｜逾時將自動刮開",
+        "reveal_prompt": "按下 **刮開** 揭曉票面。",
+        "title": "🎫 刮刮樂",
+        "won": "🎉 **{prize}！** 倍率 **x{multiplier}**\n派彩：**{payout}** {currency}（{profit}）"
+    },
+    "slots": {
+        "err": {
+            "spinning": "拉霸機還在轉，等它停下來！"
+        },
+        "lost": "💥 **{prize}**，損失 **{bet}** {currency}",
+        "spinning": "🌀 轉動中…",
+        "title": "🎰 拉霸機",
+        "won": "🎉 **{prize}** 倍率 **x{multiplier}**\n派彩：**{payout}** {currency}（{profit}）"
+    },
+    "tower": {
+        "cactus": "🌵 踩到仙人掌！遊戲結束，損失 **{bet}** {currency}",
+        "cashout_desc": "**Cashed Out!**\n\n達到的關卡：**{level}/{total}**\n下注：**{bet}** {currency}｜倍率：**x{multiplier}**\n派彩：**{payout}** {currency}｜利潤：**+{profit}**\n新餘額：**{balance}** {currency}",
+        "confirm_desc": "賭注：**{bet}** {currency}\n你的餘額：**{balance}** {currency}\n\n**⚠️ 注意事項**\n{notices}",
+        "confirm_footer": "確認後將扣除賭注並開始遊戲",
+        "confirm_timeout": "已逾時，請重新下指令開始。",
+        "err": {
+            "already_playing": "你已經有一局 Tower 遊戲。",
+            "in_progress": "你已經有一局 Tower 遊戲正在進行。",
+            "insufficient": "餘額不足 {bet} {currency}。",
+            "pick_current_level": "請選擇當前層的格子。",
+            "pick_next": "請點擊下一層或結束。"
+        },
+        "notices": "• 每層 3 格中隨機 **2 格 🟦 安全**、**1 格 🌵 仙人掌**\n• 踩到仙人掌 = **遊戲結束，失去全部賭注**\n• 選到安全格可選擇 **繼續攀登**（倍率更高）或 **提現**（鎖定當前倍率獎金）\n• 倍率：L1 x1.4 → L2 x1.8 → L3 x2.2 → L4 x2.6 → L5 x3.0\n• 抵達頂層將自動提現",
+        "pick": "**第 {level}/{total} 層**\n選擇一個格子！\n可隨時點「💰 結束」提現（倍率 x{multiplier}）",
+        "safe": "**第 {level}/{total} 層** ✅ 安全！\n點下一層繼續，或點「💰 結束」提現。",
+        "title": "🗼 爬塔",
+        "top_desc": "**抵達頂層！** 自動提現！\n\n達到的關卡：**{total}/{total}**\n下注：**{bet}** {currency}\n倍率：**x{multiplier}**\n派彩：**{payout}** {currency}\n新餘額：**{balance}** {currency}"
+    }
+}

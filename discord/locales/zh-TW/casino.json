@@ -1,0 +1,62 @@
+{
+    "err": {
+        "balance_insufficient": "全域幣餘額不足。",
+        "balance_insufficient_double": "全域幣餘額不足，無法加倍。",
+        "bet_not_number": "賭注必須是數字。",
+        "bet_range": "賭注金額需介於 {min}～{max} 之間。",
+        "bj_action": "21 點只能要牌、停牌或加倍。",
+        "bj_double_unavailable": "目前不能加倍。",
+        "coinflip_side": "硬幣選項必須是 heads 或 tails。",
+        "dice_range": "骰子點數必須介於 1～6。",
+        "hl_action": "比大小只能猜牌或提現。",
+        "hl_cashout_streak": "至少猜中一次後才能提現。",
+        "hl_direction": "目前牌面不能選擇這個方向。",
+        "hl_guess": "比大小選項必須是 high 或 low。",
+        "hl_rank_range": "牌面點數必須介於 1～13。",
+        "invalid_game": "無效的遊戲。",
+        "invalid_instant_game": "無效的即時遊戲。",
+        "invalid_round_game": "無效的回合遊戲。",
+        "lottery_drawing": "彩票正在開獎，請稍後再試。",
+        "lottery_number_range": "彩票號碼必須介於 00～99。",
+        "request_id_missing": "缺少有效的 request_id。",
+        "request_id_taken": "request_id 已被其他玩家使用。",
+        "round_active": "你已有尚未結束的同類遊戲。",
+        "round_already_settled": "牌局已經結算。",
+        "round_not_found": "找不到這個遊戲回合。",
+        "roulette_bet_type": "無效的輪盤投注方式。",
+        "roulette_number_only": "只有單號投注能指定號碼。",
+        "roulette_number_range": "單號投注必須選擇 0～36。",
+        "slots_reels": "拉霸結果必須包含三個符號。",
+        "tower_action": "爬塔只能選格或提現。",
+        "tower_tile_invalid": "無效的爬塔格子。",
+        "tower_tile_range": "格子必須介於 0～2。"
+    },
+    "roulette": {
+        "bet": {
+            "black": "黑色",
+            "even": "雙數",
+            "high": "大（19～36）",
+            "low": "小（1～18）",
+            "number": "單一號碼",
+            "odd": "單數",
+            "red": "紅色"
+        }
+    },
+    "scratch": {
+        "prize": {
+            "jackpot": "頭獎",
+            "major": "大獎",
+            "medium": "中獎",
+            "none": "未中獎",
+            "refund": "回本",
+            "small": "小獎"
+        }
+    },
+    "slots": {
+        "outcome": {
+            "none": "未中獎",
+            "pair": "一對",
+            "triple": "三連線！"
+        }
+    }
+}

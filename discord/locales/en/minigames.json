@@ -1,0 +1,286 @@
+{
+    "bigtwo": {
+        "all_passed": "Everyone passed. The table is cleared and the last player to play leads again.",
+        "err": {
+            "already_joined": "You're already at this table.",
+            "already_started": "The game has started; you can't join now.",
+            "already_started_short": "Already started.",
+            "charge_failed": "The charge failed; no player's balance was changed.",
+            "need_two": "At least 2 players are needed to start.",
+            "no_table_message": "Couldn't fetch the table message.",
+            "players_insufficient": "These players don't have **{stake}** {currency}: {players}",
+            "table_exists": "This channel already has a table.",
+            "table_full": "4 players maximum.",
+            "table_update_failed": "Couldn't update the table message."
+        },
+        "field": {
+            "last_play": "Last play",
+            "players": "Players",
+            "prize": "💰 Prize",
+            "ranking": "Ranking",
+            "status": "Status",
+            "turn": "Turn"
+        },
+        "game_ended": "This game has ended.",
+        "hand_footer": {
+            "one": "{count} card | Pick cards from the dropdown, then hit Play, or just Pass.",
+            "other": "{count} cards | Pick cards from the dropdown, then hit Play, or just Pass."
+        },
+        "joined": "Joined!",
+        "lobby_desc": "Rules: **{rule}** | Players: {count}/4",
+        "lobby_footer": "Hit ✅ to join; the host hits ▶ to start.",
+        "lobby_stake": "💰 Stake: **{stake}** {currency} each",
+        "lobby_timeout": "The lobby timed out.",
+        "lobby_title": "🎴 Big Two - lobby open",
+        "none": "(none)",
+        "over_desc": "Final standings:",
+        "over_footer": "The host can start a new game.",
+        "over_title": "🎴 Big Two - game over",
+        "player_tag": {
+            "one": "{user} [{count} card]",
+            "other": "{user} [{count} cards]"
+        },
+        "prize_line": "🏆 Winner {user} takes **{prize}** {currency}!",
+        "rank_line": "**#{rank}**: {user}",
+        "rule_3d": "3♦ opener",
+        "rule_free": "Free opener",
+        "rules": {
+            "classic": "Classic (open with 3♦, 2 can't form a straight)",
+            "free_start": "Free opener (3♦ not required)",
+            "hand_ranks_body": "Single, pair, triple, straight, flush, full house, four of a kind, straight flush.\nRanks: 3-10, J, Q, K, A, 2 (2 is highest).\nSuits: ♣ < ♦ < ♥ < ♠ (suit breaks ties).",
+            "hand_ranks_title": "Hand rankings",
+            "play_body": "On your turn play **1 / 2 / 3 / 5 cards** as a legal hand, or **Pass**.\nYour play must **beat** the last one (same hand type); on an empty table any legal hand can lead.\nIf everyone passes, the table clears and the last player to play leads again.",
+            "play_title": "Playing cards",
+            "table_body": "**Classic**: the first hand must contain 3♦, and 2 can't form a straight.\n**Free opener**: 3♦ is not required; the host can switch this in the lobby dropdown.",
+            "table_title": "This table's rules"
+        },
+        "rules_desc": "2-4 players, 13 cards each. First to empty their hand wins.",
+        "rules_footer": "Hit \"My hand\" to pick and play cards.",
+        "rules_title": "🎴 Big Two - how to play",
+        "select": {
+            "cards_ph": "Pick cards (1/2/3/5, max 5)",
+            "rules_ph": "Rules (host only)",
+            "stake_ph": "Stake (host only)"
+        },
+        "stake": {
+            "amount": "Bet {amount}",
+            "none": "No stake"
+        },
+        "started": "Game started!",
+        "table_cancelled": "This table was cancelled.",
+        "table_footer": "Hit 🂠 My hand to play.",
+        "table_rule": "Rules: **{rule}**",
+        "table_stake": " | 💰 Stake: {stake} {currency}",
+        "table_title": "🎴 Big Two - in progress",
+        "you_passed": "You passed.",
+        "you_played": "✅ You played: {cards}",
+        "your_hand_title": "🂠 Your hand"
+    },
+    "blackjack": {
+        "blackjack": "🎉 **Blackjack!** 3:2 pays **{payout}** {currency}",
+        "dealer_blackjack": "💥 **Dealer blackjack!** You lost **{bet}** {currency}",
+        "dealer_bust": "🎉 **Dealer busts!** You won **{payout}** {currency}",
+        "dealing": "Dealing...",
+        "err": {
+            "double_first_two": "You can only double on your first two cards.",
+            "in_progress": "You already have a blackjack round in progress."
+        },
+        "footer_doubled": "Bet: {bet} {currency} (doubled)",
+        "hands": "**Dealer**: {dealer}\n**You**: {player} ({player_total})",
+        "lose": "💥 **You lost!** Down **{bet}** {currency}",
+        "player_bust": "💥 **Bust!** You lost **{bet}** {currency}",
+        "push": "🤝 **Push!** Bet returned",
+        "soft_total": "soft {total}",
+        "title": "🂡 Blackjack",
+        "win": "🎉 **You won!** You got **{payout}** {currency}"
+    },
+    "btn": {
+        "bet_again": "Bet again",
+        "cancel": "❌ Cancel",
+        "cashout": "💰 Cash out",
+        "confirm_start": "✅ Confirm start",
+        "double": "⏫ Double",
+        "end_host": "🛑 End (host)",
+        "higher": "🔼 Higher",
+        "hit": "🎯 Hit",
+        "join": "✅ Join",
+        "lower": "🔽 Lower",
+        "my_hand": "🂠 My hand",
+        "play_cards": "Play",
+        "rules": "📜 How to play",
+        "scratch": "🪙 Scratch",
+        "spin_again": "🔁 Spin again",
+        "stand": "✋ Stand",
+        "start": "▶ Start",
+        "tower_stop": "💰 Stop"
+    },
+    "coinflip": {
+        "flipping": "Flipping...",
+        "heads": "Heads",
+        "lost": "You picked **{side}** | Result: # **{result}**\n\n💥 **Wrong!** You lost **{bet}** {currency}",
+        "pick_footer": "Bet: {bet} {currency} | You're only charged once you pick",
+        "pick_prompt": "Pick **Heads** or **Tails**.",
+        "result_footer": "Bet: {bet} {currency} | Win pays x1.90",
+        "tails": "Tails",
+        "title": "🪙 Coin flip",
+        "won": "You picked **{side}** | Result: # **{result}**\n\n🎉 **Correct!**\nPayout: **{payout}** {currency} (+{profit})"
+    },
+    "dice": {
+        "lost": "You guessed **{guess}** | Die: # **{result}**\n\n💥 **Wrong!** You lost **{bet}** {currency}",
+        "pick_footer": "Bet: {bet} {currency} | You're only charged once you pick",
+        "pick_prompt": "Pick the number you want to guess.",
+        "result_footer": "Bet: {bet} {currency} | Win pays x5.70",
+        "rolling": "Rolling...",
+        "title": "🎲 Dice",
+        "won": "You guessed **{guess}** | Die: # **{result}**\n\n🎉 **Correct!**\nPayout: **{payout}** {currency} (+{profit})"
+    },
+    "doom": {
+        "loaded": "Save loaded!",
+        "no_save": "Error: no save found.",
+        "saved": "Saved!"
+    },
+    "err": {
+        "bet_range": "❌ The bet must be between **{min}** and **{max}**.",
+        "cannot_pass_empty": "You can't pass on an empty table; you have to lead.",
+        "card_count": "You can only play 1 / 2 / 3 / 5 cards at a time.",
+        "compare_failed": "Comparison failed: {reason}",
+        "does_not_beat": "Your play doesn't beat the table.",
+        "first_move_3d": "The first hand must contain 3♦.",
+        "game_over": "This game has ended.",
+        "hand_empty": "You've already played all your cards.",
+        "host_only_cancel": "Only the host can cancel.",
+        "host_only_end": "Only the host can end the game.",
+        "host_only_rules": "Only the host can change the rules.",
+        "host_only_stake": "Only the host can change the stake.",
+        "host_only_start": "Only the host can start.",
+        "illegal_hand": "Illegal hand: {reason}",
+        "insufficient": "❌ Insufficient balance!\nYour balance: **{balance}** {currency}\nBet needed: **{needed}** {currency}",
+        "insufficient_double": "❌ Not enough to double!\nYour balance: **{balance}** {currency}\nDoubling needs: **{needed}** {currency}",
+        "invalid_choice": "Invalid choice.",
+        "must_match_count": "You must play the same number of cards to beat the table.",
+        "no_cards_selected": "You haven't picked any cards.",
+        "not_at_table": "You're not at this table.",
+        "not_five_card_hand": "not a legal five-card hand (straight/flush/full house/four of a kind/straight flush)",
+        "not_pair": "not a pair",
+        "not_started": "The game hasn't started yet.",
+        "not_triple": "not a triple",
+        "not_your_game": "This isn't your game.",
+        "not_your_turn": "It's not your turn yet.",
+        "not_your_ui": "This isn't your interface.",
+        "round_settled": "This round has already been settled."
+    },
+    "footer": {
+        "bet": "Bet: {bet} {currency}"
+    },
+    "highlow": {
+        "cashout": "💰 **Cashed Out!**\nStreak: **{streak}**\nPayout: **{payout}** {currency} | Profit: **{profit}**\nNew balance: **{balance}** {currency}",
+        "cashout_auto": "💰 **Cap reached - auto cash out!**\nStreak: **{streak}**\nPayout: **{payout}** {currency} | Profit: **{profit}**\nNew balance: **{balance}** {currency}",
+        "correct": "✅ {old} → {new} - correct!",
+        "current_card": "Current card: # {card}",
+        "err": {
+            "cashout_streak": "You need at least one correct guess before cashing out.",
+            "in_progress": "You already have a high-low round in progress."
+        },
+        "footer": "Bet: {bet} {currency} | The next card is always a different rank (A low, K high) | Pot caps at {cap}x and auto cashes out",
+        "lost": "💥 Wrong! You lost **{pot}** {currency}\nStreak ended at **{streak}**",
+        "opt_high": "🔼 Higher → x{multiplier}",
+        "opt_low": "🔽 Lower → x{multiplier}",
+        "streak_pot": "Streak: **{streak}** | Pot: **{pot}** {currency}",
+        "timeout_cashout": "⏰ The game timed out and auto cashed out **{payout}** {currency}.",
+        "timeout_refund": "⏰ The game timed out and refunded **{payout}** {currency}.",
+        "title": "🃏 High-low"
+    },
+    "line": {
+        "new_balance": "New balance: **{balance}** {currency}"
+    },
+    "lottery": {
+        "bought_desc": "Number: # **{number}**\nThis bet: **{bet}** {currency}\nYour total on this number: **{my_stake}** {currency}\nCurrent jackpot: **{jackpot}** {currency}\nDraw: {draw_at}",
+        "bought_footer": "Winners split 95% of the jackpot in proportion to their stake on the winning number.",
+        "bought_title": "🎟️ Ticket purchased",
+        "draw_time": "{at} ({rel})",
+        "drawn_at": "Drawn at: {at}",
+        "err": {
+            "need_both": "❌ To buy a ticket you must give both `bet` and `number`; leave both empty to check the status.",
+            "round_closing": "This round is waiting to be drawn or settled; please buy again shortly.",
+            "save_failed": "Saving the lottery state failed; your ticket purchase was refunded."
+        },
+        "field": {
+            "last_result": "Last draw"
+        },
+        "not_scheduled": "not scheduled yet",
+        "result_hit": "Winning number: **{number}**\nWinners: **{winners}**\nTotal paid: **{total}** {currency}",
+        "result_rollover": "Winning number: **{number}**\nNo winners; **{jackpot}** {currency} rolls over to the next round.",
+        "round_footer": "Round: {round_id}",
+        "status_desc": "Current jackpot: **{jackpot}** {currency}\nStaked this round: **{stake}** {currency}\nPlayers: **{players}**\n{timing}",
+        "status_footer": "Tickets expire each round; if nobody wins, only the jackpot carries over - old tickets do not.",
+        "timing": {
+            "not_started": "Not started; the draw happens 60 minutes after the first ticket sells.",
+            "scheduled": "Draw: {at} ({rel})",
+            "settling": "This round is being settled; ticket sales are paused.",
+            "waiting": "The jackpot is waiting on the next ticket; the draw happens 60 minutes after a purchase."
+        },
+        "title": "🎟️ Rolling lottery",
+        "win_desc": "Winning number: **{number}**\nYour payout: **{payout}** {currency}\nCurrent balance: **{balance}** {currency}",
+        "win_title": "🎉 Lottery win!"
+    },
+    "msg": {
+        "choice_timeout": "The choice timed out.",
+        "ended_by_timeout": "The game ended because it timed out.",
+        "game_timeout": "The game timed out.",
+        "rules_updated": "Rules updated.",
+        "stake_updated": "Stake updated."
+    },
+    "roulette": {
+        "err": {
+            "number_not_allowed": "❌ Only a single-number bet takes a number.",
+            "number_required": "❌ A single-number bet must pick a number from 0-36."
+        },
+        "footer": "Bet type: {selection} | Bet: {bet} {currency}",
+        "lost": "Landed on {result}\n\n💥 **No win** - you lost **{bet}** {currency}",
+        "selection_number": "Number {number}",
+        "spinning": "The wheel is spinning...",
+        "title": "🎡 Roulette",
+        "won": "Landed on {result}\n\n🎉 **You won!**\nPayout: **{payout}** {currency} (+{profit})"
+    },
+    "scratch": {
+        "auto_revealed": "⏰ Timed out - scratched and settled automatically.",
+        "err": {
+            "already_holding": "You already have an unscratched card.",
+            "not_yours": "This isn't your scratch card.",
+            "settled": "This scratch card has already been settled."
+        },
+        "lost": "💥 **No win** - you lost **{bet}** {currency}",
+        "pending_footer": "Bet: {bet} {currency} | It will be scratched automatically on timeout",
+        "reveal_prompt": "Hit **Scratch** to reveal the card.",
+        "title": "🎫 Scratch card",
+        "won": "🎉 **{prize}!** Multiplier **x{multiplier}**\nPayout: **{payout}** {currency} ({profit})"
+    },
+    "slots": {
+        "err": {
+            "spinning": "The reels are still spinning - let them stop!"
+        },
+        "lost": "💥 **{prize}** - you lost **{bet}** {currency}",
+        "spinning": "🌀 Spinning...",
+        "title": "🎰 Slot machine",
+        "won": "🎉 **{prize}** multiplier **x{multiplier}**\nPayout: **{payout}** {currency} ({profit})"
+    },
+    "tower": {
+        "cactus": "🌵 You hit a cactus! Game over - you lost **{bet}** {currency}",
+        "cashout_desc": "**Cashed Out!**\n\nLevel reached: **{level}/{total}**\nBet: **{bet}** {currency} | Multiplier: **x{multiplier}**\nPayout: **{payout}** {currency} | Profit: **+{profit}**\nNew balance: **{balance}** {currency}",
+        "confirm_desc": "Bet: **{bet}** {currency}\nYour balance: **{balance}** {currency}\n\n**⚠️ Before you start**\n{notices}",
+        "confirm_footer": "Confirming charges the bet and starts the game",
+        "confirm_timeout": "Timed out - run the command again to start.",
+        "err": {
+            "already_playing": "You already have a Tower game.",
+            "in_progress": "You already have a Tower game in progress.",
+            "insufficient": "You need {bet} {currency}.",
+            "pick_current_level": "Pick a tile on the current level.",
+            "pick_next": "Hit the next level or stop."
+        },
+        "notices": "• Each level has **2 🟦 safe tiles** and **1 🌵 cactus** at random\n• Hitting the cactus = **game over, you lose the whole bet**\n• On a safe tile you can **climb on** (higher multiplier) or **cash out** (lock in the current multiplier)\n• Multipliers: L1 x1.4 → L2 x1.8 → L3 x2.2 → L4 x2.6 → L5 x3.0\n• Reaching the top cashes out automatically",
+        "pick": "**Level {level}/{total}**\nPick a tile!\nHit \"💰 Stop\" any time to cash out (multiplier x{multiplier})",
+        "safe": "**Level {level}/{total}** ✅ Safe!\nHit the next level to continue, or \"💰 Stop\" to cash out.",
+        "title": "🗼 Tower",
+        "top_desc": "**You reached the top!** Auto cash out!\n\nLevel reached: **{total}/{total}**\nBet: **{bet}** {currency}\nMultiplier: **x{multiplier}**\nPayout: **{payout}** {currency}\nNew balance: **{balance}** {currency}"
+    }
+}
