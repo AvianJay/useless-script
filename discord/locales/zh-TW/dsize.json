@@ -1,0 +1,264 @@
+{
+    "attack": {
+        "dm": "你被 {attacker} 使用了亂槍打鳥，造成了 {damage} cm 的傷害！\n你的屌長從 {before} cm 變成了 {after} cm！\n-# {scope}",
+        "err": {
+            "no_target": "目前沒有可攻擊的目標。",
+            "target_too_short": "被抽到的目標已經短到不能再短了。\n攻擊失敗，沒有造成任何傷害。"
+        },
+        "hit": "你使用了亂槍打鳥，對 {target} 造成了 {damage} cm 的傷害！\n{target_name} 的屌長從 {before} cm 變成了 {after} cm！",
+        "scope_global": "全域 dsize",
+        "scope_guild": "伺服器：{guild}",
+        "self": "# {user} 亂槍打鳥打到自己啦！\n自殘造成了 {damage} cm 的傷害！\n你的屌長從 {before} cm 變成了 {after} cm！"
+    },
+    "battle": {
+        "draw": "🤝 平手！",
+        "err": {
+            "bot": "不能跟機器人比屌長。",
+            "generic": "對決過程中發生錯誤。",
+            "not_your_invite": "這不是你的對決邀請。",
+            "opponent_busy": "{user} 正在進行一場對決，請稍後再試。",
+            "opponent_measured": "{user} 今天已經量過屌長了。",
+            "self": "不能跟自己比屌長。",
+            "you_busy": "你已經在進行一場對決了，請先結束目前的對決。",
+            "you_measured": "你今天已經量過屌長了。"
+        },
+        "field": {
+            "result": "結果："
+        },
+        "global_note": "此次對決將記錄到全域排行榜。",
+        "invite": "{user} 想跟你比長度。\n請在 30 秒內按下 ✅ 同意 或 ❌ 拒絕。",
+        "invite_expired": "對決邀請已過期。",
+        "invite_rejected": "已拒絕對決邀請。",
+        "starting": "開始對決。",
+        "title": "比長度",
+        "winner": "🎉 {user} 勝利！"
+    },
+    "btn": {
+        "accept": "同意",
+        "accept_surgery": "同意手術",
+        "reject": "拒絕",
+        "reject_surgery": "拒絕手術"
+    },
+    "checkin": {
+        "auto_goal_default": "由於您上次未選擇目標，系統已自動為您設定目標為 {item} x {count}。",
+        "err": {
+            "not_your_goal": "這不是你的目標選擇。"
+        },
+        "footer": "簽到第 {streak} 天！",
+        "footer_broke": "你在第 {broke_on} 天打破了簽到紀錄，重新開始簽到！ | 簽到第 {streak} 天！",
+        "footer_broke_freeze": "你在第 {broke_on} 天打破了簽到紀錄，消耗了 {freeze} 個凍結球！重新開始簽到！ | 簽到第 {streak} 天！",
+        "footer_broke_freeze_user": "{user} 在第 {broke_on} 天打破了簽到紀錄，消耗了 {freeze} 個凍結球！重新開始！",
+        "footer_broke_user": "{user} 在第 {broke_on} 天打破了簽到紀錄，重新開始！",
+        "footer_frozen": "簽到第 {streak} 天！凍結球保護了連續（消耗 {freeze} 個）",
+        "footer_frozen_user": "{user} 簽到第 {streak} 天！凍結球保護了連續（消耗 {freeze} 個）",
+        "footer_user": "{user} 簽到第 {streak} 天！",
+        "goal_auto": "超過時間未選擇目標，系統已自動為你設定下一個目標：{days} 天！繼續加油！",
+        "goal_btn": "+{days} 天 ({item} x {count})",
+        "goal_selected": "你已選擇下一個目標：{days} 天！繼續加油！",
+        "goal_title": "目標設定",
+        "pick_goal_desc": "請選擇你的下一個簽到目標天數：",
+        "pick_goal_title": "選擇下一個目標",
+        "reward_desc": "恭喜達成 {days} 天連續簽到！\n獲得：{item} x {count}！",
+        "reward_title": "🎉 簽到獎勵！"
+    },
+    "cloud_ruler": {
+        "dragged_in": "{user} 被抓去量長度。",
+        "dragged_in_femboy": "{user} 被抓去量長度，變男娘了。",
+        "err": {
+            "already_measured": "{user} 今天量過屌長了，無法幫他量長度。"
+        },
+        "title": "{user} 幫 {target} 測量長度："
+    },
+    "drop": {
+        "anti_surgery": "你撿到了一顆{item}！\n使用 {command} {item} 可以防止一天被手術。",
+        "cloud_ruler": "你撿到了一把{item}！\n使用 {command} {item} 可以進行手術。",
+        "fake_ruler": "你撿到了一把{item}！\n使用 {command} {item} 可能可以讓下次量長度時變長？",
+        "grass": "你撿到了{item} x{count}！\n使用 {command} 可以草飼男娘。",
+        "rusty_scalpel": "你撿到了一把{item}！\n使用 {command} {item} 可以進行手術。",
+        "scalpel": "你撿到了一把{item}！\n使用 {command} {item} 可以進行手術。"
+    },
+    "embed": {
+        "length_title": "{user} 的長度：",
+        "new_length_title": "{user} 的新長度："
+    },
+    "err": {
+        "limit_range": "限制必須在 1 到 50 之間。",
+        "needs_itemsystem": "此功能需要 ItemSystem 模組。",
+        "once_per_day": "一天只能量一次屌長。{when} 才能再次使用。"
+    },
+    "feedgrass": {
+        "err": {
+            "femboy_cannot": "男娘無法草飼，除非今天有喝日本生可樂。",
+            "no_grass": "你沒有草，無法草飼。",
+            "no_history": "無法獲取頻道歷史訊息，未能顯示其他用戶的頭像。\n請確保機器人有權限讀取頻道歷史訊息。",
+            "not_femboy": "{name} 不是男娘，無法草飼。",
+            "not_measured": "你今天還沒有量過，無法草飼。",
+            "self_nsfw_off": "你目前設定為不允許 NSFW 草飼，請先切換設定。\n> 使用 {command} 來切換。",
+            "target_nsfw_off": "{user} 設定為不允許 NSFW 草飼，無法草飼。\n> 使用 {command} 來切換。"
+        },
+        "fed": "{feeder} 草飼了 {target}！",
+        "fed_self": "{user} 草飼了自己！",
+        "reloaded": "已重新載入 {count} 張草飼圖片！",
+        "submit_btn": "立即投稿！"
+    },
+    "history": {
+        "desc": "顯示最近 {count} 筆紀錄",
+        "empty": "{name} 在{scope}還沒有任何紀錄。",
+        "global_footer": "全域紀錄",
+        "title": "{user} 的歷史紀錄",
+        "type": {
+            "battle": "對決",
+            "cloud_ruler": "雲端尺",
+            "measure": "測量",
+            "surgery_failed": "手術失敗",
+            "surgery_success": "手術成功"
+        },
+        "unknown_date": "未知日期"
+    },
+    "item": {
+        "anti_surgery": {
+            "desc": "一顆屌型的藥丸。使用後可以防止一天被手術。\n使用後兩天內量長度時將會有變短的副作用。",
+            "name": "抗手術藥物"
+        },
+        "anti_surgery_used": "你使用了抗手術藥物！\n今天不會被手術。",
+        "checkin_freeze": {
+            "desc": "一個神奇的凍結球，可以使其變成急凍鳥。\n可以抵消一天未簽到，保護你的簽到連續紀錄不被打破。",
+            "name": "凍結球"
+        },
+        "cloud_ruler": {
+            "desc": "這是一把雲端尺，可以幫處於線上的網友量長度。",
+            "name": "雲端尺"
+        },
+        "cola_used": "{user} 使用了日本生可樂！\n-# 變成了有幾把的男娘",
+        "err": {
+            "cola_not_femboy": "你不是男娘，無法使用日本生可樂。",
+            "cola_not_measured": "你今天還沒有量過屌長，無法使用日本生可樂。",
+            "cola_used": "你今天已經使用過日本生可樂了。",
+            "fake_ruler_used": "你今天已經使用過自欺欺人尺了。",
+            "missing": "你沒有{item}，無法使用。",
+            "viagra_not_measured": "你今天還沒有量過屌長，無法使用威而鋼。",
+            "viagra_used": "你已經使用過威而鋼了。"
+        },
+        "fake_ruler": {
+            "desc": "使用後下次量長度時或許會更長？",
+            "name": "自欺欺人尺"
+        },
+        "fake_ruler_used": "你使用了自欺欺人尺！\n下次量長度時或許會更長？",
+        "grass": {
+            "desc": "這是一把草，可以用來草飼男娘。使用 `/dsize-feedgrass`。",
+            "name": "草"
+        },
+        "japanese_cola": {
+            "desc": "一罐日本生可樂，可以讓男娘長屌。",
+            "name": "日本生可樂"
+        },
+        "random_attack": {
+            "desc": "隨機對一個在排行榜上的非男娘人物造成傷害。",
+            "name": "[技能] 亂槍打鳥"
+        },
+        "rusty_scalpel": {
+            "desc": "這是一把生鏽的手術刀，可以強制感染進而變成男娘。",
+            "name": "生鏽的手術刀"
+        },
+        "scalpel": {
+            "desc": "這是一把手術刀，可以用來進行手術，必定成功。",
+            "name": "手術刀"
+        },
+        "viagra": {
+            "desc": "一顆藍色的藥丸，有持久的作用。\n使用後今天的狀態將會持續到明天，無論是好是壞。",
+            "name": "威而鋼"
+        },
+        "viagra_used": "你使用了威而鋼！\n今天的狀態將會持續到明天，無論是好是壞。"
+    },
+    "leaderboard": {
+        "empty": "今天還沒有任何人量過屌長。",
+        "global_footer": "全域排行榜",
+        "row_unknown": "**{rank}. 用戶ID {user_id}** - {size}",
+        "title": "今天的長度排行榜"
+    },
+    "modal": {
+        "measure_title": "要幫誰量長度？",
+        "pick_user_label": "選擇用戶",
+        "pick_user_ph": "選擇一個用戶",
+        "surgery_title": "要幫誰手術？"
+    },
+    "msg": {
+        "became_femboy_target": "{user} 變男娘了。",
+        "became_femboy_user": "{user} 變成男娘了。",
+        "became_femboy_you": "你變男娘了。",
+        "became_femboy_you2": "你變成男娘了。",
+        "feels_odd_user": "{user} 的ㄐㄐ今天好像怪怪的。",
+        "feels_odd_you": "你的ㄐㄐ今天好像怪怪的。",
+        "global_record": "此次量測為全域紀錄。",
+        "side_effect": "糟糕！有副作用！",
+        "side_effect_femboy": "糟糕！有副作用！變男娘了！",
+        "side_effect_femboy_user": "{user} 糟糕！有副作用！變男娘了！",
+        "side_effect_user": "{user} 糟糕！有副作用！"
+    },
+    "nsfw": {
+        "allow": "允許",
+        "deny": "拒絕",
+        "toggled": "已切換 NSFW 草飼設定，目前為：{status}"
+    },
+    "scope": {
+        "global": "全域",
+        "server": "此伺服器",
+        "themselves": "自己",
+        "you": "你"
+    },
+    "settings": {
+        "drop_chance_set": "已設定撿到物品機率為 {value}%。",
+        "err": {
+            "drop_chance_range": "撿到物品機率必須是介於 0 到 100 之間的整數。",
+            "max_range": "最大長度必須是介於 1 到 1000 之間的整數。",
+            "surgery_max_range": "手術最大長度必須是介於 1 到 100 之間的整數。",
+            "surgery_percent_range": "手術機率必須是介於 1 到 100 之間的整數。",
+            "unknown": "未知的設定項目。"
+        },
+        "max_set": "已設定最大長度為 {value} cm。",
+        "surgery_max_set": "已設定手術最大長度為 {value} cm。",
+        "surgery_percent_set": "已設定手術機率為 {value}%。"
+    },
+    "size": {
+        "femboy": "**男娘！**",
+        "femboy_with_cola": "有 {size} cm 的**男娘！**"
+    },
+    "stats": {
+        "checkin_streak": "連續簽到天數",
+        "losses": "失敗次數",
+        "mangirl_count": "變成男娘次數",
+        "perform_random_attacks": "隨機攻擊次數",
+        "random_attacks": "被隨機攻擊次數",
+        "successful_surgeries": "成功手術次數",
+        "title": "{user} 的 dsize 統計資料",
+        "total_battles": "對決次數",
+        "total_been_feedgrass": "被草飼次數",
+        "total_checkins": "簽到次數",
+        "total_drops": "撿到物品次數",
+        "total_feedgrass": "草飼次數",
+        "total_surgeries": "手術次數",
+        "total_uses": "量屌次數",
+        "wins": "勝利次數"
+    },
+    "surgery": {
+        "blocked_by_anti": "由於你使用了抗手術藥物，你無法進行手術。",
+        "dragged_in": "{user} 被抓去動手術。",
+        "err": {
+            "not_yours": "這不是你的手術機會。",
+            "target_already_femboy": "{user} 已經是男娘了。",
+            "target_is_femboy": "{user} 是男娘，無法進行手術。",
+            "target_not_measured": "{user} 今天還沒有量過屌長，無法進行手術。",
+            "target_protected": "{user} 使用了抗手術藥物，無法進行手術。"
+        },
+        "expired": "手術機會已過期。",
+        "failed_femboy": "手術失敗，你變男娘了。",
+        "in_progress": "正在手術中...",
+        "in_progress_boom": "正在手術中...💥",
+        "in_progress_q": "正在手術中...？",
+        "offer": "你獲得了一次做手術的機會。\n請問你是否同意手術？\n-# 失敗機率：{chance}%",
+        "performed_title": "{user} 幫 {target} 動手術！",
+        "rejected": "已拒絕手術。",
+        "succeeded": "手術成功。",
+        "target_succeeded": "{user} 手術成功。"
+    }
+}
