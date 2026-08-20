@@ -1,0 +1,216 @@
+{
+    "action_builder": {
+        "usage_value": "複製上方字串，用於 {settings_command} 的 action 值，或 {setup_command} 的 action 參數。"
+    },
+    "action_check_title": "動作檢查結果",
+    "action_setup_done_title": "動作設定完成",
+    "automod_action_type": {
+        "block_member_interactions": "封鎖成員互動",
+        "block_message": "封鎖訊息",
+        "send_alert_message": "傳送警報",
+        "timeout": "禁言用戶"
+    },
+    "btn": {
+        "retry_action": "不是，重新輸入",
+        "save_action": "是，儲存這個動作"
+    },
+    "default_action": {
+        "invite_link": "delete {user}，請勿發送其他伺服器的邀請連結。",
+        "scamtrap": "delete {user} 是最後一個被封禁的帳號，不要在這裡講話！, ban {user} 5s 12h [自動封禁] 疑似被盜帳號",
+        "spam": "mute 10m 刷頻自動禁言, delete {user}，請勿刷頻。",
+        "uispam": "delete {user}，請勿濫用用戶安裝的應用程式指令。, mute 10m 濫用用戶安裝指令"
+    },
+    "default_reason": {
+        "escape_punish": "逃避禁言",
+        "raid": "突襲偵測自動封禁"
+    },
+    "detect": {
+        "title": "🛡️ AutoMod 規則觸發",
+        "unknown_channel": "未知頻道",
+        "unknown_rule": "未知規則"
+    },
+    "err": {
+        "action_source_invalid": "`action_source` 只接受 local / api / both。",
+        "allow_current_server_bool": "`allow_current_server` 只接受 true / false。",
+        "automod_detect_needs_channel": "AutoMod 偵測請先選擇通知頻道。",
+        "channel_no_perms": "⚠️ 機器人在 {channel} 沒有檢視頻道或發送訊息的權限，請先調整後再設定。",
+        "channel_not_found": "⚠️ 找不到頻道（ID: `{channel_id}`），請確認輸入是否正確。",
+        "channel_not_in_guild": "⚠️ 找不到頻道（ID: `{channel_id}`），請確認這些頻道屬於目前伺服器。",
+        "flagged_user_needs_channel": "標記用戶加入偵測請先選擇通知頻道。",
+        "invalid_feature": "無效的功能。",
+        "local_match_mode_invalid": "`local_match_mode` 只接受 active / history。",
+        "not_enabled": "自動管理尚未啟用。",
+        "pick_action": "請選擇處置動作。",
+        "scamtrap_needs_channel": "詐騙陷阱請先選擇陷阱頻道。",
+        "unparseable_channels": "⚠️ 無法解析以下頻道：`{channels}`。請使用頻道提及或頻道 ID，並以逗號分隔。"
+    },
+    "feature_desc": {
+        "anti_invite_link": "偵測 Discord 邀請連結",
+        "anti_raid": "大量加入偵測",
+        "anti_spam": "相似訊息刷頻",
+        "anti_uispam": "User Install 濫用",
+        "automod_detect": "偵測 Discord 原生 AutoMod 觸發",
+        "escape_punish": "禁言期間離開者",
+        "flagged_user": "本機與 API 標記命中",
+        "scamtrap": "蜜罐頻道",
+        "too_many_emojis": "過多 emoji",
+        "too_many_h1": "Markdown 大標題洗版"
+    },
+    "feature_name": {
+        "anti_invite_link": "邀請連結",
+        "anti_raid": "防突襲",
+        "anti_spam": "防刷頻",
+        "anti_uispam": "用戶安裝應用程式濫用",
+        "automod_detect": "AutoMod 偵測",
+        "escape_punish": "逃避責任懲處",
+        "flagged_user": "標記用戶加入",
+        "scamtrap": "詐騙陷阱",
+        "too_many_emojis": "表情符號過多",
+        "too_many_h1": "標題過多"
+    },
+    "feature_name_emoji": {
+        "anti_invite_link": "🔗 邀請連結",
+        "anti_raid": "🚨 防突襲",
+        "anti_spam": "🔁 防刷頻",
+        "anti_uispam": "📲 用戶安裝應用程式濫用",
+        "automod_detect": "🛡️ AutoMod 偵測",
+        "escape_punish": "🏃 逃避責任懲處",
+        "flagged_user": "🚩 標記用戶加入",
+        "scamtrap": "🪤 詐騙陷阱",
+        "too_many_emojis": "😂 表情符號過多",
+        "too_many_h1": "📢 標題過多"
+    },
+    "field": {
+        "action": "處置動作",
+        "allow_current_server": "允許本伺服器連結",
+        "channel": "頻道",
+        "executed_action": "執行動作",
+        "ignore_channels": "忽略頻道",
+        "log_channel": "通知頻道",
+        "matched_content": "匹配內容",
+        "matched_keyword": "匹配關鍵字",
+        "message_content": "訊息內容",
+        "rule_name": "規則名稱",
+        "trigger_type": "觸發類型",
+        "user": "用戶"
+    },
+    "flagged": {
+        "action_done": "處置已執行。",
+        "action_failed": "處置失敗：{error}",
+        "action_not_applicable": "處置未執行：已儲存的動作不適用於成員加入事件。",
+        "action_result": "處置結果",
+        "api_entry": "• {reason}｜回報者: {reporter} ({reporter_id})｜{at}",
+        "api_records": "Blacklist API（{count} 筆）",
+        "local_entry": "• {guild}｜{at}｜{kind}",
+        "local_records": "本機資料（{count} 筆）",
+        "no_action_configured": "未設定自動處置。",
+        "source_mismatch": "動作來源設定為 {source}，本次來源不符合，未執行。",
+        "title": "🚩 標記用戶加入伺服器"
+    },
+    "info": {
+        "action_syntax_body": "動作可用逗號 `,` 串接，最多5個。可用動作:\n`delete` / `delete_dm` — 刪除訊息（可附帶警告）\n`warn` / `warn_dm` — 發送警告訊息\n`mute <時長>` — 禁言用戶\n`kick` — 踢出用戶\n`ban <時長> <刪除訊息時長>` — 封禁用戶\n`send_mod_message` — 傳送管理通知\n`force_verify <時長>` — 強制驗證用戶 (需先啟用網頁驗證) \n使用 {builder} 產生動作字串，或 {check} 預覽效果。",
+        "action_syntax_title": "⚙️ 動作指令語法",
+        "desc": "自動管理 (AutoModerate) 提供多種自動化保護功能，協助管理員維護伺服器秩序。\n使用 {quick_setup} 互動式快速設定（推薦），使用 {setup} 一次設定某功能的所有選項，使用 {toggle} 啟用或停用功能，使用 {settings} 單獨調整參數，使用 {view} 查看目前設定。",
+        "feature_body": {
+            "anti_invite_link": "偵測 Discord 邀請連結，可選擇是否允許本伺服器的邀請連結。\n設定項: `allow_current_server`（是否允許本服邀請）、`action`、`ignore_channels`（忽略頻道）",
+            "anti_raid": "偵測短時間內大量用戶加入伺服器，觸發時對所有新加入者執行處置。\n設定項: `max_joins`（最大加入數，預設5）、`time_window`（秒，預設60）、`action`",
+            "anti_spam": "偵測用戶短時間內發送相同或高度相似的訊息。\n設定項: `max_messages`（最大訊息數，預設5）、`time_window`（秒，預設30）、`similarity`（相似度閾值 0~100，預設75）、`action`、`ignore_channels`（忽略頻道）",
+            "anti_uispam": "偵測用戶透過 User Install 方式觸發的指令頻率，防止濫用。\n設定項: `max_count`（最大次數，預設5）、`time_window`（秒，預設60）、`action`、`ignore_channels`（忽略頻道）",
+            "automod_detect": "偵測 Discord 原生 AutoMod 規則被觸發時，發送通知到指定頻道，並可選擇執行額外處置動作。\n設定項: `log_channel`（通知頻道）、`action`（額外處置動作，可選）\n過濾條件: `filter_rule`（規則名稱過濾，支援多個用 `|` 分隔）、`filter_action_type`（動作類型過濾: block/alert/timeout/block_interactions，支援多個用 `|` 分隔）",
+            "escape_punish": "當用戶在禁言期間離開伺服器時，自動執行額外懲處（如封禁）。\n設定項: `punishment`（懲處方式）、`duration`（持續時間）",
+            "flagged_user": "合併本機三個月內標記資料與 Blacklist API 快取，在標記用戶加入時通知並可執行處置。\n設定項: `log_channel`（通知頻道）、`action`（可選）、`action_source`（local/api/both）、`local_match_mode`（active/history）",
+            "scamtrap": "設定一個蜜罐頻道，任何在該頻道發送訊息的用戶將被自動處置。\n設定項: `channel_id`（頻道）、`action`（處置動作）",
+            "too_many_emojis": "偵測訊息中的表情符號數量（含自訂及 Unicode emoji），超過上限自動處置。\n設定項: `max_emojis`（最大數量，預設10）、`action`、`ignore_channels`（忽略頻道）",
+            "too_many_h1": "偵測訊息中 Markdown 大標題 (`# `) 的總字數過長，防止洗版。\n設定項: `max_length`（最大字數，預設20）、`action`、`ignore_channels`（忽略頻道）"
+        },
+        "feature_heading": "{name} ({key})",
+        "title": "自動管理功能介紹"
+    },
+    "modal": {
+        "custom_action_label": "處置動作指令",
+        "custom_action_ph": "例：mute 30m 刷頻, delete {user} 請勿刷頻",
+        "custom_action_title": "自訂處置動作"
+    },
+    "msg": {
+        "alert_channel_set": "已將用戶加入通知頻道設置為 {channel}。",
+        "setting_set": "已將自動管理設定 '{setting}' 設為 {value}。",
+        "toggled": "已將自動管理設定 '{setting}' 設為 {status}。"
+    },
+    "quick_setup": {
+        "action_ph": "處置動作（選一個）",
+        "action_source_ph": "選擇處置來源",
+        "allow_invite_no_desc": "任何 Discord 邀請連結都會觸發",
+        "allow_invite_ph": "是否允許本伺服器邀請連結",
+        "allow_invite_yes_desc": "只阻擋其他伺服器的邀請連結",
+        "ban_duration_ph": "封禁時長",
+        "days_30": "30 天",
+        "days_7": "7 天",
+        "done_desc": "已完成 **{feature}** 的快速設定並啟用。",
+        "done_title": "✅ 設定完成",
+        "feature_ph": "選擇功能",
+        "finish_btn": "完成設定",
+        "ignore_channels_ph": "選擇要忽略的頻道（可多選）",
+        "log_channel_ph": "選擇通知頻道",
+        "match_mode_active": "僅目前標記",
+        "match_mode_history": "三個月內所有紀錄",
+        "match_mode_ph": "選擇本機命中模式",
+        "max_emojis_ph": "最大表情符號數",
+        "max_h1_length_ph": "最大標題字數",
+        "max_joins_ph": "時間窗口內最大加入數",
+        "max_similar_messages_ph": "最大相似訊息數",
+        "max_trigger_count_ph": "時間窗口內最大觸發次數",
+        "more_channels": "... 共 {count} 個",
+        "punishment_ph": "懲處方式",
+        "seconds_n": "{count} 秒",
+        "similarity_ph": "相似度閾值",
+        "source_api": "僅 API",
+        "source_both": "本機與 API",
+        "source_local": "僅本機",
+        "step1_desc": "請選擇要設定的功能：",
+        "step2_desc": "正在設定 **{feature}**\n請完成下方選項後點擊「完成設定」。",
+        "time_window_ph": "偵測時間窗口（秒）",
+        "title": "⚡ 自動管理快速設定",
+        "trap_channel_ph": "選擇陷阱頻道"
+    },
+    "records_omitted": "…另有 {count} 筆紀錄未顯示。",
+    "scan": {
+        "api_cache": "API 快取：{status}",
+        "api_last_sync": "最後成功同步 {at}",
+        "api_line": " - [API] {reason}；回報者: {reporter} ({reporter_id})；時間: {at}",
+        "api_never_synced": "尚未成功同步",
+        "api_no_result": "尚無同步結果",
+        "api_ok": "成功",
+        "api_status": "API 最近狀態：{status}",
+        "flag_active": "目前標記",
+        "flag_history": "歷史紀錄",
+        "local_data": "本機資料：{status}",
+        "local_line": " - [本機/{kind}] {guild}，標記時間: {at}",
+        "local_ok": "已套用三個月內 / {mode}",
+        "local_read_failed": "讀取失敗 ({error})",
+        "matches_found": "掃描完成，共找到 {count} 位標記用戶。",
+        "no_matches": "掃描完成，未找到標記用戶。",
+        "user_line": "用戶: {user} (ID: {user_id})"
+    },
+    "settings_title": "自動管理設定",
+    "suggest": {
+        "clear": "只通知（清除處置）",
+        "custom": "自訂..."
+    },
+    "trigger_type": {
+        "harmful_link": "有害連結",
+        "keyword": "關鍵字",
+        "keyword_preset": "預設關鍵字",
+        "member_profile": "用戶個人資料",
+        "mention_spam": "提及濫用",
+        "spam": "疑似垃圾訊息"
+    },
+    "unknown_guild": "未知伺服器",
+    "unknown_user": "未知用戶",
+    "warn": {
+        "anti_invite_no_action": "請注意，邀請連結偵測已啟用，但尚未設定動作指令。請使用 {command} 來設定 `anti_invite_link-action`。",
+        "automod_detect_no_channel": "請注意，AutoMod 偵測已啟用，但尚未設定通知頻道。請使用 {command} 來設定 `automod_detect-log_channel`。",
+        "flagged_user_no_channel": "請注意，標記用戶加入偵測已啟用，但尚未設定通知頻道。請使用 {command} 設定 `flagged_user-log_channel`。",
+        "scamtrap_no_action": "請注意，詐騙陷阱已啟用，但尚未設定動作指令。請使用 {command} 來設定動作指令。",
+        "scamtrap_no_channel": "請注意，詐騙陷阱已啟用，但尚未設定頻道ID。請使用 {command} 來設定頻道ID。"
+    }
+}

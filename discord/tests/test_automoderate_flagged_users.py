@@ -69,7 +69,7 @@ class BlacklistPayloadTests(unittest.TestCase):
     def test_rejects_incomplete_or_mixed_status_snapshots(self):
         with self.assertRaisesRegex(ValueError, "data.items"):
             AutoModerate._normalize_blacklist_payload({"code": 200, "data": {}})
-        with self.assertRaisesRegex(ValueError, "非有效紀錄"):
+        with self.assertRaisesRegex(ValueError, "non-active record"):
             AutoModerate._normalize_blacklist_payload(api_payload([api_item(status=0)]))
         bad_date = api_item()
         bad_date["reported_at"] = "not-a-date"
@@ -369,7 +369,7 @@ class FlaggedUserBehaviorTests(unittest.IsolatedAsyncioTestCase):
             await cog.on_member_join(member)
         action.assert_not_awaited()
         channel.send.assert_awaited_once()
-        self.assertTrue(any("本機標記資料失敗" in str(call) or "讀取本機標記資料失敗" in str(call) for call in event_log.call_args_list))
+        self.assertTrue(any("Failed to read local flagged records" in str(call) for call in event_log.call_args_list))
 
     async def test_scan_uses_current_cache_without_fetching_api(self):
         cog = AutoModerate.AutoModerate(MagicMock())
