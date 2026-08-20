@@ -1,0 +1,139 @@
+{
+    "about": {
+        "antibeast_body": "AntiBeast 啟用時會讓 @everyone 擁有提及權限，關閉可提及會失效；此時 MentionLimit 會自動改用 AutoMod 規則強制執行。\n加入身分組時會自動加入 AntiBeast 繞過清單（移除時不會自動移出）。",
+        "antibeast_title": "AntiBeast 相容",
+        "automod_mode_body": "身分組保持永遠可提及，冷卻期間改用 Discord 原生 AutoMod 規則封鎖該身分組的提及。\n注意：AutoMod 不會作用於管理員與伺服器擁有者，他們在冷卻期間仍可提及。",
+        "automod_mode_title": "AutoMod 模式",
+        "default_mode_body": "被提及後暫時關閉身分組的「允許任何人提及」，冷卻結束還原原本設定。",
+        "default_mode_title": "預設模式",
+        "desc": "為「我想被tag」這類開放提及的身分組加上冷卻：\n身分組被提及後，會暫時擋住再次提及，冷卻結束自動恢復。",
+        "other_body": "「計入管理員」可讓管理員的提及也觸發冷卻（預設不觸發）。\n「冷卻公告」會在進入冷卻時於該頻道發出提示（預設關閉）。",
+        "other_title": "其他設定"
+    },
+    "antibeast": {
+        "bypass_added_pending": "已偵測到 AntiBeast 啟用中，已自動將 **{role}** 加入 AntiBeast 繞過清單，將於 AntiBeast 下次同步時生效。",
+        "bypass_added_synced": "已偵測到 AntiBeast 啟用中，已自動將 **{role}** 加入 AntiBeast 繞過清單並同步其 AutoMod 規則。",
+        "bypass_failed": "⚠️ 將 **{role}** 加入 AntiBeast 繞過清單失敗，請手動執行 `/antibeast bypass`。"
+    },
+    "audit": {
+        "cooldown_ended": "MentionLimit 冷卻結束",
+        "cooldown_start": "MentionLimit 冷卻開始，{seconds} 秒後恢復",
+        "cooldown_started": "MentionLimit 冷卻開始",
+        "cooldown_started_degraded": "MentionLimit 冷卻開始（降級執法）",
+        "cooldown_sync": "MentionLimit 冷卻狀態同步",
+        "enforcement_reconcile": "MentionLimit 執法模式對帳"
+    },
+    "block_message": "MentionLimit 已阻擋提及：此身分組正在冷卻中，請稍後再試。",
+    "btn": {
+        "announce_toggle": "冷卻公告：{state}",
+        "automod_toggle": "AutoMod 模式：{state}",
+        "back_to_roles": "返回選擇身分組",
+        "clear_and_continue": "清空並繼續",
+        "count_admins_toggle": "計入管理員：{state}",
+        "enable": "啟用 MentionLimit",
+        "keep_current": "保留目前設定",
+        "set_cooldown": "設定冷卻秒數"
+    },
+    "config": {
+        "automod_admin_note": "AutoMod 不會作用於管理員與伺服器擁有者。",
+        "deleted_role": "已刪除的身分組 ({role_id})",
+        "more_roles": "…以及其他 {count} 個身分組",
+        "no_roles": "尚未加入任何身分組，請用 `/mentionlimit add` 加入。",
+        "not_in_bypass": "　⚠️ 不在 AntiBeast 繞過清單，提及會被 AntiBeast 阻擋。",
+        "role_line": "{role}｜冷卻 {seconds} 秒｜{state}",
+        "rule_not_created": "尚未建立",
+        "state_cooling": "冷卻中，{when} 結束",
+        "state_idle": "未在冷卻",
+        "title": "MentionLimit 設定"
+    },
+    "err": {
+        "bot_hierarchy_too_low": "⚠️ 機器人的最高身分組必須高於 **{role}** 才能切換它的可提及狀態。",
+        "bot_missing_perms": "⚠️ 機器人缺少權限：{perms}",
+        "cannot_manage_everyone": "⚠️ 不能管理 @everyone。",
+        "cannot_manage_integration_role": "⚠️ 不能管理由機器人或整合服務管理的身分組。",
+        "cooldown_not_int": "⚠️ 冷卻秒數必須是整數。",
+        "cooldown_range": "⚠️ 冷卻時間必須介於 {min} 到 {max} 秒。",
+        "max_roles": "⚠️ 最多只能管理 {max} 個身分組。",
+        "not_your_setup": "這個設定流程不是你的。",
+        "role_not_managed": "⚠️ **{role}** 不在管理清單中。",
+        "rule_limit_reached": "⚠️ MentionLimit 無法建立 AutoMod 規則：這個伺服器的 Discord AutoMod 規則數量已達上限。請先刪除不需要的 AutoMod 規則後再試。",
+        "rule_sync_forbidden": "⚠️ MentionLimit 同步 AutoMod 規則失敗：{error}",
+        "rule_sync_generic": "⚠️ MentionLimit 同步 AutoMod 規則失敗，請稍後再試。",
+        "rule_sync_http": "⚠️ MentionLimit 同步 AutoMod 規則失敗：Discord API 回應錯誤 ({status})。"
+    },
+    "field": {
+        "announce": "冷卻公告",
+        "automod_rule": "AutoMod 規則",
+        "count_admins": "計入管理員",
+        "managed_roles": "受管理身分組",
+        "mode": "模式",
+        "status": "狀態"
+    },
+    "modal": {
+        "cooldown_label": "冷卻秒數（{min}-{max}），套用到所有已選身分組",
+        "cooldown_title": "MentionLimit 冷卻設定"
+    },
+    "mode": {
+        "antibeast_forced": "（AntiBeast 啟用中，強制使用 AutoMod 模式）",
+        "automod": "AutoMod 規則封鎖",
+        "unmentionable": "關閉可提及"
+    },
+    "msg": {
+        "cooldown_announce": "⏳ {role} 已進入提及冷卻，{when} 後恢復。",
+        "currently_disabled": "ℹ️ MentionLimit 目前是停用狀態，請用 `/mentionlimit toggle` 啟用。",
+        "disabled": "✅ MentionLimit 已**停用**，冷卻中的身分組已全部還原。",
+        "disabled_partial_failure": "⚠️ 部分身分組還原失敗，將自動重試；請檢查機器人權限。",
+        "enabled": "✅ MentionLimit 已**啟用**，目前管理 {count} 個身分組。",
+        "enabled_no_roles": "請用 `/mentionlimit add` 加入要管理的身分組。",
+        "role_added": "✅ 已將 **{role}** 加入提及冷卻管理，冷卻時間 {seconds} 秒。",
+        "role_removed": "✅ 已移除 **{role}** 的提及冷卻管理。",
+        "role_removed_restore_failed": "⚠️ 還原可提及狀態失敗，請手動檢查身分組設定。",
+        "role_removed_restored": "（原本正在冷卻，已立即還原）",
+        "role_updated": "✅ 已將 **{role}** 更新提及冷卻管理，冷卻時間 {seconds} 秒。"
+    },
+    "note": {
+        "antibeast_forces_automod": "⚠️ AntiBeast 啟用中：冷卻期間仍會以 AutoMod 規則強制執行，直到 AntiBeast 停用。",
+        "automod_skips_admins": "ℹ️ AutoMod 不會作用於管理員與伺服器擁有者，他們在冷卻期間仍可提及。"
+    },
+    "perm": {
+        "manage_guild": "管理伺服器",
+        "manage_roles": "管理身分組"
+    },
+    "settings": {
+        "announce_line": "冷卻公告：{state}",
+        "automod_line": "AutoMod 模式：{state}",
+        "count_admins_line": "計入管理員：{state}",
+        "current": "目前設定：",
+        "updated": "已更新設定。"
+    },
+    "setup": {
+        "antibeast_note": "⚠️ AntiBeast 啟用中：冷卻期間會強制以 AutoMod 規則執行，並自動將身分組加入 AntiBeast 繞過清單。",
+        "confirm_desc": "確認設定後按下啟用。",
+        "confirm_title": "MentionLimit Setup: 確認啟用",
+        "current_selection": "目前選擇",
+        "enabled_title": "MentionLimit 已啟用",
+        "hierarchy_body": "機器人的最高身分組低於：{roles}，將無法切換這些身分組的可提及狀態。",
+        "hierarchy_title": "⚠️ 身分組層級",
+        "mode_explainer": "AutoMod 模式：冷卻期間用 AutoMod 規則封鎖，身分組保持可提及。\n關閉時：冷卻期間暫時關閉身分組的「允許任何人提及」。",
+        "nothing_selected": "尚未選擇",
+        "nothing_selected_hint": "尚未選擇（也可以之後用 `/mentionlimit add` 加入）",
+        "options_desc": "設定冷卻秒數與執法模式。",
+        "options_title": "MentionLimit Setup: 冷卻與模式",
+        "role_line": "{role}｜冷卻 {seconds} 秒",
+        "role_select_ph": "選擇要管理的身分組",
+        "roles_desc": "選擇要加上提及冷卻的身分組（例如「我想被tag」）。\n@everyone 與整合服務管理的身分組會自動排除。",
+        "roles_title": "MentionLimit Setup: 受管理身分組"
+    },
+    "state": {
+        "disabled": "❌ 停用",
+        "enabled": "✅ 啟用",
+        "no": "❌ 否",
+        "no_plain": "否",
+        "off": "❌ 關",
+        "off_plain": "關",
+        "on": "✅ 開",
+        "on_plain": "開",
+        "yes": "✅ 是",
+        "yes_plain": "是"
+    }
+}
