@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 import asyncio
 import copy
@@ -1242,7 +1242,7 @@ class AntiBeastActionPresetSelect(discord.ui.Select):
         self.parent_view = parent
         options = [
             discord.SelectOption(label=label, value=value)
-            for label, value in (Moderate.ACTION_INPUT_SUGGESTIONS if Moderate is not None else [])[:25]
+            for label, value in (Moderate._action_input_suggestions() if Moderate is not None else [])[:25]
         ]
         super().__init__(placeholder="選擇常用動作", options=options, row=0)
 
@@ -1262,7 +1262,7 @@ class AntiBeastActionView(SetupView):
         super().__init__(session)
         self.module_name = module_name
         self.config = load_antibeast_config(session.guild.id)
-        if Moderate is not None and Moderate.ACTION_INPUT_SUGGESTIONS:
+        if Moderate is not None and Moderate.ACTION_INPUT_SUGGESTION_KEYS:
             self.add_item(AntiBeastActionPresetSelect(self))
         edit = discord.ui.Button(label="編輯門檻與動作", style=discord.ButtonStyle.primary, row=1)
         edit.callback = self.edit
@@ -2636,7 +2636,7 @@ class AutoModerateActionPresetSelect(discord.ui.Select):
     def __init__(self, parent: "AutoModerateFieldView"):
         self.parent_view = parent
         field_schema = getattr(parent, "field_schema", {})
-        suggestions = Moderate.ACTION_INPUT_SUGGESTIONS if Moderate is not None else []
+        suggestions = Moderate._action_input_suggestions() if Moderate is not None else []
         if field_schema.get("action_context") == "member_join" and Moderate is not None:
             suggestions = [
                 (label, value)

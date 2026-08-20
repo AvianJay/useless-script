@@ -1,4 +1,4 @@
-from globalenv import bot, start_bot, get_server_config, set_server_config, get_user_data, set_user_data, on_ready_tasks, config, modules, get_command_mention
+﻿from globalenv import bot, start_bot, get_server_config, set_server_config, get_user_data, set_user_data, on_ready_tasks, config, modules, get_command_mention
 import discord
 from discord import app_commands
 from discord.ext import commands
@@ -24,6 +24,9 @@ from embed_template import (
     validate_embed_template,
 )
 
+import i18n
+from i18n import t, t_enum
+
 ignore_message_ids = set()  # 用於暫時忽略特定訊息的處理（例如剛剛被刪除的訊息）
 BUILTIN_ACTIONS = {
     "ban", "kick", "mute", "timeout", "to", "unban", "unmute", "untimeout",
@@ -31,19 +34,27 @@ BUILTIN_ACTIONS = {
 }
 REPLY_ACTION_ALIASES = {f"{action}r": action for action in BUILTIN_ACTIONS}
 
-ACTION_INPUT_SUGGESTIONS = [
-    ("刪除訊息", "delete"),
-    ("刪除訊息並公開警告", "delete {user}，請注意你的行為。"),
-    ("公開警告", "warn {user}，請注意你的行為。"),
-    ("禁言 10 分鐘", "mute 10m 違規"),
-    ("禁言 10 分鐘（to 短寫）", "to 10m 違規"),
-    ("禁言 1 小時", "mute 1h 違規"),
-    ("踢出", "kick 違規"),
-    ("永久封禁", "ban 0 0 違規"),
-    ("封禁 1 天並刪除 7 天訊息", "ban 1d 7d 違規"),
-    ("強制驗證 1 天", "force_verify 1d"),
-    ("發送懲處公告", "smm"),
+# 動作指令輸入建議：label 與範例原因是顯示用（在地化），DSL 動作詞（delete/mute/...）
+# 與 {user} 佔位符是永久語法，值模板存在語言檔中、由 t() 的 _SafeDict 保留不變。
+ACTION_INPUT_SUGGESTION_KEYS = [
+    ("moderate.suggest.delete", "moderate.suggest.value.delete"),
+    ("moderate.suggest.delete_warn", "moderate.suggest.value.delete_warn"),
+    ("moderate.suggest.warn", "moderate.suggest.value.warn"),
+    ("moderate.suggest.mute_10m", "moderate.suggest.value.mute_10m"),
+    ("moderate.suggest.to_10m", "moderate.suggest.value.to_10m"),
+    ("moderate.suggest.mute_1h", "moderate.suggest.value.mute_1h"),
+    ("moderate.suggest.kick", "moderate.suggest.value.kick"),
+    ("moderate.suggest.ban_perm", "moderate.suggest.value.ban_perm"),
+    ("moderate.suggest.ban_1d", "moderate.suggest.value.ban_1d"),
+    ("moderate.suggest.force_verify_1d", "moderate.suggest.value.force_verify_1d"),
+    ("moderate.suggest.smm", "moderate.suggest.value.smm"),
 ]
+
+
+def _action_input_suggestions() -> list[tuple[str, str]]:
+    """回傳 (顯示 label, 範例動作字串) 清單；DSL 動作詞與 {user} 佔位符不變，其餘在地化。"""
+    reason = t("moderate.suggest.sample_reason")
+    return [(t(label_key), t(value_key, reason=reason)) for label_key, value_key in ACTION_INPUT_SUGGESTION_KEYS]
 
 _DURATION_TOKEN_RE = re.compile(
     r"^(?:0|(?:\d+(?:seconds?|minutes?|hours?|days?|weeks?|months?|years?|s|m|h|d|w|M|y|秒|分|分鐘|小時|天|週|月|個月|年))+)$"
@@ -52,13 +63,6 @@ MAX_TIMEOUT_SECONDS = 28 * 24 * 60 * 60
 MODERATION_ANNOUNCEMENT_CONFIG_KEY = "moderation_announcement_config"
 MODERATION_CASE_STATE_KEY = "moderation_case_state"
 DEFAULT_MODERATION_CASE_ID_FORMAT = "{roc_year}{sequence:04d}"
-DEFAULT_MODERATION_ANNOUNCEMENT_TEMPLATE = """### ⛔ 違規處分
-> - 被處分者：{user}{report_context}
-> - 處分原因：{reason}
-> - 處分結果：{action}
-> - 裁判字號：{case_id}
-> - 處分執行：{moderator}
-{ai_note}"""
 MODERATION_TEMPLATE_VARIABLES = {
     "user",
     "user_name",
@@ -141,22 +145,22 @@ def timestr_to_seconds(timestr: str) -> int:
     return total_seconds
 
 
-def get_time_text(seconds: int) -> str:
-    final = ""
+def get_time_text(seconds: int, *, locale: str | None = None) -> str:
+    parts = []
     while seconds != 0:
         if seconds < 60:
-            final += f" {seconds} 秒"
+            parts.append(i18n.tn("common.unit.seconds", seconds, locale=locale))
             seconds = 0
         elif seconds < 3600:
-            final += f" {seconds // 60} 分鐘"
+            parts.append(i18n.tn("common.unit.minutes", seconds // 60, locale=locale))
             seconds = seconds % 60
         elif seconds < 86400:
-            final += f" {seconds // 3600} 小時"
+            parts.append(i18n.tn("common.unit.hours", seconds // 3600, locale=locale))
             seconds = seconds % 3600
         else:
-            final += f" {seconds // 86400} 天"
+            parts.append(i18n.tn("common.unit.days", seconds // 86400, locale=locale))
             seconds = seconds % 86400
-    return final.strip()
+    return " ".join(parts)
 
 
 def guess_role(guild: discord.Guild, role_name: str):
@@ -200,43 +204,43 @@ def current_roc_year() -> int:
     return _taipei_now().year - 1911
 
 
-def default_moderation_announcement_config() -> dict[str, str]:
+def default_moderation_announcement_config(*, locale: str | None = None) -> dict[str, str]:
     return {
-        "template": DEFAULT_MODERATION_ANNOUNCEMENT_TEMPLATE,
+        "template": t("moderate.default_announcement_template", locale=locale),
         "case_id_format": DEFAULT_MODERATION_CASE_ID_FORMAT,
     }
 
 
 def _parse_case_id_format(case_id_format: str) -> list[tuple[str, str | None, str, str | None]]:
     if not isinstance(case_id_format, str):
-        raise ValueError("裁判字號格式必須是文字。")
+        raise ValueError(t("moderate.err.case_id_format_not_string"))
     case_id_format = case_id_format.strip()
     if not case_id_format:
-        raise ValueError("裁判字號格式不得為空。")
+        raise ValueError(t("moderate.err.case_id_format_empty"))
     if len(case_id_format) > 100:
-        raise ValueError("裁判字號格式不得超過 100 字。")
+        raise ValueError(t("moderate.err.case_id_format_too_long"))
 
     try:
         parsed = list(string.Formatter().parse(case_id_format))
     except ValueError as error:
-        raise ValueError(f"裁判字號格式無效：{error}") from error
+        raise ValueError(t("moderate.err.case_id_format_invalid", error=error)) from error
 
     fields = []
     for _, field_name, format_spec, conversion in parsed:
         if field_name is None:
             continue
         if field_name not in {"year", "roc_year", "sequence"}:
-            raise ValueError(f"不支援的裁判字號變數 `{{{field_name}}}`。")
+            raise ValueError(t("moderate.err.case_id_format_unsupported_var", field=field_name))
         if conversion is not None:
-            raise ValueError("裁判字號格式不支援 `!` 轉換。")
+            raise ValueError(t("moderate.err.case_id_format_no_conversion"))
         if field_name == "sequence":
             if format_spec not in {"", "d"} and not re.fullmatch(r"0[1-9]d", format_spec):
-                raise ValueError("sequence 只支援 `{sequence}`、`{sequence:d}` 或 `{sequence:04d}` 這類補零格式。")
+                raise ValueError(t("moderate.err.case_id_format_sequence_spec"))
         elif format_spec not in {"", "d"}:
-            raise ValueError(f"{field_name} 只支援空白格式或 `:d`。")
+            raise ValueError(t("moderate.err.case_id_format_field_spec", field=field_name))
         fields.append(field_name)
     if "sequence" not in fields:
-        raise ValueError("裁判字號格式必須包含 `{sequence}`。")
+        raise ValueError(t("moderate.err.case_id_format_missing_sequence"))
     return parsed
 
 
@@ -249,7 +253,7 @@ def format_case_id(case_id_format: str, year: int, sequence: int) -> str:
             sequence=int(sequence),
         )
     except (KeyError, ValueError) as error:
-        raise ValueError(f"無法產生裁判字號：{error}") from error
+        raise ValueError(t("moderate.err.case_id_generate_failed", error=error)) from error
 
 
 def _compile_case_id_regex(case_id_format: str) -> re.Pattern:
@@ -276,34 +280,35 @@ def _compile_case_id_regex(case_id_format: str) -> re.Pattern:
     return re.compile(r"(?<!\d)" + "".join(pattern_parts) + r"(?!\d)")
 
 
-def normalize_moderation_announcement_config(value) -> dict[str, str]:
-    defaults = default_moderation_announcement_config()
+def normalize_moderation_announcement_config(value, *, locale: str | None = None) -> dict[str, str]:
+    defaults = default_moderation_announcement_config(locale=locale)
     raw = value if isinstance(value, dict) else {}
     template = raw.get("template", defaults["template"])
     case_id_format = raw.get("case_id_format", defaults["case_id_format"])
     template = str(template if template is not None else defaults["template"])
     case_id_format = str(case_id_format if case_id_format is not None else defaults["case_id_format"]).strip()
     if not template.strip():
-        raise ValueError("懲處公告模板不得為空。")
+        raise ValueError(t("moderate.err.announcement_template_empty", locale=locale))
     if len(template) > 4000:
-        raise ValueError("懲處公告模板不得超過 4000 字。")
+        raise ValueError(t("moderate.err.announcement_template_too_long", locale=locale))
     try:
         validate_embed_template(template, MODERATION_TEMPLATE_VARIABLES)
     except EmbedTemplateSyntaxError as error:
-        raise ValueError(f"懲處公告模板無效：{error}") from error
+        raise ValueError(t("moderate.err.announcement_template_invalid", locale=locale, error=error)) from error
     _parse_case_id_format(case_id_format)
     _, extracted = extract_embed_tokens(template)
     if len(extracted["fields"]) > 25:
-        raise ValueError("懲處公告模板最多只能包含 25 個 Embed 欄位。")
+        raise ValueError(t("moderate.err.announcement_template_too_many_fields", locale=locale))
     return {"template": template, "case_id_format": case_id_format}
 
 
 def get_moderation_announcement_config(guild_id: int) -> dict[str, str]:
+    guild_locale = i18n.resolve_locale(guild_id=guild_id)
     raw = get_server_config(guild_id, MODERATION_ANNOUNCEMENT_CONFIG_KEY, {})
     try:
-        return normalize_moderation_announcement_config(raw)
+        return normalize_moderation_announcement_config(raw, locale=guild_locale)
     except ValueError:
-        return default_moderation_announcement_config()
+        return default_moderation_announcement_config(locale=guild_locale)
 
 
 def _message_case_texts(message: discord.Message) -> list[str]:
@@ -431,11 +436,11 @@ def check_member_hierarchy(
     if not isinstance(target, discord.Member):
         return True, ""
     if target == target.guild.owner:
-        return False, "無法對伺服器擁有者執行此操作。"
+        return False, t("moderate.err.cannot_target_owner")
     if target.top_role >= bot_member.top_role:
-        return False, f"機器人無法對 {target.mention} 執行操作（對方身份組高於或等於機器人）。"
+        return False, t("moderate.err.bot_hierarchy_too_low", target=target.mention)
     if executor != executor.guild.owner and target.top_role >= executor.top_role:
-        return False, f"你無法對 {target.mention} 執行操作（對方身份組高於或等於你）。"
+        return False, t("moderate.err.executor_hierarchy_too_low", target=target.mention)
     return True, ""
 
 
@@ -447,19 +452,17 @@ async def ban_user(guild: discord.Guild, user: Union[discord.Member, discord.Use
             set_user_data(guild.id, user.id, "unban_time", unban_time.isoformat())
         ModerationNotify.ignore_user(user.id)  # 避免重複通知
         try:
-            notifymsg = await ModerationNotify.notify_user(user, guild, "封禁", reason, end_time=unban_time if duration > 0 else None, moderator=moderator)
+            notifymsg = await ModerationNotify.notify_user(user, guild, "封禁", reason, end_time=unban_time if duration > 0 else None, moderator=moderator)  # i18n: skip (ModerationNotify action token)
         except Exception:
             pass
         if isinstance(user, discord.Member):
             await user.ban(reason=reason, delete_message_seconds=delete_message_seconds)
         else:
             await guild.ban(user, reason=reason, delete_message_seconds=delete_message_seconds)
-        # print(f"[+] 已封禁用戶 {user}，原因：{reason}，解封時間：{'無' if duration == 0 else unban_time.isoformat()}")
-        log(f"已封禁用戶 {user}，原因：{reason}，解封時間：{'無' if duration == 0 else unban_time.isoformat()}", module_name="Moderate", guild=guild)
+        log(f"Banned {user}, reason: {reason}, unban time: {'none' if duration == 0 else unban_time.isoformat()}", module_name="Moderate", guild=guild)
         return True
     except Exception as e:
-        # print(f"[!] 無法封禁用戶 {user}：{e}")
-        log(f"無法封禁用戶 {user}：{e}", level=logging.ERROR, module_name="Moderate", guild=guild)
+        log(f"Failed to ban {user}: {e}", level=logging.ERROR, module_name="Moderate", guild=guild)
         if notifymsg:
             await notifymsg.delete()
         return False
@@ -467,8 +470,7 @@ async def ban_user(guild: discord.Guild, user: Union[discord.Member, discord.Use
 
 async def check_unban():
     await bot.wait_until_ready()
-    # print("[+] 自動解封任務已啟動")
-    log("自動解封任務已啟動", module_name="Moderate")
+    log("Auto-unban task started", module_name="Moderate")
     try:
         while not bot.is_closed():
             for guild in bot.guilds:
@@ -493,20 +495,19 @@ async def check_unban():
                         if unban_time <= datetime.now(timezone.utc):
                             to_unban.append(user)
                 except Exception as e:
-                    # print(f"[!] 讀取 {guild.name} 的封鎖列表發生錯誤：{e}")
                     continue
 
                 for user in to_unban:
                     try:
-                        await guild.unban(user, reason="自動解封")
+                        await guild.unban(user, reason=t("moderate.audit.auto_unban", locale=i18n.resolve_locale(guild_id=guild_id)))
                         set_user_data(guild_id, user.id, "unban_time", None)
-                        log(f"已自動解封 {user} 在 {guild.name} 的封禁。", module_name="Moderate", guild=guild)
+                        log(f"Auto-unbanned {user} in {guild.name}.", module_name="Moderate", guild=guild)
                     except Exception as e:
-                        log(f"解封 {user} 時發生錯誤：{e}", level=logging.ERROR, module_name="Moderate", guild=guild)
+                        log(f"Error unbanning {user}: {e}", level=logging.ERROR, module_name="Moderate", guild=guild)
 
             await asyncio.sleep(60)  # 每分鐘檢查一次
     except asyncio.CancelledError:
-        log("自動解封任務已取消", module_name="Moderate")
+        log("Auto-unban task cancelled", module_name="Moderate")
 on_ready_tasks.append(check_unban)
 
 
@@ -521,14 +522,13 @@ def _bot_action_check(
         return True, ""
     bot_member = guild.me
     if not getattr(bot_member.guild_permissions, perm_name, False):
-        return False, f"機器人缺少 `{perm_name}` 權限，跳過此動作。"
+        return False, t("moderate.err.bot_missing_perm", perm=perm_name)
     if user and isinstance(user, discord.Member):
         if user == guild.owner:
-            return False, "無法對伺服器擁有者執行操作。"
+            return False, t("moderate.err.cannot_target_owner_action")
         if user.top_role >= bot_member.top_role:
             if getattr(user.guild_permissions, perm_name, False):
-                return False, f"{user} 是管理員且身份組高於或等於機器人，跳過此動作。"
-            # return False, f"{user} 的身份組高於或等於機器人，跳過此動作。"
+                return False, t("moderate.err.target_is_admin_hierarchy", user=str(user))
     return True, ""
 
 
@@ -582,22 +582,22 @@ def _custom_action_argument_count(template: str) -> int:
     matches = list(_CUSTOM_ACTION_ARGUMENT_RE.finditer(template))
     indexes = sorted({int(match.group(1)) for match in matches})
     if indexes and indexes != list(range(1, indexes[-1] + 1)):
-        raise ValueError("自訂指令參數必須從 `{1}` 開始連續編號。")
+        raise ValueError(t("moderate.err.custom_action_args_not_sequential", token="{1}"))
     for match in matches:
         fallback = match.group(2)
         if fallback is not None and "," in fallback:
-            raise ValueError("自訂指令參數的 fallback 不可包含逗號；逗號保留為動作分隔符。")
+            raise ValueError(t("moderate.err.custom_action_fallback_comma"))
     malformed = re.search(r"\{(?:0|[1-9]\d+)(?::[^{}]*)?\}", template)
     remaining = _CUSTOM_ACTION_ARGUMENT_RE.sub("", template)
     if malformed or re.search(r"\{\d", remaining):
-        raise ValueError("自訂指令參數只支援 `{1}` 至 `{9}`。")
+        raise ValueError(t("moderate.err.custom_action_args_range", start="{1}", end="{9}"))
     return indexes[-1] if indexes else 0
 
 
 def _substitute_custom_action_arguments(template: str, args: list[str]) -> str:
     argument_count = _custom_action_argument_count(template)
     if len(args) > argument_count:
-        raise ValueError(f"自訂指令最多接受 {argument_count} 個參數，但收到 {len(args)} 個。")
+        raise ValueError(t("moderate.err.custom_action_too_many_args", max=argument_count, count=len(args)))
 
     def replace_argument(match: re.Match) -> str:
         index = int(match.group(1))
@@ -607,7 +607,7 @@ def _substitute_custom_action_arguments(template: str, args: list[str]) -> str:
         fallback = match.group(2)
         if fallback is not None:
             return _quote_custom_action_argument(fallback) if any(char.isspace() for char in fallback) else fallback
-        raise ValueError(f"自訂指令缺少第 {index} 個必要參數 `{{{index}}}`。")
+        raise ValueError(t("moderate.err.custom_action_missing_arg", index=index))
 
     return _CUSTOM_ACTION_ARGUMENT_RE.sub(replace_argument, template)
 
@@ -628,10 +628,10 @@ def _expand_custom_action_aliases(action: str, custom_actions: dict[str, str]) -
             try:
                 parts = _split_custom_action_tokens(chunk)
             except ValueError as error:
-                raise ValueError(f"自訂指令參數引號無效：{error}") from error
+                raise ValueError(t("moderate.err.custom_action_bad_quotes", error=error)) from error
             cmd_name = parts[0].lower() if parts else ""
             if cmd_name in chain:
-                raise ValueError(f"自訂指令循環引用：{' -> '.join(chain + [cmd_name])}")
+                raise ValueError(t("moderate.err.custom_action_circular", chain=' -> '.join(chain + [cmd_name])))
             rendered = _substitute_custom_action_arguments(alias_map[cmd_name], parts[1:])
             expanded = []
             for sub in _split_action_chunks(rendered):
@@ -641,7 +641,7 @@ def _expand_custom_action_aliases(action: str, custom_actions: dict[str, str]) -
             try:
                 return [" ".join(_split_custom_action_tokens(chunk))]
             except ValueError as error:
-                raise ValueError(f"自訂指令展開後的引號無效：{error}") from error
+                raise ValueError(t("moderate.err.custom_action_expanded_bad_quotes", error=error)) from error
         return [chunk]
 
     expanded_actions = []
@@ -650,21 +650,21 @@ def _expand_custom_action_aliases(action: str, custom_actions: dict[str, str]) -
     return expanded_actions
 
 
-def _format_preview_duration(seconds: int, *, permanent_text: str = "永久") -> str:
+def _format_preview_duration(seconds: int, *, permanent_text: str | None = None) -> str:
     if seconds == 0:
-        return permanent_text
-    return get_time_text(seconds) or f"{seconds} 秒"
+        return permanent_text if permanent_text is not None else t("moderate.duration.permanent")
+    return get_time_text(seconds) or i18n.tn("common.unit.seconds", seconds)
 
 
 def _parse_action_duration(token: str, *, allow_zero: bool = True) -> tuple[int | None, str | None]:
     token = str(token or "").strip()
     if not _DURATION_TOKEN_RE.fullmatch(token):
-        return None, f"無法辨識時間 `{token}`；請加上單位，例如 `10m`、`2h`、`7d`。"
+        return None, t("moderate.err.duration_unrecognized", token=token)
     seconds = timestr_to_seconds(token)
     if seconds == 0 and token != "0":
-        return None, f"時間 `{token}` 必須大於 0。"
+        return None, t("moderate.err.duration_must_be_positive_token", token=token)
     if seconds == 0 and not allow_zero:
-        return None, "時間必須大於 0。"
+        return None, t("moderate.err.duration_must_be_positive")
     return seconds, None
 
 
@@ -679,11 +679,11 @@ def _suggest_shorthand_action(action: str) -> tuple[str | None, str | None]:
         if len(tokens) == 1 and tokens[0].isdigit():
             minutes = int(tokens[0])
             if minutes <= 0:
-                return None, "禁言分鐘數必須大於 0。"
+                return None, t("moderate.err.mute_minutes_positive")
             if minutes * 60 > MAX_TIMEOUT_SECONDS:
-                return None, "Discord 禁言最長為 28 天（40320 分鐘）。"
+                return None, t("moderate.err.timeout_max_minutes")
             normalized_chunks.append(f"mute {minutes}m")
-            confirmation = f"你的意思是禁言 {minutes} 分鐘嗎？"
+            confirmation = t("moderate.confirm.mute_minutes", minutes=minutes)
             changed = True
             continue
 
@@ -692,21 +692,21 @@ def _suggest_shorthand_action(action: str) -> tuple[str | None, str | None]:
             if error:
                 return None, error
             if seconds > MAX_TIMEOUT_SECONDS:
-                return None, "Discord 禁言最長為 28 天。"
+                return None, t("moderate.err.timeout_max_days")
             normalized_chunks.append(f"mute {tokens[0]}")
-            confirmation = f"你的意思是禁言 {_format_preview_duration(seconds)}嗎？"
+            confirmation = t("moderate.confirm.mute_duration", duration=_format_preview_duration(seconds))
             changed = True
             continue
 
         if tokens and tokens[0].lower() in ("mute", "timeout", "to") and len(tokens) >= 2 and tokens[1].isdigit():
             minutes = int(tokens[1])
             if minutes <= 0:
-                return None, "禁言分鐘數必須大於 0。"
+                return None, t("moderate.err.mute_minutes_positive")
             if minutes * 60 > MAX_TIMEOUT_SECONDS:
-                return None, "Discord 禁言最長為 28 天（40320 分鐘）。"
+                return None, t("moderate.err.timeout_max_minutes")
             tokens[1] = f"{minutes}m"
             normalized_chunks.append(" ".join(tokens))
-            confirmation = f"你輸入的 `{minutes}` 沒有時間單位；你的意思是禁言 {minutes} 分鐘嗎？"
+            confirmation = t("moderate.confirm.mute_minutes_no_unit", minutes=minutes)
             changed = True
             continue
 
@@ -734,14 +734,14 @@ def analyze_action_string(
         "error": None,
         "suggestions": [
             {"label": label, "value": value}
-            for label, value in ACTION_INPUT_SUGGESTIONS
+            for label, value in _action_input_suggestions()
         ],
     }
     if not raw_action:
-        result["error"] = "動作指令不得為空。"
+        result["error"] = t("moderate.err.action_empty")
         return result
     if len(raw_action) > 500:
-        result["error"] = "動作指令不得超過 500 個字元。"
+        result["error"] = t("moderate.err.action_too_long")
         return result
 
     if infer_shorthand:
@@ -773,20 +773,20 @@ def analyze_action_string(
         result["error"] = str(error)
         return result
     if not actions:
-        result["error"] = "至少需要一個動作。"
+        result["error"] = t("moderate.err.needs_one_action")
         return result
     if len(actions) > 5:
-        result["error"] = "一次只能執行最多 5 個動作。"
+        result["error"] = t("moderate.err.too_many_actions")
         return result
 
     previews = []
-    last_reason = "管理執行"
+    last_reason = t("moderate.default_reason")
     for chunk in actions:
         tokens = chunk.split()
         command = tokens[0].lower() if tokens else ""
         if command not in BUILTIN_ACTIONS:
-            available = "、".join(sorted(BUILTIN_ACTIONS))
-            result["error"] = f"不支援的動作 `{command or chunk}`。可用動作：{available}。"
+            available = i18n.join_list(sorted(BUILTIN_ACTIONS))
+            result["error"] = t("moderate.err.unsupported_action", command=command or chunk, available=available)
             return result
 
         args = tokens[1:]
@@ -807,9 +807,9 @@ def analyze_action_string(
                         return result
                     reason = " ".join(args[2:]) or last_reason
                 elif len(args) >= 2:
-                    result["error"] = (
-                        "封禁動作在時長後還需要「刪除訊息時長」。"
-                        f"你的意思可能是 `ban {args[0]} 0 {' '.join(args[1:])}`。"
+                    result["error"] = t(
+                        "moderate.err.ban_missing_delete_window",
+                        example=f"ban {args[0]} 0 {' '.join(args[1:])}",
                     )
                     return result
                 else:
@@ -817,12 +817,14 @@ def analyze_action_string(
                     reason = last_reason
             last_reason = reason
             previews.append(
-                f"封禁：{_format_preview_duration(duration_seconds)}；"
-                f"刪除訊息範圍：{_format_preview_duration(delete_seconds, permanent_text='不刪除')}；原因：{reason}"
+                t("moderate.preview.ban",
+                  duration=_format_preview_duration(duration_seconds),
+                  delete_window=_format_preview_duration(delete_seconds, permanent_text=t("moderate.duration.no_deletion")),
+                  reason=reason)
             )
         elif command == "kick":
             reason = " ".join(args) or last_reason
-            previews.append(f"踢出；原因：{reason}")
+            previews.append(t("moderate.preview.kick", reason=reason))
         elif command in ("mute", "timeout", "to"):
             if not args or not args[0][0].isdigit():
                 duration_seconds = 3600
@@ -833,30 +835,33 @@ def analyze_action_string(
                     result["error"] = error
                     return result
                 if duration_seconds > MAX_TIMEOUT_SECONDS:
-                    result["error"] = "Discord 禁言最長為 28 天。"
+                    result["error"] = t("moderate.err.timeout_max_days")
                     return result
                 reason = " ".join(args[1:]) or last_reason
-            previews.append(f"禁言 {_format_preview_duration(duration_seconds)}；原因：{reason}")
+            previews.append(t("moderate.preview.mute", duration=_format_preview_duration(duration_seconds), reason=reason))
         elif command == "unban":
-            previews.append(f"解除封禁；原因：{' '.join(args) or last_reason}")
+            previews.append(t("moderate.preview.unban", reason=' '.join(args) or last_reason))
         elif command in ("unmute", "untimeout"):
-            previews.append(f"解除禁言；原因：{' '.join(args) or last_reason}")
+            previews.append(t("moderate.preview.unmute", reason=' '.join(args) or last_reason))
         elif command == "delete":
             message_text = " ".join(args)
-            previews.append("刪除觸發訊息" + (f"，並公開提示：{message_text}" if message_text else ""))
+            previews.append(
+                t("moderate.preview.delete_with_warn", message=message_text) if message_text
+                else t("moderate.preview.delete")
+            )
         elif command == "warn":
-            previews.append(f"公開警告：{' '.join(args) or '{user}，請注意你的行為。'}")
+            previews.append(t("moderate.preview.warn", message=' '.join(args) or t("moderate.default_warn_message")))
         elif command in ("send_mod_message", "smm"):
-            previews.append("發送懲處公告")
+            previews.append(t("moderate.preview.send_mod_message"))
         elif command == "force_verify":
             if args:
                 duration_seconds, error = _parse_action_duration(args[0], allow_zero=False)
                 if error:
                     result["error"] = error
                     return result
-                previews.append(f"強制網頁驗證 {_format_preview_duration(duration_seconds)}")
+                previews.append(t("moderate.preview.force_verify_duration", duration=_format_preview_duration(duration_seconds)))
             else:
-                previews.append("強制網頁驗證")
+                previews.append(t("moderate.preview.force_verify"))
 
     result["valid"] = True
     result["preview"] = previews
@@ -900,10 +905,9 @@ def analyze_member_join_action(action: str, guild_id: Optional[int] = None) -> d
         analysis["valid"] = False
         analysis["requires_confirmation"] = False
         analysis["confirmation"] = None
-        analysis["error"] = (
-            "標記用戶加入事件沒有觸發訊息，不能使用以下動作："
-            + "、".join(f"`{command}`" for command in unsupported)
-            + "。請改用 ban、kick、mute、force_verify 或 send_mod_message。"
+        analysis["error"] = t(
+            "moderate.err.member_join_unsupported_actions",
+            actions=i18n.join_list(f"`{command}`" for command in unsupported),
         )
     return analysis
 
@@ -916,13 +920,13 @@ def action_autocomplete_choices(current: str) -> list[app_commands.Choice[str]]:
         if 0 < minutes <= MAX_TIMEOUT_SECONDS // 60:
             choices.append(
                 app_commands.Choice(
-                    name=f"禁言 {minutes} 分鐘",
+                    name=t("moderate.autocomplete.mute_minutes", minutes=minutes),
                     value=f"mute {minutes}m",
                 )
             )
 
     lowered = current_text.casefold()
-    for label, value in ACTION_INPUT_SUGGESTIONS:
+    for label, value in _action_input_suggestions():
         if lowered and lowered not in label.casefold() and lowered not in value.casefold():
             continue
         if any(choice.value == value for choice in choices):
@@ -938,37 +942,37 @@ async def action_input_autocomplete(interaction: discord.Interaction, current: s
 def build_action_preview_embed(
     analysis: dict,
     *,
-    title: str = "動作預覽",
+    title: str | None = None,
     saved: bool = False,
 ) -> discord.Embed:
     if not analysis.get("valid"):
         return discord.Embed(
-            title="動作指令無效",
-            description=analysis.get("error") or "無法解析動作指令。",
+            title=t("moderate.action_invalid_title"),
+            description=analysis.get("error") or t("moderate.err.cannot_parse_action"),
             color=discord.Color.red(),
         )
 
     embed = discord.Embed(
-        title=title,
-        description="設定已儲存。" if saved else (analysis.get("confirmation") or "請確認解析結果。"),
+        title=title if title is not None else t("moderate.action_preview_title"),
+        description=t("moderate.settings_saved") if saved else (analysis.get("confirmation") or t("moderate.please_confirm")),
         color=discord.Color.green() if saved else discord.Color.orange(),
     )
     embed.add_field(
-        name="實際儲存的指令",
+        name=t("moderate.field.stored_command"),
         value=f"```text\n{analysis['normalized']}\n```",
         inline=False,
     )
     preview = analysis.get("preview") or []
     embed.add_field(
-        name="執行預覽",
+        name=t("moderate.field.execution_preview"),
         value="\n".join(f"{index}. {line}" for index, line in enumerate(preview, 1))
-        or "沒有可執行的動作",
+        or t("moderate.no_executable_actions"),
         inline=False,
     )
     return embed
 
 
-class ActionConfirmationView(discord.ui.View):
+class ActionConfirmationView(i18n.I18nView):
     def __init__(
         self,
         owner_id: int,
@@ -987,22 +991,22 @@ class ActionConfirmationView(discord.ui.View):
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         if interaction.user.id == self.owner_id:
             return True
-        await interaction.response.send_message("只有原本設定的人可以確認。", ephemeral=True)
+        await interaction.response.send_message(t("moderate.err.not_your_confirmation"), ephemeral=True)
         return False
 
-    @discord.ui.button(label="是，使用這個動作", style=discord.ButtonStyle.success)
+    @discord.ui.button(label=i18n.K("moderate.btn.confirm_action"), style=discord.ButtonStyle.success)
     async def confirm(self, interaction: discord.Interaction, button: discord.ui.Button):
         await self.confirm_callback(interaction, self.analysis)
         self.stop()
 
-    @discord.ui.button(label="取消", style=discord.ButtonStyle.secondary)
+    @discord.ui.button(label=i18n.K("common.btn.cancel"), style=discord.ButtonStyle.secondary)
     async def cancel(self, interaction: discord.Interaction, button: discord.ui.Button):
         self.stop()
         if self.cancel_callback is not None:
             await self.cancel_callback(interaction)
             return
         await interaction.response.edit_message(
-            content="已取消，沒有變更動作設定。",
+            content=t("moderate.action_settings_unchanged"),
             embed=None,
             view=None,
         )
@@ -1014,18 +1018,18 @@ async def do_action_str(action: str, guild: Optional[discord.Guild] = None, user
     try:
         actions = _expand_custom_action_aliases(action, custom_actions)
     except ValueError as e:
-        return [f"錯誤：{e}"]
+        return [t("moderate.log.error", error=e)]
     if len(actions) > 5:
-        return ["錯誤：一次只能執行最多5個動作。"]
+        return [t("moderate.log.error", error=t("moderate.err.too_many_actions"))]
     validation = analyze_action_string(
         ", ".join(actions),
         infer_shorthand=False,
         custom_actions_override={},
     )
     if not validation["valid"]:
-        return [f"錯誤：{validation['error']}"]
+        return [t("moderate.log.error", error=validation['error'])]
     logs = []
-    last_reason = "管理執行"
+    last_reason = t("moderate.default_reason")
     actions_json = []
     for a in actions:
         cmd = a.split(" ")
@@ -1054,14 +1058,14 @@ async def do_action_str(action: str, guild: Optional[discord.Guild] = None, user
             if user:
                 ok, msg = _bot_action_check(guild, user, "ban_members")
                 if not ok:
-                    logs.append(f"封禁跳過：{msg}")
+                    logs.append(t("moderate.log.ban_skipped", reason=msg))
                     success = False
                 else:
                     success = await ban_user(guild, user, reason=reason, duration=duration_seconds, delete_message_seconds=delete_messages)
             if success:
-                logs.append(f"封禁用戶，原因: {reason}，持續秒數: {duration_seconds}秒，刪除訊息時間: {delete_messages}秒")
+                logs.append(t("moderate.log.ban_done", reason=reason, duration=duration_seconds, delete_seconds=delete_messages))
             elif user:
-                logs.append(f"封禁用戶失敗。")
+                logs.append(t("moderate.log.ban_failed"))
                 break  # failed to ban, stop further actions to prevent confusion
             actions_json.append({"action": "ban", "duration": duration_seconds, "reason": reason})
         elif cmd[0] == "kick":
@@ -1073,12 +1077,12 @@ async def do_action_str(action: str, guild: Optional[discord.Guild] = None, user
             if user:
                 ok, msg = _bot_action_check(guild, user, "kick_members")
                 if not ok:
-                    logs.append(f"踢出跳過：{msg}")
+                    logs.append(t("moderate.log.kick_skipped", reason=msg))
                 else:
                     await user.kick(reason=reason)
-                    logs.append(f"踢出用戶，原因: {reason}")
+                    logs.append(t("moderate.log.kick_done", reason=reason))
             else:
-                logs.append(f"踢出用戶，原因: {reason}")
+                logs.append(t("moderate.log.kick_done", reason=reason))
             actions_json.append({"action": "kick", "reason": reason})
         elif cmd[0] in ("mute", "timeout", "to"):
             # mute <duration> <reason>
@@ -1098,12 +1102,12 @@ async def do_action_str(action: str, guild: Optional[discord.Guild] = None, user
             if user:
                 ok, msg = _bot_action_check(guild, user, "moderate_members")
                 if not ok:
-                    logs.append(f"禁言跳過：{msg}")
+                    logs.append(t("moderate.log.mute_skipped", reason=msg))
                 else:
                     await user.timeout(datetime.now(timezone.utc) + timedelta(seconds=duration_seconds), reason=reason)
-                    logs.append(f"禁言用戶，原因: {reason}，持續秒數: {duration_seconds}秒")
+                    logs.append(t("moderate.log.mute_done", reason=reason, duration=duration_seconds))
             else:
-                logs.append(f"禁言用戶，原因: {reason}，持續秒數: {duration_seconds}秒")
+                logs.append(t("moderate.log.mute_done", reason=reason, duration=duration_seconds))
             actions_json.append({"action": "mute", "duration": duration_seconds, "reason": reason})
         elif cmd[0] == "unban":
             # unban <reason>
@@ -1115,18 +1119,18 @@ async def do_action_str(action: str, guild: Optional[discord.Guild] = None, user
             if guild and user:
                 ok, msg = _bot_action_check(guild, None, "ban_members")  # unban: no hierarchy concern
                 if not ok:
-                    logs.append(f"解封跳過：{msg}")
+                    logs.append(t("moderate.log.unban_skipped", reason=msg))
                 else:
                     try:
                         await guild.unban(user, reason=reason)
                         set_user_data(guild.id, user.id, "unban_time", None)
-                        logs.append(f"解封用戶，原因: {reason}")
+                        logs.append(t("moderate.log.unban_done", reason=reason))
                     except Exception as e:
-                        logs.append(f"解封用戶失敗：{e}")
-                        log(f"解封用戶 {user} 時發生錯誤：{e}", level=logging.ERROR, module_name="Moderate", guild=guild)
+                        logs.append(t("moderate.log.unban_failed", error=e))
+                        log(f"Error unbanning {user}: {e}", level=logging.ERROR, module_name="Moderate", guild=guild)
                         break  # failed to unban, stop further actions to prevent confusion
             else:
-                logs.append(f"解封用戶，原因: {reason}")
+                logs.append(t("moderate.log.unban_done", reason=reason))
             actions_json.append({"action": "unban", "reason": reason})
         elif cmd[0] == "unmute" or cmd[0] == "untimeout":
             # unmute <reason>
@@ -1137,29 +1141,29 @@ async def do_action_str(action: str, guild: Optional[discord.Guild] = None, user
             if user:
                 ok, msg = _bot_action_check(guild, user, "moderate_members")
                 if not ok:
-                    logs.append(f"解除禁言跳過：{msg}")
+                    logs.append(t("moderate.log.unmute_skipped", reason=msg))
                 else:
                     await user.timeout(None, reason=reason)
-                    logs.append(f"解除禁言用戶，原因: {reason}")
+                    logs.append(t("moderate.log.unmute_done", reason=reason))
             else:
-                logs.append(f"解除禁言用戶，原因: {reason}")
+                logs.append(t("moderate.log.unmute_done", reason=reason))
             actions_json.append({"action": "unmute", "reason": reason})
         elif cmd[0] == "delete": # or cmd[0] == "delete_dm":
             # delete <warn_message>
-            logs.append("刪除訊息")
+            logs.append(t("moderate.log.deleted_message"))
             if message:
                 try:
                     await message.delete()
                 except:
-                    logs.append("刪除訊息失敗")
+                    logs.append(t("moderate.log.delete_message_failed"))
             if len(cmd) > 1:
                 msg = cmd.copy()
                 msg.pop(0)
                 warn_message = " ".join(msg)
-                warn_message = warn_message.replace("{user}", user.mention if user else "用戶")
-                logs.append(f"並警告: {warn_message}")
+                warn_message = warn_message.replace("{user}", user.mention if user else t("moderate.fallback_user"))
+                logs.append(t("moderate.log.also_warned", message=warn_message))
                 if cmd[0] == "delete_dm" and user:
-                    embed = discord.Embed(title="⚠️ 你被警告了", description=warn_message, color=discord.Color.orange())
+                    embed = discord.Embed(title=t("moderate.embed.you_were_warned"), description=warn_message, color=discord.Color.orange())
                     embed.set_footer(text=guild.name if guild else None, icon_url=guild.icon.url if guild and guild.icon else None)
                     await user.send(embed=embed)
                 elif message:
@@ -1171,14 +1175,14 @@ async def do_action_str(action: str, guild: Optional[discord.Guild] = None, user
         elif cmd[0] == "warn": # or cmd[0] == "warn_dm":
             # warn <warn_message>
             if len(cmd) == 1:
-                cmd.append(f"{user.mention if user else '用戶'}，請注意你的行為。")
+                cmd.append((user.mention if user else t("moderate.fallback_user")) + "，" + t("moderate.default_warn_reason"))
             msg = cmd.copy()
             msg.pop(0)
             warn_message = " ".join(msg)
-            warn_message = warn_message.replace("{user}", user.mention if user else "用戶")
-            logs.append(f"傳送警告訊息: {warn_message}")
+            warn_message = warn_message.replace("{user}", user.mention if user else t("moderate.fallback_user"))
+            logs.append(t("moderate.log.sent_warning", message=warn_message))
             if cmd[0] == "warn_dm" and user:
-                embed = discord.Embed(title="⚠️ 你被警告了", description=warn_message, color=discord.Color.orange())
+                embed = discord.Embed(title=t("moderate.embed.you_were_warned"), description=warn_message, color=discord.Color.orange())
                 embed.set_footer(text=guild.name if guild else None, icon_url=guild.icon.url if guild and guild.icon else None)
                 await user.send(embed=embed)
             elif message:
@@ -1190,8 +1194,8 @@ async def do_action_str(action: str, guild: Optional[discord.Guild] = None, user
         elif cmd[0] == "send_mod_message" or cmd[0] == "smm":
             # send_mod_message
             if len(cmd) == 1:
-                cmd.append("用戶被系統處置。")
-            logs.append("傳送管理訊息")
+                cmd.append(t("moderate.default_smm_reason"))
+            logs.append(t("moderate.log.sent_mod_message"))
             if guild and user and moderator:
                 await moderation_message_settings(None, user, moderator, actions_json, direct=True, guild=guild)
         elif cmd[0] == "force_verify":
@@ -1204,10 +1208,10 @@ async def do_action_str(action: str, guild: Optional[discord.Guild] = None, user
                 if len(cmd) > 1:
                     duration_seconds = timestr_to_seconds(cmd[1]) if cmd[1] != "0" else 0
                     until_time = datetime.now(timezone.utc) + timedelta(seconds=duration_seconds)
-                    logs.append(f"強制驗證持續秒數: {duration_seconds}秒")
+                    logs.append(t("moderate.log.force_verify_duration", duration=duration_seconds))
                     set_server_config(guild.id, "force_verify_until", until_time.timestamp())
             else:
-                logs.append("無法執行 force_verify，因為 ServerWebVerify 模組未找到")
+                logs.append(t("moderate.log.force_verify_unavailable"))
     return logs
 
 
@@ -1235,22 +1239,24 @@ def build_moderation_template_values(
     reported_message: str = "",
     report_context: str = "",
     ai_note: str = "",
+    locale: str | None = None,
 ) -> dict[str, str]:
-    user_name = _entity_name(user, "用戶")
-    moderator_name = _entity_name(moderator, "系統自動") if moderator else "系統自動"
+    user_name = _entity_name(user, t("moderate.fallback_user", locale=locale))
+    system_auto = t("moderate.fallback_system_auto", locale=locale)
+    moderator_name = _entity_name(moderator, system_auto) if moderator else system_auto
     return {
         "user": str(getattr(user, "mention", user_name)),
         "user_name": user_name,
         "user_id": str(getattr(user, "id", "")),
         "user_avatar": _entity_avatar_url(user),
-        "moderator": str(getattr(moderator, "mention", moderator_name)) if moderator else "系統自動",
+        "moderator": str(getattr(moderator, "mention", moderator_name)) if moderator else system_auto,
         "moderator_name": moderator_name,
         "moderator_id": str(getattr(moderator, "id", "")) if moderator else "",
         "moderator_avatar": _entity_avatar_url(moderator) if moderator else "",
-        "reason": str(reason or "無"),
-        "action": str(action_text or "無"),
+        "reason": str(reason or t("moderate.fallback_none", locale=locale)),
+        "action": str(action_text or t("moderate.fallback_none", locale=locale)),
         "case_id": str(case_id),
-        "guild": str(getattr(guild, "name", "伺服器")),
+        "guild": str(getattr(guild, "name", t("moderate.fallback_guild", locale=locale))),
         "guild_id": str(getattr(guild, "id", "")),
         "guild_icon": str(getattr(getattr(guild, "icon", None), "url", "") or ""),
         "reported_message": str(reported_message or ""),
@@ -1262,8 +1268,10 @@ def build_moderation_template_values(
 async def render_moderation_announcement(
     config_value: dict,
     values: dict[str, str],
+    *,
+    locale: str | None = None,
 ) -> tuple[str | None, discord.Embed | None]:
-    normalized = normalize_moderation_announcement_config(config_value)
+    normalized = normalize_moderation_announcement_config(config_value, locale=locale)
     content_template, extracted = extract_embed_tokens(normalized["template"])
 
     async def resolver(value: str) -> str:
@@ -1275,7 +1283,7 @@ async def render_moderation_announcement(
     if extracted["color"] is not None:
         resolved_color = (await resolver(extracted["color"])).strip()
         if resolved_color and parse_embed_color(resolved_color) is None:
-            raise ValueError("Embed 顏色必須是 0 到 FFFFFF 的十六進位色碼。")
+            raise ValueError(t("moderate.err.embed_color_invalid", locale=locale))
 
     content = (await resolver(content_template)).strip() or None
     embed = await build_embed_from_tokens(
@@ -1293,14 +1301,18 @@ async def preview_moderation_announcement(
     config_value: Optional[dict] = None,
     user=None,
     moderator=None,
-    reason: str = "違規原因範例",
-    action_text: str = "禁言 10 分鐘",
+    reason: str | None = None,
+    action_text: str | None = None,
     reported_message: str = "",
     report_context: str = "",
     ai_note: str = "",
 ) -> tuple[str | None, discord.Embed | None, str]:
+    guild_locale = i18n.resolve_locale(guild_id=guild.id)
+    reason = reason if reason is not None else t("moderate.sample.reason", locale=guild_locale)
+    action_text = action_text if action_text is not None else t("moderate.sample.action_text", locale=guild_locale)
     normalized = normalize_moderation_announcement_config(
-        config_value if config_value is not None else get_moderation_announcement_config(guild.id)
+        config_value if config_value is not None else get_moderation_announcement_config(guild.id),
+        locale=guild_locale,
     )
     channel_id = get_server_config(guild.id, "MODERATION_MESSAGE_CHANNEL_ID")
     channel = guild.get_channel(channel_id) if channel_id else None
@@ -1322,8 +1334,9 @@ async def preview_moderation_announcement(
         reported_message=reported_message,
         report_context=report_context,
         ai_note=ai_note,
+        locale=guild_locale,
     )
-    content, embed = await render_moderation_announcement(normalized, values)
+    content, embed = await render_moderation_announcement(normalized, values, locale=guild_locale)
     return content, embed, case_id
 
 
@@ -1340,6 +1353,7 @@ async def send_moderation_announcement(
     ai_note: str = "",
 ) -> tuple[discord.Message, str]:
     async with _case_id_locks[guild.id]:
+        guild_locale = i18n.resolve_locale(guild_id=guild.id)
         config_value = get_moderation_announcement_config(guild.id)
         year, sequence = await _next_case_components(
             guild,
@@ -1357,8 +1371,9 @@ async def send_moderation_announcement(
             reported_message=reported_message,
             report_context=report_context,
             ai_note=ai_note,
+            locale=guild_locale,
         )
-        content, embed = await render_moderation_announcement(config_value, values)
+        content, embed = await render_moderation_announcement(config_value, values, locale=guild_locale)
         sent_message = await channel.send(
             content=content,
             embed=embed,
@@ -1376,33 +1391,34 @@ async def moderation_message_settings(interaction: Optional[discord.Interaction]
     resolved_guild = guild if guild else (interaction.guild if interaction else None)
     if resolved_guild is None:
         if interaction:
-            await interaction.followup.send("此功能只能在伺服器中使用。", ephemeral=True)
+            await interaction.followup.send(t("moderate.err.guild_only"), ephemeral=True)
         return
 
+    guild_locale = i18n.resolve_locale(guild_id=resolved_guild.id)
     action_texts = []
     for action in actions:
         if action["action"] == "ban":
             duration_seconds = action.get("duration", 0)
             if duration_seconds > 0:
-                action_texts.append(f"國服新疆分流雙程機票||暫時停權||{get_time_text(duration_seconds)}")
+                action_texts.append(t("moderate.joke.ban_temp", locale=guild_locale, duration=get_time_text(duration_seconds, locale=guild_locale)))
             else:
-                action_texts.append("國服新疆分流單程機票||永久停權||")
+                action_texts.append(t("moderate.joke.ban_perm", locale=guild_locale))
         elif action["action"] == "kick":
-            action_texts.append("踢出")
+            action_texts.append(t("moderate.action_name.kick", locale=guild_locale))
         elif action["action"] == "mute":
             time_text = action.get("duration", 0)
-            action_texts.append(f"羈押禁見||禁言||{get_time_text(time_text)}")
+            action_texts.append(t("moderate.joke.mute", locale=guild_locale, duration=get_time_text(time_text, locale=guild_locale)))
         elif action["action"] == "add_role":
-            action_texts.append(f"給予身分組 {action['role']}")
+            action_texts.append(t("moderate.action_text.add_role", locale=guild_locale, role=action['role']))
         elif action["action"] == "remove_role":
-            action_texts.append(f"移除身分組 {action['role']}")
+            action_texts.append(t("moderate.action_text.remove_role", locale=guild_locale, role=action['role']))
         elif action["action"] == "custom":
-            action_texts.append(action.get("custom_action", "無"))
-    action_text = "+".join(action_texts) if action_texts else "無"
-    reason = "無"
+            action_texts.append(action.get("custom_action", t("moderate.fallback_none", locale=guild_locale)))
+    action_text = "+".join(action_texts) if action_texts else t("moderate.fallback_none", locale=guild_locale)
+    reason = t("moderate.fallback_none", locale=guild_locale)
     for action in actions:
         if 'reason' in action:
-            reason = action['reason'] or "無"
+            reason = action['reason'] or t("moderate.fallback_none", locale=guild_locale)
             break
 
     async def render_preview():
@@ -1425,12 +1441,12 @@ async def moderation_message_settings(interaction: Optional[discord.Interaction]
         channel_id = get_server_config(resolved_guild.id, "MODERATION_MESSAGE_CHANNEL_ID")
         if channel_id is None:
             if feedback_interaction:
-                await send_feedback(feedback_interaction, "伺服器未設定公告頻道，請先設定後再嘗試。")
+                await send_feedback(feedback_interaction, t("moderate.err.no_announcement_channel"))
             return
         channel = resolved_guild.get_channel(channel_id)
         if channel is None:
             if feedback_interaction:
-                await send_feedback(feedback_interaction, "找不到公告頻道，請確認頻道是否存在。")
+                await send_feedback(feedback_interaction, t("moderate.err.announcement_channel_not_found"))
             return
         try:
             _, case_id = await send_moderation_announcement(
@@ -1442,18 +1458,18 @@ async def moderation_message_settings(interaction: Optional[discord.Interaction]
                 action_text=action_text,
             )
             if feedback_interaction:
-                await send_feedback(feedback_interaction, f"已發送公告到公告頻道；裁判字號：`{case_id}`。")
-            log(f"已發送公告到 {channel.name} 頻道。", module_name="Moderate", guild=resolved_guild)
+                await send_feedback(feedback_interaction, t("moderate.msg.announcement_sent", case_id=case_id))
+            log(f"Sent announcement to #{channel.name}.", module_name="Moderate", guild=resolved_guild)
         except discord.Forbidden:
             if feedback_interaction:
-                await send_feedback(feedback_interaction, "無法在公告頻道發送訊息，機器人缺少權限。")
-            log("無法在公告頻道發送訊息，機器人缺少權限。", level=logging.ERROR, module_name="Moderate", guild=resolved_guild)
+                await send_feedback(feedback_interaction, t("moderate.err.announcement_forbidden"))
+            log("Cannot send message in the announcement channel; bot is missing permissions.", level=logging.ERROR, module_name="Moderate", guild=resolved_guild)
         except Exception as e:
             if feedback_interaction:
-                await send_feedback(feedback_interaction, f"發送公告時發生錯誤：{e}")
-            log(f"發送公告時發生錯誤：{e}", level=logging.ERROR, module_name="Moderate", guild=resolved_guild)
+                await send_feedback(feedback_interaction, t("moderate.err.announcement_send_error", error=e))
+            log(f"Error sending announcement: {e}", level=logging.ERROR, module_name="Moderate", guild=resolved_guild)
 
-    class MessageButtons(discord.ui.View):
+    class MessageButtons(i18n.I18nView):
         def __init__(self, owner_id: int):
             super().__init__(timeout=300)
             self.owner_id = owner_id
@@ -1461,17 +1477,17 @@ async def moderation_message_settings(interaction: Optional[discord.Interaction]
         async def interaction_check(self, component_interaction: discord.Interaction) -> bool:
             if component_interaction.user.id == self.owner_id:
                 return True
-            await component_interaction.response.send_message("只有開啟預覽的管理員可以操作。", ephemeral=True)
+            await component_interaction.response.send_message(t("moderate.err.not_your_preview"), ephemeral=True)
             return False
 
-        @discord.ui.button(label="更改原因", style=discord.ButtonStyle.primary, row=0)
+        @discord.ui.button(label=i18n.K("moderate.btn.change_reason"), style=discord.ButtonStyle.primary, row=0)
         async def change_reason_button(self, component_interaction: discord.Interaction, button: discord.ui.Button):
             parent_view = self
 
-            class ReasonModal(discord.ui.Modal, title="更改原因"):
+            class ReasonModal(i18n.I18nModal, title=i18n.K("moderate.btn.change_reason")):
                 reason_input = discord.ui.TextInput(
-                    label="處分原因",
-                    placeholder="請輸入處分原因",
+                    label=t("moderate.field.action_reason"),
+                    placeholder=t("moderate.placeholder.action_reason"),
                     default=str(reason),
                     required=True,
                     max_length=100,
@@ -1491,14 +1507,14 @@ async def moderation_message_settings(interaction: Optional[discord.Interaction]
                     )
             await component_interaction.response.send_modal(ReasonModal())
 
-        @discord.ui.button(label="更改結果", style=discord.ButtonStyle.primary, row=0)
+        @discord.ui.button(label=i18n.K("moderate.btn.change_result"), style=discord.ButtonStyle.primary, row=0)
         async def change_actions_button(self, component_interaction: discord.Interaction, button: discord.ui.Button):
             parent_view = self
 
-            class ActionModal(discord.ui.Modal, title="更改結果"):
+            class ActionModal(i18n.I18nModal, title=i18n.K("moderate.btn.change_result")):
                 new_actions = discord.ui.TextInput(
-                    label="處分結果",
-                    placeholder="請輸入處分結果",
+                    label=t("moderate.field.action_result"),
+                    placeholder=t("moderate.placeholder.action_result"),
                     default=action_text,
                     required=True,
                     max_length=200,
@@ -1515,7 +1531,7 @@ async def moderation_message_settings(interaction: Optional[discord.Interaction]
                     )
             await component_interaction.response.send_modal(ActionModal())
 
-        @discord.ui.button(label="確認並發送", style=discord.ButtonStyle.success, row=1)
+        @discord.ui.button(label=i18n.K("moderate.btn.confirm_and_send"), style=discord.ButtonStyle.success, row=1)
         async def confirm_button(self, component_interaction: discord.Interaction, button: discord.ui.Button):
             self.stop()
             await component_interaction.response.defer(ephemeral=True)
@@ -1538,7 +1554,7 @@ async def moderation_message_settings(interaction: Optional[discord.Interaction]
                 allowed_mentions=discord.AllowedMentions(users=True, roles=False, everyone=False),
             )
         except Exception as error:
-            await interaction.followup.send(f"無法產生公告預覽：{error}", ephemeral=True)
+            await interaction.followup.send(t("moderate.err.preview_generation_failed", error=error), ephemeral=True)
             
 
 @app_commands.guild_only()
@@ -1559,15 +1575,14 @@ class Moderate(commands.Cog):
         await interaction.response.defer()
         guild = interaction.guild
         if guild is None:
-            await interaction.followup.send("此指令只能在伺服器中使用。", ephemeral=True)
+            await interaction.followup.send(t("moderate.err.guild_only"), ephemeral=True)
             return
         
         # check bot permissions
         if not guild.me.guild_permissions.administrator:
-            await interaction.followup.send("機器人需要管理員權限才能執行此操作。", ephemeral=True)
+            await interaction.followup.send(t("moderate.err.bot_needs_admin"), ephemeral=True)
             return
         
-        # 支援逗號、空格、換行分隔多個用戶
         user_list = [u.strip() for u in re.split(r'[,\s]+', users) if u.strip()]
         target_users: list[Union[discord.Member, discord.User]] = []
         failed_users: list[str] = []  # 無法解析的用戶原始輸入
@@ -1592,32 +1607,34 @@ class Moderate(commands.Cog):
                 try:
                     member = await self.bot.fetch_user(user_id)
                 except discord.NotFound:
-                    log(f"multi-moderate: 跳過不存在的用戶 {u}", module_name="Moderate", guild=guild)
-                    failed_users.append(f"`{u}`（用戶不存在）")
+                    log(f"multi-moderate: skipped nonexistent user {u}", module_name="Moderate", guild=guild)
+                    failed_users.append(t("moderate.multi.user_not_found", input=u))
                     continue
                 except discord.HTTPException:
-                    log(f"multi-moderate: 取得用戶 {u} 時發生錯誤，跳過", level=logging.WARNING, module_name="Moderate", guild=guild)
-                    failed_users.append(f"`{u}`（取得失敗）")
+                    log(f"multi-moderate: error fetching user {u}, skipped", level=logging.WARNING, module_name="Moderate", guild=guild)
+                    failed_users.append(t("moderate.multi.user_fetch_failed", input=u))
                     continue
             if member is None:
-                log(f"multi-moderate: 無法解析用戶 {u}，跳過", module_name="Moderate", guild=guild)
-                failed_users.append(f"`{u}`（無法解析）")
+                log(f"multi-moderate: could not resolve user {u}, skipped", module_name="Moderate", guild=guild)
+                failed_users.append(t("moderate.multi.user_unresolved", input=u))
                 continue
             target_users.append(member)
         
         if not target_users:
-            fail_note = "、".join(failed_users) if failed_users else "請確認輸入是否正確"
-            await interaction.followup.send(f"無法找到任何有效的用戶。失敗的用戶：{fail_note}", ephemeral=True)
+            fail_note = i18n.join_list(failed_users) if failed_users else t("moderate.multi.check_input")
+            await interaction.followup.send(t("moderate.multi.no_valid_users", failed=fail_note), ephemeral=True)
             return
-        
-        await interaction.followup.send(f"開始對 {len(target_users)} 位用戶執行操作...\n預計需要 {get_time_text(len(target_users) * 2)}。", ephemeral=True)
+
+        await interaction.followup.send(
+            t("moderate.multi.starting", count=len(target_users), eta=get_time_text(len(target_users) * 2)),
+            ephemeral=True)
         
         success_logs: list[str] = []  # (user, [logs])
         skipped_users: list[str] = []  # 因階層不足跳過的用戶
         for i, user in enumerate(target_users):
             ok, msg = check_member_hierarchy(interaction.user, user, guild.me)
             if not ok:
-                skipped_users.append(f"{user.mention}（{msg}）")
+                skipped_users.append(t("moderate.multi.skipped_user", user=user.mention, reason=msg))
                 continue
             result_logs = await do_action_str(action, guild=guild, user=user, moderator=interaction.user)
             success_logs.append("\n".join(f"> - {r}" for r in result_logs))
@@ -1627,12 +1644,12 @@ class Moderate(commands.Cog):
         
         # 組合輸出訊息
         output_parts: list[str] = []
-        output_parts.append(f"✅ 成功處理 **{len(success_logs)}** 位用戶，共 {len(target_users)} 位目標。")
+        output_parts.append(t("moderate.multi.summary", done=len(success_logs), total=len(target_users)))
         if success_logs:
             output_parts.append(success_logs[0])  # 只顯示第一位用戶的操作記錄
         all_failed = failed_users + skipped_users
         if all_failed:
-            output_parts.append("❌ 以下用戶處理失敗或跳過：\n" + "\n".join(f"- {f}" for f in all_failed))
+            output_parts.append(t("moderate.multi.failed_list") + "\n" + "\n".join(f"- {f}" for f in all_failed))
         
         # 若訊息過長則分段發送
         async def send_chunked(parts: list[str]):
@@ -1657,109 +1674,114 @@ class Moderate(commands.Cog):
     async def multi_moderate_action(self, interaction: discord.Interaction, user: discord.Member):
         guild = interaction.guild
         if guild is None:
-            await interaction.response.send_message("此指令只能在伺服器中使用。", ephemeral=True)
+            await interaction.response.send_message(t("moderate.err.guild_only"), ephemeral=True)
             return
         
         # check bot permissions
         if not guild.me.guild_permissions.administrator:
-            await interaction.response.send_message("機器人需要管理員權限才能執行此操作。", ephemeral=True)
+            await interaction.response.send_message(t("moderate.err.bot_needs_admin"), ephemeral=True)
             return
         
         actions = []  # {"action": "mute/kick/ban/add_role/remove_role", "reason": "reason", "duration": minutes, "role": role_id}
         def actions_to_str(actions):
             if not actions:
-                return "無"
-            return "\n".join(f"- {a['action']}" + (f" ({a['duration']} 分鐘)" if a['action'] == 'mute' and 'duration' in a else '') + (f" (角色 ID: {a['role']} / 名稱: {interaction.guild.get_role(a['role']).name})" if a['action'] in ['add_role', 'remove_role'] and 'role' in a else '') + (f": {a['reason']}" if 'reason' in a else '') for a in actions)
-        class ActionButtons(discord.ui.View):
+                return t("moderate.fallback_none")
+            return "\n".join(
+                f"- {a['action']}"
+                + (t("moderate.multi_action.mute_suffix", minutes=a['duration']) if a['action'] == 'mute' and 'duration' in a else '')
+                + (t("moderate.multi_action.role_suffix", role_id=a['role'], role_name=interaction.guild.get_role(a['role']).name) if a['action'] in ['add_role', 'remove_role'] and 'role' in a else '')
+                + (f": {a['reason']}" if 'reason' in a else '')
+                for a in actions)
+        class ActionButtons(i18n.I18nView):
             def __init__(self):
                 super().__init__()
-            
-            @discord.ui.button(label="禁言", style=discord.ButtonStyle.primary, row=0)
+
+            @discord.ui.button(label=i18n.K("moderate.action_name.mute"), style=discord.ButtonStyle.primary, row=0)
             async def mute_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-                class MuteModal(discord.ui.Modal, title="禁言時間設定"):
-                    minutes = discord.ui.TextInput(label="禁言分鐘數", placeholder="請輸入禁言時間（分鐘）", required=True)
-                    reason = discord.ui.TextInput(label="禁言原因", placeholder="請輸入禁言原因", required=True, max_length=100)
+                class MuteModal(i18n.I18nModal, title=i18n.K("moderate.multi_action.mute_modal_title")):
+                    minutes = discord.ui.TextInput(label=t("moderate.multi_action.mute_minutes_label"), placeholder=t("moderate.multi_action.mute_minutes_ph"), required=True)
+                    reason = discord.ui.TextInput(label=t("moderate.multi_action.mute_reason_label"), placeholder=t("moderate.multi_action.mute_reason_ph"), required=True, max_length=100)
                     async def on_submit(self, interaction: discord.Interaction):
                         if not interaction.user.guild_permissions.administrator:
-                            await interaction.response.send_message("你沒有權限執行此操作。", ephemeral=True)
+                            await interaction.response.send_message(t("moderate.err.no_permission"), ephemeral=True)
                             return
                         try:
                             duration = int(self.minutes.value)
                             if duration <= 0:
                                 raise ValueError
                         except ValueError:
-                            await interaction.response.send_message("無效的禁言時間，請輸入正整數。", ephemeral=True)
+                            await interaction.response.send_message(t("moderate.err.invalid_mute_minutes"), ephemeral=True)
                             return
                         actions.append({"action": "mute", "duration": duration, "reason": self.reason.value})
-                        embed.set_field_at(0, name="目前操作", value=actions_to_str(actions), inline=False)
+                        embed.set_field_at(0, name=t("moderate.field.current_actions"), value=actions_to_str(actions), inline=False)
                         await interaction.response.edit_message(embed=embed, view=view)
                 await interaction.response.send_modal(MuteModal())
 
-            @discord.ui.button(label="踢出", style=discord.ButtonStyle.danger, row=0)
+            @discord.ui.button(label=i18n.K("moderate.action_name.kick"), style=discord.ButtonStyle.danger, row=0)
             async def kick_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-                class KickModal(discord.ui.Modal, title="踢出原因設定"):
-                    reason = discord.ui.TextInput(label="踢出原因", placeholder="請輸入踢出原因", required=True, max_length=100)
+                class KickModal(i18n.I18nModal, title=i18n.K("moderate.multi_action.kick_modal_title")):
+                    reason = discord.ui.TextInput(label=t("moderate.multi_action.kick_reason_label"), placeholder=t("moderate.multi_action.kick_reason_ph"), required=True, max_length=100)
                     async def on_submit(self, interaction: discord.Interaction):
                         if not interaction.user.guild_permissions.administrator:
-                            await interaction.response.send_message("你沒有權限執行此操作。", ephemeral=True)
+                            await interaction.response.send_message(t("moderate.err.no_permission"), ephemeral=True)
                             return
                         actions.append({"action": "kick", "reason": self.reason.value})
-                        embed.set_field_at(0, name="目前操作", value=actions_to_str(actions), inline=False)
+                        embed.set_field_at(0, name=t("moderate.field.current_actions"), value=actions_to_str(actions), inline=False)
                         await interaction.response.edit_message(embed=embed, view=view)
                 await interaction.response.send_modal(KickModal())
 
-            @discord.ui.button(label="封禁", style=discord.ButtonStyle.danger, row=0)
+            @discord.ui.button(label=i18n.K("moderate.action_name.ban"), style=discord.ButtonStyle.danger, row=0)
             async def ban_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-                class BanModal(discord.ui.Modal, title="封禁原因設定"):
-                    reason = discord.ui.TextInput(label="封禁原因", placeholder="請輸入封禁原因", required=True, max_length=100)
+                class BanModal(i18n.I18nModal, title=i18n.K("moderate.multi_action.ban_modal_title")):
+                    reason = discord.ui.TextInput(label=t("moderate.multi_action.ban_reason_label"), placeholder=t("moderate.multi_action.ban_reason_ph"), required=True, max_length=100)
                     async def on_submit(self, interaction: discord.Interaction):
                         if not interaction.user.guild_permissions.administrator:
-                            await interaction.response.send_message("你沒有權限執行此操作。", ephemeral=True)
+                            await interaction.response.send_message(t("moderate.err.no_permission"), ephemeral=True)
                             return
                         actions.append({"action": "ban", "reason": self.reason.value})
-                        embed.set_field_at(0, name="目前操作", value=actions_to_str(actions), inline=False)
+                        embed.set_field_at(0, name=t("moderate.field.current_actions"), value=actions_to_str(actions), inline=False)
                         await interaction.response.edit_message(embed=embed, view=view)
                 await interaction.response.send_modal(BanModal())
-                
-            @discord.ui.button(label="新增身分組", style=discord.ButtonStyle.secondary, row=1)
+
+            @discord.ui.button(label=i18n.K("moderate.multi_action.add_role_btn"), style=discord.ButtonStyle.secondary, row=1)
             async def add_role_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-                class AddRoleModal(discord.ui.Modal, title="新增身分組設定"):
-                    role = discord.ui.Label(text="選擇身分組", component=discord.ui.RoleSelect(placeholder="選擇身分組", min_values=1, max_values=1))
+                class AddRoleModal(i18n.I18nModal, title=i18n.K("moderate.multi_action.add_role_modal_title")):
+                    role = discord.ui.Label(text=t("moderate.multi_action.pick_role_label"), component=discord.ui.RoleSelect(placeholder=t("moderate.multi_action.pick_role_ph"), min_values=1, max_values=1))
                     async def on_submit(self, interaction: discord.Interaction):
                         if not interaction.user.guild_permissions.administrator:
-                            await interaction.response.send_message("你沒有權限執行此操作。", ephemeral=True)
+                            await interaction.response.send_message(t("moderate.err.no_permission"), ephemeral=True)
                             return
                         role_id = self.role.component.values[0].id
                         actions.append({"action": "add_role", "role": role_id})
-                        embed.set_field_at(0, name="目前操作", value=actions_to_str(actions), inline=False)
+                        embed.set_field_at(0, name=t("moderate.field.current_actions"), value=actions_to_str(actions), inline=False)
                         await interaction.response.edit_message(embed=embed, view=view)
                 await interaction.response.send_modal(AddRoleModal())
 
-            @discord.ui.button(label="移除身分組", style=discord.ButtonStyle.secondary, row=1)
+            @discord.ui.button(label=i18n.K("moderate.multi_action.remove_role_btn"), style=discord.ButtonStyle.secondary, row=1)
             async def remove_role_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-                class RemoveRoleModal(discord.ui.Modal, title="移除身分組設定"):
-                    role_name = discord.ui.TextInput(label="身分組名稱", placeholder="請輸入身分組名稱/ID/關鍵字", required=True, max_length=100)
+                class RemoveRoleModal(i18n.I18nModal, title=i18n.K("moderate.multi_action.remove_role_modal_title")):
+                    role_name = discord.ui.TextInput(label=t("moderate.multi_action.role_name_label"), placeholder=t("moderate.multi_action.role_name_ph"), required=True, max_length=100)
                     async def on_submit(self, interaction: discord.Interaction):
                         if not interaction.user.guild_permissions.administrator:
-                            await interaction.response.send_message("你沒有權限執行此操作。", ephemeral=True)
+                            await interaction.response.send_message(t("moderate.err.no_permission"), ephemeral=True)
                             return
                         role_id = guess_role(interaction.guild, self.role_name.value)
                         if role_id is None:
-                            await interaction.response.send_message("找不到指定的身分組，請確認名稱或 ID 是否正確。", ephemeral=True)
+                            await interaction.response.send_message(t("moderate.err.role_not_found"), ephemeral=True)
                             return
                         actions.append({"action": "remove_role", "role": role_id})
-                        embed.set_field_at(0, name="目前操作", value=actions_to_str(actions), inline=False)
+                        embed.set_field_at(0, name=t("moderate.field.current_actions"), value=actions_to_str(actions), inline=False)
                         await interaction.response.edit_message(embed=embed, view=view)
                 await interaction.response.send_modal(RemoveRoleModal())
-            
-            
-            @discord.ui.button(label="執行公告設定", style=discord.ButtonStyle.success, row=1)
+
+
+            @discord.ui.button(label=i18n.K("moderate.multi_action.run_announcement_btn"), style=discord.ButtonStyle.success, row=1)
             async def moderation_message(self, interaction: discord.Interaction, button: discord.ui.Button):
                 if not interaction.user.guild_permissions.administrator:
-                    await interaction.response.send_message("你沒有權限執行此操作。", ephemeral=True)
+                    await interaction.response.send_message(t("moderate.err.no_permission"), ephemeral=True)
                     return
                 if not actions:
-                    await interaction.response.send_message("請先選擇至少一個操作。", ephemeral=True)
+                    await interaction.response.send_message(t("moderate.err.pick_one_action"), ephemeral=True)
                     return
                 actions_with_mention = actions.copy()
                 for action in actions_with_mention:
@@ -1770,17 +1792,17 @@ class Moderate(commands.Cog):
                         else:
                             action["role"] = str(action["role"])
                 await moderation_message_settings(interaction, user, interaction.user, actions_with_mention)
-            
-            @discord.ui.button(label="執行操作", style=discord.ButtonStyle.success, row=2)
+
+            @discord.ui.button(label=i18n.K("moderate.multi_action.execute_btn"), style=discord.ButtonStyle.success, row=2)
             async def execute_button(self, interaction: discord.Interaction, button: discord.ui.Button):
                 if not interaction.user.guild_permissions.administrator:
-                    await interaction.response.send_message("你沒有權限執行此操作。", ephemeral=True)
+                    await interaction.response.send_message(t("moderate.err.no_permission"), ephemeral=True)
                     return
                 if not actions:
-                    await interaction.response.send_message("請先選擇至少一個操作。", ephemeral=True)
+                    await interaction.response.send_message(t("moderate.err.pick_one_action"), ephemeral=True)
                     return
                 if len(actions) > 5:
-                    await interaction.response.send_message("一次只能執行最多5個動作。", ephemeral=True)
+                    await interaction.response.send_message(t("moderate.err.too_many_actions"), ephemeral=True)
                     return
                 self.stop()
                 # execute actions
@@ -1789,53 +1811,53 @@ class Moderate(commands.Cog):
                     try:
                         if action["action"] == "mute":
                             duration = action.get("duration", 0)
-                            await user.timeout(timedelta(minutes=duration), reason=action.get("reason", "無"))
-                            results.append(f"已對 {user.mention} 禁言 {get_time_text(duration)}。")
+                            await user.timeout(timedelta(minutes=duration), reason=action.get("reason") or None)
+                            results.append(t("moderate.multi_action.mute_result", user=user.mention, duration=get_time_text(duration)))
                         elif action["action"] == "kick":
                             ModerationNotify.ignore_user(user.id)  # 避免重複通知
                             try:
-                                await ModerationNotify.notify_user(user, interaction.guild, "踢出", action.get("reason", "無"))
+                                await ModerationNotify.notify_user(user, interaction.guild, "踢出", action.get("reason") or None)  # i18n: skip (ModerationNotify action token)
                             except Exception as e:
-                                print(f"[!] 無法私訊 {user}：{e}")
-                            await user.kick(reason=action.get("reason", "無"))
-                            results.append(f"已將 {user.mention} 踢出伺服器。")
+                                print(f"[!] Failed to DM {user}: {e}")
+                            await user.kick(reason=action.get("reason") or None)
+                            results.append(t("moderate.multi_action.kick_result", user=user.mention))
                         elif action["action"] == "ban":
                             ModerationNotify.ignore_user(user.id)  # 避免重複通知
                             try:
-                                await ModerationNotify.notify_user(user, interaction.guild, "封禁", action.get("reason", "無"))
+                                await ModerationNotify.notify_user(user, interaction.guild, "封禁", action.get("reason") or None)  # i18n: skip (ModerationNotify action token)
                             except Exception as e:
-                                print(f"[!] 無法私訊 {user}：{e}")
-                            await user.ban(reason=action.get("reason", "無"))
-                            results.append(f"已將 {user.mention} 封禁。")
+                                print(f"[!] Failed to DM {user}: {e}")
+                            await user.ban(reason=action.get("reason") or None)
+                            results.append(t("moderate.multi_action.ban_result", user=user.mention))
                         elif action["action"] == "add_role":
                             role = interaction.guild.get_role(action["role"])
                             if role:
-                                await user.add_roles(role, reason="多重操作")
-                                results.append(f"已給予 {user.mention} 身分組 {role.name}。")
+                                await user.add_roles(role, reason=t("moderate.audit.multi_action"))
+                                results.append(t("moderate.multi_action.add_role_result", user=user.mention, role=role.name))
                             else:
-                                results.append(f"找不到身分組 ID {action['role']}，無法新增身分組。")
+                                results.append(t("moderate.multi_action.role_not_found_add", role_id=action['role']))
                         elif action["action"] == "remove_role":
                             role = interaction.guild.get_role(action["role"])
                             if role:
-                                await user.remove_roles(role, reason="多重操作")
-                                results.append(f"已移除 {user.mention} 身分組 {role.name}。")
+                                await user.remove_roles(role, reason=t("moderate.audit.multi_action"))
+                                results.append(t("moderate.multi_action.remove_role_result", user=user.mention, role=role.name))
                             else:
-                                results.append(f"找不到身分組 ID {action['role']}，無法移除身分組。")
+                                results.append(t("moderate.multi_action.role_not_found_remove", role_id=action['role']))
                     except Exception as e:
-                        results.append(f"執行 {action['action']} 時發生錯誤：{e}")
+                        results.append(t("moderate.multi_action.execute_error", action=action['action'], error=e))
                 await interaction.response.edit_message(content="\n".join(results), embed=None, view=None)
 
-            @discord.ui.button(label="取消", style=discord.ButtonStyle.secondary, row=2)
+            @discord.ui.button(label=i18n.K("common.btn.cancel"), style=discord.ButtonStyle.secondary, row=2)
             async def cancel_button(self, interaction: discord.Interaction, button: discord.ui.Button):
                 if not interaction.user.guild_permissions.administrator:
-                    await interaction.response.send_message("你沒有權限執行此操作。", ephemeral=True)
+                    await interaction.response.send_message(t("moderate.err.no_permission"), ephemeral=True)
                     return
                 actions.append({"action": "cancel", "user": user.id})
                 self.stop()
-                await interaction.response.edit_message(content="操作已取消。", view=None)
-        
-        embed = discord.Embed(title="多重操作", description=f"請選擇對 {user.name} 執行的操作：", color=0xff0000)
-        embed.add_field(name="目前操作", value="無", inline=False)
+                await interaction.response.edit_message(content=t("moderate.multi_action.cancelled"), view=None)
+
+        embed = discord.Embed(title=t("moderate.multi_action.title"), description=t("moderate.multi_action.desc", user=user.name), color=0xff0000)
+        embed.add_field(name=t("moderate.field.current_actions"), value=t("moderate.fallback_none"), inline=False)
         view = ActionButtons()
         message = await interaction.response.send_message(embed=embed, view=view)
 
@@ -1848,7 +1870,7 @@ class Moderate(commands.Cog):
         await interaction.response.defer(ephemeral=True)
         guild = interaction.guild
         if guild is None:
-            await interaction.followup.send("此指令只能在伺服器中使用。", ephemeral=True)
+            await interaction.followup.send(t("moderate.err.guild_only"), ephemeral=True)
             return
         if moderator is None:
             moderator = interaction.user
@@ -1860,16 +1882,16 @@ class Moderate(commands.Cog):
     @app_commands.describe(user=app_commands.locale_str("Choose a user", i18n_key="cmd.moderate.ban.param.user"), reason=app_commands.locale_str("Ban reason (optional)", i18n_key="cmd.moderate.ban.param.reason"), duration=app_commands.locale_str("Ban duration (optional, default: permanent)", i18n_key="cmd.moderate.ban.param.duration"), delete_message=app_commands.locale_str("Message deletion period (optional, default: none)", i18n_key="cmd.moderate.ban.param.delete_message"), send_moderation_message=app_commands.locale_str("Also send a moderation announcement", i18n_key="cmd.moderate.ban.param.send_moderation_message"))
     @app_commands.allowed_installs(guilds=True, users=False)
     @app_commands.default_permissions(ban_members=True)
-    async def ban_user(self, interaction: discord.Interaction, user: Union[discord.Member, discord.User], reason: str = "無", duration: str = "", delete_message: str = "", send_moderation_message: bool = False):
+    async def ban_user(self, interaction: discord.Interaction, user: Union[discord.Member, discord.User], reason: str = None, duration: str = "", delete_message: str = "", send_moderation_message: bool = False):
         await interaction.response.defer()
         guild = interaction.guild
         if guild is None:
-            await interaction.followup.send("此指令只能在伺服器中使用。", ephemeral=True)
+            await interaction.followup.send(t("moderate.err.guild_only"), ephemeral=True)
             return
         
         # check bot permissions
         if not guild.me.guild_permissions.ban_members:
-            await interaction.followup.send("機器人沒有封鎖成員的權限，請確認機器人擁有「封鎖成員」的權限。", ephemeral=True)
+            await interaction.followup.send(t("moderate.err.bot_missing_ban_perm"), ephemeral=True)
             return
 
         # 檢查身份組階層（ban 的目標可能是不在伺服器的 User，此時跳過）
@@ -1883,7 +1905,7 @@ class Moderate(commands.Cog):
         if duration:
             duration_seconds = timestr_to_seconds(duration)
             if duration_seconds <= 0:
-                await interaction.followup.send("無效的封禁時間，請使用類似 10m、2h、3d 的格式。", ephemeral=True)
+                await interaction.followup.send(t("moderate.err.invalid_ban_duration"), ephemeral=True)
                 return
             unban_time = datetime.now(timezone.utc) + timedelta(seconds=duration_seconds)
 
@@ -1892,7 +1914,7 @@ class Moderate(commands.Cog):
 
         success = await ban_user(guild, user, reason, duration=duration_seconds if unban_time else 0, delete_message_seconds=delete_message_seconds)
         if not success:
-            await interaction.followup.send("封禁時發生錯誤，請確認機器人是否有足夠的權限。")
+            await interaction.followup.send(t("moderate.err.ban_failed"))
             return
 
         if send_moderation_message:
@@ -1904,13 +1926,13 @@ class Moderate(commands.Cog):
                 pass
 
         mention = user.mention if user else f"<@{user.id}>"
-        parts = [f"已將 {mention} 封禁。"]
-        if reason != "無":
-            parts.append(f"- 原因：{reason}")
+        parts = [t("moderate.msg.banned", user=mention)]
+        if reason:
+            parts.append(t("moderate.msg.reason_line", reason=reason))
         if unban_time:
-            parts.append(f"- 封禁時間：{get_time_text(duration_seconds)}")
+            parts.append(t("moderate.msg.ban_duration_line", duration=get_time_text(duration_seconds)))
         if delete_message_seconds > 0:
-            parts.append(f"- 刪除訊息時間：{get_time_text(delete_message_seconds)}")
+            parts.append(t("moderate.msg.delete_message_line", duration=get_time_text(delete_message_seconds)))
         await interaction.followup.send("\n".join(parts))
 
 
@@ -1922,41 +1944,41 @@ class Moderate(commands.Cog):
         await interaction.response.defer()
         guild = interaction.guild
         if guild is None:
-            await interaction.followup.send("此指令只能在伺服器中使用。")
+            await interaction.followup.send(t("moderate.err.guild_only"))
             return
         
         # check bot permissions
         if not guild.me.guild_permissions.ban_members:
-            await interaction.followup.send("機器人沒有解封成員的權限，請確認機器人擁有「解除封鎖成員」的權限。")
+            await interaction.followup.send(t("moderate.err.bot_missing_unban_perm"))
             return
 
         user_id = user.id
 
         # 執行解封
         try:
-            await guild.unban(user, reason="手動解封")
+            await guild.unban(user, reason=t("moderate.audit.manual_unban"))
             set_user_data(guild.id, user_id, "unban_time", None)
         except Exception as e:
-            await interaction.followup.send(f"解封時發生錯誤：{e}")
+            await interaction.followup.send(t("moderate.err.unban_error", error=e))
             return
 
-        await interaction.followup.send(f"已將 <@{user_id}> 解封。")
+        await interaction.followup.send(t("moderate.msg.unbanned", user=f"<@{user_id}>"))
 
 
     @app_commands.command(name=app_commands.locale_str("kick", i18n_key="cmd.moderate.kick.name"), description=app_commands.locale_str("Kick a user", i18n_key="cmd.moderate.kick.desc"))
     @app_commands.describe(user=app_commands.locale_str("Choose a user (@mention or ID)", i18n_key="cmd.moderate.kick.param.user"), reason=app_commands.locale_str("Kick reason (optional)", i18n_key="cmd.moderate.kick.param.reason"), send_moderation_message=app_commands.locale_str("Also send a moderation announcement", i18n_key="cmd.moderate.kick.param.send_moderation_message"))
     @app_commands.default_permissions(kick_members=True)
     @app_commands.allowed_installs(guilds=True, users=False)
-    async def kick_user(self, interaction: discord.Interaction, user: discord.Member, reason: str = "無", send_moderation_message: bool = False):
+    async def kick_user(self, interaction: discord.Interaction, user: discord.Member, reason: str = None, send_moderation_message: bool = False):
         await interaction.response.defer()
         guild = interaction.guild
         if guild is None:
-            await interaction.followup.send("此指令只能在伺服器中使用。")
+            await interaction.followup.send(t("moderate.err.guild_only"))
             return
 
         # check bot permissions
         if not guild.me.guild_permissions.kick_members:
-            await interaction.followup.send("機器人沒有踢出成員的權限，請確認機器人擁有「踢出成員」的權限。")
+            await interaction.followup.send(t("moderate.err.bot_missing_kick_perm"))
             return
 
         # 檢查身份組階層
@@ -1971,7 +1993,7 @@ class Moderate(commands.Cog):
         # 通知與忽略
         ModerationNotify.ignore_user(user_id)
         try:
-            await ModerationNotify.notify_user(user, guild, "踢出", reason)
+            await ModerationNotify.notify_user(user, guild, "踢出", reason)  # i18n: skip (ModerationNotify action token)
         except Exception:
             pass
 
@@ -1979,7 +2001,7 @@ class Moderate(commands.Cog):
         try:
             await user.kick(reason=reason)
         except Exception as e:
-            await interaction.followup.send(f"踢出時發生錯誤：{e}")
+            await interaction.followup.send(t("moderate.err.kick_error", error=e))
             return
 
         if send_moderation_message:
@@ -1990,26 +2012,26 @@ class Moderate(commands.Cog):
             except Exception as e:
                 pass
 
-        suffix = f"\n- 原因：{reason}" if reason != "無" else ""
-        await interaction.followup.send(f"已將 {user.mention} 踢出伺服器。{suffix}")
+        suffix = "\n" + t("moderate.msg.reason_line", reason=reason) if reason else ""
+        await interaction.followup.send(t("moderate.msg.kicked", user=user.mention) + suffix)
 
 
     @app_commands.command(name=app_commands.locale_str("timeout", i18n_key="cmd.moderate.timeout.name"), description=app_commands.locale_str("Time out a user", i18n_key="cmd.moderate.timeout.desc"))
     @app_commands.describe(user=app_commands.locale_str("Choose a user", i18n_key="cmd.moderate.timeout.param.user"), reason=app_commands.locale_str("Timeout reason (optional)", i18n_key="cmd.moderate.timeout.param.reason"), duration=app_commands.locale_str("Timeout duration (optional, default: 10 minutes)", i18n_key="cmd.moderate.timeout.param.duration"), send_moderation_message=app_commands.locale_str("Also send a moderation announcement", i18n_key="cmd.moderate.timeout.param.send_moderation_message"))
     @app_commands.default_permissions(mute_members=True)
     @app_commands.allowed_installs(guilds=True, users=False)
-    async def timeout_user(self, interaction: discord.Interaction, user: discord.Member, reason: str = "無", duration: str = "10m", send_moderation_message: bool = False):
+    async def timeout_user(self, interaction: discord.Interaction, user: discord.Member, reason: str = None, duration: str = "10m", send_moderation_message: bool = False):
         # 先 defer，避免耗時操作導致 interaction 過期
         await interaction.response.defer()
 
         guild = interaction.guild
         if guild is None:
-            await interaction.followup.send("此指令只能在伺服器中使用。")
+            await interaction.followup.send(t("moderate.err.guild_only"))
             return
         
         # check bot permissions
         if not guild.me.guild_permissions.moderate_members:
-            await interaction.followup.send("機器人沒有禁言的權限，請確認機器人擁有「管理成員」的權限。")
+            await interaction.followup.send(t("moderate.err.bot_missing_moderate_perm"))
             return
 
         # 檢查身份組階層
@@ -2023,15 +2045,15 @@ class Moderate(commands.Cog):
 
         duration_seconds = timestr_to_seconds(duration)
         if duration_seconds <= 0:
-            await interaction.followup.send("無效的禁言時間，請使用類似 10m、2h、3d 的格式。")
+            await interaction.followup.send(t("moderate.err.invalid_mute_duration"))
             return
 
         # 執行禁言（可能耗時）
         try:
             await user.timeout(timedelta(seconds=duration_seconds), reason=reason)
         except Exception as e:
-            print(f"[!] 禁言 {user} 時發生錯誤：{e}")
-            await interaction.followup.send(f"禁言時發生錯誤：{e}")
+            print(f"[!] Error muting {user}: {e}")
+            await interaction.followup.send(t("moderate.err.mute_error", error=e))
             return
 
         if send_moderation_message:
@@ -2043,8 +2065,8 @@ class Moderate(commands.Cog):
                 pass
 
         # 使用 followup 送出最終訊息
-        suffix = f"\n- 原因：{reason}" if reason != "無" else ""
-        await interaction.followup.send(f"已對 {user.mention} 禁言 {get_time_text(duration_seconds)}。{suffix}")
+        suffix = "\n" + t("moderate.msg.reason_line", reason=reason) if reason else ""
+        await interaction.followup.send(t("moderate.msg.muted", user=user.mention, duration=get_time_text(duration_seconds)) + suffix)
         
     @app_commands.command(name=app_commands.locale_str("untimeout", i18n_key="cmd.moderate.untimeout.name"), description=app_commands.locale_str("Remove a user's timeout", i18n_key="cmd.moderate.untimeout.desc"))
     @app_commands.describe(user=app_commands.locale_str("Choose a user", i18n_key="cmd.moderate.untimeout.param.user"))
@@ -2054,12 +2076,12 @@ class Moderate(commands.Cog):
 
         guild = interaction.guild
         if guild is None:
-            await interaction.followup.send("此指令只能在伺服器中使用。")
+            await interaction.followup.send(t("moderate.err.guild_only"))
             return
         
         # check bot permissions
         if not guild.me.guild_permissions.moderate_members:
-            await interaction.followup.send("機器人沒有解除禁言的權限，請確認機器人擁有「管理成員」的權限。")
+            await interaction.followup.send(t("moderate.err.bot_missing_moderate_perm"))
             return
 
         # 檢查身份組階層
@@ -2073,13 +2095,13 @@ class Moderate(commands.Cog):
 
         # 執行解除禁言
         try:
-            await user.timeout(None, reason="解除禁言")
+            await user.timeout(None, reason=t("moderate.audit.untimeout"))
         except Exception as e:
-            print(f"[!] 解除禁言 {user} 時發生錯誤：{e}")
-            await interaction.followup.send(f"解除禁言時發生錯誤：{e}")
+            print(f"[!] Error untiming out {user}: {e}")
+            await interaction.followup.send(t("moderate.err.untimeout_error", error=e))
             return
 
-        await interaction.followup.send(f"已對 {user.mention} 解除禁言。")
+        await interaction.followup.send(t("moderate.msg.untimed_out", user=user.mention))
         
     @app_commands.command(name=app_commands.locale_str("moderation-message-channel", i18n_key="cmd.moderate.moderation_message_channel.name"), description=app_commands.locale_str("Set the moderation announcement channel", i18n_key="cmd.moderate.moderation_message_channel.desc"))
     @app_commands.describe(channel=app_commands.locale_str("Choose a channel", i18n_key="cmd.moderate.moderation_message_channel.param.channel"))
@@ -2090,16 +2112,13 @@ class Moderate(commands.Cog):
         await interaction.response.defer()
         permissions = channel.permissions_for(interaction.guild.me)
         if not (permissions.send_messages and permissions.view_channel):
-            await interaction.followup.send("機器人在該頻道沒有發送訊息的權限，請先調整權限後再嘗試。")
+            await interaction.followup.send(t("moderate.err.channel_no_send_perm"))
             return
         set_server_config(interaction.guild.id, "MODERATION_MESSAGE_CHANNEL_ID", channel.id)
         warning = ""
         if not permissions.read_message_history:
-            warning = (
-                "\n⚠️ 機器人缺少「讀取訊息歷史」權限；仍已保存頻道，"
-                "但跨機器人裁判字號只能使用本機備援狀態。"
-            )
-        await interaction.followup.send(f"已設定懲處公告頻道為 {channel.mention}。{warning}")
+            warning = "\n" + t("moderate.warn.missing_history_perm")
+        await interaction.followup.send(t("moderate.msg.announcement_channel_set", channel=channel.mention) + warning)
 
     @app_commands.command(name=app_commands.locale_str("moderation-message-format", i18n_key="cmd.moderate.moderation_message_format.name"), description=app_commands.locale_str("Configure the announcement template and case-ID format", i18n_key="cmd.moderate.moderation_message_format.desc"))
     @app_commands.default_permissions(administrator=True)
@@ -2108,24 +2127,24 @@ class Moderate(commands.Cog):
     async def set_moderation_message_format(self, interaction: discord.Interaction):
         guild = interaction.guild
         if guild is None:
-            await interaction.response.send_message("此指令只能在伺服器中使用。", ephemeral=True)
+            await interaction.response.send_message(t("moderate.err.guild_only"), ephemeral=True)
             return
         current = get_moderation_announcement_config(guild.id)
         owner_id = interaction.user.id
 
-        class ResetFormatView(discord.ui.View):
+        class ResetFormatView(i18n.I18nView):
             def __init__(self):
                 super().__init__(timeout=300)
 
             async def interaction_check(self, reset_interaction: discord.Interaction) -> bool:
                 if reset_interaction.user.id == owner_id:
                     return True
-                await reset_interaction.response.send_message("只有原本設定的管理員可以重設。", ephemeral=True)
+                await reset_interaction.response.send_message(t("moderate.err.not_your_settings"), ephemeral=True)
                 return False
 
-            @discord.ui.button(label="恢復目前預設格式", style=discord.ButtonStyle.danger)
+            @discord.ui.button(label=i18n.K("moderate.btn.reset_to_default"), style=discord.ButtonStyle.danger)
             async def reset(self, reset_interaction: discord.Interaction, button: discord.ui.Button):
-                defaults = default_moderation_announcement_config()
+                defaults = default_moderation_announcement_config(locale=i18n.resolve_locale(guild_id=guild.id))
                 try:
                     content, announcement_embed, _ = await preview_moderation_announcement(
                         guild,
@@ -2134,7 +2153,7 @@ class Moderate(commands.Cog):
                         moderator=reset_interaction.user,
                     )
                 except Exception as error:
-                    await reset_interaction.response.send_message(f"無法產生預設預覽：{error}", ephemeral=True)
+                    await reset_interaction.response.send_message(t("moderate.err.default_preview_failed", error=error), ephemeral=True)
                     return
                 set_server_config(guild.id, MODERATION_ANNOUNCEMENT_CONFIG_KEY, defaults)
                 await reset_interaction.response.edit_message(
@@ -2142,19 +2161,19 @@ class Moderate(commands.Cog):
                     embed=announcement_embed,
                     view=self,
                 )
-                await reset_interaction.followup.send("已恢復目前的預設公告與裁判字號格式。", ephemeral=True)
+                await reset_interaction.followup.send(t("moderate.msg.reset_to_default_done"), ephemeral=True)
 
-        class FormatModal(discord.ui.Modal, title="懲處公告格式"):
+        class FormatModal(i18n.I18nModal, title=i18n.K("moderate.modal.announcement_format_title")):
             template_input = discord.ui.TextInput(
-                label="公告模板",
+                label=t("moderate.field.announcement_template"),
                 style=discord.TextStyle.paragraph,
                 default=current["template"],
                 required=True,
                 max_length=4000,
             )
             case_format_input = discord.ui.TextInput(
-                label="裁判字號格式",
-                placeholder="例如 {roc_year}-{sequence:04d}",
+                label=t("moderate.field.case_id_format"),
+                placeholder=t("moderate.placeholder.case_id_format"),
                 default=current["case_id_format"],
                 required=True,
                 max_length=100,
@@ -2174,11 +2193,11 @@ class Moderate(commands.Cog):
                         moderator=modal_interaction.user,
                     )
                 except Exception as error:
-                    await modal_interaction.response.send_message(f"格式無效：{error}", ephemeral=True)
+                    await modal_interaction.response.send_message(t("moderate.err.format_invalid", error=error), ephemeral=True)
                     return
                 set_server_config(guild.id, MODERATION_ANNOUNCEMENT_CONFIG_KEY, normalized)
                 await modal_interaction.response.send_message(
-                    f"已儲存懲處公告格式；下個預估裁判字號：`{case_id}`。",
+                    t("moderate.msg.format_saved", case_id=case_id),
                     ephemeral=True,
                 )
                 await modal_interaction.followup.send(
@@ -2201,28 +2220,28 @@ class Moderate(commands.Cog):
         await interaction.response.defer(ephemeral=True)
         guild = interaction.guild
         if guild is None:
-            await interaction.followup.send("此指令只能在伺服器中使用。", ephemeral=True)
+            await interaction.followup.send(t("moderate.err.guild_only"), ephemeral=True)
             return
 
         alias_name = name.strip()
         action_str = action.strip()
         if not alias_name or not action_str:
-            await interaction.followup.send("自訂指令名稱與動作內容不得為空。", ephemeral=True)
+            await interaction.followup.send(t("moderate.err.custom_action_empty"), ephemeral=True)
             return
         if "," in alias_name or any(ch.isspace() for ch in alias_name):
-            await interaction.followup.send("自訂指令名稱不可包含空白或逗號。", ephemeral=True)
+            await interaction.followup.send(t("moderate.err.custom_action_name_whitespace"), ephemeral=True)
             return
         if len(alias_name) > 32:
-            await interaction.followup.send("自訂指令名稱長度不得超過 32 字。", ephemeral=True)
+            await interaction.followup.send(t("moderate.err.custom_action_name_too_long"), ephemeral=True)
             return
         if alias_name.lower() in BUILTIN_ACTIONS:
-            await interaction.followup.send("此名稱與內建動作衝突，請更換名稱。", ephemeral=True)
+            await interaction.followup.send(t("moderate.err.custom_action_name_conflict"), ephemeral=True)
             return
 
         custom_actions = _load_custom_action_strings(guild.id)
         existed_key = _find_custom_action_key(custom_actions, alias_name)
         if existed_key is None and len(custom_actions) >= 10:
-            await interaction.followup.send("每個伺服器最多只能設定 10 個自訂指令。", ephemeral=True)
+            await interaction.followup.send(t("moderate.err.custom_action_limit"), ephemeral=True)
             return
 
         test_actions = dict(custom_actions)
@@ -2232,7 +2251,7 @@ class Moderate(commands.Cog):
         try:
             sample_invocation = _custom_action_sample_invocation(alias_name, action_str)
         except ValueError as error:
-            await interaction.followup.send(f"自訂指令參數無效：{error}", ephemeral=True)
+            await interaction.followup.send(t("moderate.err.custom_action_invalid_args", error=error), ephemeral=True)
             return
         analysis = analyze_action_string(
             sample_invocation,
@@ -2257,17 +2276,17 @@ class Moderate(commands.Cog):
                 sample_invocation = _custom_action_sample_invocation(alias_name, normalized_action)
                 expanded = _expand_custom_action_aliases(sample_invocation, test_actions)
             except ValueError as error:
-                return None, f"無法儲存自訂指令：{error}"
+                return None, t("moderate.err.custom_action_save_failed", error=error)
             if len(expanded) > 5:
-                return None, "此自訂指令展開後超過 5 個動作，請精簡內容。"
+                return None, t("moderate.err.custom_action_expands_too_many")
 
             if existed_key and existed_key != alias_name:
                 custom_actions.pop(existed_key, None)
             custom_actions[alias_name] = normalized_action
             set_server_config(guild.id, "custom_action_strings", custom_actions)
-            action_text = "更新" if existed_key is not None else "新增"
+            action_text_key = "moderate.custom_action.updated" if existed_key is not None else "moderate.custom_action.added"
             return (
-                f"已{action_text}自訂指令 `{alias_name}`；目前數量：{len(custom_actions)}/10",
+                t(action_text_key, name=alias_name, count=len(custom_actions)),
                 None,
             )
 
@@ -2279,12 +2298,12 @@ class Moderate(commands.Cog):
                     return
                 await confirm_interaction.response.edit_message(
                     content=message,
-                    embed=build_action_preview_embed(confirmed, title="自訂動作設定完成", saved=True),
+                    embed=build_action_preview_embed(confirmed, title=t("moderate.custom_action.setup_done_title"), saved=True),
                     view=None,
                 )
 
             await interaction.followup.send(
-                embed=build_action_preview_embed(analysis, title="確認你的意思"),
+                embed=build_action_preview_embed(analysis, title=t("moderate.confirm_your_intent_title")),
                 view=ActionConfirmationView(interaction.user.id, analysis, confirm_action),
                 ephemeral=True,
             )
@@ -2296,7 +2315,7 @@ class Moderate(commands.Cog):
             return
         await interaction.followup.send(
             content=message,
-            embed=build_action_preview_embed(analysis, title="自訂動作設定完成", saved=True),
+            embed=build_action_preview_embed(analysis, title=t("moderate.custom_action.setup_done_title"), saved=True),
             ephemeral=True,
         )
 
@@ -2309,19 +2328,19 @@ class Moderate(commands.Cog):
         await interaction.response.defer(ephemeral=True)
         guild = interaction.guild
         if guild is None:
-            await interaction.followup.send("此指令只能在伺服器中使用。", ephemeral=True)
+            await interaction.followup.send(t("moderate.err.guild_only"), ephemeral=True)
             return
 
         custom_actions = _load_custom_action_strings(guild.id)
         existed_key = _find_custom_action_key(custom_actions, name)
         if existed_key is None:
-            await interaction.followup.send("找不到該自訂指令。", ephemeral=True)
+            await interaction.followup.send(t("moderate.err.custom_action_not_found"), ephemeral=True)
             return
 
         removed_value = custom_actions.pop(existed_key)
         set_server_config(guild.id, "custom_action_strings", custom_actions)
         await interaction.followup.send(
-            f"已刪除自訂指令 `{existed_key}`\n- 原動作：`{removed_value}`\n- 目前數量：{len(custom_actions)}/10",
+            t("moderate.custom_action.removed", name=existed_key, action=removed_value, count=len(custom_actions)),
             ephemeral=True,
         )
 
@@ -2332,16 +2351,16 @@ class Moderate(commands.Cog):
     async def custom_action_list(self, interaction: discord.Interaction):
         guild = interaction.guild
         if guild is None:
-            await interaction.response.send_message("此指令只能在伺服器中使用。", ephemeral=True)
+            await interaction.response.send_message(t("moderate.err.guild_only"), ephemeral=True)
             return
 
         custom_actions = _load_custom_action_strings(guild.id)
         if not custom_actions:
-            await interaction.response.send_message("目前沒有自訂指令。", ephemeral=True)
+            await interaction.response.send_message(t("moderate.custom_action.none"), ephemeral=True)
             return
 
         lines = [f"`{k}` -> `{v}`" for k, v in custom_actions.items()]
-        embed = discord.Embed(title=f"自訂管理動作（{len(custom_actions)}/10）", color=0x00b894)
+        embed = discord.Embed(title=t("moderate.custom_action.list_title", count=len(custom_actions)), color=0x00b894)
         embed.description = "\n".join(lines)
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
@@ -2387,10 +2406,10 @@ class Moderate(commands.Cog):
         #         parts.append(message)
         elif action_type == "warn":
             parts = ["warn"]
-            parts.append(message or "{user}，請注意你的行為。")
+            parts.append(message or t("moderate.default_warn_message"))
         # elif action_type == "warn_dm":
         #     parts = ["warn_dm"]
-        #     parts.append(message or "{user}，請注意你的行為。")
+        #     parts.append(message or t("moderate.default_warn_message"))
         elif action_type == "mute":
             parts = ["mute", duration or "10m"]
             if reason:
@@ -2410,19 +2429,19 @@ class Moderate(commands.Cog):
         if prepend and prepend.strip():
             generated = f"{prepend.strip()}, {generated}"
         if len([a for a in generated.split(",")]) > 5:
-            await interaction.response.send_message("錯誤：動作總數不得超過 5 個。", ephemeral=True)
+            await interaction.response.send_message(t("moderate.log.error", error=t("moderate.err.too_many_actions")), ephemeral=True)
             return
 
-        embed = discord.Embed(title="動作指令產生結果", color=0x00ff00)
+        embed = discord.Embed(title=t("moderate.action_builder.result_title"), color=0x00ff00)
         embed.description = f"```\n{generated}\n```"
         embed.add_field(
-            name="使用方式",
-            value=f"複製上方字串，用於 {await get_command_mention('multi-moderate')} 的 action 參數，或 `!moderate @用戶` 指令。",
+            name=t("moderate.action_builder.usage_field"),
+            value=t("moderate.action_builder.usage_value", command=await get_command_mention('multi-moderate')),
             inline=False,
         )
         try:
             preview = await do_action_str(generated, moderator=interaction.user)
-            embed.add_field(name="預覽效果", value="\n".join(f"• {a}" for a in preview), inline=False)
+            embed.add_field(name=t("moderate.action_builder.preview_field"), value="\n".join(f"• {a}" for a in preview), inline=False)
         except Exception:
             pass
         await interaction.response.send_message(embed=embed, ephemeral=True)
@@ -2431,9 +2450,9 @@ class Moderate(commands.Cog):
     @commands.has_permissions(ban_members=True, kick_members=True, moderate_members=True, manage_messages=True)
     async def moderate(self, ctx: commands.Context, user: Union[discord.Member, discord.User, None] = None, *, commands_str: str = ""):
         """對用戶進行多重管理操作。
-        
+
         用法：!moderate <用戶> <指令1> , <指令2> , ...
-        
+
         指令格式：
         - ban <duration> <delete_messages> <reason>
         - kick <reason>
@@ -2441,47 +2460,49 @@ class Moderate(commands.Cog):
         - delete <warn_message>
         - warn <warn_message>
         - send_mod_message|smm
-        
+
         範例：
         !moderate @User ban 違規 1d 3600 , mute 30m 注意行為 , delete 請注意你的言論
         !ban @User 1d 3600 違規
         """
-        invoked_action = ctx.invoked_with.lower()
-        if invoked_action in BUILTIN_ACTIONS:
-            commands_str = f"{invoked_action} {commands_str}".strip()
+        # text command 的路徑不在 choke point 內，需顯式開 scope
+        async with i18n.guild_scope(ctx.guild.id if ctx.guild else None, user_id=ctx.author.id):
+            invoked_action = ctx.invoked_with.lower()
+            if invoked_action in BUILTIN_ACTIONS:
+                commands_str = f"{invoked_action} {commands_str}".strip()
 
-        # check bot permissions
-        if not ctx.guild.me.guild_permissions.ban_members or not ctx.guild.me.guild_permissions.kick_members or not ctx.guild.me.guild_permissions.manage_messages or not ctx.guild.me.guild_permissions.moderate_members:
-            await ctx.send("機器人缺少必要的權限，請確認機器人擁有封禁、踢出、管理訊息及禁言權限。")
-            return
-        if user is None:
-            await ctx.send("請指定要管理的用戶。")
-            return
-        if ctx.author.guild_permissions.ban_members is False and ctx.author.guild_permissions.kick_members is False and ctx.author.guild_permissions.moderate_members is False and ctx.author.guild_permissions.manage_messages is False:
-            await ctx.send("你沒有權限執行此操作。" + ('\n-# 你傻逼吧你以為你是開發者你就可以濫權？' if ctx.author.id in config('owners') else ''))
-            return
-        # 檢查身份組階層
-        ok, msg = check_member_hierarchy(ctx.author, user, ctx.guild.me)
-        if not ok:
+            # check bot permissions
+            if not ctx.guild.me.guild_permissions.ban_members or not ctx.guild.me.guild_permissions.kick_members or not ctx.guild.me.guild_permissions.manage_messages or not ctx.guild.me.guild_permissions.moderate_members:
+                await ctx.send(t("moderate.err.bot_missing_all_perms"))
+                return
+            if user is None:
+                await ctx.send(t("moderate.err.specify_user"))
+                return
+            if ctx.author.guild_permissions.ban_members is False and ctx.author.guild_permissions.kick_members is False and ctx.author.guild_permissions.moderate_members is False and ctx.author.guild_permissions.manage_messages is False:
+                await ctx.send(t("moderate.err.no_permission") + ('\n-# 你傻逼吧你以為你是開發者你就可以濫權？' if ctx.author.id in config('owners') else ''))  # i18n: skip (owner-facing)
+                return
+            # 檢查身份組階層
+            ok, msg = check_member_hierarchy(ctx.author, user, ctx.guild.me)
+            if not ok:
+                await ctx.send(msg)
+                return
+            logs = await do_action_str(commands_str, ctx.guild, user, message=None, moderator=ctx.author)
+            if len(logs) == 0:
+                msg = t("moderate.msg.no_actions_executed")
+            elif len(logs) == 1:
+                msg = t("moderate.msg.action_complete_one", user=user.name, log=logs[0])
+            else:
+                msg = t("moderate.msg.action_complete_many", user=user.name, logs="\n- " + "\n- ".join(logs))
             await ctx.send(msg)
-            return
-        logs = await do_action_str(commands_str, ctx.guild, user, message=None, moderator=ctx.author)
-        if len(logs) == 0:
-            msg = "無任何操作被執行。"
-        elif len(logs) == 1:
-            msg = user.name + " 操作完成：" + logs[0]
-        else:
-            msg = user.name + " 操作完成：\n- " + "\n- ".join(logs)
-        await ctx.send(msg)
-        log(msg, module_name="Moderate", guild=ctx.guild)
-    
+            log(msg, module_name="Moderate", guild=ctx.guild)
+
     @commands.command(aliases=["mr", "mod_reply", *sorted(REPLY_ACTION_ALIASES)])
     @commands.has_permissions(ban_members=True, kick_members=True, moderate_members=True, manage_messages=True)
     async def moderate_reply(self, ctx: commands.Context, *, commands_str: str = ""):
         """對訊息發送者進行多重管理操作。
-        
+
         用法：!moderate_reply <指令1> , <指令2> , ...
-        
+
         指令格式：
         - ban <duration> <delete_messages> <reason>
         - kick <reason>
@@ -2489,45 +2510,47 @@ class Moderate(commands.Cog):
         - delete <warn_message>
         - warn <warn_message>
         - send_mod_message|smm
-        
+
         範例：
         !moderate_reply ban 違規 1d 3600 , mute 30m 注意行為 , delete 請注意你的言論
         !banr 1d 3600 違規
         """
-        invoked_action = REPLY_ACTION_ALIASES.get(ctx.invoked_with.lower())
-        if invoked_action:
-            commands_str = f"{invoked_action} {commands_str}".strip()
+        async with i18n.guild_scope(ctx.guild.id if ctx.guild else None, user_id=ctx.author.id):
+            invoked_action = REPLY_ACTION_ALIASES.get(ctx.invoked_with.lower())
+            if invoked_action:
+                commands_str = f"{invoked_action} {commands_str}".strip()
 
-        # check bot permissions
-        if not ctx.guild.me.guild_permissions.ban_members or not ctx.guild.me.guild_permissions.kick_members or not ctx.guild.me.guild_permissions.manage_messages or not ctx.guild.me.guild_permissions.moderate_members:
-            await ctx.send("機器人缺少必要的權限，請確認機器人擁有封禁、踢出、管理訊息及禁言權限。")
-            return
-        if ctx.author.guild_permissions.ban_members is False and ctx.author.guild_permissions.kick_members is False and ctx.author.guild_permissions.moderate_members is False and ctx.author.guild_permissions.manage_messages is False:
-            await ctx.send("你沒有權限執行此操作。" + ('\n-# 你傻逼吧你以為你是開發者你就可以濫權？' if ctx.author.id in config('owners') else ''))
-            return
-        if ctx.message.reference is None:
-            await ctx.send("請在回覆的訊息中使用此指令。")
-            return
-        try:
-            referenced_message = await ctx.channel.fetch_message(ctx.message.reference.message_id)
-        except Exception:
-            await ctx.send("無法取得被回覆的訊息。")
-            return
-        user = referenced_message.author
-        # 檢查身份組階層
-        ok, msg = check_member_hierarchy(ctx.author, user, ctx.guild.me)
-        if not ok:
+            # check bot permissions
+            if not ctx.guild.me.guild_permissions.ban_members or not ctx.guild.me.guild_permissions.kick_members or not ctx.guild.me.guild_permissions.manage_messages or not ctx.guild.me.guild_permissions.moderate_members:
+                await ctx.send(t("moderate.err.bot_missing_all_perms"))
+                return
+            if ctx.author.guild_permissions.ban_members is False and ctx.author.guild_permissions.kick_members is False and ctx.author.guild_permissions.moderate_members is False and ctx.author.guild_permissions.manage_messages is False:
+                await ctx.send(t("moderate.err.no_permission") + ('\n-# 你傻逼吧你以為你是開發者你就可以濫權？' if ctx.author.id in config('owners') else ''))  # i18n: skip (owner-facing)
+                return
+            if ctx.message.reference is None:
+                await ctx.send(t("moderate.err.use_in_reply"))
+                return
+            try:
+                referenced_message = await ctx.channel.fetch_message(ctx.message.reference.message_id)
+            except Exception:
+                await ctx.send(t("moderate.err.cannot_fetch_replied_message"))
+                return
+            user = referenced_message.author
+            # 檢查身份組階層
+            ok, msg = check_member_hierarchy(ctx.author, user, ctx.guild.me)
+            if not ok:
+                await ctx.send(msg)
+                return
+            logs = await do_action_str(commands_str, ctx.guild, user, message=referenced_message, moderator=ctx.author)
+            if len(logs) == 0:
+                msg = t("moderate.msg.no_actions_executed")
+            elif len(logs) == 1:
+                msg = t("moderate.msg.action_complete_one", user=user.name, log=logs[0])
+            else:
+                msg = t("moderate.msg.action_complete_many", user=user.name, logs="\n- " + "\n- ".join(logs))
             await ctx.send(msg)
-            return
-        logs = await do_action_str(commands_str, ctx.guild, user, message=referenced_message, moderator=ctx.author)
-        if len(logs) == 0:
-            msg = "無任何操作被執行。"
-        elif len(logs) == 1:
-            msg = user.name + " 操作完成：" + logs[0]
-        else:
-            msg = user.name + " 操作完成：\n- " + "\n- ".join(logs)
-        await ctx.send(msg)
-        log(msg, module_name="Moderate", user=user, guild=ctx.guild)
+            log(msg, module_name="Moderate", user=user, guild=ctx.guild)
+
 
 
 asyncio.run(bot.add_cog(Moderate(bot)))
@@ -2536,10 +2559,14 @@ asyncio.run(bot.add_cog(Moderate(bot)))
 # ====== /request 與 /vote 懲處系統 ======
 
 MOD_ACTION_DEFS = {
-    "ban":     {"perm": "ban_members",      "zh": "封禁"},
-    "kick":    {"perm": "kick_members",     "zh": "踢出"},
-    "timeout": {"perm": "moderate_members", "zh": "禁言"},
+    "ban":     {"perm": "ban_members"},
+    "kick":    {"perm": "kick_members"},
+    "timeout": {"perm": "moderate_members"},
 }
+
+
+def _action_name(action: str, *, locale: str | None = None) -> str:
+    return t_enum("moderate.action_name", action, locale=locale)
 active_requests = set()            # (guild_id, target_id, action)
 active_votes = {}                  # (guild_id, target_id) -> VoteView（None 表示建立中佔位）
 active_request_initiators = set()  # (guild_id, requester_id)：無權限者同時只能有一個進行中的請求
@@ -2591,11 +2618,11 @@ def _check_duration_limit(action: str, duration_seconds: int, max_seconds: int) 
     """檢查時長是否超過伺服器設定的上限，回傳錯誤訊息或 None。"""
     if max_seconds <= 0 or action == "kick":
         return None
-    zh = MOD_ACTION_DEFS[action]["zh"]
+    name = _action_name(action)
     if action == "ban" and duration_seconds <= 0:
-        return f"本伺服器限制{zh}時間最長 {get_time_text(max_seconds)}，無法永久封禁，請指定時間。"
+        return t("moderate.err.duration_limit_no_permanent", name=name, max=get_time_text(max_seconds))
     if duration_seconds > max_seconds:
-        return f"本伺服器限制{zh}時間最長 {get_time_text(max_seconds)}。"
+        return t("moderate.err.duration_limit_exceeded", name=name, max=get_time_text(max_seconds))
     return None
 
 
@@ -2605,9 +2632,9 @@ def _parse_max_duration_setting(text: str, action: str) -> tuple[Optional[int], 
         return 0, None
     seconds = timestr_to_seconds(text)
     if seconds <= 0:
-        return None, "無效的時間格式，請使用類似 10m、2h、3d 的格式，或 0 表示不限制。"
+        return None, t("moderate.err.invalid_time_or_zero")
     if action == "timeout" and seconds > MAX_TIMEOUT_SECONDS:
-        return None, "禁言時間不能超過 28 天。"
+        return None, t("moderate.err.timeout_max_days")
     return seconds, None
 
 
@@ -2616,9 +2643,9 @@ def _bot_side_target_check(guild: discord.Guild, target) -> tuple[bool, str]:
     if not isinstance(target, discord.Member):
         return True, ""
     if target == guild.owner:
-        return False, "無法對伺服器擁有者執行此操作。"
+        return False, t("moderate.err.cannot_target_owner_action")
     if target.top_role >= guild.me.top_role:
-        return False, f"機器人無法對 {target.mention} 執行操作（對方身份組高於或等於機器人）。"
+        return False, t("moderate.err.bot_hierarchy_too_low", target=target.mention)
     return True, ""
 
 
@@ -2629,11 +2656,15 @@ async def _execute_moderation(
     reason: str,
     duration_seconds: int = 0,
     executor: Optional[discord.Member] = None,
+    locale: str | None = None,
 ) -> tuple[bool, str]:
     """執行 request / vote 通過後的懲處動作，回傳 (是否成功, 結果訊息)。
 
     executor 為 None（投票）或與目標同人（自我懲處）時，跳過執行者階層檢查。
+    結果訊息會寫進公開的 request/vote embed，因此以 locale（guild locale）渲染。
     """
+    if locale is None:
+        locale = i18n.resolve_locale(guild_id=guild.id)
     info = MOD_ACTION_DEFS[action]
     member = guild.get_member(target_id)
     if action == "ban":
@@ -2642,14 +2673,14 @@ async def _execute_moderation(
             try:
                 target = await bot.fetch_user(target_id)
             except Exception:
-                return False, "找不到該用戶。"
+                return False, t("moderate.err.user_not_found", locale=locale)
     else:
         if member is None:
-            return False, "對象已不在伺服器中，無法執行。"
+            return False, t("moderate.err.target_left_guild", locale=locale)
         target = member
 
     if not getattr(guild.me.guild_permissions, info["perm"], False):
-        return False, f"機器人缺少{info['zh']}所需的權限。"
+        return False, t("moderate.err.bot_missing_action_perm", locale=locale, name=_action_name(action, locale=locale))
     ok, msg = _bot_side_target_check(guild, target)
     if not ok:
         return False, msg
@@ -2661,31 +2692,31 @@ async def _execute_moderation(
     if action == "ban":
         ok = await ban_user(guild, target, reason, duration=duration_seconds, moderator=executor)
         if not ok:
-            return False, "封禁時發生錯誤。"
-        suffix = f"，時長 {get_time_text(duration_seconds)}" if duration_seconds > 0 else ""
-        return True, f"已將 {target.mention} 封禁{suffix}。"
+            return False, t("moderate.err.ban_failed", locale=locale)
+        suffix = t("moderate.suffix.with_duration", locale=locale, duration=get_time_text(duration_seconds, locale=locale)) if duration_seconds > 0 else ""
+        return True, t("moderate.exec.ban_result", locale=locale, user=target.mention, suffix=suffix)
     if action == "kick":
         ModerationNotify.ignore_user(target_id)
         try:
-            await ModerationNotify.notify_user(member, guild, "踢出", reason)
+            await ModerationNotify.notify_user(member, guild, "踢出", reason)  # i18n: skip (ModerationNotify action token)
         except Exception:
             pass
         try:
             await member.kick(reason=reason)
         except Exception as e:
-            return False, f"踢出時發生錯誤：{e}"
-        log(f"已踢出用戶 {member}，原因：{reason}", module_name="Moderate", guild=guild)
-        return True, f"已將 {member.mention} 踢出伺服器。"
+            return False, t("moderate.err.kick_error", locale=locale, error=e)
+        log(f"Kicked {member}, reason: {reason}", module_name="Moderate", guild=guild)
+        return True, t("moderate.msg.kicked", locale=locale, user=member.mention)
     # timeout
     try:
         await member.timeout(timedelta(seconds=duration_seconds), reason=reason)
     except Exception as e:
-        return False, f"禁言時發生錯誤：{e}"
-    log(f"已禁言用戶 {member} {get_time_text(duration_seconds)}，原因：{reason}", module_name="Moderate", guild=guild)
-    return True, f"已對 {member.mention} 禁言 {get_time_text(duration_seconds)}。"
+        return False, t("moderate.err.mute_error", locale=locale, error=e)
+    log(f"Muted {member} for {duration_seconds}s, reason: {reason}", module_name="Moderate", guild=guild)
+    return True, t("moderate.msg.muted", locale=locale, user=member.mention, duration=get_time_text(duration_seconds, locale=locale))
 
 
-class RequestView(discord.ui.View):
+class RequestView(i18n.I18nView):
     """/request 的確認視圖：僅 approver 可確認，requester / approver 可取消。"""
 
     def __init__(self, *, guild: discord.Guild, requester_id: int, target_id: int,
@@ -2702,6 +2733,7 @@ class RequestView(discord.ui.View):
         self.embed = embed
         self.message: Optional[discord.Message] = None
         self.finished = False
+        self.locale = i18n.resolve_locale(guild_id=guild.id)
 
     def _release(self):
         active_requests.discard((self.guild.id, self.target_id, self.action))
@@ -2711,23 +2743,23 @@ class RequestView(discord.ui.View):
         for child in self.children:
             child.disabled = True
 
-    @discord.ui.button(label="確認", emoji="✅", style=discord.ButtonStyle.success)
+    @discord.ui.button(label=i18n.K("common.btn.confirm"), emoji="✅", style=discord.ButtonStyle.success)
     async def confirm(self, interaction: discord.Interaction, button: discord.ui.Button):
         if self.finished:
-            await interaction.response.send_message("此請求已處理。", ephemeral=True)
+            await interaction.response.send_message(t("moderate.err.request_already_handled"), ephemeral=True)
             return
         if interaction.user.id != self.approver_id:
-            await interaction.response.send_message(f"只有 <@{self.approver_id}> 可以確認此請求。", ephemeral=True)
+            await interaction.response.send_message(t("moderate.err.only_approver_confirms", user=f"<@{self.approver_id}>"), ephemeral=True)
             return
         self.finished = True
         await interaction.response.defer()
         ok, msg = await _execute_moderation(
             self.guild, self.action, self.target_id, self.reason,
-            self.duration_seconds, executor=interaction.user,
+            self.duration_seconds, executor=interaction.user, locale=self.locale,
         )
         self._disable_buttons()
         self.embed.color = discord.Color.green() if ok else discord.Color.red()
-        self.embed.add_field(name="結果", value=msg if ok else f"⚠️ {msg}", inline=False)
+        self.embed.add_field(name=t("moderate.field.result", locale=self.locale), value=msg if ok else f"⚠️ {msg}", inline=False)
         try:
             await interaction.message.edit(embed=self.embed, view=self)
         except Exception:
@@ -2735,18 +2767,18 @@ class RequestView(discord.ui.View):
         self.stop()
         self._release()
 
-    @discord.ui.button(label="取消", emoji="❌", style=discord.ButtonStyle.secondary)
+    @discord.ui.button(label=i18n.K("common.btn.cancel"), emoji="❌", style=discord.ButtonStyle.secondary)
     async def cancel(self, interaction: discord.Interaction, button: discord.ui.Button):
         if self.finished:
-            await interaction.response.send_message("此請求已處理。", ephemeral=True)
+            await interaction.response.send_message(t("moderate.err.request_already_handled"), ephemeral=True)
             return
         if interaction.user.id not in (self.requester_id, self.approver_id):
-            await interaction.response.send_message("只有請求者或被請求者可以取消此請求。", ephemeral=True)
+            await interaction.response.send_message(t("moderate.err.only_requester_or_approver_cancels"), ephemeral=True)
             return
         self.finished = True
         self._disable_buttons()
         self.embed.color = discord.Color.dark_grey()
-        self.embed.add_field(name="結果", value=f"已由 {interaction.user.mention} 取消。", inline=False)
+        self.embed.add_field(name=t("moderate.field.result", locale=self.locale), value=t("moderate.msg.cancelled_by", locale=self.locale, user=interaction.user.mention), inline=False)
         await interaction.response.edit_message(embed=self.embed, view=self)
         self.stop()
         self._release()
@@ -2758,7 +2790,7 @@ class RequestView(discord.ui.View):
         self._release()
         self._disable_buttons()
         self.embed.color = discord.Color.dark_grey()
-        self.embed.add_field(name="結果", value="⌛ 請求已逾時。", inline=False)
+        self.embed.add_field(name=t("moderate.field.result", locale=self.locale), value=t("moderate.msg.request_timed_out", locale=self.locale), inline=False)
         if self.message:
             try:
                 await self.message.edit(embed=self.embed, view=self)
@@ -2782,16 +2814,18 @@ class ModerationRequest(commands.GroupCog, name=app_commands.locale_str("request
                               reason: Optional[str], duration_seconds: int):
         guild = interaction.guild
         if guild is None:
-            await interaction.response.send_message("此指令只能在伺服器中使用。", ephemeral=True)
+            await interaction.response.send_message(t("moderate.err.guild_only"), ephemeral=True)
             return
         info = MOD_ACTION_DEFS[action]
-        perm, zh = info["perm"], info["zh"]
-        reason_text = reason or "未提供"
+        perm = info["perm"]
+        guild_locale = i18n.resolve_locale(guild_id=guild.id)
+        name = _action_name(action, locale=guild_locale)
+        reason_text = reason or t("moderate.not_provided", locale=guild_locale)
         settings = _get_request_settings(guild.id, action)
         bypass = _has_mod_bypass(interaction.user, perm)
 
         if not settings["enabled"] and not bypass:
-            await interaction.response.send_message(f"此伺服器尚未啟用{zh}請求。", ephemeral=True)
+            await interaction.response.send_message(t("moderate.err.request_not_enabled", name=_action_name(action)), ephemeral=True)
             return
         err = _check_duration_limit(action, duration_seconds, settings["max_duration"])
         if err and not bypass:
@@ -2801,11 +2835,11 @@ class ModerationRequest(commands.GroupCog, name=app_commands.locale_str("request
             remaining = _check_creation_cooldown(guild.id, interaction.user.id)
             if remaining > 0:
                 await interaction.response.send_message(
-                    f"操作太頻繁，請在 {remaining} 秒後再試。", ephemeral=True)
+                    t("moderate.err.creation_cooldown", seconds=remaining), ephemeral=True)
                 return
             if (guild.id, interaction.user.id) in active_request_initiators:
                 await interaction.response.send_message(
-                    "你已有一個進行中的請求，請先等待其完成或取消。", ephemeral=True)
+                    t("moderate.err.request_already_active"), ephemeral=True)
                 return
 
         if request_to is None:
@@ -2813,19 +2847,19 @@ class ModerationRequest(commands.GroupCog, name=app_commands.locale_str("request
                 request_to = user
             else:
                 await interaction.response.send_message(
-                    "對方不在伺服器中，請使用 request_to 指定一位管理員來確認。", ephemeral=True)
+                    t("moderate.err.target_not_in_guild"), ephemeral=True)
                 return
         if request_to.bot:
-            await interaction.response.send_message("無法向機器人發送請求。", ephemeral=True)
+            await interaction.response.send_message(t("moderate.err.cannot_request_bot"), ephemeral=True)
             return
         if not (request_to.id == user.id
                 or getattr(request_to.guild_permissions, perm, False)
                 or request_to.guild_permissions.administrator):
             await interaction.response.send_message(
-                f"{request_to.mention} 不是對方本人，也沒有{zh}權限，無法確認此請求。", ephemeral=True)
+                t("moderate.err.request_target_not_authorized", user=request_to.mention, name=_action_name(action)), ephemeral=True)
             return
         if not getattr(guild.me.guild_permissions, perm, False):
-            await interaction.response.send_message(f"機器人缺少{zh}所需的權限。", ephemeral=True)
+            await interaction.response.send_message(t("moderate.err.bot_missing_action_perm", name=_action_name(action)), ephemeral=True)
             return
         ok, msg = _bot_side_target_check(guild, user)
         if not ok:
@@ -2834,21 +2868,21 @@ class ModerationRequest(commands.GroupCog, name=app_commands.locale_str("request
 
         key = (guild.id, user.id, action)
         if key in active_requests:
-            await interaction.response.send_message("已有針對該用戶的相同請求正在進行中。", ephemeral=True)
+            await interaction.response.send_message(t("moderate.err.request_target_active"), ephemeral=True)
             return
         active_requests.add(key)
         active_request_initiators.add((guild.id, interaction.user.id))
         mod_creation_cooldowns[(guild.id, interaction.user.id)] = time.monotonic()
 
-        title = f"{interaction.user.name} 請求{zh} {user.name}"
+        title = t("moderate.request.title", locale=guild_locale, requester=interaction.user.name, name=name, target=user.name)
         if action == "timeout":
-            title += f" {get_time_text(duration_seconds)}"
-        embed = discord.Embed(title=title, description="按下方按鈕進行確認", color=discord.Color.orange())
-        embed.add_field(name="原因", value=reason_text, inline=False)
+            title += " " + get_time_text(duration_seconds, locale=guild_locale)
+        embed = discord.Embed(title=title, description=t("moderate.request.confirm_prompt", locale=guild_locale), color=discord.Color.orange())
+        embed.add_field(name=t("moderate.field.reason", locale=guild_locale), value=reason_text, inline=False)
         if action == "timeout":
-            embed.add_field(name="時間", value=get_time_text(duration_seconds), inline=False)
+            embed.add_field(name=t("moderate.field.time", locale=guild_locale), value=get_time_text(duration_seconds, locale=guild_locale), inline=False)
         elif action == "ban":
-            embed.add_field(name="時間", value=get_time_text(duration_seconds) if duration_seconds > 0 else "永久", inline=False)
+            embed.add_field(name=t("moderate.field.time", locale=guild_locale), value=get_time_text(duration_seconds, locale=guild_locale) if duration_seconds > 0 else t("moderate.duration.permanent", locale=guild_locale), inline=False)
 
         view = RequestView(
             guild=guild, requester_id=interaction.user.id, target_id=user.id,
@@ -2882,7 +2916,7 @@ class ModerationRequest(commands.GroupCog, name=app_commands.locale_str("request
         if duration:
             duration_seconds = timestr_to_seconds(duration)
             if duration_seconds <= 0:
-                await interaction.response.send_message("無效的封禁時間，請使用類似 10m、2h、3d 的格式。", ephemeral=True)
+                await interaction.response.send_message(t("moderate.err.invalid_ban_duration"), ephemeral=True)
                 return
         await self._create_request(interaction, "ban", user, request_to, reason, duration_seconds)
 
@@ -2901,10 +2935,10 @@ class ModerationRequest(commands.GroupCog, name=app_commands.locale_str("request
                               reason: Optional[str] = None, duration: str = "10m"):
         duration_seconds = timestr_to_seconds(duration)
         if duration_seconds <= 0:
-            await interaction.response.send_message("無效的禁言時間，請使用類似 10m、2h、3d 的格式。", ephemeral=True)
+            await interaction.response.send_message(t("moderate.err.invalid_mute_duration"), ephemeral=True)
             return
         if duration_seconds > MAX_TIMEOUT_SECONDS:
-            await interaction.response.send_message("禁言時間不能超過 28 天。", ephemeral=True)
+            await interaction.response.send_message(t("moderate.err.timeout_max_days"), ephemeral=True)
             return
         await self._create_request(interaction, "timeout", user, request_to, reason, duration_seconds)
 
@@ -2922,35 +2956,35 @@ class ModerationRequest(commands.GroupCog, name=app_commands.locale_str("request
                                max_duration: Optional[str] = None):
         guild = interaction.guild
         if guild is None:
-            await interaction.response.send_message("此指令只能在伺服器中使用。", ephemeral=True)
+            await interaction.response.send_message(t("moderate.err.guild_only"), ephemeral=True)
             return
         if not interaction.user.guild_permissions.administrator:
-            await interaction.response.send_message("只有管理員可以使用此指令。", ephemeral=True)
+            await interaction.response.send_message(t("moderate.err.admin_only"), ephemeral=True)
             return
 
         if action is None:
             if enabled is not None or max_duration is not None:
-                await interaction.response.send_message("請同時指定 action 才能修改設定。", ephemeral=True)
+                await interaction.response.send_message(t("moderate.err.need_action_param"), ephemeral=True)
                 return
-            embed = discord.Embed(title="📩 請求懲處設定", color=0x00b894)
+            embed = discord.Embed(title=t("moderate.request.settings_title"), color=0x00b894)
             for act, info in MOD_ACTION_DEFS.items():
                 s = _get_request_settings(guild.id, act)
-                value = f"狀態：{'✅ 啟用' if s['enabled'] else '❌ 停用'}"
+                value = t("moderate.settings.status_line", status=t("moderate.status.enabled" if s['enabled'] else "moderate.status.disabled"))
                 if act != "kick":
-                    value += f"\n最長時間：{'不限制' if s['max_duration'] <= 0 else get_time_text(s['max_duration'])}"
-                embed.add_field(name=info["zh"], value=value, inline=True)
+                    value += "\n" + t("moderate.settings.max_duration_line", max=t("moderate.duration.unlimited") if s['max_duration'] <= 0 else get_time_text(s['max_duration']))
+                embed.add_field(name=_action_name(act), value=value, inline=True)
             await interaction.response.send_message(embed=embed, ephemeral=True)
             return
 
         info = MOD_ACTION_DEFS[action]
         if enabled and not getattr(guild.me.guild_permissions, info["perm"], False):
             await interaction.response.send_message(
-                f"機器人缺少{info['zh']}所需的權限，無法啟用。請先授予權限後再試。", ephemeral=True)
+                t("moderate.err.bot_missing_action_perm_enable", name=_action_name(action)), ephemeral=True)
             return
         max_seconds = None
         if max_duration is not None:
             if action == "kick":
-                await interaction.response.send_message("踢出沒有時間限制可設定。", ephemeral=True)
+                await interaction.response.send_message(t("moderate.err.kick_no_duration_limit"), ephemeral=True)
                 return
             max_seconds, err = _parse_max_duration_setting(max_duration, action)
             if err:
@@ -2962,25 +2996,26 @@ class ModerationRequest(commands.GroupCog, name=app_commands.locale_str("request
         changes = []
         if enabled is not None:
             current["enabled"] = enabled
-            changes.append(f"狀態：{'啟用' if enabled else '停用'}")
+            changes.append(t("moderate.settings.status_line", status=t("common.state.enabled" if enabled else "common.state.disabled")))
         if max_seconds is not None:
             current["max_duration"] = max_seconds
-            changes.append(f"最長時間：{'不限制' if max_seconds == 0 else get_time_text(max_seconds)}")
+            changes.append(t("moderate.settings.max_duration_line", max=t("moderate.duration.unlimited") if max_seconds == 0 else get_time_text(max_seconds)))
 
         if not changes:
             s = _get_request_settings(guild.id, action)
-            lines = [f"{info['zh']}請求目前設定：", f"- 狀態：{'✅ 啟用' if s['enabled'] else '❌ 停用'}"]
+            lines = [t("moderate.request.current_settings", name=_action_name(action)),
+                     "- " + t("moderate.settings.status_line", status=t("moderate.status.enabled" if s['enabled'] else "moderate.status.disabled"))]
             if action != "kick":
-                lines.append(f"- 最長時間：{'不限制' if s['max_duration'] <= 0 else get_time_text(s['max_duration'])}")
+                lines.append("- " + t("moderate.settings.max_duration_line", max=t("moderate.duration.unlimited") if s['max_duration'] <= 0 else get_time_text(s['max_duration'])))
             await interaction.response.send_message("\n".join(lines), ephemeral=True)
             return
 
         set_server_config(guild.id, REQUEST_MODERATION_KEY, all_settings)
         await interaction.response.send_message(
-            f"已更新{info['zh']}請求設定：\n- " + "\n- ".join(changes), ephemeral=True)
+            t("moderate.request.settings_updated", name=_action_name(action)) + "\n- " + "\n- ".join(changes), ephemeral=True)
 
 
-class VoteView(discord.ui.View):
+class VoteView(i18n.I18nView):
     """/vote 的投票視圖：同意達閾值即執行，逾時失敗，允許改票。"""
 
     def __init__(self, *, guild: discord.Guild, initiator_id: int, target_id: int,
@@ -2999,23 +3034,24 @@ class VoteView(discord.ui.View):
         self.disagree = set()
         self.message: Optional[discord.Message] = None
         self.finished = False
+        self.locale = i18n.resolve_locale(guild_id=guild.id)
 
     def _counts_text(self) -> str:
-        return f"✅ 同意：{len(self.agree)}/{self.threshold}\n❌ 不同意：{len(self.disagree)}"
+        return t("moderate.vote.counts", locale=self.locale, agree=len(self.agree), threshold=self.threshold, disagree=len(self.disagree))
 
     async def _handle_vote(self, interaction: discord.Interaction, agree: bool):
         if self.finished:
-            await interaction.response.send_message("投票已結束。", ephemeral=True)
+            await interaction.response.send_message(t("moderate.err.vote_ended"), ephemeral=True)
             return
         uid = interaction.user.id
         side = self.agree if agree else self.disagree
         other = self.disagree if agree else self.agree
         if uid in side:
-            await interaction.response.send_message("你已經投過這一票了，若要改票請按另一個按鈕。", ephemeral=True)
+            await interaction.response.send_message(t("moderate.err.already_voted"), ephemeral=True)
             return
         other.discard(uid)
         side.add(uid)
-        self.embed.set_field_at(-1, name="目前票數", value=self._counts_text(), inline=False)
+        self.embed.set_field_at(-1, name=t("moderate.field.current_votes", locale=self.locale), value=self._counts_text(), inline=False)
         if len(self.agree) >= self.threshold:
             self.finished = True
             await interaction.response.defer()
@@ -3031,16 +3067,16 @@ class VoteView(discord.ui.View):
         active_vote_initiators.discard((self.guild.id, self.initiator_id))
         if success:
             ok, msg = await _execute_moderation(
-                self.guild, self.action, self.target_id, self.reason, self.duration_seconds)
+                self.guild, self.action, self.target_id, self.reason, self.duration_seconds, locale=self.locale)
             if ok:
                 self.embed.color = discord.Color.green()
-                self.embed.add_field(name="結果", value=f"✅ 投票通過！{msg}", inline=False)
+                self.embed.add_field(name=t("moderate.field.result", locale=self.locale), value=t("moderate.vote.passed", locale=self.locale, result=msg), inline=False)
             else:
                 self.embed.color = discord.Color.red()
-                self.embed.add_field(name="結果", value=f"⚠️ 投票通過，但執行失敗：{msg}", inline=False)
+                self.embed.add_field(name=t("moderate.field.result", locale=self.locale), value=t("moderate.vote.passed_but_failed", locale=self.locale, result=msg), inline=False)
         else:
             self.embed.color = discord.Color.dark_grey()
-            self.embed.add_field(name="結果", value=f"❌ 投票未通過（時限內未達 {self.threshold} 票同意）。", inline=False)
+            self.embed.add_field(name=t("moderate.field.result", locale=self.locale), value=t("moderate.vote.not_passed", locale=self.locale, threshold=self.threshold), inline=False)
         if self.message:
             try:
                 await self.message.edit(embed=self.embed, view=self)
@@ -3053,11 +3089,11 @@ class VoteView(discord.ui.View):
         self.finished = True
         await self._finish(success=False)
 
-    @discord.ui.button(label="同意", emoji="👍", style=discord.ButtonStyle.success)
+    @discord.ui.button(label=i18n.K("moderate.btn.vote_agree"), emoji="👍", style=discord.ButtonStyle.success)
     async def vote_agree(self, interaction: discord.Interaction, button: discord.ui.Button):
         await self._handle_vote(interaction, agree=True)
 
-    @discord.ui.button(label="不同意", emoji="👎", style=discord.ButtonStyle.danger)
+    @discord.ui.button(label=i18n.K("moderate.btn.vote_disagree"), emoji="👎", style=discord.ButtonStyle.danger)
     async def vote_disagree(self, interaction: discord.Interaction, button: discord.ui.Button):
         await self._handle_vote(interaction, agree=False)
 
@@ -3077,16 +3113,18 @@ class ModerationVote(commands.GroupCog, name=app_commands.locale_str("vote", i18
                           reason: Optional[str], duration_seconds: int):
         guild = interaction.guild
         if guild is None:
-            await interaction.response.send_message("此指令只能在伺服器中使用。", ephemeral=True)
+            await interaction.response.send_message(t("moderate.err.guild_only"), ephemeral=True)
             return
         info = MOD_ACTION_DEFS[action]
-        perm, zh = info["perm"], info["zh"]
-        reason_text = reason or "未提供"
+        perm = info["perm"]
+        guild_locale = i18n.resolve_locale(guild_id=guild.id)
+        name = _action_name(action, locale=guild_locale)
+        reason_text = reason or t("moderate.not_provided", locale=guild_locale)
         settings = _get_vote_settings(guild.id, action)
         bypass = _has_mod_bypass(interaction.user, perm)
 
         if not settings["enabled"] and not bypass:
-            await interaction.response.send_message(f"此伺服器尚未啟用{zh}投票。", ephemeral=True)
+            await interaction.response.send_message(t("moderate.err.vote_not_enabled", name=_action_name(action)), ephemeral=True)
             return
         err = _check_duration_limit(action, duration_seconds, settings["max_duration"])
         if err and not bypass:
@@ -3096,14 +3134,14 @@ class ModerationVote(commands.GroupCog, name=app_commands.locale_str("vote", i18
             remaining = _check_creation_cooldown(guild.id, interaction.user.id)
             if remaining > 0:
                 await interaction.response.send_message(
-                    f"操作太頻繁，請在 {remaining} 秒後再試。", ephemeral=True)
+                    t("moderate.err.creation_cooldown", seconds=remaining), ephemeral=True)
                 return
             if (guild.id, interaction.user.id) in active_vote_initiators:
                 await interaction.response.send_message(
-                    "你已有一個進行中的投票，請先等待其結束。", ephemeral=True)
+                    t("moderate.err.vote_already_active"), ephemeral=True)
                 return
         if not getattr(guild.me.guild_permissions, perm, False):
-            await interaction.response.send_message(f"機器人缺少{zh}所需的權限。", ephemeral=True)
+            await interaction.response.send_message(t("moderate.err.bot_missing_action_perm", name=_action_name(action)), ephemeral=True)
             return
         ok, msg = _bot_side_target_check(guild, user)
         if not ok:
@@ -3112,7 +3150,7 @@ class ModerationVote(commands.GroupCog, name=app_commands.locale_str("vote", i18
 
         key = (guild.id, user.id)
         if key in active_votes:
-            await interaction.response.send_message("已有針對該用戶的投票正在進行中。", ephemeral=True)
+            await interaction.response.send_message(t("moderate.err.vote_target_active"), ephemeral=True)
             return
         active_votes[key] = None  # 佔位，避免併發重複發起
         active_vote_initiators.add((guild.id, interaction.user.id))
@@ -3135,18 +3173,18 @@ class ModerationVote(commands.GroupCog, name=app_commands.locale_str("vote", i18
 
             duration_suffix = ""
             if action == "timeout" or (action == "ban" and duration_seconds > 0):
-                duration_suffix = f" {get_time_text(duration_seconds)}"
+                duration_suffix = " " + get_time_text(duration_seconds, locale=guild_locale)
             embed = discord.Embed(
-                title=f"{interaction.user.name} 發起{zh} {user.name}{duration_suffix} 的投票",
-                description=f"按下方按鈕進行投票，投票將於 {discord.utils.format_dt(deadline, 'R')} 結束",
+                title=t("moderate.vote.title", locale=guild_locale, initiator=interaction.user.name, name=name, target=user.name, suffix=duration_suffix),
+                description=t("moderate.vote.prompt", locale=guild_locale, deadline=discord.utils.format_dt(deadline, 'R')),
                 color=discord.Color.orange(),
             )
-            embed.add_field(name="原因", value=reason_text, inline=False)
+            embed.add_field(name=t("moderate.field.reason", locale=guild_locale), value=reason_text, inline=False)
             if action == "timeout":
-                embed.add_field(name="時間", value=get_time_text(duration_seconds), inline=False)
+                embed.add_field(name=t("moderate.field.time", locale=guild_locale), value=get_time_text(duration_seconds, locale=guild_locale), inline=False)
             elif action == "ban":
-                embed.add_field(name="時間", value=get_time_text(duration_seconds) if duration_seconds > 0 else "永久", inline=False)
-            embed.add_field(name="目前票數", value=f"✅ 同意：0/{threshold}\n❌ 不同意：0", inline=False)
+                embed.add_field(name=t("moderate.field.time", locale=guild_locale), value=get_time_text(duration_seconds, locale=guild_locale) if duration_seconds > 0 else t("moderate.duration.permanent", locale=guild_locale), inline=False)
+            embed.add_field(name=t("moderate.field.current_votes", locale=guild_locale), value=t("moderate.vote.counts", locale=guild_locale, agree=0, threshold=threshold, disagree=0), inline=False)
 
             view = VoteView(
                 guild=guild, initiator_id=interaction.user.id, target_id=user.id,
@@ -3173,7 +3211,7 @@ class ModerationVote(commands.GroupCog, name=app_commands.locale_str("vote", i18
         if duration:
             duration_seconds = timestr_to_seconds(duration)
             if duration_seconds <= 0:
-                await interaction.response.send_message("無效的封禁時間，請使用類似 10m、2h、3d 的格式。", ephemeral=True)
+                await interaction.response.send_message(t("moderate.err.invalid_ban_duration"), ephemeral=True)
                 return
         await self._start_vote(interaction, "ban", user, reason, duration_seconds)
 
@@ -3189,10 +3227,10 @@ class ModerationVote(commands.GroupCog, name=app_commands.locale_str("vote", i18
                            reason: Optional[str] = None, duration: str = "10m"):
         duration_seconds = timestr_to_seconds(duration)
         if duration_seconds <= 0:
-            await interaction.response.send_message("無效的禁言時間，請使用類似 10m、2h、3d 的格式。", ephemeral=True)
+            await interaction.response.send_message(t("moderate.err.invalid_mute_duration"), ephemeral=True)
             return
         if duration_seconds > MAX_TIMEOUT_SECONDS:
-            await interaction.response.send_message("禁言時間不能超過 28 天。", ephemeral=True)
+            await interaction.response.send_message(t("moderate.err.timeout_max_days"), ephemeral=True)
             return
         await self._start_vote(interaction, "timeout", user, reason, duration_seconds)
 
@@ -3213,46 +3251,47 @@ class ModerationVote(commands.GroupCog, name=app_commands.locale_str("vote", i18
                             max_duration: Optional[str] = None):
         guild = interaction.guild
         if guild is None:
-            await interaction.response.send_message("此指令只能在伺服器中使用。", ephemeral=True)
+            await interaction.response.send_message(t("moderate.err.guild_only"), ephemeral=True)
             return
         if not interaction.user.guild_permissions.administrator:
-            await interaction.response.send_message("只有管理員可以使用此指令。", ephemeral=True)
+            await interaction.response.send_message(t("moderate.err.admin_only"), ephemeral=True)
             return
 
         if action is None:
             if enabled is not None or threshold is not None or vote_duration is not None or max_duration is not None:
-                await interaction.response.send_message("請同時指定 action 才能修改設定。", ephemeral=True)
+                await interaction.response.send_message(t("moderate.err.need_action_param"), ephemeral=True)
                 return
-            embed = discord.Embed(title="🗳️ 投票懲處設定", color=0x00b894)
+            embed = discord.Embed(title=t("moderate.vote.settings_title"), color=0x00b894)
             for act, info in MOD_ACTION_DEFS.items():
                 s = _get_vote_settings(guild.id, act)
-                value = (f"狀態：{'✅ 啟用' if s['enabled'] else '❌ 停用'}\n"
-                         f"門檻：{'自動計算' if s['threshold'] <= 0 else str(s['threshold']) + ' 票'}\n"
-                         f"投票時間：{get_time_text(s['duration'])}")
+                value = t("moderate.vote.settings_value",
+                          status=t("moderate.status.enabled" if s['enabled'] else "moderate.status.disabled"),
+                          threshold=t("moderate.vote.threshold_auto") if s['threshold'] <= 0 else t("moderate.vote.threshold_votes", count=s['threshold']),
+                          duration=get_time_text(s['duration']))
                 if act != "kick":
-                    value += f"\n最長時間：{'不限制' if s['max_duration'] <= 0 else get_time_text(s['max_duration'])}"
-                embed.add_field(name=info["zh"], value=value, inline=True)
+                    value += "\n" + t("moderate.settings.max_duration_line", max=t("moderate.duration.unlimited") if s['max_duration'] <= 0 else get_time_text(s['max_duration']))
+                embed.add_field(name=_action_name(act), value=value, inline=True)
             await interaction.response.send_message(embed=embed, ephemeral=True)
             return
 
         info = MOD_ACTION_DEFS[action]
         if enabled and not getattr(guild.me.guild_permissions, info["perm"], False):
             await interaction.response.send_message(
-                f"機器人缺少{info['zh']}所需的權限，無法啟用。請先授予權限後再試。", ephemeral=True)
+                t("moderate.err.bot_missing_action_perm_enable", name=_action_name(action)), ephemeral=True)
             return
         duration_seconds = None
         if vote_duration is not None:
             duration_seconds = timestr_to_seconds(vote_duration)
             if duration_seconds <= 0:
-                await interaction.response.send_message("無效的投票時間，請使用類似 10m、2h 的格式。", ephemeral=True)
+                await interaction.response.send_message(t("moderate.err.invalid_vote_duration"), ephemeral=True)
                 return
             if duration_seconds > MAX_VOTE_DURATION_SECONDS:
-                await interaction.response.send_message("投票時間不能超過 1 天。", ephemeral=True)
+                await interaction.response.send_message(t("moderate.err.vote_duration_max"), ephemeral=True)
                 return
         max_seconds = None
         if max_duration is not None:
             if action == "kick":
-                await interaction.response.send_message("踢出沒有時間限制可設定。", ephemeral=True)
+                await interaction.response.send_message(t("moderate.err.kick_no_duration_limit"), ephemeral=True)
                 return
             max_seconds, err = _parse_max_duration_setting(max_duration, action)
             if err:
@@ -3264,31 +3303,31 @@ class ModerationVote(commands.GroupCog, name=app_commands.locale_str("vote", i18
         changes = []
         if enabled is not None:
             current["enabled"] = enabled
-            changes.append(f"狀態：{'啟用' if enabled else '停用'}")
+            changes.append(t("moderate.settings.status_line", status=t("common.state.enabled" if enabled else "common.state.disabled")))
         if threshold is not None:
             current["threshold"] = threshold
-            changes.append(f"門檻：{'自動計算' if threshold == 0 else str(threshold) + ' 票'}")
+            changes.append(t("moderate.vote.threshold_line", threshold=t("moderate.vote.threshold_auto") if threshold == 0 else t("moderate.vote.threshold_votes", count=threshold)))
         if duration_seconds is not None:
             current["duration"] = duration_seconds
-            changes.append(f"投票時間：{get_time_text(duration_seconds)}")
+            changes.append(t("moderate.vote.duration_line", duration=get_time_text(duration_seconds)))
         if max_seconds is not None:
             current["max_duration"] = max_seconds
-            changes.append(f"最長時間：{'不限制' if max_seconds == 0 else get_time_text(max_seconds)}")
+            changes.append(t("moderate.settings.max_duration_line", max=t("moderate.duration.unlimited") if max_seconds == 0 else get_time_text(max_seconds)))
 
         if not changes:
             s = _get_vote_settings(guild.id, action)
-            lines = [f"{info['zh']}投票目前設定：",
-                     f"- 狀態：{'✅ 啟用' if s['enabled'] else '❌ 停用'}",
-                     f"- 門檻：{'自動計算' if s['threshold'] <= 0 else str(s['threshold']) + ' 票'}",
-                     f"- 投票時間：{get_time_text(s['duration'])}"]
+            lines = [t("moderate.vote.current_settings", name=_action_name(action)),
+                     "- " + t("moderate.settings.status_line", status=t("moderate.status.enabled" if s['enabled'] else "moderate.status.disabled")),
+                     "- " + t("moderate.vote.threshold_line", threshold=t("moderate.vote.threshold_auto") if s['threshold'] <= 0 else t("moderate.vote.threshold_votes", count=s['threshold'])),
+                     "- " + t("moderate.vote.duration_line", duration=get_time_text(s['duration']))]
             if action != "kick":
-                lines.append(f"- 最長時間：{'不限制' if s['max_duration'] <= 0 else get_time_text(s['max_duration'])}")
+                lines.append("- " + t("moderate.settings.max_duration_line", max=t("moderate.duration.unlimited") if s['max_duration'] <= 0 else get_time_text(s['max_duration'])))
             await interaction.response.send_message("\n".join(lines), ephemeral=True)
             return
 
         set_server_config(guild.id, VOTE_MODERATION_KEY, all_settings)
         await interaction.response.send_message(
-            f"已更新{info['zh']}投票設定：\n- " + "\n- ".join(changes), ephemeral=True)
+            t("moderate.vote.settings_updated", name=_action_name(action)) + "\n- " + "\n- ".join(changes), ephemeral=True)
 
 
 asyncio.run(bot.add_cog(ModerationRequest(bot)))
