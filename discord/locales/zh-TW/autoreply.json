@@ -1,0 +1,209 @@
+{
+    "btn": {
+        "clear_channels": "清空頻道限制",
+        "confirm_clear": "確認清除",
+        "edit_trigger_response": "編輯觸發與回覆",
+        "reply_original": "回覆原訊息：{state}",
+        "save_rule": "儲存規則"
+    },
+    "builder": {
+        "cancelled_desc": "這次沒有儲存任何規則。",
+        "cancelled_title": "AutoReply Builder 已取消",
+        "instructions": "用下方按鈕和下拉選單慢慢組這條規則，準備好之後按「儲存規則」。",
+        "more_items": "… 另外還有 {count} 項",
+        "rule_added_confirm": "規則已加入 AutoReply 清單。",
+        "rule_added_desc": "這條規則已經加入清單，目前共有 {total} / {limit} 條。",
+        "timed_out_desc": "Builder 已關閉，想繼續的話請重新執行指令。",
+        "timed_out_title": "AutoReply Builder 已逾時",
+        "tip_body": "觸發字 / 回覆可以一行一個；回覆可直接用 `{user}`、`{content}`、`{contentsplit:1-}`、`{if:...}`、`{math:(...)}`。"
+    },
+    "channel_mode": {
+        "all": {
+            "desc": "任何文字頻道都能觸發",
+            "label": "全部頻道"
+        },
+        "blacklist": {
+            "desc": "除了指定頻道外都會觸發",
+            "label": "黑名單"
+        },
+        "whitelist": {
+            "desc": "只有指定頻道會觸發",
+            "label": "白名單"
+        }
+    },
+    "clear": {
+        "cancelled": "已取消清除自動回覆。",
+        "confirm_prompt": "您確定要清除所有自動回覆嗎？\n目前有 {count} 筆自動回覆。",
+        "done": "已清除所有自動回覆。",
+        "timed_out": "操作逾時，已取消清除自動回覆。"
+    },
+    "err": {
+        "config_limit": "自動回覆設定最多只能有 {count} 筆。\n> 想要增加限制？\n> 前往支援伺服器開啟客服單取得支援！\n> {support_url}",
+        "limit_reached": "自動回覆上限為 {count} 條。",
+        "need_response": "至少要設定一個回覆內容。",
+        "need_trigger": "至少要設定一個觸發字。",
+        "not_builder_owner": "這個 builder 只給原本開啟的人操作。",
+        "not_clear_initiator": "只有發起操作的使用者可以確認清除。",
+        "pack_not_found": "找不到這個範本包。",
+        "random_chance_between": "隨機回覆機率必須在 1 到 100 之間。",
+        "random_chance_range": "觸發機率必須是 1 到 100 的整數。",
+        "template_syntax": "回覆模板語法錯誤：{error}",
+        "template_would_exceed_limit": "套用後會超過 {count} 筆自動回覆上限，這次未套用。",
+        "trigger_conflict_existing": "這些觸發器已經存在於其他自動回覆規則中：{preview}",
+        "trigger_conflict_new": "你這次新增的觸發器裡有重複項目：{preview}",
+        "trigger_not_found": "找不到觸發字串 `{trigger}` 的自動回覆。",
+        "unknown_channel_mode": "未知的頻道限制模式。",
+        "unknown_mode": "未知的觸發模式。",
+        "unknown_type_trigger": "未知的 type trigger：{preview}。可用 `type:join`、`type:boost`，或直接填 Discord 的 MessageType 名稱，例如 `type:premium_guild_subscription`。"
+    },
+    "export": {
+        "file_message": "以下是此伺服器的自動回覆設定 JSON 檔案：",
+        "no_config": "此伺服器尚未設定自動回覆。"
+    },
+    "field": {
+        "apply_mode": "套用模式",
+        "chance": "機率",
+        "channel_mode": "頻道模式",
+        "current_count": "目前條數",
+        "current_total": "目前總數",
+        "duplicates_skipped": "略過重複",
+        "included_rules": "內含規則",
+        "mode": "模式",
+        "random_chance": "隨機回覆機率",
+        "reply_original": "回覆原訊息",
+        "response": "回覆內容",
+        "rules_added": "新增規則",
+        "specified_channels": "指定頻道",
+        "template_pack": "範本包",
+        "tip": "小提示",
+        "trigger": "觸發字",
+        "trigger_string": "觸發字串"
+    },
+    "help": {
+        "body": {
+            "basic_vars": "- `{user}` mention；`{author}` / `{member}` 名稱；`{id}` / `{authorid}` 使用者 ID\n- `{authoravatar}` 頭像 URL；`{authorbanner}` banner URL；`{authorcreated}` 帳號建立時間\n- `{guild}` / `{server}` 伺服器名稱；`{guildid}` 伺服器 ID\n- `{guildicon}` icon URL；`{guildbanner}` banner URL；`{guildowner}` / `{guildownerid}` 擁有者\n- `{guildmembers}` 成員數；`{guildroles}` 身分組數；`{guildboosts}` boost 數\n- `{content}` / `{channel}` / `{role}`\n- `{null}` 空字串，可拿來做 `if` 比較\n- `\\n` 換行、`\\t` Tab",
+            "builtin_packs": "- `daily_greetings`：早安 / 午安 / 晚安 / 安安\n- `mini_commands`：!say / !time / !date / !roll\n- `chat_fun`：簽到 / 抽一個人 / 今日運勢 / 好耶\n- 可用 {template} 直接套用",
+            "commands": "{add}：新增規則\n{edit} / {remove}：修改或刪除規則\n{quickadd}：快速補 trigger / response\n{template}：套用內建範本包\n{list} / {clear}：查看或清空規則\n{export} / {import_}：匯出或匯入 JSON\n{ignore}：設定全域忽略/白名單頻道\n{test}：預覽變數、條件與 embed 效果",
+            "date_condition": "- `{date}` `{year}` `{month}` `{day}`\n- `{time}` `{time24}` `{hour}` `{minute}` `{second}`\n- `{timemd:t}` ~ `{timemd:R}` 產生 Discord 時間戳\n- `{contentsplit:0}`、`{contentsplit:1-}`、`{contentsplit:-4}`、`{contentsplit:1-2}`\n- `{math:(1+2*3)}`，只支援 `+ - * /`，數字限制 `-1000 ~ 1000`\n- `math` 內可用其他變數，例如 `{math:({contentsplit:1}+5)}`\n- `{if:{contentsplit:1}==true:Yes:else:No}`\n- `{if:{contentsplit:1}!={null}:有內容:else:空白}`\n- 也支援 `{if:{contentsplit:1}==true:Yes:No}` 與 `{if:條件:成立內容}`\n- 支援 `==` `!=` `<=` `>=` `&&` `||`",
+            "delay_state_vars": "- `{newmsg:2}`：1~3 秒後再發一則新訊息，最多 2 個\n- `{edit:2}`：1~3 秒後編輯目前這則 autoreply，最多 4 個\n- 預設只允許提及 users；`{mention:true}` 開放 `@everyone` / 身分組，`{mention:false}` 關閉\n- `{uservar:key}` / `{uservar:key:value}`\n- `{guildvar:key}` / `{guildvar:key:value}`\n- uservar 最多 5 個、guildvar 最多 10 個，key/value 最長 100",
+            "embed_advanced": "- `{random}` / `{randint:min-max}` / `{random_user}`\n- `{react:emoji}`、`{sticker:sticker_id}`\n- `{embedtitle:標題}` `{embeddescription:內容}` `{embedurl:連結}`\n- `{embedimage:連結}` `{embedthumbnail:連結}`\n- `{embedcolor:HEX}` `{embedfooter:文字}` `{embedfooterimage:連結}`\n- `{embedauthor:名字}` `{embedauthorurl:連結}` `{embedauthorimage:連結}`\n- `{embedtime:true}` `{embedfield:欄位名:欄位值}`\n- Embed 內文也可以繼續使用其他變數",
+            "notes": "- 同一個 guild 每 1 秒最多發 3 條 autoreply\n- 模板語法錯誤時會直接輸出空字串\n- 日期 / 時間變數跟隨機器人主機本地時區\n",
+            "special_trigger": "- `type:join`：只在成員加入系統訊息觸發 (`discord.MessageType.new_member`)\n- `type:boost`：只在伺服器 boost 系統訊息觸發 (`discord.MessageType.premium_guild_subscription`)\n- 也可直接用 Discord 原生名稱，例如 `type:premium_guild_tier_1`"
+        },
+        "btn": {
+            "more_examples": "顯示更多範例",
+            "test_hint": "提示：測試替換"
+        },
+        "examples_body": "1) `歡迎 {user} 來到 {guild}！`\n2) `{if:{contentsplit:1}==true&&{hour}>=12:你在下午輸入了 true:還沒達成條件}`\n3) `{if:{contentsplit:1}!={null}:你有輸入參數:else:你沒輸入參數}`\n4) `{embedtitle:簽到成功}{embedurl:https://example.com}{embeddescription:{user} 在 {date} {time24} 完成簽到}{embedauthor:系統}{embedauthorimage:{authoravatar}}{embedcolor:57F287}`\n5) `從第 2 個單字開始：{contentsplit:1-}`\n6) `剛剛聊天室隨機點名：{random_user}`\n7) `{mention:true}@everyone 系統維護開始`\n8) trigger 寫 `type:boost` 或 `type:join` 來監聽系統訊息",
+        "examples_title": "自動回覆範例",
+        "section": {
+            "basic_vars": "基本變數",
+            "builtin_packs": "內建範本包",
+            "commands": "指令說明",
+            "date_condition": "日期與條件",
+            "delay_state_vars": "延遲 / 狀態變數",
+            "embed_advanced": "Embed / 進階效果",
+            "notes": "注意事項",
+            "special_trigger": "特殊 Trigger"
+        },
+        "subtitle": "支援變數替換、條件判斷、Embed 回覆、貼圖/反應。",
+        "test_hint_body": "可用 {test} 測試變數、條件與 embed 結果。",
+        "title": "自動回覆使用說明"
+    },
+    "ignore": {
+        "updated": "已設定忽略頻道模式為 `{mode}`，頻道列表：`{channels}`。"
+    },
+    "import": {
+        "done": "已匯入自動回覆設定。",
+        "download_failed": "無法下載檔案。",
+        "parse_failed": "無法解析 JSON 檔案。",
+        "would_exceed_limit": "自動回覆設定最多只能有 {count} 筆，這次匯入未套用。\n> 想要增加限制？\n> 前往支援伺服器開啟客服單取得支援！\n> {support_url}"
+    },
+    "list": {
+        "row": "**{index}.** 模式：{mode}，觸發字串：`{triggers}`，回覆內容：`{responses}`，回覆原訊息：{reply}，指定頻道模式：{channel_mode}，指定頻道：`{channels}`，隨機回覆機率：{chance}%",
+        "title": "自動回覆列表"
+    },
+    "modal": {
+        "builder_title": "AutoReply Builder",
+        "random_chance_label": "觸發機率 (1-100)",
+        "response_ph": "一行一個 response；可直接使用 {user}、{contentsplit:1-} 等變數",
+        "trigger_ph": "一行一個 trigger；只有一行時也可用逗號分隔"
+    },
+    "mode": {
+        "contains": {
+            "desc": "訊息包含其中一個觸發字就回覆",
+            "label": "包含"
+        },
+        "ends_with": {
+            "desc": "訊息結尾符合時觸發",
+            "label": "結尾符合"
+        },
+        "equals": {
+            "desc": "訊息要和觸發字完全一樣",
+            "label": "完全相同"
+        },
+        "regex": {
+            "desc": "用 Python regex 比對訊息",
+            "label": "正規表達式"
+        },
+        "starts_with": {
+            "desc": "訊息開頭符合時觸發",
+            "label": "開頭符合"
+        }
+    },
+    "msg": {
+        "add_success": "新增自動回覆成功",
+        "builder_content_updated": "Builder 內容已更新。",
+        "edit_success": "編輯自動回覆成功",
+        "no_autoreplies": "目前沒有設定任何自動回覆。",
+        "quickadd_success": "快速新增自動回覆成功",
+        "removed": "已移除自動回覆：`{trigger}`。",
+        "rule_saved_title": "已儲存 AutoReply 規則",
+        "template_applied": "已套用自動回覆範本包"
+    },
+    "pack": {
+        "booster": {
+            "description": "專為加成者設計的回覆規則，適合放在公告頻道或一般聊天頻道。",
+            "display_name": "加成者回覆包"
+        },
+        "chat_fun": {
+            "description": "簽到、點名、運勢和好耶反應，適合先讓聊天室動起來。",
+            "display_name": "聊天互動包"
+        },
+        "daily_greetings": {
+            "description": "早安 / 午安 / 晚安 / 安安，會依現在時間給不同回覆。",
+            "display_name": "日常問候包"
+        },
+        "mini_commands": {
+            "description": "幾個常用小指令，像是 !say、!time、!date、!roll、!weather。",
+            "display_name": "迷你指令包"
+        },
+        "welcome": {
+            "description": "新成員加入歡迎語，適合放在歡迎頻道或一般聊天頻道。",
+            "display_name": "歡迎語包"
+        }
+    },
+    "render": {
+        "am": "上午",
+        "no_user_found": "查無使用者",
+        "pm": "下午",
+        "user_unavailable": "無法取得使用者"
+    },
+    "select": {
+        "channel_limit_ph": "選擇頻道限制（可多選，不選就是空清單）",
+        "channel_mode_ph": "選擇頻道限制模式",
+        "mode_ph": "選擇觸發模式"
+    },
+    "state": {
+        "empty_list": "空清單",
+        "merge_existing": "合併現有規則",
+        "not_set": "還沒設定",
+        "off": "關閉",
+        "on": "開啟",
+        "overwrite_existing": "覆蓋現有規則"
+    },
+    "test": {
+        "mock_content": "這是一則測試訊息內容。",
+        "no_output": "沒有可輸出的內容"
+    }
+}

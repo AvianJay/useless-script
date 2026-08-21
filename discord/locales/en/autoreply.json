@@ -1,0 +1,221 @@
+{
+    "btn": {
+        "clear_channels": "Clear channel filter",
+        "confirm_clear": "Confirm clear",
+        "edit_trigger_response": "Edit trigger & response",
+        "reply_original": "Reply to original: {state}",
+        "save_rule": "Save rule"
+    },
+    "builder": {
+        "cancelled_desc": "No rule was saved this time.",
+        "cancelled_title": "AutoReply Builder cancelled",
+        "instructions": "Use the buttons and dropdowns below to build this rule, then hit \"Save rule\" when ready.",
+        "more_items": "… and {count} more",
+        "rule_added_confirm": "The rule has been added to the AutoReply list.",
+        "rule_added_desc": "This rule has been added; there are now {total} / {limit}.",
+        "timed_out_desc": "The builder closed. Run the command again to keep going.",
+        "timed_out_title": "AutoReply Builder timed out",
+        "tip_body": "Enter one trigger / response per line; responses can use `{user}`, `{content}`, `{contentsplit:1-}`, `{if:...}`, `{math:(...)}` directly."
+    },
+    "channel_mode": {
+        "all": {
+            "desc": "Triggers in any text channel",
+            "label": "All channels"
+        },
+        "blacklist": {
+            "desc": "Triggers everywhere except the listed channels",
+            "label": "Blacklist"
+        },
+        "whitelist": {
+            "desc": "Only triggers in the listed channels",
+            "label": "Whitelist"
+        }
+    },
+    "clear": {
+        "cancelled": "Clearing all auto-replies was cancelled.",
+        "confirm_prompt": "Are you sure you want to clear all auto-replies?\nThere are currently {count}.",
+        "done": "All auto-replies have been cleared.",
+        "timed_out": "Timed out; clearing all auto-replies was cancelled."
+    },
+    "err": {
+        "config_limit": {
+            "one": "You can have at most {count} auto-reply.\n> Want a higher limit?\n> Open a ticket in the support server!\n> {support_url}",
+            "other": "You can have at most {count} auto-replies.\n> Want a higher limit?\n> Open a ticket in the support server!\n> {support_url}"
+        },
+        "limit_reached": {
+            "one": "The auto-reply limit is {count}.",
+            "other": "The auto-reply limit is {count}."
+        },
+        "need_response": "At least one reply is required.",
+        "need_trigger": "At least one trigger is required.",
+        "not_builder_owner": "This builder can only be used by the person who opened it.",
+        "not_clear_initiator": "Only the user who started this can confirm the clear.",
+        "pack_not_found": "That template pack couldn't be found.",
+        "random_chance_between": "The random reply chance must be between 1 and 100.",
+        "random_chance_range": "The trigger chance must be a whole number from 1 to 100.",
+        "template_syntax": "Reply template syntax error: {error}",
+        "template_would_exceed_limit": {
+            "one": "Applying this would exceed the {count} auto-reply limit, so it wasn't applied.",
+            "other": "Applying this would exceed the {count} auto-reply limit, so it wasn't applied."
+        },
+        "trigger_conflict_existing": "These triggers already exist in other auto-reply rules: {preview}",
+        "trigger_conflict_new": "The triggers you're adding contain duplicates: {preview}",
+        "trigger_not_found": "No auto-reply found with the trigger string `{trigger}`.",
+        "unknown_channel_mode": "Unknown channel filter mode.",
+        "unknown_mode": "Unknown trigger mode.",
+        "unknown_type_trigger": "Unknown type trigger: {preview}. Use `type:join`, `type:boost`, or a Discord MessageType name directly, e.g. `type:premium_guild_subscription`."
+    },
+    "export": {
+        "file_message": "Here's this server's auto-reply settings as a JSON file:",
+        "no_config": "This server has no auto-replies configured yet."
+    },
+    "field": {
+        "apply_mode": "Apply mode",
+        "chance": "Chance",
+        "channel_mode": "Channel mode",
+        "current_count": "Current count",
+        "current_total": "Current total",
+        "duplicates_skipped": "Duplicates skipped",
+        "included_rules": "Included rules",
+        "mode": "Mode",
+        "random_chance": "Random reply chance",
+        "reply_original": "Reply to original",
+        "response": "Response",
+        "rules_added": "Rules added",
+        "specified_channels": "Specified channels",
+        "template_pack": "Template pack",
+        "tip": "Tip",
+        "trigger": "Trigger",
+        "trigger_string": "Trigger string"
+    },
+    "help": {
+        "body": {
+            "basic_vars": "- `{user}` mention; `{author}` / `{member}` name; `{id}` / `{authorid}` user ID\n- `{authoravatar}` avatar URL; `{authorbanner}` banner URL; `{authorcreated}` account creation time\n- `{guild}` / `{server}` server name; `{guildid}` server ID\n- `{guildicon}` icon URL; `{guildbanner}` banner URL; `{guildowner}` / `{guildownerid}` owner\n- `{guildmembers}` member count; `{guildroles}` role count; `{guildboosts}` boost count\n- `{content}` / `{channel}` / `{role}`\n- `{null}` empty string, useful for `if` comparisons\n- `\\n` newline, `\\t` tab",
+            "builtin_packs": "- `daily_greetings`: morning / afternoon / evening / generic greetings\n- `mini_commands`: !say / !time / !date / !roll\n- `chat_fun`: check-in / pick someone / daily fortune / hype reactions\n- Apply one directly with {template}",
+            "commands": "{add}: add a rule\n{edit} / {remove}: modify or delete a rule\n{quickadd}: quickly append trigger / response\n{template}: apply a built-in template pack\n{list} / {clear}: view or clear rules\n{export} / {import_}: export or import JSON\n{ignore}: configure global ignore/allow channels\n{test}: preview variables, conditions, and embed output",
+            "date_condition": "- `{date}` `{year}` `{month}` `{day}`\n- `{time}` `{time24}` `{hour}` `{minute}` `{second}`\n- `{timemd:t}` ~ `{timemd:R}` produce a Discord timestamp\n- `{contentsplit:0}`, `{contentsplit:1-}`, `{contentsplit:-4}`, `{contentsplit:1-2}`\n- `{math:(1+2*3)}`, only `+ - * /` supported, numbers limited to `-1000 ~ 1000`\n- other variables can be used inside `math`, e.g. `{math:({contentsplit:1}+5)}`\n- `{if:{contentsplit:1}==true:Yes:else:No}`\n- `{if:{contentsplit:1}!={null}:Has content:else:Empty}`\n- also supports `{if:{contentsplit:1}==true:Yes:No}` and `{if:condition:content if true}`\n- supports `==` `!=` `<=` `>=` `&&` `||`",
+            "delay_state_vars": "- `{newmsg:2}`: sends a new message after 1~3s, up to 2\n- `{edit:2}`: edits this autoreply after 1~3s, up to 4\n- only user mentions are allowed by default; `{mention:true}` allows `@everyone` / roles, `{mention:false}` turns it off\n- `{uservar:key}` / `{uservar:key:value}`\n- `{guildvar:key}` / `{guildvar:key:value}`\n- up to 5 uservars, 10 guildvars, key/value max length 100",
+            "embed_advanced": "- `{random}` / `{randint:min-max}` / `{random_user}`\n- `{react:emoji}`, `{sticker:sticker_id}`\n- `{embedtitle:title}` `{embeddescription:content}` `{embedurl:link}`\n- `{embedimage:link}` `{embedthumbnail:link}`\n- `{embedcolor:HEX}` `{embedfooter:text}` `{embedfooterimage:link}`\n- `{embedauthor:name}` `{embedauthorurl:link}` `{embedauthorimage:link}`\n- `{embedtime:true}` `{embedfield:field name:field value}`\n- Other variables can still be used inside the embed text",
+            "notes": "- At most 3 auto-replies per guild per second\n- A template syntax error just produces an empty string\n- Date / time variables follow the bot host's local timezone\n",
+            "special_trigger": "- `type:join`: only triggers on the member-join system message (`discord.MessageType.new_member`)\n- `type:boost`: only triggers on the server-boost system message (`discord.MessageType.premium_guild_subscription`)\n- A native Discord name also works directly, e.g. `type:premium_guild_tier_1`"
+        },
+        "btn": {
+            "more_examples": "Show more examples",
+            "test_hint": "Tip: test substitution"
+        },
+        "examples_body": "1) `Welcome {user} to {guild}!`\n2) `{if:{contentsplit:1}==true&&{hour}>=12:You entered true in the afternoon:Not met yet}`\n3) `{if:{contentsplit:1}!={null}:You entered a parameter:else:No parameter entered}`\n4) `{embedtitle:Checked in}{embedurl:https://example.com}{embeddescription:{user} checked in at {date} {time24}}{embedauthor:System}{embedauthorimage:{authoravatar}}{embedcolor:57F287}`\n5) `Starting from the 2nd word: {contentsplit:1-}`\n6) `Random pick from chat just now: {random_user}`\n7) `{mention:true}@everyone Maintenance starting`\n8) Write `type:boost` or `type:join` as the trigger to listen for system messages",
+        "examples_title": "AutoReply examples",
+        "section": {
+            "basic_vars": "Basic variables",
+            "builtin_packs": "Built-in template packs",
+            "commands": "Commands",
+            "date_condition": "Dates & conditions",
+            "delay_state_vars": "Delay / state variables",
+            "embed_advanced": "Embed / advanced effects",
+            "notes": "Notes",
+            "special_trigger": "Special triggers"
+        },
+        "subtitle": "Supports variable substitution, conditionals, embed replies, and stickers/reactions.",
+        "test_hint_body": "Use {test} to preview variables, conditions, and embed output.",
+        "title": "Auto-reply usage guide"
+    },
+    "ignore": {
+        "updated": "Ignore channel mode set to `{mode}`, channel list: `{channels}`."
+    },
+    "import": {
+        "done": "The auto-reply settings have been imported.",
+        "download_failed": "Couldn't download the file.",
+        "parse_failed": "Couldn't parse the JSON file.",
+        "would_exceed_limit": {
+            "one": "You can have at most {count} auto-reply, so this import wasn't applied.\n> Want a higher limit?\n> Open a ticket in the support server!\n> {support_url}",
+            "other": "You can have at most {count} auto-replies, so this import wasn't applied.\n> Want a higher limit?\n> Open a ticket in the support server!\n> {support_url}"
+        }
+    },
+    "list": {
+        "row": "**{index}.** Mode: {mode}, trigger: `{triggers}`, response: `{responses}`, reply to original: {reply}, channel mode: {channel_mode}, channels: `{channels}`, random chance: {chance}%",
+        "title": "Auto-reply list"
+    },
+    "modal": {
+        "builder_title": "AutoReply Builder",
+        "random_chance_label": "Trigger chance (1-100)",
+        "response_ph": "One response per line; use variables like {user}, {contentsplit:1-} directly",
+        "trigger_ph": "One trigger per line; a single line may also be comma-separated"
+    },
+    "mode": {
+        "contains": {
+            "desc": "Replies when the message contains one of the triggers",
+            "label": "Contains"
+        },
+        "ends_with": {
+            "desc": "Triggers when the message ends with the trigger",
+            "label": "Ends with"
+        },
+        "equals": {
+            "desc": "The message must exactly match the trigger",
+            "label": "Exact match"
+        },
+        "regex": {
+            "desc": "Matches the message using a Python regex",
+            "label": "Regular expression"
+        },
+        "starts_with": {
+            "desc": "Triggers when the message starts with the trigger",
+            "label": "Starts with"
+        }
+    },
+    "msg": {
+        "add_success": "Auto-reply added",
+        "builder_content_updated": "Builder content updated.",
+        "edit_success": "Auto-reply edited",
+        "no_autoreplies": "No auto-replies are configured yet.",
+        "quickadd_success": "Auto-reply quick-added",
+        "removed": "Removed the auto-reply: `{trigger}`.",
+        "rule_saved_title": "AutoReply rule saved",
+        "template_applied": "Auto-reply template pack applied"
+    },
+    "pack": {
+        "booster": {
+            "description": "Reply rules made for boosters; works well in an announcement or general chat channel.",
+            "display_name": "Booster Replies"
+        },
+        "chat_fun": {
+            "description": "Check-in, pick-someone, fortune, and hype reactions - good for getting chat moving.",
+            "display_name": "Chat Fun"
+        },
+        "daily_greetings": {
+            "description": "Morning / afternoon / evening greetings that vary with the current time.",
+            "display_name": "Daily Greetings"
+        },
+        "mini_commands": {
+            "description": "A few handy mini-commands like !say, !time, !date, !roll, !weather.",
+            "display_name": "Mini Commands"
+        },
+        "welcome": {
+            "description": "A welcome message for new members; works well in a welcome or general chat channel.",
+            "display_name": "Welcome Pack"
+        }
+    },
+    "render": {
+        "am": "AM",
+        "no_user_found": "no user found",
+        "pm": "PM",
+        "user_unavailable": "user unavailable"
+    },
+    "select": {
+        "channel_limit_ph": "Pick channels to restrict to (multi-select; none = no restriction)",
+        "channel_mode_ph": "Pick a channel filter mode",
+        "mode_ph": "Pick a trigger mode"
+    },
+    "state": {
+        "empty_list": "empty list",
+        "merge_existing": "Merged with existing rules",
+        "not_set": "not set yet",
+        "off": "off",
+        "on": "on",
+        "overwrite_existing": "Overwrote existing rules"
+    },
+    "test": {
+        "mock_content": "This is a test message.",
+        "no_output": "There's no output to show."
+    }
+}

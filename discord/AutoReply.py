@@ -21,6 +21,9 @@ from embed_template import (
     parse_embed_color,
 )
 
+import i18n
+from i18n import t, t_enum
+
 DEFAULT_AUTOREPLY_CONFIG_LIMIT = 50
 AUTOREPLY_RATE_LIMIT_COUNT = 3
 AUTOREPLY_RATE_LIMIT_WINDOW = 1.0
@@ -35,6 +38,19 @@ AUTOREPLY_MATH_EXPRESSION_MAX_LENGTH = 300
 AUTOREPLY_MATH_AST_MAX_DEPTH = 64
 AUTOREPLY_MATH_AST_MAX_NODES = 256
 AUTOREPLY_VAR_KEY_PREFIX = "autoreply_var_"
+
+# i18n: skip-start
+# 內建範本包的 trigger/response 內容不翻譯：
+# - trigger 是要比對「中文」使用者訊息的字面詞（"早安"、"簽到"…），換成英文字面值
+#   等於改變功能，不是翻譯；一個英文伺服器需要的是完全不同的觸發詞與笑話文案。
+# - response 混雜著本模組自己的樣板 DSL（{if:...}、{embedtitle:...}…，與
+#   embed_template.py 的 EMBED_DIRECTIVES 同一套語法，受 dsl-frozen 保護）與需要
+#   道地雙關/哏才有笑點的中文文案，機械翻譯只會產生語意通但不好笑的英文。
+# - 使用者安裝範本包後，內容會原樣複製進該 guild 的 server_configs，屬於
+#   「guild 自選內容」的既有排除規則（見遷移計畫排除清單第 7 項），guild 已存的
+#   資料一律不翻譯。
+# display_name / description 是選擇範本包時看到的 UI chrome，會在下方另外
+# 用 t_enum("autoreply.pack", f"{key}.display_name"/".description") 覆蓋。
 AUTOREPLY_TEMPLATE_PACKS = {
     "daily_greetings": {
         "display_name": "日常問候包",
@@ -269,6 +285,19 @@ AUTOREPLY_TEMPLATE_PACKS = {
         ],
     }
 }
+# i18n: skip-end
+
+
+def autoreply_pack_display_name(pack_key: str, *, locale: str | None = None) -> str:
+    """範本包的顯示名稱；語言檔缺這個 key 才會退回內嵌原文（不應該發生，
+    每個 AUTOREPLY_TEMPLATE_PACKS 的 key 都在語言檔裡有對應條目）。"""
+    return t_enum("autoreply.pack", f"{pack_key}.display_name", locale=locale,
+                  default=AUTOREPLY_TEMPLATE_PACKS.get(pack_key, {}).get("display_name", pack_key))
+
+
+def autoreply_pack_description(pack_key: str, *, locale: str | None = None) -> str:
+    return t_enum("autoreply.pack", f"{pack_key}.description", locale=locale,
+                  default=AUTOREPLY_TEMPLATE_PACKS.get(pack_key, {}).get("description", ""))
 
 
 class TemplateSyntaxError(ValueError):
@@ -302,15 +331,13 @@ async def list_autoreply_autocomplete(interaction: discord.Interaction, current:
 async def list_template_pack_autocomplete(interaction: discord.Interaction, current: str):
     lowered_current = current.lower()
     choices = []
-    for pack_key, pack_data in AUTOREPLY_TEMPLATE_PACKS.items():
-        searchable_text = " ".join([
-            pack_key,
-            pack_data["display_name"],
-            pack_data["description"],
-        ]).lower()
+    for pack_key in AUTOREPLY_TEMPLATE_PACKS:
+        pack_display_name = autoreply_pack_display_name(pack_key)
+        pack_description = autoreply_pack_description(pack_key)
+        searchable_text = " ".join([pack_key, pack_display_name, pack_description]).lower()
         if lowered_current and lowered_current not in searchable_text:
             continue
-        display_name = f'{pack_data["display_name"]} ({pack_key})'
+        display_name = f"{pack_display_name} ({pack_key})"
         display_name = display_name if len(display_name) <= 100 else display_name[:97] + "..."
         choices.append(app_commands.Choice(name=display_name, value=pack_key))
     return choices[:25]
@@ -323,43 +350,30 @@ def parse_channel_mention(mention: str) -> str:
     return mention
 
 
-AUTOREPLY_MODE_METADATA = {
-    "contains": {
-        "label": "包含",
-        "description": "訊息包含其中一個觸發字就回覆",
-    },
-    "equals": {
-        "label": "完全相同",
-        "description": "訊息要和觸發字完全一樣",
-    },
-    "starts_with": {
-        "label": "開頭符合",
-        "description": "訊息開頭符合時觸發",
-    },
-    "ends_with": {
-        "label": "結尾符合",
-        "description": "訊息結尾符合時觸發",
-    },
-    "regex": {
-        "label": "正規表達式",
-        "description": "用 Python regex 比對訊息",
-    },
-}
+# mode/channel_mode 的 key 本身是存進 server_configs 的機器值，永不翻譯；
+# label/description 一律透過 t_enum() 動態查表（見下方函式）。
+AUTOREPLY_MODES = ("contains", "equals", "starts_with", "ends_with", "regex")
+AUTOREPLY_CHANNEL_MODES = ("all", "whitelist", "blacklist")
 
-AUTOREPLY_CHANNEL_MODE_METADATA = {
-    "all": {
-        "label": "全部頻道",
-        "description": "任何文字頻道都能觸發",
-    },
-    "whitelist": {
-        "label": "白名單",
-        "description": "只有指定頻道會觸發",
-    },
-    "blacklist": {
-        "label": "黑名單",
-        "description": "除了指定頻道外都會觸發",
-    },
-}
+
+def autoreply_mode_label(mode: str, *, locale: str | None = None) -> str:
+    if mode not in AUTOREPLY_MODES:
+        return mode
+    return t_enum("autoreply.mode", f"{mode}.label", locale=locale)
+
+
+def autoreply_mode_description(mode: str, *, locale: str | None = None) -> str:
+    return t_enum("autoreply.mode", f"{mode}.desc", locale=locale)
+
+
+def autoreply_channel_mode_label(mode: str, *, locale: str | None = None) -> str:
+    if mode not in AUTOREPLY_CHANNEL_MODES:
+        return mode
+    return t_enum("autoreply.channel_mode", f"{mode}.label", locale=locale)
+
+
+def autoreply_channel_mode_description(mode: str, *, locale: str | None = None) -> str:
+    return t_enum("autoreply.channel_mode", f"{mode}.desc", locale=locale)
 
 AUTOREPLY_MESSAGE_TYPE_TRIGGER_ALIASES = {
     "boost": "premium_guild_subscription",
@@ -385,29 +399,29 @@ def build_autoreply_message_type_lookup() -> dict[str, discord.MessageType]:
 AUTOREPLY_MESSAGE_TYPE_TRIGGER_LOOKUP = build_autoreply_message_type_lookup()
 
 
-class AutoReplyBuilderContentModal(discord.ui.Modal, title="AutoReply Builder"):
+class AutoReplyBuilderContentModal(i18n.I18nModal, title=i18n.K("autoreply.modal.builder_title")):
     def __init__(self, builder_view: "AutoReplyBuilderView"):
         super().__init__()
         self.builder_view = builder_view
 
         self.trigger_input = discord.ui.TextInput(
-            label="觸發字",
-            placeholder="一行一個 trigger；只有一行時也可用逗號分隔",
+            label=t("autoreply.field.trigger"),
+            placeholder=t("autoreply.modal.trigger_ph"),
             required=True,
             max_length=1000,
             style=discord.TextStyle.paragraph,
             default=builder_view.state["trigger_text"],
         )
         self.response_input = discord.ui.TextInput(
-            label="回覆內容",
-            placeholder="一行一個 response；可直接使用 {user}、{contentsplit:1-} 等變數",
+            label=t("autoreply.field.response"),
+            placeholder=t("autoreply.modal.response_ph"),
             required=True,
             max_length=2000,
             style=discord.TextStyle.paragraph,
             default=builder_view.state["response_text"],
         )
         self.random_chance_input = discord.ui.TextInput(
-            label="觸發機率 (1-100)",
+            label=t("autoreply.modal.random_chance_label"),
             placeholder="100",
             required=True,
             max_length=3,
@@ -424,11 +438,11 @@ class AutoReplyBuilderContentModal(discord.ui.Modal, title="AutoReply Builder"):
         try:
             random_chance = int(chance_raw)
         except (TypeError, ValueError):
-            await interaction.response.send_message("觸發機率必須是 1 到 100 的整數。", ephemeral=True)
+            await interaction.response.send_message(t("autoreply.err.random_chance_range"), ephemeral=True)
             return
 
         if random_chance < 1 or random_chance > 100:
-            await interaction.response.send_message("觸發機率必須是 1 到 100 的整數。", ephemeral=True)
+            await interaction.response.send_message(t("autoreply.err.random_chance_range"), ephemeral=True)
             return
 
         self.builder_view.state["trigger_text"] = self.trigger_input.value.strip()
@@ -437,7 +451,7 @@ class AutoReplyBuilderContentModal(discord.ui.Modal, title="AutoReply Builder"):
 
         await interaction.response.defer(ephemeral=True)
         await self.builder_view.refresh_message()
-        await interaction.followup.send("Builder 內容已更新。", ephemeral=True)
+        await interaction.followup.send(t("autoreply.msg.builder_content_updated"), ephemeral=True)
 
 
 class AutoReplyBuilderModeSelect(discord.ui.Select):
@@ -445,15 +459,15 @@ class AutoReplyBuilderModeSelect(discord.ui.Select):
         self.builder_view = builder_view
         options = [
             discord.SelectOption(
-                label=meta["label"],
+                label=autoreply_mode_label(value),
                 value=value,
-                description=meta["description"],
+                description=autoreply_mode_description(value),
                 default=builder_view.state["mode"] == value,
             )
-            for value, meta in AUTOREPLY_MODE_METADATA.items()
+            for value in AUTOREPLY_MODES
         ]
         super().__init__(
-            placeholder="選擇觸發模式",
+            placeholder=t("autoreply.select.mode_ph"),
             min_values=1,
             max_values=1,
             options=options,
@@ -473,15 +487,15 @@ class AutoReplyBuilderChannelModeSelect(discord.ui.Select):
         self.builder_view = builder_view
         options = [
             discord.SelectOption(
-                label=meta["label"],
+                label=autoreply_channel_mode_label(value),
                 value=value,
-                description=meta["description"],
+                description=autoreply_channel_mode_description(value),
                 default=builder_view.state["channel_mode"] == value,
             )
-            for value, meta in AUTOREPLY_CHANNEL_MODE_METADATA.items()
+            for value in AUTOREPLY_CHANNEL_MODES
         ]
         super().__init__(
-            placeholder="選擇頻道限制模式",
+            placeholder=t("autoreply.select.channel_mode_ph"),
             min_values=1,
             max_values=1,
             options=options,
@@ -504,7 +518,7 @@ class AutoReplyBuilderChannelSelect(discord.ui.ChannelSelect):
             if getattr(channel, "type", None) in (discord.ChannelType.text, discord.ChannelType.news)
         ])
         super().__init__(
-            placeholder="選擇頻道限制（可多選，不選就是空清單）",
+            placeholder=t("autoreply.select.channel_limit_ph"),
             channel_types=[discord.ChannelType.text, discord.ChannelType.news],
             min_values=0,
             max_values=max(1, min(25, text_channel_count or 1)),
@@ -546,7 +560,7 @@ class AutoReplyBuilderView(discord.ui.View):
     async def ensure_owner(self, interaction: discord.Interaction) -> bool:
         if interaction.user.id == self.owner_id:
             return True
-        await interaction.response.send_message("這個 builder 只給原本開啟的人操作。", ephemeral=True)
+        await interaction.response.send_message(t("autoreply.err.not_builder_owner"), ephemeral=True)
         return False
 
     def _rebuild_components(self):
@@ -555,58 +569,59 @@ class AutoReplyBuilderView(discord.ui.View):
         self.add_item(AutoReplyBuilderChannelModeSelect(self))
         self.add_item(AutoReplyBuilderChannelSelect(self))
 
-        edit_button = discord.ui.Button(label="編輯觸發與回覆", style=discord.ButtonStyle.primary, row=3)
+        edit_button = discord.ui.Button(label=t("autoreply.btn.edit_trigger_response"), style=discord.ButtonStyle.primary, row=3)
         edit_button.callback = self.open_content_modal
         self.add_item(edit_button)
 
         reply_button = discord.ui.Button(
-            label=f"回覆原訊息：{'開啟' if self.state['reply'] else '關閉'}",
+            label=t("autoreply.btn.reply_original", state=t("autoreply.state.on") if self.state["reply"] else t("autoreply.state.off")),
             style=discord.ButtonStyle.success if self.state["reply"] else discord.ButtonStyle.secondary,
             row=3,
         )
         reply_button.callback = self.toggle_reply
         self.add_item(reply_button)
 
-        clear_channels_button = discord.ui.Button(label="清空頻道限制", style=discord.ButtonStyle.secondary, row=3)
+        clear_channels_button = discord.ui.Button(label=t("autoreply.btn.clear_channels"), style=discord.ButtonStyle.secondary, row=3)
         clear_channels_button.callback = self.clear_channels
         self.add_item(clear_channels_button)
 
-        save_button = discord.ui.Button(label="儲存規則", style=discord.ButtonStyle.success, row=4)
+        save_button = discord.ui.Button(label=t("autoreply.btn.save_rule"), style=discord.ButtonStyle.success, row=4)
         save_button.callback = self.save_rule
         self.add_item(save_button)
 
-        cancel_button = discord.ui.Button(label="取消", style=discord.ButtonStyle.danger, row=4)
+        cancel_button = discord.ui.Button(label=t("common.btn.cancel"), style=discord.ButtonStyle.danger, row=4)
         cancel_button.callback = self.cancel_builder
         self.add_item(cancel_button)
 
-    def build_embed(self, *, title: str = "AutoReply Builder", description: str | None = None, color: int = 0x5865F2):
-        trigger_preview = self.cog._preview_builder_items(self.state["trigger_text"], empty_text="還沒設定")
-        response_preview = self.cog._preview_builder_items(self.state["response_text"], empty_text="還沒設定")
+    def build_embed(self, *, title: str | None = None, description: str | None = None, color: int = 0x5865F2):
+        title = title or t("autoreply.modal.builder_title")
+        trigger_preview = self.cog._preview_builder_items(self.state["trigger_text"])
+        response_preview = self.cog._preview_builder_items(self.state["response_text"])
         channel_mentions = [
             f"<#{channel_id}>"
             for channel_id in self.state["channels"]
             if self.guild.get_channel(channel_id) is not None
         ]
-        mode_label = AUTOREPLY_MODE_METADATA[self.state["mode"]]["label"]
-        channel_mode_label = AUTOREPLY_CHANNEL_MODE_METADATA[self.state["channel_mode"]]["label"]
-        channel_text = ", ".join(channel_mentions) if channel_mentions else "空清單"
+        mode_label = autoreply_mode_label(self.state["mode"])
+        channel_mode_label = autoreply_channel_mode_label(self.state["channel_mode"])
+        channel_text = ", ".join(channel_mentions) if channel_mentions else t("autoreply.state.empty_list")
 
         embed = discord.Embed(
             title=title,
-            description=description or "用下方按鈕和下拉選單慢慢組這條規則，準備好之後按「儲存規則」。",
+            description=description or t("autoreply.builder.instructions"),
             color=color,
         )
-        embed.add_field(name="觸發字", value=trigger_preview, inline=False)
-        embed.add_field(name="回覆內容", value=response_preview, inline=False)
-        embed.add_field(name="模式", value=f"{mode_label} (`{self.state['mode']}`)", inline=True)
-        embed.add_field(name="回覆原訊息", value="開啟" if self.state["reply"] else "關閉", inline=True)
-        embed.add_field(name="機率", value=f"{self.state['random_chance']}%", inline=True)
-        embed.add_field(name="頻道模式", value=f"{channel_mode_label} (`{self.state['channel_mode']}`)", inline=True)
-        embed.add_field(name="指定頻道", value=channel_text, inline=True)
-        embed.add_field(name="目前條數", value=f"{len(get_server_config(self.guild.id, 'autoreplies', []))} / {self.cog._get_autoreply_limit(self.guild.id)}", inline=True)
+        embed.add_field(name=t("autoreply.field.trigger"), value=trigger_preview, inline=False)
+        embed.add_field(name=t("autoreply.field.response"), value=response_preview, inline=False)
+        embed.add_field(name=t("autoreply.field.mode"), value=f"{mode_label} (`{self.state['mode']}`)", inline=True)
+        embed.add_field(name=t("autoreply.field.reply_original"), value=t("autoreply.state.on") if self.state["reply"] else t("autoreply.state.off"), inline=True)
+        embed.add_field(name=t("autoreply.field.chance"), value=f"{self.state['random_chance']}%", inline=True)
+        embed.add_field(name=t("autoreply.field.channel_mode"), value=f"{channel_mode_label} (`{self.state['channel_mode']}`)", inline=True)
+        embed.add_field(name=t("autoreply.field.specified_channels"), value=channel_text, inline=True)
+        embed.add_field(name=t("autoreply.field.current_count"), value=f"{len(get_server_config(self.guild.id, 'autoreplies', []))} / {self.cog._get_autoreply_limit(self.guild.id)}", inline=True)
         embed.add_field(
-            name="小提示",
-            value="觸發字 / 回覆可以一行一個；回覆可直接用 `{user}`、`{content}`、`{contentsplit:1-}`、`{if:...}`、`{math:(...)}`。",
+            name=t("autoreply.field.tip"),
+            value=t("autoreply.builder.tip_body"),
             inline=False,
         )
         return embed
@@ -664,10 +679,10 @@ class AutoReplyBuilderView(discord.ui.View):
         self.stop()
 
         success_embed = self.cog._build_autoreply_rule_embed(
-            title="已儲存 AutoReply 規則",
+            title=t("autoreply.msg.rule_saved_title"),
             rule=rule,
             guild=self.guild,
-            description=f"這條規則已經加入清單，目前共有 {total_count} / {limit} 條。",
+            description=t("autoreply.builder.rule_added_desc", total=total_count, limit=limit),
         )
         if self.message is None:
             self.message = interaction.message
@@ -676,13 +691,13 @@ class AutoReplyBuilderView(discord.ui.View):
 
         trigger_text = ", ".join(rule["trigger"])
         log(
-            f"自動回覆由 builder 新增：`{trigger_text[:10]}{'...' if len(trigger_text) > 10 else ''}`。",
+            f"AutoReply rule added via builder: `{trigger_text[:10]}{'...' if len(trigger_text) > 10 else ''}`.",
             module_name="AutoReply",
             level=logging.INFO,
             user=interaction.user,
             guild=interaction.guild,
         )
-        await interaction.followup.send("規則已加入 AutoReply 清單。", ephemeral=True)
+        await interaction.followup.send(t("autoreply.builder.rule_added_confirm"), ephemeral=True)
 
     async def cancel_builder(self, interaction: discord.Interaction):
         if not await self.ensure_owner(interaction):
@@ -696,8 +711,8 @@ class AutoReplyBuilderView(discord.ui.View):
         if self.message is not None:
             await self.message.edit(
                 embed=self.build_embed(
-                    title="AutoReply Builder 已取消",
-                    description="這次沒有儲存任何規則。",
+                    title=t("autoreply.builder.cancelled_title"),
+                    description=t("autoreply.builder.cancelled_desc"),
                     color=0x747F8D,
                 ),
                 view=self,
@@ -711,8 +726,8 @@ class AutoReplyBuilderView(discord.ui.View):
             try:
                 await self.message.edit(
                     embed=self.build_embed(
-                        title="AutoReply Builder 已逾時",
-                        description="Builder 已關閉，想繼續的話請重新執行指令。",
+                        title=t("autoreply.builder.timed_out_title"),
+                        description=t("autoreply.builder.timed_out_desc"),
                         color=0xED4245,
                     ),
                     view=self,
@@ -761,7 +776,8 @@ class AutoReply(commands.GroupCog, name=app_commands.locale_str("autoreply", i18
 
         return [item.strip() for item in normalized_value.split(",") if item.strip()]
 
-    def _preview_builder_items(self, raw_value: str, *, empty_text: str = "未設定") -> str:
+    def _preview_builder_items(self, raw_value: str, *, empty_text: str | None = None) -> str:
+        empty_text = empty_text if empty_text is not None else t("autoreply.state.not_set")
         items = self._split_autoreply_items(raw_value)
         if not items:
             return empty_text
@@ -772,7 +788,7 @@ class AutoReply(commands.GroupCog, name=app_commands.locale_str("autoreply", i18
             preview_lines.append(f"• {shortened}")
 
         if len(items) > 5:
-            preview_lines.append(f"… 另外還有 {len(items) - 5} 項")
+            preview_lines.append(t("autoreply.builder.more_items", count=len(items) - 5))
 
         preview_text = "\n".join(preview_lines)
         return preview_text if len(preview_text) <= 1024 else preview_text[:1021] + "..."
@@ -821,33 +837,33 @@ class AutoReply(commands.GroupCog, name=app_commands.locale_str("autoreply", i18
         channels_input=None,
         random_chance: int = 100,
     ) -> dict:
-        if mode not in AUTOREPLY_MODE_METADATA:
-            raise ValueError("未知的觸發模式。")
-        if channel_mode not in AUTOREPLY_CHANNEL_MODE_METADATA:
-            raise ValueError("未知的頻道限制模式。")
+        if mode not in AUTOREPLY_MODES:
+            raise ValueError(t("autoreply.err.unknown_mode"))
+        if channel_mode not in AUTOREPLY_CHANNEL_MODES:
+            raise ValueError(t("autoreply.err.unknown_channel_mode"))
 
         try:
             random_chance = int(random_chance)
         except (TypeError, ValueError):
-            raise ValueError("觸發機率必須是 1 到 100 的整數。")
+            raise ValueError(t("autoreply.err.random_chance_range"))
 
         if random_chance < 1 or random_chance > 100:
-            raise ValueError("觸發機率必須是 1 到 100 的整數。")
+            raise ValueError(t("autoreply.err.random_chance_range"))
 
         trigger = self._split_autoreply_items(trigger_input)
         response = self._split_autoreply_items(response_input)
 
         if not trigger:
-            raise ValueError("至少要設定一個觸發字。")
+            raise ValueError(t("autoreply.err.need_trigger"))
         self._validate_message_type_triggers(trigger)
         if not response:
-            raise ValueError("至少要設定一個回覆內容。")
+            raise ValueError(t("autoreply.err.need_response"))
 
         for template in response:
             try:
                 self._validate_template_syntax(template)
             except TemplateSyntaxError as e:
-                raise ValueError(f"回覆模板語法錯誤：{e}") from e
+                raise ValueError(t("autoreply.err.template_syntax", error=e)) from e
 
         valid_channels = self._normalize_autoreply_channels(guild, channels_input)
 
@@ -878,10 +894,7 @@ class AutoReply(commands.GroupCog, name=app_commands.locale_str("autoreply", i18
         if len(triggers) > 5:
             preview += f" ... (+{len(triggers) - 5})"
 
-        return (
-            f"未知的 type trigger：{preview}。"
-            "可用 `type:join`、`type:boost`，或直接填 Discord 的 MessageType 名稱，例如 `type:premium_guild_subscription`。"
-        )
+        return t("autoreply.err.unknown_type_trigger", preview=preview)
 
     def _validate_message_type_triggers(self, triggers: list[str]):
         invalid_triggers = []
@@ -991,14 +1004,14 @@ class AutoReply(commands.GroupCog, name=app_commands.locale_str("autoreply", i18
             preview += f" ... (+{len(triggers) - 5})"
 
         if existing:
-            return f"這些觸發器已經存在於其他自動回覆規則中：{preview}"
-        return f"你這次新增的觸發器裡有重複項目：{preview}"
+            return t("autoreply.err.trigger_conflict_existing", preview=preview)
+        return t("autoreply.err.trigger_conflict_new", preview=preview)
 
     def _save_new_autoreply_rule(self, guild_id: int, rule: dict) -> tuple[int, int]:
         autoreplies = get_server_config(guild_id, "autoreplies", [])
         autoreply_limit = self._get_autoreply_limit(guild_id)
         if len(autoreplies) >= autoreply_limit:
-            raise ValueError(f"自動回覆上限為 {autoreply_limit} 條。")
+            raise ValueError(t("autoreply.err.limit_reached", count=autoreply_limit))
 
         duplicate_triggers = self._find_duplicate_triggers_in_list(rule.get("trigger", []))
         if duplicate_triggers:
@@ -1034,19 +1047,19 @@ class AutoReply(commands.GroupCog, name=app_commands.locale_str("autoreply", i18
                     channel_mentions.append(str(channel_id))
             channel_text = ", ".join(channel_mentions)
         else:
-            channel_text = "無"
+            channel_text = t("common.state.none")
 
-        mode_label = AUTOREPLY_MODE_METADATA.get(rule["mode"], {}).get("label", rule["mode"])
-        channel_mode_label = AUTOREPLY_CHANNEL_MODE_METADATA.get(rule["channel_mode"], {}).get("label", rule["channel_mode"])
+        mode_label = autoreply_mode_label(rule["mode"])
+        channel_mode_label = autoreply_channel_mode_label(rule["channel_mode"])
 
         embed = discord.Embed(title=title, description=description, color=color)
-        embed.add_field(name="模式", value=f"{mode_label} (`{rule['mode']}`)")
-        embed.add_field(name="觸發字", value=f"`{trigger_preview}`", inline=False)
-        embed.add_field(name="回覆內容", value=f"`{response_preview}`", inline=False)
-        embed.add_field(name="Reply", value="是" if rule["reply"] else "否")
-        embed.add_field(name="頻道模式", value=f"{channel_mode_label} (`{rule['channel_mode']}`)")
-        embed.add_field(name="指定頻道", value=channel_text, inline=False)
-        embed.add_field(name="觸發機率", value=f"{rule['random_chance']}%")
+        embed.add_field(name=t("autoreply.field.mode"), value=f"{mode_label} (`{rule['mode']}`)")
+        embed.add_field(name=t("autoreply.field.trigger"), value=f"`{trigger_preview}`", inline=False)
+        embed.add_field(name=t("autoreply.field.response"), value=f"`{response_preview}`", inline=False)
+        embed.add_field(name="Reply", value=t("common.state.yes") if rule["reply"] else t("common.state.no"))
+        embed.add_field(name=t("autoreply.field.channel_mode"), value=f"{channel_mode_label} (`{rule['channel_mode']}`)")
+        embed.add_field(name=t("autoreply.field.specified_channels"), value=channel_text, inline=False)
+        embed.add_field(name=t("autoreply.field.chance"), value=f"{rule['random_chance']}%")
         return embed
 
     def _parse_embed_color(self, value: str):
@@ -1682,7 +1695,7 @@ class AutoReply(commands.GroupCog, name=app_commands.locale_str("autoreply", i18
         author = message.author
         channel = message.channel
         now = context["now"]
-        am_pm = "上午" if now.hour < 12 else "下午"
+        am_pm = t("autoreply.render.am") if now.hour < 12 else t("autoreply.render.pm")
         hour_12 = now.hour % 12 or 12
         content_parts = message.content.split()
         role_name = getattr(getattr(author, "top_role", None), "name", "")
@@ -1760,10 +1773,10 @@ class AutoReply(commands.GroupCog, name=app_commands.locale_str("autoreply", i18
                     if users:
                         context["random_user"] = random.choice(list(users)).display_name
                     else:
-                        context["random_user"] = "查無使用者"
+                        context["random_user"] = t("autoreply.render.no_user_found")
                 except Exception as e:
-                    log(f"處理 {{random_user}} 時發生錯誤: {e}", module_name="AutoReply", level=logging.ERROR)
-                    context["random_user"] = "無法取得使用者"
+                    log(f"Error handling {{random_user}}: {e}", module_name="AutoReply", level=logging.ERROR)
+                    context["random_user"] = t("autoreply.render.user_unavailable")
             response = response.replace("{random_user}", context["random_user"])
 
         current_timestamp = str(int(now.timestamp()))
@@ -1939,9 +1952,9 @@ class AutoReply(commands.GroupCog, name=app_commands.locale_str("autoreply", i18
                         asyncio.create_task(message.add_reaction(emoji))
                 else:
                     asyncio.create_task(message.add_reaction(emoji_str))
-                log(f"自動回覆觸發，對訊息添加反應：{emoji_str}", module_name="AutoReply", level=logging.INFO)
+                log(f"AutoReply triggered, added reaction to message: {emoji_str}", module_name="AutoReply", level=logging.INFO)
             except Exception as e:
-                log(f"處理 {{react:{emoji_str}}} 時發生錯誤: {e}", module_name="AutoReply", level=logging.ERROR)
+                log(f"Error handling {{react:{emoji_str}}}: {e}", module_name="AutoReply", level=logging.ERROR)
             return ""
 
         response = react_pattern.sub(react_replacer, response)
@@ -1955,7 +1968,7 @@ class AutoReply(commands.GroupCog, name=app_commands.locale_str("autoreply", i18
                 nonlocal sticker
                 sticker = discord.utils.get(message.guild.stickers, id=sticker_id)
             except Exception as e:
-                log(f"處理 {{sticker:{sticker_id}}} 時發生錯誤: {e}", module_name="AutoReply", level=logging.ERROR)
+                log(f"Error handling {{sticker:{sticker_id}}}: {e}", module_name="AutoReply", level=logging.ERROR)
             return ""
 
         response = sticker_pattern.sub(sticker_replacer, response)
@@ -1997,10 +2010,10 @@ class AutoReply(commands.GroupCog, name=app_commands.locale_str("autoreply", i18
                     allowed_mentions=edit_allowed_mentions,
                 )
             except discord.HTTPException as e:
-                log(f"自動回覆編輯失敗: {e}", module_name="AutoReply", level=logging.ERROR)
+                log(f"AutoReply edit failed: {e}", module_name="AutoReply", level=logging.ERROR)
                 return
             except Exception as e:
-                log(f"自動回覆編輯發生錯誤: {e}", module_name="AutoReply", level=logging.ERROR)
+                log(f"AutoReply edit error: {e}", module_name="AutoReply", level=logging.ERROR)
                 return
 
     async def _execute_autoreply_followup_stage(self, trigger_message: discord.Message, reply_mode: bool, stage: dict):
@@ -2026,9 +2039,9 @@ class AutoReply(commands.GroupCog, name=app_commands.locale_str("autoreply", i18
             if stage["edits"]:
                 asyncio.create_task(self._execute_autoreply_edits(sent_message, trigger_message, stage["edits"]))
         except discord.HTTPException as e:
-            log(f"自動回覆延遲訊息發送失敗: {e}", module_name="AutoReply", level=logging.ERROR)
+            log(f"AutoReply delayed message failed to send: {e}", module_name="AutoReply", level=logging.ERROR)
         except Exception as e:
-            log(f"自動回覆延遲訊息發生錯誤: {e}", module_name="AutoReply", level=logging.ERROR)
+            log(f"AutoReply delayed message error: {e}", module_name="AutoReply", level=logging.ERROR)
 
     async def _process_response_v2(self, response: str, message: discord.Message) -> tuple:
         """Process autoreply response text and return the immediate result plus delayed actions."""
@@ -2036,7 +2049,7 @@ class AutoReply(commands.GroupCog, name=app_commands.locale_str("autoreply", i18
         try:
             self._validate_template_syntax(response)
         except TemplateSyntaxError as e:
-            log(f"自動回覆模板語法錯誤: {e}", module_name="AutoReply", level=logging.WARNING)
+            log(f"AutoReply template syntax error: {e}", module_name="AutoReply", level=logging.WARNING)
             return "", None, None, self._build_allowed_mentions(), {"initial_edits": [], "followups": []}
 
         planning_context = self._build_template_context()
@@ -2045,7 +2058,7 @@ class AutoReply(commands.GroupCog, name=app_commands.locale_str("autoreply", i18
         try:
             response_stages = self._extract_timed_response_plan(resolved_response)
         except TemplateSyntaxError as e:
-            log(f"自動回覆模板語法錯誤: {e}", module_name="AutoReply", level=logging.WARNING)
+            log(f"AutoReply template syntax error: {e}", module_name="AutoReply", level=logging.WARNING)
             return "", None, None, self._build_allowed_mentions(), {"initial_edits": [], "followups": []}
 
         initial_stage = response_stages[0] if response_stages else {"template": "", "edits": []}
@@ -2090,12 +2103,14 @@ class AutoReply(commands.GroupCog, name=app_commands.locale_str("autoreply", i18
         guild_id = interaction.guild.id
         reply = (reply == "True")
         if random_chance < 1 or random_chance > 100:
-            await interaction.response.send_message("隨機回覆機率必須在 1 到 100 之間。", ephemeral=True)
+            await interaction.response.send_message(t("autoreply.err.random_chance_between"), ephemeral=True)
             return
         autoreplies = get_server_config(guild_id, "autoreplies", [])
         autoreply_limit = self._get_autoreply_limit(guild_id)
         if len(autoreplies) >= autoreply_limit:
-            await interaction.response.send_message(f"自動回覆設定最多只能有 {autoreply_limit} 筆。\n> 想要增加限制？\n> 前往支援伺服器開啟客服單取得支援！\n> {config('support_server_invite')}", ephemeral=True)
+            await interaction.response.send_message(
+                t("autoreply.err.config_limit", count=autoreply_limit, support_url=config("support_server_invite")),
+                ephemeral=True)
             return
         trigger = trigger.split(",")  # multiple triggers
         trigger = [t.strip() for t in trigger if t.strip()]  # remove empty triggers
@@ -2133,17 +2148,17 @@ class AutoReply(commands.GroupCog, name=app_commands.locale_str("autoreply", i18
         trigger_str = trigger_str if len(trigger_str) <= 100 else trigger_str[:97] + "..."
         response_str = ", ".join(response)
         response_str = response_str if len(response_str) <= 100 else response_str[:97] + "..."
-        embed = discord.Embed(title="新增自動回覆成功", color=0x00ff00)
-        embed.add_field(name="模式", value=mode)
-        embed.add_field(name="觸發字串", value=f"`{trigger_str}`")
-        embed.add_field(name="回覆內容", value=f"`{response_str}`")
-        embed.add_field(name="回覆原訊息", value="是" if reply else "否")
-        embed.add_field(name="指定頻道模式", value=channel_mode)
-        embed.add_field(name="指定頻道", value=f"`{', '.join(map(str, valid_channels)) if valid_channels else '無'}`")
-        embed.add_field(name="隨機回覆機率", value=f"{random_chance}%")
+        embed = discord.Embed(title=t("autoreply.msg.add_success"), color=0x00ff00)
+        embed.add_field(name=t("autoreply.field.mode"), value=mode)
+        embed.add_field(name=t("autoreply.field.trigger_string"), value=f"`{trigger_str}`")
+        embed.add_field(name=t("autoreply.field.response"), value=f"`{response_str}`")
+        embed.add_field(name=t("autoreply.field.reply_original"), value=t("common.state.yes") if reply else t("common.state.no"))
+        embed.add_field(name=t("autoreply.field.channel_mode"), value=channel_mode)
+        embed.add_field(name=t("autoreply.field.specified_channels"), value=f"`{', '.join(map(str, valid_channels)) if valid_channels else t('common.state.none')}`")
+        embed.add_field(name=t("autoreply.field.random_chance"), value=f"{random_chance}%")
         await interaction.response.send_message(embed=embed)
         trigger_str = ", ".join(trigger)
-        log(f"自動回覆被新增：`{trigger_str[:10]}{'...' if len(trigger_str) > 10 else ''}`。", module_name="AutoReply", level=logging.INFO, user=interaction.user, guild=interaction.guild)
+        log(f"AutoReply added: `{trigger_str[:10]}{'...' if len(trigger_str) > 10 else ''}`.", module_name="AutoReply", level=logging.INFO, user=interaction.user, guild=interaction.guild)
 
     @app_commands.command(name=app_commands.locale_str("remove", i18n_key="cmd.autoreply.autoreply.remove.name"), description=app_commands.locale_str("Remove an auto-reply", i18n_key="cmd.autoreply.autoreply.remove.desc"))
     @app_commands.describe(
@@ -2159,10 +2174,10 @@ class AutoReply(commands.GroupCog, name=app_commands.locale_str("autoreply", i18
             if det == trigger:
                 autoreplies.remove(ar)
                 set_server_config(guild_id, "autoreplies", autoreplies)
-                await interaction.response.send_message(f"已移除自動回覆：`{trigger}`。")
-                log(f"自動回覆被移除：`{trigger[:10]}{'...' if len(trigger) > 10 else ''}`。", module_name="AutoReply", level=logging.INFO, user=interaction.user, guild=interaction.guild)
+                await interaction.response.send_message(t("autoreply.msg.removed", trigger=trigger))
+                log(f"AutoReply removed: `{trigger[:10]}{'...' if len(trigger) > 10 else ''}`.", module_name="AutoReply", level=logging.INFO, user=interaction.user, guild=interaction.guild)
                 return
-        await interaction.response.send_message(f"找不到觸發字串 `{trigger}` 的自動回覆。")
+        await interaction.response.send_message(t("autoreply.err.trigger_not_found", trigger=trigger))
     
     @app_commands.command(name=app_commands.locale_str("list", i18n_key="cmd.autoreply.autoreply.list.name"), description=app_commands.locale_str("List all auto-replies", i18n_key="cmd.autoreply.autoreply.list.desc"))
     @app_commands.default_permissions(manage_guild=True)
@@ -2170,7 +2185,7 @@ class AutoReply(commands.GroupCog, name=app_commands.locale_str("autoreply", i18
         guild_id = interaction.guild.id
         autoreplies = get_server_config(guild_id, "autoreplies", [])
         if not autoreplies:
-            await interaction.response.send_message("目前沒有設定任何自動回覆。")
+            await interaction.response.send_message(t("autoreply.msg.no_autoreplies"))
             return
         description = ""
         for i, ar in enumerate(autoreplies, start=1):
@@ -2185,8 +2200,13 @@ class AutoReply(commands.GroupCog, name=app_commands.locale_str("autoreply", i18
             ar.setdefault("random_chance", 100)
             triggers = triggers if len(triggers) <= 100 else triggers[:97] + "..."
             responses = responses if len(responses) <= 100 else responses[:97] + "..."
-            description += f"**{i}.** 模式：{ar['mode']}，觸發字串：`{triggers}`，回覆內容：`{responses}`，回覆原訊息：{'是' if ar['reply'] else '否'}，指定頻道模式：{ar['channel_mode']}，指定頻道：`{', '.join(map(str, ar['channels'])) if ar['channels'] else '無'}`，隨機回覆機率：{ar['random_chance']}%\n"
-        embed = discord.Embed(title="自動回覆列表", description=description, color=0x00ff00)
+            description += t("autoreply.list.row",
+                             index=i, mode=ar["mode"], triggers=triggers, responses=responses,
+                             reply=t("common.state.yes") if ar["reply"] else t("common.state.no"),
+                             channel_mode=ar["channel_mode"],
+                             channels=", ".join(map(str, ar["channels"])) if ar["channels"] else t("common.state.none"),
+                             chance=ar["random_chance"]) + "\n"
+        embed = discord.Embed(title=t("autoreply.list.title"), description=description, color=0x00ff00)
         await interaction.response.send_message(embed=embed)
 
     @app_commands.command(name=app_commands.locale_str("clear", i18n_key="cmd.autoreply.autoreply.clear.name"), description=app_commands.locale_str("Clear all auto-replies", i18n_key="cmd.autoreply.autoreply.clear.desc"))
@@ -2202,29 +2222,29 @@ class AutoReply(commands.GroupCog, name=app_commands.locale_str("autoreply", i18
             async def on_timeout(self):
                 for child in self.children:
                     child.disabled = True
-                await interaction.edit_original_response(content="操作逾時，已取消清除自動回覆。", view=self)
+                await interaction.edit_original_response(content=t("autoreply.clear.timed_out"), view=self)
                 self.stop()
 
-            @discord.ui.button(label="確認清除", style=discord.ButtonStyle.danger)
+            @discord.ui.button(label=t("autoreply.btn.confirm_clear"), style=discord.ButtonStyle.danger)
             async def confirm(self, interaction: discord.Interaction, button: discord.ui.Button):
                 if interaction.user.id != user_id:
-                    await interaction.response.send_message("只有發起操作的使用者可以確認清除。", ephemeral=True)
+                    await interaction.response.send_message(t("autoreply.err.not_clear_initiator"), ephemeral=True)
                     return
                 set_server_config(guild_id, "autoreplies", [])
                 for child in self.children:
                     child.disabled = True
-                await interaction.response.edit_message(content="已清除所有自動回覆。", view=self)
-                log(f"所有自動回覆被清除。", module_name="AutoReply", level=logging.INFO, user=interaction.user, guild=interaction.guild)
+                await interaction.response.edit_message(content=t("autoreply.clear.done"), view=self)
+                log("All AutoReply rules cleared.", module_name="AutoReply", level=logging.INFO, user=interaction.user, guild=interaction.guild)
                 self.stop()
 
-            @discord.ui.button(label="取消", style=discord.ButtonStyle.secondary)
+            @discord.ui.button(label=t("common.btn.cancel"), style=discord.ButtonStyle.secondary)
             async def cancel(self, interaction: discord.Interaction, button: discord.ui.Button):
                 for child in self.children:
                     child.disabled = True
-                await interaction.response.edit_message(content="已取消清除自動回覆。", view=self)
+                await interaction.response.edit_message(content=t("autoreply.clear.cancelled"), view=self)
                 self.stop()
 
-        await interaction.response.send_message(f"您確定要清除所有自動回覆嗎？\n目前有 {len(autoreplies)} 筆自動回覆。", view=Confirm())
+        await interaction.response.send_message(t("autoreply.clear.confirm_prompt", count=len(autoreplies)), view=Confirm())
 
     @app_commands.command(name=app_commands.locale_str("edit", i18n_key="cmd.autoreply.autoreply.edit.name"), description=app_commands.locale_str("Edit an auto-reply", i18n_key="cmd.autoreply.autoreply.edit.desc"))
     @app_commands.describe(
@@ -2263,7 +2283,7 @@ class AutoReply(commands.GroupCog, name=app_commands.locale_str("autoreply", i18
         autoreplies = get_server_config(guild_id, "autoreplies", [])
         if random_chance is not None:
             if random_chance < 1 or random_chance > 100:
-                await interaction.response.send_message("隨機回覆機率必須在 1 到 100 之間。", ephemeral=True)
+                await interaction.response.send_message(t("autoreply.err.random_chance_between"), ephemeral=True)
                 return
         for ar in autoreplies:
             det = ", ".join(ar["trigger"])
@@ -2294,18 +2314,18 @@ class AutoReply(commands.GroupCog, name=app_commands.locale_str("autoreply", i18
                 trigger_str = trigger_str if len(trigger_str) <= 100 else trigger_str[:97] + "..."
                 response_str = ", ".join(ar["response"])
                 response_str = response_str if len(response_str) <= 100 else response_str[:97] + "..."
-                embed = discord.Embed(title="編輯自動回覆成功", color=0x00ff00)
-                embed.add_field(name="模式", value=ar["mode"])
-                embed.add_field(name="觸發字串", value=f"`{trigger_str}`")
-                embed.add_field(name="回覆內容", value=f"`{response_str}`")
-                embed.add_field(name="回覆原訊息", value="是" if ar["reply"] else "否")
-                embed.add_field(name="指定頻道模式", value=ar["channel_mode"])
-                embed.add_field(name="指定頻道", value=f"`{', '.join(map(str, ar['channels'])) if ar['channels'] else '無'}`")
-                embed.add_field(name="隨機回覆機率", value=f"{ar['random_chance']}%")
+                embed = discord.Embed(title=t("autoreply.msg.edit_success"), color=0x00ff00)
+                embed.add_field(name=t("autoreply.field.mode"), value=ar["mode"])
+                embed.add_field(name=t("autoreply.field.trigger_string"), value=f"`{trigger_str}`")
+                embed.add_field(name=t("autoreply.field.response"), value=f"`{response_str}`")
+                embed.add_field(name=t("autoreply.field.reply_original"), value=t("common.state.yes") if ar["reply"] else t("common.state.no"))
+                embed.add_field(name=t("autoreply.field.channel_mode"), value=ar["channel_mode"])
+                embed.add_field(name=t("autoreply.field.specified_channels"), value=f"`{', '.join(map(str, ar['channels'])) if ar['channels'] else t('common.state.none')}`")
+                embed.add_field(name=t("autoreply.field.random_chance"), value=f"{ar['random_chance']}%")
                 await interaction.response.send_message(embed=embed)
-                log(f"自動回覆被編輯：`{det[:10]}{'...' if len(det) > 10 else ''}`。", module_name="AutoReply", level=logging.INFO, user=interaction.user, guild=interaction.guild)
+                log(f"AutoReply edited: `{det[:10]}{'...' if len(det) > 10 else ''}`.", module_name="AutoReply", level=logging.INFO, user=interaction.user, guild=interaction.guild)
                 return
-        await interaction.response.send_message(f"找不到觸發字串 `{trigger}` 的自動回覆。")
+        await interaction.response.send_message(t("autoreply.err.trigger_not_found", trigger=trigger))
     
     @app_commands.command(name=app_commands.locale_str("quickadd", i18n_key="cmd.autoreply.autoreply.quickadd.name"), description=app_commands.locale_str("Quickly add an auto-reply, merging with existing ones", i18n_key="cmd.autoreply.autoreply.quickadd.desc"))
     @app_commands.describe(
@@ -2354,18 +2374,18 @@ class AutoReply(commands.GroupCog, name=app_commands.locale_str("autoreply", i18
                 trigger_str = trigger_str if len(trigger_str) <= 100 else trigger_str[:97] + "..."
                 response_str = ", ".join(ar["response"])
                 response_str = response_str if len(response_str) <= 100 else response_str[:97] + "..."
-                embed = discord.Embed(title="快速新增自動回覆成功", color=0x00ff00)
-                embed.add_field(name="模式", value=ar["mode"])
-                embed.add_field(name="觸發字串", value=f"`{trigger_str}`")
-                embed.add_field(name="回覆內容", value=f"`{response_str}`")
-                embed.add_field(name="回覆原訊息", value="是" if ar["reply"] else "否")
-                embed.add_field(name="指定頻道模式", value=ar["channel_mode"])
-                embed.add_field(name="指定頻道", value=f"`{', '.join(map(str, ar['channels'])) if ar['channels'] else '無'}`")
-                embed.add_field(name="隨機回覆機率", value=f"{ar['random_chance']}%")
+                embed = discord.Embed(title=t("autoreply.msg.quickadd_success"), color=0x00ff00)
+                embed.add_field(name=t("autoreply.field.mode"), value=ar["mode"])
+                embed.add_field(name=t("autoreply.field.trigger_string"), value=f"`{trigger_str}`")
+                embed.add_field(name=t("autoreply.field.response"), value=f"`{response_str}`")
+                embed.add_field(name=t("autoreply.field.reply_original"), value=t("common.state.yes") if ar["reply"] else t("common.state.no"))
+                embed.add_field(name=t("autoreply.field.channel_mode"), value=ar["channel_mode"])
+                embed.add_field(name=t("autoreply.field.specified_channels"), value=f"`{', '.join(map(str, ar['channels'])) if ar['channels'] else t('common.state.none')}`")
+                embed.add_field(name=t("autoreply.field.random_chance"), value=f"{ar['random_chance']}%")
                 await interaction.response.send_message(embed=embed)
-                log(f"自動回覆被快速新增：`{det}`。", module_name="AutoReply", level=logging.INFO, user=interaction.user, guild=interaction.guild)
+                log(f"AutoReply quick-added: `{det}`.", module_name="AutoReply", level=logging.INFO, user=interaction.user, guild=interaction.guild)
                 return
-        await interaction.response.send_message(f"找不到觸發字串 `{trigger}` 的自動回覆。")
+        await interaction.response.send_message(t("autoreply.err.trigger_not_found", trigger=trigger))
 
     @app_commands.command(name=app_commands.locale_str("template", i18n_key="cmd.autoreply.autoreply.template.name"), description=app_commands.locale_str("Apply a built-in auto-reply template pack", i18n_key="cmd.autoreply.autoreply.template.desc"))
     @app_commands.describe(pack=app_commands.locale_str("The template pack to apply", i18n_key="cmd.autoreply.autoreply.template.param.pack"), merge=app_commands.locale_str("Whether to merge with existing rules", i18n_key="cmd.autoreply.autoreply.template.param.merge"))
@@ -2380,7 +2400,7 @@ class AutoReply(commands.GroupCog, name=app_commands.locale_str("autoreply", i18
     async def apply_autoreply_template(self, interaction: discord.Interaction, pack: str, merge: str = "True"):
         pack_data = AUTOREPLY_TEMPLATE_PACKS.get(pack)
         if pack_data is None:
-            await interaction.response.send_message("找不到這個範本包。", ephemeral=True)
+            await interaction.response.send_message(t("autoreply.err.pack_not_found"), ephemeral=True)
             return
 
         guild_id = interaction.guild.id
@@ -2410,7 +2430,7 @@ class AutoReply(commands.GroupCog, name=app_commands.locale_str("autoreply", i18
         autoreply_limit = self._get_autoreply_limit(guild_id)
         if len(final_autoreplies) > autoreply_limit:
             await interaction.response.send_message(
-                f"套用後會超過 {autoreply_limit} 筆自動回覆上限，這次未套用。",
+                t("autoreply.err.template_would_exceed_limit", count=autoreply_limit),
                 ephemeral=True
             )
             return
@@ -2422,23 +2442,24 @@ class AutoReply(commands.GroupCog, name=app_commands.locale_str("autoreply", i18
             trigger_preview = ", ".join(rule["trigger"])
             trigger_preview = trigger_preview if len(trigger_preview) <= 40 else trigger_preview[:37] + "..."
             preview_lines.append(f"{index}. {rule['mode']} / {trigger_preview}")
-        preview_text = "\n".join(preview_lines) if preview_lines else "無"
+        preview_text = "\n".join(preview_lines) if preview_lines else t("common.state.none")
 
         embed = discord.Embed(
-            title="已套用自動回覆範本包",
-            description=pack_data["description"],
+            title=t("autoreply.msg.template_applied"),
+            description=autoreply_pack_description(pack),
             color=0x57F287 if added_count else 0xFEE75C,
         )
-        embed.add_field(name="範本包", value=f"`{pack_data['display_name']}` (`{pack}`)", inline=False)
-        embed.add_field(name="套用模式", value="合併現有規則" if merge_enabled else "覆蓋現有規則")
-        embed.add_field(name="新增規則", value=str(added_count))
+        embed.add_field(name=t("autoreply.field.template_pack"), value=f"`{autoreply_pack_display_name(pack)}` (`{pack}`)", inline=False)
+        embed.add_field(name=t("autoreply.field.apply_mode"), value=t("autoreply.state.merge_existing") if merge_enabled else t("autoreply.state.overwrite_existing"))
+        embed.add_field(name=t("autoreply.field.rules_added"), value=str(added_count))
         if merge_enabled:
-            embed.add_field(name="略過重複", value=str(skipped_duplicates))
-        embed.add_field(name="目前總數", value=str(len(final_autoreplies)))
-        embed.add_field(name="內含規則", value=preview_text, inline=False)
+            embed.add_field(name=t("autoreply.field.duplicates_skipped"), value=str(skipped_duplicates))
+        embed.add_field(name=t("autoreply.field.current_total"), value=str(len(final_autoreplies)))
+        embed.add_field(name=t("autoreply.field.included_rules"), value=preview_text, inline=False)
         await interaction.response.send_message(embed=embed)
         log(
-            f"自動回覆範本包被套用：{pack}，模式：{'merge' if merge_enabled else 'replace'}，新增 {added_count} 筆，略過 {skipped_duplicates} 筆。",
+            f"AutoReply template pack applied: {pack}, mode={'merge' if merge_enabled else 'replace'}, "
+            f"added={added_count}, skipped={skipped_duplicates}.",
             module_name="AutoReply",
             level=logging.INFO,
             user=interaction.user,
@@ -2451,12 +2472,12 @@ class AutoReply(commands.GroupCog, name=app_commands.locale_str("autoreply", i18
         guild_id = interaction.guild.id
         autoreplies = get_server_config(guild_id, "autoreplies", [])
         if not autoreplies:
-            await interaction.response.send_message("此伺服器尚未設定自動回覆。")
+            await interaction.response.send_message(t("autoreply.export.no_config"))
             return
         json_data = json.dumps(autoreplies, ensure_ascii=False, indent=4)
         file = discord.File(io.StringIO(json_data), filename="autoreplies.json")
-        await interaction.response.send_message("以下是此伺服器的自動回覆設定 JSON 檔案：", file=file)
-        log(f"自動回覆設定被匯出。", module_name="AutoReply", level=logging.INFO, user=interaction.user, guild=interaction.guild)
+        await interaction.response.send_message(t("autoreply.export.file_message"), file=file)
+        log("AutoReply config exported.", module_name="AutoReply", level=logging.INFO, user=interaction.user, guild=interaction.guild)
     
     @app_commands.command(name=app_commands.locale_str("import", i18n_key="cmd.autoreply.autoreply.import.name"), description=app_commands.locale_str("Import auto-reply settings from a JSON file", i18n_key="cmd.autoreply.autoreply.import.desc"))
     @app_commands.describe(file=app_commands.locale_str("The JSON file to import", i18n_key="cmd.autoreply.autoreply.import.param.file"), merge=app_commands.locale_str("Whether to merge with existing settings", i18n_key="cmd.autoreply.autoreply.import.param.merge"))
@@ -2479,13 +2500,13 @@ class AutoReply(commands.GroupCog, name=app_commands.locale_str("autoreply", i18
         async with aiohttp.ClientSession() as session:
             async with session.get(file.url) as resp:
                 if resp.status != 200:
-                    await interaction.followup.send("無法下載檔案。")
+                    await interaction.followup.send(t("autoreply.import.download_failed"))
                     return
                 json_data = await resp.text()
         try:
             new_autoreplies = json.loads(json_data)
         except json.JSONDecodeError:
-            await interaction.followup.send("無法解析 JSON 檔案。")
+            await interaction.followup.send(t("autoreply.import.parse_failed"))
             return
         if merge:
             autoreplies.extend(new_autoreplies)
@@ -2493,11 +2514,12 @@ class AutoReply(commands.GroupCog, name=app_commands.locale_str("autoreply", i18
             autoreplies = new_autoreplies
         autoreply_limit = self._get_autoreply_limit(guild_id)
         if len(autoreplies) > autoreply_limit:
-            await interaction.followup.send(f"自動回覆設定最多只能有 {autoreply_limit} 筆，這次匯入未套用。\n> 想要增加限制？\n> 前往支援伺服器開啟客服單取得支援！\n> {config('support_server_invite')}")
+            await interaction.followup.send(
+                t("autoreply.import.would_exceed_limit", count=autoreply_limit, support_url=config("support_server_invite")))
             return
         set_server_config(guild_id, "autoreplies", autoreplies)
-        await interaction.followup.send("已匯入自動回覆設定。")
-        log(f"自動回覆設定被匯入。", module_name="AutoReply", level=logging.INFO, user=interaction.user, guild=interaction.guild)
+        await interaction.followup.send(t("autoreply.import.done"))
+        log("AutoReply config imported.", module_name="AutoReply", level=logging.INFO, user=interaction.user, guild=interaction.guild)
     
     @app_commands.command(name=app_commands.locale_str("ignore", i18n_key="cmd.autoreply.autoreply.ignore.name"), description=app_commands.locale_str("Configure ignored channels", i18n_key="cmd.autoreply.autoreply.ignore.desc"))
     @app_commands.describe(
@@ -2522,8 +2544,10 @@ class AutoReply(commands.GroupCog, name=app_commands.locale_str("autoreply", i18
                 valid_channels.append(c)
         set_server_config(guild_id, "autoreply_ignore_mode", mode)
         set_server_config(guild_id, "autoreply_ignore_channels", valid_channels)
-        await interaction.response.send_message(f"已設定忽略頻道模式為 `{mode}`，頻道列表：`{', '.join(map(str, valid_channels)) if valid_channels else '無'}`。")
-        log(f"忽略頻道設定被更新。模式：{mode}，頻道：{valid_channels}", module_name="AutoReply", level=logging.INFO, user=interaction.user, guild=interaction.guild)
+        await interaction.response.send_message(
+            t("autoreply.ignore.updated", mode=mode,
+              channels=", ".join(map(str, valid_channels)) if valid_channels else t("common.state.none")))
+        log(f"AutoReply ignore settings updated. mode={mode}, channels={valid_channels}", module_name="AutoReply", level=logging.INFO, user=interaction.user, guild=interaction.guild)
     
     @app_commands.command(name=app_commands.locale_str("test", i18n_key="cmd.autoreply.autoreply.test.name"), description=app_commands.locale_str("Test variable substitution in auto-reply content", i18n_key="cmd.autoreply.autoreply.test.desc"))
     @app_commands.describe(response=app_commands.locale_str("The reply content to test", i18n_key="cmd.autoreply.autoreply.test.param.response"))
@@ -2544,7 +2568,7 @@ class AutoReply(commands.GroupCog, name=app_commands.locale_str("autoreply", i18
             async def add_reaction(self, emoji):
                 return None
 
-        mock_message = MockMessage(guild, author, channel, "這是一則測試訊息內容。")
+        mock_message = MockMessage(guild, author, channel, t("autoreply.test.mock_content"))
 
         final_response, _, embed, _, delayed_actions = await self._process_response_v2(response, mock_message)
         preview_text = final_response or None
@@ -2559,7 +2583,7 @@ class AutoReply(commands.GroupCog, name=app_commands.locale_str("autoreply", i18
             delayed_preview = "\n".join(delayed_lines)
             preview_text = f"{preview_text}\n\n{delayed_preview}" if preview_text else delayed_preview
         if preview_text is None and embed is None:
-            preview_text = "沒有可輸出的內容"
+            preview_text = t("autoreply.test.no_output")
         await interaction.response.send_message(
             preview_text,
             embed=embed,
@@ -2579,212 +2603,74 @@ class AutoReply(commands.GroupCog, name=app_commands.locale_str("autoreply", i18
     
     @app_commands.command(name=app_commands.locale_str("help", i18n_key="cmd.autoreply.autoreply.help.name"), description=app_commands.locale_str("Show auto-reply usage instructions", i18n_key="cmd.autoreply.autoreply.help.desc"))
     async def autoreply_help(self, interaction: discord.Interaction):
-        # vibe coding is fun lol
         await interaction.response.defer()
         embed = discord.Embed(
-            title="自動回覆使用說明",
-            description="您可以使用以下設定，讓回覆更加靈活。",
-            color=0x00FF00,
-        )
-        
-        embed.add_field(
-            name="指令說明",
-            value=(
-                f"使用 {await get_command_mention('autoreply', 'add')} 指令新增自動回覆。\n"
-                f"使用 {await get_command_mention('autoreply', 'quickadd')} 指令可以快速新增自動回覆到一個現有的自動回覆裡。\n"
-                f"使用 {await get_command_mention('autoreply', 'list')} 指令可以列出目前所有的自動回覆。\n"
-                f"使用 {await get_command_mention('autoreply', 'remove')} 指令可以移除指定的自動回覆。\n"
-                f"使用 {await get_command_mention('autoreply', 'edit')} 指令可以編輯指定的自動回覆。\n"
-                f"使用 {await get_command_mention('autoreply', 'clear')} 指令可以清除所有自動回覆。\n"
-                f"使用 {await get_command_mention('autoreply', 'export')} 指令可以匯出自動回覆設定為 JSON 檔案。\n"
-                f"使用 {await get_command_mention('autoreply', 'import')} 指令可以從 JSON 檔案匯入自動回覆設定。\n"
-                f"使用 {await get_command_mention('autoreply', 'test')} 指令可以測試自動回覆內容的變數替換效果。"
-            ),
-            inline=False,
-        )
-
-        embed.add_field(
-            name="基本變數",
-            value=(
-                "您可以在自動回覆的回覆內容中使用以下變數，讓回覆更靈活。\n"
-                "- `{user}`：提及觸發者\n"
-                "- `{content}`：觸發訊息內容\n"
-                "- `{guild}` / `{server}`：伺服器名稱\n"
-                "- `{channel}`：頻道名稱\n"
-                "- `{author}` / `{member}`：觸發者名稱\n"
-                "- `{role}`：觸發者最高角色名稱\n"
-                "- `{id}`：觸發者 ID\n"
-                "- `\\n`：換行\n"
-                "- `\\t`：制表符"
-            ),
-            inline=False,
-        )
-
-        embed.add_field(
-            name="隨機 / 進階",
-            value=(
-                "- `{random}`：隨機產生 1 到 100 的整數\n"
-                "- `{randint:min-max}`：隨機產生 min~max（例：`{randint:10-50}`）\n"
-                "- `{random_user}`：從最近 50 則訊息中隨機選一位非機器人使用者顯示名稱\n"
-                "- `{react:emoji}`：給予該訊息表情符號（例：`{react:↖️}`）\n"
-                "- `{sticker:sticker_id}`：傳送貼圖（例：`{sticker:123456789012345678}`）\n"
-                "  - 貼圖 ID 可用 `y!sticker` 指令取得"
-            ),
-            inline=False,
-        )
-
-        embed.add_field(
-            name="快速範例",
-            value=(
-                "- `你好 {user}，你剛剛說：{content}`\n"
-                "- `今天的幸運數字是 {randint:1-99}`"
-            ),
-            inline=False,
-        )
-
-        class HelpView(discord.ui.View):
-            def __init__(self):
-                super().__init__(timeout=60)
-            
-            async def on_timeout(self):
-                for child in self.children:
-                    child.disabled = True
-                await interaction.edit_original_response(view=self)
-                self.stop()
-
-            @discord.ui.button(label="顯示更多範例", style=discord.ButtonStyle.primary)
-            async def examples(self, i: discord.Interaction, _: discord.ui.Button):
-                ex = discord.Embed(title="自動回覆範例", color=0x00FF00)
-                ex.description = (
-                    "1) `歡迎 {user} 來到 {guild}！`\n"
-                    "2) `你在 #{channel} 發了：{content}`\n"
-                    "3) `抽獎號碼：{randint:1000-9999}`\n"
-                    "4) `剛剛聊天室隨機點名：{random_user}`"
-                )
-                await i.response.send_message(embed=ex, ephemeral=True)
-
-            @discord.ui.button(label="提示：測試替換", style=discord.ButtonStyle.secondary)
-            async def hint(self, i: discord.Interaction, _: discord.ui.Button):
-                await i.response.send_message(f"可用 {await get_command_mention('autoreply', 'test')} 測試變數替換結果。", ephemeral=True)
-
-        await interaction.followup.send(embed=embed, view=HelpView())
-
-    @app_commands.command(name=app_commands.locale_str("help", i18n_key="cmd.autoreply.autoreply.help.name"), description=app_commands.locale_str("Show auto-reply usage instructions", i18n_key="cmd.autoreply.autoreply.help.desc"))
-    async def autoreply_help(self, interaction: discord.Interaction):
-        await interaction.response.defer()
-        embed = discord.Embed(
-            title="自動回覆使用說明",
-            description="支援變數替換、條件判斷、Embed 回覆、貼圖/反應。",
+            title=t("autoreply.help.title"),
+            description=t("autoreply.help.subtitle"),
             color=0x00FF00,
         )
 
         embed.add_field(
-            name="指令說明",
-            value=(
-                f"{await get_command_mention('autoreply', 'add')}：新增規則\n"
-                f"{await get_command_mention('autoreply', 'edit')} / {await get_command_mention('autoreply', 'remove')}：修改或刪除規則\n"
-                f"{await get_command_mention('autoreply', 'quickadd')}：快速補 trigger / response\n"
-                f"{await get_command_mention('autoreply', 'template')}：套用內建範本包\n"
-                f"{await get_command_mention('autoreply', 'list')} / {await get_command_mention('autoreply', 'clear')}：查看或清空規則\n"
-                f"{await get_command_mention('autoreply', 'export')} / {await get_command_mention('autoreply', 'import')}：匯出或匯入 JSON\n"
-                f"{await get_command_mention('autoreply', 'ignore')}：設定全域忽略/白名單頻道\n"
-                f"{await get_command_mention('autoreply', 'test')}：預覽變數、條件與 embed 效果"
-            ),
+            name=t("autoreply.help.section.commands"),
+            value=t("autoreply.help.body.commands",
+                   add=await get_command_mention("autoreply", "add"),
+                   edit=await get_command_mention("autoreply", "edit"),
+                   remove=await get_command_mention("autoreply", "remove"),
+                   quickadd=await get_command_mention("autoreply", "quickadd"),
+                   template=await get_command_mention("autoreply", "template"),
+                   list=await get_command_mention("autoreply", "list"),
+                   clear=await get_command_mention("autoreply", "clear"),
+                   export=await get_command_mention("autoreply", "export"),
+                   import_=await get_command_mention("autoreply", "import"),
+                   ignore=await get_command_mention("autoreply", "ignore"),
+                   test=await get_command_mention("autoreply", "test")),
             inline=False,
         )
 
         embed.add_field(
-            name="基本變數",
-            value=(
-                "- `{user}` mention；`{author}` / `{member}` 名稱；`{id}` / `{authorid}` 使用者 ID\n"
-                "- `{authoravatar}` 頭像 URL；`{authorbanner}` banner URL；`{authorcreated}` 帳號建立時間\n"
-                "- `{guild}` / `{server}` 伺服器名稱；`{guildid}` 伺服器 ID\n"
-                "- `{guildicon}` icon URL；`{guildbanner}` banner URL；`{guildowner}` / `{guildownerid}` 擁有者\n"
-                "- `{guildmembers}` 成員數；`{guildroles}` 身分組數；`{guildboosts}` boost 數\n"
-                "- `{content}` / `{channel}` / `{role}`\n"
-                "- `{null}` 空字串，可拿來做 `if` 比較\n"
-                "- `\\n` 換行、`\\t` Tab"
-            ),
+            name=t("autoreply.help.section.basic_vars"),
+            value=t("autoreply.help.body.basic_vars"),
             inline=False,
         )
 
         embed.add_field(
-            name="日期與條件",
-            value=(
-                "- `{date}` `{year}` `{month}` `{day}`\n"
-                "- `{time}` `{time24}` `{hour}` `{minute}` `{second}`\n"
-                "- `{timemd:t}` ~ `{timemd:R}` 產生 Discord 時間戳\n"
-                "- `{contentsplit:0}`、`{contentsplit:1-}`、`{contentsplit:-4}`、`{contentsplit:1-2}`\n"
-                "- `{math:(1+2*3)}`，只支援 `+ - * /`，數字限制 `-1000 ~ 1000`\n"
-                "- `math` 內可用其他變數，例如 `{math:({contentsplit:1}+5)}`\n"
-                "- `{if:{contentsplit:1}==true:Yes:else:No}`\n"
-                "- `{if:{contentsplit:1}!={null}:有內容:else:空白}`\n"
-                "- 也支援 `{if:{contentsplit:1}==true:Yes:No}` 與 `{if:條件:成立內容}`\n"
-                "- 支援 `==` `!=` `<=` `>=` `&&` `||`"
-            ),
+            name=t("autoreply.help.section.date_condition"),
+            value=t("autoreply.help.body.date_condition"),
             inline=False,
         )
 
         embed.add_field(
-            name="Embed / 進階效果",
-            value=(
-                "- `{random}` / `{randint:min-max}` / `{random_user}`\n"
-                "- `{react:emoji}`、`{sticker:sticker_id}`\n"
-                "- `{embedtitle:標題}` `{embeddescription:內容}` `{embedurl:連結}`\n"
-                "- `{embedimage:連結}` `{embedthumbnail:連結}`\n"
-                "- `{embedcolor:HEX}` `{embedfooter:文字}` `{embedfooterimage:連結}`\n"
-                "- `{embedauthor:名字}` `{embedauthorurl:連結}` `{embedauthorimage:連結}`\n"
-                "- `{embedtime:true}` `{embedfield:欄位名:欄位值}`\n"
-                "- Embed 內文也可繼續使用其他 `{}` 變數"
-            ),
+            name=t("autoreply.help.section.embed_advanced"),
+            value=t("autoreply.help.body.embed_advanced"),
             inline=False,
         )
 
         embed.add_field(
-            name="特殊 Trigger",
-            value=(
-                "- `type:join`：只在成員加入系統訊息觸發 (`discord.MessageType.new_member`)\n"
-                "- `type:boost`：只在伺服器 boost 系統訊息觸發 (`discord.MessageType.premium_guild_subscription`)\n"
-                "- 也可直接用 Discord 原生名稱，例如 `type:premium_guild_tier_1`"
-            ),
+            name=t("autoreply.help.section.special_trigger"),
+            value=t("autoreply.help.body.special_trigger"),
             inline=False,
         )
 
         embed.add_field(
-            name="延遲 / 狀態變數",
-            value=(
-                "- `{newmsg:2}`：1~3 秒後再發一則新訊息，最多 2 個\n"
-                "- `{edit:2}`：1~3 秒後編輯目前這則 autoreply，最多 4 個\n"
-                "- 預設只允許提及 users；`{mention:true}` 開放 `@everyone` / 身分組，`{mention:false}` 關閉\n"
-                "- `{uservar:key}` / `{uservar:key:value}`\n"
-                "- `{guildvar:key}` / `{guildvar:key:value}`\n"
-                "- uservar 最多 5 個、guildvar 最多 10 個，key/value 最長 100"
-            ),
+            name=t("autoreply.help.section.delay_state_vars"),
+            value=t("autoreply.help.body.delay_state_vars"),
             inline=False,
         )
 
         embed.add_field(
-            name="內建範本包",
-            value=(
-                "- `daily_greetings`：早安 / 午安 / 晚安 / 安安\n"
-                "- `mini_commands`：!say / !time / !date / !roll\n"
-                "- `chat_fun`：簽到 / 抽一個人 / 今日運勢 / 好耶\n"
-                f"- 可用 {await get_command_mention('autoreply', 'template')} 直接套用"
-            ),
+            name=t("autoreply.help.section.builtin_packs"),
+            value=t("autoreply.help.body.builtin_packs",
+                   template=await get_command_mention("autoreply", "template")),
             inline=False,
         )
 
         embed.add_field(
-            name="注意事項",
-            value=(
-                "- 同一個 guild 每 1 秒最多發 3 條 autoreply\n"
-                "- 模板語法錯誤時會直接輸出空字串\n"
-                "- 日期 / 時間變數跟隨機器人主機本地時區\n"
-            ),
+            name=t("autoreply.help.section.notes"),
+            value=t("autoreply.help.body.notes"),
             inline=False,
         )
 
-        class HelpView(discord.ui.View):
+        class HelpView(i18n.I18nView):
             def __init__(self):
                 super().__init__(timeout=60)
 
@@ -2794,150 +2680,34 @@ class AutoReply(commands.GroupCog, name=app_commands.locale_str("autoreply", i18
                 await interaction.edit_original_response(view=self)
                 self.stop()
 
-            @discord.ui.button(label="顯示更多範例", style=discord.ButtonStyle.primary)
+            @discord.ui.button(label=i18n.K("autoreply.help.btn.more_examples"), style=discord.ButtonStyle.primary)
             async def examples(self, i: discord.Interaction, _: discord.ui.Button):
-                ex = discord.Embed(title="自動回覆範例", color=0x00FF00)
-                ex.description = (
-                    "1) `歡迎 {user} 來到 {guild}！`\n"
-                    "2) `{if:{contentsplit:1}==true&&{hour}>=12:你在下午輸入了 true:還沒達成條件}`\n"
-                    "3) `{if:{contentsplit:1}!={null}:你有輸入參數:else:你沒輸入參數}`\n"
-                    "4) `{embedtitle:簽到成功}{embedurl:https://example.com}{embeddescription:{user} 在 {date} {time24} 完成簽到}{embedauthor:系統}{embedauthorimage:{authoravatar}}{embedcolor:57F287}`\n"
-                    "5) `從第 2 個單字開始：{contentsplit:1-}`\n"
-                    "6) `剛剛聊天室隨機點名：{random_user}`\n"
-                    "7) `{mention:true}@everyone 系統維護開始`\n"
-                    "8) trigger 寫 `type:boost` 或 `type:join` 來監聽系統訊息"
-                )
+                ex = discord.Embed(title=t("autoreply.help.examples_title"), color=0x00FF00)
+                ex.description = t("autoreply.help.examples_body")
                 await i.response.send_message(embed=ex, ephemeral=True)
 
-            @discord.ui.button(label="提示：測試替換", style=discord.ButtonStyle.secondary)
+            @discord.ui.button(label=i18n.K("autoreply.help.btn.test_hint"), style=discord.ButtonStyle.secondary)
             async def hint(self, i: discord.Interaction, _: discord.ui.Button):
                 await i.response.send_message(
-                    f"可用 {await get_command_mention('autoreply', 'test')} 測試變數、條件與 embed 結果。",
+                    t("autoreply.help.test_hint_body", test=await get_command_mention("autoreply", "test")),
                     ephemeral=True
                 )
 
         await interaction.followup.send(embed=embed, view=HelpView())
 
-    async def _process_response(self, response: str, message: discord.Message) -> tuple:
-        """處理回覆內容中的變數替換或檢測給予訊息反應"""
-        
-        # 訊息反應
-        # response 可能包含多個反應，以空格分隔
-        # {react:emoji} 格式 (unicode emoji 或自訂 emoji ID)
-        react_pattern = re.compile(r"\{react:([^\}]+)\}")
-        def react_replacer(match):
-            emoji_str = match.group(1).strip()
-            try:
-                if emoji_str.isdigit():
-                    # 自訂表情符號 ID
-                    emoji = message.guild.emojis.get(int(emoji_str))
-                    if emoji:
-                        asyncio.create_task(message.add_reaction(emoji))
-                else:
-                    # Unicode 表情符號
-                    asyncio.create_task(message.add_reaction(emoji_str))
-                log(f"自動回覆觸發，對訊息添加反應：{emoji_str}", module_name="AutoReply", level=logging.INFO)
-            except Exception as e:
-                log(f"處理 {{react:{emoji_str}}} 時發生錯誤: {e}", module_name="AutoReply", level=logging.ERROR)
-            return ""  # 移除反應標記
-        response = react_pattern.sub(react_replacer, response)
-        response = response.strip()
-        if not response:
-            return "", None  # 如果回覆內容在處理後為空，則不回覆
-        
-        # 貼圖傳送
-        # {sticker:sticker_id} 格式
-        sticker = None
-        sticker_pattern = re.compile(r"\{sticker:(\d+)\}")
-        def sticker_replacer(match):
-            sticker_id = int(match.group(1))
-            try:
-                nonlocal sticker
-                sticker = discord.utils.get(message.guild.stickers, id=sticker_id)
-            except Exception as e:
-                log(f"處理 {{sticker:{sticker_id}}} 時發生錯誤: {e}", module_name="AutoReply", level=logging.ERROR)
-            return ""  # 移除貼圖標記
-        response = sticker_pattern.sub(sticker_replacer, response)
-        response = response.strip()
-        if not response and not sticker:
-            return "", None  # 如果回覆內容在處理後為空，且沒有貼圖，則不回覆
-        elif not response and sticker:
-            return "", sticker  # 如果回覆內容在處理後為空，但有貼圖，則只傳送貼圖
-
-        # 取得基本資訊
-        
-        guild = message.guild
-        author = message.author
-        channel = message.channel
-
-        # 基本變數替換
-        replacements = {
-            "{user}": author.mention,
-            "{content}": message.content,
-            "{guild}": guild.name,
-            "{server}": guild.name,
-            "{channel}": channel.name,
-            "{author}": author.name,
-            "{member}": author.name,
-            "{role}": author.top_role.name,
-            "{id}": str(author.id),
-            "\\n": "\n",
-            "\\t": "\t"
-        }
-        
-        for key, value in replacements.items():
-            response = response.replace(key, value)
-
-        # {random}
-        if "{random}" in response:
-            response = response.replace("{random}", str(random.randint(1, 100)))
-
-        # {randint:min-max}
-        # 使用 regex 尋找所有 {randint:min-max} 格式
-        # 非貪婪匹配，並捕捉 min 和 max
-        randint_pattern = re.compile(r"\{randint:(\d+)-(\d+)\}")
-        
-        def randint_replacer(match):
-            try:
-                min_val = int(match.group(1))
-                max_val = int(match.group(2))
-                if min_val > max_val:
-                    min_val, max_val = max_val, min_val
-                return str(random.randint(min_val, max_val))
-            except (ValueError, IndexError):
-                return match.group(0) # 發生錯誤則不替換
-
-        response = randint_pattern.sub(randint_replacer, response)
-
-        # {random_user}
-        if "{random_user}" in response:
-            try:
-                users = set()
-                # 限制讀取歷史訊息數量以避免效能問題
-                async for msg in channel.history(limit=50):
-                     if not msg.author.bot:
-                        users.add(msg.author)
-                
-                if users:
-                    selected_user = random.choice(list(users))
-                    response = response.replace("{random_user}", selected_user.display_name)
-                else:
-                    response = response.replace("{random_user}", "沒有人")
-            except Exception as e:
-                log(f"處理 {{random_user}} 時發生錯誤: {e}", module_name="AutoReply", level=logging.ERROR)
-                response = response.replace("{random_user}", "未知使用者")
-
-        return response, sticker
 
     @commands.Cog.listener()
     async def on_message(self, message: discord.Message):
         if message.author.bot or message.guild is None:
             return
-        
+        async with i18n.guild_scope(message.guild.id, user_id=message.author.id):
+            await self._on_message_impl(message)
+
+    async def _on_message_impl(self, message: discord.Message):
         # check permissions
         if not message.channel.permissions_for(message.guild.me).send_messages:
             return
-        
+
         ignore_mode = get_server_config(message.guild.id, "autoreply_ignore_mode", "blacklist")
         ignore_channels = get_server_config(message.guild.id, "autoreply_ignore_channels", [])
         if ignore_mode == "blacklist" and message.channel.id in ignore_channels:
@@ -3021,10 +2791,10 @@ class AutoReply(commands.GroupCog, name=app_commands.locale_str("autoreply", i18
                         response_preview = "[delayed]"
                     else:
                         response_preview = "[embed]"
-                    log(f"自動回覆觸發：`{trigger_used[:10]}...` 回覆內容：`{response_preview[:10]}...`。", 
+                    log(f"AutoReply triggered: `{trigger_used[:10]}...` response: `{response_preview[:10]}...`.",
                         module_name="AutoReply", level=logging.INFO, user=message.author, guild=message.guild)
                 except discord.HTTPException as e:
-                    log(f"自動回覆發送失敗: {e}", module_name="AutoReply", level=logging.ERROR)
+                    log(f"AutoReply failed to send: {e}", module_name="AutoReply", level=logging.ERROR)
                 
                 return
 
