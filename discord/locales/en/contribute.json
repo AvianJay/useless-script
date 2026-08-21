@@ -1,0 +1,97 @@
+{
+    "btn": {
+        "go_submit": "Go submit"
+    },
+    "cmd": {
+        "audio_format_error": "Error: only MP3, WAV, and OGG audio files are supported.",
+        "audio_too_large": "Error: the audio file exceeds 5MB; please pick a smaller file.",
+        "channel_not_found": "Couldn't find the contribution channel; please contact a developer.",
+        "channel_not_set": "The contribution channel isn't set up; please contact a developer.",
+        "rate_limited": "You're submitting too often; please wait {seconds}s and try again.",
+        "thanks_audio": "Thanks for your submission! We'll review your audio soon.\n-# You'll be notified once it's approved.",
+        "thanks_image": "Thanks for your submission! We'll review your image soon.",
+        "upload_image_gif_video": "Please upload an image, GIF, or video file."
+    },
+    "dm": {
+        "approved_plain": "{approved_text}.",
+        "approved_with_reward": "{approved_text}, and you earned **{reward}** {currency}\nCurrent balance: **{balance}**",
+        "text": {
+            "audio_approved": "Your audio submission has been approved",
+            "feedgrass_approved": "Your submission has been approved",
+            "whatisthisguytalking_approved": "Your \"what is this guy talking about\" submission has been approved"
+        }
+    },
+    "editjson": {
+        "label": "JSON content",
+        "title": "Edit JSON config"
+    },
+    "embed": {
+        "feedgrass_cmd_desc": "Click the link below to submit",
+        "feedgrass_cmd_title": "Feedgrass submission",
+        "new_dynamic_voice_audio": "New dynamic voice sound effect submission",
+        "new_feedgrass": "New feedgrass submission",
+        "new_whatisthisguytalking": "New \"what is this guy talking about\" image submission",
+        "video_attachment_desc": "Attachment is a video: `{filename}`"
+    },
+    "err": {
+        "json_attachment_not_found": "Couldn't find the JSON attachment",
+        "json_attachment_not_found_period": "Couldn't find the JSON attachment.",
+        "json_format": "JSON format error: {error}",
+        "missing_feeder_fields": "In non-self mode, the JSON must include feeder.position and feeder.size",
+        "missing_target_fields": "The JSON must include target.position and target.size",
+        "open_editor_failed": "Failed to open the JSON editor: {error}",
+        "update_failed": "Update failed: {error}"
+    },
+    "field": {
+        "file_size": "File size",
+        "media_type": "Media type",
+        "original_filename": "Original filename",
+        "user_id": "User ID",
+        "will_save_as": "Will be saved as"
+    },
+    "media_type": {
+        "static": "Static image",
+        "video": "Video"
+    },
+    "msg": {
+        "json_updated": "The JSON has been updated! The preview has been regenerated."
+    },
+    "review": {
+        "btn": {
+            "approve": "Approve",
+            "edit_json": "Edit JSON",
+            "reject": "Reject"
+        },
+        "err": {
+            "missing_image_or_json": "Couldn't find the submission's image or JSON attachment.",
+            "no_attachment_or_preview": "Couldn't find a submission attachment or a downloadable preview image.",
+            "no_audio_attachment": "Couldn't find the submission's audio attachment.",
+            "reload_failed": "Failed to reload assets: {error}",
+            "review_failed": "Review failed: {error}",
+            "unsupported_format": "This submission isn't a supported image, GIF, or video format."
+        },
+        "msg": {
+            "asset_saved": "The submission asset has been saved.",
+            "audio_saved_as": "The submission audio has been saved as {filename}",
+            "reloaded_assets": {
+                "one": "Assets reloaded; there is now {count} file.",
+                "other": "Assets reloaded; there are now {count} files."
+            },
+            "saved": "The submission has been saved."
+        }
+    },
+    "suffix": {
+        "approved": " [Approved]",
+        "rejected": " [Rejected]"
+    },
+    "web": {
+        "channel_not_found": "Couldn't find the contribution channel",
+        "channel_not_set": "The contribution channel isn't set up",
+        "error_occurred": "An error occurred: {error}",
+        "invalid_or_expired_token": "That verification token is invalid or expired; please try again.",
+        "invalid_token": "Invalid token",
+        "rate_limited": "You're submitting too often; please wait {seconds}s and try again.",
+        "submitted": "Submission sent!",
+        "verify_failed": "Verification failed; please try again."
+    }
+}
