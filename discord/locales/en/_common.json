@@ -20,7 +20,9 @@
         "auto": "Auto",
         "unset": "Not set",
         "default": "Default",
-        "default_value": "(default) {value}"
+        "default_value": "(default) {value}",
+        "on": "On",
+        "off": "Off"
     },
     "btn": {
         "confirm": "Confirm",
@@ -29,7 +31,9 @@
         "close": "Close",
         "done": "Done",
         "next": "Next",
-        "prev": "Previous"
+        "prev": "Previous",
+        "next_step": "Next step",
+        "prev_step": "Previous step"
     },
     "err": {
         "guild_only": "This command can only be used in a server.",

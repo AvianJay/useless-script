@@ -323,16 +323,17 @@ class ComplexSchemaTests(unittest.TestCase):
             "automod_detect",
             "flagged_user",
         }
-        self.assertEqual(set(gs.AUTOMOD_FEATURE_MAP), expected)
+        automod_feature_map = gs.automod_feature_map()
+        self.assertEqual(set(automod_feature_map), expected)
         automod_detect_fields = {
-            field["key"] for field in gs.AUTOMOD_FEATURE_MAP["automod_detect"]["fields"]
+            field["key"] for field in automod_feature_map["automod_detect"]["fields"]
         }
         self.assertEqual(
             automod_detect_fields,
             {"log_channel", "action", "filter_rule", "filter_action_type"},
         )
         flagged_user_fields = {
-            field["key"] for field in gs.AUTOMOD_FEATURE_MAP["flagged_user"]["fields"]
+            field["key"] for field in automod_feature_map["flagged_user"]["fields"]
         }
         self.assertEqual(
             flagged_user_fields,

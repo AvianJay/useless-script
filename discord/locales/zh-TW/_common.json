@@ -20,7 +20,9 @@
         "auto": "自動",
         "unset": "未設定",
         "default": "預設",
-        "default_value": "（預設）{value}"
+        "default_value": "（預設）{value}",
+        "on": "開",
+        "off": "關"
     },
     "btn": {
         "confirm": "確認",
@@ -29,7 +31,9 @@
         "close": "關閉",
         "done": "完成",
         "next": "下一頁",
-        "prev": "上一頁"
+        "prev": "上一頁",
+        "next_step": "下一步",
+        "prev_step": "上一步"
     },
     "err": {
         "guild_only": "此指令只能在伺服器中使用。",
