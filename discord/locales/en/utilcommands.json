@@ -1,0 +1,254 @@
+{
+    "avatar": {
+        "title": "{name}'s avatar"
+    },
+    "banner": {
+        "err_no_banner": "That user hasn't set a banner.",
+        "title": "{name}'s banner"
+    },
+    "botinfo": {
+        "command_count_value": "{total} ({text} text, {app} app)",
+        "database_info_value": "Total rows: {total}\nServer config rows: {server}\nUser data rows: {user}",
+        "field": {
+            "bot_name": "Bot name",
+            "command_count": "Command count",
+            "command_usage_count": "Command usage count",
+            "cpu_usage": "CPU usage",
+            "database_info": "Database info",
+            "install_count": "User install count",
+            "latency": "Bot latency",
+            "links": "Links",
+            "memory_usage": "Memory usage",
+            "modules_disabled": "Disabled modules",
+            "modules_disabled_full": "Disabled modules ({count})",
+            "modules_failed": "Failed to load",
+            "modules_failed_full": "Failed to load ({count})",
+            "modules_loaded": "Modules loaded",
+            "modules_loaded_full": "Modules loaded ({count})",
+            "server_count": "Server count",
+            "uptime": "Uptime",
+            "user_count": "Total users",
+            "version": "Version",
+            "version_suffix": "version"
+        },
+        "links_value": "* [Bot website]({website})\n* [Documentation]({docs})\n* [Support server]({support})\n* [Privacy policy]({privacy})\n* [Terms of service]({terms})\n* [Invite the bot]({invite})",
+        "title": "Bot info"
+    },
+    "btn": {
+        "avatar_link": "Avatar link",
+        "banner_link": "Banner link",
+        "emoji_link": "Emoji link",
+        "server_avatar_link": "Server avatar link",
+        "server_banner_link": "Server banner link",
+        "server_icon_link": "Server icon link",
+        "steal": "Steal",
+        "sticker_link": "Sticker link"
+    },
+    "changelog": {
+        "no_content": "No changes listed.",
+        "page_footer": "Page {page}/{total}",
+        "title": "Changelog",
+        "title_versioned": "Changelog - {version}",
+        "unavailable": "Couldn't load the changelog."
+    },
+    "commits": {
+        "title": "Bot git commit log"
+    },
+    "emoji_info": {
+        "author": "Emoji info",
+        "field": {
+            "emoji_id": "Emoji ID",
+            "is_animated": "Animated"
+        },
+        "footer": "Emoji {page} / {total}"
+    },
+    "err": {
+        "command_not_found": "That command couldn't be found.",
+        "image_not_found": "Couldn't find the {target} image.",
+        "need_manage_emojis_stickers": "You need Manage Emojis and Stickers to use this.",
+        "no_commit_log": "Couldn't fetch the commit log.",
+        "no_emoji": "This message doesn't have any emojis.",
+        "no_sticker": "This message doesn't have a sticker.",
+        "steal_failed": "Couldn't add the {target}: {error}"
+    },
+    "help": {
+        "bot_help_footer": {
+            "one": "{count} text command | by AvianJay",
+            "other": "{count} text commands | by AvianJay"
+        },
+        "cog_help_footer": "Use {prefix}help <command> for details",
+        "command_help_footer": "<> = required | [] = optional",
+        "command_not_found": "That command couldn't be found.",
+        "command_not_found_autocomplete": "That command couldn't be found. Please pick one from autocomplete.",
+        "command_not_found_title": "❌ Command not found",
+        "cooldown_value": "{rate} use(s) / {per}s",
+        "error_footer": "Use {prefix}help to see all commands",
+        "field": {
+            "aliases": "Aliases",
+            "cooldown": "Cooldown",
+            "parameters": "Parameters",
+            "subcommands": "Subcommands",
+            "usage": "Usage"
+        },
+        "no_description": "No description",
+        "optional": "optional",
+        "other_commands": "🔧 Other commands",
+        "overview_desc": "Use `{prefix}help <command>` for details on a specific command",
+        "overview_desc_mention": "Use {mention} `<command>` for details on a specific command",
+        "page_footer": "Page {page}/{total} | {app_count} slash commands | {text_count} text commands | by AvianJay",
+        "required": "required",
+        "slash_commands_field": "⚡ Slash commands ({start}-{end}/{total})",
+        "subcommand_not_found": "That subcommand couldn't be found.",
+        "text_commands_field": "📝 Text commands ({start}-{end}/{total})",
+        "title": "📚 Command help"
+    },
+    "info": {
+        "warning": "-# Tip: if your command freezes mid-way or stops working, it's probably that dumb developer restarting the bot again||or the bot crashed again||"
+    },
+    "msg": {
+        "steal_success": "Added the {target} '{name}' to the server!"
+    },
+    "nitro": {
+        "btn": {
+            "claim": "Claim"
+        },
+        "claim_restriction_value": "Only people who've recently posted in this channel can claim it.",
+        "claimed_by": "Claimed by: {user}",
+        "claimed_title": "{gift_name} [Claimed]",
+        "err_already_claimed": "This gift has already been claimed.",
+        "err_already_used": "This link has already been used.",
+        "err_invalid_link": "Error: that's not a valid Nitro link format.",
+        "err_need_message": "You need to have posted in this channel to use this gift.",
+        "err_verify_failed": "Couldn't verify that link; please double-check it.",
+        "field": {
+            "claim_restriction": "Claim restriction",
+            "expires_at": "Expires"
+        },
+        "gift_desc": "Someone sent a gift! Click the button below to claim it.",
+        "link_label": "Nitro link",
+        "modal_title": "Send a Nitro gift",
+        "not_claimed_yet": "Not claimed yet.",
+        "sent_to_channel": "The gift was sent to the channel!{warning}",
+        "warn_no_history_perm": "Note: the bot doesn't have permission to read message history, so it can't verify who's posted. Anyone can claim this gift.",
+        "warn_user_install_unsupported": "Note: user installs don't support verifying who's posted. Anyone can claim this gift.",
+        "your_link": "Here's your Nitro link:\n{link}"
+    },
+    "ping": {
+        "field": {
+            "rest_defer": "REST API (Defer) latency",
+            "rest_typing": "REST API (Typing) latency",
+            "websocket": "Websocket latency"
+        },
+        "title": "Bot latency"
+    },
+    "randomnumber": {
+        "err_min_max": "Error: the minimum must be less than the maximum.",
+        "result": "Random number: {number}\n-# Range: {min} - {max}"
+    },
+    "randomuser": {
+        "err_guild_only": "This command can only be used in a server channel.",
+        "err_no_users": "No users found.",
+        "result": "The randomly selected user is: {user}!\n-# Pool size: {count}"
+    },
+    "serverinfo": {
+        "boosts_value": "{count} (tier {tier})",
+        "field": {
+            "boosts": "Boosts",
+            "channel_count": "Channel count",
+            "created_at": "Created at",
+            "locale": "Locale",
+            "member_count": "Member count",
+            "owner": "Owner",
+            "role_count": "Role count",
+            "server_id": "Server ID",
+            "verification_level": "Verification level"
+        },
+        "title": "{name}'s info"
+    },
+    "state": {
+        "bot_name_fallback": "the bot",
+        "unknown": "Unknown",
+        "unknown_user": "Unknown user"
+    },
+    "sticker_info": {
+        "author": "Sticker info"
+    },
+    "stickerinfo": {
+        "field": {
+            "format": "Sticker format",
+            "sticker_id": "Sticker ID"
+        },
+        "title": "Sticker info - {name}"
+    },
+    "target": {
+        "emoji": "emoji",
+        "sticker": "sticker"
+    },
+    "tutorial": {
+        "ai_misc": {
+            "desc": "**AI chat assistant**\n💬 {ai} `<message>` — Chat with the AI\n🗑️ {ai_clear} — Clear the conversation history\n📜 {ai_history} — View the conversation log\n\n**Report system**\n🚨 {report} — Report a rule-breaking message (AI-assisted)\n\n**Dynamic voice channels**\n🔊 {dynamic_voice_setup} — Set up dynamic voice channels; a private room is created automatically on join\n\n**Feedback**\n📝 {feedback} — Send feedback to the developer\n\n**Bot customization**\n🖼️ {change_avatar} / {change_banner} / {change_bio} — Customize the bot's appearance (requires authorization)\n",
+            "title": "🤖 AI Chat & More"
+        },
+        "automod_autopublish": {
+            "desc": "Let the bot manage your server automatically.\n\n**AutoMod**\n• {automod_view} — View the current AutoMod settings\n• {automod_toggle} — Turn AutoMod on or off\n• {automod_settings} — Adjust what AutoMod detects\n• Can auto-detect: punishment evasion, mention spam, scam links, and more\n\n**AutoPublish**\n• {autopublish_settings} — Configure the auto-publish channel\n• The bot automatically publishes announcement channel messages to all following servers\n",
+            "title": "🤖 AutoMod & AutoPublish"
+        },
+        "autoreply": {
+            "desc": "Set up keyword-triggered auto-reply messages.\n\n➕ {autoreply_add} `<keyword> <reply>` — Add an auto-reply\n➖ {autoreply_remove} `<keyword>` — Remove an auto-reply\n📋 {autoreply_list} — List all auto-replies\n✏️ {autoreply_edit} — Edit an existing auto-reply\n⚡ {autoreply_quickadd} — Quickly add multiple replies\n📤 {autoreply_export} — Export replies as JSON\n📥 {autoreply_import} — Import replies from JSON\n🧪 {autoreply_test} — Test an auto-reply trigger\n\n-# Supports chance-based triggers and variable substitution",
+            "title": "💬 Auto-Reply"
+        },
+        "basic_info": {
+            "desc": "These commands give you quick info about the bot and the server.\n\n🏓 {info_ping} — Check the bot's latency (Websocket & REST API)\nℹ️ {info_bot} — Show the bot's version, server count, uptime, and more\n📋 {info_changelog} — View the bot's changelog\n📝 {info_commits} — Show recent Git commits\n📈 {stats} — View command usage stats\n",
+            "title": "📊 Basic Info Commands"
+        },
+        "completed": {
+            "desc": "Congrats, you've finished the bot tutorial! 🎉\n\n**Quick recap:**\n• Use {info_help} to see all commands\n• Use {info_help} `<command>` for details on a specific command\n• Use {info_bot} to view bot info\n• Use {feedback} to send feedback to the developer\n\n**Links:**\nIf you run into any issues, join the [support server]({support_url}) for help!\n\n-# Have fun! — by AvianJay",
+            "title": "✅ Tutorial Complete!"
+        },
+        "economy": {
+            "desc": "A full virtual economy system with currency, a shop, and trading.\n\n💵 {economy_balance} — Check your balance\n📅 {economy_daily} — Claim your daily reward\n⏰ {economy_hourly} — Claim your hourly reward\n💸 {economy_pay} `<user> <amount>` — Transfer money to another user\n🔄 {economy_exchange} — Exchange server currency for global currency\n🛒 {economy_shop} — Browse the shop\n🛍️ {economy_buy} / {economy_sell} — Buy or sell items\n🤝 {economy_trade} — Trade with another user\n🏆 {economy_leaderboard} — View the wealth leaderboard\n",
+            "title": "💰 Economy"
+        },
+        "fun": {
+            "desc": "A variety of fun commands.\n\n📏 {dsize} — Random measurement... you know 😏\n🏆 {dsize_leaderboard} — View the leaderboard\n⚔️ {dsize_battle} — Battle another user\n🌿 {dsize_feedgrass} — Feed grass\n📊 {dsize_stats} — View your stats\n\n🎁 {nitro} — Nitro gift sharing tool\n🐾 {petpet} — Generate a petpet GIF\n🌐 {explore} — Explore other servers\n",
+            "title": "🎮 Fun Stuff"
+        },
+        "lookup": {
+            "desc": "Look up users, servers, and other handy info.\n\n👤 {info_user} `<user>` — Look up a user's ID, creation time, join time, and more\n🏠 {info_server} — Look up details about the current server\n🖼️ {info_avatar} `[user]` — Get a user's avatar\n🎨 {info_banner} `[user]` — Get a user's banner\n🎲 {randomnumber} `[min] [max]` — Generate a random number\n👥 {randomuser} — Pick a random recent speaker in the channel\n📏 {textlength} `<text>` — Count text length\n🐱 {httpcat} `<status code>` — Generate a cat image from an HTTP status code\n",
+            "title": "🔍 Lookup Commands"
+        },
+        "moderation": {
+            "desc": "Moderation tools for server admins.\n\n🔨 {ban} `<user> [reason]` — Ban a user\n🔓 {unban} `<user>` — Unban a user\n👢 {kick} `<user> [reason]` — Kick a user\n🔇 {timeout} `<user> <duration>` — Timeout a user\n🔊 {untimeout} `<user>` — Remove a timeout\n⚡ {multi_moderate} — Moderate multiple users at once\n\n-# Requires the corresponding server moderation permissions",
+            "title": "🛡️ Moderation Tools"
+        },
+        "music": {
+            "desc": "Play music in a voice channel.\n\n▶️ {music_play} `<song>` — Play a song or add it to the queue\n⏸️ {music_pause} — Pause playback\n⏯️ {music_resume} — Resume playback\n⏹️ {music_stop} — Stop playback and leave the voice channel\n⏭️ {music_skip} — Skip the current song\n📜 {music_queue} — View the queue\n🎶 {music_now_playing} — Show the current song\n🔀 {music_shuffle} — Shuffle the queue\n🔊 {music_volume} `<volume>` — Adjust the volume\n💡 {music_recommend} — Get a recommendation based on the current song\n",
+            "title": "🎵 Music"
+        },
+        "page_footer": "Page {page} / {total} • Tutorial",
+        "text_cmd": {
+            "desc": "Welcome to the bot! Here's a quick overview of what it can do:\n\n📊 **Basic info** — {cmd_ping}, {cmd_info}, {cmd_changelog}, {cmd_stats}\n🔍 **Lookup** — `/info user`, `/info server`, `/info avatar`, `/info banner`\n🛡️ **Moderation** — `/ban`, `/kick`, `/timeout`, and more\n🤖 **AutoMod** — `/automod`, `/autopublish`\n💬 **Auto-reply** — `/autoreply add/remove/list`\n💰 **Economy** — `/economy balance/daily/shop`, and more\n🎵 **Music** — `/music play/pause/skip`, and more\n🤖 **AI chat** — `/ai`, `/ai-clear`\n🎮 **Fun** — `/dsize`, `/petpet`, `/explore`\n📝 **Feedback** — {cmd_feedback}\n\nUse `{prefix}help <command>` for details on a specific command\nUse the slash command {cmd_tutorial} for an interactive, paginated tutorial!",
+            "title": "📖 Bot Tutorial"
+        },
+        "welcome": {
+            "desc": "This is a tutorial to help you quickly get up to speed with everything the bot can do.\n\n**How to use it:**\nUse the ⬅️ ➡️ buttons below to flip through the feature pages.\n\n**Command types:**\n• **Slash commands** — type `/` and pick from the menu\n• **Text commands** — type the prefix (currently `{prefix}`) followed by the command name in chat\n\n**Tip:** use {info_help} or `{prefix}help` any time to see the full command list.",
+            "title": "👋 Welcome to {bot_name}!"
+        }
+    },
+    "userinfo": {
+        "field": {
+            "created_at": "Account created",
+            "joined_at": "Joined server",
+            "nickname": "Server nickname",
+            "user_id": "User ID"
+        },
+        "title": "{name}'s info"
+    },
+    "verification": {
+        "high": "High",
+        "highest": "Highest",
+        "low": "Low",
+        "medium": "Medium",
+        "none": "None"
+    }
+}
