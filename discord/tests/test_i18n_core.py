@@ -335,6 +335,27 @@ class ChokePointTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(result)
         self.assertEqual(i18n.current_locale(), "en")
 
+    async def test_dynamic_item_dispatch_wrapped(self):
+        from discord.ui.view import ViewStore
+        self.assertTrue(getattr(ViewStore.schedule_dynamic_item_call, "_i18n_wrapped", False))
+
+    async def test_dynamic_item_wrapper_sets_and_clears_locale(self):
+        # FixLink/Ticket 的持久化刪除按鈕是 DynamicItem，不經過
+        # View._scheduled_task，需要獨立的 choke point。
+        from discord.ui.view import ViewStore
+        seen = {}
+
+        class Dummy:
+            async def schedule_dynamic_item_call(self, component_type, factory, interaction, custom_id, match):
+                seen["locale"] = i18n.current_locale()
+
+        i18n._wrap_dynamic_item_dispatch(Dummy)
+        interaction = _fake_interaction(
+            user_id=7, guild_id=None, locale=discord.Locale.american_english)
+        await Dummy().schedule_dynamic_item_call(2, object(), interaction, "x:1", None)
+        self.assertEqual(seen["locale"], "en")
+        self.assertEqual(i18n.current_locale(), i18n.DEFAULT_LOCALE)
+
     async def test_prefix_command_hook_installed(self):
         from discord.ext.commands.bot import BotBase
         self.assertTrue(getattr(BotBase.invoke, "_i18n_wrapped", False))

@@ -1,0 +1,116 @@
+{
+    "btn": {
+        "add_custom": "Add custom",
+        "configure_query_fixer": "Configure query fixer",
+        "confirm_delete": "Confirm delete",
+        "delete_custom": "Delete custom",
+        "disable_custom_default": "Disable custom",
+        "disable_platform": "Disable {platform}",
+        "disable_platform_default": "Disable platform",
+        "edit_custom": "Edit custom",
+        "enable_custom": "Enable custom",
+        "enable_platform": "Enable {platform}",
+        "remove_tracker_off": "Remove trackers: off",
+        "remove_tracker_on": "Remove trackers: on",
+        "webhook_all_links": "Webhook: all links",
+        "webhook_off": "Webhook: off",
+        "webhook_on": "Webhook: on",
+        "webhook_tracker_only": "Webhook: tracked only"
+    },
+    "condition": {
+        "all_links": "All supported links",
+        "tracker_only": "Links with a tracking code only"
+    },
+    "confirm": {
+        "delete_custom": "Delete **{name}**?"
+    },
+    "embed": {
+        "builtin_field_body": "Status: {status}\nPreferred: {preferred}\nAvailable: {available}",
+        "custom_field_body": "Status: {status}\nOrigins: {origins}\nPaths: {paths}\nFixer: {fixer_name} (`{fixer_host}`)",
+        "footer": "Built-in platforms: {builtin_enabled}/{builtin_total} • Custom platforms: {custom_count}/{custom_max}",
+        "settings_desc": "Enabled: **{enabled}**\nMode: **{mode}**\nWebhook condition: **{webhook_condition}**\nRemove trackers: **{tracker}**",
+        "settings_title": "FixLink settings"
+    },
+    "err": {
+        "builtin_conflict": "{platform} is a built-in platform and can't be overridden by a custom rule.",
+        "custom_id_invalid": "The custom platform ID is invalid.",
+        "custom_not_found": "That custom platform couldn't be found.",
+        "delete_custom_failed": "Failed to delete the custom platform.",
+        "delete_failed": "Couldn't delete that message.",
+        "endpoint_https_required": "The endpoint must use HTTPS and a public domain.",
+        "endpoint_no_query": "The endpoint can't include a query or fragment; use the static query field instead.",
+        "endpoint_no_userinfo": "The endpoint can't include userinfo or a custom port.",
+        "endpoint_url_format": "That endpoint URL isn't formatted correctly.",
+        "invalid_domain": "{field} isn't a valid domain.",
+        "length_1_40": "{field} must be 1 to 40 characters.",
+        "message_not_found": "The message to delete couldn't be found.",
+        "must_be_exact_domain": "{field} must be an exact domain, without a scheme, port, or wildcard.",
+        "must_be_public_domain": "{field} must be a public domain.",
+        "name_duplicate": "A custom platform with that name already exists.",
+        "no_control_chars": "{field} can't contain control characters.",
+        "no_ip_literal": "{field} can't be an IP literal.",
+        "not_original_author": "Only the original author can delete this message.",
+        "not_panel_owner": "Only the admin who opened this panel can change the FixLink settings.",
+        "origin_count": "Enter 1 to 5 origin domains.",
+        "path_prefix_count": "Enter 1 to 5 path prefixes.",
+        "path_prefix_format": "Path prefixes must start with `/` and can't contain a query, fragment, or backslash.",
+        "path_prefix_whitespace": "Path prefixes can't contain whitespace.",
+        "pick_custom_first": "Pick a custom platform first.",
+        "platform_not_object": "The custom platform data must be an object.",
+        "query_key_charset": "{field} can only use letters, digits, `.`, `_`, `~`, or `-`, up to 64 characters.",
+        "rule_duplicate": "`{pattern}` already has an identical custom matching rule.",
+        "save_config_failed": "Failed to save the FixLink settings; please try again later.",
+        "save_custom_failed": "Failed to save the custom platform; please try again later.",
+        "source_param_conflict": "The source URL parameter name can't match a static query key.",
+        "static_query_format": "The static query must use `key=value`; enter multiple pairs on separate lines.",
+        "static_query_key_dup": "Static query key `{key}` is duplicated.",
+        "static_query_too_many": "At most 10 static query pairs are allowed.",
+        "static_query_value_length": "Static query values can be at most 256 characters.",
+        "too_many_custom": "Each server can have at most {max} custom platforms."
+    },
+    "field": {
+        "builtin_platform": "Built-in: {platform}",
+        "custom_platform": "Custom: {name}",
+        "custom_platform_header": "Custom platform",
+        "endpoint_domain": "Endpoint domain",
+        "fixer_name": "Fixer name",
+        "origin_domain": "Origin domain",
+        "platform_name": "Platform name",
+        "required_query_key": "Required query key",
+        "source_param": "Source URL parameter name",
+        "static_query_key": "Static query key"
+    },
+    "modal": {
+        "custom_fixer_title": "Custom query fixer",
+        "custom_source_title": "Custom platform source",
+        "endpoint_label": "HTTPS endpoint (no query)",
+        "keep_query_label": "Query keys to keep (optional)",
+        "origins_label": "Origin domains (1-5)",
+        "paths_label": "Path prefixes (1-5)",
+        "source_param_label": "Source URL's query parameter name",
+        "static_query_label": "Static query (key=value, optional)"
+    },
+    "mode": {
+        "normal_reply": "Normal reply",
+        "webhook": "Webhook replace"
+    },
+    "msg": {
+        "cancelled": "Cancelled.",
+        "custom_deleted": "The custom platform has been deleted.",
+        "custom_saved": "Saved the custom platform **{name}**.",
+        "source_verified": "Source verified: **{name}**\nNow configure the query fixer."
+    },
+    "select": {
+        "builtin_platform": "Choose a built-in platform",
+        "custom_platform": "Choose a custom platform",
+        "platform_preferred_fixer": "{platform}'s preferred fixer",
+        "preferred_fixer": "Built-in platform's preferred fixer"
+    },
+    "state": {
+        "disabled_short": "Disabled",
+        "enabled_short": "Enabled",
+        "no_custom_platform": "No custom platforms yet",
+        "no_custom_platform_option": "No custom platforms yet",
+        "no_custom_platform_period": "No custom platforms yet."
+    }
+}

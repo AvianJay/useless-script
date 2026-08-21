@@ -1,13 +1,16 @@
 """i18n 核心模組。
 
 繁體中文 (zh-TW) 為原文語言，其他語言（目前只有 en）透過 locales/ 下的
-JSON 語言檔提供翻譯。locale 透過 contextvars.ContextVar 傳遞，於四個
+JSON 語言檔提供翻譯。locale 透過 contextvars.ContextVar 傳遞，於六個
 choke point 設定：
 
 1. I18nCommandTree.interaction_check   — 斜線指令 / context menu / autocomplete
 2. BaseView._scheduled_task wrapper    — 全部 button / select / item callback（含 LayoutView）
 3. Modal._scheduled_task wrapper       — 全部 modal submit
 4. Flask @app.before_request           — 網頁面板與 docs（Website.py）
+5. BotBase.invoke wrapper              — 全部前綴文字指令（含 check 失敗與錯誤處理）
+6. ViewStore.schedule_dynamic_item_call — discord.ui.DynamicItem 的 callback
+   （它不經過 _scheduled_task，所以 2 蓋不到）
 
 choke point 未覆蓋的進入點（on_message、on_member_join、背景迴圈）
 需要顯式開 scope：
@@ -676,17 +679,44 @@ def _wrap_scheduled_task(cls) -> None:
     setattr(cls, "_scheduled_task", _i18n_scheduled_task)
 
 
+def _wrap_dynamic_item_dispatch(cls) -> None:
+    """DynamicItem（如 FixLink/Ticket 的持久化刪除按鈕）不經過
+    View._scheduled_task，是獨立的 ViewStore.schedule_dynamic_item_call
+    路徑，所以需要單獨包一層。"""
+    original = cls.__dict__.get("schedule_dynamic_item_call")
+    if original is None or getattr(original, "_i18n_wrapped", False):
+        return
+
+    @functools.wraps(original)
+    async def _i18n_schedule_dynamic_item_call(self, component_type, factory, interaction, custom_id, match):
+        try:
+            locale = resolve_from_interaction(interaction)
+        except Exception:
+            _log.exception("i18n locale resolution failed in dynamic item dispatch")
+            return await original(self, component_type, factory, interaction, custom_id, match)
+        token = _current.set(locale)
+        try:
+            return await original(self, component_type, factory, interaction, custom_id, match)
+        finally:
+            _current.reset(token)
+
+    _i18n_schedule_dynamic_item_call._i18n_wrapped = True
+    setattr(cls, "schedule_dynamic_item_call", _i18n_schedule_dynamic_item_call)
+
+
 def install_ui_hooks() -> None:
-    """Wrap BaseView / Modal 的 _scheduled_task（idempotent）。
+    """Wrap BaseView / Modal 的 _scheduled_task，以及 ViewStore 的
+    dynamic item dispatch（idempotent）。
 
     必須 wrap _scheduled_task 而非 _dispatch_item —— 後者在 gateway task
     的 context 執行，set 會洩漏到之後所有 listener task。
     BaseView 涵蓋 View 與 LayoutView；Modal 有自己的 override 所以分開包。
     """
-    from discord.ui.view import BaseView
+    from discord.ui.view import BaseView, ViewStore
     from discord.ui.modal import Modal
     _wrap_scheduled_task(BaseView)
     _wrap_scheduled_task(Modal)
+    _wrap_dynamic_item_dispatch(ViewStore)
 
 
 # ============= choke point 5: 前綴文字指令 =============
