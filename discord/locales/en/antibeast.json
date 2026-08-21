@@ -1,0 +1,111 @@
+{
+    "about": {
+        "automod_body": "When enabled, creates/updates a dedicated AntiBeast AutoMod rule that blocks everyone/here and every non-bypassed role mention.\nIt also temporarily grants @everyone the permission to mention everyone/here/all roles; disabling restores the original setting.",
+        "bypass_body": "Roles that need to stay normally mentionable can be added to the bypass list; those roles are left out of the AutoMod keyword filter.",
+        "bypass_title": "Bypass",
+        "desc": "As everyone knows, Discord is full of Mr. Beast image scams these days.\nAntiBeast uses native Discord AutoMod to block everyone/here and role mentions, while letting scam bots believe the server allows mass mentions.",
+        "trigger_action_body": "You can configure a Moderate action to run after AntiBeast is triggered a set number of times within a set window; the default is a kick."
+    },
+    "action_setup_done_title": "AntiBeast action saved",
+    "block_message": "AntiBeast blocked an everyone/here or protected-role mention.",
+    "btn": {
+        "back_to_action": "Back to action",
+        "back_to_bypass": "Back to bypass",
+        "custom_action": "Custom action",
+        "enable": "Enable AntiBeast",
+        "everyone_here_only_toggle": "everyone/here only: {state}",
+        "keep_bypass": "Keep current bypass",
+        "no_action": "No action",
+        "use_default_kick": "Use the default kick"
+    },
+    "bypass": {
+        "added": "✅ Added **{role}**; {suffix}.",
+        "applies_when_enabled": "it will be applied to the AutoMod keyword rule once enabled",
+        "removed": "✅ Removed **{role}**; {suffix}.",
+        "synced": "the AutoMod keyword rule has been synced"
+    },
+    "config": {
+        "everyone_can_mention": "can mention everyone/here",
+        "everyone_cannot_mention": "cannot mention everyone/here",
+        "no_bypass_roles": "There are no bypassed roles right now.",
+        "protected_role_count": {
+            "one": "{count} role goes into the keyword filter",
+            "other": "{count} roles go into the keyword filter"
+        },
+        "rule_not_created": "not created yet",
+        "title": "AntiBeast settings",
+        "trigger_disabled": "❌ Disabled\nScope: {scope}",
+        "trigger_enabled": "✅ Enabled - after {count} triggers within {seconds}s, run: `{action}`\nScope: {scope}"
+    },
+    "default_trigger_action": "kick AntiBeast: {trigger_count} triggers within {time_window}s",
+    "err": {
+        "action_empty": "The action can't be empty.",
+        "action_too_long": "The action can be at most 500 characters.",
+        "bot_missing_perms": "The bot is missing permissions: {perms}",
+        "cannot_bypass_everyone": "⚠️ @everyone can't be added to the bypass list.",
+        "modal_not_int": "⚠️ The trigger count and time window must both be whole numbers.",
+        "rule_limit_reached": "⚠️ AntiBeast couldn't create an AutoMod rule: this server has hit Discord's AutoMod rule limit. Delete an unused AutoMod rule, or remove an old AntiBeast rule, and try again.",
+        "sync_failed": "⚠️ AntiBeast sync failed: {error}",
+        "sync_generic": "⚠️ AntiBeast sync failed; please try again later.",
+        "sync_http": "⚠️ AntiBeast sync failed: the Discord API returned an error ({status}).",
+        "threshold_range": "⚠️ The trigger count must be between 1 and 20.",
+        "threshold_range_param": "⚠️ threshold must be between 1 and 20.",
+        "time_window_range": "⚠️ The time window must be between 5 and 3600 seconds.",
+        "time_window_range_param": "⚠️ time_window must be between 5 and 3600 seconds.",
+        "unsupported_action": "Unsupported Moderate action: {action}"
+    },
+    "field": {
+        "automod_rule": "AutoMod rule",
+        "bypass_roles": "Bypassed roles",
+        "everyone_permission": "@everyone permission",
+        "protected_roles": "Protected roles",
+        "status": "Status",
+        "trigger_action": "Repeated-trigger action"
+    },
+    "modal": {
+        "action_label": "Moderate action command",
+        "action_title": "AntiBeast action",
+        "threshold_label": "Trigger count",
+        "time_window_label": "Time window (seconds)"
+    },
+    "scope": {
+        "everyone_here_and_roles": "Acts on @everyone / @here and non-bypassed role mentions",
+        "everyone_here_only": "Acts on @everyone / @here only"
+    },
+    "settings": {
+        "trigger_line": "Automatic action: {status}"
+    },
+    "setup": {
+        "action_desc": "Configure the Moderate command to run after one user triggers AntiBeast repeatedly in a short window.\nBy default they're kicked once the threshold is reached.",
+        "action_disabled": "The repeated-trigger action is currently disabled",
+        "action_preview": "Action preview",
+        "action_scope": "Action scope",
+        "action_summary": "{count} times within {seconds}s, run `{action}`",
+        "action_title": "AntiBeast Setup: repeated-trigger action",
+        "bypass_desc": "Pick the roles that need to stay normally mentionable.\nSelected roles are left out of AntiBeast's AutoMod keyword filter.",
+        "bypass_select_ph": "Pick the roles to bypass",
+        "bypass_title": "AntiBeast Setup: bypassed roles",
+        "confirm_action_disabled": "Disabled\nScope: {scope}",
+        "confirm_action_enabled": "{count} times within {seconds}s, run `{action}`\nScope: {scope}",
+        "confirm_desc": "Review the settings and hit enable; AntiBeast will create/update the AutoMod rule and apply the @everyone permission.",
+        "confirm_title": "AntiBeast Setup: confirm",
+        "current_action": "Current action",
+        "current_bypass": "Current bypass",
+        "enabled_title": "AntiBeast enabled",
+        "not_configured": "Not configured yet",
+        "variables": "Available variables",
+        "variables_body": "`{time_window}` and `{trigger_count}` are replaced with the actual values before the action runs."
+    },
+    "state": {
+        "disabled": "❌ Disabled",
+        "enabled": "✅ Enabled"
+    },
+    "toggle": {
+        "disabled": "✅ AntiBeast is now **disabled**.",
+        "enabled": "✅ AntiBeast is now **enabled**.",
+        "everyone_unchanged": "The @everyone permission was already in the target state.",
+        "everyone_updated": "The @everyone permission was updated.",
+        "no_rule": "No existing AutoMod rule was found.",
+        "rule_id": "AutoMod rule ID: `{rule_id}`"
+    }
+}

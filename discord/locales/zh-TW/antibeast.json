@@ -1,0 +1,108 @@
+{
+    "about": {
+        "automod_body": "啟用時會建立/更新 AntiBeast 專用 AutoMod 規則，封鎖 everyone/here 與所有非繞過身分組提及。\n同時會暫時開啟 @everyone 的提及 everyone/here/所有身分組權限；停用時會還原原本設定。",
+        "bypass_body": "可以把需要正常被提及的身分組加入繞過清單；這些身分組不會被放進 AutoMod keyword filter。",
+        "bypass_title": "繞過",
+        "desc": "眾所周知，現在 Discord 有非常多的 Mr. Beast 圖片詐騙。\nAntiBeast 會用 Discord 原生 AutoMod 阻擋 everyone/here 與身分組提及，同時讓詐騙機器人以為伺服器允許大量提及。",
+        "trigger_action_body": "可以設定在指定秒數內觸發 AntiBeast 幾次後，執行 Moderate 動作指令；預設是踢出。"
+    },
+    "action_setup_done_title": "AntiBeast 動作設定完成",
+    "block_message": "AntiBeast 已阻擋 everyone/here 或受保護身分組提及。",
+    "btn": {
+        "back_to_action": "返回處置",
+        "back_to_bypass": "返回繞過",
+        "custom_action": "自訂處置",
+        "enable": "啟用 AntiBeast",
+        "everyone_here_only_toggle": "僅處理 everyone/here：{state}",
+        "keep_bypass": "保留目前繞過",
+        "no_action": "不啟用處置",
+        "use_default_kick": "使用預設踢出"
+    },
+    "bypass": {
+        "added": "✅ 已新增 **{role}**，{suffix}。",
+        "applies_when_enabled": "啟用時會套用到 AutoMod 關鍵字規則",
+        "removed": "✅ 已移除 **{role}**，{suffix}。",
+        "synced": "並已同步 AutoMod 關鍵字規則"
+    },
+    "config": {
+        "everyone_can_mention": "可提及 everyone/here",
+        "everyone_cannot_mention": "不可提及 everyone/here",
+        "no_bypass_roles": "目前沒有任何想要被繞過的身分組。",
+        "protected_role_count": "{count} 個身分組會被放進 keyword filter",
+        "rule_not_created": "尚未建立",
+        "title": "AntiBeast 設定",
+        "trigger_disabled": "❌ 停用\n範圍：{scope}",
+        "trigger_enabled": "✅ 啟用，{seconds} 秒內觸發 {count} 次後執行：`{action}`\n範圍：{scope}"
+    },
+    "default_trigger_action": "kick AntiBeast: {time_window} 秒內觸發 {trigger_count} 次",
+    "err": {
+        "action_empty": "action 不能是空的。",
+        "action_too_long": "action 最多 500 個字。",
+        "bot_missing_perms": "機器人缺少權限：{perms}",
+        "cannot_bypass_everyone": "⚠️ 不能把 @everyone 加入繞過清單。",
+        "modal_not_int": "⚠️ 觸發次數與時間窗口都必須是整數。",
+        "rule_limit_reached": "⚠️ AntiBeast 無法建立 AutoMod 規則：這個伺服器的 Discord AutoMod 規則數量已達上限。請先刪除不需要的 AutoMod 規則，或移除舊的 AntiBeast 規則後再試。",
+        "sync_failed": "⚠️ AntiBeast 同步失敗：{error}",
+        "sync_generic": "⚠️ AntiBeast 同步失敗，請稍後再試。",
+        "sync_http": "⚠️ AntiBeast 同步失敗：Discord API 回應錯誤 ({status})。",
+        "threshold_range": "⚠️ 觸發次數必須介於 1 到 20。",
+        "threshold_range_param": "⚠️ threshold 必須介於 1 到 20。",
+        "time_window_range": "⚠️ 時間窗口必須介於 5 到 3600 秒。",
+        "time_window_range_param": "⚠️ time_window 必須介於 5 到 3600 秒。",
+        "unsupported_action": "不支援的 Moderate 動作：{action}"
+    },
+    "field": {
+        "automod_rule": "AutoMod 規則",
+        "bypass_roles": "繞過身分組",
+        "everyone_permission": "@everyone 權限",
+        "protected_roles": "受保護身分組",
+        "status": "狀態",
+        "trigger_action": "連續觸發處置"
+    },
+    "modal": {
+        "action_label": "Moderate 動作指令",
+        "action_title": "AntiBeast 處置設定",
+        "threshold_label": "觸發次數",
+        "time_window_label": "時間窗口秒數"
+    },
+    "scope": {
+        "everyone_here_and_roles": "處理 @everyone / @here 與未繞過身分組提及",
+        "everyone_here_only": "只處理 @everyone / @here"
+    },
+    "settings": {
+        "trigger_line": "自動處置：{status}"
+    },
+    "setup": {
+        "action_desc": "設定同一個使用者在短時間內連續觸發 AntiBeast 後要執行的 Moderate 指令。\n預設會在門檻達成後踢出。",
+        "action_disabled": "目前停用連續觸發處置",
+        "action_preview": "動作執行預覽",
+        "action_scope": "處置範圍",
+        "action_summary": "{seconds} 秒內 {count} 次，執行 `{action}`",
+        "action_title": "AntiBeast Setup: 連續觸發處置",
+        "bypass_desc": "選擇需要正常被提及的身分組。\n被選到的身分組不會被放進 AntiBeast 的 AutoMod keyword filter。",
+        "bypass_select_ph": "選擇要繞過的身分組",
+        "bypass_title": "AntiBeast Setup: 繞過身分組",
+        "confirm_action_disabled": "停用\n範圍：{scope}",
+        "confirm_action_enabled": "{seconds} 秒內 {count} 次，執行 `{action}`\n範圍：{scope}",
+        "confirm_desc": "確認設定後按下啟用，AntiBeast 會建立/更新 AutoMod 規則並套用 @everyone 權限。",
+        "confirm_title": "AntiBeast Setup: 確認啟用",
+        "current_action": "目前處置",
+        "current_bypass": "目前繞過",
+        "enabled_title": "AntiBeast 已啟用",
+        "not_configured": "尚未設定",
+        "variables": "可用變數",
+        "variables_body": "`{time_window}`、`{trigger_count}` 會在執行前替換成實際數值。"
+    },
+    "state": {
+        "disabled": "❌ 停用",
+        "enabled": "✅ 啟用"
+    },
+    "toggle": {
+        "disabled": "✅ AntiBeast 已**停用**。",
+        "enabled": "✅ AntiBeast 已**啟用**。",
+        "everyone_unchanged": "@everyone 權限已是目標狀態。",
+        "everyone_updated": "已更新 @everyone 權限。",
+        "no_rule": "沒有找到既有 AutoMod 規則。",
+        "rule_id": "AutoMod 規則 ID：`{rule_id}`"
+    }
+}
