@@ -27,16 +27,22 @@ BUTTON_EMOJI_MANIFEST_PATH = BUTTON_EMOJI_ASSET_DIR / "manifest.json"
 REPO_ROOT = Path(__file__).resolve().parents[1]
 GLOBALENV_SOURCE_PATH = REPO_ROOT / "discord" / "globalenv.py"
 UTIL_COMMANDS_SOURCE_PATH = REPO_ROOT / "discord" / "UtilCommands.py"
-EMOJI_ASSET_SOURCES = [
+EMOJI_ASSET_SOURCES = [  # i18n: skip-start (擁有者專用指令的分類標籤，見下方大範圍 skip 註記)
     ("一般", APP_EMOJI_ASSET_DIR, APP_EMOJI_MANIFEST_PATH),
     ("按鈕", BUTTON_EMOJI_ASSET_DIR, BUTTON_EMOJI_MANIFEST_PATH),
-]
+]  # i18n: skip-end
 
 def is_owner() -> Callable:
     async def predicate(ctx):
         return ctx.author.id in config("owners", [])
     return commands.check(predicate)
 
+
+# i18n: skip-start
+# 這個模組是機器人擁有者專用工具：每個 @bot.command 都掛 @is_owner()，
+# on_guild_join/on_guild_remove 也只發到私有的 join_leave_log_channel，
+# 一般使用者完全看不到。依標準決定「擁有者用中文沒差」，以下保留中文，
+# 不建語言檔 key。log() 訊息已個別轉換為英文（見上方 log() 呼叫）。
 @bot.command(aliases=["set", "cfg"])
 @is_owner()
 async def settings(ctx, key: str=None, value: str=None):
@@ -533,7 +539,7 @@ async def shutdown(ctx):
             except Exception as e:
                 task["status"] = "error"
                 task["error"] = str(e)
-                log(f"執行關閉前任務 {task['name']} 時發生錯誤: {e}", level=logging.ERROR, module_name="OwnerTools")
+                log(f"Error running pre-shutdown task {task['name']}: {e}", level=logging.ERROR, module_name="OwnerTools")
             end_time = time.perf_counter()
             task["time"] = end_time - start_time
             await msg.edit(content=f"```ansi\n{closingtext}\n{create_shutdowntask_message(tasks, tick)}\n```")
@@ -578,7 +584,7 @@ async def restart(ctx):
             except Exception as e:
                 task["status"] = "error"
                 task["error"] = str(e)
-                log(f"執行關閉前任務 {task['name']} 時發生錯誤: {e}", level=logging.ERROR, module_name="OwnerTools")
+                log(f"Error running pre-shutdown task {task['name']}: {e}", level=logging.ERROR, module_name="OwnerTools")
             end_time = time.perf_counter()
             task["time"] = end_time - start_time
             await msg.edit(content=f"```ansi\n{closingtext}\n{create_shutdowntask_message(tasks, tick)}\n```")
@@ -1098,7 +1104,7 @@ async def uploadmissingemojis(ctx, limit: int = None):
         except discord.HTTPException as e:
             failed_entries.append((emoji_name, str(e)))
             log(
-                f"上傳 application emoji {emoji_name} 失敗: {e}",
+                f"Failed to upload application emoji {emoji_name}: {e}",
                 level=logging.ERROR,
                 module_name="OwnerTools"
             )
@@ -1403,13 +1409,13 @@ async def eval_command(ctx, *, code: str):
 @bot.event
 async def on_guild_join(guild: discord.Guild):
     # print(f"Joined guild: {guild.name} (ID: {guild.id})")
-    log(f"加入了伺服器: {guild.name}，正在快取伺服器資料", module_name="OwnerTools", guild=guild)
+    log(f"Joined guild: {guild.name}, caching guild data", module_name="OwnerTools", guild=guild)
     # try to chunk guild data
     try:
         await guild.chunk(cache=True)
-        log(f"已快取伺服器資料: {guild.name}", module_name="OwnerTools", guild=guild)
+        log(f"Cached guild data: {guild.name}", module_name="OwnerTools", guild=guild)
     except Exception as e:
-        log(f"無法快取伺服器資料: {e}", module_name="OwnerTools", guild=guild)
+        log(f"Failed to cache guild data: {e}", module_name="OwnerTools", guild=guild)
     # send to channel
     channel = bot.get_channel(config("join_leave_log_channel_id"))
     try:
@@ -1439,12 +1445,12 @@ async def on_guild_join(guild: discord.Guild):
 
         await channel.send(embed=embed)
     except discord.Forbidden:
-        log(f"無法在設定的頻道發送加入伺服器訊息", level=logging.ERROR, module_name="OwnerTools")
+        log("Failed to send the guild-join message in the configured channel", level=logging.ERROR, module_name="OwnerTools")
                 
 
 @bot.event
 async def on_guild_remove(guild):
-    log(f"離開了伺服器: {guild.name}", module_name="OwnerTools", guild=guild)
+    log(f"Left guild: {guild.name}", module_name="OwnerTools", guild=guild)
     # send to channel
     channel = bot.get_channel(config("join_leave_log_channel_id"))
     try:
@@ -1463,7 +1469,8 @@ async def on_guild_remove(guild):
             embed.set_thumbnail(url=icon_url)
         await channel.send(embed=embed)
     except discord.Forbidden:
-        log(f"無法在設定的頻道發送離開伺服器訊息", level=logging.ERROR, module_name="OwnerTools")
+        log("Failed to send the guild-leave message in the configured channel", level=logging.ERROR, module_name="OwnerTools")
+# i18n: skip-end
 
 
 if __name__ == "__main__":
