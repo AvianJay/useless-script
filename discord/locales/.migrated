@@ -22,3 +22,5 @@ AutoPublish
 CustomPrefix
 JoinNotify
 DynamicVoice
+StickyRole
+StickyMessage

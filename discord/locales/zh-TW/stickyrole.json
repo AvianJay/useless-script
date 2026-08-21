@@ -1,0 +1,56 @@
+{
+    "audit": {
+        "restore": "StickyRole 自動恢復身份組"
+    },
+    "config": {
+        "channel_missing": "找不到 (ID: {channel_id})",
+        "deleted_role": "已刪除 (ID: `{role_id}`)",
+        "no_restriction": "（未限定，將記憶所有可指派的身份組）",
+        "title": "📌 StickyRole 設定"
+    },
+    "err": {
+        "already_allowed": "⚠️ {role} 已在允許清單中。",
+        "cannot_add_everyone": "⚠️ 無法將 @everyone 加入允許清單。",
+        "log_channel_perms": "⚠️ 機器人在 {channel} 沒有檢視頻道或發送訊息的權限，請先調整後再設定。",
+        "missing_manage_roles": "⚠️ 機器人缺少「管理身份組」權限，無法啟用 StickyRole 功能。",
+        "not_allowed": "⚠️ {role} 不在允許清單中。",
+        "role_too_high": "⚠️ {role} 的順位高於或等於機器人最高身份組，無法指派。"
+    },
+    "field": {
+        "allowed_roles": "允許記憶的身份組",
+        "ignore_bots": "忽略機器人",
+        "log_channel": "日誌頻道",
+        "recorded_roles": "記錄的身份組",
+        "restore_failed": "恢復失敗",
+        "restored": "已恢復",
+        "saved_roles": "儲存的身份組",
+        "status": "功能狀態"
+    },
+    "log": {
+        "footer": "用戶 ID: {user_id}",
+        "left_guild": "{user} 離開了伺服器",
+        "rejoined_guild": "{user} 重新加入了伺服器",
+        "restored_title": "📥 StickyRole — 身份組已恢復",
+        "saved_title": "📤 StickyRole — 身份組已記錄"
+    },
+    "msg": {
+        "disabled": "✅ StickyRole 功能已 **停用**。",
+        "enabled": "✅ StickyRole 功能已 **啟用**。",
+        "ignore_bots_off": "✅ 已停用忽略機器人帳號。",
+        "ignore_bots_on": "✅ 已啟用忽略機器人帳號。",
+        "list_cleared": "✅ 已清空允許清單，StickyRole 將記憶所有可指派的身份組。",
+        "log_channel_set": "✅ StickyRole 日誌頻道已設定為 {channel}。",
+        "log_channel_unset": "✅ 已取消 StickyRole 日誌頻道設定。",
+        "no_records": "ℹ️ {user} 沒有已儲存的身份組紀錄。",
+        "records_cleared": "✅ 已清除 {user} 的 StickyRole 紀錄。",
+        "role_added": "✅ 已將 {role} 加入 StickyRole 允許清單。",
+        "role_removed": "✅ 已將 {role} 從 StickyRole 允許清單中移除。"
+    },
+    "state": {
+        "disabled": "❌ 停用",
+        "enabled": "✅ 啟用"
+    },
+    "view": {
+        "title": "📋 {user} 的 StickyRole 紀錄"
+    }
+}

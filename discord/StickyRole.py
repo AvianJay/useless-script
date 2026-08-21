@@ -6,6 +6,9 @@ from logger import log
 import logging
 import asyncio
 
+import i18n
+from i18n import t
+
 
 @app_commands.guild_only()
 @app_commands.default_permissions(manage_roles=True)
@@ -31,12 +34,12 @@ class StickyRole(commands.GroupCog,
     async def toggle(self, interaction: discord.Interaction, enable: str):
         enabled = (enable == "True")
         if enabled and not interaction.guild.me.guild_permissions.manage_roles:
-            await interaction.response.send_message("⚠️ 機器人缺少「管理身份組」權限，無法啟用 StickyRole 功能。", ephemeral=True)
+            await interaction.response.send_message(t("stickyrole.err.missing_manage_roles"), ephemeral=True)
             return
         set_server_config(interaction.guild.id, "stickyrole_enabled", enabled)
-        status = "啟用" if enabled else "停用"
-        log(f"StickyRole 已{status}", module_name="StickyRole", guild=interaction.guild, user=interaction.user)
-        await interaction.response.send_message(f"✅ StickyRole 功能已 **{status}**。", ephemeral=True)
+        log(f"StickyRole {'enabled' if enabled else 'disabled'}", module_name="StickyRole", guild=interaction.guild, user=interaction.user)
+        await interaction.response.send_message(
+            t("stickyrole.msg.enabled" if enabled else "stickyrole.msg.disabled"), ephemeral=True)
 
     @app_commands.command(name=app_commands.locale_str("add", i18n_key="cmd.stickyrole.stickyrole.add.name"), description=app_commands.locale_str("Add a role to the remember list (empty list = remember all roles)", i18n_key="cmd.stickyrole.stickyrole.add.desc"))
     @app_commands.describe(role=app_commands.locale_str("The role to add to the allow list", i18n_key="cmd.stickyrole.stickyrole.add.param.role"))
@@ -45,18 +48,18 @@ class StickyRole(commands.GroupCog,
         guild_id = interaction.guild.id
         allowed: list = get_server_config(guild_id, "stickyrole_allowed_roles", [])
         if role.id in allowed:
-            await interaction.response.send_message(f"⚠️ {role.mention} 已在允許清單中。", ephemeral=True)
+            await interaction.response.send_message(t("stickyrole.err.already_allowed", role=role.mention), ephemeral=True)
             return
         if role.is_default():
-            await interaction.response.send_message("⚠️ 無法將 @everyone 加入允許清單。", ephemeral=True)
+            await interaction.response.send_message(t("stickyrole.err.cannot_add_everyone"), ephemeral=True)
             return
         if role >= interaction.guild.me.top_role:
-            await interaction.response.send_message(f"⚠️ {role.mention} 的順位高於或等於機器人最高身份組，無法指派。", ephemeral=True)
+            await interaction.response.send_message(t("stickyrole.err.role_too_high", role=role.mention), ephemeral=True)
             return
         allowed.append(role.id)
         set_server_config(guild_id, "stickyrole_allowed_roles", allowed)
-        log(f"允許清單新增 {role.name} ({role.id})", module_name="StickyRole", guild=interaction.guild, user=interaction.user)
-        await interaction.response.send_message(f"✅ 已將 {role.mention} 加入 StickyRole 允許清單。", ephemeral=True)
+        log(f"Added {role.name} ({role.id}) to the allow list", module_name="StickyRole", guild=interaction.guild, user=interaction.user)
+        await interaction.response.send_message(t("stickyrole.msg.role_added", role=role.mention), ephemeral=True)
 
     @app_commands.command(name=app_commands.locale_str("remove", i18n_key="cmd.stickyrole.stickyrole.remove.name"), description=app_commands.locale_str("Remove a role from the allow list", i18n_key="cmd.stickyrole.stickyrole.remove.desc"))
     @app_commands.describe(role=app_commands.locale_str("The role to remove from the allow list", i18n_key="cmd.stickyrole.stickyrole.remove.param.role"))
@@ -65,12 +68,12 @@ class StickyRole(commands.GroupCog,
         guild_id = interaction.guild.id
         allowed: list = get_server_config(guild_id, "stickyrole_allowed_roles", [])
         if role.id not in allowed:
-            await interaction.response.send_message(f"⚠️ {role.mention} 不在允許清單中。", ephemeral=True)
+            await interaction.response.send_message(t("stickyrole.err.not_allowed", role=role.mention), ephemeral=True)
             return
         allowed.remove(role.id)
         set_server_config(guild_id, "stickyrole_allowed_roles", allowed)
-        log(f"允許清單移除 {role.name} ({role.id})", module_name="StickyRole", guild=interaction.guild, user=interaction.user)
-        await interaction.response.send_message(f"✅ 已將 {role.mention} 從 StickyRole 允許清單中移除。", ephemeral=True)
+        log(f"Removed {role.name} ({role.id}) from the allow list", module_name="StickyRole", guild=interaction.guild, user=interaction.user)
+        await interaction.response.send_message(t("stickyrole.msg.role_removed", role=role.mention), ephemeral=True)
 
     @app_commands.command(name=app_commands.locale_str("list", i18n_key="cmd.stickyrole.stickyrole.list.name"), description=app_commands.locale_str("View the current allow list and feature status", i18n_key="cmd.stickyrole.stickyrole.list.desc"))
     @app_commands.checks.has_permissions(administrator=True)
@@ -82,26 +85,31 @@ class StickyRole(commands.GroupCog,
         log_channel_id = get_server_config(guild_id, "stickyrole_log_channel")
 
         embed = discord.Embed(
-            title="📌 StickyRole 設定",
+            title=t("stickyrole.config.title"),
             color=0x5865F2 if enabled else 0x99AAB5,
         )
-        embed.add_field(name="功能狀態", value="✅ 啟用" if enabled else "❌ 停用", inline=True)
-        embed.add_field(name="忽略機器人", value="是" if ignore_bots else "否", inline=True)
+        embed.add_field(name=t("stickyrole.field.status"),
+                        value=t("stickyrole.state.enabled") if enabled else t("stickyrole.state.disabled"),
+                        inline=True)
+        embed.add_field(name=t("stickyrole.field.ignore_bots"),
+                        value=t("common.state.yes") if ignore_bots else t("common.state.no"), inline=True)
 
         if log_channel_id:
             channel = interaction.guild.get_channel(log_channel_id)
-            embed.add_field(name="日誌頻道", value=channel.mention if channel else f"找不到 (ID: {log_channel_id})", inline=True)
+            embed.add_field(name=t("stickyrole.field.log_channel"),
+                            value=channel.mention if channel else t("stickyrole.config.channel_missing", channel_id=log_channel_id),
+                            inline=True)
         else:
-            embed.add_field(name="日誌頻道", value="未設定", inline=True)
+            embed.add_field(name=t("stickyrole.field.log_channel"), value=t("common.state.unset"), inline=True)
 
         if allowed:
             role_mentions = []
             for rid in allowed:
                 r = interaction.guild.get_role(rid)
-                role_mentions.append(r.mention if r else f"已刪除 (ID: `{rid}`)")
-            embed.add_field(name="允許記憶的身份組", value="\n".join(role_mentions), inline=False)
+                role_mentions.append(r.mention if r else t("stickyrole.config.deleted_role", role_id=rid))
+            embed.add_field(name=t("stickyrole.field.allowed_roles"), value="\n".join(role_mentions), inline=False)
         else:
-            embed.add_field(name="允許記憶的身份組", value="（未限定，將記憶所有可指派的身份組）", inline=False)
+            embed.add_field(name=t("stickyrole.field.allowed_roles"), value=t("stickyrole.config.no_restriction"), inline=False)
 
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
@@ -109,8 +117,8 @@ class StickyRole(commands.GroupCog,
     @app_commands.checks.has_permissions(administrator=True)
     async def clear_roles(self, interaction: discord.Interaction):
         set_server_config(interaction.guild.id, "stickyrole_allowed_roles", [])
-        log("允許清單已清空", module_name="StickyRole", guild=interaction.guild, user=interaction.user)
-        await interaction.response.send_message("✅ 已清空允許清單，StickyRole 將記憶所有可指派的身份組。", ephemeral=True)
+        log("Allow list cleared", module_name="StickyRole", guild=interaction.guild, user=interaction.user)
+        await interaction.response.send_message(t("stickyrole.msg.list_cleared"), ephemeral=True)
 
     @app_commands.command(name=app_commands.locale_str("ignore-bots", i18n_key="cmd.stickyrole.stickyrole.ignore_bots.name"), description=app_commands.locale_str("Configure whether bot accounts are ignored", i18n_key="cmd.stickyrole.stickyrole.ignore_bots.desc"))
     @app_commands.describe(enable=app_commands.locale_str("Whether to ignore bot accounts", i18n_key="cmd.stickyrole.stickyrole.ignore_bots.param.enable"))
@@ -122,7 +130,8 @@ class StickyRole(commands.GroupCog,
     async def ignore_bots(self, interaction: discord.Interaction, enable: str):
         val = (enable == "True")
         set_server_config(interaction.guild.id, "stickyrole_ignore_bots", val)
-        await interaction.response.send_message(f"✅ 已{'啟用' if val else '停用'}忽略機器人帳號。", ephemeral=True)
+        await interaction.response.send_message(
+            t("stickyrole.msg.ignore_bots_on" if val else "stickyrole.msg.ignore_bots_off"), ephemeral=True)
 
     @app_commands.command(name=app_commands.locale_str("set-log-channel", i18n_key="cmd.stickyrole.stickyrole.set_log_channel.name"), description=app_commands.locale_str("Set the StickyRole log channel", i18n_key="cmd.stickyrole.stickyrole.set_log_channel.desc"))
     @app_commands.describe(channel=app_commands.locale_str("Channel for StickyRole logs (leave empty to unset)", i18n_key="cmd.stickyrole.stickyrole.set_log_channel.param.channel"))
@@ -132,13 +141,13 @@ class StickyRole(commands.GroupCog,
         if channel:
             perms = channel.permissions_for(interaction.guild.me)
             if not (perms.view_channel and perms.send_messages):
-                await interaction.response.send_message(f"⚠️ 機器人在 {channel.mention} 沒有檢視頻道或發送訊息的權限，請先調整後再設定。", ephemeral=True)
+                await interaction.response.send_message(t("stickyrole.err.log_channel_perms", channel=channel.mention), ephemeral=True)
                 return
             set_server_config(guild_id, "stickyrole_log_channel", channel.id)
-            await interaction.response.send_message(f"✅ StickyRole 日誌頻道已設定為 {channel.mention}。", ephemeral=True)
+            await interaction.response.send_message(t("stickyrole.msg.log_channel_set", channel=channel.mention), ephemeral=True)
         else:
             set_server_config(guild_id, "stickyrole_log_channel", None)
-            await interaction.response.send_message("✅ 已取消 StickyRole 日誌頻道設定。", ephemeral=True)
+            await interaction.response.send_message(t("stickyrole.msg.log_channel_unset"), ephemeral=True)
 
     @app_commands.command(name=app_commands.locale_str("view", i18n_key="cmd.stickyrole.stickyrole.view.name"), description=app_commands.locale_str("View a user's previously saved roles", i18n_key="cmd.stickyrole.stickyrole.view.desc"))
     @app_commands.describe(user=app_commands.locale_str("The user to view", i18n_key="cmd.stickyrole.stickyrole.view.param.user"))
@@ -147,14 +156,14 @@ class StickyRole(commands.GroupCog,
         guild_id = interaction.guild.id
         saved: list = get_user_data(guild_id, user.id, "stickyrole_roles", [])
         if not saved:
-            await interaction.response.send_message(f"ℹ️ {user.mention} 沒有已儲存的身份組紀錄。", ephemeral=True)
+            await interaction.response.send_message(t("stickyrole.msg.no_records", user=user.mention), ephemeral=True)
             return
         role_mentions = []
         for rid in saved:
             r = interaction.guild.get_role(rid)
-            role_mentions.append(r.mention if r else f"已刪除 (ID: `{rid}`)")
-        embed = discord.Embed(title=f"📋 {user} 的 StickyRole 紀錄", color=0x5865F2)
-        embed.add_field(name="儲存的身份組", value="\n".join(role_mentions), inline=False)
+            role_mentions.append(r.mention if r else t("stickyrole.config.deleted_role", role_id=rid))
+        embed = discord.Embed(title=t("stickyrole.view.title", user=user), color=0x5865F2)
+        embed.add_field(name=t("stickyrole.field.saved_roles"), value="\n".join(role_mentions), inline=False)
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
     @app_commands.command(name=app_commands.locale_str("clear-user", i18n_key="cmd.stickyrole.stickyrole.clear_user.name"), description=app_commands.locale_str("Clear a user's StickyRole records", i18n_key="cmd.stickyrole.stickyrole.clear_user.desc"))
@@ -163,8 +172,8 @@ class StickyRole(commands.GroupCog,
     async def clear_user(self, interaction: discord.Interaction, user: discord.User):
         guild_id = interaction.guild.id
         set_user_data(guild_id, user.id, "stickyrole_roles", None)
-        log(f"已清除 {user} 的 StickyRole 紀錄", module_name="StickyRole", guild=interaction.guild, user=interaction.user)
-        await interaction.response.send_message(f"✅ 已清除 {user.mention} 的 StickyRole 紀錄。", ephemeral=True)
+        log(f"Cleared the StickyRole records for {user}", module_name="StickyRole", guild=interaction.guild, user=interaction.user)
+        await interaction.response.send_message(t("stickyrole.msg.records_cleared", user=user.mention), ephemeral=True)
 
     # ── 事件監聽 ──────────────────────────────────────────────
 
@@ -204,7 +213,7 @@ class StickyRole(commands.GroupCog,
             return
 
         set_user_data(guild_id, member.id, "stickyrole_roles", role_ids)
-        log(f"已記錄 {member} 離開時的 {len(role_ids)} 個身份組", module_name="StickyRole", guild=member.guild, user=member)
+        log(f"Saved {len(role_ids)} role(s) held by {member} on leave", module_name="StickyRole", guild=member.guild, user=member)
 
         # 發送日誌
         await self._send_log(member.guild, member, role_ids, action="save")
@@ -239,19 +248,20 @@ class StickyRole(commands.GroupCog,
                 failed.append(rid)
                 continue
             try:
-                await member.add_roles(role, reason="StickyRole 自動恢復身份組")
+                await member.add_roles(role, reason=t("stickyrole.audit.restore",
+                                                      locale=i18n.resolve_locale(guild_id=guild_id)))
                 restored.append(rid)
             except discord.Forbidden:
                 failed.append(rid)
-                log(f"無法恢復身份組 {role.name} 給 {member}（權限不足）", level=logging.WARNING, module_name="StickyRole", guild=member.guild, user=member)
+                log(f"Couldn't restore role {role.name} for {member} (insufficient permissions)", level=logging.WARNING, module_name="StickyRole", guild=member.guild, user=member)
             except discord.HTTPException as e:
                 failed.append(rid)
-                log(f"恢復身份組 {role.name} 給 {member} 時發生錯誤：{e}", level=logging.ERROR, module_name="StickyRole", guild=member.guild, user=member)
+                log(f"Error restoring role {role.name} for {member}: {e}", level=logging.ERROR, module_name="StickyRole", guild=member.guild, user=member)
 
         if restored:
-            log(f"已恢復 {member} 的 {len(restored)} 個身份組", module_name="StickyRole", guild=member.guild, user=member)
+            log(f"Restored {len(restored)} role(s) for {member}", module_name="StickyRole", guild=member.guild, user=member)
         if failed:
-            log(f"無法恢復 {member} 的 {len(failed)} 個身份組", level=logging.WARNING, module_name="StickyRole", guild=member.guild, user=member)
+            log(f"Failed to restore {len(failed)} role(s) for {member}", level=logging.WARNING, module_name="StickyRole", guild=member.guild, user=member)
 
         # 清除已使用的紀錄
         set_user_data(guild_id, member.id, "stickyrole_roles", None)
@@ -268,39 +278,47 @@ class StickyRole(commands.GroupCog,
         if not channel:
             return
 
+        # 日誌頻道是 guild 共享的，用伺服器語言而不是觸發者的個人語言
+        locale = i18n.resolve_locale(guild_id=guild.id)
         role_mentions = []
         for rid in role_ids:
             r = guild.get_role(rid)
             role_mentions.append(r.mention if r else f"`{rid}`")
+        none_text = t("common.state.none", locale=locale)
 
         if action == "save":
             embed = discord.Embed(
-                title="📤 StickyRole — 身份組已記錄",
-                description=f"{user.mention} 離開了伺服器",
+                title=t("stickyrole.log.saved_title", locale=locale),
+                description=t("stickyrole.log.left_guild", locale=locale, user=user.mention),
                 color=0xFFA500,
             )
-            embed.add_field(name="記錄的身份組", value=", ".join(role_mentions) if role_mentions else "無", inline=False)
+            embed.add_field(name=t("stickyrole.field.recorded_roles", locale=locale),
+                            value=i18n.join_list(role_mentions, locale=locale) if role_mentions else none_text,
+                            inline=False)
         else:
             embed = discord.Embed(
-                title="📥 StickyRole — 身份組已恢復",
-                description=f"{user.mention} 重新加入了伺服器",
+                title=t("stickyrole.log.restored_title", locale=locale),
+                description=t("stickyrole.log.rejoined_guild", locale=locale, user=user.mention),
                 color=0x57F287,
             )
-            embed.add_field(name="已恢復", value=", ".join(role_mentions) if role_mentions else "無", inline=False)
+            embed.add_field(name=t("stickyrole.field.restored", locale=locale),
+                            value=i18n.join_list(role_mentions, locale=locale) if role_mentions else none_text,
+                            inline=False)
             if failed:
                 failed_mentions = []
                 for rid in failed:
                     r = guild.get_role(rid)
                     failed_mentions.append(r.mention if r else f"`{rid}`")
-                embed.add_field(name="恢復失敗", value=", ".join(failed_mentions), inline=False)
+                embed.add_field(name=t("stickyrole.field.restore_failed", locale=locale),
+                                value=i18n.join_list(failed_mentions, locale=locale), inline=False)
 
         embed.set_thumbnail(url=user.display_avatar.url if user.display_avatar else None)
-        embed.set_footer(text=f"用戶 ID: {user.id}")
+        embed.set_footer(text=t("stickyrole.log.footer", locale=locale, user_id=user.id))
 
         try:
             await channel.send(embed=embed)
         except Exception as e:
-            log(f"無法發送 StickyRole 日誌：{e}", level=logging.ERROR, module_name="StickyRole", guild=guild)
+            log(f"Failed to send the StickyRole log: {e}", level=logging.ERROR, module_name="StickyRole", guild=guild)
 
 
 asyncio.run(bot.add_cog(StickyRole(bot)))

@@ -1,0 +1,59 @@
+{
+    "err": {
+        "already_configured": "This channel already has a sticky message; use edit instead.",
+        "bad_channel_id": "The sticky message's channel ID is invalid.",
+        "channel_not_found": "The specified text or announcement channel couldn't be found.",
+        "config_not_object": "The StickyMessage config must be an object.",
+        "content_empty": "The sticky message content can't be empty.",
+        "content_too_long": "The sticky message content can be at most {max} characters.",
+        "duplicate_channel": "A channel can only have one sticky message.",
+        "entries_not_list": "StickyMessage entries must be a list.",
+        "entry_not_object": "Every sticky message must be an object.",
+        "field_not_int": "{field} must be a whole number.",
+        "field_out_of_range": "{field} must be between {min} and {max}.",
+        "generic": "The operation failed.",
+        "guild_not_found": "The server couldn't be found.",
+        "missing_perms": "I don't have permission to view the channel or send messages.",
+        "not_configured": "This channel has no sticky message configured.",
+        "over_quota": "This entry is currently over the server's quota and has been paused.",
+        "position_out_of_range": {
+            "one": "The position can't exceed the current {count} entry.",
+            "other": "The position can't exceed the current {count} entries."
+        },
+        "quota_reached": {
+            "one": "This server can have at most {count} sticky message.",
+            "other": "This server can have at most {count} sticky messages."
+        },
+        "save_failed": "Failed to save the StickyMessage config.",
+        "saved_but_publish_failed": "The config was saved, but the immediate publish failed: {errors}",
+        "send_failed": "Failed to send the sticky message.",
+        "text_or_news_only": "Only text or announcement channels can be selected.",
+        "too_many_entries": {
+            "one": "StickyMessage keeps at most {count} entry.",
+            "other": "StickyMessage keeps at most {count} entries."
+        }
+    },
+    "field": {
+        "min_interval": "Minimum interval",
+        "quiet_seconds": "Quiet period",
+        "quota": "Quota"
+    },
+    "list": {
+        "empty": "No sticky messages are configured yet.",
+        "title": "StickyMessage settings"
+    },
+    "msg": {
+        "added": "Added and published the sticky message for {channel}.",
+        "moved": "Moved {channel} to position {position}.",
+        "removed": "Removed the sticky message config for {channel}.",
+        "republished": "Reposted the sticky message for {channel}.",
+        "timing_set": "Quiet period set to {quiet}s and minimum interval to {interval}s.",
+        "updated": "Updated and reposted the sticky message for {channel}."
+    },
+    "state": {
+        "active": "active",
+        "mentions_off": "mentions off",
+        "mentions_on": "mentions on",
+        "over_quota": "paused (over quota)"
+    }
+}

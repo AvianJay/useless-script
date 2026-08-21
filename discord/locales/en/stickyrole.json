@@ -1,0 +1,56 @@
+{
+    "audit": {
+        "restore": "StickyRole automatic role restore"
+    },
+    "config": {
+        "channel_missing": "not found (ID: {channel_id})",
+        "deleted_role": "deleted (ID: `{role_id}`)",
+        "no_restriction": "(unrestricted - every assignable role will be remembered)",
+        "title": "📌 StickyRole settings"
+    },
+    "err": {
+        "already_allowed": "⚠️ {role} is already on the allow list.",
+        "cannot_add_everyone": "⚠️ @everyone can't be added to the allow list.",
+        "log_channel_perms": "⚠️ The bot can't view or send messages in {channel}. Fix that first, then set it.",
+        "missing_manage_roles": "⚠️ The bot is missing Manage Roles, so StickyRole can't be enabled.",
+        "not_allowed": "⚠️ {role} isn't on the allow list.",
+        "role_too_high": "⚠️ {role} sits at or above the bot's highest role, so it can't be assigned."
+    },
+    "field": {
+        "allowed_roles": "Roles eligible to be remembered",
+        "ignore_bots": "Ignore bots",
+        "log_channel": "Log channel",
+        "recorded_roles": "Recorded roles",
+        "restore_failed": "Failed to restore",
+        "restored": "Restored",
+        "saved_roles": "Saved roles",
+        "status": "Status"
+    },
+    "log": {
+        "footer": "User ID: {user_id}",
+        "left_guild": "{user} left the server",
+        "rejoined_guild": "{user} rejoined the server",
+        "restored_title": "📥 StickyRole — roles restored",
+        "saved_title": "📤 StickyRole — roles recorded"
+    },
+    "msg": {
+        "disabled": "✅ StickyRole is now **disabled**.",
+        "enabled": "✅ StickyRole is now **enabled**.",
+        "ignore_bots_off": "✅ Bot accounts are no longer ignored.",
+        "ignore_bots_on": "✅ Bot accounts are now ignored.",
+        "list_cleared": "✅ Allow list cleared; StickyRole will remember every assignable role.",
+        "log_channel_set": "✅ The StickyRole log channel is now {channel}.",
+        "log_channel_unset": "✅ The StickyRole log channel has been unset.",
+        "no_records": "ℹ️ {user} has no saved role records.",
+        "records_cleared": "✅ Cleared {user}'s StickyRole records.",
+        "role_added": "✅ {role} has been added to the StickyRole allow list.",
+        "role_removed": "✅ {role} has been removed from the StickyRole allow list."
+    },
+    "state": {
+        "disabled": "❌ Disabled",
+        "enabled": "✅ Enabled"
+    },
+    "view": {
+        "title": "📋 StickyRole records for {user}"
+    }
+}
