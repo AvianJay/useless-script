@@ -5,6 +5,8 @@ from discord.ext import commands
 from globalenv import bot, start_bot, get_server_config, set_server_config
 from logger import log
 import logging
+
+from i18n import t
 from datetime import datetime, timezone
 
 
@@ -22,7 +24,9 @@ class AutoPublish(commands.GroupCog, name=app_commands.locale_str("autopublish",
         guild_id = interaction.guild.id if interaction.guild else None
         autopublish_settings = get_server_config(guild_id, "autopublish", {})
 
-        await interaction.response.send_message(f"自動發布{'已啟用' if autopublish_settings.get('enabled', False) else '未啟用'}。", ephemeral=True)
+        await interaction.response.send_message(
+            t("autopublish.msg.status_enabled" if autopublish_settings.get("enabled", False)
+              else "autopublish.msg.status_disabled"), ephemeral=True)
         return
 
     @app_commands.command(name=app_commands.locale_str("settings", i18n_key="cmd.autopublish.autopublish.settings.name"), description=app_commands.locale_str("Configure auto-publishing", i18n_key="cmd.autopublish.autopublish.settings.desc"))
@@ -38,11 +42,12 @@ class AutoPublish(commands.GroupCog, name=app_commands.locale_str("autopublish",
         guild_id = interaction.guild.id if interaction.guild else None
         # check bot permissions
         if not interaction.guild.me.guild_permissions.manage_messages:
-            await interaction.response.send_message("機器人需要管理訊息權限才能設定自動發布。", ephemeral=True)
+            await interaction.response.send_message(t("autopublish.err.missing_manage_messages"), ephemeral=True)
             return
         set_server_config(guild_id, "autopublish", {"enabled": (enable == "True")})
-        await interaction.response.send_message(f"自動發布已{'啟用' if enable == 'True' else '停用'}。", ephemeral=True)
-        log(f"自動發布已{'啟用' if enable == 'True' else '停用'}。", module_name="AutoPublish", guild=interaction.guild)
+        await interaction.response.send_message(
+            t("autopublish.msg.enabled" if enable == "True" else "autopublish.msg.disabled"), ephemeral=True)
+        log(f"Auto-publish {'enabled' if enable == 'True' else 'disabled'}.", module_name="AutoPublish", guild=interaction.guild)
         return
     
     @commands.Cog.listener()
@@ -93,9 +98,9 @@ class AutoPublish(commands.GroupCog, name=app_commands.locale_str("autopublish",
             set_server_config(guild.id, "autopublish", autopublish_settings)
             try:
                 await message.publish()
-                log(f"已自動發布訊息 ID {message.id} 在伺服器 {guild.id}", module_name="AutoPublish", guild=guild)
+                log(f"Auto-published message {message.id} in guild {guild.id}", module_name="AutoPublish", guild=guild)
             except Exception as e:
-                log(f"發布訊息時發生錯誤: {e}", level=logging.ERROR, module_name="AutoPublish", guild=guild)
+                log(f"Failed to publish message: {e}", level=logging.ERROR, module_name="AutoPublish", guild=guild)
 
 asyncio.run(bot.add_cog(AutoPublish(bot)))
 

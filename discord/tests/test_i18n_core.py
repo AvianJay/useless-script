@@ -14,6 +14,15 @@ import i18n
 from tests.i18n_base import FakeDB, clear_i18n_caches
 
 
+def _fake_context(user_id=1, guild_id=None):
+    """commands.Context 只有 author / guild，沒有 locale 欄位。"""
+    ctx = MagicMock()
+    ctx.author = MagicMock()
+    ctx.author.id = user_id
+    ctx.guild = None if guild_id is None else MagicMock(id=guild_id)
+    return ctx
+
+
 def _fake_interaction(user_id=1, guild_id=None, locale=None):
     interaction = MagicMock(spec=discord.Interaction)
     interaction.user = MagicMock()
@@ -325,6 +334,50 @@ class ChokePointTests(unittest.IsolatedAsyncioTestCase):
         result = await check(MagicMock(), interaction)
         self.assertTrue(result)
         self.assertEqual(i18n.current_locale(), "en")
+
+    async def test_prefix_command_hook_installed(self):
+        from discord.ext.commands.bot import BotBase
+        self.assertTrue(getattr(BotBase.invoke, "_i18n_wrapped", False))
+
+    async def test_prefix_hook_sets_and_clears_locale(self):
+        # 前綴指令沒有 interaction.locale，走使用者設定這一層。
+        self.fake_db.user_data[(3, 0, i18n.USER_LOCALE_KEY)] = "en"
+        seen = {}
+
+        async def invoke(self, ctx, /):
+            seen["locale"] = i18n.current_locale()
+
+        wrapped = i18n._wrap_invoke(invoke)
+        await wrapped(object(), _fake_context(user_id=3))
+        self.assertEqual(seen["locale"], "en")
+        # wrapper 離開後要清除，否則會洩漏到同一個 task 之後的 listener
+        self.assertEqual(i18n.current_locale(), i18n.DEFAULT_LOCALE)
+
+    async def test_prefix_hook_clears_locale_on_error(self):
+        self.fake_db.user_data[(31, 0, i18n.USER_LOCALE_KEY)] = "en"
+
+        async def invoke(self, ctx, /):
+            raise RuntimeError("boom")
+
+        wrapped = i18n._wrap_invoke(invoke)
+        with self.assertRaises(RuntimeError):
+            await wrapped(object(), _fake_context(user_id=31))
+        self.assertEqual(i18n.current_locale(), i18n.DEFAULT_LOCALE)
+
+    async def test_prefix_hook_guild_setting_applies(self):
+        self.fake_db.server_config[(9, i18n.GUILD_LOCALE_KEY)] = "en"
+        ctx = _fake_context(user_id=4, guild_id=9)
+        self.assertEqual(i18n.resolve_from_context(ctx), "en")
+
+    async def test_prefix_hook_falls_back_to_default(self):
+        # 沒有任何設定、也沒用過斜線指令 → zh-TW
+        ctx = _fake_context(user_id=5, guild_id=10)
+        self.assertEqual(i18n.resolve_from_context(ctx), i18n.DEFAULT_LOCALE)
+
+    async def test_prefix_hook_reads_last_locale(self):
+        # 使用者用過斜線指令後，前綴指令也拿得到 Discord 語言
+        self.fake_db.user_data[(6, 0, i18n.LAST_LOCALE_KEY)] = "en-US"
+        self.assertEqual(i18n.resolve_from_context(_fake_context(user_id=6)), "en")
 
 
 if __name__ == "__main__":

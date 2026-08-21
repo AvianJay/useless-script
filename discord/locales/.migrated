@@ -18,3 +18,5 @@ AutoModerate
 MentionLimit
 AntiBeast
 HackedDetector
+AutoPublish
+CustomPrefix

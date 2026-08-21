@@ -689,6 +689,49 @@ def install_ui_hooks() -> None:
     _wrap_scheduled_task(Modal)
 
 
+# ============= choke point 5: 前綴文字指令 =============
+
+def resolve_from_context(ctx) -> str:
+    """Context 沒有 locale 欄位（只有 Interaction 有），所以 Discord 語言那一層
+    是靠 last_locale——使用者用過任一斜線指令後才有值。"""
+    author = getattr(ctx, "author", None)
+    guild = getattr(ctx, "guild", None)
+    return resolve_locale(user_id=author.id if author is not None else None,
+                          guild_id=guild.id if guild is not None else None)
+
+
+def _wrap_invoke(original):
+    @functools.wraps(original)
+    async def _i18n_invoke(self, ctx, /):
+        try:
+            locale = resolve_from_context(ctx)
+        except Exception:
+            _log.exception("i18n locale resolution failed in prefix command dispatch")
+            return await original(self, ctx)
+        token = _current.set(locale)
+        try:
+            return await original(self, ctx)
+        finally:
+            _current.reset(token)
+
+    _i18n_invoke._i18n_wrapped = True
+    return _i18n_invoke
+
+
+def install_prefix_command_hook() -> None:
+    """Wrap BotBase.invoke（idempotent）。
+
+    包 invoke 而非 before_invoke：invoke 同時涵蓋 check 失敗與
+    dispatch_error，所以錯誤訊息也拿得到語言。process_commands 本身跑在
+    _schedule_event 建立的 per-message task 裡，不會污染其他 listener。
+    """
+    from discord.ext.commands.bot import BotBase
+    original = BotBase.__dict__.get("invoke")
+    if original is None or getattr(original, "_i18n_wrapped", False):
+        return
+    BotBase.invoke = _wrap_invoke(original)
+
+
 # ============= choke point 4 helper: Flask =============
 
 def push_locale_for_web(*, user_id: int | None = None, lang_param: str | None = None,
@@ -883,5 +926,6 @@ def join_list(items: Iterable, locale: str | None = None) -> str:
     return sep.join(parts[:-1]) + last_sep + parts[-1]
 
 
-# 於 import 時安裝 UI hook（idempotent，且純 wrapper 無副作用）
+# 於 import 時安裝 hook（idempotent，且純 wrapper 無副作用）
 install_ui_hooks()
+install_prefix_command_hook()

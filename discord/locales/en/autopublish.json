@@ -1,0 +1,11 @@
+{
+    "err": {
+        "missing_manage_messages": "The bot needs the Manage Messages permission to configure auto-publishing."
+    },
+    "msg": {
+        "disabled": "Auto-publishing is now disabled.",
+        "enabled": "Auto-publishing is now enabled.",
+        "status_disabled": "Auto-publishing is not enabled.",
+        "status_enabled": "Auto-publishing is enabled."
+    }
+}
