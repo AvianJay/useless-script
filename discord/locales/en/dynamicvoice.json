@@ -1,0 +1,27 @@
+{
+    "audit": {
+        "blacklisted": "User is blacklisted from dynamic voice channels."
+    },
+    "err": {
+        "channel_missing": "Error: the configured dynamic voice channel couldn't be found.",
+        "missing_perms": "Error: the bot needs Manage Channels and Move Members to set up dynamic voice channels.",
+        "missing_voice_perms": "Error: the bot needs Connect and Speak to play the sound.",
+        "not_set_up": "Error: set up a dynamic voice channel first.",
+        "role_already_blacklisted": "That role is already blacklisted.",
+        "role_not_blacklisted": "That role isn't blacklisted."
+    },
+    "msg": {
+        "blacklist_empty": "The blacklist is empty.",
+        "blacklist_header": "Blacklisted roles:",
+        "deleted_role": "deleted role (ID: `{role_id}`)",
+        "disabled": "Dynamic voice channels are now disabled.",
+        "play_audio_disabled": "The dynamic voice join sound is now disabled.",
+        "play_audio_enabled": "The dynamic voice join sound is now enabled.",
+        "role_blacklisted": "That role has been added to the blacklist.",
+        "role_unblacklisted": "That role has been removed from the blacklist.",
+        "setup_done": "Dynamic voice is set up on '{channel}'; new channels will be created under '{category}'."
+    },
+    "warn": {
+        "user_limit_failed": "Warning: couldn't set the user limit on '{channel}'. Make sure the bot has Manage Channels."
+    }
+}

@@ -1,0 +1,42 @@
+{
+    "audit": {
+        "subscribed": "Bot update notifications subscribed by {user}"
+    },
+    "btn": {
+        "disable_join_notify": "Turn off join notifications",
+        "dismiss": "No thanks",
+        "docs": "Documentation",
+        "subscribe_here": "Sure",
+        "support": "Support server",
+        "website": "Website"
+    },
+    "dm": {
+        "body": "Quick start:\n- {help_cmd} to browse the command list\n- {tutorial_cmd} for the tutorial\n- {panel_cmd} to open the web panel\nIf anything comes up, come ask in the [support server]({support_url})!\n\n-# Don't want these messages? Use {joinnotify_cmd} to turn off join notifications.",
+        "greeting_inviter": "Hey {user}! Thanks for inviting me to {guild}!",
+        "greeting_unknown": "Hey {user}! Looks like someone invited me to your server {guild} - but I don't have permission to see who it was :/",
+        "title_inviter": "Oh? Did you just invite me?",
+        "title_unknown": "Oh? Did someone just invite me?"
+    },
+    "err": {
+        "cannot_check_perms": "I can't check my permissions in that server right now.",
+        "follow_forbidden": "I don't have permission to set up an update-notification subscription in that channel.",
+        "missing_channel_perms": "I need View Channel and Manage Webhooks in that channel.",
+        "need_manage_guild": "Only members with Manage Server can configure update notifications.",
+        "pick_channel_in_guild": "Please pick a text or announcement channel in this server.",
+        "subscribe_failed": "Something went wrong subscribing to update notifications; please try again later.",
+        "updates_unavailable": "Update notifications can't be subscribed to right now; please try again later."
+    },
+    "msg": {
+        "disabled": "Join notifications are off! I won't DM you when you invite me to a server.",
+        "enabled": "Join notifications are on! I'll DM you a welcome message when you invite me to a server.",
+        "subscribed": "Bot update notifications will now arrive in {channel}.",
+        "update_prompt": "Would you like to receive bot update notifications here?"
+    },
+    "notify_off": {
+        "desc": "I won't notify you again! If you change your mind, use {command} to turn join notifications back on.",
+        "title": "Fair enough"
+    },
+    "select": {
+        "other_channel_ph": "Or receive them in another channel..."
+    }
+}

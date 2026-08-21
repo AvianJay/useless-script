@@ -6,6 +6,9 @@ import asyncio
 from logger import log
 import logging
 
+import i18n
+from i18n import t
+
 
 async def find_bot_inviter(guild: discord.Guild, bot_user_id: int | None = None):
     """Return the user who added the bot, when the audit log is available."""
@@ -56,7 +59,7 @@ class UpdateSubscriptionChannelSelect(discord.ui.ChannelSelect):
     def __init__(self):
         super().__init__(
             custom_id="join_notify_update_channel_select",
-            placeholder="還是在其他頻道接收...",
+            placeholder=i18n.K("joinnotify.select.other_channel_ph"),
             min_values=1,
             max_values=1,
             channel_types=[discord.ChannelType.text, discord.ChannelType.news],
@@ -73,7 +76,7 @@ class UpdateSubscriptionChannelSelect(discord.ui.ChannelSelect):
         await self.view.subscribe(interaction, selected_channel)
 
 
-class UpdateSubscriptionView(discord.ui.View):
+class UpdateSubscriptionView(i18n.I18nView):
     def __init__(self):
         super().__init__(timeout=None)
         self.add_item(UpdateSubscriptionChannelSelect())
@@ -81,7 +84,7 @@ class UpdateSubscriptionView(discord.ui.View):
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         permissions = getattr(interaction.user, "guild_permissions", None)
         if interaction.guild is None or permissions is None or not permissions.manage_guild:
-            await interaction.response.send_message("只有具備管理伺服器權限的成員可以設定更新通知。", ephemeral=True)
+            await interaction.response.send_message(t("joinnotify.err.need_manage_guild"), ephemeral=True)
             return False
         return True
 
@@ -89,61 +92,63 @@ class UpdateSubscriptionView(discord.ui.View):
         await interaction.response.defer(ephemeral=True)
 
         if interaction.guild is None or not isinstance(destination, discord.TextChannel):
-            await interaction.followup.send("請選擇這個伺服器中的文字或公告頻道。", ephemeral=True)
+            await interaction.followup.send(t("joinnotify.err.pick_channel_in_guild"), ephemeral=True)
             return
 
         bot_member = interaction.guild.me
         if bot_member is None:
-            await interaction.followup.send("目前無法確認機器人在該伺服器的權限。", ephemeral=True)
+            await interaction.followup.send(t("joinnotify.err.cannot_check_perms"), ephemeral=True)
             return
 
         permissions = destination.permissions_for(bot_member)
         if not (permissions.view_channel and permissions.manage_webhooks):
             await interaction.followup.send(
-                "我需要在該頻道的查看頻道和管理 Webhook 權限。",
+                t("joinnotify.err.missing_channel_perms"),
                 ephemeral=True,
             )
             return
 
         update_channel = await get_update_channel()
         if update_channel is None:
-            await interaction.followup.send("目前無法訂閱更新通知，請稍後再試。", ephemeral=True)
+            await interaction.followup.send(t("joinnotify.err.updates_unavailable"), ephemeral=True)
             return
 
         try:
             await update_channel.follow(
                 destination=destination,
-                reason=f"由 {interaction.user} ({interaction.user.id}) 訂閱機器人更新通知",
+                reason=t("joinnotify.audit.subscribed",
+                         locale=i18n.resolve_locale(guild_id=interaction.guild.id),
+                         user=f"{interaction.user} ({interaction.user.id})"),
             )
         except discord.Forbidden:
-            await interaction.followup.send("我沒有足夠權限在該頻道建立更新通知訂閱。", ephemeral=True)
+            await interaction.followup.send(t("joinnotify.err.follow_forbidden"), ephemeral=True)
             return
         except (discord.ClientException, discord.HTTPException) as error:
             log(
-                f"訂閱更新通知失敗：{error}",
+                f"Failed to subscribe to update notifications: {error}",
                 level=logging.ERROR,
                 module_name="JoinNotify",
                 user=interaction.user,
                 guild=interaction.guild,
             )
-            await interaction.followup.send("訂閱更新通知時發生錯誤，請稍後再試。", ephemeral=True)
+            await interaction.followup.send(t("joinnotify.err.subscribe_failed"), ephemeral=True)
             return
 
-        await interaction.followup.send(f"已在 {destination.mention} 接收機器人更新通知。", ephemeral=True)
+        await interaction.followup.send(t("joinnotify.msg.subscribed", channel=destination.mention), ephemeral=True)
         if interaction.message:
             try:
                 await interaction.message.delete()
             except discord.HTTPException:
                 pass
         log(
-            f"已訂閱更新通知到 {destination.name} ({destination.id})",
+            f"Subscribed to update notifications in {destination.name} ({destination.id})",
             module_name="JoinNotify",
             user=interaction.user,
             guild=interaction.guild,
         )
 
     @discord.ui.button(
-        label="好啊",
+        label=i18n.K("joinnotify.btn.subscribe_here"),
         style=discord.ButtonStyle.success,
         custom_id="join_notify_subscribe_updates_here",
         row=0,
@@ -153,7 +158,7 @@ class UpdateSubscriptionView(discord.ui.View):
         await self.subscribe(interaction, destination)
 
     @discord.ui.button(
-        label="算了",
+        label=i18n.K("joinnotify.btn.dismiss"),
         style=discord.ButtonStyle.secondary,
         custom_id="join_notify_dismiss_update_subscription",
         row=0,
@@ -167,18 +172,19 @@ class UpdateSubscriptionView(discord.ui.View):
                 pass
 
 
-class JoinNotifyView(discord.ui.View):
+class JoinNotifyView(i18n.I18nView):
     def __init__(self):
         super().__init__(timeout=None)
-        self.add_item(discord.ui.Button(label="官方網站", style=discord.ButtonStyle.link, url=config('website_url')))
-        self.add_item(discord.ui.Button(label="使用文檔", style=discord.ButtonStyle.link, url=f"{config('website_url')}/docs"))
-        self.add_item(discord.ui.Button(label="支援伺服器", style=discord.ButtonStyle.link, url=config('support_server_invite')))
+        # 這三個是 instance 建立時求值，語言已經正確，不需要 K()
+        self.add_item(discord.ui.Button(label=t("joinnotify.btn.website"), style=discord.ButtonStyle.link, url=config('website_url')))
+        self.add_item(discord.ui.Button(label=t("joinnotify.btn.docs"), style=discord.ButtonStyle.link, url=f"{config('website_url')}/docs"))
+        self.add_item(discord.ui.Button(label=t("joinnotify.btn.support"), style=discord.ButtonStyle.link, url=config('support_server_invite')))
 
-    @discord.ui.button(label="停用加入通知", style=discord.ButtonStyle.secondary, custom_id="dont_notify_join")
+    @discord.ui.button(label=i18n.K("joinnotify.btn.disable_join_notify"), style=discord.ButtonStyle.secondary, custom_id="dont_notify_join")
     async def dont_notify_join(self, interaction: discord.Interaction, button: discord.ui.Button):
         embed = discord.Embed(
-            title="好吧",
-            description="我不會再通知你了！如果你改變主意了，可以使用 `/joinnotify` 指令來重新啟用加入通知！",
+            title=t("joinnotify.notify_off.title"),
+            description=t("joinnotify.notify_off.desc", command=await get_command_mention("joinnotify") or "`/joinnotify`"),
             color=discord.Color.green()
         )
         await interaction.response.send_message(embed=embed, ephemeral=True)
@@ -214,21 +220,32 @@ class JoinNotify(commands.Cog):
             return
 
         try:
-            await channel.send(
-                f"{recipient.mention} 請問要在這裡接收機器人更新通知嗎？",
-                view=UpdateSubscriptionView(),
-                allowed_mentions=discord.AllowedMentions(everyone=False, roles=False, users=[recipient]),
-            )
+            async with i18n.guild_scope(guild.id):
+                await channel.send(
+                    recipient.mention + " " + t("joinnotify.msg.update_prompt"),
+                    view=UpdateSubscriptionView(),
+                    allowed_mentions=discord.AllowedMentions(everyone=False, roles=False, users=[recipient]),
+                )
         except discord.Forbidden:
             return
         except discord.HTTPException as error:
             log(
-                f"發送更新通知訂閱詢問失敗：{error}",
+                f"Failed to send the update subscription prompt: {error}",
                 level=logging.ERROR,
                 module_name="JoinNotify",
                 user=recipient,
                 guild=guild,
             )
+
+    @staticmethod
+    async def _quick_start_body() -> str:
+        """兩段歡迎私訊共用的快速開始說明。"""
+        return t("joinnotify.dm.body",
+                 help_cmd=await get_command_mention("info", "help"),
+                 tutorial_cmd=await get_command_mention("info", "tutorial"),
+                 panel_cmd=await get_command_mention("panel"),
+                 support_url=config("support_server_invite"),
+                 joinnotify_cmd=await get_command_mention("joinnotify"))
 
     @app_commands.command(name=app_commands.locale_str("joinnotify", i18n_key="cmd.joinnotify.joinnotify.name"), description=app_commands.locale_str("Choose whether I DM you when you invite me to a server", i18n_key="cmd.joinnotify.joinnotify.desc"))
     @app_commands.choices(option=[
@@ -240,10 +257,10 @@ class JoinNotify(commands.Cog):
     async def joinnotify(self, interaction: discord.Interaction, option: str):
         if option == "enable":
             set_user_data(0, interaction.user.id, "join_notify", True)
-            await interaction.response.send_message("已啟用加入通知！當你邀請我加入伺服器時，我會私訊你一個歡迎訊息！", ephemeral=True)
+            await interaction.response.send_message(t("joinnotify.msg.enabled"), ephemeral=True)
         else:
             set_user_data(0, interaction.user.id, "join_notify", False)
-            await interaction.response.send_message("已停用加入通知！當你邀請我加入伺服器時，我將不會私訊你任何訊息！", ephemeral=True)
+            await interaction.response.send_message(t("joinnotify.msg.disabled"), ephemeral=True)
 
     @commands.Cog.listener()
     async def on_guild_join(self, guild: discord.Guild):
@@ -257,33 +274,37 @@ class JoinNotify(commands.Cog):
             if not get_user_data(0, inviter.id, "join_notify", True):
                 return
             try:
-                embed = discord.Embed(
-                    title="欸？你好像邀請了我？",
-                    description=f"你好啊，{inviter.mention}！感謝你邀請我加入 {guild.name}！\n快速開始：\n- {await get_command_mention('info', 'help')} 查看指令列表\n- {await get_command_mention('info', 'tutorial')} 查看使用教學\n- {await get_command_mention('panel')} 開啟網頁面板\n如果有任何問題，歡迎加入[支援伺服器]({config('support_server_invite')})尋求幫助！\n\n-# 不想收到這些訊息？你可以使用 {await get_command_mention('joinnotify')} 指令來關閉加入通知！",
-                    color=discord.Color.green()
-                )
-                embed.set_footer(text=guild.name, icon_url=guild.icon.url if guild.icon else None)
-                view = JoinNotifyView()
-                await inviter.send(embed=embed, view=view)
-                log(f"找到了邀請者並私訊成功", module_name="JoinNotify", user=inviter, guild=guild)
+                with i18n.use_locale(i18n.resolve_locale(user_id=inviter.id)):
+                    embed = discord.Embed(
+                        title=t("joinnotify.dm.title_inviter"),
+                        description=t("joinnotify.dm.greeting_inviter", user=inviter.mention, guild=guild.name)
+                        + "\n" + await self._quick_start_body(),
+                        color=discord.Color.green()
+                    )
+                    embed.set_footer(text=guild.name, icon_url=guild.icon.url if guild.icon else None)
+                    view = JoinNotifyView()
+                    await inviter.send(embed=embed, view=view)
+                log("Found the inviter and DMed them successfully", module_name="JoinNotify", user=inviter, guild=guild)
             except discord.Forbidden:
-                log("無法私訊邀請者，可能是因為他關閉了私訊或封鎖了我", level=logging.WARNING, module_name="JoinNotify", user=inviter, guild=guild)
+                log("Couldn't DM the inviter; they may have DMs closed or have blocked me", level=logging.WARNING, module_name="JoinNotify", user=inviter, guild=guild)
         else:
             # dm the owner of the guild if we can't find the inviter
             owner = guild.owner
             if not get_user_data(0, owner.id, "join_notify", True):
                 return
             try:
-                embed = discord.Embed(
-                    title="欸？好像有人邀請了我？",
-                    description=f"你好啊，{owner.mention}！好像有人把我邀請進入你的伺服器 {guild.name} 了？但是我沒有權限可以知道他是誰 :/\n快速開始：\n- {await get_command_mention('info', 'help')} 查看指令列表\n- {await get_command_mention('info', 'tutorial')} 查看使用教學\n- {await get_command_mention('panel')} 開啟網頁面板\n如果有任何問題，歡迎加入[支援伺服器]({config('support_server_invite')})尋求幫助！\n\n-# 不想收到這些訊息？你可以使用 {await get_command_mention('joinnotify')} 指令來關閉加入通知！",
-                    color=discord.Color.green()
-                )
-                embed.set_footer(text=guild.name, icon_url=guild.icon.url if guild.icon else None)
-                view = JoinNotifyView()
-                await owner.send(embed=embed, view=view)
-                log(f"找不到邀請者但私訊了伺服器擁有者成功", module_name="JoinNotify", user=owner, guild=guild)
+                with i18n.use_locale(i18n.resolve_locale(user_id=owner.id)):
+                    embed = discord.Embed(
+                        title=t("joinnotify.dm.title_unknown"),
+                        description=t("joinnotify.dm.greeting_unknown", user=owner.mention, guild=guild.name)
+                        + "\n" + await self._quick_start_body(),
+                        color=discord.Color.green()
+                    )
+                    embed.set_footer(text=guild.name, icon_url=guild.icon.url if guild.icon else None)
+                    view = JoinNotifyView()
+                    await owner.send(embed=embed, view=view)
+                log("Couldn't find the inviter but DMed the guild owner successfully", module_name="JoinNotify", user=owner, guild=guild)
             except discord.Forbidden:
-                log("無法私訊伺服器擁有者，可能是因為他關閉了私訊或封鎖了我", level=logging.WARNING, module_name="JoinNotify", user=owner, guild=guild)
+                log("Couldn't DM the guild owner; they may have DMs closed or have blocked me", level=logging.WARNING, module_name="JoinNotify", user=owner, guild=guild)
 
 asyncio.run(bot.add_cog(JoinNotify(bot)))
