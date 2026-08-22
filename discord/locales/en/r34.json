@@ -1,0 +1,17 @@
+{
+    "embed": {
+        "error_title": "Error"
+    },
+    "err": {
+        "generic": "Error! {error}",
+        "generic_bare": "Error!",
+        "no_results": "No results found"
+    },
+    "value": {
+        "ai_generated_suffix": " (includes AI-generated images)",
+        "tag_count_desc": {
+            "one": "ID: `{id}`\n{count} tag total.",
+            "other": "ID: `{id}`\n{count} tags total."
+        }
+    }
+}

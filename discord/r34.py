@@ -9,6 +9,8 @@ import time
 from globalenv import bot, start_bot, config
 from logger import log
 import logging
+import i18n
+from i18n import t
 if not config("r34_user_id") or not config("r34_api_key"):
     raise ValueError("r34_user_id or r34_api_key is not set in config.json")
 
@@ -38,27 +40,27 @@ def cache_request(tags=None, pid=1, expire_seconds=300):
     else:
         r = requests.get(f'https://api.rule34.xxx/index.php?page=dapi&s=post&q=index&json=1&pid={pid}&api_key={config("r34_api_key")}&user_id={config("r34_user_id")}')
     if not r.text:
-        raise Exception('無搜尋結果')
+        raise Exception(t('r34.err.no_results'))
     try:
         rj = r.json()
         cache(key, rj, expire_seconds)
         return rj
     except:
         log(f"Error fetching r34 data: {r.text}", module_name="r34", level=logging.ERROR)
-        raise Exception(f'錯誤！{r.text}')
+        raise Exception(t('r34.err.generic', error=r.text))
 
 
 def r34(tags=None, pid=1, exclude_tags=None):
     try:
         rj = cache_request(tags, pid)
         if not rj:
-            return False, '無搜尋結果'
+            return False, t('r34.err.no_results')
         if exclude_tags:
             rj = [item for item in rj if not any(ex_tag in item.get('tags', '') for ex_tag in exclude_tags)]
         selected = random.choice(rj)
         return True, selected
     except Exception as e:
-        return False, f'錯誤！{str(e)}'
+        return False, t('r34.err.generic', error=str(e))
 
 
 def r34tags(query=None):
@@ -80,11 +82,11 @@ def r34tags(query=None):
         else:
             result = " ".join([random.choice(r2) for i in range(10)])
         if result == '':
-            return '無搜尋結果'
+            return t('r34.err.no_results')
         else:
             return result.strip()
     except:
-        return '錯誤！'
+        return t('r34.err.generic_bare')
 
 
 async def r34_tags_autocomplete(interaction: discord.Interaction, current: str):
@@ -117,13 +119,14 @@ async def r34_command(interaction: discord.Interaction, tags: str = None, pid: i
     ai = (ai == "True")
     stat, img_data = r34(tags, pid, exclude_tags=["ai_generated"] if not ai else None)
     if not stat:
-        embed = discord.Embed(title="錯誤", description=img_data, color=0xFF0000)
+        embed = discord.Embed(title=t("r34.embed.error_title"), description=img_data, color=0xFF0000)
         await interaction.followup.send(embed=embed)
     else:
+        ai_suffix = t("r34.value.ai_generated_suffix") if 'ai_generated' in img_data.get('tags', '') else ''
         embed = discord.Embed(
             title="Rule34.xxx",
             url=f"https://rule34.xxx/index.php?page=post&s=view&id={img_data.get('id', 'N/A')}",
-            description=f"ID: `{img_data.get('id', 'N/A')}`\n共有 {len(img_data.get('tags', '').split())} 個標籤。{'(包含AI生成圖片)' if 'ai_generated' in img_data.get('tags', '') else ''}",
+            description=t("r34.value.tag_count_desc", count=len(img_data.get('tags', '').split()), id=img_data.get('id', 'N/A')) + ai_suffix,
             color=0x00FF00
         )
         if spoilers:
