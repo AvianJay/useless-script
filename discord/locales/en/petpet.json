@@ -1,0 +1,5 @@
+{
+    "err": {
+        "generation_failed": "An error occurred while generating the PetPet GIF: {error}"
+    }
+}
