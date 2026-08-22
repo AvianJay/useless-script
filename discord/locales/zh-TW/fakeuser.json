@@ -1,0 +1,55 @@
+{
+    "audit": {
+        "impersonate_reason": "用戶 {moderator} 假冒 {target} 發送訊息"
+    },
+    "btn": {
+        "cancel_edit": "不，我想修改一下訊息",
+        "confirm_send": "是的，我確定要發送這條訊息",
+        "send_without_mentions": "是的，但我想發送無提及訊息"
+    },
+    "embed": {
+        "log_title": "假冒用戶操作紀錄"
+    },
+    "err": {
+        "delay_needs_content": "延遲標記後面必須有要發送的訊息內容。",
+        "delay_out_of_range": "延遲秒數必須在 0 到 2 之間。",
+        "empty_content": "訊息內容不能為空。",
+        "filter_already_exists": "該過濾器已存在。",
+        "filter_not_found": "該過濾器不存在。",
+        "filter_triggered": "你的訊息內容觸發了過濾器，請修改後再試。",
+        "invalid_regex": "提供的正則表達式無效，請檢查後再試。",
+        "no_send_permission": "機器人沒有在該頻道發送訊息的權限，請選擇其他頻道。",
+        "no_webhook_permission": "機器人沒有管理 Webhook 的權限，無法使用假冒用戶功能。",
+        "not_enabled": "假冒用戶功能未啟用，請聯繫管理員設置假冒用戶功能。",
+        "not_your_button": "這不是你的確認按鈕！",
+        "rate_limited": "你正在頻繁使用假冒用戶功能，請稍後再試。",
+        "regex_required_add": "請提供要添加的正則表達式。",
+        "regex_required_remove": "請提供要移除的正則表達式。",
+        "target_blacklisted": "看起來 {user} 不想要被你假冒，換一個人試試吧。",
+        "too_many_delays": "最多只能使用 2 個延遲標記（共 3 則訊息）。"
+    },
+    "msg": {
+        "blacklist_everyone_toggled": "所有人已被{action}你的假冒用戶黑名單。",
+        "blacklist_toggled": "用戶 {user} 已被{action}你的假冒用戶黑名單。",
+        "confirm_mentions_prompt": "你的訊息中包含了提及，這可能會通知到很多人。你確定要發送這條訊息嗎？",
+        "confirm_timed_out": "你沒有在時間內確認，訊息發送已取消。",
+        "confirmed_with_mentions": "你已確認要發送包含提及的訊息。",
+        "confirmed_without_mentions": "你已選擇發送無提及的訊息。",
+        "disabled": "假冒用戶功能已被禁用。",
+        "filter_added": "已添加過濾器：`{regex}`",
+        "filter_removed": "已移除過濾器：`{regex}`",
+        "log_channel_set": "假冒用戶紀錄頻道已設置為：{channel}",
+        "send_cancelled": "訊息發送已取消。",
+        "sent": {
+            "other": "訊息已發送（共 {count} 則）。"
+        }
+    },
+    "value": {
+        "blacklist_added": "加入",
+        "blacklist_removed": "移除",
+        "current_filters": "目前的假冒用戶過濾器有：\n{filter_list}",
+        "filtered_log_desc": "用戶 {moderator} 假冒 {target} 發送了訊息被過濾：{message}",
+        "no_filters": "目前沒有設置任何過濾器。",
+        "sent_log_desc": "用戶 {moderator} 假冒 {target} 發送了訊息：{message}"
+    }
+}

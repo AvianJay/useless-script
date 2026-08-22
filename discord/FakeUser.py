@@ -1,4 +1,4 @@
-import discord
+﻿import discord
 from discord import app_commands
 from discord.ext import commands
 from globalenv import bot, get_server_config, set_server_config, get_user_data, set_user_data
@@ -7,6 +7,8 @@ from datetime import datetime, timezone
 from logger import log
 import asyncio
 import re
+import i18n
+from i18n import t
 
 
 def filter_checker(content: str, guild: discord.Guild) -> bool:
@@ -52,7 +54,7 @@ def can_send_mass_mentions(interaction: discord.Interaction) -> bool:
     return True
 
 
-class ConfirmMentionsView(discord.ui.View):
+class ConfirmMentionsView(i18n.I18nView):
     def __init__(self, user: Union[discord.User, discord.Member], message: str, interaction: discord.Interaction):
         super().__init__(timeout=30)
         self.user = user
@@ -62,34 +64,36 @@ class ConfirmMentionsView(discord.ui.View):
 
     async def on_timeout(self):
         if self.result is None:
-            await self.interaction.message.edit(content="你沒有在時間內確認，訊息發送已取消。", view=None)
+            with i18n.use_locale(i18n.resolve_locale(user_id=self.user.id)):
+                content = t("fakeuser.msg.confirm_timed_out")
+            await self.interaction.message.edit(content=content, view=None)
             self.result = False
 
-    @discord.ui.button(label="是的，我確定要發送這條訊息", style=discord.ButtonStyle.danger)
+    @discord.ui.button(label=i18n.K("fakeuser.btn.confirm_send"), style=discord.ButtonStyle.danger)
     async def confirm(self, interaction: discord.Interaction, button: discord.ui.Button):
         if interaction.user != self.user:
-            await interaction.response.send_message("這不是你的確認按鈕！", ephemeral=True)
+            await interaction.response.send_message(t("fakeuser.err.not_your_button"), ephemeral=True)
             return
         self.result = True
-        await interaction.response.edit_message(content="你已確認要發送包含提及的訊息。", view=None)
+        await interaction.response.edit_message(content=t("fakeuser.msg.confirmed_with_mentions"), view=None)
         self.stop()
 
-    @discord.ui.button(label="是的，但我想發送無提及訊息", style=discord.ButtonStyle.secondary)
+    @discord.ui.button(label=i18n.K("fakeuser.btn.send_without_mentions"), style=discord.ButtonStyle.secondary)
     async def send_without_mentions(self, interaction: discord.Interaction, button: discord.ui.Button):
         if interaction.user != self.user:
-            await interaction.response.send_message("這不是你的確認按鈕！", ephemeral=True)
+            await interaction.response.send_message(t("fakeuser.err.not_your_button"), ephemeral=True)
             return
         self.result = False
-        await interaction.response.edit_message(content="你已選擇發送無提及的訊息。", view=None)
+        await interaction.response.edit_message(content=t("fakeuser.msg.confirmed_without_mentions"), view=None)
         self.stop()
 
-    @discord.ui.button(label="不，我想修改一下訊息", style=discord.ButtonStyle.secondary)
+    @discord.ui.button(label=i18n.K("fakeuser.btn.cancel_edit"), style=discord.ButtonStyle.secondary)
     async def cancel(self, interaction: discord.Interaction, button: discord.ui.Button):
         if interaction.user != self.user:
-            await interaction.response.send_message("這不是你的確認按鈕！", ephemeral=True)
+            await interaction.response.send_message(t("fakeuser.err.not_your_button"), ephemeral=True)
             return
         self.result = None
-        await interaction.response.edit_message(content="訊息發送已取消。", view=None)
+        await interaction.response.edit_message(content=t("fakeuser.msg.send_cancelled"), view=None)
         self.stop()
 
 
@@ -104,43 +108,43 @@ class FakeUser(commands.Cog):
     async def fake(self, interaction: discord.Interaction, user: Union[discord.User, discord.Member], message: str):
         await interaction.response.defer(ephemeral=True)
         if interaction.channel.permissions_for(interaction.guild.me).manage_webhooks is False:
-            await interaction.followup.send("機器人沒有管理 Webhook 的權限，無法使用假冒用戶功能。", ephemeral=True)
+            await interaction.followup.send(t("fakeuser.err.no_webhook_permission"), ephemeral=True)
             return
         user_last_used = get_user_data(0, str(interaction.user.id), "fake_rate_limit_last", None)
         if user_last_used:
             last_time = datetime.fromisoformat(user_last_used)
             if (datetime.now(timezone.utc) - last_time).total_seconds() < 30:
-                log("假冒用戶速率限制觸發", module_name="FakeUser", user=interaction.user, guild=interaction.guild)
-                await interaction.followup.send("你正在頻繁使用假冒用戶功能，請稍後再試。", ephemeral=True)
+                log("Fake-user rate limit triggered", module_name="FakeUser", user=interaction.user, guild=interaction.guild)
+                await interaction.followup.send(t("fakeuser.err.rate_limited"), ephemeral=True)
                 return
         set_user_data(0, str(interaction.user.id), "fake_rate_limit_last", datetime.now(timezone.utc).isoformat())
         guild_id = str(interaction.guild.id) if interaction.guild else None
         log_channel_id = get_server_config(guild_id, "fake_user_log_channel")
         log_channel = interaction.guild.get_channel(log_channel_id) if interaction.guild and log_channel_id else None
         if not log_channel:
-            await interaction.followup.send("假冒用戶功能未啟用，請聯繫管理員設置假冒用戶功能。", ephemeral=True)
+            await interaction.followup.send(t("fakeuser.err.not_enabled"), ephemeral=True)
             return
         
         user_blacklist = get_user_data(interaction.guild.id if interaction.guild else 0, user.id, "fake_user_blacklist", [])
         if str(interaction.user.id) in user_blacklist:
-            await interaction.followup.send(f"看起來 {user} 不想要被你假冒，換一個人試試吧。", ephemeral=True)
-            log(f"嘗試假冒被黑名單的用戶 {user}", module_name="FakeUser", user=interaction.user, guild=interaction.guild)
+            await interaction.followup.send(t("fakeuser.err.target_blacklisted", user=user), ephemeral=True)
+            log(f"Attempted to impersonate blacklisted user {user}", module_name="FakeUser", user=interaction.user, guild=interaction.guild)
             return
         elif str(self.bot.user.id) in user_blacklist:
-            await interaction.followup.send(f"看起來 {user} 不想要被你假冒，換一個人試試吧。", ephemeral=True)
-            log(f"嘗試假冒被黑名單的用戶 {user}", module_name="FakeUser", user=interaction.user, guild=interaction.guild)
+            await interaction.followup.send(t("fakeuser.err.target_blacklisted", user=user), ephemeral=True)
+            log(f"Attempted to impersonate blacklisted user {user}", module_name="FakeUser", user=interaction.user, guild=interaction.guild)
             return
 
         message = message.replace("\\n", "\n")  # 允許使用 \n 來換行
 
         if filter_checker(message, interaction.guild):
-            await interaction.followup.send("你的訊息內容觸發了過濾器，請修改後再試。", ephemeral=True)
+            await interaction.followup.send(t("fakeuser.err.filter_triggered"), ephemeral=True)
             if log_channel:
-                embed = discord.Embed(title="假冒用戶操作紀錄", description=f"用戶 {interaction.user.mention} 假冒 {user.mention} 發送了訊息被過濾：{message}", color=discord.Color.red())
+                embed = discord.Embed(title=t("fakeuser.embed.log_title"), description=t("fakeuser.value.filtered_log_desc", moderator=interaction.user.mention, target=user.mention, message=message), color=discord.Color.red())
                 embed.timestamp = datetime.now(timezone.utc)
                 await log_channel.send(embed=embed)
 
-            log(f"訊息觸發過濾器，拒絕假冒用戶 {user} 發送訊息：{message}", module_name="FakeUser", user=interaction.user, guild=interaction.guild)
+            log(f"Message triggered filter; refused to send fake-user message as {user}: {message}", module_name="FakeUser", user=interaction.user, guild=interaction.guild)
             return
 
         # {t:n} allow multiple messages
@@ -152,11 +156,11 @@ class FakeUser(commands.Cog):
         delay_pattern = r"\{t(?::((?:\d+(?:\.\d+)?)|(?:\.\d+)))?\}"
         delays = re.findall(delay_pattern, message)
         if len(delays) > 2:
-            await interaction.followup.send("最多只能使用 2 個延遲標記（共 3 則訊息）。", ephemeral=True)
+            await interaction.followup.send(t("fakeuser.err.too_many_delays"), ephemeral=True)
             return
 
         if re.search(r"\{t(?:(?:\d+(?:\.\d+)?)|(?:\.\d+))?\}\s*$", message):
-            await interaction.followup.send("延遲標記後面必須有要發送的訊息內容。", ephemeral=True)
+            await interaction.followup.send(t("fakeuser.err.delay_needs_content"), ephemeral=True)
             return
 
         x = re.split(delay_pattern, message, maxsplit=2)
@@ -165,7 +169,7 @@ class FakeUser(commands.Cog):
         for i in range(1, len(x), 2):
             delay = float(x[i]) if x[i] else 0.0
             if delay < 0 or delay > 2:
-                await interaction.followup.send("延遲秒數必須在 0 到 2 之間。", ephemeral=True)
+                await interaction.followup.send(t("fakeuser.err.delay_out_of_range"), ephemeral=True)
                 return
             chunk_delays.append(delay)
             message_chunks.append(x[i + 1])
@@ -178,7 +182,7 @@ class FakeUser(commands.Cog):
             send_plan.append((delay_before_send, chunk))
 
         if not send_plan:
-            await interaction.followup.send("訊息內容不能為空。", ephemeral=True)
+            await interaction.followup.send(t("fakeuser.err.empty_content"), ephemeral=True)
             return
         
 
@@ -188,14 +192,14 @@ class FakeUser(commands.Cog):
             if can_send_mass_mentions(interaction):
                 # ask user if they really want to send a message with mentions
                 view = ConfirmMentionsView(interaction.user, message, interaction)
-                await interaction.followup.send("你的訊息中包含了提及，這可能會通知到很多人。你確定要發送這條訊息嗎？", view=view, ephemeral=True)
+                await interaction.followup.send(t("fakeuser.msg.confirm_mentions_prompt"), view=view, ephemeral=True)
                 await view.wait()
                 if view.result is None:
                     # await interaction.followup.send("訊息發送已取消。", ephemeral=True)
                     return
                 mention = view.result
 
-        webhook = await interaction.channel.create_webhook(name=user.name, reason=f"用戶 {interaction.user} 假冒 {user} 發送訊息")
+        webhook = await interaction.channel.create_webhook(name=user.name, reason=t("fakeuser.audit.impersonate_reason", moderator=interaction.user, target=user))
         try:
             avatar_url = user.display_avatar or user.avatar or user.default_avatar
             for delay_before_send, chunk in send_plan:
@@ -214,10 +218,10 @@ class FakeUser(commands.Cog):
             fake_history = fake_history[-10:]
             set_user_data(history_scope_id, user.id, "fakeuser_history", fake_history)
 
-            await interaction.followup.send(f"訊息已發送（共 {len(send_plan)} 則）。", ephemeral=True)
-            log(f"假冒了用戶 {user} 發送訊息：{message}", module_name="FakeUser", user=interaction.user, guild=interaction.guild)
+            await interaction.followup.send(t("fakeuser.msg.sent", count=len(send_plan)), ephemeral=True)
+            log(f"Impersonated user {user} to send a message: {message}", module_name="FakeUser", user=interaction.user, guild=interaction.guild)
             if log_channel:
-                embed = discord.Embed(title="假冒用戶操作紀錄", description=f"用戶 {interaction.user.mention} 假冒 {user.mention} 發送了訊息：{message}", color=discord.Color.red())
+                embed = discord.Embed(title=t("fakeuser.embed.log_title"), description=t("fakeuser.value.sent_log_desc", moderator=interaction.user.mention, target=user.mention, message=message), color=discord.Color.red())
                 embed.timestamp = datetime.now(timezone.utc)
                 await log_channel.send(embed=embed)
         finally:
@@ -232,16 +236,16 @@ class FakeUser(commands.Cog):
         blacklist = get_user_data(guild_id, interaction.user.id, "fake_user_blacklist", [])
         if str(user.id) in blacklist:
             blacklist.remove(str(user.id))
-            action = "移除"
+            added = False
         else:
             blacklist.append(str(user.id))
-            action = "加入"
+            added = True
         set_user_data(guild_id, interaction.user.id, "fake_user_blacklist", blacklist)
         if user.id == self.bot.user.id:
-            await interaction.response.send_message(f"所有人已被{action}你的假冒用戶黑名單。", ephemeral=True)
+            await interaction.response.send_message(t("fakeuser.msg.blacklist_everyone_toggled", action=t("fakeuser.value.blacklist_added") if added else t("fakeuser.value.blacklist_removed")), ephemeral=True)
         else:
-            await interaction.response.send_message(f"用戶 {user.mention} 已被{action}你的假冒用戶黑名單。", ephemeral=True)
-        log(f"{action}用戶 {user} ({user.id}) 至假冒用戶黑名單", module_name="FakeUser", user=interaction.user, guild=interaction.guild)
+            await interaction.response.send_message(t("fakeuser.msg.blacklist_toggled", user=user.mention, action=t("fakeuser.value.blacklist_added") if added else t("fakeuser.value.blacklist_removed")), ephemeral=True)
+        log(f"{'Added' if added else 'Removed'} user {user} ({user.id}) {'to' if added else 'from'} the fake-user blacklist", module_name="FakeUser", user=interaction.user, guild=interaction.guild)
 
 
 asyncio.run(bot.add_cog(FakeUser(bot)))
@@ -271,38 +275,38 @@ class FakeAdmin(commands.GroupCog, name=app_commands.locale_str("fake-admin", i1
         filters = get_server_config(guild_id, "fake_user_filters", [])
         if mode == "add":
             if not regex:
-                await interaction.response.send_message("請提供要添加的正則表達式。", ephemeral=True)
+                await interaction.response.send_message(t("fakeuser.err.regex_required_add"), ephemeral=True)
                 return
             if regex in filters:
-                await interaction.response.send_message("該過濾器已存在。", ephemeral=True)
+                await interaction.response.send_message(t("fakeuser.err.filter_already_exists"), ephemeral=True)
                 return
             # 簡單驗證正則表達式是否有效
             try:
                 re.compile(regex)
             except re.error:
-                await interaction.response.send_message("提供的正則表達式無效，請檢查後再試。", ephemeral=True)
+                await interaction.response.send_message(t("fakeuser.err.invalid_regex"), ephemeral=True)
                 return
             filters.append(regex)
             set_server_config(guild_id, "fake_user_filters", filters)
-            await interaction.response.send_message(f"已添加過濾器：`{regex}`", ephemeral=True)
-            log(f"添加假冒用戶過濾器 `{regex}`", module_name="FakeAdmin", user=interaction.user, guild=interaction.guild)
+            await interaction.response.send_message(t("fakeuser.msg.filter_added", regex=regex), ephemeral=True)
+            log(f"Added fake-user filter `{regex}`", module_name="FakeAdmin", user=interaction.user, guild=interaction.guild)
         elif mode == "remove":
             if not regex:
-                await interaction.response.send_message("請提供要移除的正則表達式。", ephemeral=True)
+                await interaction.response.send_message(t("fakeuser.err.regex_required_remove"), ephemeral=True)
                 return
             if regex not in filters:
-                await interaction.response.send_message("該過濾器不存在。", ephemeral=True)
+                await interaction.response.send_message(t("fakeuser.err.filter_not_found"), ephemeral=True)
                 return
             filters.remove(regex)
             set_server_config(guild_id, "fake_user_filters", filters)
-            await interaction.response.send_message(f"已移除過濾器：`{regex}`", ephemeral=True)
-            log(f"移除假冒用戶過濾器 `{regex}`", module_name="FakeAdmin", user=interaction.user, guild=interaction.guild)
+            await interaction.response.send_message(t("fakeuser.msg.filter_removed", regex=regex), ephemeral=True)
+            log(f"Removed fake-user filter `{regex}`", module_name="FakeAdmin", user=interaction.user, guild=interaction.guild)
         else:
             if not filters:
-                await interaction.response.send_message("目前沒有設置任何過濾器。", ephemeral=True)
+                await interaction.response.send_message(t("fakeuser.value.no_filters"), ephemeral=True)
                 return
             filter_list = "\n".join(f"- `{f}`" for f in filters)
-            await interaction.response.send_message(f"目前的假冒用戶過濾器有：\n{filter_list}", ephemeral=True)
+            await interaction.response.send_message(t("fakeuser.value.current_filters", filter_list=filter_list), ephemeral=True)
 
     @app_commands.allowed_installs(guilds=True, users=False)
     @app_commands.allowed_contexts(guilds=True, dms=False, private_channels=False)
@@ -313,15 +317,15 @@ class FakeAdmin(commands.GroupCog, name=app_commands.locale_str("fake-admin", i1
         guild_id = str(interaction.guild.id) if interaction.guild else None
         if channel:
             if channel.permissions_for(interaction.guild.me).send_messages is False:
-                await interaction.response.send_message("機器人沒有在該頻道發送訊息的權限，請選擇其他頻道。", ephemeral=True)
+                await interaction.response.send_message(t("fakeuser.err.no_send_permission"), ephemeral=True)
                 return
             set_server_config(guild_id, "fake_user_log_channel", channel.id)
-            await interaction.response.send_message(f"假冒用戶紀錄頻道已設置為：{channel.mention}", ephemeral=True)
-            log(f"設置假冒用戶紀錄頻道為 {channel} ({channel.id})", module_name="FakeUser", user=interaction.user, guild=interaction.guild)
+            await interaction.response.send_message(t("fakeuser.msg.log_channel_set", channel=channel.mention), ephemeral=True)
+            log(f"Set fake-user log channel to {channel} ({channel.id})", module_name="FakeUser", user=interaction.user, guild=interaction.guild)
         else:
             # remove the log channel
             set_server_config(guild_id, "fake_user_log_channel", None)
-            await interaction.response.send_message("假冒用戶功能已被禁用。", ephemeral=True)
-            log("禁用假冒用戶功能", module_name="FakeUser", user=interaction.user, guild=interaction.guild)
+            await interaction.response.send_message(t("fakeuser.msg.disabled"), ephemeral=True)
+            log("Disabled the fake-user feature", module_name="FakeUser", user=interaction.user, guild=interaction.guild)
 
 asyncio.run(bot.add_cog(FakeAdmin(bot)))

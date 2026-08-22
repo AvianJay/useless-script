@@ -1,0 +1,56 @@
+{
+    "audit": {
+        "impersonate_reason": "User {moderator} sent a message impersonating {target}"
+    },
+    "btn": {
+        "cancel_edit": "No, I want to edit the message",
+        "confirm_send": "Yes, I'm sure I want to send this message",
+        "send_without_mentions": "Yes, but send it without mentions"
+    },
+    "embed": {
+        "log_title": "Fake-User Action Log"
+    },
+    "err": {
+        "delay_needs_content": "A delay marker must be followed by message content to send.",
+        "delay_out_of_range": "The delay in seconds must be between 0 and 2.",
+        "empty_content": "The message content can't be empty.",
+        "filter_already_exists": "That filter already exists.",
+        "filter_not_found": "That filter doesn't exist.",
+        "filter_triggered": "Your message content triggered a filter — please modify it and try again.",
+        "invalid_regex": "The provided regular expression is invalid — please check it and try again.",
+        "no_send_permission": "The bot doesn't have permission to send messages in that channel — please choose another one.",
+        "no_webhook_permission": "The bot doesn't have Manage Webhooks permission, so the fake-user feature can't be used.",
+        "not_enabled": "The fake-user feature isn't enabled — please contact an admin to set it up.",
+        "not_your_button": "This isn't your confirmation button!",
+        "rate_limited": "You're using the fake-user feature too frequently — please try again later.",
+        "regex_required_add": "Please provide the regular expression to add.",
+        "regex_required_remove": "Please provide the regular expression to remove.",
+        "target_blacklisted": "Looks like {user} doesn't want to be impersonated by you — try someone else.",
+        "too_many_delays": "You can use at most 2 delay markers (3 messages total)."
+    },
+    "msg": {
+        "blacklist_everyone_toggled": "Everyone has been {action} your fake-user blacklist.",
+        "blacklist_toggled": "{user} has been {action} your fake-user blacklist.",
+        "confirm_mentions_prompt": "Your message contains mentions, which could notify a lot of people. Are you sure you want to send it?",
+        "confirm_timed_out": "You didn't confirm in time, so sending the message was cancelled.",
+        "confirmed_with_mentions": "You've confirmed sending the message with mentions.",
+        "confirmed_without_mentions": "You've chosen to send the message without mentions.",
+        "disabled": "The fake-user feature has been disabled.",
+        "filter_added": "Added filter: `{regex}`",
+        "filter_removed": "Removed filter: `{regex}`",
+        "log_channel_set": "The fake-user log channel has been set to: {channel}",
+        "send_cancelled": "Sending the message has been cancelled.",
+        "sent": {
+            "one": "Message sent ({count} message).",
+            "other": "Message sent ({count} messages)."
+        }
+    },
+    "value": {
+        "blacklist_added": "added to",
+        "blacklist_removed": "removed from",
+        "current_filters": "Current fake-user filters:\n{filter_list}",
+        "filtered_log_desc": "User {moderator} impersonated {target} to send a message that was filtered: {message}",
+        "no_filters": "There are currently no filters configured.",
+        "sent_log_desc": "User {moderator} impersonated {target} to send a message: {message}"
+    }
+}
