@@ -18,6 +18,7 @@ class PSMonitor(commands.Cog):
         if not self.monitor_processes.is_running():
             self.monitor_processes.start()
 
+    # i18n: skip-start (owner-facing ops monitoring, posts to a single operator-configured channel)
     @tasks.loop(minutes=5)
     async def monitor_processes(self):
         channel_id = config('process_monitor_channel_id')
@@ -98,6 +99,7 @@ class PSMonitor(commands.Cog):
         if memory_highest_process_info:
             embed.add_field(name="最高記憶體佔用程序", value=f"{memory_highest_process_info['name']} (PID: {memory_highest_process_info['pid']}) - {memory_highest_process_info['memory_percent']}%", inline=False)
         await channel.send(embed=embed)
+    # i18n: skip-end
 
 asyncio.run(bot.add_cog(PSMonitor(bot)))
 
