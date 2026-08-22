@@ -199,10 +199,16 @@ def get_commit_logs(limit=10) -> str:
         return [t("utilcommands.err.no_commit_log")]
 
 
-def parse_changelog() -> list[dict]:
-    """解析 changelog.md 並返回版本列表"""
+def parse_changelog(locale: str | None = None) -> list[dict]:
+    """解析 changelog.md 並返回版本列表；locale 指定時優先讀 changelog.<locale>.md，
+    整檔不存在時 fallback 回 changelog.md（原文 zh-TW，逐版本翻譯不可行，僅支援整檔切換）。"""
+    locale = locale or i18n.current_locale()
+    changelog_path = os.path.join(os.path.dirname(__file__), "changelog.md")
+    if locale and locale != i18n.SOURCE_LOCALE:
+        localized_path = os.path.join(os.path.dirname(__file__), f"changelog.{locale}.md")
+        if os.path.exists(localized_path):
+            changelog_path = localized_path
     try:
-        changelog_path = os.path.join(os.path.dirname(__file__), "changelog.md")
         with open(changelog_path, "r", encoding="utf-8") as f:
             content = f.read()
     except Exception as e:
