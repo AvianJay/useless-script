@@ -1,0 +1,48 @@
+{
+    "embed": {
+        "report_footer": "Data source: Central Weather Administration",
+        "report_title": "📋 Earthquake Report",
+        "status_title": "🔌 OXWU Connection Status",
+        "warning_title": "⚠️ Earthquake Early Warning"
+    },
+    "err": {
+        "guild_only": "❌ This command can only be used in a server",
+        "missing_channel_permission": "❌ The bot doesn't have permission to view or send messages in {channel} — please adjust the permissions before setting this.",
+        "no_permission": "❌ You don't have permission to use this command (requires Manage Server)",
+        "report_fetch_failed": "❌ Couldn't get earthquake report information",
+        "screenshot_failed": "❌ Couldn't get a screenshot",
+        "warning_fetch_failed": "❌ Couldn't get earthquake warning information (there may be no active warning)"
+    },
+    "field": {
+        "arrival_by_area": "Arrival by Area",
+        "depth": "📏 Depth",
+        "epicenter": "📍 Epicenter",
+        "last_report_time": "Last Report Time",
+        "last_warning_time": "Last Warning Time",
+        "magnitude": "📊 Magnitude",
+        "max_intensity": "💥 Max Intensity",
+        "occurred_at": "🕐 Occurred At",
+        "report_number": "📝 Number",
+        "this_server_settings": "This Server's Settings"
+    },
+    "msg": {
+        "report_channel_cleared": "✅ Report channel setting removed",
+        "report_channel_set": "✅ Report channel set to {channel}"
+    },
+    "value": {
+        "area_field_name": "📍 {area} ({max_intensity})",
+        "arrival_line_arrived": "{county}: Arrived | Est. {intensity}",
+        "arrival_line_eta": "{county}: <t:{ts}:R> | Est. {intensity}",
+        "channel_settings_lines": "Warning channel: {warning_channel}\nReport channel: {report_channel}",
+        "connected": "✅ Connected",
+        "cwa_report_btn": "CWA Report",
+        "disconnected": "❌ Disconnected",
+        "lat_lon": "Lat {lat} / Lon {lon}",
+        "more_regions": {
+            "one": "...{count} more area",
+            "other": "...{count} more areas"
+        },
+        "station_level_line": "Level {level}: {names}",
+        "unknown": "Unknown"
+    }
+}

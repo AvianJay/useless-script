@@ -1,4 +1,4 @@
-# require unoffical oxwu api (https://github.com/AvianJay/useless-script/tree/main/oxwu/)
+﻿# require unoffical oxwu api (https://github.com/AvianJay/useless-script/tree/main/oxwu/)
 from globalenv import bot, set_server_config, get_server_config, config, on_close_tasks
 import discord
 from discord import app_commands
@@ -13,6 +13,8 @@ import logging
 from bs4 import BeautifulSoup
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+import i18n
+from i18n import t
 
 _LOCAL_OXWU_PACKAGE = Path(__file__).resolve().parent.parent / "oxwu"
 if str(_LOCAL_OXWU_PACKAGE) not in sys.path:
@@ -54,7 +56,7 @@ async def cwa_get_last_link() -> tuple[str, bool]:
                         print(f"[DEBUG] CWA link: {link}, is_same: {is_same}")
                     return link, is_same
     except Exception as e:
-        log(f"無法取得 CWA 連結: {e}", module_name="OXWU", level=logging.ERROR)
+        log(f"Failed to get CWA link: {e}", module_name="OXWU", level=logging.ERROR)
     return "", False
 
 async def cwa_get_image_url(report_url: str) -> Optional[str]:
@@ -70,7 +72,7 @@ async def cwa_get_image_url(report_url: str) -> Optional[str]:
                     cwa_last_image_url = meta["content"]
                     return cwa_last_image_url
     except Exception as e:
-        log(f"無法取得 CWA 圖片 URL: {e}", module_name="OXWU", level=logging.ERROR)
+        log(f"Failed to get CWA image URL: {e}", module_name="OXWU", level=logging.ERROR)
     return None
 
 def cwa_get_cached_image_url() -> Optional[str]:
@@ -139,11 +141,11 @@ class OXWU(commands.GroupCog, name=app_commands.locale_str("earthquake", i18n_ke
         
         @self.proxy_client.event()
         def connect():
-            log("Proxy Socket.IO 已連線", module_name="OXWU", level=logging.INFO)
+            log("Proxy Socket.IO connected", module_name="OXWU", level=logging.INFO)
         
         @self.proxy_client.event()
         def disconnect():
-            log("Proxy Socket.IO 已斷線", module_name="OXWU", level=logging.WARNING)
+            log("Proxy Socket.IO disconnected", module_name="OXWU", level=logging.WARNING)
     
     async def _handle_warning_changed(self, data):
         """處理速報更新事件"""
@@ -151,7 +153,7 @@ class OXWU(commands.GroupCog, name=app_commands.locale_str("earthquake", i18n_ke
         if new_time and new_time != self.last_warning_time:
             self.last_warning_time = new_time
             # print(f"[OXWU] 收到新速報: {new_time}")
-            log(f"收到新速報: {new_time}", module_name="OXWU", level=logging.INFO)
+            log(f"Received new warning: {new_time}", module_name="OXWU", level=logging.INFO)
 
             # 上傳截圖
             screenshot_url = await self._upload_screenshot_to_temp("warning")
@@ -164,8 +166,7 @@ class OXWU(commands.GroupCog, name=app_commands.locale_str("earthquake", i18n_ke
             else:
                 info = await self._fetch_warning_info()
             if info:
-                embed = self._create_warning_embed(info, screenshot_url)
-                await self._send_to_all_servers(embed, "oxwu_warning_channel")
+                await self._send_to_all_servers(lambda: self._create_warning_embed(info, screenshot_url), "oxwu_warning_channel")
     
     async def _handle_warning_updated(self, data):
         info = self._build_warning_info_from_event(data)
@@ -179,7 +180,7 @@ class OXWU(commands.GroupCog, name=app_commands.locale_str("earthquake", i18n_ke
             estimated_count = len(info.get("estimated_intensities") or {})
             arrival_count = len(info.get("arrival_times") or {})
             log(
-                f"速報更新資料同步完成: arrival_times={arrival_count}, estimated_intensities={estimated_count}",
+                f"Warning update data synced: arrival_times={arrival_count}, estimated_intensities={estimated_count}",
                 module_name="OXWU",
                 level=logging.INFO,
             )
@@ -190,7 +191,7 @@ class OXWU(commands.GroupCog, name=app_commands.locale_str("earthquake", i18n_ke
         if new_time and new_time != self.last_report_time:
             self.last_report_time = new_time
             # print(f"[OXWU] 收到新報告: {new_time}")
-            log(f"收到新報告: {new_time}", module_name="OXWU", level=logging.INFO)
+            log(f"Received new report: {new_time}", module_name="OXWU", level=logging.INFO)
 
             # 上傳截圖
             screenshot_url = await self._upload_screenshot_to_temp("report")
@@ -200,14 +201,16 @@ class OXWU(commands.GroupCog, name=app_commands.locale_str("earthquake", i18n_ke
             if report:
                 # 嘗試取得 CWA 圖片 URL（最多 6 次，間隔 10 秒）
                 cwa_image_url = await self._fetch_cwa_image_with_retry()
-                embed = self._create_report_embed(report, screenshot_url, cwa_image_url)
                 # 建立連結按鈕
-                view = None
                 cached_link = cwa_get_cached_link()
+                build_view = None
                 if cached_link and cwa_image_url:
-                    view = discord.ui.View(timeout=None)
-                    view.add_item(discord.ui.Button(label="中央氣象署報告", emoji="🌐", url=cached_link, style=discord.ButtonStyle.link))
-                await self._send_to_all_servers(embed, "oxwu_report_channel", view=view)
+                    build_view = lambda: self._build_cwa_report_link_view(cached_link)
+                await self._send_to_all_servers(
+                    lambda: self._create_report_embed(report, screenshot_url, cwa_image_url),
+                    "oxwu_report_channel",
+                    build_view=build_view,
+                )
     
     async def _fetch_cwa_image_with_retry(self, max_retries: int = 6, delay: float = 10.0) -> Optional[str]:
         """嘗試取得 CWA 圖片 URL，直到 is_same 為 False"""
@@ -218,16 +221,16 @@ class OXWU(commands.GroupCog, name=app_commands.locale_str("earthquake", i18n_ke
                 if not is_same and link:
                     image_url = await cwa_get_image_url(link)
                     if image_url:
-                        log(f"成功取得 CWA 圖片 (第 {attempt + 1} 次嘗試)", module_name="OXWU", level=logging.INFO)
+                        log(f"Successfully got CWA image (attempt {attempt + 1})", module_name="OXWU", level=logging.INFO)
                         return image_url
                 if attempt < max_retries - 1:
-                    log(f"CWA 報告尚未更新，{delay} 秒後重試 ({attempt + 1}/{max_retries})", module_name="OXWU", level=logging.INFO)
+                    log(f"CWA report not updated yet, retrying in {delay}s ({attempt + 1}/{max_retries})", module_name="OXWU", level=logging.INFO)
                     await asyncio.sleep(delay)
             except Exception as e:
-                log(f"取得 CWA 圖片失敗: {e}", module_name="OXWU", level=logging.ERROR)
+                log(f"Failed to get CWA image: {e}", module_name="OXWU", level=logging.ERROR)
                 if attempt < max_retries - 1:
                     await asyncio.sleep(delay)
-        log("無法取得 CWA 圖片，已達最大重試次數", module_name="OXWU", level=logging.WARNING)
+        log("Failed to get CWA image; max retries reached", module_name="OXWU", level=logging.WARNING)
         return None
     
     async def _fetch_screenshot(self, type_: str) -> Optional[bytes]:
@@ -235,24 +238,24 @@ class OXWU(commands.GroupCog, name=app_commands.locale_str("earthquake", i18n_ke
         try:
             return await asyncio.to_thread(self.proxy_client.get_screenshot, type_)
         except Exception as e:
-            log(f"無法取得截圖: {e}", module_name="OXWU", level=logging.ERROR)
+            log(f"Failed to get screenshot: {e}", module_name="OXWU", level=logging.ERROR)
         return None
     
     async def _upload_screenshot_to_temp(self, type_: str) -> Optional[str]:
         """上傳截圖到臨時頻道並返回 URL"""
         channel_id = config("temp_channel_id")
         if not channel_id:
-            log("未設定臨時頻道 ID，無法上傳截圖", module_name="OXWU", level=logging.WARNING)
+            log("Temp channel ID not configured; cannot upload screenshot", module_name="OXWU", level=logging.WARNING)
             return None
         
         screenshot = await self._fetch_screenshot(type_)
         if not screenshot:
-            log("無法取得截圖，無法上傳", module_name="OXWU", level=logging.WARNING)
+            log("Failed to get screenshot; cannot upload", module_name="OXWU", level=logging.WARNING)
             return None
         
         channel = self.bot.get_channel(int(channel_id))
         if not channel:
-            log("無法找到臨時頻道，無法上傳截圖", module_name="OXWU", level=logging.WARNING)
+            log("Temp channel not found; cannot upload screenshot", module_name="OXWU", level=logging.WARNING)
             return None
         
         try:
@@ -261,7 +264,7 @@ class OXWU(commands.GroupCog, name=app_commands.locale_str("earthquake", i18n_ke
             if msg.attachments:
                 return msg.attachments[0].url
         except Exception as e:
-            log(f"無法上傳截圖: {e}", module_name="OXWU", level=logging.ERROR)
+            log(f"Failed to upload screenshot: {e}", module_name="OXWU", level=logging.ERROR)
         return None
     
     async def _fetch_warning_info(self) -> Optional[dict]:
@@ -271,7 +274,7 @@ class OXWU(commands.GroupCog, name=app_commands.locale_str("earthquake", i18n_ke
             if warning.ok:
                 return warning.raw
         except Exception as e:
-            log(f"無法取得速報資訊: {e}", module_name="OXWU", level=logging.ERROR)
+            log(f"Failed to get warning info: {e}", module_name="OXWU", level=logging.ERROR)
         return None
     
     async def _fetch_report_info(self) -> Optional[dict]:
@@ -281,7 +284,7 @@ class OXWU(commands.GroupCog, name=app_commands.locale_str("earthquake", i18n_ke
             if report.ok:
                 return report.raw.get("report")
         except Exception as e:
-            log(f"無法取得報告資訊: {e}", module_name="OXWU", level=logging.ERROR)
+            log(f"Failed to get report info: {e}", module_name="OXWU", level=logging.ERROR)
         return None
     
     def _build_warning_info_from_event(self, data) -> Optional[dict]:
@@ -388,6 +391,7 @@ class OXWU(commands.GroupCog, name=app_commands.locale_str("earthquake", i18n_ke
         except ValueError:
             return None
 
+        # i18n: skip-start (matches intensity strings returned by the OXWU API, not user-facing)
         intensity_rank = {
             "0\u7d1a": 0,
             "1\u7d1a": 1,
@@ -400,6 +404,7 @@ class OXWU(commands.GroupCog, name=app_commands.locale_str("earthquake", i18n_ke
             "6\u5f37": 8,
             "7\u7d1a": 9,
         }
+        # i18n: skip-end
         county_summary = {}
         for town_id, intensity in estimated_intensities.items():
             town = self.town_map.get(str(town_id))
@@ -446,42 +451,42 @@ class OXWU(commands.GroupCog, name=app_commands.locale_str("earthquake", i18n_ke
             if eta_seconds is not None:
                 arrival_dt = base_time + timedelta(seconds=int(eta_seconds))
                 arrival_ts = int(arrival_dt.timestamp())
-                lines.append(f"{county_name}: <t:{arrival_ts}:R> | \u9810\u4f30 {intensity}")
+                lines.append(t("oxwu.value.arrival_line_eta", county=county_name, ts=arrival_ts, intensity=intensity))
             else:
-                lines.append(f"{county_name}: \u5df2\u62b5\u9054 | \u9810\u4f30 {intensity}")
+                lines.append(t("oxwu.value.arrival_line_arrived", county=county_name, intensity=intensity))
 
         remaining = len(sorted_items) - limit
         if remaining > 0:
-            lines.append(f"...\u9084\u6709 {remaining} \u500b\u5730\u5340")
+            lines.append(t("oxwu.value.more_regions", count=remaining))
         return "\n".join(lines)
 
     def _create_warning_embed(self, info: dict, screenshot_url: Optional[str] = None) -> discord.Embed:
         """建立速報 Embed"""
         embed = discord.Embed(
-            title="⚠️ 地震速報",
+            title=t("oxwu.embed.warning_title"),
             color=discord.Color.red(),
             timestamp=discord.utils.utcnow()
         )
         
         if info.get("time"):
-            embed.add_field(name="🕐 發生時間", value=info["time"], inline=False)
+            embed.add_field(name=t("oxwu.field.occurred_at"), value=info["time"], inline=False)
         
         if info.get("location"):
             loc = info["location"]
-            embed.add_field(name="📍 震央位置", value=loc.get("text", "未知"), inline=False)
+            embed.add_field(name=t("oxwu.field.epicenter"), value=loc.get("text", t("oxwu.value.unknown")), inline=False)
         
         if info.get("depth"):
-            embed.add_field(name="📏 深度", value=f"{info['depth']} km", inline=True)
+            embed.add_field(name=t("oxwu.field.depth"), value=f"{info['depth']} km", inline=True)
         
         if info.get("magnitude"):
-            embed.add_field(name="📊 規模", value=f"M {info['magnitude']}", inline=True)
+            embed.add_field(name=t("oxwu.field.magnitude"), value=f"M {info['magnitude']}", inline=True)
         
         if info.get("maxIntensity"):
-            embed.add_field(name="💥 最大震度", value=info["maxIntensity"], inline=True)
+            embed.add_field(name=t("oxwu.field.max_intensity"), value=info["maxIntensity"], inline=True)
         
         arrival_lines = self._build_arrival_lines(info)
         if arrival_lines:
-            embed.add_field(name="各地到達", value=arrival_lines, inline=False)
+            embed.add_field(name=t("oxwu.field.arrival_by_area"), value=arrival_lines, inline=False)
 
         if screenshot_url:
             embed.set_image(url=screenshot_url)
@@ -492,44 +497,44 @@ class OXWU(commands.GroupCog, name=app_commands.locale_str("earthquake", i18n_ke
     def _create_report_embed(self, report: dict, screenshot_url: Optional[str] = None, cwa_image_url: Optional[str] = None) -> discord.Embed:
         """建立報告 Embed"""
         embed = discord.Embed(
-            title="📋 地震報告",
+            title=t("oxwu.embed.report_title"),
             color=discord.Color.orange(),
             timestamp=discord.utils.utcnow()
         )
         
         if report.get("number"):
-            embed.add_field(name="📝 編號", value=report["number"], inline=True)
+            embed.add_field(name=t("oxwu.field.report_number"), value=report["number"], inline=True)
         
         if report.get("time"):
-            embed.add_field(name="🕐 發生時間", value=report["time"], inline=False)
+            embed.add_field(name=t("oxwu.field.occurred_at"), value=report["time"], inline=False)
         
         if report.get("latitude") and report.get("longitude"):
             embed.add_field(
-                name="📍 震央位置",
-                value=f"北緯 {report['latitude']} / 東經 {report['longitude']}",
+                name=t("oxwu.field.epicenter"),
+                value=t("oxwu.value.lat_lon", lat=report['latitude'], lon=report['longitude']),
                 inline=False
             )
         
         if report.get("depth"):
-            embed.add_field(name="📏 深度", value=f"{report['depth']} km", inline=True)
+            embed.add_field(name=t("oxwu.field.depth"), value=f"{report['depth']} km", inline=True)
         
         if report.get("magnitude"):
-            embed.add_field(name="📊 規模", value=f"M {report['magnitude']}", inline=True)
+            embed.add_field(name=t("oxwu.field.magnitude"), value=f"M {report['magnitude']}", inline=True)
         
         if report.get("maxIntensity"):
-            embed.add_field(name="💥 最大震度", value=report["maxIntensity"], inline=True)
+            embed.add_field(name=t("oxwu.field.max_intensity"), value=report["maxIntensity"], inline=True)
         
         # 各地震度（截斷過長的 field 避免超過 Discord 1024 字元限制）
         if report.get("intensities"):
             for area in report["intensities"]:
                 stations_texts = []
                 for station in area["stations"]:
-                    names = "、".join(station["names"])
-                    stations_texts.append(f'{station["level"]}級: {names}')
+                    names = t("common.list.sep").join(station["names"])
+                    stations_texts.append(t("oxwu.value.station_level_line", level=station["level"], names=names))
                 stations_info = "\n".join(stations_texts)
                 if len(stations_info) > 1024:
                     stations_info = stations_info[:1021] + "..."
-                embed.add_field(name=f"📍 {area['area']} ({area['maxIntensity']})", value=stations_info, inline=False)
+                embed.add_field(name=t("oxwu.value.area_field_name", area=area["area"], max_intensity=area["maxIntensity"]), value=stations_info, inline=False)
         
         # 優先使用 CWA 圖片，否則使用截圖
         if cwa_image_url:
@@ -537,11 +542,18 @@ class OXWU(commands.GroupCog, name=app_commands.locale_str("earthquake", i18n_ke
         elif screenshot_url:
             embed.set_image(url=screenshot_url)
         
-        embed.set_footer(text="資料來源：中央氣象署")  # ahh
+        embed.set_footer(text=t("oxwu.embed.report_footer"))
         return embed
-    
-    async def _send_to_all_servers(self, embed: discord.Embed, config_key: str, view: Optional[discord.ui.View] = None):
-        """發送訊息到所有已設定的伺服器（含 429 避免機制）"""
+
+    def _build_cwa_report_link_view(self, cached_link: str) -> discord.ui.View:
+        view = discord.ui.View(timeout=None)
+        view.add_item(discord.ui.Button(label=t("oxwu.value.cwa_report_btn"), emoji="🌐", url=cached_link, style=discord.ButtonStyle.link))
+        return view
+
+    async def _send_to_all_servers(self, build_embed, config_key: str, build_view=None):
+        """發送訊息到所有已設定的伺服器（含 429 避免機制）。
+        build_embed/build_view 是零參數 callable，在每個伺服器的語言 scope 內重新建立，
+        確保每個伺服器收到符合自己語言設定的內容。"""
         tasks = []
         for guild in self.bot.guilds:
             channel_id = get_server_config(guild.id, config_key)
@@ -549,7 +561,7 @@ class OXWU(commands.GroupCog, name=app_commands.locale_str("earthquake", i18n_ke
                 channel = self.bot.get_channel(int(channel_id))
                 text_to_add = get_server_config(guild.id, f"{config_key}_text", "")
                 if channel:
-                    tasks.append((guild.name, channel, text_to_add))
+                    tasks.append((guild.id, guild.name, channel, text_to_add))
 
         success_count = 0
         failed_count = 0
@@ -558,7 +570,10 @@ class OXWU(commands.GroupCog, name=app_commands.locale_str("earthquake", i18n_ke
         batch_size = 5
         for i in range(0, len(tasks), batch_size):
             batch = tasks[i:i + batch_size]
-            for guild_name, channel, text_to_add in batch:
+            for guild_id, guild_name, channel, text_to_add in batch:
+                async with i18n.guild_scope(guild_id):
+                    embed = build_embed()
+                    view = build_view() if build_view else None
                 if await self._send_with_retry(channel, embed, guild_name, text_to_add, view=view):
                     success_count += 1
                 else:
@@ -566,7 +581,7 @@ class OXWU(commands.GroupCog, name=app_commands.locale_str("earthquake", i18n_ke
             # 批次間延遲
             if i + batch_size < len(tasks):
                 await asyncio.sleep(0.5)
-        log(f"訊息發送完成: {success_count} 成功, {failed_count} 失敗", module_name="OXWU", level=logging.INFO)
+        log(f"Message send complete: {success_count} succeeded, {failed_count} failed", module_name="OXWU", level=logging.INFO)
     
     async def _send_with_retry(self, channel, embed: discord.Embed, guild_name: str, text_to_add: str = "", view: Optional[discord.ui.View] = None, max_retries: int = 3):
         """發送訊息並在遇到 429 時重試"""
@@ -579,18 +594,18 @@ class OXWU(commands.GroupCog, name=app_commands.locale_str("earthquake", i18n_ke
                     # 從 header 取得重試時間，或預設等待
                     retry_after = getattr(e, 'retry_after', 5)
                     # print(f"[OXWU] 429 限速中，{retry_after:.1f} 秒後重試 ({guild_name})")
-                    log(f"429 限速中，{retry_after:.1f} 秒後重試 ({guild_name})", module_name="OXWU", level=logging.WARNING)
+                    log(f"Rate limited (429), retrying in {retry_after:.1f}s ({guild_name})", module_name="OXWU", level=logging.WARNING)
                     await asyncio.sleep(retry_after)
                 else:
                     # print(f"[OXWU] 無法發送到 {guild_name}: {e}")
-                    log(f"無法發送到 {guild_name}: {e}", module_name="OXWU", level=logging.ERROR)
+                    log(f"Failed to send to {guild_name}: {e}", module_name="OXWU", level=logging.ERROR)
                     return False
             except Exception as e:
                 # print(f"[OXWU] 無法發送到 {guild_name}: {e}")
-                log(f"無法發送到 {guild_name}: {e}", module_name="OXWU", level=logging.ERROR)
+                log(f"Failed to send to {guild_name}: {e}", module_name="OXWU", level=logging.ERROR)
                 return False
         # print(f"[OXWU] 重試次數已達上限，放棄發送到 {guild_name}")
-        log(f"重試次數已達上限，放棄發送到 {guild_name}", module_name="OXWU", level=logging.ERROR)
+        log(f"Max retries reached; giving up sending to {guild_name}", module_name="OXWU", level=logging.ERROR)
         return False
     
     async def _connect_socketio(self):
@@ -621,7 +636,7 @@ class OXWU(commands.GroupCog, name=app_commands.locale_str("earthquake", i18n_ke
                 if cwa_last_link:
                     await cwa_get_image_url(cwa_last_link)
             except Exception as e:
-                log(f"CWA 初始化失敗: {e}", module_name="OXWU", level=logging.WARNING)
+                log(f"CWA initialization failed: {e}", module_name="OXWU", level=logging.WARNING)
     
     async def cog_unload(self):
         """Cog 卸載時清理資源"""
@@ -639,15 +654,15 @@ class OXWU(commands.GroupCog, name=app_commands.locale_str("earthquake", i18n_ke
     # @app_commands.allowed_installs(guilds=True, users=False)
     # async def set_warning_channel(self, interaction: discord.Interaction, channel: discord.TextChannel = None, text: str = ""):
     #     if not interaction.is_guild_integration():
-    #         await interaction.response.send_message("❌ 此指令只能在伺服器中使用", ephemeral=True)
+    #         await interaction.response.send_message(t("oxwu.err.guild_only"), ephemeral=True)
     #         return
     #     if interaction.user.guild_permissions.manage_guild is False:
-    #         await interaction.response.send_message("❌ 你沒有權限使用此指令（需要管理伺服器權限）", ephemeral=True)
+    #         await interaction.response.send_message(t("oxwu.err.no_permission"), ephemeral=True)
     #         return
     #     if channel:
     #         perms = channel.permissions_for(interaction.guild.me)
     #         if not (perms.view_channel and perms.send_messages):
-    #             await interaction.response.send_message(f"❌ 機器人在 {channel.mention} 沒有檢視頻道或發送訊息的權限，請先調整後再設定。", ephemeral=True)
+    #             await interaction.response.send_message(t("oxwu.err.missing_channel_permission", channel=channel.mention), ephemeral=True)
     #             return
     #         set_server_config(interaction.guild_id, "oxwu_warning_channel", str(channel.id))
     #         set_server_config(interaction.guild_id, "oxwu_warning_channel_text", text)
@@ -665,24 +680,24 @@ class OXWU(commands.GroupCog, name=app_commands.locale_str("earthquake", i18n_ke
     @app_commands.allowed_installs(guilds=True, users=False)
     async def set_report_channel(self, interaction: discord.Interaction, channel: discord.TextChannel = None, text: str = ""):
         if not interaction.is_guild_integration():
-            await interaction.response.send_message("❌ 此指令只能在伺服器中使用", ephemeral=True)
+            await interaction.response.send_message(t("oxwu.err.guild_only"), ephemeral=True)
             return
         if interaction.user.guild_permissions.manage_guild is False:
-            await interaction.response.send_message("❌ 你沒有權限使用此指令（需要管理伺服器權限）", ephemeral=True)
+            await interaction.response.send_message(t("oxwu.err.no_permission"), ephemeral=True)
             return
         if channel:
             perms = channel.permissions_for(interaction.guild.me)
             if not (perms.view_channel and perms.send_messages):
-                await interaction.response.send_message(f"❌ 機器人在 {channel.mention} 沒有檢視頻道或發送訊息的權限，請先調整後再設定。", ephemeral=True)
+                await interaction.response.send_message(t("oxwu.err.missing_channel_permission", channel=channel.mention), ephemeral=True)
                 return
             set_server_config(interaction.guild_id, "oxwu_report_channel", str(channel.id))
             set_server_config(interaction.guild_id, "oxwu_report_channel_text", text)
-            await interaction.response.send_message(f"✅ 已設定報告頻道為 {channel.mention}", ephemeral=True)
+            await interaction.response.send_message(t("oxwu.msg.report_channel_set", channel=channel.mention), ephemeral=True)
         else:
             # 移除設定
             set_server_config(interaction.guild_id, "oxwu_report_channel", None)
             set_server_config(interaction.guild_id, "oxwu_report_channel_text", None)
-            await interaction.response.send_message("✅ 已移除報告頻道設定", ephemeral=True)
+            await interaction.response.send_message(t("oxwu.msg.report_channel_cleared"), ephemeral=True)
     
     @app_commands.command(name=app_commands.locale_str("query-report", i18n_key="cmd.oxwu.earthquake.query_report.name"), description=app_commands.locale_str("Get the latest earthquake report", i18n_key="cmd.oxwu.earthquake.query_report.desc"))
     @app_commands.allowed_contexts(guilds=True, dms=False, private_channels=False)
@@ -692,7 +707,7 @@ class OXWU(commands.GroupCog, name=app_commands.locale_str("earthquake", i18n_ke
         
         report = await self._fetch_report_info()
         if not report:
-            await interaction.followup.send("❌ 無法取得地震報告資訊", ephemeral=True)
+            await interaction.followup.send(t("oxwu.err.report_fetch_failed"), ephemeral=True)
             return
         
         # 上傳截圖
@@ -705,11 +720,8 @@ class OXWU(commands.GroupCog, name=app_commands.locale_str("earthquake", i18n_ke
         embed = self._create_report_embed(report, screenshot_url, cwa_image_url)
         
         # 建立連結按鈕
-        view = None
-        if cached_link:
-            view = discord.ui.View(timeout=None)
-            view.add_item(discord.ui.Button(label="中央氣象署報告", emoji="🌐", url=cached_link, style=discord.ButtonStyle.link))
-        
+        view = self._build_cwa_report_link_view(cached_link) if cached_link else None
+
         await interaction.followup.send(embed=embed, view=view)
     
     @app_commands.command(name=app_commands.locale_str("query-warning", i18n_key="cmd.oxwu.earthquake.query_warning.name"), description=app_commands.locale_str("Check the current earthquake early-warning status", i18n_key="cmd.oxwu.earthquake.query_warning.desc"))
@@ -718,7 +730,7 @@ class OXWU(commands.GroupCog, name=app_commands.locale_str("earthquake", i18n_ke
         
         info = await self._fetch_warning_info()
         if not info:
-            await interaction.followup.send("❌ 無法取得地震速報資訊（可能目前沒有速報）", ephemeral=True)
+            await interaction.followup.send(t("oxwu.err.warning_fetch_failed"), ephemeral=True)
             return
         
         # 上傳截圖
@@ -733,7 +745,7 @@ class OXWU(commands.GroupCog, name=app_commands.locale_str("earthquake", i18n_ke
         
         screenshot = await self._fetch_screenshot("warning")
         if not screenshot:
-            await interaction.followup.send("❌ 無法取得截圖", ephemeral=True)
+            await interaction.followup.send(t("oxwu.err.screenshot_failed"), ephemeral=True)
             return
         
         file = discord.File(BytesIO(screenshot), filename="oxwu_screenshot.png")
@@ -741,21 +753,25 @@ class OXWU(commands.GroupCog, name=app_commands.locale_str("earthquake", i18n_ke
     
     @app_commands.command(name=app_commands.locale_str("status", i18n_key="cmd.oxwu.earthquake.status.name"), description=app_commands.locale_str("View OXWU connection status", i18n_key="cmd.oxwu.earthquake.status.desc"))
     async def check_status(self, interaction: discord.Interaction):
-        embed = discord.Embed(title="🔌 OXWU 連線狀態", color=discord.Color.blue())
+        embed = discord.Embed(title=t("oxwu.embed.status_title"), color=discord.Color.blue())
         proxy_connected = bool(getattr(self.proxy_client, "_socket", None) and self.proxy_client._socket.connected)
-        embed.add_field(name="Socket.IO", value="✅ 已連線" if proxy_connected else "❌ 未連線", inline=True)
+        embed.add_field(name="Socket.IO", value=t("oxwu.value.connected") if proxy_connected else t("oxwu.value.disconnected"), inline=True)
         embed.add_field(name="Proxy API", value=self.api_url or "not set", inline=False)
         embed.add_field(name="API Key", value="configured" if self.api_key else "missing", inline=True)
-        embed.add_field(name="最後速報時間", value=self.last_warning_time or "無", inline=True)
-        embed.add_field(name="最後報告時間", value=self.last_report_time or "無", inline=True)
+        embed.add_field(name=t("oxwu.field.last_warning_time"), value=self.last_warning_time or t("common.state.none"), inline=True)
+        embed.add_field(name=t("oxwu.field.last_report_time"), value=self.last_report_time or t("common.state.none"), inline=True)
         
         # 在伺服器中才顯示頻道設定
         if interaction.guild_id:
             warning_ch = get_server_config(interaction.guild_id, "oxwu_warning_channel")
             report_ch = get_server_config(interaction.guild_id, "oxwu_report_channel")
             embed.add_field(
-                name="本伺服器設定",
-                value=f"速報頻道: {f'<#{warning_ch}>' if warning_ch else '未設定'}\n報告頻道: {f'<#{report_ch}>' if report_ch else '未設定'}",
+                name=t("oxwu.field.this_server_settings"),
+                value=t(
+                    "oxwu.value.channel_settings_lines",
+                    warning_channel=f"<#{warning_ch}>" if warning_ch else t("common.state.unset"),
+                    report_channel=f"<#{report_ch}>" if report_ch else t("common.state.unset"),
+                ),
                 inline=False
             )
         
@@ -768,11 +784,11 @@ async def _cleanup_oxwu():
     if _oxwu_cog_instance is not None:
         try:
             await asyncio.to_thread(_oxwu_cog_instance.proxy_client.close)
-            log("已關閉 Proxy Socket.IO 連線", module_name="OXWU")
+            log("Closed Proxy Socket.IO connection", module_name="OXWU")
             if _oxwu_cog_instance._session and not _oxwu_cog_instance._session.closed:
                 await _oxwu_cog_instance._session.close()
         except Exception as e:
-            log(f"關閉時發生錯誤: {e}", module_name="OXWU", level=logging.WARNING)
+            log(f"Error while shutting down: {e}", module_name="OXWU", level=logging.WARNING)
 
 
 on_close_tasks.add(_cleanup_oxwu)
