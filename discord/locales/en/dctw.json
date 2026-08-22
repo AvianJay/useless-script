@@ -1,0 +1,148 @@
+{
+    "btn": {
+        "apply_template": "Apply template",
+        "back_to_list": "Back to list",
+        "bump": "Bump",
+        "dctw_page": "DCTW page",
+        "invite_bot": "Invite bot",
+        "join_server": "Join server",
+        "official_website": "Official website",
+        "support_server": "Support server",
+        "view_comments": "View comments",
+        "vote": "Vote"
+    },
+    "embed": {
+        "browse_title": "## DCTW {resource_title} browser",
+        "help": {
+            "field1_name": "1. Log in to the DCTW website",
+            "field1_value": "Go to [dctw.xyz](https://dctw.xyz) and click the login button in the top-right to log in with Discord.",
+            "field2_name": "2. Enter the dashboard",
+            "field2_value": "After logging in, click account management to enter the dashboard.",
+            "field3_name": "3. Copy your API key",
+            "field3_value": "Find the \"Copy API KEY\" button near your profile; clicking it copies the key to your clipboard.",
+            "field4_name": "4. Set your API key",
+            "field4_value": "After copying your API key, use the `/dctw key set <your API key>` command to set it on this bot."
+        },
+        "help_footer": "Don't share your API key with anyone, or it may be misused.\nOfficial docs: https://dctw.xyz/docs/?tags=api",
+        "help_title": "How to get a DCTW API Key"
+    },
+    "err": {
+        "action_failed": "Action failed: {error}",
+        "api_key_required": "This lookup requires an API key. Please set your key first with /dctw key set.",
+        "empty_search_query": "Please enter a search keyword.",
+        "invalid_bot_target": "Please enter a bot ID or mention (e.g. <@123...>).",
+        "invalid_server_target": "Please enter a server ID (numeric).",
+        "invalid_template_target": "Please enter a template ID (numeric).",
+        "item_not_found": "The selected item doesn't exist.",
+        "no_bumpable_resources": "You don't currently have any resources to bump.{error_part}",
+        "no_key_set": "You don't currently have a key set.",
+        "no_search_results": "No results found matching `{query}`.",
+        "no_selectable_data": "There's currently no data to view.",
+        "not_your_browse_list": "This isn't your browse list.",
+        "not_your_detail_page": "This isn't your detail page.",
+        "personal_key_required": "You haven't set a personal API key yet — use /dctw key set first.",
+        "search_failed": "Lookup failed: {error}",
+        "unsupported_sort": "Unsupported sort mode"
+    },
+    "heading": {
+        "admins": "Admins",
+        "developers": "Developers",
+        "intro": "Description",
+        "introduce": "About",
+        "server_features": "Server features",
+        "social_links": "Social links"
+    },
+    "msg": {
+        "action_done": "✅ Ran {action} on {resource}:{id}.",
+        "bump_in_progress": "Bumping, please wait...\nEstimated {minutes} minutes.",
+        "bump_summary": "✅ Bump complete: {success}/{total}",
+        "cache_stats": "DCTW cache stats\n- TTL: {ttl}s\n- Cached entries: {cached_items}\n- Hits: {hits}\n- Misses: {misses}\n- Hit rate: {hit_rate}%",
+        "key_cleared": "✅ Your DCTW API key has been cleared.",
+        "key_saved": "✅ Your DCTW API key has been saved."
+    },
+    "resource_title": {
+        "bots": "Bots",
+        "servers": "Servers",
+        "templates": "Templates"
+    },
+    "select": {
+        "no_items": "No items available",
+        "pick_item_ph": "Select an item to view details"
+    },
+    "sort": {
+        "bumped": "Bumped",
+        "members": "Members",
+        "newest": "Newest",
+        "servers": "Servers",
+        "votes": "Votes"
+    },
+    "tag": {
+        "bot": {
+            "automation": "Automation",
+            "customizable": "Customizable",
+            "fun": "Fun",
+            "management": "Management",
+            "minigames": "Minigames",
+            "music": "Music",
+            "roleplay": "Roleplay",
+            "utility": "Utility"
+        },
+        "server": {
+            "acting": "Acting",
+            "anime": "Anime",
+            "art": "Art",
+            "community": "Community",
+            "gaming": "Gaming",
+            "hangout": "Hangout",
+            "politics": "Politics",
+            "programming": "Programming",
+            "roleplay": "Roleplay"
+        },
+        "template": {
+            "anime": "Large",
+            "art": "Fun",
+            "community": "Support",
+            "gaming": "Gaming"
+        }
+    },
+    "value": {
+        "bump_failed_header": "Bump failures:",
+        "bumped_at_line": "Bumped at: {bumped_at}",
+        "created_at_line": "Created at: {created_at}",
+        "current_key_line": "Current key: {masked}",
+        "extra_members": " | Members: {count}",
+        "extra_servers": " | Servers: {count}",
+        "fetch_error_suffix": "\nErrors: {errors}",
+        "gallery_image": "{name} image",
+        "gallery_image_indexed": "{name} image {index}",
+        "keywords_line": "Keywords: {keywords}",
+        "list_item_line": "{index}. {name} (ID: {id}) | Votes: {votes}{extra}",
+        "members_line": "Members: {count}",
+        "no_comments": "There are no comments yet.",
+        "no_content": "(No content)",
+        "no_data": "There's no data right now.",
+        "no_description": "No description",
+        "no_name": "(No name)",
+        "official_verified_line": "Officially verified: {status}",
+        "online_members_line": "Online members: {count}",
+        "owned_fetch_errors_header": "Errors fetching owned resources:",
+        "page_label": "Page: {page}/{total}",
+        "prefix_line": "Prefix: {prefix}",
+        "resource_category_line": "Resource types: {resources}",
+        "resource_id_line": "{resource_title} ID: `{id}`",
+        "search_label": "Search: `{query}`",
+        "servers_line": "Servers: {count}",
+        "sort_label": "Sort: `{sort}`",
+        "tags_line": "Tags: {tags}",
+        "total_label": "Total: {count}",
+        "truncated_note": {
+            "one": "-# Sorted using the first {limit} entry",
+            "other": "-# Sorted using the first {limit} entries"
+        },
+        "unknown": "Unknown",
+        "verified_no": "Unverified",
+        "verified_status_line": "Verification status: {status}",
+        "verified_yes": "Verified",
+        "votes_line": "Votes: {votes}"
+    }
+}
