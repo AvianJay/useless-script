@@ -4,6 +4,8 @@ from discord.ext import commands
 from discord import app_commands
 from threading import Semaphore
 import asyncio
+import i18n
+from i18n import t
 
 semaphore = Semaphore()
 
@@ -23,30 +25,31 @@ class Statistics(commands.GroupCog, name=app_commands.locale_str("stats", i18n_k
         app_command_stats = get_global_config("app_command_usage_stats", {})
         app_command_error_stats = get_global_config("app_command_error_stats", {})
 
-        embed = discord.Embed(title="指令使用統計", color=discord.Color.blue())
-        
+        embed = discord.Embed(title=t("statistics.embed.command_stats_title"), color=discord.Color.blue())
+
         if full:
             sort_by_count = lambda items: sorted(items, key=lambda x: x[1], reverse=True)
-            command_stats_str = "\n".join([f"{cmd}: {count}" for cmd, count in sort_by_count(command_stats.items())]) or "無數據"
-            command_error_stats_str = "\n".join([f"{cmd}: {count}" for cmd, count in sort_by_count(command_error_stats.items())]) or "無數據"
-            app_command_stats_str = "\n".join([f"{cmd}: {count}" for cmd, count in sort_by_count(app_command_stats.items())]) or "無數據"
-            app_command_error_stats_str = "\n".join([f"{cmd}: {count}" for cmd, count in sort_by_count(app_command_error_stats.items())]) or "無數據"
-            
+            no_data = t("statistics.value.no_data")
+            command_stats_str = "\n".join([f"{cmd}: {count}" for cmd, count in sort_by_count(command_stats.items())]) or no_data
+            command_error_stats_str = "\n".join([f"{cmd}: {count}" for cmd, count in sort_by_count(command_error_stats.items())]) or no_data
+            app_command_stats_str = "\n".join([f"{cmd}: {count}" for cmd, count in sort_by_count(app_command_stats.items())]) or no_data
+            app_command_error_stats_str = "\n".join([f"{cmd}: {count}" for cmd, count in sort_by_count(app_command_error_stats.items())]) or no_data
+
             # anti 400
             command_stats_str = command_stats_str[:1021] + "..." if len(command_stats_str) > 1024 else command_stats_str
             command_error_stats_str = command_error_stats_str[:1021] + "..." if len(command_error_stats_str) > 1024 else command_error_stats_str
             app_command_stats_str = app_command_stats_str[:1021] + "..." if len(app_command_stats_str) > 1024 else app_command_stats_str
             app_command_error_stats_str = app_command_error_stats_str[:1021] + "..." if len(app_command_error_stats_str) > 1024 else app_command_error_stats_str
         else:
-            command_stats_str = f"總計 {sum(command_stats.values())} 次使用"
-            command_error_stats_str = f"總計 {sum(command_error_stats.values())} 次錯誤"
-            app_command_stats_str = f"總計 {sum(app_command_stats.values())} 次使用"
-            app_command_error_stats_str = f"總計 {sum(app_command_error_stats.values())} 次錯誤"
+            command_stats_str = t("statistics.value.total_uses", count=sum(command_stats.values()))
+            command_error_stats_str = t("statistics.value.total_errors", count=sum(command_error_stats.values()))
+            app_command_stats_str = t("statistics.value.total_uses", count=sum(app_command_stats.values()))
+            app_command_error_stats_str = t("statistics.value.total_errors", count=sum(app_command_error_stats.values()))
 
-        embed.add_field(name="文字指令使用次數", value=command_stats_str, inline=False)
-        embed.add_field(name="文字指令錯誤次數", value=command_error_stats_str, inline=False)
-        embed.add_field(name="應用程式指令使用次數", value=app_command_stats_str, inline=False)
-        embed.add_field(name="應用程式指令錯誤次數", value=app_command_error_stats_str, inline=False)
+        embed.add_field(name=t("statistics.field.text_command_uses"), value=command_stats_str, inline=False)
+        embed.add_field(name=t("statistics.field.text_command_errors"), value=command_error_stats_str, inline=False)
+        embed.add_field(name=t("statistics.field.app_command_uses"), value=app_command_stats_str, inline=False)
+        embed.add_field(name=t("statistics.field.app_command_errors"), value=app_command_error_stats_str, inline=False)
 
         await interaction.response.send_message(embed=embed)
 
@@ -55,9 +58,9 @@ class Statistics(commands.GroupCog, name=app_commands.locale_str("stats", i18n_k
         petpet_count = get_user_data(None, interaction.user.id, "petpet_count", 0)
         get_petpet_count = get_user_data(None, interaction.user.id, "get_petpet_count", 0)
 
-        embed = discord.Embed(title="PetPet 統計", color=0x00ff00)
-        embed.add_field(name="你 PetPet 了多少次？", value=str(petpet_count), inline=False)
-        embed.add_field(name="被別人 PetPet 了多少次？", value=str(get_petpet_count), inline=False)
+        embed = discord.Embed(title=t("statistics.embed.petpet_stats_title"), color=0x00ff00)
+        embed.add_field(name=t("statistics.field.petpet_given"), value=str(petpet_count), inline=False)
+        embed.add_field(name=t("statistics.field.petpet_received"), value=str(get_petpet_count), inline=False)
 
         await interaction.response.send_message(embed=embed)
     
