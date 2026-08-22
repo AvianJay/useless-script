@@ -1,0 +1,12 @@
+{
+    "embed": {
+        "error_header": "## ❌ Chart Failed",
+        "header": "## 🎋 BaZi Chart Result"
+    },
+    "err": {
+        "generic_failure": "Unable to complete the chart. Please check that the date and time are correct."
+    },
+    "msg": {
+        "footer_disclaimer": "-# This chart is algorithmically generated and for reference only"
+    }
+}

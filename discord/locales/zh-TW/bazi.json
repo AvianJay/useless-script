@@ -1,0 +1,12 @@
+{
+    "embed": {
+        "error_header": "## ❌ 排盤失敗",
+        "header": "## 🎋 八字排盤結果"
+    },
+    "err": {
+        "generic_failure": "無法完成排盤，請確認日期時間是否正確。"
+    },
+    "msg": {
+        "footer_disclaimer": "-# 此排盤為程式化推算，僅供參考"
+    }
+}
