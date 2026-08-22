@@ -1,0 +1,151 @@
+{
+    "audit": {
+        "autorole_assign": "Auto-assigned the unverified role",
+        "create_unverified_role": "Created the unverified-member role",
+        "force_assign_unverified": "Force-assigned the unverified role",
+        "manual_remove_unverified": "Manually removed the unverified role",
+        "passed_web_verify": "Passed web verification",
+        "set_unverified_role_permissions": "Set unverified-member role permissions",
+        "wizard_create_unverified_role": "Web verification setup wizard: created the unverified role"
+    },
+    "dm": {
+        "verified_success": "You've successfully passed web verification for {guild} and can now access the server!"
+    },
+    "embed": {
+        "geo_alert_title": "Anomalous verification region alert",
+        "manually_verified_desc": "Your verification status has been manually set to verified by an administrator.",
+        "relation_title": "{user}'s related accounts",
+        "status_update_title": "Verification status updated"
+    },
+    "err": {
+        "already_unverified": "This user is already unverified.",
+        "force_verify_failed": "Couldn't force-verify {user}: {message}",
+        "geo_alert_disabled": "This server hasn't enabled region alerts.",
+        "invalid_captcha_provider": "Invalid CAPTCHA provider. Please choose 'none', 'turnstile', or 'recaptcha'.",
+        "invalid_duration_format": "Invalid time format. Please use a format like '1h30m' to represent the duration.",
+        "members_only": "This action can only be used on server members.",
+        "moderate_not_enabled": "The Moderate module isn't enabled, so this action can't be performed.",
+        "no_relation_data": "No relation data found for user {user}.",
+        "no_unverified_role": "This server hasn't set an unverified-member role.",
+        "no_verify_history": "No verification history found for the user.",
+        "not_configured": "This server hasn't set up web verification.",
+        "not_unverified": "This user isn't currently unverified.",
+        "role_already_exists": "The role '{name}' already exists. Please use a different name or set that role as the unverified-member role directly."
+    },
+    "field": {
+        "city": "City",
+        "country_code": "Country code",
+        "region": "Region",
+        "related_accounts": "Related accounts ({count})",
+        "relation_id": "Relation ID",
+        "role_name_label": "Role name",
+        "user_id": "User ID"
+    },
+    "msg": {
+        "autorole_set": "Auto-assign unverified role {status}, trigger condition: {trigger}.",
+        "captcha_disabled": "CAPTCHA verification has been turned off.",
+        "captcha_set": "The web verification CAPTCHA type has been set to {provider}.",
+        "country_alert_set": "Region alerts {status}. Mode: {mode}, country codes: {countries}, alert channel: {channel}.",
+        "disabled": "Web verification has been disabled for this server.",
+        "enabled": "Web verification has been enabled for this server.",
+        "force_assign_success": "The unverified role has been successfully assigned to the user.",
+        "force_verify_started": "Started forcing verification for all newly joined members, for {duration}.",
+        "force_verify_success": "{user} has been forced to verify.",
+        "manually_verified": "{user} has been set to verified.",
+        "min_age_set": {
+            "one": "The minimum account age has been set to {days} day.",
+            "other": "The minimum account age has been set to {days} days."
+        },
+        "no_geo_anomalies": "All users' locations match the configured list conditions; no anomalies found.",
+        "notify_dm_set": "Verification notification method has been set to DM.",
+        "notify_sent": "The web verification message has been sent to {channel}.",
+        "relation_action_header": "**Results of the action on {user} and their related accounts:**\n",
+        "setup_done": "Web verification has been set up for this server. Remember to set the unverified-member role ({command}).",
+        "status": "Web verification status: {enabled}\nCAPTCHA type: {captcha_type}\nUnverified role ID: {role_id}",
+        "unverified_role_created": "Created the role '{name}' and disabled it in all text channels, and set it as the unverified-member role.",
+        "unverified_role_set": "The unverified-member role has been set to {role}."
+    },
+    "value": {
+        "action_error": "User ID: `{uid}` - Error: {error}",
+        "default_notify_message": "Click the button below to complete web verification:",
+        "default_notify_title": "Server web verification",
+        "default_unverified_role_name": "Unverified Member",
+        "disabled": "Disabled",
+        "disabled_suffix": "disabled",
+        "enabled": "Enabled",
+        "enabled_suffix": "enabled",
+        "geo_report_line": "User: {user} | Country code: {country} | Time: {timestamp}",
+        "go_verify_btn": "Go verify",
+        "hierarchy_skip": "{member} - Skipped: {reason}",
+        "member_not_found_skip": "User ID: `{uid}` - Not in the server, skipped.",
+        "no_action": "{member} - No action.",
+        "not_selected": "Not selected yet",
+        "please_wait": "Please wait...",
+        "unset": "Not set"
+    },
+    "web": {
+        "err": {
+            "access_denied": "You denied the app authorization to access your Discord account info. Please re-enter this page from the verification button in the server and authorize the app.",
+            "already_verified": "You've already passed this server's web verification; no need to verify again.",
+            "bad_fingerprint": "Invalid browser fingerprint.",
+            "disabled": "Web verification is disabled for this server. Please contact a server admin.",
+            "guild_not_found": "Couldn't find the specified server. Please make sure you entered this page from the correct verification button.",
+            "invalid_auth_token": "Invalid verification token. Please re-enter this page from the verification button in the server.",
+            "invalid_auth_token_api": "Invalid or missing auth token.",
+            "invalid_method": "Invalid verification method.",
+            "method_mismatch": "The verification method doesn't match the server's configuration. Please try again.",
+            "missing_auth_token": "Missing verification token. Please re-enter this page from the verification button in the server.",
+            "missing_params": "Missing parameters. Please enter this page from the verification button in the server.",
+            "no_user_info": "Couldn't get your Discord account info. Please make sure you've authorized the app to access your account info.",
+            "not_a_member": "You're not a member of this server. Please join the server first before verifying.",
+            "not_configured": "This server hasn't set up web verification. Please contact a server admin.",
+            "verify_failed": "Verification failed. Error codes: {codes}"
+        },
+        "msg": {
+            "verify_success": "Verification successful! You can now return to the server."
+        }
+    },
+    "wizard": {
+        "auto_create_role_btn": "Auto-create unverified role",
+        "autorole_field": "Auto-assign",
+        "autorole_toggle_btn": "Auto-assign: {state}",
+        "captcha_none_desc": "Don't use CAPTCHA",
+        "captcha_none_label": "None",
+        "captcha_recaptcha_desc": "Google's verification service",
+        "captcha_turnstile_desc": "Recommended",
+        "current_setting": "Current setting",
+        "feature_status": "Feature status",
+        "finish_btn": "Finish setup",
+        "notify_both_label": "Both (DM and channel)",
+        "notify_channel": "Notify channel",
+        "notify_channel_label": "Channel notification",
+        "notify_dm_label": "DM notification",
+        "notify_method_field": "Notify method",
+        "notify_send_failed_suffix": "\nFailed to send the verification message to {channel}: {error}",
+        "notify_sent_suffix": "\nThe verification message has been sent to {channel}.",
+        "notify_type": "Notify type",
+        "select_captcha_ph": "Choose a CAPTCHA method",
+        "select_existing_role_ph": "Select an existing unverified role",
+        "select_notify_channel_ph": "Select the notify channel",
+        "select_notify_type_ph": "Select the notify method",
+        "select_trigger_ph": "Select the auto-assign trigger conditions (multiple allowed)",
+        "setup_complete_desc": "All settings have been saved.",
+        "setup_complete_title": "Web verification setup complete",
+        "step1_desc": "First, choose the CAPTCHA mechanism to use.",
+        "step2_desc": "Next, set up or create the \"unverified member\" role.\nMembers with this role are usually restricted until they verify.",
+        "step3_desc": "Configure whether to automatically grant the unverified role when a member joins, and the trigger conditions.",
+        "step4_desc": "Finally, configure how verification prompts are sent.\nFor channel notifications, a persistent verification embed will be sent to that channel.",
+        "step_title": "Web verification setup wizard (step {step}/4)",
+        "timed_out_desc": "The wizard has timed out; please run the command again.",
+        "title": "Web verification setup wizard",
+        "trigger": {
+            "age_check": "Account too new (Age Check)",
+            "always": "Always assign",
+            "has_flagged_history": "Account was flagged before (Flagged History)",
+            "left_guild_before": "Left the server before (Left Guild Before)",
+            "no_history": "No verification history (No History)"
+        },
+        "trigger_condition": "Trigger condition",
+        "unverified_role_field": "Unverified role"
+    }
+}

@@ -1902,6 +1902,10 @@
         }
     },
     "serverwebverify": {
+        "ctx": {
+            "force_verify": "強制用戶驗證",
+            "manual_verify": "手動驗證用戶"
+        },
         "webverify": {
             "autorole": {
                 "choice": {

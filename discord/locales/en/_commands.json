@@ -1914,6 +1914,10 @@
         }
     },
     "serverwebverify": {
+        "ctx": {
+            "force_verify": "Force user verification",
+            "manual_verify": "Manually verify user"
+        },
         "webverify": {
             "autorole": {
                 "choice": {
