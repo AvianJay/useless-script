@@ -6,7 +6,10 @@ import re
 import random
 from owoify import owoify
 import asyncio
+import i18n
+from i18n import t
 
+# i18n: skip-start (the Chinese "cutified" slang output IS the feature; never translated)
 def owoify_chinese(text):
     # 1. 來自圖片中的前綴與後綴清單
     prefixes = ["OwO", "嘿嘿", "UwU", "(*^ω^*)", "(｡♥‿♥｡)", "ʕ•́ᴥ•̀ʔっ", "ヽ(・∀・)ﾉ", "(≧◡≦)"]
@@ -88,6 +91,7 @@ def owoify_chinese(text):
     if random.random() < 0.40:
         text = f"{text} {random.choice(suffixes)}"
     return text
+# i18n: skip-end
 
 
 class OwOify(commands.Cog):
@@ -112,7 +116,7 @@ class OwOify(commands.Cog):
         embed.set_author(name=f"{interaction.user.display_name}", icon_url=interaction.user.display_avatar.url)
         await interaction.response.send_message(embed=embed)
     
-    @commands.command(name="owoify", help="文字也能變可愛！", aliases=["owo"])
+    @commands.command(name="owoify", help="文字也能變可愛！", aliases=["owo"])  # i18n: skip (help= 在 import 期求值，待 PrettyHelpCommand 在地化)
     async def owoify_command(self, ctx: commands.Context, *, text: str = ""):
         """把文字變可愛！
         用法: owoify [--english] <text> 或回覆一則訊息使用 owoify [--english]
@@ -126,17 +130,17 @@ class OwOify(commands.Cog):
             english = True
         if not text:
             if not ctx.message.reference:
-                await ctx.reply("請提供要變可愛的文字，或回覆一則訊息來變可愛該訊息的內容。")
+                await ctx.reply(t("owoify.err.no_text_provided"))
                 return
             try:
                 referenced_message = await ctx.channel.fetch_message(ctx.message.reference.message_id)
                 text = referenced_message.content
                 author = referenced_message.author
             except Exception:
-                await ctx.reply("無法取得回覆的訊息內容，請確保該訊息存在且可讀取。")
+                await ctx.reply(t("owoify.err.cannot_fetch_reply"))
                 return
         if not text:
-            await ctx.reply("回覆的訊息沒有內容可供 OwOify。")
+            await ctx.reply(t("owoify.err.reply_empty"))
             return
         if english:
             owoified_text = owoify(text)
@@ -152,7 +156,7 @@ class OwOify(commands.Cog):
     @app_commands.allowed_installs(guilds=True, users=True)
     async def owoify_context_menu(self, interaction: discord.Interaction, message: discord.Message):
         if not message.content:
-            await interaction.response.send_message("該訊息沒有內容可供 OwOify。", ephemeral=True)
+            await interaction.response.send_message(t("owoify.err.message_empty"), ephemeral=True)
             return
         owoified_text = owoify_chinese(message.content)
         embed = discord.Embed(description=owoified_text, color=0xffc0cb)

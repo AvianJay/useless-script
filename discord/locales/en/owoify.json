@@ -1,0 +1,8 @@
+{
+    "err": {
+        "cannot_fetch_reply": "Couldn't get the content of the replied-to message — please make sure it still exists and is readable.",
+        "message_empty": "That message has no content to OwOify.",
+        "no_text_provided": "Please provide text to cutify, or reply to a message to cutify its content.",
+        "reply_empty": "The replied-to message has no content to OwOify."
+    }
+}
