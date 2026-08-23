@@ -3582,7 +3582,7 @@ async def start_webverify_quick_setup(interaction: discord.Interaction):
     session.message = await interaction.original_response()
 
 
-class GettingStartedLauncherView(discord.ui.View):
+class GettingStartedLauncherView(i18n.I18nView):
     def __init__(self):
         super().__init__(timeout=None)
 

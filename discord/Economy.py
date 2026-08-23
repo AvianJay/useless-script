@@ -1447,7 +1447,7 @@ class ShopView(discord.ui.View):
             await interaction.response.send_modal(modal)
 
 
-class ShopTypeView(discord.ui.View):
+class ShopTypeView(i18n.I18nView):
     def __init__(self, item: dict):
         super().__init__(timeout=60)
         self.item = item
@@ -2943,7 +2943,7 @@ asyncio.run(bot.add_cog(Economy()))
 
 # ==================== Economy Mod Cog ====================
 
-class ConfirmGlobalModeView(discord.ui.View):
+class ConfirmGlobalModeView(i18n.I18nView):
     def __init__(self, guild_id: int, actor_id: int):
         super().__init__(timeout=180)
         self.guild_id = guild_id

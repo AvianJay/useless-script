@@ -46,7 +46,7 @@ class HumanReviewView(discord.ui.View):
         # 機器狀態：狀態欄位的位置由 review_type 決定（bio 的 embed 多一個內容欄位）
         self.status_field_index = 2 if review_type == "bio" else 1
 
-    @discord.ui.button(label=i18n.K("botcustomizer.btn.approve"), style=discord.ButtonStyle.success)
+    @discord.ui.button(label=S("botcustomizer.btn.approve"), style=discord.ButtonStyle.success)
     async def approve_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         # 檢查權限 - 只有擁有者可以審核
         if interaction.user.id not in config("owners", []):
@@ -115,7 +115,7 @@ class HumanReviewView(discord.ui.View):
             traceback.print_exc()
             await interaction.followup.send(t("botcustomizer.msg.update_error", error=e), ephemeral=True)
 
-    @discord.ui.button(label=i18n.K("botcustomizer.btn.reject"), style=discord.ButtonStyle.danger)
+    @discord.ui.button(label=S("botcustomizer.btn.reject"), style=discord.ButtonStyle.danger)
     async def reject_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         # 檢查權限 - 只有擁有者可以審核
         if interaction.user.id not in config("owners", []):

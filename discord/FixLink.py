@@ -1042,7 +1042,7 @@ class CustomPlatformSelect(discord.ui.Select):
         )
 
 
-class FixLinkSettingsView(discord.ui.View):
+class FixLinkSettingsView(i18n.I18nView):
     def __init__(self, cog: "FixLink", interaction: discord.Interaction):
         super().__init__(timeout=300)
         self.cog = cog
@@ -1383,7 +1383,7 @@ class CustomPlatformSourceModal(i18n.I18nModal, title=i18n.K("fixlink.modal.cust
         )
 
 
-class CustomFixerDraftView(discord.ui.View):
+class CustomFixerDraftView(i18n.I18nView):
     def __init__(self, settings_view: FixLinkSettingsView, source: dict, existing: dict | None):
         super().__init__(timeout=300)
         self.settings_view = settings_view
@@ -1471,7 +1471,7 @@ class CustomFixerModal(i18n.I18nModal, title=i18n.K("fixlink.modal.custom_fixer_
         await self.settings_view.refresh_message()
 
 
-class CustomDeleteConfirmView(discord.ui.View):
+class CustomDeleteConfirmView(i18n.I18nView):
     def __init__(self, settings_view: FixLinkSettingsView, platform_id: str):
         super().__init__(timeout=60)
         self.settings_view = settings_view

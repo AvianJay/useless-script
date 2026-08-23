@@ -595,7 +595,7 @@ async def dsize(interaction: discord.Interaction, global_dsize: str = "False"):
             return
         log("Got a surgery chance", module_name="dsize", user=interaction.user, guild=interaction.guild)
         fail_chance = random.randint(1, 100)
-        class dsize_SurgeryView(discord.ui.View):
+        class dsize_SurgeryView(i18n.I18nView):
             def __init__(self):
                 super().__init__(timeout=60)  # 60 seconds to click
             
@@ -932,7 +932,7 @@ async def dsize_battle(interaction: discord.Interaction, opponent: Union[discord
     # print(f"[DSize] {interaction.user} is challenging {opponent} to a dsize battle in guild {interaction.guild.id}")
     log(f"{interaction.user} is challenging {opponent} to a dsize battle, guild: {interaction.guild.id if guild_key else 'global'}", module_name="dsize", user=interaction.user, guild=interaction.guild)
     
-    class dsize_Confirm(discord.ui.View):
+    class dsize_Confirm(i18n.I18nView):
         def __init__(self):
             super().__init__(timeout=30)
             self.value = None
