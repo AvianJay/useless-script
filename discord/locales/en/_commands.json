@@ -667,14 +667,14 @@
                 "false": "No",
                 "true": "Yes"
             },
-            "desc": "Measure your dick length",
+            "desc": "Measure your d* length",
             "name": "dsize",
             "param": {
                 "global_dsize": "Use the global record (default: no)"
             }
         },
         "dsize_battle": {
-            "desc": "Dick-length battle (both sides must not have measured today)",
+            "desc": "D*-length battle (both sides must not have measured today)",
             "name": "dsize-battle",
             "param": {
                 "opponent": "Who to battle"
@@ -725,7 +725,7 @@
                 "false": "No",
                 "true": "Yes"
             },
-            "desc": "View the dick-length leaderboard",
+            "desc": "View the d*-length leaderboard",
             "name": "dsize-leaderboard",
             "param": {
                 "global_leaderboard": "Show the global leaderboard (default: no)",
@@ -748,7 +748,7 @@
             }
         },
         "dsize_stats": {
-            "desc": "View your dick-length statistics",
+            "desc": "View your d*-length statistics",
             "name": "dsize-stats"
         }
     },

@@ -387,7 +387,7 @@ async def handle_checkin_rewards(interaction: discord.Interaction, user: Union[d
         await interaction.followup.send(user.mention, embeds=[embed, noteEmbed], view=GoalSelectionView())
 
 
-@bot.tree.command(name=app_commands.locale_str("dsize", i18n_key="cmd.dsize.dsize.name"), description=app_commands.locale_str("Measure your dick length", i18n_key="cmd.dsize.dsize.desc"))
+@bot.tree.command(name=app_commands.locale_str("dsize", i18n_key="cmd.dsize.dsize.name"), description=app_commands.locale_str("Measure your d* length", i18n_key="cmd.dsize.dsize.desc"))
 @app_commands.describe(global_dsize=app_commands.locale_str("Use the global record (default: no)", i18n_key="cmd.dsize.dsize.param.global_dsize"))
 @app_commands.choices(global_dsize=[
     app_commands.Choice(name=app_commands.locale_str("No", i18n_key="cmd.dsize.dsize.choice.false"), value="False"),
@@ -741,7 +741,7 @@ async def dsize(interaction: discord.Interaction, global_dsize: str = "False"):
                     await msg.edit(content=interaction.user.mention + "\n" + t(
                         "dsize.drop.rusty_scalpel", command=item_use_command, item=item_name("rusty_scalpel")))
 
-@bot.tree.command(name=app_commands.locale_str("dsize-leaderboard", i18n_key="cmd.dsize.dsize_leaderboard.name"), description=app_commands.locale_str("View the dick-length leaderboard", i18n_key="cmd.dsize.dsize_leaderboard.desc"))
+@bot.tree.command(name=app_commands.locale_str("dsize-leaderboard", i18n_key="cmd.dsize.dsize_leaderboard.name"), description=app_commands.locale_str("View the d*-length leaderboard", i18n_key="cmd.dsize.dsize_leaderboard.desc"))
 @app_commands.describe(limit=app_commands.locale_str("How many top entries to show (default 10)", i18n_key="cmd.dsize.dsize_leaderboard.param.limit"), global_leaderboard=app_commands.locale_str("Show the global leaderboard (default: no)", i18n_key="cmd.dsize.dsize_leaderboard.param.global_leaderboard"), reverse=app_commands.locale_str("Reverse the leaderboard (default: no)", i18n_key="cmd.dsize.dsize_leaderboard.param.reverse"))
 @app_commands.choices(
     global_leaderboard=[
@@ -850,7 +850,7 @@ def release_dsize_battle_lock(*user_ids: int):
     for locked_user_id in user_ids:
         user_using_dsize_battle.discard(locked_user_id)
 
-@bot.tree.command(name=app_commands.locale_str("dsize-battle", i18n_key="cmd.dsize.dsize_battle.name"), description=app_commands.locale_str("Dick-length battle (both sides must not have measured today)", i18n_key="cmd.dsize.dsize_battle.desc"))
+@bot.tree.command(name=app_commands.locale_str("dsize-battle", i18n_key="cmd.dsize.dsize_battle.name"), description=app_commands.locale_str("D*-length battle (both sides must not have measured today)", i18n_key="cmd.dsize.dsize_battle.desc"))
 @app_commands.allowed_installs(guilds=True, users=True)
 @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
 @app_commands.describe(opponent=app_commands.locale_str("Who to battle", i18n_key="cmd.dsize.dsize_battle.param.opponent"))
@@ -1290,7 +1290,7 @@ async def dsize_settings(interaction: discord.Interaction, setting: str, value: 
     log(f"Set {setting} to {value} in guild {guild_key}", module_name="dsize", user=interaction.user, guild=interaction.guild)
 
 
-@bot.tree.command(name=app_commands.locale_str("dsize-stats", i18n_key="cmd.dsize.dsize_stats.name"), description=app_commands.locale_str("View your dick-length statistics", i18n_key="cmd.dsize.dsize_stats.desc"))
+@bot.tree.command(name=app_commands.locale_str("dsize-stats", i18n_key="cmd.dsize.dsize_stats.name"), description=app_commands.locale_str("View your d*-length statistics", i18n_key="cmd.dsize.dsize_stats.desc"))
 @app_commands.allowed_installs(guilds=True, users=True)
 @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
 async def dsize_stats(interaction: discord.Interaction):
