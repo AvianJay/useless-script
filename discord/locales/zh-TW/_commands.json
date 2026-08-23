@@ -7,6 +7,12 @@
                 "message": "你想問 AI 的問題或訊息",
                 "model": "選擇 AI 模型（預設 openai）",
                 "new_conversation": "是否開始新對話（清除之前的對話歷史）"
+            },
+            "param_name": {
+                "image": "圖片",
+                "message": "訊息",
+                "model": "模型",
+                "new_conversation": "新對話"
             }
         },
         "ai_admin": {
@@ -33,6 +39,9 @@
                 "name": "提及模式",
                 "param": {
                     "enabled": "開啟或關閉提及與回覆觸發；預設關閉"
+                },
+                "param_name": {
+                    "enabled": "啟用"
                 }
             },
             "prompt": {
@@ -49,6 +58,9 @@
                     "name": "設定",
                     "param": {
                         "prompt": "提供給 AI 的額外伺服器背景、風格描述或回覆偏好"
+                    },
+                    "param_name": {
+                        "prompt": "提示詞"
                     }
                 },
                 "view": {
@@ -74,6 +86,9 @@
             "name": "ai-設定預設模型",
             "param": {
                 "model": "選擇預設 AI 模型"
+            },
+            "param_name": {
+                "model": "模型"
             }
         },
         "ai_set_response_view": {
@@ -83,6 +98,11 @@
                 "container": "是否使用 Container 容器顯示回應",
                 "cost": "是否顯示計費資訊",
                 "model": "是否顯示模型名稱與時間資訊"
+            },
+            "param_name": {
+                "container": "容器",
+                "cost": "花費",
+                "model": "模型"
             }
         }
     },
@@ -102,6 +122,9 @@
                 "name": "繞過",
                 "param": {
                     "role": "要切換繞過狀態的身分組"
+                },
+                "param_name": {
+                    "role": "身分組"
                 }
             },
             "list": {
@@ -117,6 +140,13 @@
                     "only_everyone_here": "是否只處理提及 @everyone 或 @here 的成員",
                     "threshold": "時間窗口內觸發幾次後處置（1-20）",
                     "time_window": "時間窗口秒數（5-3600）"
+                },
+                "param_name": {
+                    "action": "動作",
+                    "enable": "啟用",
+                    "only_everyone_here": "只有所有人提及",
+                    "threshold": "閾值",
+                    "time_window": "偵測時間窗口"
                 }
             },
             "setup": {
@@ -128,6 +158,9 @@
                 "name": "切換",
                 "param": {
                     "enable": "留空則切換目前狀態"
+                },
+                "param_name": {
+                    "enable": "啟用"
                 }
             }
         }
@@ -155,6 +188,14 @@
                     "message": "警告訊息（delete/warn 用），可用 {user} 代表用戶",
                     "prepend": "要接在此動作前面的既有指令（用逗號分隔多個動作時）",
                     "reason": "原因（mute/kick/ban 用）"
+                },
+                "param_name": {
+                    "action_type": "動作類型",
+                    "delete_message_duration": "刪除訊息時長",
+                    "duration": "持續時間",
+                    "message": "訊息",
+                    "prepend": "前置指令",
+                    "reason": "原因"
                 }
             },
             "check_action": {
@@ -162,6 +203,9 @@
                 "name": "檢查動作",
                 "param": {
                     "action": "要檢查的動作指令"
+                },
+                "param_name": {
+                    "action": "動作"
                 }
             },
             "flagged_user_alert_channel": {
@@ -169,6 +213,9 @@
                 "name": "標記用戶警報頻道",
                 "param": {
                     "channel": "用於接收用戶加入通知的頻道"
+                },
+                "param_name": {
+                    "channel": "頻道"
                 }
             },
             "info": {
@@ -187,6 +234,9 @@
                 "name": "掃描標記用戶",
                 "param": {
                     "user": "要掃描的用戶，若不指定則掃描所有用戶"
+                },
+                "param_name": {
+                    "user": "用戶"
                 }
             },
             "settings": {
@@ -195,6 +245,10 @@
                 "param": {
                     "setting": "要設定的自動管理選項",
                     "value": "選項的值"
+                },
+                "param_name": {
+                    "setting": "設定項",
+                    "value": "值"
                 }
             },
             "toggle": {
@@ -217,6 +271,10 @@
                 "param": {
                     "enable": "是否啟用該設定",
                     "setting": "要啟用或停用的自動管理設定名稱"
+                },
+                "param_name": {
+                    "enable": "啟用",
+                    "setting": "設定項"
                 }
             },
             "view": {
@@ -266,6 +324,9 @@
                 "name": "設定",
                 "param": {
                     "enable": "是否啟用自動發布"
+                },
+                "param_name": {
+                    "enable": "啟用"
                 }
             },
             "view": {
@@ -299,6 +360,15 @@
                     "reply": "回覆原訊息",
                     "response": "回覆內容 (使用 , 分隔多個回覆，隨機選擇一個回覆)",
                     "trigger": "觸發字串 (使用 , 分隔多個觸發字串)"
+                },
+                "param_name": {
+                    "channel_mode": "頻道模式",
+                    "channels": "頻道",
+                    "mode": "模式",
+                    "random_chance": "回覆機率",
+                    "reply": "回覆",
+                    "response": "回覆內容",
+                    "trigger": "觸發字串"
                 }
             },
             "builder": {
@@ -333,6 +403,16 @@
                     "random_chance": "隨機回覆機率 (1-100)",
                     "reply": "是否回覆原訊息",
                     "trigger": "觸發字串"
+                },
+                "param_name": {
+                    "channel_mode": "頻道模式",
+                    "channels": "頻道",
+                    "new_mode": "新模式",
+                    "new_response": "新回覆內容",
+                    "new_trigger": "新觸發字串",
+                    "random_chance": "回覆機率",
+                    "reply": "回覆",
+                    "trigger": "觸發字串"
                 }
             },
             "export": {
@@ -353,6 +433,10 @@
                 "param": {
                     "channels": "頻道 ID (使用 , 分隔多個頻道 ID)",
                     "mode": "忽略頻道模式"
+                },
+                "param_name": {
+                    "channels": "頻道",
+                    "mode": "模式"
                 }
             },
             "import": {
@@ -365,6 +449,10 @@
                 "param": {
                     "file": "要匯入的 JSON 檔案",
                     "merge": "是否與現有設定合併"
+                },
+                "param_name": {
+                    "file": "檔案",
+                    "merge": "合併"
                 }
             },
             "list": {
@@ -378,12 +466,20 @@
                     "new_response": "新的回覆內容",
                     "new_trigger": "新的觸發字串",
                     "trigger": "觸發字串"
+                },
+                "param_name": {
+                    "new_response": "新回覆內容",
+                    "new_trigger": "新觸發字串",
+                    "trigger": "觸發字串"
                 }
             },
             "remove": {
                 "desc": "移除自動回覆",
                 "name": "移除",
                 "param": {
+                    "trigger": "觸發字串"
+                },
+                "param_name": {
                     "trigger": "觸發字串"
                 }
             },
@@ -401,6 +497,10 @@
                 "param": {
                     "merge": "是否與現有規則合併",
                     "pack": "要套用的範本包"
+                },
+                "param_name": {
+                    "merge": "合併",
+                    "pack": "範本包"
                 }
             },
             "test": {
@@ -408,6 +508,9 @@
                 "name": "測試",
                 "param": {
                     "response": "要測試的回覆內容"
+                },
+                "param_name": {
+                    "response": "回覆內容"
                 }
             }
         }
@@ -427,6 +530,14 @@
                 "month": "出生月（1-12）",
                 "public": "是否公開此排盤結果（預設為私密）",
                 "year": "出生年（西元）"
+            },
+            "param_name": {
+                "day": "日",
+                "gender": "性別",
+                "hour": "時",
+                "month": "月",
+                "public": "公開",
+                "year": "年"
             }
         }
     },
@@ -437,6 +548,9 @@
                 "name": "頭像",
                 "param": {
                     "image": "新的頭像圖片"
+                },
+                "param_name": {
+                    "image": "圖片"
                 }
             },
             "banner": {
@@ -444,6 +558,9 @@
                 "name": "橫幅",
                 "param": {
                     "image": "新的橫幅圖片"
+                },
+                "param_name": {
+                    "image": "圖片"
                 }
             },
             "bio": {
@@ -451,6 +568,9 @@
                 "name": "介紹",
                 "param": {
                     "bio": "新的介紹（\\n 代表換行）（最多 100 字）"
+                },
+                "param_name": {
+                    "bio": "介紹"
                 }
             },
             "root": {
@@ -465,6 +585,9 @@
                 "name": "動態語音音效",
                 "param": {
                     "audio": "音檔（MP3、WAV、OGG 格式，最大 5MB，建議 3-10 秒）"
+                },
+                "param_name": {
+                    "audio": "音訊"
                 }
             },
             "feedgrass": {
@@ -636,6 +759,9 @@
                 "name": "追蹤",
                 "param": {
                     "channel": "要發送通知的頻道"
+                },
+                "param_name": {
+                    "channel": "頻道"
                 }
             },
             "root": {
@@ -664,6 +790,9 @@
             "desc": "量屌長",
             "param": {
                 "global_dsize": "是否使用全域紀錄 (預設否)"
+            },
+            "param_name": {
+                "global_dsize": "全域"
             }
         },
         "dsize_battle": {
@@ -671,6 +800,9 @@
             "name": "dsize-對決",
             "param": {
                 "opponent": "要比屌長的對象"
+            },
+            "param_name": {
+                "opponent": "對手"
             }
         },
         "dsize_feedgrass": {
@@ -683,6 +815,10 @@
             "param": {
                 "global_feedgrass": "是否草飼全域排行榜上的男娘 (預設否)",
                 "user": "要草飼的對象"
+            },
+            "param_name": {
+                "global_feedgrass": "全域草飼",
+                "user": "用戶"
             }
         },
         "dsize_feedgrass_nsfw": {
@@ -695,6 +831,10 @@
             "param": {
                 "global_feedgrass": "是否草飼全域排行榜上的男娘 (預設否)",
                 "user": "要草飼的對象"
+            },
+            "param_name": {
+                "global_feedgrass": "全域草飼",
+                "user": "用戶"
             }
         },
         "dsize_feedgrass_nsfw_toggle": {
@@ -711,6 +851,10 @@
             "param": {
                 "global_history": "是否顯示全域紀錄 (預設否)",
                 "user": "查看指定用戶的歷史紀錄 (預設為自己)"
+            },
+            "param_name": {
+                "global_history": "全域歷史紀錄",
+                "user": "用戶"
             }
         },
         "dsize_leaderboard": {
@@ -724,6 +868,11 @@
                 "global_leaderboard": "顯示全域排行榜 (預設否)",
                 "limit": "顯示前幾名 (預設10)",
                 "reverse": "反轉排行榜 (預設否)"
+            },
+            "param_name": {
+                "global_leaderboard": "全域排行榜",
+                "limit": "限制",
+                "reverse": "反轉"
             }
         },
         "dsize_settings": {
@@ -738,6 +887,10 @@
             "param": {
                 "setting": "要設定的項目",
                 "value": "設定的值"
+            },
+            "param_name": {
+                "setting": "設定項",
+                "value": "值"
             }
         },
         "dsize_stats": {
@@ -764,6 +917,9 @@
                 "name": "播放音效",
                 "param": {
                     "enable": "是否啟用進入頻道前播放音效"
+                },
+                "param_name": {
+                    "enable": "啟用"
                 }
             },
             "root": {
@@ -776,6 +932,11 @@
                     "channel": "選擇頻道",
                     "channel_category": "選擇頻道類別",
                     "channel_name": "選擇頻道名稱模板 (使用 {user} 代表用戶名稱)"
+                },
+                "param_name": {
+                    "channel": "頻道",
+                    "channel_category": "頻道類別",
+                    "channel_name": "頻道名稱"
                 }
             },
             "unblacklist_role": {
@@ -799,6 +960,9 @@
                 "name": "餘額",
                 "param": {
                     "user": "查看其他用戶的餘額"
+                },
+                "param_name": {
+                    "user": "用戶"
                 }
             },
             "buy": {
@@ -812,6 +976,11 @@
                     "amount": "購買數量",
                     "item_id": "要購買的物品",
                     "scope": "商店類型"
+                },
+                "param_name": {
+                    "amount": "數量",
+                    "item_id": "物品",
+                    "scope": "範圍"
                 }
             },
             "daily": {
@@ -819,6 +988,9 @@
                 "name": "每日獎勵",
                 "param": {
                     "global_daily": "是否領取全域獎勵"
+                },
+                "param_name": {
+                    "global_daily": "全域每日獎勵"
                 }
             },
             "exchange": {
@@ -831,6 +1003,10 @@
                 "param": {
                     "amount": "金額",
                     "direction": "兌換方向"
+                },
+                "param_name": {
+                    "amount": "數量",
+                    "direction": "方向"
                 }
             },
             "history": {
@@ -843,6 +1019,9 @@
                 "param": {
                     "page": "頁數",
                     "scope": "查看範圍"
+                },
+                "param_name": {
+                    "scope": "範圍"
                 }
             },
             "hourly": {
@@ -850,6 +1029,9 @@
                 "name": "每小時獎勵",
                 "param": {
                     "global_hourly": "是否領取全域獎勵"
+                },
+                "param_name": {
+                    "global_hourly": "全域每小時獎勵"
                 }
             },
             "info": {
@@ -866,6 +1048,9 @@
                 "name": "排行榜",
                 "param": {
                     "currency": "排行類型"
+                },
+                "param_name": {
+                    "currency": "貨幣類型"
                 }
             },
             "pay": {
@@ -879,6 +1064,11 @@
                     "amount": "金額",
                     "currency": "貨幣類型",
                     "user": "收款人"
+                },
+                "param_name": {
+                    "amount": "數量",
+                    "currency": "貨幣類型",
+                    "user": "用戶"
                 }
             },
             "root": {
@@ -896,6 +1086,11 @@
                     "amount": "賣出數量",
                     "item_id": "要賣出的物品",
                     "scope": "商店類型"
+                },
+                "param_name": {
+                    "amount": "數量",
+                    "item_id": "物品",
+                    "scope": "範圍"
                 }
             },
             "shop": {
@@ -914,6 +1109,15 @@
                     "request_item_amount": "想要的物品數量",
                     "request_money": "你想要的金額",
                     "user": "交易對象"
+                },
+                "param_name": {
+                    "offer_item": "提供物品",
+                    "offer_item_amount": "提供物品數量",
+                    "offer_money": "提供金額",
+                    "request_item": "要求物品",
+                    "request_item_amount": "要求物品數量",
+                    "request_money": "要求金額",
+                    "user": "用戶"
                 }
             }
         },
@@ -923,6 +1127,9 @@
                 "name": "全域模式",
                 "param": {
                     "enabled": "True = 強制全域，False = 恢復伺服器模式"
+                },
+                "param_name": {
+                    "enabled": "啟用"
                 }
             },
             "info": {
@@ -938,6 +1145,9 @@
                 "name": "設定名稱",
                 "param": {
                     "name": "新的貨幣名稱"
+                },
+                "param_name": {
+                    "name": "名稱"
                 }
             },
             "toggle_flow": {
@@ -1012,6 +1222,10 @@
             "param": {
                 "message": "要發送的訊息內容",
                 "user": "要假冒的用戶"
+            },
+            "param_name": {
+                "message": "訊息",
+                "user": "用戶"
             }
         },
         "fake_admin": {
@@ -1026,6 +1240,10 @@
                 "param": {
                     "mode": "要做什麼？",
                     "regex": "要過濾的正則表達式，僅在選擇添加或移除模式時需要"
+                },
+                "param_name": {
+                    "mode": "模式",
+                    "regex": "正則表達式"
                 }
             },
             "log_channel": {
@@ -1033,6 +1251,9 @@
                 "name": "日誌頻道",
                 "param": {
                     "channel": "要設置的假冒用戶紀錄頻道，留空以查看當前頻道"
+                },
+                "param_name": {
+                    "channel": "頻道"
                 }
             },
             "root": {
@@ -1045,6 +1266,9 @@
             "name": "假冒黑名單",
             "param": {
                 "user": "要加入或移除黑名單的用戶 (若指定本機器人代表所有人)"
+            },
+            "param_name": {
+                "user": "用戶"
             }
         }
     },
@@ -1100,6 +1324,14 @@
                     "pickup_duration": "物品可以被撿起的時間（秒）",
                     "pickup_only_once": "物品只能被撿起一次嗎？",
                     "scope": "物品來源範圍（預設自動偵測）"
+                },
+                "param_name": {
+                    "amount": "數量",
+                    "can_pickup": "可撿起",
+                    "item_id": "物品",
+                    "pickup_duration": "撿起持續時間",
+                    "pickup_only_once": "僅能撿起一次",
+                    "scope": "範圍"
                 }
             },
             "give": {
@@ -1114,6 +1346,12 @@
                     "item_id": "你想給予的物品ID",
                     "scope": "物品來源範圍（預設自動偵測）",
                     "user": "你想給予物品的用戶"
+                },
+                "param_name": {
+                    "amount": "數量",
+                    "item_id": "物品",
+                    "scope": "範圍",
+                    "user": "用戶"
                 }
             },
             "list": {
@@ -1125,6 +1363,9 @@
                 "name": "列出",
                 "param": {
                     "scope": "查看範圍（預設自動偵測）"
+                },
+                "param_name": {
+                    "scope": "範圍"
                 }
             },
             "root": {
@@ -1141,6 +1382,10 @@
                 "param": {
                     "item_id": "你想使用的物品ID",
                     "scope": "使用範圍（預設自動偵測）"
+                },
+                "param_name": {
+                    "item_id": "物品",
+                    "scope": "範圍"
                 }
             }
         },
@@ -1157,6 +1402,16 @@
                     "price": "商店定價（伺服幣，僅在「上架商店」為是時有效）",
                     "remove_after_use": "使用後是否自動移除物品",
                     "revenue_share_user": "分潤用戶，物品被使用後會獲得 90% 價值"
+                },
+                "param_name": {
+                    "content": "內容",
+                    "description": "描述",
+                    "ephemeral_response": "隱藏回覆",
+                    "list_in_shop": "上架商店",
+                    "name": "名稱",
+                    "price": "定價",
+                    "remove_after_use": "使用後移除",
+                    "revenue_share_user": "收益分成用戶"
                 }
             },
             "editcustom": {
@@ -1171,6 +1426,16 @@
                     "name": "物品名稱",
                     "remove_after_use": "使用後是否自動移除物品",
                     "revenue_share_user": "分潤用戶，物品被使用後會獲得 90% 價值"
+                },
+                "param_name": {
+                    "content": "內容",
+                    "description": "描述",
+                    "ephemeral_response": "隱藏回覆",
+                    "item_id": "物品",
+                    "list_in_shop": "上架商店",
+                    "name": "名稱",
+                    "remove_after_use": "使用後移除",
+                    "revenue_share_user": "收益分成用戶"
                 }
             },
             "give": {
@@ -1180,6 +1445,11 @@
                     "amount": "你想給予的數量",
                     "item_id": "你想給予的物品ID",
                     "user": "你想給予物品的用戶"
+                },
+                "param_name": {
+                    "amount": "數量",
+                    "item_id": "物品",
+                    "user": "用戶"
                 }
             },
             "list": {
@@ -1195,6 +1465,9 @@
                 "name": "列出用戶",
                 "param": {
                     "user": "你想查詢的用戶"
+                },
+                "param_name": {
+                    "user": "用戶"
                 }
             },
             "remove": {
@@ -1204,6 +1477,11 @@
                     "amount": "你想移除的數量",
                     "item_id": "你想移除的物品ID",
                     "user": "你想移除物品的用戶"
+                },
+                "param_name": {
+                    "amount": "數量",
+                    "item_id": "物品",
+                    "user": "用戶"
                 }
             },
             "removecustom": {
@@ -1211,6 +1489,9 @@
                 "name": "移除自定義物品",
                 "param": {
                     "item_id": "要移除的自定義物品"
+                },
+                "param_name": {
+                    "item_id": "物品"
                 }
             },
             "root": {
@@ -1262,6 +1543,9 @@
             "name": "設定日誌頻道",
             "param": {
                 "channel": "選擇日誌頻道"
+            },
+            "param_name": {
+                "channel": "頻道"
             }
         }
     },
@@ -1277,6 +1561,10 @@
                 "param": {
                     "cooldown": "冷卻秒數（10-86400，預設 600）",
                     "role": "要管理的身分組"
+                },
+                "param_name": {
+                    "cooldown": "冷卻秒數",
+                    "role": "身分組"
                 }
             },
             "list": {
@@ -1288,6 +1576,9 @@
                 "name": "移除",
                 "param": {
                     "role": "要移除管理的身分組"
+                },
+                "param_name": {
+                    "role": "身分組"
                 }
             },
             "root": {
@@ -1300,6 +1591,11 @@
                     "announce": "進入冷卻時是否在該頻道公告",
                     "automod_mode": "AutoMod 模式：冷卻期間用 AutoMod 規則封鎖，身分組保持可提及",
                     "count_admins": "管理員的提及是否也觸發冷卻"
+                },
+                "param_name": {
+                    "announce": "冷卻公告",
+                    "automod_mode": "automod模式",
+                    "count_admins": "計入管理員"
                 }
             },
             "setup": {
@@ -1311,6 +1607,9 @@
                 "name": "切換",
                 "param": {
                     "enable": "留空則切換目前狀態"
+                },
+                "param_name": {
+                    "enable": "啟用"
                 }
             }
         }
@@ -1332,6 +1631,9 @@
             "name": "有料板子",
             "param": {
                 "channel": "要設置的頻道（若未設置則清除設定）"
+            },
+            "param_name": {
+                "channel": "頻道"
             }
         }
     },
@@ -1342,6 +1644,9 @@
                 "name": "大老二",
                 "param": {
                     "use_global": "是否使用全域幣（預設依伺服器設定）"
+                },
+                "param_name": {
+                    "use_global": "使用全域"
                 }
             },
             "blackjack": {
@@ -1350,6 +1655,10 @@
                 "param": {
                     "bet": "賭注金額（50～2000）",
                     "use_global": "是否使用全域幣（預設依伺服器設定）"
+                },
+                "param_name": {
+                    "bet": "賭注",
+                    "use_global": "使用全域"
                 }
             },
             "coinflip": {
@@ -1357,6 +1666,9 @@
                 "name": "擲硬幣",
                 "param": {
                     "bet": "賭注金額（50～2000）"
+                },
+                "param_name": {
+                    "bet": "賭注"
                 }
             },
             "dice": {
@@ -1364,6 +1676,9 @@
                 "name": "骰子",
                 "param": {
                     "bet": "賭注金額（50～2000）"
+                },
+                "param_name": {
+                    "bet": "賭注"
                 }
             },
             "doom": {
@@ -1375,6 +1690,10 @@
                 "param": {
                     "bet": "賭注金額（50～2000）",
                     "use_global": "是否使用全域幣（預設依伺服器設定）"
+                },
+                "param_name": {
+                    "bet": "賭注",
+                    "use_global": "使用全域"
                 }
             },
             "lottery": {
@@ -1384,6 +1703,11 @@
                     "bet": "每張票的投注金額（50～2000；查詢狀態時留空）",
                     "number": "選擇 00～99（查詢狀態時留空）",
                     "use_global": "是否使用全域幣（預設依伺服器設定）"
+                },
+                "param_name": {
+                    "bet": "賭注",
+                    "number": "數字",
+                    "use_global": "使用全域"
                 }
             },
             "root": {
@@ -1406,6 +1730,12 @@
                     "bet_type": "投注方式",
                     "number": "單號投注時選擇 0～36",
                     "use_global": "是否使用全域幣（預設依伺服器設定）"
+                },
+                "param_name": {
+                    "bet": "賭注",
+                    "bet_type": "賭注類型",
+                    "number": "數字",
+                    "use_global": "使用全域"
                 }
             },
             "scratchcard": {
@@ -1414,6 +1744,10 @@
                 "param": {
                     "bet": "賭注金額（50～2000）",
                     "use_global": "是否使用全域幣（預設依伺服器設定）"
+                },
+                "param_name": {
+                    "bet": "賭注",
+                    "use_global": "使用全域"
                 }
             },
             "slots": {
@@ -1422,6 +1756,10 @@
                 "param": {
                     "bet": "賭注金額（50～2000）",
                     "use_global": "是否使用全域幣（預設依伺服器設定）"
+                },
+                "param_name": {
+                    "bet": "賭注",
+                    "use_global": "使用全域"
                 }
             },
             "tower": {
@@ -1430,6 +1768,10 @@
                 "param": {
                     "bet": "賭注金額（50～2000）",
                     "use_global": "是否使用全域幣（預設依伺服器設定）"
+                },
+                "param_name": {
+                    "bet": "賭注",
+                    "use_global": "使用全域"
                 }
             }
         }
@@ -1453,6 +1795,14 @@
                 "message": "警告訊息（delete/warn 用），可用 {user} 代表用戶",
                 "prepend": "要接在此動作前面的既有指令（用逗號分隔多個動作時）",
                 "reason": "原因（mute/kick/ban 用）"
+            },
+            "param_name": {
+                "action_type": "動作類型",
+                "delete_message_duration": "刪除訊息時長",
+                "duration": "持續時間",
+                "message": "訊息",
+                "prepend": "前置指令",
+                "reason": "原因"
             }
         },
         "ban": {
@@ -1464,6 +1814,13 @@
                 "reason": "封禁原因（可選）",
                 "send_moderation_message": "是否同步發送處分通知",
                 "user": "選擇用戶"
+            },
+            "param_name": {
+                "delete_message": "刪除訊息",
+                "duration": "持續時間",
+                "reason": "原因",
+                "send_moderation_message": "發送懲處公告",
+                "user": "用戶"
             }
         },
         "custom_action_add": {
@@ -1472,6 +1829,10 @@
             "param": {
                 "action": "要執行的動作字串（例如 mute 1h 在非宣傳區宣傳, smm）",
                 "name": "自訂指令名稱（例如 ad）"
+            },
+            "param_name": {
+                "action": "動作",
+                "name": "名稱"
             }
         },
         "custom_action_list": {
@@ -1483,6 +1844,9 @@
             "name": "自定義動作-移除",
             "param": {
                 "name": "要刪除的自訂指令名稱"
+            },
+            "param_name": {
+                "name": "名稱"
             }
         },
         "kick": {
@@ -1492,6 +1856,11 @@
                 "reason": "踢出原因（可選）",
                 "send_moderation_message": "是否同步發送處分通知",
                 "user": "選擇用戶（@或ID）"
+            },
+            "param_name": {
+                "reason": "原因",
+                "send_moderation_message": "發送懲處公告",
+                "user": "用戶"
             }
         },
         "moderation_message_channel": {
@@ -1499,6 +1868,9 @@
             "name": "懲處公告頻道",
             "param": {
                 "channel": "選擇頻道"
+            },
+            "param_name": {
+                "channel": "頻道"
             }
         },
         "moderation_message_format": {
@@ -1511,6 +1883,10 @@
             "param": {
                 "action": "輸入懲處指令，使用逗號分隔多個指令，例如：ban 1d spamming, mute 10m",
                 "users": "選擇用戶 (提及或是 ID，使用逗號、空格或換行分隔多個用戶)"
+            },
+            "param_name": {
+                "action": "動作",
+                "users": "目標用戶"
             }
         },
         "multi_moderate_action": {
@@ -1518,6 +1894,9 @@
             "name": "多重操作",
             "param": {
                 "user": "選擇用戶"
+            },
+            "param_name": {
+                "user": "用戶"
             }
         },
         "request": {
@@ -1529,6 +1908,12 @@
                     "reason": "封禁原因（可選）",
                     "request_to": "請求誰來確認（預設為對方本人）",
                     "user": "要封禁的用戶"
+                },
+                "param_name": {
+                    "duration": "持續時間",
+                    "reason": "原因",
+                    "request_to": "請求人",
+                    "user": "用戶"
                 }
             },
             "kick": {
@@ -1538,6 +1923,11 @@
                     "reason": "踢出原因（可選）",
                     "request_to": "請求誰來確認（預設為對方本人）",
                     "user": "要踢出的用戶"
+                },
+                "param_name": {
+                    "reason": "原因",
+                    "request_to": "請求人",
+                    "user": "用戶"
                 }
             },
             "root": {
@@ -1556,6 +1946,10 @@
                     "action": "要設定的動作",
                     "enabled": "是否啟用",
                     "max_duration": "禁言/封禁最長時間（例如 1h，0 = 不限制）"
+                },
+                "param_name": {
+                    "action": "動作",
+                    "enabled": "啟用"
                 }
             },
             "timeout": {
@@ -1566,6 +1960,12 @@
                     "reason": "禁言原因（可選）",
                     "request_to": "請求誰來確認（預設為對方本人）",
                     "user": "要禁言的用戶"
+                },
+                "param_name": {
+                    "duration": "持續時間",
+                    "reason": "原因",
+                    "request_to": "請求人",
+                    "user": "用戶"
                 }
             }
         },
@@ -1578,6 +1978,13 @@
                 "moderator": "執行管理員（可選）",
                 "reason": "處分原因",
                 "user": "選擇用戶"
+            },
+            "param_name": {
+                "action": "動作",
+                "direct": "直接",
+                "moderator": "執行管理員",
+                "reason": "原因",
+                "user": "用戶"
             }
         },
         "timeout": {
@@ -1588,6 +1995,12 @@
                 "reason": "禁言原因（可選）",
                 "send_moderation_message": "是否同步發送處分通知",
                 "user": "選擇用戶"
+            },
+            "param_name": {
+                "duration": "持續時間",
+                "reason": "原因",
+                "send_moderation_message": "發送懲處公告",
+                "user": "用戶"
             }
         },
         "unban": {
@@ -1595,6 +2008,9 @@
             "name": "解封",
             "param": {
                 "user": "選擇用戶"
+            },
+            "param_name": {
+                "user": "用戶"
             }
         },
         "untimeout": {
@@ -1602,6 +2018,9 @@
             "name": "解除禁言",
             "param": {
                 "user": "選擇用戶"
+            },
+            "param_name": {
+                "user": "用戶"
             }
         },
         "vote": {
@@ -1612,6 +2031,11 @@
                     "duration": "封禁時間（可選，預設永久）",
                     "reason": "封禁原因（可選）",
                     "user": "要封禁的用戶"
+                },
+                "param_name": {
+                    "duration": "持續時間",
+                    "reason": "原因",
+                    "user": "用戶"
                 }
             },
             "kick": {
@@ -1620,6 +2044,10 @@
                 "param": {
                     "reason": "踢出原因（可選）",
                     "user": "要踢出的用戶"
+                },
+                "param_name": {
+                    "reason": "原因",
+                    "user": "用戶"
                 }
             },
             "root": {
@@ -1640,6 +2068,11 @@
                     "max_duration": "禁言/封禁最長時間（例如 1h，0 = 不限制）",
                     "threshold": "固定投票門檻（0 = 自動計算）",
                     "vote_duration": "投票持續時間（例如 10m，預設 10 分鐘）"
+                },
+                "param_name": {
+                    "action": "動作",
+                    "enabled": "啟用",
+                    "threshold": "閾值"
                 }
             },
             "timeout": {
@@ -1649,6 +2082,11 @@
                     "duration": "禁言時間（預設10分鐘）",
                     "reason": "禁言原因（可選）",
                     "user": "要禁言的用戶"
+                },
+                "param_name": {
+                    "duration": "持續時間",
+                    "reason": "原因",
+                    "user": "用戶"
                 }
             }
         }
@@ -1665,6 +2103,10 @@
             "param": {
                 "action": "選擇要設定的懲罰類型",
                 "enable": "是否啟用通知"
+            },
+            "param_name": {
+                "action": "動作",
+                "enable": "啟用"
             }
         },
         "user_appeal_blacklist": {
@@ -1673,6 +2115,10 @@
             "param": {
                 "reason": "加入黑名單的理由(選填)",
                 "user": "要加入或移除黑名單的用戶"
+            },
+            "param_name": {
+                "reason": "原因",
+                "user": "用戶"
             }
         },
         "user_appeal_channel": {
@@ -1680,6 +2126,9 @@
             "name": "用戶申訴頻道",
             "param": {
                 "channel": "要設置的用戶申訴頻道，留空則關閉申訴功能。"
+            },
+            "param_name": {
+                "channel": "頻道"
             }
         },
         "view_appeal_blacklist": {
@@ -1699,6 +2148,9 @@
                 "name": "循環",
                 "param": {
                     "mode": "循環模式"
+                },
+                "param_name": {
+                    "mode": "模式"
                 }
             },
             "nodes": {
@@ -1718,6 +2170,9 @@
                 "name": "播放",
                 "param": {
                     "query": "歌曲名稱或 URL"
+                },
+                "param_name": {
+                    "query": "關鍵字"
                 }
             },
             "queue": {
@@ -1733,6 +2188,9 @@
                 "name": "電台",
                 "param": {
                     "station": "要播放的電台"
+                },
+                "param_name": {
+                    "station": "頻道"
                 }
             },
             "recommend": {
@@ -1740,6 +2198,9 @@
                 "name": "推薦",
                 "param": {
                     "count": "要添加的推薦歌曲數量 (1-10，預設 5)"
+                },
+                "param_name": {
+                    "count": "數量"
                 }
             },
             "restore_queue": {
@@ -1759,6 +2220,9 @@
                 "name": "搜尋",
                 "param": {
                     "query": "搜尋歌曲（支援自動完成）"
+                },
+                "param_name": {
+                    "query": "關鍵字"
                 }
             },
             "shuffle": {
@@ -1778,6 +2242,9 @@
                 "name": "音量",
                 "param": {
                     "level": "音量等級 (0-100)"
+                },
+                "param_name": {
+                    "level": "等級"
                 }
             }
         }
@@ -1789,6 +2256,10 @@
             "param": {
                 "english": "是否英文版？",
                 "text": "要變可愛的文字"
+            },
+            "param_name": {
+                "english": "英文版",
+                "text": "文字"
             }
         }
     },
@@ -1816,6 +2287,10 @@
                 "param": {
                     "channel": "要接收報告的頻道",
                     "text": "可選的附加文字訊息"
+                },
+                "param_name": {
+                    "channel": "頻道",
+                    "text": "文字"
                 }
             },
             "status": {
@@ -1829,6 +2304,9 @@
             "desc": "生成 PetPet GIF",
             "param": {
                 "user": "要撫摸的使用者 (預設為自己)"
+            },
+            "param_name": {
+                "user": "用戶"
             }
         }
     },
@@ -1844,6 +2322,11 @@
                 "pid": "頁數",
                 "spoilers": "是否標記為暴雷內容",
                 "tags": "標籤"
+            },
+            "param_name": {
+                "pid": "頁數",
+                "spoilers": "暴雷",
+                "tags": "標籤"
             }
         },
         "r34tags": {
@@ -1851,6 +2334,9 @@
             "name": "r34標籤",
             "param": {
                 "query": "搜尋關鍵字"
+            },
+            "param_name": {
+                "query": "關鍵字"
             }
         }
     },
@@ -1872,6 +2358,10 @@
                 "param": {
                     "action": "要執行的動作",
                     "role": "身分組"
+                },
+                "param_name": {
+                    "action": "動作",
+                    "role": "身分組"
                 }
             },
             "root": {
@@ -1882,6 +2372,9 @@
                 "name": "設定伺服器規則",
                 "param": {
                     "rules": "伺服器規則內容，多行請用 \\n 來換行"
+                },
+                "param_name": {
+                    "rules": "規則"
                 }
             },
             "settings": {
@@ -1897,6 +2390,10 @@
                 "param": {
                     "setting": "要設定的項目",
                     "value": "設定的值 (對於頻道，請使用 #頻道名稱 或頻道ID)"
+                },
+                "param_name": {
+                    "setting": "設定項",
+                    "value": "值"
                 }
             }
         }
@@ -1920,6 +2417,10 @@
                 "param": {
                     "enable": "啟用或停用自動分配未驗證角色",
                     "trigger": "選擇給予身分組條件"
+                },
+                "param_name": {
+                    "enable": "啟用",
+                    "trigger": "觸發字串"
                 }
             },
             "check_relation": {
@@ -1927,6 +2428,9 @@
                 "name": "檢查關聯帳號",
                 "param": {
                     "user": "要檢查的用戶"
+                },
+                "param_name": {
+                    "user": "用戶"
                 }
             },
             "country_alert": {
@@ -1941,6 +2445,12 @@
                     "countries": "輸入國家代碼，使用逗號分隔 (例如: US,CN,RU)",
                     "enable": "啟用或停用地區警示功能",
                     "mode": "選擇警示模式"
+                },
+                "param_name": {
+                    "channel": "頻道",
+                    "countries": "國家列表",
+                    "enable": "啟用",
+                    "mode": "模式"
                 }
             },
             "create_unverified_role": {
@@ -1948,6 +2458,9 @@
                 "name": "建立未驗證身分組",
                 "param": {
                     "name": "未驗證成員身分組名稱"
+                },
+                "param_name": {
+                    "name": "名稱"
                 }
             },
             "disable": {
@@ -1963,6 +2476,9 @@
                 "name": "強制驗證",
                 "param": {
                     "user": "選擇要強制驗證的用戶"
+                },
+                "param_name": {
+                    "user": "用戶"
                 }
             },
             "manual_check_country": {
@@ -1970,6 +2486,9 @@
                 "name": "手動檢查地區",
                 "param": {
                     "user": "選擇用戶"
+                },
+                "param_name": {
+                    "user": "用戶"
                 }
             },
             "minage": {
@@ -1977,6 +2496,9 @@
                 "name": "最小帳號年齡",
                 "param": {
                     "min_age": "最小帳號年齡（天）"
+                },
+                "param_name": {
+                    "min_age": "最小年齡"
                 }
             },
             "quick_setup": {
@@ -1989,6 +2511,10 @@
                 "param": {
                     "action": "要執行的操作 (格式與 !moderate 相同)",
                     "user": "選擇用戶"
+                },
+                "param_name": {
+                    "action": "動作",
+                    "user": "用戶"
                 }
             },
             "root": {
@@ -2005,6 +2531,9 @@
                 "name": "設定人機驗證",
                 "param": {
                     "captcha_provider": "選擇 CAPTCHA 提供者"
+                },
+                "param_name": {
+                    "captcha_provider": "人機驗證提供者"
                 }
             },
             "set_unverified_role": {
@@ -2012,6 +2541,9 @@
                 "name": "設定未驗證身分組",
                 "param": {
                     "role": "選擇未驗證成員的角色"
+                },
+                "param_name": {
+                    "role": "身分組"
                 }
             },
             "setup": {
@@ -2023,6 +2555,9 @@
                 "name": "開始強制驗證",
                 "param": {
                     "duration": "強制驗證持續的時間（?h?m?s...）"
+                },
+                "param_name": {
+                    "duration": "持續時間"
                 }
             },
             "status": {
@@ -2042,6 +2577,12 @@
                     "message": "自訂驗證訊息內容",
                     "title": "自訂 Embed 標題",
                     "type": "選擇要如何提示"
+                },
+                "param_name": {
+                    "channel": "頻道",
+                    "message": "訊息",
+                    "title": "標題",
+                    "type": "類型"
                 }
             }
         }
@@ -2053,6 +2594,9 @@
                 "name": "指令",
                 "param": {
                     "full": "是否顯示完整統計數據"
+                },
+                "param_name": {
+                    "full": "完整"
                 }
             },
             "petpet_stats": {
@@ -2073,6 +2617,11 @@
                     "allow_mentions": "首次與手動發布時是否允許提及",
                     "channel": "要設定的文字或公告頻道",
                     "content": "置底訊息內容"
+                },
+                "param_name": {
+                    "allow_mentions": "允許提及",
+                    "channel": "頻道",
+                    "content": "內容"
                 }
             },
             "edit": {
@@ -2082,6 +2631,11 @@
                     "allow_mentions": "首次與手動發布時是否允許提及",
                     "channel": "已設定的文字或公告頻道",
                     "content": "新的置底訊息內容"
+                },
+                "param_name": {
+                    "allow_mentions": "允許提及",
+                    "channel": "頻道",
+                    "content": "內容"
                 }
             },
             "list": {
@@ -2094,6 +2648,9 @@
                 "param": {
                     "channel": "要移動的置底訊息頻道",
                     "position": "新的順序位置"
+                },
+                "param_name": {
+                    "channel": "頻道"
                 }
             },
             "publish": {
@@ -2101,6 +2658,9 @@
                 "name": "發布",
                 "param": {
                     "channel": "要立即重新發布置底訊息的頻道"
+                },
+                "param_name": {
+                    "channel": "頻道"
                 }
             },
             "remove": {
@@ -2108,6 +2668,9 @@
                 "name": "移除",
                 "param": {
                     "channel": "要移除置底訊息的頻道"
+                },
+                "param_name": {
+                    "channel": "頻道"
                 }
             },
             "root": {
@@ -2120,6 +2683,10 @@
                 "param": {
                     "min_interval_seconds": "同頻道兩次自動重貼的最短間隔",
                     "quiet_seconds": "最後一則真人訊息後等待秒數"
+                },
+                "param_name": {
+                    "min_interval_seconds": "最短間隔秒數",
+                    "quiet_seconds": "安靜秒數"
                 }
             }
         }
@@ -2131,6 +2698,9 @@
                 "name": "新增",
                 "param": {
                     "role": "要加入允許清單的身份組"
+                },
+                "param_name": {
+                    "role": "身分組"
                 }
             },
             "clear": {
@@ -2142,6 +2712,9 @@
                 "name": "清除用戶紀錄",
                 "param": {
                     "user": "要清除紀錄的用戶"
+                },
+                "param_name": {
+                    "user": "用戶"
                 }
             },
             "ignore_bots": {
@@ -2153,6 +2726,9 @@
                 "name": "忽略機器人",
                 "param": {
                     "enable": "是否忽略機器人帳號"
+                },
+                "param_name": {
+                    "enable": "啟用"
                 }
             },
             "list": {
@@ -2164,6 +2740,9 @@
                 "name": "移除",
                 "param": {
                     "role": "要從允許清單移除的身份組"
+                },
+                "param_name": {
+                    "role": "身分組"
                 }
             },
             "root": {
@@ -2175,6 +2754,9 @@
                 "name": "設定日誌頻道",
                 "param": {
                     "channel": "用於記錄 StickyRole 操作的頻道（留空則取消設定）"
+                },
+                "param_name": {
+                    "channel": "頻道"
                 }
             },
             "toggle": {
@@ -2186,6 +2768,9 @@
                 "name": "切換",
                 "param": {
                     "enable": "是否啟用 StickyRole 功能"
+                },
+                "param_name": {
+                    "enable": "啟用"
                 }
             },
             "view": {
@@ -2193,6 +2778,9 @@
                 "name": "查看",
                 "param": {
                     "user": "要查看的用戶"
+                },
+                "param_name": {
+                    "user": "用戶"
                 }
             }
         }
@@ -2204,6 +2792,9 @@
                 "name": "新增",
                 "param": {
                     "member": "要加入的用戶"
+                },
+                "param_name": {
+                    "member": "成員"
                 }
             },
             "claim": {
@@ -2215,6 +2806,9 @@
                 "name": "關閉",
                 "param": {
                     "reason": "關閉原因（會記錄在逐字稿摘要中）"
+                },
+                "param_name": {
+                    "reason": "原因"
                 }
             },
             "panel": {
@@ -2222,6 +2816,9 @@
                 "name": "面板",
                 "param": {
                     "channel": "要發布面板的頻道（省略時使用設定的面板頻道）"
+                },
+                "param_name": {
+                    "channel": "頻道"
                 }
             },
             "remove": {
@@ -2229,6 +2826,9 @@
                 "name": "移除",
                 "param": {
                     "member": "要移出的用戶"
+                },
+                "param_name": {
+                    "member": "成員"
                 }
             },
             "root": {
@@ -2243,6 +2843,13 @@
                     "panel_channel": "開票按鈕面板所在的頻道",
                     "publish": "是否立即發布面板訊息（預設是）",
                     "staff_role": "客服身分組（更多身分組可到伺服器面板設定）"
+                },
+                "param_name": {
+                    "category": "分類",
+                    "log_channel": "紀錄頻道",
+                    "panel_channel": "面板頻道",
+                    "publish": "發布",
+                    "staff_role": "客服身分組"
                 }
             }
         },
@@ -2263,6 +2870,14 @@
                     "staff_role": "此類別額外的客服身分組（省略時只用全域客服）",
                     "style": "按鈕顏色（預設藍色）",
                     "welcome": "此類別專屬的歡迎訊息，可用 {user}、{subject}（省略時使用全域設定）"
+                },
+                "param_name": {
+                    "category": "分類",
+                    "emoji": "表情符號",
+                    "label": "按鈕文字",
+                    "staff_role": "客服身分組",
+                    "style": "顏色",
+                    "welcome": "歡迎訊息"
                 }
             },
             "edit": {
@@ -2282,6 +2897,15 @@
                     "style": "新的按鈕顏色",
                     "type": "要編輯的類別",
                     "welcome": "新的專屬歡迎訊息（輸入 - 可清除改用全域設定）"
+                },
+                "param_name": {
+                    "category": "分類",
+                    "emoji": "表情符號",
+                    "label": "按鈕文字",
+                    "staff_role": "客服身分組",
+                    "style": "顏色",
+                    "type": "類型",
+                    "welcome": "歡迎訊息"
                 }
             },
             "list": {
@@ -2293,6 +2917,9 @@
                 "name": "移除",
                 "param": {
                     "type": "要移除的類別"
+                },
+                "param_name": {
+                    "type": "類型"
                 }
             },
             "root": {
@@ -2312,6 +2939,9 @@
                 "name": "查詢路線",
                 "param": {
                     "route_key": "路線ID"
+                },
+                "param_name": {
+                    "route_key": "路線代碼"
                 }
             },
             "getstop": {
@@ -2320,6 +2950,10 @@
                 "param": {
                     "route_key": "路線ID",
                     "stop_id": "站牌ID"
+                },
+                "param_name": {
+                    "route_key": "路線代碼",
+                    "stop_id": "站點代碼"
                 }
             },
             "root": {
@@ -2330,6 +2964,9 @@
                 "name": "微笑單車",
                 "param": {
                     "station_name": "YouBike站點名稱"
+                },
+                "param_name": {
+                    "station_name": "站點名稱"
                 }
             }
         }
@@ -2348,6 +2985,9 @@
             "name": "網路貓咪",
             "param": {
                 "status_code": "HTTP 狀態碼（例如 404）"
+            },
+            "param_name": {
+                "status_code": "狀態碼"
             }
         },
         "info": {
@@ -2356,6 +2996,9 @@
                 "name": "頭像",
                 "param": {
                     "user": "要查詢的用戶"
+                },
+                "param_name": {
+                    "user": "用戶"
                 }
             },
             "banner": {
@@ -2363,6 +3006,9 @@
                 "name": "橫幅",
                 "param": {
                     "user": "要查詢的用戶"
+                },
+                "param_name": {
+                    "user": "用戶"
                 }
             },
             "bot": {
@@ -2370,6 +3016,9 @@
                 "name": "機器人",
                 "param": {
                     "full": "是否顯示完整模組列表與載入失敗模組"
+                },
+                "param_name": {
+                    "full": "完整"
                 }
             },
             "changelog": {
@@ -2385,6 +3034,9 @@
                 "name": "幫助",
                 "param": {
                     "command": "要查詢的指令名稱"
+                },
+                "param_name": {
+                    "command": "指令"
                 }
             },
             "mention": {
@@ -2393,6 +3045,10 @@
                 "param": {
                     "command": "指令名稱",
                     "subcommand": "子指令名稱（可選）"
+                },
+                "param_name": {
+                    "command": "指令",
+                    "subcommand": "子指令"
                 }
             },
             "ping": {
@@ -2415,6 +3071,9 @@
                 "name": "用戶",
                 "param": {
                     "user": "要查詢的用戶"
+                },
+                "param_name": {
+                    "user": "用戶"
                 }
             }
         },
@@ -2422,12 +3081,19 @@
             "desc": "我不想要被機器人幹走尼戳",
             "param": {
                 "need_message": "是否只有近期發過訊息的用戶才能領取（最近 50 條訊息的作者）"
+            },
+            "param_name": {
+                "need_message": "需要訊息"
             }
         },
         "randomnumber": {
             "desc": "生成一個隨機數字",
             "name": "隨機數字",
             "param": {
+                "max": "最大值",
+                "min": "最小值"
+            },
+            "param_name": {
                 "max": "最大值",
                 "min": "最小值"
             }
@@ -2441,6 +3107,9 @@
             "name": "隨機用戶",
             "param": {
                 "mention": "是否提及該用戶"
+            },
+            "param_name": {
+                "mention": "提及"
             }
         },
         "textlength": {
@@ -2448,6 +3117,9 @@
             "name": "文字長度",
             "param": {
                 "text": "要計算長度的文字"
+            },
+            "param_name": {
+                "text": "文字"
             }
         }
     }

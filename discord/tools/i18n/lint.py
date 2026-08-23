@@ -348,6 +348,13 @@ def check_unused(report: Report):
             continue
         if any(key.startswith(prefix) for prefix in enum_prefixes):
             continue
+        # …param_name.<x> 由 i18n.annotate_parameter_name_keys 於 sync 前從
+        # 對應的 …param.<x> describe key 動態推導，程式碼中不會出現字面值；
+        # 視同其 …param.<x> 兄弟 key 被引用
+        if ".param_name." in key:
+            prefix, _, pname = key.rpartition(".param_name.")
+            if f"{prefix}.param.{pname}" in referenced or f"{prefix}.desc" in referenced:
+                continue
         report.warning("unused", f"{key} is never referenced from code")
 
 

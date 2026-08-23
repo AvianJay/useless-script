@@ -644,6 +644,59 @@ class I18nCommandTree(app_commands.CommandTree):
             _log.exception("i18n locale resolution failed; falling back to default")
         return True
 
+    async def sync(self, *, guild: discord.abc.Snowflake | None = None):
+        annotate_parameter_name_keys(self)
+        return await super().sync(guild=guild)
+
+
+def _derive_param_name_key(command: app_commands.Command, param) -> str | None:
+    """推導參數「名稱」的 i18n key。
+
+    discord.py 會把沒有 rename 的參數名包成不帶 extras 的
+    locale_str(name)（transformers._convert_to_locale_strings），
+    CatalogTranslator 只翻譯帶 i18n_key 的字串，所以參數名稱需要在
+    sync 前補上 key。優先從參數描述的 key（…param.<name>）推導，
+    沒有 describe 的參數退而用指令描述的 key（…desc）推導。
+    """
+    desc = getattr(param, "description", None)
+    if isinstance(desc, locale_str):
+        desc_key = desc.extras.get("i18n_key")
+        if desc_key and ".param." in desc_key:
+            prefix, _, _ = desc_key.rpartition(".param.")
+            return f"{prefix}.param_name.{param.name}"
+    cmd_desc = getattr(command, "_locale_description", None)
+    if isinstance(cmd_desc, locale_str):
+        cmd_key = cmd_desc.extras.get("i18n_key")
+        if cmd_key and cmd_key.endswith(".desc"):
+            return f"{cmd_key[:-5]}.param_name.{param.name}"
+    return None
+
+
+def annotate_parameter_name_keys(tree: app_commands.CommandTree) -> int:
+    """sync 前把有語言檔內容的參數名稱補上帶 i18n_key 的 locale_str。
+
+    idempotent；只在任一語言的目錄裡真的有 …param_name.<name> 值時
+    才標註，避免對 30 個 locale 送出無意義的 translate 呼叫。
+    """
+    ensure_loaded()
+    annotated = 0
+    for command in tree.walk_commands():
+        if not isinstance(command, app_commands.Command):
+            continue
+        for param in command._params.values():
+            rename = getattr(param, "_rename", None)
+            if isinstance(rename, locale_str) and "i18n_key" in rename.extras:
+                continue  # 已標註（或模組自帶 rename key）
+            key = _derive_param_name_key(command, param)
+            if key is None:
+                continue
+            if not any(key in flat for flat in _catalogs.values()):
+                continue
+            base_name = str(rename) if isinstance(rename, (str, locale_str)) else param.name
+            param._rename = locale_str(base_name, i18n_key=key)
+            annotated += 1
+    return annotated
+
 
 # ============= choke point 2/3: View / Modal =============
 

@@ -8,6 +8,12 @@
                 "message": "The question or message you want to ask the AI",
                 "model": "Choose an AI model (default: openai)",
                 "new_conversation": "Start a new conversation (clears previous history)"
+            },
+            "param_name": {
+                "image": "image",
+                "message": "message",
+                "model": "model",
+                "new_conversation": "new_conversation"
             }
         },
         "ai_admin": {
@@ -34,6 +40,9 @@
                 "name": "mention-mode",
                 "param": {
                     "enabled": "Enable or disable mention/reply triggers; off by default"
+                },
+                "param_name": {
+                    "enabled": "enabled"
                 }
             },
             "prompt": {
@@ -50,6 +59,9 @@
                     "name": "set",
                     "param": {
                         "prompt": "Extra server context, style guidance, or response preferences for the AI"
+                    },
+                    "param_name": {
+                        "prompt": "prompt"
                     }
                 },
                 "view": {
@@ -75,6 +87,9 @@
             "name": "ai-set-default-model",
             "param": {
                 "model": "Choose a default AI model"
+            },
+            "param_name": {
+                "model": "model"
             }
         },
         "ai_set_response_view": {
@@ -84,6 +99,11 @@
                 "container": "Display responses in a container",
                 "cost": "Show billing information",
                 "model": "Show model name and timing information"
+            },
+            "param_name": {
+                "container": "container",
+                "cost": "cost",
+                "model": "model"
             }
         }
     },
@@ -104,6 +124,9 @@
                 "name": "bypass",
                 "param": {
                     "role": "The role to toggle bypass for"
+                },
+                "param_name": {
+                    "role": "role"
                 }
             },
             "list": {
@@ -122,6 +145,13 @@
                     "only_everyone_here": "Only act on members who mention @everyone or @here",
                     "threshold": "Act after this many triggers within the window (1-20)",
                     "time_window": "Time window in seconds (5-3600)"
+                },
+                "param_name": {
+                    "action": "action",
+                    "enable": "enable",
+                    "only_everyone_here": "only_everyone_here",
+                    "threshold": "threshold",
+                    "time_window": "time_window"
                 }
             },
             "setup": {
@@ -133,6 +163,9 @@
                 "name": "toggle",
                 "param": {
                     "enable": "Leave empty to toggle the current state"
+                },
+                "param_name": {
+                    "enable": "enable"
                 }
             }
         }
@@ -160,6 +193,14 @@
                     "message": "Warning message (for delete/warn); {user} inserts the user",
                     "prepend": "Existing command to prepend before this action (comma-separated actions)",
                     "reason": "Reason (for mute/kick/ban)"
+                },
+                "param_name": {
+                    "action_type": "action_type",
+                    "delete_message_duration": "delete_message_duration",
+                    "duration": "duration",
+                    "message": "message",
+                    "prepend": "prepend",
+                    "reason": "reason"
                 }
             },
             "check_action": {
@@ -167,6 +208,9 @@
                 "name": "check-action",
                 "param": {
                     "action": "The action command to check"
+                },
+                "param_name": {
+                    "action": "action"
                 }
             },
             "flagged_user_alert_channel": {
@@ -174,6 +218,9 @@
                 "name": "flagged-user-alert-channel",
                 "param": {
                     "channel": "Channel that receives user-join notifications"
+                },
+                "param_name": {
+                    "channel": "channel"
                 }
             },
             "info": {
@@ -192,6 +239,9 @@
                 "name": "scan-flagged-users",
                 "param": {
                     "user": "The user to scan; scans everyone if omitted"
+                },
+                "param_name": {
+                    "user": "user"
                 }
             },
             "settings": {
@@ -200,6 +250,10 @@
                 "param": {
                     "setting": "The auto-moderation option to configure",
                     "value": "The option's value"
+                },
+                "param_name": {
+                    "setting": "setting",
+                    "value": "value"
                 }
             },
             "toggle": {
@@ -222,6 +276,10 @@
                 "param": {
                     "enable": "Whether to enable the setting",
                     "setting": "Name of the auto-moderation setting to toggle"
+                },
+                "param_name": {
+                    "enable": "enable",
+                    "setting": "setting"
                 }
             },
             "view": {
@@ -271,6 +329,9 @@
                 "name": "settings",
                 "param": {
                     "enable": "Whether to enable auto-publishing"
+                },
+                "param_name": {
+                    "enable": "enable"
                 }
             },
             "view": {
@@ -304,6 +365,15 @@
                     "reply": "Reply to the original message",
                     "response": "Reply content (separate multiple with , to pick one at random)",
                     "trigger": "Trigger string (separate multiple with ,)"
+                },
+                "param_name": {
+                    "channel_mode": "channel_mode",
+                    "channels": "channels",
+                    "mode": "mode",
+                    "random_chance": "random_chance",
+                    "reply": "reply",
+                    "response": "response",
+                    "trigger": "trigger"
                 }
             },
             "builder": {
@@ -338,6 +408,16 @@
                     "random_chance": "Random reply chance (1-100)",
                     "reply": "Whether to reply to the original message",
                     "trigger": "Trigger string"
+                },
+                "param_name": {
+                    "channel_mode": "channel_mode",
+                    "channels": "channels",
+                    "new_mode": "new_mode",
+                    "new_response": "new_response",
+                    "new_trigger": "new_trigger",
+                    "random_chance": "random_chance",
+                    "reply": "reply",
+                    "trigger": "trigger"
                 }
             },
             "export": {
@@ -358,6 +438,10 @@
                 "param": {
                     "channels": "Channel IDs (separate multiple IDs with ,)",
                     "mode": "Ignore channel mode"
+                },
+                "param_name": {
+                    "channels": "channels",
+                    "mode": "mode"
                 }
             },
             "import": {
@@ -370,6 +454,10 @@
                 "param": {
                     "file": "The JSON file to import",
                     "merge": "Whether to merge with existing settings"
+                },
+                "param_name": {
+                    "file": "file",
+                    "merge": "merge"
                 }
             },
             "list": {
@@ -383,6 +471,11 @@
                     "new_response": "New reply content",
                     "new_trigger": "New trigger string",
                     "trigger": "Trigger string"
+                },
+                "param_name": {
+                    "new_response": "new_response",
+                    "new_trigger": "new_trigger",
+                    "trigger": "trigger"
                 }
             },
             "remove": {
@@ -390,6 +483,9 @@
                 "name": "remove",
                 "param": {
                     "trigger": "Trigger string"
+                },
+                "param_name": {
+                    "trigger": "trigger"
                 }
             },
             "root": {
@@ -406,6 +502,10 @@
                 "param": {
                     "merge": "Whether to merge with existing rules",
                     "pack": "The template pack to apply"
+                },
+                "param_name": {
+                    "merge": "merge",
+                    "pack": "pack"
                 }
             },
             "test": {
@@ -413,6 +513,9 @@
                 "name": "test",
                 "param": {
                     "response": "The reply content to test"
+                },
+                "param_name": {
+                    "response": "response"
                 }
             }
         }
@@ -432,6 +535,14 @@
                 "month": "Month of birth (1-12)",
                 "public": "Make this chart public (private by default)",
                 "year": "Year of birth (Gregorian)"
+            },
+            "param_name": {
+                "day": "day",
+                "gender": "gender",
+                "hour": "hour",
+                "month": "month",
+                "public": "public",
+                "year": "year"
             }
         }
     },
@@ -442,6 +553,9 @@
                 "name": "avatar",
                 "param": {
                     "image": "The new avatar image"
+                },
+                "param_name": {
+                    "image": "image"
                 }
             },
             "banner": {
@@ -449,6 +563,9 @@
                 "name": "banner",
                 "param": {
                     "image": "The new banner image"
+                },
+                "param_name": {
+                    "image": "image"
                 }
             },
             "bio": {
@@ -456,6 +573,9 @@
                 "name": "bio",
                 "param": {
                     "bio": "The new bio (\\n for line breaks, max 100 characters)"
+                },
+                "param_name": {
+                    "bio": "bio"
                 }
             },
             "root": {
@@ -470,6 +590,9 @@
                 "name": "dynamic-voice-audio",
                 "param": {
                     "audio": "Audio file (MP3/WAV/OGG, max 5MB, 3-10 seconds recommended)"
+                },
+                "param_name": {
+                    "audio": "audio"
                 }
             },
             "feedgrass": {
@@ -642,6 +765,9 @@
                 "name": "follow",
                 "param": {
                     "channel": "Channel to send notifications to"
+                },
+                "param_name": {
+                    "channel": "channel"
                 }
             },
             "root": {
@@ -671,6 +797,9 @@
             "name": "dsize",
             "param": {
                 "global_dsize": "Use the global record (default: no)"
+            },
+            "param_name": {
+                "global_dsize": "global_dsize"
             }
         },
         "dsize_battle": {
@@ -678,6 +807,9 @@
             "name": "dsize-battle",
             "param": {
                 "opponent": "Who to battle"
+            },
+            "param_name": {
+                "opponent": "opponent"
             }
         },
         "dsize_feedgrass": {
@@ -690,6 +822,10 @@
             "param": {
                 "global_feedgrass": "Feed a femboy from the global leaderboard (default: no)",
                 "user": "Who to feed"
+            },
+            "param_name": {
+                "global_feedgrass": "global_feedgrass",
+                "user": "user"
             }
         },
         "dsize_feedgrass_nsfw": {
@@ -702,6 +838,10 @@
             "param": {
                 "global_feedgrass": "Feed a femboy from the global leaderboard (default: no)",
                 "user": "Who to feed"
+            },
+            "param_name": {
+                "global_feedgrass": "global_feedgrass",
+                "user": "user"
             }
         },
         "dsize_feedgrass_nsfw_toggle": {
@@ -718,6 +858,10 @@
             "param": {
                 "global_history": "Show the global record (default: no)",
                 "user": "View a specific user's history (default: yourself)"
+            },
+            "param_name": {
+                "global_history": "global_history",
+                "user": "user"
             }
         },
         "dsize_leaderboard": {
@@ -731,6 +875,11 @@
                 "global_leaderboard": "Show the global leaderboard (default: no)",
                 "limit": "How many top entries to show (default 10)",
                 "reverse": "Reverse the leaderboard (default: no)"
+            },
+            "param_name": {
+                "global_leaderboard": "global_leaderboard",
+                "limit": "limit",
+                "reverse": "reverse"
             }
         },
         "dsize_settings": {
@@ -745,6 +894,10 @@
             "param": {
                 "setting": "The setting to change",
                 "value": "The value to set"
+            },
+            "param_name": {
+                "setting": "setting",
+                "value": "value"
             }
         },
         "dsize_stats": {
@@ -771,6 +924,9 @@
                 "name": "play-audio",
                 "param": {
                     "enable": "Whether to play a sound before entering the channel"
+                },
+                "param_name": {
+                    "enable": "enable"
                 }
             },
             "root": {
@@ -783,6 +939,11 @@
                     "channel": "Choose a channel",
                     "channel_category": "Choose a channel category",
                     "channel_name": "Channel name template ({user} inserts the user's name)"
+                },
+                "param_name": {
+                    "channel": "channel",
+                    "channel_category": "channel_category",
+                    "channel_name": "channel_name"
                 }
             },
             "unblacklist_role": {
@@ -806,6 +967,9 @@
                 "name": "balance",
                 "param": {
                     "user": "Check another user's balance"
+                },
+                "param_name": {
+                    "user": "user"
                 }
             },
             "buy": {
@@ -819,6 +983,11 @@
                     "amount": "How many to buy",
                     "item_id": "The item to buy",
                     "scope": "Shop type"
+                },
+                "param_name": {
+                    "amount": "amount",
+                    "item_id": "item_id",
+                    "scope": "scope"
                 }
             },
             "daily": {
@@ -826,6 +995,9 @@
                 "name": "daily",
                 "param": {
                     "global_daily": "Claim the global reward instead"
+                },
+                "param_name": {
+                    "global_daily": "global_daily"
                 }
             },
             "exchange": {
@@ -838,6 +1010,10 @@
                 "param": {
                     "amount": "Amount",
                     "direction": "Exchange direction"
+                },
+                "param_name": {
+                    "amount": "amount",
+                    "direction": "direction"
                 }
             },
             "history": {
@@ -850,6 +1026,9 @@
                 "param": {
                     "page": "Page number",
                     "scope": "Scope to view"
+                },
+                "param_name": {
+                    "scope": "scope"
                 }
             },
             "hourly": {
@@ -857,6 +1036,9 @@
                 "name": "hourly",
                 "param": {
                     "global_hourly": "Claim the global reward instead"
+                },
+                "param_name": {
+                    "global_hourly": "global_hourly"
                 }
             },
             "info": {
@@ -873,6 +1055,9 @@
                 "name": "leaderboard",
                 "param": {
                     "currency": "Leaderboard type"
+                },
+                "param_name": {
+                    "currency": "currency"
                 }
             },
             "pay": {
@@ -886,6 +1071,11 @@
                     "amount": "Amount",
                     "currency": "Currency type",
                     "user": "Recipient"
+                },
+                "param_name": {
+                    "amount": "amount",
+                    "currency": "currency",
+                    "user": "user"
                 }
             },
             "root": {
@@ -903,6 +1093,11 @@
                     "amount": "How many to sell",
                     "item_id": "The item to sell",
                     "scope": "Shop type"
+                },
+                "param_name": {
+                    "amount": "amount",
+                    "item_id": "item_id",
+                    "scope": "scope"
                 }
             },
             "shop": {
@@ -921,6 +1116,15 @@
                     "request_item_amount": "How many of the item you want",
                     "request_money": "The amount of money you want",
                     "user": "Trading partner"
+                },
+                "param_name": {
+                    "offer_item": "offer_item",
+                    "offer_item_amount": "offer_item_amount",
+                    "offer_money": "offer_money",
+                    "request_item": "request_item",
+                    "request_item_amount": "request_item_amount",
+                    "request_money": "request_money",
+                    "user": "user"
                 }
             }
         },
@@ -930,6 +1134,9 @@
                 "name": "global-mode",
                 "param": {
                     "enabled": "True = force global, False = restore server mode"
+                },
+                "param_name": {
+                    "enabled": "enabled"
                 }
             },
             "info": {
@@ -945,6 +1152,9 @@
                 "name": "setname",
                 "param": {
                     "name": "The new currency name"
+                },
+                "param_name": {
+                    "name": "name"
                 }
             },
             "toggle_flow": {
@@ -1019,6 +1229,10 @@
             "param": {
                 "message": "The message to send",
                 "user": "The user to impersonate"
+            },
+            "param_name": {
+                "message": "message",
+                "user": "user"
             }
         },
         "fake_admin": {
@@ -1033,6 +1247,10 @@
                 "param": {
                     "mode": "What do you want to do?",
                     "regex": "Regex to filter; only needed for add or remove"
+                },
+                "param_name": {
+                    "mode": "mode",
+                    "regex": "regex"
                 }
             },
             "log_channel": {
@@ -1040,6 +1258,9 @@
                 "name": "log-channel",
                 "param": {
                     "channel": "The log channel to set; leave empty to view the current one"
+                },
+                "param_name": {
+                    "channel": "channel"
                 }
             },
             "root": {
@@ -1052,6 +1273,9 @@
             "name": "fake-blacklist",
             "param": {
                 "user": "User to add/remove from the blacklist (pick this bot to mean everyone)"
+            },
+            "param_name": {
+                "user": "user"
             }
         }
     },
@@ -1109,6 +1333,14 @@
                     "pickup_duration": "How long the item can be picked up (seconds)",
                     "pickup_only_once": "Can the item only be picked up once?",
                     "scope": "Item scope (auto-detected by default)"
+                },
+                "param_name": {
+                    "amount": "amount",
+                    "can_pickup": "can_pickup",
+                    "item_id": "item_id",
+                    "pickup_duration": "pickup_duration",
+                    "pickup_only_once": "pickup_only_once",
+                    "scope": "scope"
                 }
             },
             "give": {
@@ -1123,6 +1355,12 @@
                     "item_id": "The item ID to give",
                     "scope": "Item scope (auto-detected by default)",
                     "user": "The user to give the item to"
+                },
+                "param_name": {
+                    "amount": "amount",
+                    "item_id": "item_id",
+                    "scope": "scope",
+                    "user": "user"
                 }
             },
             "list": {
@@ -1134,6 +1372,9 @@
                 "name": "list",
                 "param": {
                     "scope": "Scope to view (auto-detected by default)"
+                },
+                "param_name": {
+                    "scope": "scope"
                 }
             },
             "root": {
@@ -1150,6 +1391,10 @@
                 "param": {
                     "item_id": "The item ID to use",
                     "scope": "Scope to use in (auto-detected by default)"
+                },
+                "param_name": {
+                    "item_id": "item_id",
+                    "scope": "scope"
                 }
             }
         },
@@ -1166,6 +1411,16 @@
                     "price": "Shop price (server currency; only used when listed in shop)",
                     "remove_after_use": "Remove the item automatically after use",
                     "revenue_share_user": "Revenue-share user; receives 90% of the value when the item is used"
+                },
+                "param_name": {
+                    "content": "content",
+                    "description": "description",
+                    "ephemeral_response": "ephemeral_response",
+                    "list_in_shop": "list_in_shop",
+                    "name": "name",
+                    "price": "price",
+                    "remove_after_use": "remove_after_use",
+                    "revenue_share_user": "revenue_share_user"
                 }
             },
             "editcustom": {
@@ -1180,6 +1435,16 @@
                     "name": "Item name",
                     "remove_after_use": "Remove the item automatically after use",
                     "revenue_share_user": "Revenue-share user; receives 90% of the value when the item is used"
+                },
+                "param_name": {
+                    "content": "content",
+                    "description": "description",
+                    "ephemeral_response": "ephemeral_response",
+                    "item_id": "item_id",
+                    "list_in_shop": "list_in_shop",
+                    "name": "name",
+                    "remove_after_use": "remove_after_use",
+                    "revenue_share_user": "revenue_share_user"
                 }
             },
             "give": {
@@ -1189,6 +1454,11 @@
                     "amount": "How many to give",
                     "item_id": "The item ID to give",
                     "user": "The user to give the item to"
+                },
+                "param_name": {
+                    "amount": "amount",
+                    "item_id": "item_id",
+                    "user": "user"
                 }
             },
             "list": {
@@ -1204,6 +1474,9 @@
                 "name": "listuser",
                 "param": {
                     "user": "The user to look up"
+                },
+                "param_name": {
+                    "user": "user"
                 }
             },
             "remove": {
@@ -1213,6 +1486,11 @@
                     "amount": "How many to remove",
                     "item_id": "The item ID to remove",
                     "user": "The user to remove the item from"
+                },
+                "param_name": {
+                    "amount": "amount",
+                    "item_id": "item_id",
+                    "user": "user"
                 }
             },
             "removecustom": {
@@ -1220,6 +1498,9 @@
                 "name": "removecustom",
                 "param": {
                     "item_id": "The custom item to remove"
+                },
+                "param_name": {
+                    "item_id": "item_id"
                 }
             },
             "root": {
@@ -1271,6 +1552,9 @@
             "name": "set-log-channel",
             "param": {
                 "channel": "The log channel"
+            },
+            "param_name": {
+                "channel": "channel"
             }
         }
     },
@@ -1286,6 +1570,10 @@
                 "param": {
                     "cooldown": "Cooldown seconds (10-86400, default 600)",
                     "role": "The role to manage"
+                },
+                "param_name": {
+                    "cooldown": "cooldown",
+                    "role": "role"
                 }
             },
             "list": {
@@ -1297,6 +1585,9 @@
                 "name": "remove",
                 "param": {
                     "role": "The role to stop managing"
+                },
+                "param_name": {
+                    "role": "role"
                 }
             },
             "root": {
@@ -1309,6 +1600,11 @@
                     "announce": "Announce in the channel when a cooldown starts",
                     "automod_mode": "AutoMod mode: block with an AutoMod rule during cooldown, role stays mentionable",
                     "count_admins": "Whether admin mentions also trigger the cooldown"
+                },
+                "param_name": {
+                    "announce": "announce",
+                    "automod_mode": "automod_mode",
+                    "count_admins": "count_admins"
                 }
             },
             "setup": {
@@ -1320,6 +1616,9 @@
                 "name": "toggle",
                 "param": {
                     "enable": "Leave empty to toggle the current state"
+                },
+                "param_name": {
+                    "enable": "enable"
                 }
             }
         }
@@ -1341,6 +1640,9 @@
             "name": "upvoteboard",
             "param": {
                 "channel": "The channel to use (omit to clear the setting)"
+            },
+            "param_name": {
+                "channel": "channel"
             }
         }
     },
@@ -1351,6 +1653,9 @@
                 "name": "big2",
                 "param": {
                     "use_global": "Use global currency (defaults to the server setting)"
+                },
+                "param_name": {
+                    "use_global": "use_global"
                 }
             },
             "blackjack": {
@@ -1359,6 +1664,10 @@
                 "param": {
                     "bet": "Bet amount (50-2000)",
                     "use_global": "Use global currency (defaults to the server setting)"
+                },
+                "param_name": {
+                    "bet": "bet",
+                    "use_global": "use_global"
                 }
             },
             "coinflip": {
@@ -1366,6 +1675,9 @@
                 "name": "coinflip",
                 "param": {
                     "bet": "Bet amount (50-2000)"
+                },
+                "param_name": {
+                    "bet": "bet"
                 }
             },
             "dice": {
@@ -1373,6 +1685,9 @@
                 "name": "dice",
                 "param": {
                     "bet": "Bet amount (50-2000)"
+                },
+                "param_name": {
+                    "bet": "bet"
                 }
             },
             "doom": {
@@ -1385,6 +1700,10 @@
                 "param": {
                     "bet": "Bet amount (50-2000)",
                     "use_global": "Use global currency (defaults to the server setting)"
+                },
+                "param_name": {
+                    "bet": "bet",
+                    "use_global": "use_global"
                 }
             },
             "lottery": {
@@ -1394,6 +1713,11 @@
                     "bet": "Bet per ticket (50-2000; leave empty to check status)",
                     "number": "Pick 00-99 (leave empty to check status)",
                     "use_global": "Use global currency (defaults to the server setting)"
+                },
+                "param_name": {
+                    "bet": "bet",
+                    "number": "number",
+                    "use_global": "use_global"
                 }
             },
             "root": {
@@ -1416,6 +1740,12 @@
                     "bet_type": "Bet type",
                     "number": "Pick 0-36 for single-number bets",
                     "use_global": "Use global currency (defaults to the server setting)"
+                },
+                "param_name": {
+                    "bet": "bet",
+                    "bet_type": "bet_type",
+                    "number": "number",
+                    "use_global": "use_global"
                 }
             },
             "scratchcard": {
@@ -1424,6 +1754,10 @@
                 "param": {
                     "bet": "Bet amount (50-2000)",
                     "use_global": "Use global currency (defaults to the server setting)"
+                },
+                "param_name": {
+                    "bet": "bet",
+                    "use_global": "use_global"
                 }
             },
             "slots": {
@@ -1432,6 +1766,10 @@
                 "param": {
                     "bet": "Bet amount (50-2000)",
                     "use_global": "Use global currency (defaults to the server setting)"
+                },
+                "param_name": {
+                    "bet": "bet",
+                    "use_global": "use_global"
                 }
             },
             "tower": {
@@ -1440,6 +1778,10 @@
                 "param": {
                     "bet": "Bet amount (50-2000)",
                     "use_global": "Use global currency (defaults to the server setting)"
+                },
+                "param_name": {
+                    "bet": "bet",
+                    "use_global": "use_global"
                 }
             }
         }
@@ -1463,6 +1805,14 @@
                 "message": "Warning message (for delete/warn); {user} inserts the user",
                 "prepend": "Existing command to prepend before this action (comma-separated actions)",
                 "reason": "Reason (for mute/kick/ban)"
+            },
+            "param_name": {
+                "action_type": "action_type",
+                "delete_message_duration": "delete_message_duration",
+                "duration": "duration",
+                "message": "message",
+                "prepend": "prepend",
+                "reason": "reason"
             }
         },
         "ban": {
@@ -1474,6 +1824,13 @@
                 "reason": "Ban reason (optional)",
                 "send_moderation_message": "Also send a moderation announcement",
                 "user": "Choose a user"
+            },
+            "param_name": {
+                "delete_message": "delete_message",
+                "duration": "duration",
+                "reason": "reason",
+                "send_moderation_message": "send_moderation_message",
+                "user": "user"
             }
         },
         "custom_action_add": {
@@ -1482,6 +1839,10 @@
             "param": {
                 "action": "The action string to run (e.g. mute 1h advertising, smm)",
                 "name": "Custom command name (e.g. ad)"
+            },
+            "param_name": {
+                "action": "action",
+                "name": "name"
             }
         },
         "custom_action_list": {
@@ -1493,6 +1854,9 @@
             "name": "custom-action-remove",
             "param": {
                 "name": "Name of the custom command to delete"
+            },
+            "param_name": {
+                "name": "name"
             }
         },
         "kick": {
@@ -1502,6 +1866,11 @@
                 "reason": "Kick reason (optional)",
                 "send_moderation_message": "Also send a moderation announcement",
                 "user": "Choose a user (@mention or ID)"
+            },
+            "param_name": {
+                "reason": "reason",
+                "send_moderation_message": "send_moderation_message",
+                "user": "user"
             }
         },
         "moderation_message_channel": {
@@ -1509,6 +1878,9 @@
             "name": "moderation-message-channel",
             "param": {
                 "channel": "Choose a channel"
+            },
+            "param_name": {
+                "channel": "channel"
             }
         },
         "moderation_message_format": {
@@ -1521,6 +1893,10 @@
             "param": {
                 "action": "Action commands, comma separated, e.g. ban 1d spamming, mute 10m",
                 "users": "Users (mentions or IDs, separated by commas, spaces, or newlines)"
+            },
+            "param_name": {
+                "action": "action",
+                "users": "users"
             }
         },
         "multi_moderate_action": {
@@ -1528,6 +1904,9 @@
             "name": "multi-moderate-action",
             "param": {
                 "user": "Choose a user"
+            },
+            "param_name": {
+                "user": "user"
             }
         },
         "request": {
@@ -1539,6 +1918,12 @@
                     "reason": "Ban reason (optional)",
                     "request_to": "Who confirms the request (default: the target)",
                     "user": "The user to ban"
+                },
+                "param_name": {
+                    "duration": "duration",
+                    "reason": "reason",
+                    "request_to": "request_to",
+                    "user": "user"
                 }
             },
             "kick": {
@@ -1548,6 +1933,11 @@
                     "reason": "Kick reason (optional)",
                     "request_to": "Who confirms the request (default: the target)",
                     "user": "The user to kick"
+                },
+                "param_name": {
+                    "reason": "reason",
+                    "request_to": "request_to",
+                    "user": "user"
                 }
             },
             "root": {
@@ -1566,6 +1956,10 @@
                     "action": "The action to configure",
                     "enabled": "Whether to enable it",
                     "max_duration": "Maximum timeout/ban duration (e.g. 1h, 0 = unlimited)"
+                },
+                "param_name": {
+                    "action": "action",
+                    "enabled": "enabled"
                 }
             },
             "timeout": {
@@ -1576,6 +1970,12 @@
                     "reason": "Timeout reason (optional)",
                     "request_to": "Who confirms the request (default: the target)",
                     "user": "The user to time out"
+                },
+                "param_name": {
+                    "duration": "duration",
+                    "reason": "reason",
+                    "request_to": "request_to",
+                    "user": "user"
                 }
             }
         },
@@ -1588,6 +1988,13 @@
                 "moderator": "Acting moderator (optional)",
                 "reason": "Reason for the action",
                 "user": "Choose a user"
+            },
+            "param_name": {
+                "action": "action",
+                "direct": "direct",
+                "moderator": "moderator",
+                "reason": "reason",
+                "user": "user"
             }
         },
         "timeout": {
@@ -1598,6 +2005,12 @@
                 "reason": "Timeout reason (optional)",
                 "send_moderation_message": "Also send a moderation announcement",
                 "user": "Choose a user"
+            },
+            "param_name": {
+                "duration": "duration",
+                "reason": "reason",
+                "send_moderation_message": "send_moderation_message",
+                "user": "user"
             }
         },
         "unban": {
@@ -1605,6 +2018,9 @@
             "name": "unban",
             "param": {
                 "user": "Choose a user"
+            },
+            "param_name": {
+                "user": "user"
             }
         },
         "untimeout": {
@@ -1612,6 +2028,9 @@
             "name": "untimeout",
             "param": {
                 "user": "Choose a user"
+            },
+            "param_name": {
+                "user": "user"
             }
         },
         "vote": {
@@ -1622,6 +2041,11 @@
                     "duration": "Ban duration (optional, default: permanent)",
                     "reason": "Ban reason (optional)",
                     "user": "The user to ban"
+                },
+                "param_name": {
+                    "duration": "duration",
+                    "reason": "reason",
+                    "user": "user"
                 }
             },
             "kick": {
@@ -1630,6 +2054,10 @@
                 "param": {
                     "reason": "Kick reason (optional)",
                     "user": "The user to kick"
+                },
+                "param_name": {
+                    "reason": "reason",
+                    "user": "user"
                 }
             },
             "root": {
@@ -1650,6 +2078,11 @@
                     "max_duration": "Maximum timeout/ban duration (e.g. 1h, 0 = unlimited)",
                     "threshold": "Fixed vote threshold (0 = automatic)",
                     "vote_duration": "Vote duration (e.g. 10m, default 10 minutes)"
+                },
+                "param_name": {
+                    "action": "action",
+                    "enabled": "enabled",
+                    "threshold": "threshold"
                 }
             },
             "timeout": {
@@ -1659,6 +2092,11 @@
                     "duration": "Timeout duration (default: 10 minutes)",
                     "reason": "Timeout reason (optional)",
                     "user": "The user to time out"
+                },
+                "param_name": {
+                    "duration": "duration",
+                    "reason": "reason",
+                    "user": "user"
                 }
             }
         }
@@ -1675,6 +2113,10 @@
             "param": {
                 "action": "The punishment type to configure",
                 "enable": "Whether to enable notifications"
+            },
+            "param_name": {
+                "action": "action",
+                "enable": "enable"
             }
         },
         "user_appeal_blacklist": {
@@ -1683,6 +2125,10 @@
             "param": {
                 "reason": "Reason for blacklisting (optional)",
                 "user": "User to add to or remove from the blacklist"
+            },
+            "param_name": {
+                "reason": "reason",
+                "user": "user"
             }
         },
         "user_appeal_channel": {
@@ -1690,6 +2136,9 @@
             "name": "user-appeal-channel",
             "param": {
                 "channel": "The appeal channel; leave empty to disable appeals."
+            },
+            "param_name": {
+                "channel": "channel"
             }
         },
         "view_appeal_blacklist": {
@@ -1709,6 +2158,9 @@
                 "name": "loop",
                 "param": {
                     "mode": "Loop mode"
+                },
+                "param_name": {
+                    "mode": "mode"
                 }
             },
             "nodes": {
@@ -1728,6 +2180,9 @@
                 "name": "play",
                 "param": {
                     "query": "Track name or URL"
+                },
+                "param_name": {
+                    "query": "query"
                 }
             },
             "queue": {
@@ -1743,6 +2198,9 @@
                 "name": "radio",
                 "param": {
                     "station": "The station to play"
+                },
+                "param_name": {
+                    "station": "station"
                 }
             },
             "recommend": {
@@ -1750,6 +2208,9 @@
                 "name": "recommend",
                 "param": {
                     "count": "How many recommendations to add (1-10, default 5)"
+                },
+                "param_name": {
+                    "count": "count"
                 }
             },
             "restore_queue": {
@@ -1769,6 +2230,9 @@
                 "name": "search",
                 "param": {
                     "query": "Search for a track (autocomplete supported)"
+                },
+                "param_name": {
+                    "query": "query"
                 }
             },
             "shuffle": {
@@ -1788,6 +2252,9 @@
                 "name": "volume",
                 "param": {
                     "level": "Volume level (0-100)"
+                },
+                "param_name": {
+                    "level": "level"
                 }
             }
         }
@@ -1799,6 +2266,10 @@
             "param": {
                 "english": "English version?",
                 "text": "The text to cutify"
+            },
+            "param_name": {
+                "english": "english",
+                "text": "text"
             }
         }
     },
@@ -1826,6 +2297,10 @@
                 "param": {
                     "channel": "The channel to receive reports",
                     "text": "Optional extra text message"
+                },
+                "param_name": {
+                    "channel": "channel",
+                    "text": "text"
                 }
             },
             "status": {
@@ -1840,6 +2315,9 @@
             "name": "petpet",
             "param": {
                 "user": "The user to pet (default: yourself)"
+            },
+            "param_name": {
+                "user": "user"
             }
         }
     },
@@ -1856,6 +2334,11 @@
                 "pid": "Page number",
                 "spoilers": "Mark as a spoiler",
                 "tags": "Tags"
+            },
+            "param_name": {
+                "pid": "pid",
+                "spoilers": "spoilers",
+                "tags": "tags"
             }
         },
         "r34tags": {
@@ -1863,6 +2346,9 @@
             "name": "r34tags",
             "param": {
                 "query": "Search keyword"
+            },
+            "param_name": {
+                "query": "query"
             }
         }
     },
@@ -1884,6 +2370,10 @@
                 "param": {
                     "action": "The action to perform",
                     "role": "Role"
+                },
+                "param_name": {
+                    "action": "action",
+                    "role": "role"
                 }
             },
             "root": {
@@ -1894,6 +2384,9 @@
                 "name": "set-server-rules",
                 "param": {
                     "rules": "Server rules; use \\n for line breaks"
+                },
+                "param_name": {
+                    "rules": "rules"
                 }
             },
             "settings": {
@@ -1909,6 +2402,10 @@
                 "param": {
                     "setting": "The setting to change",
                     "value": "The value (for channels use #channel-name or a channel ID)"
+                },
+                "param_name": {
+                    "setting": "setting",
+                    "value": "value"
                 }
             }
         }
@@ -1932,6 +2429,10 @@
                 "param": {
                     "enable": "Enable or disable automatic role assignment",
                     "trigger": "Condition for assigning the role"
+                },
+                "param_name": {
+                    "enable": "enable",
+                    "trigger": "trigger"
                 }
             },
             "check_relation": {
@@ -1939,6 +2440,9 @@
                 "name": "check_relation",
                 "param": {
                     "user": "The user to check"
+                },
+                "param_name": {
+                    "user": "user"
                 }
             },
             "country_alert": {
@@ -1953,6 +2457,12 @@
                     "countries": "Country codes, comma separated (e.g. US,CN,RU)",
                     "enable": "Enable or disable region alerts",
                     "mode": "Alert mode"
+                },
+                "param_name": {
+                    "channel": "channel",
+                    "countries": "countries",
+                    "enable": "enable",
+                    "mode": "mode"
                 }
             },
             "create_unverified_role": {
@@ -1960,6 +2470,9 @@
                 "name": "create_unverified_role",
                 "param": {
                     "name": "Name for the unverified-member role"
+                },
+                "param_name": {
+                    "name": "name"
                 }
             },
             "disable": {
@@ -1975,6 +2488,9 @@
                 "name": "force-verify",
                 "param": {
                     "user": "The user to force-verify"
+                },
+                "param_name": {
+                    "user": "user"
                 }
             },
             "manual_check_country": {
@@ -1982,6 +2498,9 @@
                 "name": "manual-check-country",
                 "param": {
                     "user": "Choose a user"
+                },
+                "param_name": {
+                    "user": "user"
                 }
             },
             "minage": {
@@ -1989,6 +2508,9 @@
                 "name": "minage",
                 "param": {
                     "min_age": "Minimum account age (days)"
+                },
+                "param_name": {
+                    "min_age": "min_age"
                 }
             },
             "quick_setup": {
@@ -2001,6 +2523,10 @@
                 "param": {
                     "action": "The action to run (same format as !moderate)",
                     "user": "Choose a user"
+                },
+                "param_name": {
+                    "action": "action",
+                    "user": "user"
                 }
             },
             "root": {
@@ -2017,6 +2543,9 @@
                 "name": "set_captcha",
                 "param": {
                     "captcha_provider": "Choose a CAPTCHA provider"
+                },
+                "param_name": {
+                    "captcha_provider": "captcha_provider"
                 }
             },
             "set_unverified_role": {
@@ -2024,6 +2553,9 @@
                 "name": "set_unverified_role",
                 "param": {
                     "role": "The role for unverified members"
+                },
+                "param_name": {
+                    "role": "role"
                 }
             },
             "setup": {
@@ -2035,6 +2567,9 @@
                 "name": "start-force-verify",
                 "param": {
                     "duration": "How long forced verification lasts (?h?m?s...)"
+                },
+                "param_name": {
+                    "duration": "duration"
                 }
             },
             "status": {
@@ -2054,6 +2589,12 @@
                     "message": "Custom verification message",
                     "title": "Custom embed title",
                     "type": "How to notify"
+                },
+                "param_name": {
+                    "channel": "channel",
+                    "message": "message",
+                    "title": "title",
+                    "type": "type"
                 }
             }
         }
@@ -2065,6 +2606,9 @@
                 "name": "command",
                 "param": {
                     "full": "Show full statistics"
+                },
+                "param_name": {
+                    "full": "full"
                 }
             },
             "petpet_stats": {
@@ -2085,6 +2629,11 @@
                     "allow_mentions": "Allow mentions on first and manual posts",
                     "channel": "The text or announcement channel to configure",
                     "content": "Sticky message content"
+                },
+                "param_name": {
+                    "allow_mentions": "allow_mentions",
+                    "channel": "channel",
+                    "content": "content"
                 }
             },
             "edit": {
@@ -2094,6 +2643,11 @@
                     "allow_mentions": "Allow mentions on first and manual posts",
                     "channel": "The configured text or announcement channel",
                     "content": "New sticky message content"
+                },
+                "param_name": {
+                    "allow_mentions": "allow_mentions",
+                    "channel": "channel",
+                    "content": "content"
                 }
             },
             "list": {
@@ -2106,6 +2660,9 @@
                 "param": {
                     "channel": "The sticky message channel to move",
                     "position": "New position"
+                },
+                "param_name": {
+                    "channel": "channel"
                 }
             },
             "publish": {
@@ -2113,6 +2670,9 @@
                 "name": "publish",
                 "param": {
                     "channel": "The channel whose sticky message to repost now"
+                },
+                "param_name": {
+                    "channel": "channel"
                 }
             },
             "remove": {
@@ -2120,6 +2680,9 @@
                 "name": "remove",
                 "param": {
                     "channel": "The channel whose sticky message to remove"
+                },
+                "param_name": {
+                    "channel": "channel"
                 }
             },
             "root": {
@@ -2132,6 +2695,10 @@
                 "param": {
                     "min_interval_seconds": "Minimum interval between two automatic reposts in a channel",
                     "quiet_seconds": "Seconds to wait after the last human message"
+                },
+                "param_name": {
+                    "min_interval_seconds": "min_interval_seconds",
+                    "quiet_seconds": "quiet_seconds"
                 }
             }
         }
@@ -2143,6 +2710,9 @@
                 "name": "add",
                 "param": {
                     "role": "The role to add to the allow list"
+                },
+                "param_name": {
+                    "role": "role"
                 }
             },
             "clear": {
@@ -2154,6 +2724,9 @@
                 "name": "clear-user",
                 "param": {
                     "user": "The user whose records to clear"
+                },
+                "param_name": {
+                    "user": "user"
                 }
             },
             "ignore_bots": {
@@ -2165,6 +2738,9 @@
                 "name": "ignore-bots",
                 "param": {
                     "enable": "Whether to ignore bot accounts"
+                },
+                "param_name": {
+                    "enable": "enable"
                 }
             },
             "list": {
@@ -2176,6 +2752,9 @@
                 "name": "remove",
                 "param": {
                     "role": "The role to remove from the allow list"
+                },
+                "param_name": {
+                    "role": "role"
                 }
             },
             "root": {
@@ -2187,6 +2766,9 @@
                 "name": "set-log-channel",
                 "param": {
                     "channel": "Channel for StickyRole logs (leave empty to unset)"
+                },
+                "param_name": {
+                    "channel": "channel"
                 }
             },
             "toggle": {
@@ -2198,6 +2780,9 @@
                 "name": "toggle",
                 "param": {
                     "enable": "Whether to enable StickyRole"
+                },
+                "param_name": {
+                    "enable": "enable"
                 }
             },
             "view": {
@@ -2205,6 +2790,9 @@
                 "name": "view",
                 "param": {
                     "user": "The user to view"
+                },
+                "param_name": {
+                    "user": "user"
                 }
             }
         }
@@ -2216,6 +2804,9 @@
                 "name": "add",
                 "param": {
                     "member": "The user to add"
+                },
+                "param_name": {
+                    "member": "member"
                 }
             },
             "claim": {
@@ -2227,6 +2818,9 @@
                 "name": "close",
                 "param": {
                     "reason": "Close reason (recorded in the transcript summary)"
+                },
+                "param_name": {
+                    "reason": "reason"
                 }
             },
             "panel": {
@@ -2234,6 +2828,9 @@
                 "name": "panel",
                 "param": {
                     "channel": "Channel to publish the panel in (defaults to the configured panel channel)"
+                },
+                "param_name": {
+                    "channel": "channel"
                 }
             },
             "remove": {
@@ -2241,6 +2838,9 @@
                 "name": "remove",
                 "param": {
                     "member": "The user to remove"
+                },
+                "param_name": {
+                    "member": "member"
                 }
             },
             "root": {
@@ -2255,6 +2855,13 @@
                     "panel_channel": "Channel for the ticket panel with its open button",
                     "publish": "Publish the panel message immediately (default: yes)",
                     "staff_role": "Staff role (add more roles in the server panel)"
+                },
+                "param_name": {
+                    "category": "category",
+                    "log_channel": "log_channel",
+                    "panel_channel": "panel_channel",
+                    "publish": "publish",
+                    "staff_role": "staff_role"
                 }
             }
         },
@@ -2275,6 +2882,14 @@
                     "staff_role": "Extra staff role for this type (defaults to global staff only)",
                     "style": "Button color (default: blue)",
                     "welcome": "Dedicated welcome message; {user} and {subject} supported (defaults to global)"
+                },
+                "param_name": {
+                    "category": "category",
+                    "emoji": "emoji",
+                    "label": "label",
+                    "staff_role": "staff_role",
+                    "style": "style",
+                    "welcome": "welcome"
                 }
             },
             "edit": {
@@ -2294,6 +2909,15 @@
                     "style": "New button color",
                     "type": "The type to edit",
                     "welcome": "New dedicated welcome message (enter - to clear and use the global one)"
+                },
+                "param_name": {
+                    "category": "category",
+                    "emoji": "emoji",
+                    "label": "label",
+                    "staff_role": "staff_role",
+                    "style": "style",
+                    "type": "type",
+                    "welcome": "welcome"
                 }
             },
             "list": {
@@ -2305,6 +2929,9 @@
                 "name": "remove",
                 "param": {
                     "type": "The type to remove"
+                },
+                "param_name": {
+                    "type": "type"
                 }
             },
             "root": {
@@ -2324,6 +2951,9 @@
                 "name": "getroute",
                 "param": {
                     "route_key": "Route ID"
+                },
+                "param_name": {
+                    "route_key": "route_key"
                 }
             },
             "getstop": {
@@ -2332,6 +2962,10 @@
                 "param": {
                     "route_key": "Route ID",
                     "stop_id": "Stop ID"
+                },
+                "param_name": {
+                    "route_key": "route_key",
+                    "stop_id": "stop_id"
                 }
             },
             "root": {
@@ -2342,6 +2976,9 @@
                 "name": "youbike",
                 "param": {
                     "station_name": "YouBike station name"
+                },
+                "param_name": {
+                    "station_name": "station_name"
                 }
             }
         }
@@ -2360,6 +2997,9 @@
             "name": "httpcat",
             "param": {
                 "status_code": "HTTP status code (e.g. 404)"
+            },
+            "param_name": {
+                "status_code": "status_code"
             }
         },
         "info": {
@@ -2368,6 +3008,9 @@
                 "name": "avatar",
                 "param": {
                     "user": "The user to look up"
+                },
+                "param_name": {
+                    "user": "user"
                 }
             },
             "banner": {
@@ -2375,6 +3018,9 @@
                 "name": "banner",
                 "param": {
                     "user": "The user to look up"
+                },
+                "param_name": {
+                    "user": "user"
                 }
             },
             "bot": {
@@ -2382,6 +3028,9 @@
                 "name": "bot",
                 "param": {
                     "full": "Show the full module list including failed modules"
+                },
+                "param_name": {
+                    "full": "full"
                 }
             },
             "changelog": {
@@ -2397,6 +3046,9 @@
                 "name": "help",
                 "param": {
                     "command": "The command to look up"
+                },
+                "param_name": {
+                    "command": "command"
                 }
             },
             "mention": {
@@ -2405,6 +3057,10 @@
                 "param": {
                     "command": "Command name",
                     "subcommand": "Subcommand name (optional)"
+                },
+                "param_name": {
+                    "command": "command",
+                    "subcommand": "subcommand"
                 }
             },
             "ping": {
@@ -2427,6 +3083,9 @@
                 "name": "user",
                 "param": {
                     "user": "The user to look up"
+                },
+                "param_name": {
+                    "user": "user"
                 }
             }
         },
@@ -2435,6 +3094,9 @@
             "name": "nitro",
             "param": {
                 "need_message": "Only recent speakers can claim (authors of the last 50 messages)"
+            },
+            "param_name": {
+                "need_message": "need_message"
             }
         },
         "randomnumber": {
@@ -2443,6 +3105,10 @@
             "param": {
                 "max": "Maximum value",
                 "min": "Minimum value"
+            },
+            "param_name": {
+                "max": "max",
+                "min": "min"
             }
         },
         "randomuser": {
@@ -2454,6 +3120,9 @@
             "name": "randomuser",
             "param": {
                 "mention": "Whether to mention the chosen user"
+            },
+            "param_name": {
+                "mention": "mention"
             }
         },
         "textlength": {
@@ -2461,6 +3130,9 @@
             "name": "textlength",
             "param": {
                 "text": "The text to measure"
+            },
+            "param_name": {
+                "text": "text"
             }
         }
     }
