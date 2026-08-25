@@ -32,6 +32,8 @@
 
         gtag('config', '{{ gtag }}');
     </script>
+    {% set i18n_prefixes = ['web.index.js.'] %}
+    {% include '_i18n_bootstrap.html' %}
     <script src="{{ url_for('static', filename='js/main.js') }}" defer></script>
 </head>
 
@@ -50,6 +52,7 @@
             <a href="/contribute-feed-grass">{{ t('web.nav.feedgrass') }}</a>
             <a href="/privacy-policy">{{ t('web.nav.privacy') }}</a>
             <a href="/terms-of-service">{{ t('web.nav.terms') }}</a>
+            {% include '_language_selector.html' %}
         </div>
     </nav>
 
@@ -233,7 +236,7 @@
     </div>
 
     <footer>
-        <p>&copy; 2025 {{ bot.user.name }}. All rights reserved.</p>
+        <p>{{ t('web.footer.copyright', year=2025, name=bot.user.name) }}</p>
     </footer>
 
     <script>

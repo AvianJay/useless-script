@@ -1,4 +1,87 @@
 {
+    "footer": {
+        "copyright": "© {year} {name}. All rights reserved."
+    },
+    "language": {
+        "apply": "Apply",
+        "label": "Language"
+    },
+    "privacy": {
+        "title": "{name} Privacy Policy",
+        "intro": "Welcome to {name} (the “Bot”). We value your privacy and are committed to protecting your personal information. Please read this Privacy Policy carefully to understand how we collect, use, and protect your information.",
+        "collection": {
+            "heading": "1. Information We Collect",
+            "intro": "The Bot may collect the following types of information:",
+            "server_label": "Server information: ",
+            "server_text": "When you use the Bot in a Discord server, we may collect the server ID, channel IDs, and related usage data.",
+            "interaction_label": "User interaction data: ",
+            "interaction_text": "We may record your interactions with the Bot, such as command usage and response content, to improve service quality.",
+            "technical_label": "Technical information: ",
+            "technical_text": "We may collect technical information about your device, such as your IP address, browser type, and operating system, to help diagnose problems and improve your experience.",
+            "logs_label": "Log data: ",
+            "logs_text": "We automatically collect certain log data, such as error reports and usage statistics, so that we can analyze and improve the Bot.",
+            "user_label": "User information: ",
+            "user_text": "We collect user IDs for identification and service delivery.",
+            "excluded_intro": "The Bot does not collect the following type of information:",
+            "message_label": "Message content: ",
+            "message_text": "We do not collect or store the content of your Discord messages. The Bot only processes a message when another user applies a Bot feature to that message."
+        },
+        "use": {
+            "heading": "2. How We Use Information",
+            "intro": "We use the information we collect for the following purposes:",
+            "service": "To provide and maintain the Bot's features and services.",
+            "analytics": "To analyze usage trends and improve the Bot's performance and user experience.",
+            "support": "To respond to user questions and support requests."
+        },
+        "protection": {
+            "heading": "3. Information Security",
+            "body": "We use appropriate technical and organizational measures to protect your personal information from unauthorized access, disclosure, or destruction. However, please note that no method of transmission or electronic storage is completely secure."
+        },
+        "sharing": {
+            "heading": "4. Information Sharing",
+            "body": "We do not sell or rent your personal information to third parties. We may, however, share your information in the following situation:",
+            "legal": "Legal requirements: We may disclose your information when required by law or when necessary to protect our rights."
+        },
+        "contact": {
+            "heading": "5. Deletion Requests and Contact",
+            "body": "Although the Bot generally does not store users' message content or personal data, if you have concerns about your data privacy or want to exercise your right to request deletion (including confirming whether we hold your data), please contact us through one of the following methods:",
+            "email_label": "Contact email: ",
+            "support_label": "Support server invite: ",
+            "final": "After receiving your request, we will help verify and handle the relevant matter."
+        }
+    },
+    "terms": {
+        "title": "{name} Terms of Service",
+        "intro": "Welcome to {name} (the “Bot”). By using the Bot, you agree to comply with these Terms of Service:",
+        "service": {
+            "heading": "1. Service",
+            "body": "The Bot provides various features designed to improve interaction and management efficiency in Discord servers. Specific features may change over time."
+        },
+        "rules": {
+            "heading": "2. Acceptable Use",
+            "discord": "You must comply with Discord's Terms of Service and Community Guidelines.",
+            "age": "You may not use the Bot if you are under 13 years old, or under the minimum age required by law where you live.",
+            "legal": "You agree not to use the Bot for unlawful activity or conduct that violates Discord's Community Guidelines.",
+            "interference": "You may not attempt to interfere with or disrupt the Bot's normal operation.",
+            "privacy": "You must respect other users' privacy and rights and may not use the Bot to collect or distribute another person's personal information."
+        },
+        "liability": {
+            "heading": "3. Limitation of Liability",
+            "body": "The Bot is provided “as is.” The developer is not liable for any direct, indirect, incidental, or consequential damages arising from use of the Bot."
+        },
+        "changes": {
+            "heading": "4. Service Changes and Termination",
+            "body": "The developer reserves the right to modify or terminate the Bot at any time without prior notice."
+        },
+        "revisions": {
+            "heading": "5. Changes to These Terms",
+            "body": "The developer reserves the right to modify these Terms of Service at any time. Revised terms will be published on this page. You should review this page periodically for the latest Terms of Service."
+        },
+        "contact": {
+            "heading": "6. Contact",
+            "body": "If you have questions about these Terms of Service, contact the developer on Discord: @{owner}."
+        }
+    },
     "docs": {
         "back_to_top": "Back to top",
         "hero_sub": "Complete command and feature reference to unleash the bot's full chaotic potential",
@@ -6,6 +89,7 @@
         "og_desc": "Complete documentation for {name} — command references and feature guides for 40+ modules.",
         "sidebar_toc": "Table of Contents",
         "title": "Documentation",
+        "unavailable": "The documentation is currently unavailable. Please try again later.",
         "twitter_desc": "Complete command and feature reference covering every module.",
         "untranslated_notice": "📝 This section hasn't been translated into your language yet; the original (Traditional Chinese) is shown below."
     },
@@ -33,6 +117,28 @@
         "upload_bg": "1. Upload a background image"
     },
     "index": {
+        "js": {
+            "title": "{name} | Discord Bot",
+            "unavailable": "Unavailable",
+            "status": {
+                "label": "Status: {status}",
+                "online": "Online",
+                "starting": "Starting",
+                "offline": "Offline",
+                "load_error": "Unable to load status"
+            },
+            "uptime": {
+                "day": { "one": "{count} day", "other": "{count} days" },
+                "hour": { "one": "{count} hour", "other": "{count} hours" },
+                "minute": { "one": "{count} minute", "other": "{count} minutes" },
+                "second": { "one": "{count} second", "other": "{count} seconds" }
+            },
+            "commit": {
+                "empty": "No changelog entries yet",
+                "failed": "Unable to load the changelog",
+                "label": "commit {hash}"
+            }
+        },
         "about_desc": "A hand-written multi-purpose Discord bot with over <strong>40 modules</strong> covering server moderation, automation, an economy system, music playback, minigames, AI chat, and more. Whether you want a safe, orderly community or a server full of fun, this bot has you covered. It is, of course, a giant pile of spaghetti code.",
         "about_title": "About the Bot",
         "cat": {
@@ -348,6 +454,10 @@
     },
     "verify": {
         "auto_verifying": "Verifying automatically...",
-        "title": "{guild} Verification"
+        "page_title": "{name} | Web Verification",
+        "title": "{guild} Verification",
+        "js": {
+            "error": "Something went wrong. {error}"
+        }
     }
 }

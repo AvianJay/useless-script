@@ -1,5 +1,13 @@
 {
     "panel": {
+        "unauthorized": "尚未登入。",
+        "forbidden": "你沒有管理此伺服器的權限。",
+        "bot_not_in_guild": "機器人不在此伺服器中。",
+        "no_data": "未提供資料。",
+        "missing_module_or_key": "缺少模組或設定鍵。",
+        "unknown_module": "未知的模組。",
+        "unknown_setting": "未知的設定。",
+        "autoreply_limit": "AutoReply 規則最多只能設定 {count} 筆。",
         "invalid_boolean": "布林設定值無效。",
         "save_failed": "儲存伺服器設定失敗。",
         "guild_not_found": "找不到伺服器。",

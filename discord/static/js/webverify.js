@@ -34,7 +34,7 @@ async function reCaptchaCallback(token) {
         document.getElementById('verify-form').submit();
     } catch (error) {
         console.error("Error in reCaptchaCallback:", error);
-        alert(`發生了一些錯誤。${error.message}`);
+        alert(t('web.verify.js.error', { error: error.message }));
     }
 }
 
@@ -49,7 +49,7 @@ async function turnstileCallback(token) {
         document.getElementById('verify-form').submit();
     } catch (error) {
         console.error("Error in turnstileCallback:", error);
-        alert(`發生了一些錯誤。${error.message}`);
+        alert(t('web.verify.js.error', { error: error.message }));
     }
 }
 
@@ -63,6 +63,6 @@ async function directVerify() {
         document.getElementById('verify-form').submit();
     } catch (error) {
         console.error("Error in directVerify:", error);
-        alert(`發生了一些錯誤。${error.message}`);
+        alert(t('web.verify.js.error', { error: error.message }));
     }
 }

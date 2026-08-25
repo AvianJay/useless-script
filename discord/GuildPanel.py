@@ -12,7 +12,6 @@ if "Website" not in modules:
 from Website import app
 from flask import request, redirect, session, jsonify, render_template, url_for
 import requests as http_requests
-import os
 import json
 import importlib
 import urllib.parse
@@ -296,12 +295,6 @@ async def _apply_antibeast_panel_config(guild_id, value):
         )
     set_server_config(int(guild_id), "antibeast", config)
 
-# ============= Flask session secret =============
-app.secret_key = os.environ.get(
-    "FLASK_SECRET_KEY",
-    config("client_secret", "please-change-this-secret"),
-)
-
 # ============= Server-side guild cache =============
 # Keyed by user ID -> list of {id, permissions}
 _guild_cache: dict[str, list[dict]] = {}
@@ -378,7 +371,7 @@ def _require_auth(f):
     def wrapper(*args, **kwargs):
         if _current_user() is None:
             if request.path.startswith("/api/"):
-                return jsonify({"error": "Unauthorized"}), 401
+                return jsonify({"error": t("err.panel.unauthorized")}), 401
             return redirect(url_for("panel_login"))
         return f(*args, **kwargs)
 
@@ -392,15 +385,15 @@ def _require_guild(f):
     def wrapper(*args, **kwargs):
         guild_id = kwargs.get("guild_id") or (args[0] if args else None)
         if _current_user() is None:
-            return jsonify({"error": "Unauthorized"}), 401
+            return jsonify({"error": t("err.panel.unauthorized")}), 401
         # permission check
         guilds = _current_guilds()
         guild = next((g for g in guilds if str(g["id"]) == str(guild_id)), None)
         if guild is None or not _has_manage(guild.get("permissions", 0)):
-            return jsonify({"error": "Forbidden"}), 403
+            return jsonify({"error": t("err.panel.forbidden")}), 403
         # bot membership check
         if bot.get_guild(int(guild_id)) is None:
-            return jsonify({"error": "Bot is not in this guild"}), 404
+            return jsonify({"error": t("err.panel.bot_not_in_guild")}), 404
         return f(*args, **kwargs)
 
     return wrapper
@@ -515,7 +508,6 @@ def panel_guild_page(guild_id):
         user=user,
         guild=bg,
         settings_json=json.dumps(safe_settings, ensure_ascii=False),
-        web_i18n_json=json.dumps(i18n.catalog_subset(("web.js.",)), ensure_ascii=False),
         gtag=config("website_gtag", ""),
     )
 
@@ -556,20 +548,20 @@ def api_set_settings(guild_id):
     gid = int(guild_id)
     payload = request.get_json(silent=True)
     if not payload:
-        return jsonify({"error": "No data"}), 400
+        return jsonify({"error": t("err.panel.no_data")}), 400
 
     mod_name = payload.get("module")
     key = payload.get("key")
     value = payload.get("value")
 
     if not mod_name or not key:
-        return jsonify({"error": "Missing module or key"}), 400
+        return jsonify({"error": t("err.panel.missing_module_or_key")}), 400
     if mod_name not in settings:
-        return jsonify({"error": "Unknown module"}), 400
+        return jsonify({"error": t("err.panel.unknown_module")}), 400
 
     setting = next((s for s in settings[mod_name]["settings"] if s["database_key"] == key), None)
     if setting is None:
-        return jsonify({"error": "Unknown setting"}), 400
+        return jsonify({"error": t("err.panel.unknown_setting")}), 400
 
     previous_value = get_server_config(gid, key, setting.get("default"))
 
@@ -613,7 +605,9 @@ def api_set_settings(guild_id):
     if setting.get("type") == "autoreply_list":
         autoreply_limit = int(get_server_config(gid, "autoreply_limit", 50) or 50)
         if len(value or []) > autoreply_limit:
-            return jsonify({"error": f"AutoReply rules are limited to {autoreply_limit} items."}), 400
+            return jsonify({
+                "error": t("err.panel.autoreply_limit", count=autoreply_limit),
+            }), 400
 
     if setting.get("type") == "stickymessage_config":
         stickymessage = _stickymessage_module()

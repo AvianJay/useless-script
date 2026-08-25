@@ -16,8 +16,10 @@
 
         gtag('config', '{{ gtag }}');
     </script>
+    {% include '_i18n_bootstrap.html' %}
 </head>
 <body>
+    <div class="login-language">{% include '_language_selector.html' %}</div>
     <div class="login-container">
         <div class="login-card">
             <img class="login-avatar" src="{{ bot.user.avatar.url if bot.user.avatar else '' }}" alt="{{ bot.user.name }}">

@@ -1,5 +1,13 @@
 {
     "panel": {
+        "unauthorized": "Unauthorized.",
+        "forbidden": "You do not have permission to manage this server.",
+        "bot_not_in_guild": "The bot is not in this server.",
+        "no_data": "No data was provided.",
+        "missing_module_or_key": "The module or setting key is missing.",
+        "unknown_module": "Unknown module.",
+        "unknown_setting": "Unknown setting.",
+        "autoreply_limit": { "one": "AutoReply rules are limited to {count} item.", "other": "AutoReply rules are limited to {count} items." },
         "invalid_boolean": "Invalid boolean value.",
         "save_failed": "Failed to save server settings.",
         "guild_not_found": "Server not found.",

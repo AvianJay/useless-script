@@ -1,7 +1,11 @@
-from flask import Flask, send_from_directory, render_template, send_file
+from flask import (
+    Flask, abort, g, redirect, render_template, request, send_file,
+    send_from_directory, session,
+)
 import os
 import asyncio
 from pathlib import Path
+from urllib.parse import urlsplit
 from hypercorn.config import Config
 from hypercorn.asyncio import serve
 from globalenv import bot, modules, config, on_ready_tasks, get_global_config, on_close_tasks
@@ -22,6 +26,11 @@ else:
     UtilCommands = None
 
 app = Flask(__name__, template_folder='templates', static_folder='static')
+app.secret_key = (
+    os.environ.get("FLASK_SECRET_KEY")
+    or config("client_secret", "")
+    or "please-change-this-secret"
+)
 
 # ============= i18n (choke point 4) =============
 # 每個 request 依 ?lang= > session > 面板登入者的個人語言 > Accept-Language
@@ -35,34 +44,101 @@ app.jinja_env.globals.update(
 
 @app.before_request
 def _set_request_locale():
-    from flask import request as _request, session as _session, g
-    lang_param = _request.args.get("lang")
+    lang_param = request.args.get("lang")
     if lang_param and lang_param in _i18n.available_locales():
-        _session["lang"] = lang_param
-    stored = _session.get("lang")
-    panel_user = _session.get("panel_user") or {}
-    user_id = None
-    try:
-        user_id = int(panel_user.get("id")) if panel_user.get("id") else None
-    except (TypeError, ValueError):
-        user_id = None
-    locale = _i18n.push_locale_for_web(
-        user_id=user_id,
-        lang_param=stored,
-        accept_language=_request.headers.get("Accept-Language"),
+        session["lang"] = lang_param
+    locale = _i18n.resolve_web_locale(
+        user_id=_panel_user_id(),
+        lang_param=lang_param,
+        session_locale=session.get("lang"),
+        accept_language=request.headers.get("Accept-Language"),
     )
+    g.i18n_token = _i18n.push_locale(locale)
     g.locale = locale
+
+
+@app.teardown_request
+def _reset_request_locale(_error=None):
+    token = getattr(g, "i18n_token", None)
+    if token is not None:
+        g.i18n_token = None
+        _i18n.reset_locale(token)
+
+
+def _panel_user_id():
+    panel_user = session.get("panel_user") or {}
+    try:
+        return int(panel_user.get("id")) if panel_user.get("id") else None
+    except (TypeError, ValueError):
+        return None
+
+
+def _safe_internal_next(target: str | None, *, default: str | None = "/") -> str | None:
+    if not target:
+        return default
+    try:
+        parsed = urlsplit(target)
+    except ValueError:
+        return None
+    if (not target.startswith("/") or target.startswith("//") or "\\" in target or
+            parsed.scheme or parsed.netloc):
+        return None
+    return target
+
+
+def _frontend_catalog(prefixes=()):
+    if isinstance(prefixes, str):
+        prefixes = (prefixes,)
+    return _i18n.catalog_subset(prefixes, locale=getattr(g, "locale", None))
 
 
 @app.context_processor
 def _inject_i18n_context():
-    from flask import g
     locale = getattr(g, "locale", _i18n.DEFAULT_LOCALE)
+    return_path = request.full_path
+    if return_path.endswith("?"):
+        return_path = return_path[:-1]
     return {
         "html_lang": "zh-Hant" if locale == "zh-TW" else locale,
         "locale": locale,
         "available_locales": _i18n.available_locales(),
+        "locale_options": [
+            {"code": code, "label": _i18n.locale_display_name(code)}
+            for code in _i18n.available_locales()
+        ],
+        "language_return_path": return_path or "/",
+        "frontend_catalog": _frontend_catalog,
     }
+
+
+@app.post('/api/language')
+def set_web_language():
+    locale = request.form.get("lang", "")
+    if locale not in _i18n.available_locales():
+        abort(400)
+    supplied_next = request.form.get("next")
+    target = _safe_internal_next(
+        supplied_next,
+        default="/" if supplied_next is None else None,
+    )
+    if target is None:
+        abort(400)
+
+    session["lang"] = locale
+    user_id = _panel_user_id()
+    if user_id:
+        try:
+            if not _i18n.set_user_locale(user_id, locale):
+                log(
+                    f"無法儲存網站語言偏好 (user_id={user_id}, locale={locale})",
+                    module_name="Website",
+                )
+        except Exception as error:
+            log(
+                f"儲存網站語言偏好時發生錯誤 (user_id={user_id}, locale={locale}): {error}",
+                module_name="Website",
+            )
+    return redirect(target)
 
 @app.route('/api/status')
 def api_status():

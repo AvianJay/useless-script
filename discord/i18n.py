@@ -458,7 +458,8 @@ def get_user_locale(user_id: int) -> str | None:
 def set_user_locale(user_id: int, locale: str | None) -> bool:
     value = _normalize_setting(locale)
     ok = db.set_user_data(user_id, 0, USER_LOCALE_KEY, value or "auto")
-    _user_locale_cache[user_id] = value
+    if ok:
+        _user_locale_cache[user_id] = value
     return ok
 
 
@@ -817,32 +818,96 @@ def install_prefix_command_hook() -> None:
 
 # ============= choke point 4 helper: Flask =============
 
-def push_locale_for_web(*, user_id: int | None = None, lang_param: str | None = None,
-                        accept_language: str | None = None) -> str:
-    """給 Website.py 的 @app.before_request 用；回傳解析出的 locale。
-
-    Flask 每個 request 一個 context（thread 或 asgi task），set 後不需 reset。
-    """
+def _map_web_locale(value: str | None) -> str | None:
+    """Map a web locale without applying Discord's unsupported-language fallback."""
+    if not value:
+        return None
     ensure_loaded()
-    if lang_param and lang_param in _catalogs:
-        _current.set(lang_param)
-        return lang_param
+    normalized = str(value).strip().replace("_", "-")
+    if not normalized:
+        return None
+    lowered = normalized.lower()
+    canonical = {locale.lower(): locale for locale in _catalogs}
+    if lowered in canonical:
+        return canonical[lowered]
+    if lowered == "zh" or lowered.startswith("zh-"):
+        return "zh-TW" if "zh-TW" in _catalogs else None
+    if lowered == "en" or lowered.startswith("en-"):
+        return "en" if "en" in _catalogs else None
+    base = lowered.split("-", 1)[0]
+    return canonical.get(base)
+
+
+def _parse_accept_language(value: str | None) -> list[tuple[str, float]]:
+    """Return positive Accept-Language choices in RFC quality order."""
+    choices: list[tuple[int, str, float]] = []
+    for index, part in enumerate((value or "").split(",")):
+        segments = [segment.strip() for segment in part.split(";")]
+        code = segments[0] if segments else ""
+        if not code:
+            continue
+        quality = 1.0
+        for parameter in segments[1:]:
+            name, separator, raw = parameter.partition("=")
+            if separator and name.strip().lower() == "q":
+                try:
+                    quality = float(raw.strip())
+                except ValueError:
+                    quality = 0.0
+                break
+        if not 0.0 < quality <= 1.0:
+            continue
+        choices.append((index, code, quality))
+    choices.sort(key=lambda item: (-item[2], item[0]))
+    return [(code, quality) for _, code, quality in choices]
+
+
+def resolve_accept_language(accept_language: str | None) -> str | None:
+    """Resolve a browser header, falling back to English only for unknown choices."""
+    ensure_loaded()
+    saw_unsupported = False
+    for code, _quality in _parse_accept_language(accept_language):
+        mapped = _map_web_locale(code)
+        if mapped:
+            return mapped
+        if code != "*":
+            saw_unsupported = True
+    if saw_unsupported and "en" in _catalogs:
+        return "en"
+    return None
+
+
+def resolve_web_locale(*, user_id: int | None = None,
+                       lang_param: str | None = None,
+                       session_locale: str | None = None,
+                       accept_language: str | None = None) -> str:
+    """query > session > user preference > Accept-Language > default."""
+    ensure_loaded()
+    for candidate in (lang_param, session_locale):
+        mapped = _map_web_locale(candidate)
+        if mapped:
+            return mapped
     if user_id:
-        user_setting = get_user_locale(user_id)
+        user_setting = _map_web_locale(get_user_locale(user_id))
         if user_setting:
-            _current.set(user_setting)
             return user_setting
-    if accept_language:
-        for part in accept_language.split(","):
-            code = part.split(";")[0].strip()
-            if not code:
-                continue
-            mapped = map_discord_locale(code)
-            if mapped:
-                _current.set(mapped)
-                return mapped
-    _current.set(DEFAULT_LOCALE)
-    return DEFAULT_LOCALE
+    browser_locale = resolve_accept_language(accept_language)
+    return browser_locale or DEFAULT_LOCALE
+
+
+def push_locale_for_web(*, user_id: int | None = None,
+                        lang_param: str | None = None,
+                        session_locale: str | None = None,
+                        accept_language: str | None = None) -> str:
+    """Resolve and install a web locale; callers must reset their request token."""
+    locale = resolve_web_locale(
+        user_id=user_id,
+        lang_param=lang_param,
+        session_locale=session_locale,
+        accept_language=accept_language,
+    )
+    _current.set(locale)
+    return locale
 
 
 # ============= 指令 metadata translator =============

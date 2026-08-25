@@ -16,6 +16,7 @@
 
         gtag('config', '{{ gtag }}');
     </script>
+    {% include '_i18n_bootstrap.html' %}
 </head>
 <body>
     <nav class="panel-nav">
@@ -24,6 +25,7 @@
             <span>{{ bot.user.name }}</span>
         </a>
         <div class="nav-user">
+            {% include '_language_selector.html' %}
             <img class="user-avatar" src="https://cdn.discordapp.com/avatars/{{ user.id }}/{{ user.avatar }}.png?size=64" alt="{{ user.username }}">
             <span>{{ user.global_name or user.username }}</span>
             <a href="{{ url_for('panel_logout') }}" class="btn-logout">{{ t('web.panel.logout') }}</a>

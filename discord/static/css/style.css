@@ -56,6 +56,44 @@ body {
     color: var(--text-primary);
 }
 
+.nav-links {
+    display: flex;
+    align-items: center;
+}
+
+.language-selector {
+    display: inline-flex;
+    align-items: center;
+    margin-left: 20px;
+}
+
+.language-selector-label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+}
+
+.language-selector select {
+    appearance: none;
+    color: var(--text-secondary);
+    background: var(--bg-primary);
+    border: 1px solid rgba(255,255,255,0.16);
+    border-radius: 6px;
+    padding: 0.42rem 1.8rem 0.42rem 0.65rem;
+    font: inherit;
+    cursor: pointer;
+    background-image: linear-gradient(45deg, transparent 50%, currentColor 50%), linear-gradient(135deg, currentColor 50%, transparent 50%);
+    background-position: calc(100% - 12px) 50%, calc(100% - 8px) 50%;
+    background-size: 4px 4px, 4px 4px;
+    background-repeat: no-repeat;
+}
+
 /* Hero Section */
 .hero {
     text-align: center;
@@ -329,6 +367,17 @@ footer a {
         padding: 0.6rem 0;
         border-top: 1px solid rgba(255,255,255,0.06);
         text-align: center;
+    }
+
+    .language-selector {
+        margin: 0;
+        padding: 0.6rem 0;
+        justify-content: center;
+        border-top: 1px solid rgba(255,255,255,0.06);
+    }
+
+    .language-selector select {
+        width: min(100%, 16rem);
     }
 
     .hero {

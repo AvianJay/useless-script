@@ -1,28 +1,6 @@
 // ============= Panel JS =============
 // Requires GUILD_ID and SETTINGS_SCHEMA to be defined by the template.
-// window.I18N (web.js.* catalog subset) and window.I18N_LOCALE are injected
-// by panel_guild.html; t() falls back to the key itself when missing.
-
-function t(key, params) {
-    let value = (window.I18N || {})[key];
-    if (value === undefined || value === null) return key;
-    if (typeof value === 'object') {
-        // 複數項：zh 系語言一律 other；en 在 count === 1 時用 one
-        const count = params && params.count;
-        const noPlural = /^(zh|ja|ko|th|vi|id|ms)/.test(window.I18N_LOCALE || 'zh-TW');
-        let variant = 'other';
-        if (count === 0 && value.zero !== undefined) variant = 'zero';
-        else if (!noPlural && count === 1 && value.one !== undefined) variant = 'one';
-        value = value[variant] !== undefined ? value[variant]
-            : (value.other !== undefined ? value.other : Object.values(value)[0]);
-    }
-    if (params) {
-        for (const name in params) {
-            value = value.split('{' + name + '}').join(params[name]);
-        }
-    }
-    return value;
-}
+// window.I18N, window.I18N_LOCALE, and t() are provided by i18n.js.
 
 let currentValues = {};
 let channelsCache = null;

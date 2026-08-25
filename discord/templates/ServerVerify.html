@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{{ title }}</title>
+    <title>{{ t('web.verify.page_title', name=bot.user.name) }}</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
@@ -17,16 +17,18 @@
 
         gtag('config', '{{ gtag }}');
     </script>
-    <script src="https://www.google.com/recaptcha/api.js" async defer></script>
-    <script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
+    <script src="https://www.google.com/recaptcha/api.js?hl={{ locale | urlencode }}" async defer></script>
+    <script src="https://challenges.cloudflare.com/turnstile/v0/api.js?language={{ locale | urlencode }}" async defer></script>
     <script src="{{ url_for('static', filename='js/fp.min.js') }}"></script>
+    {% set i18n_prefixes = ['web.verify.js.'] %}
+    {% include '_i18n_bootstrap.html' %}
     <script src="{{ url_for('static', filename='js/webverify.js') }}" defer></script>
 </head>
 
 <body>
     <nav class="navbar">
         <a href="/" class="navbar-brand">
-            <img id="nav-avatar" src="{{ bot.user.avatar.url }}" alt="Logo"
+            <img id="nav-avatar" src="{{ bot.user.avatar.url if bot.user.avatar else '' }}" alt="{{ bot.user.name }}"
                 style="width: 30px; height: 30px; border-radius: 50%; display: none;">
             <span id="nav-name">{{ bot.user.name }}</span>
         </a>
@@ -36,6 +38,7 @@
             <a href="/contribute-feed-grass">{{ t('web.nav.feedgrass') }}</a>
             <a href="/privacy-policy">{{ t('web.nav.privacy') }}</a>
             <a href="/terms-of-service">{{ t('web.nav.terms') }}</a>
+            {% include '_language_selector.html' %}
         </div>
     </nav>
 
@@ -69,7 +72,7 @@
     </div>
 
     <footer>
-        <p>&copy; 2025 {{ bot.user.name }}. All rights reserved.</p>
+        <p>{{ t('web.footer.copyright', year=2025, name=bot.user.name) }}</p>
     </footer>
 
     <script>

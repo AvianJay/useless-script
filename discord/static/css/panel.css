@@ -139,6 +139,39 @@ body {
 .btn-logout:hover { color: var(--danger); background: var(--danger-bg); }
 .btn-back:hover { color: var(--text-white); background: var(--bg-input); }
 
+.language-selector {
+    display: inline-flex;
+    align-items: center;
+}
+
+.language-selector-label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+}
+
+.language-selector select {
+    color: var(--text-primary);
+    background: var(--bg-input);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 6px 8px;
+    font: inherit;
+    cursor: pointer;
+}
+
+.login-language {
+    position: fixed;
+    top: 1rem;
+    right: 1rem;
+}
+
 /* ============= Container ============= */
 .panel-container {
     max-width: 960px;
@@ -1046,7 +1079,9 @@ body {
 /* ============= Responsive ============= */
 @media (max-width: 640px) {
     .panel-nav { flex-wrap: wrap; gap: 0.5rem; }
-    .nav-right { flex-wrap: wrap; gap: 0.5rem; }
+    .nav-right { width: 100%; flex-wrap: wrap; justify-content: flex-end; gap: 0.5rem; }
+    .nav-user { flex-wrap: wrap; justify-content: flex-end; }
+    .login-language { position: absolute; }
     .setting-row { flex-direction: column; }
     .setting-control { min-width: 100%; }
     .guild-grid { grid-template-columns: 1fr; }

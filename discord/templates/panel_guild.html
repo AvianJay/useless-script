@@ -16,6 +16,8 @@
 
         gtag('config', '{{ gtag }}');
     </script>
+    {% set i18n_prefixes = ['web.js.'] %}
+    {% include '_i18n_bootstrap.html' %}
 </head>
 <body>
     <nav class="panel-nav">
@@ -24,6 +26,7 @@
             <span>{{ bot.user.name }}</span>
         </a>
         <div class="nav-right">
+            {% include '_language_selector.html' %}
             <a href="/panel/" class="btn-back">{{ t('web.panel.back_to_list') }}</a>
             <div class="nav-user">
                 <img class="user-avatar" src="https://cdn.discordapp.com/avatars/{{ user.id }}/{{ user.avatar }}.png?size=64" alt="{{ user.username }}">
@@ -59,9 +62,7 @@
     <script>
         const GUILD_ID = "{{ guild.id }}";
         const SETTINGS_SCHEMA = {{ settings_json | safe }};
-        window.I18N = {{ web_i18n_json | safe }};
-        window.I18N_LOCALE = "{{ locale }}";
     </script>
-    <script src="{{ url_for('static', filename='js/panel.js') }}?v=6"></script>
+    <script src="{{ url_for('static', filename='js/panel.js') }}?v=7"></script>
 </body>
 </html>

@@ -165,6 +165,75 @@ class ResolutionTests(unittest.TestCase):
         self.assertIsNone(i18n.get_guild_locale(10))
 
 
+class WebResolutionTests(unittest.TestCase):
+    def setUp(self):
+        self.fake_db = FakeDB()
+        patcher = patch.object(i18n, "db", self.fake_db)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+        clear_i18n_caches()
+        self.addCleanup(clear_i18n_caches)
+        i18n.ensure_loaded()
+
+    def test_query_then_session_then_user_then_header_priority(self):
+        self.fake_db.set_user_data(1, 0, i18n.USER_LOCALE_KEY, "en")
+        clear_i18n_caches()
+        self.assertEqual(i18n.resolve_web_locale(
+            user_id=1,
+            lang_param="zh-TW",
+            session_locale="en",
+            accept_language="en-US",
+        ), "zh-TW")
+        self.assertEqual(i18n.resolve_web_locale(
+            user_id=1,
+            session_locale="zh-TW",
+            accept_language="en-US",
+        ), "zh-TW")
+        self.assertEqual(i18n.resolve_web_locale(
+            user_id=1,
+            accept_language="zh-TW",
+        ), "en")
+
+    def test_accept_language_quality_and_source_order(self):
+        self.assertEqual(
+            i18n.resolve_web_locale(accept_language="en-US;q=0.4, zh-Hant-HK;q=0.9"),
+            "zh-TW",
+        )
+        self.assertEqual(
+            i18n.resolve_web_locale(accept_language="en;q=0.7, zh-TW;q=0.7"),
+            "en",
+        )
+
+    def test_chinese_variants_map_to_traditional_chinese(self):
+        for header in ("zh", "zh-TW", "zh-HK", "zh-CN", "zh-Hant", "zh-Hans-CN"):
+            with self.subTest(header=header):
+                self.assertEqual(
+                    i18n.resolve_web_locale(accept_language=header),
+                    "zh-TW",
+                )
+
+    def test_unsupported_language_uses_english(self):
+        self.assertEqual(i18n.resolve_web_locale(accept_language="fr-FR"), "en")
+        self.assertEqual(
+            i18n.resolve_web_locale(accept_language="fr-FR;q=1, zh-TW;q=0.2"),
+            "zh-TW",
+        )
+
+    def test_q_zero_is_ignored_and_default_remains_source_locale(self):
+        self.assertEqual(
+            i18n.resolve_web_locale(accept_language="en;q=0, fr;q=0"),
+            i18n.DEFAULT_LOCALE,
+        )
+
+    def test_failed_user_locale_write_does_not_poison_cache(self):
+        self.fake_db.set_user_data(1, 0, i18n.USER_LOCALE_KEY, "zh-TW")
+        clear_i18n_caches()
+        self.assertEqual(i18n.get_user_locale(1), "zh-TW")
+        with patch.object(self.fake_db, "set_user_data", return_value=False):
+            self.assertFalse(i18n.set_user_locale(1, "en"))
+        self.assertEqual(i18n.get_user_locale(1), "zh-TW")
+
+
 class LookupTests(unittest.TestCase):
     def setUp(self):
         i18n.ensure_loaded()
