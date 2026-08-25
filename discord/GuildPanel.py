@@ -1,5 +1,5 @@
 from globalenv import (
-    bot, get_server_config, set_server_config, modules, config,
+    bot, get_server_config, set_server_config, get_db_connection, modules, config,
     panel_settings, register_panel_settings, localized_panel_settings,
 )
 from logger import log
@@ -20,6 +20,7 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 import asyncio
+import uuid
 
 # ============= Settings alias =============
 # The canonical dict lives in globalenv so any module can register before GuildPanel loads.
@@ -49,6 +50,69 @@ def _analyze_automod_action(feature_name, action, guild_id):
 
     analyzer = analyze_member_join_action if feature_name == "flagged_user" else analyze_action_string
     return analyzer(action, guild_id)
+
+
+def _normalize_webverify_country_mode(value):
+    return {
+        "blacklist": "blacklist",
+        "blocklist": "blacklist",
+        "whitelist": "whitelist",
+        "allowlist": "whitelist",
+    }.get(str(value or "").strip().lower(), "blacklist")
+
+
+def _normalize_webverify_relation_ids(values, *, validate_exists=False):
+    if isinstance(values, str):
+        values = re.split(r"[,，\s]+", values)
+    if not isinstance(values, (list, tuple, set)):
+        values = []
+    result = []
+    for value in values:
+        try:
+            relation_id = str(uuid.UUID(str(value).strip()))
+        except (ValueError, TypeError, AttributeError) as error:
+            raise ValueError(t("err.panel.webverify_relation_id_invalid", relation_id=value)) from error
+        if relation_id not in result:
+            result.append(relation_id)
+    if validate_exists and result:
+        placeholders = ",".join("?" for _ in result)
+        with get_db_connection() as conn:
+            existing = {
+                row[0]
+                for row in conn.execute(
+                    f"SELECT DISTINCT relation_id FROM webverify_user_relation WHERE relation_id IN ({placeholders})",
+                    result,
+                ).fetchall()
+            }
+        missing = [relation_id for relation_id in result if relation_id not in existing]
+        if missing:
+            raise ValueError(t("err.panel.webverify_relation_id_not_found", relation_id=missing[0]))
+    return result
+
+
+def _webverify_relation_ids_from_config(value):
+    if not isinstance(value, dict):
+        return set()
+    relation = value.get("relation_blacklist")
+    if not isinstance(relation, dict):
+        return set()
+    try:
+        return set(_normalize_webverify_relation_ids(relation.get("relation_ids", [])))
+    except ValueError:
+        return set()
+
+
+def _webverify_config_trigger(guild_id, value, previous_value):
+    """Clear successful-action dedupe rows for relation IDs removed by any UI."""
+    removed = _webverify_relation_ids_from_config(previous_value) - _webverify_relation_ids_from_config(value)
+    if not removed:
+        return
+    with get_db_connection() as conn:
+        conn.executemany(
+            "DELETE FROM webverify_relation_action_history WHERE guild_id = ? AND relation_id = ?",
+            [(int(guild_id), relation_id) for relation_id in removed],
+        )
+        conn.commit()
 
 
 def _coerce_bool(value, *, default=False):
@@ -835,6 +899,50 @@ def _serialize(value, stype, guild_id=None):
         return _serialize_stickymessage_config(value)
     if stype == "moderation_announcement_config":
         return _moderate_module().normalize_moderation_announcement_config(value)
+    if stype == "webverify_config":
+        if not isinstance(value, dict):
+            return {}
+        out = {}
+        out["enabled"] = bool(value.get("enabled", False))
+        out["captcha_type"] = str(value.get("captcha_type", "turnstile"))
+        out["unverified_role_id"] = str(value["unverified_role_id"]) if value.get("unverified_role_id") is not None else None
+        out["autorole_enabled"] = bool(value.get("autorole_enabled", False))
+        out["autorole_trigger"] = str(value.get("autorole_trigger", "always"))
+        try:
+            out["min_age"] = int(value.get("min_age", 7))
+        except (TypeError, ValueError):
+            out["min_age"] = 7
+        notify = value.get("notify")
+        if isinstance(notify, dict):
+            out["notify"] = {
+                "type": str(notify.get("type", "dm")),
+                "channel_id": str(notify["channel_id"]) if notify.get("channel_id") is not None else None,
+                "title": str(notify.get("title", "伺服器網頁驗證")),
+                "message": str(notify.get("message", "請點擊下方按鈕進行網頁驗證：")),
+            }
+        else:
+            out["notify"] = {"type": "dm", "channel_id": None, "title": "伺服器網頁驗證", "message": "請點擊下方按鈕進行網頁驗證："}
+        country = value.get("webverify_country_alert")
+        if isinstance(country, dict):
+            out["webverify_country_alert"] = {
+                "enabled": bool(country.get("enabled", False)),
+                "mode": _normalize_webverify_country_mode(country.get("mode")),
+                "countries": list(dict.fromkeys(str(code).strip().upper() for code in (country.get("countries") or []) if re.fullmatch(r"[A-Za-z]{2}", str(code).strip()))),
+                "channel_id": str(country["channel_id"]) if country.get("channel_id") is not None else None,
+            }
+        else:
+            out["webverify_country_alert"] = {"enabled": False, "mode": "blacklist", "countries": [], "channel_id": None}
+        relation = value.get("relation_blacklist")
+        if isinstance(relation, dict):
+            out["relation_blacklist"] = {
+                "enabled": bool(relation.get("enabled", False)),
+                "relation_ids": _normalize_webverify_relation_ids(relation.get("relation_ids", [])),
+                "action": str(relation.get("action", "") or ""),
+                "channel_id": str(relation["channel_id"]) if relation.get("channel_id") is not None else None,
+            }
+        else:
+            out["relation_blacklist"] = {"enabled": False, "relation_ids": [], "action": "", "channel_id": None}
+        return out
     return value
 
 
@@ -954,44 +1062,6 @@ def _coerce(value, stype, guild_id=None):
             out[feat] = row
         return out
 
-    if stype == "webverify_config":
-        if not isinstance(value, dict):
-            return {}
-        out = {}
-        out["enabled"] = bool(value.get("enabled", False))
-        out["captcha_type"] = str(value.get("captcha_type", "turnstile"))
-        if value.get("unverified_role_id") is not None:
-            out["unverified_role_id"] = str(value["unverified_role_id"])
-        else:
-            out["unverified_role_id"] = None
-        out["autorole_enabled"] = bool(value.get("autorole_enabled", False))
-        out["autorole_trigger"] = str(value.get("autorole_trigger", "always"))
-        try:
-            out["min_age"] = int(value.get("min_age", 7))
-        except (TypeError, ValueError):
-            out["min_age"] = 7
-        notify = value.get("notify")
-        if isinstance(notify, dict):
-            out["notify"] = {
-                "type": str(notify.get("type", "dm")),
-                "channel_id": str(notify["channel_id"]) if notify.get("channel_id") is not None else None,
-                "title": str(notify.get("title", "伺服器網頁驗證")),
-                "message": str(notify.get("message", "請點擊下方按鈕進行網頁驗證：")),
-            }
-        else:
-            out["notify"] = {"type": "dm", "channel_id": None, "title": "伺服器網頁驗證", "message": "請點擊下方按鈕進行網頁驗證："}
-        country = value.get("webverify_country_alert")
-        if isinstance(country, dict):
-            out["webverify_country_alert"] = {
-                "enabled": bool(country.get("enabled", False)),
-                "mode": str(country.get("mode", "blacklist")),
-                "countries": list(country.get("countries") or []),
-                "channel_id": str(country["channel_id"]) if country.get("channel_id") is not None else None,
-            }
-        else:
-            out["webverify_country_alert"] = {"enabled": False, "mode": "blacklist", "countries": [], "channel_id": None}
-        return out
-
     if stype == "boolean":
         if isinstance(value, bool):
             return value
@@ -1039,11 +1109,10 @@ def _coerce(value, stype, guild_id=None):
             }
         else:
             out["notify"] = {"type": "dm", "channel_id": None, "title": "伺服器網頁驗證", "message": "請點擊下方按鈕進行網頁驗證："}
+        guild = bot.get_guild(int(guild_id)) if guild_id is not None else None
         country = value.get("webverify_country_alert")
         if isinstance(country, dict):
-            cm = str(country.get("mode", "blacklist")).strip().lower()
-            if cm not in ("blacklist", "whitelist"):
-                cm = "blacklist"
+            cm = _normalize_webverify_country_mode(country.get("mode"))
             cc = country.get("countries")
             if isinstance(cc, str):
                 cc = [c.strip().upper() for c in cc.split(",") if c.strip()]
@@ -1051,16 +1120,75 @@ def _coerce(value, stype, guild_id=None):
                 cc = [str(c).strip().upper() for c in cc if str(c).strip()]
             else:
                 cc = []
+            invalid_cc = [code for code in cc if not re.fullmatch(r"[A-Z]{2}", code)]
+            if invalid_cc:
+                raise ValueError(t("err.panel.webverify_country_code_invalid", code=invalid_cc[0]))
+            cc = list(dict.fromkeys(cc))
             ch_id = country.get("channel_id")
             ch_id = int(ch_id) if ch_id is not None and str(ch_id).strip() and str(ch_id).isdigit() else None
+            country_enabled = bool(country.get("enabled", False))
+            if country_enabled and not cc:
+                raise ValueError(t("err.panel.webverify_country_codes_required"))
+            if country_enabled and ch_id is None:
+                raise ValueError(t("err.panel.webverify_country_channel_required"))
+            if country_enabled and guild is not None:
+                channel = guild.get_channel(ch_id)
+                permissions = channel.permissions_for(guild.me) if channel and guild.me else None
+                if (
+                    channel is None
+                    or permissions is None
+                    or not permissions.view_channel
+                    or not permissions.send_messages
+                    or not permissions.embed_links
+                ):
+                    raise ValueError(t("err.panel.webverify_alert_channel_permissions"))
             out["webverify_country_alert"] = {
-                "enabled": bool(country.get("enabled", False)),
+                "enabled": country_enabled,
                 "mode": cm,
                 "countries": cc,
                 "channel_id": ch_id,
             }
         else:
             out["webverify_country_alert"] = {"enabled": False, "mode": "blacklist", "countries": [], "channel_id": None}
+        relation = value.get("relation_blacklist")
+        if isinstance(relation, dict):
+            relation_ids = _normalize_webverify_relation_ids(
+                relation.get("relation_ids", []),
+                validate_exists=bool(relation.get("relation_ids")),
+            )
+            action = str(relation.get("action", "") or "").strip()
+            channel_id = relation.get("channel_id")
+            channel_id = int(channel_id) if channel_id is not None and str(channel_id).strip() and str(channel_id).isdigit() else None
+            enabled = bool(relation.get("enabled", False))
+            if enabled:
+                if not relation_ids:
+                    raise ValueError(t("err.panel.webverify_relation_ids_required"))
+                if channel_id is None:
+                    raise ValueError(t("err.panel.webverify_relation_channel_required"))
+                from Moderate import analyze_member_join_action
+                analysis = analyze_member_join_action(action, guild_id)
+                if not analysis["valid"] or analysis.get("requires_confirmation"):
+                    raise ValueError(analysis.get("error") or analysis.get("confirmation") or t("err.panel.invalid_action"))
+                action = str(analysis.get("normalized") or action).strip()
+            if enabled and guild is not None:
+                channel = guild.get_channel(channel_id)
+                permissions = channel.permissions_for(guild.me) if channel and guild.me else None
+                if (
+                    channel is None
+                    or permissions is None
+                    or not permissions.view_channel
+                    or not permissions.send_messages
+                    or not permissions.embed_links
+                ):
+                    raise ValueError(t("err.panel.webverify_alert_channel_permissions"))
+            out["relation_blacklist"] = {
+                "enabled": enabled,
+                "relation_ids": relation_ids,
+                "action": action,
+                "channel_id": channel_id,
+            }
+        else:
+            out["relation_blacklist"] = {"enabled": False, "relation_ids": [], "action": "", "channel_id": None}
         return out
 
     return value
@@ -1216,7 +1344,15 @@ def _register_all():
 
     if "ServerWebVerify" in modules:
         register_settings("ServerWebVerify", "網頁驗證", [
-            {"display": "網頁驗證設定", "description": "啟用、CAPTCHA、未驗證角色、自動分配、通知方式與地區警示", "database_key": "webverify_config", "type": "webverify_config", "default": {}},
+            {
+                "display": "網頁驗證設定",
+                "description": "啟用、CAPTCHA、未驗證角色、自動分配、通知、地區警示與關聯 ID 黑名單",
+                "database_key": "webverify_config",
+                "type": "webverify_config",
+                "default": {},
+                "trigger": _webverify_config_trigger,
+                "trigger_with_previous": True,
+            },
         ], description="伺服器網頁驗證（需先以 /webverify setup 或 quick_setup 初始化）", icon="🌐")
 
     if "StickyRole" in modules:

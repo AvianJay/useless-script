@@ -6,6 +6,7 @@ import inspect
 import logging
 import math
 import re
+import uuid
 from dataclasses import dataclass, field
 from typing import Any
 from urllib.parse import urlencode
@@ -19,6 +20,7 @@ from globalenv import (
     config,
     failed_modules,
     get_command_mention,
+    get_db_connection,
     get_server_config,
     localized_panel_settings,
     modules,
@@ -2978,6 +2980,57 @@ class AutoModerateChannelListView(SetupView):
         await self.session.render(interaction, embed=target.build_embed(), view=target)
 
 
+def normalize_webverify_country_mode(value) -> str:
+    return {
+        "blacklist": "blacklist",
+        "blocklist": "blacklist",
+        "whitelist": "whitelist",
+        "allowlist": "whitelist",
+    }.get(str(value or "").strip().lower(), "blacklist")
+
+
+def normalize_webverify_country_codes(values) -> list[str]:
+    if isinstance(values, str):
+        values = re.split(r"[,，\s]+", values)
+    if not isinstance(values, (list, tuple, set)):
+        return []
+    result = []
+    for value in values:
+        code = str(value or "").strip().upper()
+        if re.fullmatch(r"[A-Z]{2}", code) and code not in result:
+            result.append(code)
+    return result
+
+
+def normalize_webverify_relation_ids(values, *, validate_exists: bool = False) -> list[str]:
+    if isinstance(values, str):
+        values = re.split(r"[,，\s]+", values)
+    if not isinstance(values, (list, tuple, set)):
+        values = []
+    result = []
+    for value in values:
+        try:
+            relation_id = str(uuid.UUID(str(value).strip()))
+        except (ValueError, TypeError, AttributeError) as error:
+            raise ValueError(t("gettingstarted.webverify.err.invalid_relation_id", relation_id=value)) from error
+        if relation_id not in result:
+            result.append(relation_id)
+    if validate_exists and result:
+        placeholders = ",".join("?" for _ in result)
+        with get_db_connection() as conn:
+            existing = {
+                str(row[0])
+                for row in conn.execute(
+                    f"SELECT DISTINCT relation_id FROM webverify_user_relation WHERE relation_id IN ({placeholders})",
+                    result,
+                ).fetchall()
+            }
+        missing = [relation_id for relation_id in result if relation_id not in existing]
+        if missing:
+            raise ValueError(t("gettingstarted.webverify.err.relation_id_not_found", relation_id=missing[0]))
+    return result
+
+
 def default_webverify_config() -> dict:
     return {
         "enabled": True,
@@ -2998,6 +3051,12 @@ def default_webverify_config() -> dict:
             "countries": [],
             "channel_id": None,
         },
+        "relation_blacklist": {
+            "enabled": False,
+            "relation_ids": [],
+            "action": "",
+            "channel_id": None,
+        },
     }
 
 
@@ -3013,6 +3072,14 @@ def load_webverify_config(guild_id: int) -> dict:
         base["notify"].update(copy.deepcopy(stored["notify"]))
     if isinstance(stored.get("webverify_country_alert"), dict):
         base["webverify_country_alert"].update(copy.deepcopy(stored["webverify_country_alert"]))
+    country = base["webverify_country_alert"]
+    country["mode"] = normalize_webverify_country_mode(country.get("mode"))
+    country["countries"] = normalize_webverify_country_codes(country.get("countries"))
+    if isinstance(stored.get("relation_blacklist"), dict):
+        base["relation_blacklist"].update(copy.deepcopy(stored["relation_blacklist"]))
+    relation = base["relation_blacklist"]
+    relation["relation_ids"] = normalize_webverify_relation_ids(relation.get("relation_ids"))
+    relation["action"] = str(relation.get("action", "") or "").strip()
     return base
 
 
@@ -3108,6 +3175,66 @@ class WebVerifyCountriesModal(i18n.I18nModal, title=i18n.K("gettingstarted.webve
         await self.parent_view.refresh(interaction)
 
 
+class WebVerifyRelationBlacklistModal(
+    i18n.I18nModal,
+    title=i18n.K("gettingstarted.webverify.modal.relation_blacklist_title"),
+):
+    def __init__(self, parent: "WebVerifySetupView"):
+        super().__init__()
+        self.parent_view = parent
+        relation = parent.draft["relation_blacklist"]
+        self.relation_ids_input = discord.ui.TextInput(
+            label=t("gettingstarted.webverify.field.relation_ids_label"),
+            placeholder=t("gettingstarted.webverify.field.relation_ids_placeholder"),
+            default="\n".join(relation.get("relation_ids", [])),
+            required=False,
+            max_length=4000,
+            style=discord.TextStyle.paragraph,
+        )
+        self.action_input = discord.ui.TextInput(
+            label=t("gettingstarted.webverify.field.relation_action_label"),
+            placeholder=t("gettingstarted.webverify.field.relation_action_placeholder"),
+            default=truncate(relation.get("action", ""), 1000),
+            required=False,
+            max_length=1000,
+        )
+        self.add_item(self.relation_ids_input)
+        self.add_item(self.action_input)
+
+    async def on_submit(self, interaction: discord.Interaction):
+        try:
+            relation_ids = normalize_webverify_relation_ids(
+                self.relation_ids_input.value,
+                validate_exists=True,
+            )
+        except ValueError as error:
+            await interaction.response.send_message(str(error), ephemeral=True)
+            return
+
+        action = self.action_input.value.strip()
+        if action:
+            if Moderate is None:
+                await interaction.response.send_message(
+                    t("gettingstarted.webverify.err.relation_action_unavailable"),
+                    ephemeral=True,
+                )
+                return
+            analysis = Moderate.analyze_member_join_action(action, self.parent_view.session.guild.id)
+            if not analysis["valid"] or analysis.get("requires_confirmation"):
+                error = analysis.get("error") or analysis.get("confirmation") or action
+                await interaction.response.send_message(
+                    t("gettingstarted.webverify.err.invalid_relation_action", error=error),
+                    ephemeral=True,
+                )
+                return
+            action = str(analysis.get("normalized") or action).strip()
+
+        relation = self.parent_view.draft["relation_blacklist"]
+        relation["relation_ids"] = relation_ids
+        relation["action"] = action
+        await self.parent_view.refresh(interaction)
+
+
 class WebVerifyRoleCreationModal(i18n.I18nModal, title=i18n.K("gettingstarted.webverify.modal.create_role_title")):
     def __init__(self, parent: "WebVerifySetupView"):
         super().__init__()
@@ -3168,7 +3295,7 @@ class WebVerifySetupView(SetupView):
         super().__init__(session)
         self.module_name = module_name
         self.draft = copy.deepcopy(draft) if draft is not None else load_webverify_config(session.guild.id)
-        self.step = max(1, min(step, 6))
+        self.step = max(1, min(step, 7))
         self.rebuild_components()
 
     def rebuild_components(self):
@@ -3294,6 +3421,36 @@ class WebVerifySetupView(SetupView):
             countries.callback = self.edit_countries
             self.add_item(countries)
             self.add_navigation(previous_step=True, next_step=True, row=4)
+        elif self.step == 6:
+            relation = self.draft["relation_blacklist"]
+            toggle = discord.ui.Button(
+                label=t(
+                    "gettingstarted.webverify.btn.relation_blacklist_state",
+                    state=t("common.state.enabled") if relation.get("enabled") else t("common.state.disabled"),
+                ),
+                style=discord.ButtonStyle.success if relation.get("enabled") else discord.ButtonStyle.secondary,
+                row=0,
+            )
+            toggle.callback = self.toggle_relation_blacklist
+            self.add_item(toggle)
+            if relation.get("enabled"):
+                channel_select = discord.ui.ChannelSelect(
+                    placeholder=t("gettingstarted.webverify.select_relation_channel_ph"),
+                    channel_types=[discord.ChannelType.text, discord.ChannelType.news],
+                    min_values=1,
+                    max_values=1,
+                    row=1,
+                )
+                channel_select.callback = self.select_relation_channel
+                self.add_item(channel_select)
+            edit = discord.ui.Button(
+                label=t("gettingstarted.webverify.btn.edit_relation_blacklist"),
+                style=discord.ButtonStyle.primary,
+                row=2,
+            )
+            edit.callback = self.edit_relation_blacklist
+            self.add_item(edit)
+            self.add_navigation(previous_step=True, next_step=True, row=3)
         else:
             save = discord.ui.Button(label=t("gettingstarted.webverify.btn.save_only"), style=discord.ButtonStyle.success, row=0)
             save.callback = self.save_only
@@ -3326,7 +3483,7 @@ class WebVerifySetupView(SetupView):
 
     def build_embed(self) -> discord.Embed:
         embed = discord.Embed(
-            title=t("gettingstarted.webverify.setup_title", step=self.step, total=6),
+            title=t("gettingstarted.webverify.setup_title", step=self.step, total=7),
             color=discord.Color.blurple(),
         )
         if self.step == 1:
@@ -3361,17 +3518,44 @@ class WebVerifySetupView(SetupView):
             channel_id = country.get("channel_id")
             channel = self.session.guild.get_channel(int(channel_id)) if channel_id and str(channel_id).isdigit() else None
             embed.add_field(name=t("gettingstarted.webverify.field.alert_channel"), value=channel.mention if channel else t("common.state.unset"), inline=False)
+        elif self.step == 6:
+            relation = self.draft["relation_blacklist"]
+            embed.description = t("gettingstarted.webverify.step6.desc")
+            embed.add_field(
+                name=t("gettingstarted.webverify.field.relation_blacklist"),
+                value=t("common.state.enabled") if relation.get("enabled") else t("common.state.disabled"),
+                inline=True,
+            )
+            channel_id = relation.get("channel_id")
+            channel = self.session.guild.get_channel(int(channel_id)) if channel_id and str(channel_id).isdigit() else None
+            embed.add_field(
+                name=t("gettingstarted.webverify.field.relation_channel"),
+                value=channel.mention if channel else t("common.state.unset"),
+                inline=True,
+            )
+            embed.add_field(
+                name=t("gettingstarted.webverify.field.relation_ids"),
+                value="\n".join(f"`{relation_id}`" for relation_id in relation.get("relation_ids", [])) or t("common.state.unset"),
+                inline=False,
+            )
+            embed.add_field(
+                name=t("gettingstarted.webverify.field.relation_action"),
+                value=relation.get("action") or t("common.state.unset"),
+                inline=False,
+            )
         else:
             notify = self.draft["notify"]
             country = self.draft["webverify_country_alert"]
+            relation = self.draft["relation_blacklist"]
             role_id = self.draft.get("unverified_role_id")
             role = self.session.guild.get_role(int(role_id)) if role_id and str(role_id).isdigit() else None
-            embed.description = t("gettingstarted.webverify.step6.desc")
+            embed.description = t("gettingstarted.webverify.step7.desc")
             embed.add_field(name=t("gettingstarted.webverify.field.feature_captcha"), value=f"{t('common.state.enabled') if self.draft['enabled'] else t('common.state.disabled')} / {self.draft['captcha_type']}", inline=False)
             embed.add_field(name=t("gettingstarted.webverify.field.unverified_role"), value=role.mention if role else t("common.state.unset"), inline=False)
             embed.add_field(name=t("gettingstarted.webverify.field.autorole"), value=f"{t('common.state.enabled') if self.draft['autorole_enabled'] else t('common.state.disabled')} / {self.draft['autorole_trigger']}", inline=False)
             embed.add_field(name=t("gettingstarted.webverify.field.notify"), value=notify.get("type", "dm"), inline=True)
             embed.add_field(name=t("gettingstarted.webverify.field.country_alert"), value=t("common.state.enabled") if country.get("enabled") else t("common.state.disabled"), inline=True)
+            embed.add_field(name=t("gettingstarted.webverify.field.relation_blacklist"), value=t("common.state.enabled") if relation.get("enabled") else t("common.state.disabled"), inline=True)
         return embed
 
     async def refresh(self, interaction: discord.Interaction):
@@ -3434,6 +3618,18 @@ class WebVerifySetupView(SetupView):
     async def edit_countries(self, interaction: discord.Interaction):
         await interaction.response.send_modal(WebVerifyCountriesModal(self))
 
+    async def toggle_relation_blacklist(self, interaction: discord.Interaction):
+        relation = self.draft["relation_blacklist"]
+        relation["enabled"] = not relation.get("enabled", False)
+        await self.refresh(interaction)
+
+    async def select_relation_channel(self, interaction: discord.Interaction):
+        self.draft["relation_blacklist"]["channel_id"] = int(interaction.data["values"][0])
+        await self.refresh(interaction)
+
+    async def edit_relation_blacklist(self, interaction: discord.Interaction):
+        await interaction.response.send_modal(WebVerifyRelationBlacklistModal(self))
+
     async def previous_step(self, interaction: discord.Interaction):
         self.step = max(1, self.step - 1)
         await self.refresh(interaction)
@@ -3442,8 +3638,57 @@ class WebVerifySetupView(SetupView):
         if self.step in (2, 3) and self.draft.get("autorole_enabled") and not self.draft.get("unverified_role_id"):
             await interaction.response.send_message(t("gettingstarted.webverify.err.select_role_before_autorole"), ephemeral=True)
             return
-        self.step = min(6, self.step + 1)
+        if self.step == 6:
+            error = self.validate_relation_blacklist()
+            if error:
+                await interaction.response.send_message(error, ephemeral=True)
+                return
+        self.step = min(7, self.step + 1)
         await self.refresh(interaction)
+
+    def alert_channel_is_usable(self, channel_id) -> bool:
+        if not channel_id or not str(channel_id).isdigit():
+            return False
+        channel = self.session.guild.get_channel(int(channel_id))
+        bot_member = self.session.guild.me
+        permissions = channel.permissions_for(bot_member) if channel and bot_member else None
+        return bool(
+            channel
+            and permissions
+            and permissions.view_channel
+            and permissions.send_messages
+            and permissions.embed_links
+        )
+
+    def validate_relation_blacklist(self) -> str | None:
+        relation = self.draft["relation_blacklist"]
+        if not relation.get("enabled"):
+            return None
+        try:
+            relation_ids = normalize_webverify_relation_ids(
+                relation.get("relation_ids", []),
+                validate_exists=True,
+            )
+        except ValueError as error:
+            return str(error)
+        if not relation_ids:
+            return t("gettingstarted.webverify.err.relation_blacklist_needs_ids")
+        relation["relation_ids"] = relation_ids
+        if not relation.get("channel_id"):
+            return t("gettingstarted.webverify.err.relation_blacklist_needs_channel")
+        if not self.alert_channel_is_usable(relation.get("channel_id")):
+            return t("gettingstarted.webverify.err.alert_channel_unusable")
+        action = str(relation.get("action", "") or "").strip()
+        if not action:
+            return t("gettingstarted.webverify.err.relation_blacklist_needs_action")
+        if Moderate is None:
+            return t("gettingstarted.webverify.err.relation_action_unavailable")
+        analysis = Moderate.analyze_member_join_action(action, self.session.guild.id)
+        if not analysis["valid"] or analysis.get("requires_confirmation"):
+            error = analysis.get("error") or analysis.get("confirmation") or action
+            return t("gettingstarted.webverify.err.invalid_relation_action", error=error)
+        relation["action"] = str(analysis.get("normalized") or action).strip()
+        return None
 
     def validate(self) -> str | None:
         if self.draft.get("autorole_enabled") and not self.draft.get("unverified_role_id"):
@@ -3457,7 +3702,9 @@ class WebVerifySetupView(SetupView):
                 return t("gettingstarted.webverify.err.country_alert_needs_channel")
             if not country.get("countries"):
                 return t("gettingstarted.webverify.err.country_alert_needs_codes")
-        return None
+            if not self.alert_channel_is_usable(country.get("channel_id")):
+                return t("gettingstarted.webverify.err.alert_channel_unusable")
+        return self.validate_relation_blacklist()
 
     async def persist(self, interaction: discord.Interaction, *, send_message: bool):
         error = self.validate()

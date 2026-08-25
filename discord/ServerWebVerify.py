@@ -1,5 +1,6 @@
 ﻿from globalenv import bot, config, modules, get_server_config, set_server_config, get_db_connection, get_command_mention, get_user_data, set_user_data
 import discord
+from globalenv import get_all_server_config_key
 from discord.ext import commands
 from discord import app_commands
 from logger import log
@@ -16,6 +17,8 @@ import sqlite3
 import re
 import json
 import sys
+import hashlib
+import ipaddress
 from typing import Union
 from datetime import datetime, timezone
 from urllib.parse import urlencode
@@ -26,6 +29,7 @@ if "Website" in modules:
 else:
     raise ModuleNotFoundError("Website module not found")
 if "Moderate" in modules:
+    import Moderate
     from Moderate import timestr_to_seconds
 else:
     raise ModuleNotFoundError("Moderate module not found")
@@ -33,6 +37,132 @@ if "UtilCommands" in modules:
     from UtilCommands import get_time_text
 else:
     raise ModuleNotFoundError("UtilCommands module not found")
+
+
+COUNTRY_MODE_ALIASES = {
+    "blacklist": "blacklist",
+    "blocklist": "blacklist",
+    "whitelist": "whitelist",
+    "allowlist": "whitelist",
+}
+DEFAULT_COUNTRY_ALERT_CONFIG = {
+    "enabled": False,
+    "mode": "blacklist",
+    "countries": [],
+    "channel_id": None,
+}
+DEFAULT_RELATION_BLACKLIST_CONFIG = {
+    "enabled": False,
+    "relation_ids": [],
+    "action": "",
+    "channel_id": None,
+}
+
+
+def normalize_country_mode(mode) -> str:
+    return COUNTRY_MODE_ALIASES.get(str(mode or "").strip().lower(), "blacklist")
+
+
+def normalize_country_codes(countries) -> list[str]:
+    if isinstance(countries, str):
+        countries = re.split(r"[,，\s]+", countries)
+    if not isinstance(countries, (list, tuple, set)):
+        return []
+    result = []
+    for raw in countries:
+        code = str(raw or "").strip().upper()
+        if re.fullmatch(r"[A-Z]{2}", code) and code not in result:
+            result.append(code)
+    return result
+
+
+def normalize_country_alert_config(raw) -> dict:
+    raw = raw if isinstance(raw, dict) else {}
+    channel_id = raw.get("channel_id") or raw.get("alert_channel_id")
+    try:
+        channel_id = int(channel_id) if channel_id else None
+    except (TypeError, ValueError):
+        channel_id = None
+    return {
+        "enabled": bool(raw.get("enabled", False)),
+        "mode": normalize_country_mode(raw.get("mode")),
+        "countries": normalize_country_codes(raw.get("countries")),
+        "channel_id": channel_id,
+    }
+
+
+def country_alert_matches(country: str, config_value: dict) -> bool:
+    code = str(country or "").strip().upper()
+    if not re.fullmatch(r"[A-Z]{2}", code):
+        return False
+    normalized = normalize_country_alert_config(config_value)
+    countries = set(normalized["countries"])
+    return code in countries if normalized["mode"] == "blacklist" else code not in countries
+
+
+def normalize_relation_id(value) -> str | None:
+    try:
+        return str(uuid.UUID(str(value).strip()))
+    except (ValueError, TypeError, AttributeError):
+        return None
+
+
+def normalize_relation_blacklist_config(raw) -> dict:
+    raw = raw if isinstance(raw, dict) else {}
+    raw_ids = raw.get("relation_ids", [])
+    relation_ids = []
+    if isinstance(raw_ids, (list, tuple, set)):
+        for value in raw_ids:
+            relation_id = normalize_relation_id(value)
+            if relation_id and relation_id not in relation_ids:
+                relation_ids.append(relation_id)
+    channel_id = raw.get("channel_id")
+    try:
+        channel_id = int(channel_id) if channel_id else None
+    except (TypeError, ValueError):
+        channel_id = None
+    return {
+        "enabled": bool(raw.get("enabled", False)),
+        "relation_ids": relation_ids,
+        "action": str(raw.get("action", "") or "").strip(),
+        "channel_id": channel_id,
+    }
+
+
+def migrate_webverify_config(guild_id: int, config_value: dict) -> dict:
+    """Return canonical nested settings and persist only when migration is needed."""
+    if not isinstance(config_value, dict):
+        return {}
+    migrated = dict(config_value)
+    country = normalize_country_alert_config(config_value.get("webverify_country_alert"))
+    relation = normalize_relation_blacklist_config(config_value.get("relation_blacklist"))
+    migrated["webverify_country_alert"] = country
+    migrated["relation_blacklist"] = relation
+    if migrated != config_value:
+        set_server_config(int(guild_id), "webverify_config", migrated)
+    return migrated
+
+
+def extract_client_ip(headers, remote_addr) -> str | None:
+    candidates = []
+    cloudflare_ip = headers.get("CF-Connecting-IP") if headers else None
+    if cloudflare_ip:
+        candidates.append(cloudflare_ip)
+    forwarded = headers.get("X-Forwarded-For") if headers else None
+    if forwarded:
+        candidates.extend(forwarded.split(","))
+    if remote_addr:
+        candidates.append(remote_addr)
+    for candidate in candidates:
+        try:
+            return str(ipaddress.ip_address(str(candidate).strip()))
+        except ValueError:
+            continue
+    return None
+
+
+def _action_hash(action: str) -> str:
+    return hashlib.sha256(str(action or "").strip().encode("utf-8")).hexdigest()
 
 def init_db():
     with get_db_connection() as conn:
@@ -64,12 +194,101 @@ def init_db():
                 timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
             )
         ''')
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS webverify_relation_action_history (
+                guild_id INTEGER NOT NULL,
+                relation_id TEXT NOT NULL,
+                user_id INTEGER NOT NULL,
+                action_hash TEXT NOT NULL,
+                completed_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY (guild_id, relation_id, user_id, action_hash)
+            )
+        ''')
         conn.commit()
 
 def is_valid_md5(s: str) -> bool:
     return bool(re.fullmatch(r"[0-9a-fA-F]{32}", s))
 
-def add_webverify_history(user_id, guild_id, ip_address, fingerprint):
+def relation_id_exists(relation_id: str) -> bool:
+    relation_id = normalize_relation_id(relation_id)
+    if not relation_id:
+        return False
+    with get_db_connection() as conn:
+        return conn.execute(
+            'SELECT 1 FROM webverify_user_relation WHERE relation_id = ? LIMIT 1',
+            (relation_id,),
+        ).fetchone() is not None
+
+
+def get_user_relation_id(user_id: int) -> str | None:
+    with get_db_connection() as conn:
+        row = conn.execute(
+            'SELECT relation_id FROM webverify_user_relation WHERE user_id = ? LIMIT 1',
+            (int(user_id),),
+        ).fetchone()
+    return normalize_relation_id(row[0]) if row else None
+
+
+def get_relation_user_ids(relation_id: str) -> list[int]:
+    relation_id = normalize_relation_id(relation_id)
+    if not relation_id:
+        return []
+    with get_db_connection() as conn:
+        rows = conn.execute(
+            'SELECT DISTINCT user_id FROM webverify_user_relation WHERE relation_id = ? ORDER BY user_id',
+            (relation_id,),
+        ).fetchall()
+    return [int(row[0]) for row in rows]
+
+
+def relation_action_succeeded(guild_id: int, relation_id: str, user_id: int, action: str) -> bool:
+    with get_db_connection() as conn:
+        return conn.execute('''
+            SELECT 1 FROM webverify_relation_action_history
+            WHERE guild_id = ? AND relation_id = ? AND user_id = ? AND action_hash = ?
+            LIMIT 1
+        ''', (int(guild_id), relation_id, int(user_id), _action_hash(action))).fetchone() is not None
+
+
+def record_relation_action_success(guild_id: int, relation_id: str, user_id: int, action: str):
+    with get_db_connection() as conn:
+        conn.execute('''
+            INSERT OR IGNORE INTO webverify_relation_action_history
+                (guild_id, relation_id, user_id, action_hash)
+            VALUES (?, ?, ?, ?)
+        ''', (int(guild_id), relation_id, int(user_id), _action_hash(action)))
+        conn.commit()
+
+
+def clear_relation_action_history(guild_id: int, relation_id: str):
+    with get_db_connection() as conn:
+        conn.execute(
+            'DELETE FROM webverify_relation_action_history WHERE guild_id = ? AND relation_id = ?',
+            (int(guild_id), relation_id),
+        )
+        conn.commit()
+
+
+def _rekey_relation_blacklists(old_relation_ids: set[str], target_relation_id: str):
+    old_relation_ids = {rid for rid in old_relation_ids if rid != target_relation_id}
+    if not old_relation_ids:
+        return
+    for guild_id, config_value in (get_all_server_config_key("webverify_config") or {}).items():
+        if not isinstance(config_value, dict):
+            continue
+        settings = normalize_relation_blacklist_config(config_value.get("relation_blacklist"))
+        if not old_relation_ids.intersection(settings["relation_ids"]):
+            continue
+        settings["relation_ids"] = sorted(
+            ({rid for rid in settings["relation_ids"] if rid not in old_relation_ids} | {target_relation_id})
+        )
+        config_value = dict(config_value)
+        config_value["relation_blacklist"] = settings
+        set_server_config(int(guild_id), "webverify_config", config_value)
+
+
+def add_webverify_history(user_id, guild_id, ip_address, fingerprint) -> str:
+    merged_relation_ids = set()
     with get_db_connection() as conn:
         cursor = conn.cursor()
         # check theres existing record for this user in this guild with same ip and fingerprint
@@ -83,8 +302,6 @@ def add_webverify_history(user_id, guild_id, ip_address, fingerprint):
                 INSERT INTO webverify_history (user_id, guild_id, ip_address, fingerprint)
                 VALUES (?, ?, ?, ?)
             ''', (user_id, guild_id, ip_address, fingerprint))
-            conn.commit()
-
         # Find all users that share the same IP or fingerprint
         cursor.execute('''
             SELECT DISTINCT user_id FROM webverify_history 
@@ -94,16 +311,13 @@ def add_webverify_history(user_id, guild_id, ip_address, fingerprint):
         related_users = {row[0] for row in cursor.fetchall()}
         related_users.add(user_id) # Ensure current user is included
 
-        if not related_users:
-            return
-
         # Find existing relation IDs for these users
         placeholders = ','.join('?' for _ in related_users)
         cursor.execute(f'''
             SELECT DISTINCT relation_id FROM webverify_user_relation
             WHERE user_id IN ({placeholders})
         ''', list(related_users))
-        existing_relations = [row[0] for row in cursor.fetchall()]
+        existing_relations = sorted({row[0] for row in cursor.fetchall()})
 
         if existing_relations:
             # Merge: Use the first existing relation ID
@@ -111,6 +325,7 @@ def add_webverify_history(user_id, guild_id, ip_address, fingerprint):
             
             # If there are multiple different relation IDs, we need to merge them all into one
             if len(existing_relations) > 1:
+                 merged_relation_ids = set(existing_relations)
                  # Update all users with any of the found relation IDs to the target ID
                  placeholders_rel = ','.join('?' for _ in existing_relations)
                  cursor.execute(f'''
@@ -118,6 +333,18 @@ def add_webverify_history(user_id, guild_id, ip_address, fingerprint):
                     SET relation_id = ?
                     WHERE relation_id IN ({placeholders_rel})
                  ''', [target_relation_id] + existing_relations)
+                 for old_relation_id in existing_relations[1:]:
+                     cursor.execute('''
+                        INSERT OR IGNORE INTO webverify_relation_action_history
+                            (guild_id, relation_id, user_id, action_hash, completed_at)
+                        SELECT guild_id, ?, user_id, action_hash, completed_at
+                        FROM webverify_relation_action_history
+                        WHERE relation_id = ?
+                     ''', (target_relation_id, old_relation_id))
+                     cursor.execute(
+                         'DELETE FROM webverify_relation_action_history WHERE relation_id = ?',
+                         (old_relation_id,),
+                     )
         else:
             # Create new relation ID
             target_relation_id = str(uuid.uuid4())
@@ -135,6 +362,9 @@ def add_webverify_history(user_id, guild_id, ip_address, fingerprint):
                 ''', (r_user_id, target_relation_id))
         
         conn.commit()
+    if merged_relation_ids:
+        _rekey_relation_blacklists(merged_relation_ids, target_relation_id)
+    return target_relation_id
 
 def validate_turnstile(token, remoteip=None):
     url = 'https://challenges.cloudflare.com/turnstile/v0/siteverify'
@@ -208,7 +438,25 @@ def oauth_code_to_id(code):
         log(f"OAuth code exchange error: {e}", module_name="ServerWebVerify", level=logging.ERROR)
         return None
 
-def get_ip_location(ip_address):
+def _normalize_location(value) -> dict | None:
+    if not isinstance(value, dict):
+        return None
+    country = str(value.get("country", "") or "").strip().upper()
+    if not re.fullmatch(r"[A-Z]{2}", country):
+        return None
+    return {
+        "city": str(value.get("city", "") or "").strip(),
+        "region": str(value.get("region", "") or "").strip(),
+        "country": country,
+    }
+
+
+def get_ip_location(ip_address) -> dict | None:
+    try:
+        ip_address = str(ipaddress.ip_address(str(ip_address).strip()))
+    except ValueError:
+        log("IP location lookup skipped because the address is invalid", module_name="ServerWebVerify", level=logging.WARNING)
+        return None
     with get_db_connection() as conn:
         cursor = conn.cursor()
         cursor.execute('''
@@ -220,19 +468,24 @@ def get_ip_location(ip_address):
         row = cursor.fetchone()
         if row:
             try:
-                return json.loads(row[0])
-            except json.JSONDecodeError:
-                return row[0]
+                cached = _normalize_location(json.loads(row[0]))
+                if cached:
+                    return cached
+            except (json.JSONDecodeError, TypeError):
+                pass
 
     try:
         response = requests.get(f'https://ipinfo.io/{ip_address}/json', timeout=10)
         response.raise_for_status()
         data = response.json()
-        location = {
+        location = _normalize_location({
             'city': data.get('city', ''),
             'region': data.get('region', ''),
             'country': data.get('country', '')
-        }
+        })
+        if location is None:
+            log("IP location response did not include a valid country code", module_name="ServerWebVerify", level=logging.WARNING)
+            return None
         
         with get_db_connection() as conn:
             cursor = conn.cursor()
@@ -243,9 +496,310 @@ def get_ip_location(ip_address):
             conn.commit()
         
         return location
-    except requests.RequestException as e:
+    except (requests.RequestException, ValueError) as e:
         log(f"IP location fetch error: {e}", module_name="ServerWebVerify", level=logging.ERROR)
-        return "Unknown"
+        return None
+
+
+def parse_history_timestamp(value) -> datetime | None:
+    if isinstance(value, datetime):
+        parsed = value
+    elif isinstance(value, (int, float)):
+        return datetime.fromtimestamp(value, tz=timezone.utc)
+    else:
+        try:
+            parsed = datetime.fromisoformat(str(value).strip().replace("Z", "+00:00"))
+        except (ValueError, TypeError):
+            return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
+
+
+def schedule_bot_coroutine(coroutine, *, description: str, guild=None, user=None):
+    try:
+        future = asyncio.run_coroutine_threadsafe(coroutine, bot.loop)
+    except Exception as error:
+        coroutine.close()
+        log(
+            f"Failed to schedule {description}: {error}",
+            module_name="ServerWebVerify",
+            level=logging.ERROR,
+            guild=guild,
+            user=user,
+        )
+        return None
+
+    def done_callback(completed):
+        try:
+            completed.result()
+        except Exception as error:
+            log(
+                f"Background task {description} failed: {error}",
+                module_name="ServerWebVerify",
+                level=logging.ERROR,
+                guild=guild,
+                user=user,
+            )
+
+    future.add_done_callback(done_callback)
+    return future
+
+
+async def _resolve_relation_members(guild: discord.Guild, relation_id: str) -> tuple[list[discord.Member], list[int]]:
+    members = []
+    missing = []
+    for user_id in get_relation_user_ids(relation_id):
+        member = guild.get_member(user_id)
+        if member is None:
+            try:
+                member = await guild.fetch_member(user_id)
+            except (discord.NotFound, discord.Forbidden, discord.HTTPException):
+                missing.append(user_id)
+                continue
+        members.append(member)
+    return members, missing
+
+
+def _truncate_lines(lines: list[str], limit: int = 1024) -> str:
+    if not lines:
+        return t("serverwebverify.value.none")
+    output = ""
+    omitted = 0
+    for line in lines:
+        candidate = (output + "\n" + line).strip()
+        if len(candidate) > limit:
+            omitted += 1
+            continue
+        output = candidate
+    if omitted:
+        suffix = t("serverwebverify.value.omitted_count", count=omitted)
+        output = (output[:max(0, limit - len(suffix) - 1)] + "\n" + suffix).strip()
+    return output or t("serverwebverify.value.none")
+
+
+async def execute_relation_blacklist(
+    guild: discord.Guild,
+    relation_id: str,
+    settings_value: dict,
+    *,
+    trigger_member: discord.Member | None = None,
+    executor: discord.Member | None = None,
+    send_alert: bool = True,
+) -> dict:
+    settings = normalize_relation_blacklist_config(settings_value)
+    relation_id = normalize_relation_id(relation_id)
+    result = {
+        "relation_id": relation_id,
+        "actioned": [],
+        "completed": [],
+        "skipped": [],
+        "failed": [],
+        "missing": [],
+    }
+    if not relation_id or relation_id not in settings["relation_ids"]:
+        return result
+
+    analysis = Moderate.analyze_member_join_action(settings["action"], guild.id)
+    if not analysis["valid"] or analysis.get("requires_confirmation"):
+        result["failed"].append(t("serverwebverify.value.invalid_action_config"))
+    else:
+        action = str(analysis.get("normalized") or settings["action"]).strip()
+        members, missing = await _resolve_relation_members(guild, relation_id)
+        result["missing"] = missing
+        for member in members:
+            if relation_action_succeeded(guild.id, relation_id, member.id, action):
+                result["completed"].append(member.id)
+                continue
+            if executor is not None:
+                hierarchy_ok, hierarchy_message = Moderate.check_member_hierarchy(executor, member, guild.me)
+                if not hierarchy_ok:
+                    result["skipped"].append(f"{member.mention}: {hierarchy_message}")
+                    continue
+            try:
+                logs, execution_status = await Moderate.do_action_str(
+                    action,
+                    guild=guild,
+                    user=member,
+                    moderator=executor or guild.me,
+                    return_status=True,
+                )
+            except Exception as error:
+                execution_status = "failed"
+                logs = [f"{type(error).__name__}: {error}"]
+                log(
+                    f"Relation blacklist action failed for {member}: {error}",
+                    module_name="ServerWebVerify",
+                    level=logging.ERROR,
+                    guild=guild,
+                    user=member,
+                )
+            detail = "; ".join(str(line) for line in logs) or t("serverwebverify.value.none")
+            if execution_status == "success":
+                record_relation_action_success(guild.id, relation_id, member.id, action)
+                result["actioned"].append(f"{member.mention}: {detail}")
+            elif execution_status == "skipped":
+                result["skipped"].append(f"{member.mention}: {detail}")
+            else:
+                result["failed"].append(f"{member.mention}: {detail}")
+
+    if send_alert:
+        channel = guild.get_channel(settings["channel_id"]) if settings["channel_id"] else None
+        if channel is None:
+            log(
+                "Relation blacklist matched but its alert channel is unavailable",
+                module_name="ServerWebVerify",
+                level=logging.ERROR,
+                guild=guild,
+                user=trigger_member,
+            )
+        else:
+            embed = discord.Embed(title=t("serverwebverify.embed.relation_blacklist_title"), color=0xFF0000)
+            embed.add_field(name=t("serverwebverify.field.relation_id"), value=f"`{relation_id}`", inline=False)
+            if trigger_member:
+                embed.add_field(name=t("serverwebverify.field.trigger_user"), value=f"{trigger_member.mention} (`{trigger_member.id}`)", inline=False)
+            embed.add_field(name=t("serverwebverify.field.action"), value=settings["action"] or t("serverwebverify.value.unset"), inline=False)
+            embed.add_field(name=t("serverwebverify.field.actioned"), value=_truncate_lines(result["actioned"]), inline=False)
+            skipped_lines = list(result["skipped"])
+            skipped_lines.extend(t("serverwebverify.value.already_actioned", uid=uid) for uid in result["completed"])
+            skipped_lines.extend(t("serverwebverify.value.member_not_found_skip", uid=uid) for uid in result["missing"])
+            embed.add_field(name=t("serverwebverify.field.skipped"), value=_truncate_lines(skipped_lines), inline=False)
+            embed.add_field(name=t("serverwebverify.field.failed"), value=_truncate_lines(result["failed"]), inline=False)
+            embed.timestamp = datetime.now(timezone.utc)
+            try:
+                await channel.send(embed=embed)
+            except (discord.Forbidden, discord.HTTPException) as error:
+                log(
+                    f"Failed to send relation blacklist alert: {error}",
+                    module_name="ServerWebVerify",
+                    level=logging.ERROR,
+                    guild=guild,
+                    user=trigger_member,
+                )
+    return result
+
+
+async def collect_relation_blacklist_preview(
+    guild: discord.Guild,
+    settings_value: dict,
+    executor: discord.Member,
+) -> dict:
+    settings = normalize_relation_blacklist_config(settings_value)
+    preview = {"actionable": [], "completed": [], "missing": [], "skipped": []}
+    analysis = Moderate.analyze_member_join_action(settings["action"], guild.id)
+    if not analysis["valid"] or analysis.get("requires_confirmation"):
+        preview["error"] = analysis.get("error") or analysis.get("confirmation")
+        return preview
+    action = str(analysis.get("normalized") or settings["action"]).strip()
+    for relation_id in settings["relation_ids"]:
+        members, missing = await _resolve_relation_members(guild, relation_id)
+        preview["missing"].extend(f"`{relation_id}` / `{uid}`" for uid in missing)
+        for member in members:
+            label = f"`{relation_id}` / {member.mention}"
+            if relation_action_succeeded(guild.id, relation_id, member.id, action):
+                preview["completed"].append(label)
+                continue
+            hierarchy_ok, hierarchy_message = Moderate.check_member_hierarchy(executor, member, guild.me)
+            if hierarchy_ok:
+                preview["actionable"].append(label)
+            else:
+                preview["skipped"].append(f"{label}: {hierarchy_message}")
+    return preview
+
+
+async def _send_country_alert(
+    guild: discord.Guild,
+    member: discord.Member,
+    ip_address: str,
+    config_value: dict,
+):
+    settings = normalize_country_alert_config(config_value)
+    if not settings["enabled"]:
+        return
+    location = await asyncio.to_thread(get_ip_location, ip_address)
+    if not location:
+        log(
+            "Region alert skipped because IP geolocation was unavailable",
+            module_name="ServerWebVerify",
+            level=logging.WARNING,
+            guild=guild,
+            user=member,
+        )
+        return
+    if not country_alert_matches(location["country"], settings):
+        return
+    channel = guild.get_channel(settings["channel_id"]) if settings["channel_id"] else None
+    if channel is None:
+        log(
+            "Region alert matched but its alert channel is unavailable",
+            module_name="ServerWebVerify",
+            level=logging.ERROR,
+            guild=guild,
+            user=member,
+        )
+        return
+    embed = discord.Embed(title=t("serverwebverify.embed.geo_alert_title"), color=0xFF0000)
+    embed.set_author(name=str(member), icon_url=member.display_avatar.url if member.display_avatar else None)
+    embed.add_field(name=t("serverwebverify.field.user_id"), value=str(member.id), inline=False)
+    embed.add_field(name=t("serverwebverify.field.region"), value=location.get("region") or t("serverwebverify.value.unknown"))
+    embed.add_field(name=t("serverwebverify.field.city"), value=location.get("city") or t("serverwebverify.value.unknown"))
+    embed.add_field(name=t("serverwebverify.field.country_code"), value=location["country"])
+    embed.timestamp = datetime.now(timezone.utc)
+    try:
+        await channel.send(embed=embed)
+    except (discord.Forbidden, discord.HTTPException) as error:
+        log(
+            f"Failed to send geo-location alert: {error}",
+            module_name="ServerWebVerify",
+            level=logging.ERROR,
+            guild=guild,
+            user=member,
+        )
+
+
+async def complete_successful_verification(
+    guild: discord.Guild,
+    member: discord.Member,
+    guild_config: dict,
+    ip_address: str,
+    relation_id: str,
+):
+    async with i18n.guild_scope(guild.id):
+        role_id = guild_config.get("unverified_role_id")
+        if role_id and member.get_role(role_id):
+            try:
+                await member.remove_roles(discord.Object(id=role_id), reason=t("serverwebverify.audit.passed_web_verify"))
+            except Exception as error:
+                log(f"Failed to remove the unverified role: {error}", module_name="ServerWebVerify", level=logging.ERROR, guild=guild, user=member)
+
+        relation_settings = normalize_relation_blacklist_config(guild_config.get("relation_blacklist"))
+
+        async def run_country_alert():
+            try:
+                await _send_country_alert(guild, member, ip_address, guild_config.get("webverify_country_alert"))
+            except Exception as error:
+                log(f"Region alert pipeline failed: {error}", module_name="ServerWebVerify", level=logging.ERROR, guild=guild, user=member)
+
+        async def run_relation_blacklist():
+            if relation_settings["enabled"] and relation_id in relation_settings["relation_ids"]:
+                try:
+                    await execute_relation_blacklist(
+                        guild,
+                        relation_id,
+                        relation_settings,
+                        trigger_member=member,
+                    )
+                except Exception as error:
+                    log(f"Relation blacklist pipeline failed: {error}", module_name="ServerWebVerify", level=logging.ERROR, guild=guild, user=member)
+
+        # Geolocation can take several seconds. Run it independently so it
+        # cannot delay or suppress relation-blacklist enforcement.
+        await asyncio.gather(run_country_alert(), run_relation_blacklist())
+
+        try:
+            await member.send(t("serverwebverify.dm.verified_success", guild=guild.name))
+        except Exception as error:
+            log(f"Failed to DM user {member} about their successful verification: {error}", module_name="ServerWebVerify", level=logging.ERROR, user=member, guild=guild)
 
 auth_tokens = {}
 
@@ -285,6 +839,7 @@ def server_verify():
         guild_config = get_server_config(guild.id, "webverify_config")
         if not guild_config:
             return render_template('ServerVerify.html', error=t("serverwebverify.web.err.not_configured"), bot=bot, site_key_turnstile=config("webverify_turnstile_key"), site_key_recaptcha=config("webverify_recaptcha_key"), gtag=config("website_gtag", ""))
+        guild_config = migrate_webverify_config(guild_id, guild_config)
         if not guild_config.get('enabled', False):
             return render_template('ServerVerify.html', error=t("serverwebverify.web.err.disabled"), bot=bot, site_key_turnstile=config("webverify_turnstile_key"), site_key_recaptcha=config("webverify_recaptcha_key"), gtag=config("website_gtag", ""))
         
@@ -311,18 +866,21 @@ def server_verify():
         user_id = auth_tokens[auth_token]['user_id']
         guild_id = auth_tokens[auth_token]['guild_id']
         guild_config = get_server_config(guild_id, "webverify_config", {})
-        guild_country_config = guild_config.get('webverify_country_alert', {}) if guild_config else {}
         if not guild_config:
             return render_template('ServerVerify.html', error=t("serverwebverify.web.err.not_configured"), bot=bot, site_key_turnstile=config("webverify_turnstile_key"), site_key_recaptcha=config("webverify_recaptcha_key"), gtag=config("website_gtag", ""))
+        guild_config = migrate_webverify_config(guild_id, guild_config)
         if not guild_config.get('enabled', False):
             return render_template('ServerVerify.html', error=t("serverwebverify.web.err.disabled"), bot=bot, site_key_turnstile=config("webverify_turnstile_key"), site_key_recaptcha=config("webverify_recaptcha_key"), gtag=config("website_gtag", ""))
-        remoteip = request.headers.get('CF-Connecting-IP') or \
-               request.headers.get('X-Forwarded-For') or \
-               request.remote_addr
+        remoteip = extract_client_ip(request.headers, request.remote_addr)
+        if remoteip is None:
+            log("Web verification rejected because no valid client IP was available", module_name="ServerWebVerify", level=logging.WARNING)
+            return render_template('ServerVerify.html', error=t("serverwebverify.web.err.invalid_client_ip"), bot=bot, site_key_turnstile=config("webverify_turnstile_key"), site_key_recaptcha=config("webverify_recaptcha_key"), gtag=config("website_gtag", "")), 400
         guild = bot.get_guild(guild_id)
         if not guild:
             return render_template('ServerVerify.html', error=t("serverwebverify.web.err.guild_not_found"), bot=bot, site_key_turnstile=config("webverify_turnstile_key"), site_key_recaptcha=config("webverify_recaptcha_key"), gtag=config("website_gtag", ""))
         member = guild.get_member(int(user_id))
+        if member is None:
+            return render_template('ServerVerify.html', error=t("serverwebverify.web.err.not_a_member"), bot=bot, site_key_turnstile=config("webverify_turnstile_key"), site_key_recaptcha=config("webverify_recaptcha_key"), gtag=config("website_gtag", "")), 400
 
         if method != guild_config.get('captcha_type'):
             return render_template('ServerVerify.html', error=t("serverwebverify.web.err.method_mismatch"), bot=bot, site_key_turnstile=config("webverify_turnstile_key"), site_key_recaptcha=config("webverify_recaptcha_key"), gtag=config("website_gtag", ""))
@@ -340,35 +898,14 @@ def server_verify():
             result = {'success': True}
 
         if result.get('success'):
-            add_webverify_history(user_id, guild_id, remoteip, fingerprint)
-            if member.get_role(guild_config.get('unverified_role_id')):
-                asyncio.run_coroutine_threadsafe(member.remove_roles(discord.Object(id=guild_config.get('unverified_role_id')), reason=t("serverwebverify.audit.passed_web_verify")), bot.loop)
+            relation_id = add_webverify_history(user_id, guild_id, remoteip, fingerprint)
             log("User passed web verification", module_name="ServerWebVerify", user=member, guild=guild)
-            try:
-                if guild_country_config.get('enabled', False):
-                    mode = guild_country_config.get('mode', 'blacklist')
-                    location = get_ip_location(remoteip)
-                    country = location.get('country', 'Unknown') if isinstance(location, dict) else 'Unknown'
-                    alert_countries = guild_country_config.get('countries', [])
-                    if (mode == 'blacklist' and country in alert_countries) or (mode == 'whitelist' and country not in alert_countries):
-                        alert_channel_id = guild_country_config.get('alert_channel_id') or guild_country_config.get('channel_id')
-                        alert_channel = guild.get_channel(alert_channel_id) if alert_channel_id else None
-                        if alert_channel:
-                            embed = discord.Embed(title=t("serverwebverify.embed.geo_alert_title"), color=0xFF0000)
-                            embed.set_author(name=str(member), icon_url=member.display_avatar.url if member.display_avatar else None)
-                            embed.add_field(name=t("serverwebverify.field.user_id"), value=str(member.id), inline=False)
-                            embed.add_field(name=t("serverwebverify.field.region"), value=location.get('region', 'Unknown'))
-                            embed.add_field(name=t("serverwebverify.field.city"), value=location.get('city', 'Unknown'))
-                            embed.add_field(name=t("serverwebverify.field.country_code"), value=country)
-                            embed.timestamp = datetime.now(timezone.utc)
-                            asyncio.run_coroutine_threadsafe(alert_channel.send(embed=embed), bot.loop)
-            except Exception as e:
-                log(f"Failed to send geo-location alert: {e}", level=logging.ERROR, module_name="ServerWebVerify", guild=guild)
-            # try to dm user
-            try:
-                asyncio.run_coroutine_threadsafe(member.send(t("serverwebverify.dm.verified_success", guild=guild.name)), bot.loop)
-            except Exception as e:
-                log(f"Failed to DM user {member} about their successful verification: {e}", level=logging.ERROR, module_name="ServerWebVerify", user=member, guild=guild)
+            schedule_bot_coroutine(
+                complete_successful_verification(guild, member, guild_config, remoteip, relation_id),
+                description="successful web verification follow-up",
+                guild=guild,
+                user=member,
+            )
             return render_template('ServerVerify.html', error=t("serverwebverify.web.msg.verify_success"), bot=bot, site_key_turnstile=config("webverify_turnstile_key"), site_key_recaptcha=config("webverify_recaptcha_key"), gtag=config("website_gtag", ""))
         else:
             error_codes = result.get('error-codes', [])
@@ -405,13 +942,95 @@ async def check_unlock_force_verify():
             await asyncio.sleep(60) # Check every minute
     except Exception as e:
         log(f"Error checking forced-verification unlock status: {e}", level=logging.ERROR, module_name="ServerWebVerify")
-                
+
+
+def build_relation_scan_preview_embed(preview: dict) -> discord.Embed:
+    embed = discord.Embed(title=t("serverwebverify.embed.relation_scan_preview_title"), color=discord.Color.orange())
+    if preview.get("error"):
+        embed.description = t("serverwebverify.err.invalid_relation_action", error=preview["error"])
+        return embed
+    embed.description = t("serverwebverify.msg.relation_scan_preview_desc")
+    for key, field_key in (
+        ("actionable", "actionable"),
+        ("completed", "already_actioned_field"),
+        ("missing", "not_in_guild"),
+        ("skipped", "hierarchy_skipped"),
+    ):
+        embed.add_field(
+            name=t(f"serverwebverify.field.{field_key}", count=len(preview.get(key, []))),
+            value=_truncate_lines(preview.get(key, [])),
+            inline=False,
+        )
+    return embed
+
+
+class RelationBlacklistScanView(discord.ui.View):
+    def __init__(self, owner_id: int, guild_id: int):
+        super().__init__(timeout=300)
+        self.owner_id = owner_id
+        self.guild_id = guild_id
+        confirm = discord.ui.Button(
+            label=t("serverwebverify.btn.confirm_relation_scan"),
+            style=discord.ButtonStyle.danger,
+        )
+        confirm.callback = self.confirm
+        self.add_item(confirm)
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if interaction.user.id == self.owner_id:
+            return True
+        await interaction.response.send_message(t("serverwebverify.err.scan_owner_only"), ephemeral=True)
+        return False
+
+    async def confirm(self, interaction: discord.Interaction):
+        # Stop dispatch immediately so a double-click cannot race the success
+        # history insert and execute the same moderation action twice.
+        self.stop()
+        await interaction.response.defer()
+        guild_config = get_server_config(self.guild_id, "webverify_config", {})
+        settings = normalize_relation_blacklist_config(
+            guild_config.get("relation_blacklist") if isinstance(guild_config, dict) else None
+        )
+        if not settings["enabled"]:
+            await interaction.edit_original_response(content=t("serverwebverify.err.relation_blacklist_disabled"), embed=None, view=None)
+            return
+
+        totals = {"actioned": [], "completed": [], "skipped": [], "failed": [], "missing": []}
+        for relation_id in list(settings["relation_ids"]):
+            current_config = get_server_config(self.guild_id, "webverify_config", {})
+            current_settings = normalize_relation_blacklist_config(
+                current_config.get("relation_blacklist") if isinstance(current_config, dict) else None
+            )
+            if not current_settings["enabled"] or relation_id not in current_settings["relation_ids"]:
+                continue
+            result = await execute_relation_blacklist(
+                interaction.guild,
+                relation_id,
+                current_settings,
+                executor=interaction.user,
+            )
+            for key in totals:
+                totals[key].extend(result[key])
+
+        embed = discord.Embed(title=t("serverwebverify.embed.relation_scan_result_title"), color=discord.Color.blurple())
+        embed.add_field(name=t("serverwebverify.field.actioned"), value=_truncate_lines(totals["actioned"]), inline=False)
+        skipped = list(totals["skipped"])
+        skipped.extend(t("serverwebverify.value.already_actioned", uid=uid) for uid in totals["completed"])
+        skipped.extend(t("serverwebverify.value.member_not_found_skip", uid=uid) for uid in totals["missing"])
+        embed.add_field(name=t("serverwebverify.field.skipped"), value=_truncate_lines(skipped), inline=False)
+        embed.add_field(name=t("serverwebverify.field.failed"), value=_truncate_lines(totals["failed"]), inline=False)
+        await interaction.edit_original_response(content=None, embed=embed, view=None)
 
 @app_commands.guild_only()
 @app_commands.default_permissions(manage_guild=True)
 @app_commands.allowed_installs(guilds=True, users=False)
 @app_commands.allowed_contexts(guilds=True, dms=False, private_channels=False)
 class ServerWebVerify(commands.GroupCog, name=app_commands.locale_str("webverify", i18n_key="cmd.serverwebverify.webverify.root.name"), description=app_commands.locale_str("Server web verification commands", i18n_key="cmd.serverwebverify.webverify.root.desc")):
+    relation_blacklist = app_commands.Group(
+        name=app_commands.locale_str("relation-blacklist", i18n_key="cmd.serverwebverify.webverify.relation_blacklist.root.name"),
+        description=app_commands.locale_str("Manage relation ID blacklist actions", i18n_key="cmd.serverwebverify.webverify.relation_blacklist.root.desc"),
+    )
+
     def __init__(self, bot):
         self.bot = bot
         self.force_ctx_menu = app_commands.ContextMenu(name=app_commands.locale_str("Force user verification", i18n_key="cmd.serverwebverify.ctx.force_verify"), callback=self.force_user_verify_context_menu)
@@ -435,7 +1054,9 @@ class ServerWebVerify(commands.GroupCog, name=app_commands.locale_str("webverify
                 'channel_id': None,
                 'title': t("serverwebverify.value.default_notify_title"),
                 'message': t("serverwebverify.value.default_notify_message")
-            }
+            },
+            'webverify_country_alert': dict(DEFAULT_COUNTRY_ALERT_CONFIG),
+            'relation_blacklist': dict(DEFAULT_RELATION_BLACKLIST_CONFIG),
         }
         set_server_config(guild_id, "webverify_config", default_config)
         await interaction.response.send_message(t("serverwebverify.msg.setup_done", command=get_command_mention('webverify', 'set_unverified_role')))
@@ -447,8 +1068,17 @@ class ServerWebVerify(commands.GroupCog, name=app_commands.locale_str("webverify
         if getting_started_module is not None:
             await getting_started_module.start_webverify_quick_setup(interaction)
             return
-        view = WebVerifySetupWizard(interaction, self.bot)
-        await interaction.response.send_message(embed=await view.get_embed(), view=view)
+        log(
+            "WebVerify quick setup is unavailable because gettingstarted is not loaded",
+            module_name="ServerWebVerify",
+            level=logging.ERROR,
+            guild=interaction.guild,
+            user=interaction.user,
+        )
+        await interaction.response.send_message(
+            t("serverwebverify.err.quick_setup_unavailable"),
+            ephemeral=True,
+        )
 
     
     @app_commands.command(name=app_commands.locale_str("disable", i18n_key="cmd.serverwebverify.webverify.disable.name"), description=app_commands.locale_str("Disable web verification for this server", i18n_key="cmd.serverwebverify.webverify.disable.desc"))
@@ -459,6 +1089,7 @@ class ServerWebVerify(commands.GroupCog, name=app_commands.locale_str("webverify
         if not guild_config:
             await interaction.response.send_message(t("serverwebverify.err.not_configured"))
             return
+        guild_config = migrate_webverify_config(guild_id, guild_config)
         guild_config['enabled'] = False
         set_server_config(guild_id, "webverify_config", guild_config)
         await interaction.response.send_message(t("serverwebverify.msg.disabled"))
@@ -516,13 +1147,65 @@ class ServerWebVerify(commands.GroupCog, name=app_commands.locale_str("webverify
         if not guild_config:
             await interaction.response.send_message(t("serverwebverify.err.not_configured"))
             return
+        guild_config = migrate_webverify_config(guild_id, guild_config)
         status_msg = t(
             "serverwebverify.msg.status",
             enabled=t("serverwebverify.value.enabled") if guild_config.get('enabled', False) else t("serverwebverify.value.disabled"),
             captcha_type=guild_config.get('captcha_type') or t("serverwebverify.value.unset"),
             role_id=guild_config.get('unverified_role_id') or t("serverwebverify.value.unset"),
         )
-        await interaction.response.send_message(status_msg)
+        country = normalize_country_alert_config(guild_config.get("webverify_country_alert"))
+        country_channel = interaction.guild.get_channel(country["channel_id"]) if country["channel_id"] else None
+        country_permissions = country_channel.permissions_for(interaction.guild.me) if country_channel and interaction.guild.me else None
+        country_complete = bool(
+            country["countries"]
+            and country_channel
+            and country_permissions
+            and country_permissions.view_channel
+            and country_permissions.send_messages
+            and country_permissions.embed_links
+        )
+        relation = normalize_relation_blacklist_config(guild_config.get("relation_blacklist"))
+        relation_channel = interaction.guild.get_channel(relation["channel_id"]) if relation["channel_id"] else None
+        relation_permissions = relation_channel.permissions_for(interaction.guild.me) if relation_channel and interaction.guild.me else None
+        relation_analysis = Moderate.analyze_member_join_action(relation["action"], guild_id) if relation["action"] else {"valid": False}
+        relation_complete = bool(
+            relation["relation_ids"]
+            and all(relation_id_exists(relation_id) for relation_id in relation["relation_ids"])
+            and relation_channel
+            and relation_permissions
+            and relation_permissions.view_channel
+            and relation_permissions.send_messages
+            and relation_permissions.embed_links
+            and relation_analysis.get("valid")
+            and not relation_analysis.get("requires_confirmation")
+        )
+        embed = discord.Embed(title=t("serverwebverify.embed.status_title"), description=status_msg, color=discord.Color.blurple())
+        embed.add_field(
+            name=t("serverwebverify.field.country_alert"),
+            value=t(
+                "serverwebverify.value.country_status",
+                status=t("serverwebverify.value.enabled") if country["enabled"] else t("serverwebverify.value.disabled"),
+                mode=country["mode"],
+                countries=", ".join(country["countries"]) or t("serverwebverify.value.unset"),
+                channel=country_channel.mention if country_channel else t("serverwebverify.value.unavailable"),
+                complete=t("serverwebverify.value.complete") if country_complete else t("serverwebverify.value.incomplete"),
+            ),
+            inline=False,
+        )
+        embed.add_field(
+            name=t("serverwebverify.field.relation_blacklist"),
+            value=t(
+                "serverwebverify.value.relation_blacklist_status",
+                status=t("serverwebverify.value.enabled") if relation["enabled"] else t("serverwebverify.value.disabled"),
+                count=len(relation["relation_ids"]),
+                channel=relation_channel.mention if relation_channel else t("serverwebverify.value.unavailable"),
+                action=relation["action"] or t("serverwebverify.value.unset"),
+                complete=t("serverwebverify.value.complete") if relation_complete else t("serverwebverify.value.incomplete"),
+            ),
+            inline=False,
+        )
+        await interaction.response.send_message(embed=embed, ephemeral=True)
     
     @app_commands.command(name=app_commands.locale_str("verify_notify", i18n_key="cmd.serverwebverify.webverify.verify_notify.name"), description=app_commands.locale_str("Configure how verification notices are sent", i18n_key="cmd.serverwebverify.webverify.verify_notify.desc"))
     @app_commands.describe(type=app_commands.locale_str("How to notify", i18n_key="cmd.serverwebverify.webverify.verify_notify.param.type"), channel=app_commands.locale_str("The channel for verification messages", i18n_key="cmd.serverwebverify.webverify.verify_notify.param.channel"), title=app_commands.locale_str("Custom embed title", i18n_key="cmd.serverwebverify.webverify.verify_notify.param.title"), message=app_commands.locale_str("Custom verification message", i18n_key="cmd.serverwebverify.webverify.verify_notify.param.message"))
@@ -595,6 +1278,138 @@ class ServerWebVerify(commands.GroupCog, name=app_commands.locale_str("webverify
             embed.add_field(name=t("serverwebverify.field.related_accounts", count=len(related_users_mentions)), value="\n".join(related_users_mentions), inline=False)
             
             await interaction.response.send_message(embed=embed, ephemeral=True)
+
+    @relation_blacklist.command(
+        name=app_commands.locale_str("add", i18n_key="cmd.serverwebverify.webverify.relation_blacklist.add.name"),
+        description=app_commands.locale_str("Add a relation ID to this server's blacklist", i18n_key="cmd.serverwebverify.webverify.relation_blacklist.add.desc"),
+    )
+    @app_commands.describe(relation_id=app_commands.locale_str("Existing WebVerify relation ID", i18n_key="cmd.serverwebverify.webverify.relation_blacklist.add.param.relation_id"))
+    @app_commands.default_permissions(administrator=True)
+    async def relation_blacklist_add(self, interaction: discord.Interaction, relation_id: str):
+        normalized_id = normalize_relation_id(relation_id)
+        if not normalized_id:
+            await interaction.response.send_message(t("serverwebverify.err.invalid_relation_id"), ephemeral=True)
+            return
+        if not relation_id_exists(normalized_id):
+            await interaction.response.send_message(t("serverwebverify.err.relation_id_not_found", relation_id=normalized_id), ephemeral=True)
+            return
+        guild_config = get_server_config(interaction.guild.id, "webverify_config", {})
+        guild_config = dict(guild_config) if isinstance(guild_config, dict) else {}
+        settings = normalize_relation_blacklist_config(guild_config.get("relation_blacklist"))
+        if normalized_id in settings["relation_ids"]:
+            await interaction.response.send_message(t("serverwebverify.err.relation_id_already_blacklisted", relation_id=normalized_id), ephemeral=True)
+            return
+        settings["relation_ids"].append(normalized_id)
+        guild_config["relation_blacklist"] = settings
+        set_server_config(interaction.guild.id, "webverify_config", guild_config)
+        await interaction.response.send_message(t("serverwebverify.msg.relation_blacklist_added", relation_id=normalized_id), ephemeral=True)
+
+    @relation_blacklist.command(
+        name=app_commands.locale_str("remove", i18n_key="cmd.serverwebverify.webverify.relation_blacklist.remove.name"),
+        description=app_commands.locale_str("Remove a relation ID from this server's blacklist", i18n_key="cmd.serverwebverify.webverify.relation_blacklist.remove.desc"),
+    )
+    @app_commands.describe(relation_id=app_commands.locale_str("Blacklisted relation ID", i18n_key="cmd.serverwebverify.webverify.relation_blacklist.remove.param.relation_id"))
+    @app_commands.default_permissions(administrator=True)
+    async def relation_blacklist_remove(self, interaction: discord.Interaction, relation_id: str):
+        normalized_id = normalize_relation_id(relation_id)
+        guild_config = get_server_config(interaction.guild.id, "webverify_config", {})
+        guild_config = dict(guild_config) if isinstance(guild_config, dict) else {}
+        settings = normalize_relation_blacklist_config(guild_config.get("relation_blacklist"))
+        if not normalized_id or normalized_id not in settings["relation_ids"]:
+            await interaction.response.send_message(t("serverwebverify.err.relation_id_not_blacklisted"), ephemeral=True)
+            return
+        settings["relation_ids"].remove(normalized_id)
+        guild_config["relation_blacklist"] = settings
+        set_server_config(interaction.guild.id, "webverify_config", guild_config)
+        clear_relation_action_history(interaction.guild.id, normalized_id)
+        await interaction.response.send_message(t("serverwebverify.msg.relation_blacklist_removed", relation_id=normalized_id), ephemeral=True)
+
+    @relation_blacklist.command(
+        name=app_commands.locale_str("list", i18n_key="cmd.serverwebverify.webverify.relation_blacklist.list.name"),
+        description=app_commands.locale_str("List relation blacklist settings", i18n_key="cmd.serverwebverify.webverify.relation_blacklist.list.desc"),
+    )
+    @app_commands.default_permissions(administrator=True)
+    async def relation_blacklist_list(self, interaction: discord.Interaction):
+        guild_config = get_server_config(interaction.guild.id, "webverify_config", {})
+        settings = normalize_relation_blacklist_config(
+            guild_config.get("relation_blacklist") if isinstance(guild_config, dict) else None
+        )
+        channel = interaction.guild.get_channel(settings["channel_id"]) if settings["channel_id"] else None
+        embed = discord.Embed(title=t("serverwebverify.embed.relation_blacklist_settings_title"), color=discord.Color.blurple())
+        embed.add_field(name=t("serverwebverify.field.status"), value=t("serverwebverify.value.enabled") if settings["enabled"] else t("serverwebverify.value.disabled"), inline=True)
+        embed.add_field(name=t("serverwebverify.field.alert_channel"), value=channel.mention if channel else t("serverwebverify.value.unset"), inline=True)
+        embed.add_field(name=t("serverwebverify.field.action"), value=settings["action"] or t("serverwebverify.value.unset"), inline=False)
+        relation_lines = [f"`{relation_id}` ({len(get_relation_user_ids(relation_id))})" for relation_id in settings["relation_ids"]]
+        embed.add_field(name=t("serverwebverify.field.relation_ids", count=len(relation_lines)), value=_truncate_lines(relation_lines), inline=False)
+        await interaction.response.send_message(embed=embed, ephemeral=True)
+
+    @relation_blacklist.command(
+        name=app_commands.locale_str("configure", i18n_key="cmd.serverwebverify.webverify.relation_blacklist.configure.name"),
+        description=app_commands.locale_str("Configure and enable relation blacklist actions", i18n_key="cmd.serverwebverify.webverify.relation_blacklist.configure.desc"),
+    )
+    @app_commands.describe(
+        action=app_commands.locale_str("Moderate action string", i18n_key="cmd.serverwebverify.webverify.relation_blacklist.configure.param.action"),
+        channel=app_commands.locale_str("Channel that receives action reports", i18n_key="cmd.serverwebverify.webverify.relation_blacklist.configure.param.channel"),
+    )
+    @app_commands.default_permissions(administrator=True)
+    async def relation_blacklist_configure(self, interaction: discord.Interaction, action: str, channel: discord.TextChannel):
+        guild_config = get_server_config(interaction.guild.id, "webverify_config", {})
+        guild_config = dict(guild_config) if isinstance(guild_config, dict) else {}
+        settings = normalize_relation_blacklist_config(guild_config.get("relation_blacklist"))
+        if not settings["relation_ids"]:
+            await interaction.response.send_message(t("serverwebverify.err.relation_blacklist_needs_ids"), ephemeral=True)
+            return
+        analysis = Moderate.analyze_member_join_action(action, interaction.guild.id)
+        if not analysis["valid"] or analysis.get("requires_confirmation"):
+            error = analysis.get("error") or analysis.get("confirmation") or t("serverwebverify.value.unknown")
+            await interaction.response.send_message(t("serverwebverify.err.invalid_relation_action", error=error), ephemeral=True)
+            return
+        permissions = channel.permissions_for(interaction.guild.me)
+        if not permissions.view_channel or not permissions.send_messages or not permissions.embed_links:
+            await interaction.response.send_message(t("serverwebverify.err.alert_channel_permissions"), ephemeral=True)
+            return
+        settings.update({
+            "enabled": True,
+            "action": str(analysis.get("normalized") or action).strip(),
+            "channel_id": channel.id,
+        })
+        guild_config["relation_blacklist"] = settings
+        set_server_config(interaction.guild.id, "webverify_config", guild_config)
+        await interaction.response.send_message(t("serverwebverify.msg.relation_blacklist_configured", channel=channel.mention, action=settings["action"]), ephemeral=True)
+
+    @relation_blacklist.command(
+        name=app_commands.locale_str("disable", i18n_key="cmd.serverwebverify.webverify.relation_blacklist.disable.name"),
+        description=app_commands.locale_str("Disable automatic relation blacklist actions", i18n_key="cmd.serverwebverify.webverify.relation_blacklist.disable.desc"),
+    )
+    @app_commands.default_permissions(administrator=True)
+    async def relation_blacklist_disable(self, interaction: discord.Interaction):
+        guild_config = get_server_config(interaction.guild.id, "webverify_config", {})
+        guild_config = dict(guild_config) if isinstance(guild_config, dict) else {}
+        settings = normalize_relation_blacklist_config(guild_config.get("relation_blacklist"))
+        settings["enabled"] = False
+        guild_config["relation_blacklist"] = settings
+        set_server_config(interaction.guild.id, "webverify_config", guild_config)
+        await interaction.response.send_message(t("serverwebverify.msg.relation_blacklist_disabled"), ephemeral=True)
+
+    @relation_blacklist.command(
+        name=app_commands.locale_str("scan", i18n_key="cmd.serverwebverify.webverify.relation_blacklist.scan.name"),
+        description=app_commands.locale_str("Preview and confirm a relation blacklist scan", i18n_key="cmd.serverwebverify.webverify.relation_blacklist.scan.desc"),
+    )
+    @app_commands.default_permissions(administrator=True)
+    async def relation_blacklist_scan(self, interaction: discord.Interaction):
+        await interaction.response.defer(ephemeral=True)
+        guild_config = get_server_config(interaction.guild.id, "webverify_config", {})
+        settings = normalize_relation_blacklist_config(
+            guild_config.get("relation_blacklist") if isinstance(guild_config, dict) else None
+        )
+        if not settings["enabled"]:
+            await interaction.followup.send(t("serverwebverify.err.relation_blacklist_disabled"), ephemeral=True)
+            return
+        preview = await collect_relation_blacklist_preview(interaction.guild, settings, interaction.user)
+        view = RelationBlacklistScanView(interaction.user.id, interaction.guild.id)
+        if preview.get("error"):
+            view = None
+        await interaction.followup.send(embed=build_relation_scan_preview_embed(preview), view=view, ephemeral=True)
     
     @app_commands.command(name=app_commands.locale_str("relation_action", i18n_key="cmd.serverwebverify.webverify.relation_action.name"), description=app_commands.locale_str("Act on a user and their related accounts", i18n_key="cmd.serverwebverify.webverify.relation_action.desc"))
     @app_commands.describe(user=app_commands.locale_str("Choose a user", i18n_key="cmd.serverwebverify.webverify.relation_action.param.user"), action=app_commands.locale_str("The action to run (same format as !moderate)", i18n_key="cmd.serverwebverify.webverify.relation_action.param.action"))
@@ -733,6 +1548,8 @@ class ServerWebVerify(commands.GroupCog, name=app_commands.locale_str("webverify
         guild_config = get_server_config(interaction.guild.id, "webverify_config")
         if not guild_config:
             guild_config = {}
+        else:
+            guild_config = migrate_webverify_config(interaction.guild.id, guild_config)
         guild_config['min_age'] = min_age
         set_server_config(interaction.guild.id, "webverify_config", guild_config)
         await interaction.response.send_message(t("serverwebverify.msg.min_age_set", count=min_age, days=min_age))
@@ -745,15 +1562,30 @@ class ServerWebVerify(commands.GroupCog, name=app_commands.locale_str("webverify
         channel=app_commands.locale_str("The channel that receives alerts", i18n_key="cmd.serverwebverify.webverify.country_alert.param.channel")
     )
     @app_commands.choices(mode=[
-        app_commands.Choice(name=app_commands.locale_str("Blocklist mode", i18n_key="cmd.serverwebverify.webverify.country_alert.choice.blocklist"), value="blocklist"),
-        app_commands.Choice(name=app_commands.locale_str("Allowlist mode", i18n_key="cmd.serverwebverify.webverify.country_alert.choice.allowlist"), value="allowlist")
+        app_commands.Choice(name=app_commands.locale_str("Blocklist mode", i18n_key="cmd.serverwebverify.webverify.country_alert.choice.blocklist"), value="blacklist"),
+        app_commands.Choice(name=app_commands.locale_str("Allowlist mode", i18n_key="cmd.serverwebverify.webverify.country_alert.choice.allowlist"), value="whitelist")
     ])
     @app_commands.default_permissions(administrator=True)
     async def country_alert(self, interaction: discord.Interaction, enable: bool, mode: str, countries: str, channel: discord.TextChannel):
         guild_config = get_server_config(interaction.guild.id, "webverify_config")
         if not guild_config:
             guild_config = {}
-        country_list = [code.strip().upper() for code in countries.split(',') if code.strip()]
+        else:
+            guild_config = migrate_webverify_config(interaction.guild.id, guild_config)
+        raw_codes = [code for code in re.split(r"[,，\s]+", countries) if code]
+        country_list = normalize_country_codes(raw_codes)
+        invalid_codes = [str(code).strip().upper() for code in raw_codes if not re.fullmatch(r"[A-Z]{2}", str(code).strip().upper())]
+        if invalid_codes:
+            await interaction.response.send_message(t("serverwebverify.err.invalid_country_codes", codes=i18n.join_list(invalid_codes[:10])), ephemeral=True)
+            return
+        if enable and not country_list:
+            await interaction.response.send_message(t("serverwebverify.err.country_alert_needs_codes"), ephemeral=True)
+            return
+        permissions = channel.permissions_for(interaction.guild.me)
+        if enable and (not permissions.view_channel or not permissions.send_messages or not permissions.embed_links):
+            await interaction.response.send_message(t("serverwebverify.err.alert_channel_permissions"), ephemeral=True)
+            return
+        mode = normalize_country_mode(mode)
         guild_config['webverify_country_alert'] = {
             'enabled': enable,
             'mode': mode,
@@ -762,19 +1594,20 @@ class ServerWebVerify(commands.GroupCog, name=app_commands.locale_str("webverify
         }
         set_server_config(interaction.guild.id, "webverify_config", guild_config)
         status = t("serverwebverify.value.enabled_suffix") if enable else t("serverwebverify.value.disabled_suffix")
-        await interaction.response.send_message(t("serverwebverify.msg.country_alert_set", status=status, mode=mode, countries=", ".join(country_list), channel=channel.mention))
+        await interaction.response.send_message(t("serverwebverify.msg.country_alert_set", status=status, mode=mode, countries=", ".join(country_list), channel=channel.mention), ephemeral=True)
     
     @app_commands.command(name=app_commands.locale_str("manual-check-country", i18n_key="cmd.serverwebverify.webverify.manual_check_country.name"), description=app_commands.locale_str("Manually check a user's region", i18n_key="cmd.serverwebverify.webverify.manual_check_country.desc"))
     @app_commands.describe(user=app_commands.locale_str("Choose a user", i18n_key="cmd.serverwebverify.webverify.manual_check_country.param.user"))
     @app_commands.default_permissions(administrator=True)
     async def manual_check_country(self, interaction: discord.Interaction, user: discord.Member = None):
-        await interaction.response.defer()
+        await interaction.response.defer(ephemeral=True)
         guild_config = get_server_config(interaction.guild.id, "webverify_config")
-        guild_config = guild_config.get('webverify_country_alert') if guild_config else None
-        if not guild_config or not guild_config.get('enabled', False):
-            await interaction.followup.send(t("serverwebverify.err.geo_alert_disabled"))
+        if guild_config:
+            guild_config = migrate_webverify_config(interaction.guild.id, guild_config)
+        country_config = normalize_country_alert_config(guild_config.get('webverify_country_alert') if guild_config else None)
+        if not country_config["enabled"]:
+            await interaction.followup.send(t("serverwebverify.err.geo_alert_disabled"), ephemeral=True)
             return
-        await interaction.followup.send(t("serverwebverify.value.please_wait"))
         user_ips = []
         if user:
             with get_db_connection() as conn:
@@ -794,28 +1627,62 @@ class ServerWebVerify(commands.GroupCog, name=app_commands.locale_str("webverify
                         user_ips.append({'user_id': row[0], 'ip': row[1], 'timestamp': row[2]})
                         got_users.add(row[0])
         if not user_ips:
-            await interaction.followup.send(t("serverwebverify.err.no_verify_history"))
+            await interaction.followup.send(t("serverwebverify.err.no_verify_history"), ephemeral=True)
             return
         report_lines = []
+        unknown_lines = []
         for entry in user_ips:
-            location = get_ip_location(entry['ip'])
-            country = location.get('country', 'Unknown') if isinstance(location, dict) else 'Unknown'
-            country_list = guild_config.get('countries', [])
-            mode = guild_config.get('mode', 'blacklist')
-            if (mode == 'blacklist' and country in country_list) or (mode == 'whitelist' and country not in country_list):
-                try:
-                    u = await bot.fetch_user(entry['user_id'])
-                    user_mention = f"{u.name} ({u.id})"
-                except:
-                    user_mention = f"Unknown User (`{entry['user_id']}`)"
-                timestamp = datetime.fromtimestamp(entry['timestamp'], tz=timezone.utc).strftime('%Y-%m-%d %H:%M:%S UTC')
-                report_lines.append(t("serverwebverify.value.geo_report_line", user=user_mention, country=country, timestamp=timestamp))
+            location = await asyncio.to_thread(get_ip_location, entry['ip'])
+            try:
+                resolved_user = await bot.fetch_user(entry['user_id'])
+                user_mention = f"{resolved_user.name} ({resolved_user.id})"
+            except (discord.NotFound, discord.HTTPException):
+                user_mention = f"Unknown User (`{entry['user_id']}`)"
+            parsed_timestamp = parse_history_timestamp(entry['timestamp'])
+            timestamp = parsed_timestamp.strftime('%Y-%m-%d %H:%M:%S UTC') if parsed_timestamp else t("serverwebverify.value.unknown")
+            if location is None:
+                if user:
+                    await interaction.followup.send(t("serverwebverify.err.geo_lookup_unavailable", user=user.mention), ephemeral=True)
+                    return
+                unknown_lines.append(t("serverwebverify.value.geo_unknown_line", user=user_mention, timestamp=timestamp))
+                continue
+            matched = country_alert_matches(location["country"], country_config)
+            line = t(
+                "serverwebverify.value.geo_report_line",
+                user=user_mention,
+                country=location["country"],
+                timestamp=timestamp,
+            )
+            if user:
+                channel = interaction.guild.get_channel(country_config["channel_id"]) if country_config["channel_id"] else None
+                permissions = channel.permissions_for(interaction.guild.me) if channel and interaction.guild.me else None
+                channel_available = bool(
+                    channel
+                    and permissions
+                    and permissions.view_channel
+                    and permissions.send_messages
+                    and permissions.embed_links
+                )
+                embed = discord.Embed(title=t("serverwebverify.embed.geo_diagnostic_title"), color=discord.Color.orange() if matched else discord.Color.green())
+                embed.add_field(name=t("serverwebverify.field.user"), value=user.mention, inline=False)
+                embed.add_field(name=t("serverwebverify.field.location"), value=f"{location.get('city') or '-'}, {location.get('region') or '-'}, {location['country']}", inline=False)
+                embed.add_field(name=t("serverwebverify.field.decision"), value=t("serverwebverify.value.would_alert") if matched else t("serverwebverify.value.would_not_alert"), inline=True)
+                embed.add_field(name=t("serverwebverify.field.mode"), value=f"{country_config['mode']} / {', '.join(country_config['countries'])}", inline=True)
+                embed.add_field(name=t("serverwebverify.field.alert_channel"), value=channel.mention if channel_available else t("serverwebverify.value.unavailable"), inline=False)
+                embed.set_footer(text=timestamp)
+                await interaction.followup.send(embed=embed, ephemeral=True)
+                return
+            if matched:
+                report_lines.append(line)
         if not report_lines:
-            await interaction.followup.send(t("serverwebverify.msg.no_geo_anomalies"))
-            return
+            report_lines.append(t("serverwebverify.msg.no_geo_anomalies"))
         for i in range(0, len(report_lines), 20):
             chunk = report_lines[i:i+20]
-            await interaction.followup.send("```" + "\n".join(chunk) + "```")
+            await interaction.followup.send("```" + "\n".join(chunk) + "```", ephemeral=True)
+        if unknown_lines:
+            for i in range(0, len(unknown_lines), 20):
+                chunk = unknown_lines[i:i+20]
+                await interaction.followup.send(t("serverwebverify.msg.geo_unknown_header") + "\n```" + "\n".join(chunk) + "```", ephemeral=True)
     
     @app_commands.command(name=app_commands.locale_str("force-verify", i18n_key="cmd.serverwebverify.webverify.force_verify.name"), description=app_commands.locale_str("Force a user to verify", i18n_key="cmd.serverwebverify.webverify.force_verify.desc"))
     @app_commands.describe(user=app_commands.locale_str("The user to force-verify", i18n_key="cmd.serverwebverify.webverify.force_verify.param.user"))

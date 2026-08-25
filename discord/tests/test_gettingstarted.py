@@ -15,9 +15,10 @@ from JoinNotify import find_bot_inviter, get_join_prompt_recipient
 
 
 class FakePermissions:
-    def __init__(self, *, view_channel=True, send_messages=True):
+    def __init__(self, *, view_channel=True, send_messages=True, embed_links=True):
         self.view_channel = view_channel
         self.send_messages = send_messages
+        self.embed_links = embed_links
 
 
 class FakeChannel:
@@ -364,7 +365,7 @@ class ComplexSchemaTests(unittest.TestCase):
         session = gs.GettingStartedSession(guild, 10)
         draft = gs.default_webverify_config()
         draft["notify"]["type"] = "both"
-        view = gs.WebVerifySetupView(session, "ServerWebVerify", draft=draft, step=6)
+        view = gs.WebVerifySetupView(session, "ServerWebVerify", draft=draft, step=7)
         self.assertIn("通知頻道", view.validate())
 
         view.draft["notify"]["channel_id"] = 123
@@ -376,6 +377,67 @@ class ComplexSchemaTests(unittest.TestCase):
 
         view.draft["webverify_country_alert"]["countries"] = ["TW"]
         self.assertIsNone(view.validate())
+
+    def test_webverify_relation_blacklist_validation_requires_ids_channel_and_action(self):
+        guild = MagicMock()
+        guild.id = 1
+        guild.name = "Guild"
+        guild.me = object()
+        permissions = FakePermissions()
+        channel = SimpleNamespace(mention="#alerts", permissions_for=lambda _member: permissions)
+        guild.get_channel.side_effect = lambda channel_id: channel if channel_id == 789 else None
+        session = gs.GettingStartedSession(guild, 10)
+        draft = gs.default_webverify_config()
+        draft["relation_blacklist"]["enabled"] = True
+        view = gs.WebVerifySetupView(session, "ServerWebVerify", draft=draft, step=6)
+        relation_id = "12345678-1234-5678-1234-567812345678"
+
+        with (
+            patch.object(gs, "normalize_webverify_relation_ids", side_effect=lambda values, **_kwargs: list(values)),
+            patch.object(gs, "Moderate", Moderate),
+        ):
+            self.assertIn("關聯 ID", view.validate())
+            view.draft["relation_blacklist"]["relation_ids"] = [relation_id]
+            self.assertIn("警報頻道", view.validate())
+            view.draft["relation_blacklist"]["channel_id"] = 789
+            self.assertIn("處置指令", view.validate())
+            view.draft["relation_blacklist"]["action"] = "warn hi"
+            self.assertIn("`warn`", view.validate())
+            view.draft["relation_blacklist"]["action"] = "kick test"
+            self.assertIsNone(view.validate())
+
+    def test_webverify_loader_migrates_country_alias_and_relation_defaults(self):
+        relation_id = "12345678-1234-5678-1234-567812345678"
+        stored = {
+            "webverify_country_alert": {
+                "enabled": True,
+                "mode": "blocklist",
+                "countries": ["tw", "TW", "bad"],
+                "channel_id": 123,
+            },
+            "relation_blacklist": {
+                "enabled": False,
+                "relation_ids": [relation_id, relation_id.upper()],
+                "action": " kick test ",
+                "channel_id": 456,
+            },
+        }
+        with patch.object(gs, "get_server_config", return_value=stored):
+            loaded = gs.load_webverify_config(1)
+        self.assertEqual(loaded["webverify_country_alert"]["mode"], "blacklist")
+        self.assertEqual(loaded["webverify_country_alert"]["countries"], ["TW"])
+        self.assertEqual(loaded["relation_blacklist"]["relation_ids"], [relation_id])
+        self.assertEqual(loaded["relation_blacklist"]["action"], "kick test")
+
+    def test_webverify_quick_setup_has_seven_steps(self):
+        guild = MagicMock()
+        guild.id = 1
+        guild.name = "Guild"
+        guild.get_role.return_value = None
+        session = gs.GettingStartedSession(guild, 10)
+        view = gs.WebVerifySetupView(session, "ServerWebVerify", draft=gs.default_webverify_config(), step=99)
+        self.assertEqual(view.step, 7)
+        self.assertIn("7/7", view.build_embed().title)
 
     def test_fixlink_gettingstarted_view_reuses_native_editor_and_adds_back(self):
         import FixLink

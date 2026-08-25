@@ -421,6 +421,13 @@
             "notify_msg": "通知內容",
             "notify_title": "通知標題",
             "notify_type": "驗證通知方式",
+            "relation": "關聯 ID 黑名單",
+            "relation_action": "處置指令",
+            "relation_action_ph": "例如：ban 0 0 關聯 ID 黑名單",
+            "relation_ch": "處置報告頻道",
+            "relation_enable": "啟用關聯 ID 黑名單",
+            "relation_ids": "關聯 ID 清單",
+            "relation_ids_ph": "每行或以逗號分隔輸入 UUID",
             "trigger": "觸發條件",
             "trigger_ph": "always 或 age_check+no_history 等",
             "unverified_role": "未驗證成員身分組"

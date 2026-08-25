@@ -391,10 +391,12 @@
             "autorole_state": "Auto-assign: {state}",
             "country_alert_state": "Region alert: {state}",
             "edit_countries": "Edit region codes",
+            "edit_relation_blacklist": "Edit relation IDs and action",
             "edit_min_age": "Set minimum account age",
             "edit_notification": "Edit notification text",
             "feature_state": "Feature: {state}",
             "go_verify": "Go verify",
+            "relation_blacklist_state": "Relation blacklist: {state}",
             "save_and_send": "Save & send verification message",
             "save_only": "Save only"
         },
@@ -411,14 +413,22 @@
             "channel_not_found": "Couldn't find the verification notify channel; the setting was saved but no message was sent.",
             "country_alert_needs_channel": "You must select an alert channel before enabling region alerts.",
             "country_alert_needs_codes": "You must set at least one region code before enabling region alerts.",
+            "alert_channel_unusable": "The alert channel is unavailable, or the bot lacks View Channel, Send Messages, or Embed Links permissions.",
             "create_role_failed": "Failed to create the role: {error}",
             "create_role_permission": "Auto-creating the unverified role needs Manage Roles and Manage Channels permissions.",
             "invalid_country_code": "Region codes must be two letters: {codes}",
+            "invalid_relation_action": "Invalid relation-blacklist action: {error}",
+            "invalid_relation_id": "Invalid relation ID: {relation_id}",
             "invalid_days": "Please enter a valid number of days.",
             "min_age_negative": "The minimum account age can't be less than 0.",
             "no_application_id": "Couldn't get the application ID right now.",
             "no_channel_permission": "I don't have permission to send messages in the verification notify channel.",
             "notify_needs_channel": "You must select a notify channel when using channel notifications.",
+            "relation_action_unavailable": "The Moderate module is unavailable, so the relation-blacklist action cannot be validated.",
+            "relation_blacklist_needs_action": "A valid action command is required when the relation blacklist is enabled.",
+            "relation_blacklist_needs_channel": "A separate alert channel is required when the relation blacklist is enabled.",
+            "relation_blacklist_needs_ids": "At least one relation ID is required when the relation blacklist is enabled.",
+            "relation_id_not_found": "Relation ID not found in the database: {relation_id}",
             "select_role_before_autorole": "Please select the unverified role before enabling auto-assign.",
             "send_failed": "Failed to send the verification message: {error}"
         },
@@ -440,6 +450,14 @@
             "notify_title_label": "Notification title",
             "notify_type": "Notify method",
             "role_name_label": "Role name",
+            "relation_action": "Action command",
+            "relation_action_label": "Moderate action command",
+            "relation_action_placeholder": "For example: ban 0 0 Relation ID blacklist",
+            "relation_blacklist": "Relation ID blacklist",
+            "relation_channel": "Action report channel",
+            "relation_ids": "Relation IDs",
+            "relation_ids_label": "Relation ID list",
+            "relation_ids_placeholder": "Enter UUIDs separated by lines or commas",
             "title": "Title",
             "trigger": "Trigger",
             "unverified_role": "Unverified role"
@@ -448,7 +466,8 @@
             "countries_title": "Region codes",
             "create_role_title": "Create unverified role",
             "min_age_title": "Minimum account age",
-            "notify_title": "Verification notification"
+            "notify_title": "Verification notification",
+            "relation_blacklist_title": "Relation ID blacklist"
         },
         "mode": {
             "blacklist": "Blacklist",
@@ -468,6 +487,7 @@
         "select_country_mode_ph": "Select a region list mode",
         "select_notify_channel_ph": "Select a verification notify channel",
         "select_notify_type_ph": "Select a notify method",
+        "select_relation_channel_ph": "Select the relation-blacklist alert channel",
         "select_role_ph": "Select the unverified role",
         "setup_title": "Web verification setup (step {step}/{total})",
         "step1": {
@@ -486,6 +506,9 @@
             "desc": "Set a blacklist or whitelist alert for the verifying region."
         },
         "step6": {
+            "desc": "Configure this server's relation ID blacklist, action command, and separate alert channel."
+        },
+        "step7": {
             "desc": "Confirming will save the entire web verification setup at once."
         },
         "trigger": {

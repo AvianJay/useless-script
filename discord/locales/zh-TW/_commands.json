@@ -2505,6 +2505,56 @@
                 "desc": "使用互動式精靈快速設定網頁驗證",
                 "name": "快速設定"
             },
+            "relation_blacklist": {
+                "add": {
+                    "desc": "將現存的關聯 ID 加入此伺服器的黑名單",
+                    "name": "新增",
+                    "param": {
+                        "relation_id": "資料庫中現存的 WebVerify 關聯 ID"
+                    },
+                    "param_name": {
+                        "relation_id": "關聯id"
+                    }
+                },
+                "configure": {
+                    "desc": "設定並啟用關聯黑名單處置",
+                    "name": "設定",
+                    "param": {
+                        "action": "可在無訊息情境執行的 Moderate 處置指令",
+                        "channel": "接收處置報告的文字頻道"
+                    },
+                    "param_name": {
+                        "action": "處置指令",
+                        "channel": "警報頻道"
+                    }
+                },
+                "disable": {
+                    "desc": "停用自動關聯黑名單處置",
+                    "name": "停用"
+                },
+                "list": {
+                    "desc": "查看關聯黑名單設定與關聯 ID",
+                    "name": "清單"
+                },
+                "remove": {
+                    "desc": "從此伺服器的黑名單移除關聯 ID",
+                    "name": "移除",
+                    "param": {
+                        "relation_id": "要從黑名單移除的關聯 ID"
+                    },
+                    "param_name": {
+                        "relation_id": "關聯id"
+                    }
+                },
+                "root": {
+                    "desc": "管理此伺服器的關聯 ID 黑名單與處置",
+                    "name": "關聯黑名單"
+                },
+                "scan": {
+                    "desc": "預覽並確認掃描關聯黑名單",
+                    "name": "掃描"
+                }
+            },
             "relation_action": {
                 "desc": "對用戶及其關聯帳號進行操作",
                 "name": "關聯用戶動作",

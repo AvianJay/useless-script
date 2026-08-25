@@ -421,6 +421,13 @@
             "notify_msg": "Notification message",
             "notify_title": "Notification title",
             "notify_type": "Notification method",
+            "relation": "Relation ID blacklist",
+            "relation_action": "Action command",
+            "relation_action_ph": "For example: ban 0 0 Relation ID blacklist",
+            "relation_ch": "Action report channel",
+            "relation_enable": "Enable relation ID blacklist",
+            "relation_ids": "Relation IDs",
+            "relation_ids_ph": "Enter UUIDs separated by lines or commas",
             "trigger": "Trigger condition",
             "trigger_ph": "always, or age_check+no_history, etc.",
             "unverified_role": "Unverified member role"

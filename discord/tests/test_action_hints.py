@@ -209,6 +209,41 @@ class ActionExecutionTests(unittest.IsolatedAsyncioTestCase):
         message.reply.assert_not_awaited()
         message.channel.send.assert_not_awaited()
 
+    async def test_return_status_is_opt_in_and_reports_success(self):
+        legacy = await Moderate.do_action_str("kick test")
+        logs, status = await Moderate.do_action_str("kick test", return_status=True)
+        self.assertIsInstance(legacy, list)
+        self.assertEqual(logs, legacy)
+        self.assertEqual(status, "success")
+
+    async def test_return_status_marks_permission_skip_unsuccessful(self):
+        guild = SimpleNamespace(id=1)
+        user = SimpleNamespace(id=2)
+        with patch.object(Moderate, "_bot_action_check", return_value=(False, "missing permission")):
+            logs, status = await Moderate.do_action_str(
+                "kick test",
+                guild=guild,
+                user=user,
+                return_status=True,
+            )
+        self.assertEqual(status, "skipped")
+        self.assertIn("missing permission", logs[0])
+
+    async def test_return_status_marks_unsent_moderation_announcement_unsuccessful(self):
+        guild = SimpleNamespace(id=1, get_channel=lambda _channel_id: None)
+        user = SimpleNamespace(id=2)
+        moderator = SimpleNamespace(id=3)
+        with patch.object(Moderate, "get_server_config", return_value=None):
+            logs, status = await Moderate.do_action_str(
+                "smm",
+                guild=guild,
+                user=user,
+                moderator=moderator,
+                return_status=True,
+            )
+        self.assertEqual(status, "failed")
+        self.assertIn("未成功", logs[0])
+
 
 class ActionConfirmationViewTests(unittest.IsolatedAsyncioTestCase):
     async def test_confirmation_is_bound_to_original_user(self):
@@ -380,6 +415,78 @@ class GuildPanelCompoundSettingsTests(unittest.TestCase):
         serialized = GuildPanel._serialize(coerced, "automod_config", guild_id=1)
         self.assertEqual(serialized["flagged_user"], value["flagged_user"])
 
+    def test_webverify_schema_serializes_country_aliases_and_relation_blacklist(self):
+        relation_id = "12345678-1234-5678-1234-567812345678"
+        value = {
+            "webverify_country_alert": {
+                "enabled": False,
+                "mode": "allowlist",
+                "countries": ["tw", "TW"],
+                "channel_id": "123",
+            },
+            "relation_blacklist": {
+                "enabled": False,
+                "relation_ids": [relation_id, relation_id.upper()],
+                "action": "kick test",
+                "channel_id": "456",
+            },
+        }
+        serialized = GuildPanel._serialize(value, "webverify_config", guild_id=1)
+        self.assertEqual(serialized["webverify_country_alert"]["mode"], "whitelist")
+        self.assertEqual(serialized["webverify_country_alert"]["countries"], ["TW"])
+        self.assertEqual(serialized["relation_blacklist"]["relation_ids"], [relation_id])
+        self.assertEqual(serialized["relation_blacklist"]["channel_id"], "456")
+
+    def test_webverify_relation_blacklist_uses_member_join_action_and_channel_validation(self):
+        relation_id = "12345678-1234-5678-1234-567812345678"
+        permissions = SimpleNamespace(view_channel=True, send_messages=True, embed_links=True)
+        channel = SimpleNamespace(permissions_for=lambda _member: permissions)
+        guild = SimpleNamespace(me=object(), get_channel=lambda channel_id: channel if channel_id == 456 else None)
+        value = {
+            "relation_blacklist": {
+                "enabled": True,
+                "relation_ids": [relation_id],
+                "action": "kick test",
+                "channel_id": "456",
+            },
+        }
+        analysis = {"valid": True, "requires_confirmation": False, "normalized": "kick test"}
+        with (
+            patch.object(GuildPanel, "_normalize_webverify_relation_ids", return_value=[relation_id]),
+            patch.object(GuildPanel.bot, "get_guild", return_value=guild),
+            patch.object(Moderate, "analyze_member_join_action", return_value=analysis) as analyzer,
+        ):
+            coerced = GuildPanel._coerce(value, "webverify_config", guild_id=1)
+        self.assertTrue(coerced["relation_blacklist"]["enabled"])
+        self.assertEqual(coerced["relation_blacklist"]["action"], "kick test")
+        analyzer.assert_called_once_with("kick test", 1)
+
+        permissions.embed_links = False
+        with (
+            patch.object(GuildPanel, "_normalize_webverify_relation_ids", return_value=[relation_id]),
+            patch.object(GuildPanel.bot, "get_guild", return_value=guild),
+            patch.object(Moderate, "analyze_member_join_action", return_value=analysis),
+        ):
+            with self.assertRaisesRegex(ValueError, "權限"):
+                GuildPanel._coerce(value, "webverify_config", guild_id=1)
+
+    def test_webverify_config_trigger_clears_history_for_removed_ids_only(self):
+        kept = "12345678-1234-5678-1234-567812345678"
+        removed = "87654321-4321-8765-4321-876543218765"
+        previous = {"relation_blacklist": {"relation_ids": [kept, removed]}}
+        current = {"relation_blacklist": {"relation_ids": [kept]}}
+        connection = MagicMock()
+        context = MagicMock()
+        context.__enter__.return_value = connection
+        context.__exit__.return_value = False
+        with patch.object(GuildPanel, "get_db_connection", return_value=context):
+            GuildPanel._webverify_config_trigger(10, current, previous)
+        connection.executemany.assert_called_once_with(
+            "DELETE FROM webverify_relation_action_history WHERE guild_id = ? AND relation_id = ?",
+            [(10, removed)],
+        )
+        connection.commit.assert_called_once()
+
     def test_registry_includes_fixlink_and_antibeast(self):
         with (
             patch.object(GuildPanel, "modules", ["FixLink", "AntiBeast"]),
@@ -397,6 +504,16 @@ class GuildPanelCompoundSettingsTests(unittest.TestCase):
             self.assertTrue(
                 callable(GuildPanel.settings["AntiBeast"]["settings"][0]["trigger"])
             )
+
+    def test_registry_marks_webverify_trigger_as_previous_value_aware(self):
+        with (
+            patch.object(GuildPanel, "modules", ["ServerWebVerify"]),
+            patch.dict(GuildPanel.settings, {}, clear=True),
+        ):
+            GuildPanel._register_all()
+            setting = GuildPanel.settings["ServerWebVerify"]["settings"][0]
+            self.assertIs(setting["trigger"], GuildPanel._webverify_config_trigger)
+            self.assertTrue(setting["trigger_with_previous"])
 
     def test_stickymessage_schema_round_trip_and_channel_validation(self):
         value = {

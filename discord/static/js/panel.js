@@ -2022,6 +2022,7 @@ function buildWebverifyConfigEditor(mod, s, value, channels, roles) {
     const config = typeof value === 'object' && value !== null ? { ...value } : {};
     if (!config.notify) config.notify = { type: 'dm', channel_id: null, title: '伺服器網頁驗證', message: '請點擊下方按鈕進行網頁驗證：' };
     if (!config.webverify_country_alert) config.webverify_country_alert = { enabled: false, mode: 'blacklist', countries: [], channel_id: null };
+    if (!config.relation_blacklist) config.relation_blacklist = { enabled: false, relation_ids: [], action: '', channel_id: null };
 
     const container = document.createElement('div');
     container.className = 'webverify-config-editor';
@@ -2036,6 +2037,12 @@ function buildWebverifyConfigEditor(mod, s, value, channels, roles) {
             min_age: Math.max(0, parseInt(config.min_age, 10) || 7),
             notify: { ...config.notify },
             webverify_country_alert: { ...config.webverify_country_alert },
+            relation_blacklist: {
+                ...config.relation_blacklist,
+                relation_ids: Array.isArray(config.relation_blacklist.relation_ids)
+                    ? [...config.relation_blacklist.relation_ids]
+                    : [],
+            },
         };
         debounceSave(mod, s.database_key, out, 500);
     }
@@ -2222,6 +2229,76 @@ function buildWebverifyConfigEditor(mod, s, value, channels, roles) {
     countrySection.appendChild(addRow(t('web.js.webverify.country_ch'), countryChannelSelect));
 
     container.appendChild(countrySection);
+
+    const relationSection = document.createElement('div');
+    relationSection.className = 'webverify-country-section';
+    const relationTitle = document.createElement('div');
+    relationTitle.className = 'webverify-section-title';
+    relationTitle.textContent = t('web.js.webverify.relation');
+    relationSection.appendChild(relationTitle);
+
+    const relationEnabledWrap = document.createElement('div');
+    relationEnabledWrap.className = 'toggle-wrapper';
+    const relationEnabledLabel = document.createElement('label');
+    relationEnabledLabel.className = 'toggle';
+    const relationEnabledCheck = document.createElement('input');
+    relationEnabledCheck.type = 'checkbox';
+    relationEnabledCheck.checked = !!config.relation_blacklist.enabled;
+    relationEnabledCheck.addEventListener('change', () => {
+        config.relation_blacklist.enabled = relationEnabledCheck.checked;
+        save();
+    });
+    relationEnabledLabel.appendChild(relationEnabledCheck);
+    const relationToggleSpan = document.createElement('span');
+    relationToggleSpan.className = 'toggle-slider';
+    relationEnabledLabel.appendChild(relationToggleSpan);
+    relationEnabledWrap.appendChild(relationEnabledLabel);
+    relationSection.appendChild(addRow(t('web.js.webverify.relation_enable'), relationEnabledWrap));
+
+    const relationIdsInput = document.createElement('textarea');
+    relationIdsInput.className = 'form-textarea';
+    relationIdsInput.rows = 3;
+    relationIdsInput.placeholder = t('web.js.webverify.relation_ids_ph');
+    relationIdsInput.value = Array.isArray(config.relation_blacklist.relation_ids)
+        ? config.relation_blacklist.relation_ids.join('\n')
+        : '';
+    relationIdsInput.addEventListener('input', () => {
+        config.relation_blacklist.relation_ids = relationIdsInput.value
+            .split(/[,，\s]+/)
+            .map(value => value.trim())
+            .filter(Boolean);
+        save();
+    });
+    relationSection.appendChild(addRow(t('web.js.webverify.relation_ids'), relationIdsInput));
+
+    const relationActionInput = document.createElement('input');
+    relationActionInput.type = 'text';
+    relationActionInput.className = 'form-input';
+    relationActionInput.placeholder = t('web.js.webverify.relation_action_ph');
+    relationActionInput.value = (config.relation_blacklist.action || '').toString();
+    relationActionInput.addEventListener('input', () => {
+        config.relation_blacklist.action = relationActionInput.value;
+        save();
+    });
+    relationSection.appendChild(addRow(t('web.js.webverify.relation_action'), relationActionInput));
+
+    const relationChannelSelect = document.createElement('select');
+    relationChannelSelect.className = 'form-select';
+    relationChannelSelect.innerHTML = '<option value="">' + t('web.js.common.unset') + '</option>';
+    for (const ch of textChannels) {
+        const opt = document.createElement('option');
+        opt.value = ch.id;
+        opt.textContent = (ch.category ? '[' + ch.category + '] ' : '') + ch.name;
+        if (String(config.relation_blacklist.channel_id) === String(ch.id)) opt.selected = true;
+        relationChannelSelect.appendChild(opt);
+    }
+    relationChannelSelect.addEventListener('change', () => {
+        config.relation_blacklist.channel_id = relationChannelSelect.value || null;
+        save();
+    });
+    relationSection.appendChild(addRow(t('web.js.webverify.relation_ch'), relationChannelSelect));
+
+    container.appendChild(relationSection);
 
     return container;
 }

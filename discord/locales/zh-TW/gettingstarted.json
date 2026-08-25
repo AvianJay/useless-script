@@ -386,10 +386,12 @@
             "autorole_state": "自動分配：{state}",
             "country_alert_state": "地區警示：{state}",
             "edit_countries": "編輯地區代碼",
+            "edit_relation_blacklist": "編輯關聯 ID 與處置",
             "edit_min_age": "設定最小帳號年齡",
             "edit_notification": "編輯通知文字",
             "feature_state": "功能：{state}",
             "go_verify": "前往驗證",
+            "relation_blacklist_state": "關聯黑名單：{state}",
             "save_and_send": "儲存並發送驗證訊息",
             "save_only": "只儲存"
         },
@@ -406,14 +408,22 @@
             "channel_not_found": "找不到驗證通知頻道，設定已儲存但未發送訊息。",
             "country_alert_needs_channel": "啟用地區警示時必須選擇警示頻道。",
             "country_alert_needs_codes": "啟用地區警示時必須至少設定一個地區代碼。",
+            "alert_channel_unusable": "警報頻道不存在，或機器人缺少檢視頻道、發送訊息或嵌入連結權限。",
             "create_role_failed": "建立身分組失敗：{error}",
             "create_role_permission": "自動建立未驗證身分組需要管理身分組與管理頻道權限。",
             "invalid_country_code": "國家／地區代碼必須是兩個英文字母：{codes}",
+            "invalid_relation_action": "關聯黑名單處置指令無效：{error}",
+            "invalid_relation_id": "關聯 ID 格式無效：{relation_id}",
             "invalid_days": "請輸入有效的整數天數。",
             "min_age_negative": "最小帳號年齡不可小於 0。",
             "no_application_id": "目前無法取得應用程式 ID。",
             "no_channel_permission": "我沒有權限在驗證通知頻道發送訊息。",
             "notify_needs_channel": "使用頻道通知時必須選擇通知頻道。",
+            "relation_action_unavailable": "Moderate 模組目前無法驗證關聯黑名單處置指令。",
+            "relation_blacklist_needs_action": "啟用關聯黑名單時必須設定有效處置指令。",
+            "relation_blacklist_needs_channel": "啟用關聯黑名單時必須選擇獨立的警報頻道。",
+            "relation_blacklist_needs_ids": "啟用關聯黑名單時必須至少設定一個關聯 ID。",
+            "relation_id_not_found": "資料庫中找不到關聯 ID：{relation_id}",
             "select_role_before_autorole": "啟用自動分配前，請先選擇未驗證身分組。",
             "send_failed": "發送驗證訊息失敗：{error}"
         },
@@ -435,6 +445,14 @@
             "notify_title_label": "通知標題",
             "notify_type": "通知方式",
             "role_name_label": "身分組名稱",
+            "relation_action": "處置指令",
+            "relation_action_label": "Moderate 處置指令",
+            "relation_action_placeholder": "例如：ban 0 0 關聯 ID 黑名單",
+            "relation_blacklist": "關聯 ID 黑名單",
+            "relation_channel": "處置報告頻道",
+            "relation_ids": "關聯 ID",
+            "relation_ids_label": "關聯 ID 清單",
+            "relation_ids_placeholder": "每行或以逗號分隔輸入 UUID",
             "title": "標題",
             "trigger": "條件",
             "unverified_role": "未驗證身分組"
@@ -443,7 +461,8 @@
             "countries_title": "地區代碼",
             "create_role_title": "建立未驗證身分組",
             "min_age_title": "最小帳號年齡",
-            "notify_title": "驗證通知內容"
+            "notify_title": "驗證通知內容",
+            "relation_blacklist_title": "關聯 ID 黑名單"
         },
         "mode": {
             "blacklist": "黑名單",
@@ -463,6 +482,7 @@
         "select_country_mode_ph": "選擇地區清單模式",
         "select_notify_channel_ph": "選擇驗證通知頻道",
         "select_notify_type_ph": "選擇通知方式",
+        "select_relation_channel_ph": "選擇關聯黑名單警報頻道",
         "select_role_ph": "選擇未驗證身分組",
         "setup_title": "網頁驗證設定（步驟 {step}/{total}）",
         "step1": {
@@ -481,6 +501,9 @@
             "desc": "設定驗證來源地區的黑名單或白名單警示。"
         },
         "step6": {
+            "desc": "設定伺服器專屬的關聯 ID 黑名單、處置指令與獨立警報頻道。"
+        },
+        "step7": {
             "desc": "確認後會一次儲存整份網頁驗證設定。"
         },
         "trigger": {

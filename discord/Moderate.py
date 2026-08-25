@@ -1012,23 +1012,45 @@ class ActionConfirmationView(i18n.I18nView):
         )
 
 
-async def do_action_str(action: str, guild: Optional[discord.Guild] = None, user: Optional[discord.Member] = None, message: Optional[discord.Message] = None, moderator: Optional[discord.Member] = None):
+async def do_action_str(
+    action: str,
+    guild: Optional[discord.Guild] = None,
+    user: Optional[discord.Member] = None,
+    message: Optional[discord.Message] = None,
+    moderator: Optional[discord.Member] = None,
+    *,
+    return_status: bool = False,
+):
+    """Execute an action string.
+
+    ``return_status`` is intentionally opt-in so existing callers keep receiving
+    the historical ``list[str]`` result.  Join-time automation uses the tuple
+    form, whose second item is ``success``, ``skipped``, or ``failed``.
+    """
+    def finish(lines: list[str], status: str):
+        return (lines, status) if return_status else lines
+
+    def merge_status(current: str, incoming: str) -> str:
+        priority = {"success": 0, "skipped": 1, "failed": 2}
+        return incoming if priority[incoming] > priority[current] else current
+
     # if user is none just check if action is valid
     custom_actions = _load_custom_action_strings(guild.id if guild else None)
     try:
         actions = _expand_custom_action_aliases(action, custom_actions)
     except ValueError as e:
-        return [t("moderate.log.error", error=e)]
+        return finish([t("moderate.log.error", error=e)], "failed")
     if len(actions) > 5:
-        return [t("moderate.log.error", error=t("moderate.err.too_many_actions"))]
+        return finish([t("moderate.log.error", error=t("moderate.err.too_many_actions"))], "failed")
     validation = analyze_action_string(
         ", ".join(actions),
         infer_shorthand=False,
         custom_actions_override={},
     )
     if not validation["valid"]:
-        return [t("moderate.log.error", error=validation['error'])]
+        return finish([t("moderate.log.error", error=validation['error'])], "failed")
     logs = []
+    execution_status = "success"
     last_reason = t("moderate.default_reason")
     actions_json = []
     for a in actions:
@@ -1055,17 +1077,22 @@ async def do_action_str(action: str, guild: Optional[discord.Guild] = None, user
             reason = " ".join(cmd)
             last_reason = reason
             success = True
+            skipped = False
             if user:
                 ok, msg = _bot_action_check(guild, user, "ban_members")
                 if not ok:
                     logs.append(t("moderate.log.ban_skipped", reason=msg))
                     success = False
+                    skipped = True
+                    execution_status = merge_status(execution_status, "skipped")
                 else:
                     success = await ban_user(guild, user, reason=reason, duration=duration_seconds, delete_message_seconds=delete_messages)
             if success:
                 logs.append(t("moderate.log.ban_done", reason=reason, duration=duration_seconds, delete_seconds=delete_messages))
             elif user:
                 logs.append(t("moderate.log.ban_failed"))
+                if not skipped:
+                    execution_status = merge_status(execution_status, "failed")
                 break  # failed to ban, stop further actions to prevent confusion
             actions_json.append({"action": "ban", "duration": duration_seconds, "reason": reason})
         elif cmd[0] == "kick":
@@ -1078,6 +1105,7 @@ async def do_action_str(action: str, guild: Optional[discord.Guild] = None, user
                 ok, msg = _bot_action_check(guild, user, "kick_members")
                 if not ok:
                     logs.append(t("moderate.log.kick_skipped", reason=msg))
+                    execution_status = merge_status(execution_status, "skipped")
                 else:
                     await user.kick(reason=reason)
                     logs.append(t("moderate.log.kick_done", reason=reason))
@@ -1103,6 +1131,7 @@ async def do_action_str(action: str, guild: Optional[discord.Guild] = None, user
                 ok, msg = _bot_action_check(guild, user, "moderate_members")
                 if not ok:
                     logs.append(t("moderate.log.mute_skipped", reason=msg))
+                    execution_status = merge_status(execution_status, "skipped")
                 else:
                     await user.timeout(datetime.now(timezone.utc) + timedelta(seconds=duration_seconds), reason=reason)
                     logs.append(t("moderate.log.mute_done", reason=reason, duration=duration_seconds))
@@ -1195,9 +1224,21 @@ async def do_action_str(action: str, guild: Optional[discord.Guild] = None, user
             # send_mod_message
             if len(cmd) == 1:
                 cmd.append(t("moderate.default_smm_reason"))
-            logs.append(t("moderate.log.sent_mod_message"))
             if guild and user and moderator:
-                await moderation_message_settings(None, user, moderator, actions_json, direct=True, guild=guild)
+                sent = await moderation_message_settings(None, user, moderator, actions_json, direct=True, guild=guild)
+                if sent or not return_status:
+                    logs.append(t("moderate.log.sent_mod_message"))
+                else:
+                    logs.append(t("moderate.log.send_mod_message_failed"))
+                if not sent:
+                    execution_status = merge_status(execution_status, "failed")
+            else:
+                logs.append(
+                    t("moderate.log.send_mod_message_failed")
+                    if return_status
+                    else t("moderate.log.sent_mod_message")
+                )
+                execution_status = merge_status(execution_status, "failed")
         elif cmd[0] == "force_verify":
             # force_verify <duration>
             if "ServerWebVerify" in modules:
@@ -1205,6 +1246,8 @@ async def do_action_str(action: str, guild: Optional[discord.Guild] = None, user
                 if user:
                     success, message = await force_verify_user(guild, user)
                     logs.append(message)
+                    if not success:
+                        execution_status = merge_status(execution_status, "skipped")
                 if len(cmd) > 1:
                     duration_seconds = timestr_to_seconds(cmd[1]) if cmd[1] != "0" else 0
                     until_time = datetime.now(timezone.utc) + timedelta(seconds=duration_seconds)
@@ -1212,7 +1255,8 @@ async def do_action_str(action: str, guild: Optional[discord.Guild] = None, user
                     set_server_config(guild.id, "force_verify_until", until_time.timestamp())
             else:
                 logs.append(t("moderate.log.force_verify_unavailable"))
-    return logs
+                execution_status = merge_status(execution_status, "failed")
+    return finish(logs, execution_status)
 
 
 def _entity_name(entity, fallback: str) -> str:
@@ -1442,12 +1486,12 @@ async def moderation_message_settings(interaction: Optional[discord.Interaction]
         if channel_id is None:
             if feedback_interaction:
                 await send_feedback(feedback_interaction, t("moderate.err.no_announcement_channel"))
-            return
+            return False
         channel = resolved_guild.get_channel(channel_id)
         if channel is None:
             if feedback_interaction:
                 await send_feedback(feedback_interaction, t("moderate.err.announcement_channel_not_found"))
-            return
+            return False
         try:
             _, case_id = await send_moderation_announcement(
                 resolved_guild,
@@ -1460,14 +1504,17 @@ async def moderation_message_settings(interaction: Optional[discord.Interaction]
             if feedback_interaction:
                 await send_feedback(feedback_interaction, t("moderate.msg.announcement_sent", case_id=case_id))
             log(f"Sent announcement to #{channel.name}.", module_name="Moderate", guild=resolved_guild)
+            return True
         except discord.Forbidden:
             if feedback_interaction:
                 await send_feedback(feedback_interaction, t("moderate.err.announcement_forbidden"))
             log("Cannot send message in the announcement channel; bot is missing permissions.", level=logging.ERROR, module_name="Moderate", guild=resolved_guild)
+            return False
         except Exception as e:
             if feedback_interaction:
                 await send_feedback(feedback_interaction, t("moderate.err.announcement_send_error", error=e))
             log(f"Error sending announcement: {e}", level=logging.ERROR, module_name="Moderate", guild=resolved_guild)
+            return False
 
     class MessageButtons(i18n.I18nView):
         def __init__(self, owner_id: int):
@@ -1542,7 +1589,7 @@ async def moderation_message_settings(interaction: Optional[discord.Interaction]
                 pass
 
     if direct:
-        await send_message(interaction)
+        return await send_message(interaction)
     elif interaction:
         try:
             content, announcement_embed = await render_preview()

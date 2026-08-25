@@ -215,6 +215,7 @@
         "kick_skipped": "踢出跳過：{reason}",
         "mute_done": "禁言用戶，原因: {reason}，持續秒數: {duration}秒",
         "mute_skipped": "禁言跳過：{reason}",
+        "send_mod_message_failed": "管理公告未成功送出",
         "sent_mod_message": "傳送管理訊息",
         "sent_warning": "傳送警告訊息: {message}",
         "unban_done": "解封用戶，原因: {reason}",

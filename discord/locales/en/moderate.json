@@ -215,6 +215,7 @@
         "kick_skipped": "Kick skipped: {reason}",
         "mute_done": "Muted the user, reason: {reason}, duration: {duration}s",
         "mute_skipped": "Mute skipped: {reason}",
+        "send_mod_message_failed": "The moderation announcement was not sent",
         "sent_mod_message": "Sent the moderation announcement",
         "sent_warning": "Sent a warning message: {message}",
         "unban_done": "Unbanned the user, reason: {reason}",

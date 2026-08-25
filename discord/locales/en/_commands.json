@@ -2517,6 +2517,56 @@
                 "desc": "Quickly set up web verification with an interactive wizard",
                 "name": "quick_setup"
             },
+            "relation_blacklist": {
+                "add": {
+                    "desc": "Add an existing relation ID to this server's blacklist",
+                    "name": "add",
+                    "param": {
+                        "relation_id": "An existing WebVerify relation ID"
+                    },
+                    "param_name": {
+                        "relation_id": "relation_id"
+                    }
+                },
+                "configure": {
+                    "desc": "Configure and enable relation-blacklist actions",
+                    "name": "configure",
+                    "param": {
+                        "action": "A Moderate action that can run without a message",
+                        "channel": "The text channel that receives action reports"
+                    },
+                    "param_name": {
+                        "action": "action",
+                        "channel": "channel"
+                    }
+                },
+                "disable": {
+                    "desc": "Disable automatic relation-blacklist actions",
+                    "name": "disable"
+                },
+                "list": {
+                    "desc": "List relation-blacklist settings and relation IDs",
+                    "name": "list"
+                },
+                "remove": {
+                    "desc": "Remove a relation ID from this server's blacklist",
+                    "name": "remove",
+                    "param": {
+                        "relation_id": "The blacklisted relation ID to remove"
+                    },
+                    "param_name": {
+                        "relation_id": "relation_id"
+                    }
+                },
+                "root": {
+                    "desc": "Manage this server's relation ID blacklist and actions",
+                    "name": "relation-blacklist"
+                },
+                "scan": {
+                    "desc": "Preview and confirm a relation-blacklist scan",
+                    "name": "scan"
+                }
+            },
             "relation_action": {
                 "desc": "Act on a user and their related accounts",
                 "name": "relation_action",
