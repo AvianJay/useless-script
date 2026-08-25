@@ -1,0 +1,73 @@
+{
+    "scope": {
+        "global": "全域",
+        "unknown_guild": "未知伺服器",
+        "dm": "私人訊息"
+    },
+    "btn": {
+        "pick_up": "撿起物品"
+    },
+    "embed": {
+        "inventory_title": "{user} 的物品（{scope}）",
+        "all_items_title": "所有可用的物品",
+        "custom_items_title": "伺服器自定義物品"
+    },
+    "msg": {
+        "item_used": "已使用物品。",
+        "custom_item_desc": "自定義物品。使用時會傳送儲存的文字內容。",
+        "no_items": "你在 {scope} 沒有任何物品。",
+        "worth": "\n💰 價值: {worth}",
+        "dropped": "{user} 丟棄了 {item} x{amount}！",
+        "dropped_gone": "{user} 丟棄了 {item} x{amount}，但是物品馬上不見了。",
+        "drop_expired": "{user} 丟棄了 {item} x{amount}！\n物品消失了！",
+        "drop_all_picked": "{user} 丟棄了 {item} x{amount}！\n物品已經被撿光了！",
+        "picked_up": "你撿起了 {item}。",
+        "gave": "你給了 {user} {count} 個 {item}。",
+        "received": "你從 {sender} 那裡收到了 {count} 個 {item}！\n-# 伺服器: {scope}",
+        "removed": "你移除了 {user} 的 {count} 個 {item}。",
+        "no_items_exist": "目前沒有任何物品。",
+        "custom_tag": " [自定義]",
+        "user_no_items": "{user} 在 {scope} 目前沒有任何物品。",
+        "unknown_item": "未知物品",
+        "custom_added": "✅ 已新增自定義物品 **{name}**",
+        "custom_added_hint": "使用 `/itemmod give` 可發送給用戶。",
+        "listed_in_shop": "🏪 已上架伺服器商店，定價 **{price}** {currency}。",
+        "revenue_user": "💸 分潤用戶: {user} | 90%",
+        "custom_removed": "✅ 已移除自定義物品 **{name}**。",
+        "custom_updated": "✅ 已更新 **{name}**：{status}。",
+        "status_listed": "已上架商店，定價 **{price}** {currency}",
+        "status_unlisted": "未上架商店",
+        "no_custom_items": "本伺服器目前沒有自定義物品。",
+        "shop_price": "🏪 商店定價: **{price}** {currency}",
+        "shop_unlisted": "🏪 未上架商店",
+        "content_preview": "內容預覽: {preview}"
+    },
+    "err": {
+        "not_owned": "你沒有這個物品。",
+        "invalid_item": "無效的物品ID。",
+        "not_usable": "這個物品無法使用。",
+        "amount_positive": "數量必須大於 0。",
+        "dm_global_only": "❌ 在私訊中請使用全域範圍。",
+        "pickup_duration_range": "錯誤：撿起持續時間必須在 1 到 86400 秒之間。",
+        "already_picked": "你已經撿起過這個物品了。\n-# 原物主設定了僅能撿起一次。",
+        "all_picked": "物品已經被撿光了！",
+        "give_self": "你不能給自己物品。",
+        "give_bot": "你不能給機器人物品。",
+        "global_mode": "伺服器啟用了全域模式，無法使用此指令。",
+        "item_unavailable": "無法取得此物品。",
+        "remove_bot": "你不能移除機器人物品。",
+        "user_not_owned": "{user} 沒有這個物品。",
+        "bot_has_no_items": "機器人沒有物品。",
+        "name_empty": "物品名稱不能為空。",
+        "content_empty": "文字內容不能為空。",
+        "content_too_long": "文字內容不可超過 2000 字元。",
+        "template_syntax": "❌ 文字內容的 AutoReply 模板語法錯誤: {error}",
+        "name_too_long": "物品名稱不可超過 100 字元。",
+        "price_required": "上架商店時請設定大於 0 的定價。",
+        "revenue_bot": "分潤對象不能是機器人。",
+        "revenue_once_only": "只有一次性自訂物品才能設定分潤。",
+        "revenue_needs_price": "設定分潤的自訂物品必須先上架並有價格，分潤金額會是價格的 90%。",
+        "custom_not_found": "找不到此自定義物品。",
+        "cannot_reprice": "這個指令不能改價格；如果要重新定價，請刪除後重新建立。"
+    }
+}

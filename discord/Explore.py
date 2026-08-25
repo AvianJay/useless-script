@@ -1,4 +1,4 @@
-from globalenv import bot, start_bot, set_server_config, get_server_config, get_all_server_config_key, set_user_data, get_user_data, config, modules
+﻿from globalenv import bot, start_bot, set_server_config, get_server_config, get_all_server_config_key, set_user_data, get_user_data, config, modules
 import json
 import discord
 from discord.ext import commands
@@ -23,6 +23,8 @@ import re
 import math
 from collections import deque
 from casino_service import CasinoError, default_casino_service, init_casino_tables
+import i18n
+from i18n import t
 
 import socketio as socketio_asgi
 
@@ -115,7 +117,10 @@ except Exception:
     _economy_mod = None
     _economy_available = False
 
-activity_entry = ActivityEntry(name=app_commands.locale_str("explore space"), description="開啟探索空間")
+activity_entry = ActivityEntry(
+    name=app_commands.locale_str("explore space", i18n_key="cmd.explore.ctx.activity_entry.name"),
+    description=app_commands.locale_str("Launch the Explore space", i18n_key="cmd.explore.ctx.activity_entry.desc"),
+)
 
 EXPLORE_SAVE_DATA_KEY = "explore_save_data"
 EXPLORE_SAVE_ALLOWED_SWITCH_IDS = (
@@ -406,17 +411,17 @@ async def _validate_explore_invite_link(
 ) -> tuple[str | None, str | None]:
     normalized = _normalize_discord_invite_url(invite_link)
     if not normalized:
-        return None, "邀請連結格式無效，請提供 Discord 邀請連結。"
+        return None, t("explore.err.invalid_invite_format")
     try:
         invite = await bot.fetch_invite(normalized)
     except discord.NotFound:
-        return None, "找不到這個邀請連結，請確認它仍然有效。"
+        return None, t("explore.err.invite_not_found")
     except discord.HTTPException:
-        return None, "目前無法驗證這個邀請連結，請稍後再試。"
+        return None, t("explore.err.invite_verify_failed")
 
     invite_guild = getattr(invite, "guild", None)
     if invite_guild is None or invite_guild.id != guild.id:
-        return None, "這個邀請連結不屬於目前的伺服器。"
+        return None, t("explore.err.invite_wrong_guild")
 
     resolved_url = getattr(invite, "url", None) or normalized
     return resolved_url, None
@@ -438,7 +443,7 @@ async def _resolve_explore_require_join_invite_link(
     created_link = await _create_explore_invite_link(guild)
     if created_link:
         return created_link, None, True
-    return None, "我沒有權限自動建立永久邀請連結，請先提供 `invite_link` 或給我建立邀請的權限。", False
+    return None, t("explore.err.cannot_create_invite"), False
 
 
 def _is_explore_server_member(guild_id: int | str, guild_ids: set[str]) -> bool:
@@ -593,43 +598,48 @@ DEFAULT_SKIN_ID = "Actor1:0"
 
 SKIN_CATALOG: list[dict] = [
     # 免費基本款
-    {"id": "Actor1:0", "name": "勇者", "price": 0},
-    {"id": "Actor1:1", "name": "戰士", "price": 0},
-    {"id": "Actor1:2", "name": "武鬥家", "price": 0},
-    {"id": "Actor1:3", "name": "盜賊", "price": 0},
-    {"id": "Actor1:4", "name": "女勇者", "price": 0},
-    {"id": "Actor1:5", "name": "女戰士", "price": 0},
-    {"id": "Actor1:6", "name": "女武鬥家", "price": 0},
-    {"id": "Actor1:7", "name": "女盜賊", "price": 0},
-    {"id": "Actor2:0", "name": "僧侶", "price": 0},
-    {"id": "Actor2:1", "name": "魔法師", "price": 0},
-    {"id": "Actor2:2", "name": "賢者", "price": 0},
-    {"id": "Actor2:3", "name": "商人", "price": 0},
+    {"id": "Actor1:0", "name": "explore.skin.hero", "price": 0},
+    {"id": "Actor1:1", "name": "explore.skin.warrior", "price": 0},
+    {"id": "Actor1:2", "name": "explore.skin.martial_artist", "price": 0},
+    {"id": "Actor1:3", "name": "explore.skin.thief", "price": 0},
+    {"id": "Actor1:4", "name": "explore.skin.heroine", "price": 0},
+    {"id": "Actor1:5", "name": "explore.skin.female_warrior", "price": 0},
+    {"id": "Actor1:6", "name": "explore.skin.female_martial_artist", "price": 0},
+    {"id": "Actor1:7", "name": "explore.skin.female_thief", "price": 0},
+    {"id": "Actor2:0", "name": "explore.skin.monk", "price": 0},
+    {"id": "Actor2:1", "name": "explore.skin.mage", "price": 0},
+    {"id": "Actor2:2", "name": "explore.skin.sage", "price": 0},
+    {"id": "Actor2:3", "name": "explore.skin.merchant", "price": 0},
     # 村民系列(便宜)
-    {"id": "People1:0", "name": "村民大叔", "price": 50},
-    {"id": "People1:1", "name": "村民大嬸", "price": 50},
-    {"id": "People1:6", "name": "老爺爺", "price": 50},
-    {"id": "People1:7", "name": "老奶奶", "price": 50},
-    {"id": "People2:2", "name": "貴族", "price": 120},
-    {"id": "People2:3", "name": "貴婦", "price": 120},
-    {"id": "People4:4", "name": "國王", "price": 300},
-    {"id": "People4:5", "name": "皇后", "price": 300},
+    {"id": "People1:0", "name": "explore.skin.villager_man", "price": 50},
+    {"id": "People1:1", "name": "explore.skin.villager_woman", "price": 50},
+    {"id": "People1:6", "name": "explore.skin.old_man", "price": 50},
+    {"id": "People1:7", "name": "explore.skin.old_woman", "price": 50},
+    {"id": "People2:2", "name": "explore.skin.noble", "price": 120},
+    {"id": "People2:3", "name": "explore.skin.noblewoman", "price": 120},
+    {"id": "People4:4", "name": "explore.skin.king", "price": 300},
+    {"id": "People4:5", "name": "explore.skin.queen", "price": 300},
     # 科幻系列
-    {"id": "SF_Actor1:0", "name": "太空人A", "price": 200},
-    {"id": "SF_Actor1:1", "name": "太空人B", "price": 200},
-    {"id": "SF_Actor2:0", "name": "機器人", "price": 250},
-    {"id": "SF_Actor3:0", "name": "異星人", "price": 250},
-    {"id": "SF_People1:0", "name": "太空市民", "price": 150},
+    {"id": "SF_Actor1:0", "name": "explore.skin.astronaut_a", "price": 200},
+    {"id": "SF_Actor1:1", "name": "explore.skin.astronaut_b", "price": 200},
+    {"id": "SF_Actor2:0", "name": "explore.skin.robot", "price": 250},
+    {"id": "SF_Actor3:0", "name": "explore.skin.alien", "price": 250},
+    {"id": "SF_People1:0", "name": "explore.skin.space_citizen", "price": 150},
     # 怪物/特殊系列(貴)
-    {"id": "Evil:0", "name": "魔王手下", "price": 500},
-    {"id": "Evil:4", "name": "死神", "price": 800},
-    {"id": "Monster:0", "name": "史萊姆", "price": 400},
-    {"id": "Monster:2", "name": "蝙蝠", "price": 400},
-    {"id": "Nature:0", "name": "精靈", "price": 600},
-    {"id": "Meme:0", "name": "迷因人", "price": 1000},
+    {"id": "Evil:0", "name": "explore.skin.demon_minion", "price": 500},
+    {"id": "Evil:4", "name": "explore.skin.reaper", "price": 800},
+    {"id": "Monster:0", "name": "explore.skin.slime", "price": 400},
+    {"id": "Monster:2", "name": "explore.skin.bat", "price": 400},
+    {"id": "Nature:0", "name": "explore.skin.fairy", "price": 600},
+    {"id": "Meme:0", "name": "explore.skin.meme_guy", "price": 1000},
 ]
 
 _SKIN_BY_ID: dict[str, dict] = {s["id"]: s for s in SKIN_CATALOG}
+
+
+def _skin_name(skin: dict, *, locale: str | None = None) -> str:
+    return t(skin["name"], locale=locale)
+
 
 # 舊版皮膚 id(純數字)→ 新格式的對照
 _LEGACY_SKIN_MAP = {"1": DEFAULT_SKIN_ID}
@@ -751,6 +761,7 @@ CHAT_BLOCKLIST_CONFIG_KEY = "explore_chat_blocklist"
 CHAT_CHANNEL_CONFIG_KEY = "explore_chat_channel"
 
 # 內建禁字詞庫(中英俄羅斯基本款,管理員可用指令補充)
+# i18n: skip-start (word filter list, matched against user input regardless of locale)
 BUILTIN_BANNED_WORDS = [
     # 英文
     "fuck", "shit", "bitch", "asshole", "cunt", "faggot", "nigger", "nigga",
@@ -761,6 +772,7 @@ BUILTIN_BANNED_WORDS = [
     "智障", "腦殘", "脑残", "垃圾人", "去死", "婊子", "賤人", "贱人", "傻逼",
     "沙比", "煞筆", "傻屄", "尼瑪", "你妈死了", "妳媽死了",
 ]
+# i18n: skip-end
 
 # guild_id(str) -> deque of chat message dicts
 _chat_history: dict[str, deque] = {}
@@ -859,34 +871,42 @@ EXPLORE_QUESTS_KEY = "explore_quests"
 # 一次性任務目錄。reward: 全域幣 / xp。requires: 前置任務 id 列表。
 QUEST_CATALOG: dict[str, dict] = {
     "vill_rat": {
-        "name": "村長家的哲學鼠患",
-        "description": "幫村長趕走他家裡那隻會背莎士比亞的老鼠。",
+        "name": "explore.quest.vill_rat.name",
+        "description": "explore.quest.vill_rat.desc",
         "reward_coins": 30,
         "reward_xp": 50,
         "requires": [],
     },
     "vill_delivery": {
-        "name": "極速快遞(步行)",
-        "description": "把一封「超急件」從村口走路送到隔壁,距離大概十步。",
+        "name": "explore.quest.vill_delivery.name",
+        "description": "explore.quest.vill_delivery.desc",
         "reward_coins": 30,
         "reward_xp": 50,
         "requires": [],
     },
     "vill_cabbage": {
-        "name": "高麗菜失蹤事件",
-        "description": "調查菜園裡高麗菜連環失蹤案。兇手可能就是委託人。",
+        "name": "explore.quest.vill_cabbage.name",
+        "description": "explore.quest.vill_cabbage.desc",
         "reward_coins": 30,
         "reward_xp": 50,
         "requires": [],
     },
     "vill_boss": {
-        "name": "迷因大魔王",
-        "description": "村莊三大蠢事解決後,迷因大魔王被吵醒了。把祂打回去睡覺。",
+        "name": "explore.quest.vill_boss.name",
+        "description": "explore.quest.vill_boss.desc",
         "reward_coins": 200,
         "reward_xp": 300,
         "requires": ["vill_rat", "vill_delivery", "vill_cabbage"],
     },
 }
+
+
+def _quest_name(quest: dict, *, locale: str | None = None) -> str:
+    return t(quest["name"], locale=locale)
+
+
+def _quest_description(quest: dict, *, locale: str | None = None) -> str:
+    return t(quest["description"], locale=locale)
 
 
 def get_user_completed_quests(user_id: int) -> set[str]:
@@ -910,13 +930,13 @@ def complete_user_quest(user_id: int, quest_id: str) -> tuple[bool, str | dict]:
     """
     quest = QUEST_CATALOG.get(str(quest_id))
     if not quest:
-        return False, "未知的任務"
+        return False, t("explore.err.unknown_quest")
 
     completed = get_user_completed_quests(user_id)
     if quest_id in completed:
-        return False, "這個任務你已經完成過了"
+        return False, t("explore.err.quest_already_completed")
     if not _quest_prerequisites_met(quest_id, completed):
-        return False, "前置任務尚未完成"
+        return False, t("explore.err.quest_prerequisites_not_met")
 
     completed.add(str(quest_id))
     set_user_data(0, user_id, EXPLORE_QUESTS_KEY, sorted(completed))
@@ -931,8 +951,8 @@ def complete_user_quest(user_id: int, quest_id: str) -> tuple[bool, str | dict]:
             _economy_mod.set_global_balance(user_id, balance + reward_coins)
             _economy_mod.log_transaction(
                 _economy_mod.GLOBAL_GUILD_ID, user_id, 'explore_quest',
-                reward_coins, getattr(_economy_mod, 'GLOBAL_CURRENCY_NAME', '全域幣'),
-                f"完成 Explore 任務 {quest['name']} ({quest_id})",
+                reward_coins, getattr(_economy_mod, 'GLOBAL_CURRENCY_NAME', t('explore.value.global_currency_fallback')),
+                f"完成 Explore 任務 {_quest_name(quest, locale='zh-TW')} ({quest_id})",  # i18n: skip (stored tx data)
             )
             coins_awarded = reward_coins
         except Exception as e:
@@ -942,7 +962,7 @@ def complete_user_quest(user_id: int, quest_id: str) -> tuple[bool, str | dict]:
 
     return True, {
         "quest_id": str(quest_id),
-        "name": quest["name"],
+        "name": _quest_name(quest),
         "coins": coins_awarded,
         "xp_gained": reward_xp,
         "xp": xp,
@@ -958,8 +978,8 @@ def build_quest_state_payload(user_id: int) -> dict:
     for qid, quest in QUEST_CATALOG.items():
         quests.append({
             "id": qid,
-            "name": quest["name"],
-            "description": quest["description"],
+            "name": _quest_name(quest),
+            "description": _quest_description(quest),
             "reward_coins": int(quest.get("reward_coins") or 0),
             "reward_xp": int(quest.get("reward_xp") or 0),
             "requires": list(quest.get("requires", [])),
@@ -1125,7 +1145,7 @@ def get_available_skins(user_id: int | None = None) -> list[dict]:
     for skin in SKIN_CATALOG:
         entry = {
             "id": skin["id"],
-            "name": skin["name"],
+            "name": _skin_name(skin),
             "price": int(skin.get("price") or 0),
             "icon_url": None,
         }
@@ -1440,7 +1460,7 @@ def _casino_response(callable_):
         return jsonify({'error': exc.message, **exc.payload}), exc.status_code
     except Exception:
         logging.getLogger("runtime").exception("Explore casino request failed")
-        return jsonify({'error': '賭場服務暫時無法使用。'}), 500
+        return jsonify({'error': t("explore.err.casino_unavailable")}), 500
 
 
 @app.route('/api/explore/casino/state', methods=['GET'])
@@ -1496,7 +1516,7 @@ def explore_get_skins():
         'skins': get_available_skins(user_id),
         'current_skin_id': get_user_skin(user_id),
         'balance': balance,
-        'currency_name': getattr(_economy_mod, 'GLOBAL_CURRENCY_NAME', '全域幣') if _economy_available else None,
+        'currency_name': getattr(_economy_mod, 'GLOBAL_CURRENCY_NAME', t('explore.value.global_currency_fallback')) if _economy_available else None,
     })
 
 
@@ -1513,11 +1533,11 @@ def explore_buy_skin():
     user_id = int(g.explore_user['user_id'])
 
     if user_owns_skin(user_id, skin_id):
-        return jsonify({'error': '你已經擁有這個皮膚了'}), 400
+        return jsonify({'error': t('explore.err.skin_already_owned')}), 400
     if price <= 0:
-        return jsonify({'error': '這個皮膚是免費的,不用買'}), 400
+        return jsonify({'error': t('explore.err.skin_is_free')}), 400
     if not _economy_available:
-        return jsonify({'error': '經濟系統未啟用,無法購買'}), 503
+        return jsonify({'error': t('explore.err.economy_disabled')}), 503
 
     success, balance_before, balance_after = _economy_mod.mutate_balance_atomic(
         _economy_mod.GLOBAL_GUILD_ID,
@@ -1525,12 +1545,12 @@ def explore_buy_skin():
         -price,
     )
     if not success:
-        return jsonify({'error': f'全域幣不足(需要 {price},你有 {balance_before:.0f})', 'balance': balance_before}), 400
+        return jsonify({'error': t('explore.err.insufficient_currency', price=price, balance=f'{balance_before:.0f}'), 'balance': balance_before}), 400
     try:
         _economy_mod.log_transaction(
             _economy_mod.GLOBAL_GUILD_ID, user_id, 'explore_skin',
-            -price, getattr(_economy_mod, 'GLOBAL_CURRENCY_NAME', '全域幣'),
-            f"購買 Explore 皮膚 {skin['name']} ({skin_id})",
+            -price, getattr(_economy_mod, 'GLOBAL_CURRENCY_NAME', t('explore.value.global_currency_fallback')),
+            f"購買 Explore 皮膚 {_skin_name(skin, locale='zh-TW')} ({skin_id})",  # i18n: skip (stored tx data)
         )
     except Exception:
         pass
@@ -1598,7 +1618,7 @@ def explore_set_my_skin():
 
     user_id = int(g.explore_user['user_id'])
     if not user_owns_skin(user_id, skin_id):
-        return jsonify({'error': '你還沒擁有這個皮膚'}), 403
+        return jsonify({'error': t('explore.err.skin_not_owned')}), 403
 
     set_user_skin(user_id, skin_id)
     return jsonify({'success': True, 'skin_id': skin_id})
@@ -2182,7 +2202,8 @@ async def on_skin_change(sid, data=None):
 
     uid = int(sess["user_id"])
     if not user_owns_skin(uid, skin_id):
-        await sio.emit("error", {"message": "你還沒擁有這個皮膚"}, to=sid)
+        with i18n.use_locale(i18n.resolve_locale(user_id=uid)):
+            await sio.emit("error", {"message": t("explore.err.skin_not_owned")}, to=sid)
         return
     set_user_skin(uid, str(skin_id))
     guild_id = str(payload.get("guild_id") or sess.get("guild_id") or "world")
@@ -2268,7 +2289,8 @@ async def on_chat_send(sid, data=None):
     now = time.time()
     with _chat_lock:
         if now - _chat_last_sent.get(uid, 0.0) < CHAT_RATE_LIMIT_SECONDS:
-            await sio.emit("chat_error", {"message": "你講話太快了,慢一點"}, to=sid)
+            with i18n.use_locale(i18n.resolve_locale(user_id=int(uid))):
+                await sio.emit("chat_error", {"message": t("explore.err.chat_rate_limited")}, to=sid)
             return
         _chat_last_sent[uid] = now
 
@@ -2430,11 +2452,11 @@ async def on_music_action(sid, data=None):
 
 # --- Discord Commands ---
 
-class PlayView(discord.ui.View):
+class PlayView(i18n.I18nView):
     def __init__(self):
         super().__init__(timeout=None)
 
-    @discord.ui.button(label="玩", style=discord.ButtonStyle.primary, custom_id="explore_play_button")
+    @discord.ui.button(label=i18n.K("explore.btn.play"), style=discord.ButtonStyle.primary, custom_id="explore_play_button")
     async def play_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         await interaction.response.launch_activity()
 
@@ -2442,12 +2464,12 @@ bot.add_view(PlayView())
 
 @app_commands.allowed_installs(guilds=True, users=True)
 @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
-@bot.tree.command(name="explore", description="啟動探索空間")
+@bot.tree.command(name=app_commands.locale_str("explore", i18n_key="cmd.explore.explore.name"), description=app_commands.locale_str("Launch the Explore space", i18n_key="cmd.explore.explore.desc"))
 async def explore_command(interaction: discord.Interaction):
     await interaction.response.launch_activity()
     embed = discord.Embed(
-        title="探索空間",
-        description=f"{interaction.user.display_name} 正在遊玩",
+        title=t("explore.embed.title"),
+        description=t("explore.embed.playing_desc", user=interaction.user.display_name),
         color=discord.Color.blue()
     )
     embed.set_thumbnail(url=interaction.user.display_avatar.url)
@@ -2456,7 +2478,7 @@ async def explore_command(interaction: discord.Interaction):
 @app_commands.allowed_installs(guilds=True, users=False)
 @app_commands.allowed_contexts(guilds=True, dms=False, private_channels=False)
 @app_commands.default_permissions(manage_guild=True)
-class ExplorerCommands(commands.GroupCog, name="explore-settings"):
+class ExplorerCommands(commands.GroupCog, name=app_commands.locale_str("explore-settings", i18n_key="cmd.explore.explore_settings.root.name")):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
 
@@ -2481,27 +2503,28 @@ class ExplorerCommands(commands.GroupCog, name="explore-settings"):
         _append_chat_history(gid, chat_message)
         await sio.emit("chat_message", chat_message, room=gid)
 
-    @app_commands.command(name="setup", description="啟用或設定探索空間")
+    @app_commands.command(name=app_commands.locale_str("setup", i18n_key="cmd.explore.explore_settings.setup.name"), description=app_commands.locale_str("Enable or configure the Explore space", i18n_key="cmd.explore.explore_settings.setup.desc"))
     @app_commands.choices(enabled=[
-        app_commands.Choice(name="啟用", value=1),
-        app_commands.Choice(name="停用", value=0),
+        app_commands.Choice(name=app_commands.locale_str("Enable", i18n_key="cmd.explore.explore_settings.setup.choice.1"), value=1),
+        app_commands.Choice(name=app_commands.locale_str("Disable", i18n_key="cmd.explore.explore_settings.setup.choice.0"), value=0),
     ])
     async def setup(self, interaction: discord.Interaction, enabled: int):
         toggle_explore_server(interaction.guild.id, bool(enabled))
-        status = "啟用" if enabled else "停用"
-        await interaction.response.send_message(f"已{status}本伺服器的探索空間。")
+        status = t("common.state.enabled") if enabled else t("common.state.disabled")
+        await interaction.response.send_message(t("explore.msg.setup_toggled", status=status))
 
-    @app_commands.command(name="privacy", description="設定伺服器是否在探索大廳公開")
+    @app_commands.command(name=app_commands.locale_str("privacy", i18n_key="cmd.explore.explore_settings.privacy.name"), description=app_commands.locale_str("Set whether this server is listed in the Explore lobby", i18n_key="cmd.explore.explore_settings.privacy.desc"))
     @app_commands.choices(public=[
-        app_commands.Choice(name="公開", value=1),
-        app_commands.Choice(name="私人", value=0),
+        app_commands.Choice(name=app_commands.locale_str("Public", i18n_key="cmd.explore.explore_settings.privacy.choice.1"), value=1),
+        app_commands.Choice(name=app_commands.locale_str("Private", i18n_key="cmd.explore.explore_settings.privacy.choice.0"), value=0),
     ])
     async def privacy(self, interaction: discord.Interaction, public: int):
         set_explore_privacy(interaction.guild.id, bool(public))
-        status = "公開" if public else "私人"
-        await interaction.response.send_message(f"已將本伺服器設定為{status}（在探索大廳{'可見' if public else '不可見'}）。")
+        status = t("explore.value.public") if public else t("explore.value.private")
+        visibility = t("explore.value.visible") if public else t("explore.value.not_visible")
+        await interaction.response.send_message(t("explore.msg.privacy_set", status=status, visibility=visibility))
 
-    @app_commands.command(name="require-join", description="設定是否必須先加入伺服器才能進入 Explore")
+    @app_commands.command(name=app_commands.locale_str("require-join", i18n_key="cmd.explore.explore_settings.require_join.name"), description=app_commands.locale_str("Require joining the server before entering Explore", i18n_key="cmd.explore.explore_settings.require_join.desc"))
     async def require_join(
         self,
         interaction: discord.Interaction,
@@ -2509,7 +2532,7 @@ class ExplorerCommands(commands.GroupCog, name="explore-settings"):
         invite_link: str | None = None,
     ):
         if interaction.guild is None:
-            await interaction.response.send_message("這個指令只能在伺服器內使用。", ephemeral=True)
+            await interaction.response.send_message(t("explore.err.guild_only"), ephemeral=True)
             return
 
         guild = interaction.guild
@@ -2517,7 +2540,7 @@ class ExplorerCommands(commands.GroupCog, name="explore-settings"):
 
         if not enabled:
             _update_explore_server_config(guild.id, require_join=False)
-            await interaction.response.send_message("已關閉必須先加入伺服器才能進入 Explore 的限制。")
+            await interaction.response.send_message(t("explore.msg.require_join_disabled"))
             return
 
         resolved_link, error_message, created_link = await _resolve_explore_require_join_invite_link(
@@ -2526,7 +2549,7 @@ class ExplorerCommands(commands.GroupCog, name="explore-settings"):
             fallback_invite_link=current_config.get("invite_link"),
         )
         if not resolved_link:
-            await interaction.response.send_message(error_message or "無法設定加入限制。", ephemeral=True)
+            await interaction.response.send_message(error_message or t("explore.err.cannot_set_require_join"), ephemeral=True)
             return
 
         _update_explore_server_config(
@@ -2534,24 +2557,24 @@ class ExplorerCommands(commands.GroupCog, name="explore-settings"):
             require_join=True,
             invite_link=resolved_link,
         )
-        source_text = "已自動建立永久邀請連結" if created_link else "已使用提供的邀請連結"
+        source_text = t("explore.value.invite_auto_created") if created_link else t("explore.value.invite_provided")
         await interaction.response.send_message(
-            f"已啟用先加入伺服器才能進入 Explore。{source_text}：{resolved_link}"
+            t("explore.msg.require_join_enabled", source_text=source_text, link=resolved_link)
         )
 
-    @app_commands.command(name="chat-channel", description="設定 Explore 聊天室橋接的 Discord 文字頻道")
+    @app_commands.command(name=app_commands.locale_str("chat-channel", i18n_key="cmd.explore.explore_settings.chat_channel.name"), description=app_commands.locale_str("Set the Discord text channel bridged to the Explore chat", i18n_key="cmd.explore.explore_settings.chat_channel.desc"))
     async def chat_channel(
         self,
         interaction: discord.Interaction,
         channel: discord.TextChannel | None = None,
     ):
         if interaction.guild is None:
-            await interaction.response.send_message("這個指令只能在伺服器內使用。", ephemeral=True)
+            await interaction.response.send_message(t("explore.err.guild_only"), ephemeral=True)
             return
 
         if channel is None:
             set_server_config(interaction.guild.id, CHAT_CHANNEL_CONFIG_KEY, None)
-            await interaction.response.send_message("已關閉 Explore 聊天室與 Discord 頻道的橋接。")
+            await interaction.response.send_message(t("explore.msg.chat_bridge_disabled"))
             return
 
         bot_member = _get_explore_bot_member(interaction.guild)
@@ -2559,63 +2582,63 @@ class ExplorerCommands(commands.GroupCog, name="explore-settings"):
             perms = channel.permissions_for(bot_member)
             if not (perms.view_channel and perms.send_messages):
                 await interaction.response.send_message(
-                    f"我沒有在 {channel.mention} 檢視或發言的權限,請先調整頻道權限。",
+                    t("explore.err.no_channel_permission", channel=channel.mention),
                     ephemeral=True,
                 )
                 return
 
         set_server_config(interaction.guild.id, CHAT_CHANNEL_CONFIG_KEY, str(channel.id))
         await interaction.response.send_message(
-            f"已將 Explore 聊天室橋接到 {channel.mention}。遊戲內訊息會轉發到這裡,頻道訊息也會出現在遊戲內。"
+            t("explore.msg.chat_bridge_set", channel=channel.mention)
         )
 
-    banned_words = app_commands.Group(name="banned-words", description="管理 Explore 聊天室的自訂禁字")
+    banned_words = app_commands.Group(name=app_commands.locale_str("banned-words", i18n_key="cmd.explore.banned_words.root.name"), description=app_commands.locale_str("Manage custom banned words for the Explore chat", i18n_key="cmd.explore.banned_words.root.desc"))
 
-    @banned_words.command(name="add", description="新增一個自訂禁字")
+    @banned_words.command(name=app_commands.locale_str("add", i18n_key="cmd.explore.banned_words.add.name"), description=app_commands.locale_str("Add a custom banned word", i18n_key="cmd.explore.banned_words.add.desc"))
     async def banned_words_add(self, interaction: discord.Interaction, word: str):
         if interaction.guild is None:
-            await interaction.response.send_message("這個指令只能在伺服器內使用。", ephemeral=True)
+            await interaction.response.send_message(t("explore.err.guild_only"), ephemeral=True)
             return
         word = word.strip()
         if not word or len(word) > 50:
-            await interaction.response.send_message("禁字長度需為 1-50 字元。", ephemeral=True)
+            await interaction.response.send_message(t("explore.err.banned_word_length"), ephemeral=True)
             return
         words = _get_guild_banned_words(str(interaction.guild.id))
         if word.lower() in {w.lower() for w in words}:
-            await interaction.response.send_message(f"「{word}」已在禁字清單中。", ephemeral=True)
+            await interaction.response.send_message(t("explore.err.banned_word_exists", word=word), ephemeral=True)
             return
         if len(words) >= 100:
-            await interaction.response.send_message("自訂禁字已達上限(100 個)。", ephemeral=True)
+            await interaction.response.send_message(t("explore.err.banned_word_limit"), ephemeral=True)
             return
         words.append(word)
         set_server_config(interaction.guild.id, CHAT_BLOCKLIST_CONFIG_KEY, words)
-        await interaction.response.send_message(f"已新增禁字「{word}」。目前共 {len(words)} 個自訂禁字。", ephemeral=True)
+        await interaction.response.send_message(t("explore.msg.banned_word_added", word=word, count=len(words)), ephemeral=True)
 
-    @banned_words.command(name="remove", description="移除一個自訂禁字")
+    @banned_words.command(name=app_commands.locale_str("remove", i18n_key="cmd.explore.banned_words.remove.name"), description=app_commands.locale_str("Remove a custom banned word", i18n_key="cmd.explore.banned_words.remove.desc"))
     async def banned_words_remove(self, interaction: discord.Interaction, word: str):
         if interaction.guild is None:
-            await interaction.response.send_message("這個指令只能在伺服器內使用。", ephemeral=True)
+            await interaction.response.send_message(t("explore.err.guild_only"), ephemeral=True)
             return
         word = word.strip()
         words = _get_guild_banned_words(str(interaction.guild.id))
         remaining = [w for w in words if w.lower() != word.lower()]
         if len(remaining) == len(words):
-            await interaction.response.send_message(f"清單中找不到「{word}」。", ephemeral=True)
+            await interaction.response.send_message(t("explore.err.banned_word_not_found", word=word), ephemeral=True)
             return
         set_server_config(interaction.guild.id, CHAT_BLOCKLIST_CONFIG_KEY, remaining)
-        await interaction.response.send_message(f"已移除禁字「{word}」。目前共 {len(remaining)} 個自訂禁字。", ephemeral=True)
+        await interaction.response.send_message(t("explore.msg.banned_word_removed", word=word, count=len(remaining)), ephemeral=True)
 
-    @banned_words.command(name="list", description="列出所有自訂禁字")
+    @banned_words.command(name=app_commands.locale_str("list", i18n_key="cmd.explore.banned_words.list.name"), description=app_commands.locale_str("List all custom banned words", i18n_key="cmd.explore.banned_words.list.desc"))
     async def banned_words_list(self, interaction: discord.Interaction):
         if interaction.guild is None:
-            await interaction.response.send_message("這個指令只能在伺服器內使用。", ephemeral=True)
+            await interaction.response.send_message(t("explore.err.guild_only"), ephemeral=True)
             return
         words = _get_guild_banned_words(str(interaction.guild.id))
         if not words:
-            await interaction.response.send_message("目前沒有自訂禁字(內建詞庫仍然生效)。", ephemeral=True)
+            await interaction.response.send_message(t("explore.value.no_custom_banned_words"), ephemeral=True)
             return
-        joined = "、".join(f"`{w}`" for w in words[:100])
-        await interaction.response.send_message(f"自訂禁字({len(words)} 個):{joined}", ephemeral=True)
+        joined = t("common.list.sep").join(f"`{w}`" for w in words[:100])
+        await interaction.response.send_message(t("explore.msg.banned_word_list", count=len(words), words=joined), ephemeral=True)
 
 init_db()
 

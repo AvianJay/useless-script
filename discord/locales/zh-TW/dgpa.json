@@ -1,0 +1,20 @@
+{
+    "embed": {
+        "status_title": "天災停班停課情形",
+        "update_title": "停班停課更新"
+    },
+    "err": {
+        "fetch_failed": "取得資料時發生錯誤：{error}",
+        "guild_only": "此指令只能在伺服器中使用。",
+        "no_channel_permission": "我沒有在頻道 {channel} 發送訊息的權限。",
+        "no_permission": "你沒有權限使用此指令。"
+    },
+    "field": {
+        "last_updated": "上次更新",
+        "last_updated_time": "上次更新時間"
+    },
+    "msg": {
+        "follow_disabled": "已取消追蹤天然災害停止上班及上課情形變更通知。",
+        "follow_enabled": "已設定在頻道 {channel} 追蹤天然災害停止上班及上課情形變更通知。\n-# 測試版，功能尚未完善，請小心使用。"
+    }
+}

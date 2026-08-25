@@ -1,0 +1,110 @@
+{
+    "topic": {
+        "display": "Ticket #{number} | Subject: {subject}"
+    },
+    "embed": {
+        "title": "🎫 Ticket #{number}",
+        "closed_title": "🎫 Ticket #{number} closed",
+        "types_title": "🎫 Ticket types ({count}/{limit})"
+    },
+    "field": {
+        "opener": "Opened by",
+        "type": "Type",
+        "subject": "Subject",
+        "detail": "Description",
+        "opened_at": "Opened at",
+        "claimer": "Claimed by",
+        "closer": "Closed by",
+        "message_count": "Messages",
+        "close_reason": "Close reason",
+        "duration": "Duration"
+    },
+    "btn": {
+        "open": "Open Ticket",
+        "claim": "Claim",
+        "close": "Close",
+        "confirm_close": "Confirm close",
+        "view_transcript_web": "View transcript on the web"
+    },
+    "modal": {
+        "open_title": "Open a ticket",
+        "open_title_typed": "Open a ticket - {label}",
+        "subject": "Subject",
+        "detail": "Description"
+    },
+    "transcript": {
+        "header": "Ticket #{number} transcript ({count} messages)",
+        "attachment": "attachment"
+    },
+    "setup": {
+        "done": "✅ Ticket system configured and enabled!",
+        "category": "- Ticket category: {category}",
+        "panel_channel": "- Panel channel: {channel}",
+        "staff_role": "- Staff role: {role}",
+        "log_channel": "- Log channel: {channel}",
+        "log_channel_unset": "- Log channel: (not set, transcripts are not saved)",
+        "panel_published": "- Panel: published 🎫",
+        "panel_failed": "- Panel: publish failed: {error}",
+        "panel_pending": "- Panel: not published yet; use /ticket panel",
+        "more_options": "More options (welcome message, blacklist, per-user limit, etc.) are in the server panel."
+    },
+    "types": {
+        "style": "Color: {style}",
+        "category": "Category: {category}",
+        "deleted": "(deleted)",
+        "staff": "Staff: ",
+        "custom_welcome": "Custom welcome message ✓"
+    },
+    "msg": {
+        "no_subject": "(not provided)",
+        "unclaimed": "(unclaimed)",
+        "created": "✅ Ticket created: {channel}",
+        "claimed": "✅ Ticket claimed.",
+        "claimed_by": "🙋 {user} claimed this ticket.",
+        "closing": "🔒 Closing the ticket and generating the transcript...",
+        "close_cancelled": "Close cancelled.",
+        "close_confirm": "Close this ticket? The channel will be deleted and the transcript saved to the log channel.",
+        "member_added": "✅ Added {member} to this ticket.",
+        "member_removed": "✅ Removed {member} from this ticket.",
+        "panel_published": "✅ Ticket panel published to {channel}.",
+        "type_added": "✅ Added ticket type \"{label}\". ",
+        "type_updated": "✅ Updated ticket type \"{label}\". ",
+        "type_removed": "✅ Ticket type removed. ",
+        "panel_refreshed": "Panel updated.",
+        "panel_republish_hint": "Republish the panel with /ticket panel.",
+        "no_types": "No ticket types configured; the panel shows a single default button. Add one with /ticket types add.",
+        "opener_left": "⚠️ The ticket opener has left the server."
+    },
+    "err": {
+        "disabled": "The ticket system is not enabled.",
+        "blacklisted": "You cannot open tickets.",
+        "no_category": "An administrator has not configured the ticket category yet.",
+        "category_gone": "The ticket category no longer exists. Please ask an administrator to reconfigure it.",
+        "bot_category_perms": "The bot is missing Manage Channels or Manage Roles in the ticket category. Please ask an administrator to fix this.",
+        "category_full": "The ticket category is full (50-channel limit). Please ask an administrator to clean it up.",
+        "limit_reached": "You already have {count} open tickets (limit {limit}). Please handle the existing ones first: {mentions}",
+        "bot_manage_channels": "The bot is missing the Manage Channels permission and cannot create the ticket.",
+        "create_failed": "An error occurred while creating the ticket channel. Please try again later.",
+        "not_a_ticket": "This is not a valid ticket channel.",
+        "already_closing": "This ticket is already being closed.",
+        "delete_no_permission": "⚠️ The bot lacks permission to delete this channel. Please delete it manually.",
+        "saved_but_not_deleted": "The transcript was saved, but the bot lacks permission to delete the channel. Please delete it manually.",
+        "staff_only_claim": "Only staff can claim tickets.",
+        "already_claimed": "This ticket is already claimed by {user}.",
+        "type_removed": "This ticket type was removed. Please ask an administrator to republish the panel.",
+        "close_permission": "Only staff or the ticket opener can close this ticket.",
+        "panel_no_permission": "The bot cannot send messages in that channel.",
+        "panel_publish_failed": "Failed to publish the panel. Check the panel image URL and each type's button emoji.",
+        "panel_channel_missing": "Please specify a channel, or set the panel channel in the server panel first.",
+        "setup_category_perms": "The bot is missing Manage Channels or Manage Roles in the {category} category.",
+        "setup_panel_perms": "The bot is missing Send Messages or Embed Links in {channel}.",
+        "setup_log_perms": "The bot is missing Send Messages or Attach Files in {channel}.",
+        "setup_problems": "⚠️ Settings not saved. Fix these permission problems first:",
+        "staff_only_members": "Only staff can manage ticket members.",
+        "bot_perms_edit": "The bot lacks permission to edit channel permissions.",
+        "cannot_remove_opener": "The ticket opener cannot be removed.",
+        "type_limit": "At most {limit} ticket types can be created.",
+        "type_not_found": "Ticket type not found.",
+        "transcript_unavailable": "The transcript is temporarily unavailable. Please try again later."
+    }
+}

@@ -1,0 +1,151 @@
+{
+    "embed": {
+        "current_track_title": "🎵 Currently playing",
+        "left_voice_channel_title": "👋 Left the voice channel",
+        "node_health": "\nHealth score: {health}%",
+        "node_latency": "\nLatency: {ping}",
+        "node_usage": "\n{playing}/{connected}/{total} servers are currently using this node",
+        "nodes_title": "🔧 Lavalink node status",
+        "playlist_added_title": "📋 Playlist added",
+        "queue_now_playing_line": "**Now playing:**\n[{title}]({uri})",
+        "queue_title": "📋 Playback queue",
+        "recommend_added_title": "🎯 Added recommended tracks",
+        "recommend_desc": "Recommended based on **{title}**:\n\n{track_list}",
+        "shutdown_desc": "The bot is shutting down or restarting.",
+        "shutdown_desc_restore_hint": "\nIt will automatically rejoin the original voice channel and restore playback after startup.",
+        "shutdown_title": "🔴 The bot is about to leave the voice channel",
+        "track_added_title": "✅ Added to the queue",
+        "track_skipped_title": "⏭️ Skipped",
+        "track_started_title": "🎵 Now playing"
+    },
+    "err": {
+        "all_saved_tracks_failed": {
+            "one": "❌ All saved tracks failed to load; the saved state was kept for a later retry. ({failed} failed)",
+            "other": "❌ All saved tracks failed to load; the saved state was kept for a later retry. ({failed} failed)"
+        },
+        "already_paused": "❌ Music is already paused",
+        "available_radio_stations": "❌ Available stations: `listen.moe`, `r-a-d.io`",
+        "clear_played_state_failed": "Failed to clear the finished saved state",
+        "clear_restored_state_failed": "Failed to clear the restored saved state",
+        "connect_failed": "❌ Failed to connect to the voice channel: {error}",
+        "invalid_loop_mode": "❌ Invalid loop mode, please use `off`, `track`, or `queue`",
+        "invalid_query": "❌ Please provide a valid track name or URL",
+        "join_voice": "❌ You must join a voice channel to use this command",
+        "join_voice_to_play": "❌ You must join a voice channel to play music",
+        "join_voice_to_radio": "❌ You must join a voice channel to play the radio",
+        "missing_voice_permissions": "Missing voice channel permissions: {missing}",
+        "no_bot_member_data": "Couldn't get the bot's member data for this server",
+        "no_lavalink_node": "❌ No Lavalink node is currently available; the saved state was kept: {error}",
+        "no_paused_player": "❌ No music is paused",
+        "no_player": "❌ No music is playing right now",
+        "no_results": "❌ No results found for '{query}'",
+        "no_saved_state": "❌ There's no saved playback state to restore.",
+        "no_similar_recommendations": "❌ No similar recommendations found",
+        "not_paused": "❌ Music isn't paused",
+        "pause_failed": "❌ Failed to pause: {error}",
+        "play_failed": "❌ Playback failed: {error}",
+        "queue_empty": "❌ The queue is empty",
+        "radio_mode_active": "Currently using {station} radio mode — you can't add tracks or modify the queue. Please stop playback first.",
+        "radio_no_loop": "❌ You can't set loop mode in {station} radio mode.",
+        "radio_no_skip": "❌ You can't skip tracks in {station} radio mode.",
+        "radio_stream_load_failed": "Failed to load the {station} stream",
+        "radio_switch_failed": "❌ Failed to switch to {station}: {error}",
+        "recommend_failed": "❌ Failed to recommend tracks: {error}",
+        "restore_already_connected": "⚠️ The bot is already connected to another voice session; the saved state was kept.",
+        "restore_failed": "⚠️ Failed to auto-restore music: {error}. The saved state was kept.",
+        "restore_manual_failed": "⚠️ Failed to restore playback state; the saved data was kept: {error}",
+        "restore_preload_failed": "⚠️ Couldn't preload the saved music: {error}. The saved state was kept.",
+        "restore_unsupported_mode_raw": "Unsupported playback mode: {mode}",
+        "restore_voice_channel_gone": "⚠️ The saved voice channel no longer exists; the saved state was kept for a later retry.",
+        "restore_voice_permission": "⚠️ Couldn't auto-restore music: {reason}. The saved state was kept.",
+        "resume_failed": "❌ Failed to resume: {error}",
+        "resume_no_player": "❌ No music is playing — provide a track name or URL",
+        "resume_not_paused": "❌ Music isn't paused — provide a track name or URL to add a new track",
+        "same_voice_channel": "❌ You must be in the same voice channel as the bot to use this command",
+        "saved_radio_gone": "❌ The saved radio station no longer exists and can't be restored.",
+        "saved_radio_missing": "The saved radio station doesn't exist",
+        "saved_state_no_tracks": "The saved playback state has no tracks",
+        "saved_track_decode_failed": "Failed to decode the encoded track and no URI is available",
+        "saved_track_load_failed_both": "Failed to load both the encoded track and URI: {uri}",
+        "saved_track_missing_data": "The saved track is missing both an encoded track and a URI",
+        "search_play_failed": "❌ Search & play failed: {error}",
+        "shuffle_failed": "❌ Failed to shuffle the queue: {error}",
+        "skip_failed": "❌ Failed to skip: {error}",
+        "stage_needs_mute_permission": "Stage channels require the mute_members permission to automatically become a speaker",
+        "stop_before_restore_radio": "❌ Please stop the current playback session before restoring the saved radio.",
+        "stop_failed": "❌ Failed to stop: {error}",
+        "unsupported_radio_station": "❌ Unsupported radio station.",
+        "unsupported_saved_mode": "❌ Unsupported saved playback mode: {mode}",
+        "voice_channel_full": "The voice channel is full and the bot doesn't have permission to bypass the user limit",
+        "voice_restore_failed": "❌ Can't restore playback in this voice channel: {reason}",
+        "voice_type_unsupported": "The saved voice channel type doesn't support automatic restoration",
+        "volume_failed": "❌ Failed to set volume: {error}",
+        "volume_range": "❌ Volume must be between 0 and 100"
+    },
+    "field": {
+        "added_count": "Added",
+        "artist": "Artist",
+        "duration": "Duration",
+        "listener_count": "Listener count",
+        "loop_mode": "Loop mode",
+        "more_tracks": "More tracks",
+        "progress": "Progress",
+        "queue_position": "Queue position",
+        "queue_total_duration": "Queue total duration",
+        "total_duration": "Total duration",
+        "track_count": "Track count",
+        "upcoming_tracks": {
+            "one": "Upcoming track ({count})",
+            "other": "Upcoming tracks ({count})"
+        },
+        "volume": "Volume"
+    },
+    "footer": {
+        "queue_count": {
+            "one": "{count} track in the queue",
+            "other": "{count} tracks in the queue"
+        }
+    },
+    "msg": {
+        "left_voice_no_members": "No other members have been in the voice channel for 5 minutes; the bot has left",
+        "left_voice_queue_empty": "No more tracks to play; the bot has left the voice channel",
+        "next_track_failed_warning": "⚠️ Failed to play the next track: {error}",
+        "paused": "⏸️ Music paused",
+        "queue_shuffled": "🔀 Queue shuffled",
+        "radio_switching": "📻 Switched to {station} radio mode, waiting for station data...",
+        "recommend_added_play_warning": "⚠️ Recommended tracks were added, but playback failed: {error}",
+        "restore_auto_done": "✅ Automatically restored the playback state from before shutdown.",
+        "restore_failed_count_suffix": {
+            "one": " ({failed} failed to load)",
+            "other": " ({failed} failed to load)"
+        },
+        "restore_played_out": "✅ The saved track already finished playing; the saved state was cleared.",
+        "restore_radio_done": "✅ Restored {station} radio playback.",
+        "restore_tracks_done": {
+            "one": "✅ Restored {count} track.",
+            "other": "✅ Restored {count} tracks."
+        },
+        "resumed": "▶️ Music resumed",
+        "stopped": "⏹️ Stopped playback and disconnected",
+        "track_added_play_warning": "⚠️ The track was added to the queue, but playback failed: {error}",
+        "volume_set": "🔊 Volume set to {level}%"
+    },
+    "value": {
+        "fetching_radio_info": "Fetching station info...",
+        "loop_off": "▶️ Loop off",
+        "loop_off_short": "▶️ Off",
+        "loop_queue": "🔁 Queue loop",
+        "loop_track": "🔂 Track loop",
+        "more_tracks_count": {
+            "one": "{count} more track",
+            "other": "{count} more tracks"
+        },
+        "node_connected": "✅ Connected",
+        "node_current_marker": " ⬅️ You are here",
+        "node_disconnected": "❌ Disconnected",
+        "track_count": {
+            "one": "{count} track",
+            "other": "{count} tracks"
+        }
+    }
+}

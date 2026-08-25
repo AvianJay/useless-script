@@ -12,6 +12,7 @@ from typing import Any, Dict, Iterable, Optional
 import casino_rules as rules
 import Economy
 from globalenv import db
+from i18n import t
 
 
 ROUND_TIMEOUT = timedelta(seconds=120)
@@ -114,7 +115,7 @@ class CasinoService:
     def _request_id(value: Any) -> str:
         request_id = str(value or "").strip()
         if not request_id or len(request_id) > 128:
-            raise CasinoError("缺少有效的 request_id。")
+            raise CasinoError(t("casino.err.request_id_missing"))
         return request_id
 
     @staticmethod
@@ -126,7 +127,7 @@ class CasinoService:
         if not row:
             return None
         if int(row["user_id"]) != int(user_id):
-            raise CasinoError("request_id 已被其他玩家使用。", 409)
+            raise CasinoError(t("casino.err.request_id_taken"), 409)
         return _loads(row["response_json"], {})
 
     @staticmethod
@@ -221,7 +222,7 @@ class CasinoService:
         request_id = self._request_id(payload.get("request_id"))
         game = str(payload.get("game") or "").strip().lower()
         if game not in INSTANT_GAMES:
-            raise CasinoError("無效的即時遊戲。")
+            raise CasinoError(t("casino.err.invalid_instant_game"))
         try:
             bet = rules.validate_bet(payload.get("bet"))
             outcome = self._instant_outcome(game, payload)
@@ -242,7 +243,7 @@ class CasinoService:
                 connection=conn,
             )
             if not success:
-                raise CasinoError("全域幣餘額不足。", 400, {"balance": before})
+                raise CasinoError(t("casino.err.balance_insufficient"), 400, {"balance": before})
             multiplier = float(outcome.get("multiplier", 0.0))
             payout = round(bet * multiplier, 2) if outcome.get("won") else 0.0
             balance = after_bet
@@ -265,9 +266,9 @@ class CasinoService:
             }
             self._store_request(conn, request_id, user_id, "play", response)
             conn.commit()
-            logs.append((user_id, f"Explore {game} 下注", -bet, f"Explore 賭場 {game} 下注"))
+            logs.append((user_id, f"Explore {game} 下注", -bet, f"Explore 賭場 {game} 下注"))  # i18n: skip (stored tx data)
             if payout > 0:
-                logs.append((user_id, f"Explore {game} 派彩", payout, f"Explore 賭場 {game} 派彩"))
+                logs.append((user_id, f"Explore {game} 派彩", payout, f"Explore 賭場 {game} 派彩"))  # i18n: skip (stored tx data)
         self._log_events(logs)
         return response
 
@@ -291,7 +292,7 @@ class CasinoService:
             return result
         if game == "slots":
             return rules.play_slots(self.rng)
-        raise ValueError("無效的遊戲。")
+        raise ValueError(t("casino.err.invalid_game"))
 
     def buy_lottery(self, user_id: int, payload: dict, *, source: str = "Explore") -> dict:
         request_id = self._request_id(payload.get("request_id"))
@@ -299,9 +300,9 @@ class CasinoService:
             bet = rules.validate_bet(payload.get("bet"))
             number = int(payload.get("number"))
         except (TypeError, ValueError) as exc:
-            raise CasinoError("彩票號碼必須介於 00～99。") from exc
+            raise CasinoError(t("casino.err.lottery_number_range")) from exc
         if not 0 <= number <= 99:
-            raise CasinoError("彩票號碼必須介於 00～99。")
+            raise CasinoError(t("casino.err.lottery_number_range"))
 
         logs = []
         with self._connection() as conn:
@@ -314,7 +315,7 @@ class CasinoService:
             draw_at = rules.parse_lottery_draw_at(state.get("draw_at"))
             now = utcnow()
             if state.get("pending_settlement") or (draw_at is not None and draw_at <= now):
-                raise CasinoError("彩票正在開獎，請稍後再試。", 409)
+                raise CasinoError(t("casino.err.lottery_drawing"), 409)
             success, before, balance = Economy.mutate_balance_atomic(
                 Economy.GLOBAL_GUILD_ID,
                 user_id,
@@ -322,7 +323,7 @@ class CasinoService:
                 connection=conn,
             )
             if not success:
-                raise CasinoError("全域幣餘額不足。", 400, {"balance": before})
+                raise CasinoError(t("casino.err.balance_insufficient"), 400, {"balance": before})
             if draw_at is None or not state.get("round_id"):
                 draw_at = rules.next_lottery_draw_at(now)
                 state["draw_at"] = _iso(draw_at)
@@ -346,7 +347,7 @@ class CasinoService:
             }
             self._store_request(conn, request_id, user_id, "lottery", response, state.get("round_id"))
             conn.commit()
-            logs.append((user_id, f"{source} 彩票下注", -bet, f"購買 {number_key} 號彩票"))
+            logs.append((user_id, f"{source} 彩票下注", -bet, f"購買 {number_key} 號彩票"))  # i18n: skip (stored tx data)
         self._log_events(logs)
         return response
 
@@ -439,7 +440,7 @@ class CasinoService:
         request_id = self._request_id(payload.get("request_id"))
         game = str(payload.get("game") or "").strip().lower()
         if game not in STATEFUL_GAMES:
-            raise CasinoError("無效的回合遊戲。")
+            raise CasinoError(t("casino.err.invalid_round_game"))
         try:
             bet = rules.validate_bet(payload.get("bet"))
         except ValueError as exc:
@@ -463,7 +464,7 @@ class CasinoService:
             ).fetchone()
             if active:
                 response = self._response_from_row(active, self._balance(conn, user_id))
-                raise CasinoError("你已有尚未結束的同類遊戲。", 409, response)
+                raise CasinoError(t("casino.err.round_active"), 409, response)
             success, before, balance = Economy.mutate_balance_atomic(
                 Economy.GLOBAL_GUILD_ID,
                 user_id,
@@ -471,7 +472,7 @@ class CasinoService:
                 connection=conn,
             )
             if not success:
-                raise CasinoError("全域幣餘額不足。", 400, {"balance": before})
+                raise CasinoError(t("casino.err.balance_insufficient"), 400, {"balance": before})
             now = utcnow()
             round_id = uuid.uuid4().hex
             state = self._new_round_state(game, bet)
@@ -499,9 +500,9 @@ class CasinoService:
             )
             self._store_request(conn, request_id, user_id, "round_start", response, round_id)
             conn.commit()
-            logs.append((user_id, f"Explore {game} 下注", -bet, f"Explore 賭場 {game} 開始"))
+            logs.append((user_id, f"Explore {game} 下注", -bet, f"Explore 賭場 {game} 開始"))  # i18n: skip (stored tx data)
             if payout > 0:
-                logs.append((user_id, f"Explore {game} 派彩", payout, f"Explore 賭場 {game} 結算"))
+                logs.append((user_id, f"Explore {game} 派彩", payout, f"Explore 賭場 {game} 結算"))  # i18n: skip (stored tx data)
         self._log_events(logs)
         return response
 
@@ -525,7 +526,7 @@ class CasinoService:
                 "doubled": False,
                 "total_bet": bet,
             }
-        raise CasinoError("無效的回合遊戲。")
+        raise CasinoError(t("casino.err.invalid_round_game"))
 
     def act_round(self, user_id: int, round_id: str, payload: dict) -> dict:
         request_id = self._request_id(payload.get("request_id"))
@@ -543,7 +544,7 @@ class CasinoService:
                 (round_id,),
             ).fetchone()
             if not row or int(row["user_id"]) != int(user_id):
-                raise CasinoError("找不到這個遊戲回合。", 404)
+                raise CasinoError(t("casino.err.round_not_found"), 404)
             if row["status"] != "active":
                 response = self._response_from_row(row, self._balance(conn, user_id))
                 self._store_request(conn, request_id, user_id, "round_action", response, round_id)
@@ -586,9 +587,9 @@ class CasinoService:
             self._store_request(conn, request_id, user_id, "round_action", response, round_id)
             conn.commit()
             if extra_bet > 0:
-                logs.append((user_id, "Explore blackjack 加倍", -extra_bet, "Explore 21 點加倍"))
+                logs.append((user_id, "Explore blackjack 加倍", -extra_bet, "Explore 21 點加倍"))  # i18n: skip (stored tx data)
             if settled and payout > 0:
-                logs.append((user_id, f"Explore {game} 派彩", payout, f"Explore 賭場 {game} 結算"))
+                logs.append((user_id, f"Explore {game} 派彩", payout, f"Explore 賭場 {game} 結算"))  # i18n: skip (stored tx data)
         self._log_events(logs)
         return response
 
@@ -599,14 +600,14 @@ class CasinoService:
                 payout = round(bet * rules.TOWER_MULTIPLIERS[safe_level], 2)
                 return {"outcome": "cashout", "safe_level": safe_level, "payout": payout}, payout, True, 0.0
             if action != "pick":
-                raise CasinoError("爬塔只能選格或提現。")
+                raise CasinoError(t("casino.err.tower_action"))
             try:
                 tile = int(payload.get("tile"))
             except (TypeError, ValueError) as exc:
-                raise CasinoError("格子必須介於 0～2。") from exc
+                raise CasinoError(t("casino.err.tower_tile_range")) from exc
             level = int(state.get("current_level", 1))
             if not 0 <= tile < rules.TOWER_TILES_PER_LEVEL or not 1 <= level <= rules.TOWER_LEVELS:
-                raise CasinoError("無效的爬塔格子。")
+                raise CasinoError(t("casino.err.tower_tile_invalid"))
             hit_cactus = bool(state["grid"][level - 1][tile])
             state.setdefault("picked", {})[str(level)] = tile
             if hit_cactus:
@@ -621,16 +622,16 @@ class CasinoService:
         if game == "highlow":
             if action == "cashout":
                 if int(state.get("streak", 0)) < 1:
-                    raise CasinoError("至少猜中一次後才能提現。")
+                    raise CasinoError(t("casino.err.hl_cashout_streak"))
                 payout = round(float(state["pot"]), 2)
                 return {"outcome": "cashout", "streak": state["streak"], "payout": payout}, payout, True, 0.0
             if action != "guess":
-                raise CasinoError("比大小只能猜牌或提現。")
+                raise CasinoError(t("casino.err.hl_action"))
             guess = str(payload.get("guess") or "").lower()
             current_rank = int(state["current_rank"])
             p_high, p_low = rules.hl_probs(current_rank)
             if guess not in ("high", "low") or (guess == "high" and p_high <= 0) or (guess == "low" and p_low <= 0):
-                raise CasinoError("目前牌面不能選擇這個方向。")
+                raise CasinoError(t("casino.err.hl_direction"))
             next_rank = rules.hl_draw_next(current_rank, self.rng)
             source = self.rng or __import__("random")
             next_suit = source.choice(rules.BJ_SUITS)
@@ -668,20 +669,20 @@ class CasinoService:
                 return result, float(result["payout"]), True, 0.0
             if action == "double":
                 if len(state["player_hand"]) != 2 or state.get("doubled"):
-                    raise CasinoError("目前不能加倍。")
+                    raise CasinoError(t("casino.err.bj_double_unavailable"))
                 success, before, _ = Economy.mutate_balance_atomic(
                     Economy.GLOBAL_GUILD_ID, user_id, -bet, connection=conn
                 )
                 if not success:
-                    raise CasinoError("全域幣餘額不足，無法加倍。", 400, {"balance": before})
+                    raise CasinoError(t("casino.err.balance_insufficient_double"), 400, {"balance": before})
                 state["doubled"] = True
                 state["player_hand"].append(state["deck"].pop())
                 doubled_bet = round(bet * 2, 2)
                 result = self._blackjack_result(state, doubled_bet)
                 state["total_bet"] = doubled_bet
                 return result, float(result["payout"]), True, bet
-            raise CasinoError("21 點只能要牌、停牌或加倍。")
-        raise CasinoError("無效的遊戲。")
+            raise CasinoError(t("casino.err.bj_action"))
+        raise CasinoError(t("casino.err.invalid_game"))
 
     @staticmethod
     def _blackjack_result(state: dict, bet: Optional[float] = None) -> dict:
@@ -703,7 +704,7 @@ class CasinoService:
             (status, _dumps(state), _dumps(result), payout, _iso(now), _iso(now), round_id),
         )
         if cursor.rowcount != 1:
-            raise CasinoError("牌局已經結算。", 409)
+            raise CasinoError(t("casino.err.round_already_settled"), 409)
         balance = self._balance(conn, user_id)
         if payout > 0:
             _, _, balance = Economy.mutate_balance_atomic(
@@ -739,7 +740,7 @@ class CasinoService:
                 payout = float(result["payout"])
             self._settle_round(conn, row["round_id"], user_id, state, result, payout, "expired")
             if payout > 0:
-                logs.append((user_id, f"Explore {game} 逾時結算", payout, "Explore 賭場逾時自動結算"))
+                logs.append((user_id, f"Explore {game} 逾時結算", payout, "Explore 賭場逾時自動結算"))  # i18n: skip (stored tx data)
         return logs
 
     def get_state(self, user_id: int) -> dict:

@@ -1,5 +1,6 @@
 ﻿from globalenv import (
-    bot, config, get_server_config, set_server_config, get_user_data, set_user_data,
+    bot, config, get_server_config, set_server_config, get_server_config_i18n,
+    get_user_data, set_user_data,
     get_all_user_data, get_all_server_config_key, interaction_uses_guild_scope, ECONOMY_GLOBAL_MODE_CONFIG_KEY, db,
 )
 import discord
@@ -18,6 +19,20 @@ from ItemSystem import (
     admin_action_callbacks, get_item_by_id, get_all_items_for_guild
 )
 from OwnerTools import is_owner
+
+import i18n
+from i18n import t
+
+
+def display_currency(currency: str, locale: str = None) -> str:
+    """貨幣名稱顯示：全域幣 token 依語言對映；guild 自訂名稱原樣通過。
+
+    注意：log_transaction 儲存的 currency/tx_type 是資料 token，
+    永遠寫入原值；只有「顯示」經過這裡。
+    """
+    if currency == GLOBAL_CURRENCY_NAME:
+        return t("economy.currency.global", locale=locale)
+    return currency
 import economy_integrity as economy_db
 
 
@@ -99,7 +114,8 @@ def get_currency_name(guild_id: int) -> str:
     """取得伺服器的貨幣名稱"""
     if not guild_id:
         return GLOBAL_CURRENCY_NAME
-    return get_server_config(guild_id, "economy_currency_name", "伺服幣")
+    return get_server_config_i18n(guild_id, "economy_currency_name",
+                                  "panel.economy.economy_currency_name.default")
 
 
 def get_daily_amount(guild_id: int) -> int:
@@ -169,18 +185,15 @@ def build_flow_member_requirement_notice(guild_id: int, guild: discord.Guild | N
     human_count = get_human_member_count(guild)
     support_invite = str(config("support_server_invite", "") or "").strip()
     lines = [
-        "## 此伺服器尚未達到全域幣流通資格",
-        (
-            f"> 至少需要 **{MIN_GLOBAL_FLOW_HUMAN_MEMBERS} 位真人成員**，"
-            f"目前偵測到 **{human_count} 位**。"
-        ),
+        t("economy.flow.member_req_title"),
+        t("economy.flow.member_req_line", required=MIN_GLOBAL_FLOW_HUMAN_MEMBERS, current=human_count),
         "",
-        "為避免小型伺服器透過兌換或全域模式整體轉換影響全域經濟，目前無法開啟或使用全域幣流通功能。",
+        t("economy.flow.member_req_reason"),
     ]
     if support_invite:
-        lines.append(f"如需例外開啟，請前往[支援伺服器]({support_invite})開單，由機器人擁有者審核。")
+        lines.append(t("economy.flow.member_req_appeal_link", invite=support_invite))
     else:
-        lines.append("如需例外開啟，請聯繫機器人擁有者申請審核。")
+        lines.append(t("economy.flow.member_req_appeal"))
     return "\n".join(lines)
 
 
@@ -241,17 +254,17 @@ def clear_flow_blacklist(guild_id: int):
 
 def build_flow_blacklist_notice(guild_id: int) -> str:
     info = get_flow_blacklist_info(guild_id)
-    reason = info.get("reason", "未提供")
+    reason = info.get("reason") or t("economy.msg.not_provided")
     support_invite = str(config("support_server_invite", "") or "").strip()
     lines = [
-        "## 此伺服器的貨幣流通功能已被強制停用",
-        f"> 原因：{reason}",
+        t("economy.flow.blacklist_title"),
+        t("economy.flow.blacklist_reason", reason=reason),
         "",
     ]
     if support_invite:
-        lines.append(f"如需申訴，請前往支援伺服器開單：{support_invite}")
+        lines.append(t("economy.flow.blacklist_appeal_link", invite=support_invite))
     else:
-        lines.append("如需申訴，請聯繫機器人管理員。")
+        lines.append(t("economy.flow.blacklist_appeal"))
     return "\n".join(lines)
 
 
@@ -261,7 +274,7 @@ def get_global_flow_block_notice(guild_id: int, guild: discord.Guild | None = No
     if not meets_global_flow_member_requirement(guild_id, guild):
         return build_flow_member_requirement_notice(guild_id, guild)
     if not get_configured_allow_global_flow(guild_id):
-        return "❌ 此伺服器已關閉伺服幣與全域幣的流通功能。"
+        return t("economy.flow.disabled")
     return None
 
 
@@ -793,13 +806,13 @@ async def migrate_guild_economy_to_global(guild_id: int) -> dict:
         queue_economy_risk_log(guild_id, exc)
         raise GlobalFlowUnavailableError(build_flow_blacklist_notice(guild_id)) from exc
     except economy_db.EconomyIntegrityError as exc:
-        raise GlobalFlowUnavailableError("匯率或經濟資料在結算前發生變動，請重新操作。") from exc
+        raise GlobalFlowUnavailableError(t("economy.err.data_changed")) from exc
     for user_id, (total_server_value, converted_global) in per_user_summary.items():
         if converted_global:
             log_transaction(
                 GLOBAL_GUILD_ID,
                 user_id,
-                "伺服器轉全域",
+                "伺服器轉全域",  # i18n: skip (stored tx_type token)
                 converted_global,
                 GLOBAL_CURRENCY_NAME,
                 f"From guild {guild_id}, server value {total_server_value:,.2f}",
@@ -831,6 +844,8 @@ def log_transaction(guild_id: int, user_id: int, tx_type: str, amount: float, cu
     set_user_data(guild_id, user_id, "economy_history", history)
 
 
+# i18n: skip-start
+# 以下 _owner_* helpers 只服務機器人擁有者（dev-* 指令），依約定保留中文。
 OWNER_ECONOMY_SCOPE_KEYS = ("economy_balance", "economy_history", "items", "admin_items")
 
 
@@ -1156,6 +1171,7 @@ def mutate_balances_atomic(guild_id: int, deltas_by_user: dict[int, float]):
     except economy_db.EconomyRiskError as exc:
         queue_economy_risk_log(guild_id, exc)
         raise
+# i18n: skip-end
 
 
 # ==================== Admin Action Callback ====================
@@ -1345,7 +1361,7 @@ async def sellable_items_autocomplete(interaction: discord.Interaction, current:
         count = user_items_data.get(item["id"], 0)
         if guild_id:
             count = max(0, count - get_admin_item_count(guild_id, user_id, item["id"]))
-        choices.append(app_commands.Choice(name=f"{item['name']} x{count} - 💰{price:,.0f}/個", value=item["id"]))
+        choices.append(app_commands.Choice(name=t("economy.shop.item_choice", item=item["name"], count=count, price=i18n.fmt_num(price, decimals=0)), value=item["id"]))
     return choices
 
 
@@ -1377,7 +1393,7 @@ class ShopView(discord.ui.View):
 
         if options:
             self.item_select = discord.ui.Select(
-                placeholder="選擇要購買的商品...",
+                placeholder=t("economy.shop.pick_item_ph"),
                 options=options,
                 custom_id="shop_item_select"
             )
@@ -1389,7 +1405,7 @@ class ShopView(discord.ui.View):
         item = get_item_by_id(selected_item_id, interaction.guild.id if interaction_uses_server_scope(interaction) else 0)
 
         if not item:
-            await interaction.response.send_message("❌ 無效的物品。", ephemeral=True)
+            await interaction.response.send_message(t("economy.err.invalid_item"), ephemeral=True)
             return
 
         # 顯示購買選項（伺服器商店或全域商店）
@@ -1410,18 +1426,18 @@ class ShopView(discord.ui.View):
                 currency_name = get_currency_name(guild_id)
 
                 embed = discord.Embed(
-                    title=f"🛒 購買 {item['name']}",
-                    description=item.get('description', '無描述'),
+                    title=t("economy.shop.buy_title", item=item["name"]),
+                    description=item.get("description") or t("economy.msg.no_description"),
                     color=0x9b59b6
                 )
                 embed.add_field(
-                    name="🏦 伺服器商店",
-                    value=f"**{server_price:,.2f}** {currency_name}\n物品到伺服器背包",
+                    name=t("economy.shop.server_shop"),
+                    value=t("economy.shop.server_price_line", price=i18n.fmt_num(server_price, decimals=2), currency=display_currency(currency_name)),
                     inline=True
                 )
                 embed.add_field(
-                    name="🌐 全域商店",
-                    value=f"**{global_price:,.2f}** {GLOBAL_CURRENCY_NAME}\n物品到全域背包",
+                    name=t("economy.shop.global_shop"),
+                    value=t("economy.shop.global_price_line", price=i18n.fmt_num(global_price, decimals=2), currency=display_currency(GLOBAL_CURRENCY_NAME)),
                     inline=True
                 )
                 await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
@@ -1431,17 +1447,17 @@ class ShopView(discord.ui.View):
             await interaction.response.send_modal(modal)
 
 
-class ShopTypeView(discord.ui.View):
+class ShopTypeView(i18n.I18nView):
     def __init__(self, item: dict):
         super().__init__(timeout=60)
         self.item = item
 
-    @discord.ui.button(label="伺服器商店", style=discord.ButtonStyle.primary, emoji="🏦")
+    @discord.ui.button(label=i18n.K("economy.btn.server_shop"), style=discord.ButtonStyle.primary, emoji="🏦")
     async def server_shop(self, interaction: discord.Interaction, button: discord.ui.Button):
         modal = PurchaseModal(self.item, "server")
         await interaction.response.send_modal(modal)
 
-    @discord.ui.button(label="全域商店", style=discord.ButtonStyle.success, emoji="🌐")
+    @discord.ui.button(label=i18n.K("economy.btn.global_shop"), style=discord.ButtonStyle.success, emoji="🌐")
     async def global_shop(self, interaction: discord.Interaction, button: discord.ui.Button):
         modal = PurchaseModal(self.item, "global")
         await interaction.response.send_modal(modal)
@@ -1449,13 +1465,13 @@ class ShopTypeView(discord.ui.View):
 
 class PurchaseModal(discord.ui.Modal):
     def __init__(self, item: dict, scope: str):
-        super().__init__(title=f"購買 {item['name']}")
+        super().__init__(title=t("economy.shop.buy_modal_title", item=item["name"]))
         self.item = item
         self.scope = scope
 
         self.quantity_input = discord.ui.TextInput(
-            label="數量",
-            placeholder="輸入購買數量...",
+            label=t("economy.shop.amount_label"),
+            placeholder=t("economy.shop.amount_ph"),
             default="1",
             min_length=1,
             max_length=10,
@@ -1467,11 +1483,11 @@ class PurchaseModal(discord.ui.Modal):
         try:
             amount = int(self.quantity_input.value)
         except ValueError:
-            await interaction.response.send_message("❌ 請輸入有效的數量。", ephemeral=True)
+            await interaction.response.send_message(t("economy.err.invalid_amount"), ephemeral=True)
             return
 
         if amount <= 0:
-            await interaction.response.send_message("❌ 數量必須大於 0。", ephemeral=True)
+            await interaction.response.send_message(t("economy.err.amount_positive"), ephemeral=True)
             return
 
         # 執行購買邏輯
@@ -1487,7 +1503,7 @@ class PurchaseModal(discord.ui.Modal):
                     await interaction.response.send_message(flow_block_notice, ephemeral=True)
                     return
         if scope not in ("server", "global"):
-            await interaction.response.send_message("❌ 無效的商店類型。", ephemeral=True)
+            await interaction.response.send_message(t("economy.err.invalid_shop_type"), ephemeral=True)
             return
         settlement_guild_id = guild_id if scope == "server" else GLOBAL_GUILD_ID
 
@@ -1495,7 +1511,7 @@ class PurchaseModal(discord.ui.Modal):
         item = get_item_by_id(self.item["id"], guild_id if scope == "server" else 0)
 
         if not item:
-            await interaction.response.send_message("❌ 無效的物品 ID。", ephemeral=True)
+            await interaction.response.send_message(t("economy.err.invalid_item_id"), ephemeral=True)
             return
 
         worth = item.get("worth", 0)
@@ -1543,27 +1559,27 @@ class PurchaseModal(discord.ui.Modal):
         except economy_db.EconomyInsufficientFunds:
             available = get_balance(settlement_guild_id, user_id)
             await interaction.response.send_message(
-                f"❌ 餘額不足。需要 **{total_price:,.2f}** {currency_name}，但只有 **{available:,.2f}**。",
+                t("economy.err.insufficient_balance", needed=i18n.fmt_num(total_price, decimals=2), currency=display_currency(currency_name), available=i18n.fmt_num(available, decimals=2)),
                 ephemeral=True,
             )
             return
         except economy_db.EconomyIntegrityError:
-            await interaction.response.send_message("❌ 數量或商品價格無效，購買已取消。", ephemeral=True)
+            await interaction.response.send_message(t("economy.err.purchase_invalid"), ephemeral=True)
             return
 
-        scope_label = "伺服器" if scope == "server" else "全域"
+        scope_label = t("economy.scope.server") if scope == "server" else t("economy.scope.global")
         embed = discord.Embed(
-            title=f"🛒 購買成功（{scope_label}）",
-            description=f"你購買了 **{item['name']}** x{amount}！",
+            title=t("economy.shop.buy_success_title", scope=scope_label),
+            description=t("economy.shop.buy_success_desc", item=item["name"], amount=amount),
             color=0x2ecc71
         )
-        embed.add_field(name="單價", value=f"{price_per:,.2f} {currency_name}", inline=True)
-        embed.add_field(name="總價", value=f"{total_price:,.2f} {currency_name}", inline=True)
+        embed.add_field(name=t("economy.field.unit_price"), value=f"{i18n.fmt_num(price_per, decimals=2)} {display_currency(currency_name)}", inline=True)
+        embed.add_field(name=t("economy.field.total_price"), value=f"{i18n.fmt_num(total_price, decimals=2)} {display_currency(currency_name)}", inline=True)
         remaining = settlement.balance_after
-        dest = "伺服器背包" if scope == "server" else "全域背包"
-        embed.set_footer(text=f"剩餘餘額：{remaining:,.2f} {currency_name} | 物品已放入{dest}")
+        dest = t("economy.scope.server_inventory") if scope == "server" else t("economy.scope.global_inventory")
+        embed.set_footer(text=t("economy.shop.buy_footer", remaining=i18n.fmt_num(remaining, decimals=2), currency=display_currency(currency_name), dest=dest))
         buy_guild = guild_id if scope == "server" else GLOBAL_GUILD_ID
-        log_transaction(buy_guild, user_id, "購買物品", -total_price, currency_name, f"{item['name']} x{amount}")
+        log_transaction(buy_guild, user_id, "購買物品", -total_price, currency_name, f"{item['name']} x{amount}")  # i18n: skip (stored tx data)
         queue_economy_audit_log(
             "buy_item",
             guild_id=buy_guild,
@@ -1585,12 +1601,12 @@ class PurchaseModal(discord.ui.Modal):
 
 @app_commands.allowed_installs(guilds=True, users=True)
 @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
-class Economy(commands.GroupCog, name="economy", description="經濟系統指令"):
+class Economy(commands.GroupCog, name=app_commands.locale_str("economy", i18n_key="cmd.economy.economy.root.name"), description=app_commands.locale_str("Economy system commands", i18n_key="cmd.economy.economy.root.desc")):
     def __init__(self):
         super().__init__()
 
-    @app_commands.command(name="balance", description="查看餘額")
-    @app_commands.describe(user="查看其他用戶的餘額")
+    @app_commands.command(name=app_commands.locale_str("balance", i18n_key="cmd.economy.economy.balance.name"), description=app_commands.locale_str("Check your balance", i18n_key="cmd.economy.economy.balance.desc"))
+    @app_commands.describe(user=app_commands.locale_str("Check another user's balance", i18n_key="cmd.economy.economy.balance.param.user"))
     async def balance(self, interaction: discord.Interaction, user: discord.User = None):
         target = user or interaction.user
         global_bal = get_global_balance(target.id)
@@ -1603,25 +1619,25 @@ class Economy(commands.GroupCog, name="economy", description="經濟系統指令
             currency_name = get_currency_name(guild_id)
             total_global = global_bal + (server_bal * rate)
 
-            embed = discord.Embed(title=f"💰 {target.display_name} 的錢包", color=0xf1c40f)
+            embed = discord.Embed(title=t("economy.wallet.title", user=target.display_name), color=0xf1c40f)
             embed.add_field(
                 name=f"{SERVER_CURRENCY_EMOJI} {currency_name}",
                 value=f"**{server_bal:,.2f}**",
                 inline=True
             )
             embed.add_field(
-                name=f"{GLOBAL_CURRENCY_EMOJI} {GLOBAL_CURRENCY_NAME}",
+                name=f"{GLOBAL_CURRENCY_EMOJI} {display_currency(GLOBAL_CURRENCY_NAME)}",
                 value=f"**{global_bal:,.2f}**",
                 inline=True
             )
             embed.add_field(
-                name="📊 匯率",
-                value=f"1 {currency_name} = {rate:.4f} {GLOBAL_CURRENCY_NAME}",
+                name=t("economy.field.rate"),
+                value=f"1 {display_currency(currency_name)} = {rate:.4f} {display_currency(GLOBAL_CURRENCY_NAME)}",
                 inline=True
             )
             embed.add_field(
-                name="💎 總資產（全域幣計）",
-                value=f"**{total_global:,.2f}** {GLOBAL_CURRENCY_NAME}",
+                name=t("economy.field.total_assets"),
+                value=f"**{i18n.fmt_num(total_global, decimals=2)}** {display_currency(GLOBAL_CURRENCY_NAME)}",
                 inline=False
             )
             embed.set_footer(
@@ -1630,19 +1646,19 @@ class Economy(commands.GroupCog, name="economy", description="經濟系統指令
             )
         else:
             # 全域上下文：僅顯示全域幣
-            embed = discord.Embed(title=f"💰 {target.display_name} 的全域錢包", color=0xf1c40f)
+            embed = discord.Embed(title=t("economy.wallet.global_title", user=target.display_name), color=0xf1c40f)
             embed.add_field(
-                name=f"{GLOBAL_CURRENCY_EMOJI} {GLOBAL_CURRENCY_NAME}",
+                name=f"{GLOBAL_CURRENCY_EMOJI} {display_currency(GLOBAL_CURRENCY_NAME)}",
                 value=f"**{global_bal:,.2f}**",
                 inline=False
             )
-            embed.set_footer(text="全域用戶錢包")
+            embed.set_footer(text=t("economy.wallet.global_footer"))
         
         embed.set_thumbnail(url=target.display_avatar.url)
         await interaction.response.send_message(embed=embed)
 
-    @app_commands.command(name="daily", description="領取每日獎勵")
-    @app_commands.describe(global_daily="是否領取全域獎勵")
+    @app_commands.command(name=app_commands.locale_str("daily", i18n_key="cmd.economy.economy.daily.name"), description=app_commands.locale_str("Claim your daily reward", i18n_key="cmd.economy.economy.daily.desc"))
+    @app_commands.describe(global_daily=app_commands.locale_str("Claim the global reward instead", i18n_key="cmd.economy.economy.daily.param.global_daily"))
     async def daily(self, interaction: discord.Interaction, global_daily: bool = False):
         from datetime import datetime, timezone, timedelta
         
@@ -1676,7 +1692,7 @@ class Economy(commands.GroupCog, name="economy", description="經濟系統指令
             await interaction.response.send_message(build_flow_blacklist_notice(guild_id), ephemeral=True)
             return
         except economy_db.EconomyIntegrityError:
-            await interaction.response.send_message("❌ 經濟資料異常，本次獎勵未發放。", ephemeral=True)
+            await interaction.response.send_message(t("economy.err.reward_data_invalid"), ephemeral=True)
             return
 
         if reward.already_claimed:
@@ -1685,7 +1701,7 @@ class Economy(commands.GroupCog, name="economy", description="經濟系統指令
             next_checkin_utc = next_checkin.astimezone(timezone.utc)
             timestamp_next = int(next_checkin_utc.timestamp())
             await interaction.response.send_message(
-                f"⏰ 你已經領取過每日獎勵了！請在 <t:{timestamp_next}:R> 再來。",
+                t("economy.reward.daily_claimed", time=f"<t:{timestamp_next}:R>"),
                 ephemeral=True
             )
             return
@@ -1695,44 +1711,42 @@ class Economy(commands.GroupCog, name="economy", description="經濟系統指令
         bonus = reward.streak_bonus
         support_bonus = reward.support_bonus
         total_earned = round(balance_after - balance_before, 2)
-        scope_label = "全域" if guild_id == GLOBAL_GUILD_ID else "伺服器"
+        scope_label = t("economy.scope.global") if guild_id == GLOBAL_GUILD_ID else t("economy.scope.server")
         support_invite = str(config("support_server_invite", "") or "")
         support_bonus_notice = (
-            "\n-# 提示：加入[支援伺服器]("
-            + support_invite
-            + ")可獲得額外加成！"
+            "\n" + t("economy.reward.support_hint", invite=support_invite)
             if _should_show_support_guild_join_notice(user_id) else ""
         )
         embed = discord.Embed(
-            title=f"📅 每日獎勵（{scope_label}）",
-            description=f"你獲得了 **{daily_amount:,.0f}** {currency_name}！{support_bonus_notice}",
+            title=t("economy.reward.daily_title", scope=scope_label),
+            description=t("economy.reward.earned_desc", amount=i18n.fmt_num(daily_amount, decimals=0), currency=display_currency(currency_name)) + support_bonus_notice,
             color=0x2ecc71
         )
         if bonus > 0:
             embed.add_field(
-                name="🔥 連續登入獎勵",
-                value=f"+{bonus:,.0f} {currency_name}（連續 {streak} 天）",
+                name=t("economy.reward.streak_bonus"),
+                value=t("economy.reward.streak_value", bonus=i18n.fmt_num(bonus, decimals=0), currency=display_currency(currency_name), streak=streak),
                 inline=False
             )
         if support_bonus > 0:
             embed.add_field(
-                name="🎁 支援伺服器加成",
+                name=t("economy.reward.support_bonus"),
                 value=f"+{support_bonus:,.0f} {currency_name}（+{support_bonus_count * 10}%）",
                 inline=False
             )
         embed.add_field(
-            name="📊 目前餘額",
+            name=t("economy.field.current_balance"),
             value=f"{get_balance(guild_id, user_id):,.2f} {currency_name}",
             inline=False
         )
-        embed.set_footer(text=f"連續登入：{streak} 天")
+        embed.set_footer(text=t("economy.reward.streak_footer", streak=streak))
         embed.timestamp = datetime.now(timezone(timedelta(hours=8)))
-        detail_parts = [f"連續 {streak} 天"]
+        detail_parts = [f"連續 {streak} 天"]  # i18n: skip (stored tx data)
         if bonus > 0:
-            detail_parts.append(f"含連續獎勵 {bonus:,.0f}")
+            detail_parts.append(f"含連續獎勵 {bonus:,.0f}")  # i18n: skip (stored tx data)
         if support_bonus > 0:
-            detail_parts.append(f"支援伺服器加成 {support_bonus:,.0f}")
-        log_transaction(guild_id, user_id, "每日簽到", total_earned, currency_name, "，".join(detail_parts))
+            detail_parts.append(f"支援伺服器加成 {support_bonus:,.0f}")  # i18n: skip (stored tx data)
+        log_transaction(guild_id, user_id, "每日簽到", total_earned, currency_name, "，".join(detail_parts))  # i18n: skip (stored tx data)
         queue_economy_audit_log(
             "daily",
             guild_id=guild_id,
@@ -1747,8 +1761,8 @@ class Economy(commands.GroupCog, name="economy", description="經濟系統指令
         )
         await interaction.response.send_message(embed=embed)
 
-    @app_commands.command(name="hourly", description="領取每小時獎勵")
-    @app_commands.describe(global_hourly="是否領取全域獎勵")
+    @app_commands.command(name=app_commands.locale_str("hourly", i18n_key="cmd.economy.economy.hourly.name"), description=app_commands.locale_str("Claim your hourly reward", i18n_key="cmd.economy.economy.hourly.desc"))
+    @app_commands.describe(global_hourly=app_commands.locale_str("Claim the global reward instead", i18n_key="cmd.economy.economy.hourly.param.global_hourly"))
     async def hourly(self, interaction: discord.Interaction, global_hourly: bool = False):
         from datetime import datetime, timezone, timedelta
         
@@ -1783,14 +1797,14 @@ class Economy(commands.GroupCog, name="economy", description="經濟系統指令
             await interaction.response.send_message(build_flow_blacklist_notice(guild_id), ephemeral=True)
             return
         except economy_db.EconomyIntegrityError:
-            await interaction.response.send_message("❌ 經濟資料異常，本次獎勵未發放。", ephemeral=True)
+            await interaction.response.send_message(t("economy.err.reward_data_invalid"), ephemeral=True)
             return
         if reward.already_claimed:
             next_hour = current_hour + timedelta(hours=1)
             next_hour_utc = next_hour.astimezone(timezone.utc)
             timestamp_next = int(next_hour_utc.timestamp())
             await interaction.response.send_message(
-                f"⏰ 你已經領取過每小時獎勵了！請在 <t:{timestamp_next}:R> 再來。",
+                t("economy.reward.hourly_claimed", time=f"<t:{timestamp_next}:R>"),
                 ephemeral=True,
             )
             return
@@ -1798,34 +1812,32 @@ class Economy(commands.GroupCog, name="economy", description="經濟系統指令
         balance_after = reward.balance_after
         support_bonus = reward.support_bonus
         total_earned = round(balance_after - balance_before, 2)
-        scope_label = "全域" if guild_id == GLOBAL_GUILD_ID else "伺服器"
+        scope_label = t("economy.scope.global") if guild_id == GLOBAL_GUILD_ID else t("economy.scope.server")
         support_invite = str(config("support_server_invite", "") or "")
         support_bonus_notice = (
-            "\n-# 提示：加入[支援伺服器]("
-            + support_invite
-            + ")可獲得額外加成！"
+            "\n" + t("economy.reward.support_hint", invite=support_invite)
             if _should_show_support_guild_join_notice(user_id) else ""
         )
         embed = discord.Embed(
-            title=f"⏱️ 每小時獎勵（{scope_label}）",
-            description=f"你獲得了 **{hourly_amount:,.0f}** {currency_name}！{support_bonus_notice}",
+            title=t("economy.reward.hourly_title", scope=scope_label),
+            description=t("economy.reward.earned_desc", amount=i18n.fmt_num(hourly_amount, decimals=0), currency=display_currency(currency_name)) + support_bonus_notice,
             color=0x3498db
         )
         if support_bonus > 0:
             embed.add_field(
-                name="🎁 支援伺服器加成",
+                name=t("economy.reward.support_bonus"),
                 value=f"+{support_bonus:,.0f} {currency_name}（+{support_bonus_count * 10}%）",
                 inline=False
             )
         embed.add_field(
-            name="📊 目前餘額",
+            name=t("economy.field.current_balance"),
             value=f"{get_balance(guild_id, user_id):,.2f} {currency_name}",
             inline=False
         )
         # embed.set_footer(text="AwA")
         embed.timestamp = now
-        detail = f"支援伺服器加成 {support_bonus:,.0f}" if support_bonus > 0 else ""
-        log_transaction(guild_id, user_id, "每小時簽到", total_earned, currency_name, detail)
+        detail = f"支援伺服器加成 {support_bonus:,.0f}" if support_bonus > 0 else ""  # i18n: skip (stored tx data)
+        log_transaction(guild_id, user_id, "每小時簽到", total_earned, currency_name, detail)  # i18n: skip (stored tx data)
         queue_economy_audit_log(
             "hourly",
             guild_id=guild_id,
@@ -1840,11 +1852,11 @@ class Economy(commands.GroupCog, name="economy", description="經濟系統指令
         )
         await interaction.response.send_message(embed=embed)
 
-    @app_commands.command(name="pay", description="轉帳給其他用戶")
-    @app_commands.describe(user="收款人", amount="金額", currency="貨幣類型")
+    @app_commands.command(name=app_commands.locale_str("pay", i18n_key="cmd.economy.economy.pay.name"), description=app_commands.locale_str("Transfer money to another user", i18n_key="cmd.economy.economy.pay.desc"))
+    @app_commands.describe(user=app_commands.locale_str("Recipient", i18n_key="cmd.economy.economy.pay.param.user"), amount=app_commands.locale_str("Amount", i18n_key="cmd.economy.economy.pay.param.amount"), currency=app_commands.locale_str("Currency type", i18n_key="cmd.economy.economy.pay.param.currency"))
     @app_commands.choices(currency=[
-        app_commands.Choice(name="伺服幣", value="server"),
-        app_commands.Choice(name="全域幣", value="global"),
+        app_commands.Choice(name=app_commands.locale_str("Server currency", i18n_key="cmd.economy.economy.pay.choice.server"), value="server"),
+        app_commands.Choice(name=app_commands.locale_str("Global currency", i18n_key="cmd.economy.economy.pay.choice.global"), value="global"),
     ])
     async def pay(self, interaction: discord.Interaction, user: discord.User, amount: float, currency: str = None):
         # 非伺服器上下文時強制全域幣；伺服器上下文未指定時預設伺服幣
@@ -1855,13 +1867,13 @@ class Economy(commands.GroupCog, name="economy", description="經濟系統指令
         try:
             amount = economy_db.money(amount)
         except economy_db.EconomyIntegrityError:
-            await interaction.response.send_message("❌ 金額必須大於 0。", ephemeral=True)
+            await interaction.response.send_message(t("economy.err.amount_positive"), ephemeral=True)
             return
         if user.id == interaction.user.id:
-            await interaction.response.send_message("❌ 你不能轉帳給自己。", ephemeral=True)
+            await interaction.response.send_message(t("economy.err.pay_self"), ephemeral=True)
             return
         if user.bot:
-            await interaction.response.send_message("❌ 你不能轉帳給機器人。", ephemeral=True)
+            await interaction.response.send_message(t("economy.err.pay_bot"), ephemeral=True)
             return
 
         await interaction.response.defer()
@@ -1877,7 +1889,7 @@ class Economy(commands.GroupCog, name="economy", description="經濟系統指令
         elif currency == "global":
             currency_name = GLOBAL_CURRENCY_NAME
         else:
-            await interaction.followup.send("❌ 無效的貨幣類型。", ephemeral=True)
+            await interaction.followup.send(t("economy.err.invalid_currency"), ephemeral=True)
             return
 
         try:
@@ -1898,25 +1910,24 @@ class Economy(commands.GroupCog, name="economy", description="經濟系統指令
             needed = round(amount + fee, 2)
             available = get_balance(guild_id, sender_id)
             await interaction.followup.send(
-                f"❌ 餘額不足。需要 **{needed:,.2f}** {currency_name}"
-                f"（含 {TRADE_FEE_PERCENT}% 手續費），但只有 **{available:,.2f}**。",
+                t("economy.err.insufficient_with_fee", needed=i18n.fmt_num(needed, decimals=2), currency=display_currency(currency_name), fee_percent=TRADE_FEE_PERCENT, available=i18n.fmt_num(available, decimals=2)),
                 ephemeral=True,
             )
             return
         except economy_db.EconomyIntegrityError:
-            await interaction.followup.send("❌ 金額或帳戶資料無效，交易已取消。", ephemeral=True)
+            await interaction.followup.send(t("economy.err.pay_invalid"), ephemeral=True)
             return
 
         # 記錄雙方交易紀錄
         pay_guild = guild_id
-        log_transaction(pay_guild, sender_id, "轉帳支出", -(amount + fee), currency_name, f"→ {user.display_name}，手續費 {fee:,.2f}")
-        log_transaction(pay_guild, receiver_id, "轉帳收入", amount, currency_name, f"← {interaction.user.display_name}")
+        log_transaction(pay_guild, sender_id, "轉帳支出", -(amount + fee), currency_name, f"→ {user.display_name}，手續費 {fee:,.2f}")  # i18n: skip (stored tx data)
+        log_transaction(pay_guild, receiver_id, "轉帳收入", amount, currency_name, f"← {interaction.user.display_name}")  # i18n: skip (stored tx data)
 
-        embed = discord.Embed(title="轉帳成功", color=0x2ecc71)
-        embed.add_field(name="收款人", value=user.display_name, inline=True)
-        embed.add_field(name="金額", value=f"{amount:,.2f} {currency_name}", inline=True)
-        embed.add_field(name="手續費", value=f"{fee:,.2f} {currency_name} ({TRADE_FEE_PERCENT}%)", inline=True)
-        embed.set_footer(text=f"交易由 {interaction.user.display_name} 發起")
+        embed = discord.Embed(title=t("economy.pay.success_title"), color=0x2ecc71)
+        embed.add_field(name=t("economy.field.recipient"), value=user.display_name, inline=True)
+        embed.add_field(name=t("economy.field.amount"), value=f"{i18n.fmt_num(amount, decimals=2)} {display_currency(currency_name)}", inline=True)
+        embed.add_field(name=t("economy.field.fee"), value=f"{i18n.fmt_num(fee, decimals=2)} {display_currency(currency_name)} ({TRADE_FEE_PERCENT}%)", inline=True)
+        embed.set_footer(text=t("economy.pay.footer", user=interaction.user.display_name))
         queue_economy_audit_log(
             "pay",
             guild_id=pay_guild,
@@ -1936,27 +1947,29 @@ class Economy(commands.GroupCog, name="economy", description="經濟系統指令
         await interaction.followup.send(embed=embed)
 
         try:
+            # 轉帳通知是私訊，以收件人語言渲染
+            recipient_loc = i18n.resolve_locale(user_id=user.id, guild_id=pay_guild or None)
             await user.send(
-                f"你從 **{interaction.user.display_name}** 收到了 **{amount:,.2f}** {currency_name}！\n"
-                f"-# {'伺服器: ' + interaction.guild.name if pay_guild else '全域經濟系統'}"
+                t("economy.pay.received_dm", locale=recipient_loc, sender=interaction.user.display_name, amount=i18n.fmt_num(amount, decimals=2), currency=display_currency(currency_name, locale=recipient_loc))
+                + "\n-# " + (t("economy.pay.received_scope_guild", locale=recipient_loc, guild=interaction.guild.name) if pay_guild else t("economy.pay.received_scope_global", locale=recipient_loc))
             )
         except Exception:
             pass
 
-    @app_commands.command(name="exchange", description="兌換伺服幣和全域幣")
+    @app_commands.command(name=app_commands.locale_str("exchange", i18n_key="cmd.economy.economy.exchange.name"), description=app_commands.locale_str("Exchange between server and global currency", i18n_key="cmd.economy.economy.exchange.desc"))
     @app_commands.guild_only()
-    @app_commands.describe(amount="金額", direction="兌換方向")
+    @app_commands.describe(amount=app_commands.locale_str("Amount", i18n_key="cmd.economy.economy.exchange.param.amount"), direction=app_commands.locale_str("Exchange direction", i18n_key="cmd.economy.economy.exchange.param.direction"))
     @app_commands.choices(direction=[
-        app_commands.Choice(name="伺服幣 → 全域幣", value="to_global"),
-        app_commands.Choice(name="全域幣 → 伺服幣", value="to_server"),
+        app_commands.Choice(name=app_commands.locale_str("Server currency → global currency", i18n_key="cmd.economy.economy.exchange.choice.to_global"), value="to_global"),
+        app_commands.Choice(name=app_commands.locale_str("Global currency → server currency", i18n_key="cmd.economy.economy.exchange.choice.to_server"), value="to_server"),
     ])
     async def exchange(self, interaction: discord.Interaction, amount: float, direction: str):
         if direction not in ("to_global", "to_server"):
-            await interaction.response.send_message("❌ 無效的兌換方向。", ephemeral=True)
+            await interaction.response.send_message(t("economy.err.invalid_direction"), ephemeral=True)
             return
         
         if not interaction_uses_server_scope(interaction):
-            await interaction.response.send_message("❌ 這個指令只能在**有邀請此機器人的伺服器**中使用。", ephemeral=True)
+            await interaction.response.send_message(t("economy.err.guild_with_bot_only"), ephemeral=True)
             return
 
         guild_id = interaction.guild.id
@@ -1986,28 +1999,28 @@ class Economy(commands.GroupCog, name="economy", description="經濟系統指令
             return
         except economy_db.EconomyInsufficientFunds:
             source = currency_name if direction == "to_global" else GLOBAL_CURRENCY_NAME
-            await interaction.response.send_message(f"❌ {source}餘額不足。", ephemeral=True)
+            await interaction.response.send_message(t("economy.err.source_insufficient", source=display_currency(source)), ephemeral=True)
             return
         except economy_db.EconomyIntegrityError:
-            await interaction.response.send_message("❌ 兌換金額或經濟資料無效，交易已取消。", ephemeral=True)
+            await interaction.response.send_message(t("economy.err.exchange_invalid"), ephemeral=True)
             return
 
         amount = result.spent
         rate = result.rate
         fee = result.fee
         received = result.received
-        embed = discord.Embed(title="💱 兌換成功", color=0x3498db)
+        embed = discord.Embed(title=t("economy.exchange.success_title"), color=0x3498db)
         if direction == "to_global":
-            embed.add_field(name="支出", value=f"{amount:,.2f} {currency_name}", inline=True)
-            embed.add_field(name="獲得", value=f"{received:,.2f} {GLOBAL_CURRENCY_NAME}", inline=True)
-            embed.add_field(name="手續費", value=f"{fee:,.2f} {GLOBAL_CURRENCY_NAME} ({fee_percent}%)", inline=True)
+            embed.add_field(name=t("economy.field.spent"), value=f"{i18n.fmt_num(amount, decimals=2)} {display_currency(currency_name)}", inline=True)
+            embed.add_field(name=t("economy.field.received"), value=f"{i18n.fmt_num(received, decimals=2)} {display_currency(GLOBAL_CURRENCY_NAME)}", inline=True)
+            embed.add_field(name=t("economy.field.fee"), value=f"{i18n.fmt_num(fee, decimals=2)} {display_currency(GLOBAL_CURRENCY_NAME)} ({fee_percent}%)", inline=True)
         else:
-            embed.add_field(name="支出", value=f"{amount:,.2f} {GLOBAL_CURRENCY_NAME}", inline=True)
-            embed.add_field(name="獲得", value=f"{received:,.2f} {currency_name}", inline=True)
-            embed.add_field(name="手續費", value=f"{fee:,.2f} {currency_name} ({fee_percent}%)", inline=True)
+            embed.add_field(name=t("economy.field.spent"), value=f"{i18n.fmt_num(amount, decimals=2)} {display_currency(GLOBAL_CURRENCY_NAME)}", inline=True)
+            embed.add_field(name=t("economy.field.received"), value=f"{i18n.fmt_num(received, decimals=2)} {display_currency(currency_name)}", inline=True)
+            embed.add_field(name=t("economy.field.fee"), value=f"{i18n.fmt_num(fee, decimals=2)} {display_currency(currency_name)} ({fee_percent}%)", inline=True)
 
         embed.add_field(
-            name="匯率",
+            name=t("economy.field.rate_plain"),
             value=f"1 {currency_name} = {rate:.4f} {GLOBAL_CURRENCY_NAME}",
             inline=False
         )
@@ -2050,20 +2063,20 @@ class Economy(commands.GroupCog, name="economy", description="經濟系統指令
             )
 
         if direction == "to_global":
-            log_transaction(guild_id, user_id, "兌換支出", -amount, currency_name, f"→ {received:,.2f} {GLOBAL_CURRENCY_NAME}")
-            log_transaction(GLOBAL_GUILD_ID, user_id, "兌換收入", received, GLOBAL_CURRENCY_NAME, f"← {amount:,.2f} {currency_name}")
+            log_transaction(guild_id, user_id, "兌換支出", -amount, currency_name, f"→ {received:,.2f} {GLOBAL_CURRENCY_NAME}")  # i18n: skip (stored tx data)
+            log_transaction(GLOBAL_GUILD_ID, user_id, "兌換收入", received, GLOBAL_CURRENCY_NAME, f"← {amount:,.2f} {currency_name}")  # i18n: skip (stored tx data)
         else:
-            log_transaction(GLOBAL_GUILD_ID, user_id, "兌換支出", -amount, GLOBAL_CURRENCY_NAME, f"→ {received:,.2f} {currency_name}")
-            log_transaction(guild_id, user_id, "兌換收入", received, currency_name, f"← {amount:,.2f} {GLOBAL_CURRENCY_NAME}")
+            log_transaction(GLOBAL_GUILD_ID, user_id, "兌換支出", -amount, GLOBAL_CURRENCY_NAME, f"→ {received:,.2f} {currency_name}")  # i18n: skip (stored tx data)
+            log_transaction(guild_id, user_id, "兌換收入", received, currency_name, f"← {amount:,.2f} {GLOBAL_CURRENCY_NAME}")  # i18n: skip (stored tx data)
 
         await interaction.response.send_message(embed=embed)
 
-    @app_commands.command(name="buy", description="從商店購買物品")
-    @app_commands.describe(item_id="要購買的物品", amount="購買數量", scope="商店類型")
+    @app_commands.command(name=app_commands.locale_str("buy", i18n_key="cmd.economy.economy.buy.name"), description=app_commands.locale_str("Buy items from the shop", i18n_key="cmd.economy.economy.buy.desc"))
+    @app_commands.describe(item_id=app_commands.locale_str("The item to buy", i18n_key="cmd.economy.economy.buy.param.item_id"), amount=app_commands.locale_str("How many to buy", i18n_key="cmd.economy.economy.buy.param.amount"), scope=app_commands.locale_str("Shop type", i18n_key="cmd.economy.economy.buy.param.scope"))
     @app_commands.autocomplete(item_id=purchasable_items_autocomplete)
     @app_commands.choices(scope=[
-        app_commands.Choice(name="伺服器商店（伺服幣）", value="server"),
-        app_commands.Choice(name="全域商店（全域幣）", value="global"),
+        app_commands.Choice(name=app_commands.locale_str("Server shop (server currency)", i18n_key="cmd.economy.economy.buy.choice.server"), value="server"),
+        app_commands.Choice(name=app_commands.locale_str("Global shop (global currency)", i18n_key="cmd.economy.economy.buy.choice.global"), value="global"),
     ])
     async def buy(self, interaction: discord.Interaction, item_id: str, amount: int = 1, scope: str = "server"):
         # 全域安裝時強制使用全域商店
@@ -2078,20 +2091,20 @@ class Economy(commands.GroupCog, name="economy", description="經濟系統指令
                     await interaction.response.send_message(flow_block_notice, ephemeral=True)
                     return
         if scope not in ("server", "global"):
-            await interaction.response.send_message("❌ 無效的商店類型。", ephemeral=True)
+            await interaction.response.send_message(t("economy.err.invalid_shop_type"), ephemeral=True)
             return
         settlement_guild_id = guild_id if scope == "server" else GLOBAL_GUILD_ID
         try:
             amount = economy_db.positive_item_quantity(amount)
         except economy_db.EconomyIntegrityError:
-            await interaction.response.send_message("❌ 數量必須大於 0。", ephemeral=True)
+            await interaction.response.send_message(t("economy.err.amount_positive"), ephemeral=True)
             return
 
         user_id = interaction.user.id
 
         item = get_item_by_id(item_id, guild_id if scope == "server" else 0)
         if not item:
-            await interaction.response.send_message("❌ 無效的物品 ID。", ephemeral=True)
+            await interaction.response.send_message(t("economy.err.invalid_item_id"), ephemeral=True)
             return
 
         worth = item.get("worth", 0)
@@ -2139,27 +2152,27 @@ class Economy(commands.GroupCog, name="economy", description="經濟系統指令
         except economy_db.EconomyInsufficientFunds:
             available = get_balance(settlement_guild_id, user_id)
             await interaction.response.send_message(
-                f"❌ 餘額不足。需要 **{total_price:,.2f}** {currency_name}，但只有 **{available:,.2f}**。",
+                t("economy.err.insufficient_balance", needed=i18n.fmt_num(total_price, decimals=2), currency=display_currency(currency_name), available=i18n.fmt_num(available, decimals=2)),
                 ephemeral=True,
             )
             return
         except economy_db.EconomyIntegrityError:
-            await interaction.response.send_message("❌ 數量或商品價格無效，購買已取消。", ephemeral=True)
+            await interaction.response.send_message(t("economy.err.purchase_invalid"), ephemeral=True)
             return
 
-        scope_label = "伺服器" if scope == "server" else "全域"
+        scope_label = t("economy.scope.server") if scope == "server" else t("economy.scope.global")
         embed = discord.Embed(
-            title=f"🛒 購買成功（{scope_label}）",
-            description=f"你購買了 **{item['name']}** x{amount}！",
+            title=t("economy.shop.buy_success_title", scope=scope_label),
+            description=t("economy.shop.buy_success_desc", item=item["name"], amount=amount),
             color=0x2ecc71
         )
-        embed.add_field(name="單價", value=f"{price_per:,.2f} {currency_name}", inline=True)
-        embed.add_field(name="總價", value=f"{total_price:,.2f} {currency_name}", inline=True)
+        embed.add_field(name=t("economy.field.unit_price"), value=f"{i18n.fmt_num(price_per, decimals=2)} {display_currency(currency_name)}", inline=True)
+        embed.add_field(name=t("economy.field.total_price"), value=f"{i18n.fmt_num(total_price, decimals=2)} {display_currency(currency_name)}", inline=True)
         remaining = settlement.balance_after
-        dest = "伺服器背包" if scope == "server" else "全域背包"
-        embed.set_footer(text=f"剩餘餘額：{remaining:,.2f} {currency_name} | 物品已放入{dest}")
+        dest = t("economy.scope.server_inventory") if scope == "server" else t("economy.scope.global_inventory")
+        embed.set_footer(text=t("economy.shop.buy_footer", remaining=i18n.fmt_num(remaining, decimals=2), currency=display_currency(currency_name), dest=dest))
         buy_guild = guild_id if scope == "server" else GLOBAL_GUILD_ID
-        log_transaction(buy_guild, user_id, "購買物品", -total_price, currency_name, f"{item['name']} x{amount}")
+        log_transaction(buy_guild, user_id, "購買物品", -total_price, currency_name, f"{item['name']} x{amount}")  # i18n: skip (stored tx data)
         queue_economy_audit_log(
             "buy_item",
             guild_id=buy_guild,
@@ -2176,18 +2189,18 @@ class Economy(commands.GroupCog, name="economy", description="經濟系統指令
         )
         await interaction.response.send_message(embed=embed)
 
-    @app_commands.command(name="sell", description="賣出物品給商店")
-    @app_commands.describe(item_id="要賣出的物品", amount="賣出數量", scope="商店類型")
+    @app_commands.command(name=app_commands.locale_str("sell", i18n_key="cmd.economy.economy.sell.name"), description=app_commands.locale_str("Sell items to the shop", i18n_key="cmd.economy.economy.sell.desc"))
+    @app_commands.describe(item_id=app_commands.locale_str("The item to sell", i18n_key="cmd.economy.economy.sell.param.item_id"), amount=app_commands.locale_str("How many to sell", i18n_key="cmd.economy.economy.sell.param.amount"), scope=app_commands.locale_str("Shop type", i18n_key="cmd.economy.economy.sell.param.scope"))
     @app_commands.choices(scope=[
-        app_commands.Choice(name="伺服器商店（伺服幣）", value="server"),
-        app_commands.Choice(name="全域商店（全域幣）", value="global"),
+        app_commands.Choice(name=app_commands.locale_str("Server shop (server currency)", i18n_key="cmd.economy.economy.sell.choice.server"), value="server"),
+        app_commands.Choice(name=app_commands.locale_str("Global shop (global currency)", i18n_key="cmd.economy.economy.sell.choice.global"), value="global"),
     ])
     @app_commands.autocomplete(item_id=sellable_items_autocomplete)
     async def sell(self, interaction: discord.Interaction, item_id: str, amount: int = 1, scope: str = "server"):
         try:
             amount = economy_db.positive_item_quantity(amount)
         except economy_db.EconomyIntegrityError:
-            await interaction.response.send_message("❌ 數量必須大於 0。", ephemeral=True)
+            await interaction.response.send_message(t("economy.err.amount_positive"), ephemeral=True)
             return
 
         if not interaction_uses_server_scope(interaction):
@@ -2201,14 +2214,14 @@ class Economy(commands.GroupCog, name="economy", description="經濟系統指令
                     await interaction.response.send_message(flow_block_notice, ephemeral=True)
                     return
         if scope not in ("server", "global"):
-            await interaction.response.send_message("❌ 無效的商店類型。", ephemeral=True)
+            await interaction.response.send_message(t("economy.err.invalid_shop_type"), ephemeral=True)
             return
         settlement_guild_id = guild_id if scope == "server" else GLOBAL_GUILD_ID
         user_id = interaction.user.id
 
         item = get_item_by_id(item_id, settlement_guild_id)
         if not item:
-            await interaction.response.send_message("❌ 無效的物品 ID。", ephemeral=True)
+            await interaction.response.send_message(t("economy.err.invalid_item_id"), ephemeral=True)
             return
 
         worth = item.get("worth", 0)
@@ -2219,7 +2232,7 @@ class Economy(commands.GroupCog, name="economy", description="經濟系統指令
             sellable_count = max(0, user_item_count - get_admin_item_count(guild_id, user_id, item_id))
         if sellable_count < amount:
             await interaction.response.send_message(
-                f"❌ 你只有 **{sellable_count}** 個 {item['name']} 可以賣出。\n-# 管理員給予的物品不能賣",
+                t("economy.err.sell_not_enough", count=sellable_count, item=item["name"]),
                 ephemeral=True
             )
             return
@@ -2274,20 +2287,20 @@ class Economy(commands.GroupCog, name="economy", description="經濟系統指令
             await interaction.response.send_message(build_flow_blacklist_notice(guild_id), ephemeral=True)
             return
         except economy_db.EconomyInsufficientFunds:
-            await interaction.response.send_message("❌ 可賣出的物品數量不足。", ephemeral=True)
+            await interaction.response.send_message(t("economy.err.sell_insufficient"), ephemeral=True)
             return
         except economy_db.EconomyIntegrityError:
-            await interaction.response.send_message("❌ 數量或商品價格無效，賣出已取消。", ephemeral=True)
+            await interaction.response.send_message(t("economy.err.sell_invalid"), ephemeral=True)
             return
         removed = settlement.quantity
 
         embed = discord.Embed(
-            title="💰 賣出成功",
-            description=f"你賣出了 **{item['name']}** x{removed}！",
+            title=t("economy.sell.success_title"),
+            description=t("economy.sell.success_desc", item=item["name"], amount=removed),
             color=0xe67e22
         )
-        embed.add_field(name="單價", value=f"{price_per:,.2f} {currency_name}", inline=True)
-        embed.add_field(name="總收入", value=f"{total_price:,.2f} {currency_name}", inline=True)
+        embed.add_field(name=t("economy.field.unit_price"), value=f"{i18n.fmt_num(price_per, decimals=2)} {display_currency(currency_name)}", inline=True)
+        embed.add_field(name=t("economy.field.total_income"), value=f"{i18n.fmt_num(total_price, decimals=2)} {display_currency(currency_name)}", inline=True)
 
         if scope == "server":
             buy_price = economy_db.money(
@@ -2299,11 +2312,11 @@ class Economy(commands.GroupCog, name="economy", description="經濟系統指令
         else:
             buy_price = item.get("worth", 0)
         embed.set_footer(
-            text=f"賣出價為買入價的 {sell_ratio*100:.0f}%（買入: {buy_price:,.2f}）",
+            text=t("economy.sell.footer", ratio=f"{sell_ratio*100:.0f}", buy_price=i18n.fmt_num(buy_price, decimals=2)),
         )
         embed.timestamp = datetime.now(timezone.utc)
         sell_guild = guild_id if scope == "server" else GLOBAL_GUILD_ID
-        log_transaction(sell_guild, user_id, "賣出物品", total_price, currency_name, f"{item['name']} x{removed}")
+        log_transaction(sell_guild, user_id, "賣出物品", total_price, currency_name, f"{item['name']} x{removed}")  # i18n: skip (stored tx data)
         queue_economy_audit_log(
             "sell_item",
             guild_id=sell_guild,
@@ -2320,14 +2333,14 @@ class Economy(commands.GroupCog, name="economy", description="經濟系統指令
         )
         await interaction.response.send_message(embed=embed)
 
-    @app_commands.command(name="shop", description="查看商店")
+    @app_commands.command(name=app_commands.locale_str("shop", i18n_key="cmd.economy.economy.shop.name"), description=app_commands.locale_str("View the shop", i18n_key="cmd.economy.economy.shop.desc"))
     async def shop(self, interaction: discord.Interaction):
         if interaction_uses_server_scope(interaction):
             purchasable = [item for item in get_all_items_for_guild(interaction.guild.id) if item.get("worth", 0) > 0]
         else:
             purchasable = [item for item in items if item.get("worth", 0) > 0]
         if not purchasable:
-            await interaction.response.send_message("🏪 商店目前沒有任何商品。", ephemeral=True)
+            await interaction.response.send_message(t("economy.shop.empty"), ephemeral=True)
             return
 
         if interaction_uses_server_scope(interaction):
@@ -2337,16 +2350,16 @@ class Economy(commands.GroupCog, name="economy", description="經濟系統指令
             rate = get_exchange_rate(guild_id)
 
             allow_flow = get_allow_global_flow(guild_id)
-            flow_label = "\n🔓 全域幣流通：已開啟" if allow_flow else "\n🔒 全域幣流通：已關閉"
+            flow_label = "\n" + (t("economy.shop.flow_on") if allow_flow else t("economy.shop.flow_off"))
             desc_parts = [
-                f"當前匯率: 1 {currency_name} = {rate:.4f} {GLOBAL_CURRENCY_NAME}",
-                f"🏦 伺服器商店 = 伺服幣付款，物品到伺服器背包",
+                t("economy.shop.current_rate", currency=display_currency(currency_name), rate=f"{rate:.4f}", global_currency=display_currency(GLOBAL_CURRENCY_NAME)),
+                t("economy.shop.server_shop_hint", currency=display_currency(currency_name)),
             ]
             if allow_flow:
-                desc_parts.append(f"🌐 全域商店 = 全域幣付款，物品到全域背包")
+                desc_parts.append(t("economy.shop.global_shop_hint", currency=display_currency(GLOBAL_CURRENCY_NAME)))
             desc_parts.append(flow_label)
             embed = discord.Embed(
-                title="🏪 商店",
+                title=t("economy.shop.title"),
                 description="\n".join(desc_parts),
                 color=0x9b59b6
             )
@@ -2354,12 +2367,12 @@ class Economy(commands.GroupCog, name="economy", description="經濟系統指令
                 buy_price = get_item_buy_price(item["id"], guild_id)
                 sell_price = get_item_sell_price(item["id"], guild_id)
                 item_lines = [
-                    item.get('description', '無描述'),
-                    f"🏦 伺服器商店: **{buy_price:,.2f}** {currency_name}",
+                    item.get("description") or t("economy.msg.no_description"),
+                    t("economy.shop.server_price", price=i18n.fmt_num(buy_price, decimals=2), currency=display_currency(currency_name)),
                 ]
                 if allow_flow and not str(item["id"]).startswith("custom_"):
-                    item_lines.append(f"🌐 全域商店: **{item['worth']:,.2f}** {GLOBAL_CURRENCY_NAME}")
-                item_lines.append(f"💰 賣出: **{sell_price:,.2f}** {currency_name}")
+                    item_lines.append(t("economy.shop.global_price", price=i18n.fmt_num(item["worth"], decimals=2), currency=display_currency(GLOBAL_CURRENCY_NAME)))
+                item_lines.append(t("economy.shop.sell_price", price=i18n.fmt_num(sell_price, decimals=2), currency=display_currency(currency_name)))
                 embed.add_field(
                     name=item["name"],
                     value="\n".join(item_lines),
@@ -2367,41 +2380,41 @@ class Economy(commands.GroupCog, name="economy", description="經濟系統指令
                 )
 
             embed.set_footer(
-                text=f"{interaction.guild.name} | 賣出價為買入價的 {get_sell_ratio(guild_id)*100:.0f}%",
+                text=f"{interaction.guild.name} | " + t("economy.shop.sell_ratio_footer", ratio=f"{get_sell_ratio(guild_id)*100:.0f}"),
                 icon_url=interaction.guild.icon.url if interaction.guild.icon else None
             )
         else:
             # 全域：只顯示全域商店
             embed = discord.Embed(
-                title="🏪 全域商店",
-                description=f"🌐 全域商店 = {GLOBAL_CURRENCY_NAME}付款，物品到全域背包",
+                title=t("economy.shop.global_title"),
+                description=t("economy.shop.global_shop_hint", currency=display_currency(GLOBAL_CURRENCY_NAME)),
                 color=0x9b59b6
             )
             for item in purchasable:
                 embed.add_field(
                     name=item["name"],
                     value=(
-                        f"{item.get('description', '無描述')}\n"
-                        f"💰 價格: **{item['worth']:,.2f}** {GLOBAL_CURRENCY_NAME}"
+                        (item.get("description") or t("economy.msg.no_description")) + "\n"
+                        + t("economy.shop.price", price=i18n.fmt_num(item["worth"], decimals=2), currency=display_currency(GLOBAL_CURRENCY_NAME))
                     ),
                     inline=False
                 )
-            embed.set_footer(text="全域商店")
+            embed.set_footer(text=t("economy.shop.global_title_plain"))
 
         # 建立購買 View
         view = ShopView(interaction, purchasable)
         await interaction.response.send_message(embed=embed, view=view)
 
-    @app_commands.command(name="trade", description="與其他用戶交易")
+    @app_commands.command(name=app_commands.locale_str("trade", i18n_key="cmd.economy.economy.trade.name"), description=app_commands.locale_str("Trade with another user", i18n_key="cmd.economy.economy.trade.desc"))
     @app_commands.describe(
-        user="交易對象",
-        offer_item="你要提供的物品",
-        offer_item_amount="提供的物品數量",
-        offer_money="你要提供的金額",
-        request_item="你想要的物品",
-        request_item_amount="想要的物品數量",
-        request_money="你想要的金額",
-        global_trade="使用全域幣/全域物品交易（跨伺服器）"
+        user=app_commands.locale_str("Trading partner", i18n_key="cmd.economy.economy.trade.param.user"),
+        offer_item=app_commands.locale_str("The item you offer", i18n_key="cmd.economy.economy.trade.param.offer_item"),
+        offer_item_amount=app_commands.locale_str("How many of the item you offer", i18n_key="cmd.economy.economy.trade.param.offer_item_amount"),
+        offer_money=app_commands.locale_str("The amount of money you offer", i18n_key="cmd.economy.economy.trade.param.offer_money"),
+        request_item=app_commands.locale_str("The item you want", i18n_key="cmd.economy.economy.trade.param.request_item"),
+        request_item_amount=app_commands.locale_str("How many of the item you want", i18n_key="cmd.economy.economy.trade.param.request_item_amount"),
+        request_money=app_commands.locale_str("The amount of money you want", i18n_key="cmd.economy.economy.trade.param.request_money"),
+        global_trade=app_commands.locale_str("Trade with global currency/items (cross-server)", i18n_key="cmd.economy.economy.trade.param.global_trade")
     )
     @app_commands.autocomplete(offer_item=get_user_items_autocomplete, request_item=all_items_autocomplete)
     async def trade(self, interaction: discord.Interaction, user: discord.User,
@@ -2419,17 +2432,17 @@ class Economy(commands.GroupCog, name="economy", description="經濟系統指令
                 request_item_amount = economy_db.positive_item_quantity(request_item_amount)
         except economy_db.EconomyIntegrityError:
             await interaction.response.send_message(
-                "❌ 金額必須是有限值，物品數量必須至少為 1。", ephemeral=True,
+                t("economy.err.trade_bounds"), ephemeral=True,
             )
             return
         if user.id == interaction.user.id:
-            await interaction.response.send_message("❌ 你不能跟自己交易。", ephemeral=True)
+            await interaction.response.send_message(t("economy.err.trade_self"), ephemeral=True)
             return
         if user.bot:
-            await interaction.response.send_message("❌ 你不能跟機器人交易。", ephemeral=True)
+            await interaction.response.send_message(t("economy.err.trade_bot"), ephemeral=True)
             return
         if not offer_item and offer_money <= 0 and not request_item and request_money <= 0:
-            await interaction.response.send_message("❌ 你需要提供或要求至少一樣東西。", ephemeral=True)
+            await interaction.response.send_message(t("economy.err.trade_empty"), ephemeral=True)
             return
 
         # 全域安裝時強制使用全域交易
@@ -2446,32 +2459,32 @@ class Economy(commands.GroupCog, name="economy", description="經濟系統指令
         if offer_item:
             offer_item_data = get_item_by_id(offer_item)
             if not offer_item_data:
-                await interaction.response.send_message("❌ 無效的提供物品。", ephemeral=True)
+                await interaction.response.send_message(t("economy.err.invalid_offer_item"), ephemeral=True)
                 return
             initiator_count = await get_user_items(guild_id, initiator_id, offer_item)
             if initiator_count < offer_item_amount:
                 await interaction.response.send_message(
-                    f"❌ 你只有 {initiator_count} 個 {offer_item_data['name']}。",
+                    t("economy.err.trade_not_enough", count=initiator_count, item=offer_item_data["name"]),
                     ephemeral=True
                 )
                 return
 
         if offer_money > 0:
             if get_balance(guild_id, initiator_id) < offer_money:
-                await interaction.response.send_message(f"❌ 你的 {currency_name} 餘額不足。", ephemeral=True)
+                await interaction.response.send_message(t("economy.err.currency_insufficient", currency=display_currency(currency_name)), ephemeral=True)
                 return
 
         request_item_data = None
         if request_item:
             request_item_data = get_item_by_id(request_item)
             if not request_item_data:
-                await interaction.response.send_message("❌ 無效的要求物品。", ephemeral=True)
+                await interaction.response.send_message(t("economy.err.invalid_request_item"), ephemeral=True)
                 return
 
         # 建構交易 Embed
         embed = discord.Embed(
-            title="🤝 交易請求" + (f" {GLOBAL_CURRENCY_EMOJI} 全域" if global_trade else ""),
-            description=f"{interaction.user.mention} 想和 {user.mention} 交易",
+            title=t("economy.trade.request_title") + (f" {GLOBAL_CURRENCY_EMOJI} " + t("economy.scope.global") if global_trade else ""),
+            description=t("economy.trade.request_desc", initiator=interaction.user.mention, target=user.mention),
             color=0xf39c12
         )
 
@@ -2481,8 +2494,8 @@ class Economy(commands.GroupCog, name="economy", description="經濟系統指令
         if offer_money > 0:
             offer_text += f"💰 {offer_money:,.2f} {currency_name}\n"
         embed.add_field(
-            name=f"📤 {interaction.user.display_name} 提供",
-            value=offer_text or "無",
+            name=t("economy.trade.offers", user=interaction.user.display_name),
+            value=offer_text or t("common.state.none"),
             inline=True
         )
 
@@ -2492,8 +2505,8 @@ class Economy(commands.GroupCog, name="economy", description="經濟系統指令
         if request_money > 0:
             request_text += f"💰 {request_money:,.2f} {currency_name}\n"
         embed.add_field(
-            name=f"📥 {interaction.user.display_name} 要求",
-            value=request_text or "無",
+            name=t("economy.trade.requests", user=interaction.user.display_name),
+            value=request_text or t("common.state.none"),
             inline=True
         )
 
@@ -2520,19 +2533,19 @@ class Economy(commands.GroupCog, name="economy", description="經濟系統指令
                 for child in self.children:
                     child.disabled = True
                 try:
-                    await interaction.edit_original_response(content="⏰ 交易已超時。", view=self)
+                    await interaction.edit_original_response(content=t("economy.trade.timeout"), view=self)
                 except Exception:
                     pass
 
-            @discord.ui.button(label="接受交易", style=discord.ButtonStyle.green, emoji="✅")
+            @discord.ui.button(label=t("economy.btn.accept_trade"), style=discord.ButtonStyle.green, emoji="✅")
             async def accept(self, btn_interaction: discord.Interaction, button: discord.ui.Button):
                 if btn_interaction.user.id != target_id:
-                    await btn_interaction.response.send_message("❌ 只有交易對象才能接受。", ephemeral=True)
+                    await btn_interaction.response.send_message(t("economy.err.trade_target_only"), ephemeral=True)
                     return
 
                 async with self._settlement_lock:
                     if self._consumed:
-                        await btn_interaction.response.send_message("ℹ️ 這筆交易已經處理完成。", ephemeral=True)
+                        await btn_interaction.response.send_message(t("economy.trade.already_done"), ephemeral=True)
                         return
                     td = trade_data
                     try:
@@ -2558,12 +2571,12 @@ class Economy(commands.GroupCog, name="economy", description="經濟系統指令
                         return
                     except economy_db.EconomyInsufficientFunds:
                         await btn_interaction.response.send_message(
-                            "❌ 交易失敗：接受時其中一方的餘額或物品不足。", ephemeral=True,
+                            t("economy.err.trade_failed_insufficient"), ephemeral=True,
                         )
                         return
                     except economy_db.EconomyIntegrityError:
                         await btn_interaction.response.send_message(
-                            "❌ 交易資料無效，未變更任何資產。", ephemeral=True,
+                            t("economy.err.trade_data_invalid"), ephemeral=True,
                         )
                         return
                     self._consumed = True
@@ -2584,18 +2597,18 @@ class Economy(commands.GroupCog, name="economy", description="經濟系統指令
                     request_parts.append(f"{ri['name'] if ri else td['request_item']} x{td['request_item_amount']}")
                 if td["request_money"] > 0:
                     request_parts.append(f"{td['request_money']:,.2f} {trade_currency}")
-                offer_str = ", ".join(offer_parts) or "無"
-                request_str = ", ".join(request_parts) or "無"
+                offer_str = ", ".join(offer_parts) or t("common.state.none")
+                request_str = ", ".join(request_parts) or t("common.state.none")
                 if td["offer_money"] > 0:
-                    log_transaction(td["guild_id"], td["initiator_id"], "交易支出", -td["offer_money"], trade_currency, f"提供: {offer_str} → 換取: {request_str}")
+                    log_transaction(td["guild_id"], td["initiator_id"], "交易支出", -td["offer_money"], trade_currency, f"提供: {offer_str} → 換取: {request_str}")  # i18n: skip (stored tx data)
                 if td["request_money"] > 0:
-                    log_transaction(td["guild_id"], td["initiator_id"], "交易收入", td["request_money"], trade_currency, f"提供: {offer_str} → 換取: {request_str}")
+                    log_transaction(td["guild_id"], td["initiator_id"], "交易收入", td["request_money"], trade_currency, f"提供: {offer_str} → 換取: {request_str}")  # i18n: skip (stored tx data)
                 if td["request_money"] > 0:
-                    log_transaction(td["guild_id"], td["target_id"], "交易支出", -td["request_money"], trade_currency, f"提供: {request_str} → 換取: {offer_str}")
+                    log_transaction(td["guild_id"], td["target_id"], "交易支出", -td["request_money"], trade_currency, f"提供: {request_str} → 換取: {offer_str}")  # i18n: skip (stored tx data)
                 if td["offer_money"] > 0:
-                    log_transaction(td["guild_id"], td["target_id"], "交易收入", td["offer_money"], trade_currency, f"提供: {request_str} → 換取: {offer_str}")
+                    log_transaction(td["guild_id"], td["target_id"], "交易收入", td["offer_money"], trade_currency, f"提供: {request_str} → 換取: {offer_str}")  # i18n: skip (stored tx data)
 
-                await btn_interaction.response.edit_message(content="✅ 交易完成！", view=self)
+                await btn_interaction.response.edit_message(content=t("economy.trade.completed"), view=self)
                 queue_economy_audit_log(
                     "trade_completed",
                     guild_id=td["guild_id"],
@@ -2619,29 +2632,29 @@ class Economy(commands.GroupCog, name="economy", description="經濟系統指令
                 log(f"{'Global t' if td.get('global_trade') else 'T'}rade between {td['initiator_id']} and {td['target_id']} in guild {td['guild_id']}",
                     module_name="Economy")
 
-            @discord.ui.button(label="拒絕交易", style=discord.ButtonStyle.red, emoji="❌")
+            @discord.ui.button(label=t("economy.btn.reject_trade"), style=discord.ButtonStyle.red, emoji="❌")
             async def decline(self, btn_interaction: discord.Interaction, button: discord.ui.Button):
                 if btn_interaction.user.id not in (initiator_id, target_id):
-                    await btn_interaction.response.send_message("❌ 只有交易雙方才能取消。", ephemeral=True)
+                    await btn_interaction.response.send_message(t("economy.err.trade_parties_only"), ephemeral=True)
                     return
                 async with self._settlement_lock:
                     if self._consumed:
-                        await btn_interaction.response.send_message("ℹ️ 這筆交易已經處理完成。", ephemeral=True)
+                        await btn_interaction.response.send_message(t("economy.trade.already_done"), ephemeral=True)
                         return
                     self._consumed = True
                     for child in self.children:
                         child.disabled = True
-                    who = "發起者" if btn_interaction.user.id == initiator_id else "對方"
-                    await btn_interaction.response.edit_message(content=f"❌ 交易已被{who}取消。", view=self)
+                    who = t("economy.trade.initiator") if btn_interaction.user.id == initiator_id else t("economy.trade.other_party")
+                    await btn_interaction.response.edit_message(content=t("economy.trade.cancelled_by", who=who), view=self)
 
         await interaction.response.send_message(content=user.mention, embed=embed, view=TradeView(), allowed_mentions=discord.AllowedMentions(users=True, roles=False, everyone=False))
 
-    @app_commands.command(name="leaderboard", description="查看財富排行榜")
-    @app_commands.describe(currency="排行類型")
+    @app_commands.command(name=app_commands.locale_str("leaderboard", i18n_key="cmd.economy.economy.leaderboard.name"), description=app_commands.locale_str("View the wealth leaderboard", i18n_key="cmd.economy.economy.leaderboard.desc"))
+    @app_commands.describe(currency=app_commands.locale_str("Leaderboard type", i18n_key="cmd.economy.economy.leaderboard.param.currency"))
     @app_commands.choices(currency=[
-        app_commands.Choice(name="伺服幣", value="server"),
-        app_commands.Choice(name="全域幣", value="global"),
-        app_commands.Choice(name="總資產", value="total"),
+        app_commands.Choice(name=app_commands.locale_str("Server currency", i18n_key="cmd.economy.economy.leaderboard.choice.server"), value="server"),
+        app_commands.Choice(name=app_commands.locale_str("Global currency", i18n_key="cmd.economy.economy.leaderboard.choice.global"), value="global"),
+        app_commands.Choice(name=app_commands.locale_str("Total assets", i18n_key="cmd.economy.economy.leaderboard.choice.total"), value="total"),
     ])
     async def leaderboard(self, interaction: discord.Interaction, currency: str = "server"):
         # 全域安裝時強制使用全域幣
@@ -2660,7 +2673,7 @@ class Economy(commands.GroupCog, name="economy", description="經濟系統指令
                 key=lambda x: x[1].get("economy_balance", 0),
                 reverse=True
             )
-            title = f"🏆 {currency_name} 排行榜"
+            title = t("economy.leaderboard.title", currency=display_currency(currency_name))
             key_name = "economy_balance"
         elif currency == "global":
             all_users = get_all_user_data(GLOBAL_GUILD_ID, "economy_balance")
@@ -2669,7 +2682,7 @@ class Economy(commands.GroupCog, name="economy", description="經濟系統指令
                 key=lambda x: x[1].get("economy_balance", 0),
                 reverse=True
             )
-            title = f"🏆 {GLOBAL_CURRENCY_NAME} 排行榜"
+            title = t("economy.leaderboard.title", currency=display_currency(GLOBAL_CURRENCY_NAME))
             key_name = "economy_balance"
         else:
             all_server = get_all_user_data(guild_id, "economy_balance")
@@ -2681,7 +2694,7 @@ class Economy(commands.GroupCog, name="economy", description="經濟系統指令
                 g_bal = all_global.get(uid, {}).get("economy_balance", 0)
                 combined[uid] = {"total": s_bal * rate + g_bal}
             sorted_users = sorted(combined.items(), key=lambda x: x[1].get("total", 0), reverse=True)
-            title = "🏆 總資產排行榜"
+            title = t("economy.leaderboard.total_title")
             key_name = "total"
 
         embed = discord.Embed(title=title, color=0xf1c40f)
@@ -2705,7 +2718,7 @@ class Economy(commands.GroupCog, name="economy", description="經濟系統指令
                 fetched_user = await bot.fetch_user(user_id)
                 name = fetched_user.display_name
             except Exception:
-                name = f"用戶 {user_id}"
+                name = t("economy.msg.user_fallback", user_id=user_id)
 
             embed.add_field(name=f"{medal} {name}", value=display, inline=False)
             displayed += 1
@@ -2713,7 +2726,7 @@ class Economy(commands.GroupCog, name="economy", description="經濟系統指令
                 break
 
         if displayed == 0:
-            embed.description = "目前沒有任何用戶有餘額。"
+            embed.description = t("economy.leaderboard.empty")
 
         embed.set_footer(
             text=interaction.guild.name,
@@ -2721,11 +2734,11 @@ class Economy(commands.GroupCog, name="economy", description="經濟系統指令
         )
         await interaction.followup.send(embed=embed)
 
-    @app_commands.command(name="info", description="查看伺服器經濟資訊")
+    @app_commands.command(name=app_commands.locale_str("info", i18n_key="cmd.economy.economy.info.name"), description=app_commands.locale_str("View server economy information", i18n_key="cmd.economy.economy.info.desc"))
     @app_commands.guild_only()
     async def info(self, interaction: discord.Interaction):
         if not interaction_uses_server_scope(interaction):
-            await interaction.response.send_message("❌ 這個指令只能在伺服器中使用。", ephemeral=True)
+            await interaction.response.send_message(t("common.err.guild_only"), ephemeral=True)
             return
         guild_id = interaction.guild.id
         rate = get_exchange_rate(guild_id)
@@ -2738,17 +2751,17 @@ class Economy(commands.GroupCog, name="economy", description="經濟系統指令
 
         # 經濟健康度指標
         if rate >= 1.5:
-            health = "🟢 非常健康（強勢貨幣）"
+            health = t("economy.health.very_healthy")
         elif rate >= 1.0:
-            health = "🟢 健康"
+            health = t("economy.health.healthy")
         elif rate >= 0.7:
-            health = "🟡 普通"
+            health = t("economy.health.normal")
         elif rate >= 0.4:
-            health = "🟠 通膨中"
+            health = t("economy.health.inflating")
         elif rate >= 0.1:
-            health = "🔴 嚴重通膨"
+            health = t("economy.health.severe_inflation")
         else:
-            health = "💀 經濟崩潰"
+            health = t("economy.health.collapsed")
 
         # 管理員濫權指標
         if total_supply > 0:
@@ -2757,50 +2770,43 @@ class Economy(commands.GroupCog, name="economy", description="經濟系統指令
             admin_ratio = 0
 
         if admin_ratio > 50:
-            admin_indicator = "🔴 嚴重濫權"
+            admin_indicator = t("economy.abuse.severe")
         elif admin_ratio > 20:
-            admin_indicator = "🟠 中度干預"
+            admin_indicator = t("economy.abuse.moderate")
         elif admin_ratio > 5:
-            admin_indicator = "🟡 輕度干預"
+            admin_indicator = t("economy.abuse.light")
         else:
-            admin_indicator = "🟢 正常"
+            admin_indicator = t("economy.abuse.normal")
 
         embed = discord.Embed(
-            title=f"📊 {interaction.guild.name} 經濟報告",
+            title=t("economy.info.title", guild=interaction.guild.name),
             color=0x3498db
         )
-        embed.add_field(name="💵 貨幣名稱", value=currency_name, inline=True)
+        embed.add_field(name=t("economy.field.currency_name"), value=display_currency(currency_name), inline=True)
         embed.add_field(
-            name="💱 匯率",
+            name=t("economy.field.rate_emoji"),
             value=f"1 {currency_name} = {rate:.4f} {GLOBAL_CURRENCY_NAME}",
             inline=True
         )
-        embed.add_field(name="📈 經濟健康度", value=health, inline=True)
+        embed.add_field(name=t("economy.field.health"), value=health, inline=True)
         embed.add_field(
-            name="💰 貨幣總供給",
+            name=t("economy.field.total_supply"),
             value=f"{total_supply:,.2f} {currency_name}",
             inline=True
         )
         embed.add_field(
-            name="🔧 管理員注入",
+            name=t("economy.field.admin_injected"),
             value=f"{admin_injected:,.2f}（{admin_ratio:.1f}%）\n{admin_indicator}",
             inline=True
         )
-        embed.add_field(name="📊 交易次數", value=f"{tx_count:,}", inline=True)
-        embed.add_field(name="📅 每日獎勵", value=f"{daily_amount:,} {currency_name}", inline=True)
-        embed.add_field(name="🏪 賣出比率", value=f"{sell_ratio*100:.0f}%", inline=True)
+        embed.add_field(name=t("economy.field.tx_count"), value=i18n.fmt_num(tx_count), inline=True)
+        embed.add_field(name=t("economy.field.daily_reward"), value=f"{i18n.fmt_num(daily_amount)} {display_currency(currency_name)}", inline=True)
+        embed.add_field(name=t("economy.field.sell_ratio"), value=f"{sell_ratio*100:.0f}%", inline=True)
 
         embed.add_field(
-            name="ℹ️ 匯率影響因素",
+            name=t("economy.field.rate_factors"),
             value=(
-                "**📉 通膨（貶值）因素：**\n"
-                "• 管理員用 `/itemmod give` 送出物品\n"
-                "• 每日/每小時獎勵導致貨幣增發\n"
-                "• 賣出物品給商店（新幣進入流通）\n\n"
-                "**📈 通縮（升值）因素：**\n"
-                "• 從商店購買物品（貨幣被銷毀）\n"
-                "• 玩家間交易（手續費銷毀貨幣）\n"
-                "• 兌換貨幣（手續費銷毀）"
+                t("economy.info.rate_factors_body")
             ),
             inline=False
         )
@@ -2811,10 +2817,10 @@ class Economy(commands.GroupCog, name="economy", description="經濟系統指令
         )
         await interaction.response.send_message(embed=embed)
 
-    @app_commands.command(name="adminitems", description="查看你擁有的管理員給予物品")
+    @app_commands.command(name=app_commands.locale_str("adminitems", i18n_key="cmd.economy.economy.adminitems.name"), description=app_commands.locale_str("View items given to you by admins", i18n_key="cmd.economy.economy.adminitems.desc"))
     async def adminitems(self, interaction: discord.Interaction):
         if not interaction_uses_server_scope(interaction):
-            await interaction.response.send_message("❌ 此指令只能在伺服器中使用。", ephemeral=True)
+            await interaction.response.send_message(t("common.err.guild_only"), ephemeral=True)
             return
 
         guild_id = interaction.guild.id
@@ -2822,12 +2828,12 @@ class Economy(commands.GroupCog, name="economy", description="經濟系統指令
         admin_items = get_user_data(guild_id, user_id, "admin_items", {})
 
         if not admin_items:
-            await interaction.response.send_message("✅ 你沒有任何管理員給予的物品。", ephemeral=True)
+            await interaction.response.send_message(t("economy.adminitems.none"), ephemeral=True)
             return
 
         embed = discord.Embed(
-            title="⚠️ 管理員給予的物品",
-            description="這些物品由管理員直接給予，受到以下限制：",
+            title=t("economy.adminitems.title"),
+            description=t("economy.adminitems.desc"),
             color=0xe74c3c
         )
 
@@ -2841,34 +2847,31 @@ class Economy(commands.GroupCog, name="economy", description="經濟系統指令
                 total_value += worth * count
                 embed.add_field(
                     name=f"{item['name']} x{count}",
-                    value=f"價值: {worth:,.2f} x {count} = {worth * count:,.2f}",
+                    value=t("economy.adminitems.value_line", worth=i18n.fmt_num(worth, decimals=2), count=count, total=i18n.fmt_num(worth * count, decimals=2)),
                     inline=False
                 )
 
         embed.add_field(
-            name="📊 總價值",
+            name=t("economy.field.total_value"),
             value=f"{total_value:,.2f} {get_currency_name(guild_id)}",
             inline=False
         )
 
         embed.add_field(
-            name="🚫 限制說明",
+            name=t("economy.adminitems.limits_title"),
             value=(
-                "• 賣出時會觸發嚴重通膨懲罰\n"
-                "• 無法賣到全域商店\n"
-                "• 支票無法兌現\n"
-                "• 交易時會轉移管理員標記"
+                t("economy.adminitems.limits_body")
             ),
             inline=False
         )
 
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
-    @app_commands.command(name="history", description="查看個人交易紀錄")
-    @app_commands.describe(scope="查看範圍", page="頁數")
+    @app_commands.command(name=app_commands.locale_str("history", i18n_key="cmd.economy.economy.history.name"), description=app_commands.locale_str("View your transaction history", i18n_key="cmd.economy.economy.history.desc"))
+    @app_commands.describe(scope=app_commands.locale_str("Scope to view", i18n_key="cmd.economy.economy.history.param.scope"), page=app_commands.locale_str("Page number", i18n_key="cmd.economy.economy.history.param.page"))
     @app_commands.choices(scope=[
-        app_commands.Choice(name="伺服器", value="server"),
-        app_commands.Choice(name="全域", value="global"),
+        app_commands.Choice(name=app_commands.locale_str("Server", i18n_key="cmd.economy.economy.history.choice.server"), value="server"),
+        app_commands.Choice(name=app_commands.locale_str("Global", i18n_key="cmd.economy.economy.history.choice.global"), value="global"),
     ])
     async def history(self, interaction: discord.Interaction, scope: str = None, page: int = 1):
         user_id = interaction.user.id
@@ -2876,14 +2879,14 @@ class Economy(commands.GroupCog, name="economy", description="經濟系統指令
             scope = "server" if interaction_uses_server_scope(interaction) else "global"
         if scope == "global" or not interaction_uses_server_scope(interaction):
             guild_id = GLOBAL_GUILD_ID
-            scope_name = "全域"
+            scope_name = t("economy.scope.global")
         else:
             guild_id = interaction.guild.id
             scope_name = interaction.guild.name
 
         history_data = get_user_data(guild_id, user_id, "economy_history", [])
         if not history_data:
-            await interaction.response.send_message(f"📜 你在 {scope_name} 沒有任何交易紀錄。", ephemeral=True)
+            await interaction.response.send_message(t("economy.history.empty", scope=scope_name), ephemeral=True)
             return
 
         # 由新到舊排序
@@ -2896,12 +2899,12 @@ class Economy(commands.GroupCog, name="economy", description="經濟系統指令
         page_data = history_data[start:end]
 
         embed = discord.Embed(
-            title=f"📜 {interaction.user.display_name} 的交易紀錄（{scope_name}）",
+            title=t("economy.history.title", user=interaction.user.display_name, scope=scope_name),
             color=0x3498db
         )
 
         for entry in page_data:
-            tx_type = entry.get("type", "未知")
+            tx_type = entry.get("type") or t("economy.msg.unknown_tx")
             amount = entry.get("amount", 0)
             currency = entry.get("currency", "")
             detail = entry.get("detail", "")
@@ -2931,7 +2934,7 @@ class Economy(commands.GroupCog, name="economy", description="經濟系統指令
 
             embed.add_field(name=name, value=value, inline=False)
 
-        embed.set_footer(text=f"第 {page}/{total_pages} 頁 · 共 {len(history_data)} 筆紀錄")
+        embed.set_footer(text=t("economy.history.footer", page=page, total=total_pages, count=len(history_data)))
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
 
@@ -2940,7 +2943,7 @@ asyncio.run(bot.add_cog(Economy()))
 
 # ==================== Economy Mod Cog ====================
 
-class ConfirmGlobalModeView(discord.ui.View):
+class ConfirmGlobalModeView(i18n.I18nView):
     def __init__(self, guild_id: int, actor_id: int):
         super().__init__(timeout=180)
         self.guild_id = guild_id
@@ -2950,7 +2953,7 @@ class ConfirmGlobalModeView(discord.ui.View):
 
     async def _reject_if_not_actor(self, interaction: discord.Interaction) -> bool:
         if interaction.user.id != self.actor_id:
-            await interaction.response.send_message("只有發起指令的人可以確認這次切換。", ephemeral=True)
+            await interaction.response.send_message(t("economy.err.initiator_only"), ephemeral=True)
             return True
         return False
 
@@ -2958,13 +2961,13 @@ class ConfirmGlobalModeView(discord.ui.View):
         for child in self.children:
             child.disabled = True
 
-    @discord.ui.button(label="確認改為全域", style=discord.ButtonStyle.danger)
+    @discord.ui.button(label=i18n.K("economy.btn.confirm_global"), style=discord.ButtonStyle.danger)
     async def confirm(self, interaction: discord.Interaction, button: discord.ui.Button):
         if await self._reject_if_not_actor(interaction):
             return
         async with self._settlement_lock:
             if self._consumed or is_global_mode_enabled(self.guild_id):
-                await interaction.response.send_message("這個伺服器已經是全域模式了。", ephemeral=True)
+                await interaction.response.send_message(t("economy.globalmode.already"), ephemeral=True)
                 return
 
             flow_block_notice = get_global_flow_block_notice(self.guild_id, interaction.guild)
@@ -2996,35 +2999,35 @@ class ConfirmGlobalModeView(discord.ui.View):
         )
 
         embed = discord.Embed(
-            title="已切換為全域模式",
-            description="這個伺服器之後的經濟、物品、dsize 範圍都會強制走全域。",
+            title=t("economy.globalmode.switched_title"),
+            description=t("economy.globalmode.switched_desc"),
             color=0xE74C3C,
         )
-        embed.add_field(name="影響人數", value=str(migration["affected_users"]), inline=True)
-        embed.add_field(name="賣出物品數", value=str(migration["sold_item_units"]), inline=True)
-        embed.add_field(name="匯率", value=f"1 伺服幣 = {migration['exchange_rate']:.4f} 全域幣", inline=False)
-        embed.add_field(name="原伺服幣", value=f"{migration['server_balance_converted']:,.2f}", inline=True)
-        embed.add_field(name="物品折現", value=f"{migration['server_item_value']:,.2f}", inline=True)
-        embed.add_field(name="轉入全域幣", value=f"{migration['global_added']:,.2f} {GLOBAL_CURRENCY_NAME}", inline=False)
+        embed.add_field(name=t("economy.globalmode.affected_users"), value=str(migration["affected_users"]), inline=True)
+        embed.add_field(name=t("economy.globalmode.sold_items"), value=str(migration["sold_item_units"]), inline=True)
+        embed.add_field(name=t("economy.field.rate_plain"), value=t("economy.globalmode.rate_line", rate=f"{migration['exchange_rate']:.4f}", global_currency=display_currency(GLOBAL_CURRENCY_NAME)), inline=False)
+        embed.add_field(name=t("economy.globalmode.server_balance"), value=i18n.fmt_num(migration["server_balance_converted"], decimals=2), inline=True)
+        embed.add_field(name=t("economy.globalmode.item_value"), value=i18n.fmt_num(migration["server_item_value"], decimals=2), inline=True)
+        embed.add_field(name=t("economy.globalmode.global_added"), value=f"{i18n.fmt_num(migration['global_added'], decimals=2)} {display_currency(GLOBAL_CURRENCY_NAME)}", inline=False)
         for child in self.children:
             child.disabled = True
         await interaction.followup.send(embed=embed, ephemeral=True)
         self.stop()
 
-    @discord.ui.button(label="取消", style=discord.ButtonStyle.secondary)
+    @discord.ui.button(label=i18n.K("common.btn.cancel"), style=discord.ButtonStyle.secondary)
     async def cancel(self, interaction: discord.Interaction, button: discord.ui.Button):
         if await self._reject_if_not_actor(interaction):
             return
         for child in self.children:
             child.disabled = True
-        await interaction.response.edit_message(content="已取消切換全域模式。", embed=None, view=self)
+        await interaction.response.edit_message(content=t("economy.globalmode.cancelled"), embed=None, view=self)
         self.stop()
 
 @app_commands.guild_only()
 @app_commands.default_permissions(manage_guild=True)
 @app_commands.allowed_installs(guilds=True, users=False)
 @app_commands.allowed_contexts(guilds=True, dms=False, private_channels=False)
-class EconomyMod(commands.GroupCog, name="economymod", description="經濟系統管理指令"):
+class EconomyMod(commands.GroupCog, name=app_commands.locale_str("economymod", i18n_key="cmd.economy.economymod.root.name"), description=app_commands.locale_str("Economy admin commands", i18n_key="cmd.economy.economymod.root.desc")):
     def __init__(self):
         super().__init__()
 
@@ -3149,15 +3152,15 @@ class EconomyMod(commands.GroupCog, name="economymod", description="經濟系統
     #     log(f"Admin {interaction.user} cleared admin item markers for {user} in guild {guild_id}",
     #         module_name="Economy", user=interaction.user, guild=interaction.guild)
 
-    @app_commands.command(name="global-mode", description="切換這個伺服器是否強制使用全域經濟/物品/dsize")
-    @app_commands.describe(enabled="True = 強制全域，False = 恢復伺服器模式")
+    @app_commands.command(name=app_commands.locale_str("global-mode", i18n_key="cmd.economy.economymod.global_mode.name"), description=app_commands.locale_str("Toggle forcing this server to use the global economy/items/dsize", i18n_key="cmd.economy.economymod.global_mode.desc"))
+    @app_commands.describe(enabled=app_commands.locale_str("True = force global, False = restore server mode", i18n_key="cmd.economy.economymod.global_mode.param.enabled"))
     async def global_mode(self, interaction: discord.Interaction, enabled: bool):
         guild_id = interaction.guild.id
         current = is_global_mode_enabled(guild_id)
 
         if enabled == current:
-            status = "全域模式" if enabled else "伺服器模式"
-            await interaction.response.send_message(f"目前已經是{status}。", ephemeral=True)
+            status = t("economy.globalmode.mode_global") if enabled else t("economy.globalmode.mode_server")
+            await interaction.response.send_message(t("economy.globalmode.already_mode", status=status), ephemeral=True)
             return
 
         if not enabled:
@@ -3171,7 +3174,7 @@ class EconomyMod(commands.GroupCog, name="economymod", description="經濟系統
                 color=0x3498DB,
             )
             await interaction.response.send_message(
-                "已關閉全域模式。之後這個伺服器會恢復使用伺服器經濟、物品與 dsize 範圍。",
+                t("economy.globalmode.disabled"),
                 ephemeral=True,
             )
             return
@@ -3182,22 +3185,21 @@ class EconomyMod(commands.GroupCog, name="economymod", description="經濟系統
             return
 
         warning = discord.Embed(
-            title="警告：即將改為全域模式",
+            title=t("economy.globalmode.warning_title"),
             description=(
-                "這會讓這個伺服器後續所有經濟、物品、dsize 的 guild 判斷都強制視為全域。\n"
-                "系統也會自動把目前伺服器內所有使用者的物品賣掉換成伺服幣，再依目前匯率轉成全域幣。"
+                t("economy.globalmode.warning_desc")
             ),
             color=0xE67E22,
         )
-        warning.add_field(name="會發生的事", value="伺服器物品清空、伺服幣清空、轉入全域幣", inline=False)
-        warning.add_field(name="不會自動還原", value="切回 False 只會恢復未來判斷，不會把已搬走的資料搬回來", inline=False)
+        warning.add_field(name=t("economy.globalmode.what_happens"), value=t("economy.globalmode.what_happens_body"), inline=False)
+        warning.add_field(name=t("economy.globalmode.no_undo"), value=t("economy.globalmode.no_undo_body"), inline=False)
         await interaction.response.send_message(
             embed=warning,
             view=ConfirmGlobalModeView(guild_id, interaction.user.id),
             ephemeral=True,
         )
 
-    @app_commands.command(name="toggle-flow", description="切換是否允許伺服幣與全域幣流通（兌換、全域商店等）")
+    @app_commands.command(name=app_commands.locale_str("toggle-flow", i18n_key="cmd.economy.economymod.toggle_flow.name"), description=app_commands.locale_str("Toggle flow between server and global currency (exchange, global shop, etc.)", i18n_key="cmd.economy.economymod.toggle_flow.desc"))
     async def toggle_flow(self, interaction: discord.Interaction):
         guild_id = interaction.guild.id
         if is_flow_blacklisted(guild_id):
@@ -3213,29 +3215,29 @@ class EconomyMod(commands.GroupCog, name="economymod", description="經濟系統
         current = get_configured_allow_global_flow(guild_id)
         new_value = not current
         set_allow_global_flow(guild_id, new_value)
-        status = "🔓 已開啟" if new_value else "🔒 已關閉"
+        status = t("economy.flow.on") if new_value else t("economy.flow.off")
         desc = (
-            "用戶可以使用兌換、全域商店買賣及支票兌現功能。"
+            t("economy.flow.on_desc")
             if new_value else
-            "用戶無法使用兌換、全域商店買賣及支票兌現功能。"
+            t("economy.flow.off_desc")
         )
         await interaction.response.send_message(
-            f"✅ 全域幣流通已切換為 **{status}**\n{desc}",
+            t("economy.flow.toggled", status=status) + f"\n{desc}",
             ephemeral=True
         )
         log(f"Admin {interaction.user} toggled global flow to {new_value} in guild {guild_id}",
             module_name="Economy", user=interaction.user, guild=interaction.guild)
 
-    @app_commands.command(name="setname", description="設定伺服器貨幣名稱")
-    @app_commands.describe(name="新的貨幣名稱")
+    @app_commands.command(name=app_commands.locale_str("setname", i18n_key="cmd.economy.economymod.setname.name"), description=app_commands.locale_str("Set the server currency name", i18n_key="cmd.economy.economymod.setname.desc"))
+    @app_commands.describe(name=app_commands.locale_str("The new currency name", i18n_key="cmd.economy.economymod.setname.param.name"))
     async def setname(self, interaction: discord.Interaction, name: str):
         if len(name) > 20:
-            await interaction.response.send_message("❌ 貨幣名稱不能超過 20 個字元。", ephemeral=True)
+            await interaction.response.send_message(t("economy.err.currency_name_too_long"), ephemeral=True)
             return
 
         guild_id = interaction.guild.id
         set_server_config(guild_id, "economy_currency_name", name)
-        await interaction.response.send_message(f"✅ 貨幣名稱已更改為 **{name}**。", ephemeral=True)
+        await interaction.response.send_message(t("economy.msg.currency_name_set", name=name), ephemeral=True)
 
     # @app_commands.command(name="setdaily", description="設定每日獎勵金額")
     # @app_commands.describe(amount="每日獎勵金額")
@@ -3259,7 +3261,7 @@ class EconomyMod(commands.GroupCog, name="economymod", description="經濟系統
     #     set_server_config(guild_id, "economy_sell_ratio", ratio)
     #     await interaction.response.send_message(f"✅ 賣出比率已設定為 **{ratio*100:.0f}%**。", ephemeral=True)
 
-    @app_commands.command(name="info", description="詳細經濟管理面板")
+    @app_commands.command(name=app_commands.locale_str("info", i18n_key="cmd.economy.economymod.info.name"), description=app_commands.locale_str("Detailed economy admin panel", i18n_key="cmd.economy.economymod.info.desc"))
     async def mod_info(self, interaction: discord.Interaction):
         guild_id = interaction.guild.id
         rate = get_exchange_rate(guild_id)
@@ -3282,51 +3284,48 @@ class EconomyMod(commands.GroupCog, name="economymod", description="經濟系統
                     admin_item_value += item.get("worth", 0) * count
 
         embed = discord.Embed(
-            title=f"🔧 {interaction.guild.name} 經濟管理面板",
+            title=t("economy.mod.title", guild=interaction.guild.name),
             color=0xe74c3c
         )
-        embed.add_field(name="匯率", value=f"{rate:.6f}", inline=True)
-        embed.add_field(name="追蹤供給量", value=f"{total_supply:,.2f}", inline=True)
-        embed.add_field(name="實際供給量", value=f"{actual_supply:,.2f}", inline=True)
-        embed.add_field(name="管理員注入（貨幣）", value=f"{admin_injected:,.2f}", inline=True)
-        embed.add_field(name="管理員物品價值", value=f"{admin_item_value:,.2f}", inline=True)
-        embed.add_field(name="交易次數", value=f"{tx_count:,}", inline=True)
-        embed.add_field(name="用戶數", value=f"{len(all_users):,}", inline=True)
+        embed.add_field(name=t("economy.field.rate_plain"), value=f"{rate:.6f}", inline=True)
+        embed.add_field(name=t("economy.mod.tracked_supply"), value=i18n.fmt_num(total_supply, decimals=2), inline=True)
+        embed.add_field(name=t("economy.mod.actual_supply"), value=i18n.fmt_num(actual_supply, decimals=2), inline=True)
+        embed.add_field(name=t("economy.mod.admin_injected"), value=i18n.fmt_num(admin_injected, decimals=2), inline=True)
+        embed.add_field(name=t("economy.mod.admin_item_value"), value=i18n.fmt_num(admin_item_value, decimals=2), inline=True)
+        embed.add_field(name=t("economy.field.tx_count_plain"), value=i18n.fmt_num(tx_count), inline=True)
+        embed.add_field(name=t("economy.mod.user_count"), value=i18n.fmt_num(len(all_users)), inline=True)
         allow_flow = get_allow_global_flow(guild_id)
-        embed.add_field(name="全域幣流通", value="🔓 已開啟" if allow_flow else "🔒 已關閉", inline=True)
-        embed.add_field(name="全域模式", value="🌐 已啟用" if is_global_mode_enabled(guild_id) else "🏦 已關閉", inline=True)
+        embed.add_field(name=t("economy.mod.global_flow"), value=t("economy.flow.on") if allow_flow else t("economy.flow.off"), inline=True)
+        embed.add_field(name=t("economy.mod.global_mode"), value=t("economy.mod.global_on") if is_global_mode_enabled(guild_id) else t("economy.mod.global_off"), inline=True)
 
         # 濫權指標
         if total_supply > 0:
             admin_ratio = (admin_injected + admin_item_value) / total_supply * 100
             if admin_ratio > 50:
-                abuse_indicator = "🔴 嚴重濫權"
+                abuse_indicator = t("economy.abuse.severe")
             elif admin_ratio > 20:
-                abuse_indicator = "🟠 中度干預"
+                abuse_indicator = t("economy.abuse.moderate")
             elif admin_ratio > 5:
-                abuse_indicator = "🟡 輕度干預"
+                abuse_indicator = t("economy.abuse.light")
             else:
-                abuse_indicator = "🟢 正常"
+                abuse_indicator = t("economy.abuse.normal")
             embed.add_field(
-                name="⚠️ 管理員干預程度",
+                name=t("economy.mod.abuse_level"),
                 value=f"{admin_ratio:.1f}% - {abuse_indicator}",
                 inline=True
             )
 
         if abs(actual_supply - total_supply) > 0.01:
             embed.add_field(
-                name="⚠️ 供給差異",
-                value=f"{actual_supply - total_supply:,.2f}（正常應為 0）",
+                name=t("economy.mod.supply_diff"),
+                value=t("economy.mod.supply_diff_value", diff=i18n.fmt_num(actual_supply - total_supply, decimals=2)),
                 inline=False
             )
 
         embed.add_field(
-            name="💡 提示",
+            name=t("economy.mod.hint_title"),
             value=(
-                "• 管理員給予的物品/金錢會被追蹤\n"
-                "• 賣出管理員物品會觸發嚴重通膨\n"
-                "• 管理員物品無法兌現為全域幣\n"
-                "• 建議使用活動系統而非直接給予"
+                t("economy.mod.hint_body")
             ),
             inline=False
         )
@@ -3364,7 +3363,7 @@ class EconomyMod(commands.GroupCog, name="economymod", description="經濟系統
     #             log(f"Admin {interaction.user} reset economy for guild {guild_id}",
     #                 module_name="Economy", user=interaction.user, guild=interaction.guild)
 
-    #         @discord.ui.button(label="取消", style=discord.ButtonStyle.secondary)
+    #         @discord.ui.button(label=i18n.K("common.btn.cancel"), style=discord.ButtonStyle.secondary)
     #         async def cancel(self, btn_interaction: discord.Interaction, button: discord.ui.Button):
     #             for child in self.children:
     #                 child.disabled = True
@@ -3380,6 +3379,8 @@ class EconomyMod(commands.GroupCog, name="economymod", description="經濟系統
 asyncio.run(bot.add_cog(EconomyMod()))
 
 
+# i18n: skip-start
+# 以下 dev-* 指令只有機器人擁有者能執行，依約定保留中文。
 @bot.command(name="dev-economyhistory", description="查看用戶的經濟交易紀錄", aliases=["deh"])
 @is_owner()
 async def dev_economy_history(ctx, user: discord.User, scope: str = "server", server_id: int = None):
@@ -3928,7 +3929,7 @@ async def dev_leaderboard(ctx: commands.Context, currency: str = "server", guild
             key=lambda x: x[1].get("economy_balance", 0),
             reverse=True
         )
-        title = f"🏆 {currency_name} 排行榜"
+        title = t("economy.leaderboard.title", currency=display_currency(currency_name))
         key_name = "economy_balance"
     elif currency == "global":
         all_users = get_all_user_data(GLOBAL_GUILD_ID, "economy_balance")
@@ -3937,7 +3938,7 @@ async def dev_leaderboard(ctx: commands.Context, currency: str = "server", guild
             key=lambda x: x[1].get("economy_balance", 0),
             reverse=True
         )
-        title = f"🏆 {GLOBAL_CURRENCY_NAME} 排行榜"
+        title = t("economy.leaderboard.title", currency=display_currency(GLOBAL_CURRENCY_NAME))
         key_name = "economy_balance"
     else:
         all_server = get_all_user_data(guild_id, "economy_balance")
@@ -3953,7 +3954,7 @@ async def dev_leaderboard(ctx: commands.Context, currency: str = "server", guild
             key=lambda x: x[1].get("total", 0),
             reverse=True
         )
-        title = "🏆 總資產排行榜"
+        title = t("economy.leaderboard.total_title")
         key_name = "total"
 
     embed = discord.Embed(title=title, color=0xf1c40f)
@@ -3977,7 +3978,7 @@ async def dev_leaderboard(ctx: commands.Context, currency: str = "server", guild
             fetched_user = await bot.fetch_user(user_id)
             name = getattr(fetched_user, "display_name", None) or fetched_user.name
         except Exception:
-            name = f"用戶 {user_id}"
+            name = t("economy.msg.user_fallback", user_id=user_id)
 
         embed.add_field(name=f"{medal} {name}", value=display, inline=False)
         displayed += 1
@@ -3985,7 +3986,7 @@ async def dev_leaderboard(ctx: commands.Context, currency: str = "server", guild
             break
 
     if displayed == 0:
-        embed.description = "目前沒有任何用戶有餘額。"
+        embed.description = t("economy.leaderboard.empty")
 
     if currency == "server":
         footer_text = f"Scope: {guild_obj.name} | {guild_id}" if guild_obj else f"Scope: Guild {guild_id}"
@@ -4000,6 +4001,9 @@ async def dev_leaderboard(ctx: commands.Context, currency: str = "server", guild
     embed.set_footer(text=footer_text)
 
     await ctx.send(embed=embed)
+
+
+# i18n: skip-end
 
 
 def make_cheque_use_callback(item_id: str, worth: int):
@@ -4035,14 +4039,13 @@ def make_cheque_use_callback(item_id: str, worth: int):
             await interaction.response.send_message(build_flow_blacklist_notice(guild_id), ephemeral=True)
             return
         except economy_db.EconomyInsufficientFunds:
-            await interaction.response.send_message("你沒有這張支票。", ephemeral=True)
+            await interaction.response.send_message(t("economy.check.not_owned"), ephemeral=True)
             return
         except economy_db.EconomyIntegrityError as exc:
             message = (
-                "❌ 這張支票是管理員給予的，無法兌現。\n"
-                "管理員給予的物品不能轉換為貨幣，以防止經濟系統被濫用。"
+                t("economy.check.admin_item")
                 if "admin cheque" in str(exc)
-                else "❌ 支票或經濟資料無效，本次未兌現。"
+                else t("economy.check.invalid")
             )
             await interaction.response.send_message(message, ephemeral=True)
             return
@@ -4065,18 +4068,22 @@ def make_cheque_use_callback(item_id: str, worth: int):
             color=0x1ABC9C,
         )
         await interaction.response.send_message(
-            f"你兌現了支票，獲得 **{payout:,.2f}** {currency_name}。",
+            t("economy.check.cashed", amount=i18n.fmt_num(payout, decimals=2), currency=display_currency(currency_name)),
             ephemeral=True,
         )
 
     return callback
 
 
-economy_items = [
+# name/description 是原文；name_key/desc_key 讓 ItemSystem 在讀取時
+# 依當前語言解析（見 ItemSystem.localize_builtin_item）
+economy_items = [  # i18n: skip-start
     {
         "id": "cheque_100",
         "name": "100元支票",
         "description": "這是一張100元支票，可以用來支付給其他用戶。",
+        "name_key": "economy.item.cheque_100.name",
+        "desc_key": "economy.item.cheque_100.desc",
         "worth": 0,
         "callback": make_cheque_use_callback("cheque_100", 100),
     },
@@ -4084,6 +4091,8 @@ economy_items = [
         "id": "cheque_500",
         "name": "500元支票",
         "description": "這是一張500元支票，可以用來支付給其他用戶。",
+        "name_key": "economy.item.cheque_500.name",
+        "desc_key": "economy.item.cheque_500.desc",
         "worth": 0,
         "callback": make_cheque_use_callback("cheque_500", 500),
     },
@@ -4091,9 +4100,11 @@ economy_items = [
         "id": "cheque_1000",
         "name": "1000元支票",
         "description": "這是一張1000元支票，可以用來支付給其他用戶。",
+        "name_key": "economy.item.cheque_1000.name",
+        "desc_key": "economy.item.cheque_1000.desc",
         "worth": 0,
         "callback": make_cheque_use_callback("cheque_1000", 1000),
     },
-]
+]  # i18n: skip-end
 
 items.extend(economy_items)

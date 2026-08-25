@@ -1,5 +1,6 @@
 // ============= Panel JS =============
 // Requires GUILD_ID and SETTINGS_SCHEMA to be defined by the template.
+// window.I18N, window.I18N_LOCALE, and t() are provided by i18n.js.
 
 let currentValues = {};
 let channelsCache = null;
@@ -49,7 +50,7 @@ let saveTimers = {};
 function debounceSave(module, key, value, delay = 600, onComplete = null) {
     const id = `${module}::${key}`;
     clearTimeout(saveTimers[id]);
-    setIndicator(id, 'saving', '儲存中...');
+    setIndicator(id, 'saving', t('web.js.common.saving'));
     saveTimers[id] = setTimeout(async () => {
         const result = await doSave(module, key, value);
         if (onComplete) onComplete(result);
@@ -73,18 +74,18 @@ async function doSave(module, key, value) {
         });
         const data = await res.json();
         if (data.success) {
-            setIndicator(id, 'saved', '✓ 已儲存');
+            setIndicator(id, 'saved', '✓ ' + t('web.js.common.saved'));
             // Update local cache
             if (!currentValues[module]) currentValues[module] = {};
             currentValues[module][key] = data.value;
         } else {
-            setIndicator(id, 'error', '✗ ' + (data.error || '保存失敗'));
-            showToast(data.error || '保存失敗', 'error');
+            setIndicator(id, 'error', '✗ ' + (data.error || t('web.js.common.save_failed')));
+            showToast(data.error || t('web.js.common.save_failed'), 'error');
         }
         return data;
     } catch (e) {
-        setIndicator(id, 'error', '✗ 網路錯誤');
-        showToast('網路錯誤: ' + e.message, 'error');
+        setIndicator(id, 'error', '✗ ' + t('web.js.common.network_error'));
+        showToast(t('web.js.common.network_error') + ': ' + e.message, 'error');
         return { success: false, error: e.message };
     }
 }
@@ -103,7 +104,7 @@ function setIndicator(id, cls, text) {
 
 async function render() {
     const wrapper = document.getElementById('settings-wrapper');
-    wrapper.innerHTML = '<div class="loading-spinner">正在載入設定...</div>';
+    wrapper.innerHTML = '<div class="loading-spinner">' + t('web.js.common.loading') + '</div>';
 
     // Load all data in parallel
     const [settings, channels, roles, autoreplyLimit, stickymessageLimit] = await Promise.all([
@@ -114,13 +115,13 @@ async function render() {
         SETTINGS_SCHEMA.StickyMessage ? loadStickymessageLimit() : Promise.resolve(5),
     ]);
 
-    if (!settings) { wrapper.innerHTML = '<div class="loading-spinner">載入失敗</div>'; return; }
+    if (!settings) { wrapper.innerHTML = '<div class="loading-spinner">' + t('web.js.common.load_failed') + '</div>'; return; }
 
     wrapper.innerHTML = '';
     const moduleNames = Object.keys(SETTINGS_SCHEMA);
 
     if (moduleNames.length === 0) {
-        wrapper.innerHTML = '<div class="empty-state"><p>沒有可配置的模組</p></div>';
+        wrapper.innerHTML = '<div class="empty-state"><p>' + t('web.js.common.no_modules') + '</p></div>';
         return;
     }
 
@@ -246,7 +247,7 @@ function buildSettingRow(mod, s, value, channels, roles, autoreplyLimit, stickym
 function buildChannelSelect(mod, s, value, channels) {
     const sel = document.createElement('select');
     sel.className = 'form-select';
-    sel.innerHTML = '<option value="none">未設定</option>';
+    sel.innerHTML = '<option value="none">' + t('web.js.common.unset') + '</option>';
 
     const typeFilter = {
         'channel': ['text', 'news'],
@@ -273,7 +274,7 @@ function buildChannelSelect(mod, s, value, channels) {
 function buildRoleSelect(mod, s, value, roles) {
     const sel = document.createElement('select');
     sel.className = 'form-select';
-    sel.innerHTML = '<option value="none">未設定</option>';
+    sel.innerHTML = '<option value="none">' + t('web.js.common.unset') + '</option>';
 
     for (const r of roles) {
         const opt = document.createElement('option');
@@ -300,13 +301,13 @@ function buildRoleListSelect(mod, s, value, roles) {
     // Add dropdown
     const sel = document.createElement('select');
     sel.className = 'form-select';
-    sel.innerHTML = '<option value="">➕ 新增身分組...</option>';
+    sel.innerHTML = '<option value="">➕ ' + t('web.js.common.add_role') + '</option>';
     container.appendChild(sel);
 
     function renderTags() {
         tagsWrap.innerHTML = '';
         if (selected.length === 0) {
-            tagsWrap.innerHTML = '<span class="role-tag-empty">尚未新增任何身分組</span>';
+            tagsWrap.innerHTML = '<span class="role-tag-empty">' + t('web.js.common.no_roles') + '</span>';
         }
         for (const rid of selected) {
             const role = roles.find(r => String(r.id) === rid);
@@ -329,7 +330,7 @@ function buildRoleListSelect(mod, s, value, roles) {
     }
 
     function rebuildOptions() {
-        sel.innerHTML = '<option value="">➕ 新增身分組...</option>';
+        sel.innerHTML = '<option value="">➕ ' + t('web.js.common.add_role') + '</option>';
         for (const r of roles) {
             if (selected.includes(String(r.id))) continue;
             const opt = document.createElement('option');
@@ -364,7 +365,7 @@ function buildChannelListSelect(mod, s, value, channels) {
 
     const sel = document.createElement('select');
     sel.className = 'form-select';
-    sel.innerHTML = '<option value="">➕ 新增頻道...</option>';
+    sel.innerHTML = '<option value="">➕ ' + t('web.js.common.add_channel') + '</option>';
     container.appendChild(sel);
 
     const allowedTypes = ['text', 'news'];
@@ -373,7 +374,7 @@ function buildChannelListSelect(mod, s, value, channels) {
     function renderTags() {
         tagsWrap.innerHTML = '';
         if (selected.length === 0) {
-            tagsWrap.innerHTML = '<span class="role-tag-empty">尚未新增任何頻道</span>';
+            tagsWrap.innerHTML = '<span class="role-tag-empty">' + t('web.js.common.no_channels') + '</span>';
         }
         for (const cid of selected) {
             const ch = channels.find(c => String(c.id) === cid);
@@ -398,7 +399,7 @@ function buildChannelListSelect(mod, s, value, channels) {
     }
 
     function rebuildOptions() {
-        sel.innerHTML = '<option value="">➕ 新增頻道...</option>';
+        sel.innerHTML = '<option value="">➕ ' + t('web.js.common.add_channel') + '</option>';
         for (const ch of allowedChannels) {
             if (selected.includes(String(ch.id))) continue;
             const prefix = ch.category ? `[${ch.category}] ` : '';
@@ -457,14 +458,14 @@ function buildStickymessageConfigEditor(mod, s, value, channels, limit = 5) {
     const timingSave = document.createElement('button');
     timingSave.type = 'button';
     timingSave.className = 'btn-autoreply-add';
-    timingSave.textContent = '儲存時間設定';
+    timingSave.textContent = t('web.js.sticky.save_timing');
     timingSave.addEventListener('click', async () => {
         config.quiet_seconds = parseInt(quietInput.value, 10);
         config.min_interval_seconds = parseInt(intervalInput.value, 10);
         await saveConfig();
     });
-    timing.appendChild(makeLabeledControl('無新訊息多久後置底（0–300 秒）', quietInput));
-    timing.appendChild(makeLabeledControl('同頻道最短重貼間隔（5–3600 秒）', intervalInput));
+    timing.appendChild(makeLabeledControl(t('web.js.sticky.quiet_label'), quietInput));
+    timing.appendChild(makeLabeledControl(t('web.js.sticky.interval_label'), intervalInput));
     timing.appendChild(timingSave);
     container.appendChild(timing);
 
@@ -477,7 +478,7 @@ function buildStickymessageConfigEditor(mod, s, value, channels, limit = 5) {
     const addButton = document.createElement('button');
     addButton.type = 'button';
     addButton.className = 'btn-autoreply-add';
-    addButton.textContent = '＋ 新增置底訊息';
+    addButton.textContent = '＋ ' + t('web.js.sticky.add');
     container.appendChild(addButton);
 
     function makeLabeledControl(labelText, control) {
@@ -520,7 +521,7 @@ function buildStickymessageConfigEditor(mod, s, value, channels, limit = 5) {
     async function publish(channelId, button) {
         button.disabled = true;
         const originalText = button.textContent;
-        button.textContent = '發布中...';
+        button.textContent = t('web.js.sticky.publishing');
         try {
             const response = await fetch(`/api/panel/guild/${GUILD_ID}/stickymessage/publish`, {
                 method: 'POST',
@@ -528,10 +529,10 @@ function buildStickymessageConfigEditor(mod, s, value, channels, limit = 5) {
                 body: JSON.stringify({ channel_id: channelId }),
             });
             const data = await response.json();
-            if (!data.success) throw new Error(data.error || '發布失敗');
-            showToast('置底訊息已發布', 'success');
+            if (!data.success) throw new Error(data.error || t('web.js.sticky.publish_failed'));
+            showToast(t('web.js.sticky.published'), 'success');
         } catch (error) {
-            showToast('發布失敗: ' + error.message, 'error');
+            showToast(t('web.js.sticky.publish_failed') + ': ' + error.message, 'error');
         } finally {
             button.disabled = false;
             button.textContent = originalText;
@@ -541,7 +542,7 @@ function buildStickymessageConfigEditor(mod, s, value, channels, limit = 5) {
     function channelSelect(entry, index) {
         const select = document.createElement('select');
         select.className = 'form-select';
-        select.innerHTML = '<option value="">選擇文字頻道...</option>';
+        select.innerHTML = '<option value="">' + t('web.js.sticky.pick_channel') + '</option>';
         for (const channel of allowedChannels) {
             if (config.entries.some((other, otherIndex) => otherIndex !== index && other.channel_id === String(channel.id))) continue;
             const option = document.createElement('option');
@@ -556,12 +557,12 @@ function buildStickymessageConfigEditor(mod, s, value, channels, limit = 5) {
 
     function renderCards() {
         cards.innerHTML = '';
-        status.textContent = `目前 ${config.entries.length} / ${limit} 則；第 ${limit + 1} 則起會保留但暫停運作。`;
+        status.textContent = t('web.js.sticky.status', {current: config.entries.length, limit: limit, next: limit + 1});
         addButton.disabled = config.entries.length >= limit || config.entries.length >= 25;
         if (config.entries.length === 0) {
             const empty = document.createElement('div');
             empty.className = 'stickymessage-empty';
-            empty.textContent = '尚未設定任何置底訊息。';
+            empty.textContent = t('web.js.sticky.empty');
             cards.appendChild(empty);
             return;
         }
@@ -574,7 +575,7 @@ function buildStickymessageConfigEditor(mod, s, value, channels, limit = 5) {
             const heading = document.createElement('div');
             heading.className = 'stickymessage-card-heading';
             const title = document.createElement('strong');
-            title.textContent = `第 ${index + 1} 則${index >= limit ? '（超額暫停）' : ''}`;
+            title.textContent = t('web.js.sticky.item_title', {index: index + 1}) + (index >= limit ? t('web.js.sticky.over_limit') : '');
             heading.appendChild(title);
             const moveWrap = document.createElement('span');
             const up = document.createElement('button');
@@ -600,14 +601,14 @@ function buildStickymessageConfigEditor(mod, s, value, channels, limit = 5) {
             heading.appendChild(moveWrap);
             card.appendChild(heading);
 
-            card.appendChild(makeLabeledControl('頻道', channelSelect(entry, index)));
+            card.appendChild(makeLabeledControl(t('web.js.sticky.channel'), channelSelect(entry, index)));
             const textarea = document.createElement('textarea');
             textarea.className = 'form-textarea';
             textarea.maxLength = 2000;
             textarea.rows = 4;
             textarea.value = entry.content;
             textarea.addEventListener('input', () => { entry.content = textarea.value; });
-            card.appendChild(makeLabeledControl('訊息內容（最多 2000 字）', textarea));
+            card.appendChild(makeLabeledControl(t('web.js.sticky.content_label'), textarea));
 
             const mentionLabel = document.createElement('label');
             mentionLabel.className = 'stickymessage-mentions';
@@ -616,7 +617,7 @@ function buildStickymessageConfigEditor(mod, s, value, channels, limit = 5) {
             mentionInput.checked = entry.allow_mentions;
             mentionInput.addEventListener('change', () => { entry.allow_mentions = mentionInput.checked; });
             mentionLabel.appendChild(mentionInput);
-            mentionLabel.appendChild(document.createTextNode(' 首次、內容修改或手動發布時允許提及（自動重貼不通知）'));
+            mentionLabel.appendChild(document.createTextNode(' ' + t('web.js.sticky.mentions_label')));
             card.appendChild(mentionLabel);
 
             const actions = document.createElement('div');
@@ -624,20 +625,20 @@ function buildStickymessageConfigEditor(mod, s, value, channels, limit = 5) {
             const save = document.createElement('button');
             save.type = 'button';
             save.className = 'btn-autoreply-add';
-            save.textContent = '儲存並發布';
+            save.textContent = t('web.js.sticky.save_publish');
             save.addEventListener('click', saveConfig);
             const publishButton = document.createElement('button');
             publishButton.type = 'button';
             publishButton.className = 'btn-autoreply-add';
-            publishButton.textContent = '手動發布';
+            publishButton.textContent = t('web.js.sticky.manual_publish');
             publishButton.disabled = !entry.channel_id || index >= limit;
             publishButton.addEventListener('click', () => publish(entry.channel_id, publishButton));
             const remove = document.createElement('button');
             remove.type = 'button';
             remove.className = 'btn-autoreply-remove';
-            remove.textContent = '刪除';
+            remove.textContent = t('web.js.common.delete');
             remove.addEventListener('click', async () => {
-                if (!window.confirm('確定要刪除這則置底訊息設定嗎？')) return;
+                if (!window.confirm(t('web.js.sticky.confirm_delete'))) return;
                 config.entries.splice(index, 1);
                 await saveConfig();
             });
@@ -660,16 +661,16 @@ function buildStickymessageConfigEditor(mod, s, value, channels, limit = 5) {
 }
 
 const AUTOREPLY_MODE_OPTIONS = [
-    { value: 'contains', label: '包含' },
-    { value: 'equals', label: '完全匹配' },
-    { value: 'starts_with', label: '開始於' },
-    { value: 'ends_with', label: '結束於' },
-    { value: 'regex', label: '正規表達式' },
+    { value: 'contains', label: t('web.js.autoreply.mode_contains') },
+    { value: 'equals', label: t('web.js.autoreply.mode_equals') },
+    { value: 'starts_with', label: t('web.js.autoreply.mode_starts') },
+    { value: 'ends_with', label: t('web.js.autoreply.mode_ends') },
+    { value: 'regex', label: t('web.js.autoreply.mode_regex') },
 ];
 const AUTOREPLY_CHANNEL_MODE_OPTIONS = [
-    { value: 'all', label: '所有頻道' },
-    { value: 'whitelist', label: '白名單' },
-    { value: 'blacklist', label: '黑名單' },
+    { value: 'all', label: t('web.js.autoreply.ch_all') },
+    { value: 'whitelist', label: t('web.js.autoreply.ch_whitelist') },
+    { value: 'blacklist', label: t('web.js.autoreply.ch_blacklist') },
 ];
 
 function buildAutoreplyListEditor(mod, s, value, channels, autoreplyLimit = 50) {
@@ -764,7 +765,7 @@ function buildAutoreplyListEditor(mod, s, value, channels, autoreplyLimit = 50) 
                 const removeBtn = document.createElement('button');
                 removeBtn.type = 'button';
                 removeBtn.className = 'btn-autoreply-remove';
-                removeBtn.textContent = '刪除';
+                removeBtn.textContent = t('web.js.common.delete');
                 removeBtn.addEventListener('click', () => {
                     values.splice(index, 1);
                     publish();
@@ -793,21 +794,21 @@ function buildAutoreplyListEditor(mod, s, value, channels, autoreplyLimit = 50) 
     function renderRules() {
         cardsWrap.innerHTML = '';
         list.forEach(rule => cardsWrap.appendChild(buildRuleCard(rule)));
-        limitNote.textContent = `已設定 ${list.length} / ${MAX_AUTOREPLY_RULES} 筆規則`;
+        limitNote.textContent = t('web.js.autoreply.limit_note', {current: list.length, limit: MAX_AUTOREPLY_RULES});
         addBtn.disabled = list.length >= MAX_AUTOREPLY_RULES;
-        addBtn.textContent = list.length >= MAX_AUTOREPLY_RULES ? `已達上限 (${MAX_AUTOREPLY_RULES})` : '新增一筆自動回覆';
+        addBtn.textContent = list.length >= MAX_AUTOREPLY_RULES ? t('web.js.autoreply.limit_reached', {limit: MAX_AUTOREPLY_RULES}) : t('web.js.autoreply.add');
     }
 
     function buildRuleCard(rule) {
         const card = document.createElement('div');
         card.className = 'autoreply-rule-card';
 
-        const triggerEditor = createMultiValueEditor(rule.trigger || [], '觸發條件', '輸入一條觸發文字', '新增觸發', '尚未設定觸發條件', next => {
+        const triggerEditor = createMultiValueEditor(rule.trigger || [], t('web.js.autoreply.trigger'), t('web.js.autoreply.trigger_ph'), t('web.js.autoreply.trigger_add'), t('web.js.autoreply.trigger_empty'), next => {
             rule.trigger = next;
             save();
         });
 
-        const responseEditor = createMultiValueEditor(rule.response || [], '回覆內容', '輸入一條回覆內容', '新增回覆', '尚未設定回覆內容', next => {
+        const responseEditor = createMultiValueEditor(rule.response || [], t('web.js.autoreply.response'), t('web.js.autoreply.response_ph'), t('web.js.autoreply.response_add'), t('web.js.autoreply.response_empty'), next => {
             rule.response = next;
             save();
         });
@@ -856,7 +857,7 @@ function buildAutoreplyListEditor(mod, s, value, channels, autoreplyLimit = 50) 
         channelSel.className = 'form-select';
 
         function rebuildChannelOptions() {
-            channelSel.innerHTML = '<option value="">選擇頻道</option>';
+            channelSel.innerHTML = '<option value="">' + t('web.js.autoreply.pick_channel') + '</option>';
             allowedChannels.forEach(ch => {
                 if ((rule.channels || []).includes(String(ch.id))) return;
                 const opt = document.createElement('option');
@@ -914,7 +915,7 @@ function buildAutoreplyListEditor(mod, s, value, channels, autoreplyLimit = 50) 
         const deleteBtn = document.createElement('button');
         deleteBtn.type = 'button';
         deleteBtn.className = 'btn-autoreply-remove';
-        deleteBtn.textContent = '刪除';
+        deleteBtn.textContent = t('web.js.common.delete');
         deleteBtn.addEventListener('click', () => {
             const i = list.indexOf(rule);
             if (i > -1) list.splice(i, 1);
@@ -934,15 +935,15 @@ function buildAutoreplyListEditor(mod, s, value, channels, autoreplyLimit = 50) 
 
         const row3 = document.createElement('div');
         row3.className = 'autoreply-rule-row autoreply-rule-meta';
-        row3.appendChild(document.createTextNode('模式 '));
+        row3.appendChild(document.createTextNode(t('web.js.autoreply.mode') + ' '));
         row3.appendChild(modeSelect);
-        row3.appendChild(document.createTextNode(' 回覆原訊息 '));
+        row3.appendChild(document.createTextNode(' ' + t('web.js.autoreply.reply') + ' '));
         row3.appendChild(replyWrap);
-        row3.appendChild(document.createTextNode(' 頻道 '));
+        row3.appendChild(document.createTextNode(' ' + t('web.js.autoreply.channel') + ' '));
         row3.appendChild(channelModeSelect);
         row3.appendChild(channelTagsWrap);
         row3.appendChild(channelSel);
-        row3.appendChild(document.createTextNode(' 機率% '));
+        row3.appendChild(document.createTextNode(' ' + t('web.js.autoreply.chance') + ' '));
         row3.appendChild(chanceInput);
         row3.appendChild(deleteBtn);
         card.appendChild(row3);
@@ -973,17 +974,17 @@ function buildAutoreplyListEditor(mod, s, value, channels, autoreplyLimit = 50) 
 }
 
 const ACTION_INPUT_SUGGESTIONS = [
-    { label: '刪除訊息', value: 'delete' },
-    { label: '刪除訊息並公開警告', value: 'delete {user}，請注意你的行為。' },
-    { label: '公開警告', value: 'warn {user}，請注意你的行為。' },
-    { label: '禁言 10 分鐘', value: 'mute 10m 違規' },
-    { label: '禁言 10 分鐘（to 短寫）', value: 'to 10m 違規' },
-    { label: '禁言 1 小時', value: 'mute 1h 違規' },
-    { label: '踢出', value: 'kick 違規' },
-    { label: '永久封禁', value: 'ban 0 0 違規' },
-    { label: '封禁 1 天並刪除 7 天訊息', value: 'ban 1d 7d 違規' },
-    { label: '強制驗證 1 天', value: 'force_verify 1d' },
-    { label: '發送懲處公告', value: 'smm' },
+    { label: t('web.js.action.preset_delete'), value: 'delete' },
+    { label: t('web.js.action.preset_delete_warn'), value: 'delete {user}，請注意你的行為。' },
+    { label: t('web.js.action.preset_warn'), value: 'warn {user}，請注意你的行為。' },
+    { label: t('web.js.action.preset_mute10'), value: 'mute 10m 違規' },
+    { label: t('web.js.action.preset_to10'), value: 'to 10m 違規' },
+    { label: t('web.js.action.preset_mute1h'), value: 'mute 1h 違規' },
+    { label: t('web.js.action.preset_kick'), value: 'kick 違規' },
+    { label: t('web.js.action.preset_ban'), value: 'ban 0 0 違規' },
+    { label: t('web.js.action.preset_ban1d'), value: 'ban 1d 7d 違規' },
+    { label: t('web.js.action.preset_fv1d'), value: 'force_verify 1d' },
+    { label: t('web.js.action.preset_smm'), value: 'smm' },
 ];
 
 async function analyzeActionInput(action, feature = '') {
@@ -1001,7 +1002,7 @@ function renderActionAnalysis(container, analysis, { saved = false, onConfirm = 
     container.className = 'action-analysis';
     if (!analysis || !analysis.valid) {
         container.classList.add('error');
-        container.textContent = (analysis && analysis.error) || '無法解析動作指令。';
+        container.textContent = (analysis && analysis.error) || t('web.js.action.parse_failed');
         return;
     }
 
@@ -1011,8 +1012,8 @@ function renderActionAnalysis(container, analysis, { saved = false, onConfirm = 
     const title = document.createElement('div');
     title.className = 'action-analysis-title';
     title.textContent = saved
-        ? '已儲存，實際會執行：'
-        : (analysis.requires_confirmation ? analysis.confirmation : '實際會執行：');
+        ? t('web.js.action.saved_will_run')
+        : (analysis.requires_confirmation ? analysis.confirmation : t('web.js.action.will_run'));
     container.appendChild(title);
 
     const list = document.createElement('ol');
@@ -1028,71 +1029,71 @@ function renderActionAnalysis(container, analysis, { saved = false, onConfirm = 
         const button = document.createElement('button');
         button.type = 'button';
         button.className = 'action-confirm-button';
-        button.textContent = `是，使用 ${analysis.normalized}`;
+        button.textContent = t('web.js.action.confirm_use', {action: analysis.normalized});
         button.addEventListener('click', onConfirm);
         container.appendChild(button);
     }
 }
 
 const AUTOMOD_FEATURES = [
-    { id: 'scamtrap', label: '🪤 詐騙陷阱', desc: '蜜罐頻道，在該頻道發訊者自動處置', fields: [
-        { key: 'channel_id', label: '陷阱頻道', type: 'channel', default: '' },
-        { key: 'action', label: '處置動作', type: 'string', default: 'delete {user} 是最後一個被封禁的帳號，不要在這裡講話！, ban {user} 5s 12h [自動封禁] 疑似被盜帳號', placeholder: '例: delete 請勿在此發言' },
+    { id: 'scamtrap', label: '🪤 ' + t('web.js.automod.scamtrap'), desc: t('web.js.automod.scamtrap_desc'), fields: [
+        { key: 'channel_id', label: t('web.js.automod.f_trap_channel'), type: 'channel', default: '' },
+        { key: 'action', label: t('web.js.automod.f_action'), type: 'string', default: 'delete {user} 是最後一個被封禁的帳號，不要在這裡講話！, ban {user} 5s 12h [自動封禁] 疑似被盜帳號', placeholder: t('web.js.automod.ph_example') },
     ]},
-    { id: 'escape_punish', label: '🏃 逃避責任懲處', desc: '禁言期間離開者額外懲處', fields: [
-        { key: 'punishment', label: '懲處方式', type: 'select', options: [{ value: 'ban', label: '封禁' }], default: 'ban' },
-        { key: 'duration', label: '持續時間 (如 0、7d)', type: 'string', default: '0' },
+    { id: 'escape_punish', label: '🏃 ' + t('web.js.automod.escape'), desc: t('web.js.automod.escape_desc'), fields: [
+        { key: 'punishment', label: t('web.js.automod.f_punishment'), type: 'select', options: [{ value: 'ban', label: t('web.js.automod.f_ban') }], default: 'ban' },
+        { key: 'duration', label: t('web.js.automod.f_duration'), type: 'string', default: '0' },
     ]},
-    { id: 'too_many_h1', label: '📢 標題過多', desc: 'Markdown 大標題總字數上限', fields: [
-        { key: 'max_length', label: '最大字數', type: 'number', default: '20', min: 1 },
-        { key: 'action', label: '處置動作', type: 'string', default: 'warn', placeholder: '例: warn 或 mute 10m' },
-        { key: 'ignore_channels', label: '忽略頻道', type: 'channel_list', default: [] },
+    { id: 'too_many_h1', label: '📢 ' + t('web.js.automod.h1'), desc: t('web.js.automod.h1_desc'), fields: [
+        { key: 'max_length', label: t('web.js.automod.f_max_length'), type: 'number', default: '20', min: 1 },
+        { key: 'action', label: t('web.js.automod.f_action'), type: 'string', default: 'warn', placeholder: t('web.js.automod.ph_example') },
+        { key: 'ignore_channels', label: t('web.js.automod.f_ignore_channels'), type: 'channel_list', default: [] },
     ]},
-    { id: 'too_many_emojis', label: '😂 表情符號過多', desc: '單則訊息 emoji 數量上限', fields: [
-        { key: 'max_emojis', label: '最大數量', type: 'number', default: '10', min: 1 },
-        { key: 'action', label: '處置動作', type: 'string', default: 'warn' },
-        { key: 'ignore_channels', label: '忽略頻道', type: 'channel_list', default: [] },
+    { id: 'too_many_emojis', label: '😂 ' + t('web.js.automod.emojis'), desc: t('web.js.automod.emojis_desc'), fields: [
+        { key: 'max_emojis', label: t('web.js.automod.f_max_emojis'), type: 'number', default: '10', min: 1 },
+        { key: 'action', label: t('web.js.automod.f_action'), type: 'string', default: 'warn' },
+        { key: 'ignore_channels', label: t('web.js.automod.f_ignore_channels'), type: 'channel_list', default: [] },
     ]},
-    { id: 'anti_invite_link', label: '🔗 邀請連結', desc: '偵測 Discord 邀請連結，可選擇是否允許本伺服器連結', fields: [
-        { key: 'allow_current_server', label: '允許本伺服器連結', type: 'boolean', default: false },
-        { key: 'action', label: '處置動作', type: 'string', default: 'delete {user}，請勿發送其他伺服器的邀請連結。' },
-        { key: 'ignore_channels', label: '忽略頻道', type: 'channel_list', default: [] },
+    { id: 'anti_invite_link', label: '🔗 ' + t('web.js.automod.invite'), desc: t('web.js.automod.invite_desc'), fields: [
+        { key: 'allow_current_server', label: t('web.js.automod.f_allow_current'), type: 'boolean', default: false },
+        { key: 'action', label: t('web.js.automod.f_action'), type: 'string', default: 'delete {user}，請勿發送其他伺服器的邀請連結。' },
+        { key: 'ignore_channels', label: t('web.js.automod.f_ignore_channels'), type: 'channel_list', default: [] },
     ]},
-    { id: 'anti_uispam', label: '📲 用戶安裝應用程式濫用', desc: 'User Install 指令觸發頻率', fields: [
-        { key: 'max_count', label: '時間內最大觸發次數', type: 'number', default: '5', min: 1 },
-        { key: 'time_window', label: '時間窗口 (秒)', type: 'number', default: '60', min: 1 },
-        { key: 'action', label: '處置動作', type: 'string', default: 'delete {user}，請勿濫用用戶安裝的應用程式指令。, mute 10m 濫用用戶安裝指令' },
-        { key: 'ignore_channels', label: '忽略頻道', type: 'channel_list', default: [] },
+    { id: 'anti_uispam', label: '📲 ' + t('web.js.automod.uispam'), desc: t('web.js.automod.uispam_desc'), fields: [
+        { key: 'max_count', label: t('web.js.automod.f_max_count'), type: 'number', default: '5', min: 1 },
+        { key: 'time_window', label: t('web.js.automod.f_time_window'), type: 'number', default: '60', min: 1 },
+        { key: 'action', label: t('web.js.automod.f_action'), type: 'string', default: 'delete {user}，請勿濫用用戶安裝的應用程式指令。, mute 10m 濫用用戶安裝指令' },
+        { key: 'ignore_channels', label: t('web.js.automod.f_ignore_channels'), type: 'channel_list', default: [] },
     ]},
-    { id: 'anti_raid', label: '🚨 防突襲', desc: '短時間內大量加入偵測', fields: [
-        { key: 'max_joins', label: '時間內最大加入數', type: 'number', default: '5', min: 1 },
-        { key: 'time_window', label: '時間窗口 (秒)', type: 'number', default: '60', min: 1 },
-        { key: 'action', label: '處置動作', type: 'string', default: 'kick 突襲偵測自動踢出' },
+    { id: 'anti_raid', label: '🚨 ' + t('web.js.automod.raid'), desc: t('web.js.automod.raid_desc'), fields: [
+        { key: 'max_joins', label: t('web.js.automod.f_max_joins'), type: 'number', default: '5', min: 1 },
+        { key: 'time_window', label: t('web.js.automod.f_time_window'), type: 'number', default: '60', min: 1 },
+        { key: 'action', label: t('web.js.automod.f_action'), type: 'string', default: 'kick 突襲偵測自動踢出' },
     ]},
-    { id: 'anti_spam', label: '🔁 防刷頻', desc: '相似訊息刷頻偵測', fields: [
-        { key: 'max_messages', label: '最大相似訊息數', type: 'number', default: '5', min: 1 },
-        { key: 'time_window', label: '時間窗口 (秒)', type: 'number', default: '30', min: 1 },
-        { key: 'similarity', label: '相似度 (%)', type: 'number', default: '75', min: 1, max: 100 },
-        { key: 'action', label: '處置動作', type: 'string', default: 'mute 10m 刷頻自動禁言, delete {user}，請勿刷頻。' },
-        { key: 'ignore_channels', label: '忽略頻道', type: 'channel_list', default: [] },
+    { id: 'anti_spam', label: '🔁 ' + t('web.js.automod.spam'), desc: t('web.js.automod.spam_desc'), fields: [
+        { key: 'max_messages', label: t('web.js.automod.f_max_messages'), type: 'number', default: '5', min: 1 },
+        { key: 'time_window', label: t('web.js.automod.f_time_window'), type: 'number', default: '30', min: 1 },
+        { key: 'similarity', label: t('web.js.automod.f_similarity'), type: 'number', default: '75', min: 1, max: 100 },
+        { key: 'action', label: t('web.js.automod.f_action'), type: 'string', default: 'mute 10m 刷頻自動禁言, delete {user}，請勿刷頻。' },
+        { key: 'ignore_channels', label: t('web.js.automod.f_ignore_channels'), type: 'channel_list', default: [] },
     ]},
-    { id: 'automod_detect', label: '🛡️ AutoMod 偵測', desc: '偵測 Discord 原生 AutoMod 規則觸發，發送通知並可執行額外處置', fields: [
-        { key: 'log_channel', label: '通知頻道', type: 'channel', default: '' },
-        { key: 'action', label: '額外處置動作', type: 'string', default: '', placeholder: '可選，例: mute 10m 違規' },
-        { key: 'filter_rule', label: '規則名稱過濾', type: 'string', default: '', placeholder: '多個用 | 分隔，留空=全部' },
-        { key: 'filter_action_type', label: '動作類型過濾', type: 'string', default: '', placeholder: 'block|alert|timeout|block_interactions' },
+    { id: 'automod_detect', label: '🛡️ ' + t('web.js.automod.detect'), desc: t('web.js.automod.detect_desc'), fields: [
+        { key: 'log_channel', label: t('web.js.automod.f_log_channel'), type: 'channel', default: '' },
+        { key: 'action', label: t('web.js.automod.f_extra_action'), type: 'string', default: '', placeholder: t('web.js.automod.ph_optional') },
+        { key: 'filter_rule', label: t('web.js.automod.f_filter_rule'), type: 'string', default: '', placeholder: t('web.js.automod.ph_filter') },
+        { key: 'filter_action_type', label: t('web.js.automod.f_filter_action'), type: 'string', default: '', placeholder: 'block|alert|timeout|block_interactions' },
     ]},
-    { id: 'flagged_user', label: '🚩 標記用戶加入', desc: '合併本機三個月內標記資料與 Blacklist API 快取，加入時通知並可處置', fields: [
-        { key: 'log_channel', label: '通知頻道', type: 'channel', default: '' },
-        { key: 'action', label: '處置動作', type: 'string', default: '', placeholder: '可選，例: mute 10m 標記用戶加入' },
-        { key: 'action_source', label: '處置來源', type: 'select', default: 'both', options: [
-            { value: 'both', label: '本機與 API' },
-            { value: 'local', label: '僅本機' },
-            { value: 'api', label: '僅 API' },
+    { id: 'flagged_user', label: '🚩 ' + t('web.js.automod.flagged'), desc: t('web.js.automod.flagged_desc'), fields: [
+        { key: 'log_channel', label: t('web.js.automod.f_log_channel'), type: 'channel', default: '' },
+        { key: 'action', label: t('web.js.automod.f_action'), type: 'string', default: '', placeholder: t('web.js.automod.ph_optional') },
+        { key: 'action_source', label: t('web.js.automod.f_action_source'), type: 'select', default: 'both', options: [
+            { value: 'both', label: t('web.js.automod.src_both') },
+            { value: 'local', label: t('web.js.automod.src_local') },
+            { value: 'api', label: t('web.js.automod.src_api') },
         ]},
-        { key: 'local_match_mode', label: '本機命中模式', type: 'select', default: 'active', options: [
-            { value: 'active', label: '僅目前標記' },
-            { value: 'history', label: '三個月內所有紀錄' },
+        { key: 'local_match_mode', label: t('web.js.automod.f_match_mode'), type: 'select', default: 'active', options: [
+            { value: 'active', label: t('web.js.automod.match_active') },
+            { value: 'history', label: t('web.js.automod.match_history') },
         ]},
     ]},
 ];
@@ -1154,7 +1155,7 @@ function buildAutomodConfigEditor(mod, s, value, channels) {
 
         const sel = document.createElement('select');
         sel.className = 'form-select';
-        sel.innerHTML = '<option value="">➕ 新增頻道...</option>';
+        sel.innerHTML = '<option value="">➕ ' + t('web.js.common.add_channel') + '</option>';
         container.appendChild(sel);
 
         const allowedChannels = channels.filter(ch => ['text', 'news'].includes(ch.type));
@@ -1162,7 +1163,7 @@ function buildAutomodConfigEditor(mod, s, value, channels) {
         function renderTags() {
             tagsWrap.innerHTML = '';
             if (selected.length === 0) {
-                tagsWrap.innerHTML = '<span class="role-tag-empty">尚未新增任何頻道</span>';
+                tagsWrap.innerHTML = '<span class="role-tag-empty">' + t('web.js.common.no_channels') + '</span>';
             }
             for (const cid of selected) {
                 const ch = channels.find(c => String(c.id) === cid);
@@ -1186,7 +1187,7 @@ function buildAutomodConfigEditor(mod, s, value, channels) {
         }
 
         function rebuildOptions() {
-            sel.innerHTML = '<option value="">➕ 新增頻道...</option>';
+            sel.innerHTML = '<option value="">➕ ' + t('web.js.common.add_channel') + '</option>';
             for (const ch of allowedChannels) {
                 if (selected.includes(String(ch.id))) continue;
                 const opt = document.createElement('option');
@@ -1260,7 +1261,7 @@ function buildAutomodConfigEditor(mod, s, value, channels) {
             if (field.type === 'channel') {
                 const sel = document.createElement('select');
                 sel.className = 'form-select';
-                sel.innerHTML = '<option value="">未設定</option>';
+                sel.innerHTML = '<option value="">' + t('web.js.common.unset') + '</option>';
                 const allowed = channels.filter(ch => ['text', 'news'].includes(ch.type));
                 for (const ch of allowed) {
                     const opt = document.createElement('option');
@@ -1314,7 +1315,7 @@ function buildAutomodConfigEditor(mod, s, value, channels) {
                 input.type = 'text';
                 input.className = 'form-input';
                 input.value = cur;
-                input.placeholder = field.placeholder || '選擇建議或輸入，例如 mute 10m 違規';
+                input.placeholder = field.placeholder || t('web.js.action.input_ph');
                 const listId = `action-suggestions-${feat.id}`;
                 input.setAttribute('list', listId);
                 const datalist = document.createElement('datalist');
@@ -1335,7 +1336,7 @@ function buildAutomodConfigEditor(mod, s, value, channels) {
                     const clean = raw.trim();
                     if (!clean) {
                         analysisBox.className = 'action-analysis';
-                        analysisBox.textContent = '尚未設定動作。';
+                        analysisBox.textContent = t('web.js.action.empty');
                         if (persist) {
                             featData[field.key] = '';
                             save();
@@ -1343,7 +1344,7 @@ function buildAutomodConfigEditor(mod, s, value, channels) {
                         return;
                     }
                     analysisBox.className = 'action-analysis loading';
-                    analysisBox.textContent = '正在解析動作...';
+                    analysisBox.textContent = t('web.js.action.parsing');
                     try {
                         const analysis = await analyzeActionInput(clean, feat.id);
                         if (currentRevision !== revision) return;
@@ -1357,7 +1358,7 @@ function buildAutomodConfigEditor(mod, s, value, channels) {
                                             renderActionAnalysis(analysisBox, analysis, { saved: true });
                                         } else {
                                             analysisBox.className = 'action-analysis error';
-                                            analysisBox.textContent = (result && result.error) || '儲存失敗。';
+                                            analysisBox.textContent = (result && result.error) || t('web.js.common.save_failed');
                                         }
                                     });
                                 },
@@ -1375,13 +1376,13 @@ function buildAutomodConfigEditor(mod, s, value, channels) {
                                 renderActionAnalysis(analysisBox, analysis, { saved: true });
                             } else {
                                 analysisBox.className = 'action-analysis error';
-                                analysisBox.textContent = (result && result.error) || '儲存失敗。';
+                                analysisBox.textContent = (result && result.error) || t('web.js.common.save_failed');
                             }
                         });
                     } catch (error) {
                         if (currentRevision !== revision) return;
                         analysisBox.className = 'action-analysis error';
-                        analysisBox.textContent = `無法檢查動作：${error.message}`;
+                        analysisBox.textContent = t('web.js.action.check_failed', {error: error.message});
                     }
                 }
 
@@ -1444,7 +1445,7 @@ function buildModerationAnnouncementEditor(mod, s, value) {
     templateInput.rows = 12;
     templateInput.maxLength = 4000;
     templateInput.value = config.template;
-    container.appendChild(buildCompoundField('公告模板', templateInput));
+    container.appendChild(buildCompoundField(t('web.js.modann.template'), templateInput));
 
     const caseFormatInput = document.createElement('input');
     caseFormatInput.type = 'text';
@@ -1452,11 +1453,11 @@ function buildModerationAnnouncementEditor(mod, s, value) {
     caseFormatInput.maxLength = 100;
     caseFormatInput.value = config.case_id_format;
     caseFormatInput.placeholder = '{roc_year}-{sequence:04d}';
-    container.appendChild(buildCompoundField('裁判字號格式', caseFormatInput));
+    container.appendChild(buildCompoundField(t('web.js.modann.case_format'), caseFormatInput));
 
     const help = document.createElement('div');
     help.className = 'compound-empty moderation-template-help';
-    help.textContent = '公告變數：{user}、{moderator}、{reason}、{action}、{case_id}、{guild}、{reported_message}、{report_context}、{ai_note}。支援 AutoReply 的 embedtitle、embeddescription、embedfield、embedcolor、圖片、作者、footer 與時間指令。';
+    help.textContent = t('web.js.modann.help');
     container.appendChild(help);
 
     const actions = document.createElement('div');
@@ -1464,11 +1465,11 @@ function buildModerationAnnouncementEditor(mod, s, value) {
     const previewButton = document.createElement('button');
     previewButton.type = 'button';
     previewButton.className = 'compound-button primary';
-    previewButton.textContent = '預覽公告';
+    previewButton.textContent = t('web.js.modann.preview');
     const resetButton = document.createElement('button');
     resetButton.type = 'button';
     resetButton.className = 'compound-button danger';
-    resetButton.textContent = '恢復目前預設';
+    resetButton.textContent = t('web.js.modann.reset');
     actions.appendChild(previewButton);
     actions.appendChild(resetButton);
     container.appendChild(actions);
@@ -1545,7 +1546,7 @@ function buildModerationAnnouncementEditor(mod, s, value) {
 
     async function renderPreview() {
         previewButton.disabled = true;
-        preview.textContent = '正在產生預覽...';
+        preview.textContent = t('web.js.modann.generating');
         try {
             const response = await fetch(`/api/panel/guild/${GUILD_ID}/moderation-announcement-preview`, {
                 method: 'POST',
@@ -1555,19 +1556,19 @@ function buildModerationAnnouncementEditor(mod, s, value) {
             const data = await response.json();
             preview.innerHTML = '';
             if (!response.ok || !data.success) {
-                preview.textContent = data.error || '無法產生預覽。';
+                preview.textContent = data.error || t('web.js.modann.preview_failed');
                 preview.classList.add('error');
                 return;
             }
             preview.classList.remove('error');
             const caseInfo = document.createElement('div');
             caseInfo.className = 'compound-empty';
-            caseInfo.textContent = `預估下一個裁判字號：${data.case_id}`;
+            caseInfo.textContent = t('web.js.modann.case_estimate', {case_id: data.case_id});
             preview.appendChild(caseInfo);
             appendTextBlock(data.content);
             appendEmbedCard(data.embed);
         } catch (error) {
-            preview.textContent = '預覽失敗：' + error.message;
+            preview.textContent = t('web.js.modann.preview_error') + error.message;
             preview.classList.add('error');
         } finally {
             previewButton.disabled = false;
@@ -1619,10 +1620,10 @@ function buildFixlinkConfigEditor(mod, s, value) {
 
     const general = document.createElement('div');
     general.className = 'compound-section';
-    general.appendChild(buildCompoundToggle('啟用 FixLink', config.enabled, checked => { config.enabled = checked; save(); }));
-    general.appendChild(buildCompoundToggle('移除追蹤參數', config.remove_tracker, checked => { config.remove_tracker = checked; save(); }));
-    general.appendChild(buildCompoundToggle('使用 Webhook 替換訊息', config.webhook_mode, checked => { config.webhook_mode = checked; save(); }));
-    general.appendChild(buildCompoundToggle('Webhook 僅處理含追蹤碼連結', config.webhook_only_with_tracker, checked => {
+    general.appendChild(buildCompoundToggle(t('web.js.fixlink.enable'), config.enabled, checked => { config.enabled = checked; save(); }));
+    general.appendChild(buildCompoundToggle(t('web.js.fixlink.remove_tracker'), config.remove_tracker, checked => { config.remove_tracker = checked; save(); }));
+    general.appendChild(buildCompoundToggle(t('web.js.fixlink.webhook_mode'), config.webhook_mode, checked => { config.webhook_mode = checked; save(); }));
+    general.appendChild(buildCompoundToggle(t('web.js.fixlink.webhook_only'), config.webhook_only_with_tracker, checked => {
         config.webhook_only_with_tracker = checked;
         save();
     }));
@@ -1632,7 +1633,7 @@ function buildFixlinkConfigEditor(mod, s, value) {
     builtinSection.className = 'compound-section';
     const builtinTitle = document.createElement('div');
     builtinTitle.className = 'compound-section-title';
-    builtinTitle.textContent = '內建平台';
+    builtinTitle.textContent = t('web.js.fixlink.builtin');
     builtinSection.appendChild(builtinTitle);
     const builtinGrid = document.createElement('div');
     builtinGrid.className = 'compound-card-grid';
@@ -1645,7 +1646,7 @@ function buildFixlinkConfigEditor(mod, s, value) {
         name.textContent = platform.name;
         heading.appendChild(name);
         const enabled = !config.disabled_platforms.includes(platform.name);
-        const toggle = buildCompoundToggle('啟用', enabled, checked => {
+        const toggle = buildCompoundToggle(t('web.js.fixlink.enabled'), enabled, checked => {
             const disabled = new Set(config.disabled_platforms);
             if (checked) disabled.delete(platform.name);
             else disabled.add(platform.name);
@@ -1668,7 +1669,7 @@ function buildFixlinkConfigEditor(mod, s, value) {
             config.preferred_fixers[platform.name] = select.value;
             save();
         });
-        card.appendChild(buildCompoundField('主要修復服務', select));
+        card.appendChild(buildCompoundField(t('web.js.fixlink.preferred'), select));
         builtinGrid.appendChild(card);
     }
     builtinSection.appendChild(builtinGrid);
@@ -1680,11 +1681,11 @@ function buildFixlinkConfigEditor(mod, s, value) {
     customHeader.className = 'compound-section-header';
     const customTitle = document.createElement('div');
     customTitle.className = 'compound-section-title';
-    customTitle.textContent = `自訂平台 (${config.custom_platforms.length}/${maxCustom})`;
+    customTitle.textContent = t('web.js.fixlink.custom_title', {current: config.custom_platforms.length, max: maxCustom});
     const addButton = document.createElement('button');
     addButton.type = 'button';
     addButton.className = 'compound-button primary';
-    addButton.textContent = '新增自訂平台';
+    addButton.textContent = t('web.js.fixlink.add_custom');
     customHeader.appendChild(customTitle);
     customHeader.appendChild(addButton);
     customSection.appendChild(customHeader);
@@ -1705,7 +1706,7 @@ function buildFixlinkConfigEditor(mod, s, value) {
 
     function renderCustomPlatforms() {
         customList.innerHTML = '';
-        customTitle.textContent = `自訂平台 (${config.custom_platforms.length}/${maxCustom})`;
+        customTitle.textContent = t('web.js.fixlink.custom_title', {current: config.custom_platforms.length, max: maxCustom});
         addButton.disabled = config.custom_platforms.length + newDrafts.length >= maxCustom;
         const entries = [
             ...config.custom_platforms.map(item => ({ item: cloneConfig(item), isNew: false })),
@@ -1714,7 +1715,7 @@ function buildFixlinkConfigEditor(mod, s, value) {
         if (entries.length === 0) {
             const empty = document.createElement('div');
             empty.className = 'compound-empty';
-            empty.textContent = '尚未新增自訂平台。';
+            empty.textContent = t('web.js.fixlink.no_custom');
             customList.appendChild(empty);
             return;
         }
@@ -1725,15 +1726,15 @@ function buildFixlinkConfigEditor(mod, s, value) {
             const heading = document.createElement('div');
             heading.className = 'compound-card-header';
             const title = document.createElement('strong');
-            title.textContent = isNew ? '新增自訂平台' : (item.name || '未命名平台');
+            title.textContent = isNew ? t('web.js.fixlink.add_custom') : (item.name || t('web.js.fixlink.unnamed'));
             heading.appendChild(title);
             card.appendChild(heading);
 
-            const nameInput = textControl(item.name, { placeholder: '平台名稱' });
+            const nameInput = textControl(item.name, { placeholder: t('web.js.fixlink.name') });
             const originsInput = textControl((item.origins || []).join('\n'), { multiline: true, placeholder: 'example.com' });
             const pathsInput = textControl((item.path_prefixes || []).join('\n'), { multiline: true, placeholder: '/post/' });
             const keepInput = textControl((item.keep_query_keys || []).join('\n'), { multiline: true, placeholder: 'id\nlang' });
-            const fixerNameInput = textControl(item.fixer.name, { placeholder: 'Fixer 名稱' });
+            const fixerNameInput = textControl(item.fixer.name, { placeholder: t('web.js.fixlink.fixer_name') });
             const endpointInput = textControl(item.fixer.endpoint, { placeholder: 'https://fix.example.com/embed' });
             const sourceParamInput = textControl(item.fixer.source_param || 'url', { placeholder: 'url' });
             const staticQuery = item.fixer.static_query || {};
@@ -1741,21 +1742,21 @@ function buildFixlinkConfigEditor(mod, s, value) {
                 multiline: true,
                 placeholder: 'v=1\nmode=embed',
             });
-            card.appendChild(buildCompoundField('平台名稱', nameInput));
-            card.appendChild(buildCompoundField('來源網域 (每行一個)', originsInput));
-            card.appendChild(buildCompoundField('路徑前綴 (每行一個)', pathsInput));
-            card.appendChild(buildCompoundField('保留 query keys', keepInput));
-            card.appendChild(buildCompoundField('Fixer 名稱', fixerNameInput));
+            card.appendChild(buildCompoundField(t('web.js.fixlink.name'), nameInput));
+            card.appendChild(buildCompoundField(t('web.js.fixlink.origins'), originsInput));
+            card.appendChild(buildCompoundField(t('web.js.fixlink.paths'), pathsInput));
+            card.appendChild(buildCompoundField(t('web.js.fixlink.keep_query'), keepInput));
+            card.appendChild(buildCompoundField(t('web.js.fixlink.fixer_name'), fixerNameInput));
             card.appendChild(buildCompoundField('HTTPS endpoint', endpointInput));
-            card.appendChild(buildCompoundField('來源 URL 參數名', sourceParamInput));
-            card.appendChild(buildCompoundField('靜態 query', staticInput));
+            card.appendChild(buildCompoundField(t('web.js.fixlink.source_param'), sourceParamInput));
+            card.appendChild(buildCompoundField(t('web.js.fixlink.static_query'), staticInput));
 
             const actions = document.createElement('div');
             actions.className = 'compound-actions';
             const saveButton = document.createElement('button');
             saveButton.type = 'button';
             saveButton.className = 'compound-button primary';
-            saveButton.textContent = '儲存平台';
+            saveButton.textContent = t('web.js.fixlink.save_platform');
             saveButton.addEventListener('click', async () => {
                 const candidate = {
                     id: item.id || undefined,
@@ -1784,7 +1785,7 @@ function buildFixlinkConfigEditor(mod, s, value) {
 
             if (!isNew) {
                 const customKey = `custom:${item.id}`;
-                const enabledToggle = buildCompoundToggle('啟用平台', !config.disabled_platforms.includes(customKey), checked => {
+                const enabledToggle = buildCompoundToggle(t('web.js.fixlink.enable_platform'), !config.disabled_platforms.includes(customKey), checked => {
                     const disabled = new Set(config.disabled_platforms);
                     if (checked) disabled.delete(customKey);
                     else disabled.add(customKey);
@@ -1798,7 +1799,7 @@ function buildFixlinkConfigEditor(mod, s, value) {
             const removeButton = document.createElement('button');
             removeButton.type = 'button';
             removeButton.className = 'compound-button danger';
-            removeButton.textContent = isNew ? '取消' : '刪除';
+            removeButton.textContent = isNew ? t('web.js.common.cancel') : t('web.js.common.delete');
             removeButton.addEventListener('click', async () => {
                 if (isNew) {
                     newDrafts = newDrafts.filter(draft => draft !== item);
@@ -1843,9 +1844,9 @@ function buildAntibeastConfigEditor(mod, s, value, roles) {
 
     const general = document.createElement('div');
     general.className = 'compound-section';
-    general.appendChild(buildCompoundToggle('啟用 AntiBeast', config.enabled, checked => { config.enabled = checked; save(); }));
-    general.appendChild(buildCompoundToggle('啟用連續觸發處置', config.kick.enabled, checked => { config.kick.enabled = checked; save(); }));
-    general.appendChild(buildCompoundToggle('處置只計算 @everyone / @here', config.kick.only_everyone_here, checked => {
+    general.appendChild(buildCompoundToggle(t('web.js.antibeast.enable'), config.enabled, checked => { config.enabled = checked; save(); }));
+    general.appendChild(buildCompoundToggle(t('web.js.antibeast.enable_kick'), config.kick.enabled, checked => { config.kick.enabled = checked; save(); }));
+    general.appendChild(buildCompoundToggle(t('web.js.antibeast.only_everyone'), config.kick.only_everyone_here, checked => {
         config.kick.only_everyone_here = checked;
         save();
     }));
@@ -1864,7 +1865,7 @@ function buildAntibeastConfigEditor(mod, s, value, roles) {
         threshold.value = String(config.kick.threshold);
         save();
     });
-    limits.appendChild(buildCompoundField('時間窗口內觸發次數', threshold));
+    limits.appendChild(buildCompoundField(t('web.js.antibeast.threshold'), threshold));
     const windowInput = document.createElement('input');
     windowInput.type = 'number';
     windowInput.className = 'form-input';
@@ -1876,14 +1877,14 @@ function buildAntibeastConfigEditor(mod, s, value, roles) {
         windowInput.value = String(config.kick.time_window);
         save();
     });
-    limits.appendChild(buildCompoundField('時間窗口 (秒)', windowInput));
+    limits.appendChild(buildCompoundField(t('web.js.antibeast.window'), windowInput));
     container.appendChild(limits);
 
     const roleSection = document.createElement('div');
     roleSection.className = 'compound-section';
     const roleTitle = document.createElement('div');
     roleTitle.className = 'compound-section-title';
-    roleTitle.textContent = '繞過身分組';
+    roleTitle.textContent = t('web.js.antibeast.bypass');
     roleSection.appendChild(roleTitle);
     const tags = document.createElement('div');
     tags.className = 'role-tags';
@@ -1898,7 +1899,7 @@ function buildAntibeastConfigEditor(mod, s, value, roles) {
         if (!config.bypass_roles.length) {
             const empty = document.createElement('span');
             empty.className = 'role-tag-empty';
-            empty.textContent = '尚未設定繞過身分組';
+            empty.textContent = t('web.js.antibeast.no_bypass');
             tags.appendChild(empty);
         }
         for (const roleId of config.bypass_roles) {
@@ -1918,7 +1919,7 @@ function buildAntibeastConfigEditor(mod, s, value, roles) {
             tag.appendChild(remove);
             tags.appendChild(tag);
         }
-        roleSelect.innerHTML = '<option value="">新增繞過身分組...</option>';
+        roleSelect.innerHTML = '<option value="">' + t('web.js.antibeast.add_bypass') + '</option>';
         for (const role of roles) {
             if (config.bypass_roles.includes(String(role.id))) continue;
             const option = document.createElement('option');
@@ -1939,7 +1940,7 @@ function buildAntibeastConfigEditor(mod, s, value, roles) {
     actionSection.className = 'compound-section';
     const actionTitle = document.createElement('div');
     actionTitle.className = 'compound-section-title';
-    actionTitle.textContent = 'Moderate 動作指令';
+    actionTitle.textContent = t('web.js.antibeast.action');
     actionSection.appendChild(actionTitle);
     const actionEditor = document.createElement('div');
     actionEditor.className = 'action-input-editor';
@@ -1947,7 +1948,7 @@ function buildAntibeastConfigEditor(mod, s, value, roles) {
     actionInput.type = 'text';
     actionInput.className = 'form-input';
     actionInput.value = config.kick.action;
-    actionInput.placeholder = '選擇建議或輸入，例如 mute 10m 違規';
+    actionInput.placeholder = t('web.js.action.input_ph');
     const listId = 'antibeast-action-suggestions';
     actionInput.setAttribute('list', listId);
     const datalist = document.createElement('datalist');
@@ -1968,11 +1969,11 @@ function buildAntibeastConfigEditor(mod, s, value, roles) {
         const clean = raw.trim();
         if (!clean) {
             analysisBox.className = 'action-analysis error';
-            analysisBox.textContent = '動作指令不能留空。';
+            analysisBox.textContent = t('web.js.action.required');
             return;
         }
         analysisBox.className = 'action-analysis loading';
-        analysisBox.textContent = '正在解析動作...';
+        analysisBox.textContent = t('web.js.action.parsing');
         try {
             const analysis = await analyzeActionInput(clean);
             if (currentRevision !== revision) return;
@@ -1983,7 +1984,7 @@ function buildAntibeastConfigEditor(mod, s, value, roles) {
                         config.kick.action = analysis.normalized;
                         save(0, result => {
                             if (result && result.success) renderActionAnalysis(analysisBox, analysis, { saved: true });
-                            else renderActionAnalysis(analysisBox, { valid: false, error: (result && result.error) || '儲存失敗。' });
+                            else renderActionAnalysis(analysisBox, { valid: false, error: (result && result.error) || t('web.js.common.save_failed') });
                         });
                     },
                 });
@@ -1997,11 +1998,11 @@ function buildAntibeastConfigEditor(mod, s, value, roles) {
             config.kick.action = analysis.normalized;
             save(0, result => {
                 if (result && result.success) renderActionAnalysis(analysisBox, analysis, { saved: true });
-                else renderActionAnalysis(analysisBox, { valid: false, error: (result && result.error) || '儲存失敗。' });
+                else renderActionAnalysis(analysisBox, { valid: false, error: (result && result.error) || t('web.js.common.save_failed') });
             });
         } catch (error) {
             if (currentRevision !== revision) return;
-            renderActionAnalysis(analysisBox, { valid: false, error: `無法檢查動作：${error.message}` });
+            renderActionAnalysis(analysisBox, { valid: false, error: t('web.js.action.check_failed', {error: error.message}) });
         }
     }
     actionInput.addEventListener('input', () => {
@@ -2063,11 +2064,11 @@ function buildWebverifyConfigEditor(mod, s, value, channels, roles) {
     enSpan.className = 'toggle-slider';
     enabledLabel.appendChild(enSpan);
     enabledWrap.appendChild(enabledLabel);
-    container.appendChild(addRow('啟用網頁驗證', enabledWrap));
+    container.appendChild(addRow(t('web.js.webverify.enable'), enabledWrap));
 
     const captchaSelect = document.createElement('select');
     captchaSelect.className = 'form-select';
-    [ { v: 'none', l: '無' }, { v: 'turnstile', l: 'Cloudflare Turnstile' }, { v: 'recaptcha', l: 'Google reCAPTCHA' } ].forEach(o => {
+    [ { v: 'none', l: t('web.js.webverify.captcha_none') }, { v: 'turnstile', l: 'Cloudflare Turnstile' }, { v: 'recaptcha', l: 'Google reCAPTCHA' } ].forEach(o => {
         const opt = document.createElement('option');
         opt.value = o.v;
         opt.textContent = o.l;
@@ -2075,11 +2076,11 @@ function buildWebverifyConfigEditor(mod, s, value, channels, roles) {
         captchaSelect.appendChild(opt);
     });
     captchaSelect.addEventListener('change', () => { config.captcha_type = captchaSelect.value; save(); });
-    container.appendChild(addRow('CAPTCHA 類型', captchaSelect));
+    container.appendChild(addRow(t('web.js.webverify.captcha'), captchaSelect));
 
     const roleSelect = document.createElement('select');
     roleSelect.className = 'form-select';
-    roleSelect.innerHTML = '<option value="">未設定</option>';
+    roleSelect.innerHTML = '<option value="">' + t('web.js.common.unset') + '</option>';
     for (const r of roles) {
         const opt = document.createElement('option');
         opt.value = r.id;
@@ -2088,7 +2089,7 @@ function buildWebverifyConfigEditor(mod, s, value, channels, roles) {
         roleSelect.appendChild(opt);
     }
     roleSelect.addEventListener('change', () => { config.unverified_role_id = roleSelect.value || null; save(); });
-    container.appendChild(addRow('未驗證成員身分組', roleSelect));
+    container.appendChild(addRow(t('web.js.webverify.unverified_role'), roleSelect));
 
     const autoroleWrap = document.createElement('div');
     autoroleWrap.className = 'toggle-wrapper';
@@ -2103,15 +2104,15 @@ function buildWebverifyConfigEditor(mod, s, value, channels, roles) {
     asl.className = 'toggle-slider';
     autoroleLabel.appendChild(asl);
     autoroleWrap.appendChild(autoroleLabel);
-    container.appendChild(addRow('自動分配未驗證角色', autoroleWrap));
+    container.appendChild(addRow(t('web.js.webverify.autorole'), autoroleWrap));
 
     const triggerInput = document.createElement('input');
     triggerInput.type = 'text';
     triggerInput.className = 'form-input';
-    triggerInput.placeholder = 'always 或 age_check+no_history 等';
+    triggerInput.placeholder = t('web.js.webverify.trigger_ph');
     triggerInput.value = (config.autorole_trigger || 'always').toString();
     triggerInput.addEventListener('input', () => { config.autorole_trigger = triggerInput.value; save(); });
-    container.appendChild(addRow('觸發條件', triggerInput));
+    container.appendChild(addRow(t('web.js.webverify.trigger'), triggerInput));
 
     const minAgeInput = document.createElement('input');
     minAgeInput.type = 'number';
@@ -2120,11 +2121,11 @@ function buildWebverifyConfigEditor(mod, s, value, channels, roles) {
     minAgeInput.value = config.min_age != null ? config.min_age : 7;
     minAgeInput.style.width = '5rem';
     minAgeInput.addEventListener('input', () => { config.min_age = minAgeInput.value; save(); });
-    container.appendChild(addRow('最小帳號年齡 (天)', minAgeInput));
+    container.appendChild(addRow(t('web.js.webverify.min_age'), minAgeInput));
 
     const notifyTypeSelect = document.createElement('select');
     notifyTypeSelect.className = 'form-select';
-    [ { v: 'dm', l: '私訊' }, { v: 'channel', l: '頻道' }, { v: 'both', l: '都要' } ].forEach(o => {
+    [ { v: 'dm', l: t('web.js.webverify.notify_dm') }, { v: 'channel', l: t('web.js.webverify.notify_channel') }, { v: 'both', l: t('web.js.webverify.notify_both') } ].forEach(o => {
         const opt = document.createElement('option');
         opt.value = o.v;
         opt.textContent = o.l;
@@ -2132,11 +2133,11 @@ function buildWebverifyConfigEditor(mod, s, value, channels, roles) {
         notifyTypeSelect.appendChild(opt);
     });
     notifyTypeSelect.addEventListener('change', () => { config.notify.type = notifyTypeSelect.value; save(); });
-    container.appendChild(addRow('驗證通知方式', notifyTypeSelect));
+    container.appendChild(addRow(t('web.js.webverify.notify_type'), notifyTypeSelect));
 
     const notifyChannelSelect = document.createElement('select');
     notifyChannelSelect.className = 'form-select';
-    notifyChannelSelect.innerHTML = '<option value="">未設定</option>';
+    notifyChannelSelect.innerHTML = '<option value="">' + t('web.js.common.unset') + '</option>';
     const textChannels = channels.filter(ch => ['text', 'news'].includes(ch.type));
     for (const ch of textChannels) {
         const opt = document.createElement('option');
@@ -2146,27 +2147,27 @@ function buildWebverifyConfigEditor(mod, s, value, channels, roles) {
         notifyChannelSelect.appendChild(opt);
     }
     notifyChannelSelect.addEventListener('change', () => { config.notify.channel_id = notifyChannelSelect.value || null; save(); });
-    container.appendChild(addRow('通知頻道', notifyChannelSelect));
+    container.appendChild(addRow(t('web.js.webverify.notify_ch'), notifyChannelSelect));
 
     const notifyTitleInput = document.createElement('input');
     notifyTitleInput.type = 'text';
     notifyTitleInput.className = 'form-input';
     notifyTitleInput.value = (config.notify.title || '伺服器網頁驗證').toString();
     notifyTitleInput.addEventListener('input', () => { config.notify.title = notifyTitleInput.value; save(); });
-    container.appendChild(addRow('通知標題', notifyTitleInput));
+    container.appendChild(addRow(t('web.js.webverify.notify_title'), notifyTitleInput));
 
     const notifyMsgInput = document.createElement('textarea');
     notifyMsgInput.className = 'form-textarea';
     notifyMsgInput.rows = 2;
     notifyMsgInput.value = (config.notify.message || '請點擊下方按鈕進行網頁驗證：').toString();
     notifyMsgInput.addEventListener('input', () => { config.notify.message = notifyMsgInput.value; save(); });
-    container.appendChild(addRow('通知內容', notifyMsgInput));
+    container.appendChild(addRow(t('web.js.webverify.notify_msg'), notifyMsgInput));
 
     const countrySection = document.createElement('div');
     countrySection.className = 'webverify-country-section';
     const countryTitle = document.createElement('div');
     countryTitle.className = 'webverify-section-title';
-    countryTitle.textContent = '地區警示';
+    countryTitle.textContent = t('web.js.webverify.country');
     countrySection.appendChild(countryTitle);
 
     const countryEnabledWrap = document.createElement('div');
@@ -2182,11 +2183,11 @@ function buildWebverifyConfigEditor(mod, s, value, channels, roles) {
     coSpan.className = 'toggle-slider';
     countryEnabledLabel.appendChild(coSpan);
     countryEnabledWrap.appendChild(countryEnabledLabel);
-    countrySection.appendChild(addRow('啟用地區警示', countryEnabledWrap));
+    countrySection.appendChild(addRow(t('web.js.webverify.country_enable'), countryEnabledWrap));
 
     const countryModeSelect = document.createElement('select');
     countryModeSelect.className = 'form-select';
-    [ { v: 'blacklist', l: '黑名單（列出的國家觸發警示）' }, { v: 'whitelist', l: '白名單（未列出的國家觸發警示）' } ].forEach(o => {
+    [ { v: 'blacklist', l: t('web.js.webverify.country_blacklist') }, { v: 'whitelist', l: t('web.js.webverify.country_whitelist') } ].forEach(o => {
         const opt = document.createElement('option');
         opt.value = o.v;
         opt.textContent = o.l;
@@ -2194,7 +2195,7 @@ function buildWebverifyConfigEditor(mod, s, value, channels, roles) {
         countryModeSelect.appendChild(opt);
     });
     countryModeSelect.addEventListener('change', () => { config.webverify_country_alert.mode = countryModeSelect.value; save(); });
-    countrySection.appendChild(addRow('模式', countryModeSelect));
+    countrySection.appendChild(addRow(t('web.js.webverify.country_mode'), countryModeSelect));
 
     const countriesInput = document.createElement('input');
     countriesInput.type = 'text';
@@ -2205,11 +2206,11 @@ function buildWebverifyConfigEditor(mod, s, value, channels, roles) {
         config.webverify_country_alert.countries = countriesInput.value.split(',').map(c => c.trim().toUpperCase()).filter(Boolean);
         save();
     });
-    countrySection.appendChild(addRow('國家代碼 (逗號分隔)', countriesInput));
+    countrySection.appendChild(addRow(t('web.js.webverify.country_codes'), countriesInput));
 
     const countryChannelSelect = document.createElement('select');
     countryChannelSelect.className = 'form-select';
-    countryChannelSelect.innerHTML = '<option value="">未設定</option>';
+    countryChannelSelect.innerHTML = '<option value="">' + t('web.js.common.unset') + '</option>';
     for (const ch of textChannels) {
         const opt = document.createElement('option');
         opt.value = ch.id;
@@ -2218,7 +2219,7 @@ function buildWebverifyConfigEditor(mod, s, value, channels, roles) {
         countryChannelSelect.appendChild(opt);
     }
     countryChannelSelect.addEventListener('change', () => { config.webverify_country_alert.channel_id = countryChannelSelect.value || null; save(); });
-    countrySection.appendChild(addRow('警示頻道', countryChannelSelect));
+    countrySection.appendChild(addRow(t('web.js.webverify.country_ch'), countryChannelSelect));
 
     container.appendChild(countrySection);
 
@@ -2263,7 +2264,7 @@ function buildTextarea(mod, s, value) {
     const ta = document.createElement('textarea');
     ta.className = 'form-textarea';
     ta.value = value || '';
-    ta.placeholder = s.display || '';
+    ta.placeholder = s.default_display != null ? String(s.default_display) : (s.display || '');
     ta.addEventListener('input', () => debounceSave(mod, s.database_key, ta.value));
     return ta;
 }
@@ -2285,7 +2286,10 @@ function buildTextInput(mod, s, value) {
     input.type = 'text';
     input.className = 'form-input';
     input.value = value != null ? value : '';
-    input.placeholder = s.default != null ? String(s.default) : '';
+    // default_i18n_key 設定：以渲染後的在地化預設當 placeholder；
+    // 欄位留空即儲存 null（後端會拒絕寫入等同渲染預設的值）
+    input.placeholder = s.default_display != null ? String(s.default_display)
+        : (s.default != null ? String(s.default) : '');
     input.addEventListener('input', () => debounceSave(mod, s.database_key, input.value));
     return input;
 }

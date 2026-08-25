@@ -1,0 +1,47 @@
+{
+    "embed": {
+        "report_footer": "資料來源：中央氣象署",
+        "report_title": "📋 地震報告",
+        "status_title": "🔌 OXWU 連線狀態",
+        "warning_title": "⚠️ 地震速報"
+    },
+    "err": {
+        "guild_only": "❌ 此指令只能在伺服器中使用",
+        "missing_channel_permission": "❌ 機器人在 {channel} 沒有檢視頻道或發送訊息的權限，請先調整後再設定。",
+        "no_permission": "❌ 你沒有權限使用此指令（需要管理伺服器權限）",
+        "report_fetch_failed": "❌ 無法取得地震報告資訊",
+        "screenshot_failed": "❌ 無法取得截圖",
+        "warning_fetch_failed": "❌ 無法取得地震速報資訊（可能目前沒有速報）"
+    },
+    "field": {
+        "arrival_by_area": "各地到達",
+        "depth": "📏 深度",
+        "epicenter": "📍 震央位置",
+        "last_report_time": "最後報告時間",
+        "last_warning_time": "最後速報時間",
+        "magnitude": "📊 規模",
+        "max_intensity": "💥 最大震度",
+        "occurred_at": "🕐 發生時間",
+        "report_number": "📝 編號",
+        "this_server_settings": "本伺服器設定"
+    },
+    "msg": {
+        "report_channel_cleared": "✅ 已移除報告頻道設定",
+        "report_channel_set": "✅ 已設定報告頻道為 {channel}"
+    },
+    "value": {
+        "area_field_name": "📍 {area} ({max_intensity})",
+        "arrival_line_arrived": "{county}: 已抵達 | 預估 {intensity}",
+        "arrival_line_eta": "{county}: <t:{ts}:R> | 預估 {intensity}",
+        "channel_settings_lines": "速報頻道: {warning_channel}\n報告頻道: {report_channel}",
+        "connected": "✅ 已連線",
+        "cwa_report_btn": "中央氣象署報告",
+        "disconnected": "❌ 未連線",
+        "lat_lon": "北緯 {lat} / 東經 {lon}",
+        "more_regions": {
+            "other": "...還有 {count} 個地區"
+        },
+        "station_level_line": "{level}級: {names}",
+        "unknown": "未知"
+    }
+}

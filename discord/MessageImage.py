@@ -1,4 +1,4 @@
-from PIL import Image, ImageDraw, ImageFont, ImageSequence
+﻿from PIL import Image, ImageDraw, ImageFont, ImageSequence
 import io
 import os
 import sys
@@ -18,6 +18,8 @@ import time
 import json
 import math
 import tempfile
+import i18n
+from i18n import t
 if "OwnerTools" in modules:
     import OwnerTools
 
@@ -476,7 +478,7 @@ async def create(message: discord.Message, animate_gif=False) -> tuple[io.BytesI
     return output_buffer, ext
 
 
-class UpvoteView(discord.ui.View):
+class UpvoteView(i18n.I18nView):
     def __init__(self, original_user: discord.User = None):
         super().__init__()
         self.upvotes = 0
@@ -490,11 +492,11 @@ class UpvoteView(discord.ui.View):
     async def upvote(self, interaction: discord.Interaction, button: discord.ui.Button):
         async with self._lock:
             if interaction.user.id in self.upvoted_users:
-                await interaction.response.send_message("你已經點過了！", ephemeral=True)
+                await interaction.response.send_message(t("messageimage.err.already_upvoted"), ephemeral=True)
                 return
             self.upvotes += 1
             self.upvoted_users.add(interaction.user.id)
-            button.label = f" | {self.upvotes} 人"
+            button.label = t("messageimage.value.upvote_count_suffix", count=self.upvotes)
             if self.upvotes >= 5:
                 channel = bot.get_channel(config("upvote_board_channel_id"))
                 message = interaction.message
@@ -504,14 +506,14 @@ class UpvoteView(discord.ui.View):
                         embed = discord.Embed()
                         embed.set_image(url=image)
                         embed.set_author(name=self.original_user.display_name + f"({self.original_user.name})", icon_url=self.original_user.display_avatar.url if self.original_user.display_avatar else None)
-                        sent_message = await channel.send(embed=embed, content=f"⬆️ | {self.upvotes} 人")
+                        sent_message = await channel.send(embed=embed, content=t("messageimage.value.upvote_board_content", count=self.upvotes))
                         self.on_board_message = sent_message
                     else:
                         # 如果已經在看板上了，更新看板訊息的內容
                         try:
-                            await self.on_board_message.edit(content=f"⬆️ | {self.upvotes} 人")
+                            await self.on_board_message.edit(content=t("messageimage.value.upvote_board_content", count=self.upvotes))
                         except Exception as e:
-                            log(f"更新看板訊息失敗: {e}", module_name="MessageImage", level=logging.ERROR)
+                            log(f"Failed to update board message: {e}", module_name="MessageImage", level=logging.ERROR)
                 guild_channel_id = get_server_config(interaction.guild.id, "upvote_board_channel_id")
                 if guild_channel_id:
                     guild_channel = bot.get_channel(guild_channel_id)
@@ -520,29 +522,29 @@ class UpvoteView(discord.ui.View):
                             embed = discord.Embed()
                             embed.set_image(url=image)
                             embed.set_author(name=self.original_user.display_name + f"({self.original_user.name})", icon_url=self.original_user.display_avatar.url if self.original_user.display_avatar else None)
-                            sent_message = await guild_channel.send(embed=embed, content=f"⬆️ | {self.upvotes} 人")
+                            sent_message = await guild_channel.send(embed=embed, content=t("messageimage.value.upvote_board_content", count=self.upvotes))
                             self.on_guild_board_message = sent_message
                         else:
                             # 如果已經在公會看板上了，更新公會看板訊息的內容
                             try:
-                                await self.on_guild_board_message.edit(content=f"⬆️ | {self.upvotes} 人")
+                                await self.on_guild_board_message.edit(content=t("messageimage.value.upvote_board_content", count=self.upvotes))
                             except Exception as e:
-                                log(f"更新公會看板訊息失敗: {e}", module_name="MessageImage", level=logging.ERROR)
+                                log(f"Failed to update guild board message: {e}", module_name="MessageImage", level=logging.ERROR)
             await interaction.response.edit_message(view=self)
 
 
-@bot.tree.command(name="upvoteboard", description="設定有料板子，當超過 5 個人點擊將會傳送在該頻道。")
-@app_commands.describe(channel="要設置的頻道（若未設置則清除設定）")
+@bot.tree.command(name=app_commands.locale_str("upvoteboard", i18n_key="cmd.messageimage.upvoteboard.name"), description=app_commands.locale_str("Set up the upvote board; posts here once 5 people upvote a message.", i18n_key="cmd.messageimage.upvoteboard.desc"))
+@app_commands.describe(channel=app_commands.locale_str("The channel to use (omit to clear the setting)", i18n_key="cmd.messageimage.upvoteboard.param.channel"))
 @app_commands.allowed_contexts(guilds=True, dms=False, private_channels=False)
 @app_commands.allowed_installs(guilds=True, users=False)
 @app_commands.default_permissions(manage_guild=True)
 async def set_upvoteboard(interaction: discord.Interaction, channel: discord.TextChannel = None):
     if channel:
         set_server_config(interaction.guild.id, "upvote_board_channel_id", channel.id)
-        await interaction.response.send_message(f"已設定有料板子頻道為 {channel.mention}")
+        await interaction.response.send_message(t("messageimage.msg.upvoteboard_set", channel=channel.mention))
     else:
         set_server_config(interaction.guild.id, "upvote_board_channel_id", None)
-        await interaction.response.send_message("已清除有料板子頻道設定")
+        await interaction.response.send_message(t("messageimage.msg.upvoteboard_cleared"))
 
 
 class BadQuoteView(UpvoteView):
@@ -554,10 +556,10 @@ class BadQuoteView(UpvoteView):
     @discord.ui.button(label="GIF", style=discord.ButtonStyle.gray)
     async def toggle_gif(self, interaction: discord.Interaction, button: discord.ui.Button):
         if not self.original_message.content or self.original_message.content.strip() == "":
-            await interaction.response.send_message("錯誤：訊息沒有內容。", ephemeral=True)
+            await interaction.response.send_message(t("messageimage.err.empty_message"), ephemeral=True)
             return
         if self.user.id != interaction.user.id:
-            await interaction.response.send_message("只有原始請求者可以使用這個按鈕。", ephemeral=True)
+            await interaction.response.send_message(t("messageimage.err.not_original_requester_button"), ephemeral=True)
             return
         button.style = discord.ButtonStyle.primary
         button.disabled = True  # 點擊後禁用按鈕，避免重複點擊造成多次生成
@@ -566,15 +568,15 @@ class BadQuoteView(UpvoteView):
             output_buffer, ext = await create(self.original_message, animate_gif=True)
             await interaction.edit_original_response(attachments=[discord.File(output_buffer, filename=f"message_quote.{ext}")], view=self)
         except discord.HTTPException as e:
-            await interaction.followup.send(f"無法上傳圖片！\n生成的圖片達到了 Discord 上傳大小的限制。", ephemeral=True)
+            await interaction.followup.send(t("messageimage.err.upload_failed_size_limit"), ephemeral=True)
 
 
-@bot.tree.context_menu(name="糟糕的Make it a Quote")
+@bot.tree.context_menu(name=app_commands.locale_str("Terrible Make it a Quote", i18n_key="cmd.messageimage.ctx.make_it_a_quote.name"))
 @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
 @app_commands.allowed_installs(guilds=True, users=True)
 async def make_it_a_quote(interaction: discord.Interaction, message: discord.Message):
     if not message.content or message.content.strip() == "":
-        await interaction.response.send_message("錯誤：訊息沒有內容。", ephemeral=True)
+        await interaction.response.send_message(t("messageimage.err.empty_message"), ephemeral=True)
         return
     await interaction.response.defer()
     output_buffer, ext = await create(message)
@@ -592,13 +594,13 @@ async def badquote(ctx: commands.Context):
         ref_msg = await ctx.channel.fetch_message(ctx.message.reference.message_id)
         message = ref_msg
     else:
-        await ctx.send("錯誤：沒有回覆的訊息。")
+        await ctx.send(t("messageimage.err.no_replied_message"))
         return
     if not message:
-        await ctx.send("錯誤：找不到回覆的訊息。（可能已刪除？）")
+        await ctx.send(t("messageimage.err.replied_message_not_found"))
         return
     if not message.content or message.content.strip() == "":
-        await ctx.send("錯誤：訊息沒有內容。")
+        await ctx.send(t("messageimage.err.empty_message"))
         return
     output_buffer, ext = await create(message)
     view = BadQuoteView(message, user=ctx.author) if message.author.display_avatar.is_animated() else UpvoteView(original_user=message.author)
@@ -609,9 +611,9 @@ async def screenshot(message: discord.Message):
     # check browser alive
     global browser
     if browser is None:
-        raise Exception("瀏覽器尚未啟動，請稍後再試。")
+        raise Exception(t("messageimage.err.browser_not_started"))
     if not browser.is_connected():
-        raise Exception("瀏覽器已關閉，請稍後再試。")
+        raise Exception(t("messageimage.err.browser_closed"))
     
     # make a stopwatch for debugging
     times = {"getting_messages": 0, "generating_html": 0, "taking_screenshot": 0}
@@ -655,9 +657,9 @@ async def screenshot(message: discord.Message):
             raise_exceptions=True
         )
     except Exception as e:
-        log(f"生成 HTML 失敗: {e}", module_name="MessageImage", level=logging.ERROR)
+        log(f"Failed to generate HTML: {e}", module_name="MessageImage", level=logging.ERROR)
         traceback.print_exc()
-        raise Exception(f"生成 HTML 失敗: {e}")
+        raise Exception(t("messageimage.err.html_generation_failed", error=str(e)))
     times["generating_html"] = time.perf_counter() - start_time
     start_time = time.perf_counter()
 
@@ -679,19 +681,19 @@ async def screenshot(message: discord.Message):
         image_bytes = await chatlog.screenshot(type="png")
         await page.close()
     except Exception as e:
-        log(f"截圖失敗: {e}", module_name="MessageImage", level=logging.ERROR)
+        log(f"Screenshot failed: {e}", module_name="MessageImage", level=logging.ERROR)
         # traceback.print_exc()
         # If screenshot fails, maybe we want to return the HTML for debugging? 
         # The original code did this in one place. For simplicity in a shared function, let's just raise.
-        raise Exception(f"截圖失敗: {e}")
+        raise Exception(t("messageimage.err.screenshot_failed", error=str(e)))
     times["taking_screenshot"] = time.perf_counter() - start_time
     # log the times for debugging
-    log(f"截圖生成成功: 取得訊息時間={times['getting_messages']*1000:.2f}ms, 生成HTML時間={times['generating_html']*1000:.2f}ms, 截圖時間={times['taking_screenshot']*1000:.2f}ms", module_name="MessageImage")
+    log(f"Screenshot generated: get_messages={times['getting_messages']*1000:.2f}ms, generate_html={times['generating_html']*1000:.2f}ms, screenshot={times['taking_screenshot']*1000:.2f}ms", module_name="MessageImage")
 
     return io.BytesIO(image_bytes)
 
 
-@bot.tree.context_menu(name="截圖生成器")
+@bot.tree.context_menu(name=app_commands.locale_str("Screenshot Generator", i18n_key="cmd.messageimage.ctx.screenshot_generator.name"))
 @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
 @app_commands.allowed_installs(guilds=True, users=True)
 async def screenshot_generator(interaction: discord.Interaction, message: discord.Message):
@@ -699,9 +701,9 @@ async def screenshot_generator(interaction: discord.Interaction, message: discor
     try:
         buffer = await screenshot(message)
         await interaction.followup.send(file=discord.File(buffer, filename="screenshot.png"), view=UpvoteView(message.author))
-        log("截圖生成完成", module_name="MessageImage", user=interaction.user, guild=interaction.guild)
+        log("Screenshot generation complete", module_name="MessageImage", user=interaction.user, guild=interaction.guild)
     except Exception as e:
-        await interaction.followup.send(f"截圖失敗: {e}", ephemeral=True)
+        await interaction.followup.send(t("messageimage.err.screenshot_failed", error=str(e)), ephemeral=True)
 
 
 @bot.command(name="screenshot", aliases=["ss", "sgen", "screenshotgen"])
@@ -717,15 +719,15 @@ async def screenshot_cmd(ctx: commands.Context):
         message = ref_msg
     
     if not message:
-        await ctx.reply("錯誤：沒有回覆的訊息。")
+        await ctx.reply(t("messageimage.err.no_replied_message"))
         return
 
     try:
         buffer = await screenshot(message)
         await ctx.reply(file=discord.File(buffer, filename="screenshot.png"), view=UpvoteView(message.author))
-        log("截圖生成完成", module_name="MessageImage", user=ctx.author, guild=ctx.guild)
+        log("Screenshot generation complete", module_name="MessageImage", user=ctx.author, guild=ctx.guild)
     except Exception as e:
-        await ctx.reply(f"截圖失敗: {e}")
+        await ctx.reply(t("messageimage.err.screenshot_failed", error=str(e)))
 
 def _classify_whatisthisguytalking_file(file_path: str) -> str | None:
     ext = os.path.splitext(file_path)[1].lower()
@@ -742,7 +744,7 @@ def _pick_whatisthisguytalking_media(media_type: str | None = None) -> tuple[str
     if media_type is not None:
         choices = whatisthisguytalking_media.get(media_type, [])
         if not choices:
-            raise RuntimeError(f"找不到可用的 {media_type} 素材")
+            raise RuntimeError(t("messageimage.err.no_media_of_type", media_type=media_type))
         return random.choice(choices), media_type
 
     for candidate_type in ("static", "gif", "video"):
@@ -750,7 +752,7 @@ def _pick_whatisthisguytalking_media(media_type: str | None = None) -> tuple[str
         if choices:
             return random.choice(choices), candidate_type
 
-    raise RuntimeError("目前沒有可用的「這傢伙在說什麼呢」素材")
+    raise RuntimeError(t("messageimage.err.no_media_available"))
 
 
 def _resize_whatisthisguytalking_screenshot(screenshot_bytes: bytes, target_width: int) -> Image.Image:
@@ -811,17 +813,17 @@ async def _probe_video_dimensions(file_path: str) -> tuple[int, int]:
         file_path,
     ])
     if return_code != 0:
-        raise RuntimeError(f"ffprobe 執行失敗: {stderr.strip() or stdout.strip()}")
+        raise RuntimeError(t("messageimage.err.ffprobe_failed", error=stderr.strip() or stdout.strip()))
 
     payload = json.loads(stdout or "{}")
     streams = payload.get("streams") or []
     if not streams:
-        raise RuntimeError("影片素材沒有可用的視訊串流")
+        raise RuntimeError(t("messageimage.err.no_video_stream"))
 
     width = int(streams[0].get("width") or 0)
     height = int(streams[0].get("height") or 0)
     if width <= 0 or height <= 0:
-        raise RuntimeError("無法取得影片素材尺寸")
+        raise RuntimeError(t("messageimage.err.cannot_get_video_size"))
 
     return width, height
 
@@ -839,7 +841,7 @@ async def _extract_video_preview_frame(file_path: str) -> Image.Image:
             frame_path,
         ])
         if return_code != 0 or not os.path.exists(frame_path):
-            raise RuntimeError(f"擷取影片預覽失敗: {stderr.strip() or stdout.strip()}")
+            raise RuntimeError(t("messageimage.err.frame_extraction_failed", error=stderr.strip() or stdout.strip()))
 
         with Image.open(frame_path) as frame_image:
             return frame_image.convert("RGBA").copy()
@@ -899,7 +901,7 @@ async def generate_whatisthisguytalking_gif(screenshot_bytes: bytes) -> io.Bytes
             )
 
     if not frames:
-        raise RuntimeError("GIF 素材沒有可用的影格")
+        raise RuntimeError(t("messageimage.err.no_gif_frames"))
 
     output_buffer = io.BytesIO()
     frames[0].save(
@@ -958,7 +960,7 @@ async def generate_whatisthisguytalking_video(screenshot_bytes: bytes) -> io.Byt
             output_path,
         ])
         if return_code != 0 or not os.path.exists(output_path):
-            raise RuntimeError(f"生成影片失敗: {stderr.strip() or stdout.strip()}")
+            raise RuntimeError(t("messageimage.err.ffmpeg_video_failed", error=stderr.strip() or stdout.strip()))
 
         with open(output_path, "rb") as video_file:
             video_bytes = io.BytesIO(video_file.read())
@@ -1034,7 +1036,7 @@ class WhatIsThisGuyTalkingView(UpvoteView):
     async def refresh(self, interaction: discord.Interaction, button: discord.ui.Button):
         await interaction.response.defer()
         if self.user and interaction.user.id != self.user.id:
-            await interaction.followup.send("❌只有原始請求者可以重新生成圖片。", ephemeral=True)
+            await interaction.followup.send(t("messageimage.err.not_original_requester_regen"), ephemeral=True)
             return
         try:
             buffer = await _build_whatisthisguytalking_preview(self.screenshot_bytes)
@@ -1043,10 +1045,10 @@ class WhatIsThisGuyTalkingView(UpvoteView):
                 view=self
             )
         except Exception as e:
-            await interaction.followup.send(f"重新生成失敗: {e}", ephemeral=True)
+            await interaction.followup.send(t("messageimage.err.regen_failed", error=str(e)), ephemeral=True)
 
 
-@bot.tree.context_menu(name="這傢伙在說什麼呢")
+@bot.tree.context_menu(name=app_commands.locale_str("What is this guy talking about", i18n_key="cmd.messageimage.ctx.whatisthisguytalking.name"))
 @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
 @app_commands.allowed_installs(guilds=True, users=True)
 async def whatisthisguytalking(interaction: discord.Interaction, message: discord.Message):
@@ -1055,9 +1057,9 @@ async def whatisthisguytalking(interaction: discord.Interaction, message: discor
         buffer, screenshot_bytes = await generate_whatisthisguytalking(message)
         # msg = f"現正開放投稿！\n-# {await get_command_mention('contribute', 'what-is-this-guy-talking-about')}"
         await interaction.followup.send(file=discord.File(buffer, filename="whatisthisguytalking.png"), view=EnhancedWhatIsThisGuyTalkingView(screenshot_bytes, user=interaction.user, original_user=message.author))
-        log("引用圖片生成完成", module_name="MessageImage", user=interaction.user, guild=interaction.guild)
+        log("Quote image generation complete", module_name="MessageImage", user=interaction.user, guild=interaction.guild)
     except Exception as e:
-        await interaction.followup.send(f"引用圖片生成失敗: {e}", ephemeral=True)
+        await interaction.followup.send(t("messageimage.err.quote_generation_failed", error=str(e)), ephemeral=True)
 
 class EnhancedWhatIsThisGuyTalkingView(UpvoteView):
     def __init__(self, screenshot_bytes: bytes, user: discord.User = None, original_user: discord.User = None):
@@ -1077,11 +1079,11 @@ class EnhancedWhatIsThisGuyTalkingView(UpvoteView):
         cooldown_seconds: int,
     ) -> bool:
         if self.user and interaction.user.id != self.user.id:
-            await interaction.response.send_message("只有原本產生這張圖的人可以按這個按鈕。", ephemeral=True)
+            await interaction.response.send_message(t("messageimage.err.not_original_requester_press"), ephemeral=True)
             return False
 
         if not whatisthisguytalking_media.get(media_type):
-            await interaction.response.send_message(f"目前沒有可用的 {media_type} 素材。", ephemeral=True)
+            await interaction.response.send_message(t("messageimage.err.no_media_of_type_period", media_type=media_type), ephemeral=True)
             return False
 
         remaining = _consume_whatisthisguytalking_cooldown(
@@ -1091,14 +1093,14 @@ class EnhancedWhatIsThisGuyTalkingView(UpvoteView):
         )
         if remaining > 0:
             await interaction.response.send_message(
-                f"你還要等 {remaining} 秒才能再生成 {media_type}。",
+                t("messageimage.err.media_cooldown", count=remaining, remaining=remaining, media_type=media_type),
                 ephemeral=True,
             )
             return False
 
         async with self._media_lock:
             if button.disabled:
-                await interaction.response.send_message("這個按鈕已經用過了。", ephemeral=True)
+                await interaction.response.send_message(t("messageimage.err.button_already_used"), ephemeral=True)
                 return False
 
             button.disabled = True
@@ -1111,7 +1113,7 @@ class EnhancedWhatIsThisGuyTalkingView(UpvoteView):
     async def refresh(self, interaction: discord.Interaction, button: discord.ui.Button):
         await interaction.response.defer()
         if self.user and interaction.user.id != self.user.id:
-            await interaction.followup.send("只有原本產生這張圖的人可以重新整理。", ephemeral=True)
+            await interaction.followup.send(t("messageimage.err.not_original_requester_refresh"), ephemeral=True)
             return
         try:
             buffer = await _build_whatisthisguytalking_preview(self.screenshot_bytes)
@@ -1120,7 +1122,7 @@ class EnhancedWhatIsThisGuyTalkingView(UpvoteView):
                 view=self,
             )
         except Exception as e:
-            await interaction.followup.send(f"重新生成失敗: {e}", ephemeral=True)
+            await interaction.followup.send(t("messageimage.err.regen_failed", error=str(e)), ephemeral=True)
 
     @discord.ui.button(label="GIF", style=discord.ButtonStyle.gray)
     async def render_gif(self, interaction: discord.Interaction, button: discord.ui.Button):
@@ -1137,7 +1139,7 @@ class EnhancedWhatIsThisGuyTalkingView(UpvoteView):
         try:
             output_buffer = await generate_whatisthisguytalking_gif(self.screenshot_bytes)
             if output_buffer.getbuffer().nbytes > _get_interaction_upload_limit(interaction):
-                await interaction.followup.send("生成出的 GIF 超過這個地方的上傳限制。", ephemeral=True)
+                await interaction.followup.send(t("messageimage.err.gif_exceeds_limit"), ephemeral=True)
                 return
 
             await interaction.edit_original_response(
@@ -1145,11 +1147,11 @@ class EnhancedWhatIsThisGuyTalkingView(UpvoteView):
                 view=self,
             )
         except discord.HTTPException as e:
-            await interaction.followup.send(f"GIF 生成失敗: {e}", ephemeral=True)
+            await interaction.followup.send(t("messageimage.err.gif_generation_failed", error=str(e)), ephemeral=True)
         except Exception as e:
-            await interaction.followup.send(f"GIF 生成失敗: {e}", ephemeral=True)
+            await interaction.followup.send(t("messageimage.err.gif_generation_failed", error=str(e)), ephemeral=True)
 
-    @discord.ui.button(label="影片", style=discord.ButtonStyle.gray)
+    @discord.ui.button(label=i18n.K("messageimage.btn.video"), style=discord.ButtonStyle.gray)
     async def render_video(self, interaction: discord.Interaction, button: discord.ui.Button):
         allowed = await self._start_media_generation(
             interaction,
@@ -1164,7 +1166,7 @@ class EnhancedWhatIsThisGuyTalkingView(UpvoteView):
         try:
             output_buffer = await generate_whatisthisguytalking_video(self.screenshot_bytes)
             if output_buffer.getbuffer().nbytes > _get_interaction_upload_limit(interaction):
-                await interaction.followup.send("生成出的影片超過這個地方的上傳限制。", ephemeral=True)
+                await interaction.followup.send(t("messageimage.err.video_exceeds_limit"), ephemeral=True)
                 return
 
             await interaction.edit_original_response(
@@ -1172,9 +1174,9 @@ class EnhancedWhatIsThisGuyTalkingView(UpvoteView):
                 view=self,
             )
         except discord.HTTPException as e:
-            await interaction.followup.send(f"影片生成失敗: {e}", ephemeral=True)
+            await interaction.followup.send(t("messageimage.err.video_generation_failed", error=str(e)), ephemeral=True)
         except Exception as e:
-            await interaction.followup.send(f"影片生成失敗: {e}", ephemeral=True)
+            await interaction.followup.send(t("messageimage.err.video_generation_failed", error=str(e)), ephemeral=True)
 
 
 browser = None
@@ -1185,14 +1187,14 @@ async def setup_browser():
     try:
         browser = await playwright.chromium.launch()
     except Exception as e:
-        log(f"啟動瀏覽器失敗: {e}", module_name="MessageImage", level=logging.ERROR)
-    log("Playwright 瀏覽器已啟動", module_name="MessageImage")
+        log(f"Failed to launch browser: {e}", module_name="MessageImage", level=logging.ERROR)
+    log("Playwright browser started", module_name="MessageImage")
     while True:
         await asyncio.sleep(60)
         if not browser.is_connected():
-            log("Playwright 瀏覽器已關閉，重新啟動中...", module_name="MessageImage", level=logging.WARNING)
+            log("Playwright browser disconnected, restarting...", module_name="MessageImage", level=logging.WARNING)
             browser = await playwright.chromium.launch()
-            log("Playwright 瀏覽器已重新啟動", module_name="MessageImage")
+            log("Playwright browser restarted", module_name="MessageImage")
 
 on_ready_tasks.append(setup_browser)
 
@@ -1212,14 +1214,15 @@ async def load_whatisthisguytalking_images():
             whatisthisguytalking_media[media_type].append(file_path)
             whatisthisguytalking_images.append(file_path)
             count += 1
-        log(f"載入了 {count} 張「這傢伙在說什麼呢？」的圖片", module_name="MessageImage")
+        log(f"Loaded {count} \"whatisthisguytalking\" images", module_name="MessageImage")
         return count
     except Exception as e:
-        log(f"載入「這傢伙在說什麼呢？」的圖片失敗: {e}", module_name="MessageImage", level=logging.ERROR)
+        log(f"Failed to load \"whatisthisguytalking\" images: {e}", module_name="MessageImage", level=logging.ERROR)
         return 0
 
 on_ready_tasks.append(load_whatisthisguytalking_images)
 
+# i18n: skip-start (owner-facing)
 @bot.command(aliases=["rwi"])
 @((OwnerTools.is_owner()) if "OwnerTools" in modules else commands.check(lambda ctx: False))
 async def reload_whatisthisguytalking_images(ctx: commands.Context):
@@ -1228,6 +1231,7 @@ async def reload_whatisthisguytalking_images(ctx: commands.Context):
         await ctx.reply("重新載入「這傢伙在說什麼呢？」的圖片失敗")
     else:
         await ctx.reply(f"重新載入「這傢伙在說什麼呢？」的圖片完成，載入了 {count} 張圖片")
+# i18n: skip-end
 
 
 if __name__ == "__main__":

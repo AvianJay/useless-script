@@ -67,14 +67,14 @@ def load_config():
 
 async def set_presence():
     await bot.wait_until_ready()
-    log("狀態更新任務已啟動", module_name="PresenceChange")
+    log("Status update task started", module_name="PresenceChange")
     # 若你有可能在 reconnect 時重複啟動，請在 on_ready 那裡用 flag 防止重複 create_task
     try:
         while not bot.is_closed():
             try:
                 load_config()
             except Exception as e:
-                log(f"重新載入設定時發生錯誤: {e}", level=logging.ERROR, module_name="PresenceChange")
+                log(f"Error reloading config: {e}", level=logging.ERROR, module_name="PresenceChange")
 
             try:
                 loop_time = float(config("presence_loop_time"))
@@ -86,7 +86,7 @@ async def set_presence():
                     await bot.change_presence(status=status, activity=None)
                     # print("[+] Status set to", status)
                 except Exception as e:
-                    log(f"無法改變狀態: {e}", level=logging.ERROR, module_name="PresenceChange")
+                    log(f"Failed to change presence: {e}", level=logging.ERROR, module_name="PresenceChange")
                 await asyncio.sleep(loop_time)
                 continue
 
@@ -97,14 +97,15 @@ async def set_presence():
                     await bot.change_presence(status=status, activity=activity)
                     # print(f"[+] Status set to {status}, activity: {activity.type.name} {activity.name}")
                 except Exception as e:
-                    log(f"無法改變狀態: {e}", level=logging.ERROR, module_name="PresenceChange")
+                    log(f"Failed to change presence: {e}", level=logging.ERROR, module_name="PresenceChange")
                 await asyncio.sleep(loop_time)
     except asyncio.CancelledError:
-        log("狀態更新任務已取消", module_name="PresenceChange")
+        log("Status update task cancelled", module_name="PresenceChange")
 
 
 async def set_starting_presence():
-    await bot.change_presence(status=discord.Status.idle, activity=discord.Activity(type=discord.ActivityType.playing, name="正在啟動..."))
+    # 機器人狀態文字是 Discord 全域單一字串，無法依觀看者語言分別顯示，故不納入翻譯
+    await bot.change_presence(status=discord.Status.idle, activity=discord.Activity(type=discord.ActivityType.playing, name="正在啟動..."))  # i18n: skip
 
 load_config()
 # on_ready_tasks.append(set_presence)

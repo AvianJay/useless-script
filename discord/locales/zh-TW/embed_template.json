@@ -1,0 +1,21 @@
+{
+    "err": {
+        "unmatched_close": "出現未配對的 `}`。",
+        "unclosed_open": "出現未閉合的 `{`。",
+        "empty_directive": "`{directive}` 內容不得為空。",
+        "field_format": "Embed 欄位格式必須是 `{embedfield:欄位名:欄位內容}`。",
+        "unknown_variable": "不支援的模板變數 `{token}`。",
+        "content_too_long": "公告的一般訊息內容超過 Discord 的 2000 字限制。",
+        "empty_output": "公告模板必須產生一般文字或 Embed。",
+        "title_too_long": "Embed 標題超過 256 字。",
+        "description_too_long": "Embed 內容超過 4096 字。",
+        "too_many_fields": "Embed 欄位超過 25 個。",
+        "field_name_too_long": "Embed 欄位名稱超過 256 字。",
+        "field_value_too_long": "Embed 欄位內容超過 1024 字。",
+        "footer_too_long": "Embed footer 超過 2048 字。",
+        "author_too_long": "Embed author 超過 256 字。",
+        "embed_too_long": "Embed 總文字長度超過 6000 字。",
+        "url_too_long": "Embed 網址超過 Discord 的 2048 字限制。",
+        "invalid_url": "Embed 網址必須是有效的 http 或 https 網址。"
+    }
+}

@@ -1,0 +1,25 @@
+{
+    "embed": {
+        "command_stats_title": "Command Usage Statistics",
+        "petpet_stats_title": "PetPet Statistics"
+    },
+    "field": {
+        "app_command_errors": "App Command Error Count",
+        "app_command_uses": "App Command Use Count",
+        "petpet_given": "How many times have you PetPet'd?",
+        "petpet_received": "How many times have you been PetPet'd?",
+        "text_command_errors": "Text Command Error Count",
+        "text_command_uses": "Text Command Use Count"
+    },
+    "value": {
+        "no_data": "No data",
+        "total_errors": {
+            "one": "{count} error total",
+            "other": "{count} errors total"
+        },
+        "total_uses": {
+            "one": "{count} use total",
+            "other": "{count} uses total"
+        }
+    }
+}

@@ -1,0 +1,111 @@
+{
+    "btn": {
+        "play": "玩"
+    },
+    "embed": {
+        "playing_desc": "{user} 正在遊玩",
+        "title": "探索空間"
+    },
+    "err": {
+        "banned_word_exists": "「{word}」已在禁字清單中。",
+        "banned_word_length": "禁字長度需為 1-50 字元。",
+        "banned_word_limit": "自訂禁字已達上限(100 個)。",
+        "banned_word_not_found": "清單中找不到「{word}」。",
+        "cannot_create_invite": "我沒有權限自動建立永久邀請連結，請先提供 `invite_link` 或給我建立邀請的權限。",
+        "cannot_set_require_join": "無法設定加入限制。",
+        "casino_unavailable": "賭場服務暫時無法使用。",
+        "chat_rate_limited": "你講話太快了,慢一點",
+        "economy_disabled": "經濟系統未啟用,無法購買",
+        "guild_only": "這個指令只能在伺服器內使用。",
+        "insufficient_currency": "全域幣不足(需要 {price},你有 {balance})",
+        "invalid_invite_format": "邀請連結格式無效，請提供 Discord 邀請連結。",
+        "invite_not_found": "找不到這個邀請連結，請確認它仍然有效。",
+        "invite_verify_failed": "目前無法驗證這個邀請連結，請稍後再試。",
+        "invite_wrong_guild": "這個邀請連結不屬於目前的伺服器。",
+        "no_channel_permission": "我沒有在 {channel} 檢視或發言的權限,請先調整頻道權限。",
+        "quest_already_completed": "這個任務你已經完成過了",
+        "quest_prerequisites_not_met": "前置任務尚未完成",
+        "skin_already_owned": "你已經擁有這個皮膚了",
+        "skin_is_free": "這個皮膚是免費的,不用買",
+        "skin_not_owned": "你還沒擁有這個皮膚",
+        "unknown_quest": "未知的任務"
+    },
+    "msg": {
+        "banned_word_added": {
+            "other": "已新增禁字「{word}」。目前共 {count} 個自訂禁字。"
+        },
+        "banned_word_list": {
+            "other": "自訂禁字({count} 個):{words}"
+        },
+        "banned_word_removed": {
+            "other": "已移除禁字「{word}」。目前共 {count} 個自訂禁字。"
+        },
+        "chat_bridge_disabled": "已關閉 Explore 聊天室與 Discord 頻道的橋接。",
+        "chat_bridge_set": "已將 Explore 聊天室橋接到 {channel}。遊戲內訊息會轉發到這裡,頻道訊息也會出現在遊戲內。",
+        "privacy_set": "已將本伺服器設定為{status}（在探索大廳{visibility}）。",
+        "require_join_disabled": "已關閉必須先加入伺服器才能進入 Explore 的限制。",
+        "require_join_enabled": "已啟用先加入伺服器才能進入 Explore。{source_text}：{link}",
+        "setup_toggled": "已{status}本伺服器的探索空間。"
+    },
+    "quest": {
+        "vill_boss": {
+            "desc": "村莊三大蠢事解決後,迷因大魔王被吵醒了。把祂打回去睡覺。",
+            "name": "迷因大魔王"
+        },
+        "vill_cabbage": {
+            "desc": "調查菜園裡高麗菜連環失蹤案。兇手可能就是委託人。",
+            "name": "高麗菜失蹤事件"
+        },
+        "vill_delivery": {
+            "desc": "把一封「超急件」從村口走路送到隔壁,距離大概十步。",
+            "name": "極速快遞(步行)"
+        },
+        "vill_rat": {
+            "desc": "幫村長趕走他家裡那隻會背莎士比亞的老鼠。",
+            "name": "村長家的哲學鼠患"
+        }
+    },
+    "skin": {
+        "alien": "異星人",
+        "astronaut_a": "太空人A",
+        "astronaut_b": "太空人B",
+        "bat": "蝙蝠",
+        "demon_minion": "魔王手下",
+        "fairy": "精靈",
+        "female_martial_artist": "女武鬥家",
+        "female_thief": "女盜賊",
+        "female_warrior": "女戰士",
+        "hero": "勇者",
+        "heroine": "女勇者",
+        "king": "國王",
+        "mage": "魔法師",
+        "martial_artist": "武鬥家",
+        "meme_guy": "迷因人",
+        "merchant": "商人",
+        "monk": "僧侶",
+        "noble": "貴族",
+        "noblewoman": "貴婦",
+        "old_man": "老爺爺",
+        "old_woman": "老奶奶",
+        "queen": "皇后",
+        "reaper": "死神",
+        "robot": "機器人",
+        "sage": "賢者",
+        "slime": "史萊姆",
+        "space_citizen": "太空市民",
+        "thief": "盜賊",
+        "villager_man": "村民大叔",
+        "villager_woman": "村民大嬸",
+        "warrior": "戰士"
+    },
+    "value": {
+        "global_currency_fallback": "全域幣",
+        "invite_auto_created": "已自動建立永久邀請連結",
+        "invite_provided": "已使用提供的邀請連結",
+        "no_custom_banned_words": "目前沒有自訂禁字(內建詞庫仍然生效)。",
+        "not_visible": "不可見",
+        "private": "私人",
+        "public": "公開",
+        "visible": "可見"
+    }
+}

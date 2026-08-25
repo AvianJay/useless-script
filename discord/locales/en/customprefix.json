@@ -1,0 +1,49 @@
+{
+    "btn": {
+        "dont_remind": "Stop reminding me"
+    },
+    "msg": {
+        "mention_reply": "Looking for me? :O\nMy prefix is `{prefix}`!",
+        "reset": "Prefix reset to the default: `{prefix}`",
+        "set": "Prefix set to `{prefix}`",
+        "tip": "Heads up: this server's custom prefix is `{prefix}`!"
+    },
+    "ping": {
+        "stage100": {
+            "1": "Still pinging me? That's some dedication...",
+            "2": "Congratulations, you unlocked the ping-me-100-times-in-3-minutes achievement 💀"
+        },
+        "stage3": {
+            "1": "Something up?",
+            "2": "Need a hand?",
+            "3": "Alright, alright, I know you're looking for me XD",
+            "4": "Just say what you need, stop pinging me!"
+        },
+        "stage4": {
+            "1": "Easy there!",
+            "2": "Don't keep pinging me like that~",
+            "3": "I'm going to get tired...",
+            "4": "Hey, hey, hey, calm down!"
+        },
+        "stage5": {
+            "1": "You really don't give up, huh...",
+            "2": "Keep this up and I'm going to get annoyed!",
+            "3": "Hey, this isn't nice, you know!",
+            "4": "Ping me again and I'm ignoring you!"
+        },
+        "stage6": {
+            "1": "I don't want to waste my time here.",
+            "2": "You're STILL pinging me?"
+        },
+        "stage7": {
+            "1": "Fine, I'm ignoring you now.",
+            "2": "You pinging me over and over is genuinely annoying.",
+            "3": "I'm tired, I'm taking a break.",
+            "4": "Goodbye."
+        }
+    },
+    "remind_off": {
+        "desc": "I won't remind you again! If you forget the prefix, try mentioning me to see this server's current one.",
+        "title": "Fair enough"
+    }
+}

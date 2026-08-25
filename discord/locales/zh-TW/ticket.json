@@ -1,0 +1,110 @@
+{
+    "topic": {
+        "display": "票口 #{number}｜主題: {subject}"
+    },
+    "embed": {
+        "title": "🎫 票口 #{number}",
+        "closed_title": "🎫 票口 #{number} 已關閉",
+        "types_title": "🎫 票口類別（{count}/{limit}）"
+    },
+    "field": {
+        "opener": "開啟者",
+        "type": "類別",
+        "subject": "主題",
+        "detail": "問題描述",
+        "opened_at": "開啟時間",
+        "claimer": "認領者",
+        "closer": "關閉者",
+        "message_count": "訊息數",
+        "close_reason": "關閉原因",
+        "duration": "持續時間"
+    },
+    "btn": {
+        "open": "開啟票口",
+        "claim": "認領",
+        "close": "關閉",
+        "confirm_close": "確認關閉",
+        "view_transcript_web": "在網頁檢視逐字稿"
+    },
+    "modal": {
+        "open_title": "開啟票口",
+        "open_title_typed": "開啟票口 - {label}",
+        "subject": "主題",
+        "detail": "問題描述"
+    },
+    "transcript": {
+        "header": "票口 #{number} 逐字稿（共 {count} 則訊息）",
+        "attachment": "附件"
+    },
+    "setup": {
+        "done": "✅ 票口系統已設定完成並啟用！",
+        "category": "- 票口分類：{category}",
+        "panel_channel": "- 面板頻道：{channel}",
+        "staff_role": "- 客服身分組：{role}",
+        "log_channel": "- 紀錄頻道：{channel}",
+        "log_channel_unset": "- 紀錄頻道：（未設定，不保存逐字稿）",
+        "panel_published": "- 面板：已發布 🎫",
+        "panel_failed": "- 面板：發布失敗：{error}",
+        "panel_pending": "- 面板：尚未發布，請使用 /ticket panel 發布",
+        "more_options": "其他選項（歡迎訊息、黑名單、每人上限等）可到伺服器面板調整。"
+    },
+    "types": {
+        "style": "顏色: {style}",
+        "category": "分類: {category}",
+        "deleted": "（已刪除）",
+        "staff": "客服: ",
+        "custom_welcome": "自訂歡迎訊息 ✓"
+    },
+    "msg": {
+        "no_subject": "（未填寫）",
+        "unclaimed": "（未認領）",
+        "created": "✅ 票口已建立：{channel}",
+        "claimed": "✅ 已認領此票口。",
+        "claimed_by": "🙋 {user} 已認領此票口。",
+        "closing": "🔒 正在關閉票口並產生逐字稿...",
+        "close_cancelled": "已取消關閉。",
+        "close_confirm": "確定要關閉此票口嗎？關閉後頻道將被刪除，逐字稿會保存到紀錄頻道。",
+        "member_added": "✅ 已將 {member} 加入此票口。",
+        "member_removed": "✅ 已將 {member} 移出此票口。",
+        "panel_published": "✅ 票口面板已發布到 {channel}。",
+        "type_added": "✅ 已新增票口類別「{label}」。",
+        "type_updated": "✅ 已更新票口類別「{label}」。",
+        "type_removed": "✅ 已移除票口類別。",
+        "panel_refreshed": "面板已更新。",
+        "panel_republish_hint": "請用 /ticket panel 重新發布面板。",
+        "no_types": "尚未建立任何票口類別，面板會顯示單一預設按鈕。用 /ticket types add 新增。",
+        "opener_left": "⚠️ 開票者已離開伺服器。"
+    },
+    "err": {
+        "disabled": "票口系統目前未啟用。",
+        "blacklisted": "你無法開啟票口。",
+        "no_category": "管理員尚未設定票口分類。",
+        "category_gone": "票口分類已不存在，請通知管理員重新設定。",
+        "bot_category_perms": "機器人在票口分類缺少「管理頻道」或「管理權限」權限，請通知管理員調整。",
+        "category_full": "票口分類已滿（50 個頻道上限），請通知管理員清理。",
+        "limit_reached": "你已開啟 {count} 個票口（上限 {limit}），請先處理現有票口：{mentions}",
+        "bot_manage_channels": "機器人缺少「管理頻道」權限，無法建立票口。",
+        "create_failed": "建立票口頻道時發生錯誤，請稍後再試。",
+        "not_a_ticket": "這裡不是有效的票口頻道。",
+        "already_closing": "此票口正在關閉中。",
+        "delete_no_permission": "⚠️ 機器人缺少權限，無法刪除此頻道，請手動刪除。",
+        "saved_but_not_deleted": "逐字稿已保存，但機器人缺少權限刪除頻道，請手動刪除。",
+        "staff_only_claim": "只有客服人員可以認領票口。",
+        "already_claimed": "此票口已由 {user} 認領。",
+        "type_removed": "此票口類別已被移除，請通知管理員重新發布面板。",
+        "close_permission": "只有客服人員或開票者可以關閉票口。",
+        "panel_no_permission": "機器人沒有權限在該頻道發送訊息。",
+        "panel_publish_failed": "發布面板時發生錯誤，請檢查面板圖片網址與類別按鈕的 emoji 是否有效。",
+        "panel_channel_missing": "請指定頻道，或先在面板設定「面板頻道」。",
+        "setup_category_perms": "機器人在 {category} 分類缺少「管理頻道」或「管理權限」權限。",
+        "setup_panel_perms": "機器人在 {channel} 缺少「發送訊息」或「嵌入連結」權限。",
+        "setup_log_perms": "機器人在 {channel} 缺少「發送訊息」或「附加檔案」權限。",
+        "setup_problems": "⚠️ 設定未儲存，請先修正以下權限問題：",
+        "staff_only_members": "只有客服人員可以管理票口成員。",
+        "bot_perms_edit": "機器人缺少權限，無法修改頻道權限。",
+        "cannot_remove_opener": "無法移除開票者。",
+        "type_limit": "最多只能建立 {limit} 個票口類別。",
+        "type_not_found": "找不到該票口類別。",
+        "transcript_unavailable": "暫時無法讀取逐字稿，請稍後再試。"
+    }
+}

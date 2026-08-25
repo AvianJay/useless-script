@@ -1,0 +1,90 @@
+{
+    "btn": {
+        "next_stop": "Next Stop",
+        "prev_stop": "Prev Stop",
+        "route_overview": "Route Overview"
+    },
+    "embed": {
+        "favorites_title": "My Favorites",
+        "route_footer": "Page {page}/{total} ・ {count} stops total ・ Last updated"
+    },
+    "err": {
+        "fav_load_failed": "Error loading favorite item: {error}",
+        "fav_stop_limit": {
+            "one": "You can only have {limit} favorite stop.",
+            "other": "You can only have up to {limit} favorite stops."
+        },
+        "fav_youbike_limit": {
+            "one": "You can only have {limit} favorite YouBike station.",
+            "other": "You can only have up to {limit} favorite YouBike stations."
+        },
+        "generic": "Error: {error}",
+        "no_favorites": "You haven't set any favorite stops or YouBike stations yet.",
+        "no_permission_button": "You don't have permission to use this button.",
+        "no_permission_menu": "You don't have permission to use this menu.",
+        "refresh_failed": "Error while refreshing: {error}",
+        "route_bus_info_not_found": "Couldn't find bus arrival info for that route.",
+        "route_not_found": "Couldn't find that route.",
+        "route_update_failed": "Error updating route info: {error}",
+        "stop_info_not_found": "Couldn't find arrival info for that stop.",
+        "stop_update_failed": "Error updating stop info: {error}",
+        "too_fast": "You're doing that too fast, please try again later.",
+        "youbike_not_found": "Couldn't find info for that YouBike station."
+    },
+    "field": {
+        "arrival_status": "Arrival Status",
+        "available_bikes": "Available Bikes",
+        "coordinates": "Coordinates",
+        "empty_spaces": "Empty Spaces",
+        "estimated_arrival": "Estimated Arrival",
+        "last_updated": "Last Updated",
+        "message": "Message",
+        "next_stop_arrow": "Next Stop ➡️",
+        "prev_stop_arrow": "⬅️ Prev Stop",
+        "scheduled_arrival": "Scheduled Arrival",
+        "sequence": "Sequence",
+        "station_id": "Station ID",
+        "status": "Status",
+        "total_spaces": "Total Spaces",
+        "vehicle_status": "Vehicle Status"
+    },
+    "msg": {
+        "fav_stop_toggled": "{action} stop: {name}",
+        "fav_youbike_toggled": "{action} YouBike station: {name}"
+    },
+    "select": {
+        "fav_quick_access_ph": "Quickly jump to a favorite stop or YouBike station",
+        "pick_stop_ph": "🚏 Select a stop to view arrival info"
+    },
+    "value": {
+        "approaching": "Approaching",
+        "boardable": "Boardable",
+        "bus_text_title": "Bus/{route}[{path}] - {stop}",
+        "disabled": "Out of Service",
+        "fav_added": "Added to favorites",
+        "fav_removed": "Removed from favorites",
+        "full": "Full",
+        "full_suffix": " (Full)",
+        "minutes_seconds": {
+            "one": "{minutes}m {seconds}s",
+            "other": "{minutes}m {seconds}s"
+        },
+        "no_data": "No data yet",
+        "operating": "In Service",
+        "origin_placeholder": "─ (Start)",
+        "path_name": "Path {id}",
+        "seconds": {
+            "one": "{seconds}s",
+            "other": "{seconds}s"
+        },
+        "stop_fetch_failed_text": "Couldn't get stop info:\n{error}",
+        "terminus_placeholder": "─ (End)",
+        "unknown_location": "Unknown Location",
+        "unknown_stop_bracket": "[Unknown Stop]{id}",
+        "unknown_stop_name": "Unknown Stop Name",
+        "unknown_youbike_bracket": "[Unknown YouBike Station]{id}",
+        "vehicle_status_prefix": "\nVehicle Status:\n",
+        "youbike_fetch_failed_text": "Couldn't get station info:\n{error}",
+        "youbike_text_content": "Available/Empty/Total\n{available} / {empty} / {total}"
+    }
+}

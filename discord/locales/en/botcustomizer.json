@@ -1,0 +1,63 @@
+{
+    "btn": {
+        "approve": "✅ Approve",
+        "reject": "❌ Reject"
+    },
+    "type": {
+        "avatar": "avatar",
+        "banner": "banner",
+        "bio": "About Me",
+        "generic": "content"
+    },
+    "embed": {
+        "review_title_avatar": "Avatar review request",
+        "review_desc_avatar": "User {user} submitted an avatar for review.",
+        "review_title_banner": "Banner review request",
+        "review_desc_banner": "User {user} submitted a banner for review.",
+        "review_title_bio": "About Me review request",
+        "review_desc_bio": "User {user} submitted About Me content for review."
+    },
+    "field": {
+        "guild_id": "Server ID",
+        "status": "Status",
+        "reason": "Reason",
+        "reject_reason": "Rejection reason",
+        "bio_content": "About Me content"
+    },
+    "status": {
+        "pending": "Awaiting review...",
+        "human_review": "Needs human review",
+        "rejected": "Rejected",
+        "approved_avatar": "Approved; avatar updated",
+        "approved_banner": "Approved; banner updated",
+        "approved_bio": "Approved; About Me updated",
+        "owner_avatar": "Owner submission; avatar updated directly",
+        "owner_banner": "Owner submission; banner updated directly",
+        "owner_bio": "Owner submission; About Me updated directly",
+        "human_approved": "✅ Approved by human review ({user})",
+        "human_rejected": "❌ Rejected by human review ({user})"
+    },
+    "msg": {
+        "too_large": "The image exceeds 10MB. Please choose a smaller one.",
+        "reviewing_image": "The image is being reviewed. Please wait...",
+        "reviewing_bio": "The About Me content is being reviewed. Please wait...",
+        "human_review_needed": "The image needs human review. Reason: {reason}\n-# Please wait for an administrator",
+        "human_review_needed_bio": "The About Me content needs human review. Reason: {reason}\n-# Please wait for an administrator",
+        "rejected_image": "The image was rejected: {reason}",
+        "rejected_bio": "The About Me content was rejected: {reason}",
+        "avatar_updated": "Avatar updated!",
+        "banner_updated": "Banner updated!",
+        "bio_updated": "About Me updated!",
+        "update_error": "Error while updating: {error}",
+        "update_error_avatar": "Error updating the avatar: {error}",
+        "update_error_banner": "Error updating the banner: {error}",
+        "update_error_bio": "Error updating the About Me: {error}",
+        "review_error": "An error occurred during review: {error}",
+        "review_approved": "Approved and applied.",
+        "review_rejected": "Review request rejected.",
+        "approved_dm": "✅ Your submitted {type} passed human review and has been applied!",
+        "rejected_dm": "❌ Your submitted {type} did not pass human review.\nReason: {reason}",
+        "unknown_reason": "Unknown reason",
+        "no_content": "No content"
+    }
+}

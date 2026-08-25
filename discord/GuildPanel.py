@@ -1,8 +1,10 @@
 from globalenv import (
     bot, get_server_config, set_server_config, modules, config,
-    panel_settings, register_panel_settings,
+    panel_settings, register_panel_settings, localized_panel_settings,
 )
 from logger import log
+import i18n
+from i18n import t
 
 if "Website" not in modules:
     raise ImportError("Website module is required for GuildPanel")
@@ -10,7 +12,6 @@ if "Website" not in modules:
 from Website import app
 from flask import request, redirect, session, jsonify, render_template, url_for
 import requests as http_requests
-import os
 import json
 import importlib
 import urllib.parse
@@ -63,7 +64,7 @@ def _coerce_bool(value, *, default=False):
             return True
         if normalized in ("false", "0", "no", "off", ""):
             return False
-    raise ValueError("布林設定值無效。")
+    raise ValueError(t("err.panel.invalid_boolean"))
 
 
 def _fixlink_module():
@@ -92,15 +93,15 @@ def _serialize_fixlink_config(value):
 
 def _coerce_fixlink_config(value):
     if not isinstance(value, dict):
-        raise ValueError("FixLink 設定必須是 object。")
+        raise ValueError(t("err.panel.fixlink_not_object"))
 
     fixlink = _fixlink_module()
     custom_platforms = []
     raw_custom_platforms = value.get("custom_platforms", [])
     if not isinstance(raw_custom_platforms, list):
-        raise ValueError("FixLink 自訂平台必須是清單。")
+        raise ValueError(t("err.panel.fixlink_custom_not_list"))
     if len(raw_custom_platforms) > fixlink.MAX_CUSTOM_PLATFORMS:
-        raise ValueError(f"每個伺服器最多 {fixlink.MAX_CUSTOM_PLATFORMS} 個自訂平台。")
+        raise ValueError(t("err.panel.fixlink_custom_limit", count=fixlink.MAX_CUSTOM_PLATFORMS))
     for raw_platform in raw_custom_platforms:
         custom_platforms.append(
             fixlink.normalize_custom_platform(raw_platform, custom_platforms)
@@ -109,17 +110,17 @@ def _coerce_fixlink_config(value):
     preferred_fixers = dict(fixlink.DEFAULT_PREFERRED_FIXERS)
     raw_preferred = value.get("preferred_fixers", {})
     if not isinstance(raw_preferred, dict):
-        raise ValueError("FixLink 主要修復服務設定必須是 object。")
+        raise ValueError(t("err.panel.fixlink_fixers_not_object"))
     for platform_name, fixer_name in raw_preferred.items():
         if platform_name not in fixlink.supported_platforms:
-            raise ValueError(f"未知的 FixLink 內建平台：{platform_name}")
+            raise ValueError(t("err.panel.fixlink_unknown_platform", platform=platform_name))
         if fixer_name not in fixlink.supported_platforms[platform_name]["fixers"]:
-            raise ValueError(f"{platform_name} 不支援修復服務：{fixer_name}")
+            raise ValueError(t("err.panel.fixlink_unsupported_fixer", platform=platform_name, fixer=fixer_name))
         preferred_fixers[platform_name] = fixer_name
 
     raw_disabled = value.get("disabled_platforms", [])
     if not isinstance(raw_disabled, list):
-        raise ValueError("FixLink 停用平台必須是清單。")
+        raise ValueError(t("err.panel.fixlink_disabled_not_list"))
     allowed_disabled = set(fixlink.supported_platforms)
     allowed_disabled.update(f"custom:{item['id']}" for item in custom_platforms)
     disabled_platforms = []
@@ -196,20 +197,20 @@ def _coerce_stickymessage_config(value, guild_id=None):
 
     guild = bot.get_guild(int(guild_id))
     if guild is None:
-        raise ValueError("找不到伺服器。")
+        raise ValueError(t("err.panel.guild_not_found"))
     for entry in normalized["entries"]:
         channel = guild.get_channel(entry["channel_id"])
         if not isinstance(channel, discord.TextChannel) or channel.type not in (
             discord.ChannelType.text,
             discord.ChannelType.news,
         ):
-            raise ValueError(f"頻道 {entry['channel_id']} 不是這個伺服器的文字或公告頻道。")
+            raise ValueError(t("err.panel.sticky_invalid_channel", channel=entry["channel_id"]))
     return normalized
 
 
 def _coerce_antibeast_config(value, guild_id=None):
     if not isinstance(value, dict):
-        raise ValueError("AntiBeast 設定必須是 object。")
+        raise ValueError(t("err.panel.antibeast_not_object"))
 
     current = get_server_config(guild_id, "antibeast", {}) if guild_id is not None else {}
     if not isinstance(current, dict):
@@ -217,35 +218,35 @@ def _coerce_antibeast_config(value, guild_id=None):
 
     raw_roles = value.get("bypass_roles", [])
     if not isinstance(raw_roles, list):
-        raise ValueError("AntiBeast 繞過身分組必須是清單。")
+        raise ValueError(t("err.panel.antibeast_bypass_not_list"))
     bypass_roles = []
     for raw_role_id in raw_roles:
         try:
             role_id = int(raw_role_id)
         except (TypeError, ValueError) as error:
-            raise ValueError("AntiBeast 繞過身分組 ID 無效。") from error
+            raise ValueError(t("err.panel.antibeast_bypass_invalid")) from error
         if role_id not in bypass_roles:
             bypass_roles.append(role_id)
 
     raw_kick = value.get("kick", {})
     if not isinstance(raw_kick, dict):
-        raise ValueError("AntiBeast 連續觸發處置設定必須是 object。")
+        raise ValueError(t("err.panel.antibeast_kick_not_object"))
     try:
         threshold = int(raw_kick.get("threshold", 2))
         time_window = int(raw_kick.get("time_window", 10))
     except (TypeError, ValueError) as error:
-        raise ValueError("AntiBeast 觸發次數與時間窗口必須是整數。") from error
+        raise ValueError(t("err.panel.antibeast_numbers_invalid")) from error
     if not 1 <= threshold <= 20:
-        raise ValueError("AntiBeast 觸發次數必須介於 1 到 20。")
+        raise ValueError(t("err.panel.antibeast_threshold_range"))
     if not 5 <= time_window <= 3600:
-        raise ValueError("AntiBeast 時間窗口必須介於 5 到 3600 秒。")
+        raise ValueError(t("err.panel.antibeast_window_range"))
 
     action = str(raw_kick.get("action") or ANTIBEAST_DEFAULT_ACTION).strip()
     from Moderate import analyze_action_string
 
     analysis = analyze_action_string(action, guild_id)
     if not analysis["valid"]:
-        raise ValueError(f"AntiBeast 動作指令無效：{analysis['error']}")
+        raise ValueError(t("err.panel.antibeast_action_invalid", error=analysis["error"]))
     if analysis["requires_confirmation"]:
         raise ValueError(analysis["confirmation"])
 
@@ -273,11 +274,11 @@ async def _apply_antibeast_panel_config(guild_id, value):
         importlib.import_module("AntiBeast")
         cog = bot.get_cog("antibeast")
     if cog is None:
-        raise RuntimeError("AntiBeast 模組尚未載入。")
+        raise RuntimeError(t("err.panel.antibeast_unavailable"))
 
     guild = bot.get_guild(int(guild_id))
     if guild is None:
-        raise RuntimeError("找不到要套用 AntiBeast 的伺服器。")
+        raise RuntimeError(t("err.panel.guild_not_found"))
 
     config = cog._get_config(int(guild_id))
     should_sync = (
@@ -293,12 +294,6 @@ async def _apply_antibeast_panel_config(guild_id, value):
             reason="AntiBeast updated from server settings panel",
         )
     set_server_config(int(guild_id), "antibeast", config)
-
-# ============= Flask session secret =============
-app.secret_key = os.environ.get(
-    "FLASK_SECRET_KEY",
-    config("client_secret", "please-change-this-secret"),
-)
 
 # ============= Server-side guild cache =============
 # Keyed by user ID -> list of {id, permissions}
@@ -376,7 +371,7 @@ def _require_auth(f):
     def wrapper(*args, **kwargs):
         if _current_user() is None:
             if request.path.startswith("/api/"):
-                return jsonify({"error": "Unauthorized"}), 401
+                return jsonify({"error": t("err.panel.unauthorized")}), 401
             return redirect(url_for("panel_login"))
         return f(*args, **kwargs)
 
@@ -390,15 +385,15 @@ def _require_guild(f):
     def wrapper(*args, **kwargs):
         guild_id = kwargs.get("guild_id") or (args[0] if args else None)
         if _current_user() is None:
-            return jsonify({"error": "Unauthorized"}), 401
+            return jsonify({"error": t("err.panel.unauthorized")}), 401
         # permission check
         guilds = _current_guilds()
         guild = next((g for g in guilds if str(g["id"]) == str(guild_id)), None)
         if guild is None or not _has_manage(guild.get("permissions", 0)):
-            return jsonify({"error": "Forbidden"}), 403
+            return jsonify({"error": t("err.panel.forbidden")}), 403
         # bot membership check
         if bot.get_guild(int(guild_id)) is None:
-            return jsonify({"error": "Bot is not in this guild"}), 404
+            return jsonify({"error": t("err.panel.bot_not_in_guild")}), 404
         return f(*args, **kwargs)
 
     return wrapper
@@ -489,17 +484,22 @@ def panel_guild_page(guild_id):
     if bg is None:
         return redirect(url_for("panel_index"))
 
-    # Build a JSON-safe copy of the registry (strip callables)
+    # Build a JSON-safe copy of the registry (strip callables), localized
+    # to the request locale. default_i18n_key settings additionally carry a
+    # rendered "default_display" so the front-end can show it as a placeholder.
     safe_settings = {}
-    for mod, data in settings.items():
+    for mod, data in localized_panel_settings().items():
+        entries = []
+        for s in data["settings"]:
+            entry = {k: v for k, v in s.items() if k != "trigger"}
+            if s.get("default_i18n_key"):
+                entry["default_display"] = t(s["default_i18n_key"])
+            entries.append(entry)
         safe_settings[mod] = {
             "display_name": data["display_name"],
             "description": data.get("description", ""),
             "icon": data.get("icon", "⚙️"),
-            "settings": [
-                {k: v for k, v in s.items() if k != "trigger"}
-                for s in data["settings"]
-            ],
+            "settings": entries,
         }
 
     return render_template(
@@ -548,20 +548,20 @@ def api_set_settings(guild_id):
     gid = int(guild_id)
     payload = request.get_json(silent=True)
     if not payload:
-        return jsonify({"error": "No data"}), 400
+        return jsonify({"error": t("err.panel.no_data")}), 400
 
     mod_name = payload.get("module")
     key = payload.get("key")
     value = payload.get("value")
 
     if not mod_name or not key:
-        return jsonify({"error": "Missing module or key"}), 400
+        return jsonify({"error": t("err.panel.missing_module_or_key")}), 400
     if mod_name not in settings:
-        return jsonify({"error": "Unknown module"}), 400
+        return jsonify({"error": t("err.panel.unknown_module")}), 400
 
     setting = next((s for s in settings[mod_name]["settings"] if s["database_key"] == key), None)
     if setting is None:
-        return jsonify({"error": "Unknown setting"}), 400
+        return jsonify({"error": t("err.panel.unknown_setting")}), 400
 
     previous_value = get_server_config(gid, key, setting.get("default"))
 
@@ -569,6 +569,17 @@ def api_set_settings(guild_id):
         value = _coerce(value, setting.get("type", "string"), guild_id=gid)
     except (ValueError, TypeError) as e:
         return jsonify({"error": str(e)}), 400
+
+    # default_i18n_key 設定：空值或等於任一語言渲染出的預設值時存 None，
+    # 避免把「渲染後的預設」寫進 guild 資料（之後就無法跟著語言變動了）
+    if setting.get("default_i18n_key"):
+        rendered_defaults = {
+            i18n.t(setting["default_i18n_key"], locale=loc)
+            for loc in i18n.available_locales()
+        }
+        if value is None or (isinstance(value, str) and
+                             (not value.strip() or value.strip() in rendered_defaults)):
+            value = None
 
     if setting.get("type") == "automod_config":
         for feature_name, feature_config in (value or {}).items():
@@ -580,7 +591,8 @@ def api_set_settings(guild_id):
             analysis = _analyze_automod_action(feature_name, str(action), gid)
             if not analysis["valid"]:
                 return jsonify({
-                    "error": f"{feature_name} 動作指令無效：{analysis['error']}",
+                    "error": t("err.panel.automod_action_invalid",
+                               feature=feature_name, error=analysis["error"]),
                     "action_analysis": analysis,
                 }), 400
             if analysis["requires_confirmation"]:
@@ -593,7 +605,9 @@ def api_set_settings(guild_id):
     if setting.get("type") == "autoreply_list":
         autoreply_limit = int(get_server_config(gid, "autoreply_limit", 50) or 50)
         if len(value or []) > autoreply_limit:
-            return jsonify({"error": f"AutoReply rules are limited to {autoreply_limit} items."}), 400
+            return jsonify({
+                "error": t("err.panel.autoreply_limit", count=autoreply_limit),
+            }), 400
 
     if setting.get("type") == "stickymessage_config":
         stickymessage = _stickymessage_module()
@@ -604,13 +618,13 @@ def api_set_settings(guild_id):
         limit = stickymessage.get_stickymessage_limit(gid)
         if added_channels and len(value["entries"]) > limit:
             return jsonify({
-                "error": f"這個伺服器最多可設定 {limit} 則置底訊息；請先移除項目再新增。",
+                "error": t("err.panel.sticky_limit", count=limit),
             }), 400
 
     if setting.get("type") == "moderation_announcement_config":
         guild = bot.get_guild(gid)
         if guild is None:
-            return jsonify({"error": "找不到伺服器，無法預覽懲處公告。"}), 400
+            return jsonify({"error": t("err.panel.guild_not_found_preview")}), 400
         try:
             _run_panel_coroutine(
                 _moderate_module().preview_moderation_announcement(
@@ -622,7 +636,7 @@ def api_set_settings(guild_id):
             return jsonify({"error": str(error)}), 400
 
     if not set_server_config(gid, key, value):
-        return jsonify({"error": "儲存伺服器設定失敗。"}), 500
+        return jsonify({"error": t("err.panel.save_failed")}), 500
 
     trigger = setting.get("trigger")
     if callable(trigger):
@@ -665,7 +679,7 @@ def api_moderation_announcement_preview(guild_id):
     payload = request.get_json(silent=True) or {}
     guild = bot.get_guild(int(guild_id))
     if guild is None:
-        return jsonify({"error": "找不到伺服器。"}), 404
+        return jsonify({"error": t("err.panel.guild_not_found")}), 404
     try:
         config_value = _moderate_module().normalize_moderation_announcement_config(payload)
         content, embed, case_id = _run_panel_coroutine(
@@ -745,10 +759,10 @@ def api_publish_stickymessage(guild_id):
     payload = request.get_json(silent=True) or {}
     raw_channel_id = payload.get("channel_id")
     if raw_channel_id is None or not str(raw_channel_id).isdigit():
-        return jsonify({"error": "頻道 ID 無效。"}), 400
+        return jsonify({"error": t("err.panel.invalid_channel_id")}), 400
     cog = bot.get_cog("StickyMessage")
     if cog is None:
-        return jsonify({"error": "StickyMessage 模組目前無法使用。"}), 503
+        return jsonify({"error": t("err.panel.sticky_unavailable")}), 503
     try:
         future = asyncio.run_coroutine_threadsafe(
             cog.publish_entry(int(guild_id), int(raw_channel_id), notify_mentions=True),
@@ -756,7 +770,7 @@ def api_publish_stickymessage(guild_id):
         )
         future.result(timeout=30)
     except Exception as error:
-        return jsonify({"error": str(error) or "發布置底訊息失敗。"}), 400
+        return jsonify({"error": str(error) or t("err.panel.sticky_publish_failed")}), 400
     return jsonify({"success": True})
 
 
@@ -1063,7 +1077,7 @@ def _register_all():
         register_settings("ReportSystem", "檢舉系統", [
             {"display": "檢舉通知頻道", "description": "檢舉訊息將發送到此頻道", "database_key": "REPORT_CHANNEL_ID", "type": "channel", "default": None},
             {"display": "檢舉頻率限制 (秒)", "description": "同一用戶連續檢舉的冷卻時間", "database_key": "REPORT_RATE_LIMIT", "type": "number", "default": 300, "min": 0},
-            {"display": "檢舉成功回覆訊息", "description": "檢舉成功後回覆給檢舉者的訊息", "database_key": "REPORTED_MESSAGE", "type": "string", "default": "感謝您的檢舉，我們會盡快處理您的檢舉。"},
+            {"display": "檢舉成功回覆訊息", "description": "檢舉成功後回覆給檢舉者的訊息", "database_key": "REPORTED_MESSAGE", "type": "string", "default": None, "default_i18n_key": "panel.reportsystem.reported_message.default"},
             {"display": "檢舉頻道提及文字", "description": "發送到檢舉頻道的提及/通知文字", "database_key": "REPORT_MESSAGE", "type": "string", "default": "@Admin"},
             {"display": "檢舉黑名單身分組", "description": "擁有這些身分組的用戶無法檢舉", "database_key": "REPORT_BLACKLIST", "type": "role_list", "default": []},
             {"display": "伺服器規則", "description": "AI 審核使用的伺服器規則 (每行一條)", "database_key": "SERVER_RULES", "type": "text", "default": None},
@@ -1109,7 +1123,7 @@ def _register_all():
         register_settings("DynamicVoice", "動態語音", [
             {"display": "入口語音頻道", "description": "用戶加入此頻道時自動建立動態頻道", "database_key": "dynamic_voice_channel", "type": "voice_channel", "default": None, "trigger": _dv_channel_trigger},
             {"display": "動態頻道分類", "description": "動態語音頻道所屬的分類", "database_key": "dynamic_voice_channel_category", "type": "category", "default": None},
-            {"display": "頻道名稱範本", "description": "使用 {user} 作為用戶名稱佔位符", "database_key": "dynamic_voice_channel_name", "type": "string", "default": "{user} 的頻道"},
+            {"display": "頻道名稱範本", "description": "使用 {user} 作為用戶名稱佔位符", "database_key": "dynamic_voice_channel_name", "type": "string", "default": None, "default_i18n_key": "panel.dynamicvoice.dynamic_voice_channel_name.default"},
             {"display": "加入時播放音效", "database_key": "dynamic_voice_play_audio", "type": "boolean", "default": False},
             {"display": "黑名單身分組", "description": "擁有這些身分組的用戶無法使用動態語音", "database_key": "dynamic_voice_blacklist_roles", "type": "role_list", "default": []},
         ], description="自動建立/刪除語音頻道", icon="🔊")
@@ -1124,7 +1138,7 @@ def _register_all():
 
     if "Economy" in modules:
         register_settings("Economy", "經濟系統", [
-            {"display": "貨幣名稱", "database_key": "economy_currency_name", "type": "string", "default": "伺服幣"},
+            {"display": "貨幣名稱", "database_key": "economy_currency_name", "type": "string", "default": None, "default_i18n_key": "panel.economy.economy_currency_name.default"},
             {"display": "允許全域幣流通", "description": "是否允許伺服幣與全域幣互相流通（兌換、全域商店買賣、支票兌現等）", "database_key": "economy_allow_global_flow", "type": "boolean", "default": True},
         ], description="管理伺服器經濟參數", icon="💰")
 
@@ -1259,11 +1273,11 @@ def _register_all():
             {"display": "黑名單身分組", "description": "擁有這些身分組的用戶無法開啟票口", "database_key": "ticket_blacklist_roles", "type": "role_list", "default": []},
             {"display": "紀錄頻道", "description": "票口關閉後逐字稿會發送到此頻道", "database_key": "ticket_log_channel", "type": "channel", "default": None},
             {"display": "每人同時開啟上限", "database_key": "ticket_max_per_user", "type": "number", "default": 1, "min": 1, "max": 10},
-            {"display": "面板標題", "database_key": "ticket_panel_title", "type": "string", "default": "需要協助嗎？"},
-            {"display": "面板說明", "database_key": "ticket_panel_description", "type": "text", "default": "點擊下方按鈕開啟私人票口，我們的團隊將盡快協助你。"},
+            {"display": "面板標題", "database_key": "ticket_panel_title", "type": "string", "default": None, "default_i18n_key": "panel.ticket.ticket_panel_title.default"},
+            {"display": "面板說明", "database_key": "ticket_panel_description", "type": "text", "default": None, "default_i18n_key": "panel.ticket.ticket_panel_description.default"},
             {"display": "面板顏色", "description": "面板 embed 的顏色（6 位 hex，例如 5865F2），留空使用預設", "database_key": "ticket_panel_color", "type": "string", "default": None},
             {"display": "面板圖片網址", "description": "顯示在面板 embed 下方的大圖（http/https 網址），留空不顯示", "database_key": "ticket_panel_image", "type": "string", "default": None},
-            {"display": "開票歡迎訊息", "description": "可用 {user}、{subject} 佔位符", "database_key": "ticket_welcome_message", "type": "text", "default": "{user} 你好，感謝開啟票口！請詳細描述你的問題。"},
+            {"display": "開票歡迎訊息", "description": "可用 {user}、{subject} 佔位符", "database_key": "ticket_welcome_message", "type": "text", "default": None, "default_i18n_key": "panel.ticket.ticket_welcome_message.default"},
             {"display": "頻道名稱範本", "description": "可用 {number}、{user} 佔位符", "database_key": "ticket_name_template", "type": "string", "default": "ticket-{number}"},
         ], description="私人客服票口：開票、認領、關閉與 HTML 逐字稿", icon="🎫")
 
@@ -1276,7 +1290,7 @@ class GuildPanel(commands.Cog):
 
     @app_commands.allowed_installs(guilds=True, users=True)
     @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
-    @app_commands.command(name="panel", description="打開伺服器面板")
+    @app_commands.command(name=app_commands.locale_str("panel", i18n_key="cmd.guildpanel.panel.name"), description=app_commands.locale_str("Open the server panel", i18n_key="cmd.guildpanel.panel.desc"))
     async def panel(self, interaction: discord.Interaction):
         button = discord.ui.Button(label="打開面板", style=discord.ButtonStyle.link, url=_get_oauth2_url())
         view = discord.ui.View()

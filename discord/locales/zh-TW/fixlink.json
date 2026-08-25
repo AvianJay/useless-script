@@ -1,0 +1,116 @@
+{
+    "btn": {
+        "add_custom": "新增自訂",
+        "configure_query_fixer": "設定 Query fixer",
+        "confirm_delete": "確定刪除",
+        "delete_custom": "刪除自訂",
+        "disable_custom_default": "停用自訂",
+        "disable_platform": "停用 {platform}",
+        "disable_platform_default": "停用平台",
+        "edit_custom": "編輯自訂",
+        "enable_custom": "啟用自訂",
+        "enable_platform": "啟用 {platform}",
+        "remove_tracker_off": "移除追蹤：關",
+        "remove_tracker_on": "移除追蹤：開",
+        "webhook_all_links": "Webhook：全部連結",
+        "webhook_off": "Webhook：關",
+        "webhook_on": "Webhook：開",
+        "webhook_tracker_only": "Webhook：僅追蹤碼"
+    },
+    "condition": {
+        "all_links": "全部支援連結",
+        "tracker_only": "僅含追蹤碼的連結"
+    },
+    "confirm": {
+        "delete_custom": "確定要刪除 **{name}** 嗎？"
+    },
+    "embed": {
+        "builtin_field_body": "狀態：{status}\n主要服務：{preferred}\n可用：{available}",
+        "custom_field_body": "狀態：{status}\n來源：{origins}\n路徑：{paths}\nFixer：{fixer_name} (`{fixer_host}`)",
+        "footer": "內建平台：{builtin_enabled}/{builtin_total} • 自訂平台：{custom_count}/{custom_max}",
+        "settings_desc": "功能：**{enabled}**\n模式：**{mode}**\nWebhook 條件：**{webhook_condition}**\n移除追蹤：**{tracker}**",
+        "settings_title": "FixLink 設定"
+    },
+    "err": {
+        "builtin_conflict": "{platform} 為內建平台，不能被自訂規則覆蓋。",
+        "custom_id_invalid": "自訂平台 ID 無效。",
+        "custom_not_found": "找不到這個自訂平台。",
+        "delete_custom_failed": "刪除自訂平台失敗。",
+        "delete_failed": "無法刪除這則訊息。",
+        "endpoint_https_required": "Endpoint 必須使用 HTTPS 並包含公開網域。",
+        "endpoint_no_query": "Endpoint 不能自帶 query 或 fragment，請改用靜態 query 欄位。",
+        "endpoint_no_userinfo": "Endpoint 不能包含 userinfo 或自訂 port。",
+        "endpoint_url_format": "Endpoint URL 格式不正確。",
+        "invalid_domain": "{field}不是有效網域。",
+        "length_1_40": "{field}必須是 1 到 40 個字。",
+        "message_not_found": "找不到要刪除的訊息。",
+        "must_be_exact_domain": "{field}必須是精確網域，不能包含 scheme、port 或 wildcard。",
+        "must_be_public_domain": "{field}必須是公開網域。",
+        "name_duplicate": "自訂平台名稱不能重複。",
+        "no_control_chars": "{field}不能包含控制字元。",
+        "no_ip_literal": "{field}不允許 IP literal。",
+        "not_original_author": "只有原訊息作者可以刪除這則訊息。",
+        "not_panel_owner": "只有開啟此面板的管理員可以修改 FixLink 設定。",
+        "origin_count": "請輸入 1 到 5 個來源網域。",
+        "path_prefix_count": "請輸入 1 到 5 個路徑前綴。",
+        "path_prefix_format": "路徑前綴必須以 `/` 開頭，且不能包含 query、fragment 或反斜線。",
+        "path_prefix_whitespace": "路徑前綴不能包含空白字元。",
+        "pick_custom_first": "請先選擇自訂平台。",
+        "platform_not_object": "自訂平台資料必須是 object。",
+        "query_key_charset": "{field}只能使用英數字、`.`、`_`、`~` 或 `-`，長度上限 64。",
+        "rule_duplicate": "`{pattern}` 已有相同的自訂匹配規則。",
+        "save_config_failed": "儲存 FixLink 設定失敗，請稍後再試。",
+        "save_custom_failed": "儲存自訂平台失敗，請稍後再試。",
+        "source_param_conflict": "來源 URL 參數名不能與靜態 query key 重複。",
+        "static_query_format": "靜態 query 必須使用 `key=value`，多組可分行輸入。",
+        "static_query_key_dup": "靜態 query key `{key}` 重複。",
+        "static_query_too_many": "靜態 query 最多 10 組。",
+        "static_query_value_length": "靜態 query value 長度上限為 256。",
+        "too_many_custom": "每個伺服器最多 {max} 個自訂平台。"
+    },
+    "field": {
+        "builtin_platform": "內建：{platform}",
+        "custom_platform": "自訂：{name}",
+        "custom_platform_header": "自訂平台",
+        "endpoint_domain": "Endpoint 網域",
+        "fixer_name": "Fixer 名稱",
+        "origin_domain": "來源網域",
+        "platform_name": "平台名稱",
+        "required_query_key": "必要 query key",
+        "source_param": "來源 URL 參數名",
+        "static_query_key": "靜態 query key"
+    },
+    "modal": {
+        "custom_fixer_title": "自訂 Query fixer",
+        "custom_source_title": "自訂平台來源",
+        "endpoint_label": "HTTPS endpoint（不含 query）",
+        "keep_query_label": "去追蹤時保留的 query keys（可留空）",
+        "origins_label": "來源網域（1-5 個，逗號或分行）",
+        "paths_label": "路徑前綴（1-5 個）",
+        "source_param_label": "來源 URL 的 query 參數名",
+        "static_query_label": "靜態 query（key=value，可留空）"
+    },
+    "mode": {
+        "normal_reply": "一般回覆",
+        "webhook": "Webhook 替換"
+    },
+    "msg": {
+        "cancelled": "已取消。",
+        "custom_deleted": "已刪除自訂平台。",
+        "custom_saved": "已儲存自訂平台 **{name}**。",
+        "source_verified": "來源已驗證：**{name}**\n繼續設定 query fixer。"
+    },
+    "select": {
+        "builtin_platform": "選擇內建平台",
+        "custom_platform": "選擇自訂平台",
+        "platform_preferred_fixer": "{platform} 主要修復服務",
+        "preferred_fixer": "內建平台主要修復服務"
+    },
+    "state": {
+        "disabled_short": "已停用",
+        "enabled_short": "已啟用",
+        "no_custom_platform": "尚無自訂平台",
+        "no_custom_platform_option": "尚無自訂平台",
+        "no_custom_platform_period": "尚無自訂平台。"
+    }
+}

@@ -1,0 +1,147 @@
+{
+    "btn": {
+        "apply_template": "套用模板",
+        "back_to_list": "回到清單",
+        "bump": "置頂",
+        "dctw_page": "DCTW 頁面",
+        "invite_bot": "邀請機器人",
+        "join_server": "加入伺服器",
+        "official_website": "官方網站",
+        "support_server": "支援伺服器",
+        "view_comments": "查看留言",
+        "vote": "投票"
+    },
+    "embed": {
+        "browse_title": "## DCTW {resource_title} 瀏覽",
+        "help": {
+            "field1_name": "1. 登入 DCTW 官網",
+            "field1_value": "前往 [dctw.xyz](https://dctw.xyz)，點擊右上角登入 Discord。",
+            "field2_name": "2. 進入後台",
+            "field2_value": "登入後點擊帳號管理，進入後台面板。",
+            "field3_name": "3. 複製 API Key",
+            "field3_value": "在個人檔案附近找到「點我複製 API KEY」按鈕，點擊後會自動複製到剪貼簿。",
+            "field4_name": "4. 設定 API key",
+            "field4_value": "將獲取的 API key 複製後，使用 `/dctw key set <你的 API key>` 指令將其設定到此機器人中。"
+        },
+        "help_footer": "請勿將 API key 洩露給他人，以免被濫用。\n官方文檔: https://dctw.xyz/docs/?tags=api",
+        "help_title": "如何獲取 DCTW API Key"
+    },
+    "err": {
+        "action_failed": "操作失敗：{error}",
+        "api_key_required": "查詢需要 API key。請先使用 /dctw key set 設定你的 key。",
+        "empty_search_query": "請輸入搜尋關鍵字。",
+        "invalid_bot_target": "請輸入 bot ID 或 mention（例如 <@123...>）。",
+        "invalid_server_target": "請輸入 server ID（數字）。",
+        "invalid_template_target": "請輸入 template ID（數字）。",
+        "item_not_found": "選擇的項目不存在。",
+        "no_bumpable_resources": "你目前沒有可置頂的資源。{error_part}",
+        "no_key_set": "你目前沒有設定 key。",
+        "no_search_results": "找不到符合 `{query}` 的結果。",
+        "no_selectable_data": "目前沒有可查看的資料。",
+        "not_your_browse_list": "這不是你的瀏覽清單。",
+        "not_your_detail_page": "這不是你的詳細頁。",
+        "personal_key_required": "你還沒設定個人 API key，先用 /dctw key set。",
+        "search_failed": "查詢失敗：{error}",
+        "unsupported_sort": "不支援的排序方式"
+    },
+    "heading": {
+        "admins": "管理員",
+        "developers": "開發者",
+        "intro": "簡介",
+        "introduce": "介紹",
+        "server_features": "伺服器功能",
+        "social_links": "社群連結"
+    },
+    "msg": {
+        "action_done": "✅ 已對 {resource}:{id} 執行 {action}。",
+        "bump_in_progress": "置頂中請稍後...\n預計 {minutes} 分鐘。",
+        "bump_summary": "✅ 置頂完成：{success}/{total}",
+        "cache_stats": "DCTW 快取統計\n- TTL: {ttl} 秒\n- 快取項目數: {cached_items}\n- 命中: {hits}\n- 未命中: {misses}\n- 命中率: {hit_rate}%",
+        "key_cleared": "✅ 已清除你的 DCTW API key。",
+        "key_saved": "✅ 已儲存你的 DCTW API key。"
+    },
+    "resource_title": {
+        "bots": "機器人",
+        "servers": "伺服器",
+        "templates": "模板"
+    },
+    "select": {
+        "no_items": "沒有可選項目",
+        "pick_item_ph": "選擇項目查看詳細"
+    },
+    "sort": {
+        "bumped": "置頂",
+        "members": "成員數",
+        "newest": "最新",
+        "servers": "伺服器數",
+        "votes": "票數"
+    },
+    "tag": {
+        "bot": {
+            "automation": "自動化",
+            "customizable": "可自訂",
+            "fun": "有趣",
+            "management": "管理",
+            "minigames": "小遊戲",
+            "music": "音樂",
+            "roleplay": "角色扮演",
+            "utility": "工具"
+        },
+        "server": {
+            "acting": "表演",
+            "anime": "動漫",
+            "art": "藝術",
+            "community": "社群",
+            "gaming": "遊戲",
+            "hangout": "閒聊",
+            "politics": "政治",
+            "programming": "程式設計",
+            "roleplay": "角色扮演"
+        },
+        "template": {
+            "anime": "大型",
+            "art": "趣味",
+            "community": "支援",
+            "gaming": "遊戲"
+        }
+    },
+    "value": {
+        "bump_failed_header": "置頂失敗：",
+        "bumped_at_line": "置頂時間: {bumped_at}",
+        "created_at_line": "建立時間: {created_at}",
+        "current_key_line": "目前 key: {masked}",
+        "extra_members": " | 成員數: {count}",
+        "extra_servers": " | 伺服器數: {count}",
+        "fetch_error_suffix": "\n錯誤: {errors}",
+        "gallery_image": "{name} 圖片",
+        "gallery_image_indexed": "{name} 圖片 {index}",
+        "keywords_line": "關鍵字: {keywords}",
+        "list_item_line": "{index}. {name} (ID: {id}) | 票數: {votes}{extra}",
+        "members_line": "成員數: {count}",
+        "no_comments": "目前沒有留言。",
+        "no_content": "(無內容)",
+        "no_data": "目前沒有資料。",
+        "no_description": "無描述",
+        "no_name": "(無名稱)",
+        "official_verified_line": "官方認證: {status}",
+        "online_members_line": "線上成員數: {count}",
+        "owned_fetch_errors_header": "擁有資源查詢錯誤：",
+        "page_label": "頁數: {page}/{total}",
+        "prefix_line": "前綴: {prefix}",
+        "resource_category_line": "資源類別：{resources}",
+        "resource_id_line": "{resource_title} ID: `{id}`",
+        "search_label": "搜尋: `{query}`",
+        "servers_line": "伺服器數: {count}",
+        "sort_label": "排序: `{sort}`",
+        "tags_line": "標籤: {tags}",
+        "total_label": "總數: {count}",
+        "truncated_note": {
+            "other": "-# 已使用前 {limit} 筆資料排序"
+        },
+        "unknown": "未知",
+        "verified_no": "未驗證",
+        "verified_status_line": "驗證狀態: {status}",
+        "verified_yes": "已驗證",
+        "votes_line": "票數: {votes}"
+    }
+}

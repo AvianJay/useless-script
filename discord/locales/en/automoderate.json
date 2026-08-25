@@ -1,0 +1,231 @@
+{
+    "action_builder": {
+        "usage_value": "Copy the string above into the action value of {settings_command}, or the action parameter of {setup_command}."
+    },
+    "action_check_title": "Action check result",
+    "action_setup_done_title": "Action saved",
+    "automod_action_type": {
+        "block_member_interactions": "Block member interactions",
+        "block_message": "Block message",
+        "send_alert_message": "Send alert",
+        "timeout": "Time out user"
+    },
+    "btn": {
+        "retry_action": "No, let me retype it",
+        "save_action": "Yes, save this action"
+    },
+    "default_action": {
+        "invite_link": "delete {user}, please don't post invite links to other servers.",
+        "scamtrap": "delete {user} was the last account to get banned - don't talk in here!, ban {user} 5s 12h [auto-ban] likely compromised account",
+        "spam": "mute 10m auto-mute for spamming, delete {user}, please don't spam.",
+        "uispam": "delete {user}, please don't abuse user-installed app commands., mute 10m user-install command abuse"
+    },
+    "default_reason": {
+        "escape_punish": "Evading a timeout",
+        "raid": "auto-ban from raid detection"
+    },
+    "detect": {
+        "title": "🛡️ AutoMod rule triggered",
+        "unknown_channel": "unknown channel",
+        "unknown_rule": "unknown rule"
+    },
+    "err": {
+        "action_source_invalid": "`action_source` only accepts local / api / both.",
+        "allow_current_server_bool": "`allow_current_server` only accepts true / false.",
+        "automod_detect_needs_channel": "Pick a notification channel for AutoMod detection first.",
+        "channel_no_perms": "⚠️ The bot can't view or send messages in {channel}; adjust its permissions before configuring this.",
+        "channel_not_found": "⚠️ Channel not found (ID: `{channel_id}`); check your input.",
+        "channel_not_in_guild": "⚠️ Channel not found (ID: `{channel_id}`); make sure these channels belong to this server.",
+        "flagged_user_needs_channel": "Pick a notification channel for flagged-user detection first.",
+        "invalid_feature": "Invalid feature.",
+        "local_match_mode_invalid": "`local_match_mode` only accepts active / history.",
+        "not_enabled": "Auto-moderation isn't enabled yet.",
+        "pick_action": "Pick an action to take.",
+        "scamtrap_needs_channel": "Pick a trap channel for the scam trap first.",
+        "unparseable_channels": "⚠️ Couldn't parse these channels: `{channels}`. Use channel mentions or channel IDs, separated by commas."
+    },
+    "feature_desc": {
+        "anti_invite_link": "Detect Discord invite links",
+        "anti_raid": "Mass-join detection",
+        "anti_spam": "Similar-message spam",
+        "anti_uispam": "User Install abuse",
+        "automod_detect": "Detect native Discord AutoMod triggers",
+        "escape_punish": "Leaving during a timeout",
+        "flagged_user": "Local and API flag hits",
+        "scamtrap": "Honeypot channel",
+        "too_many_emojis": "Excessive emoji",
+        "too_many_h1": "Markdown heading spam"
+    },
+    "feature_name": {
+        "anti_invite_link": "Invite links",
+        "anti_raid": "Anti-raid",
+        "anti_spam": "Anti-spam",
+        "anti_uispam": "User-installed app abuse",
+        "automod_detect": "AutoMod detection",
+        "escape_punish": "Punishment evasion",
+        "flagged_user": "Flagged user joins",
+        "scamtrap": "Scam trap",
+        "too_many_emojis": "Too many emojis",
+        "too_many_h1": "Too many headings"
+    },
+    "feature_name_emoji": {
+        "anti_invite_link": "🔗 Invite links",
+        "anti_raid": "🚨 Anti-raid",
+        "anti_spam": "🔁 Anti-spam",
+        "anti_uispam": "📲 User-installed app abuse",
+        "automod_detect": "🛡️ AutoMod detection",
+        "escape_punish": "🏃 Punishment evasion",
+        "flagged_user": "🚩 Flagged user joins",
+        "scamtrap": "🪤 Scam trap",
+        "too_many_emojis": "😂 Too many emojis",
+        "too_many_h1": "📢 Too many headings"
+    },
+    "field": {
+        "action": "Action",
+        "allow_current_server": "Allow this server's links",
+        "channel": "Channel",
+        "executed_action": "Action taken",
+        "ignore_channels": "Ignored channels",
+        "log_channel": "Notification channel",
+        "matched_content": "Matched content",
+        "matched_keyword": "Matched keyword",
+        "message_content": "Message content",
+        "rule_name": "Rule name",
+        "trigger_type": "Trigger type",
+        "user": "User"
+    },
+    "flagged": {
+        "action_done": "The action ran.",
+        "action_failed": "The action failed: {error}",
+        "action_not_applicable": "Action not run: the saved action doesn't apply to member-join events.",
+        "action_result": "Action result",
+        "api_entry": "• {reason} | Reporter: {reporter} ({reporter_id}) | {at}",
+        "api_records": {
+            "one": "Blacklist API ({count} record)",
+            "other": "Blacklist API ({count} records)"
+        },
+        "local_entry": "• {guild} | {at} | {kind}",
+        "local_records": {
+            "one": "Local data ({count} record)",
+            "other": "Local data ({count} records)"
+        },
+        "no_action_configured": "No automatic action is configured.",
+        "source_mismatch": "The action source is set to {source} and this hit doesn't match, so nothing ran.",
+        "title": "🚩 Flagged user joined the server"
+    },
+    "info": {
+        "action_syntax_body": "Actions can be chained with commas `,`, up to 5. Available actions:\n`delete` / `delete_dm` — delete the message (optionally with a warning)\n`warn` / `warn_dm` — send a warning message\n`mute <duration>` — time out the user\n`kick` — kick the user\n`ban <duration> <message deletion window>` — ban the user\n`send_mod_message` — send a moderation notice\n`force_verify <duration>` — force web verification (web verification must be enabled first)\nUse {builder} to generate an action string, or {check} to preview it.",
+        "action_syntax_title": "⚙️ Action string syntax",
+        "desc": "AutoModerate provides several automated protections to help admins keep order in the server.\nUse {quick_setup} for the interactive quick setup (recommended), {setup} to configure all options for one feature at once, {toggle} to enable or disable a feature, {settings} to tweak individual parameters, and {view} to see the current configuration.",
+        "feature_body": {
+            "anti_invite_link": "Detects Discord invite links; you can choose whether to allow invites to this server.\nSettings: `allow_current_server`, `action`, `ignore_channels`",
+            "anti_raid": "Detects a burst of users joining, then actions everyone who joined in the window.\nSettings: `max_joins` (default 5), `time_window` (seconds, default 60), `action`",
+            "anti_spam": "Detects a user sending identical or highly similar messages in a short window.\nSettings: `max_messages` (default 5), `time_window` (seconds, default 30), `similarity` (threshold 0-100, default 75), `action`, `ignore_channels`",
+            "anti_uispam": "Detects how often a user triggers commands via User Install, to prevent abuse.\nSettings: `max_count` (default 5), `time_window` (seconds, default 60), `action`, `ignore_channels`",
+            "automod_detect": "When a native Discord AutoMod rule fires, send a notice to a channel and optionally run an extra action.\nSettings: `log_channel`, `action` (optional)\nFilters: `filter_rule` (rule-name filter, `|`-separated for multiple), `filter_action_type` (action-type filter: block/alert/timeout/block_interactions, `|`-separated)",
+            "escape_punish": "When a user leaves the server while timed out, run an extra punishment (e.g. a ban) automatically.\nSettings: `punishment`, `duration`",
+            "flagged_user": "Merges local flag records from the last three months with the Blacklist API cache; notifies on join and can run an action.\nSettings: `log_channel`, `action` (optional), `action_source` (local/api/both), `local_match_mode` (active/history)",
+            "scamtrap": "Set up a honeypot channel; anyone who posts there is actioned automatically.\nSettings: `channel_id` (channel), `action` (action to take)",
+            "too_many_emojis": "Counts emoji in a message (custom and Unicode) and actions the author above the limit.\nSettings: `max_emojis` (default 10), `action`, `ignore_channels`",
+            "too_many_h1": "Detects when the total length of Markdown headings (`# `) in a message is excessive, to prevent spam.\nSettings: `max_length` (default 20), `action`, `ignore_channels`"
+        },
+        "feature_heading": "{name} ({key})",
+        "title": "Auto-moderation features"
+    },
+    "modal": {
+        "custom_action_label": "Action string",
+        "custom_action_ph": "e.g. mute 30m spamming, delete {user} please don't spam",
+        "custom_action_title": "Custom action"
+    },
+    "msg": {
+        "alert_channel_set": "The user-join notification channel is now {channel}.",
+        "setting_set": "Auto-moderation setting '{setting}' is now {value}.",
+        "toggled": "Auto-moderation setting '{setting}' is now {status}."
+    },
+    "quick_setup": {
+        "action_ph": "Action (pick one)",
+        "action_source_ph": "Pick the action source",
+        "allow_invite_no_desc": "Any Discord invite link triggers it",
+        "allow_invite_ph": "Allow invite links to this server?",
+        "allow_invite_yes_desc": "Only block invites to other servers",
+        "ban_duration_ph": "Ban duration",
+        "days_30": "30 days",
+        "days_7": "7 days",
+        "done_desc": "Quick setup for **{feature}** is complete and the feature is enabled.",
+        "done_title": "✅ Setup complete",
+        "feature_ph": "Pick a feature",
+        "finish_btn": "Finish setup",
+        "ignore_channels_ph": "Pick channels to ignore (multiple allowed)",
+        "log_channel_ph": "Pick a notification channel",
+        "match_mode_active": "Currently flagged only",
+        "match_mode_history": "All records from the last 3 months",
+        "match_mode_ph": "Pick the local match mode",
+        "max_emojis_ph": "Maximum emoji count",
+        "max_h1_length_ph": "Maximum heading length",
+        "max_joins_ph": "Maximum joins in the window",
+        "max_similar_messages_ph": "Maximum similar messages",
+        "max_trigger_count_ph": "Maximum triggers in the window",
+        "more_channels": "... {count} total",
+        "punishment_ph": "Punishment",
+        "seconds_n": {
+            "one": "{count} second",
+            "other": "{count} seconds"
+        },
+        "similarity_ph": "Similarity threshold",
+        "source_api": "API only",
+        "source_both": "Local and API",
+        "source_local": "Local only",
+        "step1_desc": "Pick the feature you want to configure:",
+        "step2_desc": "Configuring **{feature}**\nFill in the options below, then hit \"Finish setup\".",
+        "time_window_ph": "Detection window (seconds)",
+        "title": "⚡ Auto-moderation quick setup",
+        "trap_channel_ph": "Pick the trap channel"
+    },
+    "records_omitted": {
+        "one": "…{count} more record not shown.",
+        "other": "…{count} more records not shown."
+    },
+    "scan": {
+        "api_cache": "API cache: {status}",
+        "api_last_sync": "last successful sync {at}",
+        "api_line": " - [API] {reason}; reporter: {reporter} ({reporter_id}); time: {at}",
+        "api_never_synced": "never synced successfully",
+        "api_no_result": "no sync result yet",
+        "api_ok": "ok",
+        "api_status": "Latest API status: {status}",
+        "flag_active": "currently flagged",
+        "flag_history": "historical record",
+        "local_data": "Local data: {status}",
+        "local_line": " - [local/{kind}] {guild}, flagged at: {at}",
+        "local_ok": "last 3 months applied / {mode}",
+        "local_read_failed": "read failed ({error})",
+        "matches_found": {
+            "one": "Scan complete; found {count} flagged user.",
+            "other": "Scan complete; found {count} flagged users."
+        },
+        "no_matches": "Scan complete; no flagged users found.",
+        "user_line": "User: {user} (ID: {user_id})"
+    },
+    "settings_title": "Auto-moderation settings",
+    "suggest": {
+        "clear": "Notify only (clear the action)",
+        "custom": "Custom..."
+    },
+    "trigger_type": {
+        "harmful_link": "Harmful link",
+        "keyword": "Keyword",
+        "keyword_preset": "Preset keyword",
+        "member_profile": "Member profile",
+        "mention_spam": "Mention spam",
+        "spam": "Suspected spam"
+    },
+    "unknown_guild": "unknown server",
+    "unknown_user": "unknown user",
+    "warn": {
+        "anti_invite_no_action": "Note: invite-link detection is enabled but no action is configured. Use {command} to set `anti_invite_link-action`.",
+        "automod_detect_no_channel": "Note: AutoMod detection is enabled but no notification channel is configured. Use {command} to set `automod_detect-log_channel`.",
+        "flagged_user_no_channel": "Note: flagged-user detection is enabled but no notification channel is configured. Use {command} to set `flagged_user-log_channel`.",
+        "scamtrap_no_action": "Note: the scam trap is enabled but no action is configured. Use {command} to set the action.",
+        "scamtrap_no_channel": "Note: the scam trap is enabled but no channel ID is configured. Use {command} to set the channel ID."
+    }
+}

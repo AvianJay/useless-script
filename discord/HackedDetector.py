@@ -1,4 +1,4 @@
-from globalenv import bot, set_user_data, get_user_data, get_all_user_data, start_bot, get_command_mention, get_global_config, set_global_config
+﻿from globalenv import bot, set_user_data, get_user_data, get_all_user_data, start_bot, get_command_mention, get_global_config, set_global_config
 import discord
 from discord.ext import commands, tasks
 from discord import app_commands
@@ -13,6 +13,9 @@ import random
 import asyncio
 import json
 from OwnerTools import is_owner
+
+import i18n
+from i18n import t
 
 fonts = [
     "6x9",
@@ -250,7 +253,9 @@ class HackedDetector(commands.Cog):
 
         try:
             await channel.send(
-                f"{user.mention} 我無法私訊你。請先私訊我，然後使用 {command_mention} 開始解除禁言流程。",
+                user.mention + " " + t("hackeddetector.msg.dm_failed_fallback",
+                                       locale=i18n.resolve_locale(user_id=user.id),
+                                       command=command_mention),
                 allowed_mentions=discord.AllowedMentions(users=True, roles=False, everyone=False),
             )
             log(
@@ -290,7 +295,8 @@ class HackedDetector(commands.Cog):
                 continue
             try:
                 # discord.Member.timeout is a coroutine in discord.py v2 → await it
-                await member.timeout(None, reason="解除預防性禁言。")
+                await member.timeout(None, reason=t("hackeddetector.audit.unlock",
+                                                     locale=i18n.resolve_locale(guild_id=guild.id)))
                 # log(f"User {user} has been unmuted in guild {guild.name} ({guild.id}).", level=logging.INFO, module_name="HackedDetector", user=user) ##anti 429##
             except Exception as e:
                 log(f"Failed to untimeout user {user} in guild {guild.name} ({guild.id}): {e}", level=logging.ERROR, module_name="HackedDetector", user=user)
@@ -300,7 +306,8 @@ class HackedDetector(commands.Cog):
                 admin_role = guild.get_role(int(admin_role_id)) if admin_role_id is not None else None
                 if admin_role:
                     try:
-                        await member.add_roles(admin_role, reason="恢復管理員角色。")
+                        await member.add_roles(admin_role, reason=t("hackeddetector.audit.restore_admin",
+                                                                    locale=i18n.resolve_locale(guild_id=guild.id)))
                         log(f"User {user} has been restored admin role in guild {guild.name} ({guild.id}).", level=logging.INFO, module_name="HackedDetector", user=user)
                     except Exception as e:
                         log(f"Failed to restore admin role to user {user} in guild {guild.name} ({guild.id}): {e}", level=logging.ERROR, module_name="HackedDetector", user=user)
@@ -352,7 +359,8 @@ class HackedDetector(commands.Cog):
                 continue
             if ok and not already_muted and not is_admin:
                 try:
-                    await member.timeout(until, reason="檢測到被盜帳戶，預防性禁言。")
+                    await member.timeout(until, reason=t("hackeddetector.audit.hacked_timeout",
+                                                         locale=i18n.resolve_locale(guild_id=guild.id)))
                     muted.append(guild.id)
                 except Exception as e:
                     log(f"Failed to timeout user {user} in guild {guild.name} ({guild.id}): {e}", level=logging.ERROR, module_name="HackedDetector", user=user)
@@ -363,10 +371,12 @@ class HackedDetector(commands.Cog):
                     admin_role = discord.utils.find(lambda r: r.permissions.administrator, guild.roles)
                     if admin_role:
                         try:
-                            await member.remove_roles(admin_role, reason="檢測到被盜帳戶，移除管理員角色以進行預防性禁言。")
+                            await member.remove_roles(admin_role, reason=t("hackeddetector.audit.remove_admin",
+                                                                           locale=i18n.resolve_locale(guild_id=guild.id)))
                         except Exception as e:
                             log(f"Failed to remove admin role from user {user} in guild {guild.name} ({guild.id}): {e}", level=logging.ERROR, module_name="HackedDetector", user=user)
-                        await member.timeout(until, reason="檢測到被盜帳戶，預防性禁言。")
+                        await member.timeout(until, reason=t("hackeddetector.audit.hacked_timeout",
+                                                             locale=i18n.resolve_locale(guild_id=guild.id)))
                         muted.append(guild.id)
                         admin_ids[guild.id] = admin_role.id
                     else:
@@ -392,17 +402,19 @@ class HackedDetector(commands.Cog):
         # 儲存被禁言的伺服器 id 及移除過的 admin role id
         all_muted, all_admin_ids, added_guilds, expires_at = self._merge_hacked_user_records(user.id, muted, admin_ids, until=until)
         log(f"Timed out user in {muted} guild(s), added_records={added_guilds}, total_records={all_muted}, removed {len(all_admin_ids)} admins, expires_at={expires_at.isoformat()}, {failed} failed.", level=logging.INFO, module_name="HackedDetector", user=user)
+        recipient_loc = i18n.resolve_locale(user_id=user.id)
         embed = discord.Embed(
-            title="系統警告",
-            description="我們檢測到您的帳戶可能被盜用，已對您進行預防性禁言，請盡快檢查您的帳戶安全。",
+            title=t("hackeddetector.dm.title", locale=recipient_loc),
+            description=t("hackeddetector.dm.desc", locale=recipient_loc),
             color=discord.Color.red()
         )
-        embed.add_field(name="被禁言的伺服器數量", value=str(len(all_muted)), inline=False)
-        embed.add_field(name="未能禁言的伺服器數量", value=str(failed), inline=False)
+        embed.add_field(name=t("hackeddetector.dm.muted_guild_count", locale=recipient_loc), value=str(len(all_muted)), inline=False)
+        embed.add_field(name=t("hackeddetector.dm.failed_guild_count", locale=recipient_loc), value=str(failed), inline=False)
         embed.timestamp = datetime.now()
         try:
             # 傳送帶有按鈕的私訊，StartUnlockView 需要 parent
-            await user.send(embed=embed, view=self.StartUnlockView(self))
+            with i18n.use_locale(recipient_loc):
+                await user.send(embed=embed, view=self.StartUnlockView(self))
             log(f"Warning DM sent to suspected hacked user {user.id}.", level=logging.DEBUG, module_name="HackedDetector", user=user)
         except Exception as e:
             log(f"Failed to send DM to user {user}: {e}", level=logging.ERROR, module_name="HackedDetector", user=user)
@@ -420,7 +432,8 @@ class HackedDetector(commands.Cog):
             # ignore_user 失敗不應阻止後續流程
             log(f"ignore_user failed for {member.id}", level=logging.DEBUG, module_name="HackedDetector", user=member, guild=member.guild)
         try:
-            await member.timeout(until, reason="檢測到可疑帳號，預防性禁言。")
+            await member.timeout(until, reason=t("hackeddetector.audit.suspicious_timeout",
+                                                 locale=i18n.resolve_locale(guild_id=member.guild.id)))
         except Exception as e:
             log(f"Failed to timeout suspicious member {member}: {e}", level=logging.ERROR, module_name="HackedDetector", user=member, guild=member.guild)
             return
@@ -441,25 +454,27 @@ class HackedDetector(commands.Cog):
             user=member,
             guild=member.guild,
         )
+        recipient_loc = i18n.resolve_locale(user_id=member.id)
         embed = discord.Embed(
-            title="系統警告",
-            description="我們檢測到您的帳戶可能被盜用，已對您進行預防性禁言，請盡快檢查您的帳戶安全。",
+            title=t("hackeddetector.dm.title", locale=recipient_loc),
+            description=t("hackeddetector.dm.desc", locale=recipient_loc),
             color=discord.Color.red()
         )
-        embed.add_field(name="被禁言的伺服器數量", value=str(len(all_muted)), inline=False)
-        # embed.add_field(name="未能禁言的伺服器數量", value=str(failed), inline=False)
+        embed.add_field(name=t("hackeddetector.dm.muted_guild_count", locale=recipient_loc), value=str(len(all_muted)), inline=False)
         embed.timestamp = datetime.now()
         try:
             # 傳送帶有按鈕的私訊，StartUnlockView 需要 parent
-            await member.send(embed=embed, view=self.StartUnlockView(self))
+            with i18n.use_locale(recipient_loc):
+                await member.send(embed=embed, view=self.StartUnlockView(self))
             log(f"Warning DM sent to suspected hacked user {member.id}.", level=logging.DEBUG, module_name="HackedDetector", user=member)
         except Exception as e:
             log(f"Failed to send DM to user {member}: {e}", level=logging.ERROR, module_name="HackedDetector", user=member)
             # await self._notify_unlock_in_channel(member, channel)
 
-    class UnlockModal(discord.ui.Modal, title="解除禁言"):
+    class UnlockModal(i18n.I18nModal, title=i18n.K("hackeddetector.modal.unlock_title")):
         # enter code to unlock account
-        code = discord.ui.TextInput(label="請輸入解除禁言的驗證碼", placeholder="驗證碼", required=True)
+        code = discord.ui.TextInput(label=i18n.K("hackeddetector.modal.code_label"),
+                                    placeholder=i18n.K("hackeddetector.modal.code_ph"), required=True)
 
         def __init__(self, user: discord.User, parent, code: str):
             super().__init__()
@@ -470,51 +485,51 @@ class HackedDetector(commands.Cog):
         async def on_submit(self, interaction: discord.Interaction):
             log(f"Unlock modal submitted by user {interaction.user.id} for target {self.user.id}.", level=logging.DEBUG, module_name="HackedDetector", user=interaction.user, guild=interaction.guild)
             if interaction.user.id != self.user.id:
-                await interaction.response.send_message("這個按鈕不是為你設置的。", ephemeral=True)
+                await interaction.response.send_message(t("hackeddetector.err.not_your_button"), ephemeral=True)
                 return
             if self.original_code != self.code.value:
                 log(f"Unlock code mismatch for user {interaction.user.id}.", level=logging.DEBUG, module_name="HackedDetector", user=interaction.user, guild=interaction.guild)
-                await interaction.response.send_message("驗證碼錯誤，請重新嘗試。", ephemeral=True)
+                await interaction.response.send_message(t("hackeddetector.err.wrong_code"), ephemeral=True)
                 return
             success = await self.parent.unlock_user(self.user)
             if success:
-                await interaction.response.send_message("你的帳戶已經解除禁言。", ephemeral=True)
+                await interaction.response.send_message(t("hackeddetector.msg.unlocked"), ephemeral=True)
                 log(f"Unlock success for user {interaction.user.id}.", level=logging.DEBUG, module_name="HackedDetector", user=interaction.user, guild=interaction.guild)
             else:
-                await interaction.response.send_message("解除禁言失敗，你可能已經解除解除禁言了。", ephemeral=True)
+                await interaction.response.send_message(t("hackeddetector.msg.unlock_failed"), ephemeral=True)
                 log(f"Unlock failed for user {interaction.user.id} (no records or no guild actions).", level=logging.DEBUG, module_name="HackedDetector", user=interaction.user, guild=interaction.guild)
 
-    class UnlockView(discord.ui.View):
+    class UnlockView(i18n.I18nView):
         def __init__(self, user: discord.User, parent, code: str):
             super().__init__()
             self.user = user
             self.parent = parent
             self.code = code
 
-        @discord.ui.button(label="輸入驗證碼", style=discord.ButtonStyle.green, custom_id="hacked:unlock_code_input")
+        @discord.ui.button(label=i18n.K("hackeddetector.btn.enter_code"), style=discord.ButtonStyle.green, custom_id="hacked:unlock_code_input")
         async def unlock_button(self, interaction: discord.Interaction, button: discord.ui.Button):
             if interaction.user.id != self.user.id:
-                await interaction.response.send_message("這個按鈕不是為你設置的。", ephemeral=True)
+                await interaction.response.send_message(t("hackeddetector.err.not_your_button"), ephemeral=True)
                 return
             # parent 為 cog instance
             modal = self.parent.UnlockModal(self.user, self.parent, self.code)
             await interaction.response.send_modal(modal)
             log(f"Unlock modal opened for user {interaction.user.id}.", level=logging.DEBUG, module_name="HackedDetector", user=interaction.user, guild=interaction.guild)
 
-    class StartUnlockView(discord.ui.View):
+    class StartUnlockView(i18n.I18nView):
         def __init__(self, parent):
             super().__init__(timeout=None)
             # parent 必須是 cog instance
             self.parent = parent
 
-        @discord.ui.button(label="開始解除禁言流程", style=discord.ButtonStyle.green, custom_id="hacked:start_unlock")
+        @discord.ui.button(label=i18n.K("hackeddetector.btn.start_unlock"), style=discord.ButtonStyle.green, custom_id="hacked:start_unlock")
         async def start_unlock_button(self, interaction: discord.Interaction, button: discord.ui.Button):
             user = interaction.user
             code = str(random.randint(1, 9999)).zfill(4)
             rendered_code, font_name = self.parent._render_unlock_code_art(code)
             embed = discord.Embed(
-                title="請輸入驗證碼",
-                description=f"```\n{rendered_code}\n```\n請在下面的按鈕中輸入上方的驗證碼以解除禁言。",
+                title=t("hackeddetector.unlock.code_title"),
+                description=f"```\n{rendered_code}\n```\n" + t("hackeddetector.unlock.code_prompt"),
                 color=discord.Color.blue()
             )
             embed.timestamp = datetime.now()
@@ -783,7 +798,7 @@ class HackedDetector(commands.Cog):
                 continue
 
             try:
-                await member.kick(reason="28 天內未完成被盜帳戶驗證。")
+                await member.kick(reason=t("hackeddetector.audit.unverified_kick", locale=i18n.resolve_locale(guild_id=guild.id)))
                 kicked_guilds.append(guild_id)
             except Exception as e:
                 remaining_guilds.append(guild_id)
@@ -839,51 +854,59 @@ class HackedDetector(commands.Cog):
     async def cog_unload(self):
         self.expired_unverified_kick_task.cancel()
 
-    @app_commands.command(name="imhacked", description="開始解除被盜帳戶的流程")
+    @app_commands.command(name=app_commands.locale_str("imhacked", i18n_key="cmd.hackeddetector.imhacked.name"), description=app_commands.locale_str("Start the compromised-account recovery flow", i18n_key="cmd.hackeddetector.imhacked.desc"))
     async def imhacked(self, interaction: discord.Interaction):
         user = interaction.user
         timed_out = self._get_hacked_user_data(user.id, "hacked_timed_out_channel", [])
         log(f"/imhacked invoked by user {user.id}, timeout_records={len(timed_out)}", level=logging.DEBUG, module_name="HackedDetector", user=user, guild=interaction.guild)
         if not timed_out:
             log(f"User {user} used /imhacked but has no active timeouts.", level=logging.DEBUG, module_name="HackedDetector", user=user)
-            await interaction.response.send_message("我們沒有檢測到你的帳戶有被盜用的跡象，無需解除禁言。", ephemeral=True)
+            await interaction.response.send_message(t("hackeddetector.msg.no_timeout_records"), ephemeral=True)
             return
-        await interaction.response.send_message("按下下面的按鈕開始解除禁言流程。", view=self.StartUnlockView(self), ephemeral=True)
+        await interaction.response.send_message(t("hackeddetector.msg.press_to_start"), view=self.StartUnlockView(self), ephemeral=True)
 
     @commands.command(name="hack-addhash", description="Add a suspicious thumbhash for hacked account detection (owner only)")
     @is_owner()
     async def hack_addhash(self, ctx: commands.Context, thumbhash: str):
+        # i18n: skip-start (owner-facing)
         if thumbhash in sussy_thumbhashs:
             await ctx.send("這個 thumbhash 已經在列表中了。")
             return
         sussy_thumbhashs.append(thumbhash)
         set_global_config("hacked_detector_sussy_thumbhashs", sussy_thumbhashs)
         await ctx.send(f"已添加 suspicious thumbhash: {thumbhash}")
+        # i18n: skip-end
 
     @commands.command(name="hack-clearhashes", description="Clear all suspicious thumbhashes (owner only)")
     @is_owner()
     async def hack_clearhashes(self, ctx: commands.Context):
+        # i18n: skip-start (owner-facing)
         sussy_thumbhashs.clear()
         set_global_config("hacked_detector_sussy_thumbhashs", sussy_thumbhashs)
         await ctx.send("已清除所有 suspicious thumbhashes。")
+        # i18n: skip-end
 
     @commands.command(name="hack-showhashes", description="Show all suspicious thumbhashes (owner only)")
     @is_owner()
     async def hack_showhashes(self, ctx: commands.Context):
+        # i18n: skip-start (owner-facing)
         if not sussy_thumbhashs:
             await ctx.send("目前沒有 suspicious thumbhashes。")
             return
         await ctx.send("目前的 suspicious thumbhashes：\n" + "\n".join(sussy_thumbhashs))
+        # i18n: skip-end
 
     @commands.command(name="hack-removehash", description="Remove a suspicious thumbhash by index (owner only)")
     @is_owner()
     async def hack_removehash(self, ctx: commands.Context, index: int):
+        # i18n: skip-start (owner-facing)
         if index < 0 or index >= len(sussy_thumbhashs):
             await ctx.send("無效的索引。")
             return
         removed = sussy_thumbhashs.pop(index)
         set_global_config("hacked_detector_sussy_thumbhashs", sussy_thumbhashs)
         await ctx.send(f"已移除 suspicious thumbhash: {removed}")
+        # i18n: skip-end
 
 
 asyncio.run(bot.add_cog(HackedDetector()))

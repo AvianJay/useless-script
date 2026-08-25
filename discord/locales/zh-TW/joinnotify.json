@@ -1,0 +1,42 @@
+{
+    "audit": {
+        "subscribed": "由 {user} 訂閱機器人更新通知"
+    },
+    "btn": {
+        "disable_join_notify": "停用加入通知",
+        "dismiss": "算了",
+        "docs": "使用文檔",
+        "subscribe_here": "好啊",
+        "support": "支援伺服器",
+        "website": "官方網站"
+    },
+    "dm": {
+        "body": "快速開始：\n- {help_cmd} 查看指令列表\n- {tutorial_cmd} 查看使用教學\n- {panel_cmd} 開啟網頁面板\n如果有任何問題，歡迎加入[支援伺服器]({support_url})尋求幫助！\n\n-# 不想收到這些訊息？你可以使用 {joinnotify_cmd} 指令來關閉加入通知！",
+        "greeting_inviter": "你好啊，{user}！感謝你邀請我加入 {guild}！",
+        "greeting_unknown": "你好啊，{user}！好像有人把我邀請進入你的伺服器 {guild} 了？但是我沒有權限可以知道他是誰 :/",
+        "title_inviter": "欸？你好像邀請了我？",
+        "title_unknown": "欸？好像有人邀請了我？"
+    },
+    "err": {
+        "cannot_check_perms": "目前無法確認機器人在該伺服器的權限。",
+        "follow_forbidden": "我沒有足夠權限在該頻道建立更新通知訂閱。",
+        "missing_channel_perms": "我需要在該頻道的查看頻道和管理 Webhook 權限。",
+        "need_manage_guild": "只有具備管理伺服器權限的成員可以設定更新通知。",
+        "pick_channel_in_guild": "請選擇這個伺服器中的文字或公告頻道。",
+        "subscribe_failed": "訂閱更新通知時發生錯誤，請稍後再試。",
+        "updates_unavailable": "目前無法訂閱更新通知，請稍後再試。"
+    },
+    "msg": {
+        "disabled": "已停用加入通知！當你邀請我加入伺服器時，我將不會私訊你任何訊息！",
+        "enabled": "已啟用加入通知！當你邀請我加入伺服器時，我會私訊你一個歡迎訊息！",
+        "subscribed": "已在 {channel} 接收機器人更新通知。",
+        "update_prompt": "請問要在這裡接收機器人更新通知嗎？"
+    },
+    "notify_off": {
+        "desc": "我不會再通知你了！如果你改變主意了，可以使用 {command} 指令來重新啟用加入通知！",
+        "title": "好吧"
+    },
+    "select": {
+        "other_channel_ph": "還是在其他頻道接收..."
+    }
+}

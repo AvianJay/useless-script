@@ -1,0 +1,94 @@
+{
+    "btn": {
+        "go_submit": "前往投稿"
+    },
+    "cmd": {
+        "audio_format_error": "錯誤：只支援 MP3、WAV、OGG 格式的音檔。",
+        "audio_too_large": "錯誤：音檔大小超過 5MB，請選擇較小的音檔。",
+        "channel_not_found": "無法找到投稿頻道，請聯繫開發者。",
+        "channel_not_set": "投稿頻道未設置，請聯繫開發者。",
+        "rate_limited": "投稿過於頻繁，請等待 {seconds} 秒後再試。",
+        "thanks_audio": "感謝您的投稿！我們會盡快審核您的音檔。\n-# 審核通過後會通知你。",
+        "thanks_image": "感謝您的投稿！我們會盡快審核您的圖片。",
+        "upload_image_gif_video": "請上傳圖片、GIF 或影片檔。"
+    },
+    "dm": {
+        "approved_plain": "{approved_text}。",
+        "approved_with_reward": "{approved_text}，並獲得 **{reward}** {currency}\n目前餘額: **{balance}**",
+        "text": {
+            "audio_approved": "你的音訊投稿已通過",
+            "feedgrass_approved": "你的投稿已通過",
+            "whatisthisguytalking_approved": "你的「這傢伙在說什麼呢」投稿已通過"
+        }
+    },
+    "editjson": {
+        "label": "JSON 內容",
+        "title": "編輯 JSON 設定"
+    },
+    "embed": {
+        "feedgrass_cmd_desc": "請點擊以下連結進行投稿",
+        "feedgrass_cmd_title": "草飼圖投稿",
+        "new_dynamic_voice_audio": "新的「動態語音音效」投稿",
+        "new_feedgrass": "新的「草飼圖」投稿",
+        "new_whatisthisguytalking": "新的「這傢伙在說什麼呢」圖片投稿",
+        "video_attachment_desc": "附件為影片：`{filename}`"
+    },
+    "err": {
+        "json_attachment_not_found": "找不到 JSON 附件",
+        "json_attachment_not_found_period": "找不到 JSON 附件。",
+        "json_format": "JSON 格式錯誤：{error}",
+        "missing_feeder_fields": "非 self 模式下 JSON 必須包含 feeder.position 和 feeder.size",
+        "missing_target_fields": "JSON 必須包含 target.position 和 target.size",
+        "open_editor_failed": "開啟 JSON 編輯器失敗: {error}",
+        "update_failed": "更新失敗：{error}"
+    },
+    "field": {
+        "file_size": "檔案大小",
+        "media_type": "媒體類型",
+        "original_filename": "原始檔名",
+        "user_id": "使用者 ID",
+        "will_save_as": "預計儲存為"
+    },
+    "media_type": {
+        "static": "靜態圖片",
+        "video": "影片"
+    },
+    "msg": {
+        "json_updated": "JSON 已更新！預覽已重新生成。"
+    },
+    "review": {
+        "btn": {
+            "approve": "批准",
+            "edit_json": "編輯 JSON",
+            "reject": "拒絕"
+        },
+        "err": {
+            "missing_image_or_json": "找不到投稿需要的圖片或 JSON 附件。",
+            "no_attachment_or_preview": "找不到投稿附件，也沒有可下載的圖片預覽。",
+            "no_audio_attachment": "找不到投稿音訊附件。",
+            "reload_failed": "重新載入素材失敗: {error}",
+            "review_failed": "審核失敗: {error}",
+            "unsupported_format": "這個投稿不是支援的圖片、GIF 或影片格式。"
+        },
+        "msg": {
+            "asset_saved": "投稿素材已儲存。",
+            "audio_saved_as": "投稿音訊已儲存為 {filename}",
+            "reloaded_assets": "已重新載入素材，目前共有 {count} 個檔案。",
+            "saved": "投稿已儲存。"
+        }
+    },
+    "suffix": {
+        "approved": " [已通過]",
+        "rejected": " [已拒絕]"
+    },
+    "web": {
+        "channel_not_found": "無法找到投稿頻道",
+        "channel_not_set": "投稿頻道未設置",
+        "error_occurred": "發生錯誤: {error}",
+        "invalid_or_expired_token": "無效或過期的驗證令牌，請重試。",
+        "invalid_token": "無效的令牌",
+        "rate_limited": "投稿過於頻繁，請等待 {seconds} 秒後再試。",
+        "submitted": "投稿已送出！",
+        "verify_failed": "驗證失敗，請重試。"
+    }
+}

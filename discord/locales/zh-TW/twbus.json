@@ -1,0 +1,86 @@
+{
+    "btn": {
+        "next_stop": "下一站",
+        "prev_stop": "上一站",
+        "route_overview": "路線總覽"
+    },
+    "embed": {
+        "favorites_title": "我的最愛",
+        "route_footer": "第 {page}/{total} 頁 ・ 共 {count} 站 ・ 上次更新"
+    },
+    "err": {
+        "fav_load_failed": "載入最愛項目時發生錯誤：{error}",
+        "fav_stop_limit": {
+            "other": "你最多只能有 {limit} 個最愛站牌。"
+        },
+        "fav_youbike_limit": {
+            "other": "你最多只能有 {limit} 個最愛 YouBike 站點。"
+        },
+        "generic": "發生錯誤：{error}",
+        "no_favorites": "你還沒有設定任何最愛站牌或YouBike站點。",
+        "no_permission_button": "你無權限使用此按鈕。",
+        "no_permission_menu": "你無權限使用此選單。",
+        "refresh_failed": "重新整理時發生錯誤：{error}",
+        "route_bus_info_not_found": "找不到該路線的公車到站資訊。",
+        "route_not_found": "找不到該路線。",
+        "route_update_failed": "更新路線資訊時發生錯誤：{error}",
+        "stop_info_not_found": "找不到該站牌的到站資訊。",
+        "stop_update_failed": "更新站牌資訊時發生錯誤：{error}",
+        "too_fast": "你操作的太快了，請稍後再試。",
+        "youbike_not_found": "找不到該YouBike站點的資訊。"
+    },
+    "field": {
+        "arrival_status": "到站狀態",
+        "available_bikes": "可借車數",
+        "coordinates": "座標",
+        "empty_spaces": "可停空位",
+        "estimated_arrival": "預估到站",
+        "last_updated": "最後更新",
+        "message": "訊息",
+        "next_stop_arrow": "下一站 ➡️",
+        "prev_stop_arrow": "⬅️ 上一站",
+        "scheduled_arrival": "預計到站",
+        "sequence": "站序",
+        "station_id": "站點編號",
+        "status": "狀態",
+        "total_spaces": "總停車格",
+        "vehicle_status": "車輛狀態"
+    },
+    "msg": {
+        "fav_stop_toggled": "{action} 站牌：{name}",
+        "fav_youbike_toggled": "{action} YouBike 站點：{name}"
+    },
+    "select": {
+        "fav_quick_access_ph": "快速前往最愛站牌或YouBike站點",
+        "pick_stop_ph": "🚏 選擇站牌查看到站資訊"
+    },
+    "value": {
+        "approaching": "進站中",
+        "boardable": "可上車",
+        "bus_text_title": "公車/{route}[{path}] - {stop}",
+        "disabled": "已停用",
+        "fav_added": "已加入最愛",
+        "fav_removed": "已從最愛移除",
+        "full": "已滿",
+        "full_suffix": "（滿）",
+        "minutes_seconds": {
+            "other": "{minutes}分 {seconds}秒"
+        },
+        "no_data": "暫無資料",
+        "operating": "營運中",
+        "origin_placeholder": "─（起點）",
+        "path_name": "路徑 {id}",
+        "seconds": {
+            "other": "{seconds}秒"
+        },
+        "stop_fetch_failed_text": "無法取得站牌資訊：\n{error}",
+        "terminus_placeholder": "─（終點）",
+        "unknown_location": "未知位置",
+        "unknown_stop_bracket": "[未知站牌]{id}",
+        "unknown_stop_name": "未知站名",
+        "unknown_youbike_bracket": "[未知YouBike站點]{id}",
+        "vehicle_status_prefix": "\n車輛狀態：\n",
+        "youbike_fetch_failed_text": "無法取得站點資訊：\n{error}",
+        "youbike_text_content": "可借/可停/總格\n{available} / {empty} / {total}"
+    }
+}

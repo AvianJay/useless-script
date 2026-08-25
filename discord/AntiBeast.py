@@ -1,4 +1,4 @@
-import asyncio
+﻿import asyncio
 import logging
 import time
 
@@ -10,14 +10,22 @@ import Moderate
 from globalenv import bot, get_server_config, set_server_config, start_bot
 from logger import log
 
+import i18n
+from i18n import t
 
+
+# RULE_NAME / LEGACY_RULE_NAMES 是找回既有 AutoMod 規則的識別字串，不可翻譯。
 RULE_NAME = "AntiBeast - block everyone/here and roles"
 LEGACY_RULE_NAMES = {"AntiBeast - block everyone/here"}
 BASE_KEYWORD_FILTER = ["@everyone", "@here"]
 EVERYONE_HERE_KEYWORDS = {"@everyone", "@here"}
-BLOCK_MESSAGE = "AntiBeast 已阻擋 everyone/here 或受保護身分組提及。"
-DEFAULT_TRIGGER_ACTION = "kick AntiBeast: {time_window} 秒內觸發 {trigger_count} 次"
 AUTOMOD_RULE_LIMIT_ERROR_CODES = {30034}
+
+
+def default_trigger_action(*, locale: str | None = None) -> str:
+    """預設連續觸發處置；`kick` 是 DSL 動作詞，{time_window}/{trigger_count}
+    由 _format_trigger_action 在執行前替換，t() 不帶參數所以會原樣保留。"""
+    return t("antibeast.default_trigger_action", locale=locale)
 SUPPORTED_ACTION_PREFIXES = {
     "ban",
     "kick",
@@ -43,7 +51,7 @@ class AntiBeastPermissionError(RuntimeError):
 @app_commands.allowed_installs(guilds=True, users=False)
 @app_commands.allowed_contexts(guilds=True, dms=False, private_channels=False)
 @app_commands.default_permissions(manage_guild=True, manage_roles=True)
-class AntiBeast(commands.GroupCog, name="antibeast"):
+class AntiBeast(commands.GroupCog, name=app_commands.locale_str("antibeast", i18n_key="cmd.antibeast.antibeast.root.name")):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
         self._trigger_history: dict[tuple[int, int], list[float]] = {}
@@ -59,7 +67,7 @@ class AntiBeast(commands.GroupCog, name="antibeast"):
                 "enabled": False,
                 "threshold": 2,
                 "time_window": 10,
-                "action": DEFAULT_TRIGGER_ACTION,
+                "action": default_trigger_action(),
                 "only_everyone_here": False,
             },
         }
@@ -110,23 +118,23 @@ class AntiBeast(commands.GroupCog, name="antibeast"):
             "enabled": bool(kick_config.get("enabled", False)),
             "threshold": min(max(threshold, 1), 20),
             "time_window": min(max(time_window, 5), 3600),
-            "action": str(kick_config.get("action") or DEFAULT_TRIGGER_ACTION).strip()[:500],
+            "action": str(kick_config.get("action") or default_trigger_action()).strip()[:500],
             "only_everyone_here": bool(kick_config.get("only_everyone_here", False)),
         }
 
     @staticmethod
     def _format_action_scope(kick_config: dict) -> str:
         if kick_config.get("only_everyone_here", False):
-            return "只處理 @everyone / @here"
-        return "處理 @everyone / @here 與未繞過身分組提及"
+            return t("antibeast.scope.everyone_here_only")
+        return t("antibeast.scope.everyone_here_and_roles")
 
     @staticmethod
     def _expand_action_string(action: str, guild_id: int | None) -> tuple[list[str], str | None]:
         action = (action or "").strip()
         if not action:
-            return [], "action 不能是空的。"
+            return [], t("antibeast.err.action_empty")
         if len(action) > 500:
-            return [], "action 最多 500 個字。"
+            return [], t("antibeast.err.action_too_long")
 
         try:
             custom_actions = Moderate._load_custom_action_strings(guild_id)
@@ -135,26 +143,28 @@ class AntiBeast(commands.GroupCog, name="antibeast"):
             return [], str(error)
 
         if len(actions) > 5:
-            return [], "一次只能執行最多 5 個動作。"
+            return [], t("moderate.err.too_many_actions")
 
         for expanded_action in actions:
             prefix = expanded_action.strip().split(" ", 1)[0]
             if prefix not in SUPPORTED_ACTION_PREFIXES:
-                return [], f"不支援的 Moderate 動作：{prefix}"
+                return [], t("antibeast.err.unsupported_action", action=prefix)
         return actions, None
 
     @staticmethod
     def _required_bot_permissions(guild: discord.Guild) -> list[str]:
+        manage_guild = t("mentionlimit.perm.manage_guild")
+        manage_roles = t("mentionlimit.perm.manage_roles")
         missing = []
         bot_member = guild.me
         if bot_member is None:
-            return ["管理伺服器", "管理身分組"]
+            return [manage_guild, manage_roles]
 
         permissions = bot_member.guild_permissions
         if not permissions.manage_guild:
-            missing.append("管理伺服器")
+            missing.append(manage_guild)
         if not permissions.manage_roles:
-            missing.append("管理身分組")
+            missing.append(manage_roles)
         return missing
 
     def _resolve_bypass_roles(self, guild: discord.Guild, config: dict) -> list[discord.Role]:
@@ -222,7 +232,8 @@ class AntiBeast(commands.GroupCog, name="antibeast"):
         return [
             discord.AutoModRuleAction(
                 type=discord.AutoModRuleActionType.block_message,
-                custom_message=BLOCK_MESSAGE,
+                custom_message=t("antibeast.block_message",
+                                 locale=i18n.resolve_locale(guild_id=guild.id)),
             )
         ]
 
@@ -284,7 +295,7 @@ class AntiBeast(commands.GroupCog, name="antibeast"):
     ) -> tuple[discord.AutoModRule | None, bool]:
         missing = self._required_bot_permissions(guild)
         if missing:
-            raise AntiBeastPermissionError(f"機器人缺少權限：{'、'.join(missing)}")
+            raise AntiBeastPermissionError(t("antibeast.err.bot_missing_perms", perms=i18n.join_list(missing)))
 
         if enabled:
             if config.get("everyone_mention_before") is None:
@@ -315,22 +326,19 @@ class AntiBeast(commands.GroupCog, name="antibeast"):
 
     async def _send_sync_error(self, interaction: discord.Interaction, error: Exception):
         if isinstance(error, AntiBeastPermissionError):
-            message = f"⚠️ AntiBeast 同步失敗：{error}"
+            message = t("antibeast.err.sync_failed", error=error)
         elif isinstance(error, discord.Forbidden):
-            message = f"⚠️ AntiBeast 同步失敗：{error.text or error}"
+            message = t("antibeast.err.sync_failed", error=error.text or error)
         elif isinstance(error, discord.HTTPException):
             if self._is_automod_rule_limit_error(error):
-                message = (
-                    "⚠️ AntiBeast 無法建立 AutoMod 規則：這個伺服器的 Discord AutoMod 規則數量已達上限。"
-                    "請先刪除不需要的 AutoMod 規則，或移除舊的 AntiBeast 規則後再試。"
-                )
+                message = t("antibeast.err.rule_limit_reached")
             else:
-                message = f"⚠️ AntiBeast 同步失敗：Discord API 回應錯誤 ({error.status})。"
+                message = t("antibeast.err.sync_http", status=error.status)
         else:
-            message = "⚠️ AntiBeast 同步失敗，請稍後再試。"
+            message = t("antibeast.err.sync_generic")
 
         log(
-            f"AntiBeast 同步失敗: {error}",
+            f"AntiBeast sync failed: {error}",
             level=logging.ERROR,
             module_name="AntiBeast",
             guild=interaction.guild,
@@ -354,7 +362,7 @@ class AntiBeast(commands.GroupCog, name="antibeast"):
         mentions_automod = "automod" in error_text or "auto moderation" in error_text
         mentions_limit = any(
             keyword in error_text
-            for keyword in ("maximum", "limit", "too many", "reached", "已達", "上限")
+            for keyword in ("maximum", "limit", "too many", "reached", "已達", "上限")  # i18n: skip (API error matching)
         )
         return mentions_automod and mentions_limit
 
@@ -475,7 +483,7 @@ class AntiBeast(commands.GroupCog, name="antibeast"):
         _, error = self._expand_action_string(formatted_action, guild.id)
         if error:
             log(
-                f"AntiBeast 觸發動作無效: {error}",
+                f"AntiBeast trigger action is invalid: {error}",
                 level=logging.ERROR,
                 module_name="AntiBeast",
                 guild=guild,
@@ -493,7 +501,7 @@ class AntiBeast(commands.GroupCog, name="antibeast"):
             )
         except Exception as error:
             log(
-                f"AntiBeast 執行觸發動作失敗: {error}",
+                f"AntiBeast failed to run the trigger action: {error}",
                 level=logging.ERROR,
                 module_name="AntiBeast",
                 guild=guild,
@@ -502,7 +510,7 @@ class AntiBeast(commands.GroupCog, name="antibeast"):
             return False
 
         log(
-            f"AntiBeast 已對 {member} 執行觸發動作: {formatted_action} / {result}",
+            f"AntiBeast ran the trigger action on {member}: {formatted_action} / {result}",
             module_name="AntiBeast",
             guild=guild,
             user=member,
@@ -512,89 +520,70 @@ class AntiBeast(commands.GroupCog, name="antibeast"):
     def _build_about_embed(self) -> discord.Embed:
         embed = discord.Embed(
             title="AntiBeast",
-            description=(
-                "眾所周知，現在 Discord 有非常多的 Mr. Beast 圖片詐騙。\n"
-                "AntiBeast 會用 Discord 原生 AutoMod 阻擋 everyone/here 與身分組提及，"
-                "同時讓詐騙機器人以為伺服器允許大量提及。"
-            ),
+            description=t("antibeast.about.desc"),
             color=discord.Color.blue(),
         )
-        embed.add_field(
-            name="AutoMod",
-            value=(
-                "啟用時會建立/更新 AntiBeast 專用 AutoMod 規則，封鎖 everyone/here 與所有非繞過身分組提及。\n"
-                "同時會暫時開啟 @everyone 的提及 everyone/here/所有身分組權限；停用時會還原原本設定。"
-            ),
-            inline=False,
-        )
-        embed.add_field(
-            name="繞過",
-            value=(
-                "可以把需要正常被提及的身分組加入繞過清單；"
-                "這些身分組不會被放進 AutoMod keyword filter。"
-            ),
-            inline=False,
-        )
-        embed.add_field(
-            name="連續觸發處置",
-            value="可以設定在指定秒數內觸發 AntiBeast 幾次後，執行 Moderate 動作指令；預設是踢出。",
-            inline=False,
-        )
+        embed.add_field(name="AutoMod", value=t("antibeast.about.automod_body"), inline=False)
+        embed.add_field(name=t("antibeast.about.bypass_title"), value=t("antibeast.about.bypass_body"), inline=False)
+        embed.add_field(name=t("antibeast.field.trigger_action"), value=t("antibeast.about.trigger_action_body"), inline=False)
         return embed
 
     def _build_config_embed(self, guild: discord.Guild, config: dict) -> discord.Embed:
         roles = self._resolve_bypass_roles(guild, config)
         protected_role_count = max(len(guild.roles) - 1 - len(roles), 0)
         embed = discord.Embed(
-            title="AntiBeast 設定",
+            title=t("antibeast.config.title"),
             color=discord.Color.green() if config["enabled"] else discord.Color.light_grey(),
         )
-        embed.add_field(name="狀態", value="✅ 啟用" if config["enabled"] else "❌ 停用", inline=True)
+        embed.add_field(name=t("antibeast.field.status"),
+                        value=t("antibeast.state.enabled") if config["enabled"] else t("antibeast.state.disabled"),
+                        inline=True)
         embed.add_field(
-            name="@everyone 權限",
-            value="可提及 everyone/here" if guild.default_role.permissions.mention_everyone else "不可提及 everyone/here",
+            name=t("antibeast.field.everyone_permission"),
+            value=t("antibeast.config.everyone_can_mention") if guild.default_role.permissions.mention_everyone
+            else t("antibeast.config.everyone_cannot_mention"),
             inline=True,
         )
         embed.add_field(
-            name="AutoMod 規則",
-            value=f"`{config['rule_id']}`" if config.get("rule_id") else "尚未建立",
+            name=t("antibeast.field.automod_rule"),
+            value=f"`{config['rule_id']}`" if config.get("rule_id") else t("antibeast.config.rule_not_created"),
             inline=True,
         )
         embed.add_field(
-            name="受保護身分組",
-            value=f"{protected_role_count} 個身分組會被放進 keyword filter",
+            name=t("antibeast.field.protected_roles"),
+            value=t("antibeast.config.protected_role_count", count=protected_role_count),
             inline=False,
         )
         kick_config = config["kick"]
         kick_text = (
-            f"✅ 啟用，{kick_config['time_window']} 秒內觸發 {kick_config['threshold']} 次後執行："
-            f"`{kick_config['action']}`\n"
-            f"範圍：{self._format_action_scope(kick_config)}"
+            t("antibeast.config.trigger_enabled",
+              seconds=kick_config["time_window"], count=kick_config["threshold"],
+              action=kick_config["action"], scope=self._format_action_scope(kick_config))
             if kick_config["enabled"]
-            else f"❌ 停用\n範圍：{self._format_action_scope(kick_config)}"
+            else t("antibeast.config.trigger_disabled", scope=self._format_action_scope(kick_config))
         )
-        embed.add_field(name="連續觸發處置", value=kick_text, inline=False)
+        embed.add_field(name=t("antibeast.field.trigger_action"), value=kick_text, inline=False)
         embed.add_field(
-            name="繞過身分組",
-            value="\n".join(role.mention for role in roles) if roles else "目前沒有任何想要被繞過的身分組。",
+            name=t("antibeast.field.bypass_roles"),
+            value="\n".join(role.mention for role in roles) if roles else t("antibeast.config.no_bypass_roles"),
             inline=False,
         )
         return embed
 
-    @app_commands.command(name="about", description="關於 AntiBeast")
+    @app_commands.command(name=app_commands.locale_str("about", i18n_key="cmd.antibeast.antibeast.about.name"), description=app_commands.locale_str("About AntiBeast", i18n_key="cmd.antibeast.antibeast.about.desc"))
     async def about(self, interaction: discord.Interaction):
         await interaction.response.send_message(embed=self._build_about_embed(), ephemeral=True)
 
-    @app_commands.command(name="setup", description="互動式設定並啟用 AntiBeast")
+    @app_commands.command(name=app_commands.locale_str("setup", i18n_key="cmd.antibeast.antibeast.setup.name"), description=app_commands.locale_str("Interactively configure and enable AntiBeast", i18n_key="cmd.antibeast.antibeast.setup.desc"))
     @app_commands.default_permissions(administrator=True)
     async def setup(self, interaction: discord.Interaction):
         config = self._get_config(interaction.guild.id)
         view = AntiBeastSetupView(self, interaction.user, interaction.guild, config)
         await view.send_about(interaction)
 
-    @app_commands.command(name="toggle", description="啟用/停用 AntiBeast")
+    @app_commands.command(name=app_commands.locale_str("toggle", i18n_key="cmd.antibeast.antibeast.toggle.name"), description=app_commands.locale_str("Enable/disable AntiBeast", i18n_key="cmd.antibeast.antibeast.toggle.desc"))
     @app_commands.default_permissions(administrator=True)
-    @app_commands.describe(enable="留空則切換目前狀態")
+    @app_commands.describe(enable=app_commands.locale_str("Leave empty to toggle the current state", i18n_key="cmd.antibeast.antibeast.toggle.param.enable"))
     async def toggle(self, interaction: discord.Interaction, enable: bool = None):
         await interaction.response.defer(ephemeral=True)
 
@@ -614,27 +603,27 @@ class AntiBeast(commands.GroupCog, name="antibeast"):
             return
 
         set_server_config(interaction.guild.id, "antibeast", config)
-        status = "啟用" if enabled else "停用"
-        rule_text = f"AutoMod 規則 ID：`{rule.id}`" if rule else "沒有找到既有 AutoMod 規則。"
-        everyone_text = "已更新 @everyone 權限" if everyone_changed else "@everyone 權限已是目標狀態"
+        rule_text = t("antibeast.toggle.rule_id", rule_id=rule.id) if rule else t("antibeast.toggle.no_rule")
+        everyone_text = t("antibeast.toggle.everyone_updated") if everyone_changed else t("antibeast.toggle.everyone_unchanged")
         log(
-            f"AntiBeast 已{status}",
+            f"AntiBeast {'enabled' if enabled else 'disabled'}",
             module_name="AntiBeast",
             guild=interaction.guild,
             user=interaction.user,
         )
         await interaction.followup.send(
-            f"✅ AntiBeast 已**{status}**。\n{rule_text}\n{everyone_text}。",
+            t("antibeast.toggle.enabled" if enabled else "antibeast.toggle.disabled")
+            + f"\n{rule_text}\n{everyone_text}",
             ephemeral=True,
             allowed_mentions=discord.AllowedMentions.none(),
         )
 
-    @app_commands.command(name="bypass", description="新增/移除想要被繞過的身分組")
+    @app_commands.command(name=app_commands.locale_str("bypass", i18n_key="cmd.antibeast.antibeast.bypass.name"), description=app_commands.locale_str("Add/remove roles that bypass AntiBeast", i18n_key="cmd.antibeast.antibeast.bypass.desc"))
     @app_commands.default_permissions(administrator=True)
-    @app_commands.describe(role="要切換繞過狀態的身分組")
+    @app_commands.describe(role=app_commands.locale_str("The role to toggle bypass for", i18n_key="cmd.antibeast.antibeast.bypass.param.role"))
     async def bypass(self, interaction: discord.Interaction, role: discord.Role):
         if role.is_default():
-            await interaction.response.send_message("⚠️ 不能把 @everyone 加入繞過清單。", ephemeral=True)
+            await interaction.response.send_message(t("antibeast.err.cannot_bypass_everyone"), ephemeral=True)
             return
 
         await interaction.response.defer(ephemeral=True)
@@ -642,10 +631,10 @@ class AntiBeast(commands.GroupCog, name="antibeast"):
         bypass_roles = config["bypass_roles"]
         if role.id in bypass_roles:
             bypass_roles.remove(role.id)
-            action = "移除"
+            removed = True
         else:
             bypass_roles.append(role.id)
-            action = "新增"
+            removed = False
 
         if config["enabled"]:
             reason = f"AntiBeast bypass updated by {interaction.user} ({interaction.user.id})"
@@ -663,26 +652,28 @@ class AntiBeast(commands.GroupCog, name="antibeast"):
 
         set_server_config(interaction.guild.id, "antibeast", config)
         log(
-            f"AntiBeast 繞過清單{action} {role.name} ({role.id})",
+            f"AntiBeast bypass list {'removed' if removed else 'added'} {role.name} ({role.id})",
             module_name="AntiBeast",
             guild=interaction.guild,
             user=interaction.user,
         )
-        suffix = "並已同步 AutoMod 關鍵字規則" if config["enabled"] else "啟用時會套用到 AutoMod 關鍵字規則"
+        suffix = (t("antibeast.bypass.synced") if config["enabled"]
+                  else t("antibeast.bypass.applies_when_enabled"))
         await interaction.followup.send(
-            f"✅ 已{action} **{role.name}**，{suffix}。",
+            t("antibeast.bypass.removed" if removed else "antibeast.bypass.added",
+              role=role.name, suffix=suffix),
             ephemeral=True,
             allowed_mentions=discord.AllowedMentions.none(),
         )
 
-    @app_commands.command(name="settings", description="設定 AntiBeast 短時間多次觸發時的處置動作")
+    @app_commands.command(name=app_commands.locale_str("settings", i18n_key="cmd.antibeast.antibeast.settings.name"), description=app_commands.locale_str("Configure what AntiBeast does after repeated triggers in a short time", i18n_key="cmd.antibeast.antibeast.settings.desc"))
     @app_commands.default_permissions(administrator=True)
     @app_commands.describe(
-        enable="是否啟用自動處置",
-        threshold="時間窗口內觸發幾次後處置（1-20）",
-        time_window="時間窗口秒數（5-3600）",
-        action="Moderate 動作指令，留空則保留目前設定",
-        only_everyone_here="是否只處理提及 @everyone 或 @here 的成員",
+        enable=app_commands.locale_str("Enable automatic action", i18n_key="cmd.antibeast.antibeast.settings.param.enable"),
+        threshold=app_commands.locale_str("Act after this many triggers within the window (1-20)", i18n_key="cmd.antibeast.antibeast.settings.param.threshold"),
+        time_window=app_commands.locale_str("Time window in seconds (5-3600)", i18n_key="cmd.antibeast.antibeast.settings.param.time_window"),
+        action=app_commands.locale_str("Moderate action command; leave empty to keep the current setting", i18n_key="cmd.antibeast.antibeast.settings.param.action"),
+        only_everyone_here=app_commands.locale_str("Only act on members who mention @everyone or @here", i18n_key="cmd.antibeast.antibeast.settings.param.only_everyone_here"),
     )
     @app_commands.autocomplete(action=Moderate.action_input_autocomplete)
     async def settings(
@@ -705,14 +696,14 @@ class AntiBeast(commands.GroupCog, name="antibeast"):
 
         if threshold is not None:
             if threshold < 1 or threshold > 20:
-                await interaction.response.send_message("⚠️ threshold 必須介於 1 到 20。", ephemeral=True)
+                await interaction.response.send_message(t("antibeast.err.threshold_range_param"), ephemeral=True)
                 return
             kick_config["threshold"] = threshold
             changed = True
 
         if time_window is not None:
             if time_window < 5 or time_window > 3600:
-                await interaction.response.send_message("⚠️ time_window 必須介於 5 到 3600 秒。", ephemeral=True)
+                await interaction.response.send_message(t("antibeast.err.time_window_range_param"), ephemeral=True)
                 return
             kick_config["time_window"] = time_window
             changed = True
@@ -737,20 +728,18 @@ class AntiBeast(commands.GroupCog, name="antibeast"):
         config["kick"] = kick_config
 
         if not kick_config["enabled"]:
-            status = f"❌ 停用\n範圍：{self._format_action_scope(kick_config)}"
+            status = t("antibeast.config.trigger_disabled", scope=self._format_action_scope(kick_config))
         else:
-            status = (
-                f"✅ 啟用，{kick_config['time_window']} 秒內觸發 {kick_config['threshold']} 次後執行："
-                f"`{kick_config['action']}`\n"
-                f"範圍：{self._format_action_scope(kick_config)}"
-            )
+            status = t("antibeast.config.trigger_enabled",
+                       seconds=kick_config["time_window"], count=kick_config["threshold"],
+                       action=kick_config["action"], scope=self._format_action_scope(kick_config))
 
-        prefix = "已更新設定。" if changed else "目前設定："
+        prefix = t("mentionlimit.settings.updated") if changed else t("mentionlimit.settings.current")
 
         def persist(actor):
             set_server_config(interaction.guild.id, "antibeast", config)
             log(
-                f"AntiBeast 自動處置設定更新: {kick_config}",
+                f"AntiBeast trigger action settings updated: {kick_config}",
                 module_name="AntiBeast",
                 guild=interaction.guild,
                 user=actor,
@@ -760,10 +749,10 @@ class AntiBeast(commands.GroupCog, name="antibeast"):
             async def confirm_action(confirm_interaction: discord.Interaction, confirmed: dict):
                 persist(confirm_interaction.user)
                 await confirm_interaction.response.edit_message(
-                    content=f"{prefix}\n自動處置：{status}",
+                    content=prefix + "\n" + t("antibeast.settings.trigger_line", status=status),
                     embed=Moderate.build_action_preview_embed(
                         confirmed,
-                        title="AntiBeast 動作設定完成",
+                        title=t("antibeast.action_setup_done_title"),
                         saved=True,
                     ),
                     view=None,
@@ -771,7 +760,7 @@ class AntiBeast(commands.GroupCog, name="antibeast"):
                 )
 
             await interaction.response.send_message(
-                embed=Moderate.build_action_preview_embed(action_analysis, title="確認你的意思"),
+                embed=Moderate.build_action_preview_embed(action_analysis, title=t("moderate.confirm_your_intent_title")),
                 view=Moderate.ActionConfirmationView(
                     interaction.user.id,
                     action_analysis,
@@ -783,19 +772,19 @@ class AntiBeast(commands.GroupCog, name="antibeast"):
 
         persist(interaction.user)
         response_kwargs = {
-            "content": f"{prefix}\n自動處置：{status}",
+            "content": prefix + "\n" + t("antibeast.settings.trigger_line", status=status),
             "ephemeral": True,
             "allowed_mentions": discord.AllowedMentions.none(),
         }
         if action_analysis is not None:
             response_kwargs["embed"] = Moderate.build_action_preview_embed(
                 action_analysis,
-                title="AntiBeast 動作設定完成",
+                title=t("antibeast.action_setup_done_title"),
                 saved=True,
             )
         await interaction.response.send_message(**response_kwargs)
 
-    @app_commands.command(name="list", description="列出 AntiBeast 設定")
+    @app_commands.command(name=app_commands.locale_str("list", i18n_key="cmd.antibeast.antibeast.list.name"), description=app_commands.locale_str("List AntiBeast settings", i18n_key="cmd.antibeast.antibeast.list.desc"))
     @app_commands.default_permissions(administrator=True)
     async def list_config(self, interaction: discord.Interaction):
         config = self._get_config(interaction.guild.id)
@@ -821,7 +810,7 @@ class AntiBeast(commands.GroupCog, name="antibeast"):
             )
         except Exception as error:
             log(
-                f"AntiBeast 身分組規則同步失敗: {error}",
+                f"AntiBeast role rule sync failed: {error}",
                 level=logging.ERROR,
                 module_name="AntiBeast",
                 guild=guild,
@@ -858,7 +847,12 @@ class AntiBeast(commands.GroupCog, name="antibeast"):
         guild = execution.guild
         if guild is None:
             return
+        # listener 不在 choke point 內；觸發處置可能發出公開警告。
+        async with i18n.guild_scope(guild.id):
+            await self._on_automod_action_impl(execution)
 
+    async def _on_automod_action_impl(self, execution: discord.AutoModAction):
+        guild = execution.guild
         config = self._get_config(guild.id)
         kick_config = config["kick"]
         if not config["enabled"] or not kick_config["enabled"]:
@@ -882,7 +876,7 @@ class AntiBeast(commands.GroupCog, name="antibeast"):
         member = await self._get_execution_member(guild, execution)
         if member is None:
             log(
-                f"AntiBeast 達到處置門檻，但找不到用戶 {execution.user_id}。",
+                f"AntiBeast hit the action threshold but couldn't find user {execution.user_id}.",
                 level=logging.WARNING,
                 module_name="AntiBeast",
                 guild=guild,
@@ -898,7 +892,7 @@ class AntiBeast(commands.GroupCog, name="antibeast"):
         )
 
 
-class AntiBeastSetupView(discord.ui.View):
+class AntiBeastSetupView(i18n.I18nView):
     def __init__(
         self,
         cog: AntiBeast,
@@ -914,7 +908,7 @@ class AntiBeastSetupView(discord.ui.View):
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         if interaction.user.id != self.owner.id:
-            await interaction.response.send_message("這個設定流程不是你的。", ephemeral=True)
+            await interaction.response.send_message(t("mentionlimit.err.not_your_setup"), ephemeral=True)
             return False
         return True
 
@@ -931,17 +925,14 @@ class AntiBeastSetupView(discord.ui.View):
         self.add_item(AntiBeastKeepBypassButton())
         self.add_item(AntiBeastClearBypassButton())
         embed = discord.Embed(
-            title="AntiBeast Setup: 繞過身分組",
-            description=(
-                "選擇需要正常被提及的身分組。\n"
-                "被選到的身分組不會被放進 AntiBeast 的 AutoMod keyword filter。"
-            ),
+            title=t("antibeast.setup.bypass_title"),
+            description=t("antibeast.setup.bypass_desc"),
             color=discord.Color.blurple(),
         )
         roles = self.cog._resolve_bypass_roles(self.guild, self.config)
         embed.add_field(
-            name="目前繞過",
-            value="\n".join(role.mention for role in roles) if roles else "尚未設定",
+            name=t("antibeast.setup.current_bypass"),
+            value="\n".join(role.mention for role in roles) if roles else t("antibeast.setup.not_configured"),
             inline=False,
         )
         embed.set_footer(text="AntiBeast setup: 2/4")
@@ -956,27 +947,25 @@ class AntiBeastSetupView(discord.ui.View):
         self.add_item(AntiBeastToggleEveryoneHereOnlyButton(kick_config["only_everyone_here"]))
         self.add_item(AntiBeastBackToBypassButton())
         embed = discord.Embed(
-            title="AntiBeast Setup: 連續觸發處置",
-            description=(
-                "設定同一個使用者在短時間內連續觸發 AntiBeast 後要執行的 Moderate 指令。\n"
-                "預設會在門檻達成後踢出。"
-            ),
+            title=t("antibeast.setup.action_title"),
+            description=t("antibeast.setup.action_desc"),
             color=discord.Color.blurple(),
         )
         status = (
-            f"{kick_config['time_window']} 秒內 {kick_config['threshold']} 次，執行 `{kick_config['action']}`"
+            t("antibeast.setup.action_summary",
+              seconds=kick_config["time_window"], count=kick_config["threshold"], action=kick_config["action"])
             if kick_config["enabled"]
-            else "目前停用連續觸發處置"
+            else t("antibeast.setup.action_disabled")
         )
-        embed.add_field(name="目前處置", value=status, inline=False)
+        embed.add_field(name=t("antibeast.setup.current_action"), value=status, inline=False)
         embed.add_field(
-            name="處置範圍",
+            name=t("antibeast.setup.action_scope"),
             value=self.cog._format_action_scope(kick_config),
             inline=False,
         )
         embed.add_field(
-            name="可用變數",
-            value="`{time_window}`、`{trigger_count}` 會在執行前替換成實際數值。",
+            name=t("antibeast.setup.variables"),
+            value=t("antibeast.setup.variables_body"),
             inline=False,
         )
         embed.set_footer(text="AntiBeast setup: 3/4")
@@ -987,24 +976,26 @@ class AntiBeastSetupView(discord.ui.View):
         self.add_item(AntiBeastEnableButton())
         self.add_item(AntiBeastBackToActionButton())
         embed = discord.Embed(
-            title="AntiBeast Setup: 確認啟用",
-            description="確認設定後按下啟用，AntiBeast 會建立/更新 AutoMod 規則並套用 @everyone 權限。",
+            title=t("antibeast.setup.confirm_title"),
+            description=t("antibeast.setup.confirm_desc"),
             color=discord.Color.green(),
         )
         roles = self.cog._resolve_bypass_roles(self.guild, self.config)
         kick_config = self.config["kick"]
         embed.add_field(
-            name="繞過身分組",
-            value="\n".join(role.mention for role in roles) if roles else "尚未設定",
+            name=t("antibeast.field.bypass_roles"),
+            value="\n".join(role.mention for role in roles) if roles else t("antibeast.setup.not_configured"),
             inline=False,
         )
         embed.add_field(
-            name="連續觸發處置",
+            name=t("antibeast.field.trigger_action"),
             value=(
-                f"{kick_config['time_window']} 秒內 {kick_config['threshold']} 次，執行 `{kick_config['action']}`\n"
-                f"範圍：{self.cog._format_action_scope(kick_config)}"
+                t("antibeast.setup.confirm_action_enabled",
+                  seconds=kick_config["time_window"], count=kick_config["threshold"],
+                  action=kick_config["action"], scope=self.cog._format_action_scope(kick_config))
                 if kick_config["enabled"]
-                else f"停用\n範圍：{self.cog._format_action_scope(kick_config)}"
+                else t("antibeast.setup.confirm_action_disabled",
+                       scope=self.cog._format_action_scope(kick_config))
             ),
             inline=False,
         )
@@ -1027,13 +1018,13 @@ class AntiBeastSetupView(discord.ui.View):
             return
 
         embed = self.cog._build_config_embed(self.guild, self.config)
-        embed.title = "AntiBeast 已啟用"
+        embed.title = t("antibeast.setup.enabled_title")
         kick_config = self.config["kick"]
         if kick_config["enabled"]:
             analysis = Moderate.analyze_action_string(kick_config["action"], self.guild.id)
             if analysis["valid"]:
                 embed.add_field(
-                    name="動作執行預覽",
+                    name=t("antibeast.setup.action_preview"),
                     value="\n".join(
                         f"{index}. {line}"
                         for index, line in enumerate(analysis.get("preview", []), 1)
@@ -1042,7 +1033,7 @@ class AntiBeastSetupView(discord.ui.View):
                 )
         set_server_config(self.guild.id, "antibeast", self.config)
         log(
-            "AntiBeast 已透過 setup 啟用",
+            "AntiBeast enabled via setup",
             module_name="AntiBeast",
             guild=self.guild,
             user=interaction.user,
@@ -1056,7 +1047,7 @@ class AntiBeastSetupView(discord.ui.View):
 
 class AntiBeastSetupContinueButton(discord.ui.Button):
     def __init__(self):
-        super().__init__(label="繼續", style=discord.ButtonStyle.primary)
+        super().__init__(label=t("common.btn.next"), style=discord.ButtonStyle.primary)
 
     async def callback(self, interaction: discord.Interaction):
         await self.view.show_bypass(interaction)
@@ -1064,7 +1055,7 @@ class AntiBeastSetupContinueButton(discord.ui.Button):
 
 class AntiBeastBypassRoleSelect(discord.ui.RoleSelect):
     def __init__(self):
-        super().__init__(placeholder="選擇要繞過的身分組", min_values=1, max_values=25)
+        super().__init__(placeholder=t("antibeast.setup.bypass_select_ph"), min_values=1, max_values=25)
 
     async def callback(self, interaction: discord.Interaction):
         selected_roles = [role for role in self.values if not role.is_default()]
@@ -1074,7 +1065,7 @@ class AntiBeastBypassRoleSelect(discord.ui.RoleSelect):
 
 class AntiBeastKeepBypassButton(discord.ui.Button):
     def __init__(self):
-        super().__init__(label="保留目前繞過", style=discord.ButtonStyle.secondary)
+        super().__init__(label=t("antibeast.btn.keep_bypass"), style=discord.ButtonStyle.secondary)
 
     async def callback(self, interaction: discord.Interaction):
         await self.view.show_action(interaction)
@@ -1082,7 +1073,7 @@ class AntiBeastKeepBypassButton(discord.ui.Button):
 
 class AntiBeastClearBypassButton(discord.ui.Button):
     def __init__(self):
-        super().__init__(label="清空並繼續", style=discord.ButtonStyle.danger)
+        super().__init__(label=t("mentionlimit.btn.clear_and_continue"), style=discord.ButtonStyle.danger)
 
     async def callback(self, interaction: discord.Interaction):
         self.view.config["bypass_roles"] = []
@@ -1091,7 +1082,7 @@ class AntiBeastClearBypassButton(discord.ui.Button):
 
 class AntiBeastDefaultActionButton(discord.ui.Button):
     def __init__(self):
-        super().__init__(label="使用預設踢出", style=discord.ButtonStyle.primary)
+        super().__init__(label=t("antibeast.btn.use_default_kick"), style=discord.ButtonStyle.primary)
 
     async def callback(self, interaction: discord.Interaction):
         self.view.config["kick"] = self.view.cog._normalize_kick_config(
@@ -1099,7 +1090,7 @@ class AntiBeastDefaultActionButton(discord.ui.Button):
                 "enabled": True,
                 "threshold": 2,
                 "time_window": 10,
-                "action": DEFAULT_TRIGGER_ACTION,
+                "action": default_trigger_action(),
                 "only_everyone_here": self.view.config["kick"]["only_everyone_here"],
             }
         )
@@ -1108,7 +1099,7 @@ class AntiBeastDefaultActionButton(discord.ui.Button):
 
 class AntiBeastCustomActionButton(discord.ui.Button):
     def __init__(self):
-        super().__init__(label="自訂處置", style=discord.ButtonStyle.secondary)
+        super().__init__(label=t("antibeast.btn.custom_action"), style=discord.ButtonStyle.secondary)
 
     async def callback(self, interaction: discord.Interaction):
         await interaction.response.send_modal(AntiBeastActionModal(self.view))
@@ -1116,7 +1107,7 @@ class AntiBeastCustomActionButton(discord.ui.Button):
 
 class AntiBeastDisableActionButton(discord.ui.Button):
     def __init__(self):
-        super().__init__(label="不啟用處置", style=discord.ButtonStyle.secondary)
+        super().__init__(label=t("antibeast.btn.no_action"), style=discord.ButtonStyle.secondary)
 
     async def callback(self, interaction: discord.Interaction):
         kick_config = dict(self.view.config["kick"])
@@ -1127,7 +1118,8 @@ class AntiBeastDisableActionButton(discord.ui.Button):
 
 class AntiBeastToggleEveryoneHereOnlyButton(discord.ui.Button):
     def __init__(self, enabled: bool):
-        label = "僅處理 everyone/here：開" if enabled else "僅處理 everyone/here：關"
+        label = t("antibeast.btn.everyone_here_only_toggle",
+                  state=t("mentionlimit.state.on_plain") if enabled else t("mentionlimit.state.off_plain"))
         style = discord.ButtonStyle.primary if enabled else discord.ButtonStyle.secondary
         super().__init__(label=label, style=style, row=1)
 
@@ -1140,7 +1132,7 @@ class AntiBeastToggleEveryoneHereOnlyButton(discord.ui.Button):
 
 class AntiBeastBackToBypassButton(discord.ui.Button):
     def __init__(self):
-        super().__init__(label="返回繞過", style=discord.ButtonStyle.secondary, row=1)
+        super().__init__(label=t("antibeast.btn.back_to_bypass"), style=discord.ButtonStyle.secondary, row=1)
 
     async def callback(self, interaction: discord.Interaction):
         await self.view.show_bypass(interaction)
@@ -1148,7 +1140,7 @@ class AntiBeastBackToBypassButton(discord.ui.Button):
 
 class AntiBeastBackToActionButton(discord.ui.Button):
     def __init__(self):
-        super().__init__(label="返回處置", style=discord.ButtonStyle.secondary)
+        super().__init__(label=t("antibeast.btn.back_to_action"), style=discord.ButtonStyle.secondary)
 
     async def callback(self, interaction: discord.Interaction):
         await self.view.show_action(interaction)
@@ -1156,33 +1148,33 @@ class AntiBeastBackToActionButton(discord.ui.Button):
 
 class AntiBeastEnableButton(discord.ui.Button):
     def __init__(self):
-        super().__init__(label="啟用 AntiBeast", style=discord.ButtonStyle.success)
+        super().__init__(label=t("antibeast.btn.enable"), style=discord.ButtonStyle.success)
 
     async def callback(self, interaction: discord.Interaction):
         await self.view.finish_enable(interaction)
 
 
-class AntiBeastActionModal(discord.ui.Modal, title="AntiBeast 處置設定"):
+class AntiBeastActionModal(i18n.I18nModal, title=i18n.K("antibeast.modal.action_title")):
     def __init__(self, setup_view: AntiBeastSetupView):
         super().__init__()
         self.setup_view = setup_view
         kick_config = setup_view.config["kick"]
         self.threshold = discord.ui.TextInput(
-            label="觸發次數",
+            label=t("antibeast.modal.threshold_label"),
             default=str(kick_config["threshold"]),
             placeholder="2",
             max_length=2,
         )
         self.time_window = discord.ui.TextInput(
-            label="時間窗口秒數",
+            label=t("antibeast.modal.time_window_label"),
             default=str(kick_config["time_window"]),
             placeholder="10",
             max_length=4,
         )
         self.action = discord.ui.TextInput(
-            label="Moderate 動作指令",
+            label=t("antibeast.modal.action_label"),
             default=kick_config["action"],
-            placeholder=DEFAULT_TRIGGER_ACTION,
+            placeholder=default_trigger_action(),
             style=discord.TextStyle.paragraph,
             max_length=500,
         )
@@ -1195,14 +1187,14 @@ class AntiBeastActionModal(discord.ui.Modal, title="AntiBeast 處置設定"):
             threshold = int(str(self.threshold.value).strip())
             time_window = int(str(self.time_window.value).strip())
         except ValueError:
-            await interaction.response.send_message("⚠️ 觸發次數與時間窗口都必須是整數。", ephemeral=True)
+            await interaction.response.send_message(t("antibeast.err.modal_not_int"), ephemeral=True)
             return
 
         if threshold < 1 or threshold > 20:
-            await interaction.response.send_message("⚠️ 觸發次數必須介於 1 到 20。", ephemeral=True)
+            await interaction.response.send_message(t("antibeast.err.threshold_range"), ephemeral=True)
             return
         if time_window < 5 or time_window > 3600:
-            await interaction.response.send_message("⚠️ 時間窗口必須介於 5 到 3600 秒。", ephemeral=True)
+            await interaction.response.send_message(t("antibeast.err.time_window_range"), ephemeral=True)
             return
 
         action = str(self.action.value).strip()
@@ -1234,7 +1226,7 @@ class AntiBeastActionModal(discord.ui.Modal, title="AntiBeast 處置設定"):
                 await self.setup_view.show_action(cancel_interaction)
 
             await interaction.response.edit_message(
-                embed=Moderate.build_action_preview_embed(analysis, title="確認你的意思"),
+                embed=Moderate.build_action_preview_embed(analysis, title=t("moderate.confirm_your_intent_title")),
                 view=Moderate.ActionConfirmationView(
                     interaction.user.id,
                     analysis,

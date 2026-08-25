@@ -1,4 +1,4 @@
-# https://dctw.xyz/docs/?tags=api
+﻿# https://dctw.xyz/docs/?tags=api
 from __future__ import annotations
 
 from globalenv import bot, get_user_data, set_user_data, config
@@ -11,6 +11,8 @@ import datetime
 import math
 import re
 import time
+import i18n
+from i18n import t
 
 
 API_BASE = "https://dctw.xyz"
@@ -24,53 +26,74 @@ FETCH_LIMIT = 50
 BUMP_COOLDOWN_SECONDS = 60
 SAFE_MENTIONS = discord.AllowedMentions.none()
 
-BOT_TAGS = {
-    "music": "音樂",
-    "minigames": "小遊戲",
-    "fun": "有趣",
-    "utility": "工具",
-    "management": "管理",
-    "customizable": "可自訂",
-    "automation": "自動化",
-    "roleplay": "角色扮演",
-    "nsfw": "NSFW",
-}
+def _bot_tags() -> dict:
+    return {
+        "music": t("dctw.tag.bot.music"),
+        "minigames": t("dctw.tag.bot.minigames"),
+        "fun": t("dctw.tag.bot.fun"),
+        "utility": t("dctw.tag.bot.utility"),
+        "management": t("dctw.tag.bot.management"),
+        "customizable": t("dctw.tag.bot.customizable"),
+        "automation": t("dctw.tag.bot.automation"),
+        "roleplay": t("dctw.tag.bot.roleplay"),
+        "nsfw": "NSFW",
+    }
 
-SERVER_TAGS = {
-    "gaming": "遊戲",
-    "community": "社群",
-    "anime": "動漫",
-    "art": "藝術",
-    "hangout": "閒聊",
-    "programming": "程式設計",
-    "programing": "程式設計",
-    "acting": "表演",
-    "nsfw": "NSFW",
-    "roleplay": "角色扮演",
-    "politics": "政治",
-}
 
-TEMPLATE_TAGS = {
-    "community": "支援",
-    "gaming": "遊戲",
-    "anime": "大型",
-    "art": "趣味",
-    "nsfw": "NSFW",
-}
+def _server_tags() -> dict:
+    return {
+        "gaming": t("dctw.tag.server.gaming"),
+        "community": t("dctw.tag.server.community"),
+        "anime": t("dctw.tag.server.anime"),
+        "art": t("dctw.tag.server.art"),
+        "hangout": t("dctw.tag.server.hangout"),
+        "programming": t("dctw.tag.server.programming"),
+        "programing": t("dctw.tag.server.programming"),
+        "acting": t("dctw.tag.server.acting"),
+        "nsfw": "NSFW",
+        "roleplay": t("dctw.tag.server.roleplay"),
+        "politics": t("dctw.tag.server.politics"),
+    }
 
-TAG_MAPPINGS = {
-    "bots": BOT_TAGS,
-    "servers": SERVER_TAGS,
-    "templates": TEMPLATE_TAGS,
-}
 
-SORT_MODE_MAPPINGS = {
-    "newest": "最新",
-    "votes": "票數",
-    "members": "成員數",
-    "servers": "伺服器數",
-    "bumped": "置頂",
-}
+def _template_tags() -> dict:
+    return {
+        "community": t("dctw.tag.template.community"),
+        "gaming": t("dctw.tag.template.gaming"),
+        "anime": t("dctw.tag.template.anime"),
+        "art": t("dctw.tag.template.art"),
+        "nsfw": "NSFW",
+    }
+
+
+def _tag_mapping(resource: str) -> dict:
+    if resource == "bots":
+        return _bot_tags()
+    if resource == "servers":
+        return _server_tags()
+    if resource == "templates":
+        return _template_tags()
+    return {}
+
+
+def _sort_mode_label(sort_mode: str) -> str:
+    labels = {
+        "newest": t("dctw.sort.newest"),
+        "votes": t("dctw.sort.votes"),
+        "members": t("dctw.sort.members"),
+        "servers": t("dctw.sort.servers"),
+        "bumped": t("dctw.sort.bumped"),
+    }
+    return labels.get(sort_mode, sort_mode)
+
+
+def _resource_title(resource: str) -> str:
+    titles = {
+        "bots": t("dctw.resource_title.bots"),
+        "servers": t("dctw.resource_title.servers"),
+        "templates": t("dctw.resource_title.templates"),
+    }
+    return titles.get(resource, resource)
 
 
 RESOURCE_CONFIG = {
@@ -78,7 +101,6 @@ RESOURCE_CONFIG = {
         "list_path": "/api/v2/bots",
         "detail_path": "/api/v2/bots/{id}",
         "id_key": "id",
-        "title": "機器人",
         "name_key": "name",
         "sort_map": {
             "newest": "created_at",
@@ -91,7 +113,6 @@ RESOURCE_CONFIG = {
         "list_path": "/api/v2/servers",
         "detail_path": "/api/v2/servers/{id}",
         "id_key": "id",
-        "title": "伺服器",
         "name_key": "name",
         "sort_map": {
             "newest": "created_at",
@@ -104,7 +125,6 @@ RESOURCE_CONFIG = {
         "list_path": "/api/v2/templates",
         "detail_path": "/api/v2/templates/{id}",
         "id_key": "id",
-        "title": "模板",
         "name_key": "name",
         "sort_map": {
             "newest": "created_at",
@@ -145,7 +165,9 @@ def _format_error(exc: Exception) -> str:
     return f"{exc.__class__.__name__}"
 
 
-def _normalize_text(value, fallback: str = "無") -> str:
+def _normalize_text(value, fallback: str | None = None) -> str:
+    if fallback is None:
+        fallback = t("common.state.none")
     text = str(value or "").strip()
     return text or fallback
 
@@ -172,7 +194,7 @@ def _format_timestamp(value) -> str:
             pass
     ts = _safe_int(value)
     if ts <= 0:
-        return "未知"
+        return t("dctw.value.unknown")
     try:
         datetime.datetime.fromtimestamp(ts, tz=datetime.timezone.utc)
     except (OverflowError, OSError, ValueError):
@@ -218,7 +240,9 @@ def _listing_page_url(resource: str, listing_id: int) -> str:
     return f"{SITE_BASE}/{resource}/{listing_id}"
 
 
-def _compact_join(values, fallback: str = "無") -> str:
+def _compact_join(values, fallback: str | None = None) -> str:
+    if fallback is None:
+        fallback = t("common.state.none")
     if not isinstance(values, list):
         return fallback
     normalized = [str(value).strip() for value in values if str(value or "").strip()]
@@ -229,9 +253,9 @@ def _compact_join(values, fallback: str = "無") -> str:
 
 def _format_tag_labels(resource: str, tags) -> str:
     if not isinstance(tags, list):
-        return "無"
+        return t("common.state.none")
 
-    mapping = TAG_MAPPINGS.get(resource, {})
+    mapping = _tag_mapping(resource)
     labels = []
     seen: set[str] = set()
     for raw_tag in tags:
@@ -246,7 +270,7 @@ def _format_tag_labels(resource: str, tags) -> str:
         labels.append(label)
 
     if not labels:
-        return "無"
+        return t("common.state.none")
     return ", ".join(labels[:10])
 
 
@@ -301,25 +325,25 @@ def _build_detail_link_specs(resource: str, item: dict) -> list[tuple[str, str]]
     if resource == "bots":
         invite_url = _normalize_url(item.get("inviteLink"))
         if invite_url:
-            buttons.append(("邀請機器人", invite_url))
+            buttons.append((t("dctw.btn.invite_bot"), invite_url))
         support_url = _normalize_url(item.get("serverLink"))
         website_url = _normalize_url(item.get("webLink"))
         if support_url:
-            buttons.append(("支援伺服器", support_url))
+            buttons.append((t("dctw.btn.support_server"), support_url))
         if website_url:
-            buttons.append(("官方網站", website_url))
+            buttons.append((t("dctw.btn.official_website"), website_url))
     elif resource == "servers":
         invite_url = _normalize_url(item.get("inviteLink"))
         if invite_url:
-            buttons.append(("加入伺服器", invite_url))
+            buttons.append((t("dctw.btn.join_server"), invite_url))
     elif resource == "templates":
         share_url = _normalize_url(item.get("shareLink"))
         if share_url:
-            buttons.append(("套用模板", share_url))
+            buttons.append((t("dctw.btn.apply_template"), share_url))
 
     page_url = _listing_page_url(resource, listing_id)
     if page_url:
-        buttons.append(("DCTW 頁面", page_url))
+        buttons.append((t("dctw.btn.dctw_page"), page_url))
 
     deduped: list[tuple[str, str]] = []
     seen: set[str] = set()
@@ -356,17 +380,17 @@ class DCTWBrowseView(discord.ui.LayoutView):
         self.truncated = truncated
         self.query_text = (query_text or "").strip()
         self.page_index = page_index
-        self.prev_button = discord.ui.Button(label="上一頁", style=discord.ButtonStyle.secondary)
+        self.prev_button = discord.ui.Button(label=t("common.btn.prev"), style=discord.ButtonStyle.secondary)
         self.prev_button.callback = self._on_prev_page
-        self.next_button = discord.ui.Button(label="下一頁", style=discord.ButtonStyle.secondary)
+        self.next_button = discord.ui.Button(label=t("common.btn.next"), style=discord.ButtonStyle.secondary)
         self.next_button.callback = self._on_next_page
-        self.pick_select = discord.ui.Select(placeholder="選擇項目查看詳細", min_values=1, max_values=1)
+        self.pick_select = discord.ui.Select(placeholder=t("dctw.select.pick_item_ph"), min_values=1, max_values=1)
         self.pick_select.callback = self._on_pick_item
         self._refresh_page()
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         if interaction.user.id != self.user_id:
-            await interaction.response.send_message("這不是你的瀏覽清單。", ephemeral=True, allowed_mentions=SAFE_MENTIONS)
+            await interaction.response.send_message(t("dctw.err.not_your_browse_list"), ephemeral=True, allowed_mentions=SAFE_MENTIONS)
             return False
         return True
 
@@ -384,30 +408,30 @@ class DCTWBrowseView(discord.ui.LayoutView):
         conf = RESOURCE_CONFIG[self.resource]
         page_items = self._current_page_items()
         header_lines = [
-            f"## DCTW {conf['title']} 瀏覽",
-            f"排序: `{SORT_MODE_MAPPINGS.get(self.sort_mode, self.sort_mode)}`",
-            f"頁數: {self.page_index + 1}/{self._total_pages()}",
-            f"總數: {len(self.items)}",
+            t("dctw.embed.browse_title", resource_title=_resource_title(self.resource)),
+            t("dctw.value.sort_label", sort=_sort_mode_label(self.sort_mode)),
+            t("dctw.value.page_label", page=self.page_index + 1, total=self._total_pages()),
+            t("dctw.value.total_label", count=len(self.items)),
         ]
         if self.query_text:
-            header_lines.append(f"搜尋: `{self.query_text}`")
+            header_lines.append(t("dctw.value.search_label", query=self.query_text))
         if self.truncated:
-            header_lines.append(f"-# 已使用前 {AGGREGATE_LIMIT} 筆資料排序")
+            header_lines.append(t("dctw.value.truncated_note", count=AGGREGATE_LIMIT, limit=AGGREGATE_LIMIT))
 
         if not page_items:
-            return "\n".join(header_lines + ["", "目前沒有資料。"])
+            return "\n".join(header_lines + ["", t("dctw.value.no_data")])
 
         lines = []
         for idx, item in page_items:
             listing_id = _safe_int(item.get(conf["id_key"]))
-            name = _normalize_text(item.get(conf["name_key"]), "(無名稱)")
+            name = _normalize_text(item.get(conf["name_key"]), t("dctw.value.no_name"))
             votes = _safe_int(item.get("vote_count"))
             extra = ""
             if self.resource == "bots":
-                extra = f" | 伺服器數: {_safe_int(item.get('servers'))}"
+                extra = t("dctw.value.extra_servers", count=_safe_int(item.get('servers')))
             elif self.resource == "servers":
-                extra = f" | 成員數: {_safe_int(item.get('members'))}"
-            lines.append(f"{idx + 1}. {name} (ID: {listing_id}) | 票數: {votes}{extra}")
+                extra = t("dctw.value.extra_members", count=_safe_int(item.get('members')))
+            lines.append(t("dctw.value.list_item_line", index=idx + 1, name=name, id=listing_id, votes=votes, extra=extra))
 
         return "\n".join(header_lines + ["", *lines])
 
@@ -418,14 +442,14 @@ class DCTWBrowseView(discord.ui.LayoutView):
         page_items = self._current_page_items()
         if not page_items:
             self.pick_select.disabled = True
-            self.pick_select.options = [discord.SelectOption(label="沒有可選項目", value="none")]
+            self.pick_select.options = [discord.SelectOption(label=t("dctw.select.no_items"), value="none")]
         else:
             self.pick_select.disabled = False
             options = []
             conf = RESOURCE_CONFIG[self.resource]
             for idx, item in page_items:
                 listing_id = _safe_int(item.get(conf["id_key"]))
-                name = _normalize_text(item.get(conf["name_key"]), f"{conf['title']}{listing_id}")
+                name = _normalize_text(item.get(conf["name_key"]), f"{_resource_title(self.resource)}{listing_id}")
                 options.append(
                     discord.SelectOption(
                         label=name[:100],
@@ -455,12 +479,12 @@ class DCTWBrowseView(discord.ui.LayoutView):
 
     async def _on_pick_item(self, interaction: discord.Interaction):
         if not self.pick_select.values or self.pick_select.values[0] == "none":
-            await interaction.response.send_message("目前沒有可查看的資料。", ephemeral=True, allowed_mentions=SAFE_MENTIONS)
+            await interaction.response.send_message(t("dctw.err.no_selectable_data"), ephemeral=True, allowed_mentions=SAFE_MENTIONS)
             return
 
         selected_index = _safe_int(self.pick_select.values[0], -1)
         if selected_index < 0 or selected_index >= len(self.items):
-            await interaction.response.send_message("選擇的項目不存在。", ephemeral=True, allowed_mentions=SAFE_MENTIONS)
+            await interaction.response.send_message(t("dctw.err.item_not_found"), ephemeral=True, allowed_mentions=SAFE_MENTIONS)
             return
 
         await interaction.response.defer()
@@ -481,13 +505,13 @@ class DCTWBrowseView(discord.ui.LayoutView):
 class DCTWDetailView(discord.ui.LayoutView):
     def __init__(self, *, timeout: float = 300):
         super().__init__(timeout=timeout)
-        self.back_button = discord.ui.Button(label="回到清單", style=discord.ButtonStyle.secondary)
+        self.back_button = discord.ui.Button(label=t("dctw.btn.back_to_list"), style=discord.ButtonStyle.secondary)
         self.back_button.callback = self._back_to_list
-        self.comments_button = discord.ui.Button(label="查看留言", style=discord.ButtonStyle.primary)
+        self.comments_button = discord.ui.Button(label=t("dctw.btn.view_comments"), style=discord.ButtonStyle.primary)
         self.comments_button.callback = self._show_comments
-        self.vote_button = discord.ui.Button(label="投票", style=discord.ButtonStyle.success)
+        self.vote_button = discord.ui.Button(label=t("dctw.btn.vote"), style=discord.ButtonStyle.success)
         self.vote_button.callback = self._vote_item
-        self.bump_button = discord.ui.Button(label="置頂", style=discord.ButtonStyle.danger)
+        self.bump_button = discord.ui.Button(label=t("dctw.btn.bump"), style=discord.ButtonStyle.danger)
         self.bump_button.callback = self._bump_item
 
     @classmethod
@@ -519,7 +543,7 @@ class DCTWDetailView(discord.ui.LayoutView):
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         if interaction.user.id != self.user_id:
-            await interaction.response.send_message("這不是你的詳細頁。", ephemeral=True, allowed_mentions=SAFE_MENTIONS)
+            await interaction.response.send_message(t("dctw.err.not_your_detail_page"), ephemeral=True, allowed_mentions=SAFE_MENTIONS)
             return False
         return True
 
@@ -548,38 +572,44 @@ class DCTWDetailView(discord.ui.LayoutView):
     async def _refresh_layout(self):
         conf = RESOURCE_CONFIG[self.resource]
         listing_id = _safe_int(self.selected_item.get(conf["id_key"]))
-        name = _normalize_text(self.selected_item.get(conf["name_key"]), "(無名稱)")
+        name = _normalize_text(self.selected_item.get(conf["name_key"]), t("dctw.value.no_name"))
         votes = _safe_int(self.selected_item.get("vote_count"))
         created_at = _format_timestamp(self.selected_item.get("created_at"))
         bumped_at = _format_timestamp(self.selected_item.get("bumped_at"))
         thumbnail_url = _extract_thumbnail_url(self.resource, self.selected_item)
         gallery_urls = _extract_gallery_urls(self.resource, self.selected_item)
 
-        lines = [f"{conf['title']} ID: `{listing_id}`", f"票數: {votes}", f"建立時間: {created_at}", f"置頂時間: {bumped_at}"]
+        lines = [
+            t("dctw.value.resource_id_line", resource_title=_resource_title(self.resource), id=listing_id),
+            t("dctw.value.votes_line", votes=votes),
+            t("dctw.value.created_at_line", created_at=created_at),
+            t("dctw.value.bumped_at_line", bumped_at=bumped_at),
+        ]
         if self.resource == "bots":
             lines.extend(
                 [
-                    f"伺服器數: {_safe_int(self.selected_item.get('servers'))}",
-                    f"驗證狀態: {'已驗證' if self.selected_item.get('is_dc_verified') else '未驗證'}",
-                    f"官方認證: {'是' if self.selected_item.get('is_official_verified') else '否'}",
-                    f"前綴: {_normalize_text(self.selected_item.get('prefix'))}",
+                    t("dctw.value.servers_line", count=_safe_int(self.selected_item.get('servers'))),
+                    t("dctw.value.verified_status_line", status=t("dctw.value.verified_yes") if self.selected_item.get('is_dc_verified') else t("dctw.value.verified_no")),
+                    t("dctw.value.official_verified_line", status=t("common.state.yes") if self.selected_item.get('is_official_verified') else t("common.state.no")),
+                    t("dctw.value.prefix_line", prefix=_normalize_text(self.selected_item.get('prefix'))),
                 ]
             )
         elif self.resource == "servers":
             lines.extend(
                 [
-                    f"成員數: {_safe_int(self.selected_item.get('members'))}",
-                    f"線上成員數: {_safe_int(self.selected_item.get('onlineMembers'))}",
+                    t("dctw.value.members_line", count=_safe_int(self.selected_item.get('members'))),
+                    t("dctw.value.online_members_line", count=_safe_int(self.selected_item.get('onlineMembers'))),
                 ]
             )
 
+        none_label = t("common.state.none")
         tags_line = _format_tag_labels(self.resource, self.selected_item.get("tags"))
-        if tags_line != "無":
-            lines.append(f"標籤: {tags_line}")
+        if tags_line != none_label:
+            lines.append(t("dctw.value.tags_line", tags=tags_line))
 
         keywords_line = _compact_join(self.selected_item.get("keywords"))
-        if keywords_line != "無":
-            lines.append(f"關鍵字: {keywords_line}")
+        if keywords_line != none_label:
+            lines.append(t("dctw.value.keywords_line", keywords=keywords_line))
 
         container = discord.ui.Container(accent_colour=_resource_colour(self.resource))
 
@@ -598,11 +628,11 @@ class DCTWDetailView(discord.ui.LayoutView):
             container.add_item(discord.ui.TextDisplay(meta_block))
 
         body_sections: list[tuple[str, str]] = []
-        description = _normalize_text(self.selected_item.get("description"), "無描述")
+        description = _normalize_text(self.selected_item.get("description"), t("dctw.value.no_description"))
         introduce = _normalize_text(self.selected_item.get("introduce"), "")
-        body_sections.append(("簡介", description))
-        if introduce and introduce != "無" and introduce != description:
-            body_sections.append(("介紹", introduce))
+        body_sections.append((t("dctw.heading.intro"), description))
+        if introduce and introduce != description:
+            body_sections.append((t("dctw.heading.introduce"), introduce))
 
         social_links = self.selected_item.get("socialLinks") if isinstance(self.selected_item.get("socialLinks"), dict) else {}
         social_lines = []
@@ -611,22 +641,22 @@ class DCTWDetailView(discord.ui.LayoutView):
             if url:
                 social_lines.append(f"{label}: {url}")
         if social_lines:
-            body_sections.append(("社群連結", "\n".join(social_lines)))
+            body_sections.append((t("dctw.heading.social_links"), "\n".join(social_lines)))
 
         if self.resource == "servers":
             features_raw = self.selected_item.get("features")
             features = _compact_join([f.strip() for f in str(features_raw).split(",") if f.strip()], "") if isinstance(features_raw, str) else _compact_join(features_raw, "")
             if features:
-                body_sections.append(("伺服器功能", features))
+                body_sections.append((t("dctw.heading.server_features"), features))
         elif self.resource == "bots":
             developers = await self.cog._format_user_refs(self.selected_item.get("devs"), bullet_prefix="- ")
             if developers:
-                body_sections.append(("開發者", developers))
+                body_sections.append((t("dctw.heading.developers"), developers))
 
         if self.resource == "servers":
             admins = await self.cog._format_server_admins(self.selected_item.get("admins"))
             if admins:
-                body_sections.append(("管理員", admins))
+                body_sections.append((t("dctw.heading.admins"), admins))
 
         if body_sections:
             container.add_item(discord.ui.Separator(spacing=discord.SeparatorSpacing.small))
@@ -643,7 +673,7 @@ class DCTWDetailView(discord.ui.LayoutView):
         if gallery_urls:
             gallery = discord.ui.MediaGallery()
             for index, image_url in enumerate(gallery_urls, start=1):
-                description = f"{name} 圖片 {index}" if len(gallery_urls) > 1 else f"{name} 圖片"
+                description = t("dctw.value.gallery_image_indexed", name=name, index=index) if len(gallery_urls) > 1 else t("dctw.value.gallery_image", name=name)
                 gallery.add_item(media=image_url, description=description[:256])
             self.add_item(gallery)
 
@@ -695,7 +725,7 @@ class DCTWDetailView(discord.ui.LayoutView):
         await interaction.response.defer(ephemeral=True, thinking=True)
         comments = self.selected_item.get("comments")
         if not isinstance(comments, list) or not comments:
-            await interaction.followup.send("目前沒有留言。", ephemeral=True, allowed_mentions=SAFE_MENTIONS)
+            await interaction.followup.send(t("dctw.value.no_comments"), ephemeral=True, allowed_mentions=SAFE_MENTIONS)
             return
 
         preview_lines = []
@@ -703,12 +733,12 @@ class DCTWDetailView(discord.ui.LayoutView):
             user_id = _safe_int(comment.get("userId"))
             author_name = await self.cog._resolve_user_name(user_id)
             stars = _safe_int(comment.get("stars"))
-            content = str(comment.get("content") or "(無內容)").replace("\n", " ")
+            content = str(comment.get("content") or t("dctw.value.no_content")).replace("\n", " ")
             created_at = comment.get("created_at", "")
             if created_at:
                 ts_line = _format_timestamp(created_at)
             else:
-                ts_line = "未知"
+                ts_line = t("dctw.value.unknown")
             preview_lines.append(f"{idx}. {author_name} | {stars}★ | {ts_line}\n{content[:120]}")
         await interaction.followup.send("\n".join(preview_lines), ephemeral=True, allowed_mentions=SAFE_MENTIONS)
 
@@ -723,11 +753,11 @@ class DCTWDetailView(discord.ui.LayoutView):
 
 @app_commands.allowed_installs(guilds=True, users=True)
 @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
-class DCTW(commands.GroupCog, name="dctw", description="DCTW 瀏覽器！"):
-    dctw_bot = app_commands.Group(name="bot", description="Bot 相關指令")
-    dctw_server = app_commands.Group(name="server", description="Server 相關指令")
-    dctw_template = app_commands.Group(name="template", description="Template 相關指令")
-    dctw_key = app_commands.Group(name="key", description="管理你的 DCTW API key")
+class DCTW(commands.GroupCog, name=app_commands.locale_str("dctw", i18n_key="cmd.dctw.dctw.root.name"), description=app_commands.locale_str("The DCTW browser!", i18n_key="cmd.dctw.dctw.root.desc")):
+    dctw_bot = app_commands.Group(name=app_commands.locale_str("bot", i18n_key="cmd.dctw.bot.root.name"), description=app_commands.locale_str("Bot commands", i18n_key="cmd.dctw.bot.root.desc"))
+    dctw_server = app_commands.Group(name=app_commands.locale_str("server", i18n_key="cmd.dctw.server.root.name"), description=app_commands.locale_str("Server commands", i18n_key="cmd.dctw.server.root.desc"))
+    dctw_template = app_commands.Group(name=app_commands.locale_str("template", i18n_key="cmd.dctw.template.root.name"), description=app_commands.locale_str("Template commands", i18n_key="cmd.dctw.template.root.desc"))
+    dctw_key = app_commands.Group(name=app_commands.locale_str("key", i18n_key="cmd.dctw.key.root.name"), description=app_commands.locale_str("Manage your DCTW API key", i18n_key="cmd.dctw.key.root.desc"))
 
     def __init__(self, bot_: commands.Bot):
         self.bot = bot_
@@ -782,7 +812,7 @@ class DCTW(commands.GroupCog, name="dctw", description="DCTW 瀏覽器！"):
     async def _resolve_user_name(self, raw_user_id) -> str:
         user_id = _safe_int(raw_user_id, -1)
         if user_id <= 0:
-            return _normalize_text(raw_user_id, "未知")
+            return _normalize_text(raw_user_id, t("dctw.value.unknown"))
 
         cached = self._user_name_cache.get(user_id)
         if cached:
@@ -834,7 +864,7 @@ class DCTW(commands.GroupCog, name="dctw", description="DCTW 瀏覽器！"):
         conf = RESOURCE_CONFIG[resource]
         sort_key = conf["sort_map"].get(sort_mode)
         if sort_key is None:
-            raise ValueError("不支援的排序方式")
+            raise ValueError(t("dctw.err.unsupported_sort"))
 
         cache_key = (resource, sort_mode, FETCH_LIMIT, AGGREGATE_LIMIT, "auth")
         now = time.time()
@@ -919,25 +949,25 @@ class DCTW(commands.GroupCog, name="dctw", description="DCTW 瀏覽器！"):
     async def _send_search(self, interaction: discord.Interaction, resource: str, keyword: str, sort_mode: str):
         query = keyword.strip()
         if not query:
-            await interaction.response.send_message("請輸入搜尋關鍵字。", ephemeral=True, allowed_mentions=SAFE_MENTIONS)
+            await interaction.response.send_message(t("dctw.err.empty_search_query"), ephemeral=True, allowed_mentions=SAFE_MENTIONS)
             return
 
         await interaction.response.defer()
         request_key = self._get_read_api_key(interaction.user.id)
         if not request_key:
-            await interaction.followup.send("查詢需要 API key。請先使用 /dctw key set 設定你的 key。", ephemeral=True, allowed_mentions=SAFE_MENTIONS)
+            await interaction.followup.send(t("dctw.err.api_key_required"), ephemeral=True, allowed_mentions=SAFE_MENTIONS)
             return
 
         try:
             items, cached, truncated = await self._fetch_and_sort_resource(resource, sort_mode, api_key=request_key)
         except Exception as exc:
-            await interaction.followup.send(f"查詢失敗：{_format_error(exc)}", ephemeral=True, allowed_mentions=SAFE_MENTIONS)
+            await interaction.followup.send(t("dctw.err.search_failed", error=_format_error(exc)), ephemeral=True, allowed_mentions=SAFE_MENTIONS)
             return
 
         normalized = query.casefold()
         filtered_items = [item for item in items if self._matches_search(resource, item, normalized)]
         if not filtered_items:
-            await interaction.followup.send(f"找不到符合 `{query}` 的結果。", ephemeral=True, allowed_mentions=SAFE_MENTIONS)
+            await interaction.followup.send(t("dctw.err.no_search_results", query=query), ephemeral=True, allowed_mentions=SAFE_MENTIONS)
             return
 
         view = DCTWBrowseView(
@@ -957,7 +987,7 @@ class DCTW(commands.GroupCog, name="dctw", description="DCTW 瀏覽器！"):
         await interaction.response.defer(ephemeral=True, thinking=True)
         user_key = self._get_user_key(interaction.user.id)
         if not user_key:
-            await interaction.followup.send("你還沒設定個人 API key，先用 /dctw key set。", ephemeral=True, allowed_mentions=SAFE_MENTIONS)
+            await interaction.followup.send(t("dctw.err.personal_key_required"), ephemeral=True, allowed_mentions=SAFE_MENTIONS)
             return
 
         owned_targets: list[tuple[str, int]] = []
@@ -976,15 +1006,15 @@ class DCTW(commands.GroupCog, name="dctw", description="DCTW 瀏覽器！"):
                 continue
 
         if not owned_targets:
-            error_part = f"\n錯誤: {'; '.join(fetch_errors)}" if fetch_errors else ""
-            await interaction.followup.send(f"你目前沒有可置頂的資源。{error_part}", ephemeral=True, allowed_mentions=SAFE_MENTIONS)
+            error_part = t("dctw.value.fetch_error_suffix", errors="; ".join(fetch_errors)) if fetch_errors else ""
+            await interaction.followup.send(t("dctw.err.no_bumpable_resources", error_part=error_part), ephemeral=True, allowed_mentions=SAFE_MENTIONS)
             return
 
         owned_targets.sort(key=lambda t: t[1])
 
         estimated_minutes = math.ceil(max(0, len(owned_targets) - 1) * BUMP_COOLDOWN_SECONDS / 60)
         await interaction.followup.send(
-            f"置頂中請稍後...\n預計 {estimated_minutes} 分鐘。",
+            t("dctw.msg.bump_in_progress", minutes=estimated_minutes),
             ephemeral=True,
             allowed_mentions=SAFE_MENTIONS,
         )
@@ -1001,14 +1031,14 @@ class DCTW(commands.GroupCog, name="dctw", description="DCTW 瀏覽器！"):
                 failed.append(f"{resource}:{listing_id} -> {_format_error(exc)}")
 
         summary_lines = [
-            f"✅ 置頂完成：{success_count}/{len(owned_targets)}",
-            f"資源類別：{', '.join(resources)}",
+            t("dctw.msg.bump_summary", success=success_count, total=len(owned_targets)),
+            t("dctw.value.resource_category_line", resources=", ".join(resources)),
         ]
         if fetch_errors:
-            summary_lines.append("擁有資源查詢錯誤：")
+            summary_lines.append(t("dctw.value.owned_fetch_errors_header"))
             summary_lines.extend(f"- {line}" for line in fetch_errors[:10])
         if failed:
-            summary_lines.append("置頂失敗：")
+            summary_lines.append(t("dctw.value.bump_failed_header"))
             summary_lines.extend(f"- {line}" for line in failed[:15])
 
         await interaction.followup.send("\n".join(summary_lines), ephemeral=True, allowed_mentions=SAFE_MENTIONS)
@@ -1017,12 +1047,12 @@ class DCTW(commands.GroupCog, name="dctw", description="DCTW 瀏覽器！"):
         await interaction.response.defer()
         request_key = self._get_read_api_key(interaction.user.id)
         if not request_key:
-            await interaction.followup.send("查詢需要 API key。請先使用 /dctw key set 設定你的 key。", ephemeral=True, allowed_mentions=SAFE_MENTIONS)
+            await interaction.followup.send(t("dctw.err.api_key_required"), ephemeral=True, allowed_mentions=SAFE_MENTIONS)
             return
         try:
             items, cached, truncated = await self._fetch_and_sort_resource(resource, sort_mode, api_key=request_key)
         except Exception as exc:
-            await interaction.followup.send(f"查詢失敗：{_format_error(exc)}", ephemeral=True, allowed_mentions=SAFE_MENTIONS)
+            await interaction.followup.send(t("dctw.err.search_failed", error=_format_error(exc)), ephemeral=True, allowed_mentions=SAFE_MENTIONS)
             return
 
         view = DCTWBrowseView(
@@ -1042,208 +1072,208 @@ class DCTW(commands.GroupCog, name="dctw", description="DCTW 瀏覽器！"):
         await interaction.response.defer(ephemeral=True, thinking=True)
         user_key = self._get_user_key(interaction.user.id)
         if not user_key:
-            await interaction.followup.send("你還沒設定個人 API key，先用 /dctw key set。", ephemeral=True, allowed_mentions=SAFE_MENTIONS)
+            await interaction.followup.send(t("dctw.err.personal_key_required"), ephemeral=True, allowed_mentions=SAFE_MENTIONS)
             return
 
         try:
             await self._post_action(resource, listing_id, action, api_key=user_key)
         except Exception as exc:
-            await interaction.followup.send(f"操作失敗：{_format_error(exc)}", ephemeral=True, allowed_mentions=SAFE_MENTIONS)
+            await interaction.followup.send(t("dctw.err.action_failed", error=_format_error(exc)), ephemeral=True, allowed_mentions=SAFE_MENTIONS)
             return
 
-        await interaction.followup.send(f"✅ 已對 {resource}:{listing_id} 執行 {action}。", ephemeral=True, allowed_mentions=SAFE_MENTIONS)
+        await interaction.followup.send(t("dctw.msg.action_done", resource=resource, id=listing_id, action=action), ephemeral=True, allowed_mentions=SAFE_MENTIONS)
 
-    @dctw_key.command(name="set", description="設定你的 DCTW API key")
+    @dctw_key.command(name=app_commands.locale_str("set", i18n_key="cmd.dctw.key.set.name"), description=app_commands.locale_str("Set your DCTW API key", i18n_key="cmd.dctw.key.set.desc"))
     async def key_set(self, interaction: discord.Interaction, api_key: str):
         set_user_data(0, interaction.user.id, USER_KEY_NAME, api_key.strip())
-        await interaction.response.send_message("✅ 已儲存你的 DCTW API key。", ephemeral=True, allowed_mentions=SAFE_MENTIONS)
+        await interaction.response.send_message(t("dctw.msg.key_saved"), ephemeral=True, allowed_mentions=SAFE_MENTIONS)
 
-    @dctw_key.command(name="clear", description="清除你的 DCTW API key")
+    @dctw_key.command(name=app_commands.locale_str("clear", i18n_key="cmd.dctw.key.clear.name"), description=app_commands.locale_str("Clear your DCTW API key", i18n_key="cmd.dctw.key.clear.desc"))
     async def key_clear(self, interaction: discord.Interaction):
         set_user_data(0, interaction.user.id, USER_KEY_NAME, "")
-        await interaction.response.send_message("✅ 已清除你的 DCTW API key。", ephemeral=True, allowed_mentions=SAFE_MENTIONS)
+        await interaction.response.send_message(t("dctw.msg.key_cleared"), ephemeral=True, allowed_mentions=SAFE_MENTIONS)
 
-    @dctw_key.command(name="show", description="查看是否已設定 DCTW API key")
+    @dctw_key.command(name=app_commands.locale_str("show", i18n_key="cmd.dctw.key.show.name"), description=app_commands.locale_str("Check whether a DCTW API key is set", i18n_key="cmd.dctw.key.show.desc"))
     async def key_show(self, interaction: discord.Interaction):
         api_key = self._get_user_key(interaction.user.id)
         if not api_key:
-            await interaction.response.send_message("你目前沒有設定 key。", ephemeral=True, allowed_mentions=SAFE_MENTIONS)
+            await interaction.response.send_message(t("dctw.err.no_key_set"), ephemeral=True, allowed_mentions=SAFE_MENTIONS)
             return
         masked = api_key[:4] + "*" * max(0, len(api_key) - 8) + api_key[-4:]
-        await interaction.response.send_message(f"目前 key: {masked}", ephemeral=True, allowed_mentions=SAFE_MENTIONS)
+        await interaction.response.send_message(t("dctw.value.current_key_line", masked=masked), ephemeral=True, allowed_mentions=SAFE_MENTIONS)
 
-    @dctw_key.command(name="help", description="說明如何取得 DCTW API key")
+    @dctw_key.command(name=app_commands.locale_str("help", i18n_key="cmd.dctw.key.help.name"), description=app_commands.locale_str("How to get a DCTW API key", i18n_key="cmd.dctw.key.help.desc"))
     async def key_help(self, interaction: discord.Interaction):
-        embed = discord.Embed(title="如何獲取 DCTW API Key", color=discord.Colour.blue())
+        embed = discord.Embed(title=t("dctw.embed.help_title"), color=discord.Colour.blue())
         embed.add_field(
-            name="1. 登入 DCTW 官網",
-            value="前往 [dctw.xyz](https://dctw.xyz)，點擊右上角登入 Discord。",
+            name=t("dctw.embed.help.field1_name"),
+            value=t("dctw.embed.help.field1_value"),
             inline=False,
         )
         embed.add_field(
-            name="2. 進入後台",
-            value="登入後點擊帳號管理，進入後台面板。",
+            name=t("dctw.embed.help.field2_name"),
+            value=t("dctw.embed.help.field2_value"),
             inline=False,
         )
         embed.add_field(
-            name="3. 複製 API Key",
-            value="在個人檔案附近找到「點我複製 API KEY」按鈕，點擊後會自動複製到剪貼簿。",
+            name=t("dctw.embed.help.field3_name"),
+            value=t("dctw.embed.help.field3_value"),
             inline=False,
         )
         embed.add_field(
-            name="4. 設定 API key",
-            value="將獲取的 API key 複製後，使用 `/dctw key set <你的 API key>` 指令將其設定到此機器人中。",
+            name=t("dctw.embed.help.field4_name"),
+            value=t("dctw.embed.help.field4_value"),
             inline=False,
         )
-        embed.set_footer(text="請勿將 API key 洩露給他人，以免被濫用。\n官方文檔: https://dctw.xyz/docs/?tags=api")
+        embed.set_footer(text=t("dctw.embed.help_footer"))
         await interaction.response.send_message(embed=embed, ephemeral=True, allowed_mentions=SAFE_MENTIONS)
 
-    @dctw_bot.command(name="browse", description="瀏覽機器人清單")
+    @dctw_bot.command(name=app_commands.locale_str("browse", i18n_key="cmd.dctw.bot.browse.name"), description=app_commands.locale_str("Browse the bot list", i18n_key="cmd.dctw.bot.browse.desc"))
     @app_commands.choices(
         sort=[
-            app_commands.Choice(name="newest", value="newest"),
-            app_commands.Choice(name="votes", value="votes"),
-            app_commands.Choice(name="servers", value="servers"),
-            app_commands.Choice(name="bumped", value="bumped"),
+            app_commands.Choice(name=app_commands.locale_str("Newest", i18n_key="cmd.dctw.bot.browse.choice.newest"), value="newest"),
+            app_commands.Choice(name=app_commands.locale_str("Votes", i18n_key="cmd.dctw.bot.browse.choice.votes"), value="votes"),
+            app_commands.Choice(name=app_commands.locale_str("Servers", i18n_key="cmd.dctw.bot.browse.choice.servers"), value="servers"),
+            app_commands.Choice(name=app_commands.locale_str("Bumped", i18n_key="cmd.dctw.bot.browse.choice.bumped"), value="bumped"),
         ]
     )
     async def bot_browse(self, interaction: discord.Interaction, sort: app_commands.Choice[str] | None = None):
         await self._send_browse(interaction, "bots", sort.value if sort else "bumped")
 
-    @dctw_server.command(name="browse", description="瀏覽伺服器清單")
+    @dctw_server.command(name=app_commands.locale_str("browse", i18n_key="cmd.dctw.server.browse.name"), description=app_commands.locale_str("Browse the server list", i18n_key="cmd.dctw.server.browse.desc"))
     @app_commands.choices(
         sort=[
-            app_commands.Choice(name="newest", value="newest"),
-            app_commands.Choice(name="votes", value="votes"),
-            app_commands.Choice(name="members", value="members"),
-            app_commands.Choice(name="bumped", value="bumped"),
+            app_commands.Choice(name=app_commands.locale_str("Newest", i18n_key="cmd.dctw.server.browse.choice.newest"), value="newest"),
+            app_commands.Choice(name=app_commands.locale_str("Votes", i18n_key="cmd.dctw.server.browse.choice.votes"), value="votes"),
+            app_commands.Choice(name=app_commands.locale_str("Members", i18n_key="cmd.dctw.server.browse.choice.members"), value="members"),
+            app_commands.Choice(name=app_commands.locale_str("Bumped", i18n_key="cmd.dctw.server.browse.choice.bumped"), value="bumped"),
         ]
     )
     async def server_browse(self, interaction: discord.Interaction, sort: app_commands.Choice[str] | None = None):
         await self._send_browse(interaction, "servers", sort.value if sort else "bumped")
 
-    @dctw_template.command(name="browse", description="瀏覽模板清單")
+    @dctw_template.command(name=app_commands.locale_str("browse", i18n_key="cmd.dctw.template.browse.name"), description=app_commands.locale_str("Browse the template list", i18n_key="cmd.dctw.template.browse.desc"))
     @app_commands.choices(
         sort=[
-            app_commands.Choice(name="newest", value="newest"),
-            app_commands.Choice(name="votes", value="votes"),
-            app_commands.Choice(name="bumped", value="bumped"),
+            app_commands.Choice(name=app_commands.locale_str("Newest", i18n_key="cmd.dctw.template.browse.choice.newest"), value="newest"),
+            app_commands.Choice(name=app_commands.locale_str("Votes", i18n_key="cmd.dctw.template.browse.choice.votes"), value="votes"),
+            app_commands.Choice(name=app_commands.locale_str("Bumped", i18n_key="cmd.dctw.template.browse.choice.bumped"), value="bumped"),
         ]
     )
     async def template_browse(self, interaction: discord.Interaction, sort: app_commands.Choice[str] | None = None):
         await self._send_browse(interaction, "templates", sort.value if sort else "bumped")
 
-    @dctw_bot.command(name="search", description="搜尋 bot")
+    @dctw_bot.command(name=app_commands.locale_str("search", i18n_key="cmd.dctw.bot.search.name"), description=app_commands.locale_str("Search bots", i18n_key="cmd.dctw.bot.search.desc"))
     @app_commands.choices(
         sort=[
-            app_commands.Choice(name="newest", value="newest"),
-            app_commands.Choice(name="votes", value="votes"),
-            app_commands.Choice(name="servers", value="servers"),
-            app_commands.Choice(name="bumped", value="bumped"),
+            app_commands.Choice(name=app_commands.locale_str("Newest", i18n_key="cmd.dctw.bot.search.choice.newest"), value="newest"),
+            app_commands.Choice(name=app_commands.locale_str("Votes", i18n_key="cmd.dctw.bot.search.choice.votes"), value="votes"),
+            app_commands.Choice(name=app_commands.locale_str("Servers", i18n_key="cmd.dctw.bot.search.choice.servers"), value="servers"),
+            app_commands.Choice(name=app_commands.locale_str("Bumped", i18n_key="cmd.dctw.bot.search.choice.bumped"), value="bumped"),
         ]
     )
     async def bot_search(self, interaction: discord.Interaction, keyword: str, sort: app_commands.Choice[str] | None = None):
         await self._send_search(interaction, "bots", keyword, sort.value if sort else "bumped")
 
-    @dctw_server.command(name="search", description="搜尋 server")
+    @dctw_server.command(name=app_commands.locale_str("search", i18n_key="cmd.dctw.server.search.name"), description=app_commands.locale_str("Search servers", i18n_key="cmd.dctw.server.search.desc"))
     @app_commands.choices(
         sort=[
-            app_commands.Choice(name="newest", value="newest"),
-            app_commands.Choice(name="votes", value="votes"),
-            app_commands.Choice(name="members", value="members"),
-            app_commands.Choice(name="bumped", value="bumped"),
+            app_commands.Choice(name=app_commands.locale_str("Newest", i18n_key="cmd.dctw.server.search.choice.newest"), value="newest"),
+            app_commands.Choice(name=app_commands.locale_str("Votes", i18n_key="cmd.dctw.server.search.choice.votes"), value="votes"),
+            app_commands.Choice(name=app_commands.locale_str("Members", i18n_key="cmd.dctw.server.search.choice.members"), value="members"),
+            app_commands.Choice(name=app_commands.locale_str("Bumped", i18n_key="cmd.dctw.server.search.choice.bumped"), value="bumped"),
         ]
     )
     async def server_search(self, interaction: discord.Interaction, keyword: str, sort: app_commands.Choice[str] | None = None):
         await self._send_search(interaction, "servers", keyword, sort.value if sort else "bumped")
 
-    @dctw_template.command(name="search", description="搜尋 template")
+    @dctw_template.command(name=app_commands.locale_str("search", i18n_key="cmd.dctw.template.search.name"), description=app_commands.locale_str("Search templates", i18n_key="cmd.dctw.template.search.desc"))
     @app_commands.choices(
         sort=[
-            app_commands.Choice(name="newest", value="newest"),
-            app_commands.Choice(name="votes", value="votes"),
-            app_commands.Choice(name="bumped", value="bumped"),
+            app_commands.Choice(name=app_commands.locale_str("Newest", i18n_key="cmd.dctw.template.search.choice.newest"), value="newest"),
+            app_commands.Choice(name=app_commands.locale_str("Votes", i18n_key="cmd.dctw.template.search.choice.votes"), value="votes"),
+            app_commands.Choice(name=app_commands.locale_str("Bumped", i18n_key="cmd.dctw.template.search.choice.bumped"), value="bumped"),
         ]
     )
     async def template_search(self, interaction: discord.Interaction, keyword: str, sort: app_commands.Choice[str] | None = None):
         await self._send_search(interaction, "templates", keyword, sort.value if sort else "bumped")
 
-    @app_commands.command(name="bumpall", description="一次置頂你擁有的全部資源")
+    @app_commands.command(name=app_commands.locale_str("bumpall", i18n_key="cmd.dctw.dctw.bumpall.name"), description=app_commands.locale_str("Bump everything you own at once", i18n_key="cmd.dctw.dctw.bumpall.desc"))
     async def bumpall(self, interaction: discord.Interaction):
         await self._do_bumpall(interaction, ["bots", "servers", "templates"])
 
-    @dctw_bot.command(name="bumpall", description="一次置頂你擁有的全部 bots")
+    @dctw_bot.command(name=app_commands.locale_str("bumpall", i18n_key="cmd.dctw.bot.bumpall.name"), description=app_commands.locale_str("Bump all bots you own at once", i18n_key="cmd.dctw.bot.bumpall.desc"))
     async def bot_bumpall(self, interaction: discord.Interaction):
         await self._do_bumpall(interaction, ["bots"])
 
-    @dctw_server.command(name="bumpall", description="一次置頂你擁有的全部 servers")
+    @dctw_server.command(name=app_commands.locale_str("bumpall", i18n_key="cmd.dctw.server.bumpall.name"), description=app_commands.locale_str("Bump all servers you own at once", i18n_key="cmd.dctw.server.bumpall.desc"))
     async def server_bumpall(self, interaction: discord.Interaction):
         await self._do_bumpall(interaction, ["servers"])
 
-    @dctw_template.command(name="bumpall", description="一次置頂你擁有的全部 templates")
+    @dctw_template.command(name=app_commands.locale_str("bumpall", i18n_key="cmd.dctw.template.bumpall.name"), description=app_commands.locale_str("Bump all templates you own at once", i18n_key="cmd.dctw.template.bumpall.desc"))
     async def template_bumpall(self, interaction: discord.Interaction):
         await self._do_bumpall(interaction, ["templates"])
 
-    @dctw_bot.command(name="vote", description="對指定 bot 投票")
+    @dctw_bot.command(name=app_commands.locale_str("vote", i18n_key="cmd.dctw.bot.vote.name"), description=app_commands.locale_str("Vote for a specific bot", i18n_key="cmd.dctw.bot.vote.desc"))
     async def bot_vote(self, interaction: discord.Interaction, target: str):
         bot_id = _parse_user_mention_or_id(target)
         if bot_id is None:
-            await interaction.response.send_message("請輸入 bot ID 或 mention（例如 <@123...>）。", ephemeral=True, allowed_mentions=SAFE_MENTIONS)
+            await interaction.response.send_message(t("dctw.err.invalid_bot_target"), ephemeral=True, allowed_mentions=SAFE_MENTIONS)
             return
         await self._do_post_action(interaction, "bots", bot_id, "vote")
 
-    @dctw_bot.command(name="bump", description="對指定 bot 置頂")
+    @dctw_bot.command(name=app_commands.locale_str("bump", i18n_key="cmd.dctw.bot.bump.name"), description=app_commands.locale_str("Bump a specific bot", i18n_key="cmd.dctw.bot.bump.desc"))
     async def bot_bump(self, interaction: discord.Interaction, target: str):
         bot_id = _parse_user_mention_or_id(target)
         if bot_id is None:
-            await interaction.response.send_message("請輸入 bot ID 或 mention（例如 <@123...>）。", ephemeral=True, allowed_mentions=SAFE_MENTIONS)
+            await interaction.response.send_message(t("dctw.err.invalid_bot_target"), ephemeral=True, allowed_mentions=SAFE_MENTIONS)
             return
         await self._do_post_action(interaction, "bots", bot_id, "bump")
 
-    @dctw_server.command(name="vote", description="對指定 server 投票")
+    @dctw_server.command(name=app_commands.locale_str("vote", i18n_key="cmd.dctw.server.vote.name"), description=app_commands.locale_str("Vote for a specific server", i18n_key="cmd.dctw.server.vote.desc"))
     async def server_vote(self, interaction: discord.Interaction, target: str):
         server_id = _parse_numeric_id(target)
         if server_id is None:
-            await interaction.response.send_message("請輸入 server ID（數字）。", ephemeral=True, allowed_mentions=SAFE_MENTIONS)
+            await interaction.response.send_message(t("dctw.err.invalid_server_target"), ephemeral=True, allowed_mentions=SAFE_MENTIONS)
             return
         await self._do_post_action(interaction, "servers", server_id, "vote")
 
-    @dctw_server.command(name="bump", description="對指定 server 置頂")
+    @dctw_server.command(name=app_commands.locale_str("bump", i18n_key="cmd.dctw.server.bump.name"), description=app_commands.locale_str("Bump a specific server", i18n_key="cmd.dctw.server.bump.desc"))
     async def server_bump(self, interaction: discord.Interaction, target: str):
         server_id = _parse_numeric_id(target)
         if server_id is None:
-            await interaction.response.send_message("請輸入 server ID（數字）。", ephemeral=True, allowed_mentions=SAFE_MENTIONS)
+            await interaction.response.send_message(t("dctw.err.invalid_server_target"), ephemeral=True, allowed_mentions=SAFE_MENTIONS)
             return
         await self._do_post_action(interaction, "servers", server_id, "bump")
 
-    @dctw_template.command(name="vote", description="對指定 template 投票")
+    @dctw_template.command(name=app_commands.locale_str("vote", i18n_key="cmd.dctw.template.vote.name"), description=app_commands.locale_str("Vote for a specific template", i18n_key="cmd.dctw.template.vote.desc"))
     async def template_vote(self, interaction: discord.Interaction, target: str):
         template_id = _parse_numeric_id(target)
         if template_id is None:
-            await interaction.response.send_message("請輸入 template ID（數字）。", ephemeral=True, allowed_mentions=SAFE_MENTIONS)
+            await interaction.response.send_message(t("dctw.err.invalid_template_target"), ephemeral=True, allowed_mentions=SAFE_MENTIONS)
             return
         await self._do_post_action(interaction, "templates", template_id, "vote")
 
-    @dctw_template.command(name="bump", description="對指定 template 置頂")
+    @dctw_template.command(name=app_commands.locale_str("bump", i18n_key="cmd.dctw.template.bump.name"), description=app_commands.locale_str("Bump a specific template", i18n_key="cmd.dctw.template.bump.desc"))
     async def template_bump(self, interaction: discord.Interaction, target: str):
         template_id = _parse_numeric_id(target)
         if template_id is None:
-            await interaction.response.send_message("請輸入 template ID（數字）。", ephemeral=True, allowed_mentions=SAFE_MENTIONS)
+            await interaction.response.send_message(t("dctw.err.invalid_template_target"), ephemeral=True, allowed_mentions=SAFE_MENTIONS)
             return
         await self._do_post_action(interaction, "templates", template_id, "bump")
 
-    @app_commands.command(name="cache-stats", description="查看 DCTW 快取狀態")
+    @app_commands.command(name=app_commands.locale_str("cache-stats", i18n_key="cmd.dctw.dctw.cache_stats.name"), description=app_commands.locale_str("View DCTW cache status", i18n_key="cmd.dctw.dctw.cache_stats.desc"))
     async def cache_stats(self, interaction: discord.Interaction):
         total = self._cache_hits + self._cache_misses
         hit_rate = (self._cache_hits / total * 100.0) if total else 0.0
         await interaction.response.send_message(
-            (
-                "DCTW 快取統計\n"
-                f"- TTL: {CACHE_TTL_SECONDS} 秒\n"
-                f"- 快取項目數: {len(self._list_cache)}\n"
-                f"- 命中: {self._cache_hits}\n"
-                f"- 未命中: {self._cache_misses}\n"
-                f"- 命中率: {hit_rate:.2f}%"
+            t(
+                "dctw.msg.cache_stats",
+                ttl=CACHE_TTL_SECONDS,
+                cached_items=len(self._list_cache),
+                hits=self._cache_hits,
+                misses=self._cache_misses,
+                hit_rate=f"{hit_rate:.2f}",
             ),
             ephemeral=True,
             allowed_mentions=SAFE_MENTIONS,

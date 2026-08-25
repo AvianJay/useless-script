@@ -1,0 +1,84 @@
+{
+    "btn": {
+        "appeal": "提出申訴",
+        "blacklist_appeal": "加入申訴黑名單",
+        "confirm_unblacklist": "確認解除",
+        "respond_appeal": "回覆申訴"
+    },
+    "dm": {
+        "reason": "原因：{reason}",
+        "title_ban": "你在 {guild} 被封禁。",
+        "title_blacklist": "你在 {guild} 被加入申訴黑名單。",
+        "title_generic": "你在 {guild} 被{action}。",
+        "title_kick": "你在 {guild} 被踢出。",
+        "title_mute": "你在 {guild} 被禁言。"
+    },
+    "embed": {
+        "appeal_reply_desc": "你收到了來自伺服器 {guild} 管理員的申訴回覆。",
+        "appeal_reply_title": "申訴回覆",
+        "blacklist_desc": {
+            "other": "共有 {count} 位用戶在黑名單中"
+        },
+        "blacklist_title": "申訴黑名單",
+        "new_appeal_desc": "來自用戶 {user} (`{user_id}`) 的申訴。",
+        "new_appeal_title": "新的用戶申訴"
+    },
+    "field": {
+        "admin_action": "管理員操作",
+        "admin_reply": "管理員回覆",
+        "appeal_method": "申訴方式",
+        "appeal_reason": "申訴理由",
+        "blacklist_users": "黑名單用戶",
+        "can_appeal_again": "是否允許再次申訴",
+        "guild_id": "伺服器 ID",
+        "reply_content": "回覆內容",
+        "until": "解禁時間",
+        "user_id": "用戶 ID"
+    },
+    "footer": {
+        "blacklist_truncated": "僅顯示前 25 位用戶，共 {count} 位",
+        "replied_by": "{user} - 已回覆"
+    },
+    "modal": {
+        "appeal_label": "請描述你的申訴理由",
+        "appeal_title": "用戶申訴",
+        "can_appeal_label": "是否允許用戶再次申訴？（是/否）",
+        "respond_label": "請輸入你的回覆內容",
+        "respond_title": "回覆用戶申訴"
+    },
+    "msg": {
+        "action_blacklist": "加入申訴黑名單",
+        "already_blacklisted": "該用戶已在申訴黑名單中。",
+        "appeal_again_hint": "你可以點擊下方按鈕提出再次申訴。",
+        "appeal_blacklisted_hint": "你已被加入申訴黑名單，無法提出申訴。",
+        "appeal_channel_missing": "申訴頻道未設置或無法訪問，請聯繫管理員。",
+        "appeal_channel_set": "用戶申訴頻道已設置為：{channel}",
+        "appeal_disabled": "用戶申訴功能已被禁用。",
+        "appeal_hint": "你可以點擊下方按鈕提出申訴。",
+        "appeal_submitted": "你的申訴已提交，管理員將會審核你的申訴。",
+        "blacklist_added": "已將 {user} 加入申訴黑名單。",
+        "blacklist_empty": "目前沒有用戶在申訴黑名單中。",
+        "blacklist_notify": "你已被加入申訴黑名單。",
+        "blacklist_notify_reason": "你已被加入申訴黑名單，理由：{reason}。",
+        "blacklisted": "該用戶已被加入申訴黑名單，將無法再提出申訴。",
+        "cancelled": "已取消操作。",
+        "cannot_blacklist_bot": "無法將機器人加入申訴黑名單。",
+        "cannot_blacklist_self": "你不能將自己加入申訴黑名單。",
+        "channel_no_permission": "機器人沒有在該頻道發送訊息的權限，請選擇其他頻道。",
+        "guild_not_found": "無法找到對應的伺服器，請聯繫管理員。",
+        "invalid_action": "無效的懲罰類型。",
+        "no_reason": "未提供",
+        "not_banned": "你沒有被封禁，無法提出申訴。",
+        "not_muted": "你沒有被禁言，無法提出申訴。",
+        "notify_set": "已將 {action} 通知設定為{state}。",
+        "reply_dm_blocked": "無法發送訊息給該用戶，用戶可能已關閉私訊。",
+        "reply_sent": "你的回覆已發送給用戶。",
+        "unblacklist_confirm": "該用戶 {user} 已在申訴黑名單中，是否要解除？",
+        "unblacklisted": "已將 {user} 從申訴黑名單中移除。",
+        "unknown_user": "未知用戶"
+    },
+    "suffix": {
+        "blacklisted": "（已加入黑名單）",
+        "replied": "（已回覆）"
+    }
+}

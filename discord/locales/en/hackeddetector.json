@@ -1,0 +1,40 @@
+{
+    "audit": {
+        "hacked_timeout": "Compromised account detected; timed out as a precaution.",
+        "remove_admin": "Compromised account detected; admin role removed as part of the precautionary timeout.",
+        "restore_admin": "Restoring admin role.",
+        "suspicious_timeout": "Suspicious account detected; timed out as a precaution.",
+        "unlock": "Lifting the precautionary timeout.",
+        "unverified_kick": "Compromised-account verification not completed within 28 days."
+    },
+    "btn": {
+        "enter_code": "Enter code",
+        "start_unlock": "Start the recovery flow"
+    },
+    "dm": {
+        "desc": "We detected that your account may have been compromised and have timed you out as a precaution. Please check your account security as soon as possible.",
+        "failed_guild_count": "Servers we couldn't time you out in",
+        "muted_guild_count": "Servers you were timed out in",
+        "title": "System warning"
+    },
+    "err": {
+        "not_your_button": "This button isn't for you.",
+        "wrong_code": "That code is wrong, please try again."
+    },
+    "modal": {
+        "code_label": "Enter the code to lift your timeout",
+        "code_ph": "Verification code",
+        "unlock_title": "Lift timeout"
+    },
+    "msg": {
+        "dm_failed_fallback": "I can't DM you. Please DM me first, then use {command} to start the recovery flow.",
+        "no_timeout_records": "We haven't seen any sign that your account was compromised, so there's no timeout to lift.",
+        "press_to_start": "Press the button below to start the recovery flow.",
+        "unlock_failed": "Couldn't lift the timeout - you may have already lifted it.",
+        "unlocked": "Your account's timeout has been lifted."
+    },
+    "unlock": {
+        "code_prompt": "Enter the code shown above using the button below to lift your timeout.",
+        "code_title": "Enter the verification code"
+    }
+}

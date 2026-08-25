@@ -1,0 +1,145 @@
+{
+    "about": {
+        "antibeast_body": "When AntiBeast is enabled, @everyone gains mention permission and turning off mentionable stops working; MentionLimit then automatically switches to enforcing via an AutoMod rule.\nAdding a role also adds it to the AntiBeast bypass list (removing it does not take it back out).",
+        "antibeast_title": "AntiBeast compatibility",
+        "automod_mode_body": "The role stays permanently mentionable; during the cooldown a native Discord AutoMod rule blocks mentions of it instead.\nNote: AutoMod does not apply to admins or the server owner, so they can still mention the role during a cooldown.",
+        "automod_mode_title": "AutoMod mode",
+        "default_mode_body": "After a mention, temporarily turns off the role's \"Allow anyone to @mention this role\", then restores the original setting when the cooldown ends.",
+        "default_mode_title": "Default mode",
+        "desc": "Adds a cooldown to freely-mentionable roles (like a \"ping me\" role):\nonce the role is mentioned, further mentions are blocked for a while and restored automatically when the cooldown ends.",
+        "other_body": "\"Count admins\" makes admin mentions trigger the cooldown too (off by default).\n\"Cooldown announcement\" posts a notice in the channel when a cooldown starts (off by default).",
+        "other_title": "Other settings"
+    },
+    "antibeast": {
+        "bypass_added_pending": "AntiBeast was detected as enabled, so **{role}** was added to the AntiBeast bypass list automatically; it takes effect on AntiBeast's next sync.",
+        "bypass_added_synced": "AntiBeast was detected as enabled, so **{role}** was added to the AntiBeast bypass list automatically and its AutoMod rule was synced.",
+        "bypass_failed": "⚠️ Failed to add **{role}** to the AntiBeast bypass list; please run `/antibeast bypass` manually."
+    },
+    "audit": {
+        "cooldown_ended": "MentionLimit cooldown ended",
+        "cooldown_start": "MentionLimit cooldown started, restoring in {seconds}s",
+        "cooldown_started": "MentionLimit cooldown started",
+        "cooldown_started_degraded": "MentionLimit cooldown started (degraded enforcement)",
+        "cooldown_sync": "MentionLimit cooldown state sync",
+        "enforcement_reconcile": "MentionLimit enforcement mode reconcile"
+    },
+    "block_message": "MentionLimit blocked this mention: the role is on cooldown, please try again later.",
+    "btn": {
+        "announce_toggle": "Cooldown announcement: {state}",
+        "automod_toggle": "AutoMod mode: {state}",
+        "back_to_roles": "Back to role selection",
+        "clear_and_continue": "Clear and continue",
+        "count_admins_toggle": "Count admins: {state}",
+        "enable": "Enable MentionLimit",
+        "keep_current": "Keep current settings",
+        "set_cooldown": "Set cooldown seconds"
+    },
+    "config": {
+        "automod_admin_note": "AutoMod does not apply to admins or the server owner.",
+        "deleted_role": "deleted role ({role_id})",
+        "more_roles": {
+            "one": "…and {count} more role",
+            "other": "…and {count} more roles"
+        },
+        "no_roles": "No roles are managed yet; use `/mentionlimit add` to add one.",
+        "not_in_bypass": "　⚠️ Not in the AntiBeast bypass list, so mentions will be blocked by AntiBeast.",
+        "role_line": "{role} | cooldown {seconds}s | {state}",
+        "rule_not_created": "not created yet",
+        "state_cooling": "on cooldown, ends {when}",
+        "state_idle": "not on cooldown",
+        "title": "MentionLimit settings"
+    },
+    "err": {
+        "bot_hierarchy_too_low": "⚠️ The bot's highest role must be above **{role}** to toggle its mentionable state.",
+        "bot_missing_perms": "⚠️ The bot is missing permissions: {perms}",
+        "cannot_manage_everyone": "⚠️ @everyone can't be managed.",
+        "cannot_manage_integration_role": "⚠️ Roles managed by a bot or integration can't be managed.",
+        "cooldown_not_int": "⚠️ The cooldown must be a whole number of seconds.",
+        "cooldown_range": "⚠️ The cooldown must be between {min} and {max} seconds.",
+        "max_roles": "⚠️ At most {max} roles can be managed.",
+        "not_your_setup": "This setup flow isn't yours.",
+        "role_not_managed": "⚠️ **{role}** isn't in the managed list.",
+        "rule_limit_reached": "⚠️ MentionLimit couldn't create an AutoMod rule: this server has hit Discord's AutoMod rule limit. Delete an unused AutoMod rule and try again.",
+        "rule_sync_forbidden": "⚠️ MentionLimit failed to sync the AutoMod rule: {error}",
+        "rule_sync_generic": "⚠️ MentionLimit failed to sync the AutoMod rule; please try again later.",
+        "rule_sync_http": "⚠️ MentionLimit failed to sync the AutoMod rule: the Discord API returned an error ({status})."
+    },
+    "field": {
+        "announce": "Cooldown announcement",
+        "automod_rule": "AutoMod rule",
+        "count_admins": "Count admins",
+        "managed_roles": "Managed roles",
+        "mode": "Mode",
+        "status": "Status"
+    },
+    "modal": {
+        "cooldown_label": "Cooldown seconds ({min}-{max}), applied to all selected roles",
+        "cooldown_title": "MentionLimit cooldown"
+    },
+    "mode": {
+        "antibeast_forced": "(AntiBeast is enabled, so AutoMod mode is forced)",
+        "automod": "Block with an AutoMod rule",
+        "unmentionable": "Turn off mentionable"
+    },
+    "msg": {
+        "cooldown_announce": "⏳ {role} is now on mention cooldown; it recovers {when}.",
+        "currently_disabled": "ℹ️ MentionLimit is currently disabled; use `/mentionlimit toggle` to enable it.",
+        "disabled": "✅ MentionLimit is now **disabled**, and every role on cooldown has been restored.",
+        "disabled_partial_failure": "⚠️ Some roles failed to restore and will be retried automatically; please check the bot's permissions.",
+        "enabled": {
+            "one": "✅ MentionLimit is now **enabled**, managing {count} role.",
+            "other": "✅ MentionLimit is now **enabled**, managing {count} roles."
+        },
+        "enabled_no_roles": "Use `/mentionlimit add` to add the roles you want managed.",
+        "role_added": "✅ **{role}** was added to mention cooldown management with a {seconds}s cooldown.",
+        "role_removed": "✅ **{role}** is no longer under mention cooldown management.",
+        "role_removed_restore_failed": "⚠️ Failed to restore the mentionable state; please check the role's settings manually.",
+        "role_removed_restored": " (it was on cooldown, and has been restored immediately)",
+        "role_updated": "✅ **{role}**'s mention cooldown management was updated to a {seconds}s cooldown."
+    },
+    "note": {
+        "antibeast_forces_automod": "⚠️ AntiBeast is enabled: cooldowns will still be enforced with an AutoMod rule until AntiBeast is disabled.",
+        "automod_skips_admins": "ℹ️ AutoMod does not apply to admins or the server owner, so they can still mention the role during a cooldown."
+    },
+    "perm": {
+        "manage_guild": "Manage Server",
+        "manage_roles": "Manage Roles"
+    },
+    "settings": {
+        "announce_line": "Cooldown announcement: {state}",
+        "automod_line": "AutoMod mode: {state}",
+        "count_admins_line": "Count admins: {state}",
+        "current": "Current settings:",
+        "updated": "Settings updated."
+    },
+    "setup": {
+        "antibeast_note": "⚠️ AntiBeast is enabled: cooldowns will be enforced with an AutoMod rule, and roles will be added to the AntiBeast bypass list automatically.",
+        "confirm_desc": "Review the settings, then hit enable.",
+        "confirm_title": "MentionLimit Setup: confirm",
+        "current_selection": "Current selection",
+        "enabled_title": "MentionLimit enabled",
+        "hierarchy_body": "The bot's highest role is below: {roles}, so it won't be able to toggle those roles' mentionable state.",
+        "hierarchy_title": "⚠️ Role hierarchy",
+        "mode_explainer": "AutoMod mode: block with an AutoMod rule during the cooldown; the role stays mentionable.\nWhen off: temporarily turn off the role's \"Allow anyone to @mention this role\" during the cooldown.",
+        "nothing_selected": "Nothing selected yet",
+        "nothing_selected_hint": "Nothing selected yet (you can also add roles later with `/mentionlimit add`)",
+        "options_desc": "Set the cooldown length and enforcement mode.",
+        "options_title": "MentionLimit Setup: cooldown and mode",
+        "role_line": "{role} | cooldown {seconds}s",
+        "role_select_ph": "Pick the roles to manage",
+        "roles_desc": "Pick the roles you want a mention cooldown on (e.g. a \"ping me\" role).\n@everyone and integration-managed roles are excluded automatically.",
+        "roles_title": "MentionLimit Setup: managed roles"
+    },
+    "state": {
+        "disabled": "❌ Disabled",
+        "enabled": "✅ Enabled",
+        "no": "❌ No",
+        "no_plain": "No",
+        "off": "❌ Off",
+        "off_plain": "Off",
+        "on": "✅ On",
+        "on_plain": "On",
+        "yes": "✅ Yes",
+        "yes_plain": "Yes"
+    }
+}

@@ -1,0 +1,23 @@
+{
+    "embed": {
+        "command_stats_title": "指令使用統計",
+        "petpet_stats_title": "PetPet 統計"
+    },
+    "field": {
+        "app_command_errors": "應用程式指令錯誤次數",
+        "app_command_uses": "應用程式指令使用次數",
+        "petpet_given": "你 PetPet 了多少次？",
+        "petpet_received": "被別人 PetPet 了多少次？",
+        "text_command_errors": "文字指令錯誤次數",
+        "text_command_uses": "文字指令使用次數"
+    },
+    "value": {
+        "no_data": "無數據",
+        "total_errors": {
+            "other": "總計 {count} 次錯誤"
+        },
+        "total_uses": {
+            "other": "總計 {count} 次使用"
+        }
+    }
+}

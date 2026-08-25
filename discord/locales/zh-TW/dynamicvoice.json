@@ -1,0 +1,27 @@
+{
+    "audit": {
+        "blacklisted": "用戶在黑名單中，無法使用動態語音頻道。"
+    },
+    "err": {
+        "channel_missing": "錯誤：找不到設置的動態語音頻道。",
+        "missing_perms": "錯誤：機器人需要管理頻道和移動成員的權限才能設置動態語音頻道。",
+        "missing_voice_perms": "錯誤：機器人需要連接和說話權限才能播放音效。",
+        "not_set_up": "錯誤：請先設置動態語音頻道。",
+        "role_already_blacklisted": "該身分組已在黑名單中。",
+        "role_not_blacklisted": "該身分組不在黑名單中。"
+    },
+    "msg": {
+        "blacklist_empty": "黑名單身分組為空。",
+        "blacklist_header": "黑名單身分組：",
+        "deleted_role": "已刪除的身分組 (ID: `{role_id}`)",
+        "disabled": "動態語音頻道已被禁用。",
+        "play_audio_disabled": "動態語音頻道進入前播放音效已禁用。",
+        "play_audio_enabled": "動態語音頻道進入前播放音效已啟用。",
+        "role_blacklisted": "已將該身分組加入黑名單。",
+        "role_unblacklisted": "已將該身分組移除黑名單。",
+        "setup_done": "動態語音頻道已設置在 '{channel}' 下，將自動創建頻道於 '{category}' 中。"
+    },
+    "warn": {
+        "user_limit_failed": "警告：無法設置頻道 '{channel}' 的使用者上限，請確保機器人有管理頻道的權限。"
+    }
+}

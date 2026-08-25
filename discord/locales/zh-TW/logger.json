@@ -1,0 +1,26 @@
+{
+    "field": {
+        "user_id": "使用者ID",
+        "guild_id": "伺服器ID"
+    },
+    "msg": {
+        "log_channel_set": "日誌頻道已設置為: {channel}",
+        "log_channel_cleared": "已取消日誌頻道設定。"
+    },
+    "err": {
+        "command_error": "❌ 執行指令時發生錯誤！",
+        "generic": "❌ 發生錯誤: {error}",
+        "missing_permissions": "❌ 你沒有執行此指令的權限！缺少權限: {missing}",
+        "bot_missing_permissions": "❌ 我沒有足夠的權限執行此操作！缺少權限: {missing}",
+        "cooldown": "❌ 此指令冷卻中，請在 {seconds} 秒後再試。",
+        "check_failure": "❌ 你不符合執行此指令的條件。",
+        "owner_permission_joke": "-# 你傻逼吧你以為你是開發者你就可以濫權？",
+        "checkfail": {
+            "0": "❌ 你不符合執行此指令的條件！",
+            "1": "❌ 請支付你的女裝照來解鎖使用權限。",
+            "2": "❌ 請交出洋蔥的**新**女裝照來解鎖使用權限。",
+            "3": "❌ 請交出**小金金的女裝照**來解鎖使用權限。",
+            "4": "❌ 你在幹嘛？"
+        }
+    }
+}

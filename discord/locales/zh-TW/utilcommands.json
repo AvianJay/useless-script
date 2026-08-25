@@ -1,0 +1,251 @@
+{
+    "avatar": {
+        "title": "{name} 的頭像"
+    },
+    "banner": {
+        "err_no_banner": "該用戶沒有設定橫幅。",
+        "title": "{name} 的橫幅"
+    },
+    "botinfo": {
+        "command_count_value": "{total} ({text} 文字, {app} 應用)",
+        "database_info_value": "總筆數: {total}\n伺服器筆數: {server}\n用戶資料筆數: {user}",
+        "field": {
+            "bot_name": "機器人名稱",
+            "command_count": "指令數量",
+            "command_usage_count": "指令使用次數",
+            "cpu_usage": "CPU 使用率",
+            "database_info": "資料庫資訊",
+            "install_count": "用戶安裝數量",
+            "latency": "機器人延遲",
+            "links": "相關連結",
+            "memory_usage": "記憶體使用率",
+            "modules_disabled": "已禁用模組數量",
+            "modules_disabled_full": "已禁用模組({count})",
+            "modules_failed": "載入失敗的模組數量",
+            "modules_failed_full": "載入失敗的模組({count})",
+            "modules_loaded": "已載入模組數量",
+            "modules_loaded_full": "已載入模組({count})",
+            "server_count": "伺服器數量",
+            "uptime": "運行時間",
+            "user_count": "用戶總數量",
+            "version": "版本",
+            "version_suffix": "版本"
+        },
+        "links_value": "* [機器人網站]({website})\n* [使用文檔]({docs})\n* [支援伺服器]({support})\n* [隱私政策]({privacy})\n* [服務條款]({terms})\n* [邀請機器人]({invite})",
+        "title": "機器人資訊"
+    },
+    "btn": {
+        "avatar_link": "頭像連結",
+        "banner_link": "橫幅連結",
+        "emoji_link": "表情符號連結",
+        "server_avatar_link": "伺服器頭像連結",
+        "server_banner_link": "伺服器橫幅連結",
+        "server_icon_link": "伺服器圖標連結",
+        "steal": "偷",
+        "sticker_link": "貼圖連結"
+    },
+    "changelog": {
+        "no_content": "無更新內容。",
+        "page_footer": "頁數：{page}/{total}",
+        "title": "更新日誌",
+        "title_versioned": "更新日誌 - {version}",
+        "unavailable": "無法取得更新日誌。"
+    },
+    "commits": {
+        "title": "機器人 git 提交記錄"
+    },
+    "emoji_info": {
+        "author": "表情符號資訊",
+        "field": {
+            "emoji_id": "表情符號 ID",
+            "is_animated": "是否為動畫"
+        },
+        "footer": "表情符號 {page} / {total}"
+    },
+    "err": {
+        "command_not_found": "找不到指定的指令。",
+        "image_not_found": "無法找到{target}圖片。",
+        "need_manage_emojis_stickers": "你需要管理表情和貼圖的權限才能使用此功能。",
+        "no_commit_log": "無法取得提交記錄。",
+        "no_emoji": "此訊息沒有表情符號。",
+        "no_sticker": "此訊息沒有貼圖。",
+        "steal_failed": "無法加入{target}：{error}"
+    },
+    "help": {
+        "bot_help_footer": "共 {count} 個文字指令 | by AvianJay",
+        "cog_help_footer": "使用 {prefix}help <指令> 查看詳細說明",
+        "command_help_footer": "<> = 必填參數 | [] = 選填參數",
+        "command_not_found": "找不到此指令。",
+        "command_not_found_autocomplete": "找不到此指令。請使用自動完成選擇指令。",
+        "command_not_found_title": "❌ 找不到指令",
+        "cooldown_value": "{rate} 次 / {per} 秒",
+        "error_footer": "使用 {prefix}help 查看所有指令",
+        "field": {
+            "aliases": "別名",
+            "cooldown": "冷卻時間",
+            "parameters": "參數",
+            "subcommands": "子指令",
+            "usage": "使用方法"
+        },
+        "no_description": "無描述",
+        "optional": "選填",
+        "other_commands": "🔧 其他指令",
+        "overview_desc": "使用 `{prefix}help <指令>` 查看特定指令的詳細說明",
+        "overview_desc_mention": "使用 {mention} `<指令>` 查看特定指令的詳細說明",
+        "page_footer": "頁數：{page}/{total} | 共 {app_count} 個斜線指令 | {text_count} 個文字指令 | by AvianJay",
+        "required": "必填",
+        "slash_commands_field": "⚡ 斜線指令 ({start}-{end}/{total})",
+        "subcommand_not_found": "找不到此子指令。",
+        "text_commands_field": "📝 文字指令 ({start}-{end}/{total})",
+        "title": "📚 指令幫助"
+    },
+    "info": {
+        "warning": "-# 提示：如果你指令用到一半停住或沒辦法用了那很有可能是那個傻逼開發者||尼摳||又再重開機器人了||不然就是機器人又當機了||"
+    },
+    "msg": {
+        "steal_success": "已成功將{target} '{name}' 加入到伺服器！"
+    },
+    "nitro": {
+        "btn": {
+            "claim": "領取"
+        },
+        "claim_restriction_value": "只有近期在此頻道發過訊息的用戶才能領取。",
+        "claimed_by": "領取者: {user}",
+        "claimed_title": "{gift_name} [已領取]",
+        "err_already_claimed": "此禮物已被領取。",
+        "err_already_used": "此連結已被使用過。",
+        "err_invalid_link": "錯誤：這不是有效的 Nitro 連結格式。",
+        "err_need_message": "你需要在這個頻道發過訊息才能使用這個禮物。",
+        "err_verify_failed": "無法驗證此連結，請檢查是否輸入正確。",
+        "field": {
+            "claim_restriction": "領取限制",
+            "expires_at": "到期時間"
+        },
+        "gift_desc": "有人送出了一份禮物！點擊下方按鈕領取。",
+        "link_label": "Nitro 連結",
+        "modal_title": "發送 Nitro 禮物",
+        "not_claimed_yet": "尚未被領取。",
+        "sent_to_channel": "禮物已成功發送至頻道！{warning}",
+        "warn_no_history_perm": "請注意：機器人沒有讀取訊息歷史的權限，無法驗證用戶是否發過訊息。所有人都可以領取此禮物。",
+        "warn_user_install_unsupported": "請注意：使用者安裝不支援驗證用戶是否發過訊息。所有人都可以領取此禮物。",
+        "your_link": "這是你的 Nitro 連結：\n{link}"
+    },
+    "ping": {
+        "field": {
+            "rest_defer": "REST API(Defer) 延遲",
+            "rest_typing": "REST API(Typing) 延遲",
+            "websocket": "Websocket 延遲"
+        },
+        "title": "機器人延遲"
+    },
+    "randomnumber": {
+        "err_min_max": "錯誤：最小值必須小於最大值。",
+        "result": "隨機數字：{number}\n-# 範圍：{min} - {max}"
+    },
+    "randomuser": {
+        "err_guild_only": "此指令只能在伺服器頻道中使用。",
+        "err_no_users": "找不到任何用戶。",
+        "result": "隨機選擇的用戶是：{user}！\n-# 抽取用戶總數：{count}"
+    },
+    "serverinfo": {
+        "boosts_value": "{count} (等級{tier})",
+        "field": {
+            "boosts": "加成",
+            "channel_count": "頻道數量",
+            "created_at": "創建時間",
+            "locale": "地區",
+            "member_count": "成員數量",
+            "owner": "擁有者",
+            "role_count": "身分組數量",
+            "server_id": "伺服器 ID",
+            "verification_level": "驗證等級"
+        },
+        "title": "{name} 的資訊"
+    },
+    "state": {
+        "bot_name_fallback": "機器人",
+        "unknown": "未知",
+        "unknown_user": "未知用戶"
+    },
+    "sticker_info": {
+        "author": "貼圖資訊"
+    },
+    "stickerinfo": {
+        "field": {
+            "format": "貼圖格式",
+            "sticker_id": "貼圖 ID"
+        },
+        "title": "貼圖資訊 - {name}"
+    },
+    "target": {
+        "emoji": "表情符號",
+        "sticker": "貼圖"
+    },
+    "tutorial": {
+        "ai_misc": {
+            "desc": "**AI 聊天助手**\n💬 {ai} `<訊息>` — 與 AI 對話\n🗑️ {ai_clear} — 清除對話歷史\n📜 {ai_history} — 查看對話記錄\n\n**檢舉系統**\n🚨 {report} — 檢舉違規訊息（支援 AI 判定）\n\n**動態語音頻道**\n🔊 {dynamic_voice_setup} — 設定動態語音頻道，加入即自動建立專屬房間\n\n**回饋建議**\n📝 {feedback} — 向開發者提交回饋\n\n**機器人自訂**\n🖼️ {change_avatar} / {change_banner} / {change_bio} — 自訂機器人外觀（需授權）\n",
+            "title": "🤖 AI 聊天 & 其他功能"
+        },
+        "automod_autopublish": {
+            "desc": "讓機器人自動幫你管理伺服器。\n\n**自動管理 (AutoMod)**\n• {automod_view} — 查看目前的自動管理設定\n• {automod_toggle} — 開啟或關閉自動管理功能\n• {automod_settings} — 調整自動管理的偵測項目\n• 可自動偵測：逃避處罰、過多表情、詐騙連結等\n\n**自動發布 (AutoPublish)**\n• {autopublish_settings} — 設定自動發布的頻道\n• 機器人會自動將公告頻道的訊息發布給所有追蹤的伺服器\n",
+            "title": "🤖 自動管理 & 自動發布"
+        },
+        "autoreply": {
+            "desc": "設定關鍵字觸發的自動回覆訊息。\n\n➕ {autoreply_add} `<關鍵字> <回覆>` — 新增自動回覆\n➖ {autoreply_remove} `<關鍵字>` — 刪除自動回覆\n📋 {autoreply_list} — 列出所有自動回覆\n✏️ {autoreply_edit} — 編輯現有的自動回覆\n⚡ {autoreply_quickadd} — 快速新增多個回覆\n📤 {autoreply_export} — 匯出回覆設定為 JSON\n📥 {autoreply_import} — 從 JSON 匯入回覆設定\n🧪 {autoreply_test} — 測試自動回覆觸發\n\n-# 支援機率觸發與變數替換",
+            "title": "💬 自動回覆"
+        },
+        "basic_info": {
+            "desc": "這些指令讓你快速取得機器人與伺服器的相關資訊。\n\n🏓 {info_ping} — 檢查機器人延遲（Websocket & REST API）\nℹ️ {info_bot} — 顯示機器人版本、伺服器數量、運行時間等詳細資訊\n📋 {info_changelog} — 查看機器人的更新日誌\n📝 {info_commits} — 顯示最近的 Git 提交記錄\n📈 {stats} — 查看指令使用統計\n",
+            "title": "📊 基本資訊指令"
+        },
+        "completed": {
+            "desc": "恭喜你完成了機器人的使用教學！🎉\n\n**快速回顧：**\n• 使用 {info_help} 查看所有指令\n• 使用 {info_help} `<指令>` 查看特定指令的詳細說明\n• 使用 {info_bot} 查看機器人資訊\n• 使用 {feedback} 向開發者回饋意見\n\n**相關連結：**\n如有任何問題，歡迎加入[支援伺服器]({support_url})尋求協助！\n\n-# 祝你使用愉快！— by AvianJay",
+            "title": "✅ 教學完成！"
+        },
+        "economy": {
+            "desc": "完整的虛擬經濟系統，含貨幣、商店與交易。\n\n💵 {economy_balance} — 查看你的餘額\n📅 {economy_daily} — 領取每日獎勵\n⏰ {economy_hourly} — 領取每小時獎勵\n💸 {economy_pay} `<用戶> <金額>` — 轉帳給其他用戶\n🔄 {economy_exchange} — 伺服幣與全域幣互換\n🛒 {economy_shop} — 瀏覽商店\n🛍️ {economy_buy} / {economy_sell} — 購買或出售物品\n🤝 {economy_trade} — 與其他用戶交易\n🏆 {economy_leaderboard} — 查看財富排行榜\n",
+            "title": "💰 經濟系統"
+        },
+        "fun": {
+            "desc": "各種有趣的娛樂指令。\n\n📏 {dsize} — 隨機量測...嗯...你懂的 😏\n🏆 {dsize_leaderboard} — 查看排行榜\n⚔️ {dsize_battle} — 與其他用戶對戰\n🌿 {dsize_feedgrass} — 餵草功能\n📊 {dsize_stats} — 查看你的統計數據\n\n🎁 {nitro} — Nitro 禮物分享工具\n🐾 {petpet} — 生成 petpet GIF\n🌐 {explore} — 探索其他伺服器\n",
+            "title": "🎮 娛樂功能"
+        },
+        "lookup": {
+            "desc": "查詢用戶、伺服器與其他實用資訊。\n\n👤 {info_user} `<用戶>` — 查詢用戶的 ID、創建時間、加入時間等\n🏠 {info_server} — 查詢目前伺服器的詳細資訊\n🖼️ {info_avatar} `[用戶]` — 取得用戶的頭像圖片\n🎨 {info_banner} `[用戶]` — 取得用戶的橫幅圖片\n🎲 {randomnumber} `[min] [max]` — 生成一個隨機數字\n👥 {randomuser} — 從頻道的發言者中隨機選一人\n📏 {textlength} `<文字>` — 計算文字長度\n🐱 {httpcat} `<狀態碼>` — 用 HTTP 狀態碼產生貓咪圖片\n",
+            "title": "🔍 查詢指令"
+        },
+        "moderation": {
+            "desc": "伺服器管理員專用的懲處與管理功能。\n\n🔨 {ban} `<用戶> [原因]` — 封禁用戶\n🔓 {unban} `<用戶>` — 解除封禁\n👢 {kick} `<用戶> [原因]` — 踢出用戶\n🔇 {timeout} `<用戶> <時間>` — 禁言用戶\n🔊 {untimeout} `<用戶>` — 解除禁言\n⚡ {multi_moderate} — 對多名用戶同時執行懲處\n\n-# 需要對應的伺服器管理權限才能使用",
+            "title": "🛡️ 管理工具"
+        },
+        "music": {
+            "desc": "在語音頻道中播放音樂。\n\n▶️ {music_play} `<歌曲>` — 播放歌曲或將歌曲加入隊列\n⏸️ {music_pause} — 暫停播放\n⏯️ {music_resume} — 繼續播放\n⏹️ {music_stop} — 停止播放並離開語音頻道\n⏭️ {music_skip} — 跳過目前歌曲\n📜 {music_queue} — 查看播放隊列\n🎶 {music_now_playing} — 顯示正在播放的歌曲\n🔀 {music_shuffle} — 隨機播放隊列\n🔊 {music_volume} `<音量>` — 調整音量\n💡 {music_recommend} — 根據目前歌曲推薦\n",
+            "title": "🎵 音樂播放"
+        },
+        "page_footer": "頁面 {page} / {total} • 使用教學",
+        "text_cmd": {
+            "desc": "歡迎使用本機器人！以下是主要功能分類：\n\n📊 **基本資訊** — {cmd_ping}, {cmd_info}, {cmd_changelog}, {cmd_stats}\n🔍 **查詢功能** — `/info user`, `/info server`, `/info avatar`, `/info banner`\n🛡️ **管理工具** — `/ban/kick/timeout` 等\n🤖 **自動管理** — `/automod`, `/autopublish`\n💬 **自動回覆** — `/autoreply add/remove/list`\n💰 **經濟系統** — `/economy balance/daily/shop` 等\n🎵 **音樂播放** — `/music play/pause/skip` 等\n🤖 **AI 聊天** — `/ai`, `/ai-clear`\n🎮 **娛樂功能** — `/dsize`, `/petpet`, `/explore`\n📝 **回饋建議** — {cmd_feedback}\n\n使用 `{prefix}help <指令>` 查看特定指令說明\n使用斜線指令 {cmd_tutorial} 可以獲得互動式翻頁教學！",
+            "title": "📖 機器人使用教學"
+        },
+        "welcome": {
+            "desc": "這是一份使用教學，幫助你快速上手本機器人的所有功能。\n\n**如何操作：**\n使用下方的 ⬅️ ➡️ 按鈕翻頁瀏覽各項功能介紹。\n\n**指令類型：**\n• **斜線指令** — 輸入 `/` 後從選單選取\n• **文字指令** — 在聊天中輸入前綴（目前為 `{prefix}`）加上指令名稱\n\n**小提示：** 使用 {info_help} 或 `{prefix}help` 可以隨時查看所有指令清單。",
+            "title": "👋 歡迎使用 {bot_name} 機器人！"
+        }
+    },
+    "userinfo": {
+        "field": {
+            "created_at": "帳號創建時間",
+            "joined_at": "加入伺服器時間",
+            "nickname": "伺服器暱稱",
+            "user_id": "用戶 ID"
+        },
+        "title": "{name} 的資訊"
+    },
+    "verification": {
+        "high": "高",
+        "highest": "最高",
+        "low": "低",
+        "medium": "中等",
+        "none": "無"
+    }
+}

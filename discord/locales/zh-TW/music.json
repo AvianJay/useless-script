@@ -1,0 +1,144 @@
+{
+    "embed": {
+        "current_track_title": "🎵 當前播放",
+        "left_voice_channel_title": "👋 已離開語音頻道",
+        "node_health": "\n健康分數: {health}%",
+        "node_latency": "\n延遲: {ping}",
+        "node_usage": "\n有 {playing}/{connected}/{total} 個伺服器正在使用此節點",
+        "nodes_title": "🔧 Lavalink 節點狀態",
+        "playlist_added_title": "📋 播放列表已添加",
+        "queue_now_playing_line": "**正在播放:**\n[{title}]({uri})",
+        "queue_title": "📋 播放隊列",
+        "recommend_added_title": "🎯 已添加推薦歌曲",
+        "recommend_desc": "根據 **{title}** 推薦：\n\n{track_list}",
+        "shutdown_desc": "機器人正在關機或重啟。",
+        "shutdown_desc_restore_hint": "\n開機後會自動加入原語音頻道並還原播放狀態。",
+        "shutdown_title": "🔴 機器人即將離開語音頻道",
+        "track_added_title": "✅ 已添加到隊列",
+        "track_skipped_title": "⏭️ 已跳過",
+        "track_started_title": "🎵 開始播放"
+    },
+    "err": {
+        "all_saved_tracks_failed": {
+            "other": "❌ 所有保存的歌曲都無法載入，播放狀態已保留供稍後重試。（失敗 {failed} 首）"
+        },
+        "already_paused": "❌ 音樂已經暫停",
+        "available_radio_stations": "❌ 可用電台: `listen.moe`, `r-a-d.io`",
+        "clear_played_state_failed": "無法清除已播放完畢的保存狀態",
+        "clear_restored_state_failed": "無法清除已還原的保存狀態",
+        "connect_failed": "❌ 無法連接到語音頻道: {error}",
+        "invalid_loop_mode": "❌ 無效的循環模式，請使用 `off`、`track` 或 `queue`",
+        "invalid_query": "❌ 請提供有效的歌曲名稱或 URL",
+        "join_voice": "❌ 你必須加入語音頻道才能使用此指令",
+        "join_voice_to_play": "❌ 你必須加入語音頻道才能播放音樂",
+        "join_voice_to_radio": "❌ 你必須加入語音頻道才能播放電台",
+        "missing_voice_permissions": "缺少語音頻道權限：{missing}",
+        "no_bot_member_data": "無法取得機器人在伺服器中的成員資料",
+        "no_lavalink_node": "❌ 目前沒有可用的 Lavalink 節點，播放狀態已保留: {error}",
+        "no_paused_player": "❌ 沒有暫停的音樂",
+        "no_player": "❌ 沒有正在播放的音樂",
+        "no_results": "❌ 找不到 '{query}' 的結果",
+        "no_saved_state": "❌ 沒有儲存的播放狀態可回復。",
+        "no_similar_recommendations": "❌ 找不到相似的推薦歌曲",
+        "not_paused": "❌ 音樂未暫停",
+        "pause_failed": "❌ 暫停出錯: {error}",
+        "play_failed": "❌ 播放出錯: {error}",
+        "queue_empty": "❌ 播放隊列為空",
+        "radio_mode_active": "目前正在使用 {station} 電台模式，不能新增歌曲或修改隊列。請先停止播放後再使用。",
+        "radio_no_loop": "❌ {station} 電台模式不能設定循環。",
+        "radio_no_skip": "❌ {station} 電台模式不能跳過歌曲。",
+        "radio_stream_load_failed": "無法載入 {station} 串流",
+        "radio_switch_failed": "❌ 切換到 {station} 失敗: {error}",
+        "recommend_failed": "❌ 推薦歌曲出錯: {error}",
+        "restore_already_connected": "⚠️ 機器人已連接其他語音工作階段，保存的播放狀態已保留。",
+        "restore_failed": "⚠️ 自動還原音樂失敗：{error}。播放狀態已保留。",
+        "restore_manual_failed": "⚠️ 回復播放狀態失敗，保存資料已保留: {error}",
+        "restore_preload_failed": "⚠️ 無法預先載入保存的音樂：{error}。播放狀態已保留。",
+        "restore_unsupported_mode_raw": "不支援的播放模式: {mode}",
+        "restore_voice_channel_gone": "⚠️ 保存的語音頻道已不存在，播放狀態已保留供稍後重試。",
+        "restore_voice_permission": "⚠️ 無法自動還原音樂：{reason}。播放狀態已保留。",
+        "resume_failed": "❌ 繼續播放出錯: {error}",
+        "resume_no_player": "❌ 沒有正在播放的音樂，請提供歌曲名稱或 URL",
+        "resume_not_paused": "❌ 音樂未暫停，請提供歌曲名稱或 URL 來添加新歌曲",
+        "same_voice_channel": "❌ 你必須與機器人在同一語音頻道才能使用此指令",
+        "saved_radio_gone": "❌ 儲存的電台已不存在，無法回復。",
+        "saved_radio_missing": "保存的電台不存在",
+        "saved_state_no_tracks": "保存的播放狀態沒有任何歌曲",
+        "saved_track_decode_failed": "encoded track 無法解碼，且沒有可用 URI",
+        "saved_track_load_failed_both": "encoded track 與 URI 都無法載入: {uri}",
+        "saved_track_missing_data": "保存的歌曲缺少 encoded track 與 URI",
+        "search_play_failed": "❌ 搜尋播放出錯: {error}",
+        "shuffle_failed": "❌ 打亂隊列出錯: {error}",
+        "skip_failed": "❌ 跳過出錯: {error}",
+        "stage_needs_mute_permission": "舞台頻道需要 mute_members 權限才能自動成為講者",
+        "stop_before_restore_radio": "❌ 請先停止目前的播放工作階段，再回復保存的電台。",
+        "stop_failed": "❌ 停止出錯: {error}",
+        "unsupported_radio_station": "❌ 不支援的電台。",
+        "unsupported_saved_mode": "❌ 不支援的保存播放模式：{mode}",
+        "voice_channel_full": "語音頻道已滿，且機器人沒有略過人數限制的權限",
+        "voice_restore_failed": "❌ 無法在此語音頻道回復播放狀態：{reason}",
+        "voice_type_unsupported": "保存的語音頻道類型不支援自動還原",
+        "volume_failed": "❌ 設置音量出錯: {error}",
+        "volume_range": "❌ 音量必須在 0-100 之間"
+    },
+    "field": {
+        "added_count": "已添加",
+        "artist": "藝術家",
+        "duration": "時長",
+        "listener_count": "聽眾數量",
+        "loop_mode": "循環模式",
+        "more_tracks": "更多歌曲",
+        "progress": "進度",
+        "queue_position": "隊列位置",
+        "queue_total_duration": "隊列總時長",
+        "total_duration": "總時長",
+        "track_count": "歌曲數量",
+        "upcoming_tracks": {
+            "other": "接下來的歌曲 ({count} 首)"
+        },
+        "volume": "音量"
+    },
+    "footer": {
+        "queue_count": {
+            "other": "隊列中共有 {count} 首歌曲"
+        }
+    },
+    "msg": {
+        "left_voice_no_members": "語音頻道內已 5 分鐘無其他成員，機器人已離開",
+        "left_voice_queue_empty": "沒有更多的歌曲要播放，已離開語音頻道",
+        "next_track_failed_warning": "⚠️ 無法播放下一首歌曲: {error}",
+        "paused": "⏸️ 音樂已暫停",
+        "queue_shuffled": "🔀 隊列已隨機打亂",
+        "radio_switching": "📻 已切換到 {station} 電台模式，正在等待電台資料...",
+        "recommend_added_play_warning": "⚠️ 推薦歌曲已添加，但播放失敗: {error}",
+        "restore_auto_done": "✅ 已自動還原關機前的音樂播放狀態。",
+        "restore_failed_count_suffix": {
+            "other": "（{failed} 首無法載入）"
+        },
+        "restore_played_out": "✅ 保存的歌曲已經播放完畢，已清除播放狀態。",
+        "restore_radio_done": "✅ 已回復 {station} 電台播放狀態。",
+        "restore_tracks_done": {
+            "other": "✅ 已回復 {count} 首歌曲。"
+        },
+        "resumed": "▶️ 音樂已繼續播放",
+        "stopped": "⏹️ 已停止播放並斷開連接",
+        "track_added_play_warning": "⚠️ 歌曲已添加到隊列，但播放失敗: {error}",
+        "volume_set": "🔊 音量已設置為 {level}%"
+    },
+    "value": {
+        "fetching_radio_info": "正在抓取電台資訊...",
+        "loop_off": "▶️ 關閉循環",
+        "loop_off_short": "▶️ 關閉",
+        "loop_queue": "🔁 隊列循環",
+        "loop_track": "🔂 單曲循環",
+        "more_tracks_count": {
+            "other": "還有 {count} 首歌曲"
+        },
+        "node_connected": "✅ 已連接",
+        "node_current_marker": " ⬅️ 你在這裡",
+        "node_disconnected": "❌ 未連接",
+        "track_count": {
+            "other": "{count} 首歌曲"
+        }
+    }
+}

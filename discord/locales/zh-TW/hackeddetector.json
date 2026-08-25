@@ -1,0 +1,40 @@
+{
+    "audit": {
+        "hacked_timeout": "檢測到被盜帳戶，預防性禁言。",
+        "remove_admin": "檢測到被盜帳戶，移除管理員角色以進行預防性禁言。",
+        "restore_admin": "恢復管理員角色。",
+        "suspicious_timeout": "檢測到可疑帳號，預防性禁言。",
+        "unlock": "解除預防性禁言。",
+        "unverified_kick": "28 天內未完成被盜帳戶驗證。"
+    },
+    "btn": {
+        "enter_code": "輸入驗證碼",
+        "start_unlock": "開始解除禁言流程"
+    },
+    "dm": {
+        "desc": "我們檢測到您的帳戶可能被盜用，已對您進行預防性禁言，請盡快檢查您的帳戶安全。",
+        "failed_guild_count": "未能禁言的伺服器數量",
+        "muted_guild_count": "被禁言的伺服器數量",
+        "title": "系統警告"
+    },
+    "err": {
+        "not_your_button": "這個按鈕不是為你設置的。",
+        "wrong_code": "驗證碼錯誤，請重新嘗試。"
+    },
+    "modal": {
+        "code_label": "請輸入解除禁言的驗證碼",
+        "code_ph": "驗證碼",
+        "unlock_title": "解除禁言"
+    },
+    "msg": {
+        "dm_failed_fallback": "我無法私訊你。請先私訊我，然後使用 {command} 開始解除禁言流程。",
+        "no_timeout_records": "我們沒有檢測到你的帳戶有被盜用的跡象，無需解除禁言。",
+        "press_to_start": "按下下面的按鈕開始解除禁言流程。",
+        "unlock_failed": "解除禁言失敗，你可能已經解除解除禁言了。",
+        "unlocked": "你的帳戶已經解除禁言。"
+    },
+    "unlock": {
+        "code_prompt": "請在下面的按鈕中輸入上方的驗證碼以解除禁言。",
+        "code_title": "請輸入驗證碼"
+    }
+}

@@ -7,6 +7,8 @@ from collections import Counter
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
+from i18n import t, t_enum
+
 
 BET_MIN = 50
 BET_MAX = 2000
@@ -18,23 +20,18 @@ ROULETTE_RED_NUMBERS = frozenset({
     1, 3, 5, 7, 9, 12, 14, 16, 18,
     19, 21, 23, 25, 27, 30, 32, 34, 36,
 })
-ROULETTE_BET_LABELS = {
-    "red": "紅色",
-    "black": "黑色",
-    "odd": "單數",
-    "even": "雙數",
-    "low": "小（1～18）",
-    "high": "大（19～36）",
-    "number": "單一號碼",
-}
+ROULETTE_BET_TYPES = (
+    "red", "black", "odd", "even", "low", "high", "number",
+)
 
+# (prize_key, winning_symbol, weight, multiplier)；顯示名稱由 prize_key 查語言檔
 SCRATCH_PRIZE_TABLE = [
-    ("none", None, 5500, 0.0, "未中獎"),
-    ("refund", "🍋", 2500, 1.0, "回本"),
-    ("small", "🍒", 1200, 1.5, "小獎"),
-    ("medium", "🔔", 600, 3.0, "中獎"),
-    ("major", "7️⃣", 180, 10.0, "大獎"),
-    ("jackpot", "💎", 20, 80.0, "頭獎"),
+    ("none", None, 5500, 0.0),
+    ("refund", "🍋", 2500, 1.0),
+    ("small", "🍒", 1200, 1.5),
+    ("medium", "🔔", 600, 3.0),
+    ("major", "7️⃣", 180, 10.0),
+    ("jackpot", "💎", 20, 80.0),
 ]
 SCRATCH_SYMBOLS = ["🍋", "🍒", "🔔", "7️⃣", "💎", "⭐"]
 
@@ -61,6 +58,7 @@ SLOT_TRIPLE_PAYOUT = {
     "7️⃣": 40.0,
 }
 SLOT_PAIR_PAYOUT = 1.2
+SLOT_OUTCOMES = ("triple", "pair", "none")
 
 HL_RANK_NAMES = ["A", "2", "3", "4", "5", "6", "7", "8", "9", "10", "J", "Q", "K"]
 HL_HOUSE_FACTOR = 0.95
@@ -74,13 +72,26 @@ def _rng(rng=None):
     return rng if rng is not None else random
 
 
+def roulette_bet_label(bet_type: str) -> str:
+    """輪盤投注方式的顯示名稱（bet_type 本身是機器值，永不翻譯）。"""
+    return t_enum("casino.roulette.bet", bet_type)
+
+
+def scratch_prize_name(prize_key: str) -> str:
+    return t_enum("casino.scratch.prize", prize_key)
+
+
+def slots_outcome_name(outcome: str) -> str:
+    return t_enum("casino.slots.outcome", outcome)
+
+
 def validate_bet(bet: Any) -> float:
     try:
         value = round(float(bet), 2)
     except (TypeError, ValueError) as exc:
-        raise ValueError("賭注必須是數字。") from exc
+        raise ValueError(t("casino.err.bet_not_number")) from exc
     if value < BET_MIN or value > BET_MAX:
-        raise ValueError(f"賭注金額需介於 {BET_MIN}～{BET_MAX} 之間。")
+        raise ValueError(t("casino.err.bet_range", min=BET_MIN, max=BET_MAX))
     return value
 
 
@@ -111,14 +122,14 @@ def roulette_is_win(result: int, bet_type: str, chosen_number: Optional[int] = N
 
 
 def play_roulette(bet_type: str, chosen_number: Optional[int] = None, rng=None) -> Dict[str, Any]:
-    if bet_type not in ROULETTE_BET_LABELS:
-        raise ValueError("無效的輪盤投注方式。")
+    if bet_type not in ROULETTE_BET_TYPES:
+        raise ValueError(t("casino.err.roulette_bet_type"))
     if bet_type == "number":
         if chosen_number is None or not 0 <= int(chosen_number) <= 36:
-            raise ValueError("單號投注必須選擇 0～36。")
+            raise ValueError(t("casino.err.roulette_number_range"))
         chosen_number = int(chosen_number)
     elif chosen_number is not None:
-        raise ValueError("只有單號投注能指定號碼。")
+        raise ValueError(t("casino.err.roulette_number_only"))
     result = _rng(rng).randint(0, 36)
     won = roulette_is_win(result, bet_type, chosen_number)
     return {
@@ -132,14 +143,14 @@ def play_roulette(bet_type: str, chosen_number: Optional[int] = None, rng=None) 
 def play_dice(guess: int, rng=None) -> Dict[str, Any]:
     guess = int(guess)
     if not 1 <= guess <= 6:
-        raise ValueError("骰子點數必須介於 1～6。")
+        raise ValueError(t("casino.err.dice_range"))
     result = _rng(rng).randint(1, 6)
     return {"guess": guess, "result": result, "won": result == guess, "multiplier": DICE_MULTIPLIER}
 
 
 def play_coinflip(side: str, rng=None) -> Dict[str, Any]:
     if side not in ("heads", "tails"):
-        raise ValueError("硬幣選項必須是 heads 或 tails。")
+        raise ValueError(t("casino.err.coinflip_side"))
     result = _rng(rng).choice(("heads", "tails"))
     return {"side": side, "result": result, "won": result == side, "multiplier": COINFLIP_MULTIPLIER}
 
@@ -151,7 +162,7 @@ def draw_scratch_prize(rng=None) -> Tuple[str, Optional[str], float, str]:
         weights=[entry[2] for entry in SCRATCH_PRIZE_TABLE],
         k=1,
     )[0]
-    return prize[0], prize[1], prize[3], prize[4]
+    return prize[0], prize[1], prize[3], scratch_prize_name(prize[0])
 
 
 def create_scratch_grid(winning_symbol: Optional[str], rng=None) -> List[str]:
@@ -293,19 +304,27 @@ def spin_slots(rng=None) -> List[str]:
 
 
 def slots_multiplier(reels: Sequence[str]) -> Tuple[float, str]:
+    """回傳 (倍率, outcome 機器值)；顯示名稱由 slots_outcome_name() 解析。"""
     if len(reels) != 3:
-        raise ValueError("拉霸結果必須包含三個符號。")
+        raise ValueError(t("casino.err.slots_reels"))
     if reels[0] == reels[1] == reels[2]:
-        return SLOT_TRIPLE_PAYOUT[reels[0]], "三連線！"
+        return SLOT_TRIPLE_PAYOUT[reels[0]], "triple"
     if reels[0] == reels[1] or reels[1] == reels[2] or reels[0] == reels[2]:
-        return SLOT_PAIR_PAYOUT, "一對"
-    return 0.0, "未中獎"
+        return SLOT_PAIR_PAYOUT, "pair"
+    return 0.0, "none"
 
 
 def play_slots(rng=None) -> Dict[str, Any]:
     reels = spin_slots(rng)
-    multiplier, prize_name = slots_multiplier(reels)
-    return {"reels": reels, "multiplier": multiplier, "prize_name": prize_name, "won": multiplier > 0}
+    multiplier, outcome = slots_multiplier(reels)
+    return {
+        "reels": reels,
+        "multiplier": multiplier,
+        "outcome": outcome,
+        # prize_name 是 Explore 前端直接顯示的欄位，維持存在
+        "prize_name": slots_outcome_name(outcome),
+        "won": multiplier > 0,
+    }
 
 
 def hl_rank_name(rank: int) -> str:
@@ -314,7 +333,7 @@ def hl_rank_name(rank: int) -> str:
 
 def hl_probs(rank: int) -> Tuple[float, float]:
     if not 1 <= rank <= 13:
-        raise ValueError("牌面點數必須介於 1～13。")
+        raise ValueError(t("casino.err.hl_rank_range"))
     return (13 - rank) / 12, (rank - 1) / 12
 
 
@@ -330,9 +349,9 @@ def hl_apply_win(pot: float, bet: float, current_rank: int, guess: str) -> Tuple
     elif guess == "low":
         probability = p_low
     else:
-        raise ValueError("比大小選項必須是 high 或 low。")
+        raise ValueError(t("casino.err.hl_guess"))
     if probability <= 0:
-        raise ValueError("目前牌面不能選擇這個方向。")
+        raise ValueError(t("casino.err.hl_direction"))
     next_pot = round(pot * HL_HOUSE_FACTOR / probability, 2)
     cap = round(bet * HL_MAX_MULT, 2)
     return min(next_pot, cap), next_pot >= cap

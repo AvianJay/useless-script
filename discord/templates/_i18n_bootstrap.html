@@ -1,0 +1,6 @@
+{% set _i18n_prefixes = i18n_prefixes if i18n_prefixes is defined else [] %}
+<script>
+    window.I18N = {{ frontend_catalog(_i18n_prefixes) | tojson }};
+    window.I18N_LOCALE = {{ locale | tojson }};
+</script>
+<script src="{{ url_for('static', filename='js/i18n.js') }}?v=1"></script>

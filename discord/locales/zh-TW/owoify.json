@@ -1,0 +1,8 @@
+{
+    "err": {
+        "cannot_fetch_reply": "無法取得回覆的訊息內容，請確保該訊息存在且可讀取。",
+        "message_empty": "該訊息沒有內容可供 OwOify。",
+        "no_text_provided": "請提供要變可愛的文字，或回覆一則訊息來變可愛該訊息的內容。",
+        "reply_empty": "回覆的訊息沒有內容可供 OwOify。"
+    }
+}

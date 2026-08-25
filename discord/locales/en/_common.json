@@ -1,0 +1,53 @@
+{
+    "number": {
+        "group_sep": ",",
+        "decimal_sep": "."
+    },
+    "list": {
+        "sep": ", ",
+        "last_sep": " and "
+    },
+    "datefmt": {
+        "short": "%b %d, %Y",
+        "long": "%B %d, %Y at %H:%M"
+    },
+    "state": {
+        "enabled": "Enabled",
+        "disabled": "Disabled",
+        "yes": "Yes",
+        "no": "No",
+        "none": "None",
+        "auto": "Auto",
+        "unset": "Not set",
+        "default": "Default",
+        "default_value": "(default) {value}",
+        "on": "On",
+        "off": "Off"
+    },
+    "btn": {
+        "confirm": "Confirm",
+        "cancel": "Cancel",
+        "back": "Back",
+        "close": "Close",
+        "done": "Done",
+        "next": "Next",
+        "prev": "Previous",
+        "next_step": "Next step",
+        "prev_step": "Previous step"
+    },
+    "err": {
+        "guild_only": "This command can only be used in a server.",
+        "no_permission": "You don't have permission to do that.",
+        "generic": "Something went wrong. Please try again later."
+    },
+    "unit": {
+        "seconds": { "one": "{count} second", "other": "{count} seconds" },
+        "minutes": { "one": "{count} minute", "other": "{count} minutes" },
+        "hours": { "one": "{count} hour", "other": "{count} hours" },
+        "days": { "one": "{count} day", "other": "{count} days" },
+        "members": { "one": "{count} member", "other": "{count} members" },
+        "messages": { "one": "{count} message", "other": "{count} messages" },
+        "items": { "one": "{count} item", "other": "{count} items" },
+        "times": { "one": "{count} time", "other": "{count} times" }
+    }
+}

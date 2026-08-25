@@ -17,6 +17,8 @@ from itertools import chain
 
 from PIL import Image
 from PIL.Image import Image as PILImage
+import i18n
+from i18n import t as t_
 
 frames = 10
 resolution = (128, 128)
@@ -199,15 +201,15 @@ class PetPetCommand(commands.Cog):
         )
         bot.tree.add_command(self.ctx_menu)
 
-    @app_commands.command(name="petpet", description="生成 PetPet GIF")
-    @app_commands.describe(user="要撫摸的使用者 (預設為自己)")
+    @app_commands.command(name=app_commands.locale_str("petpet", i18n_key="cmd.petpet.petpet.name"), description=app_commands.locale_str("Generate a PetPet GIF", i18n_key="cmd.petpet.petpet.desc"))
+    @app_commands.describe(user=app_commands.locale_str("The user to pet (default: yourself)", i18n_key="cmd.petpet.petpet.param.user"))
     async def petpet(self, interaction: discord.Interaction, user: Union[discord.Member, discord.User] = None):
         try:
             await interaction.response.defer()
             if user is None:
                 user = interaction.user
 
-            log(f"生成 petpet GIF 給 {user}", module_name="petpet", user=interaction.user, guild=interaction.guild)
+            log(f"Generating petpet GIF for {user}", module_name="petpet", user=interaction.user, guild=interaction.guild)
             avatar_url = user.display_avatar.with_size(128).with_static_format("png").url
             async with aiohttp.ClientSession() as session:
                 async with session.get(avatar_url) as resp:
@@ -223,11 +225,11 @@ class PetPetCommand(commands.Cog):
             ut = get_user_data(0, user.id, "get_petpet_count", 0)
             set_user_data(0, user.id, "get_petpet_count", ut + 1)
         except Exception as e:
-            await interaction.followup.send(f"生成 PetPet GIF 時發生錯誤：{e}")
-            log(f"生成 PetPet GIF 時發生錯誤：{e}", module_name="petpet", level=logging.ERROR, user=interaction.user, guild=interaction.guild)
+            await interaction.followup.send(t_("petpet.err.generation_failed", error=str(e)))
+            log(f"Error generating PetPet GIF: {e}", module_name="petpet", level=logging.ERROR, user=interaction.user, guild=interaction.guild)
             traceback.print_exc()
     
-    @commands.command(name="petpet", help="生成 PetPet GIF", aliases=["撫摸", "pet", "pp"])
+    @commands.command(name="petpet", help="生成 PetPet GIF", aliases=["撫摸", "pet", "pp"])  # i18n: skip (help= 在 import 期求值，待 PrettyHelpCommand 在地化；別名為輸入語法)
     async def petpet_command(self, ctx: commands.Context, user: Union[discord.Member, discord.User] = None):
         async with ctx.typing():
             try:
@@ -237,7 +239,7 @@ class PetPetCommand(commands.Cog):
                     else:
                         user = ctx.author
 
-                log(f"生成 petpet GIF 給 {user}", module_name="petpet", user=ctx.author, guild=ctx.guild)
+                log(f"Generating petpet GIF for {user}", module_name="petpet", user=ctx.author, guild=ctx.guild)
                 avatar_url = user.display_avatar.with_size(128).with_static_format("png").url
                 async with aiohttp.ClientSession() as session:
                     async with session.get(avatar_url) as resp:
@@ -254,8 +256,8 @@ class PetPetCommand(commands.Cog):
                 ut = get_user_data(0, user.id, "get_petpet_count", 0)
                 set_user_data(0, user.id, "get_petpet_count", ut + 1)
             except Exception as e:
-                await ctx.reply(f"生成 PetPet GIF 時發生錯誤：{e}")
-                log(f"生成 PetPet GIF 時發生錯誤：{e}", module_name="petpet", level=logging.ERROR, user=ctx.author, guild=ctx.guild)
+                await ctx.reply(t_("petpet.err.generation_failed", error=str(e)))
+                log(f"Error generating PetPet GIF: {e}", module_name="petpet", level=logging.ERROR, user=ctx.author, guild=ctx.guild)
                 traceback.print_exc()
     
     # @app_commands.command(name="petpet-stats", description="查看你使用 petpet 指令的次數")
@@ -275,7 +277,7 @@ class PetPetCommand(commands.Cog):
             if user is None:
                 user = interaction.user
 
-            log(f"生成 petpet GIF 給 {user}", module_name="petpet", user=interaction.user, guild=interaction.guild)
+            log(f"Generating petpet GIF for {user}", module_name="petpet", user=interaction.user, guild=interaction.guild)
             avatar_url = user.display_avatar.with_size(128).with_static_format("png").url
             async with aiohttp.ClientSession() as session:
                 async with session.get(avatar_url) as resp:
@@ -291,8 +293,8 @@ class PetPetCommand(commands.Cog):
             ut = get_user_data(0, user.id, "get_petpet_count", 0)
             set_user_data(0, user.id, "get_petpet_count", ut + 1)
         except Exception as e:
-            await interaction.followup.send(f"生成 PetPet GIF 時發生錯誤：{e}")
-            log(f"生成 PetPet GIF 時發生錯誤：{e}", module_name="petpet", level=logging.ERROR, user=interaction.user, guild=interaction.guild)
+            await interaction.followup.send(t_("petpet.err.generation_failed", error=str(e)))
+            log(f"Error generating PetPet GIF: {e}", module_name="petpet", level=logging.ERROR, user=interaction.user, guild=interaction.guild)
             traceback.print_exc()
 
 asyncio.run(bot.add_cog(PetPetCommand(bot)))

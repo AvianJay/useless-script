@@ -1,4 +1,4 @@
-import asyncio
+﻿import asyncio
 import logging
 import time
 from datetime import datetime, timedelta, timezone
@@ -16,11 +16,14 @@ from globalenv import (
 )
 from logger import log
 
+import i18n
+from i18n import t
+
 
 CONFIG_KEY = "mentionlimit"
 ANTIBEAST_CONFIG_KEY = "antibeast"
+# 用來在 Discord 端找回既有規則的識別字串；翻譯會讓機器人找不到自己建的規則。
 RULE_NAME = "MentionLimit - role mention cooldown"
-BLOCK_MESSAGE = "MentionLimit 已阻擋提及：此身分組正在冷卻中，請稍後再試。"
 MIN_COOLDOWN = 10
 MAX_COOLDOWN = 86400
 DEFAULT_COOLDOWN = 600
@@ -36,7 +39,7 @@ AUTOMOD_RULE_LIMIT_ERROR_CODES = {30034}
 @app_commands.allowed_installs(guilds=True, users=False)
 @app_commands.allowed_contexts(guilds=True, dms=False, private_channels=False)
 @app_commands.default_permissions(manage_guild=True, manage_roles=True)
-class MentionLimit(commands.GroupCog, name="mentionlimit"):
+class MentionLimit(commands.GroupCog, name=app_commands.locale_str("mentionlimit", i18n_key="cmd.mentionlimit.mentionlimit.root.name")):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
         self._last_trigger: dict[tuple[int, int], float] = {}
@@ -191,43 +194,40 @@ class MentionLimit(commands.GroupCog, name="mentionlimit"):
                     cog_config,
                     enabled=True,
                     create_if_missing=True,
-                    reason=f"MentionLimit 自動加入 AntiBeast 繞過: {role.id}",
+                    reason=f"MentionLimit auto-added an AntiBeast bypass: {role.id}",
                 )
                 set_server_config(guild.id, ANTIBEAST_CONFIG_KEY, cog_config)
             except Exception as error:
                 log(
-                    f"MentionLimit 加入 AntiBeast 繞過失敗: {error}",
+                    f"MentionLimit failed to add the AntiBeast bypass: {error}",
                     level=logging.ERROR,
                     module_name="MentionLimit",
                     guild=guild,
                 )
-                return False, f"⚠️ 將 **{role.name}** 加入 AntiBeast 繞過清單失敗，請手動執行 `/antibeast bypass`。"
-            return True, (
-                f"已偵測到 AntiBeast 啟用中，已自動將 **{role.name}** 加入 AntiBeast 繞過清單並同步其 AutoMod 規則。"
-            )
+                return False, t("mentionlimit.antibeast.bypass_failed", role=role.name)
+            return True, t("mentionlimit.antibeast.bypass_added_synced", role=role.name)
 
         bypass_ids.add(role.id)
         antibeast_config["bypass_roles"] = list(bypass_ids)
         set_server_config(guild.id, ANTIBEAST_CONFIG_KEY, antibeast_config)
-        return True, (
-            f"已偵測到 AntiBeast 啟用中，已自動將 **{role.name}** 加入 AntiBeast 繞過清單，"
-            "將於 AntiBeast 下次同步時生效。"
-        )
+        return True, t("mentionlimit.antibeast.bypass_added_pending", role=role.name)
 
     # ---------- 權限 / AutoMod 規則 ----------
 
     @staticmethod
     def _required_bot_permissions(guild: discord.Guild, *, automod: bool) -> list[str]:
+        manage_roles = t("mentionlimit.perm.manage_roles")
+        manage_guild = t("mentionlimit.perm.manage_guild")
         bot_member = guild.me
         if bot_member is None:
-            return ["管理身分組", "管理伺服器"] if automod else ["管理身分組"]
+            return [manage_roles, manage_guild] if automod else [manage_roles]
 
         missing = []
         permissions = bot_member.guild_permissions
         if not permissions.manage_roles:
-            missing.append("管理身分組")
+            missing.append(manage_roles)
         if automod and not permissions.manage_guild:
-            missing.append("管理伺服器")
+            missing.append(manage_guild)
         return missing
 
     @staticmethod
@@ -291,7 +291,8 @@ class MentionLimit(commands.GroupCog, name="mentionlimit"):
             "actions": [
                 discord.AutoModRuleAction(
                     type=discord.AutoModRuleActionType.block_message,
-                    custom_message=BLOCK_MESSAGE,
+                    custom_message=t("mentionlimit.block_message",
+                                     locale=i18n.resolve_locale(guild_id=guild.id)),
                 )
             ],
             "enabled": True,
@@ -325,25 +326,22 @@ class MentionLimit(commands.GroupCog, name="mentionlimit"):
         mentions_automod = "automod" in error_text or "auto moderation" in error_text
         mentions_limit = any(
             keyword in error_text
-            for keyword in ("maximum", "limit", "too many", "reached", "已達", "上限")
+            for keyword in ("maximum", "limit", "too many", "reached", "已達", "上限")  # i18n: skip (API error matching)
         )
         return mentions_automod and mentions_limit
 
     def _rule_sync_error_message(self, error: Exception) -> str:
         if isinstance(error, discord.Forbidden):
-            return f"⚠️ MentionLimit 同步 AutoMod 規則失敗：{error.text or error}"
+            return t("mentionlimit.err.rule_sync_forbidden", error=error.text or error)
         if isinstance(error, discord.HTTPException):
             if self._is_automod_rule_limit_error(error):
-                return (
-                    "⚠️ MentionLimit 無法建立 AutoMod 規則：這個伺服器的 Discord AutoMod 規則數量已達上限。"
-                    "請先刪除不需要的 AutoMod 規則後再試。"
-                )
-            return f"⚠️ MentionLimit 同步 AutoMod 規則失敗：Discord API 回應錯誤 ({error.status})。"
-        return "⚠️ MentionLimit 同步 AutoMod 規則失敗，請稍後再試。"
+                return t("mentionlimit.err.rule_limit_reached")
+            return t("mentionlimit.err.rule_sync_http", status=error.status)
+        return t("mentionlimit.err.rule_sync_generic")
 
     def _log_rule_sync_failure(self, guild: discord.Guild, error: Exception):
         log(
-            f"MentionLimit AutoMod 規則同步失敗: {error}",
+            f"MentionLimit AutoMod rule sync failed: {error}",
             level=logging.ERROR,
             module_name="MentionLimit",
             guild=guild,
@@ -367,7 +365,7 @@ class MentionLimit(commands.GroupCog, name="mentionlimit"):
                 self._restore_failures[key] = failures
                 if failures == 1:
                     log(
-                        f"MentionLimit 還原 {role.name} ({role.id}) 可提及狀態失敗: {error}",
+                        f"MentionLimit failed to restore the mentionable state of {role.name} ({role.id}): {error}",
                         level=logging.ERROR,
                         module_name="MentionLimit",
                         guild=guild,
@@ -375,8 +373,8 @@ class MentionLimit(commands.GroupCog, name="mentionlimit"):
                 if failures < RESTORE_MAX_FAILURES:
                     return False
                 log(
-                    f"MentionLimit 還原 {role.name} ({role.id}) 連續失敗 {failures} 次，"
-                    "已放棄自動還原，請手動調整身分組的可提及設定。",
+                    f"MentionLimit failed to restore {role.name} ({role.id}) {failures} times in a row; "
+                    "giving up on automatic restore, please adjust the role's mentionable setting manually.",
                     level=logging.ERROR,
                     module_name="MentionLimit",
                     guild=guild,
@@ -409,7 +407,7 @@ class MentionLimit(commands.GroupCog, name="mentionlimit"):
                     self._restore_failures[key] = failures
                     if failures == 1:
                         log(
-                            f"MentionLimit 切換執法模式時還原 {role.name} ({role.id}) 失敗: {error}",
+                            f"MentionLimit failed to restore {role.name} ({role.id}) while switching enforcement mode: {error}",
                             level=logging.ERROR,
                             module_name="MentionLimit",
                             guild=guild,
@@ -431,7 +429,7 @@ class MentionLimit(commands.GroupCog, name="mentionlimit"):
                     self._restore_failures[key] = failures
                     if failures == 1:
                         log(
-                            f"MentionLimit 切換執法模式時關閉 {role.name} ({role.id}) 可提及失敗: {error}",
+                            f"MentionLimit failed to disable mentionable on {role.name} ({role.id}) while switching enforcement mode: {error}",
                             level=logging.ERROR,
                             module_name="MentionLimit",
                             guild=guild,
@@ -471,7 +469,11 @@ class MentionLimit(commands.GroupCog, name="mentionlimit"):
             return
         if self.bot.user and message.author.id == self.bot.user.id:
             return
+        # listener 不在 choke point 內；冷卻公告是發到 guild 頻道的共享文字。
+        async with i18n.guild_scope(message.guild.id):
+            await self._on_message_impl(message)
 
+    async def _on_message_impl(self, message: discord.Message):
         guild = message.guild
         config = self._get_config(guild.id)
         if not config["enabled"] or not config["roles"]:
@@ -522,11 +524,11 @@ class MentionLimit(commands.GroupCog, name="mentionlimit"):
                         try:
                             await role.edit(
                                 mentionable=False,
-                                reason=f"MentionLimit 冷卻開始，{entry['cooldown']} 秒後恢復",
+                                reason=t("mentionlimit.audit.cooldown_start", seconds=entry["cooldown"]),
                             )
                         except (discord.Forbidden, discord.HTTPException) as error:
                             log(
-                                f"MentionLimit 關閉 {role.name} ({role.id}) 可提及失敗: {error}",
+                                f"MentionLimit failed to disable mentionable on {role.name} ({role.id}): {error}",
                                 level=logging.ERROR,
                                 module_name="MentionLimit",
                                 guild=guild,
@@ -538,13 +540,13 @@ class MentionLimit(commands.GroupCog, name="mentionlimit"):
 
             if need_rule_sync:
                 try:
-                    await self._sync_rule(guild, config, reason="MentionLimit 冷卻開始")
+                    await self._sync_rule(guild, config, reason=t("mentionlimit.audit.cooldown_started"))
                 except discord.HTTPException as error:
                     if self._is_automod_rule_limit_error(error) and not self._antibeast_enabled(guild.id):
                         # AutoMod 規則已達上限且 AntiBeast 未啟用：降級改用關閉可提及。
                         self._rule_limit_degraded[guild.id] = time.monotonic()
                         log(
-                            "MentionLimit AutoMod 規則數量已達上限，改用關閉可提及執法。",
+                            "MentionLimit hit the AutoMod rule limit; falling back to disabling mentionable.",
                             level=logging.WARNING,
                             module_name="MentionLimit",
                             guild=guild,
@@ -555,10 +557,10 @@ class MentionLimit(commands.GroupCog, name="mentionlimit"):
                                 entry["mentionable_before"] = bool(role.mentionable)
                             if role.mentionable:
                                 try:
-                                    await role.edit(mentionable=False, reason="MentionLimit 冷卻開始（降級執法）")
+                                    await role.edit(mentionable=False, reason=t("mentionlimit.audit.cooldown_started_degraded"))
                                 except (discord.Forbidden, discord.HTTPException) as edit_error:
                                     log(
-                                        f"MentionLimit 降級執法失敗: {edit_error}",
+                                        f"MentionLimit degraded enforcement failed: {edit_error}",
                                         level=logging.ERROR,
                                         module_name="MentionLimit",
                                         guild=guild,
@@ -571,8 +573,8 @@ class MentionLimit(commands.GroupCog, name="mentionlimit"):
             set_server_config(guild.id, CONFIG_KEY, config)
 
         log(
-            "MentionLimit 冷卻開始: "
-            + "、".join(f"{role.name} ({role.id})" for role, _ in started),
+            "MentionLimit cooldown started: "
+            + ", ".join(f"{role.name} ({role.id})" for role, _ in started),
             module_name="MentionLimit",
             guild=guild,
             user=message.author,
@@ -582,7 +584,7 @@ class MentionLimit(commands.GroupCog, name="mentionlimit"):
             for role, until in started:
                 try:
                     await message.channel.send(
-                        f"⏳ {role.mention} 已進入提及冷卻，<t:{int(until.timestamp())}:R> 後恢復。",
+                        t("mentionlimit.msg.cooldown_announce", role=role.mention, when=i18n.fmt_ts(until, "R")),
                         allowed_mentions=discord.AllowedMentions.none(),
                     )
                 except (discord.Forbidden, discord.HTTPException):
@@ -619,7 +621,7 @@ class MentionLimit(commands.GroupCog, name="mentionlimit"):
         if changed:
             set_server_config(guild_id, CONFIG_KEY, config)
             log(
-                f"MentionLimit 已清除不在伺服器 {guild_id} 的殘留冷卻狀態。",
+                f"MentionLimit cleared leftover cooldown state for absent guild {guild_id}.",
                 module_name="MentionLimit",
             )
 
@@ -644,7 +646,7 @@ class MentionLimit(commands.GroupCog, name="mentionlimit"):
                 expired = until is not None and until <= now
                 leftover = until is None and entry.get("mentionable_before") is not None
                 if expired or leftover:
-                    ended = await self._end_cooldown(guild, role_id, config, reason="MentionLimit 冷卻結束")
+                    ended = await self._end_cooldown(guild, role_id, config, reason=t("mentionlimit.audit.cooldown_ended", locale=i18n.resolve_locale(guild_id=guild.id)))
                     if ended:
                         changed = True
                         need_sync = True
@@ -652,14 +654,14 @@ class MentionLimit(commands.GroupCog, name="mentionlimit"):
             drift_changed, drift_sync = await self._reconcile_enforcement(
                 guild,
                 config,
-                reason="MentionLimit 執法模式對帳",
+                reason=t("mentionlimit.audit.enforcement_reconcile", locale=i18n.resolve_locale(guild_id=guild.id)),
             )
             changed = changed or drift_changed
             need_sync = need_sync or drift_sync
 
             if need_sync:
                 try:
-                    await self._sync_rule(guild, config, reason="MentionLimit 冷卻狀態同步")
+                    await self._sync_rule(guild, config, reason=t("mentionlimit.audit.cooldown_sync", locale=i18n.resolve_locale(guild_id=guild.id)))
                 except Exception as error:
                     self._log_rule_sync_failure(guild, error)
                 changed = True
@@ -673,7 +675,7 @@ class MentionLimit(commands.GroupCog, name="mentionlimit"):
             rows = get_all_server_config_key(CONFIG_KEY)
         except Exception as error:
             log(
-                f"MentionLimit 讀取冷卻狀態失敗: {error}",
+                f"MentionLimit failed to read cooldown state: {error}",
                 level=logging.ERROR,
                 module_name="MentionLimit",
             )
@@ -698,7 +700,7 @@ class MentionLimit(commands.GroupCog, name="mentionlimit"):
                 await self._process_guild_cooldowns(guild)
             except Exception as error:
                 log(
-                    f"MentionLimit 冷卻恢復處理失敗: {error}",
+                    f"MentionLimit cooldown recovery failed: {error}",
                     level=logging.ERROR,
                     module_name="MentionLimit",
                     guild=guild,
@@ -728,7 +730,7 @@ class MentionLimit(commands.GroupCog, name="mentionlimit"):
             rows = get_all_server_config_key(CONFIG_KEY)
         except Exception as error:
             log(
-                f"MentionLimit 啟動對帳讀取失敗: {error}",
+                f"MentionLimit startup reconcile read failed: {error}",
                 level=logging.ERROR,
                 module_name="MentionLimit",
             )
@@ -753,7 +755,7 @@ class MentionLimit(commands.GroupCog, name="mentionlimit"):
                 await self._process_guild_cooldowns(guild, force_rule_sync=True)
             except Exception as error:
                 log(
-                    f"MentionLimit 啟動對帳失敗: {error}",
+                    f"MentionLimit startup reconcile failed: {error}",
                     level=logging.ERROR,
                     module_name="MentionLimit",
                     guild=guild,
@@ -772,13 +774,13 @@ class MentionLimit(commands.GroupCog, name="mentionlimit"):
                 return
             if self._entry_has_state(entry):
                 try:
-                    await self._sync_rule(role.guild, config, reason=f"MentionLimit 身分組已刪除: {role.id}")
+                    await self._sync_rule(role.guild, config, reason=f"MentionLimit role deleted: {role.id}")
                 except Exception as error:
                     self._log_rule_sync_failure(role.guild, error)
             set_server_config(role.guild.id, CONFIG_KEY, config)
 
         log(
-            f"MentionLimit 已移除被刪除的身分組 {role.name} ({role.id})",
+            f"MentionLimit removed the deleted role {role.name} ({role.id})",
             module_name="MentionLimit",
             guild=role.guild,
         )
@@ -788,64 +790,43 @@ class MentionLimit(commands.GroupCog, name="mentionlimit"):
     def _build_about_embed(self) -> discord.Embed:
         embed = discord.Embed(
             title="MentionLimit",
-            description=(
-                "為「我想被tag」這類開放提及的身分組加上冷卻：\n"
-                "身分組被提及後，會暫時擋住再次提及，冷卻結束自動恢復。"
-            ),
+            description=t("mentionlimit.about.desc"),
             color=discord.Color.blue(),
         )
-        embed.add_field(
-            name="預設模式",
-            value="被提及後暫時關閉身分組的「允許任何人提及」，冷卻結束還原原本設定。",
-            inline=False,
-        )
-        embed.add_field(
-            name="AutoMod 模式",
-            value=(
-                "身分組保持永遠可提及，冷卻期間改用 Discord 原生 AutoMod 規則封鎖該身分組的提及。\n"
-                "注意：AutoMod 不會作用於管理員與伺服器擁有者，他們在冷卻期間仍可提及。"
-            ),
-            inline=False,
-        )
-        embed.add_field(
-            name="AntiBeast 相容",
-            value=(
-                "AntiBeast 啟用時會讓 @everyone 擁有提及權限，關閉可提及會失效；"
-                "此時 MentionLimit 會自動改用 AutoMod 規則強制執行。\n"
-                "加入身分組時會自動加入 AntiBeast 繞過清單（移除時不會自動移出）。"
-            ),
-            inline=False,
-        )
-        embed.add_field(
-            name="其他設定",
-            value=(
-                "「計入管理員」可讓管理員的提及也觸發冷卻（預設不觸發）。\n"
-                "「冷卻公告」會在進入冷卻時於該頻道發出提示（預設關閉）。"
-            ),
-            inline=False,
-        )
+        for section in ("default_mode", "automod_mode", "antibeast", "other"):
+            embed.add_field(
+                name=t(f"mentionlimit.about.{section}_title"),
+                value=t(f"mentionlimit.about.{section}_body"),
+                inline=False,
+            )
         return embed
 
     def _build_config_embed(self, guild: discord.Guild, config: dict) -> discord.Embed:
         effective_automod = self._effective_automod(guild.id, config)
         antibeast_forced = effective_automod and not config["automod_mode"]
         embed = discord.Embed(
-            title="MentionLimit 設定",
+            title=t("mentionlimit.config.title"),
             color=discord.Color.green() if config["enabled"] else discord.Color.light_grey(),
         )
-        embed.add_field(name="狀態", value="✅ 啟用" if config["enabled"] else "❌ 停用", inline=True)
+        embed.add_field(name=t("mentionlimit.field.status"),
+                        value=t("mentionlimit.state.enabled") if config["enabled"] else t("mentionlimit.state.disabled"),
+                        inline=True)
 
-        mode_text = "AutoMod 規則封鎖" if config["automod_mode"] else "關閉可提及"
+        mode_text = t("mentionlimit.mode.automod") if config["automod_mode"] else t("mentionlimit.mode.unmentionable")
         if antibeast_forced:
-            mode_text += "\n（AntiBeast 啟用中，強制使用 AutoMod 模式）"
-        embed.add_field(name="模式", value=mode_text, inline=True)
+            mode_text += "\n" + t("mentionlimit.mode.antibeast_forced")
+        embed.add_field(name=t("mentionlimit.field.mode"), value=mode_text, inline=True)
         embed.add_field(
-            name="AutoMod 規則",
-            value=f"`{config['rule_id']}`" if config.get("rule_id") else "尚未建立",
+            name=t("mentionlimit.field.automod_rule"),
+            value=f"`{config['rule_id']}`" if config.get("rule_id") else t("mentionlimit.config.rule_not_created"),
             inline=True,
         )
-        embed.add_field(name="計入管理員", value="✅ 是" if config["count_admins"] else "❌ 否", inline=True)
-        embed.add_field(name="冷卻公告", value="✅ 開" if config["announce"] else "❌ 關", inline=True)
+        embed.add_field(name=t("mentionlimit.field.count_admins"),
+                        value=t("mentionlimit.state.yes") if config["count_admins"] else t("mentionlimit.state.no"),
+                        inline=True)
+        embed.add_field(name=t("mentionlimit.field.announce"),
+                        value=t("mentionlimit.state.on") if config["announce"] else t("mentionlimit.state.off"),
+                        inline=True)
 
         antibeast_bypass_ids: set[int] | None = None
         if self._antibeast_enabled(guild.id):
@@ -861,57 +842,57 @@ class MentionLimit(commands.GroupCog, name="mentionlimit"):
         lines = []
         for role_id, entry in config["roles"].items():
             role = guild.get_role(int(role_id))
-            name = role.mention if role else f"已刪除的身分組 ({role_id})"
+            name = role.mention if role else t("mentionlimit.config.deleted_role", role_id=role_id)
             until = self._parse_datetime(entry.get("cooldown_until"))
             if until is not None and until > now:
-                state = f"冷卻中，<t:{int(until.timestamp())}:R> 結束"
+                state = t("mentionlimit.config.state_cooling", when=i18n.fmt_ts(until, "R"))
             else:
-                state = "未在冷卻"
-            line = f"{name}｜冷卻 {entry['cooldown']} 秒｜{state}"
+                state = t("mentionlimit.config.state_idle")
+            line = t("mentionlimit.config.role_line", role=name, seconds=entry["cooldown"], state=state)
             if (
                 role is not None
                 and antibeast_bypass_ids is not None
                 and role.id not in antibeast_bypass_ids
             ):
-                line += "\n　⚠️ 不在 AntiBeast 繞過清單，提及會被 AntiBeast 阻擋。"
+                line += "\n" + t("mentionlimit.config.not_in_bypass")
             lines.append(line)
-        roles_text = "\n".join(lines) if lines else "尚未加入任何身分組，請用 `/mentionlimit add` 加入。"
+        roles_text = "\n".join(lines) if lines else t("mentionlimit.config.no_roles")
         if len(roles_text) > 1024:
             # embed field 上限 1024 字元，超過就截斷。
             truncated = []
             length = 0
             for line in lines:
                 if length + len(line) + 1 > 990:
-                    truncated.append(f"…以及其他 {len(lines) - len(truncated)} 個身分組")
+                    truncated.append(t("mentionlimit.config.more_roles", count=len(lines) - len(truncated)))
                     break
                 truncated.append(line)
                 length += len(line) + 1
             roles_text = "\n".join(truncated)
         embed.add_field(
-            name="受管理身分組",
+            name=t("mentionlimit.field.managed_roles"),
             value=roles_text,
             inline=False,
         )
         if effective_automod:
-            embed.set_footer(text="AutoMod 不會作用於管理員與伺服器擁有者。")
+            embed.set_footer(text=t("mentionlimit.config.automod_admin_note"))
         return embed
 
     # ---------- 指令 ----------
 
-    @app_commands.command(name="about", description="關於 MentionLimit")
+    @app_commands.command(name=app_commands.locale_str("about", i18n_key="cmd.mentionlimit.mentionlimit.about.name"), description=app_commands.locale_str("About MentionLimit", i18n_key="cmd.mentionlimit.mentionlimit.about.desc"))
     async def about(self, interaction: discord.Interaction):
         await interaction.response.send_message(embed=self._build_about_embed(), ephemeral=True)
 
-    @app_commands.command(name="setup", description="互動式設定並啟用 MentionLimit")
+    @app_commands.command(name=app_commands.locale_str("setup", i18n_key="cmd.mentionlimit.mentionlimit.setup.name"), description=app_commands.locale_str("Interactively configure and enable MentionLimit", i18n_key="cmd.mentionlimit.mentionlimit.setup.desc"))
     @app_commands.default_permissions(administrator=True)
     async def setup(self, interaction: discord.Interaction):
         config = self._get_config(interaction.guild.id)
         view = MentionLimitSetupView(self, interaction.user, interaction.guild, config)
         await view.send_about(interaction)
 
-    @app_commands.command(name="toggle", description="啟用/停用 MentionLimit")
+    @app_commands.command(name=app_commands.locale_str("toggle", i18n_key="cmd.mentionlimit.mentionlimit.toggle.name"), description=app_commands.locale_str("Enable/disable MentionLimit", i18n_key="cmd.mentionlimit.mentionlimit.toggle.desc"))
     @app_commands.default_permissions(administrator=True)
-    @app_commands.describe(enable="留空則切換目前狀態")
+    @app_commands.describe(enable=app_commands.locale_str("Leave empty to toggle the current state", i18n_key="cmd.mentionlimit.mentionlimit.toggle.param.enable"))
     async def toggle(self, interaction: discord.Interaction, enable: bool = None):
         await interaction.response.defer(ephemeral=True)
         guild = interaction.guild
@@ -927,15 +908,15 @@ class MentionLimit(commands.GroupCog, name="mentionlimit"):
                 )
                 if missing:
                     await interaction.followup.send(
-                        f"⚠️ 機器人缺少權限：{'、'.join(missing)}",
+                        t("mentionlimit.err.bot_missing_perms", perms=i18n.join_list(missing)),
                         ephemeral=True,
                     )
                     return
                 config["enabled"] = True
                 set_server_config(guild.id, CONFIG_KEY, config)
-                message = f"✅ MentionLimit 已**啟用**，目前管理 {len(config['roles'])} 個身分組。"
+                message = t("mentionlimit.msg.enabled", count=len(config["roles"]))
                 if not config["roles"]:
-                    message += "\n請用 `/mentionlimit add` 加入要管理的身分組。"
+                    message += "\n" + t("mentionlimit.msg.enabled_no_roles")
             else:
                 config["enabled"] = False
                 failed = await self._restore_all(
@@ -944,12 +925,12 @@ class MentionLimit(commands.GroupCog, name="mentionlimit"):
                     reason=f"MentionLimit disabled by {interaction.user} ({interaction.user.id})",
                 )
                 set_server_config(guild.id, CONFIG_KEY, config)
-                message = "✅ MentionLimit 已**停用**，冷卻中的身分組已全部還原。"
+                message = t("mentionlimit.msg.disabled")
                 if failed:
-                    message += "\n⚠️ 部分身分組還原失敗，將自動重試；請檢查機器人權限。"
+                    message += "\n" + t("mentionlimit.msg.disabled_partial_failure")
 
         log(
-            f"MentionLimit 已{'啟用' if enabled else '停用'}",
+            f"MentionLimit {'enabled' if enabled else 'disabled'}",
             module_name="MentionLimit",
             guild=guild,
             user=interaction.user,
@@ -960,9 +941,9 @@ class MentionLimit(commands.GroupCog, name="mentionlimit"):
             allowed_mentions=discord.AllowedMentions.none(),
         )
 
-    @app_commands.command(name="add", description="新增或更新受管理身分組的提及冷卻")
+    @app_commands.command(name=app_commands.locale_str("add", i18n_key="cmd.mentionlimit.mentionlimit.add.name"), description=app_commands.locale_str("Add or update mention cooldown for a managed role", i18n_key="cmd.mentionlimit.mentionlimit.add.desc"))
     @app_commands.default_permissions(administrator=True)
-    @app_commands.describe(role="要管理的身分組", cooldown="冷卻秒數（10-86400，預設 600）")
+    @app_commands.describe(role=app_commands.locale_str("The role to manage", i18n_key="cmd.mentionlimit.mentionlimit.add.param.role"), cooldown=app_commands.locale_str("Cooldown seconds (10-86400, default 600)", i18n_key="cmd.mentionlimit.mentionlimit.add.param.cooldown"))
     async def add_role(
         self,
         interaction: discord.Interaction,
@@ -971,11 +952,11 @@ class MentionLimit(commands.GroupCog, name="mentionlimit"):
     ):
         guild = interaction.guild
         if role.is_default():
-            await interaction.response.send_message("⚠️ 不能管理 @everyone。", ephemeral=True)
+            await interaction.response.send_message(t("mentionlimit.err.cannot_manage_everyone"), ephemeral=True)
             return
         if role.managed:
             await interaction.response.send_message(
-                "⚠️ 不能管理由機器人或整合服務管理的身分組。",
+                t("mentionlimit.err.cannot_manage_integration_role"),
                 ephemeral=True,
             )
             return
@@ -990,14 +971,14 @@ class MentionLimit(commands.GroupCog, name="mentionlimit"):
             )
             if missing:
                 await interaction.followup.send(
-                    f"⚠️ 機器人缺少權限：{'、'.join(missing)}",
+                    t("mentionlimit.err.bot_missing_perms", perms=i18n.join_list(missing)),
                     ephemeral=True,
                 )
                 return
             bot_member = guild.me
             if bot_member is not None and bot_member.top_role <= role:
                 await interaction.followup.send(
-                    f"⚠️ 機器人的最高身分組必須高於 **{role.name}** 才能切換它的可提及狀態。",
+                    t("mentionlimit.err.bot_hierarchy_too_low", role=role.name),
                     ephemeral=True,
                     allowed_mentions=discord.AllowedMentions.none(),
                 )
@@ -1006,7 +987,7 @@ class MentionLimit(commands.GroupCog, name="mentionlimit"):
             is_update = str(role.id) in config["roles"]
             if not is_update and len(config["roles"]) >= MAX_MANAGED_ROLES:
                 await interaction.followup.send(
-                    f"⚠️ 最多只能管理 {MAX_MANAGED_ROLES} 個身分組。",
+                    t("mentionlimit.err.max_roles", max=MAX_MANAGED_ROLES),
                     ephemeral=True,
                 )
                 return
@@ -1018,15 +999,15 @@ class MentionLimit(commands.GroupCog, name="mentionlimit"):
             _, bypass_note = await self._ensure_antibeast_bypass(guild, role)
             set_server_config(guild.id, CONFIG_KEY, config)
 
-        action = "更新" if is_update else "加入"
-        message = f"✅ 已將 **{role.name}** {action}提及冷卻管理，冷卻時間 {int(cooldown)} 秒。"
+        message = t("mentionlimit.msg.role_updated" if is_update else "mentionlimit.msg.role_added",
+                    role=role.name, seconds=int(cooldown))
         if bypass_note:
             message += f"\n{bypass_note}"
         if not config["enabled"]:
-            message += "\nℹ️ MentionLimit 目前是停用狀態，請用 `/mentionlimit toggle` 啟用。"
+            message += "\n" + t("mentionlimit.msg.currently_disabled")
 
         log(
-            f"MentionLimit {action}身分組 {role.name} ({role.id})，冷卻 {int(cooldown)} 秒",
+            f"MentionLimit {'updated' if is_update else 'added'} role {role.name} ({role.id}), cooldown {int(cooldown)}s",
             module_name="MentionLimit",
             guild=guild,
             user=interaction.user,
@@ -1037,9 +1018,9 @@ class MentionLimit(commands.GroupCog, name="mentionlimit"):
             allowed_mentions=discord.AllowedMentions.none(),
         )
 
-    @app_commands.command(name="remove", description="移除受管理的身分組")
+    @app_commands.command(name=app_commands.locale_str("remove", i18n_key="cmd.mentionlimit.mentionlimit.remove.name"), description=app_commands.locale_str("Remove a managed role", i18n_key="cmd.mentionlimit.mentionlimit.remove.desc"))
     @app_commands.default_permissions(administrator=True)
-    @app_commands.describe(role="要移除管理的身分組")
+    @app_commands.describe(role=app_commands.locale_str("The role to stop managing", i18n_key="cmd.mentionlimit.mentionlimit.remove.param.role"))
     async def remove(self, interaction: discord.Interaction, role: discord.Role):
         guild = interaction.guild
         await interaction.response.defer(ephemeral=True)
@@ -1049,7 +1030,7 @@ class MentionLimit(commands.GroupCog, name="mentionlimit"):
             entry = config["roles"].get(str(role.id))
             if entry is None:
                 await interaction.followup.send(
-                    f"⚠️ **{role.name}** 不在管理清單中。",
+                    t("mentionlimit.err.role_not_managed", role=role.name),
                     ephemeral=True,
                     allowed_mentions=discord.AllowedMentions.none(),
                 )
@@ -1062,24 +1043,24 @@ class MentionLimit(commands.GroupCog, name="mentionlimit"):
                     guild,
                     str(role.id),
                     config,
-                    reason=f"MentionLimit 移除身分組 by {interaction.user} ({interaction.user.id})",
+                    reason=f"MentionLimit role removed by {interaction.user} ({interaction.user.id})",
                 )
             config["roles"].pop(str(role.id), None)
             if was_cooling:
                 try:
-                    await self._sync_rule(guild, config, reason="MentionLimit 移除身分組")
+                    await self._sync_rule(guild, config, reason=f"MentionLimit removed role {role.id}")
                 except Exception as error:
                     self._log_rule_sync_failure(guild, error)
             set_server_config(guild.id, CONFIG_KEY, config)
 
-        message = f"✅ 已移除 **{role.name}** 的提及冷卻管理。"
+        message = t("mentionlimit.msg.role_removed", role=role.name)
         if was_cooling and restored:
-            message += "（原本正在冷卻，已立即還原）"
+            message += t("mentionlimit.msg.role_removed_restored")
         elif was_cooling:
-            message += "\n⚠️ 還原可提及狀態失敗，請手動檢查身分組設定。"
+            message += "\n" + t("mentionlimit.msg.role_removed_restore_failed")
 
         log(
-            f"MentionLimit 移除身分組 {role.name} ({role.id})",
+            f"MentionLimit removed role {role.name} ({role.id})",
             module_name="MentionLimit",
             guild=guild,
             user=interaction.user,
@@ -1090,12 +1071,12 @@ class MentionLimit(commands.GroupCog, name="mentionlimit"):
             allowed_mentions=discord.AllowedMentions.none(),
         )
 
-    @app_commands.command(name="settings", description="設定 MentionLimit 模式與選項")
+    @app_commands.command(name=app_commands.locale_str("settings", i18n_key="cmd.mentionlimit.mentionlimit.settings.name"), description=app_commands.locale_str("Configure MentionLimit mode and options", i18n_key="cmd.mentionlimit.mentionlimit.settings.desc"))
     @app_commands.default_permissions(administrator=True)
     @app_commands.describe(
-        automod_mode="AutoMod 模式：冷卻期間用 AutoMod 規則封鎖，身分組保持可提及",
-        count_admins="管理員的提及是否也觸發冷卻",
-        announce="進入冷卻時是否在該頻道公告",
+        automod_mode=app_commands.locale_str("AutoMod mode: block with an AutoMod rule during cooldown, role stays mentionable", i18n_key="cmd.mentionlimit.mentionlimit.settings.param.automod_mode"),
+        count_admins=app_commands.locale_str("Whether admin mentions also trigger the cooldown", i18n_key="cmd.mentionlimit.mentionlimit.settings.param.count_admins"),
+        announce=app_commands.locale_str("Announce in the channel when a cooldown starts", i18n_key="cmd.mentionlimit.mentionlimit.settings.param.announce"),
     )
     async def settings(
         self,
@@ -1125,7 +1106,7 @@ class MentionLimit(commands.GroupCog, name="mentionlimit"):
                     missing = self._required_bot_permissions(guild, automod=True)
                     if missing:
                         await interaction.followup.send(
-                            f"⚠️ 機器人缺少權限：{'、'.join(missing)}",
+                            t("mentionlimit.err.bot_missing_perms", perms=i18n.join_list(missing)),
                             ephemeral=True,
                         )
                         return
@@ -1136,11 +1117,11 @@ class MentionLimit(commands.GroupCog, name="mentionlimit"):
                 _, need_sync = await self._reconcile_enforcement(
                     guild,
                     config,
-                    reason=f"MentionLimit 模式切換 by {interaction.user} ({interaction.user.id})",
+                    reason=f"MentionLimit mode switch by {interaction.user} ({interaction.user.id})",
                 )
                 if need_sync or config.get("rule_id"):
                     try:
-                        await self._sync_rule(guild, config, reason="MentionLimit 模式切換")
+                        await self._sync_rule(guild, config, reason="MentionLimit mode switch")
                     except Exception as error:
                         self._log_rule_sync_failure(guild, error)
                         notes.append(self._rule_sync_error_message(error))
@@ -1148,7 +1129,7 @@ class MentionLimit(commands.GroupCog, name="mentionlimit"):
             if changed:
                 set_server_config(guild.id, CONFIG_KEY, config)
                 log(
-                    f"MentionLimit 設定更新: automod_mode={config['automod_mode']}, "
+                    f"MentionLimit settings updated: automod_mode={config['automod_mode']}, "
                     f"count_admins={config['count_admins']}, announce={config['announce']}",
                     module_name="MentionLimit",
                     guild=guild,
@@ -1156,15 +1137,18 @@ class MentionLimit(commands.GroupCog, name="mentionlimit"):
                 )
 
         if self._antibeast_enabled(guild.id) and not config["automod_mode"]:
-            notes.append("⚠️ AntiBeast 啟用中：冷卻期間仍會以 AutoMod 規則強制執行，直到 AntiBeast 停用。")
+            notes.append(t("mentionlimit.note.antibeast_forces_automod"))
         if self._effective_automod(guild.id, config):
-            notes.append("ℹ️ AutoMod 不會作用於管理員與伺服器擁有者，他們在冷卻期間仍可提及。")
+            notes.append(t("mentionlimit.note.automod_skips_admins"))
 
         status_lines = [
-            "已更新設定。" if changed else "目前設定：",
-            f"AutoMod 模式：{'✅ 開' if config['automod_mode'] else '❌ 關'}",
-            f"計入管理員：{'✅ 是' if config['count_admins'] else '❌ 否'}",
-            f"冷卻公告：{'✅ 開' if config['announce'] else '❌ 關'}",
+            t("mentionlimit.settings.updated") if changed else t("mentionlimit.settings.current"),
+            t("mentionlimit.settings.automod_line",
+              state=t("mentionlimit.state.on") if config["automod_mode"] else t("mentionlimit.state.off")),
+            t("mentionlimit.settings.count_admins_line",
+              state=t("mentionlimit.state.yes") if config["count_admins"] else t("mentionlimit.state.no")),
+            t("mentionlimit.settings.announce_line",
+              state=t("mentionlimit.state.on") if config["announce"] else t("mentionlimit.state.off")),
         ]
         status_lines.extend(notes)
         await interaction.followup.send(
@@ -1173,7 +1157,7 @@ class MentionLimit(commands.GroupCog, name="mentionlimit"):
             allowed_mentions=discord.AllowedMentions.none(),
         )
 
-    @app_commands.command(name="list", description="列出 MentionLimit 設定")
+    @app_commands.command(name=app_commands.locale_str("list", i18n_key="cmd.mentionlimit.mentionlimit.list.name"), description=app_commands.locale_str("List MentionLimit settings", i18n_key="cmd.mentionlimit.mentionlimit.list.desc"))
     @app_commands.default_permissions(administrator=True)
     async def list_config(self, interaction: discord.Interaction):
         config = self._get_config(interaction.guild.id)
@@ -1186,7 +1170,7 @@ class MentionLimit(commands.GroupCog, name="mentionlimit"):
         )
 
 
-class MentionLimitSetupView(discord.ui.View):
+class MentionLimitSetupView(i18n.I18nView):
     def __init__(
         self,
         cog: MentionLimit,
@@ -1202,7 +1186,7 @@ class MentionLimitSetupView(discord.ui.View):
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         if interaction.user.id != self.owner.id:
-            await interaction.response.send_message("這個設定流程不是你的。", ephemeral=True)
+            await interaction.response.send_message(t("mentionlimit.err.not_your_setup"), ephemeral=True)
             return False
         return True
 
@@ -1219,21 +1203,18 @@ class MentionLimitSetupView(discord.ui.View):
         self.add_item(MentionLimitKeepRolesButton())
         self.add_item(MentionLimitClearRolesButton())
         embed = discord.Embed(
-            title="MentionLimit Setup: 受管理身分組",
-            description=(
-                "選擇要加上提及冷卻的身分組（例如「我想被tag」）。\n"
-                "@everyone 與整合服務管理的身分組會自動排除。"
-            ),
+            title=t("mentionlimit.setup.roles_title"),
+            description=t("mentionlimit.setup.roles_desc"),
             color=discord.Color.blurple(),
         )
         lines = []
         for role_id, entry in self.config["roles"].items():
             role = self.guild.get_role(int(role_id))
             if role is not None:
-                lines.append(f"{role.mention}｜冷卻 {entry['cooldown']} 秒")
+                lines.append(t("mentionlimit.setup.role_line", role=role.mention, seconds=entry["cooldown"]))
         embed.add_field(
-            name="目前選擇",
-            value="\n".join(lines) if lines else "尚未選擇",
+            name=t("mentionlimit.setup.current_selection"),
+            value="\n".join(lines) if lines else t("mentionlimit.setup.nothing_selected"),
             inline=False,
         )
         embed.set_footer(text="MentionLimit setup: 2/4")
@@ -1253,32 +1234,29 @@ class MentionLimitSetupView(discord.ui.View):
         self.add_item(MentionLimitBackToRolesButton())
 
         embed = discord.Embed(
-            title="MentionLimit Setup: 冷卻與模式",
-            description="設定冷卻秒數與執法模式。",
+            title=t("mentionlimit.setup.options_title"),
+            description=t("mentionlimit.setup.options_desc"),
             color=discord.Color.blurple(),
         )
         lines = []
         for role_id, entry in self.config["roles"].items():
             role = self.guild.get_role(int(role_id))
             if role is not None:
-                lines.append(f"{role.mention}｜冷卻 {entry['cooldown']} 秒")
+                lines.append(t("mentionlimit.setup.role_line", role=role.mention, seconds=entry["cooldown"]))
         embed.add_field(
-            name="受管理身分組",
-            value="\n".join(lines) if lines else "尚未選擇（也可以之後用 `/mentionlimit add` 加入）",
+            name=t("mentionlimit.field.managed_roles"),
+            value="\n".join(lines) if lines else t("mentionlimit.setup.nothing_selected_hint"),
             inline=False,
         )
         embed.add_field(
-            name="模式",
-            value=(
-                "AutoMod 模式：冷卻期間用 AutoMod 規則封鎖，身分組保持可提及。\n"
-                "關閉時：冷卻期間暫時關閉身分組的「允許任何人提及」。"
-            ),
+            name=t("mentionlimit.field.mode"),
+            value=t("mentionlimit.setup.mode_explainer"),
             inline=False,
         )
         if self.cog._antibeast_enabled(self.guild.id):
             embed.add_field(
                 name="AntiBeast",
-                value="⚠️ AntiBeast 啟用中：冷卻期間會強制以 AutoMod 規則執行，並自動將身分組加入 AntiBeast 繞過清單。",
+                value=t("mentionlimit.setup.antibeast_note"),
                 inline=False,
             )
         embed.set_footer(text="MentionLimit setup: 3/4")
@@ -1293,33 +1271,33 @@ class MentionLimitSetupView(discord.ui.View):
         self.add_item(MentionLimitEnableButton())
         self.add_item(MentionLimitBackToOptionsButton())
         embed = discord.Embed(
-            title="MentionLimit Setup: 確認啟用",
-            description="確認設定後按下啟用。",
+            title=t("mentionlimit.setup.confirm_title"),
+            description=t("mentionlimit.setup.confirm_desc"),
             color=discord.Color.green(),
         )
         lines = []
         for role_id, entry in self.config["roles"].items():
             role = self.guild.get_role(int(role_id))
             if role is not None:
-                lines.append(f"{role.mention}｜冷卻 {entry['cooldown']} 秒")
+                lines.append(t("mentionlimit.setup.role_line", role=role.mention, seconds=entry["cooldown"]))
         embed.add_field(
-            name="受管理身分組",
-            value="\n".join(lines) if lines else "尚未選擇",
+            name=t("mentionlimit.field.managed_roles"),
+            value="\n".join(lines) if lines else t("mentionlimit.setup.nothing_selected"),
             inline=False,
         )
         embed.add_field(
-            name="模式",
-            value="AutoMod 規則封鎖" if self.config["automod_mode"] else "關閉可提及",
+            name=t("mentionlimit.field.mode"),
+            value=t("mentionlimit.mode.automod") if self.config["automod_mode"] else t("mentionlimit.mode.unmentionable"),
             inline=True,
         )
         embed.add_field(
-            name="計入管理員",
-            value="✅ 是" if self.config["count_admins"] else "❌ 否",
+            name=t("mentionlimit.field.count_admins"),
+            value=t("mentionlimit.state.yes") if self.config["count_admins"] else t("mentionlimit.state.no"),
             inline=True,
         )
         embed.add_field(
-            name="冷卻公告",
-            value="✅ 開" if self.config["announce"] else "❌ 關",
+            name=t("mentionlimit.field.announce"),
+            value=t("mentionlimit.state.on") if self.config["announce"] else t("mentionlimit.state.off"),
             inline=True,
         )
         embed.set_footer(text="MentionLimit setup: 4/4")
@@ -1349,7 +1327,7 @@ class MentionLimitSetupView(discord.ui.View):
             )
             if missing:
                 await interaction.followup.send(
-                    f"⚠️ 機器人缺少權限：{'、'.join(missing)}",
+                    t("mentionlimit.err.bot_missing_perms", perms=i18n.join_list(missing)),
                     ephemeral=True,
                 )
                 return
@@ -1392,21 +1370,18 @@ class MentionLimitSetupView(discord.ui.View):
             set_server_config(guild.id, CONFIG_KEY, config)
 
         embed = cog._build_config_embed(guild, config)
-        embed.title = "MentionLimit 已啟用"
+        embed.title = t("mentionlimit.setup.enabled_title")
         if bypass_notes:
             embed.add_field(name="AntiBeast", value="\n".join(bypass_notes), inline=False)
         if hierarchy_warnings:
             embed.add_field(
-                name="⚠️ 身分組層級",
-                value=(
-                    "機器人的最高身分組低於："
-                    + "、".join(f"**{name}**" for name in hierarchy_warnings)
-                    + "，將無法切換這些身分組的可提及狀態。"
-                ),
+                name=t("mentionlimit.setup.hierarchy_title"),
+                value=t("mentionlimit.setup.hierarchy_body",
+                        roles=i18n.join_list(f"**{name}**" for name in hierarchy_warnings)),
                 inline=False,
             )
         log(
-            "MentionLimit 已透過 setup 啟用",
+            "MentionLimit enabled via setup",
             module_name="MentionLimit",
             guild=guild,
             user=interaction.user,
@@ -1424,7 +1399,7 @@ class MentionLimitSetupView(discord.ui.View):
 
 class MentionLimitSetupContinueButton(discord.ui.Button):
     def __init__(self):
-        super().__init__(label="繼續", style=discord.ButtonStyle.primary)
+        super().__init__(label=t("common.btn.next"), style=discord.ButtonStyle.primary)
 
     async def callback(self, interaction: discord.Interaction):
         await self.view.show_roles(interaction)
@@ -1432,7 +1407,7 @@ class MentionLimitSetupContinueButton(discord.ui.Button):
 
 class MentionLimitRoleSelect(discord.ui.RoleSelect):
     def __init__(self):
-        super().__init__(placeholder="選擇要管理的身分組", min_values=1, max_values=25)
+        super().__init__(placeholder=t("mentionlimit.setup.role_select_ph"), min_values=1, max_values=25)
 
     async def callback(self, interaction: discord.Interaction):
         selected = [
@@ -1451,7 +1426,7 @@ class MentionLimitRoleSelect(discord.ui.RoleSelect):
 
 class MentionLimitKeepRolesButton(discord.ui.Button):
     def __init__(self):
-        super().__init__(label="保留目前設定", style=discord.ButtonStyle.secondary)
+        super().__init__(label=t("mentionlimit.btn.keep_current"), style=discord.ButtonStyle.secondary)
 
     async def callback(self, interaction: discord.Interaction):
         await self.view.show_options(interaction)
@@ -1459,7 +1434,7 @@ class MentionLimitKeepRolesButton(discord.ui.Button):
 
 class MentionLimitClearRolesButton(discord.ui.Button):
     def __init__(self):
-        super().__init__(label="清空並繼續", style=discord.ButtonStyle.danger)
+        super().__init__(label=t("mentionlimit.btn.clear_and_continue"), style=discord.ButtonStyle.danger)
 
     async def callback(self, interaction: discord.Interaction):
         self.view.config["roles"] = {}
@@ -1468,7 +1443,7 @@ class MentionLimitClearRolesButton(discord.ui.Button):
 
 class MentionLimitCooldownButton(discord.ui.Button):
     def __init__(self):
-        super().__init__(label="設定冷卻秒數", style=discord.ButtonStyle.primary)
+        super().__init__(label=t("mentionlimit.btn.set_cooldown"), style=discord.ButtonStyle.primary)
 
     async def callback(self, interaction: discord.Interaction):
         await interaction.response.send_modal(MentionLimitCooldownModal(self.view))
@@ -1476,7 +1451,7 @@ class MentionLimitCooldownButton(discord.ui.Button):
 
 class MentionLimitContinueToConfirmButton(discord.ui.Button):
     def __init__(self):
-        super().__init__(label="繼續", style=discord.ButtonStyle.success)
+        super().__init__(label=t("common.btn.next"), style=discord.ButtonStyle.success)
 
     async def callback(self, interaction: discord.Interaction):
         await self.view.show_confirm(interaction)
@@ -1484,7 +1459,8 @@ class MentionLimitContinueToConfirmButton(discord.ui.Button):
 
 class MentionLimitAutomodToggleButton(discord.ui.Button):
     def __init__(self, enabled: bool):
-        label = "AutoMod 模式：開" if enabled else "AutoMod 模式：關"
+        label = t("mentionlimit.btn.automod_toggle",
+                  state=t("mentionlimit.state.on_plain") if enabled else t("mentionlimit.state.off_plain"))
         style = discord.ButtonStyle.primary if enabled else discord.ButtonStyle.secondary
         super().__init__(label=label, style=style, row=1)
 
@@ -1495,7 +1471,8 @@ class MentionLimitAutomodToggleButton(discord.ui.Button):
 
 class MentionLimitCountAdminsToggleButton(discord.ui.Button):
     def __init__(self, enabled: bool):
-        label = "計入管理員：是" if enabled else "計入管理員：否"
+        label = t("mentionlimit.btn.count_admins_toggle",
+                  state=t("mentionlimit.state.yes_plain") if enabled else t("mentionlimit.state.no_plain"))
         style = discord.ButtonStyle.primary if enabled else discord.ButtonStyle.secondary
         super().__init__(label=label, style=style, row=1)
 
@@ -1506,7 +1483,8 @@ class MentionLimitCountAdminsToggleButton(discord.ui.Button):
 
 class MentionLimitAnnounceToggleButton(discord.ui.Button):
     def __init__(self, enabled: bool):
-        label = "冷卻公告：開" if enabled else "冷卻公告：關"
+        label = t("mentionlimit.btn.announce_toggle",
+                  state=t("mentionlimit.state.on_plain") if enabled else t("mentionlimit.state.off_plain"))
         style = discord.ButtonStyle.primary if enabled else discord.ButtonStyle.secondary
         super().__init__(label=label, style=style, row=1)
 
@@ -1517,7 +1495,7 @@ class MentionLimitAnnounceToggleButton(discord.ui.Button):
 
 class MentionLimitBackToRolesButton(discord.ui.Button):
     def __init__(self):
-        super().__init__(label="返回選擇身分組", style=discord.ButtonStyle.secondary, row=2)
+        super().__init__(label=t("mentionlimit.btn.back_to_roles"), style=discord.ButtonStyle.secondary, row=2)
 
     async def callback(self, interaction: discord.Interaction):
         await self.view.show_roles(interaction)
@@ -1525,7 +1503,7 @@ class MentionLimitBackToRolesButton(discord.ui.Button):
 
 class MentionLimitEnableButton(discord.ui.Button):
     def __init__(self):
-        super().__init__(label="啟用 MentionLimit", style=discord.ButtonStyle.success)
+        super().__init__(label=t("mentionlimit.btn.enable"), style=discord.ButtonStyle.success)
 
     async def callback(self, interaction: discord.Interaction):
         await self.view.finish_enable(interaction)
@@ -1533,20 +1511,20 @@ class MentionLimitEnableButton(discord.ui.Button):
 
 class MentionLimitBackToOptionsButton(discord.ui.Button):
     def __init__(self):
-        super().__init__(label="返回", style=discord.ButtonStyle.secondary)
+        super().__init__(label=t("common.btn.back"), style=discord.ButtonStyle.secondary)
 
     async def callback(self, interaction: discord.Interaction):
         await self.view.show_options(interaction)
 
 
-class MentionLimitCooldownModal(discord.ui.Modal, title="MentionLimit 冷卻設定"):
+class MentionLimitCooldownModal(i18n.I18nModal, title=i18n.K("mentionlimit.modal.cooldown_title")):
     def __init__(self, setup_view: MentionLimitSetupView):
         super().__init__()
         self.setup_view = setup_view
         cooldowns = {entry["cooldown"] for entry in setup_view.config["roles"].values()}
         default = str(cooldowns.pop()) if len(cooldowns) == 1 else str(DEFAULT_COOLDOWN)
         self.cooldown = discord.ui.TextInput(
-            label=f"冷卻秒數（{MIN_COOLDOWN}-{MAX_COOLDOWN}），套用到所有已選身分組",
+            label=t("mentionlimit.modal.cooldown_label", min=MIN_COOLDOWN, max=MAX_COOLDOWN),
             default=default,
             placeholder=str(DEFAULT_COOLDOWN),
             max_length=5,
@@ -1557,11 +1535,11 @@ class MentionLimitCooldownModal(discord.ui.Modal, title="MentionLimit 冷卻設�
         try:
             cooldown = int(str(self.cooldown.value).strip())
         except ValueError:
-            await interaction.response.send_message("⚠️ 冷卻秒數必須是整數。", ephemeral=True)
+            await interaction.response.send_message(t("mentionlimit.err.cooldown_not_int"), ephemeral=True)
             return
         if cooldown < MIN_COOLDOWN or cooldown > MAX_COOLDOWN:
             await interaction.response.send_message(
-                f"⚠️ 冷卻時間必須介於 {MIN_COOLDOWN} 到 {MAX_COOLDOWN} 秒。",
+                t("mentionlimit.err.cooldown_range", min=MIN_COOLDOWN, max=MAX_COOLDOWN),
                 ephemeral=True,
             )
             return

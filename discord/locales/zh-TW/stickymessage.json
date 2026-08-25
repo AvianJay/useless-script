@@ -1,0 +1,50 @@
+{
+    "err": {
+        "already_configured": "這個頻道已經有置底訊息，請使用 edit。",
+        "bad_channel_id": "置底訊息的頻道 ID 無效。",
+        "channel_not_found": "找不到指定的文字或公告頻道。",
+        "config_not_object": "StickyMessage 設定必須是 object。",
+        "content_empty": "置底訊息內容不可為空。",
+        "content_too_long": "置底訊息內容不可超過 {max} 字。",
+        "duplicate_channel": "同一個頻道只能設定一則置底訊息。",
+        "entries_not_list": "StickyMessage entries 必須是清單。",
+        "entry_not_object": "每則置底訊息都必須是 object。",
+        "field_not_int": "{field} 必須是整數。",
+        "field_out_of_range": "{field} 必須介於 {min} 到 {max}。",
+        "generic": "操作失敗。",
+        "guild_not_found": "找不到伺服器。",
+        "missing_perms": "我沒有權限查看頻道或發送訊息。",
+        "not_configured": "這個頻道尚未設定置底訊息。",
+        "over_quota": "這則設定目前超過伺服器額度，已暫停運作。",
+        "position_out_of_range": "位置不可超過目前的 {count} 則設定。",
+        "quota_reached": "這個伺服器最多可設定 {count} 則置底訊息。",
+        "save_failed": "儲存 StickyMessage 設定失敗。",
+        "saved_but_publish_failed": "設定已儲存，但即時發布失敗：{errors}",
+        "send_failed": "發送置底訊息失敗。",
+        "text_or_news_only": "只能選擇文字或公告頻道。",
+        "too_many_entries": "StickyMessage 最多保留 {count} 則設定。"
+    },
+    "field": {
+        "min_interval": "最短間隔",
+        "quiet_seconds": "安靜時間",
+        "quota": "額度"
+    },
+    "list": {
+        "empty": "尚未設定任何置底訊息。",
+        "title": "StickyMessage 設定"
+    },
+    "msg": {
+        "added": "已新增並發布 {channel} 的置底訊息。",
+        "moved": "已將 {channel} 移到第 {position} 位。",
+        "removed": "已移除 {channel} 的置底訊息設定。",
+        "republished": "已重新發布 {channel} 的置底訊息。",
+        "timing_set": "已設定安靜時間 {quiet} 秒、最短間隔 {interval} 秒。",
+        "updated": "已更新並重新發布 {channel} 的置底訊息。"
+    },
+    "state": {
+        "active": "運作中",
+        "mentions_off": "提及關",
+        "mentions_on": "提及開",
+        "over_quota": "超額暫停"
+    }
+}

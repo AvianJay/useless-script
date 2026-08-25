@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 import asyncio
 import copy
@@ -20,11 +20,14 @@ from globalenv import (
     failed_modules,
     get_command_mention,
     get_server_config,
+    localized_panel_settings,
     modules,
     panel_settings,
     set_server_config,
 )
 from logger import log
+import i18n
+from i18n import t
 
 
 if "Moderate" in modules:
@@ -120,9 +123,11 @@ def resolve_select_value(value):
 
 def available_panel_modules() -> list[tuple[str, dict]]:
     unavailable = set(failed_modules)
+    # 依當前 locale 取在地化後的 registry 拷貝（display/description/options）；
+    # 傳入本模組的 panel_settings binding，讓測試 patch 得到
     return [
         (module_name, data)
-        for module_name, data in panel_settings.items()
+        for module_name, data in localized_panel_settings(panel_settings).items()
         if module_name in modules and module_name not in unavailable
     ]
 
@@ -156,13 +161,17 @@ def find_setup_channel(guild: discord.Guild, recipient) -> discord.TextChannel |
 def format_setting_value(guild: discord.Guild, setting: dict, value: Any) -> str:
     stype = setting.get("type", "string")
     if value is None:
-        return "未設定"
+        # 有在地化預設值的設定：顯示渲染後的預設並標記（值本身仍是未設定）
+        if setting.get("default_i18n_key"):
+            return t("common.state.default_value",
+                     value=truncate(t(setting["default_i18n_key"]), 200))
+        return t("common.state.unset")
     if stype in ("channel", "voice_channel", "category"):
         channel = guild.get_channel(int(value)) if str(value).isdigit() else None
-        return channel.mention if channel else f"未知頻道 ({value})"
+        return channel.mention if channel else t("gettingstarted.value.unknown_channel", value=value)
     if stype == "role":
         role = guild.get_role(int(value)) if str(value).isdigit() else None
-        return role.mention if role else f"未知身分組 ({value})"
+        return role.mention if role else t("gettingstarted.value.unknown_role", value=value)
     if stype in ("channel_list", "role_list"):
         values = value if isinstance(value, list) else []
         mentions = []
@@ -173,15 +182,15 @@ def format_setting_value(guild: discord.Guild, setting: dict, value: Any) -> str
                 item = guild.get_role(int(raw_id)) if str(raw_id).isdigit() else None
             mentions.append(item.mention if item else str(raw_id))
         if len(values) > 15:
-            mentions.append(f"... 共 {len(values)} 項")
-        return "、".join(mentions) if mentions else "空清單"
+            mentions.append(t("gettingstarted.value.more_items", count=len(values)))
+        return i18n.join_list(mentions) if mentions else t("gettingstarted.value.empty_list")
     if stype == "boolean":
-        return "啟用" if bool(value) else "停用"
+        return t("common.state.enabled") if bool(value) else t("common.state.disabled")
     if stype == "stickymessage_config":
         entries = value.get("entries", []) if isinstance(value, dict) else []
-        return f"已設定 {len(entries)} 則"
+        return t("gettingstarted.value.entries_configured", count=len(entries))
     if isinstance(value, (dict, list)):
-        return f"已設定 {len(value)} 項"
+        return t("gettingstarted.value.items_configured", count=len(value))
     return truncate(value, 900)
 
 
@@ -199,14 +208,14 @@ def coerce_scalar_setting_value(setting: dict, raw: str) -> Any:
         else:
             value = raw
     except ValueError as error:
-        raise ValueError("請輸入有效的數字。") from error
+        raise ValueError(t("gettingstarted.err.invalid_number")) from error
 
     minimum = setting.get("min")
     maximum = setting.get("max")
     if minimum is not None and isinstance(value, (int, float)) and value < minimum:
-        raise ValueError(f"設定值不可小於 {minimum}。")
+        raise ValueError(t("gettingstarted.err.value_too_small", minimum=minimum))
     if maximum is not None and isinstance(value, (int, float)) and value > maximum:
-        raise ValueError(f"設定值不可大於 {maximum}。")
+        raise ValueError(t("gettingstarted.err.value_too_large", maximum=maximum))
     return value
 
 
@@ -218,7 +227,7 @@ async def apply_registered_setting(
 ) -> str | None:
     previous_value = get_server_config(guild_id, setting["database_key"], setting.get("default"))
     if not set_server_config(guild_id, setting["database_key"], value):
-        raise RuntimeError("寫入伺服器設定失敗。")
+        raise RuntimeError(t("gettingstarted.err.save_failed"))
 
     trigger = setting.get("trigger")
     if not callable(trigger):
@@ -235,11 +244,11 @@ async def apply_registered_setting(
             await result
     except Exception as error:
         log(
-            f"快速設定 trigger 失敗: {module_name}.{setting['database_key']}: {error}",
+            f"Quick setting trigger failed: {module_name}.{setting['database_key']}: {error}",
             level=logging.ERROR,
             module_name="gettingstarted",
         )
-        return "設定已儲存，但套用即時效果時發生錯誤。"
+        return t("gettingstarted.err.trigger_failed")
     return None
 
 
@@ -262,7 +271,7 @@ class GettingStartedSession:
         ):
             if not interaction.response.is_done():
                 await interaction.response.send_message(
-                    "只有開啟這次設定流程、且具備管理伺服器權限的成員可以操作。",
+                    t("gettingstarted.err.not_setup_owner"),
                     ephemeral=True,
                 )
             return False
@@ -332,11 +341,13 @@ class SetupView(discord.ui.View):
             item.disabled = True
         if self.session.message is not None:
             try:
-                embed = discord.Embed(
-                    title="快速設定已逾時",
-                    description="已確認的設定仍然保留；請使用 `/gettingstarted` 繼續設定。",
-                    color=discord.Color.red(),
-                )
+                with i18n.use_locale(i18n.resolve_locale(
+                        user_id=self.session.owner_id, guild_id=self.session.guild.id)):
+                    embed = discord.Embed(
+                        title=t("gettingstarted.hub.timed_out_title"),
+                        description=t("gettingstarted.hub.timed_out_desc"),
+                        color=discord.Color.red(),
+                    )
                 await self.session.message.edit(embed=embed, view=self)
             except discord.HTTPException:
                 pass
@@ -345,7 +356,7 @@ class SetupView(discord.ui.View):
 class ModuleSelect(discord.ui.Select):
     def __init__(self, parent: "GettingStartedHubView", options: list[discord.SelectOption]):
         self.parent_view = parent
-        super().__init__(placeholder="選擇要設定的功能模組", options=options, row=0)
+        super().__init__(placeholder=t("gettingstarted.hub.select_module_ph"), options=options, row=0)
 
     async def callback(self, interaction: discord.Interaction):
         module_name = self.values[0]
@@ -365,7 +376,7 @@ class GettingStartedHubView(SetupView):
             discord.SelectOption(
                 label=truncate(data.get("display_name", module_name), 100),
                 value=module_name,
-                description=truncate(data.get("description") or "開啟此模組的設定", 100),
+                description=truncate(data.get("description") or t("gettingstarted.hub.default_module_desc"), 100),
                 emoji=data.get("icon") or None,
             )
             for module_name, data in current
@@ -373,17 +384,17 @@ class GettingStartedHubView(SetupView):
         if options:
             self.add_item(ModuleSelect(self, options))
 
-        previous = discord.ui.Button(label="上一頁", style=discord.ButtonStyle.secondary, row=1)
+        previous = discord.ui.Button(label=t("common.btn.prev"), style=discord.ButtonStyle.secondary, row=1)
         previous.disabled = self.page == 0
         previous.callback = self.previous_page
         self.add_item(previous)
 
-        next_button = discord.ui.Button(label="下一頁", style=discord.ButtonStyle.secondary, row=1)
+        next_button = discord.ui.Button(label=t("common.btn.next"), style=discord.ButtonStyle.secondary, row=1)
         next_button.disabled = self.page >= self.total_pages - 1
         next_button.callback = self.next_page
         self.add_item(next_button)
 
-        finish = discord.ui.Button(label="完成", style=discord.ButtonStyle.success, row=1)
+        finish = discord.ui.Button(label=t("gettingstarted.btn.finish"), style=discord.ButtonStyle.success, row=1)
         finish.callback = self.finish
         self.add_item(finish)
 
@@ -392,13 +403,13 @@ class GettingStartedHubView(SetupView):
         entries = available_panel_modules()
         _, page, total_pages = paginate(entries, page)
         embed = discord.Embed(
-            title=f"{session.guild.name} 快速設定",
-            description="從下拉選單選擇功能。每個確認的設定都會立即儲存。",
+            title=t("gettingstarted.hub.title", guild=session.guild.name),
+            description=t("gettingstarted.hub.desc"),
             color=discord.Color.blurple(),
         )
-        embed.add_field(name="可設定模組", value=str(len(entries)), inline=True)
-        embed.add_field(name="本次已修改", value=str(len(session.changes)), inline=True)
-        embed.set_footer(text=f"模組頁面 {page + 1}/{total_pages}")
+        embed.add_field(name=t("gettingstarted.hub.field.available_modules"), value=str(len(entries)), inline=True)
+        embed.add_field(name=t("gettingstarted.hub.field.changes_this_session"), value=str(len(session.changes)), inline=True)
+        embed.set_footer(text=t("gettingstarted.hub.page_footer", page=page + 1, total=total_pages))
         return embed
 
     async def previous_page(self, interaction: discord.Interaction):
@@ -420,19 +431,19 @@ class GettingStartedHubView(SetupView):
     async def finish(self, interaction: discord.Interaction):
         if self.session.changes:
             lines = [f"- `{module}.{key}`" for module, key in sorted(self.session.changes)]
-            description = "本次已完成以下設定：\n" + "\n".join(lines[:30])
+            description = t("gettingstarted.hub.finish.summary") + "\n" + "\n".join(lines[:30])
             if len(lines) > 30:
-                description += f"\n... 另有 {len(lines) - 30} 項"
+                description += "\n" + t("gettingstarted.hub.finish.more_items", count=len(lines) - 30)
         else:
-            description = "這次沒有變更任何設定。"
-        embed = discord.Embed(title="快速設定完成", description=description, color=discord.Color.green())
+            description = t("gettingstarted.hub.finish.no_changes")
+        embed = discord.Embed(title=t("gettingstarted.hub.finish.title"), description=description, color=discord.Color.green())
         await self.session.render(interaction, embed=embed, view=None)
 
 
 class SettingSelect(discord.ui.Select):
     def __init__(self, parent: "ModuleSettingsView", options: list[discord.SelectOption]):
         self.parent_view = parent
-        super().__init__(placeholder="選擇設定項目", options=options, row=0)
+        super().__init__(placeholder=t("gettingstarted.module.select_setting_ph"), options=options, row=0)
 
     async def callback(self, interaction: discord.Interaction):
         key = self.values[0]
@@ -485,7 +496,9 @@ class ModuleSettingsView(SetupView):
     def __init__(self, session: GettingStartedSession, module_name: str, page: int = 0):
         super().__init__(session)
         self.module_name = module_name
-        self.module_data = panel_settings[module_name]
+        # localized_panel_settings()：與 GettingStartedHubView 一致，否則點進
+        # 模組後 display/description 會固定顯示中文，跟外層選單語言不一致。
+        self.module_data = localized_panel_settings(panel_settings)[module_name]
         self.settings = self.module_data.get("settings", [])
         current, self.page, self.total_pages = paginate(self.settings, page)
         options = [
@@ -499,23 +512,23 @@ class ModuleSettingsView(SetupView):
         if options:
             self.add_item(SettingSelect(self, options))
 
-        previous = discord.ui.Button(label="上一頁", style=discord.ButtonStyle.secondary, row=1)
+        previous = discord.ui.Button(label=t("common.btn.prev"), style=discord.ButtonStyle.secondary, row=1)
         previous.disabled = self.page == 0
         previous.callback = self.previous_page
         self.add_item(previous)
 
-        next_button = discord.ui.Button(label="下一頁", style=discord.ButtonStyle.secondary, row=1)
+        next_button = discord.ui.Button(label=t("common.btn.next"), style=discord.ButtonStyle.secondary, row=1)
         next_button.disabled = self.page >= self.total_pages - 1
         next_button.callback = self.next_page
         self.add_item(next_button)
 
-        back = discord.ui.Button(label="返回模組", style=discord.ButtonStyle.secondary, row=1)
+        back = discord.ui.Button(label=t("gettingstarted.btn.back_to_module"), style=discord.ButtonStyle.secondary, row=1)
         back.callback = self.back
         self.add_item(back)
 
     @staticmethod
     def build_embed(session: GettingStartedSession, module_name: str, page: int = 0) -> discord.Embed:
-        module_data = panel_settings[module_name]
+        module_data = localized_panel_settings(panel_settings)[module_name]
         settings = module_data.get("settings", [])
         current, page, total_pages = paginate(settings, page)
         lines = []
@@ -531,10 +544,10 @@ class ModuleSettingsView(SetupView):
             )
         embed = discord.Embed(
             title=f"{module_data.get('icon', '⚙️')} {module_data.get('display_name', module_name)}",
-            description="\n\n".join(lines) if lines else "這個模組目前沒有可設定項目。",
+            description="\n\n".join(lines) if lines else t("gettingstarted.module.no_settings"),
             color=discord.Color.blurple(),
         )
-        embed.set_footer(text=f"設定頁面 {page + 1}/{total_pages}")
+        embed.set_footer(text=t("gettingstarted.module.page_footer", page=page + 1, total=total_pages))
         return embed
 
     async def previous_page(self, interaction: discord.Interaction):
@@ -567,13 +580,13 @@ class CompoundSettingUnavailableView(SetupView):
         super().__init__(session)
         self.module_name = module_name
         self.message = message
-        back = discord.ui.Button(label="返回", style=discord.ButtonStyle.secondary)
+        back = discord.ui.Button(label=t("common.btn.back"), style=discord.ButtonStyle.secondary)
         back.callback = self.back
         self.add_item(back)
 
     def build_embed(self) -> discord.Embed:
         return discord.Embed(
-            title="無法開啟設定",
+            title=t("gettingstarted.compound.unavailable_title"),
             description=self.message,
             color=discord.Color.red(),
         )
@@ -593,11 +606,11 @@ def build_gettingstarted_fixlink_view(
         try:
             import FixLink as fixlink
         except Exception:
-            return CompoundSettingUnavailableView(session, module_name, "FixLink 模組尚未載入。")
+            return CompoundSettingUnavailableView(session, module_name, t("gettingstarted.fixlink.err.module_not_loaded"))
 
     cog = bot.get_cog("fixlink")
     if cog is None:
-        return CompoundSettingUnavailableView(session, module_name, "找不到正在執行的 FixLink 模組。")
+        return CompoundSettingUnavailableView(session, module_name, t("gettingstarted.fixlink.err.cog_not_running"))
 
     class GettingStartedFixLinkSettingsView(fixlink.FixLinkSettingsView):
         def __init__(self):
@@ -607,7 +620,7 @@ def build_gettingstarted_fixlink_view(
             self.initial_config = copy.deepcopy(self.config)
             self.message = session.message
             back = discord.ui.Button(
-                label="返回設定中心",
+                label=t("gettingstarted.fixlink.btn.back_to_center"),
                 style=discord.ButtonStyle.secondary,
                 row=0,
             )
@@ -669,7 +682,7 @@ def load_stickymessage_config(guild_id: int) -> dict:
 class StickyMessageEntrySelect(discord.ui.Select):
     def __init__(self, parent: "StickyMessageManagerView", options: list[discord.SelectOption]):
         self.parent_view = parent
-        super().__init__(placeholder="選擇要管理的置底訊息", options=options, row=0)
+        super().__init__(placeholder=t("gettingstarted.stickymessage.select_entry_ph"), options=options, row=0)
 
     async def callback(self, interaction: discord.Interaction):
         index = int(self.values[0])
@@ -691,31 +704,29 @@ class StickyMessageManagerView(SetupView):
         options = []
         for index, entry in enumerate(config_value["entries"][:PAGE_SIZE]):
             channel = session.guild.get_channel(entry["channel_id"])
-            channel_name = f"#{channel.name}" if channel else f"頻道 {entry['channel_id']}"
+            channel_name = f"#{channel.name}" if channel else t("gettingstarted.stickymessage.unknown_channel", channel_id=entry["channel_id"])
             content = entry["content"].replace("\n", " ")
+            status_prefix = t("gettingstarted.stickymessage.status_over_quota") if index >= limit else t("gettingstarted.stickymessage.status_active")
             options.append(discord.SelectOption(
                 label=truncate(f"{index + 1}. {channel_name}", 100),
                 value=str(index),
-                description=truncate(
-                    ("超額暫停 · " if index >= limit else "運作中 · ") + content,
-                    100,
-                ),
+                description=truncate(f"{status_prefix} · {content}", 100),
             ))
         if options:
             self.add_item(StickyMessageEntrySelect(self, options))
 
         add = discord.ui.Button(
-            label="新增",
+            label=t("gettingstarted.btn.add"),
             style=discord.ButtonStyle.success,
             row=1,
             disabled=len(config_value["entries"]) >= limit,
         )
         add.callback = self.add_entry
         self.add_item(add)
-        timing = discord.ui.Button(label="時間設定", style=discord.ButtonStyle.primary, row=1)
+        timing = discord.ui.Button(label=t("gettingstarted.stickymessage.btn.timing"), style=discord.ButtonStyle.primary, row=1)
         timing.callback = self.edit_timing
         self.add_item(timing)
-        back = discord.ui.Button(label="返回設定", style=discord.ButtonStyle.secondary, row=1)
+        back = discord.ui.Button(label=t("gettingstarted.btn.back_to_settings"), style=discord.ButtonStyle.secondary, row=1)
         back.callback = self.back
         self.add_item(back)
 
@@ -725,17 +736,17 @@ class StickyMessageManagerView(SetupView):
         limit = module.get_stickymessage_limit(self.session.guild.id) if module else 5
         lines = []
         for index, entry in enumerate(config_value["entries"]):
-            status = "運作中" if index < limit else "超額暫停"
+            status = t("gettingstarted.stickymessage.status_active") if index < limit else t("gettingstarted.stickymessage.status_over_quota")
             lines.append(f"{index + 1}. <#{entry['channel_id']}> · {status}")
         embed = discord.Embed(
-            title="📌 置底訊息",
-            description="\n".join(lines) if lines else "尚未設定任何置底訊息。",
+            title=t("gettingstarted.stickymessage.manager_title"),
+            description="\n".join(lines) if lines else t("gettingstarted.stickymessage.no_entries"),
             color=discord.Color.blurple(),
         )
-        embed.add_field(name="額度", value=f"{len(config_value['entries'])} / {limit}", inline=True)
-        embed.add_field(name="安靜時間", value=f"{config_value['quiet_seconds']} 秒", inline=True)
-        embed.add_field(name="最短間隔", value=f"{config_value['min_interval_seconds']} 秒", inline=True)
-        embed.set_footer(text="只有首次、內容修改或手動發布會依設定發送提及。")
+        embed.add_field(name=t("gettingstarted.field.quota"), value=f"{len(config_value['entries'])} / {limit}", inline=True)
+        embed.add_field(name=t("gettingstarted.stickymessage.field.quiet_seconds"), value=i18n.tn("common.unit.seconds", config_value["quiet_seconds"]), inline=True)
+        embed.add_field(name=t("gettingstarted.stickymessage.field.min_interval"), value=i18n.tn("common.unit.seconds", config_value["min_interval_seconds"]), inline=True)
+        embed.set_footer(text=t("gettingstarted.stickymessage.mentions_footer"))
         return embed
 
     async def add_entry(self, interaction: discord.Interaction):
@@ -758,7 +769,7 @@ class StickyMessageChannelSelect(discord.ui.ChannelSelect):
     def __init__(self, parent: "StickyMessageChannelPickerView"):
         self.parent_view = parent
         super().__init__(
-            placeholder="選擇文字或公告頻道",
+            placeholder=t("gettingstarted.stickymessage.pick_channel_ph"),
             channel_types=[discord.ChannelType.text, discord.ChannelType.news],
             min_values=1,
             max_values=1,
@@ -770,7 +781,7 @@ class StickyMessageChannelSelect(discord.ui.ChannelSelect):
         channel_id = selected.id if selected is not None else int(interaction.data["values"][0])
         config_value = load_stickymessage_config(self.parent_view.session.guild.id)
         if any(entry["channel_id"] == channel_id for entry in config_value["entries"]):
-            await interaction.response.send_message("這個頻道已經有置底訊息。", ephemeral=True)
+            await interaction.response.send_message(t("gettingstarted.stickymessage.err.channel_taken"), ephemeral=True)
             return
         target = StickyMessageEditorView(
             self.parent_view.session,
@@ -785,14 +796,14 @@ class StickyMessageChannelPickerView(SetupView):
         super().__init__(session)
         self.module_name = module_name
         self.add_item(StickyMessageChannelSelect(self))
-        back = discord.ui.Button(label="返回", style=discord.ButtonStyle.secondary, row=1)
+        back = discord.ui.Button(label=t("common.btn.back"), style=discord.ButtonStyle.secondary, row=1)
         back.callback = self.back
         self.add_item(back)
 
     def build_embed(self) -> discord.Embed:
         return discord.Embed(
-            title="新增置底訊息",
-            description="先選擇要設定的文字或公告頻道。每個頻道只能有一則置底訊息。",
+            title=t("gettingstarted.stickymessage.add_title"),
+            description=t("gettingstarted.stickymessage.add_desc"),
             color=discord.Color.blurple(),
         )
 
@@ -801,9 +812,9 @@ class StickyMessageChannelPickerView(SetupView):
         await self.session.render(interaction, embed=target.build_embed(), view=target)
 
 
-class StickyMessageContentModal(discord.ui.Modal, title="編輯置底訊息內容"):
+class StickyMessageContentModal(i18n.I18nModal, title=i18n.K("gettingstarted.stickymessage.content_modal_title")):
     content = discord.ui.TextInput(
-        label="訊息內容",
+        label=i18n.K("gettingstarted.stickymessage.content_label"),
         style=discord.TextStyle.paragraph,
         min_length=1,
         max_length=2000,
@@ -852,18 +863,18 @@ class StickyMessageEditorView(SetupView):
         else:
             self.entry = copy.deepcopy(config_value["entries"][index])
 
-        content = discord.ui.Button(label="編輯內容", style=discord.ButtonStyle.primary, row=0)
+        content = discord.ui.Button(label=t("gettingstarted.stickymessage.btn.edit_content"), style=discord.ButtonStyle.primary, row=0)
         content.callback = self.edit_content
         self.add_item(content)
         mentions = discord.ui.Button(
-            label=f"首次提及：{'開' if self.entry['allow_mentions'] else '關'}",
+            label=t("gettingstarted.stickymessage.btn.first_mention", state=t("common.state.on") if self.entry["allow_mentions"] else t("common.state.off")),
             style=discord.ButtonStyle.danger if self.entry["allow_mentions"] else discord.ButtonStyle.secondary,
             row=0,
         )
         mentions.callback = self.toggle_mentions
         self.add_item(mentions)
         save = discord.ui.Button(
-            label="儲存並發布",
+            label=t("gettingstarted.stickymessage.btn.save_and_publish"),
             style=discord.ButtonStyle.success,
             row=1,
             disabled=not bool(self.entry["content"]),
@@ -871,41 +882,41 @@ class StickyMessageEditorView(SetupView):
         save.callback = self.save
         self.add_item(save)
         if index is not None:
-            publish = discord.ui.Button(label="手動發布", style=discord.ButtonStyle.primary, row=1)
+            publish = discord.ui.Button(label=t("gettingstarted.stickymessage.btn.publish_now"), style=discord.ButtonStyle.primary, row=1)
             publish.callback = self.publish
             self.add_item(publish)
-            up = discord.ui.Button(label="上移", style=discord.ButtonStyle.secondary, row=2, disabled=index == 0)
+            up = discord.ui.Button(label=t("gettingstarted.btn.move_up"), style=discord.ButtonStyle.secondary, row=2, disabled=index == 0)
             up.callback = self.move_up
             self.add_item(up)
             down = discord.ui.Button(
-                label="下移",
+                label=t("gettingstarted.btn.move_down"),
                 style=discord.ButtonStyle.secondary,
                 row=2,
                 disabled=index >= len(config_value["entries"]) - 1,
             )
             down.callback = self.move_down
             self.add_item(down)
-            remove = discord.ui.Button(label="刪除", style=discord.ButtonStyle.danger, row=2)
+            remove = discord.ui.Button(label=t("gettingstarted.btn.remove"), style=discord.ButtonStyle.danger, row=2)
             remove.callback = self.remove
             self.add_item(remove)
-        back = discord.ui.Button(label="返回", style=discord.ButtonStyle.secondary, row=3)
+        back = discord.ui.Button(label=t("common.btn.back"), style=discord.ButtonStyle.secondary, row=3)
         back.callback = self.back
         self.add_item(back)
 
     def build_embed(self) -> discord.Embed:
-        preview = self.entry["content"] or "尚未輸入內容，請先點選「編輯內容」。"
+        preview = self.entry["content"] or t("gettingstarted.stickymessage.no_content_yet")
         embed = discord.Embed(
-            title="編輯置底訊息" if self.index is not None else "新增置底訊息",
+            title=t("gettingstarted.stickymessage.edit_title") if self.index is not None else t("gettingstarted.stickymessage.add_title"),
             description=truncate(preview, 4000),
             color=discord.Color.blurple(),
         )
-        embed.add_field(name="頻道", value=f"<#{self.entry['channel_id']}>", inline=True)
+        embed.add_field(name=t("gettingstarted.field.channel"), value=f"<#{self.entry['channel_id']}>", inline=True)
         embed.add_field(
-            name="首次／手動提及",
-            value="允許" if self.entry["allow_mentions"] else "抑制",
+            name=t("gettingstarted.stickymessage.field.mentions"),
+            value=t("gettingstarted.stickymessage.mentions_allowed") if self.entry["allow_mentions"] else t("gettingstarted.stickymessage.mentions_suppressed"),
             inline=True,
         )
-        embed.set_footer(text="自動重新置底永遠不會發送提及通知。")
+        embed.set_footer(text=t("gettingstarted.stickymessage.auto_repost_footer"))
         return embed
 
     async def edit_content(self, interaction: discord.Interaction):
@@ -924,19 +935,19 @@ class StickyMessageEditorView(SetupView):
 
     async def save(self, interaction: discord.Interaction):
         if not self.entry["content"].strip():
-            await interaction.response.send_message("請先輸入置底訊息內容。", ephemeral=True)
+            await interaction.response.send_message(t("gettingstarted.stickymessage.err.no_content"), ephemeral=True)
             return
         module = get_stickymessage_module()
         config_value = load_stickymessage_config(self.session.guild.id)
         if self.index is None:
             limit = module.get_stickymessage_limit(self.session.guild.id) if module else 5
             if len(config_value["entries"]) >= limit:
-                await interaction.response.send_message(f"這個伺服器最多可設定 {limit} 則置底訊息。", ephemeral=True)
+                await interaction.response.send_message(t("gettingstarted.stickymessage.err.quota_reached", count=limit), ephemeral=True)
                 return
             config_value["entries"].append(copy.deepcopy(self.entry))
         else:
             if self.index >= len(config_value["entries"]):
-                await interaction.response.send_message("這則設定已不存在，請重新開啟管理畫面。", ephemeral=True)
+                await interaction.response.send_message(t("gettingstarted.stickymessage.err.entry_gone"), ephemeral=True)
                 return
             config_value["entries"][self.index] = copy.deepcopy(self.entry)
         if not await self.session.save(
@@ -952,14 +963,14 @@ class StickyMessageEditorView(SetupView):
     async def publish(self, interaction: discord.Interaction):
         cog = bot.get_cog("StickyMessage")
         if cog is None:
-            await interaction.response.send_message("StickyMessage 模組目前無法使用。", ephemeral=True)
+            await interaction.response.send_message(t("gettingstarted.stickymessage.err.module_unavailable"), ephemeral=True)
             return
         try:
             await interaction.response.defer(ephemeral=True)
             await cog.publish_entry(self.session.guild.id, self.entry["channel_id"], notify_mentions=True)
-            await interaction.followup.send("已手動發布置底訊息。", ephemeral=True)
+            await interaction.followup.send(t("gettingstarted.stickymessage.msg.published"), ephemeral=True)
         except Exception as error:
-            await interaction.followup.send(str(error) or "發布失敗。", ephemeral=True)
+            await interaction.followup.send(str(error) or t("gettingstarted.stickymessage.err.publish_failed"), ephemeral=True)
 
     async def _move(self, interaction: discord.Interaction, offset: int):
         module = get_stickymessage_module()
@@ -1005,14 +1016,14 @@ class StickyMessageEditorView(SetupView):
         await self.session.render(interaction, embed=target.build_embed(), view=target)
 
 
-class StickyMessageTimingModal(discord.ui.Modal, title="StickyMessage 時間設定"):
+class StickyMessageTimingModal(i18n.I18nModal, title=i18n.K("gettingstarted.stickymessage.timing_modal_title")):
     quiet_seconds = discord.ui.TextInput(
-        label="無新訊息多久後置底（0–300 秒）",
+        label=i18n.K("gettingstarted.stickymessage.quiet_seconds_label"),
         min_length=1,
         max_length=3,
     )
     min_interval_seconds = discord.ui.TextInput(
-        label="同頻道最短間隔（5–3600 秒）",
+        label=i18n.K("gettingstarted.stickymessage.min_interval_label"),
         min_length=1,
         max_length=4,
     )
@@ -1033,7 +1044,7 @@ class StickyMessageTimingModal(discord.ui.Modal, title="StickyMessage 時間設�
             config_value["min_interval_seconds"] = int(str(self.min_interval_seconds.value).strip())
             normalized = module.normalize_config(config_value, strict=True) if module else config_value
         except (TypeError, ValueError) as error:
-            await interaction.response.send_message(str(error) or "請輸入有效秒數。", ephemeral=True)
+            await interaction.response.send_message(str(error) or t("gettingstarted.stickymessage.err.invalid_seconds"), ephemeral=True)
             return
         if await self.session.save(
             interaction,
@@ -1060,7 +1071,7 @@ def get_antibeast_setting(module_name: str) -> dict:
 def load_antibeast_config(guild_id: int) -> dict:
     cog = get_antibeast_cog()
     if cog is None:
-        raise RuntimeError("AntiBeast 模組尚未載入。")
+        raise RuntimeError(t("gettingstarted.antibeast.module_not_loaded"))
     return cog._get_config(guild_id)
 
 
@@ -1086,33 +1097,33 @@ class AntiBeastManagerView(SetupView):
             self.config = load_antibeast_config(session.guild.id)
         except RuntimeError:
             self.config = None
-            back = discord.ui.Button(label="返回", style=discord.ButtonStyle.secondary)
+            back = discord.ui.Button(label=t("common.btn.back"), style=discord.ButtonStyle.secondary)
             back.callback = self.back
             self.add_item(back)
             return
 
         toggle = discord.ui.Button(
-            label="停用 AntiBeast" if self.config["enabled"] else "啟用 AntiBeast",
+            label=t("gettingstarted.antibeast.btn.disable" if self.config["enabled"] else "gettingstarted.antibeast.btn.enable"),
             style=discord.ButtonStyle.danger if self.config["enabled"] else discord.ButtonStyle.success,
             row=0,
         )
         toggle.callback = self.toggle_enabled
         self.add_item(toggle)
-        bypass = discord.ui.Button(label="繞過身分組", style=discord.ButtonStyle.primary, row=0)
+        bypass = discord.ui.Button(label=t("gettingstarted.antibeast.btn.bypass_roles"), style=discord.ButtonStyle.primary, row=0)
         bypass.callback = self.open_bypass
         self.add_item(bypass)
-        action = discord.ui.Button(label="連續觸發處置", style=discord.ButtonStyle.primary, row=0)
+        action = discord.ui.Button(label=t("gettingstarted.field.trigger_action"), style=discord.ButtonStyle.primary, row=0)
         action.callback = self.open_action
         self.add_item(action)
-        back = discord.ui.Button(label="返回", style=discord.ButtonStyle.secondary, row=1)
+        back = discord.ui.Button(label=t("common.btn.back"), style=discord.ButtonStyle.secondary, row=1)
         back.callback = self.back
         self.add_item(back)
 
     def build_embed(self) -> discord.Embed:
         if self.config is None:
             return discord.Embed(
-                title="AntiBeast 設定",
-                description="AntiBeast 模組尚未載入。",
+                title=t("gettingstarted.antibeast.title"),
+                description=t("gettingstarted.antibeast.module_not_loaded"),
                 color=discord.Color.red(),
             )
         cog = get_antibeast_cog()
@@ -1123,28 +1134,28 @@ class AntiBeastManagerView(SetupView):
         ]
         roles = [role for role in roles if role is not None]
         action_status = (
-            f"{kick['time_window']} 秒內 {kick['threshold']} 次後執行 `{kick['action']}`"
+            t("gettingstarted.antibeast.action_status", seconds=kick["time_window"], count=kick["threshold"], action=kick["action"])
             if kick["enabled"]
-            else "停用"
+            else t("common.state.disabled")
         )
         embed = discord.Embed(
-            title="🛡️ AntiBeast 設定",
+            title=t("gettingstarted.antibeast.manager_title"),
             description=(
-                "已啟用，AutoMod 規則會阻擋受保護提及。"
+                t("gettingstarted.antibeast.enabled_desc")
                 if self.config["enabled"]
-                else "目前停用。你仍可先完成其他設定再啟用。"
+                else t("gettingstarted.antibeast.disabled_desc")
             ),
             color=discord.Color.green() if self.config["enabled"] else discord.Color.blurple(),
         )
-        embed.add_field(name="連續觸發處置", value=action_status, inline=False)
+        embed.add_field(name=t("gettingstarted.field.trigger_action"), value=action_status, inline=False)
         embed.add_field(
-            name="處置範圍",
-            value=cog._format_action_scope(kick) if cog is not None else "未知",
+            name=t("gettingstarted.field.action_scope"),
+            value=cog._format_action_scope(kick) if cog is not None else t("gettingstarted.state.unknown"),
             inline=False,
         )
         embed.add_field(
-            name="繞過身分組",
-            value="、".join(role.mention for role in roles) if roles else "尚未設定",
+            name=t("gettingstarted.antibeast.field.bypass_roles"),
+            value=i18n.join_list([role.mention for role in roles]) if roles else t("gettingstarted.value.not_set"),
             inline=False,
         )
         return embed
@@ -1177,7 +1188,7 @@ class AntiBeastBypassRoleSelect(discord.ui.RoleSelect):
     def __init__(self, parent: "AntiBeastBypassView"):
         self.parent_view = parent
         super().__init__(
-            placeholder="選擇要繞過的身分組（會取代目前清單）",
+            placeholder=t("gettingstarted.antibeast.bypass_select_ph"),
             min_values=1,
             max_values=25,
             row=0,
@@ -1194,22 +1205,23 @@ class AntiBeastBypassView(SetupView):
         self.module_name = module_name
         self.config = load_antibeast_config(session.guild.id)
         self.add_item(AntiBeastBypassRoleSelect(self))
-        clear = discord.ui.Button(label="全部清除", style=discord.ButtonStyle.danger, row=1)
+        clear = discord.ui.Button(label=t("gettingstarted.btn.clear_all"), style=discord.ButtonStyle.danger, row=1)
         clear.callback = self.clear
         self.add_item(clear)
-        back = discord.ui.Button(label="返回 AntiBeast", style=discord.ButtonStyle.secondary, row=1)
+        back = discord.ui.Button(label=t("gettingstarted.antibeast.btn.back_to_antibeast"), style=discord.ButtonStyle.secondary, row=1)
         back.callback = self.back
         self.add_item(back)
 
     def build_embed(self) -> discord.Embed:
         roles = [self.session.guild.get_role(role_id) for role_id in self.config["bypass_roles"]]
         roles = [role for role in roles if role is not None]
+        current_line = (
+            t("gettingstarted.antibeast.bypass_current", roles=i18n.join_list([role.mention for role in roles]))
+            if roles else t("gettingstarted.antibeast.bypass_none")
+        )
         return discord.Embed(
-            title="AntiBeast 繞過身分組",
-            description=(
-                "這些身分組的 mention token 不會加入 AntiBeast 關鍵字規則。\n\n"
-                + ("目前：" + "、".join(role.mention for role in roles) if roles else "目前沒有繞過身分組。")
-            ),
+            title=t("gettingstarted.antibeast.bypass_title"),
+            description=t("gettingstarted.antibeast.bypass_desc") + "\n\n" + current_line,
             color=discord.Color.blurple(),
         )
 
@@ -1233,9 +1245,9 @@ class AntiBeastActionPresetSelect(discord.ui.Select):
         self.parent_view = parent
         options = [
             discord.SelectOption(label=label, value=value)
-            for label, value in (Moderate.ACTION_INPUT_SUGGESTIONS if Moderate is not None else [])[:25]
+            for label, value in (Moderate._action_input_suggestions() if Moderate is not None else [])[:25]
         ]
-        super().__init__(placeholder="選擇常用動作", options=options, row=0)
+        super().__init__(placeholder=t("gettingstarted.select_preset_ph"), options=options, row=0)
 
     async def callback(self, interaction: discord.Interaction):
         analysis = Moderate.analyze_action_string(self.values[0], self.parent_view.session.guild.id)
@@ -1253,26 +1265,26 @@ class AntiBeastActionView(SetupView):
         super().__init__(session)
         self.module_name = module_name
         self.config = load_antibeast_config(session.guild.id)
-        if Moderate is not None and Moderate.ACTION_INPUT_SUGGESTIONS:
+        if Moderate is not None and Moderate.ACTION_INPUT_SUGGESTION_KEYS:
             self.add_item(AntiBeastActionPresetSelect(self))
-        edit = discord.ui.Button(label="編輯門檻與動作", style=discord.ButtonStyle.primary, row=1)
+        edit = discord.ui.Button(label=t("gettingstarted.antibeast.btn.edit_action"), style=discord.ButtonStyle.primary, row=1)
         edit.callback = self.edit
         self.add_item(edit)
         toggle = discord.ui.Button(
-            label="停用處置" if self.config["kick"]["enabled"] else "啟用處置",
+            label=t("gettingstarted.antibeast.btn.disable_action" if self.config["kick"]["enabled"] else "gettingstarted.antibeast.btn.enable_action"),
             style=discord.ButtonStyle.secondary,
             row=1,
         )
         toggle.callback = self.toggle
         self.add_item(toggle)
         scope = discord.ui.Button(
-            label="僅 everyone/here：開" if self.config["kick"]["only_everyone_here"] else "僅 everyone/here：關",
+            label=t("gettingstarted.antibeast.btn.everyone_here_only", state=t("common.state.on") if self.config["kick"]["only_everyone_here"] else t("common.state.off")),
             style=discord.ButtonStyle.secondary,
             row=1,
         )
         scope.callback = self.toggle_scope
         self.add_item(scope)
-        back = discord.ui.Button(label="返回 AntiBeast", style=discord.ButtonStyle.secondary, row=2)
+        back = discord.ui.Button(label=t("gettingstarted.antibeast.btn.back_to_antibeast"), style=discord.ButtonStyle.secondary, row=2)
         back.callback = self.back
         self.add_item(back)
 
@@ -1280,23 +1292,23 @@ class AntiBeastActionView(SetupView):
         kick = self.config["kick"]
         cog = get_antibeast_cog()
         embed = discord.Embed(
-            title="AntiBeast 連續觸發處置",
-            description="設定同一位使用者在時間窗口內多次觸發後要執行的 Moderate 動作。",
+            title=t("gettingstarted.antibeast.action_view_title"),
+            description=t("gettingstarted.antibeast.action_view_desc"),
             color=discord.Color.green() if saved else discord.Color.blurple(),
         )
-        embed.add_field(name="狀態", value="啟用" if kick["enabled"] else "停用", inline=True)
-        embed.add_field(name="門檻", value=f"{kick['time_window']} 秒內 {kick['threshold']} 次", inline=True)
+        embed.add_field(name=t("gettingstarted.field.status"), value=t("common.state.enabled") if kick["enabled"] else t("common.state.disabled"), inline=True)
+        embed.add_field(name=t("gettingstarted.antibeast.field.threshold"), value=t("gettingstarted.antibeast.threshold_value", seconds=kick["time_window"], count=kick["threshold"]), inline=True)
         embed.add_field(
-            name="範圍",
-            value=cog._format_action_scope(kick) if cog is not None else "未知",
+            name=t("gettingstarted.field.action_scope"),
+            value=cog._format_action_scope(kick) if cog is not None else t("gettingstarted.state.unknown"),
             inline=False,
         )
-        embed.add_field(name="動作", value=f"```text\n{kick['action']}\n```", inline=False)
+        embed.add_field(name=t("gettingstarted.field.action"), value=f"```text\n{kick['action']}\n```", inline=False)
         if Moderate is not None:
             analysis = Moderate.analyze_action_string(kick["action"], self.session.guild.id)
             if analysis["valid"]:
                 embed.add_field(
-                    name="執行預覽",
+                    name=t("gettingstarted.field.execution_preview"),
                     value="\n".join(
                         f"{index}. {line}"
                         for index, line in enumerate(analysis.get("preview", []), 1)
@@ -1331,15 +1343,15 @@ class AntiBeastActionView(SetupView):
         await self.session.render(interaction, embed=target.build_embed(), view=target)
 
 
-class AntiBeastGettingStartedActionModal(discord.ui.Modal, title="AntiBeast 處置設定"):
+class AntiBeastGettingStartedActionModal(i18n.I18nModal, title=i18n.K("gettingstarted.antibeast.action_modal_title")):
     def __init__(self, parent: AntiBeastActionView):
         super().__init__(timeout=300)
         self.parent_view = parent
         kick = parent.config["kick"]
-        self.threshold = discord.ui.TextInput(label="觸發次數 (1-20)", default=str(kick["threshold"]), max_length=2)
-        self.time_window = discord.ui.TextInput(label="時間窗口秒數 (5-3600)", default=str(kick["time_window"]), max_length=4)
+        self.threshold = discord.ui.TextInput(label=t("gettingstarted.antibeast.threshold_label"), default=str(kick["threshold"]), max_length=2)
+        self.time_window = discord.ui.TextInput(label=t("gettingstarted.antibeast.time_window_label"), default=str(kick["time_window"]), max_length=4)
         self.action = discord.ui.TextInput(
-            label="Moderate 動作指令",
+            label=t("gettingstarted.field.moderate_action"),
             default=kick["action"],
             style=discord.TextStyle.paragraph,
             max_length=500,
@@ -1353,13 +1365,13 @@ class AntiBeastGettingStartedActionModal(discord.ui.Modal, title="AntiBeast 處�
             threshold = int(self.threshold.value.strip())
             time_window = int(self.time_window.value.strip())
         except ValueError:
-            await interaction.response.send_message("觸發次數與時間窗口都必須是整數。", ephemeral=True)
+            await interaction.response.send_message(t("gettingstarted.antibeast.err.not_int"), ephemeral=True)
             return
         if not 1 <= threshold <= 20:
-            await interaction.response.send_message("觸發次數必須介於 1 到 20。", ephemeral=True)
+            await interaction.response.send_message(t("gettingstarted.antibeast.err.threshold_range"), ephemeral=True)
             return
         if not 5 <= time_window <= 3600:
-            await interaction.response.send_message("時間窗口必須介於 5 到 3600 秒。", ephemeral=True)
+            await interaction.response.send_message(t("gettingstarted.antibeast.err.time_window_range"), ephemeral=True)
             return
         analysis = Moderate.analyze_action_string(self.action.value.strip(), self.parent_view.session.guild.id)
         if not analysis["valid"]:
@@ -1388,18 +1400,18 @@ class AntiBeastActionConfirmView(SetupView):
         self.parent_view = parent_view
         self.kick = kick
         self.analysis = analysis
-        confirm = discord.ui.Button(label="是，使用這個動作", style=discord.ButtonStyle.success)
+        confirm = discord.ui.Button(label=t("gettingstarted.antibeast.btn.confirm_action"), style=discord.ButtonStyle.success)
         confirm.callback = self.confirm
         self.add_item(confirm)
-        retry = discord.ui.Button(label="不是，重新輸入", style=discord.ButtonStyle.secondary)
+        retry = discord.ui.Button(label=t("gettingstarted.antibeast.btn.retry_action"), style=discord.ButtonStyle.secondary)
         retry.callback = self.retry
         self.add_item(retry)
-        cancel = discord.ui.Button(label="取消", style=discord.ButtonStyle.danger)
+        cancel = discord.ui.Button(label=t("common.btn.cancel"), style=discord.ButtonStyle.danger)
         cancel.callback = self.cancel
         self.add_item(cancel)
 
     def build_embed(self) -> discord.Embed:
-        return Moderate.build_action_preview_embed(self.analysis, title="確認你的意思")
+        return Moderate.build_action_preview_embed(self.analysis, title=t("moderate.confirm_your_intent_title"))
 
     async def confirm(self, interaction: discord.Interaction):
         await self.parent_view.save_kick(interaction, self.kick)
@@ -1414,7 +1426,7 @@ class AntiBeastActionConfirmView(SetupView):
 
 class ScalarSettingModal(discord.ui.Modal):
     def __init__(self, parent: "SingleSettingView"):
-        title = truncate(parent.setting.get("display", "編輯設定"), 45)
+        title = truncate(parent.setting.get("display", t("gettingstarted.setting.edit_default_title")), 45)
         super().__init__(title=title)
         self.parent_view = parent
         stype = parent.setting.get("type", "string")
@@ -1424,12 +1436,12 @@ class ScalarSettingModal(discord.ui.Modal):
             parent.setting.get("default"),
         )
         self.value_input = discord.ui.TextInput(
-            label="設定值",
+            label=t("gettingstarted.setting.value_label"),
             default="" if current is None else truncate(current, 4000),
             required=False,
             max_length=4000,
             style=discord.TextStyle.paragraph if stype == "text" else discord.TextStyle.short,
-            placeholder="留空會清除此設定",
+            placeholder=t("gettingstarted.setting.value_ph"),
         )
         self.add_item(self.value_input)
 
@@ -1463,7 +1475,7 @@ class ScalarSettingModal(discord.ui.Modal):
 class ValueSelect(discord.ui.Select):
     def __init__(self, parent: "SingleSettingView", options: list[discord.SelectOption]):
         self.parent_view = parent
-        super().__init__(placeholder="選擇設定值", options=options, row=0)
+        super().__init__(placeholder=t("gettingstarted.setting.select_value_ph"), options=options, row=0)
 
     async def callback(self, interaction: discord.Interaction):
         value = self.values[0]
@@ -1489,7 +1501,7 @@ class SettingChannelSelect(discord.ui.ChannelSelect):
     def __init__(self, parent: "SingleSettingView", channel_types):
         self.parent_view = parent
         super().__init__(
-            placeholder="選擇頻道",
+            placeholder=t("gettingstarted.setting.select_channel_ph"),
             channel_types=channel_types,
             min_values=1,
             max_values=1,
@@ -1516,7 +1528,7 @@ class SettingChannelSelect(discord.ui.ChannelSelect):
 class SettingRoleSelect(discord.ui.RoleSelect):
     def __init__(self, parent: "SingleSettingView"):
         self.parent_view = parent
-        super().__init__(placeholder="選擇身分組", min_values=1, max_values=1, row=0)
+        super().__init__(placeholder=t("gettingstarted.setting.select_role_ph"), min_values=1, max_values=1, row=0)
 
     async def callback(self, interaction: discord.Interaction):
         selected = resolve_select_value(self.values[0])
@@ -1543,10 +1555,10 @@ class SingleSettingView(SetupView):
         stype = setting.get("type", "string")
 
         if stype == "boolean":
-            enable = discord.ui.Button(label="啟用", style=discord.ButtonStyle.success, row=0)
+            enable = discord.ui.Button(label=t("common.state.enabled"), style=discord.ButtonStyle.success, row=0)
             enable.callback = self.enable
             self.add_item(enable)
-            disable = discord.ui.Button(label="停用", style=discord.ButtonStyle.danger, row=0)
+            disable = discord.ui.Button(label=t("common.state.disabled"), style=discord.ButtonStyle.danger, row=0)
             disable.callback = self.disable
             self.add_item(disable)
         elif stype == "select":
@@ -1566,16 +1578,16 @@ class SingleSettingView(SetupView):
         elif stype == "role":
             self.add_item(SettingRoleSelect(self))
         else:
-            edit = discord.ui.Button(label="編輯", style=discord.ButtonStyle.primary, row=0)
+            edit = discord.ui.Button(label=t("gettingstarted.btn.edit"), style=discord.ButtonStyle.primary, row=0)
             edit.callback = self.edit
             self.add_item(edit)
 
         if stype not in ("boolean",):
-            clear = discord.ui.Button(label="清除", style=discord.ButtonStyle.danger, row=1)
+            clear = discord.ui.Button(label=t("gettingstarted.btn.clear"), style=discord.ButtonStyle.danger, row=1)
             clear.callback = self.clear
             self.add_item(clear)
 
-        back = discord.ui.Button(label="返回", style=discord.ButtonStyle.secondary, row=1)
+        back = discord.ui.Button(label=t("common.btn.back"), style=discord.ButtonStyle.secondary, row=1)
         back.callback = self.back
         self.add_item(back)
 
@@ -1587,15 +1599,15 @@ class SingleSettingView(SetupView):
         )
         embed = discord.Embed(
             title=self.setting.get("display", self.setting["database_key"]),
-            description=self.setting.get("description") or "修改此伺服器設定。",
+            description=self.setting.get("description") or t("gettingstarted.setting.default_desc"),
             color=discord.Color.blurple(),
         )
         embed.add_field(
-            name="目前設定",
+            name=t("gettingstarted.setting.field.current_value"),
             value=format_setting_value(self.session.guild, self.setting, value),
             inline=False,
         )
-        embed.set_footer(text=f"設定鍵：{self.setting['database_key']}")
+        embed.set_footer(text=t("gettingstarted.setting.key_footer", key=self.setting["database_key"]))
         return embed
 
     async def enable(self, interaction: discord.Interaction):
@@ -1629,7 +1641,7 @@ class ListAddChannelSelect(discord.ui.ChannelSelect):
     def __init__(self, parent: "ListSettingView"):
         self.parent_view = parent
         super().__init__(
-            placeholder="新增頻道（可多選）",
+            placeholder=t("gettingstarted.list.add_channel_ph"),
             channel_types=[discord.ChannelType.text, discord.ChannelType.news],
             min_values=1,
             max_values=25,
@@ -1644,7 +1656,7 @@ class ListAddChannelSelect(discord.ui.ChannelSelect):
 class ListAddRoleSelect(discord.ui.RoleSelect):
     def __init__(self, parent: "ListSettingView"):
         self.parent_view = parent
-        super().__init__(placeholder="新增身分組（可多選）", min_values=1, max_values=25, row=0)
+        super().__init__(placeholder=t("gettingstarted.list.add_role_ph"), min_values=1, max_values=25, row=0)
 
     async def callback(self, interaction: discord.Interaction):
         ids = [int(value) for value in interaction.data.get("values", []) if str(value).isdigit()]
@@ -1655,7 +1667,7 @@ class ListRemoveSelect(discord.ui.Select):
     def __init__(self, parent: "ListSettingView", options: list[discord.SelectOption]):
         self.parent_view = parent
         super().__init__(
-            placeholder="選擇要移除的項目",
+            placeholder=t("gettingstarted.list.select_remove_ph"),
             min_values=1,
             max_values=len(options),
             options=options,
@@ -1702,19 +1714,19 @@ class ListSettingView(SetupView):
         if options:
             self.add_item(ListRemoveSelect(self, options))
 
-        previous = discord.ui.Button(label="上一頁", style=discord.ButtonStyle.secondary, row=2)
+        previous = discord.ui.Button(label=t("common.btn.prev"), style=discord.ButtonStyle.secondary, row=2)
         previous.disabled = self.page == 0
         previous.callback = self.previous_page
         self.add_item(previous)
-        next_button = discord.ui.Button(label="下一頁", style=discord.ButtonStyle.secondary, row=2)
+        next_button = discord.ui.Button(label=t("common.btn.next"), style=discord.ButtonStyle.secondary, row=2)
         next_button.disabled = self.page >= self.total_pages - 1
         next_button.callback = self.next_page
         self.add_item(next_button)
-        clear = discord.ui.Button(label="全部清除", style=discord.ButtonStyle.danger, row=2)
+        clear = discord.ui.Button(label=t("gettingstarted.btn.clear_all"), style=discord.ButtonStyle.danger, row=2)
         clear.disabled = not self.values
         clear.callback = self.clear
         self.add_item(clear)
-        back = discord.ui.Button(label="返回", style=discord.ButtonStyle.secondary, row=2)
+        back = discord.ui.Button(label=t("common.btn.back"), style=discord.ButtonStyle.secondary, row=2)
         back.callback = self.back
         self.add_item(back)
 
@@ -1729,15 +1741,15 @@ class ListSettingView(SetupView):
     def build_embed(self) -> discord.Embed:
         embed = discord.Embed(
             title=self.setting.get("display", self.setting["database_key"]),
-            description=self.setting.get("description") or "新增或移除清單項目。",
+            description=self.setting.get("description") or t("gettingstarted.list.default_desc"),
             color=discord.Color.blurple(),
         )
         embed.add_field(
-            name=f"目前共 {len(self.values)} 項",
+            name=t("gettingstarted.list.count_field", count=len(self.values)),
             value=format_setting_value(self.session.guild, self.setting, self.values),
             inline=False,
         )
-        embed.set_footer(text=f"移除清單頁面 {self.page + 1}/{self.total_pages}")
+        embed.set_footer(text=t("gettingstarted.list.page_footer", page=self.page + 1, total=self.total_pages))
         return embed
 
     async def save_values(self, interaction: discord.Interaction, values: list[int]):
@@ -1776,7 +1788,7 @@ class ListSettingView(SetupView):
 class AutoReplyRuleSelect(discord.ui.Select):
     def __init__(self, parent: "AutoReplyManagerView", options: list[discord.SelectOption]):
         self.parent_view = parent
-        super().__init__(placeholder="選擇 AutoReply 規則", options=options, row=0)
+        super().__init__(placeholder=t("gettingstarted.autoreply.select_rule_ph"), options=options, row=0)
 
     async def callback(self, interaction: discord.Interaction):
         rule_index = int(self.values[0])
@@ -1801,8 +1813,8 @@ class AutoReplyManagerView(SetupView):
         current, self.page, self.total_pages = paginate(indexed, page)
         options = []
         for rule_index, rule in current:
-            triggers = ", ".join(str(value) for value in rule.get("trigger", [])) or "未命名規則"
-            responses = ", ".join(str(value) for value in rule.get("response", [])) or "沒有回覆"
+            triggers = ", ".join(str(value) for value in rule.get("trigger", [])) or t("gettingstarted.autoreply.unnamed_rule")
+            responses = ", ".join(str(value) for value in rule.get("response", [])) or t("gettingstarted.autoreply.no_response")
             options.append(
                 discord.SelectOption(
                     label=truncate(triggers, 100),
@@ -1813,23 +1825,23 @@ class AutoReplyManagerView(SetupView):
         if options:
             self.add_item(AutoReplyRuleSelect(self, options))
 
-        add_button = discord.ui.Button(label="新增規則", style=discord.ButtonStyle.success, row=1)
+        add_button = discord.ui.Button(label=t("gettingstarted.autoreply.btn.add_rule"), style=discord.ButtonStyle.success, row=1)
         add_button.callback = self.add_rule
         self.add_item(add_button)
-        clear_button = discord.ui.Button(label="全部清除", style=discord.ButtonStyle.danger, row=1)
+        clear_button = discord.ui.Button(label=t("gettingstarted.btn.clear_all"), style=discord.ButtonStyle.danger, row=1)
         clear_button.disabled = not self.rules
         clear_button.callback = self.clear_rules
         self.add_item(clear_button)
 
-        previous = discord.ui.Button(label="上一頁", style=discord.ButtonStyle.secondary, row=2)
+        previous = discord.ui.Button(label=t("common.btn.prev"), style=discord.ButtonStyle.secondary, row=2)
         previous.disabled = self.page == 0
         previous.callback = self.previous_page
         self.add_item(previous)
-        next_button = discord.ui.Button(label="下一頁", style=discord.ButtonStyle.secondary, row=2)
+        next_button = discord.ui.Button(label=t("common.btn.next"), style=discord.ButtonStyle.secondary, row=2)
         next_button.disabled = self.page >= self.total_pages - 1
         next_button.callback = self.next_page
         self.add_item(next_button)
-        back = discord.ui.Button(label="返回", style=discord.ButtonStyle.secondary, row=2)
+        back = discord.ui.Button(label=t("common.btn.back"), style=discord.ButtonStyle.secondary, row=2)
         back.callback = self.back
         self.add_item(back)
 
@@ -1840,18 +1852,18 @@ class AutoReplyManagerView(SetupView):
         cog = self.get_cog()
         limit = cog._get_autoreply_limit(self.session.guild.id) if cog else 0
         embed = discord.Embed(
-            title="AutoReply 規則管理",
-            description="選擇既有規則以檢視、編輯或刪除，也可以使用 Builder 新增規則。",
+            title=t("gettingstarted.autoreply.manager_title"),
+            description=t("gettingstarted.autoreply.manager_desc"),
             color=discord.Color.blurple(),
         )
-        embed.add_field(name="目前規則", value=f"{len(self.rules)} / {limit or '?'}", inline=True)
-        embed.set_footer(text=f"規則頁面 {self.page + 1}/{self.total_pages}")
+        embed.add_field(name=t("gettingstarted.autoreply.field.current_rules"), value=f"{len(self.rules)} / {limit or '?'}", inline=True)
+        embed.set_footer(text=t("gettingstarted.autoreply.rule_page_footer", page=self.page + 1, total=self.total_pages))
         return embed
 
     async def add_rule(self, interaction: discord.Interaction):
         cog = self.get_cog()
         if cog is None:
-            await interaction.response.send_message("AutoReply 模組目前無法使用。", ephemeral=True)
+            await interaction.response.send_message(t("gettingstarted.autoreply.err.module_unavailable"), ephemeral=True)
             return
         builder = GettingStartedAutoReplyBuilderView(self.session, self.module_name, cog, interaction)
         await self.session.render(interaction, embed=builder.build_embed(), view=builder)
@@ -1883,13 +1895,13 @@ class AutoReplyRuleView(SetupView):
         self.module_name = module_name
         self.rule_index = rule_index
 
-        edit = discord.ui.Button(label="編輯", style=discord.ButtonStyle.primary, row=0)
+        edit = discord.ui.Button(label=t("gettingstarted.btn.edit"), style=discord.ButtonStyle.primary, row=0)
         edit.callback = self.edit
         self.add_item(edit)
-        delete = discord.ui.Button(label="刪除", style=discord.ButtonStyle.danger, row=0)
+        delete = discord.ui.Button(label=t("gettingstarted.btn.remove"), style=discord.ButtonStyle.danger, row=0)
         delete.callback = self.delete
         self.add_item(delete)
-        back = discord.ui.Button(label="返回規則", style=discord.ButtonStyle.secondary, row=0)
+        back = discord.ui.Button(label=t("gettingstarted.autoreply.btn.back_to_rules"), style=discord.ButtonStyle.secondary, row=0)
         back.callback = self.back
         self.add_item(back)
 
@@ -1903,15 +1915,15 @@ class AutoReplyRuleView(SetupView):
         rule = self.get_rule()
         cog = bot.get_cog("AutoReply")
         if rule is None:
-            return discord.Embed(title="找不到規則", color=discord.Color.red())
+            return discord.Embed(title=t("gettingstarted.autoreply.rule_not_found"), color=discord.Color.red())
         if cog is not None:
             return cog._build_autoreply_rule_embed(
-                title=f"AutoReply 規則 #{self.rule_index + 1}",
+                title=t("gettingstarted.autoreply.rule_title", index=self.rule_index + 1),
                 rule=rule,
                 guild=self.session.guild,
             )
         return discord.Embed(
-            title=f"AutoReply 規則 #{self.rule_index + 1}",
+            title=t("gettingstarted.autoreply.rule_title", index=self.rule_index + 1),
             description=truncate(rule, 4000),
             color=discord.Color.blurple(),
         )
@@ -1920,7 +1932,7 @@ class AutoReplyRuleView(SetupView):
         rule = self.get_rule()
         cog = bot.get_cog("AutoReply")
         if rule is None or cog is None:
-            await interaction.response.send_message("這條規則已不存在或模組目前無法使用。", ephemeral=True)
+            await interaction.response.send_message(t("gettingstarted.autoreply.err.rule_gone_or_unavailable"), ephemeral=True)
             return
         builder = GettingStartedAutoReplyBuilderView(
             self.session,
@@ -1929,7 +1941,7 @@ class AutoReplyRuleView(SetupView):
             interaction,
             rule_index=self.rule_index,
         )
-        await self.session.render(interaction, embed=builder.build_embed(title="編輯 AutoReply 規則"), view=builder)
+        await self.session.render(interaction, embed=builder.build_embed(title=t("gettingstarted.autoreply.edit_rule_title")), view=builder)
 
     async def delete(self, interaction: discord.Interaction):
         target = AutoReplyDeleteConfirmView(
@@ -1950,7 +1962,7 @@ def save_autoreply_rule(cog, guild_id: int, rule: dict, rule_index: int | None =
 
     rules = get_server_config(guild_id, "autoreplies", []) or []
     if not 0 <= rule_index < len(rules):
-        raise ValueError("要編輯的 AutoReply 規則已不存在。")
+        raise ValueError(t("gettingstarted.autoreply.err.edit_target_gone"))
 
     duplicate = cog._find_duplicate_triggers_in_list(rule.get("trigger", []))
     if duplicate:
@@ -1967,7 +1979,7 @@ def save_autoreply_rule(cog, guild_id: int, rule: dict, rule_index: int | None =
 
     rules[rule_index] = rule
     if not set_server_config(guild_id, "autoreplies", rules):
-        raise ValueError("儲存 AutoReply 規則失敗。")
+        raise ValueError(t("gettingstarted.autoreply.err.save_failed"))
     return len(rules), cog._get_autoreply_limit(guild_id)
 
 
@@ -2044,14 +2056,14 @@ class GettingStartedAutoReplyBuilderView(AutoReplyBuilderView):
             item.disabled = True
         if self.session.message is not None:
             try:
-                await self.session.message.edit(
-                    embed=discord.Embed(
-                        title="AutoReply Builder 已逾時",
-                        description="尚未儲存的規則已捨棄。",
+                with i18n.use_locale(i18n.resolve_locale(
+                        user_id=self.session.owner_id, guild_id=self.session.guild.id)):
+                    embed = discord.Embed(
+                        title=t("gettingstarted.autoreply.builder_timed_out_title"),
+                        description=t("gettingstarted.autoreply.builder_timed_out_desc"),
                         color=discord.Color.red(),
-                    ),
-                    view=self,
-                )
+                    )
+                await self.session.message.edit(embed=embed, view=self)
             except discord.HTTPException:
                 pass
 
@@ -2061,17 +2073,17 @@ class AutoReplyDeleteConfirmView(SetupView):
         super().__init__(session)
         self.module_name = module_name
         self.rule_index = rule_index
-        confirm = discord.ui.Button(label="確認刪除", style=discord.ButtonStyle.danger)
+        confirm = discord.ui.Button(label=t("gettingstarted.autoreply.btn.confirm_delete"), style=discord.ButtonStyle.danger)
         confirm.callback = self.confirm
         self.add_item(confirm)
-        cancel = discord.ui.Button(label="取消", style=discord.ButtonStyle.secondary)
+        cancel = discord.ui.Button(label=t("common.btn.cancel"), style=discord.ButtonStyle.secondary)
         cancel.callback = self.cancel
         self.add_item(cancel)
 
     def build_embed(self) -> discord.Embed:
         return discord.Embed(
-            title="刪除 AutoReply 規則？",
-            description="此操作會立即生效。",
+            title=t("gettingstarted.autoreply.delete_confirm_title"),
+            description=t("gettingstarted.autoreply.delete_confirm_desc"),
             color=discord.Color.red(),
         )
 
@@ -2093,18 +2105,18 @@ class AutoReplyClearConfirmView(SetupView):
     def __init__(self, session: GettingStartedSession, module_name: str):
         super().__init__(session)
         self.module_name = module_name
-        confirm = discord.ui.Button(label="確認全部清除", style=discord.ButtonStyle.danger)
+        confirm = discord.ui.Button(label=t("gettingstarted.autoreply.btn.confirm_clear_all"), style=discord.ButtonStyle.danger)
         confirm.callback = self.confirm
         self.add_item(confirm)
-        cancel = discord.ui.Button(label="取消", style=discord.ButtonStyle.secondary)
+        cancel = discord.ui.Button(label=t("common.btn.cancel"), style=discord.ButtonStyle.secondary)
         cancel.callback = self.cancel
         self.add_item(cancel)
 
     def build_embed(self) -> discord.Embed:
         count = len(get_server_config(self.session.guild.id, "autoreplies", []) or [])
         return discord.Embed(
-            title="清除所有 AutoReply 規則？",
-            description=f"目前共有 {count} 條規則，此操作無法復原。",
+            title=t("gettingstarted.autoreply.clear_confirm_title"),
+            description=t("gettingstarted.autoreply.clear_confirm_desc", count=count),
             color=discord.Color.red(),
         )
 
@@ -2119,161 +2131,173 @@ class AutoReplyClearConfirmView(SetupView):
         await self.session.render(interaction, embed=target.build_embed(), view=target)
 
 
-AUTOMOD_FEATURE_SCHEMAS = [
-    {
-        "id": "scamtrap",
-        "label": "詐騙陷阱",
-        "description": "在蜜罐頻道發言時自動處置。",
-        "fields": [
-            {"key": "channel_id", "label": "陷阱頻道", "type": "channel", "required": True},
-            {
-                "key": "action",
-                "label": "處置動作",
-                "type": "string",
-                "default": "delete {user} 是最後一個被封禁的帳號，不要在這裡講話！, ban {user} 5s 12h [自動封禁] 疑似被盜帳號",
-                "required": True,
-            },
-        ],
-    },
-    {
-        "id": "escape_punish",
-        "label": "逃避責任懲處",
-        "description": "禁言期間離開伺服器時追加處置。",
-        "fields": [
-            {
-                "key": "punishment",
-                "label": "懲處方式",
-                "type": "select",
-                "default": "ban",
-                "options": [{"label": "封禁", "value": "ban"}],
-            },
-            {"key": "duration", "label": "持續時間", "type": "string", "default": "0"},
-        ],
-    },
-    {
-        "id": "too_many_h1",
-        "label": "標題過多",
-        "description": "限制 Markdown 大標題總字數。",
-        "fields": [
-            {"key": "max_length", "label": "最大字數", "type": "number", "default": "20", "min": 1},
-            {"key": "action", "label": "處置動作", "type": "string", "default": "warn", "required": True},
-            {"key": "ignore_channels", "label": "忽略頻道", "type": "channel_list", "default": []},
-        ],
-    },
-    {
-        "id": "too_many_emojis",
-        "label": "表情符號過多",
-        "description": "限制單則訊息的 emoji 數量。",
-        "fields": [
-            {"key": "max_emojis", "label": "最大數量", "type": "number", "default": "10", "min": 1},
-            {"key": "action", "label": "處置動作", "type": "string", "default": "warn", "required": True},
-            {"key": "ignore_channels", "label": "忽略頻道", "type": "channel_list", "default": []},
-        ],
-    },
-    {
-        "id": "anti_invite_link",
-        "label": "邀請連結",
-        "description": "偵測 Discord 邀請連結。",
-        "fields": [
-            {"key": "allow_current_server", "label": "允許本伺服器連結", "type": "boolean", "default": False},
-            {
-                "key": "action",
-                "label": "處置動作",
-                "type": "string",
-                "default": "delete {user}，請勿發送其他伺服器的邀請連結。",
-                "required": True,
-            },
-            {"key": "ignore_channels", "label": "忽略頻道", "type": "channel_list", "default": []},
-        ],
-    },
-    {
-        "id": "anti_uispam",
-        "label": "用戶安裝應用程式濫用",
-        "description": "限制 User Install 指令的觸發頻率。",
-        "fields": [
-            {"key": "max_count", "label": "最大觸發次數", "type": "number", "default": "5", "min": 1},
-            {"key": "time_window", "label": "時間窗口（秒）", "type": "number", "default": "60", "min": 1},
-            {
-                "key": "action",
-                "label": "處置動作",
-                "type": "string",
-                "default": "delete {user}，請勿濫用用戶安裝的應用程式指令。, mute 10m 濫用用戶安裝指令",
-                "required": True,
-            },
-            {"key": "ignore_channels", "label": "忽略頻道", "type": "channel_list", "default": []},
-        ],
-    },
-    {
-        "id": "anti_raid",
-        "label": "防突襲",
-        "description": "偵測短時間內大量成員加入。",
-        "fields": [
-            {"key": "max_joins", "label": "最大加入數", "type": "number", "default": "5", "min": 1},
-            {"key": "time_window", "label": "時間窗口（秒）", "type": "number", "default": "60", "min": 1},
-            {"key": "action", "label": "處置動作", "type": "string", "default": "kick 突襲偵測自動踢出", "required": True},
-        ],
-    },
-    {
-        "id": "anti_spam",
-        "label": "防刷頻",
-        "description": "偵測短時間內的相似訊息。",
-        "fields": [
-            {"key": "max_messages", "label": "最大相似訊息數", "type": "number", "default": "5", "min": 1},
-            {"key": "time_window", "label": "時間窗口（秒）", "type": "number", "default": "30", "min": 1},
-            {"key": "similarity", "label": "相似度（%）", "type": "number", "default": "75", "min": 1, "max": 100},
-            {
-                "key": "action",
-                "label": "處置動作",
-                "type": "string",
-                "default": "mute 10m 刷頻自動禁言, delete {user}，請勿刷頻。",
-                "required": True,
-            },
-            {"key": "ignore_channels", "label": "忽略頻道", "type": "channel_list", "default": []},
-        ],
-    },
-    {
-        "id": "automod_detect",
-        "label": "Discord AutoMod 偵測",
-        "description": "接收 Discord 原生 AutoMod 事件並執行額外處置。",
-        "fields": [
-            {"key": "log_channel", "label": "通知頻道", "type": "channel", "required": True},
-            {"key": "action", "label": "額外處置動作", "type": "string", "default": ""},
-            {"key": "filter_rule", "label": "規則名稱過濾", "type": "string", "default": ""},
-            {"key": "filter_action_type", "label": "動作類型過濾", "type": "string", "default": ""},
-        ],
-    },
-    {
-        "id": "flagged_user",
-        "label": "標記用戶加入",
-        "description": "合併本機標記資料與 Blacklist API，在成員加入時通知並可執行處置。",
-        "fields": [
-            {"key": "log_channel", "label": "通知頻道", "type": "channel", "required": True},
-            {"key": "action", "label": "處置動作", "type": "string", "default": "", "action_context": "member_join"},
-            {
-                "key": "action_source",
-                "label": "處置來源",
-                "type": "select",
-                "default": "both",
-                "options": [
-                    {"label": "本機與 API", "value": "both"},
-                    {"label": "僅本機", "value": "local"},
-                    {"label": "僅 API", "value": "api"},
-                ],
-            },
-            {
-                "key": "local_match_mode",
-                "label": "本機命中模式",
-                "type": "select",
-                "default": "active",
-                "options": [
-                    {"label": "僅目前標記", "value": "active"},
-                    {"label": "三個月內所有紀錄", "value": "history"},
-                ],
-            },
-        ],
-    },
-]
-AUTOMOD_FEATURE_MAP = {item["id"]: item for item in AUTOMOD_FEATURE_SCHEMAS}
+def automod_feature_schemas(*, locale: str | None = None) -> list[dict]:
+    """AutoMod 快速設定精靈的功能清單；每次呼叫都重新以 t() 解析，
+    避免 label/description/選項文字在 import 期被凍結成中文。
+    DSL 動作詞（delete/ban/kick/mute/warn 與時間後綴）不翻譯，只有
+    嵌在動作字串裡給人看的理由文字走 t()，比照 AutoModerate.py
+    default_action.* 系列函式的既有慣例。"""
+    def tt(key, **params):
+        return t(key, locale=locale, **params)
+
+    return [
+        {
+            "id": "scamtrap",
+            "label": tt("gettingstarted.automod.feature.scamtrap.label"),
+            "description": tt("gettingstarted.automod.feature.scamtrap.desc"),
+            "fields": [
+                {"key": "channel_id", "label": tt("gettingstarted.automod.feature.scamtrap.field.channel_id"), "type": "channel", "required": True},
+                {
+                    "key": "action",
+                    "label": tt("gettingstarted.automod.field.action"),
+                    "type": "string",
+                    "default": tt("gettingstarted.automod.feature.scamtrap.field.action.default"),
+                    "required": True,
+                },
+            ],
+        },
+        {
+            "id": "escape_punish",
+            "label": tt("gettingstarted.automod.feature.escape_punish.label"),
+            "description": tt("gettingstarted.automod.feature.escape_punish.desc"),
+            "fields": [
+                {
+                    "key": "punishment",
+                    "label": tt("gettingstarted.automod.feature.escape_punish.field.punishment"),
+                    "type": "select",
+                    "default": "ban",
+                    "options": [{"label": tt("gettingstarted.automod.action.ban"), "value": "ban"}],
+                },
+                {"key": "duration", "label": tt("gettingstarted.automod.feature.escape_punish.field.duration"), "type": "string", "default": "0"},
+            ],
+        },
+        {
+            "id": "too_many_h1",
+            "label": tt("gettingstarted.automod.feature.too_many_h1.label"),
+            "description": tt("gettingstarted.automod.feature.too_many_h1.desc"),
+            "fields": [
+                {"key": "max_length", "label": tt("gettingstarted.automod.feature.too_many_h1.field.max_length"), "type": "number", "default": "20", "min": 1},
+                {"key": "action", "label": tt("gettingstarted.automod.field.action"), "type": "string", "default": "warn", "required": True},
+                {"key": "ignore_channels", "label": tt("gettingstarted.automod.field.ignore_channels"), "type": "channel_list", "default": []},
+            ],
+        },
+        {
+            "id": "too_many_emojis",
+            "label": tt("gettingstarted.automod.feature.too_many_emojis.label"),
+            "description": tt("gettingstarted.automod.feature.too_many_emojis.desc"),
+            "fields": [
+                {"key": "max_emojis", "label": tt("gettingstarted.automod.feature.too_many_emojis.field.max_emojis"), "type": "number", "default": "10", "min": 1},
+                {"key": "action", "label": tt("gettingstarted.automod.field.action"), "type": "string", "default": "warn", "required": True},
+                {"key": "ignore_channels", "label": tt("gettingstarted.automod.field.ignore_channels"), "type": "channel_list", "default": []},
+            ],
+        },
+        {
+            "id": "anti_invite_link",
+            "label": tt("gettingstarted.automod.feature.anti_invite_link.label"),
+            "description": tt("gettingstarted.automod.feature.anti_invite_link.desc"),
+            "fields": [
+                {"key": "allow_current_server", "label": tt("gettingstarted.automod.feature.anti_invite_link.field.allow_current_server"), "type": "boolean", "default": False},
+                {
+                    "key": "action",
+                    "label": tt("gettingstarted.automod.field.action"),
+                    "type": "string",
+                    "default": tt("gettingstarted.automod.feature.anti_invite_link.field.action.default"),
+                    "required": True,
+                },
+                {"key": "ignore_channels", "label": tt("gettingstarted.automod.field.ignore_channels"), "type": "channel_list", "default": []},
+            ],
+        },
+        {
+            "id": "anti_uispam",
+            "label": tt("gettingstarted.automod.feature.anti_uispam.label"),
+            "description": tt("gettingstarted.automod.feature.anti_uispam.desc"),
+            "fields": [
+                {"key": "max_count", "label": tt("gettingstarted.automod.feature.anti_uispam.field.max_count"), "type": "number", "default": "5", "min": 1},
+                {"key": "time_window", "label": tt("gettingstarted.automod.field.time_window"), "type": "number", "default": "60", "min": 1},
+                {
+                    "key": "action",
+                    "label": tt("gettingstarted.automod.field.action"),
+                    "type": "string",
+                    "default": tt("gettingstarted.automod.feature.anti_uispam.field.action.default"),
+                    "required": True,
+                },
+                {"key": "ignore_channels", "label": tt("gettingstarted.automod.field.ignore_channels"), "type": "channel_list", "default": []},
+            ],
+        },
+        {
+            "id": "anti_raid",
+            "label": tt("gettingstarted.automod.feature.anti_raid.label"),
+            "description": tt("gettingstarted.automod.feature.anti_raid.desc"),
+            "fields": [
+                {"key": "max_joins", "label": tt("gettingstarted.automod.feature.anti_raid.field.max_joins"), "type": "number", "default": "5", "min": 1},
+                {"key": "time_window", "label": tt("gettingstarted.automod.field.time_window"), "type": "number", "default": "60", "min": 1},
+                {"key": "action", "label": tt("gettingstarted.automod.field.action"), "type": "string", "default": tt("gettingstarted.automod.feature.anti_raid.field.action.default"), "required": True},
+            ],
+        },
+        {
+            "id": "anti_spam",
+            "label": tt("gettingstarted.automod.feature.anti_spam.label"),
+            "description": tt("gettingstarted.automod.feature.anti_spam.desc"),
+            "fields": [
+                {"key": "max_messages", "label": tt("gettingstarted.automod.feature.anti_spam.field.max_messages"), "type": "number", "default": "5", "min": 1},
+                {"key": "time_window", "label": tt("gettingstarted.automod.field.time_window"), "type": "number", "default": "30", "min": 1},
+                {"key": "similarity", "label": tt("gettingstarted.automod.feature.anti_spam.field.similarity"), "type": "number", "default": "75", "min": 1, "max": 100},
+                {
+                    "key": "action",
+                    "label": tt("gettingstarted.automod.field.action"),
+                    "type": "string",
+                    "default": tt("gettingstarted.automod.feature.anti_spam.field.action.default"),
+                    "required": True,
+                },
+                {"key": "ignore_channels", "label": tt("gettingstarted.automod.field.ignore_channels"), "type": "channel_list", "default": []},
+            ],
+        },
+        {
+            "id": "automod_detect",
+            "label": tt("gettingstarted.automod.feature.automod_detect.label"),
+            "description": tt("gettingstarted.automod.feature.automod_detect.desc"),
+            "fields": [
+                {"key": "log_channel", "label": tt("gettingstarted.automod.field.notify_channel"), "type": "channel", "required": True},
+                {"key": "action", "label": tt("gettingstarted.automod.feature.automod_detect.field.action"), "type": "string", "default": ""},
+                {"key": "filter_rule", "label": tt("gettingstarted.automod.feature.automod_detect.field.filter_rule"), "type": "string", "default": ""},
+                {"key": "filter_action_type", "label": tt("gettingstarted.automod.feature.automod_detect.field.filter_action_type"), "type": "string", "default": ""},
+            ],
+        },
+        {
+            "id": "flagged_user",
+            "label": tt("gettingstarted.automod.feature.flagged_user.label"),
+            "description": tt("gettingstarted.automod.feature.flagged_user.desc"),
+            "fields": [
+                {"key": "log_channel", "label": tt("gettingstarted.automod.field.notify_channel"), "type": "channel", "required": True},
+                {"key": "action", "label": tt("gettingstarted.automod.field.action"), "type": "string", "default": "", "action_context": "member_join"},
+                {
+                    "key": "action_source",
+                    "label": tt("gettingstarted.automod.feature.flagged_user.field.action_source"),
+                    "type": "select",
+                    "default": "both",
+                    "options": [
+                        {"label": tt("gettingstarted.automod.feature.flagged_user.option.both"), "value": "both"},
+                        {"label": tt("gettingstarted.automod.feature.flagged_user.option.local"), "value": "local"},
+                        {"label": tt("gettingstarted.automod.feature.flagged_user.option.api"), "value": "api"},
+                    ],
+                },
+                {
+                    "key": "local_match_mode",
+                    "label": tt("gettingstarted.automod.feature.flagged_user.field.local_match_mode"),
+                    "type": "select",
+                    "default": "active",
+                    "options": [
+                        {"label": tt("gettingstarted.automod.feature.flagged_user.option.active"), "value": "active"},
+                        {"label": tt("gettingstarted.automod.feature.flagged_user.option.history"), "value": "history"},
+                    ],
+                },
+            ],
+        },
+    ]
+
+
+def automod_feature_map(*, locale: str | None = None) -> dict:
+    return {item["id"]: item for item in automod_feature_schemas(locale=locale)}
 
 
 def get_automod_panel_setting() -> dict:
@@ -2297,7 +2321,7 @@ def get_automod_feature_data(guild_id: int, feature_id: str) -> dict:
         legacy_channel = get_server_config(guild_id, "flagged_user_onjoin_channel")
         if legacy_channel:
             stored.update({"enabled": True, "log_channel": str(legacy_channel)})
-    schema = AUTOMOD_FEATURE_MAP[feature_id]
+    schema = automod_feature_map()[feature_id]
     for field_schema in schema["fields"]:
         if field_schema["key"] not in stored and "default" in field_schema:
             stored[field_schema["key"]] = copy.deepcopy(field_schema["default"])
@@ -2324,13 +2348,13 @@ async def save_automod_feature(
 
 def format_automod_field(guild: discord.Guild, field_schema: dict, value: Any) -> str:
     if value is None or value == "":
-        return "未設定"
+        return t("gettingstarted.value.not_set")
     field_type = field_schema.get("type")
     if field_type == "boolean":
-        return "是" if bool(value) else "否"
+        return t("common.state.yes") if bool(value) else t("common.state.no")
     if field_type == "channel":
         channel = guild.get_channel(int(value)) if str(value).isdigit() else None
-        return channel.mention if channel else f"未知頻道 ({value})"
+        return channel.mention if channel else t("gettingstarted.value.unknown_channel", value=value)
     if field_type == "channel_list":
         values = value if isinstance(value, list) else []
         mentions = []
@@ -2338,8 +2362,8 @@ def format_automod_field(guild: discord.Guild, field_schema: dict, value: Any) -
             channel = guild.get_channel(int(channel_id)) if str(channel_id).isdigit() else None
             mentions.append(channel.mention if channel else str(channel_id))
         if len(values) > 15:
-            mentions.append(f"... 共 {len(values)} 項")
-        return "、".join(mentions) if mentions else "無"
+            mentions.append(t("gettingstarted.value.more_items", count=len(values)))
+        return i18n.join_list(mentions) if mentions else t("common.state.none")
     if field_type == "select":
         for option in field_schema.get("options", []):
             if str(option.get("value")) == str(value):
@@ -2350,7 +2374,7 @@ def format_automod_field(guild: discord.Guild, field_schema: dict, value: Any) -
 class AutoModerateFeatureSelect(discord.ui.Select):
     def __init__(self, parent: "AutoModerateManagerView", options: list[discord.SelectOption]):
         self.parent_view = parent
-        super().__init__(placeholder="選擇自動管理功能", options=options, row=0)
+        super().__init__(placeholder=t("gettingstarted.automod.select_feature_ph"), options=options, row=0)
 
     async def callback(self, interaction: discord.Interaction):
         target = AutoModerateFeatureView(
@@ -2365,7 +2389,7 @@ class AutoModerateManagerView(SetupView):
     def __init__(self, session: GettingStartedSession, module_name: str, page: int = 0):
         super().__init__(session)
         self.module_name = module_name
-        current, self.page, self.total_pages = paginate(AUTOMOD_FEATURE_SCHEMAS, page)
+        current, self.page, self.total_pages = paginate(automod_feature_schemas(), page)
         automod = get_automod_config(session.guild.id)
         options = []
         for feature in current:
@@ -2385,20 +2409,21 @@ class AutoModerateManagerView(SetupView):
             )
         self.add_item(AutoModerateFeatureSelect(self, options))
 
-        previous = discord.ui.Button(label="上一頁", style=discord.ButtonStyle.secondary, row=1)
+        previous = discord.ui.Button(label=t("common.btn.prev"), style=discord.ButtonStyle.secondary, row=1)
         previous.disabled = self.page == 0
         previous.callback = self.previous_page
         self.add_item(previous)
-        next_button = discord.ui.Button(label="下一頁", style=discord.ButtonStyle.secondary, row=1)
+        next_button = discord.ui.Button(label=t("common.btn.next"), style=discord.ButtonStyle.secondary, row=1)
         next_button.disabled = self.page >= self.total_pages - 1
         next_button.callback = self.next_page
         self.add_item(next_button)
-        back = discord.ui.Button(label="返回", style=discord.ButtonStyle.secondary, row=1)
+        back = discord.ui.Button(label=t("common.btn.back"), style=discord.ButtonStyle.secondary, row=1)
         back.callback = self.back
         self.add_item(back)
 
     def build_embed(self) -> discord.Embed:
         automod = get_automod_config(self.session.guild.id)
+        schemas = automod_feature_schemas()
         enabled = sum(
             bool(
                 (
@@ -2407,15 +2432,15 @@ class AutoModerateManagerView(SetupView):
                     else automod.get(item["id"], {})
                 ).get("enabled", False)
             )
-            for item in AUTOMOD_FEATURE_SCHEMAS
+            for item in schemas
         )
         embed = discord.Embed(
-            title="自動管理規則",
-            description="選擇功能後可調整完整參數並啟用或停用。",
+            title=t("gettingstarted.automod.manager_title"),
+            description=t("gettingstarted.automod.manager_desc"),
             color=discord.Color.blurple(),
         )
-        embed.add_field(name="已啟用", value=f"{enabled} / {len(AUTOMOD_FEATURE_SCHEMAS)}", inline=True)
-        embed.set_footer(text=f"功能頁面 {self.page + 1}/{self.total_pages}")
+        embed.add_field(name=t("gettingstarted.automod.field.enabled_count"), value=f"{enabled} / {len(schemas)}", inline=True)
+        embed.set_footer(text=t("gettingstarted.automod.feature_page_footer", page=self.page + 1, total=self.total_pages))
         return embed
 
     async def previous_page(self, interaction: discord.Interaction):
@@ -2438,7 +2463,7 @@ class AutoModerateManagerView(SetupView):
 class AutoModerateFieldSelect(discord.ui.Select):
     def __init__(self, parent: "AutoModerateFeatureView", options: list[discord.SelectOption]):
         self.parent_view = parent
-        super().__init__(placeholder="選擇要修改的欄位", options=options, row=0)
+        super().__init__(placeholder=t("gettingstarted.automod.select_field_ph"), options=options, row=0)
 
     async def callback(self, interaction: discord.Interaction):
         field_schema = next(
@@ -2466,7 +2491,7 @@ class AutoModerateFeatureView(SetupView):
         super().__init__(session)
         self.module_name = module_name
         self.feature_id = feature_id
-        self.feature_schema = AUTOMOD_FEATURE_MAP[feature_id]
+        self.feature_schema = automod_feature_map()[feature_id]
         options = [
             discord.SelectOption(
                 label=truncate(field_schema["label"], 100),
@@ -2477,13 +2502,13 @@ class AutoModerateFeatureView(SetupView):
         ]
         self.add_item(AutoModerateFieldSelect(self, options))
 
-        enable = discord.ui.Button(label="啟用", style=discord.ButtonStyle.success, row=1)
+        enable = discord.ui.Button(label=t("common.state.enabled"), style=discord.ButtonStyle.success, row=1)
         enable.callback = self.enable
         self.add_item(enable)
-        disable = discord.ui.Button(label="停用", style=discord.ButtonStyle.danger, row=1)
+        disable = discord.ui.Button(label=t("common.state.disabled"), style=discord.ButtonStyle.danger, row=1)
         disable.callback = self.disable
         self.add_item(disable)
-        back = discord.ui.Button(label="返回規則", style=discord.ButtonStyle.secondary, row=1)
+        back = discord.ui.Button(label=t("gettingstarted.automod.btn.back_to_feature"), style=discord.ButtonStyle.secondary, row=1)
         back.callback = self.back
         self.add_item(back)
 
@@ -2494,7 +2519,7 @@ class AutoModerateFeatureView(SetupView):
             description=self.feature_schema["description"],
             color=discord.Color.green() if data.get("enabled") else discord.Color.blurple(),
         )
-        embed.add_field(name="狀態", value="啟用" if data.get("enabled") else "停用", inline=False)
+        embed.add_field(name=t("gettingstarted.field.status"), value=t("common.state.enabled") if data.get("enabled") else t("common.state.disabled"), inline=False)
         for field_schema in self.feature_schema["fields"]:
             embed.add_field(
                 name=field_schema["label"],
@@ -2516,7 +2541,7 @@ class AutoModerateFeatureView(SetupView):
         ]
         if missing:
             await interaction.response.send_message(
-                "請先完成必要設定：" + "、".join(missing),
+                t("gettingstarted.automod.err.missing_required", fields=i18n.join_list(missing)),
                 ephemeral=True,
             )
             return
@@ -2544,11 +2569,11 @@ class AutoModerateFieldModal(discord.ui.Modal):
         data = get_automod_feature_data(parent.session.guild.id, parent.feature_id)
         current = data.get(parent.field_schema["key"], "")
         self.value_input = discord.ui.TextInput(
-            label="設定值",
+            label=t("gettingstarted.setting.value_label"),
             default=truncate(current, 4000),
             required=False,
             max_length=4000,
-            placeholder="留空會清除此欄位",
+            placeholder=t("gettingstarted.automod.field_value_ph"),
             style=discord.TextStyle.paragraph if parent.field_schema["key"] == "action" else discord.TextStyle.short,
         )
         self.add_item(self.value_input)
@@ -2581,17 +2606,17 @@ class AutoModerateFieldModal(discord.ui.Modal):
             try:
                 number = int(raw)
             except ValueError:
-                await interaction.response.send_message("請輸入有效的整數。", ephemeral=True)
+                await interaction.response.send_message(t("gettingstarted.err.invalid_integer"), ephemeral=True)
                 return
             if field_schema.get("min") is not None and number < field_schema["min"]:
                 await interaction.response.send_message(
-                    f"設定值不可小於 {field_schema['min']}。",
+                    t("gettingstarted.err.value_too_small", minimum=field_schema["min"]),
                     ephemeral=True,
                 )
                 return
             if field_schema.get("max") is not None and number > field_schema["max"]:
                 await interaction.response.send_message(
-                    f"設定值不可大於 {field_schema['max']}。",
+                    t("gettingstarted.err.value_too_large", maximum=field_schema["max"]),
                     ephemeral=True,
                 )
                 return
@@ -2602,7 +2627,7 @@ class AutoModerateFieldModal(discord.ui.Modal):
 class AutoModerateValueSelect(discord.ui.Select):
     def __init__(self, parent: "AutoModerateFieldView", options: list[discord.SelectOption]):
         self.parent_view = parent
-        super().__init__(placeholder="選擇設定值", options=options, row=0)
+        super().__init__(placeholder=t("gettingstarted.setting.select_value_ph"), options=options, row=0)
 
     async def callback(self, interaction: discord.Interaction):
         await self.parent_view.save_value(interaction, self.values[0])
@@ -2612,7 +2637,7 @@ class AutoModerateChannelSelect(discord.ui.ChannelSelect):
     def __init__(self, parent: "AutoModerateFieldView"):
         self.parent_view = parent
         super().__init__(
-            placeholder="選擇頻道",
+            placeholder=t("gettingstarted.setting.select_channel_ph"),
             channel_types=[discord.ChannelType.text, discord.ChannelType.news],
             min_values=1,
             max_values=1,
@@ -2627,7 +2652,7 @@ class AutoModerateActionPresetSelect(discord.ui.Select):
     def __init__(self, parent: "AutoModerateFieldView"):
         self.parent_view = parent
         field_schema = getattr(parent, "field_schema", {})
-        suggestions = Moderate.ACTION_INPUT_SUGGESTIONS if Moderate is not None else []
+        suggestions = Moderate._action_input_suggestions() if Moderate is not None else []
         if field_schema.get("action_context") == "member_join" and Moderate is not None:
             suggestions = [
                 (label, value)
@@ -2638,7 +2663,7 @@ class AutoModerateActionPresetSelect(discord.ui.Select):
             discord.SelectOption(label=label, value=value)
             for label, value in suggestions
         ]
-        super().__init__(placeholder="選擇常用動作", options=options, row=0)
+        super().__init__(placeholder=t("gettingstarted.select_preset_ph"), options=options, row=0)
 
     async def callback(self, interaction: discord.Interaction):
         analyzer = (
@@ -2658,29 +2683,29 @@ class AutoModerateActionConfirmView(SetupView):
         super().__init__(parent_view.session, timeout=120)
         self.parent_view = parent_view
         self.analysis = analysis
-        confirm = discord.ui.Button(label="是，使用這個動作", style=discord.ButtonStyle.success)
+        confirm = discord.ui.Button(label=t("gettingstarted.antibeast.btn.confirm_action"), style=discord.ButtonStyle.success)
         confirm.callback = self.confirm
         self.add_item(confirm)
-        retry = discord.ui.Button(label="不是，重新輸入", style=discord.ButtonStyle.secondary)
+        retry = discord.ui.Button(label=t("gettingstarted.antibeast.btn.retry_action"), style=discord.ButtonStyle.secondary)
         retry.callback = self.retry
         self.add_item(retry)
-        cancel = discord.ui.Button(label="取消", style=discord.ButtonStyle.danger)
+        cancel = discord.ui.Button(label=t("common.btn.cancel"), style=discord.ButtonStyle.danger)
         cancel.callback = self.cancel
         self.add_item(cancel)
 
     def build_embed(self) -> discord.Embed:
         embed = discord.Embed(
-            title="確認你的意思",
+            title=t("moderate.confirm_your_intent_title"),
             description=self.analysis.get("confirmation"),
             color=discord.Color.orange(),
         )
         embed.add_field(
-            name="將儲存為",
+            name=t("gettingstarted.automod.field.will_save_as"),
             value=f"```text\n{self.analysis['normalized']}\n```",
             inline=False,
         )
         embed.add_field(
-            name="執行預覽",
+            name=t("gettingstarted.field.execution_preview"),
             value="\n".join(
                 f"{index}. {line}"
                 for index, line in enumerate(self.analysis.get("preview", []), 1)
@@ -2724,14 +2749,14 @@ class AutoModerateFieldView(SetupView):
         action_field = field_schema.get("key") == "action" and Moderate is not None
         if action_field:
             self.add_item(AutoModerateActionPresetSelect(self))
-            edit = discord.ui.Button(label="自訂輸入", style=discord.ButtonStyle.primary, row=1)
+            edit = discord.ui.Button(label=t("gettingstarted.automod.btn.custom_input"), style=discord.ButtonStyle.primary, row=1)
             edit.callback = self.edit
             self.add_item(edit)
         elif field_type == "boolean":
-            yes = discord.ui.Button(label="是", style=discord.ButtonStyle.success, row=0)
+            yes = discord.ui.Button(label=t("common.state.yes"), style=discord.ButtonStyle.success, row=0)
             yes.callback = self.set_true
             self.add_item(yes)
-            no = discord.ui.Button(label="否", style=discord.ButtonStyle.danger, row=0)
+            no = discord.ui.Button(label=t("common.state.no"), style=discord.ButtonStyle.danger, row=0)
             no.callback = self.set_false
             self.add_item(no)
         elif field_type == "select":
@@ -2743,15 +2768,15 @@ class AutoModerateFieldView(SetupView):
         elif field_type == "channel":
             self.add_item(AutoModerateChannelSelect(self))
         else:
-            edit = discord.ui.Button(label="編輯", style=discord.ButtonStyle.primary, row=0)
+            edit = discord.ui.Button(label=t("gettingstarted.btn.edit"), style=discord.ButtonStyle.primary, row=0)
             edit.callback = self.edit
             self.add_item(edit)
 
         footer_row = 2 if action_field else 1
-        clear = discord.ui.Button(label="清除", style=discord.ButtonStyle.danger, row=footer_row)
+        clear = discord.ui.Button(label=t("gettingstarted.btn.clear"), style=discord.ButtonStyle.danger, row=footer_row)
         clear.callback = self.clear
         self.add_item(clear)
-        back = discord.ui.Button(label="返回功能", style=discord.ButtonStyle.secondary, row=footer_row)
+        back = discord.ui.Button(label=t("gettingstarted.automod.btn.back_to_feature"), style=discord.ButtonStyle.secondary, row=footer_row)
         back.callback = self.back
         self.add_item(back)
 
@@ -2759,9 +2784,9 @@ class AutoModerateFieldView(SetupView):
         data = get_automod_feature_data(self.session.guild.id, self.feature_id)
         value = data.get(self.field_schema["key"])
         embed = discord.Embed(
-            title="動作設定完成" if self.saved and self.field_schema["key"] == "action" else self.field_schema["label"],
-            description=("設定已儲存。\n\n" if self.saved else "")
-            + "目前設定："
+            title=t("gettingstarted.automod.action_saved_title") if self.saved and self.field_schema["key"] == "action" else self.field_schema["label"],
+            description=(t("gettingstarted.automod.setting_saved") + "\n\n" if self.saved else "")
+            + t("gettingstarted.automod.current_setting_prefix")
             + format_automod_field(self.session.guild, self.field_schema, value),
             color=discord.Color.green() if self.saved else discord.Color.blurple(),
         )
@@ -2774,7 +2799,7 @@ class AutoModerateFieldView(SetupView):
             analysis = analyzer(str(value), self.session.guild.id)
             if analysis["valid"]:
                 embed.add_field(
-                    name="執行預覽",
+                    name=t("gettingstarted.field.execution_preview"),
                     value="\n".join(
                         f"{index}. {line}"
                         for index, line in enumerate(analysis.get("preview", []), 1)
@@ -2782,7 +2807,7 @@ class AutoModerateFieldView(SetupView):
                     inline=False,
                 )
             else:
-                embed.add_field(name="語法問題", value=analysis["error"], inline=False)
+                embed.add_field(name=t("gettingstarted.automod.syntax_issue"), value=analysis["error"], inline=False)
         return embed
 
     async def save_value(self, interaction: discord.Interaction, value: Any):
@@ -2822,7 +2847,7 @@ class AutoModerateChannelListAdd(discord.ui.ChannelSelect):
     def __init__(self, parent: "AutoModerateChannelListView"):
         self.parent_view = parent
         super().__init__(
-            placeholder="新增忽略頻道",
+            placeholder=t("gettingstarted.automod.add_ignore_channel_ph"),
             channel_types=[discord.ChannelType.text, discord.ChannelType.news],
             min_values=1,
             max_values=25,
@@ -2838,7 +2863,7 @@ class AutoModerateChannelListRemove(discord.ui.Select):
     def __init__(self, parent: "AutoModerateChannelListView", options: list[discord.SelectOption]):
         self.parent_view = parent
         super().__init__(
-            placeholder="移除忽略頻道",
+            placeholder=t("gettingstarted.automod.remove_ignore_channel_ph"),
             options=options,
             min_values=1,
             max_values=len(options),
@@ -2878,19 +2903,19 @@ class AutoModerateChannelListView(SetupView):
             )
         if options:
             self.add_item(AutoModerateChannelListRemove(self, options))
-        previous = discord.ui.Button(label="上一頁", style=discord.ButtonStyle.secondary, row=2)
+        previous = discord.ui.Button(label=t("common.btn.prev"), style=discord.ButtonStyle.secondary, row=2)
         previous.disabled = self.page == 0
         previous.callback = self.previous_page
         self.add_item(previous)
-        next_button = discord.ui.Button(label="下一頁", style=discord.ButtonStyle.secondary, row=2)
+        next_button = discord.ui.Button(label=t("common.btn.next"), style=discord.ButtonStyle.secondary, row=2)
         next_button.disabled = self.page >= self.total_pages - 1
         next_button.callback = self.next_page
         self.add_item(next_button)
-        clear = discord.ui.Button(label="全部清除", style=discord.ButtonStyle.danger, row=2)
+        clear = discord.ui.Button(label=t("gettingstarted.btn.clear_all"), style=discord.ButtonStyle.danger, row=2)
         clear.disabled = not self.values
         clear.callback = self.clear
         self.add_item(clear)
-        back = discord.ui.Button(label="返回功能", style=discord.ButtonStyle.secondary, row=2)
+        back = discord.ui.Button(label=t("gettingstarted.automod.btn.back_to_feature"), style=discord.ButtonStyle.secondary, row=2)
         back.callback = self.back
         self.add_item(back)
 
@@ -2903,7 +2928,7 @@ class AutoModerateChannelListView(SetupView):
                 self.values,
             ),
             color=discord.Color.blurple(),
-        ).set_footer(text=f"移除清單頁面 {self.page + 1}/{self.total_pages}")
+        ).set_footer(text=t("gettingstarted.list.page_footer", page=self.page + 1, total=self.total_pages))
 
     async def save_values(self, interaction: discord.Interaction, values: list[int]):
         data = get_automod_feature_data(self.session.guild.id, self.feature_id)
@@ -2964,8 +2989,8 @@ def default_webverify_config() -> dict:
         "notify": {
             "type": "dm",
             "channel_id": None,
-            "title": "伺服器網頁驗證",
-            "message": "請點擊下方按鈕進行網頁驗證：",
+            "title": t("gettingstarted.webverify.default.notify_title"),
+            "message": t("gettingstarted.webverify.default.notify_message"),
         },
         "webverify_country_alert": {
             "enabled": False,
@@ -2999,12 +3024,12 @@ def get_webverify_panel_setting() -> dict:
     )
 
 
-class WebVerifyMinAgeModal(discord.ui.Modal, title="最小帳號年齡"):
+class WebVerifyMinAgeModal(i18n.I18nModal, title=i18n.K("gettingstarted.webverify.modal.min_age_title")):
     def __init__(self, parent: "WebVerifySetupView"):
         super().__init__()
         self.parent_view = parent
         self.age_input = discord.ui.TextInput(
-            label="最小帳號年齡（天）",
+            label=t("gettingstarted.webverify.field.min_age_label"),
             default=str(parent.draft.get("min_age", 7)),
             required=True,
             max_length=5,
@@ -3015,29 +3040,29 @@ class WebVerifyMinAgeModal(discord.ui.Modal, title="最小帳號年齡"):
         try:
             age = int(self.age_input.value.strip())
         except ValueError:
-            await interaction.response.send_message("請輸入有效的整數天數。", ephemeral=True)
+            await interaction.response.send_message(t("gettingstarted.webverify.err.invalid_days"), ephemeral=True)
             return
         if age < 0:
-            await interaction.response.send_message("最小帳號年齡不可小於 0。", ephemeral=True)
+            await interaction.response.send_message(t("gettingstarted.webverify.err.min_age_negative"), ephemeral=True)
             return
         self.parent_view.draft["min_age"] = age
         await self.parent_view.refresh(interaction)
 
 
-class WebVerifyNotificationModal(discord.ui.Modal, title="驗證通知內容"):
+class WebVerifyNotificationModal(i18n.I18nModal, title=i18n.K("gettingstarted.webverify.modal.notify_title")):
     def __init__(self, parent: "WebVerifySetupView"):
         super().__init__()
         self.parent_view = parent
         notify = parent.draft["notify"]
         self.title_input = discord.ui.TextInput(
-            label="通知標題",
-            default=truncate(notify.get("title", "伺服器網頁驗證"), 256),
+            label=t("gettingstarted.webverify.field.notify_title_label"),
+            default=truncate(notify.get("title", t("gettingstarted.webverify.default.notify_title")), 256),
             required=True,
             max_length=256,
         )
         self.message_input = discord.ui.TextInput(
-            label="通知內容",
-            default=truncate(notify.get("message", "請點擊下方按鈕進行網頁驗證："), 4000),
+            label=t("gettingstarted.webverify.field.notify_message_label"),
+            default=truncate(notify.get("message", t("gettingstarted.webverify.default.notify_message")), 4000),
             required=True,
             max_length=4000,
             style=discord.TextStyle.paragraph,
@@ -3051,13 +3076,13 @@ class WebVerifyNotificationModal(discord.ui.Modal, title="驗證通知內容"):
         await self.parent_view.refresh(interaction)
 
 
-class WebVerifyCountriesModal(discord.ui.Modal, title="地區代碼"):
+class WebVerifyCountriesModal(i18n.I18nModal, title=i18n.K("gettingstarted.webverify.modal.countries_title")):
     def __init__(self, parent: "WebVerifySetupView"):
         super().__init__()
         self.parent_view = parent
         countries = parent.draft["webverify_country_alert"].get("countries", [])
         self.countries_input = discord.ui.TextInput(
-            label="ISO 國家／地區代碼",
+            label=t("gettingstarted.webverify.field.country_codes_label"),
             placeholder="TW, JP, US",
             default=", ".join(countries),
             required=False,
@@ -3075,7 +3100,7 @@ class WebVerifyCountriesModal(discord.ui.Modal, title="地區代碼"):
         invalid = [value for value in values if not re.fullmatch(r"[A-Z]{2}", value)]
         if invalid:
             await interaction.response.send_message(
-                "國家／地區代碼必須是兩個英文字母：" + "、".join(invalid[:10]),
+                t("gettingstarted.webverify.err.invalid_country_code", codes=i18n.join_list(invalid[:10])),
                 ephemeral=True,
             )
             return
@@ -3083,13 +3108,13 @@ class WebVerifyCountriesModal(discord.ui.Modal, title="地區代碼"):
         await self.parent_view.refresh(interaction)
 
 
-class WebVerifyRoleCreationModal(discord.ui.Modal, title="建立未驗證身分組"):
+class WebVerifyRoleCreationModal(i18n.I18nModal, title=i18n.K("gettingstarted.webverify.modal.create_role_title")):
     def __init__(self, parent: "WebVerifySetupView"):
         super().__init__()
         self.parent_view = parent
         self.name_input = discord.ui.TextInput(
-            label="身分組名稱",
-            default="未驗證成員",
+            label=t("gettingstarted.webverify.field.role_name_label"),
+            default=t("gettingstarted.webverify.default.unverified_role_name"),
             required=True,
             max_length=100,
         )
@@ -3101,7 +3126,7 @@ class WebVerifyRoleCreationModal(discord.ui.Modal, title="建立未驗證身分�
         permissions = bot_member.guild_permissions if bot_member else None
         if permissions is None or not permissions.manage_roles or not permissions.manage_channels:
             await interaction.response.send_message(
-                "自動建立未驗證身分組需要管理身分組與管理頻道權限。",
+                t("gettingstarted.webverify.err.create_role_permission"),
                 ephemeral=True,
             )
             return
@@ -3110,7 +3135,7 @@ class WebVerifyRoleCreationModal(discord.ui.Modal, title="建立未驗證身分�
         try:
             role = await guild.create_role(
                 name=self.name_input.value.strip(),
-                reason=f"由 {interaction.user} 使用快速設定建立未驗證身分組",
+                reason=t("gettingstarted.webverify.audit.create_role_reason", user=interaction.user),
             )
             for channel in guild.text_channels:
                 try:
@@ -3119,12 +3144,12 @@ class WebVerifyRoleCreationModal(discord.ui.Modal, title="建立未驗證身分�
                         send_messages=False,
                         create_public_threads=False,
                         create_private_threads=False,
-                        reason="快速設定未驗證身分組權限",
+                        reason=t("gettingstarted.webverify.audit.role_permission_reason"),
                     )
                 except (discord.Forbidden, discord.HTTPException):
                     continue
         except (discord.Forbidden, discord.HTTPException) as error:
-            await interaction.followup.send(f"建立身分組失敗：{error}", ephemeral=True)
+            await interaction.followup.send(t("gettingstarted.webverify.err.create_role_failed", error=error), ephemeral=True)
             return
 
         self.parent_view.draft["unverified_role_id"] = role.id
@@ -3150,9 +3175,9 @@ class WebVerifySetupView(SetupView):
         self.clear_items()
         if self.step == 1:
             captcha = discord.ui.Select(
-                placeholder="選擇 CAPTCHA 驗證方式",
+                placeholder=t("gettingstarted.webverify.select_captcha_ph"),
                 options=[
-                    discord.SelectOption(label="不使用 CAPTCHA", value="none", default=self.draft["captcha_type"] == "none"),
+                    discord.SelectOption(label=t("gettingstarted.webverify.captcha.none"), value="none", default=self.draft["captcha_type"] == "none"),
                     discord.SelectOption(label="Cloudflare Turnstile", value="turnstile", default=self.draft["captcha_type"] == "turnstile"),
                     discord.SelectOption(label="Google reCAPTCHA", value="recaptcha", default=self.draft["captcha_type"] == "recaptcha"),
                 ],
@@ -3161,7 +3186,7 @@ class WebVerifySetupView(SetupView):
             captcha.callback = self.select_captcha
             self.add_item(captcha)
             toggle = discord.ui.Button(
-                label=f"功能：{'啟用' if self.draft['enabled'] else '停用'}",
+                label=t("gettingstarted.webverify.btn.feature_state", state=t("common.state.enabled") if self.draft["enabled"] else t("common.state.disabled")),
                 style=discord.ButtonStyle.success if self.draft["enabled"] else discord.ButtonStyle.danger,
                 row=1,
             )
@@ -3170,20 +3195,20 @@ class WebVerifySetupView(SetupView):
             self.add_navigation(next_step=True, row=2)
         elif self.step == 2:
             role_select = discord.ui.RoleSelect(
-                placeholder="選擇未驗證身分組",
+                placeholder=t("gettingstarted.webverify.select_role_ph"),
                 min_values=1,
                 max_values=1,
                 row=0,
             )
             role_select.callback = self.select_role
             self.add_item(role_select)
-            create = discord.ui.Button(label="自動建立身分組", style=discord.ButtonStyle.success, row=1)
+            create = discord.ui.Button(label=t("gettingstarted.webverify.btn.auto_create_role"), style=discord.ButtonStyle.success, row=1)
             create.callback = self.create_role
             self.add_item(create)
             self.add_navigation(previous_step=True, next_step=True, row=2)
         elif self.step == 3:
             toggle = discord.ui.Button(
-                label=f"自動分配：{'啟用' if self.draft['autorole_enabled'] else '停用'}",
+                label=t("gettingstarted.webverify.btn.autorole_state", state=t("common.state.enabled") if self.draft["autorole_enabled"] else t("common.state.disabled")),
                 style=discord.ButtonStyle.success if self.draft["autorole_enabled"] else discord.ButtonStyle.secondary,
                 row=0,
             )
@@ -3191,32 +3216,32 @@ class WebVerifySetupView(SetupView):
             self.add_item(toggle)
             trigger_values = set(str(self.draft.get("autorole_trigger", "always")).split("+"))
             trigger = discord.ui.Select(
-                placeholder="選擇自動分配條件",
+                placeholder=t("gettingstarted.webverify.select_autorole_trigger_ph"),
                 min_values=1,
                 max_values=5,
                 options=[
-                    discord.SelectOption(label="總是給予", value="always", default="always" in trigger_values),
-                    discord.SelectOption(label="帳號年齡過小", value="age_check", default="age_check" in trigger_values),
-                    discord.SelectOption(label="無驗證紀錄", value="no_history", default="no_history" in trigger_values),
-                    discord.SelectOption(label="曾被標記", value="has_flagged_history", default="has_flagged_history" in trigger_values),
-                    discord.SelectOption(label="曾離開伺服器", value="left_guild_before", default="left_guild_before" in trigger_values),
+                    discord.SelectOption(label=t("gettingstarted.webverify.trigger.always"), value="always", default="always" in trigger_values),
+                    discord.SelectOption(label=t("gettingstarted.webverify.trigger.age_check"), value="age_check", default="age_check" in trigger_values),
+                    discord.SelectOption(label=t("gettingstarted.webverify.trigger.no_history"), value="no_history", default="no_history" in trigger_values),
+                    discord.SelectOption(label=t("gettingstarted.webverify.trigger.has_flagged_history"), value="has_flagged_history", default="has_flagged_history" in trigger_values),
+                    discord.SelectOption(label=t("gettingstarted.webverify.trigger.left_guild_before"), value="left_guild_before", default="left_guild_before" in trigger_values),
                 ],
                 row=1,
             )
             trigger.callback = self.select_autorole_trigger
             self.add_item(trigger)
-            age = discord.ui.Button(label="設定最小帳號年齡", style=discord.ButtonStyle.primary, row=2)
+            age = discord.ui.Button(label=t("gettingstarted.webverify.btn.edit_min_age"), style=discord.ButtonStyle.primary, row=2)
             age.callback = self.edit_min_age
             self.add_item(age)
             self.add_navigation(previous_step=True, next_step=True, row=3)
         elif self.step == 4:
             notify_type = self.draft["notify"].get("type", "dm")
             notify_select = discord.ui.Select(
-                placeholder="選擇通知方式",
+                placeholder=t("gettingstarted.webverify.select_notify_type_ph"),
                 options=[
-                    discord.SelectOption(label="私訊", value="dm", default=notify_type == "dm"),
-                    discord.SelectOption(label="頻道", value="channel", default=notify_type == "channel"),
-                    discord.SelectOption(label="私訊與頻道", value="both", default=notify_type == "both"),
+                    discord.SelectOption(label=t("gettingstarted.webverify.notify_type.dm"), value="dm", default=notify_type == "dm"),
+                    discord.SelectOption(label=t("gettingstarted.webverify.notify_type.channel"), value="channel", default=notify_type == "channel"),
+                    discord.SelectOption(label=t("gettingstarted.webverify.notify_type.both"), value="both", default=notify_type == "both"),
                 ],
                 row=0,
             )
@@ -3224,7 +3249,7 @@ class WebVerifySetupView(SetupView):
             self.add_item(notify_select)
             if notify_type in ("channel", "both"):
                 channel_select = discord.ui.ChannelSelect(
-                    placeholder="選擇驗證通知頻道",
+                    placeholder=t("gettingstarted.webverify.select_notify_channel_ph"),
                     channel_types=[discord.ChannelType.text, discord.ChannelType.news],
                     min_values=1,
                     max_values=1,
@@ -3232,24 +3257,24 @@ class WebVerifySetupView(SetupView):
                 )
                 channel_select.callback = self.select_notify_channel
                 self.add_item(channel_select)
-            edit_text = discord.ui.Button(label="編輯通知文字", style=discord.ButtonStyle.primary, row=2)
+            edit_text = discord.ui.Button(label=t("gettingstarted.webverify.btn.edit_notification"), style=discord.ButtonStyle.primary, row=2)
             edit_text.callback = self.edit_notification
             self.add_item(edit_text)
             self.add_navigation(previous_step=True, next_step=True, row=3)
         elif self.step == 5:
             country = self.draft["webverify_country_alert"]
             toggle = discord.ui.Button(
-                label=f"地區警示：{'啟用' if country['enabled'] else '停用'}",
+                label=t("gettingstarted.webverify.btn.country_alert_state", state=t("common.state.enabled") if country["enabled"] else t("common.state.disabled")),
                 style=discord.ButtonStyle.success if country["enabled"] else discord.ButtonStyle.secondary,
                 row=0,
             )
             toggle.callback = self.toggle_country_alert
             self.add_item(toggle)
             mode = discord.ui.Select(
-                placeholder="選擇地區清單模式",
+                placeholder=t("gettingstarted.webverify.select_country_mode_ph"),
                 options=[
-                    discord.SelectOption(label="黑名單", value="blacklist", default=country.get("mode") == "blacklist"),
-                    discord.SelectOption(label="白名單", value="whitelist", default=country.get("mode") == "whitelist"),
+                    discord.SelectOption(label=t("gettingstarted.webverify.mode.blacklist"), value="blacklist", default=country.get("mode") == "blacklist"),
+                    discord.SelectOption(label=t("gettingstarted.webverify.mode.whitelist"), value="whitelist", default=country.get("mode") == "whitelist"),
                 ],
                 row=1,
             )
@@ -3257,7 +3282,7 @@ class WebVerifySetupView(SetupView):
             self.add_item(mode)
             if country.get("enabled"):
                 channel_select = discord.ui.ChannelSelect(
-                    placeholder="選擇地區警示頻道",
+                    placeholder=t("gettingstarted.webverify.select_country_channel_ph"),
                     channel_types=[discord.ChannelType.text, discord.ChannelType.news],
                     min_values=1,
                     max_values=1,
@@ -3265,16 +3290,16 @@ class WebVerifySetupView(SetupView):
                 )
                 channel_select.callback = self.select_country_channel
                 self.add_item(channel_select)
-            countries = discord.ui.Button(label="編輯地區代碼", style=discord.ButtonStyle.primary, row=3)
+            countries = discord.ui.Button(label=t("gettingstarted.webverify.btn.edit_countries"), style=discord.ButtonStyle.primary, row=3)
             countries.callback = self.edit_countries
             self.add_item(countries)
             self.add_navigation(previous_step=True, next_step=True, row=4)
         else:
-            save = discord.ui.Button(label="只儲存", style=discord.ButtonStyle.success, row=0)
+            save = discord.ui.Button(label=t("gettingstarted.webverify.btn.save_only"), style=discord.ButtonStyle.success, row=0)
             save.callback = self.save_only
             self.add_item(save)
             notify_type = self.draft["notify"].get("type", "dm")
-            save_send = discord.ui.Button(label="儲存並發送驗證訊息", style=discord.ButtonStyle.primary, row=0)
+            save_send = discord.ui.Button(label=t("gettingstarted.webverify.btn.save_and_send"), style=discord.ButtonStyle.primary, row=0)
             save_send.disabled = notify_type not in ("channel", "both")
             save_send.callback = self.save_and_send
             self.add_item(save_send)
@@ -3288,65 +3313,65 @@ class WebVerifySetupView(SetupView):
         row: int,
     ):
         if previous_step:
-            previous = discord.ui.Button(label="上一步", style=discord.ButtonStyle.secondary, row=row)
+            previous = discord.ui.Button(label=t("common.btn.prev_step"), style=discord.ButtonStyle.secondary, row=row)
             previous.callback = self.previous_step
             self.add_item(previous)
         if next_step:
-            next_button = discord.ui.Button(label="下一步", style=discord.ButtonStyle.primary, row=row)
+            next_button = discord.ui.Button(label=t("common.btn.next_step"), style=discord.ButtonStyle.primary, row=row)
             next_button.callback = self.next_step
             self.add_item(next_button)
-        cancel = discord.ui.Button(label="取消", style=discord.ButtonStyle.danger, row=row)
+        cancel = discord.ui.Button(label=t("common.btn.cancel"), style=discord.ButtonStyle.danger, row=row)
         cancel.callback = self.cancel
         self.add_item(cancel)
 
     def build_embed(self) -> discord.Embed:
         embed = discord.Embed(
-            title=f"網頁驗證設定（步驟 {self.step}/6）",
+            title=t("gettingstarted.webverify.setup_title", step=self.step, total=6),
             color=discord.Color.blurple(),
         )
         if self.step == 1:
-            embed.description = "設定驗證功能狀態與 CAPTCHA。"
-            embed.add_field(name="功能", value="啟用" if self.draft["enabled"] else "停用", inline=True)
+            embed.description = t("gettingstarted.webverify.step1.desc")
+            embed.add_field(name=t("gettingstarted.webverify.field.feature"), value=t("common.state.enabled") if self.draft["enabled"] else t("common.state.disabled"), inline=True)
             embed.add_field(name="CAPTCHA", value=self.draft["captcha_type"], inline=True)
         elif self.step == 2:
-            embed.description = "選擇或建立未驗證成員身分組。"
+            embed.description = t("gettingstarted.webverify.step2.desc")
             role_id = self.draft.get("unverified_role_id")
             role = self.session.guild.get_role(int(role_id)) if role_id and str(role_id).isdigit() else None
-            embed.add_field(name="未驗證身分組", value=role.mention if role else "未設定", inline=False)
+            embed.add_field(name=t("gettingstarted.webverify.field.unverified_role"), value=role.mention if role else t("common.state.unset"), inline=False)
         elif self.step == 3:
-            embed.description = "設定加入時是否自動分配未驗證身分組。"
-            embed.add_field(name="自動分配", value="啟用" if self.draft["autorole_enabled"] else "停用", inline=True)
-            embed.add_field(name="條件", value=self.draft.get("autorole_trigger", "always"), inline=True)
-            embed.add_field(name="最小帳號年齡", value=f"{self.draft.get('min_age', 7)} 天", inline=True)
+            embed.description = t("gettingstarted.webverify.step3.desc")
+            embed.add_field(name=t("gettingstarted.webverify.field.autorole"), value=t("common.state.enabled") if self.draft["autorole_enabled"] else t("common.state.disabled"), inline=True)
+            embed.add_field(name=t("gettingstarted.webverify.field.trigger"), value=self.draft.get("autorole_trigger", "always"), inline=True)
+            embed.add_field(name=t("gettingstarted.webverify.field.min_age"), value=i18n.tn("common.unit.days", self.draft.get("min_age", 7)), inline=True)
         elif self.step == 4:
             notify = self.draft["notify"]
-            embed.description = "設定驗證提示的通知方式與內容。"
-            embed.add_field(name="通知方式", value=notify.get("type", "dm"), inline=True)
+            embed.description = t("gettingstarted.webverify.step4.desc")
+            embed.add_field(name=t("gettingstarted.webverify.field.notify_type"), value=notify.get("type", "dm"), inline=True)
             channel_id = notify.get("channel_id")
             channel = self.session.guild.get_channel(int(channel_id)) if channel_id and str(channel_id).isdigit() else None
-            embed.add_field(name="通知頻道", value=channel.mention if channel else "未設定", inline=True)
-            embed.add_field(name="標題", value=notify.get("title", "伺服器網頁驗證"), inline=False)
-            embed.add_field(name="內容", value=truncate(notify.get("message", ""), 1000), inline=False)
+            embed.add_field(name=t("gettingstarted.webverify.field.notify_channel"), value=channel.mention if channel else t("common.state.unset"), inline=True)
+            embed.add_field(name=t("gettingstarted.webverify.field.title"), value=notify.get("title", t("gettingstarted.webverify.default.notify_title")), inline=False)
+            embed.add_field(name=t("gettingstarted.webverify.field.message"), value=truncate(notify.get("message", ""), 1000), inline=False)
         elif self.step == 5:
             country = self.draft["webverify_country_alert"]
-            embed.description = "設定驗證來源地區的黑名單或白名單警示。"
-            embed.add_field(name="地區警示", value="啟用" if country.get("enabled") else "停用", inline=True)
-            embed.add_field(name="模式", value=country.get("mode", "blacklist"), inline=True)
-            embed.add_field(name="地區", value=", ".join(country.get("countries", [])) or "未設定", inline=False)
+            embed.description = t("gettingstarted.webverify.step5.desc")
+            embed.add_field(name=t("gettingstarted.webverify.field.country_alert"), value=t("common.state.enabled") if country.get("enabled") else t("common.state.disabled"), inline=True)
+            embed.add_field(name=t("gettingstarted.webverify.field.mode"), value=country.get("mode", "blacklist"), inline=True)
+            embed.add_field(name=t("gettingstarted.webverify.field.countries"), value=", ".join(country.get("countries", [])) or t("common.state.unset"), inline=False)
             channel_id = country.get("channel_id")
             channel = self.session.guild.get_channel(int(channel_id)) if channel_id and str(channel_id).isdigit() else None
-            embed.add_field(name="警示頻道", value=channel.mention if channel else "未設定", inline=False)
+            embed.add_field(name=t("gettingstarted.webverify.field.alert_channel"), value=channel.mention if channel else t("common.state.unset"), inline=False)
         else:
             notify = self.draft["notify"]
             country = self.draft["webverify_country_alert"]
             role_id = self.draft.get("unverified_role_id")
             role = self.session.guild.get_role(int(role_id)) if role_id and str(role_id).isdigit() else None
-            embed.description = "確認後會一次儲存整份網頁驗證設定。"
-            embed.add_field(name="功能 / CAPTCHA", value=f"{'啟用' if self.draft['enabled'] else '停用'} / {self.draft['captcha_type']}", inline=False)
-            embed.add_field(name="未驗證身分組", value=role.mention if role else "未設定", inline=False)
-            embed.add_field(name="自動分配", value=f"{'啟用' if self.draft['autorole_enabled'] else '停用'} / {self.draft['autorole_trigger']}", inline=False)
-            embed.add_field(name="通知", value=notify.get("type", "dm"), inline=True)
-            embed.add_field(name="地區警示", value="啟用" if country.get("enabled") else "停用", inline=True)
+            embed.description = t("gettingstarted.webverify.step6.desc")
+            embed.add_field(name=t("gettingstarted.webverify.field.feature_captcha"), value=f"{t('common.state.enabled') if self.draft['enabled'] else t('common.state.disabled')} / {self.draft['captcha_type']}", inline=False)
+            embed.add_field(name=t("gettingstarted.webverify.field.unverified_role"), value=role.mention if role else t("common.state.unset"), inline=False)
+            embed.add_field(name=t("gettingstarted.webverify.field.autorole"), value=f"{t('common.state.enabled') if self.draft['autorole_enabled'] else t('common.state.disabled')} / {self.draft['autorole_trigger']}", inline=False)
+            embed.add_field(name=t("gettingstarted.webverify.field.notify"), value=notify.get("type", "dm"), inline=True)
+            embed.add_field(name=t("gettingstarted.webverify.field.country_alert"), value=t("common.state.enabled") if country.get("enabled") else t("common.state.disabled"), inline=True)
         return embed
 
     async def refresh(self, interaction: discord.Interaction):
@@ -3415,23 +3440,23 @@ class WebVerifySetupView(SetupView):
 
     async def next_step(self, interaction: discord.Interaction):
         if self.step in (2, 3) and self.draft.get("autorole_enabled") and not self.draft.get("unverified_role_id"):
-            await interaction.response.send_message("啟用自動分配前，請先選擇未驗證身分組。", ephemeral=True)
+            await interaction.response.send_message(t("gettingstarted.webverify.err.select_role_before_autorole"), ephemeral=True)
             return
         self.step = min(6, self.step + 1)
         await self.refresh(interaction)
 
     def validate(self) -> str | None:
         if self.draft.get("autorole_enabled") and not self.draft.get("unverified_role_id"):
-            return "啟用自動分配時必須設定未驗證身分組。"
+            return t("gettingstarted.webverify.err.autorole_needs_role")
         notify = self.draft["notify"]
         if notify.get("type") in ("channel", "both") and not notify.get("channel_id"):
-            return "使用頻道通知時必須選擇通知頻道。"
+            return t("gettingstarted.webverify.err.notify_needs_channel")
         country = self.draft["webverify_country_alert"]
         if country.get("enabled"):
             if not country.get("channel_id"):
-                return "啟用地區警示時必須選擇警示頻道。"
+                return t("gettingstarted.webverify.err.country_alert_needs_channel")
             if not country.get("countries"):
-                return "啟用地區警示時必須至少設定一個地區代碼。"
+                return t("gettingstarted.webverify.err.country_alert_needs_codes")
         return None
 
     async def persist(self, interaction: discord.Interaction, *, send_message: bool):
@@ -3455,7 +3480,7 @@ class WebVerifySetupView(SetupView):
         target = ModuleSettingsView(self.session, self.module_name)
         embed = ModuleSettingsView.build_embed(self.session, self.module_name)
         if sent_message:
-            embed.description = f"驗證訊息已發送至 {sent_message.channel.mention}。\n\n" + (embed.description or "")
+            embed.description = t("gettingstarted.webverify.msg.sent_to_channel", channel=sent_message.channel.mention) + "\n\n" + (embed.description or "")
         await self.session.render(interaction, embed=embed, view=target)
 
     async def send_verify_message(self, interaction: discord.Interaction):
@@ -3463,16 +3488,16 @@ class WebVerifySetupView(SetupView):
         channel_id = notify.get("channel_id")
         channel = self.session.guild.get_channel(int(channel_id)) if channel_id else None
         if not isinstance(channel, discord.TextChannel):
-            await interaction.followup.send("找不到驗證通知頻道，設定已儲存但未發送訊息。", ephemeral=True)
+            await interaction.followup.send(t("gettingstarted.webverify.err.channel_not_found"), ephemeral=True)
             return None
         bot_member = self.session.guild.me
         permissions = channel.permissions_for(bot_member) if bot_member else None
         if permissions is None or not permissions.view_channel or not permissions.send_messages:
-            await interaction.followup.send("我沒有權限在驗證通知頻道發送訊息。", ephemeral=True)
+            await interaction.followup.send(t("gettingstarted.webverify.err.no_channel_permission"), ephemeral=True)
             return None
         application_id = bot.application_id or (bot.user.id if bot.user else None)
         if application_id is None:
-            await interaction.followup.send("目前無法取得應用程式 ID。", ephemeral=True)
+            await interaction.followup.send(t("gettingstarted.webverify.err.no_application_id"), ephemeral=True)
             return None
         query = urlencode({"redirect_uri": config("webverify_url"), "state": self.session.guild.id})
         verify_url = (
@@ -3480,16 +3505,16 @@ class WebVerifySetupView(SetupView):
             f"&response_type=code&scope=identify&prompt=none&{query}"
         )
         view = discord.ui.View()
-        view.add_item(discord.ui.Button(label="前往驗證", style=discord.ButtonStyle.link, url=verify_url))
+        view.add_item(discord.ui.Button(label=t("gettingstarted.webverify.btn.go_verify"), style=discord.ButtonStyle.link, url=verify_url))
         embed = discord.Embed(
-            title=notify.get("title") or "伺服器網頁驗證",
-            description=notify.get("message") or "請點擊下方按鈕進行網頁驗證：",
+            title=notify.get("title") or t("gettingstarted.webverify.default.notify_title"),
+            description=notify.get("message") or t("gettingstarted.webverify.default.notify_message"),
             color=discord.Color.green(),
         )
         try:
             return await channel.send(embed=embed, view=view)
         except (discord.Forbidden, discord.HTTPException) as error:
-            await interaction.followup.send(f"發送驗證訊息失敗：{error}", ephemeral=True)
+            await interaction.followup.send(t("gettingstarted.webverify.err.send_failed", error=error), ephemeral=True)
             return None
 
     async def save_only(self, interaction: discord.Interaction):
@@ -3511,7 +3536,7 @@ async def start_getting_started(interaction: discord.Interaction) -> bool:
     permissions = getattr(interaction.user, "guild_permissions", None)
     if interaction.guild is None or permissions is None or not permissions.manage_guild:
         await interaction.response.send_message(
-            "只有具備管理伺服器權限的成員可以開啟快速設定。",
+            t("gettingstarted.err.manage_guild_required"),
             ephemeral=True,
         )
         return False
@@ -3532,7 +3557,7 @@ async def start_autoreply_builder(interaction: discord.Interaction):
     session = GettingStartedSession(interaction.guild, interaction.user.id)
     cog = bot.get_cog("AutoReply")
     if cog is None:
-        await interaction.response.send_message("AutoReply 模組目前無法使用。", ephemeral=True)
+        await interaction.response.send_message(t("gettingstarted.err.autoreply_unavailable"), ephemeral=True)
         return
     view = GettingStartedAutoReplyBuilderView(session, "AutoReply", cog, interaction)
     session.active_view = view
@@ -3557,7 +3582,7 @@ async def start_webverify_quick_setup(interaction: discord.Interaction):
     session.message = await interaction.original_response()
 
 
-class GettingStartedLauncherView(discord.ui.View):
+class GettingStartedLauncherView(i18n.I18nView):
     def __init__(self):
         super().__init__(timeout=None)
 
@@ -3565,14 +3590,14 @@ class GettingStartedLauncherView(discord.ui.View):
         permissions = getattr(interaction.user, "guild_permissions", None)
         if interaction.guild is None or permissions is None or not permissions.manage_guild:
             await interaction.response.send_message(
-                "只有具備管理伺服器權限的成員可以開啟快速設定。",
+                t("gettingstarted.err.manage_guild_required"),
                 ephemeral=True,
             )
             return False
         return True
 
     @discord.ui.button(
-        label="快速設定伺服器",
+        label=i18n.K("gettingstarted.launcher.btn.open_setup"),
         style=discord.ButtonStyle.primary,
         custom_id="getting_started_open_server_setup",
     )
@@ -3607,19 +3632,19 @@ class GettingStarted(commands.Cog):
                 command = await get_command_mention("gettingstarted")
             except Exception:
                 command = "`/gettingstarted`"
+            recipient_loc = i18n.resolve_locale(user_id=recipient.id)
             await recipient.send(
-                f"我找不到能在 **{guild.name}** 發送快速設定按鈕的頻道。"
-                f"請到伺服器內使用 {command} 開啟設定中心。"
+                t("gettingstarted.dm.no_setup_channel", locale=recipient_loc, guild=guild.name, command=command)
             )
             log(
-                "找不到合適的快速設定頻道，已私訊管理員",
+                "No suitable quick-setup channel found; DMed the admin instead",
                 module_name="gettingstarted",
                 user=recipient,
                 guild=guild,
             )
         except discord.Forbidden:
             log(
-                "找不到合適的快速設定頻道，也無法私訊管理員",
+                "No suitable quick-setup channel found, and DM to admin failed as well",
                 level=logging.WARNING,
                 module_name="gettingstarted",
                 user=recipient,
@@ -3628,6 +3653,11 @@ class GettingStarted(commands.Cog):
 
     @commands.Cog.listener()
     async def on_guild_join(self, guild: discord.Guild):
+        # listener 不在 choke point 內，顯式開伺服器語言 scope
+        async with i18n.guild_scope(guild.id):
+            await self._on_guild_join_impl(guild)
+
+    async def _on_guild_join_impl(self, guild: discord.Guild):
         recipient = await get_join_prompt_recipient(
             guild,
             self.bot.user.id if self.bot.user else None,
@@ -3648,14 +3678,14 @@ class GettingStarted(commands.Cog):
             return
 
         embed = discord.Embed(
-            title="快速設定機器人",
-            description="使用下方按鈕設定這個伺服器的管理、通知、經濟、自動回覆、驗證與其他功能。",
+            title=t("gettingstarted.launcher.embed.title"),
+            description=t("gettingstarted.launcher.embed.desc"),
             color=discord.Color.blurple(),
         )
         embed.set_footer(text=guild.name, icon_url=guild.icon.url if guild.icon else None)
         try:
             await channel.send(
-                content=f"{recipient.mention} 要現在快速設定機器人嗎？",
+                content=t("gettingstarted.launcher.msg.prompt", mention=recipient.mention),
                 embed=embed,
                 view=GettingStartedLauncherView(),
                 allowed_mentions=discord.AllowedMentions(
@@ -3665,14 +3695,14 @@ class GettingStarted(commands.Cog):
                 ),
             )
             log(
-                f"已在 {channel.name} 發送快速設定入口",
+                f"Sent quick-setup launcher in #{channel.name}",
                 module_name="gettingstarted",
                 user=recipient,
                 guild=guild,
             )
         except (discord.Forbidden, discord.HTTPException) as error:
             log(
-                f"發送快速設定入口失敗: {error}",
+                f"Failed to send quick-setup launcher: {error}",
                 level=logging.ERROR,
                 module_name="gettingstarted",
                 user=recipient,
@@ -3680,7 +3710,7 @@ class GettingStarted(commands.Cog):
             )
             await self.send_dm_fallback(guild, recipient)
 
-    @app_commands.command(name="gettingstarted", description="開啟伺服器快速設定中心")
+    @app_commands.command(name=app_commands.locale_str("gettingstarted", i18n_key="cmd.gettingstarted.gettingstarted.name"), description=app_commands.locale_str("Open the server quick-setup center", i18n_key="cmd.gettingstarted.gettingstarted.desc"))
     @app_commands.guild_only()
     @app_commands.default_permissions(manage_guild=True)
     @app_commands.allowed_installs(guilds=True, users=False)

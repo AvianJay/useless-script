@@ -1,0 +1,150 @@
+{
+    "audit": {
+        "autorole_assign": "自動分配未驗證角色",
+        "create_unverified_role": "建立未驗證成員身分組",
+        "force_assign_unverified": "強制分配未驗證角色",
+        "manual_remove_unverified": "手動移除未驗證角色",
+        "passed_web_verify": "通過網頁驗證",
+        "set_unverified_role_permissions": "設定未驗證成員身分組權限",
+        "wizard_create_unverified_role": "網頁驗證設定精靈：建立未驗證身分組"
+    },
+    "dm": {
+        "verified_success": "您已成功通過 {guild} 的網頁驗證，現在可以訪問伺服器了！"
+    },
+    "embed": {
+        "geo_alert_title": "網頁驗證異常地理位置警報",
+        "manually_verified_desc": "你的驗證狀態已被管理員手動設為已驗證。",
+        "relation_title": "用戶 {user} 的關聯帳號",
+        "status_update_title": "驗證狀態更新"
+    },
+    "err": {
+        "already_unverified": "該用戶已經是未驗證狀態了。",
+        "force_verify_failed": "無法強制驗證 {user}：{message}",
+        "geo_alert_disabled": "此伺服器未啟用地理位置警示功能。",
+        "invalid_captcha_provider": "無效的 CAPTCHA 提供者。請選擇 'none'、'turnstile' 或 'recaptcha'。",
+        "invalid_duration_format": "無效的時間格式。請使用類似 '1h30m' 的格式來表示持續時間。",
+        "members_only": "只能對伺服器成員使用此操作。",
+        "moderate_not_enabled": "Moderate 模組未啟用，無法執行此操作。",
+        "no_relation_data": "找不到用戶 {user} 的關聯資料。",
+        "no_unverified_role": "伺服器尚未設定未驗證成員的角色。",
+        "no_verify_history": "找不到用戶的驗證紀錄。",
+        "not_configured": "伺服器尚未設定網頁驗證功能。",
+        "not_unverified": "該用戶目前不是未驗證狀態。",
+        "role_already_exists": "角色 '{name}' 已存在。請使用其他名稱或直接設定此角色為未驗證成員角色。"
+    },
+    "field": {
+        "city": "城市",
+        "country_code": "國家代碼",
+        "region": "地區",
+        "related_accounts": "關聯帳號 ({count})",
+        "relation_id": "關聯 ID",
+        "role_name_label": "身分組名稱",
+        "user_id": "用戶 ID"
+    },
+    "msg": {
+        "autorole_set": "自動分配未驗證角色功能{status}，觸發條件：{trigger}。",
+        "captcha_disabled": "已關閉 CAPTCHA 驗證。",
+        "captcha_set": "網頁驗證的 CAPTCHA 類型已設定為 {provider}。",
+        "country_alert_set": "地區警示功能{status}。模式：{mode}，國家代碼：{countries}，警示頻道：{channel}。",
+        "disabled": "伺服器的網頁驗證功能已停用。",
+        "enabled": "伺服器的網頁驗證功能已啟用。",
+        "force_assign_success": "用戶已成功分配未驗證角色。",
+        "force_verify_started": "已開始對所有新加入的成員強制驗證，持續時間：{duration}。",
+        "force_verify_success": "{user} 已被強制要求驗證。",
+        "manually_verified": "已將 {user} 設為已驗證狀態。",
+        "min_age_set": {
+            "other": "最小帳號年齡已設定為 {days} 天。"
+        },
+        "no_geo_anomalies": "所有用戶的地理位置均符合設定的清單條件，無異常紀錄。",
+        "notify_dm_set": "已設定驗證通知方式為私訊。",
+        "notify_sent": "已在 {channel} 發送網頁驗證訊息。",
+        "relation_action_header": "**對 {user} 及其關聯帳號的操作結果：**\n",
+        "setup_done": "伺服器的網頁驗證功能已設定完成。請記得設定未驗證成員的角色({command})。",
+        "status": "網頁驗證功能狀態：{enabled}\nCAPTCHA 類型：{captcha_type}\n未驗證成員角色 ID：{role_id}",
+        "unverified_role_created": "已建立角色 '{name}' 並將所有文字頻道權限關閉且設定為未驗證成員角色。",
+        "unverified_role_set": "未驗證成員的角色已設定為 {role}。"
+    },
+    "value": {
+        "action_error": "用戶 ID: `{uid}` - 執行錯誤: {error}",
+        "default_notify_message": "請點擊下方按鈕進行網頁驗證：",
+        "default_notify_title": "伺服器網頁驗證",
+        "default_unverified_role_name": "未驗證成員",
+        "disabled": "已停用",
+        "disabled_suffix": "已停用",
+        "enabled": "已啟用",
+        "enabled_suffix": "已啟用",
+        "geo_report_line": "用戶: {user} | 國家代碼: {country} | 時間: {timestamp}",
+        "go_verify_btn": "前往驗證",
+        "hierarchy_skip": "{member} - 跳過：{reason}",
+        "member_not_found_skip": "用戶 ID: `{uid}` - 未在伺服器中，跳過。",
+        "no_action": "{member} - 無操作。",
+        "not_selected": "尚未選擇",
+        "please_wait": "請稍候...",
+        "unset": "未設定"
+    },
+    "web": {
+        "err": {
+            "access_denied": "您拒絕了應用程式存取您的 Discord 帳號資訊的授權。請重新從伺服器中的驗證按鈕進入此頁面並授權應用程式。",
+            "already_verified": "您已經通過了此伺服器的網頁驗證，無需再次驗證。",
+            "bad_fingerprint": "錯誤的瀏覽器指紋。",
+            "disabled": "此伺服器的網頁驗證功能已停用。請聯絡伺服器管理員。",
+            "guild_not_found": "找不到指定的伺服器。請確認您是從正確的驗證按鈕進入此頁面。",
+            "invalid_auth_token": "無效的驗證令牌。請重新從伺服器中的驗證按鈕進入此頁面。",
+            "invalid_auth_token_api": "Invalid or missing auth token.",
+            "invalid_method": "無效的驗證方法。",
+            "method_mismatch": "驗證方法與伺服器設定不符。請重新嘗試。",
+            "missing_auth_token": "缺少驗證令牌。請重新從伺服器中的驗證按鈕進入此頁面。",
+            "missing_params": "缺少參數。請從伺服器中的驗證按鈕進入此頁面。",
+            "no_user_info": "無法取得您的 Discord 帳號資訊。請確保您已授權應用程式存取您的帳號資訊。",
+            "not_a_member": "您不是此伺服器的成員。請先加入伺服器後再進行驗證。",
+            "not_configured": "此伺服器未設定網頁驗證。請聯絡伺服器管理員。",
+            "verify_failed": "驗證失敗。錯誤代碼：{codes}"
+        },
+        "msg": {
+            "verify_success": "驗證成功！您現在可以返回伺服器。"
+        }
+    },
+    "wizard": {
+        "auto_create_role_btn": "自動建立未驗證身分組",
+        "autorole_field": "自動分配",
+        "autorole_toggle_btn": "自動分配功能: {state}",
+        "captcha_none_desc": "不使用 CAPTCHA",
+        "captcha_none_label": "無 (None)",
+        "captcha_recaptcha_desc": "Google 的驗證服務",
+        "captcha_turnstile_desc": "推薦使用",
+        "current_setting": "目前設定",
+        "feature_status": "功能狀態",
+        "finish_btn": "完成設定",
+        "notify_both_label": "兩者皆通知 (Both)",
+        "notify_channel": "通知頻道",
+        "notify_channel_label": "頻道通知 (Channel)",
+        "notify_dm_label": "私訊通知 (DM)",
+        "notify_method_field": "通知方式",
+        "notify_send_failed_suffix": "\n無法發送驗證訊息至 {channel}: {error}",
+        "notify_sent_suffix": "\n驗證訊息已發送至 {channel}。",
+        "notify_type": "通知類型",
+        "select_captcha_ph": "選擇 CAPTCHA 驗證方式",
+        "select_existing_role_ph": "選擇現有的未驗證身分組",
+        "select_notify_channel_ph": "選擇通知頻道",
+        "select_notify_type_ph": "選擇通知方式",
+        "select_trigger_ph": "選擇自動分配觸發條件 (可多選)",
+        "setup_complete_desc": "所有設定已儲存。",
+        "setup_complete_title": "網頁驗證設定完成",
+        "step1_desc": "首先，請選擇要使用的 CAPTCHA 驗證機制。",
+        "step2_desc": "接著，設定或建立「未驗證成員」的身分組。\n擁有此身分組的成員通常會被限制權限，直到通過驗證。",
+        "step3_desc": "設定是否在成員加入時自動給予未驗證身分組，以及觸發的條件。",
+        "step4_desc": "最後，設定驗證提示的通知方式。\n如果是頻道通知，將會發送一個永久性的驗證 Embed 到該頻道。",
+        "step_title": "網頁驗證設定精靈 (步驟 {step}/4)",
+        "timed_out_desc": "精靈已超時，請重新執行命令。",
+        "title": "網頁驗證設定精靈",
+        "trigger": {
+            "age_check": "帳號年齡過小 (Age Check)",
+            "always": "總是給予 (Always)",
+            "has_flagged_history": "帳號曾經被標記過 (Flagged History)",
+            "left_guild_before": "曾經退出過伺服器 (Left Guild Before)",
+            "no_history": "無驗證紀錄 (No History)"
+        },
+        "trigger_condition": "觸發條件",
+        "unverified_role_field": "未驗證身分組"
+    }
+}

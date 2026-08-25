@@ -1,0 +1,16 @@
+{
+    "embed": {
+        "error_title": "錯誤"
+    },
+    "err": {
+        "generic": "錯誤！{error}",
+        "generic_bare": "錯誤！",
+        "no_results": "無搜尋結果"
+    },
+    "value": {
+        "ai_generated_suffix": "(包含AI生成圖片)",
+        "tag_count_desc": {
+            "other": "ID: `{id}`\n共有 {count} 個標籤。"
+        }
+    }
+}

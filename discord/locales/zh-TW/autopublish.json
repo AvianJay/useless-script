@@ -1,0 +1,11 @@
+{
+    "err": {
+        "missing_manage_messages": "機器人需要管理訊息權限才能設定自動發布。"
+    },
+    "msg": {
+        "disabled": "自動發布已停用。",
+        "enabled": "自動發布已啟用。",
+        "status_disabled": "自動發布未啟用。",
+        "status_enabled": "自動發布已啟用。"
+    }
+}

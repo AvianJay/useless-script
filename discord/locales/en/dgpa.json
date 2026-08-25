@@ -1,0 +1,20 @@
+{
+    "embed": {
+        "status_title": "Natural Disaster Work/School Suspension Status",
+        "update_title": "Work/School Suspension Update"
+    },
+    "err": {
+        "fetch_failed": "An error occurred while fetching data: {error}",
+        "guild_only": "This command can only be used in a server.",
+        "no_channel_permission": "I don't have permission to send messages in {channel}.",
+        "no_permission": "You don't have permission to use this command."
+    },
+    "field": {
+        "last_updated": "Last Updated",
+        "last_updated_time": "Last Updated Time"
+    },
+    "msg": {
+        "follow_disabled": "Following natural-disaster work/school suspension update notices has been cancelled.",
+        "follow_enabled": "Following natural-disaster work/school suspension update notices has been set to {channel}.\n-# Beta feature, still a work in progress — please use with caution."
+    }
+}

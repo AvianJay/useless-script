@@ -1,0 +1,494 @@
+{
+    "antibeast": {
+        "action_modal_title": "AntiBeast 處置設定",
+        "action_status": {
+            "other": "{seconds} 秒內 {count} 次後執行 `{action}`"
+        },
+        "action_view_desc": "設定同一位使用者在時間窗口內多次觸發後要執行的 Moderate 動作。",
+        "action_view_title": "AntiBeast 連續觸發處置",
+        "btn": {
+            "back_to_antibeast": "返回 AntiBeast",
+            "bypass_roles": "繞過身分組",
+            "confirm_action": "是，使用這個動作",
+            "disable": "停用 AntiBeast",
+            "disable_action": "停用處置",
+            "edit_action": "編輯門檻與動作",
+            "enable": "啟用 AntiBeast",
+            "enable_action": "啟用處置",
+            "everyone_here_only": "僅 everyone/here：{state}",
+            "retry_action": "不是，重新輸入"
+        },
+        "bypass_current": "目前：{roles}",
+        "bypass_desc": "這些身分組的 mention token 不會加入 AntiBeast 關鍵字規則。",
+        "bypass_none": "目前沒有繞過身分組。",
+        "bypass_select_ph": "選擇要繞過的身分組（會取代目前清單）",
+        "bypass_title": "AntiBeast 繞過身分組",
+        "disabled_desc": "目前停用。你仍可先完成其他設定再啟用。",
+        "enabled_desc": "已啟用，AutoMod 規則會阻擋受保護提及。",
+        "err": {
+            "not_int": "觸發次數與時間窗口都必須是整數。",
+            "threshold_range": "觸發次數必須介於 1 到 20。",
+            "time_window_range": "時間窗口必須介於 5 到 3600 秒。"
+        },
+        "field": {
+            "bypass_roles": "繞過身分組",
+            "threshold": "門檻"
+        },
+        "manager_title": "🛡️ AntiBeast 設定",
+        "module_not_loaded": "AntiBeast 模組尚未載入。",
+        "threshold_label": "觸發次數 (1-20)",
+        "threshold_value": {
+            "other": "{seconds} 秒內 {count} 次"
+        },
+        "time_window_label": "時間窗口秒數 (5-3600)",
+        "title": "AntiBeast 設定"
+    },
+    "automod": {
+        "action": {
+            "ban": "封禁"
+        },
+        "action_saved_title": "動作設定完成",
+        "add_ignore_channel_ph": "新增忽略頻道",
+        "btn": {
+            "back_to_feature": "返回功能",
+            "custom_input": "自訂輸入"
+        },
+        "current_setting_prefix": "目前設定：",
+        "err": {
+            "missing_required": "請先完成必要設定：{fields}"
+        },
+        "feature": {
+            "anti_invite_link": {
+                "desc": "偵測 Discord 邀請連結。",
+                "field": {
+                    "action": {
+                        "default": "delete {user}，請勿發送其他伺服器的邀請連結。"
+                    },
+                    "allow_current_server": "允許本伺服器連結"
+                },
+                "label": "邀請連結"
+            },
+            "anti_raid": {
+                "desc": "偵測短時間內大量成員加入。",
+                "field": {
+                    "action": {
+                        "default": "kick 突襲偵測自動踢出"
+                    },
+                    "max_joins": "最大加入數"
+                },
+                "label": "防突襲"
+            },
+            "anti_spam": {
+                "desc": "偵測短時間內的相似訊息。",
+                "field": {
+                    "action": {
+                        "default": "mute 10m 刷頻自動禁言, delete {user}，請勿刷頻。"
+                    },
+                    "max_messages": "最大相似訊息數",
+                    "similarity": "相似度（%）"
+                },
+                "label": "防刷頻"
+            },
+            "anti_uispam": {
+                "desc": "限制 User Install 指令的觸發頻率。",
+                "field": {
+                    "action": {
+                        "default": "delete {user}，請勿濫用用戶安裝的應用程式指令。, mute 10m 濫用用戶安裝指令"
+                    },
+                    "max_count": "最大觸發次數"
+                },
+                "label": "用戶安裝應用程式濫用"
+            },
+            "automod_detect": {
+                "desc": "接收 Discord 原生 AutoMod 事件並執行額外處置。",
+                "field": {
+                    "action": "額外處置動作",
+                    "filter_action_type": "動作類型過濾",
+                    "filter_rule": "規則名稱過濾"
+                },
+                "label": "Discord AutoMod 偵測"
+            },
+            "escape_punish": {
+                "desc": "禁言期間離開伺服器時追加處置。",
+                "field": {
+                    "duration": "持續時間",
+                    "punishment": "懲處方式"
+                },
+                "label": "逃避責任懲處"
+            },
+            "flagged_user": {
+                "desc": "合併本機標記資料與 Blacklist API，在成員加入時通知並可執行處置。",
+                "field": {
+                    "action_source": "處置來源",
+                    "local_match_mode": "本機命中模式"
+                },
+                "label": "標記用戶加入",
+                "option": {
+                    "active": "僅目前標記",
+                    "api": "僅 API",
+                    "both": "本機與 API",
+                    "history": "三個月內所有紀錄",
+                    "local": "僅本機"
+                }
+            },
+            "scamtrap": {
+                "desc": "在蜜罐頻道發言時自動處置。",
+                "field": {
+                    "action": {
+                        "default": "delete {user} 是最後一個被封禁的帳號，不要在這裡講話！, ban {user} 5s 12h [自動封禁] 疑似被盜帳號"
+                    },
+                    "channel_id": "陷阱頻道"
+                },
+                "label": "詐騙陷阱"
+            },
+            "too_many_emojis": {
+                "desc": "限制單則訊息的 emoji 數量。",
+                "field": {
+                    "max_emojis": "最大數量"
+                },
+                "label": "表情符號過多"
+            },
+            "too_many_h1": {
+                "desc": "限制 Markdown 大標題總字數。",
+                "field": {
+                    "max_length": "最大字數"
+                },
+                "label": "標題過多"
+            }
+        },
+        "feature_page_footer": "功能頁面 {page}/{total}",
+        "field": {
+            "action": "處置動作",
+            "enabled_count": "已啟用",
+            "ignore_channels": "忽略頻道",
+            "notify_channel": "通知頻道",
+            "time_window": "時間窗口（秒）",
+            "will_save_as": "將儲存為"
+        },
+        "field_value_ph": "留空會清除此欄位",
+        "manager_desc": "選擇功能後可調整完整參數並啟用或停用。",
+        "manager_title": "自動管理規則",
+        "remove_ignore_channel_ph": "移除忽略頻道",
+        "select_feature_ph": "選擇要修改的功能",
+        "select_field_ph": "選擇要修改的欄位",
+        "setting_saved": "設定已儲存。",
+        "syntax_issue": "語法問題"
+    },
+    "autoreply": {
+        "btn": {
+            "add_rule": "新增規則",
+            "back_to_rules": "返回規則",
+            "confirm_clear_all": "確認全部清除",
+            "confirm_delete": "確認刪除"
+        },
+        "builder_timed_out_desc": "尚未儲存的規則已捨棄。",
+        "builder_timed_out_title": "AutoReply Builder 已逾時",
+        "clear_confirm_desc": {
+            "other": "目前共有 {count} 條規則，此操作無法復原。"
+        },
+        "clear_confirm_title": "清除所有 AutoReply 規則？",
+        "delete_confirm_desc": "此操作會立即生效。",
+        "delete_confirm_title": "刪除 AutoReply 規則？",
+        "edit_rule_title": "編輯 AutoReply 規則",
+        "err": {
+            "edit_target_gone": "要編輯的 AutoReply 規則已不存在。",
+            "module_unavailable": "AutoReply 模組目前無法使用。",
+            "rule_gone_or_unavailable": "這條規則已不存在或模組目前無法使用。",
+            "save_failed": "儲存 AutoReply 規則失敗。"
+        },
+        "field": {
+            "current_rules": "目前規則"
+        },
+        "manager_desc": "選擇既有規則以檢視、編輯或刪除，也可以使用 Builder 新增規則。",
+        "manager_title": "AutoReply 規則管理",
+        "no_response": "沒有回覆",
+        "rule_not_found": "找不到規則",
+        "rule_page_footer": "規則頁面 {page}/{total}",
+        "rule_title": "AutoReply 規則 #{index}",
+        "select_rule_ph": "選擇 AutoReply 規則",
+        "unnamed_rule": "未命名規則"
+    },
+    "btn": {
+        "add": "新增",
+        "back_to_module": "返回模組",
+        "back_to_settings": "返回設定",
+        "clear": "清除",
+        "clear_all": "全部清除",
+        "edit": "編輯",
+        "finish": "完成",
+        "move_down": "下移",
+        "move_up": "上移",
+        "remove": "刪除"
+    },
+    "compound": {
+        "unavailable_title": "無法開啟設定"
+    },
+    "dm": {
+        "no_setup_channel": "我找不到能在 **{guild}** 發送快速設定按鈕的頻道。請到伺服器內使用 {command} 開啟設定中心。"
+    },
+    "err": {
+        "autoreply_unavailable": "AutoReply 模組目前無法使用。",
+        "invalid_integer": "請輸入有效的整數。",
+        "invalid_number": "請輸入有效的數字。",
+        "manage_guild_required": "只有具備管理伺服器權限的成員可以開啟快速設定。",
+        "not_setup_owner": "只有開啟這次設定流程、且具備管理伺服器權限的成員可以操作。",
+        "save_failed": "寫入伺服器設定失敗。",
+        "trigger_failed": "設定已儲存，但套用即時效果時發生錯誤。",
+        "value_too_large": "設定值不可大於 {maximum}。",
+        "value_too_small": "設定值不可小於 {minimum}。"
+    },
+    "field": {
+        "action": "動作",
+        "action_scope": "處置範圍",
+        "channel": "頻道",
+        "execution_preview": "執行預覽",
+        "moderate_action": "Moderate 動作指令",
+        "quota": "額度",
+        "status": "狀態",
+        "trigger_action": "連續觸發處置"
+    },
+    "fixlink": {
+        "btn": {
+            "back_to_center": "返回設定中心"
+        },
+        "err": {
+            "cog_not_running": "找不到正在執行的 FixLink 模組。",
+            "module_not_loaded": "FixLink 模組尚未載入。"
+        }
+    },
+    "hub": {
+        "default_module_desc": "開啟此模組的設定",
+        "desc": "從下拉選單選擇功能。每個確認的設定都會立即儲存。",
+        "field": {
+            "available_modules": "可設定模組",
+            "changes_this_session": "本次已修改"
+        },
+        "finish": {
+            "more_items": "... 另有 {count} 項",
+            "no_changes": "這次沒有變更任何設定。",
+            "summary": "本次已完成以下設定：",
+            "title": "快速設定完成"
+        },
+        "page_footer": "模組頁面 {page}/{total}",
+        "select_module_ph": "選擇要設定的功能模組",
+        "timed_out_desc": "已確認的設定仍然保留；請使用 `/gettingstarted` 繼續設定。",
+        "timed_out_title": "快速設定已逾時",
+        "title": "{guild} 快速設定"
+    },
+    "launcher": {
+        "btn": {
+            "open_setup": "快速設定伺服器"
+        },
+        "embed": {
+            "desc": "使用下方按鈕設定這個伺服器的管理、通知、經濟、自動回覆、驗證與其他功能。",
+            "title": "快速設定機器人"
+        },
+        "msg": {
+            "prompt": "{mention} 要現在快速設定機器人嗎？"
+        }
+    },
+    "list": {
+        "add_channel_ph": "新增頻道（可多選）",
+        "add_role_ph": "新增身分組（可多選）",
+        "count_field": "目前共 {count} 項",
+        "default_desc": "新增或移除清單項目。",
+        "page_footer": "移除清單頁面 {page}/{total}",
+        "select_remove_ph": "選擇要移除的項目"
+    },
+    "module": {
+        "no_settings": "這個模組目前沒有可設定項目。",
+        "page_footer": "設定頁面 {page}/{total}",
+        "select_setting_ph": "選擇設定項目"
+    },
+    "select_preset_ph": "選擇常用動作",
+    "setting": {
+        "default_desc": "修改此伺服器設定。",
+        "edit_default_title": "編輯設定",
+        "field": {
+            "current_value": "目前設定"
+        },
+        "key_footer": "設定鍵：{key}",
+        "select_channel_ph": "選擇頻道",
+        "select_role_ph": "選擇身分組",
+        "select_value_ph": "選擇設定值",
+        "value_label": "設定值",
+        "value_ph": "留空會清除此設定"
+    },
+    "state": {
+        "unknown": "未知"
+    },
+    "stickymessage": {
+        "add_desc": "先選擇要設定的文字或公告頻道。每個頻道只能有一則置底訊息。",
+        "add_title": "新增置底訊息",
+        "auto_repost_footer": "自動重新置底永遠不會發送提及通知。",
+        "btn": {
+            "edit_content": "編輯內容",
+            "first_mention": "首次提及：{state}",
+            "publish_now": "手動發布",
+            "save_and_publish": "儲存並發布",
+            "timing": "時間設定"
+        },
+        "content_label": "訊息內容",
+        "content_modal_title": "編輯置底訊息內容",
+        "edit_title": "編輯置底訊息",
+        "err": {
+            "channel_taken": "這個頻道已經有置底訊息。",
+            "entry_gone": "這則設定已不存在，請重新開啟管理畫面。",
+            "invalid_seconds": "請輸入有效秒數。",
+            "module_unavailable": "StickyMessage 模組目前無法使用。",
+            "no_content": "請先輸入置底訊息內容。",
+            "publish_failed": "發布失敗。",
+            "quota_reached": {
+                "other": "這個伺服器最多可設定 {count} 則置底訊息。"
+            }
+        },
+        "field": {
+            "mentions": "首次／手動提及",
+            "min_interval": "最短間隔",
+            "quiet_seconds": "安靜時間"
+        },
+        "manager_title": "📌 置底訊息",
+        "mentions_allowed": "允許",
+        "mentions_footer": "只有首次、內容修改或手動發布會依設定發送提及。",
+        "mentions_suppressed": "抑制",
+        "min_interval_label": "同頻道最短間隔（5–3600 秒）",
+        "msg": {
+            "published": "已手動發布置底訊息。"
+        },
+        "no_content_yet": "尚未輸入內容，請先點選「編輯內容」。",
+        "no_entries": "尚未設定任何置底訊息。",
+        "pick_channel_ph": "選擇文字或公告頻道",
+        "quiet_seconds_label": "無新訊息多久後置底（0–300 秒）",
+        "select_entry_ph": "選擇要管理的置底訊息",
+        "status_active": "運作中",
+        "status_over_quota": "超額暫停",
+        "timing_modal_title": "StickyMessage 時間設定",
+        "unknown_channel": "頻道 {channel_id}"
+    },
+    "value": {
+        "empty_list": "空清單",
+        "entries_configured": {
+            "other": "已設定 {count} 則"
+        },
+        "items_configured": "已設定 {count} 項",
+        "more_items": "... 共 {count} 項",
+        "not_set": "未設定",
+        "unknown_channel": "未知頻道 ({value})",
+        "unknown_role": "未知身分組 ({value})"
+    },
+    "webverify": {
+        "audit": {
+            "create_role_reason": "由 {user} 使用快速設定建立未驗證身分組",
+            "role_permission_reason": "快速設定未驗證身分組權限"
+        },
+        "btn": {
+            "auto_create_role": "自動建立身分組",
+            "autorole_state": "自動分配：{state}",
+            "country_alert_state": "地區警示：{state}",
+            "edit_countries": "編輯地區代碼",
+            "edit_min_age": "設定最小帳號年齡",
+            "edit_notification": "編輯通知文字",
+            "feature_state": "功能：{state}",
+            "go_verify": "前往驗證",
+            "save_and_send": "儲存並發送驗證訊息",
+            "save_only": "只儲存"
+        },
+        "captcha": {
+            "none": "不使用 CAPTCHA"
+        },
+        "default": {
+            "notify_message": "請點擊下方按鈕進行網頁驗證：",
+            "notify_title": "伺服器網頁驗證",
+            "unverified_role_name": "未驗證成員"
+        },
+        "err": {
+            "autorole_needs_role": "啟用自動分配時必須設定未驗證身分組。",
+            "channel_not_found": "找不到驗證通知頻道，設定已儲存但未發送訊息。",
+            "country_alert_needs_channel": "啟用地區警示時必須選擇警示頻道。",
+            "country_alert_needs_codes": "啟用地區警示時必須至少設定一個地區代碼。",
+            "create_role_failed": "建立身分組失敗：{error}",
+            "create_role_permission": "自動建立未驗證身分組需要管理身分組與管理頻道權限。",
+            "invalid_country_code": "國家／地區代碼必須是兩個英文字母：{codes}",
+            "invalid_days": "請輸入有效的整數天數。",
+            "min_age_negative": "最小帳號年齡不可小於 0。",
+            "no_application_id": "目前無法取得應用程式 ID。",
+            "no_channel_permission": "我沒有權限在驗證通知頻道發送訊息。",
+            "notify_needs_channel": "使用頻道通知時必須選擇通知頻道。",
+            "select_role_before_autorole": "啟用自動分配前，請先選擇未驗證身分組。",
+            "send_failed": "發送驗證訊息失敗：{error}"
+        },
+        "field": {
+            "alert_channel": "警示頻道",
+            "autorole": "自動分配",
+            "countries": "地區",
+            "country_alert": "地區警示",
+            "country_codes_label": "ISO 國家／地區代碼",
+            "feature": "功能",
+            "feature_captcha": "功能 / CAPTCHA",
+            "message": "內容",
+            "min_age": "最小帳號年齡",
+            "min_age_label": "最小帳號年齡（天）",
+            "mode": "模式",
+            "notify": "通知",
+            "notify_channel": "通知頻道",
+            "notify_message_label": "通知內容",
+            "notify_title_label": "通知標題",
+            "notify_type": "通知方式",
+            "role_name_label": "身分組名稱",
+            "title": "標題",
+            "trigger": "條件",
+            "unverified_role": "未驗證身分組"
+        },
+        "modal": {
+            "countries_title": "地區代碼",
+            "create_role_title": "建立未驗證身分組",
+            "min_age_title": "最小帳號年齡",
+            "notify_title": "驗證通知內容"
+        },
+        "mode": {
+            "blacklist": "黑名單",
+            "whitelist": "白名單"
+        },
+        "msg": {
+            "sent_to_channel": "驗證訊息已發送至 {channel}。"
+        },
+        "notify_type": {
+            "both": "私訊與頻道",
+            "channel": "頻道",
+            "dm": "私訊"
+        },
+        "select_autorole_trigger_ph": "選擇自動分配條件",
+        "select_captcha_ph": "選擇 CAPTCHA 驗證方式",
+        "select_country_channel_ph": "選擇地區警示頻道",
+        "select_country_mode_ph": "選擇地區清單模式",
+        "select_notify_channel_ph": "選擇驗證通知頻道",
+        "select_notify_type_ph": "選擇通知方式",
+        "select_role_ph": "選擇未驗證身分組",
+        "setup_title": "網頁驗證設定（步驟 {step}/{total}）",
+        "step1": {
+            "desc": "設定驗證功能狀態與 CAPTCHA。"
+        },
+        "step2": {
+            "desc": "選擇或建立未驗證成員身分組。"
+        },
+        "step3": {
+            "desc": "設定加入時是否自動分配未驗證身分組。"
+        },
+        "step4": {
+            "desc": "設定驗證提示的通知方式與內容。"
+        },
+        "step5": {
+            "desc": "設定驗證來源地區的黑名單或白名單警示。"
+        },
+        "step6": {
+            "desc": "確認後會一次儲存整份網頁驗證設定。"
+        },
+        "trigger": {
+            "age_check": "帳號年齡過小",
+            "always": "總是給予",
+            "has_flagged_history": "曾被標記",
+            "left_guild_before": "曾離開伺服器",
+            "no_history": "無驗證紀錄"
+        }
+    }
+}

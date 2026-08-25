@@ -1,0 +1,10 @@
+<form class="language-selector" action="{{ url_for('set_web_language') }}" method="post" data-language-selector>
+    <label class="language-selector-label" for="language-select">{{ t('web.language.label') }}</label>
+    <select id="language-select" name="lang" aria-label="{{ t('web.language.label') }}">
+        {% for option in locale_options %}
+        <option value="{{ option.code }}"{% if option.code == locale %} selected{% endif %}>{{ option.label }}</option>
+        {% endfor %}
+    </select>
+    <input type="hidden" name="next" value="{{ language_return_path }}">
+    <noscript><button type="submit">{{ t('web.language.apply') }}</button></noscript>
+</form>

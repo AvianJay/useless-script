@@ -8,3 +8,4 @@ venv/
 data.db
 *.log
 avatar_temp.ico
+i18n-candidates.json

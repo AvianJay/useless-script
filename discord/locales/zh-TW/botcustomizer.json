@@ -1,0 +1,63 @@
+{
+    "btn": {
+        "approve": "✅ 通過審核",
+        "reject": "❌ 拒絕"
+    },
+    "type": {
+        "avatar": "頭像",
+        "banner": "橫幅",
+        "bio": "關於我",
+        "generic": "內容"
+    },
+    "embed": {
+        "review_title_avatar": "頭像圖片審核請求",
+        "review_desc_avatar": "用戶 {user} 正在審核頭像圖片。",
+        "review_title_banner": "橫幅圖片審核請求",
+        "review_desc_banner": "用戶 {user} 正在審核橫幅圖片。",
+        "review_title_bio": "關於我審核請求",
+        "review_desc_bio": "用戶 {user} 正在審核關於我內容。"
+    },
+    "field": {
+        "guild_id": "伺服器 ID",
+        "status": "目前狀態",
+        "reason": "原因",
+        "reject_reason": "拒絕原因",
+        "bio_content": "關於我內容"
+    },
+    "status": {
+        "pending": "等待審核中...",
+        "human_review": "需要人工審核",
+        "rejected": "審核未通過",
+        "approved_avatar": "審核通過並已更新頭像",
+        "approved_banner": "審核通過並已更新橫幅",
+        "approved_bio": "審核通過並已更新關於我",
+        "owner_avatar": "擁有者提交，直接更新頭像",
+        "owner_banner": "擁有者提交，直接更新橫幅",
+        "owner_bio": "擁有者提交，直接更新關於我",
+        "human_approved": "✅ 人工審核通過 (由 {user} 審核)",
+        "human_rejected": "❌ 人工審核拒絕 (由 {user} 審核)"
+    },
+    "msg": {
+        "too_large": "圖片大小超過 10MB，請選擇較小的圖片。",
+        "reviewing_image": "圖片正在審核中，請稍候...",
+        "reviewing_bio": "關於我內容正在審核中，請稍候...",
+        "human_review_needed": "圖片需要人工審核，原因：{reason}\n-# 請等待管理員審核",
+        "human_review_needed_bio": "關於我內容需要人工審核，原因：{reason}\n-# 請等待管理員審核",
+        "rejected_image": "圖片未通過審核：{reason}",
+        "rejected_bio": "關於我內容未通過審核：{reason}",
+        "avatar_updated": "頭像更新成功！",
+        "banner_updated": "橫幅更新成功！",
+        "bio_updated": "介紹更新成功！",
+        "update_error": "更新時發生錯誤：{error}",
+        "update_error_avatar": "更新頭像時發生錯誤：{error}",
+        "update_error_banner": "更新橫幅時發生錯誤：{error}",
+        "update_error_bio": "更新介紹時發生錯誤：{error}",
+        "review_error": "審核過程中發生錯誤: {error}",
+        "review_approved": "審核通過，已更新。",
+        "review_rejected": "已拒絕此審核請求。",
+        "approved_dm": "✅ 你提交的{type}已通過人工審核並已更新！",
+        "rejected_dm": "❌ 你提交的{type}未通過人工審核。\n原因：{reason}",
+        "unknown_reason": "未知原因",
+        "no_content": "無內容"
+    }
+}

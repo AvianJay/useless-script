@@ -1,0 +1,29 @@
+{
+    "btn": {
+        "reply": "Reply"
+    },
+    "modal": {
+        "title": "Send feedback to the developers",
+        "label": "Your feedback",
+        "placeholder": "Type your suggestions or feedback here...",
+        "reply_title": "Reply to user feedback",
+        "reply_label": "Your reply",
+        "reply_placeholder": "Type your reply here..."
+    },
+    "embed": {
+        "title": "New user feedback",
+        "user_id": "User ID",
+        "content": "Feedback",
+        "reply_title": "Reply from the developers",
+        "reply_content": "Reply",
+        "reply_footer": "You received this message because you submitted feedback earlier."
+    },
+    "msg": {
+        "sent": "Sent — thanks for your feedback!\nConsider joining the official support server to report issues or share ideas!\n{invite}",
+        "send_failed": "Could not send your feedback. Please try again later.",
+        "channel_missing": "Could not find the feedback channel. Please try again later.",
+        "reply_sent": "Reply sent to the user!",
+        "reply_failed": "Could not send the reply; the user's privacy settings may block DMs: {error}",
+        "user_not_found": "Could not find the user; the account may be deleted or their privacy settings changed."
+    }
+}

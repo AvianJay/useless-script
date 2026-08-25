@@ -1,0 +1,270 @@
+{
+    "attack": {
+        "dm": "{attacker} used Spray and Pray on you and dealt {damage} cm of damage!\nYour length went from {before} cm to {after} cm!\n-# {scope}",
+        "err": {
+            "no_target": "There are no targets to attack right now.",
+            "target_too_short": "The target drawn is already as short as it gets.\nThe attack failed and dealt no damage."
+        },
+        "hit": "You used Spray and Pray on {target} and dealt {damage} cm of damage!\n{target_name}'s length went from {before} cm to {after} cm!",
+        "scope_global": "global dsize",
+        "scope_guild": "Server: {guild}",
+        "self": "# {user} sprayed and prayed straight into themselves!\nSelf-harm dealt {damage} cm of damage!\nYour length went from {before} cm to {after} cm!"
+    },
+    "battle": {
+        "draw": "🤝 It's a draw!",
+        "err": {
+            "bot": "You can't battle a bot.",
+            "generic": "Something went wrong during the battle.",
+            "not_your_invite": "This isn't your battle invite.",
+            "opponent_busy": "{user} is already in a battle; please try again later.",
+            "opponent_measured": "{user} has already measured today.",
+            "self": "You can't battle yourself.",
+            "you_busy": "You're already in a battle; finish that one first.",
+            "you_measured": "You've already measured today."
+        },
+        "field": {
+            "result": "Result:"
+        },
+        "global_note": "This battle will be recorded on the global leaderboard.",
+        "invite": "{user} wants to compare lengths with you.\nHit ✅ to accept or ❌ to decline within 30 seconds.",
+        "invite_expired": "The battle invite expired.",
+        "invite_rejected": "Battle invite declined.",
+        "starting": "Starting the battle.",
+        "title": "Length battle",
+        "winner": "🎉 {user} wins!"
+    },
+    "btn": {
+        "accept": "Accept",
+        "accept_surgery": "Accept surgery",
+        "reject": "Decline",
+        "reject_surgery": "Decline surgery"
+    },
+    "checkin": {
+        "auto_goal_default": "Since you didn't pick a goal last time, it's been set to {item} x {count} automatically.",
+        "err": {
+            "not_your_goal": "This isn't your goal selection."
+        },
+        "footer": "Check-in day {streak}!",
+        "footer_broke": "You broke your streak on day {broke_on}; starting over! | Check-in day {streak}!",
+        "footer_broke_freeze": "You broke your streak on day {broke_on} and used {freeze} freeze ball(s)! Starting over! | Check-in day {streak}!",
+        "footer_broke_freeze_user": "{user} broke their streak on day {broke_on} and used {freeze} freeze ball(s)! Starting over!",
+        "footer_broke_user": "{user} broke their streak on day {broke_on}; starting over!",
+        "footer_frozen": "Check-in day {streak}! A freeze ball saved your streak ({freeze} used)",
+        "footer_frozen_user": "{user} check-in day {streak}! A freeze ball saved their streak ({freeze} used)",
+        "footer_user": "{user} check-in day {streak}!",
+        "goal_auto": "You didn't pick a goal in time, so your next goal was set automatically: {days} days! Keep it up!",
+        "goal_btn": "+{days} days ({item} x {count})",
+        "goal_selected": "Your next goal is set: {days} days! Keep it up!",
+        "goal_title": "Goal set",
+        "pick_goal_desc": "Pick how many days you want for your next check-in goal:",
+        "pick_goal_title": "Pick your next goal",
+        "reward_desc": "Congrats on a {days}-day streak!\nYou got: {item} x {count}!",
+        "reward_title": "🎉 Check-in reward!"
+    },
+    "cloud_ruler": {
+        "dragged_in": "{user} got dragged in to be measured.",
+        "dragged_in_femboy": "{user} got dragged in to be measured and turned into a femboy.",
+        "err": {
+            "already_measured": "{user} already measured today, so you can't measure them."
+        },
+        "title": "{user} measures {target}:"
+    },
+    "drop": {
+        "anti_surgery": "You found an {item}!\nUse {command} {item} to block surgery for a day.",
+        "cloud_ruler": "You found a {item}!\nUse {command} {item} to perform surgery.",
+        "fake_ruler": "You found a {item}!\nUse {command} {item} and your next measurement might come out longer?",
+        "grass": "You found {item} x{count}!\nUse {command} to feed a femboy.",
+        "rusty_scalpel": "You found a {item}!\nUse {command} {item} to perform surgery.",
+        "scalpel": "You found a {item}!\nUse {command} {item} to perform surgery."
+    },
+    "embed": {
+        "length_title": "{user}'s length:",
+        "new_length_title": "{user}'s new length:"
+    },
+    "err": {
+        "limit_range": "The limit must be between 1 and 50.",
+        "needs_itemsystem": "This feature needs the ItemSystem module.",
+        "once_per_day": "You can only measure once a day. You can try again {when}."
+    },
+    "feedgrass": {
+        "err": {
+            "femboy_cannot": "Femboys can't feed grass unless they've had a Japanese cola today.",
+            "no_grass": "You have no grass, so you can't feed anyone.",
+            "no_history": "Couldn't read the channel history, so other users' avatars aren't shown.\nMake sure the bot can read message history in this channel.",
+            "not_femboy": "{name} is not a femboy, so they can't be fed.",
+            "not_measured": "You haven't measured today, so you can't feed anyone.",
+            "self_nsfw_off": "You currently don't allow NSFW feedgrass; switch the setting first.\n> Use {command} to toggle it.",
+            "target_nsfw_off": "{user} doesn't allow NSFW feedgrass, so you can't feed them.\n> Use {command} to toggle it."
+        },
+        "fed": "{feeder} fed {target}!",
+        "fed_self": "{user} fed themselves!",
+        "reloaded": {
+            "one": "Reloaded {count} feedgrass image!",
+            "other": "Reloaded {count} feedgrass images!"
+        },
+        "submit_btn": "Submit one now!"
+    },
+    "history": {
+        "desc": {
+            "one": "Showing the latest {count} record",
+            "other": "Showing the latest {count} records"
+        },
+        "empty": "{name} has no records in {scope} yet.",
+        "global_footer": "Global record",
+        "title": "{user}'s history",
+        "type": {
+            "battle": "Battle",
+            "cloud_ruler": "Cloud ruler",
+            "measure": "Measurement",
+            "surgery_failed": "Surgery failed",
+            "surgery_success": "Surgery succeeded"
+        },
+        "unknown_date": "Unknown date"
+    },
+    "item": {
+        "anti_surgery": {
+            "desc": "A d*-shaped pill. Using it blocks surgery for one day.\nFor two days after use, your measurements take a shrinking penalty.",
+            "name": "Anti-surgery pill"
+        },
+        "anti_surgery_used": "You used the anti-surgery pill!\nYou can't be operated on today.",
+        "checkin_freeze": {
+            "desc": "A magical freeze ball that turns things into Articuno.\nIt cancels out one missed check-in day so your streak survives.",
+            "name": "Freeze ball"
+        },
+        "cloud_ruler": {
+            "desc": "A cloud ruler that lets you measure friends who are online.",
+            "name": "Cloud ruler"
+        },
+        "cola_used": "{user} drank a Japanese cola!\n-# Now a femboy with a few of them",
+        "err": {
+            "cola_not_femboy": "You're not a femboy, so you can't use Japanese cola.",
+            "cola_not_measured": "You haven't measured today, so you can't use Japanese cola.",
+            "cola_used": "You've already used a Japanese cola today.",
+            "fake_ruler_used": "You've already used the self-deception ruler today.",
+            "missing": "You don't have a {item}, so you can't use it.",
+            "viagra_not_measured": "You haven't measured today, so you can't use viagra.",
+            "viagra_used": "You've already used viagra."
+        },
+        "fake_ruler": {
+            "desc": "After using it, your next measurement might come out longer?",
+            "name": "Self-deception ruler"
+        },
+        "fake_ruler_used": "You used the self-deception ruler!\nYour next measurement might come out longer?",
+        "grass": {
+            "desc": "A handful of grass for feeding femboys. Use `/dsize-feedgrass`.",
+            "name": "Grass"
+        },
+        "japanese_cola": {
+            "desc": "A can of Japanese cola that grows a femboy a d*.",
+            "name": "Japanese cola"
+        },
+        "random_attack": {
+            "desc": "Damages one random non-femboy on the leaderboard.",
+            "name": "[Skill] Spray and Pray"
+        },
+        "rusty_scalpel": {
+            "desc": "A rusty scalpel that forces an infection and turns the target into a femboy.",
+            "name": "Rusty scalpel"
+        },
+        "scalpel": {
+            "desc": "A scalpel for performing surgery. Always succeeds.",
+            "name": "Scalpel"
+        },
+        "viagra": {
+            "desc": "A blue pill with lasting effects.\nAfter using it, today's state carries over to tomorrow - for better or worse.",
+            "name": "Viagra"
+        },
+        "viagra_used": "You used viagra!\nToday's state will carry over to tomorrow, for better or worse."
+    },
+    "leaderboard": {
+        "empty": "Nobody has measured today yet.",
+        "global_footer": "Global leaderboard",
+        "row_unknown": "**{rank}. User ID {user_id}** - {size}",
+        "title": "Today's length leaderboard"
+    },
+    "modal": {
+        "measure_title": "Who do you want to measure?",
+        "pick_user_label": "Pick a user",
+        "pick_user_ph": "Pick a user",
+        "surgery_title": "Who do you want to operate on?"
+    },
+    "msg": {
+        "became_femboy_target": "{user} turned into a femboy.",
+        "became_femboy_user": "{user} turned into a femboy.",
+        "became_femboy_you": "You turned into a femboy.",
+        "became_femboy_you2": "You turned into a femboy.",
+        "feels_odd_user": "{user}'s d* feels a bit odd today.",
+        "feels_odd_you": "Your d* feels a bit odd today.",
+        "global_record": "This measurement went to the global record.",
+        "side_effect": "Uh oh! Side effects!",
+        "side_effect_femboy": "Uh oh! Side effects! Turned into a femboy!",
+        "side_effect_femboy_user": "{user} - uh oh! Side effects! Turned into a femboy!",
+        "side_effect_user": "{user} - uh oh! Side effects!"
+    },
+    "nsfw": {
+        "allow": "Allowed",
+        "deny": "Denied",
+        "toggled": "NSFW feedgrass setting toggled; it's now: {status}"
+    },
+    "scope": {
+        "global": "global",
+        "server": "this server",
+        "themselves": "themselves",
+        "you": "You"
+    },
+    "settings": {
+        "drop_chance_set": "Item drop chance set to {value}%.",
+        "err": {
+            "drop_chance_range": "The item drop chance must be an integer between 0 and 100.",
+            "max_range": "The maximum length must be an integer between 1 and 1000.",
+            "surgery_max_range": "The maximum surgery gain must be an integer between 1 and 100.",
+            "surgery_percent_range": "The surgery chance must be an integer between 1 and 100.",
+            "unknown": "Unknown setting."
+        },
+        "max_set": "Maximum length set to {value} cm.",
+        "surgery_max_set": "Maximum surgery gain set to {value} cm.",
+        "surgery_percent_set": "Surgery chance set to {value}%."
+    },
+    "size": {
+        "femboy": "**Femboy!**",
+        "femboy_with_cola": "a **femboy!** with {size} cm"
+    },
+    "stats": {
+        "checkin_streak": "Check-in streak",
+        "losses": "Losses",
+        "mangirl_count": "Times turned femboy",
+        "perform_random_attacks": "Random attacks dealt",
+        "random_attacks": "Random attacks received",
+        "successful_surgeries": "Successful surgeries",
+        "title": "{user}'s dsize stats",
+        "total_battles": "Battles",
+        "total_been_feedgrass": "Times fed",
+        "total_checkins": "Check-ins",
+        "total_drops": "Items found",
+        "total_feedgrass": "Times you fed someone",
+        "total_surgeries": "Surgeries",
+        "total_uses": "Measurements",
+        "wins": "Wins"
+    },
+    "surgery": {
+        "blocked_by_anti": "You used an anti-surgery pill, so you can't have surgery.",
+        "dragged_in": "{user} got dragged in for surgery.",
+        "err": {
+            "not_yours": "This isn't your surgery chance.",
+            "target_already_femboy": "{user} is already a femboy.",
+            "target_is_femboy": "{user} is a femboy, so surgery isn't possible.",
+            "target_not_measured": "{user} hasn't measured today, so surgery isn't possible.",
+            "target_protected": "{user} used an anti-surgery pill, so surgery isn't possible."
+        },
+        "expired": "The surgery chance expired.",
+        "failed_femboy": "The surgery failed and you turned into a femboy.",
+        "in_progress": "Operating...",
+        "in_progress_boom": "Operating...💥",
+        "in_progress_q": "Operating...?",
+        "offer": "You got a chance to have surgery.\nDo you accept?\n-# Failure chance: {chance}%",
+        "performed_title": "{user} operates on {target}!",
+        "rejected": "Surgery declined.",
+        "succeeded": "Surgery succeeded.",
+        "target_succeeded": "{user}'s surgery succeeded."
+    }
+}

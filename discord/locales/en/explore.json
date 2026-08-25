@@ -1,0 +1,114 @@
+{
+    "btn": {
+        "play": "Play"
+    },
+    "embed": {
+        "playing_desc": "{user} is playing",
+        "title": "Explore Space"
+    },
+    "err": {
+        "banned_word_exists": "\"{word}\" is already in the banned word list.",
+        "banned_word_length": "Banned words must be 1-50 characters long.",
+        "banned_word_limit": "You've reached the custom banned word limit (100).",
+        "banned_word_not_found": "\"{word}\" wasn't found in the list.",
+        "cannot_create_invite": "I don't have permission to auto-create a permanent invite link. Please provide `invite_link` or give me invite-creation permission.",
+        "cannot_set_require_join": "Couldn't set the join requirement.",
+        "casino_unavailable": "The casino service is temporarily unavailable.",
+        "chat_rate_limited": "You're talking too fast, slow down",
+        "economy_disabled": "The economy system isn't enabled, so purchases aren't available",
+        "guild_only": "This command can only be used in a server.",
+        "insufficient_currency": "Not enough global currency (need {price}, you have {balance})",
+        "invalid_invite_format": "Invalid invite link format — please provide a Discord invite link.",
+        "invite_not_found": "Couldn't find that invite link — please make sure it's still valid.",
+        "invite_verify_failed": "Couldn't verify that invite link right now — please try again later.",
+        "invite_wrong_guild": "That invite link doesn't belong to this server.",
+        "no_channel_permission": "I don't have permission to view or send messages in {channel} — please adjust the channel permissions first.",
+        "quest_already_completed": "You've already completed this quest",
+        "quest_prerequisites_not_met": "The prerequisite quests aren't completed yet",
+        "skin_already_owned": "You already own this skin",
+        "skin_is_free": "This skin is free, no need to buy it",
+        "skin_not_owned": "You don't own this skin yet",
+        "unknown_quest": "Unknown quest"
+    },
+    "msg": {
+        "banned_word_added": {
+            "one": "Added banned word \"{word}\". You now have {count} custom banned word.",
+            "other": "Added banned word \"{word}\". You now have {count} custom banned words."
+        },
+        "banned_word_list": {
+            "one": "Custom banned words ({count}): {words}",
+            "other": "Custom banned words ({count}): {words}"
+        },
+        "banned_word_removed": {
+            "one": "Removed banned word \"{word}\". You now have {count} custom banned word.",
+            "other": "Removed banned word \"{word}\". You now have {count} custom banned words."
+        },
+        "chat_bridge_disabled": "The Explore chat bridge to a Discord channel has been disabled.",
+        "chat_bridge_set": "The Explore chat has been bridged to {channel}. In-game messages will be forwarded here, and channel messages will also appear in-game.",
+        "privacy_set": "This server has been set to {status} (it is {visibility} in the Explore lobby).",
+        "require_join_disabled": "The requirement to join the server before entering Explore has been disabled.",
+        "require_join_enabled": "Requiring server membership before entering Explore has been enabled. {source_text}: {link}",
+        "setup_toggled": "The Explore space has been {status} for this server."
+    },
+    "quest": {
+        "vill_boss": {
+            "desc": "After the village's three little disasters are solved, the meme demon lord wakes up. Send it back to sleep.",
+            "name": "The Meme Demon Lord"
+        },
+        "vill_cabbage": {
+            "desc": "Investigate the serial disappearance of cabbages from the garden. The culprit might just be the client.",
+            "name": "The Missing Cabbage Case"
+        },
+        "vill_delivery": {
+            "desc": "Deliver an \"urgent parcel\" on foot from the village entrance to next door — about ten steps away.",
+            "name": "Speedy Delivery (On Foot)"
+        },
+        "vill_rat": {
+            "desc": "Help the village chief chase off the rat in his house that can recite Shakespeare.",
+            "name": "The Village Chief's Philosophical Rat Problem"
+        }
+    },
+    "skin": {
+        "alien": "Alien",
+        "astronaut_a": "Astronaut A",
+        "astronaut_b": "Astronaut B",
+        "bat": "Bat",
+        "demon_minion": "Demon Minion",
+        "fairy": "Fairy",
+        "female_martial_artist": "Female Martial Artist",
+        "female_thief": "Female Thief",
+        "female_warrior": "Female Warrior",
+        "hero": "Hero",
+        "heroine": "Heroine",
+        "king": "King",
+        "mage": "Mage",
+        "martial_artist": "Martial Artist",
+        "meme_guy": "Meme Guy",
+        "merchant": "Merchant",
+        "monk": "Monk",
+        "noble": "Noble",
+        "noblewoman": "Noblewoman",
+        "old_man": "Old Man",
+        "old_woman": "Old Woman",
+        "queen": "Queen",
+        "reaper": "Reaper",
+        "robot": "Robot",
+        "sage": "Sage",
+        "slime": "Slime",
+        "space_citizen": "Space Citizen",
+        "thief": "Thief",
+        "villager_man": "Villager Man",
+        "villager_woman": "Villager Woman",
+        "warrior": "Warrior"
+    },
+    "value": {
+        "global_currency_fallback": "Global Coins",
+        "invite_auto_created": "A permanent invite link was auto-created",
+        "invite_provided": "The provided invite link was used",
+        "no_custom_banned_words": "There are no custom banned words yet (the built-in list still applies).",
+        "not_visible": "not visible",
+        "private": "private",
+        "public": "public",
+        "visible": "visible"
+    }
+}

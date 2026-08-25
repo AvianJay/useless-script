@@ -1,0 +1,272 @@
+{
+    "abuse": {
+        "light": "🟡 Light intervention",
+        "moderate": "🟠 Moderate intervention",
+        "normal": "🟢 Normal",
+        "severe": "🔴 Severe abuse"
+    },
+    "adminitems": {
+        "desc": "These items were granted directly by an admin and carry the following restrictions:",
+        "limits_body": "• Selling triggers a severe inflation penalty\n• Cannot be sold to the global shop\n• Cheques cannot be cashed\n• Trading transfers the admin flag",
+        "limits_title": "🚫 Restrictions",
+        "none": "✅ You have no admin-granted items.",
+        "title": "⚠️ Admin-granted items",
+        "value_line": "Worth: {worth} x {count} = {total}"
+    },
+    "btn": {
+        "accept_trade": "Accept trade",
+        "confirm_global": "Confirm switch to global",
+        "global_shop": "Global shop",
+        "reject_trade": "Reject trade",
+        "server_shop": "Server shop"
+    },
+    "check": {
+        "admin_item": "❌ This cheque was granted by an admin and cannot be cashed.\nAdmin-granted items cannot be converted into currency, to prevent economy abuse.",
+        "cashed": "You cashed the cheque and received **{amount}** {currency}.",
+        "invalid": "❌ The cheque or economy data is invalid; nothing was cashed.",
+        "not_owned": "You don't have this cheque."
+    },
+    "currency": {
+        "global": "Global Coin"
+    },
+    "err": {
+        "amount_positive": "❌ The amount must be greater than 0.",
+        "currency_insufficient": "❌ Your {currency} balance is insufficient.",
+        "currency_name_too_long": "❌ The currency name cannot exceed 20 characters.",
+        "data_changed": "The exchange rate or economy data changed before settlement. Please try again.",
+        "exchange_invalid": "❌ The exchange amount or economy data is invalid; the transaction was cancelled.",
+        "guild_with_bot_only": "❌ This command only works in **a server that has invited this bot**.",
+        "initiator_only": "Only the person who ran the command can confirm this switch.",
+        "insufficient_balance": "❌ Insufficient balance. You need **{needed}** {currency} but only have **{available}**.",
+        "insufficient_with_fee": "❌ Insufficient balance. You need **{needed}** {currency} (including the {fee_percent}% fee) but only have **{available}**.",
+        "invalid_amount": "❌ Please enter a valid amount.",
+        "invalid_currency": "❌ Invalid currency type.",
+        "invalid_direction": "❌ Invalid exchange direction.",
+        "invalid_item": "❌ Invalid item.",
+        "invalid_item_id": "❌ Invalid item ID.",
+        "invalid_offer_item": "❌ Invalid offered item.",
+        "invalid_request_item": "❌ Invalid requested item.",
+        "invalid_shop_type": "❌ Invalid shop type.",
+        "pay_bot": "❌ You can't transfer to a bot.",
+        "pay_invalid": "❌ The amount or account data is invalid; the transfer was cancelled.",
+        "pay_self": "❌ You can't transfer to yourself.",
+        "purchase_invalid": "❌ The amount or item price is invalid; the purchase was cancelled.",
+        "reward_data_invalid": "❌ Economy data anomaly; no reward was granted.",
+        "sell_insufficient": "❌ Not enough sellable items.",
+        "sell_invalid": "❌ The amount or item price is invalid; the sale was cancelled.",
+        "sell_not_enough": "❌ You only have **{count}** {item} available to sell.\n-# Admin-granted items cannot be sold",
+        "source_insufficient": "❌ Insufficient {source} balance.",
+        "trade_bot": "❌ You can't trade with a bot.",
+        "trade_bounds": "❌ Amounts must be finite and item counts must be at least 1.",
+        "trade_data_invalid": "❌ Trade data invalid; no assets were changed.",
+        "trade_empty": "❌ You need to offer or request at least one thing.",
+        "trade_failed_insufficient": "❌ Trade failed: one side had insufficient balance or items on accept.",
+        "trade_not_enough": "❌ You only have {count} {item}.",
+        "trade_parties_only": "❌ Only the trade participants can cancel.",
+        "trade_self": "❌ You can't trade with yourself.",
+        "trade_target_only": "❌ Only the trade target can accept."
+    },
+    "exchange": {
+        "success_title": "💱 Exchange complete"
+    },
+    "field": {
+        "admin_injected": "🔧 Admin injections",
+        "amount": "Amount",
+        "currency_name": "💵 Currency name",
+        "current_balance": "📊 Current balance",
+        "daily_reward": "📅 Daily reward",
+        "fee": "Fee",
+        "health": "📈 Economic health",
+        "rate": "📊 Exchange rate",
+        "rate_emoji": "💱 Exchange rate",
+        "rate_factors": "ℹ️ What moves the rate",
+        "rate_plain": "Exchange rate",
+        "received": "Received",
+        "recipient": "Recipient",
+        "sell_ratio": "🏪 Sell ratio",
+        "spent": "Spent",
+        "total_assets": "💎 Total assets (in global currency)",
+        "total_income": "Total income",
+        "total_price": "Total",
+        "total_supply": "💰 Total money supply",
+        "total_value": "📊 Total value",
+        "tx_count": "📊 Transactions",
+        "tx_count_plain": "Transactions",
+        "unit_price": "Unit price"
+    },
+    "flow": {
+        "blacklist_appeal": "To appeal, contact a bot administrator.",
+        "blacklist_appeal_link": "To appeal, open a ticket in the support server: {invite}",
+        "blacklist_reason": "> Reason: {reason}",
+        "blacklist_title": "## Currency flow has been force-disabled for this server",
+        "disabled": "❌ This server has disabled flow between server and global currency.",
+        "member_req_appeal": "To request an exception, contact the bot owner for review.",
+        "member_req_appeal_link": "To request an exception, open a ticket in the [support server]({invite}) for the bot owner to review.",
+        "member_req_line": "> At least **{required} human members** are required; **{current}** detected.",
+        "member_req_reason": "To stop small servers from affecting the global economy through exchange or wholesale global-mode conversion, global currency flow cannot be enabled or used here.",
+        "member_req_title": "## This server is not eligible for global currency flow",
+        "off": "🔒 Disabled",
+        "off_desc": "Users cannot use exchange, the global shop, or cheque cashing.",
+        "on": "🔓 Enabled",
+        "on_desc": "Users can use exchange, the global shop, and cheque cashing.",
+        "toggled": "✅ Global currency flow set to **{status}**"
+    },
+    "globalmode": {
+        "affected_users": "Users affected",
+        "already": "This server is already in global mode.",
+        "already_mode": "Already in {status}.",
+        "cancelled": "Global mode switch cancelled.",
+        "disabled": "Global mode disabled. This server will use server-scoped economy, items, and dsize again.",
+        "global_added": "Added to global currency",
+        "item_value": "Item value converted",
+        "mode_global": "global mode",
+        "mode_server": "server mode",
+        "no_undo": "Not automatically reversible",
+        "no_undo_body": "Switching back to False only restores future lookups; it does not move migrated data back",
+        "rate_line": "1 server coin = {rate} {global_currency}",
+        "server_balance": "Server balance converted",
+        "sold_items": "Items sold",
+        "switched_desc": "Economy, items, and dsize scopes on this server will now always be global.",
+        "switched_title": "Switched to global mode",
+        "warning_desc": "This forces every economy, item, and dsize guild lookup on this server to be treated as global.\nAll users' server items will be sold for server currency and converted to global currency at the current rate.",
+        "warning_title": "Warning: about to switch to global mode",
+        "what_happens": "What will happen",
+        "what_happens_body": "Server items cleared, server currency cleared, converted to global currency"
+    },
+    "health": {
+        "collapsed": "💀 Economic collapse",
+        "healthy": "🟢 Healthy",
+        "inflating": "🟠 Inflating",
+        "normal": "🟡 Normal",
+        "severe_inflation": "🔴 Severe inflation",
+        "very_healthy": "🟢 Very healthy (strong currency)"
+    },
+    "history": {
+        "empty": "📜 You have no transactions in {scope}.",
+        "footer": "Page {page}/{total} · {count} records total",
+        "title": "📜 {user}'s transactions ({scope})"
+    },
+    "info": {
+        "rate_factors_body": "**📉 Inflation (devaluation) factors:**\n• Admins handing out items with `/itemmod give`\n• Daily/hourly rewards minting currency\n• Selling items to the shop (new currency enters circulation)\n\n**📈 Deflation (appreciation) factors:**\n• Buying items from the shop (currency is burned)\n• Player-to-player trades (fees burn currency)\n• Currency exchange (fees burn currency)",
+        "title": "📊 {guild} economy report"
+    },
+    "item": {
+        "cheque_100": {
+            "desc": "A cheque worth 100, usable to pay other users.",
+            "name": "100 Cheque"
+        },
+        "cheque_1000": {
+            "desc": "A cheque worth 1000, usable to pay other users.",
+            "name": "1000 Cheque"
+        },
+        "cheque_500": {
+            "desc": "A cheque worth 500, usable to pay other users.",
+            "name": "500 Cheque"
+        }
+    },
+    "leaderboard": {
+        "empty": "No users have a balance yet.",
+        "title": "🏆 {currency} leaderboard",
+        "total_title": "🏆 Total assets leaderboard"
+    },
+    "mod": {
+        "abuse_level": "⚠️ Admin intervention level",
+        "actual_supply": "Actual supply",
+        "admin_injected": "Admin injections (currency)",
+        "admin_item_value": "Admin item value",
+        "global_flow": "Global currency flow",
+        "global_mode": "Global mode",
+        "global_off": "🏦 Disabled",
+        "global_on": "🌐 Enabled",
+        "hint_body": "• Admin-granted items/money are tracked\n• Selling admin items triggers severe inflation\n• Admin items cannot be cashed into global currency\n• Prefer an event system over direct grants",
+        "hint_title": "💡 Tips",
+        "supply_diff": "⚠️ Supply discrepancy",
+        "supply_diff_value": "{diff} (should normally be 0)",
+        "title": "🔧 {guild} economy admin panel",
+        "tracked_supply": "Tracked supply",
+        "user_count": "Users"
+    },
+    "msg": {
+        "currency_name_set": "✅ Currency name changed to **{name}**.",
+        "no_description": "No description",
+        "not_provided": "Not provided",
+        "unknown_tx": "Unknown",
+        "user_fallback": "User {user_id}"
+    },
+    "pay": {
+        "footer": "Transfer initiated by {user}",
+        "received_dm": "You received **{amount}** {currency} from **{sender}**!",
+        "received_scope_global": "Global economy",
+        "received_scope_guild": "Server: {guild}",
+        "success_title": "Transfer complete"
+    },
+    "reward": {
+        "daily_claimed": "⏰ You already claimed your daily reward! Come back {time}.",
+        "daily_title": "📅 Daily reward ({scope})",
+        "earned_desc": "You earned **{amount}** {currency}!",
+        "hourly_claimed": "⏰ You already claimed your hourly reward! Come back {time}.",
+        "hourly_title": "⏱️ Hourly reward ({scope})",
+        "streak_bonus": "🔥 Login streak bonus",
+        "streak_footer": "Login streak: {streak} days",
+        "streak_value": "+{bonus} {currency} ({streak}-day streak)",
+        "support_bonus": "🎁 Support server bonus",
+        "support_hint": "-# Tip: join the [support server]({invite}) for a bonus!"
+    },
+    "scope": {
+        "global": "Global",
+        "global_inventory": "global inventory",
+        "server": "Server",
+        "server_inventory": "server inventory"
+    },
+    "sell": {
+        "footer": "Sell price is {ratio}% of the buy price (bought at: {buy_price})",
+        "success_desc": "You sold **{item}** x{amount}!",
+        "success_title": "💰 Sold"
+    },
+    "shop": {
+        "amount_label": "Amount",
+        "amount_ph": "Enter how many to buy...",
+        "buy_footer": "Remaining balance: {remaining} {currency} | Item placed in your {dest}",
+        "buy_modal_title": "Buy {item}",
+        "buy_success_desc": "You bought **{item}** x{amount}!",
+        "buy_success_title": "🛒 Purchase complete ({scope})",
+        "buy_title": "🛒 Buy {item}",
+        "current_rate": "Current rate: 1 {currency} = {rate} {global_currency}",
+        "empty": "🏪 The shop has no items right now.",
+        "flow_off": "🔒 Global currency flow: disabled",
+        "flow_on": "🔓 Global currency flow: enabled",
+        "global_price": "🌐 Global shop: **{price}** {currency}",
+        "global_price_line": "**{price}** {currency}\nItem goes to your global inventory",
+        "global_shop": "🌐 Global shop",
+        "global_shop_hint": "🌐 Global shop = pay with {currency}, item goes to your global inventory",
+        "global_title": "🏪 Global shop",
+        "global_title_plain": "Global shop",
+        "item_choice": "{item} x{count} - 💰{price} each",
+        "pick_item_ph": "Pick an item to buy...",
+        "price": "💰 Price: **{price}** {currency}",
+        "sell_price": "💰 Sells for: **{price}** {currency}",
+        "sell_ratio_footer": "Sell price is {ratio}% of the buy price",
+        "server_price": "🏦 Server shop: **{price}** {currency}",
+        "server_price_line": "**{price}** {currency}\nItem goes to your server inventory",
+        "server_shop": "🏦 Server shop",
+        "server_shop_hint": "🏦 Server shop = pay with {currency}, item goes to your server inventory",
+        "title": "🏪 Shop"
+    },
+    "trade": {
+        "already_done": "ℹ️ This trade has already been handled.",
+        "cancelled_by": "❌ The trade was cancelled by {who}.",
+        "completed": "✅ Trade complete!",
+        "initiator": "the initiator",
+        "offers": "📤 {user} offers",
+        "other_party": "the other party",
+        "request_desc": "{initiator} wants to trade with {target}",
+        "request_title": "🤝 Trade request",
+        "requests": "📥 {user} requests",
+        "timeout": "⏰ The trade timed out."
+    },
+    "wallet": {
+        "global_footer": "Global user wallet",
+        "global_title": "💰 {user}'s global wallet",
+        "title": "💰 {user}'s wallet"
+    }
+}

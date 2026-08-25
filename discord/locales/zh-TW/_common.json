@@ -1,0 +1,53 @@
+{
+    "number": {
+        "group_sep": ",",
+        "decimal_sep": "."
+    },
+    "list": {
+        "sep": "、",
+        "last_sep": "、"
+    },
+    "datefmt": {
+        "short": "%Y/%m/%d",
+        "long": "%Y年%m月%d日 %H:%M"
+    },
+    "state": {
+        "enabled": "啟用",
+        "disabled": "停用",
+        "yes": "是",
+        "no": "否",
+        "none": "無",
+        "auto": "自動",
+        "unset": "未設定",
+        "default": "預設",
+        "default_value": "（預設）{value}",
+        "on": "開",
+        "off": "關"
+    },
+    "btn": {
+        "confirm": "確認",
+        "cancel": "取消",
+        "back": "返回",
+        "close": "關閉",
+        "done": "完成",
+        "next": "下一頁",
+        "prev": "上一頁",
+        "next_step": "下一步",
+        "prev_step": "上一步"
+    },
+    "err": {
+        "guild_only": "此指令只能在伺服器中使用。",
+        "no_permission": "你沒有權限執行此操作。",
+        "generic": "發生錯誤，請稍後再試。"
+    },
+    "unit": {
+        "seconds": { "other": "{count} 秒" },
+        "minutes": { "other": "{count} 分鐘" },
+        "hours": { "other": "{count} 小時" },
+        "days": { "other": "{count} 天" },
+        "members": { "other": "{count} 名成員" },
+        "messages": { "other": "{count} 則訊息" },
+        "items": { "other": "{count} 個" },
+        "times": { "other": "{count} 次" }
+    }
+}

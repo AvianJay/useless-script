@@ -1,7 +1,8 @@
 from globalenv import (
-    bot, get_server_config, set_server_config,
+    bot, get_server_config, set_server_config, get_server_config_i18n,
     get_all_server_config_key, config, modules,
 )
+import i18n
 from logger import log
 import discord
 from discord import app_commands
@@ -65,7 +66,10 @@ def resolve_ticket(guild_id: int, channel) -> dict | None:
     if entry:
         return entry
     topic = getattr(channel, "topic", None) or ""
-    match = re.search(r"票口 #(\d+)｜開啟者: (\d+)", topic)
+    # 新版機器格式優先；舊版中文格式為歷史資料的永久 fallback
+    match = re.search(r"\[t:(\d+):(\d+)\]", topic)
+    if not match:
+        match = re.search(r"票口 #(\d+)｜開啟者: (\d+)", topic)  # i18n: skip (legacy topic reader)
     if match:
         return {
             "channel_id": channel.id,
@@ -122,9 +126,11 @@ def effective_staff_role_ids(guild_id: int, ticket_type: dict | None) -> list[in
 def effective_welcome(guild_id: int, ticket_type: dict | None) -> str:
     if ticket_type and ticket_type.get("welcome_message"):
         return str(ticket_type["welcome_message"])
-    return str(get_server_config(
+    # 歡迎訊息發在票口頻道（guild 共享），預設值以伺服器語言解析
+    return str(get_server_config_i18n(
         guild_id, "ticket_welcome_message",
-        "{user} 你好，感謝開啟票口！請詳細描述你的問題。",
+        "panel.ticket.ticket_welcome_message.default",
+        locale=i18n.resolve_locale(guild_id=guild_id),
     ) or "")
 
 
@@ -182,32 +188,32 @@ def count_open_tickets(guild: discord.Guild, user_id: int) -> tuple[int, list[in
 def precheck_open(guild: discord.Guild, member: discord.Member, ticket_type: dict | None = None) -> str | None:
     """Return an error message if the user cannot open a ticket, else None."""
     if not get_server_config(guild.id, "ticket_enabled", False):
-        return "票口系統目前未啟用。"
+        return t("ticket.err.disabled")
     if is_blacklisted(member, guild.id):
-        return "你無法開啟票口。"
+        return t("ticket.err.blacklisted")
     category_id = effective_category_id(guild.id, ticket_type)
     if not category_id:
-        return "管理員尚未設定票口分類。"
+        return t("ticket.err.no_category")
     category = guild.get_channel(int(category_id))
     if not isinstance(category, discord.CategoryChannel):
-        return "票口分類已不存在，請通知管理員重新設定。"
+        return t("ticket.err.category_gone")
     bot_perms = category.permissions_for(guild.me)
     if not (bot_perms.view_channel and bot_perms.manage_channels and bot_perms.manage_roles):
-        return "機器人在票口分類缺少「管理頻道」或「管理權限」權限，請通知管理員調整。"
+        return t("ticket.err.bot_category_perms")
     if len(category.channels) >= 50:
-        return "票口分類已滿（50 個頻道上限），請通知管理員清理。"
+        return t("ticket.err.category_full")
     limit = get_max_per_user(guild.id)
     count, channel_ids = count_open_tickets(guild, member.id)
     if count >= limit:
-        mentions = "、".join(f"<#{cid}>" for cid in channel_ids[:5])
-        return f"你已開啟 {count} 個票口（上限 {limit}），請先處理現有票口：{mentions}"
+        mentions = i18n.join_list(f"<#{cid}>" for cid in channel_ids[:5])
+        return t("ticket.err.limit_reached", count=count, limit=limit, mentions=mentions)
     return None
 
 
 def sanitize_channel_name(name: str, number: int) -> str:
     name = name.strip().lower()
     name = re.sub(r"\s+", "-", name)
-    name = re.sub(r"[^0-9a-z一-鿿_\-]", "", name)
+    name = re.sub(r"[^0-9a-z一-鿿_\-]", "", name)  # i18n: skip (channel-name charset, not display text)
     name = re.sub(r"-{2,}", "-", name).strip("-")
     if not name:
         name = f"ticket-{number}"
@@ -223,7 +229,7 @@ async def create_ticket(guild: discord.Guild, opener: discord.Member,
     guild_id = guild.id
     category = guild.get_channel(effective_category_id(guild_id, ticket_type) or 0)
     if not isinstance(category, discord.CategoryChannel):
-        raise TicketError("票口分類已不存在，請通知管理員重新設定。")
+        raise TicketError(t("ticket.err.category_gone"))
 
     number = int(get_server_config(guild_id, COUNTER_KEY, 0) or 0) + 1
     set_server_config(guild_id, COUNTER_KEY, number)
@@ -258,7 +264,9 @@ async def create_ticket(guild: discord.Guild, opener: discord.Member,
         template.replace("{number}", str(number)).replace("{user}", opener.name),
         number,
     )
-    topic = f"票口 #{number}｜開啟者: {opener.id}｜主題: {subject[:60]}"
+    guild_loc = i18n.resolve_locale(guild_id=guild_id)
+    # topic 開頭是機器格式（resolve_ticket 解析用），其後才是顯示文字
+    topic = f"[t:{number}:{opener.id}] " + t("ticket.topic.display", locale=guild_loc, number=number, subject=subject[:60])
 
     try:
         channel = await guild.create_text_channel(
@@ -266,31 +274,33 @@ async def create_ticket(guild: discord.Guild, opener: discord.Member,
             category=category,
             overwrites=overwrites,
             topic=topic,
-            reason=f"票口 #{number} - {opener}",
+            reason=f"Ticket #{number} - {opener}",
         )
     except discord.Forbidden:
-        raise TicketError("機器人缺少「管理頻道」權限，無法建立票口。")
+        raise TicketError(t("ticket.err.bot_manage_channels"))
     except discord.HTTPException as e:
-        log(f"建立票口頻道失敗: {e}", module_name="Ticket", level=logging.ERROR)
-        raise TicketError("建立票口頻道時發生錯誤，請稍後再試。")
+        log(f"Failed to create ticket channel: {e}", module_name="Ticket", level=logging.ERROR)
+        raise TicketError(t("ticket.err.create_failed"))
 
-    embed = discord.Embed(title=f"🎫 票口 #{number}", color=discord.Color.blurple())
-    embed.add_field(name="開啟者", value=opener.mention, inline=True)
+    embed = discord.Embed(title=t("ticket.embed.title", locale=guild_loc, number=number), color=discord.Color.blurple())
+    embed.add_field(name=t("ticket.field.opener", locale=guild_loc), value=opener.mention, inline=True)
     if ticket_type:
-        embed.add_field(name="類別", value=ticket_type.get("label", "?"), inline=True)
-    embed.add_field(name="主題", value=subject or "（未填寫）", inline=True)
+        embed.add_field(name=t("ticket.field.type", locale=guild_loc), value=ticket_type.get("label", "?"), inline=True)
+    embed.add_field(name=t("ticket.field.subject", locale=guild_loc), value=subject or t("ticket.msg.no_subject", locale=guild_loc), inline=True)
     if detail:
-        embed.add_field(name="問題描述", value=detail[:1024], inline=False)
-    embed.add_field(name="開啟時間", value=discord.utils.format_dt(discord.utils.utcnow(), "f"), inline=True)
+        embed.add_field(name=t("ticket.field.detail", locale=guild_loc), value=detail[:1024], inline=False)
+    embed.add_field(name=t("ticket.field.opened_at", locale=guild_loc), value=discord.utils.format_dt(discord.utils.utcnow(), "f"), inline=True)
 
     welcome = effective_welcome(guild_id, ticket_type)
     welcome = welcome.replace("{user}", opener.mention).replace("{subject}", subject)
 
     message = None
     try:
-        message = await channel.send(content=welcome, embed=embed, view=TicketControlView())
+        with i18n.use_locale(guild_loc):
+            control_view = TicketControlView()
+        message = await channel.send(content=welcome, embed=embed, view=control_view)
     except discord.HTTPException as e:
-        log(f"發送票口首訊息失敗: {e}", module_name="Ticket", level=logging.ERROR)
+        log(f"Failed to send ticket opening message: {e}", module_name="Ticket", level=logging.ERROR)
 
     tickets = get_active_tickets(guild_id)
     tickets.append({
@@ -304,7 +314,7 @@ async def create_ticket(guild: discord.Guild, opener: discord.Member,
         "type_id": ticket_type.get("id") if ticket_type else None,
     })
     save_active_tickets(guild_id, tickets)
-    log(f"票口 #{number} 已建立 (Guild: {guild_id}, User: {opener.id})", module_name="Ticket")
+    log(f"Ticket #{number} created (Guild: {guild_id}, User: {opener.id})", module_name="Ticket")
     return channel
 
 
@@ -330,15 +340,16 @@ async def build_transcript_file(channel: discord.TextChannel, entry: dict) -> tu
         if html:
             return discord.File(io.BytesIO(html.encode("utf-8")), filename=f"ticket-{number}.html"), count
     except Exception as e:
-        log(f"chat_exporter 逐字稿產生失敗: {e}", module_name="Ticket", level=logging.ERROR)
+        log(f"chat_exporter transcript generation failed: {e}", module_name="Ticket", level=logging.ERROR)
 
-    # 純文字 fallback
-    lines = [f"票口 #{number} 逐字稿（共 {count} 則訊息）", ""]
+    # 純文字 fallback（guild 共享的檔案，以伺服器語言渲染）
+    guild_loc = i18n.resolve_locale(guild_id=channel.guild.id)
+    lines = [t("ticket.transcript.header", locale=guild_loc, number=number, count=count), ""]
     for msg in reversed(messages):
         ts = msg.created_at.strftime("%Y-%m-%d %H:%M:%S")
         lines.append(f"[{ts}] {msg.author} ({msg.author.id}): {msg.content}")
         for att in msg.attachments:
-            lines.append(f"    [附件] {att.filename}: {att.url}")
+            lines.append(f"    [{t('ticket.transcript.attachment', locale=guild_loc)}] {att.filename}: {att.url}")
     text = "\n".join(lines)
     return discord.File(io.BytesIO(text.encode("utf-8")), filename=f"ticket-{number}.txt"), count
 
@@ -348,9 +359,9 @@ async def close_ticket(channel: discord.TextChannel, closer: discord.Member, rea
     guild = channel.guild
     entry = resolve_ticket(guild.id, channel)
     if entry is None:
-        return "這裡不是有效的票口頻道。"
+        return t("ticket.err.not_a_ticket")
     if channel.id in _closing_channels:
-        return "此票口正在關閉中。"
+        return t("ticket.err.already_closing")
     _closing_channels.add(channel.id)
     try:
         number = entry.get("number", "?")
@@ -360,9 +371,9 @@ async def close_ticket(channel: discord.TextChannel, closer: discord.Member, rea
             try:
                 transcript_file, message_count = await build_transcript_file(channel, entry)
             except discord.HTTPException as e:
-                log(f"讀取票口歷史訊息失敗: {e}", module_name="Ticket", level=logging.ERROR)
+                log(f"Failed to read ticket history: {e}", module_name="Ticket", level=logging.ERROR)
         else:
-            log(f"機器人缺少「讀取訊息歷史」權限，跳過逐字稿 (Channel: {channel.id})", module_name="Ticket", level=logging.WARNING)
+            log(f"Missing Read Message History permission; skipping transcript (Channel: {channel.id})", module_name="Ticket", level=logging.WARNING)
 
         # 發送逐字稿到紀錄頻道
         log_channel_id = get_server_config(guild.id, "ticket_log_channel", None)
@@ -370,19 +381,20 @@ async def close_ticket(channel: discord.TextChannel, closer: discord.Member, rea
         if log_channel is not None:
             log_perms = log_channel.permissions_for(guild.me)
             if not (log_perms.view_channel and log_perms.send_messages and log_perms.attach_files):
-                log(f"機器人在紀錄頻道缺少「發送訊息」或「附加檔案」權限，跳過逐字稿發送 (Guild: {guild.id})", module_name="Ticket", level=logging.WARNING)
+                log(f"Missing Send Messages / Attach Files permission in log channel; skipping transcript (Guild: {guild.id})", module_name="Ticket", level=logging.WARNING)
                 log_channel = None
         if log_channel and transcript_file:
-            embed = discord.Embed(title=f"🎫 票口 #{number} 已關閉", color=discord.Color.red())
-            embed.add_field(name="開啟者", value=f"<@{entry['owner_id']}>", inline=True)
+            guild_loc = i18n.resolve_locale(guild_id=guild.id)
+            embed = discord.Embed(title=t("ticket.embed.closed_title", locale=guild_loc, number=number), color=discord.Color.red())
+            embed.add_field(name=t("ticket.field.opener", locale=guild_loc), value=f"<@{entry['owner_id']}>", inline=True)
             claimed_by = entry.get("claimed_by")
-            embed.add_field(name="認領者", value=f"<@{claimed_by}>" if claimed_by else "（未認領）", inline=True)
-            embed.add_field(name="關閉者", value=closer.mention, inline=True)
+            embed.add_field(name=t("ticket.field.claimer", locale=guild_loc), value=f"<@{claimed_by}>" if claimed_by else t("ticket.msg.unclaimed", locale=guild_loc), inline=True)
+            embed.add_field(name=t("ticket.field.closer", locale=guild_loc), value=closer.mention, inline=True)
             if entry.get("subject"):
-                embed.add_field(name="主題", value=entry["subject"], inline=True)
-            embed.add_field(name="訊息數", value=str(message_count), inline=True)
+                embed.add_field(name=t("ticket.field.subject", locale=guild_loc), value=entry["subject"], inline=True)
+            embed.add_field(name=t("ticket.field.message_count", locale=guild_loc), value=str(message_count), inline=True)
             if reason:
-                embed.add_field(name="關閉原因", value=reason[:1024], inline=False)
+                embed.add_field(name=t("ticket.field.close_reason", locale=guild_loc), value=reason[:1024], inline=False)
             opened_at = entry.get("opened_at")
             if opened_at:
                 try:
@@ -390,7 +402,7 @@ async def close_ticket(channel: discord.TextChannel, closer: discord.Member, rea
                     duration = datetime.now(timezone.utc) - opened_dt
                     hours, remainder = divmod(int(duration.total_seconds()), 3600)
                     minutes = remainder // 60
-                    embed.add_field(name="持續時間", value=f"{hours} 小時 {minutes} 分鐘", inline=True)
+                    embed.add_field(name=t("ticket.field.duration", locale=guild_loc), value=t("common.unit.hours", locale=guild_loc, count=hours) + " " + t("common.unit.minutes", locale=guild_loc, count=minutes), inline=True)
                 except ValueError:
                     pass
             try:
@@ -401,30 +413,30 @@ async def close_ticket(channel: discord.TextChannel, closer: discord.Member, rea
                 ):
                     view = discord.ui.View()
                     view.add_item(discord.ui.Button(
-                        label="在網頁檢視逐字稿",
+                        label=t("ticket.btn.view_transcript_web", locale=guild_loc),
                         emoji="🌐",
                         style=discord.ButtonStyle.link,
                         url=f"{website_url}/tickets/{guild.id}/{log_message.id}",
                     ))
                     await log_message.edit(view=view)
             except (discord.Forbidden, discord.HTTPException) as e:
-                log(f"發送票口逐字稿到紀錄頻道失敗: {e}", module_name="Ticket", level=logging.WARNING)
+                log(f"Failed to send transcript to log channel: {e}", module_name="Ticket", level=logging.WARNING)
 
         # 先移除追蹤再刪頻道，讓 on_guild_channel_delete 冪等
         tickets = [t for t in get_active_tickets(guild.id) if int(t.get("channel_id", 0)) != channel.id]
         save_active_tickets(guild.id, tickets)
 
         try:
-            await channel.delete(reason=f"票口 #{number} 由 {closer} 關閉")
+            await channel.delete(reason=f"Ticket #{number} closed by {closer}")
         except discord.Forbidden:
             try:
-                await channel.send("⚠️ 機器人缺少權限，無法刪除此頻道，請手動刪除。")
+                await channel.send(t("ticket.err.delete_no_permission", locale=i18n.resolve_locale(guild_id=guild.id)))
             except discord.HTTPException:
                 pass
-            log(f"無法刪除票口頻道 {channel.id}（缺少權限）", module_name="Ticket", level=logging.WARNING)
-            return "逐字稿已保存，但機器人缺少權限刪除頻道，請手動刪除。"
+            log(f"Could not delete ticket channel {channel.id} (missing permission)", module_name="Ticket", level=logging.WARNING)
+            return t("ticket.err.saved_but_not_deleted")
 
-        log(f"票口 #{number} 已由 {closer.id} 關閉 (Guild: {guild.id})", module_name="Ticket")
+        log(f"Ticket #{number} closed by {closer.id} (Guild: {guild.id})", module_name="Ticket")
         return None
     finally:
         _closing_channels.discard(channel.id)
@@ -438,11 +450,11 @@ async def claim_ticket(interaction: discord.Interaction) -> str | None:
     channel = interaction.channel
     entry = find_ticket(guild.id, channel.id)
     if entry is None:
-        return "這裡不是有效的票口頻道。"
+        return t("ticket.err.not_a_ticket")
     if not is_staff(interaction.user, guild.id):
-        return "只有客服人員可以認領票口。"
+        return t("ticket.err.staff_only_claim")
     if entry.get("claimed_by"):
-        return f"此票口已由 <@{entry['claimed_by']}> 認領。"
+        return t("ticket.err.already_claimed", user=f"<@{entry['claimed_by']}>")
 
     tickets = get_active_tickets(guild.id)
     for t in tickets:
@@ -461,20 +473,23 @@ async def claim_ticket(interaction: discord.Interaction) -> str | None:
         except discord.HTTPException:
             message = None
     if message and message.embeds:
+        guild_loc = i18n.resolve_locale(guild_id=guild.id)
+        claimer_name = t("ticket.field.claimer", locale=guild_loc)
         embed = message.embeds[0]
         for index, field in enumerate(embed.fields):
-            if field.name == "認領者":
-                embed.set_field_at(index, name="認領者", value=interaction.user.mention, inline=True)
+            # 舊訊息可能已有 zh 欄位（legacy），新訊息用 guild 語言欄位名
+            if field.name == claimer_name or field.name == "認領者":  # i18n: skip (legacy field reader)
+                embed.set_field_at(index, name=claimer_name, value=interaction.user.mention, inline=True)
                 break
         else:
-            embed.add_field(name="認領者", value=interaction.user.mention, inline=True)
+            embed.add_field(name=claimer_name, value=interaction.user.mention, inline=True)
         try:
             await message.edit(embed=embed)
         except discord.HTTPException:
             pass
 
     try:
-        await channel.send(f"🙋 {interaction.user.mention} 已認領此票口。")
+        await channel.send(t("ticket.msg.claimed_by", locale=i18n.resolve_locale(guild_id=guild.id), user=interaction.user.mention))
     except discord.HTTPException:
         pass
     return None
@@ -482,10 +497,10 @@ async def claim_ticket(interaction: discord.Interaction) -> str | None:
 
 # ============= Views / Modal =============
 
-class TicketOpenModal(discord.ui.Modal, title="開啟票口"):
-    subject = discord.ui.TextInput(label="主題", max_length=100, required=True)
+class TicketOpenModal(i18n.I18nModal, title=i18n.K("ticket.modal.open_title")):
+    subject = discord.ui.TextInput(label=i18n.K("ticket.modal.subject"), max_length=100, required=True)
     detail = discord.ui.TextInput(
-        label="問題描述", style=discord.TextStyle.paragraph,
+        label=i18n.K("ticket.modal.detail"), style=discord.TextStyle.paragraph,
         max_length=1000, required=False,
     )
 
@@ -493,7 +508,7 @@ class TicketOpenModal(discord.ui.Modal, title="開啟票口"):
         super().__init__()
         self.ticket_type = ticket_type
         if ticket_type:
-            self.title = f"開啟票口 - {str(ticket_type.get('label', ''))[:30]}"
+            self.title = t("ticket.modal.open_title_typed", label=str(ticket_type.get('label', ''))[:30])
 
     async def on_submit(self, interaction: discord.Interaction):
         await interaction.response.defer(ephemeral=True, thinking=True)
@@ -513,7 +528,7 @@ class TicketOpenModal(discord.ui.Modal, title="開啟票口"):
             except TicketError as e:
                 await interaction.followup.send(str(e), ephemeral=True)
                 return
-        await interaction.followup.send(f"✅ 票口已建立：{channel.mention}", ephemeral=True)
+        await interaction.followup.send(t("ticket.msg.created", channel=channel.mention), ephemeral=True)
 
 
 async def handle_open_button(interaction: discord.Interaction, ticket_type: dict | None):
@@ -530,9 +545,11 @@ class TicketOpenButton(
 ):
     """面板開票按鈕；type_id 編碼在 custom_id 中，重啟後不需逐一重新註冊。"""
 
-    def __init__(self, type_id: str, *, label: str = "開啟票口",
+    def __init__(self, type_id: str, *, label: str = None,
                  style: discord.ButtonStyle = discord.ButtonStyle.primary,
                  emoji: str | None = "🎫"):
+        if label is None:
+            label = t("ticket.btn.open")
         super().__init__(discord.ui.Button(
             label=label, style=style, emoji=emoji,
             custom_id=f"ticket_open:{type_id}",
@@ -549,49 +566,52 @@ class TicketOpenButton(
             ticket_type = find_ticket_type(interaction.guild.id, self.type_id)
             if ticket_type is None:
                 await interaction.response.send_message(
-                    "此票口類別已被移除，請通知管理員重新發布面板。", ephemeral=True,
+                    t("ticket.err.type_removed"), ephemeral=True,
                 )
                 return
         await handle_open_button(interaction, ticket_type)
 
 
-class TicketPanelView(discord.ui.View):
+class TicketPanelView(i18n.I18nView):
     """舊版單一按鈕面板（保留註冊讓既有面板訊息的按鈕繼續運作）。"""
 
     def __init__(self):
         super().__init__(timeout=None)
 
-    @discord.ui.button(label="開啟票口", style=discord.ButtonStyle.primary, emoji="🎫", custom_id="ticket_open_button")
+    @discord.ui.button(label=i18n.K("ticket.btn.open"), style=discord.ButtonStyle.primary, emoji="🎫", custom_id="ticket_open_button")
     async def open_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         await handle_open_button(interaction, None)
 
 
 def build_panel_view(guild_id: int) -> discord.ui.View:
     """Build the panel view: one button per ticket type, or a single default button."""
+    # 面板是 guild 共享的，按鈕預設文字以伺服器語言渲染
+    guild_loc = i18n.resolve_locale(guild_id=guild_id)
     view = discord.ui.View(timeout=None)
     types = get_ticket_types(guild_id)[:MAX_TICKET_TYPES]
     if not types:
-        view.add_item(TicketOpenButton("default"))
+        with i18n.use_locale(guild_loc):
+            view.add_item(TicketOpenButton("default"))
         return view
-    for t in types:
+    for entry in types:
         view.add_item(TicketOpenButton(
-            str(t["id"]),
-            label=str(t.get("label", "開啟票口"))[:80],
-            style=BUTTON_STYLES.get(str(t.get("style", "primary")), discord.ButtonStyle.primary),
-            emoji=str(t["emoji"]) if t.get("emoji") else None,
+            str(entry["id"]),
+            label=str(entry.get("label") or t("ticket.btn.open", locale=guild_loc))[:80],
+            style=BUTTON_STYLES.get(str(entry.get("style", "primary")), discord.ButtonStyle.primary),
+            emoji=str(entry["emoji"]) if entry.get("emoji") else None,
         ))
     return view
 
 
-class TicketCloseConfirmView(discord.ui.View):
+class TicketCloseConfirmView(i18n.I18nView):
     def __init__(self, closer: discord.Member, reason: str = None):
         super().__init__(timeout=60)
         self.closer = closer
         self.reason = reason
 
-    @discord.ui.button(label="確認關閉", style=discord.ButtonStyle.danger)
+    @discord.ui.button(label=i18n.K("ticket.btn.confirm_close"), style=discord.ButtonStyle.danger)
     async def confirm(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await interaction.response.edit_message(content="🔒 正在關閉票口並產生逐字稿...", view=None)
+        await interaction.response.edit_message(content=t("ticket.msg.closing"), view=None)
         error = await close_ticket(interaction.channel, self.closer, reason=self.reason)
         if error:
             try:
@@ -600,17 +620,17 @@ class TicketCloseConfirmView(discord.ui.View):
                 pass
         self.stop()
 
-    @discord.ui.button(label="取消", style=discord.ButtonStyle.secondary)
+    @discord.ui.button(label=i18n.K("common.btn.cancel"), style=discord.ButtonStyle.secondary)
     async def cancel(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await interaction.response.edit_message(content="已取消關閉。", view=None)
+        await interaction.response.edit_message(content=t("ticket.msg.close_cancelled"), view=None)
         self.stop()
 
 
-class TicketControlView(discord.ui.View):
+class TicketControlView(i18n.I18nView):
     def __init__(self):
         super().__init__(timeout=None)
 
-    @discord.ui.button(label="認領", style=discord.ButtonStyle.secondary, emoji="🙋", custom_id="ticket_claim_button")
+    @discord.ui.button(label=i18n.K("ticket.btn.claim"), style=discord.ButtonStyle.secondary, emoji="🙋", custom_id="ticket_claim_button")
     async def claim_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         error = await claim_ticket(interaction)
         if error:
@@ -618,17 +638,17 @@ class TicketControlView(discord.ui.View):
         elif not interaction.response.is_done():
             await interaction.response.defer()
 
-    @discord.ui.button(label="關閉", style=discord.ButtonStyle.danger, emoji="🔒", custom_id="ticket_close_button")
+    @discord.ui.button(label=i18n.K("ticket.btn.close"), style=discord.ButtonStyle.danger, emoji="🔒", custom_id="ticket_close_button")
     async def close_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         entry = resolve_ticket(interaction.guild.id, interaction.channel)
         if entry is None:
-            await interaction.response.send_message("這裡不是有效的票口頻道。", ephemeral=True)
+            await interaction.response.send_message(t("ticket.err.not_a_ticket"), ephemeral=True)
             return
         if not is_staff(interaction.user, interaction.guild.id) and interaction.user.id != int(entry.get("owner_id", 0)):
-            await interaction.response.send_message("只有客服人員或開票者可以關閉票口。", ephemeral=True)
+            await interaction.response.send_message(t("ticket.err.close_permission"), ephemeral=True)
             return
         await interaction.response.send_message(
-            "確定要關閉此票口嗎？關閉後頻道將被刪除，逐字稿會保存到紀錄頻道。",
+            t("ticket.msg.close_confirm"),
             view=TicketCloseConfirmView(interaction.user),
             ephemeral=True,
         )
@@ -641,12 +661,15 @@ def build_panel_embed(guild_id: int) -> discord.Embed:
     raw_color = str(get_server_config(guild_id, "ticket_panel_color", "") or "").strip().lstrip("#")
     if re.fullmatch(r"[0-9a-fA-F]{6}", raw_color):
         color = discord.Color(int(raw_color, 16))
+    # 面板發佈到公開頻道（guild 共享），預設值以伺服器語言解析
+    guild_locale = i18n.resolve_locale(guild_id=guild_id)
     embed = discord.Embed(
-        title=str(get_server_config(guild_id, "ticket_panel_title", "需要協助嗎？") or "需要協助嗎？"),
-        description=str(get_server_config(
+        title=str(get_server_config_i18n(
+            guild_id, "ticket_panel_title",
+            "panel.ticket.ticket_panel_title.default", locale=guild_locale) or ""),
+        description=str(get_server_config_i18n(
             guild_id, "ticket_panel_description",
-            "點擊下方按鈕開啟私人票口，我們的團隊將盡快協助你。",
-        ) or ""),
+            "panel.ticket.ticket_panel_description.default", locale=guild_locale) or ""),
         color=color,
     )
     image_url = str(get_server_config(guild_id, "ticket_panel_image", "") or "").strip()
@@ -660,10 +683,10 @@ async def publish_panel(guild: discord.Guild, channel: discord.TextChannel) -> s
     try:
         message = await channel.send(embed=build_panel_embed(guild.id), view=build_panel_view(guild.id))
     except discord.Forbidden:
-        return "機器人沒有權限在該頻道發送訊息。"
+        return t("ticket.err.panel_no_permission")
     except discord.HTTPException as e:
-        log(f"發布票口面板失敗: {e}", module_name="Ticket", level=logging.ERROR)
-        return "發布面板時發生錯誤，請檢查面板圖片網址與類別按鈕的 emoji 是否有效。"
+        log(f"Failed to publish ticket panel: {e}", module_name="Ticket", level=logging.ERROR)
+        return t("ticket.err.panel_publish_failed")
 
     # 刪除舊面板訊息
     old = get_server_config(guild.id, PANEL_MESSAGE_KEY, None)
@@ -701,13 +724,13 @@ async def refresh_panel(guild: discord.Guild) -> bool:
 @app_commands.default_permissions(manage_guild=True)
 @app_commands.allowed_installs(guilds=True, users=False)
 @app_commands.allowed_contexts(guilds=True, dms=False, private_channels=False)
-class TicketCog(commands.GroupCog, name=app_commands.locale_str("ticket")):
+class TicketCog(commands.GroupCog, name=app_commands.locale_str("ticket", i18n_key="cmd.ticket.ticket.root.name")):
     def __init__(self, bot):
         self.bot = bot
         self.persistent_views_registered = False
 
-    @app_commands.command(name=app_commands.locale_str("panel"), description="發布票口面板訊息")
-    @app_commands.describe(channel="要發布面板的頻道（省略時使用設定的面板頻道）")
+    @app_commands.command(name=app_commands.locale_str("panel", i18n_key="cmd.ticket.ticket.panel.name"), description=app_commands.locale_str("Publish the ticket panel message", i18n_key="cmd.ticket.ticket.panel.desc"))
+    @app_commands.describe(channel=app_commands.locale_str("Channel to publish the panel in (defaults to the configured panel channel)", i18n_key="cmd.ticket.ticket.panel.param.channel"))
     @app_commands.checks.has_permissions(manage_guild=True)
     async def panel(self, interaction: discord.Interaction, channel: discord.TextChannel = None):
         await interaction.response.defer(ephemeral=True)
@@ -716,22 +739,22 @@ class TicketCog(commands.GroupCog, name=app_commands.locale_str("ticket")):
             channel_id = get_server_config(guild.id, "ticket_panel_channel", None)
             channel = guild.get_channel(int(channel_id)) if channel_id else None
         if not isinstance(channel, discord.TextChannel):
-            await interaction.followup.send("請指定頻道，或先在面板設定「面板頻道」。", ephemeral=True)
+            await interaction.followup.send(t("ticket.err.panel_channel_missing"), ephemeral=True)
             return
 
         error = await publish_panel(guild, channel)
         if error:
             await interaction.followup.send(error, ephemeral=True)
             return
-        await interaction.followup.send(f"✅ 票口面板已發布到 {channel.mention}。", ephemeral=True)
+        await interaction.followup.send(t("ticket.msg.panel_published", channel=channel.mention), ephemeral=True)
 
-    @app_commands.command(name=app_commands.locale_str("setup"), description="快速設定票口系統")
+    @app_commands.command(name=app_commands.locale_str("setup", i18n_key="cmd.ticket.ticket.setup.name"), description=app_commands.locale_str("Quickly set up the ticket system", i18n_key="cmd.ticket.ticket.setup.desc"))
     @app_commands.describe(
-        category="票口頻道建立的分類",
-        panel_channel="開票按鈕面板所在的頻道",
-        staff_role="客服身分組（更多身分組可到伺服器面板設定）",
-        log_channel="票口關閉後逐字稿發送的頻道（省略則不保存逐字稿）",
-        publish="是否立即發布面板訊息（預設是）",
+        category=app_commands.locale_str("Category where ticket channels are created", i18n_key="cmd.ticket.ticket.setup.param.category"),
+        panel_channel=app_commands.locale_str("Channel for the ticket panel with its open button", i18n_key="cmd.ticket.ticket.setup.param.panel_channel"),
+        staff_role=app_commands.locale_str("Staff role (add more roles in the server panel)", i18n_key="cmd.ticket.ticket.setup.param.staff_role"),
+        log_channel=app_commands.locale_str("Channel for transcripts after closing (omit to skip transcripts)", i18n_key="cmd.ticket.ticket.setup.param.log_channel"),
+        publish=app_commands.locale_str("Publish the panel message immediately (default: yes)", i18n_key="cmd.ticket.ticket.setup.param.publish"),
     )
     @app_commands.checks.has_permissions(manage_guild=True)
     async def setup(
@@ -749,16 +772,16 @@ class TicketCog(commands.GroupCog, name=app_commands.locale_str("ticket")):
         problems = []
         category_perms = category.permissions_for(guild.me)
         if not (category_perms.view_channel and category_perms.manage_channels and category_perms.manage_roles):
-            problems.append(f"機器人在 {category.name} 分類缺少「管理頻道」或「管理權限」權限。")
+            problems.append(t("ticket.err.setup_category_perms", category=category.name))
         panel_perms = panel_channel.permissions_for(guild.me)
         if not (panel_perms.view_channel and panel_perms.send_messages and panel_perms.embed_links):
-            problems.append(f"機器人在 {panel_channel.mention} 缺少「發送訊息」或「嵌入連結」權限。")
+            problems.append(t("ticket.err.setup_panel_perms", channel=panel_channel.mention))
         if log_channel:
             log_perms = log_channel.permissions_for(guild.me)
             if not (log_perms.view_channel and log_perms.send_messages and log_perms.attach_files):
-                problems.append(f"機器人在 {log_channel.mention} 缺少「發送訊息」或「附加檔案」權限。")
+                problems.append(t("ticket.err.setup_log_perms", channel=log_channel.mention))
         if problems:
-            await interaction.followup.send("⚠️ 設定未儲存，請先修正以下權限問題：\n" + "\n".join(f"- {p}" for p in problems), ephemeral=True)
+            await interaction.followup.send(t("ticket.err.setup_problems") + "\n" + "\n".join(f"- {p}" for p in problems), ephemeral=True)
             return
 
         set_server_config(guild.id, "ticket_category", category.id)
@@ -772,53 +795,53 @@ class TicketCog(commands.GroupCog, name=app_commands.locale_str("ticket")):
         set_server_config(guild.id, "ticket_enabled", True)
 
         lines = [
-            "✅ 票口系統已設定完成並啟用！",
-            f"- 票口分類：{category.name}",
-            f"- 面板頻道：{panel_channel.mention}",
-            f"- 客服身分組：{staff_role.mention}",
-            f"- 紀錄頻道：{log_channel.mention if log_channel else '（未設定，不保存逐字稿）'}",
+            t("ticket.setup.done"),
+            t("ticket.setup.category", category=category.name),
+            t("ticket.setup.panel_channel", channel=panel_channel.mention),
+            t("ticket.setup.staff_role", role=staff_role.mention),
+            t("ticket.setup.log_channel", channel=log_channel.mention) if log_channel else t("ticket.setup.log_channel_unset"),
         ]
         if publish:
             error = await publish_panel(guild, panel_channel)
-            lines.append(f"- 面板：{'發布失敗：' + error if error else '已發布 🎫'}")
+            lines.append(t("ticket.setup.panel_failed", error=error) if error else t("ticket.setup.panel_published"))
         else:
-            lines.append("- 面板：尚未發布，請使用 /ticket panel 發布")
-        lines.append("其他選項（歡迎訊息、黑名單、每人上限等）可到伺服器面板調整。")
+            lines.append(t("ticket.setup.panel_pending"))
+        lines.append(t("ticket.setup.more_options"))
         await interaction.followup.send("\n".join(lines), ephemeral=True)
 
-    @app_commands.command(name=app_commands.locale_str("close"), description="關閉目前的票口")
-    @app_commands.describe(reason="關閉原因（會記錄在逐字稿摘要中）")
+    @app_commands.command(name=app_commands.locale_str("close", i18n_key="cmd.ticket.ticket.close.name"), description=app_commands.locale_str("Close the current ticket", i18n_key="cmd.ticket.ticket.close.desc"))
+    @app_commands.describe(reason=app_commands.locale_str("Close reason (recorded in the transcript summary)", i18n_key="cmd.ticket.ticket.close.param.reason"))
     async def close(self, interaction: discord.Interaction, reason: str = None):
         entry = resolve_ticket(interaction.guild.id, interaction.channel)
         if entry is None:
-            await interaction.response.send_message("這裡不是票口頻道。", ephemeral=True)
+            await interaction.response.send_message(t("ticket.err.not_a_ticket"), ephemeral=True)
             return
         if not is_staff(interaction.user, interaction.guild.id) and interaction.user.id != int(entry.get("owner_id", 0)):
-            await interaction.response.send_message("只有客服人員或開票者可以關閉票口。", ephemeral=True)
+            await interaction.response.send_message(t("ticket.err.close_permission"), ephemeral=True)
             return
         await interaction.response.send_message(
-            "確定要關閉此票口嗎？關閉後頻道將被刪除，逐字稿會保存到紀錄頻道。",
+            t("ticket.msg.close_confirm"),
             view=TicketCloseConfirmView(interaction.user, reason=reason),
             ephemeral=True,
         )
 
-    @app_commands.command(name=app_commands.locale_str("claim"), description="認領目前的票口")
+    @app_commands.command(name=app_commands.locale_str("claim", i18n_key="cmd.ticket.ticket.claim.name"), description=app_commands.locale_str("Claim the current ticket", i18n_key="cmd.ticket.ticket.claim.desc"))
     async def claim(self, interaction: discord.Interaction):
         error = await claim_ticket(interaction)
         if error:
             await interaction.response.send_message(error, ephemeral=True)
         else:
-            await interaction.response.send_message("✅ 已認領此票口。", ephemeral=True)
+            await interaction.response.send_message(t("ticket.msg.claimed"), ephemeral=True)
 
-    @app_commands.command(name=app_commands.locale_str("add"), description="將用戶加入目前的票口")
-    @app_commands.describe(member="要加入的用戶")
+    @app_commands.command(name=app_commands.locale_str("add", i18n_key="cmd.ticket.ticket.add.name"), description=app_commands.locale_str("Add a user to the current ticket", i18n_key="cmd.ticket.ticket.add.desc"))
+    @app_commands.describe(member=app_commands.locale_str("The user to add", i18n_key="cmd.ticket.ticket.add.param.member"))
     async def add(self, interaction: discord.Interaction, member: discord.Member):
         entry = find_ticket(interaction.guild.id, interaction.channel.id)
         if entry is None:
-            await interaction.response.send_message("這裡不是票口頻道。", ephemeral=True)
+            await interaction.response.send_message(t("ticket.err.not_a_ticket"), ephemeral=True)
             return
         if not is_staff(interaction.user, interaction.guild.id):
-            await interaction.response.send_message("只有客服人員可以管理票口成員。", ephemeral=True)
+            await interaction.response.send_message(t("ticket.err.staff_only_members"), ephemeral=True)
             return
         try:
             await interaction.channel.set_permissions(
@@ -827,35 +850,35 @@ class TicketCog(commands.GroupCog, name=app_commands.locale_str("ticket")):
                 read_message_history=True, attach_files=True, embed_links=True,
             )
         except discord.Forbidden:
-            await interaction.response.send_message("機器人缺少權限，無法修改頻道權限。", ephemeral=True)
+            await interaction.response.send_message(t("ticket.err.bot_perms_edit"), ephemeral=True)
             return
-        await interaction.response.send_message(f"✅ 已將 {member.mention} 加入此票口。")
+        await interaction.response.send_message(t("ticket.msg.member_added", member=member.mention))
 
-    @app_commands.command(name=app_commands.locale_str("remove"), description="將用戶移出目前的票口")
-    @app_commands.describe(member="要移出的用戶")
+    @app_commands.command(name=app_commands.locale_str("remove", i18n_key="cmd.ticket.ticket.remove.name"), description=app_commands.locale_str("Remove a user from the current ticket", i18n_key="cmd.ticket.ticket.remove.desc"))
+    @app_commands.describe(member=app_commands.locale_str("The user to remove", i18n_key="cmd.ticket.ticket.remove.param.member"))
     async def remove(self, interaction: discord.Interaction, member: discord.Member):
         entry = find_ticket(interaction.guild.id, interaction.channel.id)
         if entry is None:
-            await interaction.response.send_message("這裡不是票口頻道。", ephemeral=True)
+            await interaction.response.send_message(t("ticket.err.not_a_ticket"), ephemeral=True)
             return
         if not is_staff(interaction.user, interaction.guild.id):
-            await interaction.response.send_message("只有客服人員可以管理票口成員。", ephemeral=True)
+            await interaction.response.send_message(t("ticket.err.staff_only_members"), ephemeral=True)
             return
         if member.id == int(entry.get("owner_id", 0)):
-            await interaction.response.send_message("無法移除開票者。", ephemeral=True)
+            await interaction.response.send_message(t("ticket.err.cannot_remove_opener"), ephemeral=True)
             return
         try:
             await interaction.channel.set_permissions(member, overwrite=None)
         except discord.Forbidden:
-            await interaction.response.send_message("機器人缺少權限，無法修改頻道權限。", ephemeral=True)
+            await interaction.response.send_message(t("ticket.err.bot_perms_edit"), ephemeral=True)
             return
-        await interaction.response.send_message(f"✅ 已將 {member.mention} 移出此票口。")
+        await interaction.response.send_message(t("ticket.msg.member_removed", member=member.mention))
 
     # ============= Ticket types =============
 
     types_group = app_commands.Group(
-        name=app_commands.locale_str("types"),
-        description="管理票口類別（面板上的多個開票按鈕）",
+        name=app_commands.locale_str("types", i18n_key="cmd.ticket.types.root.name"),
+        description=app_commands.locale_str("Manage ticket types (multiple open buttons on the panel)", i18n_key="cmd.ticket.types.root.desc"),
     )
 
     async def _type_id_autocomplete(self, interaction: discord.Interaction, current: str):
@@ -865,20 +888,20 @@ class TicketCog(commands.GroupCog, name=app_commands.locale_str("ticket")):
             if current.lower() in str(t.get("label", "")).lower()
         ][:25]
 
-    @types_group.command(name=app_commands.locale_str("add"), description="新增票口類別")
+    @types_group.command(name=app_commands.locale_str("add", i18n_key="cmd.ticket.types.add.name"), description=app_commands.locale_str("Add a ticket type", i18n_key="cmd.ticket.types.add.desc"))
     @app_commands.describe(
-        label="按鈕文字（例如：技術支援）",
-        emoji="按鈕 emoji（選填）",
-        style="按鈕顏色（預設藍色）",
-        category="此類別專屬的頻道分類（省略時使用全域設定）",
-        staff_role="此類別額外的客服身分組（省略時只用全域客服）",
-        welcome="此類別專屬的歡迎訊息，可用 {user}、{subject}（省略時使用全域設定）",
+        label=app_commands.locale_str("Button label (e.g. Technical Support)", i18n_key="cmd.ticket.types.add.param.label"),
+        emoji=app_commands.locale_str("Button emoji (optional)", i18n_key="cmd.ticket.types.add.param.emoji"),
+        style=app_commands.locale_str("Button color (default: blue)", i18n_key="cmd.ticket.types.add.param.style"),
+        category=app_commands.locale_str("Dedicated channel category for this type (defaults to the global setting)", i18n_key="cmd.ticket.types.add.param.category"),
+        staff_role=app_commands.locale_str("Extra staff role for this type (defaults to global staff only)", i18n_key="cmd.ticket.types.add.param.staff_role"),
+        welcome=app_commands.locale_str("Dedicated welcome message; {user} and {subject} supported (defaults to global)", i18n_key="cmd.ticket.types.add.param.welcome"),
     )
     @app_commands.choices(style=[
-        app_commands.Choice(name="藍色", value="primary"),
-        app_commands.Choice(name="灰色", value="secondary"),
-        app_commands.Choice(name="綠色", value="success"),
-        app_commands.Choice(name="紅色", value="danger"),
+        app_commands.Choice(name=app_commands.locale_str("Blue", i18n_key="cmd.ticket.types.add.choice.primary"), value="primary"),
+        app_commands.Choice(name=app_commands.locale_str("Gray", i18n_key="cmd.ticket.types.add.choice.secondary"), value="secondary"),
+        app_commands.Choice(name=app_commands.locale_str("Green", i18n_key="cmd.ticket.types.add.choice.success"), value="success"),
+        app_commands.Choice(name=app_commands.locale_str("Red", i18n_key="cmd.ticket.types.add.choice.danger"), value="danger"),
     ])
     @app_commands.checks.has_permissions(manage_guild=True)
     async def types_add(self, interaction: discord.Interaction, label: str,
@@ -887,7 +910,7 @@ class TicketCog(commands.GroupCog, name=app_commands.locale_str("ticket")):
                         staff_role: discord.Role = None, welcome: str = None):
         types = get_ticket_types(interaction.guild.id)
         if len(types) >= MAX_TICKET_TYPES:
-            await interaction.response.send_message(f"最多只能建立 {MAX_TICKET_TYPES} 個票口類別。", ephemeral=True)
+            await interaction.response.send_message(t("ticket.err.type_limit", limit=MAX_TICKET_TYPES), ephemeral=True)
             return
         types.append({
             "id": uuid.uuid4().hex[:8],
@@ -901,25 +924,25 @@ class TicketCog(commands.GroupCog, name=app_commands.locale_str("ticket")):
         save_ticket_types(interaction.guild.id, types)
         refreshed = await refresh_panel(interaction.guild)
         await interaction.response.send_message(
-            f"✅ 已新增票口類別「{label}」。" + ("面板已更新。" if refreshed else "請用 /ticket panel 重新發布面板。"),
+            t("ticket.msg.type_added", label=label) + (t("ticket.msg.panel_refreshed") if refreshed else t("ticket.msg.panel_republish_hint")),
             ephemeral=True,
         )
 
-    @types_group.command(name=app_commands.locale_str("edit"), description="編輯票口類別")
+    @types_group.command(name=app_commands.locale_str("edit", i18n_key="cmd.ticket.types.edit.name"), description=app_commands.locale_str("Edit a ticket type", i18n_key="cmd.ticket.types.edit.desc"))
     @app_commands.describe(
-        type="要編輯的類別",
-        label="新的按鈕文字",
-        emoji="新的按鈕 emoji（輸入 - 可清除）",
-        style="新的按鈕顏色",
-        category="新的專屬分類（選擇後覆寫）",
-        staff_role="新的額外客服身分組（選擇後覆寫）",
-        welcome="新的專屬歡迎訊息（輸入 - 可清除改用全域設定）",
+        type=app_commands.locale_str("The type to edit", i18n_key="cmd.ticket.types.edit.param.type"),
+        label=app_commands.locale_str("New button label", i18n_key="cmd.ticket.types.edit.param.label"),
+        emoji=app_commands.locale_str("New button emoji (enter - to clear)", i18n_key="cmd.ticket.types.edit.param.emoji"),
+        style=app_commands.locale_str("New button color", i18n_key="cmd.ticket.types.edit.param.style"),
+        category=app_commands.locale_str("New dedicated category (overrides when chosen)", i18n_key="cmd.ticket.types.edit.param.category"),
+        staff_role=app_commands.locale_str("New extra staff role (overrides when chosen)", i18n_key="cmd.ticket.types.edit.param.staff_role"),
+        welcome=app_commands.locale_str("New dedicated welcome message (enter - to clear and use the global one)", i18n_key="cmd.ticket.types.edit.param.welcome"),
     )
     @app_commands.choices(style=[
-        app_commands.Choice(name="藍色", value="primary"),
-        app_commands.Choice(name="灰色", value="secondary"),
-        app_commands.Choice(name="綠色", value="success"),
-        app_commands.Choice(name="紅色", value="danger"),
+        app_commands.Choice(name=app_commands.locale_str("Blue", i18n_key="cmd.ticket.types.edit.choice.primary"), value="primary"),
+        app_commands.Choice(name=app_commands.locale_str("Gray", i18n_key="cmd.ticket.types.edit.choice.secondary"), value="secondary"),
+        app_commands.Choice(name=app_commands.locale_str("Green", i18n_key="cmd.ticket.types.edit.choice.success"), value="success"),
+        app_commands.Choice(name=app_commands.locale_str("Red", i18n_key="cmd.ticket.types.edit.choice.danger"), value="danger"),
     ])
     @app_commands.autocomplete(type=_type_id_autocomplete)
     @app_commands.checks.has_permissions(manage_guild=True)
@@ -930,7 +953,7 @@ class TicketCog(commands.GroupCog, name=app_commands.locale_str("ticket")):
         types = get_ticket_types(interaction.guild.id)
         target = next((t for t in types if t.get("id") == type), None)
         if target is None:
-            await interaction.response.send_message("找不到該票口類別。", ephemeral=True)
+            await interaction.response.send_message(t("ticket.err.type_not_found"), ephemeral=True)
             return
         if label is not None:
             target["label"] = label.strip()[:80]
@@ -947,51 +970,51 @@ class TicketCog(commands.GroupCog, name=app_commands.locale_str("ticket")):
         save_ticket_types(interaction.guild.id, types)
         refreshed = await refresh_panel(interaction.guild)
         await interaction.response.send_message(
-            f"✅ 已更新票口類別「{target['label']}」。" + ("面板已更新。" if refreshed else "請用 /ticket panel 重新發布面板。"),
+            t("ticket.msg.type_updated", label=target["label"]) + (t("ticket.msg.panel_refreshed") if refreshed else t("ticket.msg.panel_republish_hint")),
             ephemeral=True,
         )
 
-    @types_group.command(name=app_commands.locale_str("remove"), description="移除票口類別")
-    @app_commands.describe(type="要移除的類別")
+    @types_group.command(name=app_commands.locale_str("remove", i18n_key="cmd.ticket.types.remove.name"), description=app_commands.locale_str("Remove a ticket type", i18n_key="cmd.ticket.types.remove.desc"))
+    @app_commands.describe(type=app_commands.locale_str("The type to remove", i18n_key="cmd.ticket.types.remove.param.type"))
     @app_commands.autocomplete(type=_type_id_autocomplete)
     @app_commands.checks.has_permissions(manage_guild=True)
     async def types_remove(self, interaction: discord.Interaction, type: str):
         types = get_ticket_types(interaction.guild.id)
         remaining = [t for t in types if t.get("id") != type]
         if len(remaining) == len(types):
-            await interaction.response.send_message("找不到該票口類別。", ephemeral=True)
+            await interaction.response.send_message(t("ticket.err.type_not_found"), ephemeral=True)
             return
         save_ticket_types(interaction.guild.id, remaining)
         refreshed = await refresh_panel(interaction.guild)
         await interaction.response.send_message(
-            "✅ 已移除票口類別。" + ("面板已更新。" if refreshed else "請用 /ticket panel 重新發布面板。"),
+            t("ticket.msg.type_removed") + (t("ticket.msg.panel_refreshed") if refreshed else t("ticket.msg.panel_republish_hint")),
             ephemeral=True,
         )
 
-    @types_group.command(name=app_commands.locale_str("list"), description="列出所有票口類別")
+    @types_group.command(name=app_commands.locale_str("list", i18n_key="cmd.ticket.types.list.name"), description=app_commands.locale_str("List all ticket types", i18n_key="cmd.ticket.types.list.desc"))
     @app_commands.checks.has_permissions(manage_guild=True)
     async def types_list(self, interaction: discord.Interaction):
         types = get_ticket_types(interaction.guild.id)
         if not types:
             await interaction.response.send_message(
-                "尚未建立任何票口類別，面板會顯示單一預設按鈕。用 /ticket types add 新增。",
+                t("ticket.msg.no_types"),
                 ephemeral=True,
             )
             return
         guild = interaction.guild
         lines = []
-        for t in types:
-            parts = [f"{t.get('emoji', '') or ''} **{t.get('label', '?')}**".strip(), f"顏色: {t.get('style', 'primary')}"]
-            if t.get("category_id"):
-                cat = guild.get_channel(int(t["category_id"]))
-                parts.append(f"分類: {cat.name if cat else '（已刪除）'}")
-            if t.get("staff_roles"):
-                parts.append("客服: " + "、".join(f"<@&{r}>" for r in t["staff_roles"]))
-            if t.get("welcome_message"):
-                parts.append("自訂歡迎訊息 ✓")
+        for entry_type in types:
+            parts = [f"{entry_type.get('emoji', '') or ''} **{entry_type.get('label', '?')}**".strip(), t("ticket.types.style", style=entry_type.get('style', 'primary'))]
+            if entry_type.get("category_id"):
+                cat = guild.get_channel(int(entry_type["category_id"]))
+                parts.append(t("ticket.types.category", category=cat.name if cat else t("ticket.types.deleted")))
+            if entry_type.get("staff_roles"):
+                parts.append(t("ticket.types.staff") + i18n.join_list(f"<@&{r}>" for r in entry_type["staff_roles"]))
+            if entry_type.get("welcome_message"):
+                parts.append(t("ticket.types.custom_welcome"))
             lines.append("- " + "｜".join(parts))
         embed = discord.Embed(
-            title=f"🎫 票口類別（{len(types)}/{MAX_TICKET_TYPES}）",
+            title=t("ticket.embed.types_title", count=len(types), limit=MAX_TICKET_TYPES),
             description="\n".join(lines),
             color=discord.Color.blurple(),
         )
@@ -1017,7 +1040,7 @@ class TicketCog(commands.GroupCog, name=app_commands.locale_str("ticket")):
             remaining = [t for t in tickets if guild.get_channel(int(t.get("channel_id", 0)))]
             if len(remaining) != len(tickets):
                 save_active_tickets(int(guild_id), remaining)
-                log(f"已清除 {len(tickets) - len(remaining)} 筆失效的票口紀錄 (Guild: {guild_id})", module_name="Ticket")
+                log(f"Cleaned {len(tickets) - len(remaining)} stale ticket entries (Guild: {guild_id})", module_name="Ticket")
 
     @commands.Cog.listener()
     async def on_guild_channel_delete(self, channel):
@@ -1034,7 +1057,7 @@ class TicketCog(commands.GroupCog, name=app_commands.locale_str("ticket")):
             channel = member.guild.get_channel(int(entry.get("channel_id", 0)))
             if channel:
                 try:
-                    await channel.send("⚠️ 開票者已離開伺服器。")
+                    await channel.send(t("ticket.msg.opener_left", locale=i18n.resolve_locale(guild_id=member.guild.id)))
                 except discord.HTTPException:
                     pass
 
@@ -1089,8 +1112,8 @@ if "Website" in modules:
                 _fetch_transcript_attachment(guild_id, message_id), bot.loop,
             ).result(timeout=15)
         except Exception as e:
-            log(f"讀取票口逐字稿失敗: {e}", module_name="Ticket", level=logging.WARNING)
-            return Response("暫時無法讀取逐字稿，請稍後再試。", status=503, mimetype="text/plain; charset=utf-8")
+            log(f"Failed to read ticket transcript: {e}", module_name="Ticket", level=logging.WARNING)
+            return Response(t("ticket.err.transcript_unavailable"), status=503, mimetype="text/plain; charset=utf-8")
 
         _transcript_cache[cache_key] = html
         if html is None:

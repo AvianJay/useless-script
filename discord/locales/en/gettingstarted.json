@@ -1,0 +1,499 @@
+{
+    "antibeast": {
+        "action_modal_title": "AntiBeast action settings",
+        "action_status": {
+            "one": "Triggers `{action}` after {count} time within {seconds}s",
+            "other": "Triggers `{action}` after {count} times within {seconds}s"
+        },
+        "action_view_desc": "Set the Moderate action to run once the same user triggers this multiple times within the time window.",
+        "action_view_title": "AntiBeast repeat-trigger action",
+        "btn": {
+            "back_to_antibeast": "Back to AntiBeast",
+            "bypass_roles": "Bypass roles",
+            "confirm_action": "Yes, use this action",
+            "disable": "Disable AntiBeast",
+            "disable_action": "Disable action",
+            "edit_action": "Edit threshold & action",
+            "enable": "Enable AntiBeast",
+            "enable_action": "Enable action",
+            "everyone_here_only": "everyone/here only: {state}",
+            "retry_action": "No, try again"
+        },
+        "bypass_current": "Current: {roles}",
+        "bypass_desc": "Mention tokens from these roles won't trigger AntiBeast's keyword rules.",
+        "bypass_none": "No bypass roles set yet.",
+        "bypass_select_ph": "Select roles to bypass (replaces the current list)",
+        "bypass_title": "AntiBeast bypass roles",
+        "disabled_desc": "Currently disabled. You can finish the rest of the setup first, then enable it.",
+        "enabled_desc": "Enabled — AutoMod rules will block protected mentions.",
+        "err": {
+            "not_int": "Both the trigger count and time window must be whole numbers.",
+            "threshold_range": "The trigger count must be between 1 and 20.",
+            "time_window_range": "The time window must be between 5 and 3600 seconds."
+        },
+        "field": {
+            "bypass_roles": "Bypass roles",
+            "threshold": "Threshold"
+        },
+        "manager_title": "🛡️ AntiBeast settings",
+        "module_not_loaded": "The AntiBeast module isn't loaded.",
+        "threshold_label": "Trigger count (1-20)",
+        "threshold_value": {
+            "one": "{count} time within {seconds}s",
+            "other": "{count} times within {seconds}s"
+        },
+        "time_window_label": "Time window in seconds (5-3600)",
+        "title": "AntiBeast settings"
+    },
+    "automod": {
+        "action": {
+            "ban": "Ban"
+        },
+        "action_saved_title": "Action saved",
+        "add_ignore_channel_ph": "Add ignored channel",
+        "btn": {
+            "back_to_feature": "Back to feature",
+            "custom_input": "Custom input"
+        },
+        "current_setting_prefix": "Current value: ",
+        "err": {
+            "missing_required": "Please finish these required settings first: {fields}"
+        },
+        "feature": {
+            "anti_invite_link": {
+                "desc": "Detect Discord invite links.",
+                "field": {
+                    "action": {
+                        "default": "delete {user}, please don't post invite links to other servers."
+                    },
+                    "allow_current_server": "Allow this server's own link"
+                },
+                "label": "Invite links"
+            },
+            "anti_raid": {
+                "desc": "Detect a large number of members joining in a short time.",
+                "field": {
+                    "action": {
+                        "default": "kick raid detection auto-kick"
+                    },
+                    "max_joins": "Max joins"
+                },
+                "label": "Anti-raid"
+            },
+            "anti_spam": {
+                "desc": "Detect similar messages posted in a short time.",
+                "field": {
+                    "action": {
+                        "default": "mute 10m auto-mute for spamming, delete {user}, please don't spam."
+                    },
+                    "max_messages": "Max similar messages",
+                    "similarity": "Similarity (%)"
+                },
+                "label": "Anti-spam"
+            },
+            "anti_uispam": {
+                "desc": "Limit how often User Install commands can be triggered.",
+                "field": {
+                    "action": {
+                        "default": "delete {user}, please don't abuse user-installed app commands., mute 10m abusing user-installed commands"
+                    },
+                    "max_count": "Max trigger count"
+                },
+                "label": "User-install app abuse"
+            },
+            "automod_detect": {
+                "desc": "Receive Discord's native AutoMod events and run extra actions.",
+                "field": {
+                    "action": "Extra action",
+                    "filter_action_type": "Filter by action type",
+                    "filter_rule": "Filter by rule name"
+                },
+                "label": "Discord AutoMod detection"
+            },
+            "escape_punish": {
+                "desc": "Add a follow-up action if the member leaves the server while muted.",
+                "field": {
+                    "duration": "Duration",
+                    "punishment": "Punishment"
+                },
+                "label": "Escape punishment"
+            },
+            "flagged_user": {
+                "desc": "Combine local flag data with the Blacklist API, notify and optionally act when a flagged member joins.",
+                "field": {
+                    "action_source": "Action source",
+                    "local_match_mode": "Local match mode"
+                },
+                "label": "Flagged user join",
+                "option": {
+                    "active": "Currently flagged only",
+                    "api": "API only",
+                    "both": "Local & API",
+                    "history": "All records within 3 months",
+                    "local": "Local only"
+                }
+            },
+            "scamtrap": {
+                "desc": "Automatically act when someone speaks in the honeypot channel.",
+                "field": {
+                    "action": {
+                        "default": "delete {user} was the last account banned, don't post here!, ban {user} 5s 12h [auto-ban] suspected compromised account"
+                    },
+                    "channel_id": "Trap channel"
+                },
+                "label": "Scam trap"
+            },
+            "too_many_emojis": {
+                "desc": "Limit the number of emoji in a single message.",
+                "field": {
+                    "max_emojis": "Max count"
+                },
+                "label": "Too many emoji"
+            },
+            "too_many_h1": {
+                "desc": "Limit the total length of Markdown headings.",
+                "field": {
+                    "max_length": "Max length"
+                },
+                "label": "Too many headings"
+            }
+        },
+        "feature_page_footer": "Feature page {page}/{total}",
+        "field": {
+            "action": "Action",
+            "enabled_count": "Enabled",
+            "ignore_channels": "Ignored channels",
+            "notify_channel": "Notify channel",
+            "time_window": "Time window (seconds)",
+            "will_save_as": "Will save as"
+        },
+        "field_value_ph": "Leave empty to clear this field",
+        "manager_desc": "Pick a feature to adjust its full settings and enable or disable it.",
+        "manager_title": "Auto-moderation rules",
+        "remove_ignore_channel_ph": "Remove ignored channel",
+        "select_feature_ph": "Select a feature to edit",
+        "select_field_ph": "Select a field to edit",
+        "setting_saved": "Setting saved.",
+        "syntax_issue": "Syntax issue"
+    },
+    "autoreply": {
+        "btn": {
+            "add_rule": "Add rule",
+            "back_to_rules": "Back to rules",
+            "confirm_clear_all": "Confirm clear all",
+            "confirm_delete": "Confirm delete"
+        },
+        "builder_timed_out_desc": "The unsaved rule was discarded.",
+        "builder_timed_out_title": "AutoReply Builder timed out",
+        "clear_confirm_desc": {
+            "one": "There is currently {count} rule, and this can't be undone.",
+            "other": "There are currently {count} rules, and this can't be undone."
+        },
+        "clear_confirm_title": "Clear all AutoReply rules?",
+        "delete_confirm_desc": "This takes effect immediately.",
+        "delete_confirm_title": "Delete this AutoReply rule?",
+        "edit_rule_title": "Edit AutoReply rule",
+        "err": {
+            "edit_target_gone": "The AutoReply rule you're trying to edit no longer exists.",
+            "module_unavailable": "The AutoReply module isn't available right now.",
+            "rule_gone_or_unavailable": "This rule no longer exists, or the module isn't available right now.",
+            "save_failed": "Failed to save the AutoReply rule."
+        },
+        "field": {
+            "current_rules": "Current rules"
+        },
+        "manager_desc": "Pick an existing rule to view, edit, or delete it, or use the Builder to add a new one.",
+        "manager_title": "AutoReply rule management",
+        "no_response": "No response",
+        "rule_not_found": "Rule not found",
+        "rule_page_footer": "Rule page {page}/{total}",
+        "rule_title": "AutoReply rule #{index}",
+        "select_rule_ph": "Select an AutoReply rule",
+        "unnamed_rule": "Unnamed rule"
+    },
+    "btn": {
+        "add": "Add",
+        "back_to_module": "Back to module",
+        "back_to_settings": "Back to settings",
+        "clear": "Clear",
+        "clear_all": "Clear all",
+        "edit": "Edit",
+        "finish": "Finish",
+        "move_down": "Move down",
+        "move_up": "Move up",
+        "remove": "Remove"
+    },
+    "compound": {
+        "unavailable_title": "Can't open this setting"
+    },
+    "dm": {
+        "no_setup_channel": "I couldn't find a channel to post the quick-setup button in **{guild}**. Use {command} in the server to open the setup center."
+    },
+    "err": {
+        "autoreply_unavailable": "The AutoReply module isn't available right now.",
+        "invalid_integer": "Please enter a valid whole number.",
+        "invalid_number": "Please enter a valid number.",
+        "manage_guild_required": "Only members with Manage Server permission can open quick setup.",
+        "not_setup_owner": "Only the member who opened this setup flow, and who has Manage Server permission, can use this.",
+        "save_failed": "Failed to save the server setting.",
+        "trigger_failed": "The setting was saved, but applying it live ran into an error.",
+        "value_too_large": "The value can't be greater than {maximum}.",
+        "value_too_small": "The value can't be less than {minimum}."
+    },
+    "field": {
+        "action": "Action",
+        "action_scope": "Action scope",
+        "channel": "Channel",
+        "execution_preview": "Execution preview",
+        "moderate_action": "Moderate action command",
+        "quota": "Quota",
+        "status": "Status",
+        "trigger_action": "Repeat-trigger action"
+    },
+    "fixlink": {
+        "btn": {
+            "back_to_center": "Back to setup center"
+        },
+        "err": {
+            "cog_not_running": "Couldn't find a running FixLink module.",
+            "module_not_loaded": "The FixLink module isn't loaded."
+        }
+    },
+    "hub": {
+        "default_module_desc": "Open this module's settings",
+        "desc": "Pick a feature from the dropdown. Every confirmed setting saves immediately.",
+        "field": {
+            "available_modules": "Available modules",
+            "changes_this_session": "Changed this session"
+        },
+        "finish": {
+            "more_items": "... and {count} more",
+            "no_changes": "No settings were changed this time.",
+            "summary": "The following settings were changed:",
+            "title": "Quick setup complete"
+        },
+        "page_footer": "Module page {page}/{total}",
+        "select_module_ph": "Select a feature module to configure",
+        "timed_out_desc": "Confirmed settings are kept; use `/gettingstarted` to keep going.",
+        "timed_out_title": "Quick setup timed out",
+        "title": "{guild} quick setup"
+    },
+    "launcher": {
+        "btn": {
+            "open_setup": "Quick-setup this server"
+        },
+        "embed": {
+            "desc": "Use the button below to set up this server's moderation, notifications, economy, auto-reply, verification, and more.",
+            "title": "Quick-setup the bot"
+        },
+        "msg": {
+            "prompt": "{mention}, want to quick-setup the bot now?"
+        }
+    },
+    "list": {
+        "add_channel_ph": "Add channels (multi-select)",
+        "add_role_ph": "Add roles (multi-select)",
+        "count_field": "{count} items currently",
+        "default_desc": "Add or remove items from the list.",
+        "page_footer": "Removal list page {page}/{total}",
+        "select_remove_ph": "Select items to remove"
+    },
+    "module": {
+        "no_settings": "This module has no configurable settings right now.",
+        "page_footer": "Settings page {page}/{total}",
+        "select_setting_ph": "Select a setting"
+    },
+    "select_preset_ph": "Select a common action",
+    "setting": {
+        "default_desc": "Change this server setting.",
+        "edit_default_title": "Edit setting",
+        "field": {
+            "current_value": "Current value"
+        },
+        "key_footer": "Setting key: {key}",
+        "select_channel_ph": "Select a channel",
+        "select_role_ph": "Select a role",
+        "select_value_ph": "Select a value",
+        "value_label": "Value",
+        "value_ph": "Leave empty to clear this setting"
+    },
+    "state": {
+        "unknown": "Unknown"
+    },
+    "stickymessage": {
+        "add_desc": "First pick the text or announcement channel to configure. Each channel can only have one sticky message.",
+        "add_title": "Add sticky message",
+        "auto_repost_footer": "Automatic reposting never sends mention notifications.",
+        "btn": {
+            "edit_content": "Edit content",
+            "first_mention": "First-post mention: {state}",
+            "publish_now": "Publish now",
+            "save_and_publish": "Save & publish",
+            "timing": "Timing settings"
+        },
+        "content_label": "Message content",
+        "content_modal_title": "Edit sticky message content",
+        "edit_title": "Edit sticky message",
+        "err": {
+            "channel_taken": "This channel already has a sticky message.",
+            "entry_gone": "This entry no longer exists; please reopen the management screen.",
+            "invalid_seconds": "Please enter a valid number of seconds.",
+            "module_unavailable": "The StickyMessage module isn't available right now.",
+            "no_content": "Please enter the sticky message content first.",
+            "publish_failed": "Publish failed.",
+            "quota_reached": {
+                "one": "This server can have at most {count} sticky message.",
+                "other": "This server can have at most {count} sticky messages."
+            }
+        },
+        "field": {
+            "mentions": "First-post / manual mention",
+            "min_interval": "Min interval",
+            "quiet_seconds": "Quiet time"
+        },
+        "manager_title": "📌 Sticky messages",
+        "mentions_allowed": "Allowed",
+        "mentions_footer": "Mentions are only sent on the first post, after a content change, or on a manual publish.",
+        "mentions_suppressed": "Suppressed",
+        "min_interval_label": "Min interval per channel (5-3600s)",
+        "msg": {
+            "published": "Manually published the sticky message."
+        },
+        "no_content_yet": "No content yet — tap \"Edit content\" first.",
+        "no_entries": "No sticky messages configured yet.",
+        "pick_channel_ph": "Select a text or announcement channel",
+        "quiet_seconds_label": "Repost after this much silence (0-300s)",
+        "select_entry_ph": "Select a sticky message to manage",
+        "status_active": "Active",
+        "status_over_quota": "Over quota, paused",
+        "timing_modal_title": "StickyMessage timing settings",
+        "unknown_channel": "Channel {channel_id}"
+    },
+    "value": {
+        "empty_list": "Empty list",
+        "entries_configured": {
+            "one": "{count} entry configured",
+            "other": "{count} entries configured"
+        },
+        "items_configured": "{count} items configured",
+        "more_items": "... and {count} more",
+        "not_set": "Not set",
+        "unknown_channel": "Unknown channel ({value})",
+        "unknown_role": "Unknown role ({value})"
+    },
+    "webverify": {
+        "audit": {
+            "create_role_reason": "Unverified role created by {user} via quick setup",
+            "role_permission_reason": "Quick-setup unverified role permissions"
+        },
+        "btn": {
+            "auto_create_role": "Auto-create role",
+            "autorole_state": "Auto-assign: {state}",
+            "country_alert_state": "Region alert: {state}",
+            "edit_countries": "Edit region codes",
+            "edit_min_age": "Set minimum account age",
+            "edit_notification": "Edit notification text",
+            "feature_state": "Feature: {state}",
+            "go_verify": "Go verify",
+            "save_and_send": "Save & send verification message",
+            "save_only": "Save only"
+        },
+        "captcha": {
+            "none": "No CAPTCHA"
+        },
+        "default": {
+            "notify_message": "Click the button below to complete web verification:",
+            "notify_title": "Server web verification",
+            "unverified_role_name": "Unverified Member"
+        },
+        "err": {
+            "autorole_needs_role": "You must set the unverified role before enabling auto-assign.",
+            "channel_not_found": "Couldn't find the verification notify channel; the setting was saved but no message was sent.",
+            "country_alert_needs_channel": "You must select an alert channel before enabling region alerts.",
+            "country_alert_needs_codes": "You must set at least one region code before enabling region alerts.",
+            "create_role_failed": "Failed to create the role: {error}",
+            "create_role_permission": "Auto-creating the unverified role needs Manage Roles and Manage Channels permissions.",
+            "invalid_country_code": "Region codes must be two letters: {codes}",
+            "invalid_days": "Please enter a valid number of days.",
+            "min_age_negative": "The minimum account age can't be less than 0.",
+            "no_application_id": "Couldn't get the application ID right now.",
+            "no_channel_permission": "I don't have permission to send messages in the verification notify channel.",
+            "notify_needs_channel": "You must select a notify channel when using channel notifications.",
+            "select_role_before_autorole": "Please select the unverified role before enabling auto-assign.",
+            "send_failed": "Failed to send the verification message: {error}"
+        },
+        "field": {
+            "alert_channel": "Alert channel",
+            "autorole": "Auto-assign",
+            "countries": "Regions",
+            "country_alert": "Region alert",
+            "country_codes_label": "ISO region codes",
+            "feature": "Feature",
+            "feature_captcha": "Feature / CAPTCHA",
+            "message": "Message",
+            "min_age": "Minimum account age",
+            "min_age_label": "Minimum account age (days)",
+            "mode": "Mode",
+            "notify": "Notify",
+            "notify_channel": "Notify channel",
+            "notify_message_label": "Notification message",
+            "notify_title_label": "Notification title",
+            "notify_type": "Notify method",
+            "role_name_label": "Role name",
+            "title": "Title",
+            "trigger": "Trigger",
+            "unverified_role": "Unverified role"
+        },
+        "modal": {
+            "countries_title": "Region codes",
+            "create_role_title": "Create unverified role",
+            "min_age_title": "Minimum account age",
+            "notify_title": "Verification notification"
+        },
+        "mode": {
+            "blacklist": "Blacklist",
+            "whitelist": "Whitelist"
+        },
+        "msg": {
+            "sent_to_channel": "The verification message was sent to {channel}."
+        },
+        "notify_type": {
+            "both": "DM & channel",
+            "channel": "Channel",
+            "dm": "DM"
+        },
+        "select_autorole_trigger_ph": "Select auto-assign conditions",
+        "select_captcha_ph": "Select a CAPTCHA method",
+        "select_country_channel_ph": "Select a region alert channel",
+        "select_country_mode_ph": "Select a region list mode",
+        "select_notify_channel_ph": "Select a verification notify channel",
+        "select_notify_type_ph": "Select a notify method",
+        "select_role_ph": "Select the unverified role",
+        "setup_title": "Web verification setup (step {step}/{total})",
+        "step1": {
+            "desc": "Set the feature status and CAPTCHA."
+        },
+        "step2": {
+            "desc": "Select or create the unverified member role."
+        },
+        "step3": {
+            "desc": "Set whether the unverified role is auto-assigned on join."
+        },
+        "step4": {
+            "desc": "Set how and what the verification prompt notifies."
+        },
+        "step5": {
+            "desc": "Set a blacklist or whitelist alert for the verifying region."
+        },
+        "step6": {
+            "desc": "Confirming will save the entire web verification setup at once."
+        },
+        "trigger": {
+            "age_check": "Account too new",
+            "always": "Always assign",
+            "has_flagged_history": "Previously flagged",
+            "left_guild_before": "Previously left the server",
+            "no_history": "No verification history"
+        }
+    }
+}

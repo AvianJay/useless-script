@@ -18,6 +18,9 @@ from discord.ext import commands
 from globalenv import bot, get_emoji_by_name, get_server_config, set_server_config, start_bot
 from logger import log
 
+import i18n
+from i18n import t
+
 
 FIXLINK_CONFIG_KEY = "fixlink"
 FIXLINK_WEBHOOKS_KEY = "fixlink_webhooks"
@@ -368,31 +371,31 @@ def _split_form_values(value) -> list[str]:
 def _normalize_display_name(value, field_name: str) -> str:
     text = str(value or "").strip()
     if not 1 <= len(text) <= 40:
-        raise ValueError(f"{field_name}\u5fc5\u9808\u662f 1 \u5230 40 \u500b\u5b57\u3002")
+        raise ValueError(t("fixlink.err.length_1_40", field=field_name))
     if any(ord(character) < 32 for character in text):
-        raise ValueError(f"{field_name}\u4e0d\u80fd\u5305\u542b\u63a7\u5236\u5b57\u5143\u3002")
+        raise ValueError(t("fixlink.err.no_control_chars", field=field_name))
     return text
 
 
 def _normalize_public_hostname(value, field_name: str) -> str:
     hostname = str(value or "").strip().rstrip(".").casefold()
     if not hostname or any(token in hostname for token in ("://", "/", "@", "*", ":")):
-        raise ValueError(f"{field_name}\u5fc5\u9808\u662f\u7cbe\u78ba\u7db2\u57df\uff0c\u4e0d\u80fd\u5305\u542b scheme\u3001port \u6216 wildcard\u3002")
+        raise ValueError(t("fixlink.err.must_be_exact_domain", field=field_name))
     try:
         hostname = hostname.encode("idna").decode("ascii")
     except UnicodeError as error:
-        raise ValueError(f"{field_name}\u4e0d\u662f\u6709\u6548\u7db2\u57df\u3002") from error
+        raise ValueError(t("fixlink.err.invalid_domain", field=field_name)) from error
     try:
         ipaddress.ip_address(hostname)
     except ValueError:
         pass
     else:
-        raise ValueError(f"{field_name}\u4e0d\u5141\u8a31 IP literal\u3002")
+        raise ValueError(t("fixlink.err.no_ip_literal", field=field_name))
     if "." not in hostname or hostname == "localhost" or hostname.endswith((".localhost", ".local", ".internal")):
-        raise ValueError(f"{field_name}\u5fc5\u9808\u662f\u516c\u958b\u7db2\u57df\u3002")
+        raise ValueError(t("fixlink.err.must_be_public_domain", field=field_name))
     labels = hostname.split(".")
     if len(hostname) > 253 or any(not HOST_LABEL_PATTERN.fullmatch(label) for label in labels):
-        raise ValueError(f"{field_name}\u4e0d\u662f\u6709\u6548\u7db2\u57df\u3002")
+        raise ValueError(t("fixlink.err.invalid_domain", field=field_name))
     return hostname
 
 
@@ -402,34 +405,34 @@ def _normalize_endpoint(value) -> str:
         parsed = urlsplit(endpoint)
         port = parsed.port
     except ValueError as error:
-        raise ValueError("Endpoint URL \u683c\u5f0f\u4e0d\u6b63\u78ba\u3002") from error
+        raise ValueError(t("fixlink.err.endpoint_url_format")) from error
     if parsed.scheme.casefold() != "https" or not parsed.hostname:
-        raise ValueError("Endpoint \u5fc5\u9808\u4f7f\u7528 HTTPS \u4e26\u5305\u542b\u516c\u958b\u7db2\u57df\u3002")
+        raise ValueError(t("fixlink.err.endpoint_https_required"))
     if parsed.username or parsed.password or port not in (None, 443):
-        raise ValueError("Endpoint \u4e0d\u80fd\u5305\u542b userinfo \u6216\u81ea\u8a02 port\u3002")
+        raise ValueError(t("fixlink.err.endpoint_no_userinfo"))
     if parsed.query or parsed.fragment:
-        raise ValueError("Endpoint \u4e0d\u80fd\u81ea\u5e36 query \u6216 fragment\uff0c\u8acb\u6539\u7528\u975c\u614b query \u6b04\u4f4d\u3002")
-    hostname = _normalize_public_hostname(parsed.hostname, "Endpoint \u7db2\u57df")
+        raise ValueError(t("fixlink.err.endpoint_no_query"))
+    hostname = _normalize_public_hostname(parsed.hostname, t("fixlink.field.endpoint_domain"))
     return urlunsplit(("https", hostname, parsed.path or "/", "", ""))
 
 
 def _normalize_query_key(value, field_name: str) -> str:
     key = str(value or "").strip()
     if not QUERY_KEY_PATTERN.fullmatch(key):
-        raise ValueError(f"{field_name}\u53ea\u80fd\u4f7f\u7528\u82f1\u6578\u5b57\u3001`.`\u3001`_`\u3001`~` \u6216 `-`\uff0c\u9577\u5ea6\u4e0a\u9650 64\u3002")
+        raise ValueError(t("fixlink.err.query_key_charset", field=field_name))
     return key
 
 
 def _normalize_path_prefixes(value) -> list[str]:
     prefixes = _split_form_values(value)
     if not 1 <= len(prefixes) <= 5:
-        raise ValueError("\u8acb\u8f38\u5165 1 \u5230 5 \u500b\u8def\u5f91\u524d\u7db4\u3002")
+        raise ValueError(t("fixlink.err.path_prefix_count"))
     normalized: list[str] = []
     for prefix in prefixes:
         if not prefix.startswith("/") or any(token in prefix for token in ("?", "#", "\\")):
-            raise ValueError("\u8def\u5f91\u524d\u7db4\u5fc5\u9808\u4ee5 `/` \u958b\u982d\uff0c\u4e14\u4e0d\u80fd\u5305\u542b query\u3001fragment \u6216\u53cd\u659c\u7dda\u3002")
+            raise ValueError(t("fixlink.err.path_prefix_format"))
         if any(character.isspace() for character in prefix):
-            raise ValueError("\u8def\u5f91\u524d\u7db4\u4e0d\u80fd\u5305\u542b\u7a7a\u767d\u5b57\u5143\u3002")
+            raise ValueError(t("fixlink.err.path_prefix_whitespace"))
         if prefix not in normalized:
             normalized.append(prefix)
     return normalized
@@ -447,17 +450,17 @@ def _normalize_static_query(value) -> dict[str, str]:
         try:
             pairs = parse_qsl(query_text, keep_blank_values=True, strict_parsing=True)
         except ValueError as error:
-            raise ValueError("\u975c\u614b query \u5fc5\u9808\u4f7f\u7528 `key=value`\uff0c\u591a\u7d44\u53ef\u5206\u884c\u8f38\u5165\u3002") from error
+            raise ValueError(t("fixlink.err.static_query_format")) from error
     if len(pairs) > 10:
-        raise ValueError("\u975c\u614b query \u6700\u591a 10 \u7d44\u3002")
+        raise ValueError(t("fixlink.err.static_query_too_many"))
     result: dict[str, str] = {}
     for raw_key, raw_value in pairs:
-        key = _normalize_query_key(raw_key, "\u975c\u614b query key")
+        key = _normalize_query_key(raw_key, t("fixlink.field.static_query_key"))
         if key in result:
-            raise ValueError(f"\u975c\u614b query key `{key}` \u91cd\u8907\u3002")
+            raise ValueError(t("fixlink.err.static_query_key_dup", key=key))
         text = str(raw_value)
         if len(text) > 256:
-            raise ValueError("\u975c\u614b query value \u9577\u5ea6\u4e0a\u9650\u70ba 256\u3002")
+            raise ValueError(t("fixlink.err.static_query_value_length"))
         result[key] = text
     return result
 
@@ -470,14 +473,14 @@ def normalize_custom_source_fields(
     keep_query_keys=None,
     platform_id: str | None = None,
 ) -> dict:
-    normalized_name = _normalize_display_name(name, "\u5e73\u53f0\u540d\u7a31")
+    normalized_name = _normalize_display_name(name, t("fixlink.field.platform_name"))
     normalized_origins = _unique_strings(
-        (_normalize_public_hostname(origin, "\u4f86\u6e90\u7db2\u57df") for origin in _split_form_values(origins))
+        (_normalize_public_hostname(origin, t("fixlink.field.origin_domain")) for origin in _split_form_values(origins))
     )
     if not 1 <= len(normalized_origins) <= 5:
-        raise ValueError("\u8acb\u8f38\u5165 1 \u5230 5 \u500b\u4f86\u6e90\u7db2\u57df\u3002")
+        raise ValueError(t("fixlink.err.origin_count"))
     normalized_keep_keys = _unique_strings(
-        (_normalize_query_key(key, "\u5fc5\u8981 query key") for key in _split_form_values(keep_query_keys)),
+        (_normalize_query_key(key, t("fixlink.field.required_query_key")) for key in _split_form_values(keep_query_keys)),
         limit=10,
     )
     if platform_id:
@@ -485,7 +488,7 @@ def normalize_custom_source_fields(
     else:
         normalized_id = uuid.uuid4().hex[:16]
     if not re.fullmatch(r"[A-Za-z0-9_-]{8,64}", normalized_id):
-        raise ValueError("\u81ea\u8a02\u5e73\u53f0 ID \u7121\u6548\u3002")
+        raise ValueError(t("fixlink.err.custom_id_invalid"))
     return {
         "id": normalized_id,
         "name": normalized_name,
@@ -496,12 +499,12 @@ def normalize_custom_source_fields(
 
 
 def normalize_custom_fixer_fields(*, name, endpoint, source_param, static_query=None) -> dict:
-    normalized_source_param = _normalize_query_key(source_param, "\u4f86\u6e90 URL \u53c3\u6578\u540d")
+    normalized_source_param = _normalize_query_key(source_param, t("fixlink.field.source_param"))
     normalized_static_query = _normalize_static_query(static_query)
     if normalized_source_param in normalized_static_query:
-        raise ValueError("\u4f86\u6e90 URL \u53c3\u6578\u540d\u4e0d\u80fd\u8207\u975c\u614b query key \u91cd\u8907\u3002")
+        raise ValueError(t("fixlink.err.source_param_conflict"))
     return {
-        "name": _normalize_display_name(name, "Fixer \u540d\u7a31"),
+        "name": _normalize_display_name(name, t("fixlink.field.fixer_name")),
         "endpoint": _normalize_endpoint(endpoint),
         "source_param": normalized_source_param,
         "static_query": normalized_static_query,
@@ -528,12 +531,12 @@ def validate_custom_source_conflicts(source: dict, existing: list[dict], *, excl
     for origin in source["origins"]:
         builtin_name = builtin_platform_for_hostname(origin)
         if builtin_name:
-            raise ValueError(f"{builtin_name} \u70ba\u5167\u5efa\u5e73\u53f0\uff0c\u4e0d\u80fd\u88ab\u81ea\u8a02\u898f\u5247\u8986\u84cb\u3002")
+            raise ValueError(t("fixlink.err.builtin_conflict", platform=builtin_name))
     for item in existing:
         if item.get("id") == exclude_id:
             continue
         if str(item.get("name", "")).casefold() == name_key:
-            raise ValueError("\u81ea\u8a02\u5e73\u53f0\u540d\u7a31\u4e0d\u80fd\u91cd\u8907\u3002")
+            raise ValueError(t("fixlink.err.name_duplicate"))
         existing_origins = set(item.get("origins", []))
         existing_prefixes = set(item.get("path_prefixes", []))
         for origin in source["origins"]:
@@ -541,12 +544,12 @@ def validate_custom_source_conflicts(source: dict, existing: list[dict], *, excl
                 continue
             for prefix in source["path_prefixes"]:
                 if prefix in existing_prefixes:
-                    raise ValueError(f"`{origin}{prefix}` \u5df2\u6709\u76f8\u540c\u7684\u81ea\u8a02\u5339\u914d\u898f\u5247\u3002")
+                    raise ValueError(t("fixlink.err.rule_duplicate", pattern=f"{origin}{prefix}"))
 
 
 def normalize_custom_platform(raw: dict, existing: list[dict] | None = None, *, exclude_id: str | None = None) -> dict:
     if not isinstance(raw, dict):
-        raise ValueError("\u81ea\u8a02\u5e73\u53f0\u8cc7\u6599\u5fc5\u9808\u662f object\u3002")
+        raise ValueError(t("fixlink.err.platform_not_object"))
     raw_id = raw.get("id")
     if not raw_id:
         seed = f"{raw.get('name', '')}|{raw.get('origins', '')}|{raw.get('path_prefixes', '')}"
@@ -951,18 +954,18 @@ class FixLinkDeleteButton(
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         if interaction.user.id == self.author_id:
             return True
-        await interaction.response.send_message("只有原訊息作者可以刪除這則訊息。", ephemeral=True)
+        await interaction.response.send_message(t("fixlink.err.not_original_author"), ephemeral=True)
         return False
 
     async def callback(self, interaction: discord.Interaction):
         if interaction.message is None:
-            await interaction.response.send_message("找不到要刪除的訊息。", ephemeral=True)
+            await interaction.response.send_message(t("fixlink.err.message_not_found"), ephemeral=True)
             return
         await interaction.response.defer()
         try:
             await interaction.message.delete()
         except discord.HTTPException:
-            await interaction.followup.send("無法刪除這則訊息。", ephemeral=True)
+            await interaction.followup.send(t("fixlink.err.delete_failed"), ephemeral=True)
 
 
 class FixLinkDeleteView(discord.ui.View):
@@ -976,7 +979,7 @@ class BuiltinPlatformSelect(discord.ui.Select):
         self.settings_view = settings_view
         super().__init__(
             custom_id="fixlink_builtin_platform_select",
-            placeholder="選擇內建平台",
+            placeholder=t("fixlink.select.builtin_platform"),
             min_values=1,
             max_values=1,
             row=1,
@@ -997,7 +1000,7 @@ class PreferredFixerSelect(discord.ui.Select):
         self.settings_view = settings_view
         super().__init__(
             custom_id="fixlink_preferred_fixer",
-            placeholder="內建平台主要修復服務",
+            placeholder=t("fixlink.select.preferred_fixer"),
             min_values=1,
             max_values=1,
             row=2,
@@ -1018,11 +1021,11 @@ class CustomPlatformSelect(discord.ui.Select):
         self.settings_view = settings_view
         super().__init__(
             custom_id="fixlink_custom_platform_select",
-            placeholder="\u9078\u64c7\u81ea\u8a02\u5e73\u53f0",
+            placeholder=t("fixlink.select.custom_platform"),
             min_values=1,
             max_values=1,
             row=3,
-            options=[discord.SelectOption(label="\u5c1a\u7121\u81ea\u8a02\u5e73\u53f0", value="__none__")],
+            options=[discord.SelectOption(label=t("fixlink.state.no_custom_platform_option"), value="__none__")],
             disabled=True,
         )
 
@@ -1039,7 +1042,7 @@ class CustomPlatformSelect(discord.ui.Select):
         )
 
 
-class FixLinkSettingsView(discord.ui.View):
+class FixLinkSettingsView(i18n.I18nView):
     def __init__(self, cog: "FixLink", interaction: discord.Interaction):
         super().__init__(timeout=300)
         self.cog = cog
@@ -1064,19 +1067,19 @@ class FixLinkSettingsView(discord.ui.View):
         )
 
     def refresh_components(self):
-        self.toggle_enabled.label = "\u5df2\u555f\u7528" if self.config["enabled"] else "\u5df2\u505c\u7528"
+        self.toggle_enabled.label = t("fixlink.state.enabled_short") if self.config["enabled"] else t("fixlink.state.disabled_short")
         self.toggle_enabled.style = discord.ButtonStyle.success if self.config["enabled"] else discord.ButtonStyle.secondary
-        self.toggle_tracker.label = "\u79fb\u9664\u8ffd\u8e64\uff1a\u958b" if self.config["remove_tracker"] else "\u79fb\u9664\u8ffd\u8e64\uff1a\u95dc"
+        self.toggle_tracker.label = t("fixlink.btn.remove_tracker_on" if self.config["remove_tracker"] else "fixlink.btn.remove_tracker_off")
         self.toggle_tracker.style = discord.ButtonStyle.primary if self.config["remove_tracker"] else discord.ButtonStyle.secondary
-        self.toggle_webhook.label = "Webhook\uff1a\u958b" if self.config["webhook_mode"] else "Webhook\uff1a\u95dc"
+        self.toggle_webhook.label = t("fixlink.btn.webhook_on" if self.config["webhook_mode"] else "fixlink.btn.webhook_off")
         self.toggle_webhook.style = discord.ButtonStyle.primary if self.config["webhook_mode"] else discord.ButtonStyle.secondary
         tracker_only = self.config["webhook_only_with_tracker"]
-        self.toggle_webhook_tracker.label = "Webhook：僅追蹤碼" if tracker_only else "Webhook：全部連結"
+        self.toggle_webhook_tracker.label = t("fixlink.btn.webhook_tracker_only" if tracker_only else "fixlink.btn.webhook_all_links")
         self.toggle_webhook_tracker.style = (
             discord.ButtonStyle.primary if tracker_only else discord.ButtonStyle.secondary
         )
         if self.selected_builtin_name not in supported_platforms:
-            self.selected_builtin_name = "Threads"
+            self.selected_builtin_name = "Threads"  # 內建平台的鍵值本身，不是顯示文字
         self.builtin_select.options = [
             discord.SelectOption(
                 label=name,
@@ -1087,15 +1090,17 @@ class FixLinkSettingsView(discord.ui.View):
         ]
         platform = supported_platforms[self.selected_builtin_name]
         platform_disabled = self.selected_builtin_name in self.config["disabled_platforms"]
-        self.toggle_builtin.label = (
-            f"啟用 {self.selected_builtin_name}" if platform_disabled else f"停用 {self.selected_builtin_name}"
+        self.toggle_builtin.label = t(
+            "fixlink.btn.enable_platform" if platform_disabled else "fixlink.btn.disable_platform",
+            platform=self.selected_builtin_name,
         )[:80]
         self.toggle_builtin.style = (
             discord.ButtonStyle.secondary if platform_disabled else discord.ButtonStyle.success
         )
 
         preferred = self.config["preferred_fixers"][self.selected_builtin_name]
-        self.preferred_select.placeholder = f"{self.selected_builtin_name} 主要修復服務"[:150]
+        self.preferred_select.placeholder = t("fixlink.select.platform_preferred_fixer",
+                                              platform=self.selected_builtin_name)[:150]
         self.preferred_select.options = [
             discord.SelectOption(label=name, value=name, default=name == preferred)
             for name in platform["fixers"]
@@ -1118,7 +1123,7 @@ class FixLinkSettingsView(discord.ui.View):
             ]
         else:
             self.custom_select.disabled = True
-            self.custom_select.options = [discord.SelectOption(label="\u5c1a\u7121\u81ea\u8a02\u5e73\u53f0", value="__none__")]
+            self.custom_select.options = [discord.SelectOption(label=t("fixlink.state.no_custom_platform"), value="__none__")]
         has_selected = self.selected_custom() is not None
         self.edit_custom.disabled = not has_selected
         self.toggle_custom.disabled = not has_selected
@@ -1127,62 +1132,57 @@ class FixLinkSettingsView(discord.ui.View):
         if has_selected:
             key = f"custom:{self.selected_custom_id}"
             disabled = key in self.config["disabled_platforms"]
-            self.toggle_custom.label = "\u555f\u7528\u81ea\u8a02" if disabled else "\u505c\u7528\u81ea\u8a02"
+            self.toggle_custom.label = t("fixlink.btn.enable_custom" if disabled else "fixlink.btn.disable_custom")
 
     def build_embed(self) -> discord.Embed:
-        embed = discord.Embed(title="FixLink \u8a2d\u5b9a", color=discord.Color.blurple())
-        mode = "Webhook \u66ff\u63db" if self.config["webhook_mode"] else "\u4e00\u822c\u56de\u8986"
-        webhook_condition = (
-            "僅含追蹤碼的連結"
-            if self.config["webhook_only_with_tracker"]
-            else "全部支援連結"
+        embed = discord.Embed(title=t("fixlink.embed.settings_title"), color=discord.Color.blurple())
+        mode = t("fixlink.mode.webhook" if self.config["webhook_mode"] else "fixlink.mode.normal_reply")
+        webhook_condition = t(
+            "fixlink.condition.tracker_only" if self.config["webhook_only_with_tracker"]
+            else "fixlink.condition.all_links"
         )
-        enabled_text = "\u555f\u7528" if self.config["enabled"] else "\u505c\u7528"
-        tracker_text = "\u555f\u7528" if self.config["remove_tracker"] else "\u505c\u7528"
-        embed.description = (
-            f"\u529f\u80fd\uff1a**{enabled_text}**\n"
-            f"\u6a21\u5f0f\uff1a**{mode}**\n"
-            f"Webhook 條件：**{webhook_condition}**\n"
-            f"\u79fb\u9664\u8ffd\u8e64\uff1a**{tracker_text}**"
-        )
+        enabled_text = t("fixlink.state.enabled_short") if self.config["enabled"] else t("fixlink.state.disabled_short")
+        tracker_text = t("fixlink.state.enabled_short") if self.config["remove_tracker"] else t("fixlink.state.disabled_short")
+        embed.description = t("fixlink.embed.settings_desc",
+                              enabled=enabled_text, mode=mode,
+                              webhook_condition=webhook_condition, tracker=tracker_text)
         platform = supported_platforms[self.selected_builtin_name]
         platform_enabled = self.selected_builtin_name not in self.config["disabled_platforms"]
-        platform_status = "\u555f\u7528" if platform_enabled else "\u505c\u7528"
-        fixer_names = "、".join(platform["fixers"])
+        platform_status = t("fixlink.state.enabled_short") if platform_enabled else t("fixlink.state.disabled_short")
+        fixer_names = i18n.join_list(platform["fixers"])
         embed.add_field(
-            name=f"內建：{self.selected_builtin_name}",
-            value=(
-                f"\u72c0\u614b\uff1a{platform_status}\n"
-                f"\u4e3b\u8981\u670d\u52d9\uff1a{self.config['preferred_fixers'][self.selected_builtin_name]}\n"
-                f"可用：{fixer_names}"
-            ),
+            name=t("fixlink.field.builtin_platform", platform=self.selected_builtin_name),
+            value=t("fixlink.embed.builtin_field_body",
+                   status=platform_status,
+                   preferred=self.config["preferred_fixers"][self.selected_builtin_name],
+                   available=fixer_names),
             inline=False,
         )
         custom = self.selected_custom()
         if custom:
             disabled = f"custom:{custom['id']}" in self.config["disabled_platforms"]
-            custom_status = "\u505c\u7528" if disabled else "\u555f\u7528"
+            custom_status = t("fixlink.state.disabled_short") if disabled else t("fixlink.state.enabled_short")
             fixer = custom["fixer"]
             embed.add_field(
-                name=f"\u81ea\u8a02\uff1a{custom['name']}",
-                value=(
-                    f"\u72c0\u614b\uff1a{custom_status}\n"
-                    f"\u4f86\u6e90\uff1a{', '.join(custom['origins'])}\n"
-                    f"\u8def\u5f91\uff1a{', '.join(custom['path_prefixes'])}\n"
-                    f"Fixer\uff1a{fixer['name']} (`{urlsplit(fixer['endpoint']).hostname}`)"
-                )[:1024],
+                name=t("fixlink.field.custom_platform", name=custom["name"]),
+                value=t("fixlink.embed.custom_field_body",
+                       status=custom_status,
+                       origins=", ".join(custom["origins"]),
+                       paths=", ".join(custom["path_prefixes"]),
+                       fixer_name=fixer["name"],
+                       fixer_host=urlsplit(fixer["endpoint"]).hostname)[:1024],
                 inline=False,
             )
         else:
-            embed.add_field(name="\u81ea\u8a02\u5e73\u53f0", value="\u5c1a\u7121\u81ea\u8a02\u5e73\u53f0\u3002", inline=False)
+            embed.add_field(name=t("fixlink.field.custom_platform_header"),
+                            value=t("fixlink.state.no_custom_platform_period"), inline=False)
         enabled_builtin_count = sum(
             name not in self.config["disabled_platforms"] for name in supported_platforms
         )
         embed.set_footer(
-            text=(
-                f"內建平台：{enabled_builtin_count}/{len(supported_platforms)} • "
-                f"\u81ea\u8a02\u5e73\u53f0\uff1a{len(self.config['custom_platforms'])}/{MAX_CUSTOM_PLATFORMS}"
-            )
+            text=t("fixlink.embed.footer",
+                  builtin_enabled=enabled_builtin_count, builtin_total=len(supported_platforms),
+                  custom_count=len(self.config["custom_platforms"]), custom_max=MAX_CUSTOM_PLATFORMS)
         )
         return embed
 
@@ -1196,14 +1196,14 @@ class FixLinkSettingsView(discord.ui.View):
             and permissions.manage_webhooks
         )
         if not allowed:
-            await interaction.response.send_message("\u53ea\u6709\u958b\u555f\u6b64\u9762\u677f\u7684\u7ba1\u7406\u54e1\u53ef\u4ee5\u4fee\u6539 FixLink \u8a2d\u5b9a\u3002", ephemeral=True)
+            await interaction.response.send_message(t("fixlink.err.not_panel_owner"), ephemeral=True)
         return allowed
 
     async def mutate_config(self, interaction: discord.Interaction, mutator: Callable[[dict], None]):
         config = self.cog.get_config(self.guild_id)
         mutator(config)
         if not self.cog.save_config(self.guild_id, config):
-            await interaction.response.send_message("\u5132\u5b58 FixLink \u8a2d\u5b9a\u5931\u6557\uff0c\u8acb\u7a0d\u5f8c\u518d\u8a66\u3002", ephemeral=True)
+            await interaction.response.send_message(t("fixlink.err.save_config_failed"), ephemeral=True)
             return
         self.config = config
         self.refresh_components()
@@ -1218,18 +1218,18 @@ class FixLinkSettingsView(discord.ui.View):
             except discord.HTTPException:
                 pass
 
-    @discord.ui.button(label="\u5df2\u505c\u7528", style=discord.ButtonStyle.secondary, row=0, custom_id="fixlink_toggle_enabled")
+    @discord.ui.button(label=i18n.K("fixlink.state.disabled_short"), style=discord.ButtonStyle.secondary, row=0, custom_id="fixlink_toggle_enabled")
     async def toggle_enabled(self, interaction: discord.Interaction, button: discord.ui.Button):
         await self.mutate_config(interaction, lambda config: config.__setitem__("enabled", not config["enabled"]))
 
-    @discord.ui.button(label="\u79fb\u9664\u8ffd\u8e64\uff1a\u95dc", style=discord.ButtonStyle.secondary, row=0, custom_id="fixlink_toggle_tracker")
+    @discord.ui.button(label=i18n.K("fixlink.btn.remove_tracker_off"), style=discord.ButtonStyle.secondary, row=0, custom_id="fixlink_toggle_tracker")
     async def toggle_tracker(self, interaction: discord.Interaction, button: discord.ui.Button):
         await self.mutate_config(
             interaction,
             lambda config: config.__setitem__("remove_tracker", not config["remove_tracker"]),
         )
 
-    @discord.ui.button(label="Webhook\uff1a\u95dc", style=discord.ButtonStyle.secondary, row=0, custom_id="fixlink_toggle_webhook")
+    @discord.ui.button(label=i18n.K("fixlink.btn.webhook_off"), style=discord.ButtonStyle.secondary, row=0, custom_id="fixlink_toggle_webhook")
     async def toggle_webhook(self, interaction: discord.Interaction, button: discord.ui.Button):
         await self.mutate_config(
             interaction,
@@ -1237,7 +1237,7 @@ class FixLinkSettingsView(discord.ui.View):
         )
 
     @discord.ui.button(
-        label="Webhook：全部連結",
+        label=i18n.K("fixlink.btn.webhook_all_links"),
         style=discord.ButtonStyle.secondary,
         row=0,
         custom_id="fixlink_toggle_webhook_tracker",
@@ -1252,7 +1252,7 @@ class FixLinkSettingsView(discord.ui.View):
         )
 
     @discord.ui.button(
-        label="停用平台",
+        label=i18n.K("fixlink.btn.disable_platform_default"),
         style=discord.ButtonStyle.success,
         row=4,
         custom_id="fixlink_toggle_builtin",
@@ -1269,23 +1269,23 @@ class FixLinkSettingsView(discord.ui.View):
 
         await self.mutate_config(interaction, mutate)
 
-    @discord.ui.button(label="\u65b0\u589e\u81ea\u8a02", style=discord.ButtonStyle.primary, row=4, custom_id="fixlink_add_custom")
+    @discord.ui.button(label=i18n.K("fixlink.btn.add_custom"), style=discord.ButtonStyle.primary, row=4, custom_id="fixlink_add_custom")
     async def add_custom(self, interaction: discord.Interaction, button: discord.ui.Button):
         await interaction.response.send_modal(CustomPlatformSourceModal(self))
 
-    @discord.ui.button(label="\u7de8\u8f2f\u81ea\u8a02", style=discord.ButtonStyle.secondary, row=4, custom_id="fixlink_edit_custom")
+    @discord.ui.button(label=i18n.K("fixlink.btn.edit_custom"), style=discord.ButtonStyle.secondary, row=4, custom_id="fixlink_edit_custom")
     async def edit_custom(self, interaction: discord.Interaction, button: discord.ui.Button):
         custom = self.selected_custom()
         if custom is None:
-            await interaction.response.send_message("\u8acb\u5148\u9078\u64c7\u81ea\u8a02\u5e73\u53f0\u3002", ephemeral=True)
+            await interaction.response.send_message(t("fixlink.err.pick_custom_first"), ephemeral=True)
             return
         await interaction.response.send_modal(CustomPlatformSourceModal(self, existing=custom))
 
-    @discord.ui.button(label="\u505c\u7528\u81ea\u8a02", style=discord.ButtonStyle.secondary, row=4, custom_id="fixlink_toggle_custom")
+    @discord.ui.button(label=i18n.K("fixlink.btn.disable_custom_default"), style=discord.ButtonStyle.secondary, row=4, custom_id="fixlink_toggle_custom")
     async def toggle_custom(self, interaction: discord.Interaction, button: discord.ui.Button):
         custom = self.selected_custom()
         if custom is None:
-            await interaction.response.send_message("\u8acb\u5148\u9078\u64c7\u81ea\u8a02\u5e73\u53f0\u3002", ephemeral=True)
+            await interaction.response.send_message(t("fixlink.err.pick_custom_first"), ephemeral=True)
             return
         key = f"custom:{custom['id']}"
 
@@ -1298,14 +1298,14 @@ class FixLinkSettingsView(discord.ui.View):
 
         await self.mutate_config(interaction, mutate)
 
-    @discord.ui.button(label="\u522a\u9664\u81ea\u8a02", style=discord.ButtonStyle.danger, row=4, custom_id="fixlink_delete_custom")
+    @discord.ui.button(label=i18n.K("fixlink.btn.delete_custom"), style=discord.ButtonStyle.danger, row=4, custom_id="fixlink_delete_custom")
     async def delete_custom(self, interaction: discord.Interaction, button: discord.ui.Button):
         custom = self.selected_custom()
         if custom is None:
-            await interaction.response.send_message("\u8acb\u5148\u9078\u64c7\u81ea\u8a02\u5e73\u53f0\u3002", ephemeral=True)
+            await interaction.response.send_message(t("fixlink.err.pick_custom_first"), ephemeral=True)
             return
         await interaction.response.send_message(
-            f"\u78ba\u5b9a\u8981\u522a\u9664 **{discord.utils.escape_markdown(custom['name'])}** \u55ce\uff1f",
+            t("fixlink.confirm.delete_custom", name=discord.utils.escape_markdown(custom["name"])),
             view=CustomDeleteConfirmView(self, custom["id"]),
             ephemeral=True,
         )
@@ -1320,32 +1320,32 @@ class FixLinkSettingsView(discord.ui.View):
                 pass
 
 
-class CustomPlatformSourceModal(discord.ui.Modal, title="\u81ea\u8a02\u5e73\u53f0\u4f86\u6e90"):
+class CustomPlatformSourceModal(i18n.I18nModal, title=i18n.K("fixlink.modal.custom_source_title")):
     def __init__(self, settings_view: FixLinkSettingsView, existing: dict | None = None):
         super().__init__(timeout=300)
         self.settings_view = settings_view
         self.existing = existing
         self.name_input = discord.ui.TextInput(
-            label="\u5e73\u53f0\u540d\u7a31",
+            label=t("fixlink.field.platform_name"),
             default=existing["name"] if existing else None,
             max_length=40,
         )
         self.origins_input = discord.ui.TextInput(
-            label="\u4f86\u6e90\u7db2\u57df\uff081-5 \u500b\uff0c\u9017\u865f\u6216\u5206\u884c\uff09",
+            label=t("fixlink.modal.origins_label"),
             default="\n".join(existing["origins"]) if existing else None,
             placeholder="example.com",
             style=discord.TextStyle.paragraph,
             max_length=500,
         )
         self.paths_input = discord.ui.TextInput(
-            label="\u8def\u5f91\u524d\u7db4\uff081-5 \u500b\uff09",
+            label=t("fixlink.modal.paths_label"),
             default="\n".join(existing["path_prefixes"]) if existing else None,
             placeholder="/post/",
             style=discord.TextStyle.paragraph,
             max_length=500,
         )
         self.keep_query_input = discord.ui.TextInput(
-            label="\u53bb\u8ffd\u8e64\u6642\u4fdd\u7559\u7684 query keys\uff08\u53ef\u7559\u7a7a\uff09",
+            label=t("fixlink.modal.keep_query_label"),
             default="\n".join(existing.get("keep_query_keys", [])) if existing else None,
             placeholder="id\nlang",
             required=False,
@@ -1377,13 +1377,13 @@ class CustomPlatformSourceModal(discord.ui.Modal, title="\u81ea\u8a02\u5e73\u53f
             await interaction.response.send_message(str(error), ephemeral=True)
             return
         await interaction.response.send_message(
-            f"\u4f86\u6e90\u5df2\u9a57\u8b49\uff1a**{discord.utils.escape_markdown(source['name'])}**\n\u7e7c\u7e8c\u8a2d\u5b9a query fixer\u3002",
+            t("fixlink.msg.source_verified", name=discord.utils.escape_markdown(source["name"])),
             view=CustomFixerDraftView(self.settings_view, source, self.existing),
             ephemeral=True,
         )
 
 
-class CustomFixerDraftView(discord.ui.View):
+class CustomFixerDraftView(i18n.I18nView):
     def __init__(self, settings_view: FixLinkSettingsView, source: dict, existing: dict | None):
         super().__init__(timeout=300)
         self.settings_view = settings_view
@@ -1393,12 +1393,12 @@ class CustomFixerDraftView(discord.ui.View):
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         return await self.settings_view.interaction_check(interaction)
 
-    @discord.ui.button(label="\u8a2d\u5b9a Query fixer", style=discord.ButtonStyle.primary)
+    @discord.ui.button(label=i18n.K("fixlink.btn.configure_query_fixer"), style=discord.ButtonStyle.primary)
     async def configure(self, interaction: discord.Interaction, button: discord.ui.Button):
         await interaction.response.send_modal(CustomFixerModal(self.settings_view, self.source, self.existing))
 
 
-class CustomFixerModal(discord.ui.Modal, title="\u81ea\u8a02 Query fixer"):
+class CustomFixerModal(i18n.I18nModal, title=i18n.K("fixlink.modal.custom_fixer_title")):
     def __init__(self, settings_view: FixLinkSettingsView, source: dict, existing: dict | None):
         super().__init__(timeout=300)
         self.settings_view = settings_view
@@ -1406,18 +1406,18 @@ class CustomFixerModal(discord.ui.Modal, title="\u81ea\u8a02 Query fixer"):
         self.existing = existing
         existing_fixer = existing.get("fixer", {}) if existing else {}
         self.name_input = discord.ui.TextInput(
-            label="Fixer \u540d\u7a31",
+            label=t("fixlink.field.fixer_name"),
             default=existing_fixer.get("name"),
             max_length=40,
         )
         self.endpoint_input = discord.ui.TextInput(
-            label="HTTPS endpoint\uff08\u4e0d\u542b query\uff09",
+            label=t("fixlink.modal.endpoint_label"),
             default=existing_fixer.get("endpoint"),
             placeholder="https://fix.example.com/embed",
             max_length=500,
         )
         self.source_param_input = discord.ui.TextInput(
-            label="\u4f86\u6e90 URL \u7684 query \u53c3\u6578\u540d",
+            label=t("fixlink.modal.source_param_label"),
             default=existing_fixer.get("source_param", "url"),
             placeholder="url",
             max_length=64,
@@ -1426,7 +1426,7 @@ class CustomFixerModal(discord.ui.Modal, title="\u81ea\u8a02 Query fixer"):
             f"{key}={value}" for key, value in existing_fixer.get("static_query", {}).items()
         )
         self.static_query_input = discord.ui.TextInput(
-            label="\u975c\u614b query\uff08key=value\uff0c\u53ef\u7559\u7a7a\uff09",
+            label=t("fixlink.modal.static_query_label"),
             default=static_default or None,
             placeholder="v=1\nmode=embed",
             required=False,
@@ -1455,23 +1455,23 @@ class CustomFixerModal(discord.ui.Modal, title="\u81ea\u8a02 Query fixer"):
             )
             remaining = [item for item in config["custom_platforms"] if item["id"] != candidate["id"]]
             if existing_id is None and len(remaining) >= MAX_CUSTOM_PLATFORMS:
-                raise ValueError(f"\u6bcf\u500b\u4f3a\u670d\u5668\u6700\u591a {MAX_CUSTOM_PLATFORMS} \u500b\u81ea\u8a02\u5e73\u53f0\u3002")
+                raise ValueError(t("fixlink.err.too_many_custom", max=MAX_CUSTOM_PLATFORMS))
             config["custom_platforms"] = remaining + [candidate]
         except ValueError as error:
             await interaction.response.send_message(str(error), ephemeral=True)
             return
         if not self.settings_view.cog.save_config(self.settings_view.guild_id, config):
-            await interaction.response.send_message("\u5132\u5b58\u81ea\u8a02\u5e73\u53f0\u5931\u6557\uff0c\u8acb\u7a0d\u5f8c\u518d\u8a66\u3002", ephemeral=True)
+            await interaction.response.send_message(t("fixlink.err.save_custom_failed"), ephemeral=True)
             return
         self.settings_view.selected_custom_id = candidate["id"]
         await interaction.response.send_message(
-            f"\u5df2\u5132\u5b58\u81ea\u8a02\u5e73\u53f0 **{discord.utils.escape_markdown(candidate['name'])}**\u3002",
+            t("fixlink.msg.custom_saved", name=discord.utils.escape_markdown(candidate["name"])),
             ephemeral=True,
         )
         await self.settings_view.refresh_message()
 
 
-class CustomDeleteConfirmView(discord.ui.View):
+class CustomDeleteConfirmView(i18n.I18nView):
     def __init__(self, settings_view: FixLinkSettingsView, platform_id: str):
         super().__init__(timeout=60)
         self.settings_view = settings_view
@@ -1480,7 +1480,7 @@ class CustomDeleteConfirmView(discord.ui.View):
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         return await self.settings_view.interaction_check(interaction)
 
-    @discord.ui.button(label="\u78ba\u5b9a\u522a\u9664", style=discord.ButtonStyle.danger)
+    @discord.ui.button(label=i18n.K("fixlink.btn.confirm_delete"), style=discord.ButtonStyle.danger)
     async def confirm(self, interaction: discord.Interaction, button: discord.ui.Button):
         config = self.settings_view.cog.get_config(self.settings_view.guild_id)
         original_count = len(config["custom_platforms"])
@@ -1488,24 +1488,24 @@ class CustomDeleteConfirmView(discord.ui.View):
         key = f"custom:{self.platform_id}"
         config["disabled_platforms"] = [item for item in config["disabled_platforms"] if item != key]
         if len(config["custom_platforms"]) == original_count:
-            await interaction.response.edit_message(content="\u627e\u4e0d\u5230\u9019\u500b\u81ea\u8a02\u5e73\u53f0\u3002", view=None)
+            await interaction.response.edit_message(content=t("fixlink.err.custom_not_found"), view=None)
             return
         if not self.settings_view.cog.save_config(self.settings_view.guild_id, config):
-            await interaction.response.edit_message(content="\u522a\u9664\u81ea\u8a02\u5e73\u53f0\u5931\u6557\u3002", view=None)
+            await interaction.response.edit_message(content=t("fixlink.err.delete_custom_failed"), view=None)
             return
         self.settings_view.selected_custom_id = None
-        await interaction.response.edit_message(content="\u5df2\u522a\u9664\u81ea\u8a02\u5e73\u53f0\u3002", view=None)
+        await interaction.response.edit_message(content=t("fixlink.msg.custom_deleted"), view=None)
         await self.settings_view.refresh_message()
 
-    @discord.ui.button(label="\u53d6\u6d88", style=discord.ButtonStyle.secondary)
+    @discord.ui.button(label=i18n.K("common.btn.cancel"), style=discord.ButtonStyle.secondary)
     async def cancel(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await interaction.response.edit_message(content="\u5df2\u53d6\u6d88\u3002", view=None)
+        await interaction.response.edit_message(content=t("fixlink.msg.cancelled"), view=None)
 
 
 @app_commands.allowed_contexts(guilds=True, dms=False, private_channels=False)
 @app_commands.allowed_installs(guilds=True, users=False)
 @app_commands.default_permissions(manage_guild=True, manage_webhooks=True)
-class FixLink(commands.GroupCog, name="fixlink", description="\u9023\u7d50\u4fee\u5fa9\u5668"):
+class FixLink(commands.GroupCog, name=app_commands.locale_str("fixlink", i18n_key="cmd.fixlink.fixlink.root.name"), description=app_commands.locale_str("Link fixer", i18n_key="cmd.fixlink.fixlink.root.desc")):
     def __init__(self, client: commands.Bot):
         super().__init__()
         self.bot = client
@@ -1537,10 +1537,10 @@ class FixLink(commands.GroupCog, name="fixlink", description="\u9023\u7d50\u4fee
     def save_config(self, guild_id: int, config: dict) -> bool:
         return bool(set_server_config(guild_id, FIXLINK_CONFIG_KEY, normalize_fixlink_config(config)))
 
-    @app_commands.command(name="settings", description="\u958b\u555f FixLink \u4e92\u52d5\u5f0f\u8a2d\u5b9a\u9762\u677f")
+    @app_commands.command(name=app_commands.locale_str("settings", i18n_key="cmd.fixlink.fixlink.settings.name"), description=app_commands.locale_str("Open the FixLink interactive settings panel", i18n_key="cmd.fixlink.fixlink.settings.desc"))
     async def settings(self, interaction: discord.Interaction):
         if interaction.guild is None:
-            await interaction.response.send_message("\u6b64\u6307\u4ee4\u53ea\u80fd\u5728\u4f3a\u670d\u5668\u4e2d\u4f7f\u7528\u3002", ephemeral=True)
+            await interaction.response.send_message(t("common.err.guild_only"), ephemeral=True)
             return
         view = FixLinkSettingsView(self, interaction)
         await interaction.response.send_message(embed=view.build_embed(), view=view, ephemeral=True)

@@ -1,0 +1,85 @@
+{
+    "btn": {
+        "appeal": "Submit appeal",
+        "blacklist_appeal": "Add to appeal blacklist",
+        "confirm_unblacklist": "Confirm removal",
+        "respond_appeal": "Reply to appeal"
+    },
+    "dm": {
+        "reason": "Reason: {reason}",
+        "title_ban": "You were banned from {guild}.",
+        "title_blacklist": "You were added to the appeal blacklist in {guild}.",
+        "title_generic": "A moderation action ({action}) was taken against you in {guild}.",
+        "title_kick": "You were kicked from {guild}.",
+        "title_mute": "You were muted in {guild}."
+    },
+    "embed": {
+        "appeal_reply_desc": "You received a reply to your appeal from the moderators of {guild}.",
+        "appeal_reply_title": "Appeal reply",
+        "blacklist_desc": {
+            "one": "{count} user on the blacklist",
+            "other": "{count} users on the blacklist"
+        },
+        "blacklist_title": "Appeal blacklist",
+        "new_appeal_desc": "Appeal from {user} (`{user_id}`).",
+        "new_appeal_title": "New user appeal"
+    },
+    "field": {
+        "admin_action": "Moderator action",
+        "admin_reply": "Moderator reply",
+        "appeal_method": "How to appeal",
+        "appeal_reason": "Appeal reason",
+        "blacklist_users": "Blacklisted users",
+        "can_appeal_again": "May appeal again",
+        "guild_id": "Server ID",
+        "reply_content": "Reply",
+        "until": "Until",
+        "user_id": "User ID"
+    },
+    "footer": {
+        "blacklist_truncated": "Showing the first 25 of {count} users",
+        "replied_by": "{user} - replied"
+    },
+    "modal": {
+        "appeal_label": "Describe the grounds for your appeal",
+        "appeal_title": "User appeal",
+        "can_appeal_label": "Allow the user to appeal again? (y/n)",
+        "respond_label": "Your reply",
+        "respond_title": "Reply to user appeal"
+    },
+    "msg": {
+        "action_blacklist": "Added to appeal blacklist",
+        "already_blacklisted": "That user is already on the appeal blacklist.",
+        "appeal_again_hint": "You can appeal again using the button below.",
+        "appeal_blacklisted_hint": "You are on the appeal blacklist and cannot appeal.",
+        "appeal_channel_missing": "The appeal channel is not configured or inaccessible. Please contact a moderator.",
+        "appeal_channel_set": "Appeal channel set to: {channel}",
+        "appeal_disabled": "The appeal feature has been disabled.",
+        "appeal_hint": "You can appeal using the button below.",
+        "appeal_submitted": "Your appeal has been submitted; the moderators will review it.",
+        "blacklist_added": "Added {user} to the appeal blacklist.",
+        "blacklist_empty": "No users are on the appeal blacklist.",
+        "blacklist_notify": "You have been added to the appeal blacklist.",
+        "blacklist_notify_reason": "You have been added to the appeal blacklist. Reason: {reason}.",
+        "blacklisted": "The user has been added to the appeal blacklist and can no longer appeal.",
+        "cancelled": "Cancelled.",
+        "cannot_blacklist_bot": "Bots cannot be added to the appeal blacklist.",
+        "cannot_blacklist_self": "You cannot add yourself to the appeal blacklist.",
+        "channel_no_permission": "The bot cannot send messages in that channel. Please pick another one.",
+        "guild_not_found": "Could not find the server. Please contact a moderator.",
+        "invalid_action": "Invalid punishment type.",
+        "no_reason": "Not provided",
+        "not_banned": "You are not banned, so there is nothing to appeal.",
+        "not_muted": "You are not muted, so there is nothing to appeal.",
+        "notify_set": "Notifications for {action} are now {state}.",
+        "reply_dm_blocked": "Could not message the user; their DMs may be closed.",
+        "reply_sent": "Your reply has been sent to the user.",
+        "unblacklist_confirm": "{user} is already on the appeal blacklist. Remove them?",
+        "unblacklisted": "Removed {user} from the appeal blacklist.",
+        "unknown_user": "Unknown user"
+    },
+    "suffix": {
+        "blacklisted": " (blacklisted)",
+        "replied": " (replied)"
+    }
+}

@@ -19,6 +19,9 @@ from globalenv import (
 )
 from logger import log
 
+import i18n
+from i18n import t
+
 
 CONFIG_KEY = "stickymessage"
 STATE_KEY = "stickymessage_state"
@@ -80,7 +83,7 @@ def content_digest(content: str) -> str:
 def normalize_entry(raw: Any, *, strict: bool = False) -> dict[str, Any] | None:
     if not isinstance(raw, dict):
         if strict:
-            raise ValueError("每則置底訊息都必須是 object。")
+            raise ValueError(t("stickymessage.err.entry_not_object"))
         return None
 
     raw_channel_id = raw.get("channel_id")
@@ -88,21 +91,21 @@ def normalize_entry(raw: Any, *, strict: bool = False) -> dict[str, Any] | None:
         channel_id = int(raw_channel_id)
     except (TypeError, ValueError):
         if strict:
-            raise ValueError("置底訊息的頻道 ID 無效。")
+            raise ValueError(t("stickymessage.err.bad_channel_id"))
         return None
     if channel_id <= 0:
         if strict:
-            raise ValueError("置底訊息的頻道 ID 無效。")
+            raise ValueError(t("stickymessage.err.bad_channel_id"))
         return None
 
     content = str(raw.get("content") or "").strip()
     if not content:
         if strict:
-            raise ValueError("置底訊息內容不可為空。")
+            raise ValueError(t("stickymessage.err.content_empty"))
         return None
     if len(content) > MAX_CONTENT_LENGTH:
         if strict:
-            raise ValueError(f"置底訊息內容不可超過 {MAX_CONTENT_LENGTH} 字。")
+            raise ValueError(t("stickymessage.err.content_too_long", max=MAX_CONTENT_LENGTH))
         content = content[:MAX_CONTENT_LENGTH]
 
     return {
@@ -117,7 +120,7 @@ def normalize_config(raw: Any, *, strict: bool = False) -> dict[str, Any]:
         raw = {}
     if not isinstance(raw, dict):
         if strict:
-            raise ValueError("StickyMessage 設定必須是 object。")
+            raise ValueError(t("stickymessage.err.config_not_object"))
         raw = {}
 
     quiet_seconds = _bounded_int(
@@ -145,14 +148,15 @@ def normalize_config(raw: Any, *, strict: bool = False) -> dict[str, Any]:
             try:
                 parsed = int(value)
             except (TypeError, ValueError) as error:
-                raise ValueError(f"{key} 必須是整數。") from error
+                raise ValueError(t("stickymessage.err.field_not_int", field=key)) from error
             if parsed < minimum or parsed > maximum:
-                raise ValueError(f"{key} 必須介於 {minimum} 到 {maximum}。")
+                raise ValueError(t("stickymessage.err.field_out_of_range",
+                                   field=key, min=minimum, max=maximum))
 
     raw_entries = raw.get("entries", [])
     if not isinstance(raw_entries, list):
         if strict:
-            raise ValueError("StickyMessage entries 必須是清單。")
+            raise ValueError(t("stickymessage.err.entries_not_list"))
         raw_entries = []
 
     entries: list[dict[str, Any]] = []
@@ -164,14 +168,14 @@ def normalize_config(raw: Any, *, strict: bool = False) -> dict[str, Any]:
         channel_id = entry["channel_id"]
         if channel_id in seen_channels:
             if strict:
-                raise ValueError("同一個頻道只能設定一則置底訊息。")
+                raise ValueError(t("stickymessage.err.duplicate_channel"))
             continue
         seen_channels.add(channel_id)
         entries.append(entry)
 
     if len(entries) > MAX_LIMIT:
         if strict:
-            raise ValueError(f"StickyMessage 最多保留 {MAX_LIMIT} 則設定。")
+            raise ValueError(t("stickymessage.err.too_many_entries", count=MAX_LIMIT))
         entries = entries[:MAX_LIMIT]
 
     return {
@@ -230,11 +234,11 @@ async def apply_stickymessage_config(
 
 register_panel_settings(
     "StickyMessage",
-    "置底訊息",
+    t("panel.stickymessage._display", locale=i18n.SOURCE_LOCALE),
     [
         {
-            "display": "置底訊息設定",
-            "description": "設定頻道、訊息內容、提及方式與重新置底間隔",
+            "display": t("panel.stickymessage.stickymessage.display", locale=i18n.SOURCE_LOCALE),
+            "description": t("panel.stickymessage.stickymessage.desc", locale=i18n.SOURCE_LOCALE),
             "database_key": CONFIG_KEY,
             "type": "stickymessage_config",
             "default": DEFAULT_CONFIG,
@@ -242,7 +246,7 @@ register_panel_settings(
             "trigger_with_previous": True,
         },
     ],
-    description="在頻道有新對話後，自動把指定訊息重新移到最底部",
+    description=t("panel.stickymessage._desc", locale=i18n.SOURCE_LOCALE),
     icon="📌",
 )
 
@@ -251,7 +255,9 @@ register_panel_settings(
 @app_commands.default_permissions(manage_guild=True)
 @app_commands.allowed_installs(guilds=True, users=False)
 @app_commands.allowed_contexts(guilds=True, dms=False, private_channels=False)
-class StickyMessage(commands.GroupCog, group_name=app_commands.locale_str("stickymessage")):
+class StickyMessage(commands.GroupCog,
+                    group_name=app_commands.locale_str("stickymessage", i18n_key="cmd.stickymessage.stickymessage.root.name"),
+                    group_description=app_commands.locale_str("Manage this server's sticky messages", i18n_key="cmd.stickymessage.stickymessage.root.desc")):
     """管理伺服器的置底訊息。"""
 
     def __init__(self, client: commands.Bot):
@@ -349,7 +355,7 @@ class StickyMessage(commands.GroupCog, group_name=app_commands.locale_str("stick
             raise
         except Exception as error:
             log(
-                f"置底排程失敗 ({channel_id}): {error}",
+                f"Sticky refresh schedule failed ({channel_id}): {error}",
                 level=logging.ERROR,
                 module_name="StickyMessage",
             )
@@ -429,7 +435,7 @@ class StickyMessage(commands.GroupCog, group_name=app_commands.locale_str("stick
                     self._defer_api_after_http_error(error, attempt)
                     raise
                 await self._wait_after_http_error(error, attempt)
-        raise last_error or RuntimeError("發送置底訊息失敗。")
+        raise last_error or RuntimeError(t("stickymessage.err.send_failed"))
 
     async def publish_entry(
         self,
@@ -440,25 +446,25 @@ class StickyMessage(commands.GroupCog, group_name=app_commands.locale_str("stick
     ) -> discord.Message:
         guild = self.bot.get_guild(guild_id)
         if guild is None:
-            raise ValueError("找不到伺服器。")
+            raise ValueError(t("stickymessage.err.guild_not_found"))
         channel = guild.get_channel(channel_id)
         if not isinstance(channel, discord.TextChannel) or channel.type not in (
             discord.ChannelType.text,
             discord.ChannelType.news,
         ):
-            raise ValueError("找不到指定的文字或公告頻道。")
+            raise ValueError(t("stickymessage.err.channel_not_found"))
 
         config = self.get_config(guild_id)
         index, entry = find_entry(config, channel_id)
         if entry is None:
-            raise ValueError("這個頻道尚未設定置底訊息。")
+            raise ValueError(t("stickymessage.err.not_configured"))
         if index >= get_stickymessage_limit(guild_id):
-            raise ValueError("這則設定目前超過伺服器額度，已暫停運作。")
+            raise ValueError(t("stickymessage.err.over_quota"))
 
         bot_member = guild.me
         permissions = channel.permissions_for(bot_member) if bot_member else None
         if permissions is None or not permissions.view_channel or not permissions.send_messages:
-            raise ValueError("我沒有權限查看頻道或發送訊息。")
+            raise ValueError(t("stickymessage.err.missing_perms"))
 
         async with self._api_lock:
             state = self.get_state(guild_id)
@@ -504,7 +510,7 @@ class StickyMessage(commands.GroupCog, group_name=app_commands.locale_str("stick
                 await self._delete_previous(channel, channel_state.get("message_id"))
         except (discord.Forbidden, discord.HTTPException) as error:
             log(
-                f"移除舊置底訊息失敗 ({channel_id}): {error}",
+                f"Failed to remove the previous sticky message ({channel_id}): {error}",
                 level=logging.WARNING,
                 module_name="StickyMessage",
             )
@@ -557,15 +563,16 @@ class StickyMessage(commands.GroupCog, group_name=app_commands.locale_str("stick
                 try:
                     await self.publish_entry(guild_id, channel_id, notify_mentions=True)
                 except (ValueError, discord.Forbidden, discord.HTTPException) as error:
-                    publish_errors.append(f"<#{channel_id}>：{error}")
+                    publish_errors.append(f"<#{channel_id}>: {error}")
                     log(
-                        f"設定已儲存，但即時發布失敗 ({channel_id}): {error}",
+                        f"Config saved but the immediate publish failed ({channel_id}): {error}",
                         level=logging.WARNING,
                         module_name="StickyMessage",
                     )
         if publish_errors:
             raise RuntimeError(
-                "設定已儲存，但即時發布失敗：" + "；".join(publish_errors[:3])
+                t("stickymessage.err.saved_but_publish_failed",
+                  errors=i18n.join_list(publish_errors[:3]))
             )
 
     async def reconcile_limit(self, guild_id: int, previous_limit: int) -> None:
@@ -583,7 +590,7 @@ class StickyMessage(commands.GroupCog, group_name=app_commands.locale_str("stick
                 await self.publish_entry(guild_id, channel_id, notify_mentions=False)
             except (ValueError, discord.Forbidden, discord.HTTPException) as error:
                 log(
-                    f"額度調整後恢復置底訊息失敗 ({channel_id}): {error}",
+                    f"Failed to restore the sticky message after a quota change ({channel_id}): {error}",
                     level=logging.WARNING,
                     module_name="StickyMessage",
                 )
@@ -592,7 +599,7 @@ class StickyMessage(commands.GroupCog, group_name=app_commands.locale_str("stick
         previous = self.get_config(guild_id)
         normalized = normalize_config(config, strict=True)
         if not set_server_config(guild_id, CONFIG_KEY, normalized):
-            raise RuntimeError("儲存 StickyMessage 設定失敗。")
+            raise RuntimeError(t("stickymessage.err.save_failed"))
         await self.apply_config(guild_id, normalized, previous)
 
     @commands.Cog.listener()
@@ -620,14 +627,14 @@ class StickyMessage(commands.GroupCog, group_name=app_commands.locale_str("stick
         self.save_state(payload.guild_id, state)
 
     async def _respond_error(self, interaction: discord.Interaction, error: Exception) -> None:
-        message = str(error) or "操作失敗。"
+        message = str(error) or t("stickymessage.err.generic")
         if interaction.response.is_done():
             await interaction.followup.send(message, ephemeral=True)
         else:
             await interaction.response.send_message(message, ephemeral=True)
 
-    @app_commands.command(name=app_commands.locale_str("add"), description="新增一則頻道置底訊息")
-    @app_commands.describe(channel="要設定的文字或公告頻道", content="置底訊息內容", allow_mentions="首次與手動發布時是否允許提及")
+    @app_commands.command(name=app_commands.locale_str("add", i18n_key="cmd.stickymessage.stickymessage.add.name"), description=app_commands.locale_str("Add a sticky message to a channel", i18n_key="cmd.stickymessage.stickymessage.add.desc"))
+    @app_commands.describe(channel=app_commands.locale_str("The text or announcement channel to configure", i18n_key="cmd.stickymessage.stickymessage.add.param.channel"), content=app_commands.locale_str("Sticky message content", i18n_key="cmd.stickymessage.stickymessage.add.param.content"), allow_mentions=app_commands.locale_str("Allow mentions on first and manual posts", i18n_key="cmd.stickymessage.stickymessage.add.param.allow_mentions"))
     @app_commands.checks.has_permissions(manage_guild=True)
     async def add(
         self,
@@ -638,14 +645,14 @@ class StickyMessage(commands.GroupCog, group_name=app_commands.locale_str("stick
     ) -> None:
         try:
             if channel.type not in (discord.ChannelType.text, discord.ChannelType.news):
-                raise ValueError("只能選擇文字或公告頻道。")
+                raise ValueError(t("stickymessage.err.text_or_news_only"))
             config = self.get_config(interaction.guild_id)
             _, existing = find_entry(config, channel.id)
             if existing is not None:
-                raise ValueError("這個頻道已經有置底訊息，請使用 edit。")
+                raise ValueError(t("stickymessage.err.already_configured"))
             limit = get_stickymessage_limit(interaction.guild_id)
             if len(config["entries"]) >= limit:
-                raise ValueError(f"這個伺服器最多可設定 {limit} 則置底訊息。")
+                raise ValueError(t("stickymessage.err.quota_reached", count=limit))
             config["entries"].append({
                 "channel_id": channel.id,
                 "content": content,
@@ -653,12 +660,12 @@ class StickyMessage(commands.GroupCog, group_name=app_commands.locale_str("stick
             })
             await interaction.response.defer(ephemeral=True)
             await self._save_and_apply(interaction.guild_id, config)
-            await interaction.followup.send(f"已新增並發布 {channel.mention} 的置底訊息。", ephemeral=True)
+            await interaction.followup.send(t("stickymessage.msg.added", channel=channel.mention), ephemeral=True)
         except Exception as error:
             await self._respond_error(interaction, error)
 
-    @app_commands.command(name=app_commands.locale_str("edit"), description="編輯一則頻道置底訊息")
-    @app_commands.describe(channel="已設定的文字或公告頻道", content="新的置底訊息內容", allow_mentions="首次與手動發布時是否允許提及")
+    @app_commands.command(name=app_commands.locale_str("edit", i18n_key="cmd.stickymessage.stickymessage.edit.name"), description=app_commands.locale_str("Edit a channel's sticky message", i18n_key="cmd.stickymessage.stickymessage.edit.desc"))
+    @app_commands.describe(channel=app_commands.locale_str("The configured text or announcement channel", i18n_key="cmd.stickymessage.stickymessage.edit.param.channel"), content=app_commands.locale_str("New sticky message content", i18n_key="cmd.stickymessage.stickymessage.edit.param.content"), allow_mentions=app_commands.locale_str("Allow mentions on first and manual posts", i18n_key="cmd.stickymessage.stickymessage.edit.param.allow_mentions"))
     @app_commands.checks.has_permissions(manage_guild=True)
     async def edit(
         self,
@@ -671,7 +678,7 @@ class StickyMessage(commands.GroupCog, group_name=app_commands.locale_str("stick
             config = self.get_config(interaction.guild_id)
             index, entry = find_entry(config, channel.id)
             if entry is None:
-                raise ValueError("這個頻道尚未設定置底訊息。")
+                raise ValueError(t("stickymessage.err.not_configured"))
             config["entries"][index] = {
                 "channel_id": channel.id,
                 "content": content,
@@ -679,27 +686,27 @@ class StickyMessage(commands.GroupCog, group_name=app_commands.locale_str("stick
             }
             await interaction.response.defer(ephemeral=True)
             await self._save_and_apply(interaction.guild_id, config)
-            await interaction.followup.send(f"已更新並重新發布 {channel.mention} 的置底訊息。", ephemeral=True)
+            await interaction.followup.send(t("stickymessage.msg.updated", channel=channel.mention), ephemeral=True)
         except Exception as error:
             await self._respond_error(interaction, error)
 
-    @app_commands.command(name=app_commands.locale_str("remove"), description="移除一則頻道置底訊息")
-    @app_commands.describe(channel="要移除置底訊息的頻道")
+    @app_commands.command(name=app_commands.locale_str("remove", i18n_key="cmd.stickymessage.stickymessage.remove.name"), description=app_commands.locale_str("Remove a channel's sticky message", i18n_key="cmd.stickymessage.stickymessage.remove.desc"))
+    @app_commands.describe(channel=app_commands.locale_str("The channel whose sticky message to remove", i18n_key="cmd.stickymessage.stickymessage.remove.param.channel"))
     @app_commands.checks.has_permissions(manage_guild=True)
     async def remove(self, interaction: discord.Interaction, channel: discord.TextChannel) -> None:
         try:
             config = self.get_config(interaction.guild_id)
             index, entry = find_entry(config, channel.id)
             if entry is None:
-                raise ValueError("這個頻道尚未設定置底訊息。")
+                raise ValueError(t("stickymessage.err.not_configured"))
             config["entries"].pop(index)
             await interaction.response.defer(ephemeral=True)
             await self._save_and_apply(interaction.guild_id, config)
-            await interaction.followup.send(f"已移除 {channel.mention} 的置底訊息設定。", ephemeral=True)
+            await interaction.followup.send(t("stickymessage.msg.removed", channel=channel.mention), ephemeral=True)
         except Exception as error:
             await self._respond_error(interaction, error)
 
-    @app_commands.command(name=app_commands.locale_str("list"), description="列出目前的置底訊息設定")
+    @app_commands.command(name=app_commands.locale_str("list", i18n_key="cmd.stickymessage.stickymessage.list.name"), description=app_commands.locale_str("List current sticky message settings", i18n_key="cmd.stickymessage.stickymessage.list.desc"))
     @app_commands.checks.has_permissions(manage_guild=True)
     async def list_entries(self, interaction: discord.Interaction) -> None:
         config = self.get_config(interaction.guild_id)
@@ -709,34 +716,37 @@ class StickyMessage(commands.GroupCog, group_name=app_commands.locale_str("stick
             content = entry["content"].replace("\n", " ")
             if len(content) > 80:
                 content = content[:77] + "..."
-            status = "運作中" if index < limit else "超額暫停"
+            status = t("stickymessage.state.active" if index < limit else "stickymessage.state.over_quota")
+            mentions = t("stickymessage.state.mentions_on" if entry["allow_mentions"]
+                         else "stickymessage.state.mentions_off")
             lines.append(
-                f"{index + 1}. <#{entry['channel_id']}> · {status} · "
-                f"提及{'開' if entry['allow_mentions'] else '關'}\n{content}"
+                f"{index + 1}. <#{entry['channel_id']}> · {status} · {mentions}\n{content}"
             )
         embed = discord.Embed(
-            title="StickyMessage 設定",
-            description="\n\n".join(lines) if lines else "尚未設定任何置底訊息。",
+            title=t("stickymessage.list.title"),
+            description="\n\n".join(lines) if lines else t("stickymessage.list.empty"),
             color=discord.Color.blurple(),
         )
-        embed.add_field(name="額度", value=f"{len(config['entries'])} / {limit}", inline=True)
-        embed.add_field(name="安靜時間", value=f"{config['quiet_seconds']} 秒", inline=True)
-        embed.add_field(name="最短間隔", value=f"{config['min_interval_seconds']} 秒", inline=True)
+        embed.add_field(name=t("stickymessage.field.quota"), value=f"{len(config['entries'])} / {limit}", inline=True)
+        embed.add_field(name=t("stickymessage.field.quiet_seconds"),
+                        value=i18n.tn("common.unit.seconds", config["quiet_seconds"]), inline=True)
+        embed.add_field(name=t("stickymessage.field.min_interval"),
+                        value=i18n.tn("common.unit.seconds", config["min_interval_seconds"]), inline=True)
         await interaction.response.send_message(embed=embed, ephemeral=True, allowed_mentions=NO_MENTIONS)
 
-    @app_commands.command(name=app_commands.locale_str("publish"), description="立即重新發布一則置底訊息")
-    @app_commands.describe(channel="要立即重新發布置底訊息的頻道")
+    @app_commands.command(name=app_commands.locale_str("publish", i18n_key="cmd.stickymessage.stickymessage.publish.name"), description=app_commands.locale_str("Repost a sticky message immediately", i18n_key="cmd.stickymessage.stickymessage.publish.desc"))
+    @app_commands.describe(channel=app_commands.locale_str("The channel whose sticky message to repost now", i18n_key="cmd.stickymessage.stickymessage.publish.param.channel"))
     @app_commands.checks.has_permissions(manage_guild=True)
     async def publish(self, interaction: discord.Interaction, channel: discord.TextChannel) -> None:
         try:
             await interaction.response.defer(ephemeral=True)
             await self.publish_entry(interaction.guild_id, channel.id, notify_mentions=True)
-            await interaction.followup.send(f"已重新發布 {channel.mention} 的置底訊息。", ephemeral=True)
+            await interaction.followup.send(t("stickymessage.msg.republished", channel=channel.mention), ephemeral=True)
         except Exception as error:
             await self._respond_error(interaction, error)
 
-    @app_commands.command(name=app_commands.locale_str("move"), description="調整置底訊息順序；順序同時決定額度優先級")
-    @app_commands.describe(channel="要移動的置底訊息頻道", position="新的順序位置")
+    @app_commands.command(name=app_commands.locale_str("move", i18n_key="cmd.stickymessage.stickymessage.move.name"), description=app_commands.locale_str("Reorder sticky messages; order also sets quota priority", i18n_key="cmd.stickymessage.stickymessage.move.desc"))
+    @app_commands.describe(channel=app_commands.locale_str("The sticky message channel to move", i18n_key="cmd.stickymessage.stickymessage.move.param.channel"), position=app_commands.locale_str("New position", i18n_key="cmd.stickymessage.stickymessage.move.param.position"))
     @app_commands.checks.has_permissions(manage_guild=True)
     async def move(
         self,
@@ -748,19 +758,19 @@ class StickyMessage(commands.GroupCog, group_name=app_commands.locale_str("stick
             config = self.get_config(interaction.guild_id)
             index, entry = find_entry(config, channel.id)
             if entry is None:
-                raise ValueError("這個頻道尚未設定置底訊息。")
+                raise ValueError(t("stickymessage.err.not_configured"))
             if position > len(config["entries"]):
-                raise ValueError(f"位置不可超過目前的 {len(config['entries'])} 則設定。")
+                raise ValueError(t("stickymessage.err.position_out_of_range", count=len(config["entries"])))
             config["entries"].pop(index)
             config["entries"].insert(position - 1, entry)
             await interaction.response.defer(ephemeral=True)
             await self._save_and_apply(interaction.guild_id, config)
-            await interaction.followup.send(f"已將 {channel.mention} 移到第 {position} 位。", ephemeral=True)
+            await interaction.followup.send(t("stickymessage.msg.moved", channel=channel.mention, position=position), ephemeral=True)
         except Exception as error:
             await self._respond_error(interaction, error)
 
-    @app_commands.command(name=app_commands.locale_str("timing"), description="設定重新置底的安靜時間與最短間隔")
-    @app_commands.describe(quiet_seconds="最後一則真人訊息後等待秒數", min_interval_seconds="同頻道兩次自動重貼的最短間隔")
+    @app_commands.command(name=app_commands.locale_str("timing", i18n_key="cmd.stickymessage.stickymessage.timing.name"), description=app_commands.locale_str("Configure quiet time and minimum repost interval", i18n_key="cmd.stickymessage.stickymessage.timing.desc"))
+    @app_commands.describe(quiet_seconds=app_commands.locale_str("Seconds to wait after the last human message", i18n_key="cmd.stickymessage.stickymessage.timing.param.quiet_seconds"), min_interval_seconds=app_commands.locale_str("Minimum interval between two automatic reposts in a channel", i18n_key="cmd.stickymessage.stickymessage.timing.param.min_interval_seconds"))
     @app_commands.checks.has_permissions(manage_guild=True)
     async def timing(
         self,
@@ -775,7 +785,7 @@ class StickyMessage(commands.GroupCog, group_name=app_commands.locale_str("stick
             await interaction.response.defer(ephemeral=True)
             await self._save_and_apply(interaction.guild_id, config)
             await interaction.followup.send(
-                f"已設定安靜時間 {quiet_seconds} 秒、最短間隔 {min_interval_seconds} 秒。",
+                t("stickymessage.msg.timing_set", quiet=quiet_seconds, interval=min_interval_seconds),
                 ephemeral=True,
             )
         except Exception as error:

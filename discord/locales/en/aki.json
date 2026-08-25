@@ -1,0 +1,31 @@
+{
+    "btn": {
+        "idk": "Don't know",
+        "no": "No",
+        "probably": "Probably",
+        "probably_not": "Probably not",
+        "stop_game": "Stop game",
+        "yes": "Yes"
+    },
+    "embed": {
+        "guess_title": "Akinator's Guess"
+    },
+    "err": {
+        "game_in_progress": "You already have a game in progress! Please finish it first.",
+        "generic": "An error occurred: {error}",
+        "not_your_game": "This isn't your game!",
+        "on_cooldown": "Please wait 1 minute before starting a new game.",
+        "service_unavailable": "The Akinator service is temporarily unavailable — please try again later."
+    },
+    "value": {
+        "game_ended_by_user": "The game was ended by the user.",
+        "game_ended_error": "The game ended due to an error.",
+        "game_timed_out": "The game timed out.",
+        "guess_desc": "I'm guessing... **{name}**!\n{description}",
+        "progress": "Progress: {progress}%",
+        "questions_asked": {
+            "one": "Asked {count} question.",
+            "other": "Asked {count} questions."
+        }
+    }
+}

@@ -17,6 +17,8 @@ from discord.ext import commands
 from discord import app_commands
 
 from globalenv import bot
+import i18n
+from i18n import t
 
 # ============================================================
 # 基礎數據
@@ -205,6 +207,7 @@ JIEQI_DATES = {
 # ============================================================
 # 輔助函數
 # ============================================================
+# i18n: skip-start (bazi domain calculation — output is divination terminology, not translatable UI chrome)
 
 def _year_days(year_info: int) -> int:
     """計算農曆年的總天數"""
@@ -732,6 +735,8 @@ def paipan(year: int, month: int, day: int, hour: Optional[int] = None, gender: 
     
     return result
 
+# i18n: skip-end
+
 
 def _split_text_for_display(text: str, max_len: int = 1900) -> List[str]:
     """將文字分段，避免單一 TextDisplay 過長。"""
@@ -759,6 +764,7 @@ def _split_text_for_display(text: str, max_len: int = 1900) -> List[str]:
 
 def _build_bazi_view(result: Dict) -> discord.ui.LayoutView:
     """使用 Components v2 顯示八字排盤結果。"""
+    # i18n: skip-start (dict keys/values are bazi domain terminology produced by paipan(), not translatable UI chrome)
     view = discord.ui.LayoutView()
     container = discord.ui.Container(accent_colour=discord.Colour.gold())
 
@@ -769,8 +775,10 @@ def _build_bazi_view(result: Dict) -> discord.ui.LayoutView:
     yongshen = result["用神喜忌"]
     pillar_names = list(pillars.keys())
     shishen_notes = collect_shishen_notes(result)
+    # i18n: skip-end
 
-    container.add_item(discord.ui.TextDisplay("## 🎋 八字排盤結果"))
+    container.add_item(discord.ui.TextDisplay(t("bazi.embed.header")))
+    # i18n: skip-start (field labels fused with bazi domain-terminology values, not separable UI chrome)
     container.add_item(
         discord.ui.TextDisplay(
             f"西曆：{basic['西曆']}\n"
@@ -847,9 +855,10 @@ def _build_bazi_view(result: Dict) -> discord.ui.LayoutView:
 
     for part in _split_text_for_display("\n".join(dayun_lines)):
         container.add_item(discord.ui.TextDisplay(part))
+    # i18n: skip-end
 
     container.add_item(discord.ui.Separator(spacing=discord.SeparatorSpacing.small))
-    container.add_item(discord.ui.TextDisplay("-# 此排盤為程式化推算，僅供參考"))
+    container.add_item(discord.ui.TextDisplay(t("bazi.msg.footer_disclaimer")))
 
     view.add_item(container)
     return view
@@ -859,7 +868,7 @@ def _build_error_view(message: str) -> discord.ui.LayoutView:
     """建立錯誤訊息的 Components v2 視圖。"""
     view = discord.ui.LayoutView()
     container = discord.ui.Container(accent_colour=discord.Colour.red())
-    container.add_item(discord.ui.TextDisplay("## ❌ 排盤失敗"))
+    container.add_item(discord.ui.TextDisplay(t("bazi.embed.error_header")))
     container.add_item(discord.ui.Separator(spacing=discord.SeparatorSpacing.small))
     container.add_item(discord.ui.TextDisplay(message))
     view.add_item(container)
@@ -867,19 +876,19 @@ def _build_error_view(message: str) -> discord.ui.LayoutView:
 
 
 class BaziCog(commands.Cog):
-    @app_commands.command(name="bazi", description="使用生日時間進行八字排盤")
+    @app_commands.command(name=app_commands.locale_str("bazi", i18n_key="cmd.bazi.bazi.name"), description=app_commands.locale_str("Cast a BaZi (Four Pillars) chart from your birth date and time", i18n_key="cmd.bazi.bazi.desc"))
     @app_commands.describe(
-        year="出生年（西元）",
-        month="出生月（1-12）",
-        day="出生日（1-31）",
-        hour="出生小時（24 小時制 0-23）",
-        gender="性別",
-        public="是否公開此排盤結果（預設為私密）",
+        year=app_commands.locale_str("Year of birth (Gregorian)", i18n_key="cmd.bazi.bazi.param.year"),
+        month=app_commands.locale_str("Month of birth (1-12)", i18n_key="cmd.bazi.bazi.param.month"),
+        day=app_commands.locale_str("Day of birth (1-31)", i18n_key="cmd.bazi.bazi.param.day"),
+        hour=app_commands.locale_str("Hour of birth (24-hour, 0-23)", i18n_key="cmd.bazi.bazi.param.hour"),
+        gender=app_commands.locale_str("Gender", i18n_key="cmd.bazi.bazi.param.gender"),
+        public=app_commands.locale_str("Make this chart public (private by default)", i18n_key="cmd.bazi.bazi.param.public"),
     )
     @app_commands.choices(
         gender=[
-            app_commands.Choice(name="男", value="男"),
-            app_commands.Choice(name="女", value="女"),
+            app_commands.Choice(name=app_commands.locale_str("Male", i18n_key="cmd.bazi.bazi.choice.c0"), value="男"),  # i18n: skip (internal domain value, not displayed)
+            app_commands.Choice(name=app_commands.locale_str("Female", i18n_key="cmd.bazi.bazi.choice.c1"), value="女"),  # i18n: skip (internal domain value, not displayed)
         ]
     )
     @app_commands.checks.cooldown(1, 10, key=lambda i: i.user.id)
@@ -897,7 +906,7 @@ class BaziCog(commands.Cog):
             # 驗證日期是否合法（例如 2/30）
             date(year, month, day)
 
-            gender_value = gender.value if gender else "男"
+            gender_value = gender.value if gender else "男"  # i18n: skip (internal domain value, not displayed)
             result = paipan(year, month, day, hour, gender_value)
             view = _build_bazi_view(result)
             await interaction.response.send_message(view=view, ephemeral=not public, allowed_mentions=discord.AllowedMentions.none())
@@ -905,7 +914,7 @@ class BaziCog(commands.Cog):
             await interaction.response.send_message(view=_build_error_view(str(e)), ephemeral=True)
         except Exception:
             await interaction.response.send_message(
-                view=_build_error_view("無法完成排盤，請確認日期時間是否正確。"),
+                view=_build_error_view(t("bazi.err.generic_failure")),
                 ephemeral=True,
             )
 

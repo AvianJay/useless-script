@@ -1,10 +1,10 @@
 <!DOCTYPE html>
-<html lang="zh-Hant">
+<html lang="{{ html_lang }}">
 
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{{ bot.user.name }} | 隱私政策</title>
+    <title>{{ bot.user.name }} | {{ t("web.nav.privacy") }}</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
@@ -17,74 +17,74 @@
 
         gtag('config', '{{ gtag }}');
     </script>
-    <script src="{{ url_for('static', filename='js/main.js') }}" defer></script>
+    {% include '_i18n_bootstrap.html' %}
 </head>
 
 <body>
     <nav class="navbar">
         <a href="/" class="navbar-brand">
-            <img id="nav-avatar" src="" alt="Logo"
-                style="width: 30px; height: 30px; border-radius: 50%; display: none;">
-            <span id="nav-name">{{ bot.user.name }}</span>
+            <img src="{{ bot.user.avatar.url if bot.user.avatar else '' }}" alt="{{ bot.user.name }}"
+                style="width: 30px; height: 30px; border-radius: 50%;">
+            <span>{{ bot.user.name }}</span>
         </a>
-        <button class="nav-toggle" id="navToggle" aria-label="選單">☰</button>
+        <button class="nav-toggle" id="navToggle" aria-label="{{ t('web.nav.menu') }}">☰</button>
         <div class="nav-links" id="navLinks">
-            <a href="/" class="active">首頁</a>
-            <a href="/contribute-feed-grass">投稿草飼圖</a>
-            <a href="/privacy-policy">隱私政策</a>
-            <a href="/terms-of-service">使用條款</a>
+            <a href="/" class="active">{{ t('web.nav.home') }}</a>
+            <a href="/contribute-feed-grass">{{ t('web.nav.feedgrass') }}</a>
+            <a href="/privacy-policy">{{ t('web.nav.privacy') }}</a>
+            <a href="/terms-of-service">{{ t('web.nav.terms') }}</a>
+            {% include '_language_selector.html' %}
         </div>
     </nav>
 
     <div class="container" style="max-width: 800px; margin-top: 2rem;">
-        <h1 id="pptitle" style="margin-bottom: 1.5rem; text-align: center;">{{ bot.user.name }} 隱私政策</h1>
+        <h1 id="pptitle" style="margin-bottom: 1.5rem; text-align: center;">{{ t('web.privacy.title', name=bot.user.name) }}</h1>
         <div style="background-color: var(--bg-secondary); padding: 2rem; border-radius: 8px;">
-            <p id="ppdesc" style="margin-bottom: 1rem;">歡迎使用{{ bot.user.name
-                }}（以下簡稱「本機器人」）。我們重視您的隱私，並致力於保護您的個人資訊。請仔細閱讀以下隱私政策，以了解我們如何收集、使用和保護您的資訊。</p>
+            <p id="ppdesc" style="margin-bottom: 1rem;">{{ t('web.privacy.intro', name=bot.user.name) }}</p>
 
-            <h2 style="margin-top: 1.5rem; margin-bottom: 0.5rem; color: var(--accent);">1. 資訊收集</h2>
-            <p>本機器人可能會收集以下類型的資訊：</p>
+            <h2 style="margin-top: 1.5rem; margin-bottom: 0.5rem; color: var(--accent);">{{ t('web.privacy.collection.heading') }}</h2>
+            <p>{{ t('web.privacy.collection.intro') }}</p>
             <ul style="margin-left: 1.5rem; margin-top: 0.5rem;">
-                <li><strong>伺服器資訊：</strong>當您在 Discord 伺服器中使用本機器人時，我們可能會收集伺服器 ID、頻道 ID 以及相關的使用資料。</li>
-                <li><strong>用戶互動資料：</strong>我們可能會記錄您與本機器人的互動，例如指令使用情況和回覆內容，以改善服務品質。</li>
-                <li><strong>技術資訊：</strong>我們可能會收集有關您裝置的技術資訊，例如 IP 位址、瀏覽器類型和作業系統，以協助診斷問題並提升使用體驗。</li>
-                <li><strong>日誌資料：</strong>我們會自動收集某些日誌資料，例如錯誤報告和使用統計資料，以便我們分析和改進本機器人。</li>
-                <li><strong>用戶資訊：</strong>我們會收集用戶的 ID 以進行身份識別和服務提供。</li>
+                <li><strong>{{ t('web.privacy.collection.server_label') }}</strong>{{ t('web.privacy.collection.server_text') }}</li>
+                <li><strong>{{ t('web.privacy.collection.interaction_label') }}</strong>{{ t('web.privacy.collection.interaction_text') }}</li>
+                <li><strong>{{ t('web.privacy.collection.technical_label') }}</strong>{{ t('web.privacy.collection.technical_text') }}</li>
+                <li><strong>{{ t('web.privacy.collection.logs_label') }}</strong>{{ t('web.privacy.collection.logs_text') }}</li>
+                <li><strong>{{ t('web.privacy.collection.user_label') }}</strong>{{ t('web.privacy.collection.user_text') }}</li>
             </ul>
-            <p>本機器人不會收集以下類型的資訊：</p>
+            <p>{{ t('web.privacy.collection.excluded_intro') }}</p>
             <ul style="margin-left: 1.5rem; margin-top: 0.5rem;">
-                <li><strong>訊息內容：</strong>我們不會收集或儲存您在 Discord 中的訊息內容，只有當其他使用者對你的訊息使用本機器人時本機器人才會進行相對應的處理。</li>
-            </ul>
-
-            <h2 style="margin-top: 1.5rem; margin-bottom: 0.5rem; color: var(--accent);">2. 資訊使用</h2>
-            <p>我們收集的資訊將用於以下目的：</p>
-            <ul style="margin-left: 1.5rem; margin-top: 0.5rem;">
-                <li>提供和維護本機器人的功能和服務。</li>
-                <li>分析使用趨勢，以改進本機器人的性能和用戶體驗。</li>
-                <li>回應用戶查詢和支援請求。</li>
+                <li><strong>{{ t('web.privacy.collection.message_label') }}</strong>{{ t('web.privacy.collection.message_text') }}</li>
             </ul>
 
-            <h2 style="margin-top: 1.5rem; margin-bottom: 0.5rem; color: var(--accent);">3. 資訊保護</h2>
-            <p>我們採取適當的技術和組織措施來保護您的個人資訊免受未經授權的存取、洩露或破壞。然而，請注意，沒有任何一種傳輸方式或電子儲存方式是百分之百安全的。</p>
-
-            <h2 style="margin-top: 1.5rem; margin-bottom: 0.5rem; color: var(--accent);">4. 資訊分享</h2>
-            <p>我們不會將您的個人資訊出售或出租給第三方。但在以下情況下，我們可能會分享您的資訊：</p>
+            <h2 style="margin-top: 1.5rem; margin-bottom: 0.5rem; color: var(--accent);">{{ t('web.privacy.use.heading') }}</h2>
+            <p>{{ t('web.privacy.use.intro') }}</p>
             <ul style="margin-left: 1.5rem; margin-top: 0.5rem;">
-                <li>法律要求：當法律要求或為了保護我們的權利時，我們可能會披露您的資訊。</li>
+                <li>{{ t('web.privacy.use.service') }}</li>
+                <li>{{ t('web.privacy.use.analytics') }}</li>
+                <li>{{ t('web.privacy.use.support') }}</li>
             </ul>
 
-            <h2 style="margin-top: 1.5rem; margin-bottom: 0.5rem; color: var(--accent);">5. 資料刪除請求與聯絡方式</h2>
-            <p>儘管本機器人原則上不儲存使用者的訊息內容或個人數據，但若您對您的數據隱私有任何疑慮，或希望行使您的數據刪除權利（確認我們是否持有您的數據），請透過以下方式聯絡我們：</p>
+            <h2 style="margin-top: 1.5rem; margin-bottom: 0.5rem; color: var(--accent);">{{ t('web.privacy.protection.heading') }}</h2>
+            <p>{{ t('web.privacy.protection.body') }}</p>
+
+            <h2 style="margin-top: 1.5rem; margin-bottom: 0.5rem; color: var(--accent);">{{ t('web.privacy.sharing.heading') }}</h2>
+            <p>{{ t('web.privacy.sharing.body') }}</p>
             <ul style="margin-left: 1.5rem; margin-top: 0.5rem;">
-                <li>聯絡信箱：{{ contact_email }}</li>
-                <li>支援伺服器邀請連結：<a href="{{ support_server_invite }}" target="_blank">{{ support_server_invite }}</a></li>
+                <li>{{ t('web.privacy.sharing.legal') }}</li>
             </ul>
-            <p>收到請求後，我們將協助確認並處理相關事宜。</p>
+
+            <h2 style="margin-top: 1.5rem; margin-bottom: 0.5rem; color: var(--accent);">{{ t('web.privacy.contact.heading') }}</h2>
+            <p>{{ t('web.privacy.contact.body') }}</p>
+            <ul style="margin-left: 1.5rem; margin-top: 0.5rem;">
+                <li>{{ t('web.privacy.contact.email_label') }}{{ contact_email }}</li>
+                <li>{{ t('web.privacy.contact.support_label') }}<a href="{{ support_server_invite }}" target="_blank" rel="noopener noreferrer">{{ support_server_invite }}</a></li>
+            </ul>
+            <p>{{ t('web.privacy.contact.final') }}</p>
         </div>
     </div>
 
     <footer>
-        <p>&copy; 2025 {{ bot.user.name }}. All rights reserved.</p>
+        <p>{{ t('web.footer.copyright', year=2025, name=bot.user.name) }}</p>
     </footer>
     <script>
         document.getElementById("navToggle").addEventListener("click", function() {

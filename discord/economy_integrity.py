@@ -482,7 +482,7 @@ def auto_blacklist_in(
         guild_id,
         FLOW_BLACKLIST_KEY,
         {
-            "reason": "經濟風控自動停用跨域貨幣流通",
+            "reason": "經濟風控自動停用跨域貨幣流通",  # i18n: skip (only surfaced via owner-gated dev-economyflowblacklist* commands)
             "source": "automatic",
             "trigger": trigger,
             "observed": observed,

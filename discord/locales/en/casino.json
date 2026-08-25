@@ -1,0 +1,62 @@
+{
+    "err": {
+        "balance_insufficient": "Insufficient Global Coin balance.",
+        "balance_insufficient_double": "Insufficient Global Coin balance; you can't double down.",
+        "bet_not_number": "The bet must be a number.",
+        "bet_range": "The bet must be between {min} and {max}.",
+        "bj_action": "In blackjack you can only hit, stand, or double.",
+        "bj_double_unavailable": "You can't double down right now.",
+        "coinflip_side": "The coin side must be heads or tails.",
+        "dice_range": "The dice guess must be between 1 and 6.",
+        "hl_action": "In high-low you can only guess or cash out.",
+        "hl_cashout_streak": "You must win at least one guess before cashing out.",
+        "hl_direction": "You can't pick that direction on the current card.",
+        "hl_guess": "The high-low choice must be high or low.",
+        "hl_rank_range": "The card rank must be between 1 and 13.",
+        "invalid_game": "Invalid game.",
+        "invalid_instant_game": "Invalid instant game.",
+        "invalid_round_game": "Invalid round-based game.",
+        "lottery_drawing": "The lottery is being drawn; please try again shortly.",
+        "lottery_number_range": "The lottery number must be between 00 and 99.",
+        "request_id_missing": "Missing a valid request_id.",
+        "request_id_taken": "That request_id is already in use by another player.",
+        "round_active": "You already have an unfinished game of this type.",
+        "round_already_settled": "This round has already been settled.",
+        "round_not_found": "That game round could not be found.",
+        "roulette_bet_type": "Invalid roulette bet type.",
+        "roulette_number_only": "Only a single-number bet can specify a number.",
+        "roulette_number_range": "A single-number bet must pick 0-36.",
+        "slots_reels": "A slots result must contain three symbols.",
+        "tower_action": "In tower you can only pick a tile or cash out.",
+        "tower_tile_invalid": "Invalid tower tile.",
+        "tower_tile_range": "The tile must be between 0 and 2."
+    },
+    "roulette": {
+        "bet": {
+            "black": "Black",
+            "even": "Even",
+            "high": "High (19-36)",
+            "low": "Low (1-18)",
+            "number": "Single number",
+            "odd": "Odd",
+            "red": "Red"
+        }
+    },
+    "scratch": {
+        "prize": {
+            "jackpot": "Jackpot",
+            "major": "Major prize",
+            "medium": "Medium prize",
+            "none": "No win",
+            "refund": "Break even",
+            "small": "Small prize"
+        }
+    },
+    "slots": {
+        "outcome": {
+            "none": "No win",
+            "pair": "Pair",
+            "triple": "Three of a kind!"
+        }
+    }
+}

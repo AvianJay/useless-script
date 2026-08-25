@@ -1,0 +1,3139 @@
+{
+    "ai": {
+        "ai": {
+            "desc": "Chat with the AI assistant",
+            "name": "ai",
+            "param": {
+                "image": "Attach an image for the AI to analyze (optional)",
+                "message": "The question or message you want to ask the AI",
+                "model": "Choose an AI model (default: openai)",
+                "new_conversation": "Start a new conversation (clears previous history)"
+            },
+            "param_name": {
+                "image": "image",
+                "message": "message",
+                "model": "model",
+                "new_conversation": "new_conversation"
+            }
+        },
+        "ai_admin": {
+            "billing": {
+                "clear": {
+                    "desc": "Clear this server's designated AI payer",
+                    "name": "clear"
+                },
+                "root": {
+                    "desc": "Manage this server's AI billing settings",
+                    "name": "billing"
+                },
+                "set": {
+                    "desc": "Set yourself as this server's AI payer",
+                    "name": "set"
+                },
+                "view": {
+                    "desc": "See who currently pays for AI on this server",
+                    "name": "view"
+                }
+            },
+            "mention_mode": {
+                "desc": "Set whether the AI auto-responds to mentions and replies",
+                "name": "mention-mode",
+                "param": {
+                    "enabled": "Enable or disable mention/reply triggers; off by default"
+                },
+                "param_name": {
+                    "enabled": "enabled"
+                }
+            },
+            "prompt": {
+                "clear": {
+                    "desc": "Clear this server's custom AI prompt",
+                    "name": "clear"
+                },
+                "root": {
+                    "desc": "Manage this server's custom AI prompt",
+                    "name": "prompt"
+                },
+                "set": {
+                    "desc": "Set this server's custom AI prompt",
+                    "name": "set",
+                    "param": {
+                        "prompt": "Extra server context, style guidance, or response preferences for the AI"
+                    },
+                    "param_name": {
+                        "prompt": "prompt"
+                    }
+                },
+                "view": {
+                    "desc": "View this server's current custom AI prompt",
+                    "name": "view"
+                }
+            },
+            "root": {
+                "desc": "AI admin commands",
+                "name": "ai-admin"
+            }
+        },
+        "ai_clear": {
+            "desc": "Clear your AI conversation history",
+            "name": "ai-clear"
+        },
+        "ai_history": {
+            "desc": "View your AI conversation history",
+            "name": "ai-history"
+        },
+        "ai_set_default_model": {
+            "desc": "Set your default model for AI commands",
+            "name": "ai-set-default-model",
+            "param": {
+                "model": "Choose a default AI model"
+            },
+            "param_name": {
+                "model": "model"
+            }
+        },
+        "ai_set_response_view": {
+            "desc": "Set how AI command responses are displayed for you",
+            "name": "ai-set-response-view",
+            "param": {
+                "container": "Display responses in a container",
+                "cost": "Show billing information",
+                "model": "Show model name and timing information"
+            },
+            "param_name": {
+                "container": "container",
+                "cost": "cost",
+                "model": "model"
+            }
+        }
+    },
+    "aki": {
+        "aki": {
+            "desc": "Play a game with Akinator",
+            "name": "aki"
+        }
+    },
+    "antibeast": {
+        "antibeast": {
+            "about": {
+                "desc": "About AntiBeast",
+                "name": "about"
+            },
+            "bypass": {
+                "desc": "Add/remove roles that bypass AntiBeast",
+                "name": "bypass",
+                "param": {
+                    "role": "The role to toggle bypass for"
+                },
+                "param_name": {
+                    "role": "role"
+                }
+            },
+            "list": {
+                "desc": "List AntiBeast settings",
+                "name": "list"
+            },
+            "root": {
+                "name": "antibeast"
+            },
+            "settings": {
+                "desc": "Configure what AntiBeast does after repeated triggers in a short time",
+                "name": "settings",
+                "param": {
+                    "action": "Moderate action command; leave empty to keep the current setting",
+                    "enable": "Enable automatic action",
+                    "only_everyone_here": "Only act on members who mention @everyone or @here",
+                    "threshold": "Act after this many triggers within the window (1-20)",
+                    "time_window": "Time window in seconds (5-3600)"
+                },
+                "param_name": {
+                    "action": "action",
+                    "enable": "enable",
+                    "only_everyone_here": "only_everyone_here",
+                    "threshold": "threshold",
+                    "time_window": "time_window"
+                }
+            },
+            "setup": {
+                "desc": "Interactively configure and enable AntiBeast",
+                "name": "setup"
+            },
+            "toggle": {
+                "desc": "Enable/disable AntiBeast",
+                "name": "toggle",
+                "param": {
+                    "enable": "Leave empty to toggle the current state"
+                },
+                "param_name": {
+                    "enable": "enable"
+                }
+            }
+        }
+    },
+    "automoderate": {
+        "automod": {
+            "action_builder": {
+                "choice": {
+                    "ban": "Ban",
+                    "delete": "Delete message",
+                    "delete_dm": "Delete message + DM warning",
+                    "force_verify": "Force verification",
+                    "kick": "Kick",
+                    "mute": "Mute",
+                    "send_mod_message": "Send moderation notice",
+                    "warn": "Public warning",
+                    "warn_dm": "DM warning"
+                },
+                "desc": "Build an action command string",
+                "name": "action-builder",
+                "param": {
+                    "action_type": "Action type",
+                    "delete_message_duration": "Ban only: delete the user's messages from this period, e.g. 1d; 0 = none",
+                    "duration": "Duration (for mute/ban/force_verify), e.g. 10m, 7d; 0 = permanent",
+                    "message": "Warning message (for delete/warn); {user} inserts the user",
+                    "prepend": "Existing command to prepend before this action (comma-separated actions)",
+                    "reason": "Reason (for mute/kick/ban)"
+                },
+                "param_name": {
+                    "action_type": "action_type",
+                    "delete_message_duration": "delete_message_duration",
+                    "duration": "duration",
+                    "message": "message",
+                    "prepend": "prepend",
+                    "reason": "reason"
+                }
+            },
+            "check_action": {
+                "desc": "Check whether an automod action command is valid",
+                "name": "check-action",
+                "param": {
+                    "action": "The action command to check"
+                },
+                "param_name": {
+                    "action": "action"
+                }
+            },
+            "flagged_user_alert_channel": {
+                "desc": "Set the notification channel for when users join the server",
+                "name": "flagged-user-alert-channel",
+                "param": {
+                    "channel": "Channel that receives user-join notifications"
+                },
+                "param_name": {
+                    "channel": "channel"
+                }
+            },
+            "info": {
+                "desc": "View an introduction to auto-moderation features",
+                "name": "info"
+            },
+            "quick_setup": {
+                "desc": "Interactive quick-setup wizard (menu guided)",
+                "name": "quick-setup"
+            },
+            "root": {
+                "name": "automod"
+            },
+            "scan_flagged_users": {
+                "desc": "Scan the server for flagged users",
+                "name": "scan-flagged-users",
+                "param": {
+                    "user": "The user to scan; scans everyone if omitted"
+                },
+                "param_name": {
+                    "user": "user"
+                }
+            },
+            "settings": {
+                "desc": "Configure auto-moderation options",
+                "name": "settings",
+                "param": {
+                    "setting": "The auto-moderation option to configure",
+                    "value": "The option's value"
+                },
+                "param_name": {
+                    "setting": "setting",
+                    "value": "value"
+                }
+            },
+            "toggle": {
+                "choice": {
+                    "anti_invite_link": "Invite links",
+                    "anti_raid": "Anti-raid (mass-join detection)",
+                    "anti_spam": "Anti-spam",
+                    "anti_uispam": "User-installed app abuse",
+                    "automod_detect": "AutoMod detection (native AutoMod triggers)",
+                    "escape_punish": "Punishment evasion",
+                    "false": "Disable",
+                    "flagged_user": "Flagged user joins",
+                    "scamtrap": "Scam trap",
+                    "too_many_emojis": "Too many emojis",
+                    "too_many_h1": "Too many headings",
+                    "true": "Enable"
+                },
+                "desc": "Enable or disable an auto-moderation setting",
+                "name": "toggle",
+                "param": {
+                    "enable": "Whether to enable the setting",
+                    "setting": "Name of the auto-moderation setting to toggle"
+                },
+                "param_name": {
+                    "enable": "enable",
+                    "setting": "setting"
+                }
+            },
+            "view": {
+                "desc": "View auto-moderation settings",
+                "name": "view"
+            }
+        },
+        "setting": {
+            "anti_invite_link-action": "anti_invite_link-action",
+            "anti_invite_link-allow_current_server": "anti_invite_link-allow_current_server",
+            "anti_invite_link-ignore_channels": "anti_invite_link-ignore_channels",
+            "anti_raid-action": "anti_raid-action",
+            "anti_raid-max_joins": "anti_raid-max_joins",
+            "anti_raid-time_window": "anti_raid-time_window",
+            "anti_spam-action": "anti_spam-action",
+            "anti_spam-ignore_channels": "anti_spam-ignore_channels",
+            "anti_spam-max_messages": "anti_spam-max_messages",
+            "anti_spam-similarity": "anti_spam-similarity",
+            "anti_spam-time_window": "anti_spam-time_window",
+            "anti_uispam-action": "anti_uispam-action",
+            "anti_uispam-ignore_channels": "anti_uispam-ignore_channels",
+            "anti_uispam-max_count": "anti_uispam-max_count",
+            "anti_uispam-time_window": "anti_uispam-time_window",
+            "escape_punish-duration": "escape_punish-duration",
+            "escape_punish-punishment": "escape_punish-punishment",
+            "scamtrap-action": "scamtrap-action",
+            "scamtrap-channel_id": "scamtrap-channel_id",
+            "too_many_emojis-action": "too_many_emojis-action",
+            "too_many_emojis-ignore_channels": "too_many_emojis-ignore_channels",
+            "too_many_emojis-max_emojis": "too_many_emojis-max_emojis",
+            "too_many_h1-action": "too_many_h1-action",
+            "too_many_h1-ignore_channels": "too_many_h1-ignore_channels",
+            "too_many_h1-max_length": "too_many_h1-max_length"
+        }
+    },
+    "autopublish": {
+        "autopublish": {
+            "root": {
+                "name": "autopublish"
+            },
+            "settings": {
+                "choice": {
+                    "false": "Disable",
+                    "true": "Enable"
+                },
+                "desc": "Configure auto-publishing",
+                "name": "settings",
+                "param": {
+                    "enable": "Whether to enable auto-publishing"
+                },
+                "param_name": {
+                    "enable": "enable"
+                }
+            },
+            "view": {
+                "desc": "View announcement auto-publish settings",
+                "name": "view"
+            }
+        }
+    },
+    "autoreply": {
+        "autoreply": {
+            "add": {
+                "choice": {
+                    "all": "All channels",
+                    "blacklist": "Blacklist",
+                    "contains": "Contains",
+                    "ends_with": "Ends with",
+                    "equals": "Exact match",
+                    "false": "No",
+                    "regex": "Regular expression",
+                    "starts_with": "Starts with",
+                    "true": "Yes",
+                    "whitelist": "Whitelist"
+                },
+                "desc": "Add an auto-reply",
+                "name": "add",
+                "param": {
+                    "channel_mode": "Channel filter mode",
+                    "channels": "Channel IDs (separate multiple IDs with ,)",
+                    "mode": "Reply mode",
+                    "random_chance": "Random reply chance (1-100)",
+                    "reply": "Reply to the original message",
+                    "response": "Reply content (separate multiple with , to pick one at random)",
+                    "trigger": "Trigger string (separate multiple with ,)"
+                },
+                "param_name": {
+                    "channel_mode": "channel_mode",
+                    "channels": "channels",
+                    "mode": "mode",
+                    "random_chance": "random_chance",
+                    "reply": "reply",
+                    "response": "response",
+                    "trigger": "trigger"
+                }
+            },
+            "builder": {
+                "desc": "Build auto-replies with an interactive interface",
+                "name": "builder"
+            },
+            "clear": {
+                "desc": "Clear all auto-replies",
+                "name": "clear"
+            },
+            "edit": {
+                "choice": {
+                    "all": "All channels",
+                    "blacklist": "Blacklist",
+                    "contains": "Contains",
+                    "ends_with": "Ends with",
+                    "equals": "Exact match",
+                    "false": "No",
+                    "regex": "Regular expression",
+                    "starts_with": "Starts with",
+                    "true": "Yes",
+                    "whitelist": "Whitelist"
+                },
+                "desc": "Edit an auto-reply",
+                "name": "edit",
+                "param": {
+                    "channel_mode": "Channel filter mode",
+                    "channels": "Channel IDs (separate multiple IDs with ,)",
+                    "new_mode": "New reply mode",
+                    "new_response": "Reply content",
+                    "new_trigger": "New trigger string",
+                    "random_chance": "Random reply chance (1-100)",
+                    "reply": "Whether to reply to the original message",
+                    "trigger": "Trigger string"
+                },
+                "param_name": {
+                    "channel_mode": "channel_mode",
+                    "channels": "channels",
+                    "new_mode": "new_mode",
+                    "new_response": "new_response",
+                    "new_trigger": "new_trigger",
+                    "random_chance": "random_chance",
+                    "reply": "reply",
+                    "trigger": "trigger"
+                }
+            },
+            "export": {
+                "desc": "Export auto-reply settings as JSON",
+                "name": "export"
+            },
+            "help": {
+                "desc": "Show auto-reply usage instructions",
+                "name": "help"
+            },
+            "ignore": {
+                "choice": {
+                    "blacklist": "Ignore list",
+                    "whitelist": "Allow list only"
+                },
+                "desc": "Configure ignored channels",
+                "name": "ignore",
+                "param": {
+                    "channels": "Channel IDs (separate multiple IDs with ,)",
+                    "mode": "Ignore channel mode"
+                },
+                "param_name": {
+                    "channels": "channels",
+                    "mode": "mode"
+                }
+            },
+            "import": {
+                "choice": {
+                    "false": "No",
+                    "true": "Yes"
+                },
+                "desc": "Import auto-reply settings from a JSON file",
+                "name": "import",
+                "param": {
+                    "file": "The JSON file to import",
+                    "merge": "Whether to merge with existing settings"
+                },
+                "param_name": {
+                    "file": "file",
+                    "merge": "merge"
+                }
+            },
+            "list": {
+                "desc": "List all auto-replies",
+                "name": "list"
+            },
+            "quickadd": {
+                "desc": "Quickly add an auto-reply, merging with existing ones",
+                "name": "quickadd",
+                "param": {
+                    "new_response": "New reply content",
+                    "new_trigger": "New trigger string",
+                    "trigger": "Trigger string"
+                },
+                "param_name": {
+                    "new_response": "new_response",
+                    "new_trigger": "new_trigger",
+                    "trigger": "trigger"
+                }
+            },
+            "remove": {
+                "desc": "Remove an auto-reply",
+                "name": "remove",
+                "param": {
+                    "trigger": "Trigger string"
+                },
+                "param_name": {
+                    "trigger": "trigger"
+                }
+            },
+            "root": {
+                "desc": "Auto-reply configuration commands",
+                "name": "autoreply"
+            },
+            "template": {
+                "choice": {
+                    "false": "No (overwrite existing rules)",
+                    "true": "Yes"
+                },
+                "desc": "Apply a built-in auto-reply template pack",
+                "name": "template",
+                "param": {
+                    "merge": "Whether to merge with existing rules",
+                    "pack": "The template pack to apply"
+                },
+                "param_name": {
+                    "merge": "merge",
+                    "pack": "pack"
+                }
+            },
+            "test": {
+                "desc": "Test variable substitution in auto-reply content",
+                "name": "test",
+                "param": {
+                    "response": "The reply content to test"
+                },
+                "param_name": {
+                    "response": "response"
+                }
+            }
+        }
+    },
+    "bazi": {
+        "bazi": {
+            "choice": {
+                "c0": "Male",
+                "c1": "Female"
+            },
+            "desc": "Cast a BaZi (Four Pillars) chart from your birth date and time",
+            "name": "bazi",
+            "param": {
+                "day": "Day of birth (1-31)",
+                "gender": "Gender",
+                "hour": "Hour of birth (24-hour, 0-23)",
+                "month": "Month of birth (1-12)",
+                "public": "Make this chart public (private by default)",
+                "year": "Year of birth (Gregorian)"
+            },
+            "param_name": {
+                "day": "day",
+                "gender": "gender",
+                "hour": "hour",
+                "month": "month",
+                "public": "public",
+                "year": "year"
+            }
+        }
+    },
+    "botcustomizer": {
+        "change": {
+            "avatar": {
+                "desc": "Change the bot's avatar (omit to restore the default)",
+                "name": "avatar",
+                "param": {
+                    "image": "The new avatar image"
+                },
+                "param_name": {
+                    "image": "image"
+                }
+            },
+            "banner": {
+                "desc": "Change the bot's banner (omit to restore the default)",
+                "name": "banner",
+                "param": {
+                    "image": "The new banner image"
+                },
+                "param_name": {
+                    "image": "image"
+                }
+            },
+            "bio": {
+                "desc": "Change the bot's About Me (omit to restore the default)",
+                "name": "bio",
+                "param": {
+                    "bio": "The new bio (\\n for line breaks, max 100 characters)"
+                },
+                "param_name": {
+                    "bio": "bio"
+                }
+            },
+            "root": {
+                "name": "change"
+            }
+        }
+    },
+    "contribute": {
+        "contribute": {
+            "dynamic_voice_audio": {
+                "desc": "Submit a join sound for dynamic voice channels",
+                "name": "dynamic-voice-audio",
+                "param": {
+                    "audio": "Audio file (MP3/WAV/OGG, max 5MB, 3-10 seconds recommended)"
+                },
+                "param_name": {
+                    "audio": "audio"
+                }
+            },
+            "feedgrass": {
+                "desc": "Submit a feedgrass image for dsize",
+                "name": "feedgrass"
+            },
+            "root": {
+                "desc": "Submit images"
+            },
+            "what_is_this_guy_talking_about": {
+                "desc": "Submit a \"What is this guy talking about\" image",
+                "name": "what-is-this-guy-talking-about"
+            }
+        }
+    },
+    "dctw": {
+        "bot": {
+            "browse": {
+                "choice": {
+                    "bumped": "Bumped",
+                    "newest": "Newest",
+                    "servers": "Servers",
+                    "votes": "Votes"
+                },
+                "desc": "Browse the bot list",
+                "name": "browse"
+            },
+            "bump": {
+                "desc": "Bump a specific bot",
+                "name": "bump"
+            },
+            "bumpall": {
+                "desc": "Bump all bots you own at once",
+                "name": "bumpall"
+            },
+            "root": {
+                "desc": "Bot commands",
+                "name": "bot"
+            },
+            "search": {
+                "choice": {
+                    "bumped": "Bumped",
+                    "newest": "Newest",
+                    "servers": "Servers",
+                    "votes": "Votes"
+                },
+                "desc": "Search bots",
+                "name": "search"
+            },
+            "vote": {
+                "desc": "Vote for a specific bot",
+                "name": "vote"
+            }
+        },
+        "dctw": {
+            "bumpall": {
+                "desc": "Bump everything you own at once",
+                "name": "bumpall"
+            },
+            "cache_stats": {
+                "desc": "View DCTW cache status",
+                "name": "cache-stats"
+            },
+            "root": {
+                "desc": "The DCTW browser!",
+                "name": "dctw"
+            }
+        },
+        "key": {
+            "clear": {
+                "desc": "Clear your DCTW API key",
+                "name": "clear"
+            },
+            "help": {
+                "desc": "How to get a DCTW API key",
+                "name": "help"
+            },
+            "root": {
+                "desc": "Manage your DCTW API key",
+                "name": "key"
+            },
+            "set": {
+                "desc": "Set your DCTW API key",
+                "name": "set"
+            },
+            "show": {
+                "desc": "Check whether a DCTW API key is set",
+                "name": "show"
+            }
+        },
+        "server": {
+            "browse": {
+                "choice": {
+                    "bumped": "Bumped",
+                    "members": "Members",
+                    "newest": "Newest",
+                    "votes": "Votes"
+                },
+                "desc": "Browse the server list",
+                "name": "browse"
+            },
+            "bump": {
+                "desc": "Bump a specific server",
+                "name": "bump"
+            },
+            "bumpall": {
+                "desc": "Bump all servers you own at once",
+                "name": "bumpall"
+            },
+            "root": {
+                "desc": "Server commands",
+                "name": "server"
+            },
+            "search": {
+                "choice": {
+                    "bumped": "Bumped",
+                    "members": "Members",
+                    "newest": "Newest",
+                    "votes": "Votes"
+                },
+                "desc": "Search servers",
+                "name": "search"
+            },
+            "vote": {
+                "desc": "Vote for a specific server",
+                "name": "vote"
+            }
+        },
+        "template": {
+            "browse": {
+                "choice": {
+                    "bumped": "Bumped",
+                    "newest": "Newest",
+                    "votes": "Votes"
+                },
+                "desc": "Browse the template list",
+                "name": "browse"
+            },
+            "bump": {
+                "desc": "Bump a specific template",
+                "name": "bump"
+            },
+            "bumpall": {
+                "desc": "Bump all templates you own at once",
+                "name": "bumpall"
+            },
+            "root": {
+                "desc": "Template commands",
+                "name": "template"
+            },
+            "search": {
+                "choice": {
+                    "bumped": "Bumped",
+                    "newest": "Newest",
+                    "votes": "Votes"
+                },
+                "desc": "Search templates",
+                "name": "search"
+            },
+            "vote": {
+                "desc": "Vote for a specific template",
+                "name": "vote"
+            }
+        }
+    },
+    "dgpa": {
+        "nds": {
+            "follow": {
+                "desc": "Follow natural-disaster work/school suspension updates (beta)",
+                "name": "follow",
+                "param": {
+                    "channel": "Channel to send notifications to"
+                },
+                "param_name": {
+                    "channel": "channel"
+                }
+            },
+            "root": {
+                "desc": "Look up natural-disaster work and school suspensions"
+            },
+            "view": {
+                "desc": "Get the latest natural-disaster work/school suspension status",
+                "name": "view"
+            }
+        }
+    },
+    "dsize": {
+        "ctx": {
+            "dsize_battle_context": {
+                "name": "dsize battle with them"
+            },
+            "dsize_feedgrass_context": {
+                "name": "Feed them grass"
+            }
+        },
+        "dsize": {
+            "choice": {
+                "false": "No",
+                "true": "Yes"
+            },
+            "desc": "Measure your d* length",
+            "name": "dsize",
+            "param": {
+                "global_dsize": "Use the global record (default: no)"
+            },
+            "param_name": {
+                "global_dsize": "global_dsize"
+            }
+        },
+        "dsize_battle": {
+            "desc": "D*-length battle (both sides must not have measured today)",
+            "name": "dsize-battle",
+            "param": {
+                "opponent": "Who to battle"
+            },
+            "param_name": {
+                "opponent": "opponent"
+            }
+        },
+        "dsize_feedgrass": {
+            "choice": {
+                "false": "No",
+                "true": "Yes"
+            },
+            "desc": "Feed grass to a femboy",
+            "name": "dsize-feedgrass",
+            "param": {
+                "global_feedgrass": "Feed a femboy from the global leaderboard (default: no)",
+                "user": "Who to feed"
+            },
+            "param_name": {
+                "global_feedgrass": "global_feedgrass",
+                "user": "user"
+            }
+        },
+        "dsize_feedgrass_nsfw": {
+            "choice": {
+                "false": "No",
+                "true": "Yes"
+            },
+            "desc": "Feed grass to a femboy (NSFW)",
+            "name": "dsize-feedgrass-nsfw",
+            "param": {
+                "global_feedgrass": "Feed a femboy from the global leaderboard (default: no)",
+                "user": "Who to feed"
+            },
+            "param_name": {
+                "global_feedgrass": "global_feedgrass",
+                "user": "user"
+            }
+        },
+        "dsize_feedgrass_nsfw_toggle": {
+            "desc": "Toggle whether NSFW feedgrass is allowed",
+            "name": "dsize-feedgrass-nsfw-toggle"
+        },
+        "dsize_history": {
+            "choice": {
+                "false": "No",
+                "true": "Yes"
+            },
+            "desc": "View history",
+            "name": "dsize-history",
+            "param": {
+                "global_history": "Show the global record (default: no)",
+                "user": "View a specific user's history (default: yourself)"
+            },
+            "param_name": {
+                "global_history": "global_history",
+                "user": "user"
+            }
+        },
+        "dsize_leaderboard": {
+            "choice": {
+                "false": "No",
+                "true": "Yes"
+            },
+            "desc": "View the d*-length leaderboard",
+            "name": "dsize-leaderboard",
+            "param": {
+                "global_leaderboard": "Show the global leaderboard (default: no)",
+                "limit": "How many top entries to show (default 10)",
+                "reverse": "Reverse the leaderboard (default: no)"
+            },
+            "param_name": {
+                "global_leaderboard": "global_leaderboard",
+                "limit": "limit",
+                "reverse": "reverse"
+            }
+        },
+        "dsize_settings": {
+            "choice": {
+                "dsize_drop_item_chance": "Item drop chance (%)",
+                "dsize_max": "Maximum length",
+                "dsize_surgery_max": "Surgery maximum length",
+                "dsize_surgery_percent": "Surgery chance (%)"
+            },
+            "desc": "Configure dsize",
+            "name": "dsize-settings",
+            "param": {
+                "setting": "The setting to change",
+                "value": "The value to set"
+            },
+            "param_name": {
+                "setting": "setting",
+                "value": "value"
+            }
+        },
+        "dsize_stats": {
+            "desc": "View your d*-length statistics",
+            "name": "dsize-stats"
+        }
+    },
+    "dynamicvoice": {
+        "dynamic_voice": {
+            "blacklist_role": {
+                "desc": "Set a dynamic voice channel blacklist role",
+                "name": "blacklist-role"
+            },
+            "disable": {
+                "desc": "Disable dynamic voice channels",
+                "name": "disable"
+            },
+            "play_audio": {
+                "choice": {
+                    "false": "Disable",
+                    "true": "Enable"
+                },
+                "desc": "Play a sound before switching dynamic voice channels",
+                "name": "play-audio",
+                "param": {
+                    "enable": "Whether to play a sound before entering the channel"
+                },
+                "param_name": {
+                    "enable": "enable"
+                }
+            },
+            "root": {
+                "name": "dynamic-voice"
+            },
+            "setup": {
+                "desc": "Set up dynamic voice channels",
+                "name": "setup",
+                "param": {
+                    "channel": "Choose a channel",
+                    "channel_category": "Choose a channel category",
+                    "channel_name": "Channel name template ({user} inserts the user's name)"
+                },
+                "param_name": {
+                    "channel": "channel",
+                    "channel_category": "channel_category",
+                    "channel_name": "channel_name"
+                }
+            },
+            "unblacklist_role": {
+                "desc": "Remove a dynamic voice channel blacklist role",
+                "name": "unblacklist-role"
+            },
+            "view_blacklist_roles": {
+                "desc": "View dynamic voice channel blacklist roles",
+                "name": "view-blacklist-roles"
+            }
+        }
+    },
+    "economy": {
+        "economy": {
+            "adminitems": {
+                "desc": "View items given to you by admins",
+                "name": "adminitems"
+            },
+            "balance": {
+                "desc": "Check your balance",
+                "name": "balance",
+                "param": {
+                    "user": "Check another user's balance"
+                },
+                "param_name": {
+                    "user": "user"
+                }
+            },
+            "buy": {
+                "choice": {
+                    "global": "Global shop (global currency)",
+                    "server": "Server shop (server currency)"
+                },
+                "desc": "Buy items from the shop",
+                "name": "buy",
+                "param": {
+                    "amount": "How many to buy",
+                    "item_id": "The item to buy",
+                    "scope": "Shop type"
+                },
+                "param_name": {
+                    "amount": "amount",
+                    "item_id": "item_id",
+                    "scope": "scope"
+                }
+            },
+            "daily": {
+                "desc": "Claim your daily reward",
+                "name": "daily",
+                "param": {
+                    "global_daily": "Claim the global reward instead"
+                },
+                "param_name": {
+                    "global_daily": "global_daily"
+                }
+            },
+            "exchange": {
+                "choice": {
+                    "to_global": "Server currency → global currency",
+                    "to_server": "Global currency → server currency"
+                },
+                "desc": "Exchange between server and global currency",
+                "name": "exchange",
+                "param": {
+                    "amount": "Amount",
+                    "direction": "Exchange direction"
+                },
+                "param_name": {
+                    "amount": "amount",
+                    "direction": "direction"
+                }
+            },
+            "history": {
+                "choice": {
+                    "global": "Global",
+                    "server": "Server"
+                },
+                "desc": "View your transaction history",
+                "name": "history",
+                "param": {
+                    "page": "Page number",
+                    "scope": "Scope to view"
+                },
+                "param_name": {
+                    "scope": "scope"
+                }
+            },
+            "hourly": {
+                "desc": "Claim your hourly reward",
+                "name": "hourly",
+                "param": {
+                    "global_hourly": "Claim the global reward instead"
+                },
+                "param_name": {
+                    "global_hourly": "global_hourly"
+                }
+            },
+            "info": {
+                "desc": "View server economy information",
+                "name": "info"
+            },
+            "leaderboard": {
+                "choice": {
+                    "global": "Global currency",
+                    "server": "Server currency",
+                    "total": "Total assets"
+                },
+                "desc": "View the wealth leaderboard",
+                "name": "leaderboard",
+                "param": {
+                    "currency": "Leaderboard type"
+                },
+                "param_name": {
+                    "currency": "currency"
+                }
+            },
+            "pay": {
+                "choice": {
+                    "global": "Global currency",
+                    "server": "Server currency"
+                },
+                "desc": "Transfer money to another user",
+                "name": "pay",
+                "param": {
+                    "amount": "Amount",
+                    "currency": "Currency type",
+                    "user": "Recipient"
+                },
+                "param_name": {
+                    "amount": "amount",
+                    "currency": "currency",
+                    "user": "user"
+                }
+            },
+            "root": {
+                "desc": "Economy system commands",
+                "name": "economy"
+            },
+            "sell": {
+                "choice": {
+                    "global": "Global shop (global currency)",
+                    "server": "Server shop (server currency)"
+                },
+                "desc": "Sell items to the shop",
+                "name": "sell",
+                "param": {
+                    "amount": "How many to sell",
+                    "item_id": "The item to sell",
+                    "scope": "Shop type"
+                },
+                "param_name": {
+                    "amount": "amount",
+                    "item_id": "item_id",
+                    "scope": "scope"
+                }
+            },
+            "shop": {
+                "desc": "View the shop",
+                "name": "shop"
+            },
+            "trade": {
+                "desc": "Trade with another user",
+                "name": "trade",
+                "param": {
+                    "global_trade": "Trade with global currency/items (cross-server)",
+                    "offer_item": "The item you offer",
+                    "offer_item_amount": "How many of the item you offer",
+                    "offer_money": "The amount of money you offer",
+                    "request_item": "The item you want",
+                    "request_item_amount": "How many of the item you want",
+                    "request_money": "The amount of money you want",
+                    "user": "Trading partner"
+                },
+                "param_name": {
+                    "offer_item": "offer_item",
+                    "offer_item_amount": "offer_item_amount",
+                    "offer_money": "offer_money",
+                    "request_item": "request_item",
+                    "request_item_amount": "request_item_amount",
+                    "request_money": "request_money",
+                    "user": "user"
+                }
+            }
+        },
+        "economymod": {
+            "global_mode": {
+                "desc": "Toggle forcing this server to use the global economy/items/dsize",
+                "name": "global-mode",
+                "param": {
+                    "enabled": "True = force global, False = restore server mode"
+                },
+                "param_name": {
+                    "enabled": "enabled"
+                }
+            },
+            "info": {
+                "desc": "Detailed economy admin panel",
+                "name": "info"
+            },
+            "root": {
+                "desc": "Economy admin commands",
+                "name": "economymod"
+            },
+            "setname": {
+                "desc": "Set the server currency name",
+                "name": "setname",
+                "param": {
+                    "name": "The new currency name"
+                },
+                "param_name": {
+                    "name": "name"
+                }
+            },
+            "toggle_flow": {
+                "desc": "Toggle flow between server and global currency (exchange, global shop, etc.)",
+                "name": "toggle-flow"
+            }
+        }
+    },
+    "explore": {
+        "banned_words": {
+            "add": {
+                "desc": "Add a custom banned word",
+                "name": "add"
+            },
+            "list": {
+                "desc": "List all custom banned words",
+                "name": "list"
+            },
+            "remove": {
+                "desc": "Remove a custom banned word",
+                "name": "remove"
+            },
+            "root": {
+                "desc": "Manage custom banned words for the Explore chat",
+                "name": "banned-words"
+            }
+        },
+        "ctx": {
+            "activity_entry": {
+                "desc": "Launch the Explore space",
+                "name": "explore space"
+            }
+        },
+        "explore": {
+            "desc": "Launch the Explore space",
+            "name": "explore"
+        },
+        "explore_settings": {
+            "chat_channel": {
+                "desc": "Set the Discord text channel bridged to the Explore chat",
+                "name": "chat-channel"
+            },
+            "privacy": {
+                "choice": {
+                    "0": "Private",
+                    "1": "Public"
+                },
+                "desc": "Set whether this server is listed in the Explore lobby",
+                "name": "privacy"
+            },
+            "require_join": {
+                "desc": "Require joining the server before entering Explore",
+                "name": "require-join"
+            },
+            "root": {
+                "name": "explore-settings"
+            },
+            "setup": {
+                "choice": {
+                    "0": "Disable",
+                    "1": "Enable"
+                },
+                "desc": "Enable or configure the Explore space",
+                "name": "setup"
+            }
+        }
+    },
+    "fakeuser": {
+        "fake": {
+            "desc": "Speak as another user",
+            "name": "fake",
+            "param": {
+                "message": "The message to send",
+                "user": "The user to impersonate"
+            },
+            "param_name": {
+                "message": "message",
+                "user": "user"
+            }
+        },
+        "fake_admin": {
+            "filter": {
+                "choice": {
+                    "add": "Add filter",
+                    "remove": "Remove filter",
+                    "view": "View filters"
+                },
+                "desc": "Configure filters for the fake-user feature",
+                "name": "filter",
+                "param": {
+                    "mode": "What do you want to do?",
+                    "regex": "Regex to filter; only needed for add or remove"
+                },
+                "param_name": {
+                    "mode": "mode",
+                    "regex": "regex"
+                }
+            },
+            "log_channel": {
+                "desc": "Set the fake-user log channel",
+                "name": "log-channel",
+                "param": {
+                    "channel": "The log channel to set; leave empty to view the current one"
+                },
+                "param_name": {
+                    "channel": "channel"
+                }
+            },
+            "root": {
+                "desc": "Fake-user admin commands",
+                "name": "fake-admin"
+            }
+        },
+        "fake_blacklist": {
+            "desc": "Manage the fake-user blacklist",
+            "name": "fake-blacklist",
+            "param": {
+                "user": "User to add/remove from the blacklist (pick this bot to mean everyone)"
+            },
+            "param_name": {
+                "user": "user"
+            }
+        }
+    },
+    "feedback": {
+        "feedback": {
+            "desc": "Send feedback to the bot developers",
+            "name": "feedback"
+        }
+    },
+    "fixlink": {
+        "fixlink": {
+            "root": {
+                "desc": "Link fixer",
+                "name": "fixlink"
+            },
+            "settings": {
+                "desc": "Open the FixLink interactive settings panel",
+                "name": "settings"
+            }
+        }
+    },
+    "gettingstarted": {
+        "gettingstarted": {
+            "desc": "Open the server quick-setup center",
+            "name": "gettingstarted"
+        }
+    },
+    "guildpanel": {
+        "panel": {
+            "desc": "Open the server panel",
+            "name": "panel"
+        }
+    },
+    "hackeddetector": {
+        "imhacked": {
+            "desc": "Start the compromised-account recovery flow",
+            "name": "imhacked"
+        }
+    },
+    "itemsystem": {
+        "item": {
+            "drop": {
+                "choice": {
+                    "false": "No",
+                    "global": "Global",
+                    "server": "Server",
+                    "true": "Yes"
+                },
+                "desc": "Drop an item",
+                "name": "drop",
+                "param": {
+                    "amount": "How many to drop",
+                    "can_pickup": "Can others pick this item up?",
+                    "item_id": "The item ID to drop",
+                    "pickup_duration": "How long the item can be picked up (seconds)",
+                    "pickup_only_once": "Can the item only be picked up once?",
+                    "scope": "Item scope (auto-detected by default)"
+                },
+                "param_name": {
+                    "amount": "amount",
+                    "can_pickup": "can_pickup",
+                    "item_id": "item_id",
+                    "pickup_duration": "pickup_duration",
+                    "pickup_only_once": "pickup_only_once",
+                    "scope": "scope"
+                }
+            },
+            "give": {
+                "choice": {
+                    "global": "Global",
+                    "server": "Server"
+                },
+                "desc": "Give an item to another user",
+                "name": "give",
+                "param": {
+                    "amount": "Amount",
+                    "item_id": "The item ID to give",
+                    "scope": "Item scope (auto-detected by default)",
+                    "user": "The user to give the item to"
+                },
+                "param_name": {
+                    "amount": "amount",
+                    "item_id": "item_id",
+                    "scope": "scope",
+                    "user": "user"
+                }
+            },
+            "list": {
+                "choice": {
+                    "global": "Global",
+                    "server": "Server"
+                },
+                "desc": "View the items you own",
+                "name": "list",
+                "param": {
+                    "scope": "Scope to view (auto-detected by default)"
+                },
+                "param_name": {
+                    "scope": "scope"
+                }
+            },
+            "root": {
+                "desc": "Item system commands",
+                "name": "item"
+            },
+            "use": {
+                "choice": {
+                    "global": "Global",
+                    "server": "Server"
+                },
+                "desc": "Use an item",
+                "name": "use",
+                "param": {
+                    "item_id": "The item ID to use",
+                    "scope": "Scope to use in (auto-detected by default)"
+                },
+                "param_name": {
+                    "item_id": "item_id",
+                    "scope": "scope"
+                }
+            }
+        },
+        "itemmod": {
+            "addcustom": {
+                "desc": "Add a server custom item",
+                "name": "addcustom",
+                "param": {
+                    "content": "Text sent when the item is used; AutoReply variables supported",
+                    "description": "Item description (optional, defaults to \"Custom item\")",
+                    "ephemeral_response": "Respond to the user with a hidden (ephemeral) message",
+                    "list_in_shop": "List it in the server shop",
+                    "name": "Item name",
+                    "price": "Shop price (server currency; only used when listed in shop)",
+                    "remove_after_use": "Remove the item automatically after use",
+                    "revenue_share_user": "Revenue-share user; receives 90% of the value when the item is used"
+                },
+                "param_name": {
+                    "content": "content",
+                    "description": "description",
+                    "ephemeral_response": "ephemeral_response",
+                    "list_in_shop": "list_in_shop",
+                    "name": "name",
+                    "price": "price",
+                    "remove_after_use": "remove_after_use",
+                    "revenue_share_user": "revenue_share_user"
+                }
+            },
+            "editcustom": {
+                "desc": "Edit a custom item's shop listing and price",
+                "name": "editcustom",
+                "param": {
+                    "content": "Text sent when the item is used; AutoReply variables supported",
+                    "description": "Item description",
+                    "ephemeral_response": "Respond to the user with a hidden (ephemeral) message",
+                    "item_id": "The custom item to edit",
+                    "list_in_shop": "List it in the server shop",
+                    "name": "Item name",
+                    "remove_after_use": "Remove the item automatically after use",
+                    "revenue_share_user": "Revenue-share user; receives 90% of the value when the item is used"
+                },
+                "param_name": {
+                    "content": "content",
+                    "description": "description",
+                    "ephemeral_response": "ephemeral_response",
+                    "item_id": "item_id",
+                    "list_in_shop": "list_in_shop",
+                    "name": "name",
+                    "remove_after_use": "remove_after_use",
+                    "revenue_share_user": "revenue_share_user"
+                }
+            },
+            "give": {
+                "desc": "Give a user an item (may affect the economy)",
+                "name": "give",
+                "param": {
+                    "amount": "How many to give",
+                    "item_id": "The item ID to give",
+                    "user": "The user to give the item to"
+                },
+                "param_name": {
+                    "amount": "amount",
+                    "item_id": "item_id",
+                    "user": "user"
+                }
+            },
+            "list": {
+                "desc": "List all available items",
+                "name": "list"
+            },
+            "listcustom": {
+                "desc": "List this server's custom items",
+                "name": "listcustom"
+            },
+            "listuser": {
+                "desc": "List the items a user owns",
+                "name": "listuser",
+                "param": {
+                    "user": "The user to look up"
+                },
+                "param_name": {
+                    "user": "user"
+                }
+            },
+            "remove": {
+                "desc": "Remove an item from a user",
+                "name": "remove",
+                "param": {
+                    "amount": "How many to remove",
+                    "item_id": "The item ID to remove",
+                    "user": "The user to remove the item from"
+                },
+                "param_name": {
+                    "amount": "amount",
+                    "item_id": "item_id",
+                    "user": "user"
+                }
+            },
+            "removecustom": {
+                "desc": "Remove a server custom item",
+                "name": "removecustom",
+                "param": {
+                    "item_id": "The custom item to remove"
+                },
+                "param_name": {
+                    "item_id": "item_id"
+                }
+            },
+            "root": {
+                "desc": "Item system admin commands",
+                "name": "itemmod"
+            }
+        }
+    },
+    "joinnotify": {
+        "joinnotify": {
+            "choice": {
+                "disable": "No thanks",
+                "enable": "Sure"
+            },
+            "desc": "Choose whether I DM you when you invite me to a server",
+            "name": "joinnotify"
+        }
+    },
+    "language": {
+        "choice": {
+            "auto": "Auto"
+        },
+        "root": {
+            "desc": "Language settings",
+            "name": "language"
+        },
+        "server": {
+            "desc": "Set the default language for this server",
+            "name": "server",
+            "param": {
+                "language": "Language (auto = follow each user's Discord client language)"
+            }
+        },
+        "set": {
+            "desc": "Set your personal language",
+            "name": "set",
+            "param": {
+                "language": "Language (auto = follow your Discord client language)"
+            }
+        },
+        "show": {
+            "desc": "Show your current language and how it was determined",
+            "name": "show"
+        }
+    },
+    "logger": {
+        "set_log_channel": {
+            "desc": "Set the log channel (logs are not sent to a channel if unset)",
+            "name": "set-log-channel",
+            "param": {
+                "channel": "The log channel"
+            },
+            "param_name": {
+                "channel": "channel"
+            }
+        }
+    },
+    "mentionlimit": {
+        "mentionlimit": {
+            "about": {
+                "desc": "About MentionLimit",
+                "name": "about"
+            },
+            "add": {
+                "desc": "Add or update mention cooldown for a managed role",
+                "name": "add",
+                "param": {
+                    "cooldown": "Cooldown seconds (10-86400, default 600)",
+                    "role": "The role to manage"
+                },
+                "param_name": {
+                    "cooldown": "cooldown",
+                    "role": "role"
+                }
+            },
+            "list": {
+                "desc": "List MentionLimit settings",
+                "name": "list"
+            },
+            "remove": {
+                "desc": "Remove a managed role",
+                "name": "remove",
+                "param": {
+                    "role": "The role to stop managing"
+                },
+                "param_name": {
+                    "role": "role"
+                }
+            },
+            "root": {
+                "name": "mentionlimit"
+            },
+            "settings": {
+                "desc": "Configure MentionLimit mode and options",
+                "name": "settings",
+                "param": {
+                    "announce": "Announce in the channel when a cooldown starts",
+                    "automod_mode": "AutoMod mode: block with an AutoMod rule during cooldown, role stays mentionable",
+                    "count_admins": "Whether admin mentions also trigger the cooldown"
+                },
+                "param_name": {
+                    "announce": "announce",
+                    "automod_mode": "automod_mode",
+                    "count_admins": "count_admins"
+                }
+            },
+            "setup": {
+                "desc": "Interactively configure and enable MentionLimit",
+                "name": "setup"
+            },
+            "toggle": {
+                "desc": "Enable/disable MentionLimit",
+                "name": "toggle",
+                "param": {
+                    "enable": "Leave empty to toggle the current state"
+                },
+                "param_name": {
+                    "enable": "enable"
+                }
+            }
+        }
+    },
+    "messageimage": {
+        "ctx": {
+            "make_it_a_quote": {
+                "name": "Terrible Make it a Quote"
+            },
+            "screenshot_generator": {
+                "name": "Screenshot Generator"
+            },
+            "whatisthisguytalking": {
+                "name": "What is this guy talking about"
+            }
+        },
+        "upvoteboard": {
+            "desc": "Set up the upvote board; posts here once 5 people upvote a message.",
+            "name": "upvoteboard",
+            "param": {
+                "channel": "The channel to use (omit to clear the setting)"
+            },
+            "param_name": {
+                "channel": "channel"
+            }
+        }
+    },
+    "minigames": {
+        "minigamescog": {
+            "big2": {
+                "desc": "Start a table of Big Two",
+                "name": "big2",
+                "param": {
+                    "use_global": "Use global currency (defaults to the server setting)"
+                },
+                "param_name": {
+                    "use_global": "use_global"
+                }
+            },
+            "blackjack": {
+                "desc": "Blackjack: play against the dealer",
+                "name": "blackjack",
+                "param": {
+                    "bet": "Bet amount (50-2000)",
+                    "use_global": "Use global currency (defaults to the server setting)"
+                },
+                "param_name": {
+                    "bet": "bet",
+                    "use_global": "use_global"
+                }
+            },
+            "coinflip": {
+                "desc": "Coin flip: call heads or tails",
+                "name": "coinflip",
+                "param": {
+                    "bet": "Bet amount (50-2000)"
+                },
+                "param_name": {
+                    "bet": "bet"
+                }
+            },
+            "dice": {
+                "desc": "Dice game: guess the roll from 1-6",
+                "name": "dice",
+                "param": {
+                    "bet": "Bet amount (50-2000)"
+                },
+                "param_name": {
+                    "bet": "bet"
+                }
+            },
+            "doom": {
+                "desc": "Play DOOM",
+                "name": "doom"
+            },
+            "highlow": {
+                "desc": "High-low: guess if the next card is higher or lower",
+                "name": "highlow",
+                "param": {
+                    "bet": "Bet amount (50-2000)",
+                    "use_global": "Use global currency (defaults to the server setting)"
+                },
+                "param_name": {
+                    "bet": "bet",
+                    "use_global": "use_global"
+                }
+            },
+            "lottery": {
+                "desc": "Buy a 00-99 lottery ticket or view the current pot",
+                "name": "lottery",
+                "param": {
+                    "bet": "Bet per ticket (50-2000; leave empty to check status)",
+                    "number": "Pick 00-99 (leave empty to check status)",
+                    "use_global": "Use global currency (defaults to the server setting)"
+                },
+                "param_name": {
+                    "bet": "bet",
+                    "number": "number",
+                    "use_global": "use_global"
+                }
+            },
+            "root": {
+                "desc": "Minigames"
+            },
+            "roulette": {
+                "choice": {
+                    "black": "Black",
+                    "even": "Even",
+                    "high": "High (19-36)",
+                    "low": "Low (1-18)",
+                    "number": "Single number",
+                    "odd": "Odd",
+                    "red": "Red"
+                },
+                "desc": "Roulette: pick a bet type and place your bet",
+                "name": "roulette",
+                "param": {
+                    "bet": "Bet amount (50-2000)",
+                    "bet_type": "Bet type",
+                    "number": "Pick 0-36 for single-number bets",
+                    "use_global": "Use global currency (defaults to the server setting)"
+                },
+                "param_name": {
+                    "bet": "bet",
+                    "bet_type": "bet_type",
+                    "number": "number",
+                    "use_global": "use_global"
+                }
+            },
+            "scratchcard": {
+                "desc": "Buy and scratch a 3x3 scratch card",
+                "name": "scratchcard",
+                "param": {
+                    "bet": "Bet amount (50-2000)",
+                    "use_global": "Use global currency (defaults to the server setting)"
+                },
+                "param_name": {
+                    "bet": "bet",
+                    "use_global": "use_global"
+                }
+            },
+            "slots": {
+                "desc": "Slot machine",
+                "name": "slots",
+                "param": {
+                    "bet": "Bet amount (50-2000)",
+                    "use_global": "Use global currency (defaults to the server setting)"
+                },
+                "param_name": {
+                    "bet": "bet",
+                    "use_global": "use_global"
+                }
+            },
+            "tower": {
+                "desc": "Tower climbing game",
+                "name": "tower",
+                "param": {
+                    "bet": "Bet amount (50-2000)",
+                    "use_global": "Use global currency (defaults to the server setting)"
+                },
+                "param_name": {
+                    "bet": "bet",
+                    "use_global": "use_global"
+                }
+            }
+        }
+    },
+    "moderate": {
+        "action_builder": {
+            "choice": {
+                "ban": "Ban",
+                "delete": "Delete message",
+                "kick": "Kick",
+                "mute": "Mute",
+                "send_mod_message": "Send moderation notice",
+                "warn": "Public warning"
+            },
+            "desc": "Build a moderation action command string",
+            "name": "action-builder",
+            "param": {
+                "action_type": "Action type",
+                "delete_message_duration": "Ban only: delete the user's messages from this period, e.g. 1d; 0 = none",
+                "duration": "Duration (for mute/ban), e.g. 10m, 7d; 0 = permanent",
+                "message": "Warning message (for delete/warn); {user} inserts the user",
+                "prepend": "Existing command to prepend before this action (comma-separated actions)",
+                "reason": "Reason (for mute/kick/ban)"
+            },
+            "param_name": {
+                "action_type": "action_type",
+                "delete_message_duration": "delete_message_duration",
+                "duration": "duration",
+                "message": "message",
+                "prepend": "prepend",
+                "reason": "reason"
+            }
+        },
+        "ban": {
+            "desc": "Ban a user",
+            "name": "ban",
+            "param": {
+                "delete_message": "Message deletion period (optional, default: none)",
+                "duration": "Ban duration (optional, default: permanent)",
+                "reason": "Ban reason (optional)",
+                "send_moderation_message": "Also send a moderation announcement",
+                "user": "Choose a user"
+            },
+            "param_name": {
+                "delete_message": "delete_message",
+                "duration": "duration",
+                "reason": "reason",
+                "send_moderation_message": "send_moderation_message",
+                "user": "user"
+            }
+        },
+        "custom_action_add": {
+            "desc": "Add or update a server custom moderation action",
+            "name": "custom-action-add",
+            "param": {
+                "action": "The action string to run (e.g. mute 1h advertising, smm)",
+                "name": "Custom command name (e.g. ad)"
+            },
+            "param_name": {
+                "action": "action",
+                "name": "name"
+            }
+        },
+        "custom_action_list": {
+            "desc": "View server custom moderation actions",
+            "name": "custom-action-list"
+        },
+        "custom_action_remove": {
+            "desc": "Delete a server custom moderation action",
+            "name": "custom-action-remove",
+            "param": {
+                "name": "Name of the custom command to delete"
+            },
+            "param_name": {
+                "name": "name"
+            }
+        },
+        "kick": {
+            "desc": "Kick a user",
+            "name": "kick",
+            "param": {
+                "reason": "Kick reason (optional)",
+                "send_moderation_message": "Also send a moderation announcement",
+                "user": "Choose a user (@mention or ID)"
+            },
+            "param_name": {
+                "reason": "reason",
+                "send_moderation_message": "send_moderation_message",
+                "user": "user"
+            }
+        },
+        "moderation_message_channel": {
+            "desc": "Set the moderation announcement channel",
+            "name": "moderation-message-channel",
+            "param": {
+                "channel": "Choose a channel"
+            },
+            "param_name": {
+                "channel": "channel"
+            }
+        },
+        "moderation_message_format": {
+            "desc": "Configure the announcement template and case-ID format",
+            "name": "moderation-message-format"
+        },
+        "multi_moderate": {
+            "desc": "Take action on multiple users",
+            "name": "multi-moderate",
+            "param": {
+                "action": "Action commands, comma separated, e.g. ban 1d spamming, mute 10m",
+                "users": "Users (mentions or IDs, separated by commas, spaces, or newlines)"
+            },
+            "param_name": {
+                "action": "action",
+                "users": "users"
+            }
+        },
+        "multi_moderate_action": {
+            "desc": "Take multiple actions on one user",
+            "name": "multi-moderate-action",
+            "param": {
+                "user": "Choose a user"
+            },
+            "param_name": {
+                "user": "user"
+            }
+        },
+        "request": {
+            "ban": {
+                "desc": "Request a user ban",
+                "name": "ban",
+                "param": {
+                    "duration": "Ban duration (optional, default: permanent)",
+                    "reason": "Ban reason (optional)",
+                    "request_to": "Who confirms the request (default: the target)",
+                    "user": "The user to ban"
+                },
+                "param_name": {
+                    "duration": "duration",
+                    "reason": "reason",
+                    "request_to": "request_to",
+                    "user": "user"
+                }
+            },
+            "kick": {
+                "desc": "Request a user kick",
+                "name": "kick",
+                "param": {
+                    "reason": "Kick reason (optional)",
+                    "request_to": "Who confirms the request (default: the target)",
+                    "user": "The user to kick"
+                },
+                "param_name": {
+                    "reason": "reason",
+                    "request_to": "request_to",
+                    "user": "user"
+                }
+            },
+            "root": {
+                "desc": "Request confirmation from the target or an authorized admin before acting.",
+                "name": "request"
+            },
+            "settings": {
+                "choice": {
+                    "ban": "Ban",
+                    "kick": "Kick",
+                    "timeout": "Timeout"
+                },
+                "desc": "Configure the request feature (admins only)",
+                "name": "settings",
+                "param": {
+                    "action": "The action to configure",
+                    "enabled": "Whether to enable it",
+                    "max_duration": "Maximum timeout/ban duration (e.g. 1h, 0 = unlimited)"
+                },
+                "param_name": {
+                    "action": "action",
+                    "enabled": "enabled"
+                }
+            },
+            "timeout": {
+                "desc": "Request a user timeout",
+                "name": "timeout",
+                "param": {
+                    "duration": "Timeout duration (default: 10 minutes)",
+                    "reason": "Timeout reason (optional)",
+                    "request_to": "Who confirms the request (default: the target)",
+                    "user": "The user to time out"
+                },
+                "param_name": {
+                    "duration": "duration",
+                    "reason": "reason",
+                    "request_to": "request_to",
+                    "user": "user"
+                }
+            }
+        },
+        "send_moderation_message": {
+            "desc": "Manually send a moderation announcement",
+            "name": "send-moderation-message",
+            "param": {
+                "action": "Action taken",
+                "direct": "Send directly to the announcement channel without the settings UI",
+                "moderator": "Acting moderator (optional)",
+                "reason": "Reason for the action",
+                "user": "Choose a user"
+            },
+            "param_name": {
+                "action": "action",
+                "direct": "direct",
+                "moderator": "moderator",
+                "reason": "reason",
+                "user": "user"
+            }
+        },
+        "timeout": {
+            "desc": "Time out a user",
+            "name": "timeout",
+            "param": {
+                "duration": "Timeout duration (optional, default: 10 minutes)",
+                "reason": "Timeout reason (optional)",
+                "send_moderation_message": "Also send a moderation announcement",
+                "user": "Choose a user"
+            },
+            "param_name": {
+                "duration": "duration",
+                "reason": "reason",
+                "send_moderation_message": "send_moderation_message",
+                "user": "user"
+            }
+        },
+        "unban": {
+            "desc": "Unban a user",
+            "name": "unban",
+            "param": {
+                "user": "Choose a user"
+            },
+            "param_name": {
+                "user": "user"
+            }
+        },
+        "untimeout": {
+            "desc": "Remove a user's timeout",
+            "name": "untimeout",
+            "param": {
+                "user": "Choose a user"
+            },
+            "param_name": {
+                "user": "user"
+            }
+        },
+        "vote": {
+            "ban": {
+                "desc": "Start a ban vote",
+                "name": "ban",
+                "param": {
+                    "duration": "Ban duration (optional, default: permanent)",
+                    "reason": "Ban reason (optional)",
+                    "user": "The user to ban"
+                },
+                "param_name": {
+                    "duration": "duration",
+                    "reason": "reason",
+                    "user": "user"
+                }
+            },
+            "kick": {
+                "desc": "Start a kick vote",
+                "name": "kick",
+                "param": {
+                    "reason": "Kick reason (optional)",
+                    "user": "The user to kick"
+                },
+                "param_name": {
+                    "reason": "reason",
+                    "user": "user"
+                }
+            },
+            "root": {
+                "desc": "Start a moderation vote; the action runs once approvals reach the threshold.",
+                "name": "vote"
+            },
+            "settings": {
+                "choice": {
+                    "ban": "Ban",
+                    "kick": "Kick",
+                    "timeout": "Timeout"
+                },
+                "desc": "Configure vote moderation (admins only)",
+                "name": "settings",
+                "param": {
+                    "action": "The action to configure",
+                    "enabled": "Whether to enable it",
+                    "max_duration": "Maximum timeout/ban duration (e.g. 1h, 0 = unlimited)",
+                    "threshold": "Fixed vote threshold (0 = automatic)",
+                    "vote_duration": "Vote duration (e.g. 10m, default 10 minutes)"
+                },
+                "param_name": {
+                    "action": "action",
+                    "enabled": "enabled",
+                    "threshold": "threshold"
+                }
+            },
+            "timeout": {
+                "desc": "Start a timeout vote",
+                "name": "timeout",
+                "param": {
+                    "duration": "Timeout duration (default: 10 minutes)",
+                    "reason": "Timeout reason (optional)",
+                    "user": "The user to time out"
+                },
+                "param_name": {
+                    "duration": "duration",
+                    "reason": "reason",
+                    "user": "user"
+                }
+            }
+        }
+    },
+    "moderationnotify": {
+        "settings_punishment_notify": {
+            "choice": {
+                "ban": "Ban",
+                "kick": "Kick",
+                "mute": "Mute"
+            },
+            "desc": "Configure whether punished users are notified",
+            "name": "settings-punishment-notify",
+            "param": {
+                "action": "The punishment type to configure",
+                "enable": "Whether to enable notifications"
+            },
+            "param_name": {
+                "action": "action",
+                "enable": "enable"
+            }
+        },
+        "user_appeal_blacklist": {
+            "desc": "Manage the appeal blacklist",
+            "name": "user-appeal-blacklist",
+            "param": {
+                "reason": "Reason for blacklisting (optional)",
+                "user": "User to add to or remove from the blacklist"
+            },
+            "param_name": {
+                "reason": "reason",
+                "user": "user"
+            }
+        },
+        "user_appeal_channel": {
+            "desc": "Set the appeal channel; appeals are disabled if unset.",
+            "name": "user-appeal-channel",
+            "param": {
+                "channel": "The appeal channel; leave empty to disable appeals."
+            },
+            "param_name": {
+                "channel": "channel"
+            }
+        },
+        "view_appeal_blacklist": {
+            "desc": "View the appeal blacklist",
+            "name": "view-appeal-blacklist"
+        }
+    },
+    "music": {
+        "music": {
+            "loop": {
+                "choice": {
+                    "0": "Loop off",
+                    "1": "Loop track",
+                    "2": "Loop queue"
+                },
+                "desc": "Set the loop mode",
+                "name": "loop",
+                "param": {
+                    "mode": "Loop mode"
+                },
+                "param_name": {
+                    "mode": "mode"
+                }
+            },
+            "nodes": {
+                "desc": "View Lavalink node status",
+                "name": "nodes"
+            },
+            "now_playing": {
+                "desc": "Show the currently playing track",
+                "name": "now-playing"
+            },
+            "pause": {
+                "desc": "Pause playback",
+                "name": "pause"
+            },
+            "play": {
+                "desc": "Play music",
+                "name": "play",
+                "param": {
+                    "query": "Track name or URL"
+                },
+                "param_name": {
+                    "query": "query"
+                }
+            },
+            "queue": {
+                "desc": "View the playback queue",
+                "name": "queue"
+            },
+            "radio": {
+                "choice": {
+                    "listenmoe": "LISTEN.moe",
+                    "r_a_dio": "R/a/dio"
+                },
+                "desc": "Switch to radio mode",
+                "name": "radio",
+                "param": {
+                    "station": "The station to play"
+                },
+                "param_name": {
+                    "station": "station"
+                }
+            },
+            "recommend": {
+                "desc": "Recommend similar tracks based on the current one",
+                "name": "recommend",
+                "param": {
+                    "count": "How many recommendations to add (1-10, default 5)"
+                },
+                "param_name": {
+                    "count": "count"
+                }
+            },
+            "restore_queue": {
+                "desc": "Restore the playback state saved before restart",
+                "name": "restore-queue"
+            },
+            "resume": {
+                "desc": "Resume playback",
+                "name": "resume"
+            },
+            "root": {
+                "desc": "Music commands",
+                "name": "music"
+            },
+            "search": {
+                "desc": "Search for and play music",
+                "name": "search",
+                "param": {
+                    "query": "Search for a track (autocomplete supported)"
+                },
+                "param_name": {
+                    "query": "query"
+                }
+            },
+            "shuffle": {
+                "desc": "Shuffle the queue",
+                "name": "shuffle"
+            },
+            "skip": {
+                "desc": "Skip the current track",
+                "name": "skip"
+            },
+            "stop": {
+                "desc": "Stop playback and disconnect",
+                "name": "stop"
+            },
+            "volume": {
+                "desc": "Adjust the volume",
+                "name": "volume",
+                "param": {
+                    "level": "Volume level (0-100)"
+                },
+                "param_name": {
+                    "level": "level"
+                }
+            }
+        }
+    },
+    "owoify": {
+        "owoify": {
+            "desc": "Make text cute!",
+            "name": "owoify",
+            "param": {
+                "english": "English version?",
+                "text": "The text to cutify"
+            },
+            "param_name": {
+                "english": "english",
+                "text": "text"
+            }
+        }
+    },
+    "oxwu": {
+        "earthquake": {
+            "query_report": {
+                "desc": "Get the latest earthquake report",
+                "name": "query-report"
+            },
+            "query_warning": {
+                "desc": "Check the current earthquake early-warning status",
+                "name": "query-warning"
+            },
+            "root": {
+                "desc": "OXWU earthquake monitoring system",
+                "name": "earthquake"
+            },
+            "screenshot": {
+                "desc": "Get a screenshot of the current OXWU display",
+                "name": "screenshot"
+            },
+            "set_report_channel": {
+                "desc": "Set the channel that receives earthquake reports",
+                "name": "set-report-channel",
+                "param": {
+                    "channel": "The channel to receive reports",
+                    "text": "Optional extra text message"
+                },
+                "param_name": {
+                    "channel": "channel",
+                    "text": "text"
+                }
+            },
+            "status": {
+                "desc": "View OXWU connection status",
+                "name": "status"
+            }
+        }
+    },
+    "petpet": {
+        "petpet": {
+            "desc": "Generate a PetPet GIF",
+            "name": "petpet",
+            "param": {
+                "user": "The user to pet (default: yourself)"
+            },
+            "param_name": {
+                "user": "user"
+            }
+        }
+    },
+    "r34": {
+        "r34": {
+            "choice": {
+                "false": "No",
+                "true": "Yes"
+            },
+            "desc": "Get a random image from rule34.xxx",
+            "name": "r34",
+            "param": {
+                "ai": "Include AI-generated images",
+                "pid": "Page number",
+                "spoilers": "Mark as a spoiler",
+                "tags": "Tags"
+            },
+            "param_name": {
+                "pid": "pid",
+                "spoilers": "spoilers",
+                "tags": "tags"
+            }
+        },
+        "r34tags": {
+            "desc": "Search tags on rule34.xxx",
+            "name": "r34tags",
+            "param": {
+                "query": "Search keyword"
+            },
+            "param_name": {
+                "query": "query"
+            }
+        }
+    },
+    "reportsystem": {
+        "ctx": {
+            "report_message": {
+                "name": "Report Message"
+            }
+        },
+        "report": {
+            "blacklist_role": {
+                "choice": {
+                    "add": "Add",
+                    "remove": "Remove",
+                    "view": "View"
+                },
+                "desc": "Manage report blacklist roles",
+                "name": "blacklist-role",
+                "param": {
+                    "action": "The action to perform",
+                    "role": "Role"
+                },
+                "param_name": {
+                    "action": "action",
+                    "role": "role"
+                }
+            },
+            "root": {
+                "name": "report"
+            },
+            "set_server_rules": {
+                "desc": "Set the server rules text",
+                "name": "set-server-rules",
+                "param": {
+                    "rules": "Server rules; use \\n for line breaks"
+                },
+                "param_name": {
+                    "rules": "rules"
+                }
+            },
+            "settings": {
+                "choice": {
+                    "moderation_message_channel_id": "Moderation notice channel",
+                    "report_channel_id": "Report notification channel",
+                    "report_message": "Report notification message",
+                    "report_rate_limit": "Report rate limit (seconds)",
+                    "reported_message": "Reply sent to reporters"
+                },
+                "desc": "Configure this server's report system",
+                "name": "settings",
+                "param": {
+                    "setting": "The setting to change",
+                    "value": "The value (for channels use #channel-name or a channel ID)"
+                },
+                "param_name": {
+                    "setting": "setting",
+                    "value": "value"
+                }
+            }
+        }
+    },
+    "serverwebverify": {
+        "ctx": {
+            "force_verify": "Force user verification",
+            "manual_verify": "Manually verify user"
+        },
+        "webverify": {
+            "autorole": {
+                "choice": {
+                    "age_check": "Account too new",
+                    "always": "Always assign",
+                    "has_flagged_history": "Account was flagged before",
+                    "left_guild_before": "Left the server before",
+                    "no_history": "No verification history"
+                },
+                "desc": "Automatically assign the unverified role to new members",
+                "name": "autorole",
+                "param": {
+                    "enable": "Enable or disable automatic role assignment",
+                    "trigger": "Condition for assigning the role"
+                },
+                "param_name": {
+                    "enable": "enable",
+                    "trigger": "trigger"
+                }
+            },
+            "check_relation": {
+                "desc": "Check a user's related accounts",
+                "name": "check_relation",
+                "param": {
+                    "user": "The user to check"
+                },
+                "param_name": {
+                    "user": "user"
+                }
+            },
+            "country_alert": {
+                "choice": {
+                    "allowlist": "Allowlist mode",
+                    "blocklist": "Blocklist mode"
+                },
+                "desc": "Configure verification region alerts",
+                "name": "country-alert",
+                "param": {
+                    "channel": "The channel that receives alerts",
+                    "countries": "Country codes, comma separated (e.g. US,CN,RU)",
+                    "enable": "Enable or disable region alerts",
+                    "mode": "Alert mode"
+                },
+                "param_name": {
+                    "channel": "channel",
+                    "countries": "countries",
+                    "enable": "enable",
+                    "mode": "mode"
+                }
+            },
+            "create_unverified_role": {
+                "desc": "Automatically create and configure the unverified-member role",
+                "name": "create_unverified_role",
+                "param": {
+                    "name": "Name for the unverified-member role"
+                },
+                "param_name": {
+                    "name": "name"
+                }
+            },
+            "disable": {
+                "desc": "Disable web verification for this server",
+                "name": "disable"
+            },
+            "enable": {
+                "desc": "Enable web verification for this server",
+                "name": "enable"
+            },
+            "force_verify": {
+                "desc": "Force a user to verify",
+                "name": "force-verify",
+                "param": {
+                    "user": "The user to force-verify"
+                },
+                "param_name": {
+                    "user": "user"
+                }
+            },
+            "manual_check_country": {
+                "desc": "Manually check a user's region",
+                "name": "manual-check-country",
+                "param": {
+                    "user": "Choose a user"
+                },
+                "param_name": {
+                    "user": "user"
+                }
+            },
+            "minage": {
+                "desc": "Define the minimum account age",
+                "name": "minage",
+                "param": {
+                    "min_age": "Minimum account age (days)"
+                },
+                "param_name": {
+                    "min_age": "min_age"
+                }
+            },
+            "quick_setup": {
+                "desc": "Quickly set up web verification with an interactive wizard",
+                "name": "quick_setup"
+            },
+            "relation_action": {
+                "desc": "Act on a user and their related accounts",
+                "name": "relation_action",
+                "param": {
+                    "action": "The action to run (same format as !moderate)",
+                    "user": "Choose a user"
+                },
+                "param_name": {
+                    "action": "action",
+                    "user": "user"
+                }
+            },
+            "root": {
+                "desc": "Server web verification commands",
+                "name": "webverify"
+            },
+            "set_captcha": {
+                "choice": {
+                    "none": "None",
+                    "recaptcha": "Google reCAPTCHA",
+                    "turnstile": "Cloudflare Turnstile"
+                },
+                "desc": "Set the CAPTCHA provider used for web verification",
+                "name": "set_captcha",
+                "param": {
+                    "captcha_provider": "Choose a CAPTCHA provider"
+                },
+                "param_name": {
+                    "captcha_provider": "captcha_provider"
+                }
+            },
+            "set_unverified_role": {
+                "desc": "Set the unverified-member role",
+                "name": "set_unverified_role",
+                "param": {
+                    "role": "The role for unverified members"
+                },
+                "param_name": {
+                    "role": "role"
+                }
+            },
+            "setup": {
+                "desc": "Set up web verification for this server",
+                "name": "setup"
+            },
+            "start_force_verify": {
+                "desc": "Start forcing verification for all newly joined members",
+                "name": "start-force-verify",
+                "param": {
+                    "duration": "How long forced verification lasts (?h?m?s...)"
+                },
+                "param_name": {
+                    "duration": "duration"
+                }
+            },
+            "status": {
+                "desc": "View this server's web verification status",
+                "name": "status"
+            },
+            "verify_notify": {
+                "choice": {
+                    "both": "Both",
+                    "channel": "In the channel",
+                    "dm": "Direct message"
+                },
+                "desc": "Configure how verification notices are sent",
+                "name": "verify_notify",
+                "param": {
+                    "channel": "The channel for verification messages",
+                    "message": "Custom verification message",
+                    "title": "Custom embed title",
+                    "type": "How to notify"
+                },
+                "param_name": {
+                    "channel": "channel",
+                    "message": "message",
+                    "title": "title",
+                    "type": "type"
+                }
+            }
+        }
+    },
+    "statistics": {
+        "stats": {
+            "command": {
+                "desc": "View command usage statistics",
+                "name": "command",
+                "param": {
+                    "full": "Show full statistics"
+                },
+                "param_name": {
+                    "full": "full"
+                }
+            },
+            "petpet_stats": {
+                "desc": "See how many times you've used petpet",
+                "name": "petpet-stats"
+            },
+            "root": {
+                "name": "stats"
+            }
+        }
+    },
+    "stickymessage": {
+        "stickymessage": {
+            "add": {
+                "desc": "Add a sticky message to a channel",
+                "name": "add",
+                "param": {
+                    "allow_mentions": "Allow mentions on first and manual posts",
+                    "channel": "The text or announcement channel to configure",
+                    "content": "Sticky message content"
+                },
+                "param_name": {
+                    "allow_mentions": "allow_mentions",
+                    "channel": "channel",
+                    "content": "content"
+                }
+            },
+            "edit": {
+                "desc": "Edit a channel's sticky message",
+                "name": "edit",
+                "param": {
+                    "allow_mentions": "Allow mentions on first and manual posts",
+                    "channel": "The configured text or announcement channel",
+                    "content": "New sticky message content"
+                },
+                "param_name": {
+                    "allow_mentions": "allow_mentions",
+                    "channel": "channel",
+                    "content": "content"
+                }
+            },
+            "list": {
+                "desc": "List current sticky message settings",
+                "name": "list"
+            },
+            "move": {
+                "desc": "Reorder sticky messages; order also sets quota priority",
+                "name": "move",
+                "param": {
+                    "channel": "The sticky message channel to move",
+                    "position": "New position"
+                },
+                "param_name": {
+                    "channel": "channel"
+                }
+            },
+            "publish": {
+                "desc": "Repost a sticky message immediately",
+                "name": "publish",
+                "param": {
+                    "channel": "The channel whose sticky message to repost now"
+                },
+                "param_name": {
+                    "channel": "channel"
+                }
+            },
+            "remove": {
+                "desc": "Remove a channel's sticky message",
+                "name": "remove",
+                "param": {
+                    "channel": "The channel whose sticky message to remove"
+                },
+                "param_name": {
+                    "channel": "channel"
+                }
+            },
+            "root": {
+                "desc": "Manage this server's sticky messages",
+                "name": "stickymessage"
+            },
+            "timing": {
+                "desc": "Configure quiet time and minimum repost interval",
+                "name": "timing",
+                "param": {
+                    "min_interval_seconds": "Minimum interval between two automatic reposts in a channel",
+                    "quiet_seconds": "Seconds to wait after the last human message"
+                },
+                "param_name": {
+                    "min_interval_seconds": "min_interval_seconds",
+                    "quiet_seconds": "quiet_seconds"
+                }
+            }
+        }
+    },
+    "stickyrole": {
+        "stickyrole": {
+            "add": {
+                "desc": "Add a role to the remember list (empty list = remember all roles)",
+                "name": "add",
+                "param": {
+                    "role": "The role to add to the allow list"
+                },
+                "param_name": {
+                    "role": "role"
+                }
+            },
+            "clear": {
+                "desc": "Clear the allow list (back to remembering all roles)",
+                "name": "clear"
+            },
+            "clear_user": {
+                "desc": "Clear a user's StickyRole records",
+                "name": "clear-user",
+                "param": {
+                    "user": "The user whose records to clear"
+                },
+                "param_name": {
+                    "user": "user"
+                }
+            },
+            "ignore_bots": {
+                "choice": {
+                    "false": "No (include bots)",
+                    "true": "Yes (ignore bots)"
+                },
+                "desc": "Configure whether bot accounts are ignored",
+                "name": "ignore-bots",
+                "param": {
+                    "enable": "Whether to ignore bot accounts"
+                },
+                "param_name": {
+                    "enable": "enable"
+                }
+            },
+            "list": {
+                "desc": "View the current allow list and feature status",
+                "name": "list"
+            },
+            "remove": {
+                "desc": "Remove a role from the allow list",
+                "name": "remove",
+                "param": {
+                    "role": "The role to remove from the allow list"
+                },
+                "param_name": {
+                    "role": "role"
+                }
+            },
+            "root": {
+                "desc": "Restore previously held roles when users rejoin",
+                "name": "stickyrole"
+            },
+            "set_log_channel": {
+                "desc": "Set the StickyRole log channel",
+                "name": "set-log-channel",
+                "param": {
+                    "channel": "Channel for StickyRole logs (leave empty to unset)"
+                },
+                "param_name": {
+                    "channel": "channel"
+                }
+            },
+            "toggle": {
+                "choice": {
+                    "false": "Disable",
+                    "true": "Enable"
+                },
+                "desc": "Enable or disable StickyRole",
+                "name": "toggle",
+                "param": {
+                    "enable": "Whether to enable StickyRole"
+                },
+                "param_name": {
+                    "enable": "enable"
+                }
+            },
+            "view": {
+                "desc": "View a user's previously saved roles",
+                "name": "view",
+                "param": {
+                    "user": "The user to view"
+                },
+                "param_name": {
+                    "user": "user"
+                }
+            }
+        }
+    },
+    "ticket": {
+        "ticket": {
+            "add": {
+                "desc": "Add a user to the current ticket",
+                "name": "add",
+                "param": {
+                    "member": "The user to add"
+                },
+                "param_name": {
+                    "member": "member"
+                }
+            },
+            "claim": {
+                "desc": "Claim the current ticket",
+                "name": "claim"
+            },
+            "close": {
+                "desc": "Close the current ticket",
+                "name": "close",
+                "param": {
+                    "reason": "Close reason (recorded in the transcript summary)"
+                },
+                "param_name": {
+                    "reason": "reason"
+                }
+            },
+            "panel": {
+                "desc": "Publish the ticket panel message",
+                "name": "panel",
+                "param": {
+                    "channel": "Channel to publish the panel in (defaults to the configured panel channel)"
+                },
+                "param_name": {
+                    "channel": "channel"
+                }
+            },
+            "remove": {
+                "desc": "Remove a user from the current ticket",
+                "name": "remove",
+                "param": {
+                    "member": "The user to remove"
+                },
+                "param_name": {
+                    "member": "member"
+                }
+            },
+            "root": {
+                "name": "ticket"
+            },
+            "setup": {
+                "desc": "Quickly set up the ticket system",
+                "name": "setup",
+                "param": {
+                    "category": "Category where ticket channels are created",
+                    "log_channel": "Channel for transcripts after closing (omit to skip transcripts)",
+                    "panel_channel": "Channel for the ticket panel with its open button",
+                    "publish": "Publish the panel message immediately (default: yes)",
+                    "staff_role": "Staff role (add more roles in the server panel)"
+                },
+                "param_name": {
+                    "category": "category",
+                    "log_channel": "log_channel",
+                    "panel_channel": "panel_channel",
+                    "publish": "publish",
+                    "staff_role": "staff_role"
+                }
+            }
+        },
+        "types": {
+            "add": {
+                "choice": {
+                    "danger": "Red",
+                    "primary": "Blue",
+                    "secondary": "Gray",
+                    "success": "Green"
+                },
+                "desc": "Add a ticket type",
+                "name": "add",
+                "param": {
+                    "category": "Dedicated channel category for this type (defaults to the global setting)",
+                    "emoji": "Button emoji (optional)",
+                    "label": "Button label (e.g. Technical Support)",
+                    "staff_role": "Extra staff role for this type (defaults to global staff only)",
+                    "style": "Button color (default: blue)",
+                    "welcome": "Dedicated welcome message; {user} and {subject} supported (defaults to global)"
+                },
+                "param_name": {
+                    "category": "category",
+                    "emoji": "emoji",
+                    "label": "label",
+                    "staff_role": "staff_role",
+                    "style": "style",
+                    "welcome": "welcome"
+                }
+            },
+            "edit": {
+                "choice": {
+                    "danger": "Red",
+                    "primary": "Blue",
+                    "secondary": "Gray",
+                    "success": "Green"
+                },
+                "desc": "Edit a ticket type",
+                "name": "edit",
+                "param": {
+                    "category": "New dedicated category (overrides when chosen)",
+                    "emoji": "New button emoji (enter - to clear)",
+                    "label": "New button label",
+                    "staff_role": "New extra staff role (overrides when chosen)",
+                    "style": "New button color",
+                    "type": "The type to edit",
+                    "welcome": "New dedicated welcome message (enter - to clear and use the global one)"
+                },
+                "param_name": {
+                    "category": "category",
+                    "emoji": "emoji",
+                    "label": "label",
+                    "staff_role": "staff_role",
+                    "style": "style",
+                    "type": "type",
+                    "welcome": "welcome"
+                }
+            },
+            "list": {
+                "desc": "List all ticket types",
+                "name": "list"
+            },
+            "remove": {
+                "desc": "Remove a ticket type",
+                "name": "remove",
+                "param": {
+                    "type": "The type to remove"
+                },
+                "param_name": {
+                    "type": "type"
+                }
+            },
+            "root": {
+                "desc": "Manage ticket types (multiple open buttons on the panel)",
+                "name": "types"
+            }
+        }
+    },
+    "twbus": {
+        "bus": {
+            "favorites": {
+                "desc": "Your favorite bus stops and YouBike stations",
+                "name": "favorites"
+            },
+            "getroute": {
+                "desc": "Look up a bus route",
+                "name": "getroute",
+                "param": {
+                    "route_key": "Route ID"
+                },
+                "param_name": {
+                    "route_key": "route_key"
+                }
+            },
+            "getstop": {
+                "desc": "Look up a bus stop",
+                "name": "getstop",
+                "param": {
+                    "route_key": "Route ID",
+                    "stop_id": "Stop ID"
+                },
+                "param_name": {
+                    "route_key": "route_key",
+                    "stop_id": "stop_id"
+                }
+            },
+            "root": {
+                "name": "bus"
+            },
+            "youbike": {
+                "desc": "Look up a YouBike station",
+                "name": "youbike",
+                "param": {
+                    "station_name": "YouBike station name"
+                },
+                "param_name": {
+                    "station_name": "station_name"
+                }
+            }
+        }
+    },
+    "utilcommands": {
+        "ctx": {
+            "emoji_info_context": {
+                "name": "Emoji Info"
+            },
+            "sticker_info_context": {
+                "name": "Sticker Info"
+            }
+        },
+        "httpcat": {
+            "desc": "Cats are adorable",
+            "name": "httpcat",
+            "param": {
+                "status_code": "HTTP status code (e.g. 404)"
+            },
+            "param_name": {
+                "status_code": "status_code"
+            }
+        },
+        "info": {
+            "avatar": {
+                "desc": "Get a user's avatar",
+                "name": "avatar",
+                "param": {
+                    "user": "The user to look up"
+                },
+                "param_name": {
+                    "user": "user"
+                }
+            },
+            "banner": {
+                "desc": "Get a user's banner",
+                "name": "banner",
+                "param": {
+                    "user": "The user to look up"
+                },
+                "param_name": {
+                    "user": "user"
+                }
+            },
+            "bot": {
+                "desc": "Show bot information",
+                "name": "bot",
+                "param": {
+                    "full": "Show the full module list including failed modules"
+                },
+                "param_name": {
+                    "full": "full"
+                }
+            },
+            "changelog": {
+                "desc": "Show the bot changelog",
+                "name": "changelog"
+            },
+            "commits": {
+                "desc": "Show the bot's git commit history",
+                "name": "commits"
+            },
+            "help": {
+                "desc": "Show command help and usage",
+                "name": "help",
+                "param": {
+                    "command": "The command to look up"
+                },
+                "param_name": {
+                    "command": "command"
+                }
+            },
+            "mention": {
+                "desc": "Get a command's mention format",
+                "name": "mention",
+                "param": {
+                    "command": "Command name",
+                    "subcommand": "Subcommand name (optional)"
+                },
+                "param_name": {
+                    "command": "command",
+                    "subcommand": "subcommand"
+                }
+            },
+            "ping": {
+                "desc": "Check the bot's latency",
+                "name": "ping"
+            },
+            "root": {
+                "name": "info"
+            },
+            "server": {
+                "desc": "Show information about this server",
+                "name": "server"
+            },
+            "tutorial": {
+                "desc": "Bot usage tutorial",
+                "name": "tutorial"
+            },
+            "user": {
+                "desc": "Show user information",
+                "name": "user",
+                "param": {
+                    "user": "The user to look up"
+                },
+                "param_name": {
+                    "user": "user"
+                }
+            }
+        },
+        "nitro": {
+            "desc": "I don't want bots stealing my Nitro",
+            "name": "nitro",
+            "param": {
+                "need_message": "Only recent speakers can claim (authors of the last 50 messages)"
+            },
+            "param_name": {
+                "need_message": "need_message"
+            }
+        },
+        "randomnumber": {
+            "desc": "Generate a random number",
+            "name": "randomnumber",
+            "param": {
+                "max": "Maximum value",
+                "min": "Minimum value"
+            },
+            "param_name": {
+                "max": "max",
+                "min": "min"
+            }
+        },
+        "randomuser": {
+            "choice": {
+                "false": "No",
+                "true": "Yes"
+            },
+            "desc": "Pick a random recent speaker in this channel",
+            "name": "randomuser",
+            "param": {
+                "mention": "Whether to mention the chosen user"
+            },
+            "param_name": {
+                "mention": "mention"
+            }
+        },
+        "textlength": {
+            "desc": "Count the length of the given text",
+            "name": "textlength",
+            "param": {
+                "text": "The text to measure"
+            },
+            "param_name": {
+                "text": "text"
+            }
+        }
+    }
+}

@@ -6,10 +6,12 @@ from typing import Any, Dict, Optional
 DB_PATH = 'data.db'
 
 # Default server configuration
+# 注意：需要在地化的文字預設值不放這裡——absence 即 sentinel，
+# 由 globalenv.get_server_config_i18n 於讀取時以語言檔解析
+# （如 REPORTED_MESSAGE -> panel.reportsystem.reported_message.default）。
 DEFAULT_SERVER_CONFIG = {
     "REPORT_CHANNEL_ID": None,
     "MODERATION_MESSAGE_CHANNEL_ID": None,
-    "REPORTED_MESSAGE": "感謝您的檢舉，我們會盡快處理您的檢舉。",
     "REPORT_BLACKLIST": [],
     "REPORT_RATE_LIMIT": 300,
     "REPORT_MESSAGE": "@Admin",

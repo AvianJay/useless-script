@@ -1,0 +1,30 @@
+{
+    "btn": {
+        "idk": "不知道",
+        "no": "否",
+        "probably": "應該是",
+        "probably_not": "應該不是",
+        "stop_game": "結束遊戲",
+        "yes": "是"
+    },
+    "embed": {
+        "guess_title": "Akinator 的猜測"
+    },
+    "err": {
+        "game_in_progress": "你已經有一個進行中的遊戲！請先結束它。",
+        "generic": "發生錯誤: {error}",
+        "not_your_game": "這不是你的遊戲！",
+        "on_cooldown": "請稍等 1 分鐘後再開始新的遊戲。",
+        "service_unavailable": "Akinator 服務暫時無法使用，請稍後再試。"
+    },
+    "value": {
+        "game_ended_by_user": "遊戲已由用戶結束。",
+        "game_ended_error": "遊戲因錯誤結束。",
+        "game_timed_out": "遊戲已超時結束。",
+        "guess_desc": "我猜是... **{name}**！\n{description}",
+        "progress": "進度: {progress}%",
+        "questions_asked": {
+            "other": "共問了 {count} 個問題。"
+        }
+    }
+}
