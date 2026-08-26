@@ -80,6 +80,7 @@
         "analyze_message_emojis": "分析訊息表情與貼圖",
         "analyze_user_profile_media": "分析使用者頭像與橫幅",
         "delete_ai_memory": "刪除 AI 記憶",
+        "execute_code": "執行程式碼",
         "fetch_raw": "抓取原始內容",
         "fetch_webpage": "獲取網頁",
         "generate_image": "生成圖片",

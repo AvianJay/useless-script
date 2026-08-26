@@ -83,6 +83,7 @@
         "analyze_message_emojis": "Analyzing message emojis and stickers",
         "analyze_user_profile_media": "Analyzing user avatar and banner",
         "delete_ai_memory": "Deleting AI memory",
+        "execute_code": "Executing code",
         "fetch_raw": "Fetching raw content",
         "fetch_webpage": "Fetching webpage",
         "generate_image": "Generating image",
