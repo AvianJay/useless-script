@@ -1,0 +1,54 @@
+{
+    "btn": {
+        "video": "ビデオ"
+    },
+    "err": {
+        "already_upvoted": "あなたはすでに投票しました!",
+        "browser_closed": "ブラウザが閉じられています。後でもう一度お試しください。",
+        "browser_not_started": "ブラウザはまだ起動していません。後でもう一度お試しください。",
+        "button_already_used": "このボタンはすでに使用されています。",
+        "cannot_get_video_size": "ビデオ素材のサイズを取得できませんでした",
+        "empty_message": "エラー: メッセージには内容がありません。",
+        "ffmpeg_video_failed": "ビデオの生成に失敗しました: {error}",
+        "ffprobe_failed": "ffprobe が失敗しました: {error}",
+        "frame_extraction_failed": "ビデオ プレビューを抽出できませんでした: {error}",
+        "gif_exceeds_limit": "生成された GIF は、この場所のアップロード制限を超えています。",
+        "gif_generation_failed": "GIF の生成に失敗しました: {error}",
+        "html_generation_failed": "HTML の生成に失敗しました: {error}",
+        "media_cooldown": {
+            "one": "{media_type} を再度生成する前に、さらに {remaining} 秒待つ必要があります。",
+            "other": "{media_type} を再度生成するまで、さらに {remaining} 秒待つ必要があります。"
+        },
+        "no_gif_frames": "GIF素材には使用可能なフレームがありません",
+        "no_media_available": "現在、利用可能な「whatisthisguytalking」資料はありません",
+        "no_media_of_type": "使用可能な {media_type} マテリアルが見つかりません",
+        "no_media_of_type_period": "現在、利用可能な {media_type} マテリアルはありません。",
+        "no_replied_message": "エラー: 返信メッセージがありません。",
+        "no_video_stream": "ビデオ素材には使用可能なビデオ ストリームがありません",
+        "not_original_requester_button": "このボタンを使用できるのは、元の要求者だけです。",
+        "not_original_requester_press": "この画像を作成した人だけがこのボタンを押すことができます。",
+        "not_original_requester_refresh": "このイメージを生成した人だけがそれを更新できます。",
+        "not_original_requester_regen": "❌元の要求者のみがイメージを再生成できます。",
+        "quote_generation_failed": "引用画像の生成に失敗しました: {error}",
+        "regen_failed": "再生成に失敗しました: {error}",
+        "replied_message_not_found": "エラー: 返信されたメッセージが見つかりませんでした。 (消されたかも？)",
+        "screenshot_failed": "スクリーンショットが失敗しました: {error}",
+        "upload_failed_size_limit": "画像をアップロードできませんでした!\n生成された画像が Discord のアップロード サイズ制限に達しました。",
+        "video_exceeds_limit": "生成されたビデオは、この場所のアップロード制限を超えています。",
+        "video_generation_failed": "ビデオ生成に失敗しました: {error}"
+    },
+    "msg": {
+        "upvoteboard_cleared": "賛成ボードのチャンネル設定がクリアされました",
+        "upvoteboard_set": "賛成ボードのチャンネルは {channel} に設定されました"
+    },
+    "value": {
+        "upvote_board_content": {
+            "one": "⬆️ | {count} 人",
+            "other": "⬆️ | {count}人"
+        },
+        "upvote_count_suffix": {
+            "one": " | {count} 人",
+            "other": " | {count}人"
+        }
+    }
+}

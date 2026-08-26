@@ -1,0 +1,20 @@
+{
+    "embed": {
+        "status_title": "自然災害による休校・休校状況",
+        "update_title": "出勤/学校休業の最新情報"
+    },
+    "err": {
+        "fetch_failed": "データの取得中にエラーが発生しました: {error}",
+        "guild_only": "このコマンドはサーバーでのみ使用できます。",
+        "no_channel_permission": "{channel} でメッセージを送信する権限がありません。",
+        "no_permission": "このコマンドを使用する権限がありません。"
+    },
+    "field": {
+        "last_updated": "最終更新日",
+        "last_updated_time": "最終更新時間"
+    },
+    "msg": {
+        "follow_disabled": "自然災害による仕事や学校の休校通知の更新は中止されました。",
+        "follow_enabled": "自然災害による仕事/学校の停止を受けて、更新通知が {channel}.\n-# ベータ版機能に設定されました。まだ作業中です。注意して使用してください。"
+    }
+}

@@ -1,0 +1,59 @@
+{
+    "err": {
+        "already_configured": "このチャンネルにはすでに固定メッセージが含まれています。代わりに編集を使用してください。",
+        "bad_channel_id": "固定メッセージのチャンネル ID が無効です。",
+        "channel_not_found": "指定されたテキストまたはアナウンス チャンネルが見つかりませんでした。",
+        "config_not_object": "StickyMessage 構成はオブジェクトである必要があります。",
+        "content_empty": "固定メッセージの内容を空にすることはできません。",
+        "content_too_long": "固定メッセージの内容は最大 {max} 文字です。",
+        "duplicate_channel": "チャンネルには固定メッセージを 1 つだけ含めることができます。",
+        "entries_not_list": "StickyMessage エントリはリストである必要があります。",
+        "entry_not_object": "すべての固定メッセージはオブジェクトである必要があります。",
+        "field_not_int": "{field} は整数でなければなりません。",
+        "field_out_of_range": "{field} は {min} から {max} の間である必要があります。",
+        "generic": "操作は失敗しました。",
+        "guild_not_found": "サーバーが見つかりませんでした。",
+        "missing_perms": "チャンネルを閲覧したり、メッセージを送信したりする権限がありません。",
+        "not_configured": "このチャンネルには固定メッセージが設定されていません。",
+        "over_quota": "このエントリは現在サーバーの割り当てを超えているため、一時停止されています。",
+        "position_out_of_range": {
+            "one": "位置は現在の {count} エントリを超えることはできません。",
+            "other": "位置は現在の {count} エントリを超えることはできません。"
+        },
+        "quota_reached": {
+            "one": "このサーバーには最大 {count} 個の固定メッセージを含めることができます。",
+            "other": "このサーバーには最大 {count} 個の固定メッセージを含めることができます。"
+        },
+        "save_failed": "StickyMessage 構成の保存に失敗しました。",
+        "saved_but_publish_failed": "構成は保存されましたが、即時公開に失敗しました: {errors}",
+        "send_failed": "固定メッセージの送信に失敗しました。",
+        "text_or_news_only": "選択できるのはテキストまたはアナウンスチャンネルのみです。",
+        "too_many_entries": {
+            "one": "StickyMessage は最大 {count} エントリを保持します。",
+            "other": "StickyMessage は最大 {count} エントリを保持します。"
+        }
+    },
+    "field": {
+        "min_interval": "最小間隔",
+        "quiet_seconds": "沈黙期間",
+        "quota": "割り当て"
+    },
+    "list": {
+        "empty": "固定メッセージはまだ設定されていません。",
+        "title": "固定メッセージの設定"
+    },
+    "msg": {
+        "added": "{channel} の固定メッセージを追加して公開しました。",
+        "moved": "{channel} を {position} の位置に移動しました。",
+        "removed": "{channel} の固定メッセージ構成を削除しました。",
+        "republished": "{channel} の固定メッセージを再投稿しました。",
+        "timing_set": "静止期間は {quiet}s に設定され、最小間隔は {interval}s に設定されます。",
+        "updated": "{channel} の固定メッセージを更新して再投稿しました。"
+    },
+    "state": {
+        "active": "アクティブな",
+        "mentions_off": "メンションオフ",
+        "mentions_on": "についての言及",
+        "over_quota": "一時停止中（クォータ超過）"
+    }
+}

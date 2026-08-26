@@ -1,0 +1,31 @@
+{
+    "btn": {
+        "idk": "分からない",
+        "no": "いいえ",
+        "probably": "おそらく",
+        "probably_not": "おそらくそうではありません",
+        "stop_game": "ゲームを停止します",
+        "yes": "はい"
+    },
+    "embed": {
+        "guess_title": "アキネーターの推測"
+    },
+    "err": {
+        "game_in_progress": "すでにゲームが進行中です。まずは終わらせてください。",
+        "generic": "エラーが発生しました: {error}",
+        "not_your_game": "これはあなたのゲームではありません!",
+        "on_cooldown": "新しいゲームを開始する前に 1 分間お待ちください。",
+        "service_unavailable": "Akinator サービスは一時的に利用できません。後でもう一度お試しください。"
+    },
+    "value": {
+        "game_ended_by_user": "ゲームはユーザーによって終了されました。",
+        "game_ended_error": "エラーによりゲームが終了してしまいました。",
+        "game_timed_out": "ゲームはタイムアウトになりました。",
+        "guess_desc": "おそらく... **{name}**!\n{description}",
+        "progress": "進捗状況: {progress}%",
+        "questions_asked": {
+            "one": "{count} という質問をしました。",
+            "other": "{count} 件の質問をしました。"
+        }
+    }
+}

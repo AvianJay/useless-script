@@ -1,0 +1,25 @@
+{
+    "embed": {
+        "command_stats_title": "コマンド使用統計",
+        "petpet_stats_title": "ペットペットの統計"
+    },
+    "field": {
+        "app_command_errors": "アプリコマンドエラー数",
+        "app_command_uses": "アプリコマンド使用回数",
+        "petpet_given": "何回撫でましたか？",
+        "petpet_received": "何回撫でられたことがありますか？",
+        "text_command_errors": "テキストコマンドエラー数",
+        "text_command_uses": "テキストコマンド使用回数"
+    },
+    "value": {
+        "no_data": "データなし",
+        "total_errors": {
+            "one": "{count} エラーの合計",
+            "other": "合計 {count} エラー"
+        },
+        "total_uses": {
+            "one": "{count} 合計使用量",
+            "other": "{count} は合計を使用します"
+        }
+    }
+}

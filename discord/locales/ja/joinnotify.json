@@ -1,0 +1,42 @@
+{
+    "audit": {
+        "subscribed": "{user} によってサブスクライブされたボット更新通知"
+    },
+    "btn": {
+        "disable_join_notify": "参加通知をオフにする",
+        "dismiss": "いいえ、ありがとう",
+        "docs": "ドキュメント",
+        "subscribe_here": "確かに",
+        "support": "サポートサーバー",
+        "website": "ウェブサイト"
+    },
+    "dm": {
+        "body": "クイック スタート:\n- {help_cmd} コマンド リストを参照\n- {tutorial_cmd} チュートリアルを参照\n- {panel_cmd} Web を開くパネル\n何か問題があれば、[サポート サーバー]({support_url}) に問い合わせてください!\n\n-# これらのメッセージは不要ですか? {joinnotify_cmd} を使用して、参加通知をオフにします。",
+        "greeting_inviter": "{user} さん！ {guild} にご招待いただきありがとうございます。",
+        "greeting_unknown": "{user} さん!誰かがあなたのサーバー {guild} に私を招待したようです - しかし、私にはそれが誰であるかを確認する権限がありません :/",
+        "title_inviter": "ああ？誘っただけですか？",
+        "title_unknown": "ああ？誰かが私を招待しただけですか？"
+    },
+    "err": {
+        "cannot_check_perms": "現在、そのサーバーでの権限を確認できません。",
+        "follow_forbidden": "そのチャンネルで更新通知サブスクリプションを設定する権限がありません。",
+        "missing_channel_perms": "そのチャンネルでチャンネルの表示と Webhook の管理が必要です。",
+        "need_manage_guild": "サーバーの管理を持つメンバーのみが更新通知を設定できます。",
+        "pick_channel_in_guild": "このサーバーでテキストまたはアナウンス チャンネルを選択してください。",
+        "subscribe_failed": "更新通知の購読中に問題が発生しました。後でもう一度試してください。",
+        "updates_unavailable": "現在、更新通知を購読することはできません。後でもう一度試してください。"
+    },
+    "msg": {
+        "disabled": "参加通知はオフになっています！サーバーに招待してもDMは送りません。",
+        "enabled": "参加通知がオンになっています!サーバーに招待していただくと、ウェルカム メッセージを DM でお送りします。",
+        "subscribed": "ボットの更新通知は {channel} に届くようになります。",
+        "update_prompt": "ここでボットの更新通知を受け取りますか?"
+    },
+    "notify_off": {
+        "desc": "もう通知しません！気が変わった場合は、{command} を使用して、参加通知をオンに戻してください。",
+        "title": "十分に公平です"
+    },
+    "select": {
+        "other_channel_ph": "または別のチャンネルで受信します..."
+    }
+}

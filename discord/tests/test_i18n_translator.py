@@ -42,6 +42,12 @@ class CatalogTranslatorTests(unittest.TestCase):
                 "cmd.x.ban.name": "ban",
                 "cmd.x.ban.desc": "Ban a user",
             },
+            "ja": {
+                "cmd.x.ban.name": "ban",
+                "cmd.x.ban.desc": "ユーザーをBANします",
+                "cmd.x.ban.param.user": "対象ユーザー",
+                "cmd.x.ban.param_name.user": "ユーザー",
+            },
         }
         i18n._resolved.clear()
         i18n._loaded = True
@@ -73,12 +79,27 @@ class CatalogTranslatorTests(unittest.TestCase):
             _ctx(TranslationContextLocation.command_description)))
         self.assertIsNone(result)
 
-    def test_unmapped_locale_returns_none(self):
+    def test_japanese_metadata_translated(self):
         s = app_commands.locale_str("Ban a user", i18n_key="cmd.x.ban.desc")
         result = _run(self.translator.translate(
             s, discord.Locale.japanese,
             _ctx(TranslationContextLocation.command_description)))
+        self.assertEqual(result, "ユーザーをBANします")
+
+    def test_unmapped_locale_returns_none(self):
+        s = app_commands.locale_str("Ban a user", i18n_key="cmd.x.ban.desc")
+        result = _run(self.translator.translate(
+            s, discord.Locale.french,
+            _ctx(TranslationContextLocation.command_description)))
         self.assertIsNone(result)
+
+    def test_japanese_parameter_name_translated(self):
+        s = app_commands.locale_str(
+            "user", i18n_key="cmd.x.ban.param_name.user")
+        result = _run(self.translator.translate(
+            s, discord.Locale.japanese,
+            _ctx(TranslationContextLocation.parameter_name)))
+        self.assertEqual(result, "ユーザー")
 
     def test_invalid_name_localization_rejected(self):
         s = app_commands.locale_str("bad", i18n_key="cmd.x.bad.name")
@@ -118,6 +139,48 @@ class CommandNameCatalogTests(unittest.TestCase):
                     self.assertTrue(
                         i18n._valid_command_name(value),
                         f"{locale}:{key} = {value!r} is not a valid command name")
+
+    def test_all_parameter_name_keys_valid(self):
+        i18n.reload_catalogs()
+        for locale, catalog in i18n._catalogs.items():
+            for key, value in catalog.items():
+                if ".param_name." not in key or not isinstance(value, str):
+                    continue
+                self.assertTrue(
+                    i18n._valid_command_name(value),
+                    f"{locale}:{key} = {value!r} is not a valid parameter name")
+
+    def test_real_command_payload_contains_japanese_name_and_parameter(self):
+        async def build_payload():
+            client = discord.Client(intents=discord.Intents.none())
+            tree = app_commands.CommandTree(client)
+
+            async def callback(interaction: discord.Interaction, command: str):
+                pass
+
+            command = app_commands.Command(
+                name=app_commands.locale_str(
+                    "help", i18n_key="cmd.utilcommands.info.help.name"),
+                description=app_commands.locale_str(
+                    "Show command help",
+                    i18n_key="cmd.utilcommands.info.help.desc"),
+                callback=callback,
+            )
+            command._params["command"]._rename = app_commands.locale_str(
+                "command",
+                i18n_key="cmd.utilcommands.info.help.param_name.command",
+            )
+            tree.add_command(command)
+            try:
+                return await command.get_translated_payload(
+                    tree, i18n.CatalogTranslator())
+            finally:
+                await client.close()
+
+        payload = _run(build_payload())
+        self.assertEqual(payload["name_localizations"]["ja"], "ヘルプ")
+        self.assertEqual(
+            payload["options"][0]["name_localizations"]["ja"], "コマンド")
 
 
 if __name__ == "__main__":

@@ -1,6 +1,6 @@
 """i18n 核心模組。
 
-繁體中文 (zh-TW) 為原文語言，其他語言（目前只有 en）透過 locales/ 下的
+繁體中文 (zh-TW) 為原文語言，其他語言（目前有 en 與 ja）透過 locales/ 下的
 JSON 語言檔提供翻譯。locale 透過 contextvars.ContextVar 傳遞，於六個
 choke point 設定：
 
@@ -82,6 +82,7 @@ _METADATA_LOCALE_MAP = {
     "zh-CN": "zh-TW",  # 尚無 zh-CN 語言檔前先給繁中
     "en-US": "en",
     "en-GB": "en",
+    "ja": "ja",
 }
 
 # Discord 指令名稱限制（近似 ^[-_'\p{L}\p{N}]{1,32}$，且必須小寫）
@@ -196,6 +197,7 @@ _LOCALE_AUTONYMS = {
     # autonym，永不翻譯
     "zh-TW": "繁體中文",
     "en": "English",
+    "ja": "日本語",
 }
 
 

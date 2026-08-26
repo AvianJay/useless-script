@@ -1,0 +1,110 @@
+{
+    "topic": {
+        "display": "チケット #{number} |件名: {subject}"
+    },
+    "embed": {
+        "title": "🎫 チケット #{number}",
+        "closed_title": "🎫 チケット #{number} は終了しました",
+        "types_title": "🎫 チケットの種類 ({count}/{limit})"
+    },
+    "field": {
+        "opener": "開設者",
+        "type": "種類",
+        "subject": "件名",
+        "detail": "説明",
+        "opened_at": "にオープンしました",
+        "claimer": "請求者",
+        "closer": "閉店時間",
+        "message_count": "メッセージ",
+        "close_reason": "近い理由",
+        "duration": "期間"
+    },
+    "btn": {
+        "open": "オープンチケット",
+        "claim": "クレーム",
+        "close": "閉じる",
+        "confirm_close": "閉じることを確認する",
+        "view_transcript_web": "ウェブ上でトランスクリプトを表示する"
+    },
+    "modal": {
+        "open_title": "チケットを開く",
+        "open_title_typed": "チケットを開く - {label}",
+        "subject": "件名",
+        "detail": "説明"
+    },
+    "transcript": {
+        "header": "チケット #{number} トランスクリプト ({count} メッセージ)",
+        "attachment": "アタッチメント"
+    },
+    "setup": {
+        "done": "✅ チケットシステムが設定され、有効になりました!",
+        "category": "- チケットカテゴリ: {category}",
+        "panel_channel": "- パネルチャンネル: {channel}",
+        "staff_role": "- スタッフのロール: {role}",
+        "log_channel": "- ログチャンネル: {channel}",
+        "log_channel_unset": "- ログチャンネル: (未設定、トランスクリプトは保存されません)",
+        "panel_published": "- パネル: 公開されました 🎫",
+        "panel_failed": "- パネル: 公開失敗: {error}",
+        "panel_pending": "- パネル: まだ公開されていません。 /チケットパネルを使用する",
+        "more_options": "サーバー パネルには、その他のオプション (ウェルカム メッセージ、ブラックリスト、ユーザーごとの制限など) があります。"
+    },
+    "types": {
+        "style": "色: {style}",
+        "category": "カテゴリ: {category}",
+        "deleted": "(削除されました)",
+        "staff": "スタッフ: ",
+        "custom_welcome": "カスタムウェルカムメッセージ ✓"
+    },
+    "msg": {
+        "no_subject": "(提供されません)",
+        "unclaimed": "(未請求)",
+        "created": "✅ チケットが作成されました: {channel}",
+        "claimed": "✅ チケットが請求されました。",
+        "claimed_by": "🙋 {user} がこのチケットを申請しました。",
+        "closing": "🔒 チケットを閉じてトランスクリプトを生成しています...",
+        "close_cancelled": "閉じるがキャンセルされました。",
+        "close_confirm": "このチケットを閉じますか?チャンネルが削除され、トランスクリプトがログ チャンネルに保存されます。",
+        "member_added": "✅ このチケットに {member} を追加しました。",
+        "member_removed": "✅ このチケットから {member} を削除しました。",
+        "panel_published": "✅ チケットパネルが {channel} に公開されました。",
+        "type_added": "✅ チケットタイプ「{label}」を追加しました。 ",
+        "type_updated": "✅ チケットタイプ「{label}」を更新しました。 ",
+        "type_removed": "✅ チケットタイプが削除されました。 ",
+        "panel_refreshed": "パネルが更新されました。",
+        "panel_republish_hint": "/ticket パネルを使用してパネルを再公開します。",
+        "no_types": "チケットタイプが設定されていません。パネルには 1 つのデフォルト ボタンが表示されます。 /ticket types を追加して 1 つ追加します。",
+        "opener_left": "⚠️ チケットオープナーがサーバーから離れました。"
+    },
+    "err": {
+        "disabled": "チケットシステムが有効になっていません。",
+        "blacklisted": "チケットを開くことはできません。",
+        "no_category": "管理者はチケット カテゴリをまだ設定していません。",
+        "category_gone": "チケットカテゴリはもう存在しません。管理者に再設定を依頼してください。",
+        "bot_category_perms": "ボットには、チケット カテゴリの [チャンネルの管理] または [ロールの管理] がありません。管理者に修正を依頼してください。",
+        "category_full": "チケット カテゴリがいっぱいです (50 チャンネル制限)。管理者にクリーンアップを依頼してください。",
+        "limit_reached": "すでに {count} 枚のオープン チケットがあります (制限 {limit})。最初に既存のものを処理してください: {mentions}",
+        "bot_manage_channels": "ボットにはチャンネルの管理権限がないため、チケットを作成できません。",
+        "create_failed": "チケット チャンネルの作成中にエラーが発生しました。後でもう一度試してください。",
+        "not_a_ticket": "これは有効なチケット チャンネルではありません。",
+        "already_closing": "このチケットはすでに終了しています。",
+        "delete_no_permission": "⚠️ ボットにはこのチャンネルを削除する権限がありません。手動で削除してください。",
+        "saved_but_not_deleted": "トランスクリプトは保存されましたが、ボットにはチャンネルを削除する権限がありません。手動で削除してください。",
+        "staff_only_claim": "チケットを受け取ることができるのはスタッフのみです。",
+        "already_claimed": "このチケットはすでに {user} によって要求されています。",
+        "type_removed": "このチケット タイプは削除されました。管理者にパネルを再公開するよう依頼してください。",
+        "close_permission": "このチケットをクローズできるのはスタッフまたはチケットオープナーのみです。",
+        "panel_no_permission": "ボットはそのチャンネルでメッセージを送信できません。",
+        "panel_publish_failed": "パネルの公開に失敗しました。パネル画像のURLと各種類のボタン絵文字をご確認ください。",
+        "panel_channel_missing": "チャンネルを指定するか、最初にサーバーパネルでパネルチャンネルを設定してください。",
+        "setup_category_perms": "ボットには、{category} カテゴリの「チャンネルの管理」または「ロールの管理」がありません。",
+        "setup_panel_perms": "ボットには、{channel} のメッセージ送信または埋め込みリンクがありません。",
+        "setup_log_perms": "ボットには、{channel} のメッセージ送信またはファイル添付がありません。",
+        "setup_problems": "⚠️設定は保存されません。まず、次の権限の問題を修正してください。",
+        "staff_only_members": "スタッフのみがチケットメンバーを管理できます。",
+        "bot_perms_edit": "ボットにはチャンネル権限を編集する権限がありません。",
+        "cannot_remove_opener": "チケットオープナーは取り外しできません。",
+        "type_limit": "最大 {limit} 個のチケット タイプを作成できます。",
+        "type_not_found": "チケットの種類が見つかりません。",
+        "transcript_unavailable": "トランスクリプトは一時的に利用できなくなります。後でもう一度試してください。"
+    }
+}

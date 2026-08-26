@@ -115,9 +115,20 @@ class LanguageEndpointTests(unittest.TestCase):
         with self.client.session_transaction() as current_session:
             self.assertEqual(current_session["lang"], "en")
 
-    def test_invalid_language_returns_400_without_changing_session(self):
+    def test_japanese_switch_persists_in_session(self):
         response = self.client.post(
             "/api/language", data={"lang": "ja", "next": "/"})
+        self.assertEqual(response.status_code, 302)
+        with self.client.session_transaction() as current_session:
+            self.assertEqual(current_session["lang"], "ja")
+        page = self.client.get("/")
+        html = page.get_data(as_text=True)
+        self.assertIn('<html lang="ja">', html)
+        self.assertIn(">日本語<", html)
+
+    def test_invalid_language_returns_400_without_changing_session(self):
+        response = self.client.post(
+            "/api/language", data={"lang": "fr", "next": "/"})
         self.assertEqual(response.status_code, 400)
         with self.client.session_transaction() as current_session:
             self.assertNotIn("lang", current_session)
@@ -211,6 +222,40 @@ class CoreTemplateTests(unittest.TestCase):
         self.assertIn("api.js?language=en", html)
         self.assertIsNone(CJK_RE.search(_without_language_selector(html)))
 
+    def test_japanese_home_legal_and_verification_pages(self):
+        pages = {
+            "/?lang=ja": "Discordボット",
+            "/privacy-policy?lang=ja": "プライバシー ポリシー",
+            "/terms-of-service?lang=ja": "利用規約",
+        }
+        for path, expected in pages.items():
+            with self.subTest(path=path):
+                response = self.client.get(path)
+                self.assertEqual(response.status_code, 200)
+                html = response.get_data(as_text=True)
+                self.assertIn('<html lang="ja">', html)
+                self.assertIn(">日本語<", html)
+                self.assertIn(expected, html)
+
+        with Website.app.test_request_context(
+            "/server-verify?auth_token=verify-token&lang=ja"
+        ):
+            Website.app.preprocess_request()
+            html = render_template(
+                "ServerVerify.html",
+                bot=Website.bot,
+                guild_name="Example Guild",
+                captcha_type="turnstile",
+                site_key_turnstile="public-site-key",
+                site_key_recaptcha="public-site-key",
+                gtag="",
+                error=None,
+            )
+        self.assertIn('<html lang="ja">', html)
+        self.assertIn("TestBot | Web認証", html)
+        self.assertIn("api.js?language=ja", html)
+        self.assertIn("api.js?hl=ja", html)
+
     def test_language_selector_initial_next_keeps_query(self):
         response = self.client.get("/privacy-policy?lang=en&source=test")
         html = response.get_data(as_text=True)
@@ -229,6 +274,17 @@ class DocumentationLocaleTests(unittest.TestCase):
         groups, sections = doc_markdown.load_docs_site(docs_dir, locale="en")
         self.assertTrue(groups)
         self.assertEqual(len(sections), expected)
+        self.assertTrue(all(section["translated"] for section in sections))
+
+    def test_all_japanese_manifest_sections_load_without_fallback(self):
+        docs_dir = DISCORD_DIR / "docs"
+        manifest = json.loads(
+            (docs_dir / "ja" / "manifest.json").read_text(encoding="utf-8"))
+        expected = sum(len(group.get("items", [])) for group in manifest["groups"])
+        self.assertEqual(expected, 36)
+        groups, sections = doc_markdown.load_docs_site(docs_dir, locale="ja")
+        self.assertTrue(groups)
+        self.assertEqual(len(sections), 36)
         self.assertTrue(all(section["translated"] for section in sections))
 
     def test_missing_english_section_falls_back_one_section_at_a_time(self):

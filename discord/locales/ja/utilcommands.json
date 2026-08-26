@@ -1,0 +1,254 @@
+{
+    "avatar": {
+        "title": "{name} のアバター"
+    },
+    "banner": {
+        "err_no_banner": "そのユーザーはバナーを設定していません。",
+        "title": "{name} のバナー"
+    },
+    "botinfo": {
+        "command_count_value": "{total} ({text} テキスト、{app} アプリ)",
+        "database_info_value": "合計行数: {total}\nサーバー構成行: {server}\nユーザー データ行: {user}",
+        "field": {
+            "bot_name": "ボット名",
+            "command_count": "コマンド数",
+            "command_usage_count": "コマンド使用回数",
+            "cpu_usage": "CPU使用率",
+            "database_info": "データベース情報",
+            "install_count": "ユーザーのインストール数",
+            "latency": "ボットの遅延",
+            "links": "リンク",
+            "memory_usage": "メモリ使用量",
+            "modules_disabled": "無効化されたモジュール",
+            "modules_disabled_full": "無効化されたモジュール ({count})",
+            "modules_failed": "ロードに失敗しました",
+            "modules_failed_full": "ロードに失敗しました ({count})",
+            "modules_loaded": "ロードされたモジュール",
+            "modules_loaded_full": "モジュールがロードされました ({count})",
+            "server_count": "サーバー数",
+            "uptime": "稼働時間",
+            "user_count": "総ユーザー数",
+            "version": "バージョン",
+            "version_suffix": "バージョン"
+        },
+        "links_value": "* [ボット Web サイト]({website})\n* [ドキュメント]({docs})\n* [サポート サーバー]({support})\n* [プライバシーポリシー]({privacy})\n* [利用規約]({terms})\n* [ボットを招待する]({invite})",
+        "title": "ボット情報"
+    },
+    "btn": {
+        "avatar_link": "アバターリンク",
+        "banner_link": "バナーリンク",
+        "emoji_link": "絵文字リンク",
+        "server_avatar_link": "サーバーアバターリンク",
+        "server_banner_link": "サーバーバナーリンク",
+        "server_icon_link": "サーバーアイコンのリンク",
+        "steal": "盗む",
+        "sticker_link": "ステッカーリンク"
+    },
+    "changelog": {
+        "no_content": "変更点は記載されていません。",
+        "page_footer": "ページ {page}/{total}",
+        "title": "変更履歴",
+        "title_versioned": "変更ログ - {version}",
+        "unavailable": "変更ログをロードできませんでした。"
+    },
+    "commits": {
+        "title": "ボット git コミット ログ"
+    },
+    "emoji_info": {
+        "author": "絵文字情報",
+        "field": {
+            "emoji_id": "絵文字ID",
+            "is_animated": "アニメーション"
+        },
+        "footer": "絵文字 {page} / {total}"
+    },
+    "err": {
+        "command_not_found": "そのコマンドが見つかりませんでした。",
+        "image_not_found": "{target} イメージが見つかりませんでした。",
+        "need_manage_emojis_stickers": "これを使用するには、絵文字とステッカーの管理が必要です。",
+        "no_commit_log": "コミットログを取得できませんでした。",
+        "no_emoji": "このメッセージには絵文字がありません。",
+        "no_sticker": "このメッセージにはステッカーがありません。",
+        "steal_failed": "{target} を追加できませんでした: {error}"
+    },
+    "help": {
+        "bot_help_footer": {
+            "one": "{count} テキスト コマンド |アーティスト: エイビアンジェイ",
+            "other": "{count} テキスト コマンド |アーティスト: エイビアンジェイ"
+        },
+        "cog_help_footer": "詳細については、{prefix}help <command> を使用してください。",
+        "command_help_footer": "<> = 必須 | [] = オプション",
+        "command_not_found": "そのコマンドが見つかりませんでした。",
+        "command_not_found_autocomplete": "そのコマンドが見つかりませんでした。オートコンプリートから 1 つを選択してください。",
+        "command_not_found_title": "❌ コマンドが見つかりません",
+        "cooldown_value": "{rate} 使用 / {per}s",
+        "error_footer": "すべてのコマンドを表示するには、{prefix}help を使用してください",
+        "field": {
+            "aliases": "別名",
+            "cooldown": "クールダウン",
+            "parameters": "パラメータ",
+            "subcommands": "サブコマンド",
+            "usage": "使用法"
+        },
+        "no_description": "説明なし",
+        "optional": "オプション",
+        "other_commands": "🔧 その他のコマンド",
+        "overview_desc": "特定のコマンドの詳細については、`{prefix}help <command>` を使用してください。",
+        "overview_desc_mention": "特定のコマンドの詳細については、{mention} `<command>` を使用してください。",
+        "page_footer": "ページ {page}/{total} | {app_count} スラッシュ コマンド | {text_count} テキスト コマンド |アーティスト: エイビアンジェイ",
+        "required": "必須",
+        "slash_commands_field": "⚡ スラッシュコマンド ({start}-{end}/{total})",
+        "subcommand_not_found": "そのサブコマンドが見つかりませんでした。",
+        "text_commands_field": "📝 テキストコマンド ({start}-{end}/{total})",
+        "title": "📚 コマンドヘルプ"
+    },
+    "info": {
+        "warning": "-# ヒント: コマンドが途中でフリーズしたり動作を停止した場合は、おそらく愚かな開発者がボットを再起動した可能性があります||またはボットが再びクラッシュしました||"
+    },
+    "msg": {
+        "steal_success": "{target} '{name}' をサーバーに追加しました。"
+    },
+    "nitro": {
+        "btn": {
+            "claim": "クレーム"
+        },
+        "claim_restriction_value": "このチャンネルに最近投稿した人のみがそれを申請できます。",
+        "claimed_by": "申請者: {user}",
+        "claimed_title": "{gift_name} [主張]",
+        "err_already_claimed": "このギフトはすでに受け取られています。",
+        "err_already_used": "このリンクはすでに使用されています。",
+        "err_invalid_link": "エラー: これは有効な Nitro リンク形式ではありません。",
+        "err_need_message": "このギフトを使用するには、このチャンネルに投稿する必要があります。",
+        "err_verify_failed": "そのリンクを確認できませんでした。再確認してください。",
+        "field": {
+            "claim_restriction": "請求の制限",
+            "expires_at": "有効期限が切れます"
+        },
+        "gift_desc": "誰かがプレゼントを送ってくれました！下のボタンをクリックして申請してください。",
+        "link_label": "ニトロリンク",
+        "modal_title": "ニトロギフトを送る",
+        "not_claimed_yet": "まだ請求されていません。",
+        "sent_to_channel": "ギフトがチャンネルに送信されました!{warning}",
+        "warn_no_history_perm": "注: ボットにはメッセージ履歴を読み取る権限がないため、誰が投稿したかを確認できません。誰でもこのギフトを受け取ることができます。",
+        "warn_user_install_unsupported": "注: ユーザーのインストールでは、誰が投稿したかの確認はサポートされていません。誰でもこのギフトを受け取ることができます。",
+        "your_link": "Nitro リンクは次のとおりです:\n{link}"
+    },
+    "ping": {
+        "field": {
+            "rest_defer": "REST API (遅延) レイテンシ",
+            "rest_typing": "REST API (入力) レイテンシー",
+            "websocket": "WebSocket のレイテンシ"
+        },
+        "title": "ボットの遅延"
+    },
+    "randomnumber": {
+        "err_min_max": "エラー: 最小値は最大値より小さくなければなりません。",
+        "result": "乱数: {number}\n-# 範囲: {min} ～ {max}"
+    },
+    "randomuser": {
+        "err_guild_only": "このコマンドはサーバー チャンネルでのみ使用できます。",
+        "err_no_users": "ユーザーが見つかりませんでした。",
+        "result": "ランダムに選択されたユーザー: {user}!\n-# プール サイズ: {count}"
+    },
+    "serverinfo": {
+        "boosts_value": "{count} (層 {tier})",
+        "field": {
+            "boosts": "ブースト",
+            "channel_count": "チャンネル数",
+            "created_at": "で作成されました",
+            "locale": "ロケール",
+            "member_count": "会員数",
+            "owner": "オーナー",
+            "role_count": "ロールの数",
+            "server_id": "サーバーID",
+            "verification_level": "検証レベル"
+        },
+        "title": "{name} の情報"
+    },
+    "state": {
+        "bot_name_fallback": "ボット",
+        "unknown": "不明",
+        "unknown_user": "不明なユーザー"
+    },
+    "sticker_info": {
+        "author": "ステッカー情報"
+    },
+    "stickerinfo": {
+        "field": {
+            "format": "ステッカー形式",
+            "sticker_id": "ステッカーID"
+        },
+        "title": "ステッカー情報 - {name}"
+    },
+    "target": {
+        "emoji": "絵文字",
+        "sticker": "ステッカー"
+    },
+    "tutorial": {
+        "ai_misc": {
+            "desc": "**AI チャット アシスタント**\n💬 {ai} `<message>` — AI とチャット\n🗑️ {ai_clear} — 会話履歴をクリア\n📜 {ai_history} — 会話ログの表示\n\n**レポート システム**\n🚨 {report} — ルール違反のメッセージを報告(AI 支援)\n\n**動的音声チャンネル**\n🔊 {dynamic_voice_setup} — 動的音声チャンネルを設定します。参加時にプライベート ルームが自動的に作成されます\n\n**フィードバック**\n📝 {feedback} — 開発者にフィードバックを送信\n\n**ボットカスタマイズ**\n🖼️ {change_avatar} / {change_banner} / {change_bio} — ボットの外観をカスタマイズします (承認が必要です)\n",
+            "title": "🤖 AIチャットなど"
+        },
+        "automod_autopublish": {
+            "desc": "ボットにサーバーを自動的に管理させます。\n\n**AutoMod**\n• {automod_view} — 現在の AutoMod 設定を表示します\n• {automod_toggle} — AutoMod を有効にしますオンまたはオフ\n• {automod_settings} — AutoMod が検出する内容を調整\n• 自動検出可能: 処罰回避、メンションスパム、詐欺リンク、詳細\n\n**AutoPublish**\n• {autopublish_settings} — 自動公開チャンネルを構成する\n• ボットは、次のすべてにアナウンス チャンネル メッセージを自動的に公開します。サーバー\n",
+            "title": "🤖 AutoMod と AutoPublish"
+        },
+        "autoreply": {
+            "desc": "キーワードによってトリガーされる自動応答メッセージを設定します。\n\n➕ {autoreply_add} `<keyword> <reply>` — 自動応答を追加します\n➖ {autoreply_remove} `<keyword>` — 自動返信を削除します\n📋 {autoreply_list} — すべての自動返信をリストします\n✏️ {autoreply_edit} — 既存の自動返信を編集しますauto-reply\n⚡ {autoreply_quickadd} — 複数の返信をすばやく追加\n📤 {autoreply_export} — 返信を JSON としてエクスポート\n📥 {autoreply_import} — JSON から応答をインポート\n🧪 {autoreply_test} — 自動応答トリガーをテストする\n\n-# チャンスベースのトリガーと変数置換をサポート",
+            "title": "💬 自動返信"
+        },
+        "basic_info": {
+            "desc": "これらのコマンドにより、ボットとサーバーに関する簡単な情報が得られます。 \n\n🏓 {info_ping} — ボットの遅延を確認します (Websocket および REST API)\nℹ️ {info_bot} — ボットの遅延を確認します。ボットのバージョン、サーバー数、稼働時間など\n📋 {info_changelog} — ボットの変更ログを表示\n📝 {info_commits} — 最近の Git コミットを表示\n📈 {stats} — コマンド使用統計の表示\n",
+            "title": "📊 基本情報コマンド"
+        },
+        "completed": {
+            "desc": "おめでとうございます。ボットのチュートリアルは完了しました。 🎉\n\n**簡単な要約:**\n• すべてのコマンドを表示するには {info_help} を使用します\n• {info_help} を使用します`<command>` 特定のコマンドの詳細については\n• {info_bot} を使用してボット情報を表示します\n• {feedback} を使用してフィードバックを送信します開発者\n\n**リンク:**\n問題が発生した場合は、[サポート サーバー]({support_url}) に参加して助けを求めてください!\n\n-# 楽しんでください。 — エイビアンジェイ著",
+            "title": "✅ チュートリアル完了!"
+        },
+        "economy": {
+            "desc": "通貨、ショップ、取引を備えた完全な仮想経済システム。\n\n💵 {economy_balance} — 残高を確認\n📅 {economy_daily} — 日次の請求報酬\n⏰ {economy_hourly} — 時間単位の報酬を請求する\n💸 {economy_pay} `<user> <amount>` — 別のユーザーに送金する\n🔄 {economy_exchange} — サーバー通貨をグローバル通貨に交換\n🛒 {economy_shop} — ショップを閲覧\n🛍️ {economy_buy} / {economy_sell} — 売買するitems\n🤝 {economy_trade} — 別のユーザーと取引\n🏆 {economy_leaderboard} — 富のリーダーボードを表示\n",
+            "title": "💰 経済"
+        },
+        "fun": {
+            "desc": "さまざまな楽しいコマンド。\n\n📏 {dsize} — ランダム測定...ご存知のとおり 😏\n🏆 {dsize_leaderboard} — を表示リーダーボード\n⚔️ {dsize_battle} — 他のユーザーと戦う\n🌿 {dsize_feedgrass} — 草に餌をやる\n📊 {dsize_stats} — 自分のユーザーを表示stats\n\n🎁 {nitro} — Nitro ギフト共有ツール\n🐾 {petpet} — petpet GIF\n🌐 を生成{explore} — 他のサーバーを探索する\n",
+            "title": "🎮 楽しいこと"
+        },
+        "lookup": {
+            "desc": "ユーザー、サーバー、その他の便利な情報を検索します。\n\n👤 {info_user} `<user>` — ユーザーの ID、作成時間、参加時間などを検索します\n🏠 {info_server} — 現在のサーバーに関する詳細を検索\n🖼️ {info_avatar} `[user]` — ユーザーのアバターを取得\n🎨 {info_banner} `[user]` — ユーザーのバナーを取得\n🎲 {randomnumber} `[min] [max]` — 乱数を生成\n👥 {randomuser} — 最近の発言者をランダムに選択しますchannel\n📏 {textlength} `<text>` — テキストの長さをカウント\n🐱 {httpcat} `<status code>` — HTTP ステータスから猫の画像を生成コード\n",
+            "title": "🔍 ルックアップコマンド"
+        },
+        "moderation": {
+            "desc": "サーバー管理者用のモデレーション ツール。\n\n🔨 {ban} `<user> [reason]` — ユーザーの禁止\n🔓 {unban} `<user>` — ユーザーの禁止を解除\n👢 {kick} `<user> [reason]` — ユーザーをキック\n🔇 {timeout} `<user> <duration>` — ユーザーをタイムアウトする\n🔊 {untimeout} `<user>` — タイムアウトを削除する\n⚡ {multi_moderate} — 複数のユーザーを管理するOnce\n\n-# 対応するサーバーモデレーション権限が必要です",
+            "title": "🛡️ モデレーションツール"
+        },
+        "music": {
+            "desc": "音声チャンネルで音楽を再生します。\n\n▶️ {music_play} `<song>` — 曲を再生するかキューに追加します\n⏸️ {music_pause} — 一時停止再生\n⏯️ {music_resume} — 再生を再開\n⏹️ {music_stop} — 再生を停止し音声チャンネルを終了\n⏭️ {music_skip} — 現在のチャンネルをスキップSong\n📜 {music_queue} — キューを表示\n🎶 {music_now_playing} — 現在の曲を表示\n🔀 {music_shuffle} — シャッフルqueue\n🔊 {music_volume} `<volume>` — 音量を調整します\n💡 {music_recommend} — 現在の曲に基づいて推奨事項を取得します\n",
+            "title": "🎵 音楽"
+        },
+        "page_footer": "ページ {page} / {total} • チュートリアル",
+        "text_cmd": {
+            "desc": "ボットへようこそ！できることの簡単な概要は次のとおりです:\n\n📊 **基本情報** — {cmd_ping}、{cmd_info}、{cmd_changelog}、 {cmd_stats}\n🔍 **検索** — `/info user`、`/info server`、`/info avatar`、 `/info banner`\n🛡️ **モデレーション** — `/ban`、`/kick`、`/timeout`、その他\n🤖 **AutoMod** — `/automod`、`/autopublish`\n💬 **自動返信** — `/autoreply add/remove/list`\n💰 **経済** — `/economy balance/daily/shop`、および詳細\n🎵 **音楽** — `/music play/pause/skip`、その他\n🤖 **AI チャット** — `/ai`、`/ai-clear`\n🎮 **楽しい** — `/dsize`、`/petpet`、`/explore`\n📝 **フィードバック** — {cmd_feedback}\n\n特定のコマンドの詳細については、`{prefix}help <command>`を使用してください\n対話型のページ分割されたチュートリアルについては、スラッシュ コマンド {cmd_tutorial} を使用してください。",
+            "title": "📖 ボットのチュートリアル"
+        },
+        "welcome": {
+            "desc": "これは、ボットが実行できるすべての機能をすぐに理解できるようにするためのチュートリアルです。\n\n**使用方法:**\n以下の ⬅️ ➡️ ボタンを使用して機能を切り替えてください。ページ.\n\n**コマンド タイプ:**\n• **スラッシュ コマンド** — `/` と入力し、メニューから選択\n• **テキスト コマンド** — プレフィックスを入力します (現時点では`{prefix}`) の後にチャット内のコマンド名が続きます\n\n**ヒント:** いつでも {info_help} または `{prefix}help` を使用すると、完全なコマンド リストを表示できます。",
+            "title": "👋 {bot_name} へようこそ!"
+        }
+    },
+    "userinfo": {
+        "field": {
+            "created_at": "アカウントが作成されました",
+            "joined_at": "参加したサーバー",
+            "nickname": "サーバーのニックネーム",
+            "user_id": "ユーザーID"
+        },
+        "title": "{name} の情報"
+    },
+    "verification": {
+        "high": "高",
+        "highest": "最高",
+        "low": "低い",
+        "medium": "中",
+        "none": "なし"
+    }
+}

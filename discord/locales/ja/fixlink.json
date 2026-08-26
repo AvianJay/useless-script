@@ -1,0 +1,116 @@
+{
+    "btn": {
+        "add_custom": "カスタムを追加",
+        "configure_query_fixer": "クエリフィクサーを構成する",
+        "confirm_delete": "削除の確認",
+        "delete_custom": "カスタムの削除",
+        "disable_custom_default": "カスタムを無効にする",
+        "disable_platform": "{platform} を無効にする",
+        "disable_platform_default": "プラットフォームを無効にする",
+        "edit_custom": "カスタムの編集",
+        "enable_custom": "カスタムを有効にする",
+        "enable_platform": "{platform} を有効にする",
+        "remove_tracker_off": "トラッカーの削除: オフ",
+        "remove_tracker_on": "トラッカーの削除: オン",
+        "webhook_all_links": "Webhook: すべてのリンク",
+        "webhook_off": "Webhook: オフ",
+        "webhook_on": "Webhook: オン",
+        "webhook_tracker_only": "Webhook: 追跡のみ"
+    },
+    "condition": {
+        "all_links": "サポートされているすべてのリンク",
+        "tracker_only": "トラッキング コードのみのリンク"
+    },
+    "confirm": {
+        "delete_custom": "**{name}** を削除しますか?"
+    },
+    "embed": {
+        "builtin_field_body": "ステータス: {status}\n優先: {preferred}\n利用可能: {available}",
+        "custom_field_body": "ステータス: {status}\nオリジン: {origins}\nパス: {paths}\nフィクサー: {fixer_name} (`{fixer_host}`)",
+        "footer": "組み込みプラットフォーム: {builtin_enabled}/{builtin_total} • カスタム プラットフォーム: {custom_count}/{custom_max}",
+        "settings_desc": "有効: **{enabled}**\nモード: **{mode}**\nWebhook 条件: **{webhook_condition}**\nトラッカーの削除: **{tracker}**",
+        "settings_title": "フィックスリンク設定"
+    },
+    "err": {
+        "builtin_conflict": "{platform} は組み込みプラットフォームであり、カスタム ルールでオーバーライドすることはできません。",
+        "custom_id_invalid": "カスタム プラットフォーム ID が無効です。",
+        "custom_not_found": "そのカスタム プラットフォームが見つかりませんでした。",
+        "delete_custom_failed": "カスタム プラットフォームの削除に失敗しました。",
+        "delete_failed": "そのメッセージを削除できませんでした。",
+        "endpoint_https_required": "エンドポイントは HTTPS とパブリック ドメインを使用する必要があります。",
+        "endpoint_no_query": "エンドポイントにはクエリやフラグメントを含めることはできません。代わりに静的クエリフィールドを使用してください。",
+        "endpoint_no_userinfo": "エンドポイントにはユーザー情報やカスタム ポートを含めることはできません。",
+        "endpoint_url_format": "そのエンドポイント URL の形式が正しくありません。",
+        "invalid_domain": "{field} は有効なドメインではありません。",
+        "length_1_40": "{field} は 1 ～ 40 文字である必要があります。",
+        "message_not_found": "削除するメッセージが見つかりませんでした。",
+        "must_be_exact_domain": "{field} は、スキーム、ポート、またはワイルドカードを含まない、正確なドメインである必要があります。",
+        "must_be_public_domain": "{field} はパブリック ドメインである必要があります。",
+        "name_duplicate": "その名前のカスタム プラットフォームはすでに存在します。",
+        "no_control_chars": "{field} には制御文字を含めることはできません。",
+        "no_ip_literal": "{field} を IP リテラルにすることはできません。",
+        "not_original_author": "このメッセージを削除できるのは元の作成者だけです。",
+        "not_panel_owner": "このパネルを開いた管理者のみが FixLink 設定を変更できます。",
+        "origin_count": "1 ～ 5 の元のドメインを入力します。",
+        "path_prefix_count": "1 ～ 5 のパス プレフィックスを入力します。",
+        "path_prefix_format": "パスのプレフィックスは `/` で始まる必要があり、クエリ、フラグメント、またはバックスラッシュを含めることはできません。",
+        "path_prefix_whitespace": "パスのプレフィックスに空白を含めることはできません。",
+        "pick_custom_first": "まずカスタム プラットフォームを選択します。",
+        "platform_not_object": "カスタム プラットフォーム データはオブジェクトである必要があります。",
+        "query_key_charset": "{field} には、最大 64 文字の文字、数字、`.`、`_`、`~`、または `-` のみを使用できます。",
+        "rule_duplicate": "`{pattern}` には、同一のカスタム マッチング ルールがすでにあります。",
+        "save_config_failed": "FixLink 設定の保存に失敗しました。後でもう一度試してください。",
+        "save_custom_failed": "カスタム プラットフォームを保存できませんでした。後でもう一度試してください。",
+        "source_param_conflict": "ソース URL パラメータ名は静的クエリ キーと一致できません。",
+        "static_query_format": "静的クエリでは `key=value` を使用する必要があります。複数のペアを別々の行に入力します。",
+        "static_query_key_dup": "静的クエリ キー `{key}` が重複しています。",
+        "static_query_too_many": "最大 10 個の静的クエリ ペアが許可されます。",
+        "static_query_value_length": "静的クエリ値は最大 256 文字です。",
+        "too_many_custom": "各サーバーには最大 {max} 個のカスタム プラットフォームを含めることができます。"
+    },
+    "field": {
+        "builtin_platform": "組み込み: {platform}",
+        "custom_platform": "カスタム: {name}",
+        "custom_platform_header": "カスタムプラットフォーム",
+        "endpoint_domain": "エンドポイントドメイン",
+        "fixer_name": "フィクサー名",
+        "origin_domain": "オリジンドメイン",
+        "platform_name": "プラットフォーム名",
+        "required_query_key": "必要なクエリキー",
+        "source_param": "ソース URL パラメータ名",
+        "static_query_key": "静的クエリキー"
+    },
+    "modal": {
+        "custom_fixer_title": "カスタムクエリフィクサー",
+        "custom_source_title": "カスタム プラットフォーム ソース",
+        "endpoint_label": "HTTPS エンドポイント (クエリなし)",
+        "keep_query_label": "保持するクエリ キー (オプション)",
+        "origins_label": "オリジンドメイン (1-5)",
+        "paths_label": "パスプレフィックス (1 ～ 5)",
+        "source_param_label": "ソース URL のクエリパラメータ名",
+        "static_query_label": "静的クエリ (key=value、オプション)"
+    },
+    "mode": {
+        "normal_reply": "通常の応答",
+        "webhook": "Webhook の置き換え"
+    },
+    "msg": {
+        "cancelled": "キャンセルされました。",
+        "custom_deleted": "カスタム プラットフォームが削除されました。",
+        "custom_saved": "カスタム プラットフォーム **{name}** を保存しました。",
+        "source_verified": "検証されたソース: **{name}**\n 次に、クエリ フィクサーを構成します。"
+    },
+    "select": {
+        "builtin_platform": "内蔵プラットフォームを選択する",
+        "custom_platform": "カスタム プラットフォームを選択する",
+        "platform_preferred_fixer": "{platform} の優先フィクサー",
+        "preferred_fixer": "組み込みプラットフォームの優先フィクサー"
+    },
+    "state": {
+        "disabled_short": "障害者",
+        "enabled_short": "有効",
+        "no_custom_platform": "カスタム プラットフォームはまだありません",
+        "no_custom_platform_option": "カスタム プラットフォームはまだありません",
+        "no_custom_platform_period": "カスタム プラットフォームはまだありません。"
+    }
+}

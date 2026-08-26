@@ -1,0 +1,97 @@
+{
+    "btn": {
+        "go_submit": "送信してみよう"
+    },
+    "cmd": {
+        "audio_format_error": "エラー: MP3、WAV、OGG オーディオ ファイルのみがサポートされています。",
+        "audio_too_large": "エラー: 音声ファイルが 5MB を超えています。より小さいファイルを選択してください。",
+        "channel_not_found": "貢献チャンネルが見つかりませんでした。開発者にお問い合わせください。",
+        "channel_not_set": "投稿チャンネルが設定されていません。開発者にお問い合わせください。",
+        "rate_limited": "頻繁に送信しすぎています。 {seconds}秒待ってから再試行してください。",
+        "thanks_audio": "ご提出いただきありがとうございます!すぐに音声を確認します。\n-# 承認されたら通知が届きます。",
+        "thanks_image": "ご提出いただきありがとうございます!すぐに画像を確認させていただきます。",
+        "upload_image_gif_video": "画像、GIF、またはビデオ ファイルをアップロードしてください。"
+    },
+    "dm": {
+        "approved_plain": "{approved_text}.",
+        "approved_with_reward": "{approved_text} を獲得し、**{reward}** {currency}\n現在の残高: **{balance}**",
+        "text": {
+            "audio_approved": "音声の提出が承認されました",
+            "feedgrass_approved": "あなたの提出物は承認されました",
+            "whatisthisguytalking_approved": "「この人は何を言っているのか」の投稿が承認されました"
+        }
+    },
+    "editjson": {
+        "label": "JSONコンテンツ",
+        "title": "JSON 構成を編集する"
+    },
+    "embed": {
+        "feedgrass_cmd_desc": "下のリンクをクリックして送信してください",
+        "feedgrass_cmd_title": "草やりの提出",
+        "new_dynamic_voice_audio": "新しいダイナミック音声効果音の提出",
+        "new_feedgrass": "新しい草やりの提出",
+        "new_whatisthisguytalking": "新しい「この男は何を言っているのか」画像の投稿",
+        "video_attachment_desc": "添付ファイルはビデオです: `{filename}`"
+    },
+    "err": {
+        "json_attachment_not_found": "JSON 添付ファイルが見つかりませんでした",
+        "json_attachment_not_found_period": "JSON 添付ファイルが見つかりませんでした。",
+        "json_format": "JSON 形式エラー: {error}",
+        "missing_feeder_fields": "非セルフモードでは、JSON に feeder.position と feeder.size を含める必要があります。",
+        "missing_target_fields": "JSON には target.position と target.size が含まれている必要があります",
+        "open_editor_failed": "JSON エディターを開けませんでした: {error}",
+        "update_failed": "更新に失敗しました: {error}"
+    },
+    "field": {
+        "file_size": "ファイルサイズ",
+        "media_type": "メディアの種類",
+        "original_filename": "元のファイル名",
+        "user_id": "ユーザーID",
+        "will_save_as": "として保存されます"
+    },
+    "media_type": {
+        "static": "静止画像",
+        "video": "ビデオ"
+    },
+    "msg": {
+        "json_updated": "JSONが更新されました！プレビューが再生成されました。"
+    },
+    "review": {
+        "btn": {
+            "approve": "承認する",
+            "edit_json": "JSONの編集",
+            "reject": "拒否する"
+        },
+        "err": {
+            "missing_image_or_json": "送信された画像または JSON 添付ファイルが見つかりませんでした。",
+            "no_attachment_or_preview": "送信添付ファイルまたはダウンロード可能なプレビュー画像が見つかりませんでした。",
+            "no_audio_attachment": "提出物の音声添付ファイルが見つかりませんでした。",
+            "reload_failed": "アセットのリロードに失敗しました: {error}",
+            "review_failed": "レビューが失敗しました: {error}",
+            "unsupported_format": "この提出物は、サポートされている画像、GIF、またはビデオ形式ではありません。"
+        },
+        "msg": {
+            "asset_saved": "提出アセットが保存されました。",
+            "audio_saved_as": "提出音声は {filename} として保存されました",
+            "reloaded_assets": {
+                "one": "アセットがリロードされました。現在、{count} ファイルがあります。",
+                "other": "アセットがリロードされました。現在、{count} ファイルがあります。"
+            },
+            "saved": "提出物は保存されました。"
+        }
+    },
+    "suffix": {
+        "approved": " 【承認済】",
+        "rejected": " [拒否されました]"
+    },
+    "web": {
+        "channel_not_found": "貢献チャンネルが見つかりませんでした",
+        "channel_not_set": "投稿チャンネルが設定されていません",
+        "error_occurred": "エラーが発生しました: {error}",
+        "invalid_or_expired_token": "その検証トークンは無効であるか、期限切れです。もう一度試してください。",
+        "invalid_token": "無効なトークン",
+        "rate_limited": "頻繁に送信しすぎています。 {seconds}秒待ってから再試行してください。",
+        "submitted": "提出物が送信されました！",
+        "verify_failed": "検証に失敗しました。もう一度試してください。"
+    }
+}

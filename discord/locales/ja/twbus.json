@@ -1,0 +1,90 @@
+{
+    "btn": {
+        "next_stop": "次の目的地",
+        "prev_stop": "前の停止",
+        "route_overview": "ルート概要"
+    },
+    "embed": {
+        "favorites_title": "私のお気に入り",
+        "route_footer": "ページ {page}/{total} ・ {count} は合計を停止します ・ 最終更新日"
+    },
+    "err": {
+        "fav_load_failed": "お気に入りアイテムの読み込みエラー: {error}",
+        "fav_stop_limit": {
+            "one": "お気に入りの停留所は {limit} のみです。",
+            "other": "お気に入りの停留所は最大 {limit} 個までです。"
+        },
+        "fav_youbike_limit": {
+            "one": "お気に入りの YouBike ステーションは {limit} 個だけを持つことができます。",
+            "other": "お気に入りの YouBike ステーションは最大 {limit} 個までです。"
+        },
+        "generic": "エラー: {error}",
+        "no_favorites": "お気に入りの停留所や YouBike ステーションをまだ設定していません。",
+        "no_permission_button": "このボタンを使用する権限がありません。",
+        "no_permission_menu": "このメニューを使用する権限がありません。",
+        "refresh_failed": "更新中のエラー: {error}",
+        "route_bus_info_not_found": "その路線のバス到着情報が見つかりませんでした。",
+        "route_not_found": "そのルートが見つかりませんでした。",
+        "route_update_failed": "ルート情報の更新中にエラーが発生しました: {error}",
+        "stop_info_not_found": "その停留所の到着情報が見つかりませんでした。",
+        "stop_update_failed": "停留所情報の更新中にエラーが発生しました: {error}",
+        "too_fast": "処理が早すぎます。後でもう一度試してください。",
+        "youbike_not_found": "その YouBike ステーションの情報が見つかりませんでした。"
+    },
+    "field": {
+        "arrival_status": "到着状況",
+        "available_bikes": "利用可能な自転車",
+        "coordinates": "座標",
+        "empty_spaces": "空きスペース",
+        "estimated_arrival": "到着予定時刻",
+        "last_updated": "最終更新日",
+        "message": "メッセージ",
+        "next_stop_arrow": "次の目的地 ➡️",
+        "prev_stop_arrow": "⬅️ 前の停留所",
+        "scheduled_arrival": "到着予定",
+        "sequence": "シーケンス",
+        "station_id": "ステーションID",
+        "status": "ステータス",
+        "total_spaces": "総スペース数",
+        "vehicle_status": "車両の状態"
+    },
+    "msg": {
+        "fav_stop_toggled": "{action} 停止: {name}",
+        "fav_youbike_toggled": "{action} YouBike ステーション: {name}"
+    },
+    "select": {
+        "fav_quick_access_ph": "お気に入りの停留所または YouBike ステーションにすばやくジャンプします",
+        "pick_stop_ph": "🚏 到着情報を表示するには停留所を選択してください"
+    },
+    "value": {
+        "approaching": "近づいてくる",
+        "boardable": "搭乗可能",
+        "bus_text_title": "バス/{route}[{path}] - {stop}",
+        "disabled": "サービス停止中",
+        "fav_added": "お気に入りに追加されました",
+        "fav_removed": "お気に入りから削除されました",
+        "full": "フル",
+        "full_suffix": " (フル)",
+        "minutes_seconds": {
+            "one": "{minutes}m {seconds}s",
+            "other": "{minutes}m {seconds}s"
+        },
+        "no_data": "まだデータがありません",
+        "operating": "稼働中",
+        "origin_placeholder": "─（開始）",
+        "path_name": "パス {id}",
+        "seconds": {
+            "one": "{seconds}s",
+            "other": "{seconds}s"
+        },
+        "stop_fetch_failed_text": "停留所情報を取得できませんでした:\n{error}",
+        "terminus_placeholder": "─（了）",
+        "unknown_location": "不明な場所",
+        "unknown_stop_bracket": "[不明な停留所]{id}",
+        "unknown_stop_name": "不明な停留所名",
+        "unknown_youbike_bracket": "[不明な YouBike ステーション]{id}",
+        "vehicle_status_prefix": "\n車両ステータス:\n",
+        "youbike_fetch_failed_text": "ステーション情報を取得できませんでした:\n{error}",
+        "youbike_text_content": "利用可能/空/合計\n{available} / {empty} / {total}"
+    }
+}

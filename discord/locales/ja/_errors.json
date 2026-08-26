@@ -1,0 +1,56 @@
+{
+    "panel": {
+        "unauthorized": "無許可。",
+        "forbidden": "このサーバーを管理する権限がありません。",
+        "bot_not_in_guild": "ボットはこのサーバーには存在しません。",
+        "no_data": "データは提供されませんでした。",
+        "missing_module_or_key": "モジュールまたは設定キーがありません。",
+        "unknown_module": "不明なモジュールです。",
+        "unknown_setting": "不明な設定です。",
+        "autoreply_limit": {
+            "one": "自動返信ルールは {count} 項目に限定されます。",
+            "other": "自動返信ルールは {count} アイテムに限定されます。"
+        },
+        "invalid_boolean": "無効なブール値です。",
+        "save_failed": "サーバー設定の保存に失敗しました。",
+        "guild_not_found": "サーバーが見つかりません。",
+        "guild_not_found_preview": "サーバーが見つかりません。モデレーションのアナウンスをプレビューすることはできません。",
+        "invalid_channel_id": "無効なチャンネルIDです。",
+        "invalid_action": "無効なアクションコマンドです。",
+        "automod_action_invalid": "無効な {feature} アクション コマンド: {error}",
+        "webverify_country_code_invalid": "国/地域コードには、必ず 2 つの文字が含まれている必要があります: {code}",
+        "webverify_country_codes_required": "地域アラートが有効になっている場合は、少なくとも 1 つの国/地域コードが必要です。",
+        "webverify_country_channel_required": "地域アラートが有効になっている場合は、アラート チャンネルが必要です。",
+        "webverify_relation_id_invalid": "無効なリレーション ID: {relation_id}",
+        "webverify_relation_id_not_found": "データベース内に関係 ID が見つかりません: {relation_id}",
+        "webverify_relation_ids_required": "リレーション ブラックリストが有効な場合は、少なくとも 1 つのリレーション ID が必要です。",
+        "webverify_relation_channel_required": "関係ブラックリストが有効な場合は、アラート チャンネルが必要です。",
+        "webverify_alert_channel_permissions": "アラート チャンネルが利用できないか、ボットにチャンネルの表示 / メッセージの送信 / リンクの埋め込み権限がありません。",
+        "fixlink_not_object": "FixLink 設定はオブジェクトである必要があります。",
+        "fixlink_custom_not_list": "FixLink カスタム プラットフォームはリストである必要があります。",
+        "fixlink_custom_limit": {
+            "one": "サーバーあたり最大 {count} カスタム プラットフォーム。",
+            "other": "サーバーごとに最大 {count} 個のカスタム プラットフォーム。"
+        },
+        "fixlink_fixers_not_object": "FixLink の優先フィクサーはオブジェクトである必要があります。",
+        "fixlink_unknown_platform": "不明な組み込み FixLink プラットフォーム: {platform}",
+        "fixlink_unsupported_fixer": "{platform} はフィクサーをサポートしていません: {fixer}",
+        "fixlink_disabled_not_list": "FixLink が無効になっているプラットフォームはリストである必要があります。",
+        "antibeast_not_object": "AntiBeast 設定はオブジェクトである必要があります。",
+        "antibeast_bypass_not_list": "AntiBeast バイパス ロールはリストである必要があります。",
+        "antibeast_bypass_invalid": "無効な AntiBeast バイパス ロール ID。",
+        "antibeast_kick_not_object": "AntiBeast の繰り返しトリガー設定はオブジェクトである必要があります。",
+        "antibeast_numbers_invalid": "AntiBeast トリガー数と時間ウィンドウは整数である必要があります。",
+        "antibeast_threshold_range": "AntiBeast トリガー数は 1 ～ 20 でなければなりません。",
+        "antibeast_window_range": "AntiBeast の時間枠は 5 ～ 3600 秒の範囲にする必要があります。",
+        "antibeast_action_invalid": "無効な AntiBeast アクション コマンド: {error}",
+        "antibeast_unavailable": "AntiBeast モジュールがロードされていません。",
+        "sticky_invalid_channel": "チャンネル {channel} は、このサーバーのテキスト チャンネルまたはアナウンス チャンネルではありません。",
+        "sticky_limit": {
+            "one": "このサーバーでは最大 {count} 固定メッセージが許可されます。追加する前に 1 つ削除してください。",
+            "other": "このサーバーでは最大 {count} 個の固定メッセージが許可されます。追加する前に一部を削除してください。"
+        },
+        "sticky_unavailable": "StickyMessage モジュールは現在利用できません。",
+        "sticky_publish_failed": "固定メッセージの公開に失敗しました。"
+    }
+}

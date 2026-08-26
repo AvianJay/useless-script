@@ -1,0 +1,307 @@
+{
+    "antibeast": {
+        "_desc": "すべてのユーザー/ここおよび保護されたロールへの言及をブロックする",
+        "_display": "アンチビースト",
+        "antibeast": {
+            "desc": "AutoMod の一括メンション保護、バイパスロール、および繰り返しトリガーされるアクション",
+            "display": "アンチビーストの設定"
+        }
+    },
+    "automoderate": {
+        "_desc": "自動モデレーション設定 (招待リンクの検出を含む)",
+        "_display": "自動モデレーション",
+        "automod": {
+            "desc": "詐欺トラップ、リンクの招待、罰則回避、フラグ付きユーザーの参加、レイド対策、スパム対策、AutoMod 検出などを有効にして構成します。",
+            "display": "自動モデレーションルール"
+        }
+    },
+    "autoreply": {
+        "_desc": "基本的な自動返信設定",
+        "_display": "自動返信",
+        "autoreplies": {
+            "desc": "自動返信ルールを追加、編集、または削除します。複数のトリガー/応答はカンマで区切ります",
+            "display": "ルール一覧"
+        },
+        "autoreply_ignore_channels": {
+            "desc": "無視するチャンネル (ブラックリスト モード)、または唯一のアクティブなチャンネル (ホワイトリスト モード)",
+            "display": "無視/許可されたチャンネル"
+        },
+        "autoreply_ignore_mode": {
+            "desc": "ブラックリスト: リストされたチャンネルを無視 / ホワイトリスト: リストされたチャンネルでのみアクティブ",
+            "display": "無視モード",
+            "option": {
+                "blacklist": "ブラックリスト",
+                "whitelist": "ホワイトリスト"
+            }
+        }
+    },
+    "customprefix": {
+        "_desc": "このサーバーのコマンドプレフィックスをカスタマイズします",
+        "_display": "カスタムプレフィックス",
+        "custom_prefix": {
+            "desc": "このサーバーのコマンドプレフィックス。デフォルトでは空のままにしておきます",
+            "display": "コマンドプレフィックス"
+        }
+    },
+    "dgpa": {
+        "_desc": "NDS追跡通知設定",
+        "_display": "NDSトラッカー",
+        "nds_follow_channel_id": {
+            "desc": "NDS追跡結果が投稿されるチャンネル",
+            "display": "NDS 通知チャンネル"
+        }
+    },
+    "dsize": {
+        "_desc": "dsize 値の設定",
+        "_display": "サイズ",
+        "dsize_drop_item_chance": {
+            "display": "アイテムドロップ確率(%)"
+        },
+        "dsize_max": {
+            "display": "最大サイズ"
+        },
+        "dsize_surgery_max": {
+            "display": "手術結果最大値"
+        },
+        "dsize_surgery_percent": {
+            "display": "手術成功率(%)"
+        }
+    },
+    "dynamicvoice": {
+        "_desc": "音声チャンネルを自動的に作成/削除する",
+        "_display": "ダイナミックボイス",
+        "dynamic_voice_blacklist_roles": {
+            "desc": "これらのロールを持つユーザーは動的音声チャンネルを使用できません",
+            "display": "ブラックリストのロール"
+        },
+        "dynamic_voice_channel": {
+            "desc": "このチャンネルに参加すると、動的チャンネルが自動的に作成されます",
+            "display": "エントリーボイスチャンネル"
+        },
+        "dynamic_voice_channel_category": {
+            "desc": "ダイナミックボイスチャンネルが属するカテゴリ",
+            "display": "動的チャンネルカテゴリ"
+        },
+        "dynamic_voice_channel_name": {
+            "default": "{user} のチャンネル",
+            "desc": "ユーザー名のプレースホルダーとして {user} を使用します",
+            "display": "チャンネル名のテンプレート"
+        },
+        "dynamic_voice_play_audio": {
+            "display": "参加時にサウンドを再生する"
+        }
+    },
+    "economy": {
+        "_desc": "サーバー経済パラメータを管理する",
+        "_display": "エコノミー",
+        "economy_allow_global_flow": {
+            "desc": "サーバーとグローバル通貨（両替、グローバルショップ、小切手換金など）間のフローを許可します。",
+            "display": "世界的な通貨の流れを可能にする"
+        },
+        "economy_currency_name": {
+            "default": "サーバーコイン",
+            "display": "通貨名"
+        }
+    },
+    "fakeuser": {
+        "_desc": "偽ユーザーの通知",
+        "_display": "偽のユーザー",
+        "fake_user_log_channel": {
+            "desc": "偽ユーザーの結果はこのチャンネルに送信されます",
+            "display": "偽ユーザーのログ チャンネル"
+        }
+    },
+    "fixlink": {
+        "_desc": "ソーシャルプラットフォームリンクを修正し、不要な追跡パラメータを削除します",
+        "_display": "リンクフィクサー",
+        "fixlink": {
+            "desc": "状態、追跡削除、Webhook モード、組み込みフィクサー、カスタム プラットフォームを有効にする",
+            "display": "フィックスリンク設定"
+        }
+    },
+    "logger": {
+        "_desc": "ボットのログ設定",
+        "_display": "ロギング",
+        "log_channel_id": {
+            "desc": "ボットログ出力用のテキストチャンネル",
+            "display": "ログチャンネル"
+        }
+    },
+    "messageimage": {
+        "_desc": "サーバーメッセージボードの設定",
+        "_display": "掲示板",
+        "guild_board_channel_id": {
+            "desc": "サーバーの掲示板で使用されるチャンネル",
+            "display": "掲示板チャンネル"
+        }
+    },
+    "moderate": {
+        "_desc": "モデレーション関連の設定",
+        "_display": "モデレーション",
+        "moderation_announcement_config": {
+            "desc": "お知らせテンプレート、AutoReply 埋め込みディレクティブ、ケース ID 形式を編集します",
+            "display": "発表形式"
+        },
+        "moderation_message_channel_id": {
+            "desc": "モデレーションのお知らせが自動的に投稿されるチャンネル",
+            "display": "アナウンスチャンネル"
+        }
+    },
+    "moderationnotify": {
+        "_desc": "罰せられたユーザーに通知するかどうかを制御する",
+        "_display": "モデレーション通知",
+        "notify_user_on_ban": {
+            "display": "ユーザーに禁止を通知する"
+        },
+        "notify_user_on_kick": {
+            "display": "キック時にユーザーに通知"
+        },
+        "notify_user_on_mute": {
+            "display": "ミュート時にユーザーに通知する"
+        },
+        "user_appeal_channel": {
+            "desc": "設定すると、モデレーション通知に異議申し立てリンクが含まれます",
+            "display": "アピールチャンネル"
+        }
+    },
+    "oxwu": {
+        "_desc": "地震警報・通報プッシュ設定",
+        "_display": "地震速報",
+        "oxwu_report_channel": {
+            "display": "レポートチャンネル"
+        },
+        "oxwu_report_channel_text": {
+            "display": "余分なテキストを報告する"
+        },
+        "oxwu_warning_channel": {
+            "display": "警告チャンネル"
+        },
+        "oxwu_warning_channel_text": {
+            "desc": "たとえば@みんな",
+            "display": "余分なテキストの警告"
+        }
+    },
+    "reportsystem": {
+        "_desc": "レポート関連の設定を管理する",
+        "_display": "レポートシステム",
+        "report_blacklist": {
+            "desc": "これらのロールを持つユーザーはレポートを作成できません",
+            "display": "ブラックリストのロールをレポートする"
+        },
+        "report_channel_id": {
+            "desc": "レポートはこのチャンネルに送信されます",
+            "display": "レポートチャンネル"
+        },
+        "report_message": {
+            "desc": "レポートチャンネルに送信されるメンション/通知テキスト",
+            "display": "レポートチャンネルのメンションテキスト"
+        },
+        "report_rate_limit": {
+            "desc": "同じユーザーからのレポート間のクールダウン",
+            "display": "レポート速度制限 (秒)"
+        },
+        "reported_message": {
+            "default": "ご報告ありがとうございます。できるだけ早く対応させていただきます。",
+            "desc": "レポートが成功した後にレポーターに送信される返信",
+            "display": "レポート返信メッセージ"
+        },
+        "server_rules": {
+            "desc": "AI レビューで使用されるサーバー ルール (1 行に 1 つ)",
+            "display": "サーバールール"
+        }
+    },
+    "serverwebverify": {
+        "_desc": "サーバーの Web 検証 (最初に /webverify setup または Quick_setup を使用して初期化します)",
+        "_display": "Web認証",
+        "webverify_config": {
+            "desc": "有効化、CAPTCHA、未検証のロール、自動割り当て、通知、および地域アラート",
+            "display": "Web認証設定"
+        }
+    },
+    "stickymessage": {
+        "_desc": "新しいアクティビティの後、メッセージを自動的に一番下に戻す",
+        "_display": "固定メッセージ",
+        "stickymessage": {
+            "desc": "チャンネル、コンテンツ、メンション、再投稿間隔を構成する",
+            "display": "固定メッセージの設定"
+        }
+    },
+    "stickyrole": {
+        "_desc": "ロールメモリー設定",
+        "_display": "スティッキーロール",
+        "stickyrole_allowed_roles": {
+            "desc": "これらのロールのみが記憶され、復元されます",
+            "display": "記憶に残るロール"
+        },
+        "stickyrole_enabled": {
+            "desc": "ユーザーが再参加したときにロールを自動的に復元する",
+            "display": "ロール記憶を有効にする"
+        },
+        "stickyrole_ignore_bots": {
+            "display": "ボットを無視する"
+        },
+        "stickyrole_log_channel": {
+            "desc": "ロールが復元されるとチャンネルに通知される",
+            "display": "ログチャンネル"
+        }
+    },
+    "ticket": {
+        "_desc": "プライベート サポート チケット: オープン、クレーム、クローズ、および HTML トランスクリプト",
+        "_display": "チケット",
+        "ticket_blacklist_roles": {
+            "desc": "これらのロールを持つユーザーはチケットを開くことができません",
+            "display": "ブラックリストのロール"
+        },
+        "ticket_category": {
+            "desc": "新しいチケット チャンネルはこのカテゴリの下に作成されます",
+            "display": "チケットカテゴリー"
+        },
+        "ticket_enabled": {
+            "display": "チケットシステムを有効にする"
+        },
+        "ticket_inherit_category_permissions": {
+            "desc": "オンの場合、チケット チャンネルはカテゴリの権限に加えてオープナー/スタッフのオーバーライドを継承します。オフの場合、チケットは完全にプライベートになります",
+            "display": "カテゴリの権限を継承する"
+        },
+        "ticket_log_channel": {
+            "desc": "チケット終了後にトランスクリプトがここに送信されます",
+            "display": "ログチャンネル"
+        },
+        "ticket_max_per_user": {
+            "display": "ユーザーごとのオープンチケットの最大数"
+        },
+        "ticket_name_template": {
+            "desc": "{number} および {user} プレースホルダーのサポート",
+            "display": "チャンネル名のテンプレート"
+        },
+        "ticket_panel_channel": {
+            "desc": "チケットパネル用チャンネル（設定後/ticketパネルで発行）",
+            "display": "パネルチャンネル"
+        },
+        "ticket_panel_color": {
+            "desc": "パネル埋め込み色 (6 桁の 16 進数、例: 5865F2)。デフォルトでは空のままにしておきます",
+            "display": "パネルカラー"
+        },
+        "ticket_panel_description": {
+            "default": "下のボタンをクリックしてプライベート チケットを開きます。私たちのチームがすぐにお手伝いいたします。",
+            "display": "パネル説明"
+        },
+        "ticket_panel_image": {
+            "desc": "パネル埋め込みの下に大きな画像が表示されます (http/https URL)。何もしないで空のままにしておきます",
+            "display": "パネル画像URL"
+        },
+        "ticket_panel_title": {
+            "default": "助けが必要ですか?",
+            "display": "パネルタイトル"
+        },
+        "ticket_staff_roles": {
+            "desc": "チケットを表示、要求、クローズできるロール",
+            "display": "スタッフのロール"
+        },
+        "ticket_welcome_message": {
+            "default": "こんにちは {user} さん、チケットを開いていただきありがとうございます。問題を詳しく説明してください。",
+            "desc": "{user} および {subject} プレースホルダーのサポート",
+            "display": "チケットのウェルカムメッセージ"
+        }
+    }
+}

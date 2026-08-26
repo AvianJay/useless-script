@@ -1,0 +1,63 @@
+{
+    "btn": {
+        "approve": "✅ 承認する",
+        "reject": "❌ 拒否"
+    },
+    "type": {
+        "avatar": "アバター",
+        "banner": "バナー",
+        "bio": "私について",
+        "generic": "内容"
+    },
+    "embed": {
+        "review_title_avatar": "アバターレビューリクエスト",
+        "review_desc_avatar": "ユーザー {user} がレビューのためにアバターを送信しました。",
+        "review_title_banner": "バナーレビューリクエスト",
+        "review_desc_banner": "ユーザー {user} がレビューのためにバナーを送信しました。",
+        "review_title_bio": "自己紹介レビューリクエスト",
+        "review_desc_bio": "ユーザー {user} がレビューのために自己紹介コンテンツを送信しました。"
+    },
+    "field": {
+        "guild_id": "サーバーID",
+        "status": "ステータス",
+        "reason": "理由",
+        "reject_reason": "拒否理由",
+        "bio_content": "自己紹介コンテンツ"
+    },
+    "status": {
+        "pending": "レビューを待っています...",
+        "human_review": "人間によるレビューが必要",
+        "rejected": "拒否されました",
+        "approved_avatar": "承認されました。アバターが更新されました",
+        "approved_banner": "承認されました。バナーを更新しました",
+        "approved_bio": "承認されました。自己紹介を更新しました",
+        "owner_avatar": "所有者の提出。アバターを直接更新",
+        "owner_banner": "所有者の提出。バナーを直接更新",
+        "owner_bio": "所有者の提出。自己紹介を直接更新しました",
+        "human_approved": "✅ 人間によるレビューによって承認されました ({user})",
+        "human_rejected": "❌ 人間によるレビューによって拒否されました ({user})"
+    },
+    "msg": {
+        "too_large": "画像が10MBを超えています。小さめのものをお選びください。",
+        "reviewing_image": "画像は検討中です。お待ちください...",
+        "reviewing_bio": "About Me のコンテンツは検討中です。お待ちください...",
+        "human_review_needed": "画像は人間によるレビューが必要です。理由: {reason}\n-# 管理者を待ってください",
+        "human_review_needed_bio": "About Me コンテンツは人間によるレビューが必要です。理由: {reason}\n-# 管理者を待ってください",
+        "rejected_image": "画像は拒否されました: {reason}",
+        "rejected_bio": "About Me コンテンツが拒否されました: {reason}",
+        "avatar_updated": "アバターが更新されました！",
+        "banner_updated": "バナーを更新しました！",
+        "bio_updated": "自己紹介を更新しました！",
+        "update_error": "更新中のエラー: {error}",
+        "update_error_avatar": "アバターの更新中にエラーが発生しました: {error}",
+        "update_error_banner": "バナー更新エラー: {error}",
+        "update_error_bio": "About Me の更新中にエラーが発生しました: {error}",
+        "review_error": "レビュー中にエラーが発生しました: {error}",
+        "review_approved": "承認され申請されました。",
+        "review_rejected": "レビュー要求が拒否されました。",
+        "approved_dm": "✅ 提出された {type} は人間による審査に合格し、申請されました。",
+        "rejected_dm": "❌ 送信された {type} は人間によるレビューに合格しませんでした。\n理由: {reason}",
+        "unknown_reason": "不明な理由",
+        "no_content": "コンテンツなし"
+    }
+}

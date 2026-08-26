@@ -1,0 +1,27 @@
+{
+    "audit": {
+        "blacklisted": "ユーザーは動的音声チャンネルからブラックリストに登録されています。"
+    },
+    "err": {
+        "channel_missing": "エラー: 設定された動的音声チャンネルが見つかりませんでした。",
+        "missing_perms": "エラー: 動的音声チャンネルを設定するには、ボットにはチャンネルの管理とメンバーの移動が必要です。",
+        "missing_voice_perms": "エラー: ボットがサウンドを再生するには、接続して話す必要があります。",
+        "not_set_up": "エラー: 最初に動的音声チャンネルをセットアップしてください。",
+        "role_already_blacklisted": "そのロールはすでにブラックリストに登録されています。",
+        "role_not_blacklisted": "そのロールはブラックリストに載っていません。"
+    },
+    "msg": {
+        "blacklist_empty": "ブラックリストは空です。",
+        "blacklist_header": "ブラックリストに登録されたロール:",
+        "deleted_role": "削除されたロール (ID: `{role_id}`)",
+        "disabled": "動的音声チャンネルは無効になりました。",
+        "play_audio_disabled": "動的音声参加サウンドが無効になりました。",
+        "play_audio_enabled": "ダイナミック音声参加サウンドが有効になりました。",
+        "role_blacklisted": "そのロールはブラックリストに追加されました。",
+        "role_unblacklisted": "そのロールはブラックリストから削除されました。",
+        "setup_done": "動的音声は「{channel}」に設定されています。新しいチャンネルは「{category}」の下に作成されます。"
+    },
+    "warn": {
+        "user_limit_failed": "警告: '{channel}' にユーザー制限を設定できませんでした。ボットに「チャンネルの管理」があることを確認してください。"
+    }
+}

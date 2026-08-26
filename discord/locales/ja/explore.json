@@ -1,0 +1,114 @@
+{
+    "btn": {
+        "play": "遊ぶ"
+    },
+    "embed": {
+        "playing_desc": "{user} が再生中です",
+        "title": "宇宙を探索する"
+    },
+    "err": {
+        "banned_word_exists": "「{word}」はすでに禁止語リストに含まれています。",
+        "banned_word_length": "禁止された単語の長さは 1 ～ 50 文字にする必要があります。",
+        "banned_word_limit": "カスタムの禁止単語制限 (100) に達しました。",
+        "banned_word_not_found": "「{word}」がリストに見つかりませんでした。",
+        "cannot_create_invite": "永久的な招待リンクを自動作成する権限がありません。 `invite_link` を入力するか、招待作成の許可を与えてください。",
+        "cannot_set_require_join": "結合要件を設定できませんでした。",
+        "casino_unavailable": "カジノサービスは一時的にご利用いただけません。",
+        "chat_rate_limited": "話すのが早すぎるので、ゆっくりしてください",
+        "economy_disabled": "経済システムが有効になっていないため、購入できません",
+        "guild_only": "このコマンドはサーバーでのみ使用できます。",
+        "insufficient_currency": "グローバル通貨が不足しています ({price} が必要ですが、{balance} を持っています)",
+        "invalid_invite_format": "招待リンクの形式が無効です — Discord の招待リンクを提供してください。",
+        "invite_not_found": "招待リンクが見つかりませんでした。リンクがまだ有効であることを確認してください。",
+        "invite_verify_failed": "現在、その招待リンクを確認できませんでした。後でもう一度お試しください。",
+        "invite_wrong_guild": "その招待リンクはこのサーバーに属していません。",
+        "no_channel_permission": "{channel} でメッセージを表示または送信する権限がありません。最初にチャンネル権限を調整してください。",
+        "quest_already_completed": "このクエストはすでに完了しています",
+        "quest_prerequisites_not_met": "前提クエストがまだ完了していない",
+        "skin_already_owned": "あなたはすでにこのスキンを所有しています",
+        "skin_is_free": "このスキンは無料なので、購入する必要はありません",
+        "skin_not_owned": "あなたはまだこのスキンを所有していません",
+        "unknown_quest": "未知のクエスト"
+    },
+    "msg": {
+        "banned_word_added": {
+            "one": "禁止ワード「{word}」を追加しました。これで、{count} のカスタム禁止単語ができました。",
+            "other": "禁止ワード「{word}」を追加しました。これで、{count} 個のカスタム禁止単語が追加されました。"
+        },
+        "banned_word_list": {
+            "one": "カスタム禁止単語 ({count}): {words}",
+            "other": "カスタム禁止単語 ({count}): {words}"
+        },
+        "banned_word_removed": {
+            "one": "禁止用語「{word}」を削除しました。これで、{count} のカスタム禁止単語ができました。",
+            "other": "禁止用語「{word}」を削除しました。これで、{count} 個のカスタム禁止単語が追加されました。"
+        },
+        "chat_bridge_disabled": "Discord チャンネルへの Explore チャット ブリッジが無効になりました。",
+        "chat_bridge_set": "Explore チャットは {channel} にブリッジされました。ゲーム内メッセージはここに転送され、チャンネル メッセージもゲーム内に表示されます。",
+        "privacy_set": "このサーバーは {status} に設定されています (Explore ロビーでは {visibility} です)。",
+        "require_join_disabled": "Explore に入る前にサーバーに参加するという要件は無効になりました。",
+        "require_join_enabled": "Explore に入る前にサーバーのメンバーシップを要求することが有効になりました。 {source_text}: {link}",
+        "setup_toggled": "このサーバーの Explore スペースは {status} です。"
+    },
+    "quest": {
+        "vill_boss": {
+            "desc": "村の三つの小さな災害が解決した後、ミーム魔王が目を覚ます。スリープ状態に戻します。",
+            "name": "ミーム魔王"
+        },
+        "vill_cabbage": {
+            "desc": "庭からキャベツが連続失踪する事件を調査する。犯人はクライアントかもしれない。",
+            "name": "キャベツ行方不明事件"
+        },
+        "vill_delivery": {
+            "desc": "「緊急荷物」を村の入り口から徒歩約10歩先の隣家まで届ける。",
+            "name": "スピード配達（徒歩）"
+        },
+        "vill_rat": {
+            "desc": "村長が家の中でシェイクスピアを暗唱できるネズミを追い払うのを手伝ってください。",
+            "name": "村長の哲学的ネズミ問題"
+        }
+    },
+    "skin": {
+        "alien": "エイリアン",
+        "astronaut_a": "宇宙飛行士A",
+        "astronaut_b": "宇宙飛行士B",
+        "bat": "コウモリ",
+        "demon_minion": "デーモンミニオン",
+        "fairy": "妖精",
+        "female_martial_artist": "女性格闘家",
+        "female_thief": "女盗賊",
+        "female_warrior": "女戦士",
+        "hero": "ヒーロー",
+        "heroine": "ヒロイン",
+        "king": "キング",
+        "mage": "メイジ",
+        "martial_artist": "格闘家",
+        "meme_guy": "ミームガイ",
+        "merchant": "商人",
+        "monk": "モンク",
+        "noble": "高貴な",
+        "noblewoman": "貴婦人",
+        "old_man": "老人",
+        "old_woman": "老婦人",
+        "queen": "女王",
+        "reaper": "リーパー",
+        "robot": "ボット",
+        "sage": "セージ",
+        "slime": "スライム",
+        "space_citizen": "宇宙市民",
+        "thief": "泥棒",
+        "villager_man": "村人男",
+        "villager_woman": "村人の女性",
+        "warrior": "戦士"
+    },
+    "value": {
+        "global_currency_fallback": "グローバルコイン",
+        "invite_auto_created": "永久的な招待リンクが自動作成されました",
+        "invite_provided": "提供された招待リンクが使用されました",
+        "no_custom_banned_words": "カスタムの禁止単語はまだありません (組み込みのリストは引き続き適用されます)。",
+        "not_visible": "見えない",
+        "private": "プライベート",
+        "public": "公開",
+        "visible": "見える"
+    }
+}

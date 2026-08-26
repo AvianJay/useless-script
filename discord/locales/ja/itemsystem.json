@@ -1,0 +1,82 @@
+{
+    "scope": {
+        "global": "グローバル",
+        "unknown_guild": "不明なサーバー",
+        "dm": "ダイレクトメッセージ"
+    },
+    "btn": {
+        "pick_up": "ピックアップ"
+    },
+    "embed": {
+        "inventory_title": "{user} のアイテム ({scope})",
+        "all_items_title": "利用可能なすべてのアイテム",
+        "custom_items_title": "サーバーカスタムアイテム"
+    },
+    "msg": {
+        "item_used": "使用したアイテム。",
+        "custom_item_desc": "カスタムアイテム。使用時に保存されているテキストを送信します。",
+        "no_items": "{scope} にはアイテムがありません。",
+        "worth": "\n💰 価値: {worth}",
+        "dropped": "{user} は {item} x{amount} をドロップしました!",
+        "dropped_gone": "{user} は {item} x{amount} をドロップしましたが、すぐに消えてしまいました。",
+        "drop_expired": "{user} がドロップされました {item} x{amount}!\n アイテムが消えました!",
+        "drop_all_picked": "{user} がドロップされました {item} x{amount}!\n 全部拾われました!",
+        "picked_up": "{item} を拾いました。",
+        "gave": {
+            "one": "{user} {count} {item} を提供しました。",
+            "other": "{user} {count}x {item} を与えました。"
+        },
+        "received": {
+            "one": "{sender} から {count} {item} を受け取りました!\n-# サーバー: {scope}",
+            "other": "{sender}__ から {count}x {item} を受け取りました!\n-# サーバー: {scope}"
+        },
+        "removed": {
+            "one": "{count} {item} を {user} から削除しました。",
+            "other": "{count}x {item} を {user} から削除しました。"
+        },
+        "no_items_exist": "まだ項目はありません。",
+        "custom_tag": " [カスタム]",
+        "user_no_items": "{user} には {scope} に項目がありません。",
+        "unknown_item": "不明な項目",
+        "custom_added": "✅ カスタム項目 **{name}** を追加しました",
+        "custom_added_hint": "`/itemmod give` を使用してユーザーに送信します。",
+        "listed_in_shop": "🏪 **{price}** {currency} のサーバー ショップに掲載されています。",
+        "revenue_user": "💸 収益分配: {user} | 90%",
+        "custom_removed": "✅ カスタム項目 **{name}** を削除しました。",
+        "custom_updated": "✅ **{name}**: {status} を更新しました。",
+        "status_listed": "**{price}** {currency} のショップに掲載されています",
+        "status_unlisted": "ショップには載っていない",
+        "no_custom_items": "このサーバーにはまだカスタム項目がありません。",
+        "shop_price": "🏪 ショップ価格: **{price}** {currency}",
+        "shop_unlisted": "🏪店頭には掲載しておりません",
+        "content_preview": "プレビュー: {preview}"
+    },
+    "err": {
+        "not_owned": "このアイテムをお持ちではありません。",
+        "invalid_item": "アイテムIDが無効です。",
+        "not_usable": "この商品はご利用いただけません。",
+        "amount_positive": "量は 0 より大きくなければなりません。",
+        "dm_global_only": "❌ DM でグローバル スコープを使用します。",
+        "pickup_duration_range": "エラー: ピックアップ期間は 1 ～ 86400 秒の間である必要があります。",
+        "already_picked": "あなたはすでにこのアイテムを拾っています。\n-# 所有者はそれを単一ピックアップに設定しました。",
+        "all_picked": "全部拾われました！",
+        "give_self": "自分にアイテムを与えることはできません。",
+        "give_bot": "ボットにアイテムを与えることはできません。",
+        "global_mode": "このサーバーではグローバル モードが有効になっています。このコマンドは使用できません。",
+        "item_unavailable": "このアイテムを取得できませんでした。",
+        "remove_bot": "ボットからアイテムを削除することはできません。",
+        "user_not_owned": "{user} にはこのアイテムがありません。",
+        "bot_has_no_items": "ボットにはアイテムがありません。",
+        "name_empty": "項目名を空にすることはできません。",
+        "content_empty": "テキストの内容を空にすることはできません。",
+        "content_too_long": "テキストの内容は 2000 文字を超えることはできません。",
+        "template_syntax": "❌ コンテンツ内の AutoReply テンプレート構文エラー: {error}",
+        "name_too_long": "項目名は 100 文字を超えることはできません。",
+        "price_required": "ショップに出品する際は0以上の価格を設定してください。",
+        "revenue_bot": "収益分配のターゲットをボットにすることはできません。",
+        "revenue_once_only": "収益分配を受けることができるのは、使い捨てのカスタム アイテムのみです。",
+        "revenue_needs_price": "レベニューシェア項目は、最初に価格を付けてリストする必要があります。シェアは価格の90％です。",
+        "custom_not_found": "カスタム項目が見つかりません。",
+        "cannot_reprice": "このコマンドでは価格を変更できません。アイテムを削除して再作成し、価格を再設定します。"
+    }
+}

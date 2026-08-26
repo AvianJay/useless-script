@@ -1,0 +1,231 @@
+{
+    "action_builder": {
+        "usage_value": "上記の文字列を {settings_command} のアクション値、または {setup_command} のアクション パラメーターにコピーします。"
+    },
+    "action_check_title": "動作確認結果",
+    "action_setup_done_title": "アクションが保存されました",
+    "automod_action_type": {
+        "block_member_interactions": "メンバーのやり取りをブロックする",
+        "block_message": "メッセージをブロックする",
+        "send_alert_message": "アラートを送信する",
+        "timeout": "タイムアウトユーザー"
+    },
+    "btn": {
+        "retry_action": "いいえ、もう一度入力しましょう",
+        "save_action": "はい、このアクションを保存します"
+    },
+    "default_action": {
+        "invite_link": "{user} を削除してください。他のサーバーに招待リンクを投稿しないでください。",
+        "scamtrap": "削除 {user} は禁止された最後のアカウントです - ここでは話さないでください!、{user} を禁止します 5 秒 12 時間 [自動禁止] 侵害された可能性のあるアカウント",
+        "spam": "ミュート スパムのために 10 分間自動ミュートします。{user} を削除してください。スパムを送信しないでください。",
+        "uispam": "{user} を削除します。ユーザーがインストールしたアプリのコマンドを乱用しないでください。ユーザー インストール コマンドの乱用を 10 分間ミュートします。"
+    },
+    "default_reason": {
+        "escape_punish": "タイムアウトを回避する",
+        "raid": "レイド検出からの自動禁止"
+    },
+    "detect": {
+        "title": "🛡️ AutoMod ルールがトリガーされました",
+        "unknown_channel": "不明なチャンネル",
+        "unknown_rule": "未知のルール"
+    },
+    "err": {
+        "action_source_invalid": "`action_source` は、ローカル / API / 両方のみを受け入れます。",
+        "allow_current_server_bool": "`allow_current_server` は true / false のみを受け入れます。",
+        "automod_detect_needs_channel": "まず、AutoMod 検出用の通知チャンネルを選択します。",
+        "channel_no_perms": "⚠️ ボットは {channel} のメッセージを表示または送信できません。これを設定する前に権限を調整してください。",
+        "channel_not_found": "⚠️ チャンネルが見つかりません (ID: `{channel_id}`);入力を確認してください。",
+        "channel_not_in_guild": "⚠️ チャンネルが見つかりません (ID: `{channel_id}`);これらのチャンネルがこのサーバーに属していることを確認してください。",
+        "flagged_user_needs_channel": "まず、フラグが立てられたユーザーを検出するための通知チャンネルを選択します。",
+        "invalid_feature": "無効な機能です。",
+        "local_match_mode_invalid": "`local_match_mode` はアクティブ/履歴のみを受け入れます。",
+        "not_enabled": "自動モデレーションはまだ有効になっていません。",
+        "pick_action": "実行するアクションを選択してください。",
+        "scamtrap_needs_channel": "まず詐欺トラップのトラップ チャンネルを選択します。",
+        "unparseable_channels": "⚠️ これらのチャンネルを解析できませんでした: `{channels}`。チャンネルのメンションまたはチャンネル ID をカンマで区切って使用します。"
+    },
+    "feature_desc": {
+        "anti_invite_link": "Discordの招待リンクを検出する",
+        "anti_raid": "大量結合の検出",
+        "anti_spam": "類似メッセージスパム",
+        "anti_uispam": "ユーザーインストールの不正行為",
+        "automod_detect": "ネイティブの Discord AutoMod トリガーを検出する",
+        "escape_punish": "タイムアウト中の退出",
+        "flagged_user": "ローカルおよび API フラグのヒット",
+        "scamtrap": "ハニーポットチャンネル",
+        "too_many_emojis": "過剰な絵文字",
+        "too_many_h1": "マークダウン見出しスパム"
+    },
+    "feature_name": {
+        "anti_invite_link": "招待リンク",
+        "anti_raid": "レイド対策",
+        "anti_spam": "スパム対策",
+        "anti_uispam": "ユーザーがインストールしたアプリの悪用",
+        "automod_detect": "AutoMod 検出",
+        "escape_punish": "処罰回避",
+        "flagged_user": "フラグが設定されたユーザーの参加",
+        "scamtrap": "詐欺の罠",
+        "too_many_emojis": "絵文字が多すぎる",
+        "too_many_h1": "見出しが多すぎます"
+    },
+    "feature_name_emoji": {
+        "anti_invite_link": "🔗 リンクを招待",
+        "anti_raid": "🚨 レイド対策",
+        "anti_spam": "🔁スパム対策",
+        "anti_uispam": "📲 ユーザーがインストールしたアプリの悪用",
+        "automod_detect": "🛡️ AutoMod 検出",
+        "escape_punish": "🏃 懲罰回避",
+        "flagged_user": "🚩 フラグが立てられたユーザーが参加",
+        "scamtrap": "🪤 詐欺の罠",
+        "too_many_emojis": "😂 絵文字が多すぎます",
+        "too_many_h1": "📢 見出しが多すぎます"
+    },
+    "field": {
+        "action": "アクション",
+        "allow_current_server": "このサーバーのリンクを許可する",
+        "channel": "チャンネル",
+        "executed_action": "講じられたアクション",
+        "ignore_channels": "無視されたチャンネル",
+        "log_channel": "通知チャンネル",
+        "matched_content": "一致したコンテンツ",
+        "matched_keyword": "一致したキーワード",
+        "message_content": "メッセージ内容",
+        "rule_name": "ルール名",
+        "trigger_type": "トリガータイプ",
+        "user": "ユーザー"
+    },
+    "flagged": {
+        "action_done": "アクションが実行されました。",
+        "action_failed": "アクションが失敗しました: {error}",
+        "action_not_applicable": "アクションは実行されません: 保存されたアクションはメンバー参加イベントには適用されません。",
+        "action_result": "行動結果",
+        "api_entry": "• {reason} |レポーター: {reporter} ({reporter_id}) | {at}",
+        "api_records": {
+            "one": "ブラックリスト API ({count} レコード)",
+            "other": "ブラックリスト API ({count} レコード)"
+        },
+        "local_entry": "• {guild} | {at} | {kind}",
+        "local_records": {
+            "one": "ローカルデータ ({count} レコード)",
+            "other": "ローカル データ ({count} レコード)"
+        },
+        "no_action_configured": "自動アクションは設定されていません。",
+        "source_mismatch": "アクション ソースは {source} に設定されており、このヒットは一致しないため、何も実行されませんでした。",
+        "title": "🚩 フラグが設定されたユーザーがサーバーに参加しました"
+    },
+    "info": {
+        "action_syntax_body": "アクションはカンマ `,` で最大 5 つまで連結できます。 利用可能なアクション:\n`delete` / `delete_dm` — メッセージを削除します (オプションでwarning)\n`warn` / `warn_dm` — 警告メッセージを送信\n`mute <duration>` — ユーザーをタイムアウト\n`kick` — キックuser\n`ban <duration> <message deletion window>` — ユーザーを禁止\n`send_mod_message` — モデレート通知を送信\n`force_verify <duration>` — Web 認証を強制する (Web 認証を有効にする必要があります)最初)\n{builder} を使用してアクション文字列を生成するか、{check} を使用してプレビューします。",
+        "action_syntax_title": "⚙️ アクション文字列の構文",
+        "desc": "AutoModerate は、管理者がサーバー内の秩序を保つのに役立ついくつかの自動保護を提供します。\n対話型のクイック セットアップには {quick_setup} を使用し (推奨)、1 つの機能のすべてのオプションを一度に構成するには {setup}、機能を有効または無効にするには {toggle} を使用します。 {settings} を使用して個々のパラメーターを調整し、{view} を使用して現在の構成を確認します。",
+        "feature_body": {
+            "anti_invite_link": "Discordの招待リンクを検出します。このサーバーへの招待を許可するかどうかを選択できます。\n設定: `allow_current_server`、`action`、`ignore_channels`",
+            "anti_raid": "大量のユーザーの参加を検出し、ウィンドウに参加した全員にアクションを実行します。\n設定: `max_joins` (デフォルト 5)、`time_window` (秒、デフォルト 60)、`action`",
+            "anti_spam": "短いウィンドウで同一または非常に類似したメッセージを送信するユーザーを検出します。\n設定: `max_messages` (デフォルト 5)、`time_window` (秒、デフォルト 30)、`similarity` (しきい値 0 ～ 100、デフォルト 75)、 `action`、`ignore_channels`",
+            "anti_uispam": "悪用を防ぐために、ユーザーがユーザー インストールを介してコマンドをトリガーする頻度を検出します。\n設定: `max_count` (デフォルト 5)、`time_window` (秒、デフォルト 60)、`action`、`ignore_channels`",
+            "automod_detect": "ネイティブの Discord AutoMod ルールが起動すると、チャンネルに通知が送信され、必要に応じて追加のアクションが実行されます。\n設定：`log_channel`, `action`(オプション)\nフィルター:`filter_rule`(ルール名フィルター、`|`-複数の場合は区切られます)、`filter_action_type`(アクション タイプ フィルター: block/alert/timeout/block_interactions、`|`-分離)",
+            "escape_punish": "タイムアウト中にユーザーがサーバーから離れると、追加の罰則 (禁止など) が自動的に実行されます。\n設定: `punishment`、`duration`",
+            "flagged_user": "過去 3 か月のローカル フラグ レコードをブラックリスト API キャッシュとマージします。参加時に通知し、アクションを実行できます。\n設定: `log_channel`、`action` (オプション)、`action_source` (ローカル/API/両方)、`local_match_mode` (アクティブ/履歴)",
+            "scamtrap": "ハニーポット チャンネルをセットアップします。そこに投稿すると、自動的にアクションが実行されます。\n設定: `channel_id` (チャンネル)、`action` (実行するアクション)",
+            "too_many_emojis": "メッセージ内の絵文字 (カスタムおよび Unicode) と作成者による制限を超えるアクションをカウントします。\n設定：`max_emojis`(デフォルトは10)、`action`, `ignore_channels`",
+            "too_many_h1": "マークダウンの見出しの合計の長さ (`# `スパムを防ぐため、メッセージ内の ) は過剰です。\n設定：`max_length`(デフォルトは20)、`action`, `ignore_channels`"
+        },
+        "feature_heading": "{name} ({key})",
+        "title": "自動モデレーション機能"
+    },
+    "modal": {
+        "custom_action_label": "アクション文字列",
+        "custom_action_ph": "例： 30 分間スパムをミュートします。{user} を削除してください。スパムを送信しないでください。",
+        "custom_action_title": "カスタムアクション"
+    },
+    "msg": {
+        "alert_channel_set": "ユーザー参加通知チャンネルは {channel} になりました。",
+        "setting_set": "自動モデレーション設定「{setting}」は {value} になりました。",
+        "toggled": "自動モデレーション設定「{setting}」は {status} になりました。"
+    },
+    "quick_setup": {
+        "action_ph": "アクション (1 つ選択)",
+        "action_source_ph": "アクションソースを選択してください",
+        "allow_invite_no_desc": "Discord の招待リンクがトリガーされます",
+        "allow_invite_ph": "このサーバーへの招待リンクを許可しますか?",
+        "allow_invite_yes_desc": "他のサーバーへの招待のみをブロックする",
+        "ban_duration_ph": "禁止期間",
+        "days_30": "30日",
+        "days_7": "7日間",
+        "done_desc": "**{feature}** のクイック セットアップが完了し、機能が有効になりました。",
+        "done_title": "✅ セットアップ完了",
+        "feature_ph": "機能を選択してください",
+        "finish_btn": "セットアップを完了する",
+        "ignore_channels_ph": "無視するチャンネルを選択します (複数可)",
+        "log_channel_ph": "通知チャンネルを選択してください",
+        "match_mode_active": "現在フラグが立てられているもののみ",
+        "match_mode_history": "過去 3 か月のすべての記録",
+        "match_mode_ph": "ローカルマッチモードを選択してください",
+        "max_emojis_ph": "絵文字の最大数",
+        "max_h1_length_ph": "見出しの最大長さ",
+        "max_joins_ph": "ウィンドウ内の最大結合数",
+        "max_similar_messages_ph": "類似メッセージの最大数",
+        "max_trigger_count_ph": "ウィンドウ内の最大トリガー数",
+        "more_channels": "... {count} 合計",
+        "punishment_ph": "罰",
+        "seconds_n": {
+            "one": "{count} 秒",
+            "other": "{count} 秒"
+        },
+        "similarity_ph": "類似性のしきい値",
+        "source_api": "APIのみ",
+        "source_both": "ローカルとAPI",
+        "source_local": "ローカルのみ",
+        "step1_desc": "設定したい機能を選択してください:",
+        "step2_desc": "**{feature}**\n以下のオプションを入力し、[セットアップを完了] をクリックします。",
+        "time_window_ph": "検出ウィンドウ (秒)",
+        "title": "⚡ 自動モデレーションのクイックセットアップ",
+        "trap_channel_ph": "トラップチャンネルを選択してください"
+    },
+    "records_omitted": {
+        "one": "…{count} 件以上のレコードが表示されません。",
+        "other": "…{count} 件以上のレコードが表示されていません。"
+    },
+    "scan": {
+        "api_cache": "API キャッシュ: {status}",
+        "api_last_sync": "最後に成功した同期 {at}",
+        "api_line": " - [API] {reason};レポーター: {reporter} ({reporter_id});時間: {at}",
+        "api_never_synced": "正常に同期されなかった",
+        "api_no_result": "同期結果はまだありません",
+        "api_ok": "わかりました",
+        "api_status": "最新の API ステータス: {status}",
+        "flag_active": "現在フラグが立てられている",
+        "flag_history": "歴史的記録",
+        "local_data": "ローカルデータ: {status}",
+        "local_line": " - [local/{kind}] {guild}、フラグ付き: {at}",
+        "local_ok": "過去 3 か月が適用されました / {mode}",
+        "local_read_failed": "読み取りに失敗しました ({error})",
+        "matches_found": {
+            "one": "スキャンが完了しました。 {count} フラグが設定されたユーザーが見つかりました。",
+            "other": "スキャンが完了しました。 {count} フラグが立てられたユーザーが見つかりました。"
+        },
+        "no_matches": "スキャンが完了しました。フラグが設定されたユーザーは見つかりませんでした。",
+        "user_line": "ユーザー: {user} (ID: {user_id})"
+    },
+    "settings_title": "自動モデレーション設定",
+    "suggest": {
+        "clear": "通知のみ（アクションをクリア）",
+        "custom": "カスタム..."
+    },
+    "trigger_type": {
+        "harmful_link": "有害なリンク",
+        "keyword": "キーワード",
+        "keyword_preset": "プリセットキーワード",
+        "member_profile": "メンバープロフィール",
+        "mention_spam": "スパムについて言及する",
+        "spam": "スパムの疑いのあるもの"
+    },
+    "unknown_guild": "不明なサーバー",
+    "unknown_user": "不明なユーザー",
+    "warn": {
+        "anti_invite_no_action": "注: 招待リンクの検出は有効になっていますが、アクションは設定されていません。 {command} を使用して `anti_invite_link-action` を設定します。",
+        "automod_detect_no_channel": "注: AutoMod 検出は有効になっていますが、通知チャンネルが設定されていません。 {command} を使用して `automod_detect-log_channel` を設定します。",
+        "flagged_user_no_channel": "注: フラグが設定されたユーザーの検出は有効になっていますが、通知チャンネルは設定されていません。 {command} を使用して `flagged_user-log_channel` を設定します。",
+        "scamtrap_no_action": "注: 詐欺トラップは有効になっていますが、アクションは設定されていません。 {command} を使用してアクションを設定します。",
+        "scamtrap_no_channel": "注: 詐欺トラップは有効になっていますが、チャンネル ID が設定されていません。 {command} を使用してチャンネル ID を設定します。"
+    }
+}

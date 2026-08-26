@@ -1,0 +1,151 @@
+{
+    "embed": {
+        "current_track_title": "🎵 現在プレイ中",
+        "left_voice_channel_title": "👋 音声チャンネルを退出しました",
+        "node_health": "\nヘルススコア: {health}%",
+        "node_latency": "\nレイテンシ: {ping}",
+        "node_usage": "\n{playing}/{connected}/{total} サーバーは現在このノードを使用しています",
+        "nodes_title": "🔧 Lavalinkノードのステータス",
+        "playlist_added_title": "📋 プレイリストが追加されました",
+        "queue_now_playing_line": "**現在プレイ中:**\n[{title}]({uri})",
+        "queue_title": "📋 再生キュー",
+        "recommend_added_title": "🎯 おすすめ曲を追加しました",
+        "recommend_desc": "**{title}**:\n\n{track_list} に基づいて推奨されます",
+        "shutdown_desc": "ボットがシャットダウンまたは再起動中です。",
+        "shutdown_desc_restore_hint": "\n起動後に元の音声チャンネルに自動的に再参加し、再生が復元されます。",
+        "shutdown_title": "🔴 ボットが音声チャンネルを離れようとしています",
+        "track_added_title": "✅ キューに追加されました",
+        "track_skipped_title": "⏭️スキップ",
+        "track_started_title": "🎵 プレイ中"
+    },
+    "err": {
+        "all_saved_tracks_failed": {
+            "one": "❌ 保存されたすべてのトラックのロードに失敗しました。保存された状態は、後で再試行できるように保持されていました。 ({failed} は失敗しました)",
+            "other": "❌ 保存されたすべてのトラックのロードに失敗しました。保存された状態は、後で再試行できるように保持されていました。 ({failed} は失敗しました)"
+        },
+        "already_paused": "❌ 音楽はすでに一時停止されています",
+        "available_radio_stations": "❌ 利用可能なステーション: `listen.moe`、`r-a-d.io`",
+        "clear_played_state_failed": "保存済みの完了状態をクリアできませんでした",
+        "clear_restored_state_failed": "復元された保存状態をクリアできませんでした",
+        "connect_failed": "❌ 音声チャンネルに接続できませんでした: {error}",
+        "invalid_loop_mode": "❌ ループ モードが無効です。`off`、`track`、または `queue` を使用してください。",
+        "invalid_query": "❌ 有効なトラック名または URL を入力してください",
+        "join_voice": "❌ このコマンドを使用するには、音声チャンネルに参加する必要があります",
+        "join_voice_to_play": "❌ 音楽を再生するには音声チャンネルに参加する必要があります",
+        "join_voice_to_radio": "❌ ラジオを再生するには音声チャンネルに参加する必要があります",
+        "missing_voice_permissions": "音声チャンネル権限がありません: {missing}",
+        "no_bot_member_data": "このサーバーのボットのメンバー データを取得できませんでした",
+        "no_lavalink_node": "❌ 現在利用可能な Lavalink ノードはありません。保存された状態が保持されました: {error}",
+        "no_paused_player": "❌ 音楽は一時停止されていません",
+        "no_player": "❌ 現在、音楽は再生されていません",
+        "no_results": "❌ '{query}' の結果が見つかりませんでした",
+        "no_saved_state": "❌ 復元できる保存された再生状態はありません。",
+        "no_similar_recommendations": "❌ 同様の推奨事項は見つかりませんでした",
+        "not_paused": "❌ 音楽は一時停止されません",
+        "pause_failed": "❌ 一時停止に失敗しました: {error}",
+        "play_failed": "❌ 再生に失敗しました: {error}",
+        "queue_empty": "❌ キューは空です",
+        "radio_mode_active": "現在、{station} 無線モードを使用しています。トラックを追加したり、キューを変更したりすることはできません。まず再生を停止してください。",
+        "radio_no_loop": "❌ {station} 無線モードではループ モードを設定できません。",
+        "radio_no_skip": "❌ {station} ラジオ モードではトラックをスキップできません。",
+        "radio_stream_load_failed": "{station} ストリームのロードに失敗しました",
+        "radio_switch_failed": "❌ {station} への切り替えに失敗しました: {error}",
+        "recommend_failed": "❌ トラックを推奨できませんでした: {error}",
+        "restore_already_connected": "⚠️ ボットはすでに別の音声セッションに接続されています。保存された状態が保持されました。",
+        "restore_failed": "⚠️ 音楽の自動復元に失敗しました: {error}。保存された状態は保持されました。",
+        "restore_manual_failed": "⚠️ 再生状態の復元に失敗しました。保存されたデータは保持されました: {error}",
+        "restore_preload_failed": "⚠️ 保存された音楽をプリロードできませんでした: {error}。保存された状態は保持されました。",
+        "restore_unsupported_mode_raw": "サポートされていない再生モード: {mode}",
+        "restore_voice_channel_gone": "⚠️ 保存された音声チャンネルはもう存在しません。保存された状態は、後で再試行できるように保持されていました。",
+        "restore_voice_permission": "⚠️ 音楽を自動復元できませんでした: {reason}。保存された状態は保持されました。",
+        "resume_failed": "❌ 再開に失敗しました: {error}",
+        "resume_no_player": "❌ 音楽が再生されていません - トラック名または URL を入力してください",
+        "resume_not_paused": "❌ 音楽は一時停止されていません — トラック名または URL を指定して新しいトラックを追加します",
+        "same_voice_channel": "❌ このコマンドを使用するには、ボットと同じ音声チャンネルにいる必要があります",
+        "saved_radio_gone": "❌ 保存されたラジオ局はもう存在しないため、復元できません。",
+        "saved_radio_missing": "保存したラジオ局は存在しません",
+        "saved_state_no_tracks": "保存された再生状態にはトラックがありません",
+        "saved_track_decode_failed": "エンコードされたトラックのデコードに失敗し、使用可能な URI がありません",
+        "saved_track_load_failed_both": "エンコードされたトラックと URI の両方をロードできませんでした: {uri}",
+        "saved_track_missing_data": "保存されたトラックにはエンコードされたトラックと URI の両方がありません",
+        "search_play_failed": "❌ 検索と再生に失敗しました: {error}",
+        "shuffle_failed": "❌ キューのシャッフルに失敗しました: {error}",
+        "skip_failed": "❌ スキップできませんでした: {error}",
+        "stage_needs_mute_permission": "ステージチャンネルが自動的にスピーカーになるには、mute_members 権限が必要です",
+        "stop_before_restore_radio": "❌ 保存されたラジオを復元する前に、現在の再生セッションを停止してください。",
+        "stop_failed": "❌ 停止に失敗しました: {error}",
+        "unsupported_radio_station": "❌ サポートされていないラジオ局です。",
+        "unsupported_saved_mode": "❌ サポートされていない保存済み再生モード: {mode}",
+        "voice_channel_full": "音声チャンネルがいっぱいで、ボットにはユーザー制限をバイパスする権限がありません",
+        "voice_restore_failed": "❌ この音声チャンネルでは再生を復元できません: {reason}",
+        "voice_type_unsupported": "保存された音声チャンネル タイプは自動復元をサポートしていません",
+        "volume_failed": "❌ ボリュームの設定に失敗しました: {error}",
+        "volume_range": "❌ 音量は 0 ～ 100 の間で指定する必要があります"
+    },
+    "field": {
+        "added_count": "追加されました",
+        "artist": "アーティスト",
+        "duration": "期間",
+        "listener_count": "リスナー数",
+        "loop_mode": "ループモード",
+        "more_tracks": "さらに多くのトラック",
+        "progress": "進捗状況",
+        "queue_position": "キューの位置",
+        "queue_total_duration": "キューの合計時間",
+        "total_duration": "合計期間",
+        "track_count": "トラック数",
+        "upcoming_tracks": {
+            "one": "今後のトラック ({count})",
+            "other": "今後のトラック ({count})"
+        },
+        "volume": "ボリューム"
+    },
+    "footer": {
+        "queue_count": {
+            "one": "{count} キュー内のトラック",
+            "other": "{count} キュー内のトラック"
+        }
+    },
+    "msg": {
+        "left_voice_no_members": "他のメンバーは 5 分間音声チャンネルに参加していません。ボットは去りました",
+        "left_voice_queue_empty": "もう再生するトラックはありません。ボットが音声チャンネルを離れました",
+        "next_track_failed_warning": "⚠️ 次のトラックの再生に失敗しました: {error}",
+        "paused": "⏸️ 音楽が一時停止されました",
+        "queue_shuffled": "🔀 キューがシャッフルされました",
+        "radio_switching": "📻 {station} 無線モードに切り替えて、ステーション データを待機しています...",
+        "recommend_added_play_warning": "⚠️ 推奨トラックが追加されましたが、再生に失敗しました: {error}",
+        "restore_auto_done": "✅ シャットダウン前の再生状態を自動的に復元します。",
+        "restore_failed_count_suffix": {
+            "one": " ({failed} のロードに失敗しました)",
+            "other": " ({failed} のロードに失敗しました)"
+        },
+        "restore_played_out": "✅ 保存されたトラックはすでに再生を終了しています。保存された状態がクリアされました。",
+        "restore_radio_done": "✅ {station} ラジオの再生を復元しました。",
+        "restore_tracks_done": {
+            "one": "✅ {count} トラックを復元しました。",
+            "other": "✅ {count} トラックを復元しました。"
+        },
+        "resumed": "▶️音楽再開",
+        "stopped": "⏹️ 再生が停止され、接続が切断されました",
+        "track_added_play_warning": "⚠️ トラックはキューに追加されましたが、再生に失敗しました: {error}",
+        "volume_set": "🔊 ボリュームを {level}% に設定"
+    },
+    "value": {
+        "fetching_radio_info": "ステーション情報を取得中...",
+        "loop_off": "▶️ ループオフ",
+        "loop_off_short": "▶️オフ",
+        "loop_queue": "🔁 キューループ",
+        "loop_track": "🔂 トラックループ",
+        "more_tracks_count": {
+            "one": "{count} トラックをさらに増やす",
+            "other": "{count} トラック以上"
+        },
+        "node_connected": "✅ 接続済み",
+        "node_current_marker": " ⬅️ ここにいます",
+        "node_disconnected": "❌ 切断されました",
+        "track_count": {
+            "one": "{count} トラック",
+            "other": "{count} トラック"
+        }
+    }
+}

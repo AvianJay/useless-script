@@ -1,0 +1,272 @@
+{
+    "abuse": {
+        "light": "🟡 軽い介入",
+        "moderate": "🟠 適度な介入",
+        "normal": "🟢 通常",
+        "severe": "🔴 重度の虐待"
+    },
+    "adminitems": {
+        "desc": "これらのアイテムは管理者によって直接付与されており、次の制限があります。",
+        "limits_body": "• 販売すると厳しいインフレペナルティが発生します\n• グローバルショップに販売することはできません\n• 小切手を現金化することはできません\n• 取引により管理者フラグが転送されます",
+        "limits_title": "🚫制限事項",
+        "none": "✅ 管理者が許可したアイテムがありません。",
+        "title": "⚠️ 管理者が許可したアイテム",
+        "value_line": "価値: {worth} x {count} = {total}"
+    },
+    "btn": {
+        "accept_trade": "取引を受け入れる",
+        "confirm_global": "グローバルへの切り替えを確認する",
+        "global_shop": "グローバルショップ",
+        "reject_trade": "取引を拒否する",
+        "server_shop": "サーバーショップ"
+    },
+    "check": {
+        "admin_item": "❌ この小切手は管理者によって付与されたものであるため、現金化することはできません。\n経済的悪用を防ぐため、管理者が付与したアイテムは通貨に変換できません。",
+        "cashed": "小切手を現金化し、**{amount}** {currency} を受け取りました。",
+        "invalid": "❌ 小切手または経済データが無効です。何も現金化されませんでした。",
+        "not_owned": "あなたはこの小切手を持っていません。"
+    },
+    "currency": {
+        "global": "グローバルコイン"
+    },
+    "err": {
+        "amount_positive": "❌ 金額は 0 より大きくなければなりません。",
+        "currency_insufficient": "❌ {currency} 残高が不足しています。",
+        "currency_name_too_long": "❌ 通貨名は 20 文字を超えることはできません。",
+        "data_changed": "為替レートまたは経済データが決済前に変更されました。もう一度試してください。",
+        "exchange_invalid": "❌ 為替金額または経済データが無効です。取引はキャンセルされました。",
+        "guild_with_bot_only": "❌ このコマンドは、**このボットを招待したサーバー** でのみ機能します。",
+        "initiator_only": "このスイッチを確認できるのはコマンドを実行した人だけです。",
+        "insufficient_balance": "❌ バランスが不十分です。 **{needed}** {currency} が必要ですが、**{available}** しかありません。",
+        "insufficient_with_fee": "❌ バランスが不十分です。 **{needed}** {currency} ({fee_percent}% の手数料を含む) が必要ですが、**{available}** しかありません。",
+        "invalid_amount": "❌ 有効な金額を入力してください。",
+        "invalid_currency": "❌ 通貨の種類が無効です。",
+        "invalid_direction": "❌ 交換方向が無効です。",
+        "invalid_item": "❌ 無効な項目です。",
+        "invalid_item_id": "❌ アイテム ID が無効です。",
+        "invalid_offer_item": "❌ 提供されたアイテムが無効です。",
+        "invalid_request_item": "❌ 要求されたアイテムが無効です。",
+        "invalid_shop_type": "❌ ショップタイプが無効です。",
+        "pay_bot": "❌ ボットへの転送はできません。",
+        "pay_invalid": "❌ 金額またはアカウントデータが無効です。転送はキャンセルされました。",
+        "pay_self": "❌ 自分への転送はできません。",
+        "purchase_invalid": "❌ 金額または商品価格が無効です。購入はキャンセルされました。",
+        "reward_data_invalid": "❌ 経済データの異常。報酬は与えられなかった。",
+        "sell_insufficient": "❌ 販売可能なアイテムが不足しています。",
+        "sell_invalid": "❌ 金額または商品価格が無効です。販売は中止されました。",
+        "sell_not_enough": "❌ 販売できるのは **{count}** {item} のみです。\n-# 管理者が許可したアイテムは販売できません",
+        "source_insufficient": "❌ {source} 残高が不足しています。",
+        "trade_bot": "❌ ボットと取引することはできません。",
+        "trade_bounds": "❌ 金額は有限であり、アイテム数は少なくとも 1 である必要があります。",
+        "trade_data_invalid": "❌ 取引データが無効です。資産は変更されませんでした。",
+        "trade_empty": "❌ 少なくとも 1 つのことを提案または要求する必要があります。",
+        "trade_failed_insufficient": "❌ 貿易は失敗しました。一方の側には受け入れ時の残高またはアイテムが不足していました。",
+        "trade_not_enough": "❌ {count} {item} しかありません。",
+        "trade_parties_only": "❌キャンセルできるのは取引参加者のみです。",
+        "trade_self": "❌ 自分自身と取引することはできません。",
+        "trade_target_only": "❌お取引対象者のみお受けできます。"
+    },
+    "exchange": {
+        "success_title": "💱交換完了"
+    },
+    "field": {
+        "admin_injected": "🔧 管理者の注射",
+        "amount": "金額",
+        "currency_name": "💵 通貨名",
+        "current_balance": "📊 現在の残高",
+        "daily_reward": "📅 毎日の報酬",
+        "fee": "料金",
+        "health": "📈 経済的健全性",
+        "rate": "📊 為替レート",
+        "rate_emoji": "💱為替レート",
+        "rate_factors": "ℹ️ レートを動かすもの",
+        "rate_plain": "為替レート",
+        "received": "受け取りました",
+        "recipient": "受信者",
+        "sell_ratio": "🏪 売り比率",
+        "spent": "費やした",
+        "total_assets": "💎 総資産 (世界通貨)",
+        "total_income": "総収入",
+        "total_price": "合計",
+        "total_supply": "💰 貨幣総供給量",
+        "total_value": "📊 合計値",
+        "tx_count": "📊 トランザクション",
+        "tx_count_plain": "取引",
+        "unit_price": "単価"
+    },
+    "flow": {
+        "blacklist_appeal": "異議を申し立てるには、ボット管理者に連絡してください。",
+        "blacklist_appeal_link": "異議を申し立てるには、サポート サーバーでチケットを開きます: {invite}",
+        "blacklist_reason": "> 理由: {reason}",
+        "blacklist_title": "## このサーバーでは通貨フローが強制的に無効になりました",
+        "disabled": "❌ このサーバーはサーバーと世界通貨間のフローを無効にしています。",
+        "member_req_appeal": "例外をリクエストするには、ボット所有者に連絡して確認してください。",
+        "member_req_appeal_link": "例外をリクエストするには、[サポート サーバー]({invite}) でチケットを開き、ボット所有者が確認できるようにします。",
+        "member_req_line": "> 少なくとも **{required} 人のメンバー ** が必要です。 **{current}** が検出されました。",
+        "member_req_reason": "小規模サーバーが為替や大規模なグローバル モード変換を通じて世界経済に影響を与えるのを防ぐため、ここではグローバル通貨フローを有効にしたり使用したりすることはできません。",
+        "member_req_title": "## このサーバーはグローバル通貨フローの対象ではありません",
+        "off": "🔒 無効",
+        "off_desc": "取引所、グローバルショップ、小切手換金はご利用いただけません。",
+        "on": "🔓有効",
+        "on_desc": "ユーザーは取引所、グローバルショップ、小切手換金を利用できます。",
+        "toggled": "✅ グローバル通貨フローを **{status}** に設定"
+    },
+    "globalmode": {
+        "affected_users": "影響を受けるユーザー",
+        "already": "このサーバーはすでにグローバル モードになっています。",
+        "already_mode": "すでに {status} にあります。",
+        "cancelled": "グローバルモードスイッチがキャンセルされました。",
+        "disabled": "グローバルモードが無効になっています。このサーバーは、サーバー スコープのエコノミー、アイテム、および dsize を再度使用します。",
+        "global_added": "世界通貨に追加",
+        "item_value": "アイテムの値が変換されました",
+        "mode_global": "グローバルモード",
+        "mode_server": "サーバーモード",
+        "no_undo": "自動的に元に戻すことはできません",
+        "no_undo_body": "False に戻すと、今後のルックアップのみが復元されます。移行されたデータは元に戻りません",
+        "rate_line": "1 サーバーコイン = {rate} {global_currency}",
+        "server_balance": "サーバーバランスが変換されました",
+        "sold_items": "販売アイテム",
+        "switched_desc": "このサーバー上のエコノミー、アイテム、および dsize スコープは常にグローバルになります。",
+        "switched_title": "グローバルモードに切り替えました",
+        "warning_desc": "これにより、このサーバー上のすべての経済、アイテム、および dsize ギルド検索がグローバルとして扱われるようになります。\nすべてのユーザーのサーバー アイテムはサーバー通貨で販売され、現在のレートでグローバル通貨に変換されます。",
+        "warning_title": "警告: グローバル モードに切り替えようとしています",
+        "what_happens": "何が起こるでしょうか",
+        "what_happens_body": "サーバーアイテムがクリアされ、サーバー通貨がクリアされ、グローバル通貨に変換されます"
+    },
+    "health": {
+        "collapsed": "💀 経済崩壊",
+        "healthy": "🟢 健康",
+        "inflating": "🟠 膨張中",
+        "normal": "🟡 通常",
+        "severe_inflation": "🔴 深刻なインフレ",
+        "very_healthy": "🟢 非常に健全 (通貨高)"
+    },
+    "history": {
+        "empty": "📜 {scope} にはトランザクションがありません。",
+        "footer": "ページ {page}/{total} · {count} レコード合計",
+        "title": "📜 {user} のトランザクション ({scope})"
+    },
+    "info": {
+        "rate_factors_body": "**📉 インフレ (評価低下) 要因:**\n• `/itemmod give`\n• 日次/時間ごとの報酬鋳造通貨\n• アイテムをショップに販売する (新しい通貨が入る)流通)\n\n**📈 デフレ (感謝) 要因:**\n• ショップからのアイテムの購入 (通貨が燃焼)\n• プレイヤー間の取引 (手数料が燃焼)通貨)\n• 通貨両替 (通貨を燃やす手数料)",
+        "title": "📊 {guild} 経済レポート"
+    },
+    "item": {
+        "cheque_100": {
+            "desc": "100 枚相当の小切手。他のユーザーへの支払いに使用できます。",
+            "name": "100小切手"
+        },
+        "cheque_1000": {
+            "desc": "他のユーザーへの支払いに使用できる 1000 相当の小切手。",
+            "name": "1000 小切手"
+        },
+        "cheque_500": {
+            "desc": "他のユーザーへの支払いに使用できる 500 相当の小切手。",
+            "name": "500小切手"
+        }
+    },
+    "leaderboard": {
+        "empty": "まだ残高を持っているユーザーはいません。",
+        "title": "🏆 {currency} リーダーボード",
+        "total_title": "🏆総資産ランキング"
+    },
+    "mod": {
+        "abuse_level": "⚠️ 管理者の介入レベル",
+        "actual_supply": "実際の供給量",
+        "admin_injected": "管理者のインジェクション (通貨)",
+        "admin_item_value": "管理項目の値",
+        "global_flow": "世界の通貨の流れ",
+        "global_mode": "グローバルモード",
+        "global_off": "🏦 無効",
+        "global_on": "🌐 有効",
+        "hint_body": "• 管理者が付与したアイテム/お金は追跡されます\n• 管理者アイテムの販売は深刻なインフレを引き起こす\n• 管理者アイテムは世界通貨に換金できません\n• 直接付与よりもイベント システムを優先します",
+        "hint_title": "💡ヒント",
+        "supply_diff": "⚠️供給の不一致",
+        "supply_diff_value": "{diff} (通常は 0 である必要があります)",
+        "title": "🔧 {guild} 経済管理パネル",
+        "tracked_supply": "追跡された供給",
+        "user_count": "ユーザー"
+    },
+    "msg": {
+        "currency_name_set": "✅ 通貨名が **{name}** に変更されました。",
+        "no_description": "説明なし",
+        "not_provided": "提供されません",
+        "unknown_tx": "不明",
+        "user_fallback": "ユーザー {user_id}"
+    },
+    "pay": {
+        "footer": "{user} によって転送が開始されました",
+        "received_dm": "**{sender}** から **{amount}** {currency} を受け取りました。",
+        "received_scope_global": "世界経済",
+        "received_scope_guild": "サーバー: {guild}",
+        "success_title": "転送完了"
+    },
+    "reward": {
+        "daily_claimed": "⏰ あなたはすでに毎日の報酬を受け取りました! {time} 戻ってきてください。",
+        "daily_title": "📅 毎日の報酬 ({scope})",
+        "earned_desc": "**{amount}** {currency} を獲得しました!",
+        "hourly_claimed": "⏰ 時間単位の報酬はすでに獲得しています! {time} 戻ってきてください。",
+        "hourly_title": "⏱️ 時間ごとの報酬 ({scope})",
+        "streak_bonus": "🔥 連続ログインボーナス",
+        "streak_footer": "連続ログイン数: {streak} 日",
+        "streak_value": "+{bonus} {currency} ({streak} 日連続)",
+        "support_bonus": "🎁 サポートサーバーボーナス",
+        "support_hint": "-# ヒント: [サポート サーバー]({invite}) に参加してボーナスを獲得しましょう!"
+    },
+    "scope": {
+        "global": "グローバル",
+        "global_inventory": "世界的な在庫",
+        "server": "サーバー",
+        "server_inventory": "サーバーインベントリ"
+    },
+    "sell": {
+        "footer": "販売価格は購入価格の {ratio}% です (購入場所: {buy_price})",
+        "success_desc": "**{item}** x{amount} を販売しました。",
+        "success_title": "💰 販売済み"
+    },
+    "shop": {
+        "amount_label": "金額",
+        "amount_ph": "購入する個数を入力してください...",
+        "buy_footer": "残高: {remaining} {currency} | {dest} にアイテムが配置されました",
+        "buy_modal_title": "{item} を購入する",
+        "buy_success_desc": "**{item}** x{amount} を購入しました。",
+        "buy_success_title": "🛒 購入完了 ({scope})",
+        "buy_title": "🛒 {item} を購入する",
+        "current_rate": "現在のレート: 1 {currency} = {rate} {global_currency}",
+        "empty": "🏪 現在、ショップには商品がありません。",
+        "flow_off": "🔒 グローバル通貨の流れ: 無効",
+        "flow_on": "🔓 グローバル通貨の流れ: 有効",
+        "global_price": "🌐 グローバル ショップ: **{price}** {currency}",
+        "global_price_line": "**{price}** {currency}\nアイテムはグローバル在庫に移動します",
+        "global_shop": "🌐 グローバルショップ",
+        "global_shop_hint": "🌐 グローバル ショップ = {currency} で支払い、商品はグローバル在庫に送られます",
+        "global_title": "🏪 グローバルショップ",
+        "global_title_plain": "グローバルショップ",
+        "item_choice": "{item} x{count} - 💰{price} それぞれ",
+        "pick_item_ph": "購入する商品を選択してください...",
+        "price": "💰 価格: **{price}** {currency}",
+        "sell_price": "💰 販売価格: **{price}** {currency}",
+        "sell_ratio_footer": "売値は買値の{ratio}%です",
+        "server_price": "🏦 サーバーショップ: **{price}** {currency}",
+        "server_price_line": "**{price}** {currency}\nアイテムがサーバー インベントリに追加されます",
+        "server_shop": "🏦サーバーショップ",
+        "server_shop_hint": "🏦 サーバー ショップ = {currency} で支払い、アイテムはサーバー インベントリに送られます",
+        "title": "🏪ショップ"
+    },
+    "trade": {
+        "already_done": "ℹ️ この取引は既に処理されています。",
+        "cancelled_by": "❌ 取引は {who} までにキャンセルされました。",
+        "completed": "✅取引完了！",
+        "initiator": "イニシエーター",
+        "offers": "📤 {user} オファー",
+        "other_party": "相手",
+        "request_desc": "{initiator} は {target} との取引を希望しています",
+        "request_title": "🤝 取引リクエスト",
+        "requests": "📥 {user} リクエスト",
+        "timeout": "⏰ 取引がタイムアウトになりました。"
+    },
+    "wallet": {
+        "global_footer": "グローバルユーザーウォレット",
+        "global_title": "💰 {user} のグローバルウォレット",
+        "title": "💰 {user} のウォレット"
+    }
+}

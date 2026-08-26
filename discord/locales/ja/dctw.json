@@ -1,0 +1,148 @@
+{
+    "btn": {
+        "apply_template": "テンプレートを適用する",
+        "back_to_list": "リストに戻る",
+        "bump": "バンプ",
+        "dctw_page": "DCTWページ",
+        "invite_bot": "招待ボット",
+        "join_server": "サーバーに参加する",
+        "official_website": "公式ウェブサイト",
+        "support_server": "サポートサーバー",
+        "view_comments": "コメントを見る",
+        "vote": "投票する"
+    },
+    "embed": {
+        "browse_title": "## DCTW {resource_title} ブラウザ",
+        "help": {
+            "field1_name": "1. DCTW Webサイトにログインします。",
+            "field1_value": "[dctw.xyz](https://dctw.xyz) に移動し、右上のログイン ボタンをクリックして Discord にログインします。",
+            "field2_name": "2. ダッシュボードに入る",
+            "field2_value": "ログイン後、「アカウント管理」をクリックしてダッシュボードに入ります。",
+            "field3_name": "3. API キーをコピーします。",
+            "field3_value": "プロフィールの近くにある [API KEY をコピー] ボタンを見つけます。それをクリックすると、キーがクリップボードにコピーされます。",
+            "field4_name": "4. APIキーを設定する",
+            "field4_value": "API キーをコピーした後、`/dctw key set <your API key>` コマンドを使用してこのボットに設定します。"
+        },
+        "help_footer": "API キーは誰とも共有しないでください。悪用される可能性があります。\n公式ドキュメント: https://dctw.xyz/docs/?tags=api",
+        "help_title": "DCTW APIキーの取得方法"
+    },
+    "err": {
+        "action_failed": "アクションが失敗しました: {error}",
+        "api_key_required": "この検索には API キーが必要です。最初に /dctw key set を使用してキーを設定してください。",
+        "empty_search_query": "検索キーワードを入力してください。",
+        "invalid_bot_target": "ボット ID またはメンション (例: <@123...>) を入力してください。",
+        "invalid_server_target": "サーバーID(数字)を入力してください。",
+        "invalid_template_target": "テンプレートID(数字)を入力してください。",
+        "item_not_found": "選択された項目は存在しません。",
+        "no_bumpable_resources": "現在、バンプするリソースがありません。{error_part}",
+        "no_key_set": "現在キーセットがありません。",
+        "no_search_results": "`{query}` に一致する結果は見つかりませんでした。",
+        "no_selectable_data": "現在、表示できるデータはありません。",
+        "not_your_browse_list": "これはあなたの閲覧リストではありません。",
+        "not_your_detail_page": "ここはあなたの詳細ページではありません。",
+        "personal_key_required": "個人用 API キーをまだ設定していません。最初に /dctw キー セットを使用してください。",
+        "search_failed": "ルックアップが失敗しました: {error}",
+        "unsupported_sort": "サポートされていない並べ替えモード"
+    },
+    "heading": {
+        "admins": "管理者",
+        "developers": "開発者",
+        "intro": "説明",
+        "introduce": "について",
+        "server_features": "サーバーの機能",
+        "social_links": "ソーシャルリンク"
+    },
+    "msg": {
+        "action_done": "✅ {resource}:{id} で {action} を実行しました。",
+        "bump_in_progress": "ぶつかっています、お待ちください...\n{minutes} 分ほどかかります。",
+        "bump_summary": "✅ バンプ完了: {success}/{total}",
+        "cache_stats": "DCTW キャッシュ統計\n- TTL: {ttl}s\n- キャッシュされたエントリ: {cached_items}\n- ヒット: {hits}\n- ミス: {misses}\n- ヒット率: {hit_rate}%",
+        "key_cleared": "✅ DCTW API キーはクリアされました。",
+        "key_saved": "✅ DCTW API キーが保存されました。"
+    },
+    "resource_title": {
+        "bots": "ボット",
+        "servers": "サーバー",
+        "templates": "テンプレート"
+    },
+    "select": {
+        "no_items": "利用可能なアイテムはありません",
+        "pick_item_ph": "項目を選択して詳細を表示します"
+    },
+    "sort": {
+        "bumped": "ぶつかった",
+        "members": "メンバー",
+        "newest": "最新の",
+        "servers": "サーバー",
+        "votes": "投票"
+    },
+    "tag": {
+        "bot": {
+            "automation": "自動化",
+            "customizable": "カスタマイズ可能",
+            "fun": "楽しい",
+            "management": "管理",
+            "minigames": "ミニゲーム",
+            "music": "音楽",
+            "roleplay": "ロールプレイ",
+            "utility": "ユーティリティ"
+        },
+        "server": {
+            "acting": "演技",
+            "anime": "アニメ",
+            "art": "アート",
+            "community": "コミュニティ",
+            "gaming": "ゲーム",
+            "hangout": "ハングアウト",
+            "politics": "政治",
+            "programming": "プログラミング",
+            "roleplay": "ロールプレイ"
+        },
+        "template": {
+            "anime": "大",
+            "art": "楽しい",
+            "community": "サポート",
+            "gaming": "ゲーム"
+        }
+    },
+    "value": {
+        "bump_failed_header": "バンプの失敗:",
+        "bumped_at_line": "衝突先: {bumped_at}",
+        "created_at_line": "作成場所: {created_at}",
+        "current_key_line": "現在のキー: {masked}",
+        "extra_members": " |メンバー: {count}",
+        "extra_servers": " |サーバー: {count}",
+        "fetch_error_suffix": "\nエラー: {errors}",
+        "gallery_image": "{name} 画像",
+        "gallery_image_indexed": "{name} 画像 {index}",
+        "keywords_line": "キーワード: {keywords}",
+        "list_item_line": "{index}。 {name} (ID: {id}) |投票: {votes}{extra}",
+        "members_line": "メンバー: {count}",
+        "no_comments": "コメントはまだありません。",
+        "no_content": "(内容はありません)",
+        "no_data": "現在データがありません。",
+        "no_description": "説明なし",
+        "no_name": "(名前なし)",
+        "official_verified_line": "正式に検証済み: {status}",
+        "online_members_line": "オンライン会員: {count}",
+        "owned_fetch_errors_header": "所有リソースの取得エラー:",
+        "page_label": "ページ: {page}/{total}",
+        "prefix_line": "プレフィックス: {prefix}",
+        "resource_category_line": "リソースタイプ: {resources}",
+        "resource_id_line": "{resource_title} ID: `{id}`",
+        "search_label": "検索: `{query}`",
+        "servers_line": "サーバー: {count}",
+        "sort_label": "並べ替え: `{sort}`",
+        "tags_line": "タグ: {tags}",
+        "total_label": "合計: {count}",
+        "truncated_note": {
+            "one": "-# 最初の {limit} エントリを使用して並べ替えられます",
+            "other": "-# 最初の {limit} エントリを使用して並べ替えられます"
+        },
+        "unknown": "不明",
+        "verified_no": "未検証",
+        "verified_status_line": "検証ステータス: {status}",
+        "verified_yes": "確認済み",
+        "votes_line": "投票: {votes}"
+    }
+}

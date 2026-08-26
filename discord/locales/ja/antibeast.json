@@ -1,0 +1,111 @@
+{
+    "about": {
+        "automod_body": "有効にすると、全員/ここ、およびバイパスされていないすべてのロールの言及をブロックする専用の AntiBeast AutoMod ルールが作成/更新されます。\nまた、一時的に @everyone に全員/ここ/すべてのロールにメンションする権限を付与します。無効にすると、元の設定が復元されます。",
+        "bypass_body": "通常言及可能にしておく必要があるロールは、バイパス リストに追加できます。これらのロールは AutoMod キーワード フィルターから除外されます。",
+        "bypass_title": "バイパス",
+        "desc": "誰もが知っているように、最近、Discord は Mr. Beast の画像詐欺でいっぱいです。\nAntiBeast は、ネイティブの Discord AutoMod を使用して全員/ここおよびロールのメンションをブロックし、一方、サーバーが大量のメンションを許可していると詐欺ボットに信じ込ませます。",
+        "trigger_action_body": "AntiBeast が設定されたウィンドウ内で設定された回数だけトリガーされた後に実行されるようにモデレーションアクションを設定できます。デフォルトはキックです。"
+    },
+    "action_setup_done_title": "AntiBeast アクションが保存されました",
+    "block_message": "AntiBeast は、Everyone/here または保護されたロールへの言及をブロックしました。",
+    "btn": {
+        "back_to_action": "行動に戻る",
+        "back_to_bypass": "バイパスに戻ります",
+        "custom_action": "カスタムアクション",
+        "enable": "AntiBeast を有効にする",
+        "everyone_here_only_toggle": "全員/ここのみ: {state}",
+        "keep_bypass": "電流バイパスを維持する",
+        "no_action": "アクションなし",
+        "use_default_kick": "デフォルトのキックを使用する"
+    },
+    "bypass": {
+        "added": "✅ **{role}** を追加しました。 {suffix}。",
+        "applies_when_enabled": "有効にすると AutoMod キーワード ルールに適用されます",
+        "removed": "✅ **{role}** を削除しました。 {suffix}。",
+        "synced": "AutoMod キーワード ルールが同期されました"
+    },
+    "config": {
+        "everyone_can_mention": "全員に言及できます/ここで",
+        "everyone_cannot_mention": "全員に言及することはできません/ここでは",
+        "no_bypass_roles": "現在、バイパスされるロールはありません。",
+        "protected_role_count": {
+            "one": "{count} ロールがキーワード フィルターに追加されます",
+            "other": "{count} ロールがキーワード フィルターに追加されます"
+        },
+        "rule_not_created": "まだ作成されていません",
+        "title": "アンチビーストの設定",
+        "trigger_disabled": "❌ 無効\nスコープ: {scope}",
+        "trigger_enabled": "✅ 有効 - {seconds}s 以内に {count} がトリガーされた後、実行: `{action}`\n スコープ: {scope}"
+    },
+    "default_trigger_action": "AntiBeast をキック: {time_window}s 以内に {trigger_count} がトリガーされます",
+    "err": {
+        "action_empty": "アクションを空にすることはできません。",
+        "action_too_long": "アクションは最大 500 文字にすることができます。",
+        "bot_missing_perms": "ボットに権限がありません: {perms}",
+        "cannot_bypass_everyone": "⚠️ @everyone をバイパスリストに追加することはできません。",
+        "modal_not_int": "⚠️ トリガー数と時間ウィンドウは両方とも整数である必要があります。",
+        "rule_limit_reached": "⚠️ AntiBeast は AutoMod ルールを作成できませんでした。このサーバーは Discord の AutoMod ルールの制限に達しました。使用されていない AutoMod ルールを削除するか、古い AntiBeast ルールを削除して、再試行してください。",
+        "sync_failed": "⚠️ AntiBeast の同期に失敗しました: {error}",
+        "sync_generic": "⚠️ AntiBeast の同期に失敗しました。後でもう一度試してください。",
+        "sync_http": "⚠️ AntiBeast 同期に失敗しました: Discord API がエラー ({status}) を返しました。",
+        "threshold_range": "⚠️ トリガー数は 1 ～ 20 でなければなりません。",
+        "threshold_range_param": "⚠️ しきい値は 1 ～ 20 の範囲にする必要があります。",
+        "time_window_range": "⚠️ 時間枠は 5 ～ 3600 秒である必要があります。",
+        "time_window_range_param": "⚠️ time_window は 5 ～ 3600 秒の範囲にする必要があります。",
+        "unsupported_action": "サポートされていないモデレーションアクション: {action}"
+    },
+    "field": {
+        "automod_rule": "AutoMod ルール",
+        "bypass_roles": "バイパスされたロール",
+        "everyone_permission": "@全員の許可",
+        "protected_roles": "保護されたロール",
+        "status": "ステータス",
+        "trigger_action": "繰り返しトリガーアクション"
+    },
+    "modal": {
+        "action_label": "モデレーションアクションコマンド",
+        "action_title": "アンチビーストアクション",
+        "threshold_label": "トリガー数",
+        "time_window_label": "時間枠 (秒)"
+    },
+    "scope": {
+        "everyone_here_and_roles": "@everyone / @here およびバイパスされていないロールのメンションに基づいて動作します",
+        "everyone_here_only": "@everyone / @here のみに作用します"
+    },
+    "settings": {
+        "trigger_line": "自動アクション: {status}"
+    },
+    "setup": {
+        "action_desc": "1 人のユーザーが短い時間枠で AntiBeast を繰り返しトリガーした後に Moderate コマンドが実行されるように構成します。\nデフォルトでは、しきい値に達するとキックされます。",
+        "action_disabled": "繰り返しトリガーアクションは現在無効になっています",
+        "action_preview": "アクションのプレビュー",
+        "action_scope": "行動範囲",
+        "action_summary": "{seconds}s 以内に {count} 回、`{action}` を実行します",
+        "action_title": "AntiBeast セットアップ: 繰り返しトリガー アクション",
+        "bypass_desc": "通常言及可能にしておく必要があるロールを選択してください。\n選択されたロールは、AntiBeast の AutoMod キーワード フィルターから除外されます。",
+        "bypass_select_ph": "バイパスするロールを選択してください",
+        "bypass_title": "AntiBeast セットアップ: バイパスされたロール",
+        "confirm_action_disabled": "無効\nスコープ: {scope}",
+        "confirm_action_enabled": "{seconds}s 以内に {count} 回、`{action}`\n スコープ: {scope} を実行します。",
+        "confirm_desc": "設定を確認し、「有効」をクリックします。 AntiBeast は AutoMod ルールを作成/更新し、@everyone 権限を適用します。",
+        "confirm_title": "AntiBeast セットアップ: 確認",
+        "current_action": "現在のアクション",
+        "current_bypass": "電流バイパス",
+        "enabled_title": "AntiBeast が有効になっています",
+        "not_configured": "まだ設定されていません",
+        "variables": "利用可能な変数",
+        "variables_body": "`{time_window}` および `{trigger_count}` は、アクションの実行前に実際の値に置き換えられます。"
+    },
+    "state": {
+        "disabled": "❌ 無効",
+        "enabled": "✅ 有効"
+    },
+    "toggle": {
+        "disabled": "✅ AntiBeast は **無効になっています**。",
+        "enabled": "✅ AntiBeast が **有効**になりました。",
+        "everyone_unchanged": "@everyone 権限はすでにターゲット状態になっています。",
+        "everyone_updated": "@everyone 権限が更新されました。",
+        "no_rule": "既存の AutoMod ルールが見つかりませんでした。",
+        "rule_id": "AutoMod ルール ID: `{rule_id}`"
+    }
+}

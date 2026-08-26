@@ -1,0 +1,77 @@
+{
+    "number": {
+        "group_sep": ",",
+        "decimal_sep": "."
+    },
+    "list": {
+        "sep": ", ",
+        "last_sep": " そして "
+    },
+    "datefmt": {
+        "short": "%b %d, %Y",
+        "long": "%B %d、%Y、%H:%M"
+    },
+    "state": {
+        "enabled": "有効",
+        "disabled": "障害者",
+        "yes": "はい",
+        "no": "いいえ",
+        "none": "なし",
+        "auto": "自動",
+        "unset": "未設定",
+        "default": "デフォルト",
+        "default_value": "(default) {value}",
+        "on": "オン",
+        "off": "オフ"
+    },
+    "btn": {
+        "confirm": "確認する",
+        "cancel": "キャンセル",
+        "back": "戻る",
+        "close": "閉じる",
+        "done": "完了",
+        "next": "次へ",
+        "prev": "前へ",
+        "next_step": "次のステップ",
+        "prev_step": "前のステップ"
+    },
+    "err": {
+        "guild_only": "このコマンドはサーバーでのみ使用できます。",
+        "no_permission": "あなたにはそれをする許可がありません。",
+        "generic": "何か問題が発生しました。後でもう一度試してください。"
+    },
+    "unit": {
+        "seconds": {
+            "one": "{count} 秒",
+            "other": "{count} 秒"
+        },
+        "minutes": {
+            "one": "{count} 分",
+            "other": "{count} 分"
+        },
+        "hours": {
+            "one": "{count} 時間",
+            "other": "{count} 時間"
+        },
+        "days": {
+            "one": "{count} 日",
+            "other": "{count} 日"
+        },
+        "members": {
+            "one": "{count} メンバー",
+            "other": "{count} メンバー"
+        },
+        "messages": {
+            "one": "{count} メッセージ",
+            "other": "{count} メッセージ"
+        },
+        "items": {
+            "one": "{count} アイテム",
+            "other": "{count} アイテム"
+        },
+        "times": {
+            "one": "{count} 時間",
+            "other": "{count} 回"
+        }
+    }
+}

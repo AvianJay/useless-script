@@ -1,0 +1,62 @@
+{
+    "err": {
+        "balance_insufficient": "グローバルコインの残高が不足しています。",
+        "balance_insufficient_double": "グローバルコインの残高が不十分です。ダブルダウンはできません。",
+        "bet_not_number": "賭け金は数字でなければなりません。",
+        "bet_range": "賭け金は {min} から {max} の間である必要があります。",
+        "bj_action": "ブラックジャックでは、ヒット、スタンド、またはダブルのみが可能です。",
+        "bj_double_unavailable": "今のところダブルダウンはできません。",
+        "coinflip_side": "コイン側は表または裏である必要があります。",
+        "dice_range": "サイコロの目は 1 ～ 6 の間である必要があります。",
+        "hl_action": "ハイローでは推測するか現金化することしかできません。",
+        "hl_cashout_streak": "出金する前に、少なくとも 1 つの予想に勝つ必要があります。",
+        "hl_direction": "現在のカードではその方向を選択できません。",
+        "hl_guess": "高低の選択は、高または低でなければなりません。",
+        "hl_rank_range": "カードのランクは 1 ～ 13 である必要があります。",
+        "invalid_game": "無効なゲームです。",
+        "invalid_instant_game": "無効なインスタント ゲームです。",
+        "invalid_round_game": "無効なラウンドベースのゲームです。",
+        "lottery_drawing": "宝くじが引かれています。すぐにもう一度試してください。",
+        "lottery_number_range": "宝くじ番号は 00 ～ 99 の間で指定する必要があります。",
+        "request_id_missing": "有効な request_id がありません。",
+        "request_id_taken": "その request_id はすでに別のプレイヤーによって使用されています。",
+        "round_active": "このタイプの未完成のゲームがすでにあります。",
+        "round_already_settled": "このラウンドはすでに決着しています。",
+        "round_not_found": "そのゲームラウンドが見つかりませんでした。",
+        "roulette_bet_type": "ルーレットのベットの種類が無効です。",
+        "roulette_number_only": "数字を指定できるのはシングルナンバーベットのみです。",
+        "roulette_number_range": "シングルナンバーベットでは 0 ～ 36 を選択する必要があります。",
+        "slots_reels": "スロットの結果には 3 つのシンボルが含まれている必要があります。",
+        "tower_action": "タワーではタイルを選ぶかキャッシュアウトすることしかできません。",
+        "tower_tile_invalid": "無効なタワータイルです。",
+        "tower_tile_range": "タイルは 0 から 2 の間でなければなりません。"
+    },
+    "roulette": {
+        "bet": {
+            "black": "ブラック",
+            "even": "偶数",
+            "high": "高 (19-36)",
+            "low": "低 (1-18)",
+            "number": "単一の数字",
+            "odd": "奇数",
+            "red": "赤"
+        }
+    },
+    "scratch": {
+        "prize": {
+            "jackpot": "ジャックポット",
+            "major": "重賞",
+            "medium": "中賞",
+            "none": "勝ち目なし",
+            "refund": "損益分岐点",
+            "small": "小さな賞品"
+        }
+    },
+    "slots": {
+        "outcome": {
+            "none": "勝ち目なし",
+            "pair": "ペア",
+            "triple": "3種類のやつ！"
+        }
+    }
+}

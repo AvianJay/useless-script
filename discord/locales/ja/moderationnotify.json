@@ -1,0 +1,85 @@
+{
+    "btn": {
+        "appeal": "異議申し立てを送信する",
+        "blacklist_appeal": "異議申し立てのブラックリストに追加",
+        "confirm_unblacklist": "削除の確認",
+        "respond_appeal": "異議申し立てに対する返信"
+    },
+    "dm": {
+        "reason": "理由: {reason}",
+        "title_ban": "{guild} へのアクセスが禁止されました。",
+        "title_blacklist": "あなたは {guild} で異議申し立てのブラックリストに追加されました。",
+        "title_generic": "{guild} であなたに対してモデレート アクション ({action}) が行われました。",
+        "title_kick": "あなたは {guild} からキックされました。",
+        "title_mute": "{guild} でミュートされました。"
+    },
+    "embed": {
+        "appeal_reply_desc": "{guild} のモデレーターからあなたの異議申し立てに対する返信を受け取りました。",
+        "appeal_reply_title": "控訴の返答",
+        "blacklist_desc": {
+            "one": "{count} ユーザーがブラックリストに登録されています",
+            "other": "{count} ユーザーがブラックリストに登録されています"
+        },
+        "blacklist_title": "ブラックリストへの異議申し立て",
+        "new_appeal_desc": "{user} (`{user_id}`) からの異議申し立て。",
+        "new_appeal_title": "新規ユーザーへのアピール"
+    },
+    "field": {
+        "admin_action": "モデレーターのアクション",
+        "admin_reply": "モデレーターの返答",
+        "appeal_method": "異議申し立ての方法",
+        "appeal_reason": "控訴理由",
+        "blacklist_users": "ブラックリストに登録されたユーザー",
+        "can_appeal_again": "再度控訴する可能性がある",
+        "guild_id": "サーバーID",
+        "reply_content": "返信",
+        "until": "まで",
+        "user_id": "ユーザーID"
+    },
+    "footer": {
+        "blacklist_truncated": "{count} ユーザーの最初の 25 人を表示しています",
+        "replied_by": "{user} - 返信しました"
+    },
+    "modal": {
+        "appeal_label": "控訴の理由を説明してください",
+        "appeal_title": "ユーザーアピール",
+        "can_appeal_label": "ユーザーが再度異議を申し立てることを許可しますか? (はい/いいえ)",
+        "respond_label": "あなたの返事",
+        "respond_title": "ユーザーの異議申し立てに返信する"
+    },
+    "msg": {
+        "action_blacklist": "異議申し立てのブラックリストに追加されました",
+        "already_blacklisted": "そのユーザーはすでに異議申し立てのブラックリストに登録されています。",
+        "appeal_again_hint": "下のボタンを使用して再度異議を申し立てることができます。",
+        "appeal_blacklisted_hint": "あなたは異議申し立てブラックリストに登録されているため、異議申し立てを行うことはできません。",
+        "appeal_channel_missing": "異議申し立てチャンネルが設定されていないか、アクセスできません。モデレータに連絡してください。",
+        "appeal_channel_set": "異議申し立てチャンネルを {channel} に設定しました",
+        "appeal_disabled": "異議申し立て機能は無効になっています。",
+        "appeal_hint": "下のボタンから異議を申し立てることができます。",
+        "appeal_submitted": "あなたの異議申し立ては提出されました。モデレータがそれを検討します。",
+        "blacklist_added": "{user} を異議申し立てのブラックリストに追加しました。",
+        "blacklist_empty": "異議申し立てのブラックリストに登録されているユーザーはいません。",
+        "blacklist_notify": "あなたは異議申し立てのブラックリストに追加されました。",
+        "blacklist_notify_reason": "あなたは異議申し立てのブラックリストに追加されました。理由: {reason}。",
+        "blacklisted": "ユーザーは異議申し立てのブラックリストに追加されたため、異議申し立てを行うことができなくなります。",
+        "cancelled": "キャンセルされました。",
+        "cannot_blacklist_bot": "ボットを異議申し立てのブラックリストに追加することはできません。",
+        "cannot_blacklist_self": "自分自身を異議申し立てのブラックリストに追加することはできません。",
+        "channel_no_permission": "ボットはそのチャンネルでメッセージを送信できません。別のものを選択してください。",
+        "guild_not_found": "サーバーが見つかりませんでした。モデレータに連絡してください。",
+        "invalid_action": "無効な罰タイプです。",
+        "no_reason": "提供されません",
+        "not_banned": "禁止されていないので、異議を申し立てる必要はありません。",
+        "not_muted": "あなたはミュートされていないので、アピールすることは何もありません。",
+        "notify_set": "{action} の通知は {state} になりました。",
+        "reply_dm_blocked": "ユーザーにメッセージを送信できませんでした。彼らのDMは閉鎖されている可能性があります。",
+        "reply_sent": "あなたの返信はユーザーに送信されました。",
+        "unblacklist_confirm": "{user} はすでに異議申し立てのブラックリストに登録されています。それらを削除しますか?",
+        "unblacklisted": "{user} を異議申し立てのブラックリストから削除しました。",
+        "unknown_user": "不明なユーザー"
+    },
+    "suffix": {
+        "blacklisted": " (ブラックリストに載っています)",
+        "replied": " （答えた）"
+    }
+}

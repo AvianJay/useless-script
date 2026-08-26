@@ -1,0 +1,229 @@
+{
+    "groups": [
+        {
+            "title": "クイックスタート",
+            "items": [
+                {
+                    "id": "getting-started",
+                    "label": "🚀 はじめに",
+                    "file": "getting-started"
+                },
+                {
+                    "id": "prefix",
+                    "label": "⌨️ コマンドプレフィックス",
+                    "file": "prefix"
+                }
+            ]
+        },
+        {
+            "title": "🛡️モデレーションと安全",
+            "items": [
+                {
+                    "id": "Moderate",
+                    "label": "モデレーションツール",
+                    "file": "moderate"
+                },
+                {
+                    "id": "AutoModerate",
+                    "label": "自動モデレーション",
+                    "file": "automoderate"
+                },
+                {
+                    "id": "AntiBeast",
+                    "label": "アンチビースト",
+                    "file": "antibeast"
+                },
+                {
+                    "id": "ReportSystem",
+                    "label": "レポートシステム",
+                    "file": "reportsystem"
+                },
+                {
+                    "id": "ModerationNotify",
+                    "label": "モデレーション通知",
+                    "file": "moderationnotify"
+                },
+                {
+                    "id": "ServerWebVerify",
+                    "label": "Web認証",
+                    "file": "serverwebverify"
+                },
+                {
+                    "id": "StickyRole",
+                    "label": "スティッキーなロール",
+                    "file": "stickyrole"
+                }
+            ]
+        },
+        {
+            "title": "🎮 楽しいゲーム",
+            "items": [
+                {
+                    "id": "MiniGames",
+                    "label": "ミニゲーム",
+                    "file": "minigames"
+                },
+                {
+                    "id": "dsize",
+                    "label": "サイズ",
+                    "file": "dsize"
+                },
+                {
+                    "id": "doomcord",
+                    "label": "ドゥーム",
+                    "file": "doomcord"
+                },
+                {
+                    "id": "aki",
+                    "label": "アキネーター",
+                    "file": "aki"
+                },
+                {
+                    "id": "petpet",
+                    "label": "ペットペット",
+                    "file": "petpet"
+                },
+                {
+                    "id": "OwOify",
+                    "label": "オウオファイ",
+                    "file": "owoify"
+                }
+            ]
+        },
+        {
+            "title": "💰 経済とアイテム",
+            "items": [
+                {
+                    "id": "Economy",
+                    "label": "エコノミー",
+                    "file": "economy"
+                },
+                {
+                    "id": "ItemSystem",
+                    "label": "アイテムシステム",
+                    "file": "itemsystem"
+                }
+            ]
+        },
+        {
+            "title": "🎵 メディア",
+            "items": [
+                {
+                    "id": "Music",
+                    "label": "音楽の再生",
+                    "file": "music"
+                },
+                {
+                    "id": "MessageImage",
+                    "label": "メッセージのスクリーンショット",
+                    "file": "messageimage"
+                }
+            ]
+        },
+        {
+            "title": "🤖 AIとチャット",
+            "items": [
+                {
+                    "id": "ai",
+                    "label": "AIチャット",
+                    "file": "ai"
+                },
+                {
+                    "id": "AutoReply",
+                    "label": "自動返信",
+                    "file": "autoreply"
+                }
+            ]
+        },
+        {
+            "title": "🔧 ツールと自動化",
+            "items": [
+                {
+                    "id": "UtilCommands",
+                    "label": "ユーティリティコマンド",
+                    "file": "utilcommands"
+                },
+                {
+                    "id": "AutoPublish",
+                    "label": "自動公開",
+                    "file": "autopublish"
+                },
+                {
+                    "id": "FixLink",
+                    "label": "🔗 リンクフィクサー",
+                    "file": "fixlink"
+                },
+                {
+                    "id": "DynamicVoice",
+                    "label": "ダイナミックボイス",
+                    "file": "dynamicvoice"
+                },
+                {
+                    "id": "CustomPrefix",
+                    "label": "カスタムプレフィックス",
+                    "file": "customprefix"
+                },
+                {
+                    "id": "FakeUser",
+                    "label": "偽のユーザー",
+                    "file": "fakeuser"
+                },
+                {
+                    "id": "Contribute",
+                    "label": "貢献",
+                    "file": "contribute"
+                },
+                {
+                    "id": "Feedback",
+                    "label": "フィードバック",
+                    "file": "feedback"
+                },
+                {
+                    "id": "Statistics",
+                    "label": "コマンド統計",
+                    "file": "statistics"
+                },
+                {
+                    "id": "JoinNotify",
+                    "label": "参加通知",
+                    "file": "joinnotify"
+                }
+            ]
+        },
+        {
+            "title": "🌐 情報サービス",
+            "items": [
+                {
+                    "id": "twbus",
+                    "label": "バス / YouBike (台湾)",
+                    "file": "twbus"
+                },
+                {
+                    "id": "OXWU",
+                    "label": "地震モニター",
+                    "file": "oxwu"
+                },
+                {
+                    "id": "dgpa",
+                    "label": "停学・休学",
+                    "file": "dgpa"
+                }
+            ]
+        },
+        {
+            "title": "⚙️システム",
+            "items": [
+                {
+                    "id": "GuildPanel",
+                    "label": "Webパネル",
+                    "file": "guildpanel"
+                },
+                {
+                    "id": "r34",
+                    "label": "R34検索",
+                    "file": "r34"
+                }
+            ]
+        }
+    ]
+}

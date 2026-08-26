@@ -1,0 +1,522 @@
+{
+    "antibeast": {
+        "action_modal_title": "AntiBeast アクション設定",
+        "action_status": {
+            "one": "{count} 時間後、{seconds}s 以内に `{action}` をトリガーします",
+            "other": "{seconds}s 以内に {count} 回後、`{action}` をトリガーします"
+        },
+        "action_view_desc": "同じユーザーが時間枠内でこれを複数回トリガーすると、モデレーションアクションが実行されるように設定します。",
+        "action_view_title": "AntiBeast リピートトリガーアクション",
+        "btn": {
+            "back_to_antibeast": "アンチビーストに戻る",
+            "bypass_roles": "ロールをバイパスする",
+            "confirm_action": "はい、このアクションを使用します",
+            "disable": "AntiBeast を無効にする",
+            "disable_action": "アクションを無効にする",
+            "edit_action": "しきい値とアクションを編集する",
+            "enable": "AntiBeast を有効にする",
+            "enable_action": "アクションを有効にする",
+            "everyone_here_only": "全員/ここのみ: {state}",
+            "retry_action": "いいえ、もう一度試してください"
+        },
+        "bypass_current": "現在: {roles}",
+        "bypass_desc": "これらのロールからのメンション トークンは、AntiBeast のキーワード ルールをトリガーしません。",
+        "bypass_none": "バイパスロールはまだ設定されていません。",
+        "bypass_select_ph": "バイパスするロールを選択してください (現在のリストを置き換えます)",
+        "bypass_title": "AntiBeast バイパスロール",
+        "disabled_desc": "現在無効になっています。最初に残りのセットアップを完了してから有効にすることができます。",
+        "enabled_desc": "有効 — AutoMod ルールは保護されたメンションをブロックします。",
+        "err": {
+            "not_int": "トリガー数と時間ウィンドウは両方とも整数である必要があります。",
+            "threshold_range": "トリガー数は 1 ～ 20 でなければなりません。",
+            "time_window_range": "時間枠は 5 ～ 3600 秒である必要があります。"
+        },
+        "field": {
+            "bypass_roles": "ロールをバイパスする",
+            "threshold": "しきい値"
+        },
+        "manager_title": "🛡️ AntiBeast 設定",
+        "module_not_loaded": "AntiBeast モジュールがロードされていません。",
+        "threshold_label": "トリガー数（1～20）",
+        "threshold_value": {
+            "one": "{count} 時間以内 ({seconds}s)",
+            "other": "{seconds}s 以内に {count} 回"
+        },
+        "time_window_label": "秒単位の時間枠 (5 ～ 3600)",
+        "title": "アンチビーストの設定"
+    },
+    "automod": {
+        "action": {
+            "ban": "禁止"
+        },
+        "action_saved_title": "アクションが保存されました",
+        "add_ignore_channel_ph": "無視されたチャンネルを追加する",
+        "btn": {
+            "back_to_feature": "特集に戻る",
+            "custom_input": "カスタム入力"
+        },
+        "current_setting_prefix": "現在の値: ",
+        "err": {
+            "missing_required": "最初に次の必須設定を完了してください: {fields}"
+        },
+        "feature": {
+            "anti_invite_link": {
+                "desc": "Discordの招待リンクを検出します。",
+                "field": {
+                    "action": {
+                        "default": "{user} を削除してください。他のサーバーに招待リンクを投稿しないでください。"
+                    },
+                    "allow_current_server": "このサーバー自身のリンクを許可する"
+                },
+                "label": "招待リンク"
+            },
+            "anti_raid": {
+                "desc": "短時間に多数のメンバーが参加していることを検出します。",
+                "field": {
+                    "action": {
+                        "default": "キックレイド検出自動キック"
+                    },
+                    "max_joins": "マックスが参加"
+                },
+                "label": "レイド対策"
+            },
+            "anti_spam": {
+                "desc": "短期間に投稿された同様のメッセージを検出します。",
+                "field": {
+                    "action": {
+                        "default": "ミュート スパムのために 10 分間自動ミュートします。{user} を削除してください。スパムを送信しないでください。"
+                    },
+                    "max_messages": "類似メッセージの最大数",
+                    "similarity": "類似性 (%)"
+                },
+                "label": "スパム対策"
+            },
+            "anti_uispam": {
+                "desc": "ユーザー インストール コマンドをトリガーできる頻度を制限します。",
+                "field": {
+                    "action": {
+                        "default": "{user} を削除します。ユーザーがインストールしたアプリのコマンドを乱用しないでください。ユーザーがインストールしたコマンドを乱用すると、10 分間ミュートします。"
+                    },
+                    "max_count": "最大トリガー数"
+                },
+                "label": "ユーザーがインストールしたアプリの悪用"
+            },
+            "automod_detect": {
+                "desc": "Discord のネイティブ AutoMod イベントを受信し、追加のアクションを実行します。",
+                "field": {
+                    "action": "追加のアクション",
+                    "filter_action_type": "アクションの種類でフィルタリングする",
+                    "filter_rule": "ルール名でフィルタリングする"
+                },
+                "label": "Discord AutoMod の検出"
+            },
+            "escape_punish": {
+                "desc": "メンバーがミュート中にサーバーを離れた場合のフォローアップ アクションを追加します。",
+                "field": {
+                    "duration": "期間",
+                    "punishment": "罰"
+                },
+                "label": "罰を逃れる"
+            },
+            "flagged_user": {
+                "desc": "ローカル フラグ データをブラックリスト API と組み合わせて、フラグが設定されたメンバーが参加したときに通知し、オプションで動作します。",
+                "field": {
+                    "action_source": "アクションソース",
+                    "local_match_mode": "ローカルマッチモード"
+                },
+                "label": "フラグが設定されたユーザーの参加",
+                "option": {
+                    "active": "現在フラグが立てられているもののみ",
+                    "api": "APIのみ",
+                    "both": "ローカルとAPI",
+                    "history": "3か月以内のすべての記録",
+                    "local": "ローカルのみ"
+                }
+            },
+            "scamtrap": {
+                "desc": "誰かがハニーポット チャンネルで発言すると自動的に動作します。",
+                "field": {
+                    "action": {
+                        "default": "削除 {user} は禁止された最後のアカウントです。ここに投稿しないでください!、{user} を禁止 5 秒 12 時間 [自動禁止] 侵害された疑いのあるアカウント"
+                    },
+                    "channel_id": "トラップチャンネル"
+                },
+                "label": "詐欺の罠"
+            },
+            "too_many_emojis": {
+                "desc": "1 つのメッセージに含める絵文字の数を制限します。",
+                "field": {
+                    "max_emojis": "最大数"
+                },
+                "label": "絵文字が多すぎる"
+            },
+            "too_many_h1": {
+                "desc": "Markdown 見出しの合計の長さを制限します。",
+                "field": {
+                    "max_length": "最大長さ"
+                },
+                "label": "見出しが多すぎます"
+            }
+        },
+        "feature_page_footer": "特集ページ {page}/{total}",
+        "field": {
+            "action": "アクション",
+            "enabled_count": "有効",
+            "ignore_channels": "無視されたチャンネル",
+            "notify_channel": "通知チャンネル",
+            "time_window": "時間枠 (秒)",
+            "will_save_as": "として保存します"
+        },
+        "field_value_ph": "このフィールドをクリアするには空のままにしてください",
+        "manager_desc": "機能を選択して完全な設定を調整し、有効または無効にします。",
+        "manager_title": "自動モデレーションルール",
+        "remove_ignore_channel_ph": "無視されたチャンネルを削除する",
+        "select_feature_ph": "編集するフィーチャを選択してください",
+        "select_field_ph": "編集するフィールドを選択してください",
+        "setting_saved": "設定が保存されました。",
+        "syntax_issue": "構文の問題"
+    },
+    "autoreply": {
+        "btn": {
+            "add_rule": "ルールの追加",
+            "back_to_rules": "ルールに戻る",
+            "confirm_clear_all": "すべてクリアすることを確認",
+            "confirm_delete": "削除の確認"
+        },
+        "builder_timed_out_desc": "保存されていないルールは破棄されました。",
+        "builder_timed_out_title": "自動返信ビルダーがタイムアウトしました",
+        "clear_confirm_desc": {
+            "one": "現在 {count} ルールがあり、これを元に戻すことはできません。",
+            "other": "現在 {count} ルールがあり、これを元に戻すことはできません。"
+        },
+        "clear_confirm_title": "すべての自動返信ルールをクリアしますか?",
+        "delete_confirm_desc": "これはすぐに有効になります。",
+        "delete_confirm_title": "この自動返信ルールを削除しますか?",
+        "edit_rule_title": "自動返信ルールを編集する",
+        "err": {
+            "edit_target_gone": "編集しようとしている自動返信ルールは存在しません。",
+            "module_unavailable": "AutoReply モジュールは現在利用できません。",
+            "rule_gone_or_unavailable": "このルールはもう存在しないか、モジュールは現在利用できません。",
+            "save_failed": "自動返信ルールの保存に失敗しました。"
+        },
+        "field": {
+            "current_rules": "現在のルール"
+        },
+        "manager_desc": "既存のルールを選択して表示、編集、または削除するか、ビルダーを使用して新しいルールを追加します。",
+        "manager_title": "自動返信ルールの管理",
+        "no_response": "応答なし",
+        "rule_not_found": "ルールが見つかりません",
+        "rule_page_footer": "ルールページ {page}/{total}",
+        "rule_title": "自動返信ルール #{index}",
+        "select_rule_ph": "自動返信ルールを選択します",
+        "unnamed_rule": "名前のないルール"
+    },
+    "btn": {
+        "add": "追加",
+        "back_to_module": "モジュールに戻る",
+        "back_to_settings": "設定に戻る",
+        "clear": "クリア",
+        "clear_all": "すべてクリア",
+        "edit": "編集",
+        "finish": "終了",
+        "move_down": "下に移動",
+        "move_up": "上に移動",
+        "remove": "削除"
+    },
+    "compound": {
+        "unavailable_title": "この設定を開けません"
+    },
+    "dm": {
+        "no_setup_channel": "**{guild}** のクイック セットアップ ボタンを投稿するチャンネルが見つかりませんでした。サーバーで {command} を使用して、セットアップ センターを開きます。"
+    },
+    "err": {
+        "autoreply_unavailable": "AutoReply モジュールは現在利用できません。",
+        "invalid_integer": "有効な整数を入力してください。",
+        "invalid_number": "有効な番号を入力してください。",
+        "manage_guild_required": "サーバーの管理権限を持つメンバーのみがクイック セットアップを開くことができます。",
+        "not_setup_owner": "このセットアップ フローを開いたメンバー、およびサーバーの管理権限を持つメンバーのみがこれを使用できます。",
+        "save_failed": "サーバー設定の保存に失敗しました。",
+        "trigger_failed": "設定は保存されましたが、ライブで適用するとエラーが発生しました。",
+        "value_too_large": "値は {maximum} を超えることはできません。",
+        "value_too_small": "値を {minimum} 未満にすることはできません。"
+    },
+    "field": {
+        "action": "アクション",
+        "action_scope": "行動範囲",
+        "channel": "チャンネル",
+        "execution_preview": "実行プレビュー",
+        "moderate_action": "モデレーションアクションコマンド",
+        "quota": "割り当て",
+        "status": "ステータス",
+        "trigger_action": "リピートトリガーアクション"
+    },
+    "fixlink": {
+        "btn": {
+            "back_to_center": "セットアップセンターに戻る"
+        },
+        "err": {
+            "cog_not_running": "実行中の FixLink モジュールが見つかりませんでした。",
+            "module_not_loaded": "FixLink モジュールがロードされていません。"
+        }
+    },
+    "hub": {
+        "default_module_desc": "このモジュールの設定を開きます",
+        "desc": "ドロップダウンから機能を選択します。確認されたすべての設定はすぐに保存されます。",
+        "field": {
+            "available_modules": "利用可能なモジュール",
+            "changes_this_session": "このセッションを変更しました"
+        },
+        "finish": {
+            "more_items": "...および {count} 詳細",
+            "no_changes": "今回は設定の変更はありませんでした。",
+            "summary": "次の設定が変更されました。",
+            "title": "簡単セットアップ完了"
+        },
+        "page_footer": "モジュールページ {page}/{total}",
+        "select_module_ph": "設定する機能モジュールを選択してください",
+        "timed_out_desc": "確認された設定は保持されます。続行するには `/gettingstarted` を使用してください。",
+        "timed_out_title": "クイックセットアップがタイムアウトしました",
+        "title": "{guild} クイックセットアップ"
+    },
+    "launcher": {
+        "btn": {
+            "open_setup": "このサーバーのクイックセットアップ"
+        },
+        "embed": {
+            "desc": "下のボタンを使用して、このサーバーのモデレーション、通知、エコノミー、自動返信、検証などを設定します。",
+            "title": "ボットのクイックセットアップ"
+        },
+        "msg": {
+            "prompt": "{mention} さん、今すぐボットをクイックセットアップしますか?"
+        }
+    },
+    "list": {
+        "add_channel_ph": "チャンネルの追加 (複数選択)",
+        "add_role_ph": "ロールの追加 (複数選択)",
+        "count_field": "現在 {count} 個のアイテム",
+        "default_desc": "リストに項目を追加または削除します。",
+        "page_footer": "削除リスト ページ {page}/{total}",
+        "select_remove_ph": "削除する項目を選択してください"
+    },
+    "module": {
+        "no_settings": "現在、このモジュールには構成可能な設定がありません。",
+        "page_footer": "設定ページ {page}/{total}",
+        "select_setting_ph": "設定を選択してください"
+    },
+    "select_preset_ph": "共通のアクションを選択してください",
+    "setting": {
+        "default_desc": "このサーバー設定を変更します。",
+        "edit_default_title": "設定を編集する",
+        "field": {
+            "current_value": "現在値"
+        },
+        "key_footer": "設定キー：{key}",
+        "select_channel_ph": "チャンネルを選択してください",
+        "select_role_ph": "ロールを選択してください",
+        "select_value_ph": "値を選択してください",
+        "value_label": "値",
+        "value_ph": "この設定をクリアするには空のままにしておきます"
+    },
+    "state": {
+        "unknown": "不明"
+    },
+    "stickymessage": {
+        "add_desc": "まず、設定するテキストまたはアナウンス チャンネルを選択します。各チャンネルには固定メッセージを 1 つだけ含めることができます。",
+        "add_title": "固定メッセージを追加する",
+        "auto_repost_footer": "自動再投稿ではメンション通知は送信されません。",
+        "btn": {
+            "edit_content": "コンテンツの編集",
+            "first_mention": "最初の投稿のメンション: {state}",
+            "publish_now": "今すぐ公開",
+            "save_and_publish": "保存して公開する",
+            "timing": "タイミング設定"
+        },
+        "content_label": "メッセージ内容",
+        "content_modal_title": "固定メッセージの内容を編集する",
+        "edit_title": "固定メッセージを編集する",
+        "err": {
+            "channel_taken": "このチャンネルにはすでに固定メッセージが含まれています。",
+            "entry_gone": "このエントリはもう存在しません。管理画面を再度開いてください。",
+            "invalid_seconds": "有効な秒数を入力してください。",
+            "module_unavailable": "StickyMessage モジュールは現在利用できません。",
+            "no_content": "最初に固定メッセージの内容を入力してください。",
+            "publish_failed": "公開に失敗しました。",
+            "quota_reached": {
+                "one": "このサーバーには最大 {count} 個の固定メッセージを含めることができます。",
+                "other": "このサーバーには最大 {count} 個の固定メッセージを含めることができます。"
+            }
+        },
+        "field": {
+            "mentions": "最初の投稿/マニュアルでの言及",
+            "min_interval": "最小間隔",
+            "quiet_seconds": "静かな時間"
+        },
+        "manager_title": "📌 固定メッセージ",
+        "mentions_allowed": "許可される",
+        "mentions_footer": "メンションは、最初の投稿時、コンテンツ変更後、または手動公開時にのみ送信されます。",
+        "mentions_suppressed": "抑制された",
+        "min_interval_label": "チャンネルごとの最小間隔 (5 ～ 3600 秒)",
+        "msg": {
+            "published": "固定メッセージを手動で公開しました。"
+        },
+        "no_content_yet": "まだコンテンツがありません。最初に [コンテンツを編集] をタップします。",
+        "no_entries": "固定メッセージはまだ設定されていません。",
+        "pick_channel_ph": "テキストまたはアナウンスチャンネルを選択してください",
+        "quiet_seconds_label": "このくらいの沈黙の後に再投稿 (0 ～ 300 秒)",
+        "select_entry_ph": "管理する固定メッセージを選択してください",
+        "status_active": "アクティブ",
+        "status_over_quota": "割り当てを超過したため、一時停止されました",
+        "timing_modal_title": "StickyMessage のタイミング設定",
+        "unknown_channel": "チャンネル {channel_id}"
+    },
+    "value": {
+        "empty_list": "空のリスト",
+        "entries_configured": {
+            "one": "{count} エントリが構成されました",
+            "other": "{count} エントリが構成されました"
+        },
+        "items_configured": "{count} 項目が構成されました",
+        "more_items": "...および {count} 詳細",
+        "not_set": "未設定",
+        "unknown_channel": "不明なチャンネル ({value})",
+        "unknown_role": "不明なロール ({value})"
+    },
+    "webverify": {
+        "audit": {
+            "create_role_reason": "クイック セットアップにより {user} によって作成された未認証のロール",
+            "role_permission_reason": "クイックセットアップの未認証のロール権限"
+        },
+        "btn": {
+            "auto_create_role": "ロールの自動作成",
+            "autorole_state": "自動割り当て: {state}",
+            "country_alert_state": "地域アラート: {state}",
+            "edit_countries": "地域コードを編集する",
+            "edit_relation_blacklist": "リレーション ID とアクションを編集する",
+            "edit_min_age": "アカウントの最低年齢を設定する",
+            "edit_notification": "通知テキストを編集する",
+            "feature_state": "機能: {state}",
+            "go_verify": "確認に行く",
+            "relation_blacklist_state": "関係ブラックリスト: {state}",
+            "save_and_send": "確認メッセージを保存して送信する",
+            "save_only": "保存のみ"
+        },
+        "captcha": {
+            "none": "キャプチャなし"
+        },
+        "default": {
+            "notify_message": "Web 認証を完了するには、下のボタンをクリックしてください。",
+            "notify_title": "サーバーのWeb認証",
+            "unverified_role_name": "未確認のメンバー"
+        },
+        "err": {
+            "autorole_needs_role": "自動割り当てを有効にする前に、未認証のロールを設定する必要があります。",
+            "channel_not_found": "認証通知チャンネルが見つかりませんでした。設定は保存されましたが、メッセージは送信されませんでした。",
+            "country_alert_needs_channel": "地域アラートを有効にする前に、アラート チャンネルを選択する必要があります。",
+            "country_alert_needs_codes": "地域アラートを有効にする前に、少なくとも 1 つの地域コードを設定する必要があります。",
+            "alert_channel_unusable": "アラート チャンネルが使用できないか、ボットにチャンネルの表示、メッセージの送信、リンクの埋め込みの権限がありません。",
+            "create_role_failed": "ロールの作成に失敗しました: {error}",
+            "create_role_permission": "未認証のロールを自動作成するには、「ロールの管理」および「チャンネルの管理」権限が必要です。",
+            "invalid_country_code": "地域コードは 2 文字である必要があります: {codes}",
+            "invalid_relation_action": "無効な関係ブラックリスト アクション: {error}",
+            "invalid_relation_id": "無効なリレーション ID: {relation_id}",
+            "invalid_days": "有効な日数を入力してください。",
+            "min_age_negative": "アカウントの最低年齢は 0 歳未満にすることはできません。",
+            "no_application_id": "現在アプリケーション ID を取得できませんでした。",
+            "no_channel_permission": "認証通知チャンネルでメッセージを送信する権限がありません。",
+            "notify_needs_channel": "チャンネル通知を使用する場合は、通知チャンネルを選択する必要があります。",
+            "relation_action_unavailable": "Moderate モジュールが使用できないため、関係ブラックリスト アクションを認証できません。",
+            "relation_blacklist_needs_action": "関係ブラックリストが有効な場合は、有効なアクション コマンドが必要です。",
+            "relation_blacklist_needs_channel": "関係ブラックリストが有効な場合は、別のアラート チャンネルが必要です。",
+            "relation_blacklist_needs_ids": "リレーション ブラックリストが有効な場合は、少なくとも 1 つのリレーション ID が必要です。",
+            "relation_id_not_found": "データベース内に関係 ID が見つかりません: {relation_id}",
+            "select_role_before_autorole": "自動割り当てを有効にする前に、未認証のロールを選択してください。",
+            "send_failed": "認証メッセージの送信に失敗しました: {error}"
+        },
+        "field": {
+            "alert_channel": "アラートチャンネル",
+            "autorole": "自動割り当て",
+            "countries": "地域",
+            "country_alert": "地域アラート",
+            "country_codes_label": "ISO リージョンコード",
+            "feature": "特徴",
+            "feature_captcha": "機能 / キャプチャ",
+            "message": "メッセージ",
+            "min_age": "アカウントの最低年齢",
+            "min_age_label": "アカウントの最小経過日数 (日)",
+            "mode": "モード",
+            "notify": "通知する",
+            "notify_channel": "通知チャンネル",
+            "notify_message_label": "通知メッセージ",
+            "notify_title_label": "通知のタイトル",
+            "notify_type": "通知方法",
+            "role_name_label": "ロール名",
+            "relation_action": "アクションコマンド",
+            "relation_action_label": "モデレーションアクションコマンド",
+            "relation_action_placeholder": "例: ban 0 0 関係 ID ブラックリスト",
+            "relation_blacklist": "関係 ID ブラックリスト",
+            "relation_channel": "アクションレポートチャンネル",
+            "relation_ids": "関係ID",
+            "relation_ids_label": "リレーションIDリスト",
+            "relation_ids_placeholder": "UUID を行またはカンマで区切って入力します",
+            "title": "タイトル",
+            "trigger": "トリガー",
+            "unverified_role": "未確認のロール"
+        },
+        "modal": {
+            "countries_title": "地域コード",
+            "create_role_title": "未認証のロールを作成する",
+            "min_age_title": "アカウントの最低年齢",
+            "notify_title": "認証通知",
+            "relation_blacklist_title": "関係 ID ブラックリスト"
+        },
+        "mode": {
+            "blacklist": "ブラックリスト",
+            "whitelist": "ホワイトリスト"
+        },
+        "msg": {
+            "sent_to_channel": "認証メッセージは {channel} に送信されました。"
+        },
+        "notify_type": {
+            "both": "DMとチャンネル",
+            "channel": "チャンネル",
+            "dm": "DM"
+        },
+        "select_autorole_trigger_ph": "自動割り当て条件を選択します",
+        "select_captcha_ph": "CAPTCHA 方式を選択します",
+        "select_country_channel_ph": "地域アラート チャンネルを選択してください",
+        "select_country_mode_ph": "地域リストモードを選択してください",
+        "select_notify_channel_ph": "認証通知チャンネルを選択してください",
+        "select_notify_type_ph": "通知方法を選択してください",
+        "select_relation_channel_ph": "関係ブラックリスト アラート チャンネルを選択します",
+        "select_role_ph": "未認証のロールを選択してください",
+        "setup_title": "Web 認証のセットアップ (ステップ {step}/{total})",
+        "step1": {
+            "desc": "機能のステータスと CAPTCHA を設定します。"
+        },
+        "step2": {
+            "desc": "未認証のメンバーのロールを選択または作成します。"
+        },
+        "step3": {
+            "desc": "参加時に未認証のロールを自動割り当てするかどうかを設定します。"
+        },
+        "step4": {
+            "desc": "認証プロンプトが通知する方法と内容を設定します。"
+        },
+        "step5": {
+            "desc": "認証するリージョンにブラックリストまたはホワイトリストのアラートを設定します。"
+        },
+        "step6": {
+            "desc": "このサーバーの関係 ID ブラックリスト、アクション コマンド、および個別のアラート チャンネルを構成します。"
+        },
+        "step7": {
+            "desc": "確認すると、Web 認証設定全体が一度に保存されます。"
+        },
+        "trigger": {
+            "age_check": "アカウントが新しすぎます",
+            "always": "常に割り当てます",
+            "has_flagged_history": "以前にフラグが立てられた",
+            "left_guild_before": "以前にサーバーから離れた",
+            "no_history": "認証履歴がありません"
+        }
+    }
+}

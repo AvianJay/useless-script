@@ -1,0 +1,48 @@
+{
+    "embed": {
+        "report_footer": "データソース: 中央気象局",
+        "report_title": "📋 地震レポート",
+        "status_title": "🔌 OXWU接続ステータス",
+        "warning_title": "⚠️緊急地震速報"
+    },
+    "err": {
+        "guild_only": "❌ このコマンドはサーバーでのみ使用できます",
+        "missing_channel_permission": "❌ ボットには、{channel} でメッセージを表示または送信する権限がありません。これを設定する前に権限を調整してください。",
+        "no_permission": "❌ このコマンドを使用する権限がありません (サーバーの管理が必要です)",
+        "report_fetch_failed": "❌ 地震速報情報が取得できませんでした",
+        "screenshot_failed": "❌ スクリーンショットを取得できませんでした",
+        "warning_fetch_failed": "❌ 地震警報情報を取得できませんでした（警報が発令されていない可能性があります）"
+    },
+    "field": {
+        "arrival_by_area": "エリア別到着",
+        "depth": "📏 深さ",
+        "epicenter": "📍 震源地",
+        "last_report_time": "最終報告時間",
+        "last_warning_time": "最終警告時間",
+        "magnitude": "📊 マグニチュード",
+        "max_intensity": "💥 最大強度",
+        "occurred_at": "🕐 で発生しました",
+        "report_number": "📝番号",
+        "this_server_settings": "このサーバーの設定"
+    },
+    "msg": {
+        "report_channel_cleared": "✅ レポートチャンネル設定が削除されました",
+        "report_channel_set": "✅ レポートチャンネルを {channel} に設定"
+    },
+    "value": {
+        "area_field_name": "📍 {area} ({max_intensity})",
+        "arrival_line_arrived": "{county}: 到着しました | EST（東部基準時。 {intensity}",
+        "arrival_line_eta": "{county}: <t:{ts}:R> | EST（東部基準時。 {intensity}",
+        "channel_settings_lines": "警告チャンネル: {warning_channel}\nレポート チャンネル: {report_channel}",
+        "connected": "✅ 接続済み",
+        "cwa_report_btn": "CWAレポート",
+        "disconnected": "❌ 切断されました",
+        "lat_lon": "緯度 {lat} / 経度 {lon}",
+        "more_regions": {
+            "one": "...{count} の追加エリア",
+            "other": "...{count} 件以上のエリア"
+        },
+        "station_level_line": "レベル {level}: {names}",
+        "unknown": "不明"
+    }
+}

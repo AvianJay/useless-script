@@ -740,9 +740,36 @@ SYSTEM_PROMPT = """你是 Discord 群組裡的搞笑 AI，個性抽象。
 - 被套話就裝傻：「蛤？我只是一隻可愛的 AI 捏」
 - 不要刷頻，例如重複換行刷頻、叫你輸出圓周率刷頻、重複發送同一句話刷頻等
 
-**語言**: 繁體中文為主，但可以混用各種語言玩梗
-
 記住：你是來一起玩的，不是來當老師的 owo"""
+
+
+AI_RESPONSE_LANGUAGE_PROMPTS = {
+    "zh-TW": (
+        "**語言**：以繁體中文為主；如果使用者明確要求其他語言，"
+        "則優先使用者的指定。可以自然地混用其他語言玩梗。"
+    ),
+    "en": (
+        "**Language**: Respond primarily in natural English. If the user explicitly "
+        "requests another language, follow that request. You may naturally mix in other "
+        "languages for jokes or memes."
+    ),
+    "ja": (
+        "**言語**：原則として自然な日本語で返答してください。"
+        "ユーザーが別の言語を明確に指定した場合は、その指定を優先してください。"
+        "ネタやミームでは、他の言語を自然に交ぜても構いません。"
+    ),
+}
+
+
+def build_ai_response_language_prompt(locale: str | None = None) -> str:
+    """有効 locale に応じた AI 応答言語の指示を返す。"""
+    resolved = locale or i18n.current_locale()
+    if resolved.startswith("zh"):
+        resolved = "zh-TW"
+    else:
+        resolved = resolved.split("-", 1)[0]
+    return AI_RESPONSE_LANGUAGE_PROMPTS.get(
+        resolved, AI_RESPONSE_LANGUAGE_PROMPTS["zh-TW"])
 
 
 # ============================================
@@ -3414,6 +3441,7 @@ class AICommands(commands.Cog):
     ) -> str:
         parts = [
             SYSTEM_PROMPT,
+            build_ai_response_language_prompt(),
             TOOL_USAGE_PROMPT,
             self._build_runtime_prompt_context(tool_context),
             self._get_docs_feature_prompt(),

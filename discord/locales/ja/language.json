@@ -1,0 +1,26 @@
+{
+    "msg": {
+        "user_set": "✅ 言語は {language} に設定されています。",
+        "user_auto": "✅ 言語が自動検出されます。",
+        "guild_set": "✅ このサーバーの言語は {language} に設定されています。",
+        "guild_auto": "✅ このサーバーの言語は自動検出されるようになりました。",
+        "invalid": "❌ サポートされていない言語: {value}",
+        "metadata_note": "-# 注: ピッカーのコマンド名と説明は、Discord クライアントの言語に従います。この設定はボットの応答にのみ影響します。"
+    },
+    "show": {
+        "title": "言語設定",
+        "user": "あなたの設定",
+        "guild": "サーバー設定",
+        "discord": "Discordクライアント",
+        "effective": "有効な言語",
+        "auto": "自動",
+        "not_applicable": "—"
+    },
+    "panel": {
+        "module_display": "言語",
+        "module_description": "ボットの応答に使用される言語",
+        "display": "サーバー言語",
+        "description": "このサーバー上でボットが応答する言語 (自動 = 各ユーザーの Discord クライアント言語に従います)",
+        "option_auto": "自動"
+    }
+}

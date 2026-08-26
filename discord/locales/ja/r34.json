@@ -1,0 +1,17 @@
+{
+    "embed": {
+        "error_title": "エラー"
+    },
+    "err": {
+        "generic": "エラーです！ {error}",
+        "generic_bare": "エラーです！",
+        "no_results": "結果が見つかりませんでした"
+    },
+    "value": {
+        "ai_generated_suffix": " (AI生成画像を含む)",
+        "tag_count_desc": {
+            "one": "ID: `{id}`\n{count} タグの合計。",
+            "other": "ID: `{id}`\n{count} タグの合計。"
+        }
+    }
+}

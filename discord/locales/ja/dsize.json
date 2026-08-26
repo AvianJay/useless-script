@@ -1,0 +1,270 @@
+{
+    "attack": {
+        "dm": "{attacker} はあなたにスプレー アンド プレイを使用し、{damage} cm のダメージを与えました!\nあなたの体長は {before} cm から {after} cm になりました!\n-# {scope}",
+        "err": {
+            "no_target": "今のところ攻撃対象はいない。",
+            "target_too_short": "描かれたターゲットはすでに可能な限り短いです。\n攻撃は失敗し、ダメージは与えられませんでした。"
+        },
+        "hit": "あなたは {target} にスプレー アンド プレイを使用し、{damage} cm のダメージを与えました。\n{target_name} の長さは {before} cm から {after} cm になりました。",
+        "scope_global": "グローバルサイズ",
+        "scope_guild": "サーバー: {guild}",
+        "self": "# {user} は自分自身にスプレーして祈りました!\n自傷行為により {damage} cm のダメージを受けました!\nあなたの身長は {before} cm から {after} cm になりました!"
+    },
+    "battle": {
+        "draw": "🤝 引き分けです！",
+        "err": {
+            "bot": "ボットと戦うことはできません。",
+            "generic": "戦闘中に何か問題が発生しました。",
+            "not_your_invite": "これはあなたの戦いへの招待状ではありません。",
+            "opponent_busy": "{user} はすでに戦闘中です。後でもう一度試してください。",
+            "opponent_measured": "{user} は今日すでに測定されています。",
+            "self": "自分自身と戦うことはできません。",
+            "you_busy": "あなたはすでに戦いの中にいます。それを先に終わらせてください。",
+            "you_measured": "今日はすでに測定しました。"
+        },
+        "field": {
+            "result": "結果:"
+        },
+        "global_note": "この戦いはグローバルリーダーボードに記録されます。",
+        "invite": "{user} はあなたと長さを比較したいと考えています。\n30 秒以内に承諾するには ✅ を、拒否するには ❌ を押してください。",
+        "invite_expired": "バトル招待の有効期限が切れました。",
+        "invite_rejected": "戦闘への招待は拒否されました。",
+        "starting": "戦闘を開始します。",
+        "title": "長さの戦い",
+        "winner": "🎉 {user} が勝ちました!"
+    },
+    "btn": {
+        "accept": "受け入れる",
+        "accept_surgery": "手術を受け入れる",
+        "reject": "辞退",
+        "reject_surgery": "手術の辞退"
+    },
+    "checkin": {
+        "auto_goal_default": "前回は目標を選択しなかったため、自動的に {item} x {count} に設定されています。",
+        "err": {
+            "not_your_goal": "これはあなたの目標選択ではありません。"
+        },
+        "footer": "チェックイン日 {streak}!",
+        "footer_broke": "{broke_on} 日に連続記録を破りました。やり直す！ |チェックイン日 {streak}!",
+        "footer_broke_freeze": "あなたは {broke_on} 日に連続記録を破り、{freeze} 個のフリーズ ボールを使用しました。やり直し！ |チェックイン日 {streak}!",
+        "footer_broke_freeze_user": "{user} は {broke_on} 日目に連勝記録を更新し、{freeze} フリーズ ボールを使用しました。やり直し！",
+        "footer_broke_user": "{user} は {broke_on} 日に連続記録を破りました。やり直す！",
+        "footer_frozen": "チェックイン日 {streak}!フリーズ ボールで連勝記録をセーブ ({freeze} を使用)",
+        "footer_frozen_user": "{user} チェックイン日 {streak}!フリーズボールで連敗を止めた ({freeze} を使用)",
+        "footer_user": "{user} チェックイン日 {streak}!",
+        "goal_auto": "期限内に目標を選択しなかったため、次の目標が自動的に設定されました: {days} 日!それを維持する！",
+        "goal_btn": "+{days} 日 ({item} x {count})",
+        "goal_selected": "次の目標は {days} 日です。それを維持する！",
+        "goal_title": "目標設定",
+        "pick_goal_desc": "次のチェックイン目標までの日数を選択してください:",
+        "pick_goal_title": "次の目標を決めてください",
+        "reward_desc": "{days} 日連続達成おめでとうございます!\n獲得したアイテム: {item} x {count}!",
+        "reward_title": "🎉 チェックイン特典！"
+    },
+    "cloud_ruler": {
+        "dragged_in": "{user} は測定のためにドラッグされました。",
+        "dragged_in_femboy": "{user} は測定のために引きずり込まれ、フェムボーイに変えられました。",
+        "err": {
+            "already_measured": "{user} は今日すでに測定されているため、測定できません。"
+        },
+        "title": "{user} は {target} を測定します。"
+    },
+    "drop": {
+        "anti_surgery": "{item} を見つけました!\n{command} {item} を使用して、手術を 1 日ブロックします。",
+        "cloud_ruler": "{item} が見つかりました!\n{command} {item} を使用して手術を実行してください。",
+        "fake_ruler": "{item} が見つかりました!\n{command} {item} を使用すると、次の測定結果がさらに長くなる可能性がありますか?",
+        "grass": "{item} x{count} を見つけました!\n{command} を使用してフェムボーイに餌を与えます。",
+        "rusty_scalpel": "{item} が見つかりました!\n{command} {item} を使用して手術を実行してください。",
+        "scalpel": "{item} が見つかりました!\n{command} {item} を使用して手術を実行してください。"
+    },
+    "embed": {
+        "length_title": "{user} の長さ:",
+        "new_length_title": "{user} の新しい長さ:"
+    },
+    "err": {
+        "limit_range": "制限は 1 ～ 50 の間である必要があります。",
+        "needs_itemsystem": "この機能には、ItemSystem モジュールが必要です。",
+        "once_per_day": "測定できるのは1日1回だけです。 {when} を再試行できます。"
+    },
+    "feedgrass": {
+        "err": {
+            "femboy_cannot": "フェムボーイは今日日本のコーラを飲まないと草を食べられない。",
+            "no_grass": "草がないので誰にも餌を与えることができません。",
+            "no_history": "チャンネル履歴を読み取れなかったため、他のユーザーのアバターは表示されません。\nボットがこのチャンネルのメッセージ履歴を読み取れることを確認してください。",
+            "not_femboy": "{name} はフェムボーイではないので、餌を与えることはできません。",
+            "not_measured": "今日は測ってないから誰にも食べさせられないよ。",
+            "self_nsfw_off": "現在、NSFW フィードグラスは許可されていません。最初に設定を切り替えてください。\n> {command} を使用して切り替えます。",
+            "target_nsfw_off": "{user} は NSFW フィードグラスを許可していないため、餌を与えることはできません。\n> {command} を使用して切り替えます。"
+        },
+        "fed": "{feeder} が {target} を供給しました!",
+        "fed_self": "{user} はお腹を満たしました!",
+        "reloaded": {
+            "one": "{count} フィードグラス画像をリロードしました!",
+            "other": "{count} フィードグラス画像をリロードしました!"
+        },
+        "submit_btn": "今すぐ提出してください。"
+    },
+    "history": {
+        "desc": {
+            "one": "最新の {count} レコードを表示しています",
+            "other": "最新の {count} レコードを表示しています"
+        },
+        "empty": "{name} には {scope} のレコードがまだありません。",
+        "global_footer": "世界記録",
+        "title": "{user} の歴史",
+        "type": {
+            "battle": "バトル",
+            "cloud_ruler": "雲定規",
+            "measure": "測定",
+            "surgery_failed": "手術は失敗した",
+            "surgery_success": "手術は成功した"
+        },
+        "unknown_date": "日付不明"
+    },
+    "item": {
+        "anti_surgery": {
+            "desc": "d*の形をした錠剤。これを使用すると、手術が 1 日ブロックされます。\n使用後 2 日間、測定値に縮小ペナルティがかかります。",
+            "name": "抗手術薬"
+        },
+        "anti_surgery_used": "抗手術薬を使用しました!\n今日は手術できません。",
+        "checkin_freeze": {
+            "desc": "物事を Articuno に変える魔法のフリーズ ボール。\nチェックインを逃した日を 1 日キャンセルして、連続記録を維持します。",
+            "name": "フリーズボール"
+        },
+        "cloud_ruler": {
+            "desc": "オンライン上の友達を測定できるクラウド定規。",
+            "name": "雲定規"
+        },
+        "cola_used": "{user} は日本のコーラを飲みました!\n-# 今では何本か持っているフェムボーイです",
+        "err": {
+            "cola_not_femboy": "あなたはフェムボーイではないので、日本のコーラを使用することはできません。",
+            "cola_not_measured": "今日は計っていないので日本のコーラは使えません。",
+            "cola_used": "今日はもう日本のコーラを使いましたね。",
+            "fake_ruler_used": "あなたは今日すでに自己欺瞞の定規を使いました。",
+            "missing": "{item} がないため、使用できません。",
+            "viagra_not_measured": "今日は測定していないので、バイアグラは使用できません。",
+            "viagra_used": "あなたはすでにバイアグラを使用しています。"
+        },
+        "fake_ruler": {
+            "desc": "使ってみると、次の測定値が長くなるかも？",
+            "name": "自己欺瞞の支配者"
+        },
+        "fake_ruler_used": "自己欺瞞定規を使用しました!\n次の測定結果が長くなる可能性がありますか?",
+        "grass": {
+            "desc": "フェムボーイに餌を与えるための一握りの草。 `/dsize-feedgrass` を使用します。",
+            "name": "草"
+        },
+        "japanese_cola": {
+            "desc": "フェムボーイをダ*に成長させる日本のコーラの缶。",
+            "name": "日本のコーラ"
+        },
+        "random_attack": {
+            "desc": "リーダーボード上のランダムな非フェムボーイ 1 人にダメージを与えます。",
+            "name": "【スキル】スプレーアンドプレイ"
+        },
+        "rusty_scalpel": {
+            "desc": "感染を強制し、ターゲットをフェムボーイに変える錆びたメス。",
+            "name": "錆びたメス"
+        },
+        "scalpel": {
+            "desc": "手術を行うためのメス。常に成功します。",
+            "name": "メス"
+        },
+        "viagra": {
+            "desc": "持続的な効果を持つ青い錠剤。\nこれを使用すると、良くも悪くも今日の状態が明日に引き継がれます。",
+            "name": "バイアグラ"
+        },
+        "viagra_used": "バイアグラを使用しました!\n今日の状態は良くも悪くも明日に持ち越されます。"
+    },
+    "leaderboard": {
+        "empty": "今日はまだ誰も測定していません。",
+        "global_footer": "グローバルリーダーボード",
+        "row_unknown": "**{rank}。ユーザーID {user_id}** - {size}",
+        "title": "今日の長さのリーダーボード"
+    },
+    "modal": {
+        "measure_title": "誰を測定したいですか？",
+        "pick_user_label": "ユーザーを選択してください",
+        "pick_user_ph": "ユーザーを選択してください",
+        "surgery_title": "誰を手術したいですか？"
+    },
+    "msg": {
+        "became_femboy_target": "{user} はフェムボーイになりました。",
+        "became_femboy_user": "{user} はフェムボーイになりました。",
+        "became_femboy_you": "あなたはフェムボーイになってしまいました。",
+        "became_femboy_you2": "あなたはフェムボーイになってしまいました。",
+        "feels_odd_user": "{user} の d* は今日は少し変な気がします。",
+        "feels_odd_you": "今日のあなたの気分は少し変です。",
+        "global_record": "この測定値は世界記録となりました。",
+        "side_effect": "ああ、ああ！副作用！",
+        "side_effect_femboy": "ああ、ああ！副作用！フェムボーイに変身しました！",
+        "side_effect_femboy_user": "{user} - ああ、ああ！副作用！フェムボーイに変身しました！",
+        "side_effect_user": "{user} - ああ、ああ!副作用！"
+    },
+    "nsfw": {
+        "allow": "許可される",
+        "deny": "拒否されました",
+        "toggled": "NSFW 草やりの設定が切り替わりました。現在は: {status}"
+    },
+    "scope": {
+        "global": "グローバル",
+        "server": "このサーバー",
+        "themselves": "自分たち自身",
+        "you": "あなた"
+    },
+    "settings": {
+        "drop_chance_set": "アイテムのドロップ確率が {value}% に設定されました。",
+        "err": {
+            "drop_chance_range": "アイテムのドロップ確率は 0 ～ 100 の整数でなければなりません。",
+            "max_range": "最大長は 1 ～ 1000 の整数である必要があります。",
+            "surgery_max_range": "最大手術ゲインは 1 ～ 100 の整数である必要があります。",
+            "surgery_percent_range": "手術の可能性は 1 ～ 100 の整数でなければなりません。",
+            "unknown": "不明な設定です。"
+        },
+        "max_set": "最大長は {value} cm に設定されます。",
+        "surgery_max_set": "最大手術ゲインは {value} cm に設定されています。",
+        "surgery_percent_set": "手術の確率は{value}%に設定されました。"
+    },
+    "size": {
+        "femboy": "**フェムボーイ!**",
+        "femboy_with_cola": "**フェムボーイ!** {size} cm"
+    },
+    "stats": {
+        "checkin_streak": "連続チェックイン",
+        "losses": "損失",
+        "mangirl_count": "時代はフェムボーイになった",
+        "perform_random_attacks": "与えられるランダム攻撃",
+        "random_attacks": "ランダム攻撃を受ける",
+        "successful_surgeries": "手術の成功",
+        "title": "{user} の dsize 統計",
+        "total_battles": "戦闘",
+        "total_been_feedgrass": "給餌回数",
+        "total_checkins": "チェックイン",
+        "total_drops": "見つかったアイテム",
+        "total_feedgrass": "誰かに食事を与えた回数",
+        "total_surgeries": "手術",
+        "total_uses": "測定",
+        "wins": "勝利"
+    },
+    "surgery": {
+        "blocked_by_anti": "抗手術薬を使用したため、手術はできません。",
+        "dragged_in": "{user} は手術のために運ばれました。",
+        "err": {
+            "not_yours": "これは手術のチャンスではありません。",
+            "target_already_femboy": "{user} はすでにフェムボーイです。",
+            "target_is_femboy": "{user} はフェムボーイなので、手術は不可能です。",
+            "target_not_measured": "{user} は今日測定していないため、手術はできません。",
+            "target_protected": "{user} は抗手術薬を使用したため、手術は不可能です。"
+        },
+        "expired": "手術のチャンスは消えた。",
+        "failed_femboy": "手術は失敗して、あなたはフェムボーイになってしまいました。",
+        "in_progress": "動作中...",
+        "in_progress_boom": "動作中...💥",
+        "in_progress_q": "運営中…？",
+        "offer": "手術を受けるチャンスがあります。\n受け入れますか?\n-# 失敗の可能性: {chance}%",
+        "performed_title": "{user} は {target} で動作します。",
+        "rejected": "手術は断られた。",
+        "succeeded": "手術は成功した。",
+        "target_succeeded": "{user}の手術は成功しました。"
+    }
+}

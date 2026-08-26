@@ -36,7 +36,7 @@ class ConcurrencyTests(unittest.IsolatedAsyncioTestCase):
     """整個 ContextVar 設計的正當性依據：併發 interaction 不得互相污染。"""
 
     async def test_gather_no_cross_contamination(self):
-        results = {"en": [], "zh-TW": []}
+        results = {"en": [], "ja": [], "zh-TW": []}
 
         async def worker(locale):
             with i18n.use_locale(locale):
@@ -44,8 +44,9 @@ class ConcurrencyTests(unittest.IsolatedAsyncioTestCase):
                     await asyncio.sleep(0)
                     results[locale].append(i18n.current_locale())
 
-        await asyncio.gather(worker("en"), worker("zh-TW"))
+        await asyncio.gather(worker("en"), worker("ja"), worker("zh-TW"))
         self.assertEqual(results["en"], ["en"] * 20)
+        self.assertEqual(results["ja"], ["ja"] * 20)
         self.assertEqual(results["zh-TW"], ["zh-TW"] * 20)
 
     async def test_create_task_inherits_scope(self):
@@ -99,6 +100,10 @@ class ResolutionTests(unittest.TestCase):
                                 discord_locale=discord.Locale.taiwan_chinese),
             "en")
 
+    def test_japanese_is_available_with_autonym(self):
+        self.assertEqual(i18n.available_locales(), ["zh-TW", "en", "ja"])
+        self.assertEqual(i18n.locale_display_name("ja"), "日本語")
+
     def test_guild_beats_discord_locale(self):
         self.fake_db.set_server_config(10, i18n.GUILD_LOCALE_KEY, "zh-TW")
         clear_i18n_caches()
@@ -125,8 +130,9 @@ class ResolutionTests(unittest.TestCase):
         self.assertEqual(i18n.map_discord_locale(discord.Locale.chinese), "zh-TW")
         self.assertEqual(i18n.map_discord_locale(discord.Locale.american_english), "en")
         self.assertEqual(i18n.map_discord_locale(discord.Locale.british_english), "en")
+        self.assertEqual(i18n.map_discord_locale(discord.Locale.japanese), "ja")
         # catch-all：其他語言給英文
-        self.assertEqual(i18n.map_discord_locale(discord.Locale.japanese), "en")
+        self.assertEqual(i18n.map_discord_locale(discord.Locale.french), "en")
         self.assertIsNone(i18n.map_discord_locale(None))
 
     def test_last_locale_persisted_once(self):
@@ -155,12 +161,12 @@ class ResolutionTests(unittest.TestCase):
             self.fake_db.get_user_data(5, 0, i18n.LAST_LOCALE_KEY), "en-US")
 
     def test_set_get_roundtrip(self):
-        i18n.set_user_locale(1, "en")
-        self.assertEqual(i18n.get_user_locale(1), "en")
+        i18n.set_user_locale(1, "ja")
+        self.assertEqual(i18n.get_user_locale(1), "ja")
         i18n.set_user_locale(1, "auto")
         self.assertIsNone(i18n.get_user_locale(1))
-        i18n.set_guild_locale(10, "en")
-        self.assertEqual(i18n.get_guild_locale(10), "en")
+        i18n.set_guild_locale(10, "ja")
+        self.assertEqual(i18n.get_guild_locale(10), "ja")
         i18n.set_guild_locale(10, None)
         self.assertIsNone(i18n.get_guild_locale(10))
 
@@ -210,6 +216,14 @@ class WebResolutionTests(unittest.TestCase):
                 self.assertEqual(
                     i18n.resolve_web_locale(accept_language=header),
                     "zh-TW",
+                )
+
+    def test_japanese_browser_variants_map_to_japanese(self):
+        for header in ("ja", "ja-JP"):
+            with self.subTest(header=header):
+                self.assertEqual(
+                    i18n.resolve_web_locale(accept_language=header),
+                    "ja",
                 )
 
     def test_unsupported_language_uses_english(self):

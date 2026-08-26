@@ -1,0 +1,145 @@
+{
+    "about": {
+        "antibeast_body": "AntiBeast が有効になっている場合、@everyone がメンション許可を取得し、メンション可能をオフにすると機能しなくなります。 MentionLimit は、AutoMod ルールによる強制に自動的に切り替わります。\nロールを追加すると、そのロールは AntiBeast バイパス リストにも追加されます (削除しても元には戻りません)。",
+        "antibeast_title": "AntiBeast の互換性",
+        "automod_mode_body": "このロールは永続的に言及可能なままになります。クールダウン中は、ネイティブの Discord AutoMod ルールによってそのロールへのメンションがブロックされます。\n注: AutoMod は管理者やサーバー所有者には適用されないため、クールダウン中にもロールにメンションすることができます。",
+        "automod_mode_title": "AutoModモード",
+        "default_mode_body": "メンション後、ロールの「誰でもこのロールを @メンションできるようにする」を一時的にオフにし、クールダウンが終了すると元の設定に戻します。",
+        "default_mode_title": "デフォルトモード",
+        "desc": "自由に言及可能なロール (「ping me」ロールなど) にクールダウンを追加します:\nロールが言及されると、それ以降の言及はしばらくブロックされ、クールダウンが終了すると自動的に復元されます。",
+        "other_body": "「管理者をカウント」では、管理者のメンションによってもクールダウンがトリガーされます (デフォルトではオフ)。\n「クールダウンのお知らせ」では、クールダウンの開始時にチャンネルに通知が投稿されます (デフォルトではオフ)。",
+        "other_title": "その他の設定"
+    },
+    "antibeast": {
+        "bypass_added_pending": "AntiBeast が有効であることが検出されたため、**{role}** が AntiBeast バイパス リストに自動的に追加されました。これは、AntiBeast の次の同期時に有効になります。",
+        "bypass_added_synced": "AntiBeast が有効であることが検出されたため、**{role}** が AntiBeast バイパス リストに自動的に追加され、その AutoMod ルールが同期されました。",
+        "bypass_failed": "⚠️ **{role}** を AntiBeast バイパス リストに追加できませんでした。 `/antibeast bypass` を手動で実行してください。"
+    },
+    "audit": {
+        "cooldown_ended": "言及制限クールダウンが終了しました",
+        "cooldown_start": "MentionLimit のクールダウンが開始されました。{seconds}s で復元されます",
+        "cooldown_started": "言及リミットクールダウンが開始されました",
+        "cooldown_started_degraded": "MentionLimit のクールダウンが開始されました (施行の低下)",
+        "cooldown_sync": "MentionLimit クールダウン状態の同期",
+        "enforcement_reconcile": "MentionLimit 強制モードの調整"
+    },
+    "block_message": "MentionLimit はこのメンションをブロックしました: ロールはクールダウン中です。後でもう一度試してください。",
+    "btn": {
+        "announce_toggle": "クールダウンのお知らせ: {state}",
+        "automod_toggle": "AutoMod モード: {state}",
+        "back_to_roles": "ロールの選択に戻る",
+        "clear_and_continue": "クリアして続行",
+        "count_admins_toggle": "管理者の数: {state}",
+        "enable": "MentionLimit を有効にする",
+        "keep_current": "現在の設定を維持する",
+        "set_cooldown": "クールダウン秒数を設定する"
+    },
+    "config": {
+        "automod_admin_note": "AutoMod は管理者やサーバー所有者には適用されません。",
+        "deleted_role": "削除されたロール ({role_id})",
+        "more_roles": {
+            "one": "…さらに {count} のロール",
+            "other": "…さらに {count} 個のロール"
+        },
+        "no_roles": "まだ管理されているロールはありません。 `/mentionlimit add` を使用して追加します。",
+        "not_in_bypass": "　⚠️ AntiBeast バイパス リストに含まれていないため、メンションは AntiBeast によってブロックされます。",
+        "role_line": "{role} |クールダウン {seconds}s | {state}",
+        "rule_not_created": "まだ作成されていません",
+        "state_cooling": "クールダウンで、{when} が終了します",
+        "state_idle": "クールダウン中ではない",
+        "title": "メンション制限の設定"
+    },
+    "err": {
+        "bot_hierarchy_too_low": "⚠️ メンション可能な状態を切り替えるには、ボットの最高のロールが **{role}** よりも高い必要があります。",
+        "bot_missing_perms": "⚠️ ボットに権限がありません: {perms}",
+        "cannot_manage_everyone": "⚠️@みんなは管理できません。",
+        "cannot_manage_integration_role": "⚠️ ボットまたは統合によって管理されるロールは管理できません。",
+        "cooldown_not_int": "⚠️ クールダウンは整数秒でなければなりません。",
+        "cooldown_range": "⚠️ クールダウンは {min} 秒から {max} 秒の間である必要があります。",
+        "max_roles": "⚠️ 最大 {max} ロールを管理できます。",
+        "not_your_setup": "このセットアップ フローはあなたのものではありません。",
+        "role_not_managed": "⚠️ **{role}** は管理リストにありません。",
+        "rule_limit_reached": "⚠️ MentionLimit は AutoMod ルールを作成できませんでした。このサーバーは Discord の AutoMod ルールの制限に達しました。未使用の AutoMod ルールを削除して、再試行してください。",
+        "rule_sync_forbidden": "⚠️ MentionLimit が AutoMod ルールを同期できませんでした: {error}",
+        "rule_sync_generic": "⚠️ MentionLimit が AutoMod ルールを同期できませんでした。後でもう一度試してください。",
+        "rule_sync_http": "⚠️ MentionLimit が AutoMod ルールを同期できませんでした: Discord API がエラー ({status}) を返しました。"
+    },
+    "field": {
+        "announce": "クールダウンのお知らせ",
+        "automod_rule": "AutoMod ルール",
+        "count_admins": "管理者の数を数える",
+        "managed_roles": "管理されたロール",
+        "mode": "モード",
+        "status": "ステータス"
+    },
+    "modal": {
+        "cooldown_label": "クールダウン秒数 ({min}-{max})、選択されたすべてのロールに適用されます",
+        "cooldown_title": "言及クールダウンを制限する"
+    },
+    "mode": {
+        "antibeast_forced": "(AntiBeast が有効になっているため、AutoMod モードが強制されます)",
+        "automod": "AutoMod ルールでブロックする",
+        "unmentionable": "メンション可能をオフにする"
+    },
+    "msg": {
+        "cooldown_announce": "⏳ {role} はクールダウン中です。 {when} を回復します。",
+        "currently_disabled": "ℹ️ MentionLimit は現在無効になっています。 `/mentionlimit toggle` を使用して有効にします。",
+        "disabled": "✅ MentionLimit は **無効** になり、クールダウン中のすべてのロールが復元されました。",
+        "disabled_partial_failure": "⚠️ 一部のロールは復元に失敗したため、自動的に再試行されます。ボットの権限を確認してください。",
+        "enabled": {
+            "one": "✅ MentionLimit が **有効**になり、{count} ロールを管理します。",
+            "other": "✅ MentionLimit が **有効**になり、{count} ロールを管理します。"
+        },
+        "enabled_no_roles": "`/mentionlimit add` を使用して、管理するロールを追加します。",
+        "role_added": "✅ **{role}** は、{seconds}s のクールダウンによるクールダウン管理について言及するために追加されました。",
+        "role_removed": "✅ **{role}** はクールダウン管理に言及されなくなりました。",
+        "role_removed_restore_failed": "⚠️ メンション可能な状態を復元できませんでした。ロールの設定を手動で確認してください。",
+        "role_removed_restored": " (クールダウン中でしたが、すぐに回復しました)",
+        "role_updated": "✅ **{role}** の言及のクールダウン管理が {seconds}s のクールダウンに更新されました。"
+    },
+    "note": {
+        "antibeast_forces_automod": "⚠️ AntiBeast が有効になっています: AntiBeast が無効になるまで、クールダウンは AutoMod ルールで強制されます。",
+        "automod_skips_admins": "ℹ️ AutoMod は管理者やサーバー所有者には適用されないため、クールダウン中にロールについて言及することができます。"
+    },
+    "perm": {
+        "manage_guild": "サーバーの管理",
+        "manage_roles": "ロールの管理"
+    },
+    "settings": {
+        "announce_line": "クールダウンのお知らせ: {state}",
+        "automod_line": "AutoMod モード: {state}",
+        "count_admins_line": "管理者の数: {state}",
+        "current": "現在の設定:",
+        "updated": "設定が更新されました。"
+    },
+    "setup": {
+        "antibeast_note": "⚠️ AntiBeast が有効になっています: クールダウンは AutoMod ルールで強制され、ロールは AntiBeast バイパス リストに自動的に追加されます。",
+        "confirm_desc": "設定を確認し、有効化をクリックします。",
+        "confirm_title": "MentionLimit 設定: 確認",
+        "current_selection": "現在の選択内容",
+        "enabled_title": "MentionLimit が有効になっています",
+        "hierarchy_body": "ボットの最高位のロールは {roles} であるため、これらのロールの言及可能な状態を切り替えることはできません。",
+        "hierarchy_title": "⚠️ ロール階層",
+        "mode_explainer": "AutoMod モード: クールダウン中に AutoMod ルールでブロックします。ロールはメンション可能のままです。\nオフの場合: クールダウン中にロールの「誰でもこのロールを @メンションできるようにする」を一時的にオフにします。",
+        "nothing_selected": "まだ何も選択されていません",
+        "nothing_selected_hint": "まだ何も選択されていません (後で `/mentionlimit add` を使用してロールを追加することもできます)",
+        "options_desc": "クールダウンの長さと強制モードを設定します。",
+        "options_title": "MentionLimit セットアップ: クールダウンとモード",
+        "role_line": "{role} |クールダウン {seconds}s",
+        "role_select_ph": "管理するロールを選択します",
+        "roles_desc": "メンションのクールダウンを適用したいロールを選択します (例: 「ping me」ロール)。\n@everyone および統合管理ロールは自動的に除外されます。",
+        "roles_title": "MentionLimit セットアップ: 管理対象ロール"
+    },
+    "state": {
+        "disabled": "❌ 無効",
+        "enabled": "✅ 有効",
+        "no": "❌ いいえ",
+        "no_plain": "いいえ",
+        "off": "❌ オフ",
+        "off_plain": "オフ",
+        "on": "✅ オン",
+        "on_plain": "オン",
+        "yes": "✅ はい",
+        "yes_plain": "はい"
+    }
+}

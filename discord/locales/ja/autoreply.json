@@ -1,0 +1,221 @@
+{
+    "btn": {
+        "clear_channels": "チャンネルフィルターをクリア",
+        "confirm_clear": "クリアを確認する",
+        "edit_trigger_response": "トリガーとレスポンスを編集する",
+        "reply_original": "オリジナルへの返信: {state}",
+        "save_rule": "ルールの保存"
+    },
+    "builder": {
+        "cancelled_desc": "今回はルールが保存されませんでした。",
+        "cancelled_title": "自動返信ビルダーがキャンセルされました",
+        "instructions": "以下のボタンとドロップダウンを使用してこのルールを作成し、準備ができたら [ルールを保存] をクリックします。",
+        "more_items": "…そして {count} 詳細",
+        "rule_added_confirm": "ルールが自動返信リストに追加されました。",
+        "rule_added_desc": "このルールが追加されました。現在、{total} / {limit} があります。",
+        "timed_out_desc": "ビルダーは閉店しました。続行するには、コマンドを再度実行します。",
+        "timed_out_title": "自動返信ビルダーがタイムアウトしました",
+        "tip_body": "1 行に 1 つのトリガー/レスポンスを入力します。応答では、`{user}`、`{content}`、`{contentsplit:1-}`、`{if:...}`、`{math:(...)}` を直接使用できます。"
+    },
+    "channel_mode": {
+        "all": {
+            "desc": "任意のテキストチャンネルでトリガー",
+            "label": "すべてのチャンネル"
+        },
+        "blacklist": {
+            "desc": "リストされたチャンネルを除くあらゆる場所でトリガー",
+            "label": "ブラックリスト"
+        },
+        "whitelist": {
+            "desc": "リストされたチャンネルのみをトリガーします",
+            "label": "ホワイトリスト"
+        }
+    },
+    "clear": {
+        "cancelled": "すべての自動返信の削除がキャンセルされました。",
+        "confirm_prompt": "すべての自動応答をクリアしてもよろしいですか?\n 現在 {count} があります。",
+        "done": "すべての自動返信がクリアされました。",
+        "timed_out": "タイムアウトになりました。すべての自動応答のクリアがキャンセルされました。"
+    },
+    "err": {
+        "config_limit": {
+            "one": "最大 {count} 個の自動応答を設定できます。\n> 制限を高くしたいですか?\n> サポート サーバーでチケットを開いてください!\n> {support_url}",
+            "other": "最大 {count} 個の自動応答を設定できます。\n> 制限を高くしたいですか?\n> サポート サーバーでチケットを開いてください!\n> {support_url}"
+        },
+        "limit_reached": {
+            "one": "自動応答の制限は {count} です。",
+            "other": "自動応答の制限は {count} です。"
+        },
+        "need_response": "少なくとも 1 つの返信が必要です。",
+        "need_trigger": "少なくとも 1 つのトリガーが必要です。",
+        "not_builder_owner": "このビルダーは、開いた人のみが使用できます。",
+        "not_clear_initiator": "これを開始したユーザーのみがクリアを確認できます。",
+        "pack_not_found": "そのテンプレート パックが見つかりませんでした。",
+        "random_chance_between": "ランダムな返信の可能性は 1 ～ 100 の範囲にする必要があります。",
+        "random_chance_range": "トリガーのチャンスは 1 から 100 までの整数でなければなりません。",
+        "template_syntax": "返信テンプレートの構文エラー: {error}",
+        "template_would_exceed_limit": {
+            "one": "これを適用すると、{count} 自動応答制限を超えるため、適用されませんでした。",
+            "other": "これを適用すると、{count} 自動応答制限を超えるため、適用されませんでした。"
+        },
+        "trigger_conflict_existing": "これらのトリガーは他の自動応答ルールにすでに存在します: {preview}",
+        "trigger_conflict_new": "追加しているトリガーには重複が含まれています: {preview}",
+        "trigger_not_found": "トリガー文字列 `{trigger}` を含む自動応答は見つかりませんでした。",
+        "unknown_channel_mode": "不明なチャンネル フィルター モード。",
+        "unknown_mode": "不明なトリガーモードです。",
+        "unknown_type_trigger": "不明なタイプのトリガー: {preview}。 `type:join`、`type:boost`、または Discord MessageType 名を直接使用します。 `type:premium_guild_subscription`。"
+    },
+    "export": {
+        "file_message": "このサーバーの自動応答設定を JSON ファイルとして示します。",
+        "no_config": "このサーバーにはまだ自動応答が設定されていません。"
+    },
+    "field": {
+        "apply_mode": "適用モード",
+        "chance": "チャンス",
+        "channel_mode": "チャンネルモード",
+        "current_count": "現在のカウント",
+        "current_total": "現在の合計",
+        "duplicates_skipped": "重複はスキップされました",
+        "included_rules": "含まれるルール",
+        "mode": "モード",
+        "random_chance": "ランダム返信チャンス",
+        "reply_original": "原文への返信",
+        "response": "応答",
+        "rules_added": "ルールが追加されました",
+        "specified_channels": "指定チャンネル",
+        "template_pack": "テンプレートパック",
+        "tip": "ヒント",
+        "trigger": "トリガー",
+        "trigger_string": "トリガー文字列"
+    },
+    "help": {
+        "body": {
+            "basic_vars": "- `{user}` への言及; `{author}` / `{member}` 名前; `{id}` / `{authorid}` ユーザー ID\n- `{authoravatar}` アバター URL; `{authorbanner}` バナー URL; `{authorcreated}` アカウント作成時間\n- `{guild}` / `{server}` サーバー名。 `{guildid}` サーバー ID\n- `{guildicon}` アイコン URL; `{guildbanner}` バナー URL; `{guildowner}` / `{guildownerid}` 所有者\n- `{guildmembers}` メンバー数; `{guildroles}` ロール数; `{guildboosts}` ブースト数\n- `{content}` / `{channel}` / `{role}`\n- `{null}` 空の文字列。 `if` 比較\n- `\\n` 改行、`\\t` タブ",
+            "builtin_packs": "- `daily_greetings`: 朝 / 午後 / 夕方 / 一般的な挨拶\n- `mini_commands`: !say / !time / !date / !roll\n- `chat_fun`: チェックイン / 誰かを選ぶ / 毎日の運勢 / 誇大広告反応\n- {template} を使用して直接適用します",
+            "commands": "{add}: ルールを追加\n{edit} / {remove}: ルールを変更または削除\n{quickadd}: トリガーをすぐに追加 /応答\n{template}: 組み込みテンプレート パックを適用\n{list} / {clear}: ルールを表示またはクリア\n{export} / {import_}: JSON のエクスポートまたはインポート\n{ignore}: グローバル無視/許可チャンネルの構成\n{test}: 変数、条件、埋め込み出力のプレビュー",
+            "date_condition": "- `{date}` `{year}` `{month}` `{day}`\n- `{time}` `{time24}` `{hour}` `{minute}` `{second}`\n- `{timemd:t}` ~ `{timemd:R}` Discord タイムスタンプを生成します\n- `{contentsplit:0}`、`{contentsplit:1-}`、`{contentsplit:-4}`、`{contentsplit:1-2}`\n- `{math:(1+2*3)}`、`+ - * /` のみサポート、番号は以下に制限されます`-1000 ~ 1000`\n- `math` 内で他の変数を使用できます。 `{math:({contentsplit:1}+5)}`\n- `{if:{contentsplit:1}==true:Yes:else:No}`\n- `{if:{contentsplit:1}!={null}:Has content:else:Empty}`\n- `{if:{contentsplit:1}==true:Yes:No}` および`{if:condition:content if true}`\n- `==` `!=` `<=` `>=` `&&` をサポートします`||`",
+            "delay_state_vars": "- `{newmsg:2}`: 1 ～ 3 秒後、最大 2 \n- `{edit:2}`: この自動返信を 1 ～ 3 秒後、最大 4\n- デフォルトで許可されるのはユーザーのメンションのみです。 `{mention:true}` では `@everyone` / ロールが許可され、`{mention:false}` ではオフになります\n- `{uservar:key}` / `{uservar:key:value}`\n- `{guildvar:key}` / `{guildvar:key:value}`\n - 最大 5 ユーザー変数、10 ギルド変数、キー/値の最大長 100",
+            "embed_advanced": "- `{random}` / `{randint:min-max}` / `{random_user}`\n- `{react:emoji}`、`{sticker:sticker_id}`\n- `{embedtitle:title}` `{embeddescription:content}` `{embedurl:link}`\n- `{embedimage:link}` `{embedthumbnail:link}`\n- `{embedcolor:HEX}` `{embedfooter:text}` `{embedfooterimage:link}`\n- `{embedauthor:name}` `{embedauthorurl:link}` `{embedauthorimage:link}`\n- `{embedtime:true}` `{embedfield:field name:field value}`\n- 埋め込みテキスト内では他の変数も引き続き使用できます",
+            "notes": "- ギルドごとに 1 秒あたり最大 3 回の自動返信\n- テンプレート構文エラーは空の文字列を生成するだけ\n- 日付/時刻変数はボット ホストのローカル タイムゾーンに従います\n",
+            "special_trigger": "- `type:join`: メンバー参加システム メッセージでのみトリガーします (`discord.MessageType.new_member`)\n- `type:boost`: サーバー ブースト システム メッセージでのみトリガーします (`discord.MessageType.premium_guild_subscription`)\n-ネイティブの Discord 名も直接機能します。 `type:premium_guild_tier_1`"
+        },
+        "btn": {
+            "more_examples": "さらに例を表示",
+            "test_hint": "ヒント: テスト置換"
+        },
+        "examples_body": "1) `Welcome {user} to {guild}!`\n2) `{if:{contentsplit:1}==true&&{hour}>=12:You entered true in the afternoon:Not met yet}`\n3) `{if:{contentsplit:1}!={null}:You entered a parameter:else:No parameter entered}`\n4) `{embedtitle:Checked in}{embedurl:https://example.com}{embeddescription:{user} checked in at {date} {time24}}{embedauthor:System}{embedauthorimage:{authoravatar}}{embedcolor:57F287}`\n5) `Starting from the 2nd word: {contentsplit:1-}`\n6) `Random pick from chat just now: {random_user}`\n7) `{mention:true}@everyone Maintenance starting`\n8) システム メッセージをリッスンするトリガーとして `type:boost` または `type:join` を書き込みます",
+        "examples_title": "自動返信の例",
+        "section": {
+            "basic_vars": "基本的な変数",
+            "builtin_packs": "組み込みのテンプレート パック",
+            "commands": "コマンド",
+            "date_condition": "日付と条件",
+            "delay_state_vars": "遅延/状態変数",
+            "embed_advanced": "埋め込み/高度なエフェクト",
+            "notes": "注意事項",
+            "special_trigger": "特別なトリガー"
+        },
+        "subtitle": "変数置換、条件文、埋め込み返信、ステッカー/リアクションをサポートします。",
+        "test_hint_body": "{test} を使用して変数、条件をプレビューし、出力を埋め込みます。",
+        "title": "自動返信の使い方ガイド"
+    },
+    "ignore": {
+        "updated": "`{mode}` に設定されたチャンネル モード、チャンネル リスト: `{channels}` を無視します。"
+    },
+    "import": {
+        "done": "自動返信設定がインポートされました。",
+        "download_failed": "ファイルをダウンロードできませんでした。",
+        "parse_failed": "JSON ファイルを解析できませんでした。",
+        "would_exceed_limit": {
+            "one": "最大 {count} 個の自動応答を設定できるため、このインポートは適用されませんでした。\n> 制限を高くしたいですか?\n> サポート サーバーでチケットを開いてください!\n> {support_url}",
+            "other": "最大 {count} 個の自動応答を設定できるため、このインポートは適用されませんでした。\n> より高い制限が必要ですか?\n> サポート サーバーでチケットを開いてください!\n> {support_url}"
+        }
+    },
+    "list": {
+        "row": "**{index}.** モード: {mode}、トリガー: `{triggers}`、応答: `{responses}`、元の応答: {reply}、チャンネル モード: {channel_mode}、チャンネル: `{channels}`、ランダムな確率: {chance}%",
+        "title": "自動返信リスト"
+    },
+    "modal": {
+        "builder_title": "自動返信ビルダー",
+        "random_chance_label": "トリガーチャンス(1-100)",
+        "response_ph": "1 行に 1 つの応答。 {user}、{contentsplit:1-} のような変数を直接使用します",
+        "trigger_ph": "1 行に 1 つのトリガー。単一行をカンマで区切ることもできます"
+    },
+    "mode": {
+        "contains": {
+            "desc": "メッセージにトリガーのいずれかが含まれている場合に応答します",
+            "label": "含まれています"
+        },
+        "ends_with": {
+            "desc": "メッセージがトリガーで終了したときにトリガーされます",
+            "label": "で終わる"
+        },
+        "equals": {
+            "desc": "メッセージはトリガーと正確に一致する必要があります",
+            "label": "完全一致"
+        },
+        "regex": {
+            "desc": "Python 正規表現を使用してメッセージを照合します",
+            "label": "正規表現"
+        },
+        "starts_with": {
+            "desc": "メッセージがトリガーで始まるときにトリガーされます",
+            "label": "で始まる"
+        }
+    },
+    "msg": {
+        "add_success": "自動返信が追加されました",
+        "builder_content_updated": "ビルダーのコンテンツが更新されました。",
+        "edit_success": "自動返信を編集しました",
+        "no_autoreplies": "自動応答はまだ設定されていません。",
+        "quickadd_success": "自動返信のクイック追加",
+        "removed": "自動応答を削除しました: `{trigger}`。",
+        "rule_saved_title": "自動返信ルールが保存されました",
+        "template_applied": "自動返信テンプレートパックが適用されました"
+    },
+    "pack": {
+        "booster": {
+            "description": "ブースター向けに作成された返信ルール。アナウンスや一般的なチャット チャンネルでうまく機能します。",
+            "display_name": "ブースター応答"
+        },
+        "chat_fun": {
+            "description": "チェックイン、人選び、運勢、誇大宣伝の反応 - チャットを動かすのに適しています。",
+            "display_name": "楽しいチャット"
+        },
+        "daily_greetings": {
+            "description": "現在の時間によって異なる朝/昼/夜の挨拶。",
+            "display_name": "日々の挨拶"
+        },
+        "mini_commands": {
+            "description": "!say、!time、!date、!roll、!weather などの便利なミニコマンド。",
+            "display_name": "ミニコマンド"
+        },
+        "welcome": {
+            "description": "新しいメンバーへの歓迎メッセージ。ようこそまたは一般的なチャット チャンネルでうまく機能します。",
+            "display_name": "ウェルカムパック"
+        }
+    },
+    "render": {
+        "am": "午前",
+        "no_user_found": "ユーザーが見つかりませんでした",
+        "pm": "午後",
+        "user_unavailable": "ユーザーが使用不可"
+    },
+    "select": {
+        "channel_limit_ph": "制限するチャンネルを選択します (複数選択、なし = 制限なし)",
+        "channel_mode_ph": "チャンネルフィルターモードを選択してください",
+        "mode_ph": "トリガーモードを選択してください"
+    },
+    "state": {
+        "empty_list": "空のリスト",
+        "merge_existing": "既存のルールと統合",
+        "not_set": "まだ設定されていません",
+        "off": "オフ",
+        "on": "に",
+        "overwrite_existing": "既存のルールを上書きしました"
+    },
+    "test": {
+        "mock_content": "これはテストメッセージです。",
+        "no_output": "表示する出力はありません。"
+    }
+}

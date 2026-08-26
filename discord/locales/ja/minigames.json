@@ -1,0 +1,286 @@
+{
+    "bigtwo": {
+        "all_passed": "全員が合格しました。テーブルはクリアされ、最後にプレイしたプレーヤーが再びリードします。",
+        "err": {
+            "already_joined": "あなたはすでにこのテーブルにいます。",
+            "already_started": "ゲームが始まりました。今は参加できません。",
+            "already_started_short": "すでに始まっています。",
+            "charge_failed": "充電は失敗しました。どのプレイヤーのバランスも変更されませんでした。",
+            "need_two": "開始するには少なくとも 2 人のプレイヤーが必要です。",
+            "no_table_message": "テーブルメッセージを取得できませんでした。",
+            "players_insufficient": "これらのプレイヤーは **{stake}** {currency}: {players} を持っていません",
+            "table_exists": "このチャンネルにはすでにテーブルがあります。",
+            "table_full": "最大プレイヤーは4人。",
+            "table_update_failed": "テーブルメッセージを更新できませんでした。"
+        },
+        "field": {
+            "last_play": "最後のプレイ",
+            "players": "選手",
+            "prize": "💰賞品",
+            "ranking": "ランキング",
+            "status": "ステータス",
+            "turn": "ターン"
+        },
+        "game_ended": "このゲームは終了しました。",
+        "hand_footer": {
+            "one": "{count} カード |ドロップダウンからカードを選択し、[再生] をクリックするか、単にパスします。",
+            "other": "{count} カード |ドロップダウンからカードを選択し、[再生] をクリックするか、単にパスします。"
+        },
+        "joined": "参加しました！",
+        "lobby_desc": "ルール: **{rule}** |プレイヤー: {count}/4",
+        "lobby_footer": "✅ を押して参加してください。ホストが ▶ を押して開始します。",
+        "lobby_stake": "💰 ステーク: **{stake}** {currency} ずつ",
+        "lobby_timeout": "ロビーがタイムアウトになりました。",
+        "lobby_title": "🎴 ビッグ 2 - ロビーがオープン",
+        "none": "(なし)",
+        "over_desc": "最終順位:",
+        "over_footer": "ホストは新しいゲームを開始できます。",
+        "over_title": "🎴 ビッグ 2 - ゲームオーバー",
+        "player_tag": {
+            "one": "{user} [{count} カード]",
+            "other": "{user} [{count} カード]"
+        },
+        "prize_line": "🏆 勝者 {user} は **{prize}** {currency} を獲得します!",
+        "rank_line": "**#{rank}**: {user}",
+        "rule_3d": "3♦ オープナー",
+        "rule_free": "無料オープナー",
+        "rules": {
+            "classic": "クラシック (3 ♦ でオープン、2 ではストレートを形成できない)",
+            "free_start": "無料のオープナー (3♦ 不要)",
+            "hand_ranks_body": "シングル、ペア、トリプル、ストレート、フラッシュ、フルハウス、フォー カード、ストレート フラッシュ。\nランク: 3 ～ 10、J、Q、K、A、2 (2 が最高)。\nスーツ: ♣ < ♦ < ♥ < ♠ (スーツはタイを破る)。",
+            "hand_ranks_title": "ハンドランキング",
+            "play_body": "自分のターンでは、**1 / 2 / 3 / 5 枚のカード**を正当な手札としてプレイするか、**パス**。\nあなたのプレイは最後のカードに**勝つ**必要があります (同じハンドタイプ)。空のテーブルでは、正当なハンドがリードする可能性があります。\n全員がパスすると、テーブルはクリアされ、最後にプレイしたプレイヤーが再びリードします。",
+            "play_title": "トランプ",
+            "table_body": "**クラシック**: 最初のハンドには 3 ♦ が含まれている必要があり、2 でストレートを形成することはできません。\n**フリー オープナー**: 3 ♦ は必要ありません。ホストはロビーのドロップダウンでこれを切り替えることができます。",
+            "table_title": "このテーブルのルール"
+        },
+        "rules_desc": "プレイヤーは 2 ～ 4 人、カードは各 13 枚です。先に手札を空にした方が勝ちです。",
+        "rules_footer": "「マイハンド」を押してカードを選んでプレイします。",
+        "rules_title": "🎴 ビッグ 2 - 遊び方",
+        "select": {
+            "cards_ph": "カードを選ぶ (1/2/3/5、最大 5)",
+            "rules_ph": "ルール（ホストのみ）",
+            "stake_ph": "ステーク (ホストのみ)"
+        },
+        "stake": {
+            "amount": "{amount} を賭ける",
+            "none": "賭け金なし"
+        },
+        "started": "ゲームが始まりました！",
+        "table_cancelled": "このテーブルはキャンセルされました。",
+        "table_footer": "ヒット🂠 私の手をプレイします。",
+        "table_rule": "ルール: **{rule}**",
+        "table_stake": " | 💰 ステーク: {stake} {currency}",
+        "table_title": "🎴 ビッグ 2 - 進行中",
+        "you_passed": "あなたは合格しました。",
+        "you_played": "✅ あなたがプレイした: {cards}",
+        "your_hand_title": "🂠あなたの手"
+    },
+    "blackjack": {
+        "blackjack": "🎉 **ブラックジャック!** 3:2 ペイ **{payout}** {currency}",
+        "dealer_blackjack": "💥 **ディーラー ブラックジャック!** あなたは負けました **{bet}** {currency}",
+        "dealer_bust": "🎉 **ディーラーは大失敗!** あなたは **{payout}** {currency} を獲得しました",
+        "dealing": "取引中...",
+        "err": {
+            "double_first_two": "ダブルできるのは最初の 2 枚のカードのみです。",
+            "in_progress": "すでにブラックジャック ラウンドが進行中です。"
+        },
+        "footer_doubled": "ベット: {bet} {currency} (2倍)",
+        "hands": "**ディーラー**: {dealer}\n**あなた**: {player} ({player_total})",
+        "lose": "💥 **負けました!** ダウン **{bet}** {currency}",
+        "player_bust": "💥 **バスト!** あなたは負けました **{bet}** {currency}",
+        "push": "🤝 **プッシュ!** 賭け金が返されました",
+        "soft_total": "ソフト {total}",
+        "title": "🂡 ブラックジャック",
+        "win": "🎉 **あなたの勝ちです!** **{payout}** {currency} を獲得しました"
+    },
+    "btn": {
+        "bet_again": "もう一度賭けてください",
+        "cancel": "❌ キャンセル",
+        "cashout": "💰 キャッシュアウト",
+        "confirm_start": "✅ 開始の確認",
+        "double": "⏫ ダブル",
+        "end_host": "🛑 終了（ホスト）",
+        "higher": "🔼より高い",
+        "hit": "🎯ヒット",
+        "join": "✅ 参加する",
+        "lower": "🔽下位",
+        "my_hand": "🂠私の手",
+        "play_cards": "遊ぶ",
+        "rules": "📜 遊び方",
+        "scratch": "🪙 スクラッチ",
+        "spin_again": "🔁 もう一度スピン",
+        "stand": "✋スタンド",
+        "start": "▶ スタート",
+        "tower_stop": "💰 やめて"
+    },
+    "coinflip": {
+        "flipping": "反転中...",
+        "heads": "ヘッズ",
+        "lost": "**{side}** を選択しました |結果: # **{result}**\n\n💥 **間違っています!** 負けました **{bet}** {currency}",
+        "pick_footer": "ベット: {bet} {currency} |選択した場合のみ料金が発生します",
+        "pick_prompt": "**表**または**裏**を選択してください。",
+        "result_footer": "ベット: {bet} {currency} |勝利報酬 x1.90",
+        "tails": "テイルス",
+        "title": "🪙 コイントス",
+        "won": "**{side}** を選択しました |結果: # **{result}**\n\n🎉 **正解!**\n支払い: **{payout}** {currency} (+{profit})"
+    },
+    "dice": {
+        "lost": "**{guess}** | 推測しましたね。 Die: # **{result}**\n\n💥 **間違っています!** あなたは負けました **{bet}** {currency}",
+        "pick_footer": "ベット: {bet} {currency} |選択した場合のみ料金が発生します",
+        "pick_prompt": "推測したい数字を選択してください。",
+        "result_footer": "ベット: {bet} {currency} |勝利は5.70倍を支払います",
+        "rolling": "ローリング...",
+        "title": "🎲 サイコロ",
+        "won": "**{guess}** | 推測しましたね。ダイス: # **{result}**\n\n🎉 **正解!**\n支払い: **{payout}** {currency} (+{profit})"
+    },
+    "doom": {
+        "loaded": "セーブロードされました！",
+        "no_save": "エラー: 保存が見つかりません。",
+        "saved": "保存しました！"
+    },
+    "err": {
+        "bet_range": "❌ 賭け金は **{min}** から **{max}** までである必要があります。",
+        "cannot_pass_empty": "空のテーブルを渡すことはできません。あなたがリードしなければなりません。",
+        "card_count": "一度にプレイできるカードは 1 / 2 / 3 / 5 枚のみです。",
+        "compare_failed": "比較に失敗しました: {reason}",
+        "does_not_beat": "あなたのプレーは勝てません。",
+        "first_move_3d": "最初のハンドには 3◆ が含まれている必要があります。",
+        "game_over": "このゲームは終了しました。",
+        "hand_empty": "あなたはすでにすべてのカードをプレイしました。",
+        "host_only_cancel": "キャンセルできるのは主催者のみです。",
+        "host_only_end": "ゲームを終了できるのはホストだけです。",
+        "host_only_rules": "ルールを変更できるのはホストだけです。",
+        "host_only_stake": "ステークを変更できるのはホストのみです。",
+        "host_only_start": "ホストのみが起動できます。",
+        "illegal_hand": "不正なハンド: {reason}",
+        "insufficient": "❌ 残高が不足しています!\nあなたの残高: **{balance}** {currency}\n賭け金が必要です: **{needed}** {currency}",
+        "insufficient_double": "❌ 2 倍にするのに十分ではありません!\n残高: **{balance}** {currency}\n2 倍にする必要があります: **{needed}** {currency}",
+        "invalid_choice": "無効な選択です。",
+        "must_match_count": "テーブルに勝つには、同じ枚数のカードをプレイする必要があります。",
+        "no_cards_selected": "あなたはカードを何も選んでいません。",
+        "not_at_table": "あなたはこのテーブルにはいません。",
+        "not_five_card_hand": "合法的な 5 枚のカード ハンド (ストレート/フラッシュ/フルハウス/フォーカード/ストレート フラッシュ) ではない",
+        "not_pair": "ペアではない",
+        "not_started": "ゲームはまだ始まっていません。",
+        "not_triple": "トリプルではない",
+        "not_your_game": "これはあなたのゲームではありません。",
+        "not_your_turn": "まだあなたの番ではありません。",
+        "not_your_ui": "これはあなたのインターフェースではありません。",
+        "round_settled": "このラウンドはすでに決着しています。"
+    },
+    "footer": {
+        "bet": "ベット: {bet} {currency}"
+    },
+    "highlow": {
+        "cashout": "💰 **キャッシュアウトしました!**\nストリーク: **{streak}**\nペイアウト: **{payout}** {currency} |利益: **{profit}**\n新しい残高: **{balance}** {currency}",
+        "cashout_auto": "💰 **上限に達しました - 自動キャッシュアウト!**\nストリーク: **{streak}**\nペイアウト: **{payout}** {currency} |利益: **{profit}**\n新しい残高: **{balance}** {currency}",
+        "correct": "✅ {old} → {new} - 正解です!",
+        "current_card": "現在のカード: # {card}",
+        "err": {
+            "cashout_streak": "現金化する前に、少なくとも 1 つの正しい推測が必要です。",
+            "in_progress": "すでにハイローラウンドが進行中です。"
+        },
+        "footer": "ベット: {bet} {currency} |次のカードは常に異なるランク (A が低く、K が高い) | {cap}x でのポットキャップと自動キャッシュアウト",
+        "lost": "💥違います!負けました **{pot}** {currency}\n連勝は **{streak}** で終了しました",
+        "opt_high": "🔼上位 → x{multiplier}",
+        "opt_low": "🔽 下→ x{multiplier}",
+        "streak_pot": "ストリーク: **{streak}** |ポット: **{pot}** {currency}",
+        "timeout_cashout": "⏰ ゲームがタイムアウトになり、**{payout}** {currency} が自動的にキャッシュアウトされました。",
+        "timeout_refund": "⏰ ゲームがタイムアウトになり、**{payout}** {currency} が返金されました。",
+        "title": "🃏 高低"
+    },
+    "line": {
+        "new_balance": "新しい残高: **{balance}** {currency}"
+    },
+    "lottery": {
+        "bought_desc": "番号: # **{number}**\nこのベット: **{bet}** {currency}\nこの番号の合計: **{my_stake}** {currency}\n現在のジャックポット: **{jackpot}** {currency}\nドロー: {draw_at}",
+        "bought_footer": "勝者は、当選番号に対する賭け金に比例してジャックポットの 95% を分配します。",
+        "bought_title": "🎟️チケット購入済み",
+        "draw_time": "{at} ({rel})",
+        "drawn_at": "引出場所: {at}",
+        "err": {
+            "need_both": "❌ チケットを購入するには、`bet` と `number` の両方を渡す必要があります。ステータスを確認するには、両方を空のままにしてください。",
+            "round_closing": "このラウンドは抽選または決着を待っています。すぐにもう一度購入してください。",
+            "save_failed": "抽選状態の保存に失敗しました。購入したチケットは払い戻されました。"
+        },
+        "field": {
+            "last_result": "最後の抽選"
+        },
+        "not_scheduled": "まだ予定されていません",
+        "result_hit": "当選番号: **{number}**\n当選者: **{winners}**\n支払総額: **{total}** {currency}",
+        "result_rollover": "当選番号: **{number}**\n当選者はいません。 **{jackpot}** {currency} は次のラウンドにロールオーバーします。",
+        "round_footer": "ラウンド: {round_id}",
+        "status_desc": "現在のジャックポット: **{jackpot}** {currency}\nこのラウンドで賭けたもの: **{stake}** {currency}\nプレイヤー: **{players}**\n{timing}",
+        "status_footer": "チケットはラウンドごとに期限切れになります。誰も勝たなかった場合、ジャックポットのみが引き継がれます。古いチケットは引き継がれません。",
+        "timing": {
+            "not_started": "始まっていません。抽選は最初のチケットが販売されてから 60 分後に行われます。",
+            "scheduled": "ドロー: {at} ({rel})",
+            "settling": "このラウンドは決着中です。チケット販売は一時停止しております。",
+            "waiting": "ジャックポットは次のチケットを待っています。抽選は購入後 60 分後に行われます。"
+        },
+        "title": "🎟️ ローリング宝くじ",
+        "win_desc": "当選番号: **{number}**\nあなたの支払い: **{payout}** {currency}\n現在の残高: **{balance}** {currency}",
+        "win_title": "🎉 宝くじが当たる！"
+    },
+    "msg": {
+        "choice_timeout": "選択がタイムアウトになりました。",
+        "ended_by_timeout": "タイムアウトのため試合は終了した。",
+        "game_timeout": "ゲームはタイムアウトになりました。",
+        "rules_updated": "ルールが更新されました。",
+        "stake_updated": "ステークが更新されました。"
+    },
+    "roulette": {
+        "err": {
+            "number_not_allowed": "❌ 数字を賭けるのは単一数字のベットのみです。",
+            "number_required": "❌ シングルナンバーベットでは、0 ～ 36 の数字を選択する必要があります。"
+        },
+        "footer": "ベットタイプ: {selection} |ベット: {bet} {currency}",
+        "lost": "{result}\n\n に着陸しました💥 **勝利なし** - 負けました **{bet}** {currency}",
+        "selection_number": "番号 {number}",
+        "spinning": "車輪が回ってます…",
+        "title": "🎡ルーレット",
+        "won": "{result}\n\n🎉 **勝ちました!**\n支払い: **{payout}** {currency} (+{profit})"
+    },
+    "scratch": {
+        "auto_revealed": "⏰ タイムアウト - スクラッチされ、自動的に解決されます。",
+        "err": {
+            "already_holding": "あなたはすでに傷のないカードを持っています。",
+            "not_yours": "これはあなたのスクラッチ カードではありません。",
+            "settled": "このスクラッチ カードはすでに決済されています。"
+        },
+        "lost": "💥 **勝利なし** - 負けました **{bet}** {currency}",
+        "pending_footer": "ベット: {bet} {currency} |タイムアウト時に自動的にスクラッチされます",
+        "reveal_prompt": "**スクラッチ**を押してカードを表示します。",
+        "title": "🎫 スクラッチカード",
+        "won": "🎉 **{prize}!** マルチプライヤー **x{multiplier}**\n 支払い: **{payout}** {currency} ({profit})"
+    },
+    "slots": {
+        "err": {
+            "spinning": "リールはまだ回転しています - 止めてください!"
+        },
+        "lost": "💥 **{prize}** - あなたは負けました **{bet}** {currency}",
+        "spinning": "🌀 回転中...",
+        "title": "🎰 スロットマシン",
+        "won": "🎉 **{prize}** マルチプライヤー **x{multiplier}**\n 支払い: **{payout}** {currency} ({profit})"
+    },
+    "tower": {
+        "cactus": "🌵 サボテンにぶつかったよ！ゲームオーバー - 負けました **{bet}** {currency}",
+        "cashout_desc": "**キャッシュアウトしました!**\n\n到達レベル: **{level}/{total}**\nベット: **{bet}** {currency} |マルチプライヤー: **x{multiplier}**\nペイアウト: **{payout}** {currency} |利益: **+{profit}**\n新しい残高: **{balance}** {currency}",
+        "confirm_desc": "ベット: **{bet}** {currency}\n残高: **{balance}** {currency}\n\n**⚠️ 始める前に**\n{notices}",
+        "confirm_footer": "ベットをチャージしてゲームを開始することを確認します",
+        "confirm_timeout": "タイムアウトしました - コマンドを再度実行して開始します。",
+        "err": {
+            "already_playing": "あなたはすでにタワー ゲームを持っています。",
+            "in_progress": "すでにタワー ゲームが進行中です。",
+            "insufficient": "{bet} {currency} が必要です。",
+            "pick_current_level": "現在のレベルのタイルを選択します。",
+            "pick_next": "次のレベルに到達するか、停止します。"
+        },
+        "notices": "• 各レベルには、**2 🟦 安全なタイル** と **1 🌵 サボテン** がランダムにあります\n• サボテンに当たる = **ゲーム オーバー、賭け金全体を失います**\n• 安全なタイルでは、**登る** (より高い乗数) または **キャッシュ アウト** (現在のものをロックイン) できますmultiplier)\n• マルチプライヤー: L1 x1.4 → L2 x1.8 → L3 x2.2 → L4 x2.6 → L5 x3.0\n• 上位に到達すると自動的にキャッシュアウトされます",
+        "pick": "**レベル {level}/{total}**\nタイルを選択してください!\nいつでも「💰 停止」を押してキャッシュアウトしてください (乗数 x{multiplier})",
+        "safe": "**レベル {level}/{total}** ✅ 安全!\n続行するには次のレベルに移動するか、キャッシュアウトするには「💰 停止」をクリックしてください。",
+        "title": "🗼タワー",
+        "top_desc": "**トップに到達しました!** 自動キャッシュアウト!\n\n到達レベル: **{total}/{total}**\nベット: **{bet}** {currency}\n乗数: **x{multiplier}**\n支払い: **{payout}** {currency}\n新しい残高: **{balance}** {currency}"
+    }
+}

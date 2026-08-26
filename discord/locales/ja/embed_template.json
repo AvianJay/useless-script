@@ -1,0 +1,21 @@
+{
+    "err": {
+        "unmatched_close": "一致しない `}` が見つかりました。",
+        "unclosed_open": "閉じられていない`{`が見つかりました。",
+        "empty_directive": "`{directive}` を空にすることはできません。",
+        "field_format": "埋め込みフィールドでは、`{embedfield:name:value}` の形式を使用する必要があります。",
+        "unknown_variable": "サポートされていないテンプレート変数 `{token}`。",
+        "content_too_long": "お知らせテキストが Discord の 2000 文字制限を超えています。",
+        "empty_output": "アナウンス テンプレートはプレーン テキストまたは埋め込みを生成する必要があります。",
+        "title_too_long": "埋め込みタイトルが 256 文字を超えています。",
+        "description_too_long": "埋め込みの説明が 4096 文字を超えています。",
+        "too_many_fields": "埋め込みには 25 を超えるフィールドがあります。",
+        "field_name_too_long": "埋め込みフィールド名が 256 文字を超えています。",
+        "field_value_too_long": "埋め込みフィールドの値が 1024 文字を超えています。",
+        "footer_too_long": "埋め込みフッターが 2048 文字を超えています。",
+        "author_too_long": "埋め込み作成者が 256 文字を超えています。",
+        "embed_too_long": "埋め込みの合計長が 6000 文字を超えています。",
+        "url_too_long": "埋め込み URL が Discord の 2048 文字制限を超えています。",
+        "invalid_url": "埋め込み URL は有効な http または https URL である必要があります。"
+    }
+}

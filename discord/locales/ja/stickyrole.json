@@ -1,0 +1,56 @@
+{
+    "audit": {
+        "restore": "StickyRole の自動ロール復元"
+    },
+    "config": {
+        "channel_missing": "見つかりません (ID: {channel_id})",
+        "deleted_role": "削除されました (ID: `{role_id}`)",
+        "no_restriction": "(無制限 - 割り当て可能なロールはすべて記憶されます)",
+        "title": "📌 StickyRole 設定"
+    },
+    "err": {
+        "already_allowed": "⚠️ {role} はすでに許可リストに登録されています。",
+        "cannot_add_everyone": "⚠️ @everyone を許可リストに追加することはできません。",
+        "log_channel_perms": "⚠️ ボットは {channel} のメッセージを表示または送信できません。まずそれを修正してから設定してください。",
+        "missing_manage_roles": "⚠️ ボットにはロールの管理がないため、StickyRole を有効にできません。",
+        "not_allowed": "⚠️ {role} は許可リストに載っていません。",
+        "role_too_high": "⚠️ {role} はボットの最高位以上のロールにあるため、割り当てることができません。"
+    },
+    "field": {
+        "allowed_roles": "記憶に残るロール",
+        "ignore_bots": "ボットを無視する",
+        "log_channel": "ログチャンネル",
+        "recorded_roles": "記録されたロール",
+        "restore_failed": "復元に失敗しました",
+        "restored": "復元されました",
+        "saved_roles": "保存されたロール",
+        "status": "ステータス"
+    },
+    "log": {
+        "footer": "ユーザーID: {user_id}",
+        "left_guild": "{user} がサーバーから離れました",
+        "rejoined_guild": "{user} がサーバーに再参加しました",
+        "restored_title": "📥 StickyRole — ロールが復元されました",
+        "saved_title": "📤 StickyRole — 記録されたロール"
+    },
+    "msg": {
+        "disabled": "✅ StickyRole は **無効になっています**。",
+        "enabled": "✅ StickyRole が **有効**になりました。",
+        "ignore_bots_off": "✅ ボットアカウントは無視されなくなりました。",
+        "ignore_bots_on": "✅ ボットアカウントは無視されるようになりました。",
+        "list_cleared": "✅ 許可リストがクリアされました。 StickyRole は、割り当て可能なすべてのロールを記憶します。",
+        "log_channel_set": "✅ StickyRole ログ チャンネルは {channel} になりました。",
+        "log_channel_unset": "✅ StickyRole ログ チャンネルの設定が解除されました。",
+        "no_records": "ℹ️ {user} には保存されたロール レコードがありません。",
+        "records_cleared": "✅ {user} の StickyRole レコードをクリアしました。",
+        "role_added": "✅ {role} が StickyRole 許可リストに追加されました。",
+        "role_removed": "✅ {role} は StickyRole 許可リストから削除されました。"
+    },
+    "state": {
+        "disabled": "❌ 無効",
+        "enabled": "✅ 有効"
+    },
+    "view": {
+        "title": "📋 {user} の StickyRole レコード"
+    }
+}

@@ -1,0 +1,3189 @@
+{
+    "ai": {
+        "ai": {
+            "desc": "AIアシスタントとチャットする",
+            "name": "ai",
+            "param": {
+                "image": "AIが分析する画像を添付（オプション）",
+                "message": "AIに聞きたい質問やメッセージ",
+                "model": "AI モデルを選択します (デフォルト: openai)",
+                "new_conversation": "新しい会話を開始します (以前の履歴をクリアします)"
+            },
+            "param_name": {
+                "image": "画像",
+                "message": "メッセージ",
+                "model": "モデル",
+                "new_conversation": "新規会話"
+            }
+        },
+        "ai_admin": {
+            "billing": {
+                "clear": {
+                    "desc": "このサーバーの指定された AI 支払者をクリアします",
+                    "name": "クリア"
+                },
+                "root": {
+                    "desc": "このサーバーの AI 請求設定を管理する",
+                    "name": "請求"
+                },
+                "set": {
+                    "desc": "自分自身をこのサーバーの AI 支払者として設定します",
+                    "name": "設定"
+                },
+                "view": {
+                    "desc": "このサーバー上の AI の料金を現在誰が支払っているかを確認する",
+                    "name": "表示"
+                }
+            },
+            "mention_mode": {
+                "desc": "AI がメンションと返信に自動応答するかどうかを設定します",
+                "name": "メンションモード",
+                "param": {
+                    "enabled": "メンション/返信トリガーを有効または無効にします。デフォルトではオフになっています"
+                },
+                "param_name": {
+                    "enabled": "有効"
+                }
+            },
+            "prompt": {
+                "clear": {
+                    "desc": "このサーバーのカスタム AI プロンプトをクリアします",
+                    "name": "クリア"
+                },
+                "root": {
+                    "desc": "このサーバーのカスタム AI プロンプトを管理します",
+                    "name": "プロンプト"
+                },
+                "set": {
+                    "desc": "このサーバーのカスタム AI プロンプトを設定します",
+                    "name": "設定",
+                    "param": {
+                        "prompt": "AI の追加のサーバー コンテキスト、スタイル ガイダンス、または応答設定"
+                    },
+                    "param_name": {
+                        "prompt": "プロンプト"
+                    }
+                },
+                "view": {
+                    "desc": "このサーバーの現在のカスタム AI プロンプトを表示する",
+                    "name": "表示"
+                }
+            },
+            "root": {
+                "desc": "AI 管理コマンド",
+                "name": "ai管理"
+            }
+        },
+        "ai_clear": {
+            "desc": "AI の会話履歴をクリアする",
+            "name": "ai会話削除"
+        },
+        "ai_history": {
+            "desc": "AI の会話履歴を表示する",
+            "name": "ai履歴"
+        },
+        "ai_set_default_model": {
+            "desc": "AI コマンドのデフォルト モデルを設定する",
+            "name": "ai既定モデル",
+            "param": {
+                "model": "デフォルトの AI モデルを選択する"
+            },
+            "param_name": {
+                "model": "モデル"
+            }
+        },
+        "ai_set_response_view": {
+            "desc": "AI コマンド応答の表示方法を設定する",
+            "name": "ai表示設定",
+            "param": {
+                "container": "応答をコンテナに表示する",
+                "cost": "請求情報を表示する",
+                "model": "モデル名とタイミング情報を表示します"
+            },
+            "param_name": {
+                "container": "コンテナ",
+                "cost": "コスト",
+                "model": "モデル"
+            }
+        }
+    },
+    "aki": {
+        "aki": {
+            "desc": "アキネーターでゲームをプレイする",
+            "name": "アキネーター"
+        }
+    },
+    "antibeast": {
+        "antibeast": {
+            "about": {
+                "desc": "アンチビーストについて",
+                "name": "概要"
+            },
+            "bypass": {
+                "desc": "AntiBeast をバイパスするロールの追加/削除",
+                "name": "バイパス",
+                "param": {
+                    "role": "バイパスを切り替えるロール"
+                },
+                "param_name": {
+                    "role": "ロール"
+                }
+            },
+            "list": {
+                "desc": "AntiBeast 設定の一覧表示",
+                "name": "一覧"
+            },
+            "root": {
+                "name": "antibeast"
+            },
+            "settings": {
+                "desc": "短期間にトリガーが繰り返された後の AntiBeast の動作を構成する",
+                "name": "設定",
+                "param": {
+                    "action": "適度なアクションコマンド。現在の設定を維持するには空のままにしてください",
+                    "enable": "自動アクションを有効にする",
+                    "only_everyone_here": "@everyone または @here に言及しているメンバーのみに対応します",
+                    "threshold": "ウィンドウ内でこの数のトリガーの後に行動します (1 ～ 20)",
+                    "time_window": "秒単位の時間枠 (5 ～ 3600)"
+                },
+                "param_name": {
+                    "action": "アクション",
+                    "enable": "有効化",
+                    "only_everyone_here": "全員メンションのみ",
+                    "threshold": "しきい値",
+                    "time_window": "時間枠"
+                }
+            },
+            "setup": {
+                "desc": "AntiBeast を対話的に設定して有効にする",
+                "name": "セットアップ"
+            },
+            "toggle": {
+                "desc": "AntiBeast を有効/無効にする",
+                "name": "切替",
+                "param": {
+                    "enable": "現在の状態を切り替えるには空のままにしてください"
+                },
+                "param_name": {
+                    "enable": "有効化"
+                }
+            }
+        }
+    },
+    "automoderate": {
+        "automod": {
+            "action_builder": {
+                "choice": {
+                    "ban": "禁止",
+                    "delete": "メッセージを削除する",
+                    "delete_dm": "メッセージ削除+DM警告",
+                    "force_verify": "強制検証",
+                    "kick": "キック",
+                    "mute": "ミュート",
+                    "send_mod_message": "モデレーション通知を送信する",
+                    "warn": "公衆の警告",
+                    "warn_dm": "DMの警告"
+                },
+                "desc": "アクションコマンド文字列を作成する",
+                "name": "アクション作成",
+                "param": {
+                    "action_type": "アクションの種類",
+                    "delete_message_duration": "禁止のみ: この期間のユーザーのメッセージを削除します。 1d; 0 = なし",
+                    "duration": "期間 (ミュート/禁止/強制検証の場合)、例: 10分、7日。 0 = 永続的",
+                    "message": "警告メッセージ (削除/警告用)。 {user} はユーザーを挿入します",
+                    "prepend": "このアクションの前に追加する既存のコマンド (カンマ区切りのアクション)",
+                    "reason": "理由（ミュート/キック/BANの場合）"
+                },
+                "param_name": {
+                    "action_type": "アクション種別",
+                    "delete_message_duration": "削除対象期間",
+                    "duration": "期間",
+                    "message": "メッセージ",
+                    "prepend": "前に追加",
+                    "reason": "理由"
+                }
+            },
+            "check_action": {
+                "desc": "automod アクション コマンドが有効かどうかを確認する",
+                "name": "アクション確認",
+                "param": {
+                    "action": "確認するアクションコマンド"
+                },
+                "param_name": {
+                    "action": "アクション"
+                }
+            },
+            "flagged_user_alert_channel": {
+                "desc": "ユーザーがサーバーに参加したときの通知チャンネルを設定する",
+                "name": "要注意ユーザー通知先",
+                "param": {
+                    "channel": "ユーザー参加通知を受信するチャンネル"
+                },
+                "param_name": {
+                    "channel": "チャンネル"
+                }
+            },
+            "info": {
+                "desc": "自動モデレーション機能の概要を表示する",
+                "name": "情報"
+            },
+            "quick_setup": {
+                "desc": "インタラクティブなクイックセットアップウィザード (メニューガイド付き)",
+                "name": "クイック設定"
+            },
+            "root": {
+                "name": "自動モデレーション"
+            },
+            "scan_flagged_users": {
+                "desc": "サーバーをスキャンしてフラグが設定されたユーザーを探す",
+                "name": "要注意ユーザー検索",
+                "param": {
+                    "user": "スキャンするユーザー。省略した場合は全員をスキャンします"
+                },
+                "param_name": {
+                    "user": "ユーザー"
+                }
+            },
+            "settings": {
+                "desc": "自動モデレーション オプションを構成する",
+                "name": "設定",
+                "param": {
+                    "setting": "設定する自動モデレーション オプション",
+                    "value": "オプションの値"
+                },
+                "param_name": {
+                    "setting": "設定",
+                    "value": "値"
+                }
+            },
+            "toggle": {
+                "choice": {
+                    "anti_invite_link": "招待リンク",
+                    "anti_raid": "アンチレイド (大量参加検出)",
+                    "anti_spam": "スパム対策",
+                    "anti_uispam": "ユーザーがインストールしたアプリの悪用",
+                    "automod_detect": "AutoMod 検出 (ネイティブ AutoMod トリガー)",
+                    "escape_punish": "処罰回避",
+                    "false": "無効にする",
+                    "flagged_user": "フラグが設定されたユーザーの参加",
+                    "scamtrap": "詐欺の罠",
+                    "too_many_emojis": "絵文字が多すぎる",
+                    "too_many_h1": "見出しが多すぎます",
+                    "true": "有効にする"
+                },
+                "desc": "自動モデレーション設定を有効または無効にする",
+                "name": "切替",
+                "param": {
+                    "enable": "設定を有効にするかどうか",
+                    "setting": "切り替える自動モデレーション設定の名前"
+                },
+                "param_name": {
+                    "enable": "有効化",
+                    "setting": "設定"
+                }
+            },
+            "view": {
+                "desc": "自動モデレーション設定を表示する",
+                "name": "表示"
+            }
+        },
+        "setting": {
+            "anti_invite_link-action": "anti_invite_link-action",
+            "anti_invite_link-allow_current_server": "anti_invite_link-allow_current_server",
+            "anti_invite_link-ignore_channels": "anti_invite_link-ignore_channels",
+            "anti_raid-action": "アンチレイドアクション",
+            "anti_raid-max_joins": "anti_raid-max_joins",
+            "anti_raid-time_window": "anti_raid-time_window",
+            "anti_spam-action": "スパム対策アクション",
+            "anti_spam-ignore_channels": "anti_spam-ignore_channels",
+            "anti_spam-max_messages": "anti_spam-max_messages",
+            "anti_spam-similarity": "アンチスパム類似性",
+            "anti_spam-time_window": "anti_spam-time_window",
+            "anti_uispam-action": "anti_uispam アクション",
+            "anti_uispam-ignore_channels": "anti_uispam-ignore_channels",
+            "anti_uispam-max_count": "anti_uispam-max_count",
+            "anti_uispam-time_window": "anti_uispam-time_window",
+            "escape_punish-duration": "エスケープ_パニッシュ期間",
+            "escape_punish-punishment": "脱出_罰-罰",
+            "scamtrap-action": "詐欺行為",
+            "scamtrap-channel_id": "詐欺トラップ-channel_id",
+            "too_many_emojis-action": "絵文字が多すぎるアクション",
+            "too_many_emojis-ignore_channels": "絵文字が多すぎる - チャンネルを無視する",
+            "too_many_emojis-max_emojis": "too_many_emojis-max_emojis",
+            "too_many_h1-action": "too_many_h1-アクション",
+            "too_many_h1-ignore_channels": "too_many_h1-ignore_channels",
+            "too_many_h1-max_length": "too_many_h1-max_length"
+        }
+    },
+    "autopublish": {
+        "autopublish": {
+            "root": {
+                "name": "自動公開"
+            },
+            "settings": {
+                "choice": {
+                    "false": "無効にする",
+                    "true": "有効にする"
+                },
+                "desc": "自動公開を構成する",
+                "name": "設定",
+                "param": {
+                    "enable": "自動公開を有効にするかどうか"
+                },
+                "param_name": {
+                    "enable": "有効化"
+                }
+            },
+            "view": {
+                "desc": "お知らせの自動公開設定を表示する",
+                "name": "表示"
+            }
+        }
+    },
+    "autoreply": {
+        "autoreply": {
+            "add": {
+                "choice": {
+                    "all": "すべてのチャンネル",
+                    "blacklist": "ブラックリスト",
+                    "contains": "含まれています",
+                    "ends_with": "で終わる",
+                    "equals": "完全一致",
+                    "false": "いいえ",
+                    "regex": "正規表現",
+                    "starts_with": "で始まる",
+                    "true": "はい",
+                    "whitelist": "ホワイトリスト"
+                },
+                "desc": "自動返信を追加する",
+                "name": "追加",
+                "param": {
+                    "channel_mode": "チャンネルフィルターモード",
+                    "channels": "チャンネルID（複数のIDは「,」で区切ります）",
+                    "mode": "返信モード",
+                    "random_chance": "ランダムな返信チャンス (1 ～ 100)",
+                    "reply": "元のメッセージに返信する",
+                    "response": "返信内容 (複数を で区切ると、ランダムに 1 つが選択されます)",
+                    "trigger": "トリガー文字列（複数は「,」で区切る）"
+                },
+                "param_name": {
+                    "channel_mode": "チャンネル方式",
+                    "channels": "チャンネル",
+                    "mode": "モード",
+                    "random_chance": "ランダムチャンス",
+                    "reply": "返信",
+                    "response": "応答",
+                    "trigger": "トリガー"
+                }
+            },
+            "builder": {
+                "desc": "インタラクティブなインターフェースを使用して自動応答を構築する",
+                "name": "ビルダー"
+            },
+            "clear": {
+                "desc": "すべての自動返信をクリアする",
+                "name": "クリア"
+            },
+            "edit": {
+                "choice": {
+                    "all": "すべてのチャンネル",
+                    "blacklist": "ブラックリスト",
+                    "contains": "含まれています",
+                    "ends_with": "で終わる",
+                    "equals": "完全一致",
+                    "false": "いいえ",
+                    "regex": "正規表現",
+                    "starts_with": "で始まる",
+                    "true": "はい",
+                    "whitelist": "ホワイトリスト"
+                },
+                "desc": "自動返信を編集する",
+                "name": "編集",
+                "param": {
+                    "channel_mode": "チャンネルフィルターモード",
+                    "channels": "チャンネルID（複数のIDは「,」で区切ります）",
+                    "new_mode": "新しい返信モード",
+                    "new_response": "返信内容",
+                    "new_trigger": "新しいトリガー文字列",
+                    "random_chance": "ランダムな返信チャンス (1 ～ 100)",
+                    "reply": "元のメッセージに返信するかどうか",
+                    "trigger": "トリガー文字列"
+                },
+                "param_name": {
+                    "channel_mode": "チャンネル方式",
+                    "channels": "チャンネル",
+                    "new_mode": "新しいモード",
+                    "new_response": "新しい応答",
+                    "new_trigger": "新しいトリガー",
+                    "random_chance": "ランダムチャンス",
+                    "reply": "返信",
+                    "trigger": "トリガー"
+                }
+            },
+            "export": {
+                "desc": "自動返信設定を JSON としてエクスポートする",
+                "name": "エクスポート"
+            },
+            "help": {
+                "desc": "自動返信の使用説明を表示する",
+                "name": "ヘルプ"
+            },
+            "ignore": {
+                "choice": {
+                    "blacklist": "無視リスト",
+                    "whitelist": "許可リストのみ"
+                },
+                "desc": "無視されるチャンネルを構成する",
+                "name": "除外",
+                "param": {
+                    "channels": "チャンネルID（複数のIDは「,」で区切ります）",
+                    "mode": "チャンネルモードを無視する"
+                },
+                "param_name": {
+                    "channels": "チャンネル",
+                    "mode": "モード"
+                }
+            },
+            "import": {
+                "choice": {
+                    "false": "いいえ",
+                    "true": "はい"
+                },
+                "desc": "JSONファイルから自動返信設定をインポートする",
+                "name": "インポート",
+                "param": {
+                    "file": "インポートするJSONファイル",
+                    "merge": "既存の設定とマージするかどうか"
+                },
+                "param_name": {
+                    "file": "ファイル",
+                    "merge": "マージ"
+                }
+            },
+            "list": {
+                "desc": "すべての自動返信をリストする",
+                "name": "一覧"
+            },
+            "quickadd": {
+                "desc": "自動返信をすばやく追加し、既存のものと結合します",
+                "name": "クイック追加",
+                "param": {
+                    "new_response": "新しい返信内容",
+                    "new_trigger": "新しいトリガー文字列",
+                    "trigger": "トリガー文字列"
+                },
+                "param_name": {
+                    "new_response": "新しい応答",
+                    "new_trigger": "新しいトリガー",
+                    "trigger": "トリガー"
+                }
+            },
+            "remove": {
+                "desc": "自動返信を削除する",
+                "name": "削除",
+                "param": {
+                    "trigger": "トリガー文字列"
+                },
+                "param_name": {
+                    "trigger": "トリガー"
+                }
+            },
+            "root": {
+                "desc": "自動応答設定コマンド",
+                "name": "自動返信"
+            },
+            "template": {
+                "choice": {
+                    "false": "いいえ (既存のルールを上書きします)",
+                    "true": "はい"
+                },
+                "desc": "組み込みの自動返信テンプレート パックを適用する",
+                "name": "テンプレート",
+                "param": {
+                    "merge": "既存のルールとマージするかどうか",
+                    "pack": "適用するテンプレート パック"
+                },
+                "param_name": {
+                    "merge": "マージ",
+                    "pack": "パック"
+                }
+            },
+            "test": {
+                "desc": "自動返信コンテンツの変数置換をテストする",
+                "name": "テスト",
+                "param": {
+                    "response": "テストする返信内容"
+                },
+                "param_name": {
+                    "response": "応答"
+                }
+            }
+        }
+    },
+    "bazi": {
+        "bazi": {
+            "choice": {
+                "c0": "男性",
+                "c1": "女性"
+            },
+            "desc": "あなたの生年月日と時刻からBaZi（四柱）チャートをキャストします",
+            "name": "八字",
+            "param": {
+                "day": "誕生日 (1 ～ 31)",
+                "gender": "性別",
+                "hour": "出生時間 (24 時間、0 ～ 23)",
+                "month": "誕生月（1～12）",
+                "public": "このグラフを公開します (デフォルトでは非公開)",
+                "year": "誕生年（グレゴリオ暦）"
+            },
+            "param_name": {
+                "day": "日",
+                "gender": "性別",
+                "hour": "時間",
+                "month": "月",
+                "public": "公開",
+                "year": "年"
+            }
+        }
+    },
+    "botcustomizer": {
+        "change": {
+            "avatar": {
+                "desc": "ボットのアバターを変更する（デフォルトに戻すのは省略）",
+                "name": "アバター",
+                "param": {
+                    "image": "新しいアバター画像"
+                },
+                "param_name": {
+                    "image": "画像"
+                }
+            },
+            "banner": {
+                "desc": "ボットのバナーを変更（デフォルトに戻すのは省略）",
+                "name": "バナー",
+                "param": {
+                    "image": "新しいバナー画像"
+                },
+                "param_name": {
+                    "image": "画像"
+                }
+            },
+            "bio": {
+                "desc": "ボットの About Me を変更します (デフォルトに戻すのは省略します)。",
+                "name": "略歴",
+                "param": {
+                    "bio": "新しいプロフィール (\\n 改行、最大 100 文字)"
+                },
+                "param_name": {
+                    "bio": "略歴"
+                }
+            },
+            "root": {
+                "name": "変更"
+            }
+        }
+    },
+    "contribute": {
+        "contribute": {
+            "dynamic_voice_audio": {
+                "desc": "ダイナミック音声チャンネルの参加サウンドを送信する",
+                "name": "動的ボイス音声",
+                "param": {
+                    "audio": "音声ファイル (MP3/WAV/OGG、最大 5MB、3 ～ 10 秒を推奨)"
+                },
+                "param_name": {
+                    "audio": "オーディオ"
+                }
+            },
+            "feedgrass": {
+                "desc": "dsize 用の草やり画像を送信する",
+                "name": "草を与える"
+            },
+            "root": {
+                "desc": "画像を送信する"
+            },
+            "what_is_this_guy_talking_about": {
+                "desc": "「この人は何を言っているのか」画像を送信してください",
+                "name": "この人何言ってるの"
+            }
+        }
+    },
+    "dctw": {
+        "bot": {
+            "browse": {
+                "choice": {
+                    "bumped": "ぶつかった",
+                    "newest": "最新の",
+                    "servers": "サーバー",
+                    "votes": "投票"
+                },
+                "desc": "ボットリストを参照する",
+                "name": "閲覧"
+            },
+            "bump": {
+                "desc": "特定のボットをバンプする",
+                "name": "バンプ"
+            },
+            "bumpall": {
+                "desc": "あなたが所有するすべてのボットを一度に攻撃します",
+                "name": "一括bump"
+            },
+            "root": {
+                "desc": "ボットコマンド",
+                "name": "ボット"
+            },
+            "search": {
+                "choice": {
+                    "bumped": "ぶつかった",
+                    "newest": "最新の",
+                    "servers": "サーバー",
+                    "votes": "投票"
+                },
+                "desc": "検索ボット",
+                "name": "検索"
+            },
+            "vote": {
+                "desc": "特定のボットに投票する",
+                "name": "投票"
+            }
+        },
+        "dctw": {
+            "bumpall": {
+                "desc": "自分の所有物すべてを一度にぶつける",
+                "name": "一括bump"
+            },
+            "cache_stats": {
+                "desc": "DCTWキャッシュステータスの表示",
+                "name": "キャッシュ統計"
+            },
+            "root": {
+                "desc": "DCTWブラウザです！",
+                "name": "dctw"
+            }
+        },
+        "key": {
+            "clear": {
+                "desc": "DCTW API キーをクリアします",
+                "name": "クリア"
+            },
+            "help": {
+                "desc": "DCTW APIキーの取得方法",
+                "name": "ヘルプ"
+            },
+            "root": {
+                "desc": "DCTW API キーを管理する",
+                "name": "キー"
+            },
+            "set": {
+                "desc": "DCTW API キーを設定します",
+                "name": "設定"
+            },
+            "show": {
+                "desc": "DCTW APIキーが設定されているか確認する",
+                "name": "表示"
+            }
+        },
+        "server": {
+            "browse": {
+                "choice": {
+                    "bumped": "ぶつかった",
+                    "members": "メンバー",
+                    "newest": "最新の",
+                    "votes": "投票"
+                },
+                "desc": "サーバーリストを参照する",
+                "name": "閲覧"
+            },
+            "bump": {
+                "desc": "特定のサーバーをバンプする",
+                "name": "バンプ"
+            },
+            "bumpall": {
+                "desc": "あなたが所有するすべてのサーバーを一度にバンプします",
+                "name": "一括bump"
+            },
+            "root": {
+                "desc": "サーバーコマンド",
+                "name": "サーバー"
+            },
+            "search": {
+                "choice": {
+                    "bumped": "ぶつかった",
+                    "members": "メンバー",
+                    "newest": "最新の",
+                    "votes": "投票"
+                },
+                "desc": "検索サーバー",
+                "name": "検索"
+            },
+            "vote": {
+                "desc": "特定のサーバーに投票する",
+                "name": "投票"
+            }
+        },
+        "template": {
+            "browse": {
+                "choice": {
+                    "bumped": "ぶつかった",
+                    "newest": "最新の",
+                    "votes": "投票"
+                },
+                "desc": "テンプレートリストを参照する",
+                "name": "閲覧"
+            },
+            "bump": {
+                "desc": "特定のテンプレートをバンプする",
+                "name": "バンプ"
+            },
+            "bumpall": {
+                "desc": "所有しているすべてのテンプレートを一度にバンプする",
+                "name": "一括bump"
+            },
+            "root": {
+                "desc": "テンプレートコマンド",
+                "name": "テンプレート"
+            },
+            "search": {
+                "choice": {
+                    "bumped": "ぶつかった",
+                    "newest": "最新の",
+                    "votes": "投票"
+                },
+                "desc": "検索テンプレート",
+                "name": "検索"
+            },
+            "vote": {
+                "desc": "特定のテンプレートに投票する",
+                "name": "投票"
+            }
+        }
+    },
+    "dgpa": {
+        "nds": {
+            "follow": {
+                "desc": "自然災害による仕事/学校の休業に関する最新情報をフォローする (ベータ版)",
+                "name": "フォロー",
+                "param": {
+                    "channel": "通知を送信するチャンネル"
+                },
+                "param_name": {
+                    "channel": "チャンネル"
+                }
+            },
+            "root": {
+                "desc": "自然災害による仕事や学校の休校を調べる"
+            },
+            "view": {
+                "desc": "最新の自然災害による休業・休校状況を確認する",
+                "name": "表示"
+            }
+        }
+    },
+    "dsize": {
+        "ctx": {
+            "dsize_battle_context": {
+                "name": "彼らとの大規模な戦い"
+            },
+            "dsize_feedgrass_context": {
+                "name": "彼らに草を与えてください"
+            }
+        },
+        "dsize": {
+            "choice": {
+                "false": "いいえ",
+                "true": "はい"
+            },
+            "desc": "d*の長さを測定します",
+            "name": "dsize",
+            "param": {
+                "global_dsize": "グローバル レコードを使用します (デフォルト: no)"
+            },
+            "param_name": {
+                "global_dsize": "グローバル"
+            }
+        },
+        "dsize_battle": {
+            "desc": "D*長の戦い（今日は双方が測定していないはずです）",
+            "name": "dsize対戦",
+            "param": {
+                "opponent": "誰と戦うのか"
+            },
+            "param_name": {
+                "opponent": "相手"
+            }
+        },
+        "dsize_feedgrass": {
+            "choice": {
+                "false": "いいえ",
+                "true": "はい"
+            },
+            "desc": "フェムボーイに草を与える",
+            "name": "dsize草やり",
+            "param": {
+                "global_feedgrass": "グローバルリーダーボードからフェムボーイに餌を与えます (デフォルト: いいえ)",
+                "user": "誰に餌を与えるか"
+            },
+            "param_name": {
+                "global_feedgrass": "グローバル",
+                "user": "ユーザー"
+            }
+        },
+        "dsize_feedgrass_nsfw": {
+            "choice": {
+                "false": "いいえ",
+                "true": "はい"
+            },
+            "desc": "フェムボーイに草を与える (NSFW)",
+            "name": "dsize草やりnsfw",
+            "param": {
+                "global_feedgrass": "グローバルリーダーボードからフェムボーイに餌を与えます (デフォルト: いいえ)",
+                "user": "誰に餌を与えるか"
+            },
+            "param_name": {
+                "global_feedgrass": "グローバル",
+                "user": "ユーザー"
+            }
+        },
+        "dsize_feedgrass_nsfw_toggle": {
+            "desc": "NSFW フィードグラスを許可するかどうかを切り替えます",
+            "name": "dsize草やりnsfw切替"
+        },
+        "dsize_history": {
+            "choice": {
+                "false": "いいえ",
+                "true": "はい"
+            },
+            "desc": "履歴を見る",
+            "name": "dsize履歴",
+            "param": {
+                "global_history": "グローバル レコードを表示します (デフォルト: no)",
+                "user": "特定のユーザーの履歴を表示します (デフォルト: 自分自身)"
+            },
+            "param_name": {
+                "global_history": "グローバル履歴",
+                "user": "ユーザー"
+            }
+        },
+        "dsize_leaderboard": {
+            "choice": {
+                "false": "いいえ",
+                "true": "はい"
+            },
+            "desc": "d*-length リーダーボードを表示する",
+            "name": "dsizeランキング",
+            "param": {
+                "global_leaderboard": "グローバル リーダーボードを表示します (デフォルト: いいえ)",
+                "limit": "表示する上位エントリの数 (デフォルトは 10)",
+                "reverse": "リーダーボードを逆転します (デフォルト: いいえ)"
+            },
+            "param_name": {
+                "global_leaderboard": "グローバルランキング",
+                "limit": "件数",
+                "reverse": "逆順"
+            }
+        },
+        "dsize_settings": {
+            "choice": {
+                "dsize_drop_item_chance": "アイテムドロップ確率(%)",
+                "dsize_max": "最大長さ",
+                "dsize_surgery_max": "手術最大長さ",
+                "dsize_surgery_percent": "手術の可能性 (%)"
+            },
+            "desc": "サイズの構成",
+            "name": "dsize設定",
+            "param": {
+                "setting": "変更する設定",
+                "value": "設定する値"
+            },
+            "param_name": {
+                "setting": "設定",
+                "value": "値"
+            }
+        },
+        "dsize_stats": {
+            "desc": "d*-length の統計を表示する",
+            "name": "dsize統計"
+        }
+    },
+    "dynamicvoice": {
+        "dynamic_voice": {
+            "blacklist_role": {
+                "desc": "動的音声チャンネルのブラックリストのロールを設定する",
+                "name": "拒否ロール"
+            },
+            "disable": {
+                "desc": "動的音声チャンネルを無効にする",
+                "name": "無効化"
+            },
+            "play_audio": {
+                "choice": {
+                    "false": "無効にする",
+                    "true": "有効にする"
+                },
+                "desc": "ダイナミックボイスチャンネルを切り替える前にサウンドを再生する",
+                "name": "音声再生",
+                "param": {
+                    "enable": "チャンネルに入る前にサウンドを再生するかどうか"
+                },
+                "param_name": {
+                    "enable": "有効化"
+                }
+            },
+            "root": {
+                "name": "動的ボイス"
+            },
+            "setup": {
+                "desc": "動的音声チャンネルを設定する",
+                "name": "セットアップ",
+                "param": {
+                    "channel": "チャンネルを選択してください",
+                    "channel_category": "チャンネルカテゴリを選択してください",
+                    "channel_name": "チャンネル名のテンプレート ({user} はユーザー名を挿入します)"
+                },
+                "param_name": {
+                    "channel": "チャンネル",
+                    "channel_category": "チャンネルカテゴリ",
+                    "channel_name": "チャンネル名"
+                }
+            },
+            "unblacklist_role": {
+                "desc": "動的音声チャンネルのブラックリストのロールを削除する",
+                "name": "拒否ロール解除"
+            },
+            "view_blacklist_roles": {
+                "desc": "動的音声チャンネルのブラックリストのロールを表示する",
+                "name": "拒否ロール一覧"
+            }
+        }
+    },
+    "economy": {
+        "economy": {
+            "adminitems": {
+                "desc": "管理者から与えられたアイテムを表示する",
+                "name": "アイテム管理"
+            },
+            "balance": {
+                "desc": "残高を確認してください",
+                "name": "残高",
+                "param": {
+                    "user": "他のユーザーの残高を確認する"
+                },
+                "param_name": {
+                    "user": "ユーザー"
+                }
+            },
+            "buy": {
+                "choice": {
+                    "global": "グローバルショップ（世界通貨）",
+                    "server": "サーバーショップ（サーバー通貨）"
+                },
+                "desc": "ショップからアイテムを購入する",
+                "name": "購入",
+                "param": {
+                    "amount": "何個買うか",
+                    "item_id": "購入するアイテム",
+                    "scope": "店舗タイプ"
+                },
+                "param_name": {
+                    "amount": "数量",
+                    "item_id": "アイテムid",
+                    "scope": "範囲"
+                }
+            },
+            "daily": {
+                "desc": "毎日の報酬を受け取りましょう",
+                "name": "デイリー",
+                "param": {
+                    "global_daily": "代わりにグローバル報酬を請求してください"
+                },
+                "param_name": {
+                    "global_daily": "グローバル"
+                }
+            },
+            "exchange": {
+                "choice": {
+                    "to_global": "サーバー通貨 → グローバル通貨",
+                    "to_server": "グローバル通貨 → サーバー通貨"
+                },
+                "desc": "サーバーとグローバル通貨間の交換",
+                "name": "交換",
+                "param": {
+                    "amount": "金額",
+                    "direction": "交換方向"
+                },
+                "param_name": {
+                    "amount": "数量",
+                    "direction": "方向"
+                }
+            },
+            "history": {
+                "choice": {
+                    "global": "グローバル",
+                    "server": "サーバー"
+                },
+                "desc": "取引履歴を表示する",
+                "name": "履歴",
+                "param": {
+                    "page": "ページ番号",
+                    "scope": "閲覧範囲"
+                },
+                "param_name": {
+                    "scope": "範囲"
+                }
+            },
+            "hourly": {
+                "desc": "時間ごとの報酬を請求しましょう",
+                "name": "毎時",
+                "param": {
+                    "global_hourly": "代わりにグローバル報酬を請求してください"
+                },
+                "param_name": {
+                    "global_hourly": "グローバル"
+                }
+            },
+            "info": {
+                "desc": "サーバー経済情報の表示",
+                "name": "情報"
+            },
+            "leaderboard": {
+                "choice": {
+                    "global": "世界通貨",
+                    "server": "サーバー通貨",
+                    "total": "総資産"
+                },
+                "desc": "資産ランキングを見る",
+                "name": "ランキング",
+                "param": {
+                    "currency": "リーダーボードの種類"
+                },
+                "param_name": {
+                    "currency": "通貨"
+                }
+            },
+            "pay": {
+                "choice": {
+                    "global": "世界通貨",
+                    "server": "サーバー通貨"
+                },
+                "desc": "別のユーザーに送金する",
+                "name": "送金",
+                "param": {
+                    "amount": "金額",
+                    "currency": "通貨の種類",
+                    "user": "受信者"
+                },
+                "param_name": {
+                    "amount": "数量",
+                    "currency": "通貨",
+                    "user": "ユーザー"
+                }
+            },
+            "root": {
+                "desc": "エコノミーシステムコマンド",
+                "name": "経済"
+            },
+            "sell": {
+                "choice": {
+                    "global": "グローバルショップ（世界通貨）",
+                    "server": "サーバーショップ（サーバー通貨）"
+                },
+                "desc": "ショップにアイテムを売る",
+                "name": "売却",
+                "param": {
+                    "amount": "何個売るか",
+                    "item_id": "販売するアイテム",
+                    "scope": "店舗タイプ"
+                },
+                "param_name": {
+                    "amount": "数量",
+                    "item_id": "アイテムid",
+                    "scope": "範囲"
+                }
+            },
+            "shop": {
+                "desc": "ショップを見る",
+                "name": "ショップ"
+            },
+            "trade": {
+                "desc": "他のユーザーと取引する",
+                "name": "取引",
+                "param": {
+                    "global_trade": "グローバル通貨/アイテムを使用した取引 (クロスサーバー)",
+                    "offer_item": "あなたが提供するアイテム",
+                    "offer_item_amount": "あなたが提供するアイテムの数",
+                    "offer_money": "ご提示いただく金額",
+                    "request_item": "欲しいアイテム",
+                    "request_item_amount": "欲しいアイテムは何個ですか",
+                    "request_money": "ご希望の金額",
+                    "user": "取引先"
+                },
+                "param_name": {
+                    "offer_item": "提供アイテム",
+                    "offer_item_amount": "提供数量",
+                    "offer_money": "提供金額",
+                    "request_item": "希望アイテム",
+                    "request_item_amount": "希望数量",
+                    "request_money": "希望金額",
+                    "user": "ユーザー"
+                }
+            }
+        },
+        "economymod": {
+            "global_mode": {
+                "desc": "このサーバーにグローバル経済/アイテム/dsize を強制的に使用するかどうかを切り替えます",
+                "name": "グローバルモード",
+                "param": {
+                    "enabled": "True = グローバルを強制、False = サーバー モードを復元"
+                },
+                "param_name": {
+                    "enabled": "有効"
+                }
+            },
+            "info": {
+                "desc": "詳細なエコノミー管理パネル",
+                "name": "情報"
+            },
+            "root": {
+                "desc": "エコノミー管理コマンド",
+                "name": "経済管理"
+            },
+            "setname": {
+                "desc": "サーバー通貨名の設定",
+                "name": "名称設定",
+                "param": {
+                    "name": "新しい通貨名"
+                },
+                "param_name": {
+                    "name": "名前"
+                }
+            },
+            "toggle_flow": {
+                "desc": "サーバーとグローバル通貨（取引所、グローバルショップなど）の間のフローを切り替えます",
+                "name": "流通切替"
+            }
+        }
+    },
+    "explore": {
+        "banned_words": {
+            "add": {
+                "desc": "カスタムの禁止単語を追加する",
+                "name": "追加"
+            },
+            "list": {
+                "desc": "すべてのカスタム禁止単語をリストする",
+                "name": "一覧"
+            },
+            "remove": {
+                "desc": "カスタム禁止単語を削除する",
+                "name": "削除"
+            },
+            "root": {
+                "desc": "Explore チャットのカスタム禁止単語を管理する",
+                "name": "禁止ワード"
+            }
+        },
+        "ctx": {
+            "activity_entry": {
+                "desc": "Explore スペースを起動する",
+                "name": "宇宙を探索する"
+            }
+        },
+        "explore": {
+            "desc": "Explore スペースを起動する",
+            "name": "交流"
+        },
+        "explore_settings": {
+            "chat_channel": {
+                "desc": "Explore チャットにブリッジされる Discord テキスト チャンネルを設定します",
+                "name": "チャットチャンネル"
+            },
+            "privacy": {
+                "choice": {
+                    "0": "プライベート",
+                    "1": "公共"
+                },
+                "desc": "このサーバーを探索ロビーにリストするかどうかを設定します",
+                "name": "プライバシー"
+            },
+            "require_join": {
+                "desc": "Exploreに入る前にサーバーに参加する必要があります",
+                "name": "参加必須"
+            },
+            "root": {
+                "name": "交流設定"
+            },
+            "setup": {
+                "choice": {
+                    "0": "無効にする",
+                    "1": "有効にする"
+                },
+                "desc": "Explore スペースを有効化または構成する",
+                "name": "セットアップ"
+            }
+        }
+    },
+    "fakeuser": {
+        "fake": {
+            "desc": "別のユーザーとして話す",
+            "name": "なりすまし",
+            "param": {
+                "message": "送信するメッセージ",
+                "user": "なりすますユーザー"
+            },
+            "param_name": {
+                "message": "メッセージ",
+                "user": "ユーザー"
+            }
+        },
+        "fake_admin": {
+            "filter": {
+                "choice": {
+                    "add": "フィルターを追加",
+                    "remove": "フィルターを削除する",
+                    "view": "フィルターを表示する"
+                },
+                "desc": "偽ユーザー機能のフィルターを構成する",
+                "name": "フィルター",
+                "param": {
+                    "mode": "何がしたいのですか？",
+                    "regex": "フィルタリングする正規表現。追加または削除の場合にのみ必要です"
+                },
+                "param_name": {
+                    "mode": "モード",
+                    "regex": "正規表現"
+                }
+            },
+            "log_channel": {
+                "desc": "偽ユーザーのログチャンネルを設定する",
+                "name": "ログチャンネル",
+                "param": {
+                    "channel": "設定するログチャンネル。現在のものを表示するには空のままにしてください"
+                },
+                "param_name": {
+                    "channel": "チャンネル"
+                }
+            },
+            "root": {
+                "desc": "偽ユーザー管理コマンド",
+                "name": "なりすまし管理"
+            }
+        },
+        "fake_blacklist": {
+            "desc": "偽ユーザーのブラックリストを管理する",
+            "name": "なりすまし拒否",
+            "param": {
+                "user": "ブラックリストに追加/ブラックリストから削除するユーザー (全員を意味するためにこのボットを選択します)"
+            },
+            "param_name": {
+                "user": "ユーザー"
+            }
+        }
+    },
+    "feedback": {
+        "feedback": {
+            "desc": "ボット開発者にフィードバックを送信する",
+            "name": "フィードバック"
+        }
+    },
+    "fixlink": {
+        "fixlink": {
+            "root": {
+                "desc": "リンクフィクサー",
+                "name": "fixlink"
+            },
+            "settings": {
+                "desc": "FixLink の対話型設定パネルを開きます",
+                "name": "設定"
+            }
+        }
+    },
+    "gettingstarted": {
+        "gettingstarted": {
+            "desc": "サーバークイックセットアップセンターを開く",
+            "name": "初期設定"
+        }
+    },
+    "guildpanel": {
+        "panel": {
+            "desc": "サーバーパネルを開く",
+            "name": "パネル"
+        }
+    },
+    "hackeddetector": {
+        "imhacked": {
+            "desc": "侵害されたアカウントの回復フローを開始する",
+            "name": "乗っ取られた"
+        }
+    },
+    "itemsystem": {
+        "item": {
+            "drop": {
+                "choice": {
+                    "false": "いいえ",
+                    "global": "グローバル",
+                    "server": "サーバー",
+                    "true": "はい"
+                },
+                "desc": "アイテムをドロップする",
+                "name": "ドロップ",
+                "param": {
+                    "amount": "何個ドロップするか",
+                    "can_pickup": "他の人がこのアイテムを拾うことはできますか?",
+                    "item_id": "ドロップするアイテムID",
+                    "pickup_duration": "アイテムを受け取ることができる時間 (秒)",
+                    "pickup_only_once": "アイテムの受け取りは1回だけですか？",
+                    "scope": "アイテムのスコープ (デフォルトで自動検出)"
+                },
+                "param_name": {
+                    "amount": "数量",
+                    "can_pickup": "拾得可",
+                    "item_id": "アイテムid",
+                    "pickup_duration": "ピックアップ期間",
+                    "pickup_only_once": "一度のみ",
+                    "scope": "範囲"
+                }
+            },
+            "give": {
+                "choice": {
+                    "global": "グローバル",
+                    "server": "サーバー"
+                },
+                "desc": "他のユーザーにアイテムを渡す",
+                "name": "付与",
+                "param": {
+                    "amount": "金額",
+                    "item_id": "付与するアイテムID",
+                    "scope": "アイテムのスコープ (デフォルトで自動検出)",
+                    "user": "アイテムを渡すユーザー"
+                },
+                "param_name": {
+                    "amount": "数量",
+                    "item_id": "アイテムid",
+                    "scope": "範囲",
+                    "user": "ユーザー"
+                }
+            },
+            "list": {
+                "choice": {
+                    "global": "グローバル",
+                    "server": "サーバー"
+                },
+                "desc": "所有しているアイテムを表示する",
+                "name": "一覧",
+                "param": {
+                    "scope": "表示するスコープ (デフォルトで自動検出)"
+                },
+                "param_name": {
+                    "scope": "範囲"
+                }
+            },
+            "root": {
+                "desc": "アイテムシステムコマンド",
+                "name": "アイテム"
+            },
+            "use": {
+                "choice": {
+                    "global": "グローバル",
+                    "server": "サーバー"
+                },
+                "desc": "アイテムを使う",
+                "name": "使用",
+                "param": {
+                    "item_id": "使用するアイテムID",
+                    "scope": "使用するスコープ (デフォルトで自動検出)"
+                },
+                "param_name": {
+                    "item_id": "アイテムid",
+                    "scope": "範囲"
+                }
+            }
+        },
+        "itemmod": {
+            "addcustom": {
+                "desc": "サーバーカスタム項目を追加する",
+                "name": "カスタム追加",
+                "param": {
+                    "content": "アイテムが使用されたときに送信されるテキスト。 AutoReply 変数がサポートされています",
+                    "description": "アイテムの説明 (オプション、デフォルトは「カスタムアイテム」)",
+                    "ephemeral_response": "非表示の (一時的な) メッセージでユーザーに応答する",
+                    "list_in_shop": "サーバーショップに出品する",
+                    "name": "項目名",
+                    "price": "ショップ価格 (サーバー通貨。ショップに掲載されている場合のみ使用)",
+                    "remove_after_use": "使用後はアイテムを自動的に削除します",
+                    "revenue_share_user": "レベニューシェアユーザー。アイテムが使用されると価値の90%を受け取ります"
+                },
+                "param_name": {
+                    "content": "内容",
+                    "description": "説明",
+                    "ephemeral_response": "一時返信",
+                    "list_in_shop": "ショップ掲載",
+                    "name": "名前",
+                    "price": "価格",
+                    "remove_after_use": "使用後削除",
+                    "revenue_share_user": "収益分配ユーザー"
+                }
+            },
+            "editcustom": {
+                "desc": "カスタムアイテムのショップリストと価格を編集する",
+                "name": "カスタム編集",
+                "param": {
+                    "content": "アイテムが使用されたときに送信されるテキスト。 AutoReply 変数がサポートされています",
+                    "description": "商品説明",
+                    "ephemeral_response": "非表示の (一時的な) メッセージでユーザーに応答する",
+                    "item_id": "編集するカスタム項目",
+                    "list_in_shop": "サーバーショップに出品する",
+                    "name": "項目名",
+                    "remove_after_use": "使用後はアイテムを自動的に削除します",
+                    "revenue_share_user": "レベニューシェアユーザー。アイテムが使用されると価値の90%を受け取ります"
+                },
+                "param_name": {
+                    "content": "内容",
+                    "description": "説明",
+                    "ephemeral_response": "一時返信",
+                    "item_id": "アイテムid",
+                    "list_in_shop": "ショップ掲載",
+                    "name": "名前",
+                    "remove_after_use": "使用後削除",
+                    "revenue_share_user": "収益分配ユーザー"
+                }
+            },
+            "give": {
+                "desc": "ユーザーにアイテムを与える（経済に影響を及ぼす可能性がある）",
+                "name": "付与",
+                "param": {
+                    "amount": "何個あげるか",
+                    "item_id": "付与するアイテムID",
+                    "user": "アイテムを渡すユーザー"
+                },
+                "param_name": {
+                    "amount": "数量",
+                    "item_id": "アイテムid",
+                    "user": "ユーザー"
+                }
+            },
+            "list": {
+                "desc": "利用可能なすべてのアイテムをリストする",
+                "name": "一覧"
+            },
+            "listcustom": {
+                "desc": "このサーバーのカスタム項目を一覧表示します",
+                "name": "カスタム一覧"
+            },
+            "listuser": {
+                "desc": "ユーザーが所有するアイテムをリストする",
+                "name": "ユーザー一覧",
+                "param": {
+                    "user": "検索するユーザー"
+                },
+                "param_name": {
+                    "user": "ユーザー"
+                }
+            },
+            "remove": {
+                "desc": "ユーザーからアイテムを削除する",
+                "name": "削除",
+                "param": {
+                    "amount": "何個削除するか",
+                    "item_id": "削除するアイテムID",
+                    "user": "アイテムを削除するユーザー"
+                },
+                "param_name": {
+                    "amount": "数量",
+                    "item_id": "アイテムid",
+                    "user": "ユーザー"
+                }
+            },
+            "removecustom": {
+                "desc": "サーバーのカスタム項目を削除する",
+                "name": "カスタム削除",
+                "param": {
+                    "item_id": "削除するカスタム項目"
+                },
+                "param_name": {
+                    "item_id": "アイテムid"
+                }
+            },
+            "root": {
+                "desc": "アイテムシステム管理コマンド",
+                "name": "アイテム管理"
+            }
+        }
+    },
+    "joinnotify": {
+        "joinnotify": {
+            "choice": {
+                "disable": "いいえ、ありがとう",
+                "enable": "確かに"
+            },
+            "desc": "サーバーに招待したときに DM を送信するかどうかを選択してください",
+            "name": "参加通知"
+        }
+    },
+    "language": {
+        "choice": {
+            "auto": "自動"
+        },
+        "root": {
+            "desc": "言語設定",
+            "name": "言語"
+        },
+        "server": {
+            "desc": "このサーバーのデフォルト言語を設定します",
+            "name": "サーバー",
+            "param": {
+                "language": "言語 (自動 = 各ユーザーの Discord クライアント言語に従う)"
+            }
+        },
+        "set": {
+            "desc": "個人の言語を設定する",
+            "name": "設定",
+            "param": {
+                "language": "言語 (自動 = Discord クライアントの言語に従います)"
+            }
+        },
+        "show": {
+            "desc": "現在の言語とその言語がどのように決定されたかを示す",
+            "name": "表示"
+        }
+    },
+    "logger": {
+        "set_log_channel": {
+            "desc": "ログ チャンネルを設定します (未設定の場合、ログはチャンネルに送信されません)",
+            "name": "ログチャンネル設定",
+            "param": {
+                "channel": "ログチャンネル"
+            },
+            "param_name": {
+                "channel": "チャンネル"
+            }
+        }
+    },
+    "mentionlimit": {
+        "mentionlimit": {
+            "about": {
+                "desc": "MentionLimitについて",
+                "name": "概要"
+            },
+            "add": {
+                "desc": "管理対象ロールのメンションのクールダウンを追加または更新する",
+                "name": "追加",
+                "param": {
+                    "cooldown": "クールダウン秒数 (10 ～ 86400、デフォルトは 600)",
+                    "role": "管理するロール"
+                },
+                "param_name": {
+                    "cooldown": "クールダウン",
+                    "role": "ロール"
+                }
+            },
+            "list": {
+                "desc": "リストの言及制限設定",
+                "name": "一覧"
+            },
+            "remove": {
+                "desc": "管理対象のロールを削除する",
+                "name": "削除",
+                "param": {
+                    "role": "管理をやめるロール"
+                },
+                "param_name": {
+                    "role": "ロール"
+                }
+            },
+            "root": {
+                "name": "メンション制限"
+            },
+            "settings": {
+                "desc": "MentionLimit モードとオプションを構成する",
+                "name": "設定",
+                "param": {
+                    "announce": "クールダウンの開始時にチャンネルでアナウンスします",
+                    "automod_mode": "AutoMod モード: クールダウン中に AutoMod ルールでブロック、ロールはメンション可能のまま",
+                    "count_admins": "管理者のメンションもクールダウンをトリガーするかどうか"
+                },
+                "param_name": {
+                    "announce": "通知",
+                    "automod_mode": "自動モデレーション",
+                    "count_admins": "管理者を含む"
+                }
+            },
+            "setup": {
+                "desc": "MentionLimit を対話的に構成して有効にする",
+                "name": "セットアップ"
+            },
+            "toggle": {
+                "desc": "MentionLimit の有効化/無効化",
+                "name": "切替",
+                "param": {
+                    "enable": "現在の状態を切り替えるには空のままにしてください"
+                },
+                "param_name": {
+                    "enable": "有効化"
+                }
+            }
+        }
+    },
+    "messageimage": {
+        "ctx": {
+            "make_it_a_quote": {
+                "name": "ひどい 引用にしてください"
+            },
+            "screenshot_generator": {
+                "name": "スクリーンショットジェネレーター"
+            },
+            "whatisthisguytalking": {
+                "name": "この人は何を話しているのですか"
+            }
+        },
+        "upvoteboard": {
+            "desc": "賛成票ボードをセットアップします。ここに投稿すると、5 人がメッセージに賛成票を投じます。",
+            "name": "高評価ボード",
+            "param": {
+                "channel": "使用するチャンネル（設定をクリアする場合は省略）"
+            },
+            "param_name": {
+                "channel": "チャンネル"
+            }
+        }
+    },
+    "minigames": {
+        "minigamescog": {
+            "big2": {
+                "desc": "ビッグ 2 のテーブルを開始する",
+                "name": "ビッグ2",
+                "param": {
+                    "use_global": "世界通貨を使用する (デフォルトはサーバー設定)"
+                },
+                "param_name": {
+                    "use_global": "グローバル使用"
+                }
+            },
+            "blackjack": {
+                "desc": "ブラックジャック: ディーラーと対戦します",
+                "name": "ブラックジャック",
+                "param": {
+                    "bet": "ベット額 (50-2000)",
+                    "use_global": "世界通貨を使用する (デフォルトはサーバー設定)"
+                },
+                "param_name": {
+                    "bet": "賭け金",
+                    "use_global": "グローバル使用"
+                }
+            },
+            "coinflip": {
+                "desc": "コイン投げ: 表または裏をコール",
+                "name": "コインフリップ",
+                "param": {
+                    "bet": "ベット額 (50-2000)"
+                },
+                "param_name": {
+                    "bet": "賭け金"
+                }
+            },
+            "dice": {
+                "desc": "サイコロ ゲーム: 1 ～ 6 の出目を推測します。",
+                "name": "サイコロ",
+                "param": {
+                    "bet": "ベット額 (50-2000)"
+                },
+                "param_name": {
+                    "bet": "賭け金"
+                }
+            },
+            "doom": {
+                "desc": "ドゥームをプレイする",
+                "name": "doom"
+            },
+            "highlow": {
+                "desc": "高低: 次のカードが高いか低いかを推測します。",
+                "name": "ハイロー",
+                "param": {
+                    "bet": "ベット額 (50-2000)",
+                    "use_global": "世界通貨を使用する (デフォルトはサーバー設定)"
+                },
+                "param_name": {
+                    "bet": "賭け金",
+                    "use_global": "グローバル使用"
+                }
+            },
+            "lottery": {
+                "desc": "00-99 の宝くじを購入するか、現在のポットを表示します",
+                "name": "宝くじ",
+                "param": {
+                    "bet": "チケットごとのベット (50 ～ 2000、ステータスを確認するには空のままにしておきます)",
+                    "number": "00 ～ 99 を選択します (ステータスを確認するには空のままにしてください)",
+                    "use_global": "世界通貨を使用する (デフォルトはサーバー設定)"
+                },
+                "param_name": {
+                    "bet": "賭け金",
+                    "number": "番号",
+                    "use_global": "グローバル使用"
+                }
+            },
+            "root": {
+                "desc": "ミニゲーム"
+            },
+            "roulette": {
+                "choice": {
+                    "black": "ブラック",
+                    "even": "偶数",
+                    "high": "高 (19-36)",
+                    "low": "低 (1-18)",
+                    "number": "単一の数字",
+                    "odd": "奇数",
+                    "red": "赤"
+                },
+                "desc": "ルーレット: 賭けの種類を選択して賭けをします",
+                "name": "ルーレット",
+                "param": {
+                    "bet": "ベット額 (50-2000)",
+                    "bet_type": "ベットタイプ",
+                    "number": "シングルナンバーベットの場合は 0 ～ 36 を選択してください",
+                    "use_global": "世界通貨を使用する (デフォルトはサーバー設定)"
+                },
+                "param_name": {
+                    "bet": "賭け金",
+                    "bet_type": "賭け方",
+                    "number": "番号",
+                    "use_global": "グローバル使用"
+                }
+            },
+            "scratchcard": {
+                "desc": "3x3 スクラッチ カードを購入してスクラッチする",
+                "name": "スクラッチカード",
+                "param": {
+                    "bet": "ベット額 (50-2000)",
+                    "use_global": "世界通貨を使用する (デフォルトはサーバー設定)"
+                },
+                "param_name": {
+                    "bet": "賭け金",
+                    "use_global": "グローバル使用"
+                }
+            },
+            "slots": {
+                "desc": "スロットマシン",
+                "name": "スロット",
+                "param": {
+                    "bet": "ベット額 (50-2000)",
+                    "use_global": "世界通貨を使用する (デフォルトはサーバー設定)"
+                },
+                "param_name": {
+                    "bet": "賭け金",
+                    "use_global": "グローバル使用"
+                }
+            },
+            "tower": {
+                "desc": "タワークライミングゲーム",
+                "name": "タワー",
+                "param": {
+                    "bet": "ベット額 (50-2000)",
+                    "use_global": "世界通貨を使用する (デフォルトはサーバー設定)"
+                },
+                "param_name": {
+                    "bet": "賭け金",
+                    "use_global": "グローバル使用"
+                }
+            }
+        }
+    },
+    "moderate": {
+        "action_builder": {
+            "choice": {
+                "ban": "禁止",
+                "delete": "メッセージを削除する",
+                "kick": "キック",
+                "mute": "ミュート",
+                "send_mod_message": "モデレーション通知を送信する",
+                "warn": "公衆の警告"
+            },
+            "desc": "モデレーションアクションコマンド文字列を作成する",
+            "name": "アクション作成",
+            "param": {
+                "action_type": "アクションの種類",
+                "delete_message_duration": "禁止のみ: この期間のユーザーのメッセージを削除します。 1d; 0 = なし",
+                "duration": "期間（ミュート/禁止の場合）、例: 10分、7日。 0 = 永続的",
+                "message": "警告メッセージ (削除/警告用)。 {user} はユーザーを挿入します",
+                "prepend": "このアクションの前に追加する既存のコマンド (カンマ区切りのアクション)",
+                "reason": "理由（ミュート/キック/BANの場合）"
+            },
+            "param_name": {
+                "action_type": "アクション種別",
+                "delete_message_duration": "削除対象期間",
+                "duration": "期間",
+                "message": "メッセージ",
+                "prepend": "前に追加",
+                "reason": "理由"
+            }
+        },
+        "ban": {
+            "desc": "ユーザーを禁止する",
+            "name": "ban",
+            "param": {
+                "delete_message": "メッセージ削除期間 (オプション、デフォルト: なし)",
+                "duration": "禁止期間 (オプション、デフォルト: 永久)",
+                "reason": "禁止理由 (オプション)",
+                "send_moderation_message": "モデレーションアナウンスも送信します",
+                "user": "ユーザーを選択してください"
+            },
+            "param_name": {
+                "delete_message": "メッセージ削除",
+                "duration": "期間",
+                "reason": "理由",
+                "send_moderation_message": "通知送信",
+                "user": "ユーザー"
+            }
+        },
+        "custom_action_add": {
+            "desc": "サーバーのカスタム モデレーション アクションを追加または更新する",
+            "name": "カスタムアクション追加",
+            "param": {
+                "action": "実行するアクション文字列 (例: 1 時間の広告をミュート、smm)",
+                "name": "カスタムコマンド名 (例: ad)"
+            },
+            "param_name": {
+                "action": "アクション",
+                "name": "名前"
+            }
+        },
+        "custom_action_list": {
+            "desc": "サーバーのカスタム モデレーション アクションを表示する",
+            "name": "カスタムアクション一覧"
+        },
+        "custom_action_remove": {
+            "desc": "サーバーのカスタム モデレーション アクションを削除する",
+            "name": "カスタムアクション削除",
+            "param": {
+                "name": "削除するカスタム コマンドの名前"
+            },
+            "param_name": {
+                "name": "名前"
+            }
+        },
+        "kick": {
+            "desc": "ユーザーをキックする",
+            "name": "キック",
+            "param": {
+                "reason": "キック理由 (オプション)",
+                "send_moderation_message": "モデレーションアナウンスも送信します",
+                "user": "ユーザー (@mention または ID) を選択します"
+            },
+            "param_name": {
+                "reason": "理由",
+                "send_moderation_message": "通知送信",
+                "user": "ユーザー"
+            }
+        },
+        "moderation_message_channel": {
+            "desc": "モデレーションアナウンスチャンネルを設定する",
+            "name": "モデレーション通知先",
+            "param": {
+                "channel": "チャンネルを選択してください"
+            },
+            "param_name": {
+                "channel": "チャンネル"
+            }
+        },
+        "moderation_message_format": {
+            "desc": "お知らせテンプレートとケース ID 形式を設定する",
+            "name": "モデレーション通知形式"
+        },
+        "multi_moderate": {
+            "desc": "複数のユーザーに対してアクションを実行する",
+            "name": "一括モデレーション",
+            "param": {
+                "action": "アクションコマンド、カンマ区切り、例:スパム行為を 1 日間禁止、10 分間ミュート",
+                "users": "ユーザー (カンマ、スペース、または改行で区切られたメンションまたは ID)"
+            },
+            "param_name": {
+                "action": "アクション",
+                "users": "ユーザー"
+            }
+        },
+        "multi_moderate_action": {
+            "desc": "1 人のユーザーに対して複数のアクションを実行する",
+            "name": "一括アクション",
+            "param": {
+                "user": "ユーザーを選択してください"
+            },
+            "param_name": {
+                "user": "ユーザー"
+            }
+        },
+        "request": {
+            "ban": {
+                "desc": "ユーザーの禁止をリクエストする",
+                "name": "ban",
+                "param": {
+                    "duration": "禁止期間 (オプション、デフォルト: 永久)",
+                    "reason": "禁止理由 (オプション)",
+                    "request_to": "リクエストを確認する人 (デフォルト: ターゲット)",
+                    "user": "禁止するユーザー"
+                },
+                "param_name": {
+                    "duration": "期間",
+                    "reason": "理由",
+                    "request_to": "リクエスト先",
+                    "user": "ユーザー"
+                }
+            },
+            "kick": {
+                "desc": "ユーザーキックをリクエストする",
+                "name": "キック",
+                "param": {
+                    "reason": "キック理由 (オプション)",
+                    "request_to": "リクエストを確認する人 (デフォルト: ターゲット)",
+                    "user": "キックするユーザー"
+                },
+                "param_name": {
+                    "reason": "理由",
+                    "request_to": "リクエスト先",
+                    "user": "ユーザー"
+                }
+            },
+            "root": {
+                "desc": "行動する前に、ターゲットまたは権限のある管理者に確認を要求してください。",
+                "name": "リクエスト"
+            },
+            "settings": {
+                "choice": {
+                    "ban": "禁止",
+                    "kick": "キック",
+                    "timeout": "タイムアウト"
+                },
+                "desc": "リクエスト機能を構成する (管理者のみ)",
+                "name": "設定",
+                "param": {
+                    "action": "設定するアクション",
+                    "enabled": "有効にするかどうか",
+                    "max_duration": "最大タイムアウト/禁止期間 (例: 1 時間、0 = 無制限)"
+                },
+                "param_name": {
+                    "action": "アクション",
+                    "enabled": "有効"
+                }
+            },
+            "timeout": {
+                "desc": "ユーザーのタイムアウトを要求する",
+                "name": "タイムアウト",
+                "param": {
+                    "duration": "タイムアウト時間 (デフォルト: 10 分)",
+                    "reason": "タイムアウトの理由 (オプション)",
+                    "request_to": "リクエストを確認する人 (デフォルト: ターゲット)",
+                    "user": "タイムアウトするユーザー"
+                },
+                "param_name": {
+                    "duration": "期間",
+                    "reason": "理由",
+                    "request_to": "リクエスト先",
+                    "user": "ユーザー"
+                }
+            }
+        },
+        "send_moderation_message": {
+            "desc": "モデレーションアナウンスを手動で送信する",
+            "name": "モデレーション通知",
+            "param": {
+                "action": "講じられたアクション",
+                "direct": "設定 UI を使用せずにアナウンス チャンネルに直接送信します",
+                "moderator": "司会者代理 (オプション)",
+                "reason": "行動の理由",
+                "user": "ユーザーを選択してください"
+            },
+            "param_name": {
+                "action": "アクション",
+                "direct": "直接送信",
+                "moderator": "モデレーター",
+                "reason": "理由",
+                "user": "ユーザー"
+            }
+        },
+        "timeout": {
+            "desc": "ユーザーをタイムアウトさせる",
+            "name": "タイムアウト",
+            "param": {
+                "duration": "タイムアウト期間 (オプション、デフォルト: 10 分)",
+                "reason": "タイムアウトの理由 (オプション)",
+                "send_moderation_message": "モデレーションアナウンスも送信します",
+                "user": "ユーザーを選択してください"
+            },
+            "param_name": {
+                "duration": "期間",
+                "reason": "理由",
+                "send_moderation_message": "通知送信",
+                "user": "ユーザー"
+            }
+        },
+        "unban": {
+            "desc": "ユーザーの禁止を解除する",
+            "name": "ban解除",
+            "param": {
+                "user": "ユーザーを選択してください"
+            },
+            "param_name": {
+                "user": "ユーザー"
+            }
+        },
+        "untimeout": {
+            "desc": "ユーザーのタイムアウトを削除する",
+            "name": "タイムアウト解除",
+            "param": {
+                "user": "ユーザーを選択してください"
+            },
+            "param_name": {
+                "user": "ユーザー"
+            }
+        },
+        "vote": {
+            "ban": {
+                "desc": "禁止投票を開始する",
+                "name": "ban",
+                "param": {
+                    "duration": "禁止期間 (オプション、デフォルト: 永久)",
+                    "reason": "禁止理由 (オプション)",
+                    "user": "禁止するユーザー"
+                },
+                "param_name": {
+                    "duration": "期間",
+                    "reason": "理由",
+                    "user": "ユーザー"
+                }
+            },
+            "kick": {
+                "desc": "キック投票を開始する",
+                "name": "キック",
+                "param": {
+                    "reason": "キック理由 (オプション)",
+                    "user": "キックするユーザー"
+                },
+                "param_name": {
+                    "reason": "理由",
+                    "user": "ユーザー"
+                }
+            },
+            "root": {
+                "desc": "モデレーション投票を開始します。承認がしきい値に達すると、アクションが実行されます。",
+                "name": "投票"
+            },
+            "settings": {
+                "choice": {
+                    "ban": "禁止",
+                    "kick": "キック",
+                    "timeout": "タイムアウト"
+                },
+                "desc": "投票モデレーションの構成 (管理者のみ)",
+                "name": "設定",
+                "param": {
+                    "action": "設定するアクション",
+                    "enabled": "有効にするかどうか",
+                    "max_duration": "最大タイムアウト/禁止期間 (例: 1 時間、0 = 無制限)",
+                    "threshold": "固定投票しきい値 (0 = 自動)",
+                    "vote_duration": "投票期間 (例: 10 分、デフォルトは 10 分)"
+                },
+                "param_name": {
+                    "action": "アクション",
+                    "enabled": "有効",
+                    "threshold": "しきい値"
+                }
+            },
+            "timeout": {
+                "desc": "タイムアウト投票を開始する",
+                "name": "タイムアウト",
+                "param": {
+                    "duration": "タイムアウト時間 (デフォルト: 10 分)",
+                    "reason": "タイムアウトの理由 (オプション)",
+                    "user": "タイムアウトするユーザー"
+                },
+                "param_name": {
+                    "duration": "期間",
+                    "reason": "理由",
+                    "user": "ユーザー"
+                }
+            }
+        }
+    },
+    "moderationnotify": {
+        "settings_punishment_notify": {
+            "choice": {
+                "ban": "禁止",
+                "kick": "キック",
+                "mute": "ミュート"
+            },
+            "desc": "罰せられたユーザーに通知するかどうかを設定する",
+            "name": "処分通知設定",
+            "param": {
+                "action": "設定する罰のタイプ",
+                "enable": "通知を有効にするかどうか"
+            },
+            "param_name": {
+                "action": "アクション",
+                "enable": "有効化"
+            }
+        },
+        "user_appeal_blacklist": {
+            "desc": "異議申し立てのブラックリストを管理する",
+            "name": "異議申立て拒否",
+            "param": {
+                "reason": "ブラックリストに登録する理由 (オプション)",
+                "user": "ブラックリストに追加またはブラックリストから削除するユーザー"
+            },
+            "param_name": {
+                "reason": "理由",
+                "user": "ユーザー"
+            }
+        },
+        "user_appeal_channel": {
+            "desc": "アピールチャンネルを設定します。設定されていない場合、アピールは無効になります。",
+            "name": "異議申立て先",
+            "param": {
+                "channel": "アピールチャンネル。異議申し立てを無効にするには、空のままにします。"
+            },
+            "param_name": {
+                "channel": "チャンネル"
+            }
+        },
+        "view_appeal_blacklist": {
+            "desc": "異議申し立てのブラックリストを表示する",
+            "name": "異議申立て拒否一覧"
+        }
+    },
+    "music": {
+        "music": {
+            "loop": {
+                "choice": {
+                    "0": "ループオフ",
+                    "1": "ループトラック",
+                    "2": "ループキュー"
+                },
+                "desc": "ループモードを設定する",
+                "name": "ループ",
+                "param": {
+                    "mode": "ループモード"
+                },
+                "param_name": {
+                    "mode": "モード"
+                }
+            },
+            "nodes": {
+                "desc": "Lavalink ノードのステータスを表示する",
+                "name": "ノード"
+            },
+            "now_playing": {
+                "desc": "現在再生中のトラックを表示する",
+                "name": "再生中"
+            },
+            "pause": {
+                "desc": "再生を一時停止する",
+                "name": "一時停止"
+            },
+            "play": {
+                "desc": "音楽を再生する",
+                "name": "再生",
+                "param": {
+                    "query": "トラック名または URL"
+                },
+                "param_name": {
+                    "query": "クエリ"
+                }
+            },
+            "queue": {
+                "desc": "再生キューを表示する",
+                "name": "キュー"
+            },
+            "radio": {
+                "choice": {
+                    "listenmoe": "聞いて。もえ",
+                    "r_a_dio": "R/A/ディオ"
+                },
+                "desc": "ラジオモードに切り替える",
+                "name": "ラジオ",
+                "param": {
+                    "station": "プレイするステーション"
+                },
+                "param_name": {
+                    "station": "ステーション"
+                }
+            },
+            "recommend": {
+                "desc": "現在のトラックに基づいて類似のトラックを推奨します",
+                "name": "おすすめ",
+                "param": {
+                    "count": "追加する推奨事項の数 (1 ～ 10、デフォルトは 5)"
+                },
+                "param_name": {
+                    "count": "件数"
+                }
+            },
+            "restore_queue": {
+                "desc": "再起動前に保存された再生状態を復元します",
+                "name": "キュー復元"
+            },
+            "resume": {
+                "desc": "再生を再開する",
+                "name": "再開"
+            },
+            "root": {
+                "desc": "音楽コマンド",
+                "name": "音楽"
+            },
+            "search": {
+                "desc": "音楽の検索と再生",
+                "name": "検索",
+                "param": {
+                    "query": "トラックを検索します (オートコンプリートをサポート)"
+                },
+                "param_name": {
+                    "query": "クエリ"
+                }
+            },
+            "shuffle": {
+                "desc": "キューをシャッフルする",
+                "name": "シャッフル"
+            },
+            "skip": {
+                "desc": "現在のトラックをスキップする",
+                "name": "スキップ"
+            },
+            "stop": {
+                "desc": "再生を停止して接続を解除する",
+                "name": "停止"
+            },
+            "volume": {
+                "desc": "音量を調整する",
+                "name": "ボリューム",
+                "param": {
+                    "level": "音量レベル (0 ～ 100)"
+                },
+                "param_name": {
+                    "level": "レベル"
+                }
+            }
+        }
+    },
+    "owoify": {
+        "owoify": {
+            "desc": "文字を可愛くしよう！",
+            "name": "owoify",
+            "param": {
+                "english": "英語版？",
+                "text": "カットするテキスト"
+            },
+            "param_name": {
+                "english": "英語",
+                "text": "テキスト"
+            }
+        }
+    },
+    "oxwu": {
+        "earthquake": {
+            "query_report": {
+                "desc": "最新の地震情報を入手する",
+                "name": "観測報告"
+            },
+            "query_warning": {
+                "desc": "現在の緊急地震速報の状況を確認する",
+                "name": "警報照会"
+            },
+            "root": {
+                "desc": "OXWU地震監視システム",
+                "name": "地震"
+            },
+            "screenshot": {
+                "desc": "現在の OXWU 表示のスクリーンショットを取得します。",
+                "name": "スクリーンショット"
+            },
+            "set_report_channel": {
+                "desc": "地震速報を受信するチャンネルを設定する",
+                "name": "観測報告先設定",
+                "param": {
+                    "channel": "レポートを受信するチャンネル",
+                    "text": "オプションの追加テキストメッセージ"
+                },
+                "param_name": {
+                    "channel": "チャンネル",
+                    "text": "テキスト"
+                }
+            },
+            "status": {
+                "desc": "OXWU 接続ステータスの表示",
+                "name": "ステータス"
+            }
+        }
+    },
+    "petpet": {
+        "petpet": {
+            "desc": "PetPet GIF を生成する",
+            "name": "ペットペット",
+            "param": {
+                "user": "ペットにするユーザー (デフォルト: 自分自身)"
+            },
+            "param_name": {
+                "user": "ユーザー"
+            }
+        }
+    },
+    "r34": {
+        "r34": {
+            "choice": {
+                "false": "いいえ",
+                "true": "はい"
+            },
+            "desc": "rule34.xxx からランダムな画像を取得します",
+            "name": "r34",
+            "param": {
+                "ai": "AI で生成された画像を含める",
+                "pid": "ページ番号",
+                "spoilers": "ネタバレとしてマークする",
+                "tags": "タグ"
+            },
+            "param_name": {
+                "pid": "投稿id",
+                "spoilers": "スポイラー",
+                "tags": "タグ"
+            }
+        },
+        "r34tags": {
+            "desc": "rules34.xxx でタグを検索",
+            "name": "r34タグ",
+            "param": {
+                "query": "検索キーワード"
+            },
+            "param_name": {
+                "query": "クエリ"
+            }
+        }
+    },
+    "reportsystem": {
+        "ctx": {
+            "report_message": {
+                "name": "レポートメッセージ"
+            }
+        },
+        "report": {
+            "blacklist_role": {
+                "choice": {
+                    "add": "追加",
+                    "remove": "削除",
+                    "view": "見る"
+                },
+                "desc": "レポートのブラックリストのロールを管理する",
+                "name": "拒否ロール",
+                "param": {
+                    "action": "実行するアクション",
+                    "role": "ロール"
+                },
+                "param_name": {
+                    "action": "アクション",
+                    "role": "ロール"
+                }
+            },
+            "root": {
+                "name": "通報"
+            },
+            "set_server_rules": {
+                "desc": "サーバールールのテキストを設定します",
+                "name": "サーバールール設定",
+                "param": {
+                    "rules": "サーバールール。改行には \\n を使用します"
+                },
+                "param_name": {
+                    "rules": "ルール"
+                }
+            },
+            "settings": {
+                "choice": {
+                    "moderation_message_channel_id": "モデレーション通知チャンネル",
+                    "report_channel_id": "レポート通知チャンネル",
+                    "report_message": "レポート通知メッセージ",
+                    "report_rate_limit": "レポート速度制限 (秒)",
+                    "reported_message": "記者に返信"
+                },
+                "desc": "このサーバーのレポート システムを構成します",
+                "name": "設定",
+                "param": {
+                    "setting": "変更する設定",
+                    "value": "値 (チャンネルの場合は #channel-name またはチャンネル ID を使用します)"
+                },
+                "param_name": {
+                    "setting": "設定",
+                    "value": "値"
+                }
+            }
+        }
+    },
+    "serverwebverify": {
+        "ctx": {
+            "force_verify": "ユーザー認証を強制する",
+            "manual_verify": "ユーザーを手動で認証する"
+        },
+        "webverify": {
+            "autorole": {
+                "choice": {
+                    "age_check": "アカウントが新しすぎます",
+                    "always": "常に割り当てます",
+                    "has_flagged_history": "アカウントには以前にフラグが立てられました",
+                    "left_guild_before": "以前にサーバーを離れました",
+                    "no_history": "認証履歴がありません"
+                },
+                "desc": "未認証のロールを新しいメンバーに自動的に割り当てる",
+                "name": "自動ロール",
+                "param": {
+                    "enable": "自動ロール割り当てを有効または無効にする",
+                    "trigger": "ロールを割り当てるための条件"
+                },
+                "param_name": {
+                    "enable": "有効化",
+                    "trigger": "トリガー"
+                }
+            },
+            "check_relation": {
+                "desc": "ユーザーの関連アカウントを確認する",
+                "name": "関連確認",
+                "param": {
+                    "user": "確認するユーザー"
+                },
+                "param_name": {
+                    "user": "ユーザー"
+                }
+            },
+            "country_alert": {
+                "choice": {
+                    "allowlist": "ホワイトリストモード",
+                    "blocklist": "ブロックリストモード"
+                },
+                "desc": "認証領域のアラートを構成する",
+                "name": "地域アラート",
+                "param": {
+                    "channel": "アラートを受信するチャンネル",
+                    "countries": "国コード、カンマ区切り (例: US、CN、RU)",
+                    "enable": "地域アラートを有効または無効にする",
+                    "mode": "アラートモード"
+                },
+                "param_name": {
+                    "channel": "チャンネル",
+                    "countries": "国",
+                    "enable": "有効化",
+                    "mode": "モード"
+                }
+            },
+            "create_unverified_role": {
+                "desc": "未認証メンバーのロールを自動的に作成して構成する",
+                "name": "未認証ロール作成",
+                "param": {
+                    "name": "未認証メンバーのロールの名前"
+                },
+                "param_name": {
+                    "name": "名前"
+                }
+            },
+            "disable": {
+                "desc": "このサーバーの Web 認証を無効にする",
+                "name": "無効化"
+            },
+            "enable": {
+                "desc": "このサーバーの Web 認証を有効にする",
+                "name": "有効化"
+            },
+            "force_verify": {
+                "desc": "ユーザーに確認を強制する",
+                "name": "強制認証",
+                "param": {
+                    "user": "強制認証するユーザー"
+                },
+                "param_name": {
+                    "user": "ユーザー"
+                }
+            },
+            "manual_check_country": {
+                "desc": "ユーザーの地域を手動で確認する",
+                "name": "地域手動確認",
+                "param": {
+                    "user": "ユーザーを選択してください"
+                },
+                "param_name": {
+                    "user": "ユーザー"
+                }
+            },
+            "minage": {
+                "desc": "アカウントの最低年齢を定義する",
+                "name": "最低年齢",
+                "param": {
+                    "min_age": "アカウントの最小経過日数 (日)"
+                },
+                "param_name": {
+                    "min_age": "最低日数"
+                }
+            },
+            "quick_setup": {
+                "desc": "インタラクティブなウィザードで Web 認証をすばやくセットアップ",
+                "name": "クイック設定"
+            },
+            "relation_blacklist": {
+                "add": {
+                    "desc": "既存の関係 ID をこのサーバーのブラックリストに追加します",
+                    "name": "追加",
+                    "param": {
+                        "relation_id": "既存の WebVerify 関係 ID"
+                    },
+                    "param_name": {
+                        "relation_id": "関連id"
+                    }
+                },
+                "configure": {
+                    "desc": "リレーションブラックリストアクションを構成して有効にする",
+                    "name": "設定",
+                    "param": {
+                        "action": "メッセージなしで実行できるモデレーションアクション",
+                        "channel": "アクションレポートを受信するテキストチャンネル"
+                    },
+                    "param_name": {
+                        "action": "アクション",
+                        "channel": "チャンネル"
+                    }
+                },
+                "disable": {
+                    "desc": "自動関係ブラックリスト アクションを無効にする",
+                    "name": "無効化"
+                },
+                "list": {
+                    "desc": "関係ブラックリスト設定と関係 ID をリストします。",
+                    "name": "一覧"
+                },
+                "remove": {
+                    "desc": "このサーバーのブラックリストから関係 ID を削除します",
+                    "name": "削除",
+                    "param": {
+                        "relation_id": "削除するブラックリストに登録された関係 ID"
+                    },
+                    "param_name": {
+                        "relation_id": "関連id"
+                    }
+                },
+                "root": {
+                    "desc": "このサーバーの関係 ID ブラックリストとアクションを管理します",
+                    "name": "関連id拒否"
+                },
+                "scan": {
+                    "desc": "関係ブラックリストのスキャンをプレビューして確認する",
+                    "name": "スキャン"
+                }
+            },
+            "relation_action": {
+                "desc": "ユーザーとその関連アカウントに作用する",
+                "name": "関連アクション",
+                "param": {
+                    "action": "実行するアクション (!moderate と同じ形式)",
+                    "user": "ユーザーを選択してください"
+                },
+                "param_name": {
+                    "action": "アクション",
+                    "user": "ユーザー"
+                }
+            },
+            "root": {
+                "desc": "サーバー Web 認証コマンド",
+                "name": "web認証"
+            },
+            "set_captcha": {
+                "choice": {
+                    "none": "なし",
+                    "recaptcha": "Google reCAPTCHA",
+                    "turnstile": "クラウドフレア回転木戸"
+                },
+                "desc": "Web認証に使用するCAPTCHAプロバイダを設定します。",
+                "name": "captcha設定",
+                "param": {
+                    "captcha_provider": "CAPTCHA プロバイダーを選択する"
+                },
+                "param_name": {
+                    "captcha_provider": "captcha方式"
+                }
+            },
+            "set_unverified_role": {
+                "desc": "未認証メンバーのロールを設定する",
+                "name": "未認証ロール設定",
+                "param": {
+                    "role": "未認証メンバーのロール"
+                },
+                "param_name": {
+                    "role": "ロール"
+                }
+            },
+            "setup": {
+                "desc": "このサーバーの Web 認証を設定します",
+                "name": "セットアップ"
+            },
+            "start_force_verify": {
+                "desc": "新しく参加したすべてのメンバーの強制認証を開始します",
+                "name": "強制認証開始",
+                "param": {
+                    "duration": "強制認証が続く時間 (?h?m?s...)"
+                },
+                "param_name": {
+                    "duration": "期間"
+                }
+            },
+            "status": {
+                "desc": "このサーバーの Web 認証ステータスを表示する",
+                "name": "ステータス"
+            },
+            "verify_notify": {
+                "choice": {
+                    "both": "両方",
+                    "channel": "チャンネル内で",
+                    "dm": "ダイレクトメッセージ"
+                },
+                "desc": "認証通知の送信方法を構成する",
+                "name": "認証通知",
+                "param": {
+                    "channel": "確認メッセージのチャンネル",
+                    "message": "カスタム確認メッセージ",
+                    "title": "カスタム埋め込みタイトル",
+                    "type": "通知方法"
+                },
+                "param_name": {
+                    "channel": "チャンネル",
+                    "message": "メッセージ",
+                    "title": "タイトル",
+                    "type": "タイプ"
+                }
+            }
+        }
+    },
+    "statistics": {
+        "stats": {
+            "command": {
+                "desc": "コマンド使用統計の表示",
+                "name": "コマンド",
+                "param": {
+                    "full": "完全な統計を表示"
+                },
+                "param_name": {
+                    "full": "詳細"
+                }
+            },
+            "petpet_stats": {
+                "desc": "petpet を使用した回数を確認する",
+                "name": "petpet統計"
+            },
+            "root": {
+                "name": "統計"
+            }
+        }
+    },
+    "stickymessage": {
+        "stickymessage": {
+            "add": {
+                "desc": "チャンネルに固定メッセージを追加する",
+                "name": "追加",
+                "param": {
+                    "allow_mentions": "最初の投稿と手動投稿でのメンションを許可する",
+                    "channel": "設定するテキストまたはアナウンスチャンネル",
+                    "content": "固定メッセージの内容"
+                },
+                "param_name": {
+                    "allow_mentions": "メンション許可",
+                    "channel": "チャンネル",
+                    "content": "内容"
+                }
+            },
+            "edit": {
+                "desc": "チャンネルの固定メッセージを編集する",
+                "name": "編集",
+                "param": {
+                    "allow_mentions": "最初の投稿と手動投稿でのメンションを許可する",
+                    "channel": "設定されたテキストまたはアナウンスチャンネル",
+                    "content": "新しい固定メッセージのコンテンツ"
+                },
+                "param_name": {
+                    "allow_mentions": "メンション許可",
+                    "channel": "チャンネル",
+                    "content": "内容"
+                }
+            },
+            "list": {
+                "desc": "現在の固定メッセージ設定を一覧表示する",
+                "name": "一覧"
+            },
+            "move": {
+                "desc": "固定メッセージを並べ替えます。この順序によりクォータの優先順位も設定されます",
+                "name": "移動",
+                "param": {
+                    "channel": "移動する固定メッセージ チャンネル",
+                    "position": "新しいポジション"
+                },
+                "param_name": {
+                    "channel": "チャンネル"
+                }
+            },
+            "publish": {
+                "desc": "固定メッセージをすぐに再投稿する",
+                "name": "投稿",
+                "param": {
+                    "channel": "今再投稿する固定メッセージのあるチャンネル"
+                },
+                "param_name": {
+                    "channel": "チャンネル"
+                }
+            },
+            "remove": {
+                "desc": "チャンネルの固定メッセージを削除する",
+                "name": "削除",
+                "param": {
+                    "channel": "固定メッセージを削除するチャンネル"
+                },
+                "param_name": {
+                    "channel": "チャンネル"
+                }
+            },
+            "root": {
+                "desc": "このサーバーの固定メッセージを管理します",
+                "name": "固定メッセージ"
+            },
+            "timing": {
+                "desc": "静止時間と最小再投稿間隔を構成する",
+                "name": "タイミング",
+                "param": {
+                    "min_interval_seconds": "チャンネル内の 2 つの自動再投稿間の最小間隔",
+                    "quiet_seconds": "最後の人間によるメッセージの後に待機する秒数"
+                },
+                "param_name": {
+                    "min_interval_seconds": "最小間隔秒",
+                    "quiet_seconds": "待機秒"
+                }
+            }
+        }
+    },
+    "stickyrole": {
+        "stickyrole": {
+            "add": {
+                "desc": "記憶リストにロールを追加します (空のリスト = すべてのロールを記憶します)",
+                "name": "追加",
+                "param": {
+                    "role": "許可リストに追加するロール"
+                },
+                "param_name": {
+                    "role": "ロール"
+                }
+            },
+            "clear": {
+                "desc": "許可リストをクリアします (すべてのロールの記憶に戻ります)",
+                "name": "クリア"
+            },
+            "clear_user": {
+                "desc": "ユーザーの StickyRole レコードをクリアする",
+                "name": "ユーザー削除",
+                "param": {
+                    "user": "記録を消去するユーザー"
+                },
+                "param_name": {
+                    "user": "ユーザー"
+                }
+            },
+            "ignore_bots": {
+                "choice": {
+                    "false": "いいえ (ボットを含む)",
+                    "true": "はい (ボットを無視します)"
+                },
+                "desc": "ボットアカウントを無視するかどうかを構成する",
+                "name": "bot除外",
+                "param": {
+                    "enable": "ボットアカウントを無視するかどうか"
+                },
+                "param_name": {
+                    "enable": "有効化"
+                }
+            },
+            "list": {
+                "desc": "現在の許可リストと機能のステータスを表示する",
+                "name": "一覧"
+            },
+            "remove": {
+                "desc": "許可リストからロールを削除する",
+                "name": "削除",
+                "param": {
+                    "role": "許可リストから削除するロール"
+                },
+                "param_name": {
+                    "role": "ロール"
+                }
+            },
+            "root": {
+                "desc": "ユーザーが再参加するときに以前保持していたロールを復元する",
+                "name": "固定ロール"
+            },
+            "set_log_channel": {
+                "desc": "StickyRole ログ チャンネルを設定する",
+                "name": "ログチャンネル設定",
+                "param": {
+                    "channel": "StickyRole ログのチャンネル (設定を解除するには空のままにします)"
+                },
+                "param_name": {
+                    "channel": "チャンネル"
+                }
+            },
+            "toggle": {
+                "choice": {
+                    "false": "無効にする",
+                    "true": "有効にする"
+                },
+                "desc": "StickyRole を有効または無効にする",
+                "name": "切替",
+                "param": {
+                    "enable": "StickyRole を有効にするかどうか"
+                },
+                "param_name": {
+                    "enable": "有効化"
+                }
+            },
+            "view": {
+                "desc": "ユーザーが以前に保存したロールを表示する",
+                "name": "表示",
+                "param": {
+                    "user": "閲覧するユーザー"
+                },
+                "param_name": {
+                    "user": "ユーザー"
+                }
+            }
+        }
+    },
+    "ticket": {
+        "ticket": {
+            "add": {
+                "desc": "現在のチケットにユーザーを追加する",
+                "name": "追加",
+                "param": {
+                    "member": "追加するユーザー"
+                },
+                "param_name": {
+                    "member": "メンバー"
+                }
+            },
+            "claim": {
+                "desc": "現在のチケットを請求する",
+                "name": "担当"
+            },
+            "close": {
+                "desc": "現在のチケットを閉じる",
+                "name": "閉じる",
+                "param": {
+                    "reason": "近い理由（トランスクリプトの概要に記録されています）"
+                },
+                "param_name": {
+                    "reason": "理由"
+                }
+            },
+            "panel": {
+                "desc": "チケットパネルのメッセージを公開する",
+                "name": "パネル",
+                "param": {
+                    "channel": "パネルを公開するチャンネル (デフォルトは構成されたパネルチャンネル)"
+                },
+                "param_name": {
+                    "channel": "チャンネル"
+                }
+            },
+            "remove": {
+                "desc": "現在のチケットからユーザーを削除します",
+                "name": "削除",
+                "param": {
+                    "member": "削除するユーザー"
+                },
+                "param_name": {
+                    "member": "メンバー"
+                }
+            },
+            "root": {
+                "name": "チケット"
+            },
+            "setup": {
+                "desc": "チケットシステムを迅速にセットアップする",
+                "name": "セットアップ",
+                "param": {
+                    "category": "チケットチャンネルが作成されるカテゴリ",
+                    "log_channel": "終了後のトランスクリプトのチャンネル (トランスクリプトのスキップを省略)",
+                    "panel_channel": "オープンボタンを備えたチケットパネルのチャンネル",
+                    "publish": "パネルメッセージをすぐに公開します (デフォルト: はい)",
+                    "staff_role": "スタッフのロール (サーバーパネルでロールを追加)"
+                },
+                "param_name": {
+                    "category": "カテゴリ",
+                    "log_channel": "ログチャンネル",
+                    "panel_channel": "パネルチャンネル",
+                    "publish": "公開する",
+                    "staff_role": "スタッフロール"
+                }
+            }
+        },
+        "types": {
+            "add": {
+                "choice": {
+                    "danger": "赤",
+                    "primary": "ブルー",
+                    "secondary": "グレー",
+                    "success": "緑"
+                },
+                "desc": "チケットタイプを追加する",
+                "name": "追加",
+                "param": {
+                    "category": "このタイプの専用チャンネル カテゴリ (デフォルトはグローバル設定)",
+                    "emoji": "ボタンの絵文字 (オプション)",
+                    "label": "ボタンのラベル (例: テクニカル サポート)",
+                    "staff_role": "このタイプの追加スタッフのロール (デフォルトはグローバル スタッフのみ)",
+                    "style": "ボタンの色 (デフォルト: 青)",
+                    "welcome": "専用のウェルカムメッセージ。 {user} および {subject} をサポート (デフォルトはグローバル)"
+                },
+                "param_name": {
+                    "category": "カテゴリ",
+                    "emoji": "絵文字",
+                    "label": "ラベル",
+                    "staff_role": "スタッフロール",
+                    "style": "スタイル",
+                    "welcome": "ようこそ"
+                }
+            },
+            "edit": {
+                "choice": {
+                    "danger": "赤",
+                    "primary": "ブルー",
+                    "secondary": "グレー",
+                    "success": "緑"
+                },
+                "desc": "チケットタイプを編集する",
+                "name": "編集",
+                "param": {
+                    "category": "新しい専用カテゴリ (選択すると上書きされます)",
+                    "emoji": "新しいボタンの絵文字 (入力 - 消去)",
+                    "label": "新しいボタンのラベル",
+                    "staff_role": "新しい追加スタッフのロール (選択すると上書きされます)",
+                    "style": "新しいボタンの色",
+                    "type": "編集するタイプ",
+                    "welcome": "新しい専用のウェルカム メッセージ (グローバル メッセージをクリアして使用するには - を入力)"
+                },
+                "param_name": {
+                    "category": "カテゴリ",
+                    "emoji": "絵文字",
+                    "label": "ラベル",
+                    "staff_role": "スタッフロール",
+                    "style": "スタイル",
+                    "type": "タイプ",
+                    "welcome": "ようこそ"
+                }
+            },
+            "list": {
+                "desc": "すべてのチケットタイプをリストする",
+                "name": "一覧"
+            },
+            "remove": {
+                "desc": "チケットタイプを削除する",
+                "name": "削除",
+                "param": {
+                    "type": "外すタイプ"
+                },
+                "param_name": {
+                    "type": "タイプ"
+                }
+            },
+            "root": {
+                "desc": "チケットタイプの管理 (パネル上の複数の開いたボタン)",
+                "name": "種類"
+            }
+        }
+    },
+    "twbus": {
+        "bus": {
+            "favorites": {
+                "desc": "お気に入りのバス停と YouBike ステーション",
+                "name": "お気に入り"
+            },
+            "getroute": {
+                "desc": "バス路線を調べる",
+                "name": "路線検索",
+                "param": {
+                    "route_key": "ルートID"
+                },
+                "param_name": {
+                    "route_key": "ルートキー"
+                }
+            },
+            "getstop": {
+                "desc": "バス停を調べる",
+                "name": "停留所検索",
+                "param": {
+                    "route_key": "ルートID",
+                    "stop_id": "ストップID"
+                },
+                "param_name": {
+                    "route_key": "ルートキー",
+                    "stop_id": "停留所id"
+                }
+            },
+            "root": {
+                "name": "バス"
+            },
+            "youbike": {
+                "desc": "YouBikeステーションを探す",
+                "name": "ユーバイク",
+                "param": {
+                    "station_name": "YouBikeステーション名"
+                },
+                "param_name": {
+                    "station_name": "ステーション名"
+                }
+            }
+        }
+    },
+    "utilcommands": {
+        "ctx": {
+            "emoji_info_context": {
+                "name": "絵文字情報"
+            },
+            "sticker_info_context": {
+                "name": "ステッカー情報"
+            }
+        },
+        "httpcat": {
+            "desc": "猫って可愛いですね",
+            "name": "httpcat",
+            "param": {
+                "status_code": "HTTP ステータス コード (例: 404)"
+            },
+            "param_name": {
+                "status_code": "ステータスコード"
+            }
+        },
+        "info": {
+            "avatar": {
+                "desc": "ユーザーのアバターを取得する",
+                "name": "アバター",
+                "param": {
+                    "user": "検索するユーザー"
+                },
+                "param_name": {
+                    "user": "ユーザー"
+                }
+            },
+            "banner": {
+                "desc": "ユーザーのバナーを取得する",
+                "name": "バナー",
+                "param": {
+                    "user": "検索するユーザー"
+                },
+                "param_name": {
+                    "user": "ユーザー"
+                }
+            },
+            "bot": {
+                "desc": "ボット情報を表示する",
+                "name": "ボット",
+                "param": {
+                    "full": "失敗したモジュールを含む完全なモジュールのリストを表示します"
+                },
+                "param_name": {
+                    "full": "詳細"
+                }
+            },
+            "changelog": {
+                "desc": "ボットの変更ログを表示する",
+                "name": "変更履歴"
+            },
+            "commits": {
+                "desc": "ボットの git コミット履歴を表示する",
+                "name": "コミット"
+            },
+            "help": {
+                "desc": "コマンドのヘルプと使用法を表示する",
+                "name": "ヘルプ",
+                "param": {
+                    "command": "調べるコマンド"
+                },
+                "param_name": {
+                    "command": "コマンド"
+                }
+            },
+            "mention": {
+                "desc": "コマンドのメンション形式を取得する",
+                "name": "メンション",
+                "param": {
+                    "command": "コマンド名",
+                    "subcommand": "サブコマンド名（オプション）"
+                },
+                "param_name": {
+                    "command": "コマンド",
+                    "subcommand": "サブコマンド"
+                }
+            },
+            "ping": {
+                "desc": "ボットの遅延を確認する",
+                "name": "ピング"
+            },
+            "root": {
+                "name": "情報"
+            },
+            "server": {
+                "desc": "このサーバーに関する情報を表示します",
+                "name": "サーバー"
+            },
+            "tutorial": {
+                "desc": "ボットの使い方のチュートリアル",
+                "name": "チュートリアル"
+            },
+            "user": {
+                "desc": "ユーザー情報を表示する",
+                "name": "ユーザー",
+                "param": {
+                    "user": "検索するユーザー"
+                },
+                "param_name": {
+                    "user": "ユーザー"
+                }
+            }
+        },
+        "nitro": {
+            "desc": "ボットに Nitro を盗まれたくない",
+            "name": "ニトロ",
+            "param": {
+                "need_message": "最近の発言者のみが主張できます (最近の 50 メッセージの作成者)"
+            },
+            "param_name": {
+                "need_message": "メッセージ表示"
+            }
+        },
+        "randomnumber": {
+            "desc": "乱数を生成する",
+            "name": "乱数",
+            "param": {
+                "max": "最大値",
+                "min": "最小値"
+            },
+            "param_name": {
+                "max": "最大",
+                "min": "最小"
+            }
+        },
+        "randomuser": {
+            "choice": {
+                "false": "いいえ",
+                "true": "はい"
+            },
+            "desc": "Pick a random recent speaker in this channel",
+            "name": "ランダムユーザー",
+            "param": {
+                "mention": "Whether to mention the chosen user"
+            },
+            "param_name": {
+                "mention": "言及"
+            }
+        },
+        "textlength": {
+            "desc": "Count the length of the given text",
+            "name": "文字数",
+            "param": {
+                "text": "測定するテキスト"
+            },
+            "param_name": {
+                "text": "テキスト"
+            }
+        }
+    }
+}

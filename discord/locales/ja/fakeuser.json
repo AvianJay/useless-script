@@ -1,0 +1,56 @@
+{
+    "audit": {
+        "impersonate_reason": "ユーザー {moderator} が {target} になりすましてメッセージを送信しました"
+    },
+    "btn": {
+        "cancel_edit": "いいえ、メッセージを編集したいです",
+        "confirm_send": "はい、このメッセージを送信したいと思います",
+        "send_without_mentions": "はい、ただし言及せずに送信してください"
+    },
+    "embed": {
+        "log_title": "偽ユーザーのアクションログ"
+    },
+    "err": {
+        "delay_needs_content": "遅延マーカーの後には、送信するメッセージ コンテンツを続ける必要があります。",
+        "delay_out_of_range": "遅延秒数は 0 ～ 2 である必要があります。",
+        "empty_content": "メッセージの内容を空にすることはできません。",
+        "filter_already_exists": "そのフィルターはすでに存在します。",
+        "filter_not_found": "そのフィルターは存在しません。",
+        "filter_triggered": "メッセージの内容によってフィルターがトリガーされました。フィルターを変更して再試行してください。",
+        "invalid_regex": "指定された正規表現は無効です。確認して再試行してください。",
+        "no_send_permission": "ボットにはそのチャンネルでメッセージを送信する権限がありません。別のチャンネルを選択してください。",
+        "no_webhook_permission": "ボットには Webhook の管理権限がないため、偽ユーザー機能は使用できません。",
+        "not_enabled": "偽ユーザー機能が有効になっていません。設定するには管理者に問い合わせてください。",
+        "not_your_button": "これは確認ボタンではありません。",
+        "rate_limited": "偽ユーザー機能を頻繁に使用しすぎています。後でもう一度お試しください。",
+        "regex_required_add": "追加する正規表現を指定してください。",
+        "regex_required_remove": "削除する正規表現を指定してください。",
+        "target_blacklisted": "{user} はあなたになりすますことを望まないようです。他の人を試してください。",
+        "too_many_delays": "最大 2 つの遅延マーカー (合計 3 つのメッセージ) を使用できます。"
+    },
+    "msg": {
+        "blacklist_everyone_toggled": "誰もがあなたの偽ユーザー ブラックリストに {action} されています。",
+        "blacklist_toggled": "{user} は、偽ユーザーのブラックリスト {action} になりました。",
+        "confirm_mentions_prompt": "メッセージにはメンションが含まれており、多くの人に通知される可能性があります。本当に送信してもよろしいですか?",
+        "confirm_timed_out": "確認が間に合わなかったため、メッセージの送信はキャンセルされました。",
+        "confirmed_with_mentions": "メンション付きのメッセージの送信を確認しました。",
+        "confirmed_without_mentions": "メンションなしでメッセージを送信することを選択しました。",
+        "disabled": "偽ユーザー機能は無効になっています。",
+        "filter_added": "追加されたフィルター: `{regex}`",
+        "filter_removed": "削除されたフィルター: `{regex}`",
+        "log_channel_set": "偽ユーザーのログ チャンネルは {channel} に設定されています。",
+        "send_cancelled": "メッセージの送信がキャンセルされました。",
+        "sent": {
+            "one": "メッセージが送信されました ({count} メッセージ)。",
+            "other": "メッセージが送信されました ({count} メッセージ)。"
+        }
+    },
+    "value": {
+        "blacklist_added": "に追加されました",
+        "blacklist_removed": "から削除されました",
+        "current_filters": "現在の偽ユーザー フィルター:\n{filter_list}",
+        "filtered_log_desc": "ユーザー {moderator} が {target} になりすまして、フィルターされたメッセージを送信しました: {message}",
+        "no_filters": "現在、フィルタは設定されていません。",
+        "sent_log_desc": "ユーザー {moderator} が {target} になりすましてメッセージを送信しました: {message}"
+    }
+}
