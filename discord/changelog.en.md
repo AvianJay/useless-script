@@ -4,6 +4,7 @@
 * Added complete Japanese localization | /language
   * Discord slash-command names, parameters, responses, buttons, and menus, along with prefix commands, the server panel, official website, documentation, and changelog, are now available in Japanese; automatic mode also recognizes Japanese Discord client and browser settings.
   * AI responses now primarily use the effective Traditional Chinese, English, or Japanese language; an explicitly requested language still takes priority, and concurrent conversations in different languages remain isolated.
+* Fixed AntiBeast AutoMod rule creation and resynchronization failing because server-language context was missing; the block message now uses the server's effective language.
 * Updated related documentation and translations.
 * Fixed some bugs.
 
