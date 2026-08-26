@@ -228,7 +228,7 @@ class AntiBeast(commands.GroupCog, name=app_commands.locale_str("antibeast", i18
             keyword_filter=self._build_keyword_filter(guild, config),
         )
 
-    def _build_actions(self) -> list[discord.AutoModRuleAction]:
+    def _build_actions(self, guild: discord.Guild) -> list[discord.AutoModRuleAction]:
         return [
             discord.AutoModRuleAction(
                 type=discord.AutoModRuleActionType.block_message,
@@ -252,7 +252,7 @@ class AntiBeast(commands.GroupCog, name=app_commands.locale_str("antibeast", i18
             "name": RULE_NAME,
             "event_type": discord.AutoModRuleEventType.message_send,
             "trigger": self._build_trigger(guild, config),
-            "actions": self._build_actions(),
+            "actions": self._build_actions(guild),
             "enabled": enabled,
             "exempt_roles": [],
             "exempt_channels": [],
