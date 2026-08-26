@@ -1,5 +1,30 @@
 # Changelog
 
+## 0.24.1
+* Added complete Japanese localization | /language
+  * Discord slash-command names, parameters, responses, buttons, and menus, along with prefix commands, the server panel, official website, documentation, and changelog, are now available in Japanese; automatic mode also recognizes Japanese Discord client and browser settings.
+  * AI responses now primarily use the effective Traditional Chinese, English, or Japanese language; an explicitly requested language still takes priority, and concurrent conversations in different languages remain isolated.
+* Updated related documentation and translations.
+* Fixed some bugs.
+
+## 0.24.0
+* Added Traditional Chinese and English localization | /language
+  * Discord slash-command names, parameters, responses, buttons, and menus, along with prefix commands, the server panel, official website, documentation, and changelog, can now be displayed in the selected language.
+  * Use `/language set` to choose a personal language across servers, or `/language server` to set a server default as an administrator; automatic mode considers the personal setting, server setting, and Discord client language, while `/language show` explains the current result.
+  * The website now includes a language selector. Signed-in users synchronize their personal preference, while signed-out users follow the website session and browser language.
+* Updated moderation | /moderate
+  * Added customizable punishment-announcement templates and previews for Markdown, embeds, displayed fields, and case-number formats; new case numbers can continue numbering found in text or embeds posted by other bots in the announcement channel.
+  * Server-specific moderation actions now support parameters `{1}` through `{9}` and default values, allowing inputs such as durations and reasons to be reused; missing parameters, circular references, or expansions beyond the action limit are rejected before execution.
+* Updated WebVerify | /webverify relation-blacklist
+  * Existing relation IDs can be added to a per-server blacklist with a configured moderation action and report channel; when a verifying member matches, related accounts are handled automatically and successful results are recorded to prevent duplicate action.
+  * Administrators can add, remove, list, or disable blacklist entries, preview a scan of existing members, and then confirm it; confirmation rechecks the configuration, member state, permissions, and role hierarchy.
+* Updated AI | /ai-admin server-prompt
+  * Each server's custom-prompt limit can be independently configured from 1 to 6,000 characters; prompts that are too long or contain code fences are returned as UTF-8 text attachments when viewed.
+* Updated link fixing | /fixlink
+  * Processing now continues as soon as Discord generates a link preview instead of always waiting for the full fixed delay; a timeout check remains as a fallback when no update event arrives.
+* Updated related documentation, translations, quick setup, and the web panel.
+* Fixed some bugs.
+
 ## 0.23.0
 * Added sticky messages | /stickymessage
   * Text or announcement channels can now have a sticky message of up to 2,000 characters; each channel is limited to one, and each server can enable up to 5 by default — when the limit is exceeded, which entries are kept is determined by list order.

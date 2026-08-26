@@ -10,12 +10,13 @@ if str(DISCORD_DIR) not in sys.path:
 from UtilCommands import parse_changelog
 
 
-class JapaneseChangelogTests(unittest.TestCase):
-    def test_japanese_changelog_has_exact_recent_version_window(self):
-        versions = parse_changelog(locale="ja")
-        self.assertEqual(len(versions), 10)
-        self.assertEqual(versions[0]["version"], "0.24.0")
-        self.assertEqual(versions[-1]["version"], "0.21.9")
+class ChangelogLocaleSyncTests(unittest.TestCase):
+    def test_all_changelogs_start_with_current_version(self):
+        for locale in ("zh-TW", "en", "ja"):
+            with self.subTest(locale=locale):
+                versions = parse_changelog(locale=locale)
+                self.assertTrue(versions)
+                self.assertEqual(versions[0]["version"], "0.24.1")
 
 
 if __name__ == "__main__":
