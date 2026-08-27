@@ -58,8 +58,12 @@ from ai_provider import (
     get_ai_text_model_rate as _get_ai_text_model_rate,
     get_ai_tool_call_modes as _get_ai_tool_call_modes,
     get_ai_video_model_rates as _get_ai_video_model_rates,
+    get_ai_vision_model as _get_ai_vision_model,
+    get_ai_vision_models as _get_ai_vision_models,
     is_ai_text_model as _is_ai_text_model,
+    is_ai_vision_model as _is_ai_vision_model,
     mark_ai_native_tools_unsupported as _mark_ai_native_tools_unsupported,
+    resolve_ai_vision_model as _resolve_ai_vision_model,
     resolve_ai_tool_call_mode as _resolve_ai_tool_call_mode,
     set_ai_api_key as _set_ai_api_key,
     set_ai_default_model as _set_ai_default_model,
@@ -70,6 +74,8 @@ from ai_provider import (
     set_ai_report_model as _set_ai_report_model,
     set_ai_review_model as _set_ai_review_model,
     set_ai_tool_call_mode as _set_ai_tool_call_mode,
+    set_ai_vision_model as _set_ai_vision_model,
+    set_ai_vision_models as _set_ai_vision_models,
 )
 
 from Economy import log_transaction, send_economy_audit_log
@@ -817,6 +823,7 @@ Response formatting helpers:
 - In LaTeX, use explicit balanced braces such as `\\frac{1}{2}`, `\\sqrt{2}`, and `\\sqrt[3]{8}`.
 - Complete top-level Markdown tables with a header separator are rendered as inline images automatically. Use tables when rows and columns make the answer easier to compare.
 - Use the `image_analyze` tool when the user asks about an image URL. The URL must be on cdn.discordapp.com or media.discordapp.net.
+- When runtime context says the current request has an image that this model cannot see directly, call `image_analyze` with `source: "current_attachment"` before answering any question that depends on the image. Never guess unseen image contents.
 - To mention a slash command, write exactly: <command_mention>/autoreply list</command_mention>. The renderer will convert it to Discord's command mention when possible.
 - To show a Discord CDN image in the response body, write exactly: <image>https://cdn.discordapp.com/...</image> or <image>https://media.discordapp.net/...</image>.
 - To show a small side image, write exactly: <thumbnail>https://cdn.discordapp.com/...</thumbnail> or <thumbnail>https://media.discordapp.net/...</thumbnail>.
@@ -1763,7 +1770,7 @@ class AICommands(commands.Cog):
         try:
             start_time = time.perf_counter()
             working_messages = [dict(message) for message in messages]
-            working_image = image
+            working_image = image if _is_ai_vision_model(model) else None
             active_tool_context = tool_context or {}
             tools = self._build_ai_tools() if active_tool_context else None
 
@@ -3430,6 +3437,16 @@ class AICommands(commands.Cog):
         guild = (tool_context or {}).get("guild")
         if guild is not None:
             lines.append("guild_shared memory in this channel is shared by members of the current server.")
+        if (tool_context or {}).get("request_image_attachment") is not None:
+            selected_model = str((tool_context or {}).get("model") or "").strip()
+            if _is_ai_vision_model(selected_model):
+                lines.append("The current request image is attached directly and this model may inspect it.")
+            else:
+                lines.append(
+                    "The current request contains an image, but this model cannot see it directly. "
+                    "If the answer depends on the image, call image_analyze with source=current_attachment first. "
+                    "Do not guess the image contents."
+                )
         return "\n".join(lines)
 
     def _build_system_with_context(
@@ -4406,16 +4423,21 @@ class AICommands(commands.Cog):
                 "type": "function",
                 "function": {
                     "name": "image_analyze",
-                    "description": "Analyze an image from a Discord CDN URL. Only https://cdn.discordapp.com/... and https://media.discordapp.net/... URLs are allowed.",
+                    "description": (
+                        "Analyze exactly one image. Use source=current_attachment for the current request's image, "
+                        "or provide one Discord CDN image_url. Do not provide both."
+                    ),
                     "parameters": {
                         "type": "object",
                         "properties": {
+                            "source": {
+                                "type": "string",
+                                "enum": ["current_attachment"],
+                            },
                             "image_url": {"type": "string"},
                             "prompt": {"type": "string"},
                             "max_chars": {"type": "integer"},
-                            "model": {"type": "string"},
                         },
-                        "required": ["image_url"],
                     },
                 },
             },
@@ -4791,6 +4813,7 @@ class AICommands(commands.Cog):
                 "read_channel, read_message, and get_user are permission-aware. They only work for the current guild or current DM and must not be used to bypass hidden channels, private threads, or other inaccessible content.",
                 "If the user asks what people above, earlier, or just now were talking about without explicitly replying to a message, always call read_channel first even though a small recent-message block may already be present.",
                 "Use list_channels to list only channels visible to both the requester and bot. Use analyze_message_emojis for the visual meaning of a message's custom emojis, reactions, or stickers, and analyze_user_profile_media for avatar/banner contents.",
+                "When runtime context says the current request has an image that the selected model cannot see directly, call image_analyze with source=current_attachment before answering anything that depends on the image. Never guess unseen image contents.",
                 "If the user explicitly asks to generate a video, animation clip, or ad clip, call generate_video.",
                 f"Discord message content is limited to about {self.DISCORD_MESSAGE_CHAR_LIMIT} characters. If the full answer, code, logs, list, or document would exceed that, call send_as_file.",
                 "After calling send_as_file, keep the final answer short and do not repeat the full file contents in the final message.",
@@ -6240,9 +6263,12 @@ class AICommands(commands.Cog):
             requester_id = getattr(requester, "id", None)
             if requester_id is None:
                 return {"error": "unable to resolve requester id", "items": [*results, *unavailable]}
-            requested_model = str((tool_context or {}).get("model") or "").strip()
-            if not _is_ai_text_model(requested_model):
-                requested_model = await self._get_default_model(requester_id)
+            requested_model = _resolve_ai_vision_model((tool_context or {}).get("model"))
+            if not requested_model:
+                return {
+                    "error": "visual analysis model is not configured",
+                    "items": [*results, *unavailable],
+                }
 
             billing_target = await self._resolve_ai_billing_target(requester, guild)
             payer_id = billing_target["payer_id"]
@@ -6382,7 +6408,17 @@ class AICommands(commands.Cog):
                 }
 
     async def _tool_image_analyze(self, args: dict, tool_context: dict) -> dict:
+        source = str(args.get("source") or "").strip()
         image_url = str(args.get("image_url") or args.get("url") or "").strip()
+        if bool(source) == bool(image_url):
+            return {"error": "provide exactly one of source=current_attachment or image_url"}
+        if source:
+            if source != "current_attachment":
+                return {"error": "source must be current_attachment"}
+            current_attachment = (tool_context or {}).get("request_image_attachment")
+            if current_attachment is None:
+                return {"error": "the current request has no image attachment"}
+            image_url = str(getattr(current_attachment, "url", "") or "").strip()
         normalized_url = normalize_discord_image_url(image_url)
         if not normalized_url:
             return {"error": "image_url must be an https URL on cdn.discordapp.com or media.discordapp.net"}
@@ -6399,14 +6435,14 @@ class AICommands(commands.Cog):
         )
         prompt = self._truncate_tool_text(prompt, max_len=900)
 
-        requested_model = str(args.get("model") or (tool_context or {}).get("model") or "").strip()
+        requested_model = _resolve_ai_vision_model((tool_context or {}).get("model"))
         requester = (tool_context or {}).get("user")
         guild = (tool_context or {}).get("guild")
         requester_id = getattr(requester, "id", None)
-        if not _is_ai_text_model(requested_model):
-            requested_model = await self._get_default_model(requester_id) if requester_id is not None else await self._get_default_model(0)
         if requester_id is None:
             return {"error": "unable to resolve requester id"}
+        if not requested_model:
+            return {"error": "visual analysis model is not configured"}
 
         billing_target = await self._resolve_ai_billing_target(requester, guild)
         payer_id = billing_target["payer_id"]
@@ -6491,7 +6527,11 @@ class AICommands(commands.Cog):
                 balance_after=balance_after_refund,
                 color=0x27AE60,
             )
-            return {"error": f"image analysis failed: {e}"}
+            return {
+                "error": f"image analysis failed: {e}",
+                "refunded": charged_amount,
+                "currency": GLOBAL_CURRENCY_NAME,
+            }
 
     @staticmethod
     def _image_response_item_value(item, key: str):
@@ -8913,9 +8953,11 @@ class AICommands(commands.Cog):
 
         current_lower = current.lower()
         choices = []
+        vision_models = set(_get_ai_vision_models())
 
         for model, rate in _get_ai_model_rates().items():
-            name = f"{model} @ {rate:.2f}/C"
+            vision_suffix = " [vision]" if model in vision_models else ""
+            name = f"{model} @ {rate:.2f}/C{vision_suffix}"
 
             if not current_lower or \
                current_lower in model.lower() or \
@@ -8931,6 +8973,7 @@ class AICommands(commands.Cog):
     async def ai_config_text(self, ctx: commands.Context):
         models = _get_ai_model_rates()
         image_models = _get_ai_image_model_rates()
+        vision_models = _get_ai_vision_models()
         api_key_status = "configured" if _get_ai_api_key() else "empty"
         serper_api_key_status = "configured" if _get_serper_api_key() else "empty"
         fetch_proxy_status = redact_ai_fetch_proxy(_get_ai_fetch_proxy())
@@ -8946,8 +8989,9 @@ class AICommands(commands.Cog):
             f"- review_model: {_get_ai_review_model()}\n"
             f"- report_model: {_get_ai_report_model()}\n"
             f"- image_model: {_get_ai_image_model()}\n"
+            f"- vision_delegate: {_get_ai_vision_model() or '(not configured)'}\n"
             f"- tool_modes: {self._format_ai_tool_call_modes()}\n"
-            f"- models:\n{_format_ai_models_for_display(models)}\n"
+            f"- models:\n{_format_ai_models_for_display(models, vision_models)}\n"
             f"- image_models:\n{_format_ai_models_for_display(image_models)}",
             allowed_mentions=SAFE_MENTIONS,
         )
@@ -9103,7 +9147,8 @@ class AICommands(commands.Cog):
     @is_owner()
     async def ai_config_models_text(self, ctx: commands.Context):
         await ctx.send(
-            "AI models:\n" + _format_ai_models_for_display(_get_ai_model_rates()),
+            "AI models:\n"
+            + _format_ai_models_for_display(_get_ai_model_rates(), _get_ai_vision_models()),
             allowed_mentions=SAFE_MENTIONS,
         )
 
@@ -9122,6 +9167,77 @@ class AICommands(commands.Cog):
         models[model] = price_value
         _set_ai_model_rates(models)
         await ctx.send(f"Updated model {model}: {price_value:.2f}/C", allowed_mentions=SAFE_MENTIONS)
+
+    @ai_config_text.command(name="vision-models")
+    @is_owner()
+    async def ai_config_vision_models_text(self, ctx: commands.Context):
+        vision_models = _get_ai_vision_models()
+        model_list = ", ".join(vision_models) if vision_models else "(empty)"
+        await ctx.send(
+            "AI vision models\n"
+            f"- delegate: {_get_ai_vision_model() or '(not configured)'}\n"
+            f"- marked: {model_list}",
+            allowed_mentions=SAFE_MENTIONS,
+        )
+
+    @ai_config_text.command(name="vision-tag")
+    @is_owner()
+    async def ai_config_vision_tag_text(
+        self,
+        ctx: commands.Context,
+        model: str = None,
+        enabled: str = None,
+    ):
+        if not model or not enabled:
+            await ctx.send(
+                "Usage: ai-config vision-tag <model> <on|off>",
+                allowed_mentions=SAFE_MENTIONS,
+            )
+            return
+        model = model.strip()
+        if not _is_ai_text_model(model):
+            await ctx.send(f"Model not found in ai_models: {model}", allowed_mentions=SAFE_MENTIONS)
+            return
+        normalized_enabled = enabled.strip().lower()
+        if normalized_enabled in {"on", "true", "1", "yes", "enable", "enabled"}:
+            is_enabled = True
+        elif normalized_enabled in {"off", "false", "0", "no", "disable", "disabled"}:
+            is_enabled = False
+        else:
+            await ctx.send("enabled must be on or off", allowed_mentions=SAFE_MENTIONS)
+            return
+
+        vision_models = _get_ai_vision_models()
+        if is_enabled and model not in vision_models:
+            vision_models.append(model)
+        elif not is_enabled:
+            vision_models = [item for item in vision_models if item != model]
+        _set_ai_vision_models(vision_models)
+        await ctx.send(
+            f"Updated vision tag for {model}: {'on' if is_enabled else 'off'}",
+            allowed_mentions=SAFE_MENTIONS,
+        )
+
+    @ai_config_text.command(name="vision-delegate")
+    @is_owner()
+    async def ai_config_vision_delegate_text(self, ctx: commands.Context, model: str = None):
+        if model is None:
+            await ctx.send(
+                f"ai_vision_model: {_get_ai_vision_model() or '(not configured)'}",
+                allowed_mentions=SAFE_MENTIONS,
+            )
+            return
+        model = model.strip()
+        if model.lower() in {"off", "none", "clear", "disable", "disabled"}:
+            _set_ai_vision_model("")
+            await ctx.send("Updated ai_vision_model: (not configured)", allowed_mentions=SAFE_MENTIONS)
+            return
+        try:
+            _set_ai_vision_model(model)
+        except ValueError as error:
+            await ctx.send(str(error), allowed_mentions=SAFE_MENTIONS)
+            return
+        await ctx.send(f"Updated ai_vision_model: {model}", allowed_mentions=SAFE_MENTIONS)
 
     @ai_config_text.command(name="tool-mode", aliases=["toolmode"])
     @is_owner()
@@ -9315,7 +9431,8 @@ class AICommands(commands.Cog):
             return
         _set_ai_model_rates(models)
         await ctx.send(
-            "Replaced AI models:\n" + _format_ai_models_for_display(models),
+            "Replaced AI models:\n"
+            + _format_ai_models_for_display(models, _get_ai_vision_models()),
             allowed_mentions=SAFE_MENTIONS,
         )
 
@@ -9492,6 +9609,7 @@ class AICommands(commands.Cog):
                 "model": selected_model,
                 "request_text": resolved_message,
                 "request_visual_metadata": request_visual_metadata,
+                "request_image_attachment": image,
             }
             tool_notice_text = None
 
@@ -9558,7 +9676,7 @@ class AICommands(commands.Cog):
             
             # 下載圖片 bytes（若有）
             image_bytes = None
-            if image:
+            if image and _is_ai_vision_model(selected_model):
                 image_bytes = await image.read()
             
             # 生成回應
@@ -10165,6 +10283,7 @@ class AICommands(commands.Cog):
                     "model": selected_model,
                     "request_text": final_message,
                     "request_visual_metadata": current_visual_metadata,
+                    "request_image_attachment": image_attachment,
                 }
                 tool_notice_text = None
 
@@ -10232,7 +10351,7 @@ class AICommands(commands.Cog):
                 
                 # 下載圖片 bytes（若有）
                 image_bytes = None
-                if image_attachment:
+                if image_attachment and _is_ai_vision_model(selected_model):
                     image_bytes = await image_attachment.read()
                 
                 # 生成回應

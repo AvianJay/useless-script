@@ -16,6 +16,8 @@ AI_IMAGE_MODEL_CONFIG_KEY = "ai_image_model"
 AI_REVIEW_MODEL_CONFIG_KEY = "ai_review_model"
 AI_REPORT_MODEL_CONFIG_KEY = "ai_report_model"
 AI_TOOL_CALL_MODES_CONFIG_KEY = "ai_tool_call_modes"
+AI_VISION_MODELS_CONFIG_KEY = "ai_vision_models"
+AI_VISION_MODEL_CONFIG_KEY = "ai_vision_model"
 
 VALID_AI_TOOL_CALL_MODES = {"auto", "native", "emulated"}
 
@@ -43,6 +45,8 @@ DEFAULT_AI_DEFAULT_MODEL = "kimi-k2.6"
 DEFAULT_AI_IMAGE_MODEL = "gpt-image-2"
 DEFAULT_AI_REVIEW_MODEL = "openai"
 DEFAULT_AI_REPORT_MODEL = "openai-fast"
+DEFAULT_AI_VISION_MODELS = []
+DEFAULT_AI_VISION_MODEL = ""
 AI_GLOBAL_CONFIG_DEFAULTS = {
     AI_ENDPOINT_CONFIG_KEY: DEFAULT_AI_ENDPOINT,
     AI_API_KEY_CONFIG_KEY: "",
@@ -54,6 +58,8 @@ AI_GLOBAL_CONFIG_DEFAULTS = {
     AI_REVIEW_MODEL_CONFIG_KEY: DEFAULT_AI_REVIEW_MODEL,
     AI_REPORT_MODEL_CONFIG_KEY: DEFAULT_AI_REPORT_MODEL,
     AI_TOOL_CALL_MODES_CONFIG_KEY: {},
+    AI_VISION_MODELS_CONFIG_KEY: DEFAULT_AI_VISION_MODELS,
+    AI_VISION_MODEL_CONFIG_KEY: DEFAULT_AI_VISION_MODEL,
 }
 _GLOBAL_CONFIG_MISSING = object()
 
@@ -82,6 +88,40 @@ def coerce_ai_rate_dict(value, default: dict[str, float]) -> dict[str, float]:
             continue
         rates[model_name] = rate_value
     return rates or dict(default)
+
+
+def coerce_ai_model_list(value, valid_models=None) -> list[str]:
+    if not isinstance(value, (list, tuple, set)):
+        return []
+    valid = set(valid_models) if valid_models is not None else None
+    models: list[str] = []
+    seen: set[str] = set()
+    for model in value:
+        model_name = str(model or "").strip()
+        if not model_name or model_name in seen:
+            continue
+        if valid is not None and model_name not in valid:
+            continue
+        seen.add(model_name)
+        models.append(model_name)
+    return models
+
+
+def _reconcile_ai_vision_config(model_rates: dict[str, float] | None = None):
+    valid_models = set(
+        (model_rates if model_rates is not None else get_ai_model_rates()).keys()
+    )
+    vision_models = coerce_ai_model_list(
+        get_global_config(AI_VISION_MODELS_CONFIG_KEY, DEFAULT_AI_VISION_MODELS),
+        valid_models,
+    )
+    configured_delegate = str(
+        get_global_config(AI_VISION_MODEL_CONFIG_KEY, DEFAULT_AI_VISION_MODEL) or ""
+    ).strip()
+    if configured_delegate not in vision_models:
+        configured_delegate = ""
+    set_global_config(AI_VISION_MODELS_CONFIG_KEY, vision_models)
+    set_global_config(AI_VISION_MODEL_CONFIG_KEY, configured_delegate)
 
 
 def get_ai_endpoint() -> str:
@@ -166,7 +206,60 @@ def get_ai_model_rates() -> dict[str, float]:
 
 
 def set_ai_model_rates(models: dict[str, float]):
-    set_global_config(AI_MODELS_CONFIG_KEY, coerce_ai_rate_dict(models, {}))
+    model_rates = coerce_ai_rate_dict(models, {})
+    set_global_config(AI_MODELS_CONFIG_KEY, model_rates)
+    _reconcile_ai_vision_config(model_rates)
+
+
+def get_ai_vision_models() -> list[str]:
+    ensure_ai_global_config_defaults()
+    return coerce_ai_model_list(
+        get_global_config(AI_VISION_MODELS_CONFIG_KEY, DEFAULT_AI_VISION_MODELS),
+        get_ai_model_rates(),
+    )
+
+
+def set_ai_vision_models(models):
+    vision_models = coerce_ai_model_list(models, get_ai_model_rates())
+    set_global_config(AI_VISION_MODELS_CONFIG_KEY, vision_models)
+    configured_delegate = str(
+        get_global_config(AI_VISION_MODEL_CONFIG_KEY, DEFAULT_AI_VISION_MODEL) or ""
+    ).strip()
+    if configured_delegate not in vision_models:
+        set_global_config(AI_VISION_MODEL_CONFIG_KEY, "")
+
+
+def get_ai_vision_model() -> str:
+    ensure_ai_global_config_defaults()
+    configured_model = str(
+        get_global_config(AI_VISION_MODEL_CONFIG_KEY, DEFAULT_AI_VISION_MODEL) or ""
+    ).strip()
+    return configured_model if configured_model in get_ai_vision_models() else ""
+
+
+def set_ai_vision_model(model: str):
+    model_name = str(model or "").strip()
+    if not model_name:
+        set_global_config(AI_VISION_MODEL_CONFIG_KEY, "")
+        return
+    if model_name not in get_ai_model_rates():
+        raise ValueError(f"Model not found in ai_models: {model_name}")
+    vision_models = get_ai_vision_models()
+    if model_name not in vision_models:
+        vision_models.append(model_name)
+        set_global_config(AI_VISION_MODELS_CONFIG_KEY, vision_models)
+    set_global_config(AI_VISION_MODEL_CONFIG_KEY, model_name)
+
+
+def is_ai_vision_model(model: str) -> bool:
+    return str(model or "").strip() in get_ai_vision_models()
+
+
+def resolve_ai_vision_model(current_model: str = "") -> str:
+    current_model_name = str(current_model or "").strip()
+    if is_ai_vision_model(current_model_name):
+        return current_model_name
+    return get_ai_vision_model()
 
 
 def get_ai_default_model() -> str:
@@ -250,10 +343,14 @@ def create_ai_client() -> OpenAI:
     return OpenAI(api_key=api_key, base_url=get_ai_endpoint())
 
 
-def format_ai_models_for_display(model_rates: dict[str, float]) -> str:
+def format_ai_models_for_display(model_rates: dict[str, float], vision_models=None) -> str:
     if not model_rates:
         return "(empty)"
-    return "\n".join(f"- {model}: {rate:.2f}/C" for model, rate in model_rates.items())
+    vision_model_names = set(vision_models or [])
+    return "\n".join(
+        f"- {model}: {rate:.2f}/C{' [vision]' if model in vision_model_names else ''}"
+        for model, rate in model_rates.items()
+    )
 
 
 def guess_image_mime_type(image: bytes) -> str:

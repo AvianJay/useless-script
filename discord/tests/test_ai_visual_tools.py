@@ -205,11 +205,16 @@ class AIVisualAnalysisTests(unittest.IsolatedAsyncioTestCase):
         self.cog._refund_global_balance = Mock(return_value=1000.0)
         self.cog._log_economy_transaction = Mock()
         self.cog._queue_economy_audit_log = Mock()
+        self.vision_model_patch = patch("ai._resolve_ai_vision_model", return_value="openai")
+        self.vision_model_patch.start()
         self.tool_context = {
             "user": SimpleNamespace(id=11),
             "guild": None,
             "model": "openai",
         }
+
+    def tearDown(self):
+        self.vision_model_patch.stop()
 
     async def test_concurrent_same_emoji_charges_and_analyzes_once(self):
         self.cog._generate_ai_completion = AsyncMock(
