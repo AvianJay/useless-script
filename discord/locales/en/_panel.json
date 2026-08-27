@@ -119,6 +119,22 @@
             "display": "FixLink settings"
         }
     },
+    "hackeddetector": {
+        "_desc": "Manage suspicious new-member detection and cross-server compromised-account defense",
+        "_display": "Account Safety Defense",
+        "hacked_cross_guild_defense_enabled": {
+            "desc": "When disabled, this server contributes no evidence, deletes no matching messages, and receives no defense actions from other servers",
+            "display": "Enable global cross-channel defense"
+        },
+        "hacked_join_detection_action": {
+            "desc": "Supports custom Moderate actions; leave blank to restore the default 28-day timeout",
+            "display": "New-member action"
+        },
+        "hacked_join_detection_enabled": {
+            "desc": "Detect suspicious new members using account age, avatar, and name characteristics",
+            "display": "Enable suspicious new-member detection"
+        }
+    },
     "logger": {
         "_desc": "Bot logging settings",
         "_display": "Logging",

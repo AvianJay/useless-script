@@ -41,6 +41,14 @@ else:
     Moderate = None
 
 
+def get_moderate_module():
+    global Moderate
+    if Moderate is None:
+        import importlib
+        Moderate = importlib.import_module("Moderate")
+    return Moderate
+
+
 if "AutoReply" in modules:
     try:
         from AutoReply import AutoReplyBuilderView
@@ -167,6 +175,11 @@ def format_setting_value(guild: discord.Guild, setting: dict, value: Any) -> str
         if setting.get("default_i18n_key"):
             return t("common.state.default_value",
                      value=truncate(t(setting["default_i18n_key"]), 200))
+        if setting.get("action_context") == "member_join" and setting.get("default") is not None:
+            return t(
+                "common.state.default_value",
+                value=truncate(setting["default"], 200),
+            )
         return t("common.state.unset")
     if stype in ("channel", "voice_channel", "category"):
         channel = guild.get_channel(int(value)) if str(value).isdigit() else None
@@ -227,6 +240,18 @@ async def apply_registered_setting(
     setting: dict,
     value: Any,
 ) -> str | None:
+    if setting.get("action_context") == "member_join":
+        moderate = get_moderate_module()
+        if value is None or not str(value).strip():
+            value = None
+        else:
+            analysis = moderate.analyze_member_join_action(str(value), guild_id)
+            if not analysis["valid"]:
+                raise ValueError(analysis["error"])
+            if analysis["requires_confirmation"]:
+                raise ValueError(analysis["confirmation"])
+            value = analysis["normalized"]
+
     previous_value = get_server_config(guild_id, setting["database_key"], setting.get("default"))
     if not set_server_config(guild_id, setting["database_key"], value):
         raise RuntimeError(t("gettingstarted.err.save_failed"))
@@ -1455,6 +1480,25 @@ class ScalarSettingModal(discord.ui.Modal):
             await interaction.response.send_message(str(error), ephemeral=True)
             return
 
+        if value is not None and setting.get("action_context") == "member_join":
+            moderate = get_moderate_module()
+            analysis = moderate.analyze_member_join_action(
+                str(value),
+                self.parent_view.session.guild.id,
+            )
+            if not analysis["valid"]:
+                await interaction.response.send_message(analysis["error"], ephemeral=True)
+                return
+            if analysis["requires_confirmation"]:
+                target = RegisteredActionConfirmationView(self.parent_view, analysis)
+                await self.parent_view.session.render(
+                    interaction,
+                    embed=target.build_embed(),
+                    view=target,
+                )
+                return
+            value = analysis["normalized"]
+
         if not await self.parent_view.session.save(
             interaction,
             self.parent_view.module_name,
@@ -1472,6 +1516,96 @@ class ScalarSettingModal(discord.ui.Modal):
             embed=target.build_embed(),
             view=target,
         )
+
+
+class RegisteredActionPresetSelect(discord.ui.Select):
+    def __init__(self, parent: "SingleSettingView"):
+        self.parent_view = parent
+        moderate = get_moderate_module()
+        suggestions = [
+            (label, value)
+            for label, value in moderate._action_input_suggestions()
+            if moderate.analyze_member_join_action(value, parent.session.guild.id)["valid"]
+        ]
+        options = [
+            discord.SelectOption(label=label, value=value)
+            for label, value in suggestions
+        ]
+        super().__init__(placeholder=t("gettingstarted.select_preset_ph"), options=options, row=0)
+
+    async def callback(self, interaction: discord.Interaction):
+        analysis = get_moderate_module().analyze_member_join_action(
+            self.values[0],
+            self.parent_view.session.guild.id,
+        )
+        if not analysis["valid"]:
+            await interaction.response.send_message(analysis["error"], ephemeral=True)
+            return
+        if await self.parent_view.session.save(
+            interaction,
+            self.parent_view.module_name,
+            self.parent_view.setting,
+            analysis["normalized"],
+        ):
+            target = SingleSettingView(
+                self.parent_view.session,
+                self.parent_view.module_name,
+                self.parent_view.setting,
+            )
+            await self.parent_view.session.render(interaction, embed=target.build_embed(), view=target)
+
+
+class RegisteredActionConfirmationView(SetupView):
+    def __init__(self, parent_view: "SingleSettingView", analysis: dict):
+        super().__init__(parent_view.session, timeout=120)
+        self.parent_view = parent_view
+        self.analysis = analysis
+        confirm = discord.ui.Button(
+            label=t("gettingstarted.antibeast.btn.confirm_action"),
+            style=discord.ButtonStyle.success,
+        )
+        confirm.callback = self.confirm
+        self.add_item(confirm)
+        retry = discord.ui.Button(
+            label=t("gettingstarted.antibeast.btn.retry_action"),
+            style=discord.ButtonStyle.secondary,
+        )
+        retry.callback = self.retry
+        self.add_item(retry)
+        cancel = discord.ui.Button(label=t("common.btn.cancel"), style=discord.ButtonStyle.danger)
+        cancel.callback = self.cancel
+        self.add_item(cancel)
+
+    def build_embed(self) -> discord.Embed:
+        return get_moderate_module().build_action_preview_embed(
+            self.analysis,
+            title=t("moderate.confirm_your_intent_title"),
+        )
+
+    async def confirm(self, interaction: discord.Interaction):
+        if await self.parent_view.session.save(
+            interaction,
+            self.parent_view.module_name,
+            self.parent_view.setting,
+            self.analysis["normalized"],
+        ):
+            target = SingleSettingView(
+                self.parent_view.session,
+                self.parent_view.module_name,
+                self.parent_view.setting,
+            )
+            await self.parent_view.session.render(interaction, embed=target.build_embed(), view=target)
+
+    async def retry(self, interaction: discord.Interaction):
+        await interaction.response.send_modal(ScalarSettingModal(self.parent_view))
+
+    async def cancel(self, interaction: discord.Interaction):
+        target = SingleSettingView(
+            self.parent_view.session,
+            self.parent_view.module_name,
+            self.parent_view.setting,
+        )
+        await self.parent_view.session.render(interaction, embed=target.build_embed(), view=target)
 
 
 class ValueSelect(discord.ui.Select):
@@ -1556,7 +1690,17 @@ class SingleSettingView(SetupView):
         self.setting = setting
         stype = setting.get("type", "string")
 
-        if stype == "boolean":
+        member_join_action = setting.get("action_context") == "member_join"
+        if member_join_action:
+            self.add_item(RegisteredActionPresetSelect(self))
+            edit = discord.ui.Button(
+                label=t("gettingstarted.automod.btn.custom_input"),
+                style=discord.ButtonStyle.primary,
+                row=1,
+            )
+            edit.callback = self.edit
+            self.add_item(edit)
+        elif stype == "boolean":
             enable = discord.ui.Button(label=t("common.state.enabled"), style=discord.ButtonStyle.success, row=0)
             enable.callback = self.enable
             self.add_item(enable)
@@ -1599,6 +1743,11 @@ class SingleSettingView(SetupView):
             self.setting["database_key"],
             self.setting.get("default"),
         )
+        effective_value = (
+            self.setting.get("default")
+            if value is None and self.setting.get("action_context") == "member_join"
+            else value
+        )
         embed = discord.Embed(
             title=self.setting.get("display", self.setting["database_key"]),
             description=self.setting.get("description") or t("gettingstarted.setting.default_desc"),
@@ -1609,6 +1758,26 @@ class SingleSettingView(SetupView):
             value=format_setting_value(self.session.guild, self.setting, value),
             inline=False,
         )
+        if self.setting.get("action_context") == "member_join" and effective_value:
+            analysis = get_moderate_module().analyze_member_join_action(
+                str(effective_value),
+                self.session.guild.id,
+            )
+            if analysis["valid"]:
+                embed.add_field(
+                    name=t("gettingstarted.field.execution_preview"),
+                    value="\n".join(
+                        f"{index}. {line}"
+                        for index, line in enumerate(analysis.get("preview", []), 1)
+                    ),
+                    inline=False,
+                )
+            else:
+                embed.add_field(
+                    name=t("gettingstarted.automod.syntax_issue"),
+                    value=analysis["error"],
+                    inline=False,
+                )
         embed.set_footer(text=t("gettingstarted.setting.key_footer", key=self.setting["database_key"]))
         return embed
 

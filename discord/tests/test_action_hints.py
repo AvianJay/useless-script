@@ -308,6 +308,66 @@ class GuildPanelActionValidationTests(unittest.TestCase):
         self.assertIn("`warn`", response.get_json()["error"])
         save.assert_not_called()
 
+    def _post_member_join_setting(self, action):
+        schema = {
+            "HackedDetector": {
+                "settings": [
+                    {
+                        "database_key": "hacked_join_detection_action",
+                        "type": "string",
+                        "default": "mute 28d default",
+                        "action_context": "member_join",
+                    },
+                ],
+            },
+        }
+        route = GuildPanel.api_set_settings
+        while hasattr(route, "__wrapped__"):
+            route = route.__wrapped__
+        payload = {
+            "module": "HackedDetector",
+            "key": "hacked_join_detection_action",
+            "value": action,
+        }
+        with GuildPanel.app.test_request_context(json=payload):
+            with (
+                patch.dict(GuildPanel.settings, schema, clear=True),
+                patch.object(GuildPanel, "set_server_config", return_value=True) as save,
+            ):
+                result = route("1")
+        return result, save
+
+    def test_member_join_setting_rejects_message_dependent_action(self):
+        (response, status), save = self._post_member_join_setting("delete")
+        self.assertEqual(status, 400)
+        self.assertIn("`delete`", response.get_json()["error"])
+        save.assert_not_called()
+
+    def test_member_join_setting_requires_shorthand_confirmation(self):
+        (response, status), save = self._post_member_join_setting("300")
+        self.assertEqual(status, 400)
+        self.assertIn("300", response.get_json()["error"])
+        save.assert_not_called()
+
+    def test_member_join_setting_blank_restores_default(self):
+        response, save = self._post_member_join_setting("  ")
+        self.assertEqual(response.status_code, 200)
+        save.assert_called_once_with(1, "hacked_join_detection_action", None)
+
+    def test_member_join_setting_saves_normalized_action(self):
+        response, save = self._post_member_join_setting("to 2h reason")
+        self.assertEqual(response.status_code, 200)
+        save.assert_called_once_with(1, "hacked_join_detection_action", "to 2h reason")
+
+    def test_member_join_preview_context_rejects_message_action(self):
+        route = GuildPanel.api_action_preview
+        while hasattr(route, "__wrapped__"):
+            route = route.__wrapped__
+        with GuildPanel.app.test_request_context(json={"action": "warn hi", "context": "member_join"}):
+            response = route("1")
+        self.assertFalse(response.get_json()["valid"])
+        self.assertIn("`warn`", response.get_json()["error"])
+
 
 class GuildPanelCompoundSettingsTests(unittest.TestCase):
     def test_moderation_announcement_schema_round_trip(self):

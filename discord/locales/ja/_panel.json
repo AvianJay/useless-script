@@ -119,6 +119,22 @@
             "display": "フィックスリンク設定"
         }
     },
+    "hackeddetector": {
+        "_desc": "不審な新規メンバーの検出と、サーバー間の乗っ取りアカウント防御を管理します",
+        "_display": "アカウント安全防御",
+        "hacked_cross_guild_defense_enabled": {
+            "desc": "無効にすると、このサーバーは検出情報を蓄積せず、該当メッセージを削除せず、他のサーバーからの防御処置も受けません",
+            "display": "グローバルなチャンネル横断防御を有効化"
+        },
+        "hacked_join_detection_action": {
+            "desc": "カスタム Moderate アクションに対応しています。空欄にすると既定の 28 日間タイムアウトに戻ります",
+            "display": "新規メンバーへの処置"
+        },
+        "hacked_join_detection_enabled": {
+            "desc": "アカウント年齢、アバター、名前の特徴から不審な新規メンバーを検出します",
+            "display": "不審な新規メンバー検出を有効化"
+        }
+    },
     "logger": {
         "_desc": "ボットのログ設定",
         "_display": "ロギング",

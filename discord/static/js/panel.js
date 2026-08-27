@@ -168,7 +168,8 @@ async function render() {
 function buildSettingRow(mod, s, value, channels, roles, autoreplyLimit, stickymessageLimit) {
     const row = document.createElement('div');
     row.className = 'setting-row';
-    if (['autoreply_list', 'automod_config', 'webverify_config', 'fixlink_config', 'antibeast_config', 'stickymessage_config'].includes(s.type)) {
+    if (['autoreply_list', 'automod_config', 'webverify_config', 'fixlink_config', 'antibeast_config', 'stickymessage_config'].includes(s.type)
+            || s.action_context === 'member_join') {
         row.classList.add('setting-row-column');
     }
 
@@ -235,7 +236,11 @@ function buildSettingRow(mod, s, value, channels, roles, autoreplyLimit, stickym
             break;
         case 'string':
         default:
-            ctrl.appendChild(buildTextInput(mod, s, value));
+            ctrl.appendChild(
+                s.action_context === 'member_join'
+                    ? buildMemberJoinActionInput(mod, s, value)
+                    : buildTextInput(mod, s, value)
+            );
             break;
     }
 
@@ -987,11 +992,11 @@ const ACTION_INPUT_SUGGESTIONS = [
     { label: t('web.js.action.preset_smm'), value: 'smm' },
 ];
 
-async function analyzeActionInput(action, feature = '') {
+async function analyzeActionInput(action, feature = '', context = '') {
     const response = await fetch(`/api/panel/guild/${GUILD_ID}/action-preview`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action, feature }),
+        body: JSON.stringify({ action, feature, context }),
     });
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     return response.json();
@@ -2369,6 +2374,106 @@ function buildTextInput(mod, s, value) {
         : (s.default != null ? String(s.default) : '');
     input.addEventListener('input', () => debounceSave(mod, s.database_key, input.value));
     return input;
+}
+
+function buildMemberJoinActionInput(mod, s, value) {
+    const editor = document.createElement('div');
+    editor.className = 'action-input-editor';
+
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.className = 'form-input';
+    input.value = value != null ? String(value) : '';
+    input.placeholder = s.default != null ? String(s.default) : t('web.js.action.input_ph');
+
+    const listId = `member-join-actions-${mod}-${s.database_key}`.replace(/[^A-Za-z0-9_-]/g, '-');
+    input.setAttribute('list', listId);
+    const datalist = document.createElement('datalist');
+    datalist.id = listId;
+    const allowedCommands = new Set([
+        'ban', 'kick', 'mute', 'timeout', 'to', 'force_verify', 'send_mod_message', 'smm',
+    ]);
+    for (const suggestion of ACTION_INPUT_SUGGESTIONS) {
+        const command = suggestion.value.trim().split(/\s+/, 1)[0].toLowerCase();
+        if (!allowedCommands.has(command)) continue;
+        const option = document.createElement('option');
+        option.value = suggestion.value;
+        option.label = suggestion.label;
+        datalist.appendChild(option);
+    }
+
+    const analysisBox = document.createElement('div');
+    analysisBox.className = 'action-analysis';
+    let previewTimer = null;
+    let revision = 0;
+
+    async function previewAction(raw, persist) {
+        const currentRevision = ++revision;
+        const clean = raw.trim();
+        if (!clean) {
+            analysisBox.className = 'action-analysis';
+            analysisBox.textContent = t('web.js.action.empty');
+            if (persist) debounceSave(mod, s.database_key, null, 0);
+            return;
+        }
+
+        analysisBox.className = 'action-analysis loading';
+        analysisBox.textContent = t('web.js.action.parsing');
+        try {
+            const analysis = await analyzeActionInput(clean, '', 'member_join');
+            if (currentRevision !== revision) return;
+            if (analysis.requires_confirmation) {
+                renderActionAnalysis(analysisBox, analysis, {
+                    onConfirm: () => {
+                        input.value = analysis.normalized;
+                        debounceSave(mod, s.database_key, analysis.normalized, 0, result => {
+                            if (result && result.success) {
+                                renderActionAnalysis(analysisBox, analysis, { saved: true });
+                            } else {
+                                renderActionAnalysis(analysisBox, {
+                                    valid: false,
+                                    error: (result && result.error) || t('web.js.common.save_failed'),
+                                });
+                            }
+                        });
+                    },
+                });
+                return;
+            }
+            if (!analysis.valid || !persist) {
+                renderActionAnalysis(analysisBox, analysis);
+                return;
+            }
+            input.value = analysis.normalized;
+            debounceSave(mod, s.database_key, analysis.normalized, 0, result => {
+                if (result && result.success) {
+                    renderActionAnalysis(analysisBox, analysis, { saved: true });
+                } else {
+                    renderActionAnalysis(analysisBox, {
+                        valid: false,
+                        error: (result && result.error) || t('web.js.common.save_failed'),
+                    });
+                }
+            });
+        } catch (error) {
+            if (currentRevision !== revision) return;
+            renderActionAnalysis(analysisBox, {
+                valid: false,
+                error: t('web.js.action.check_failed', {error: error.message}),
+            });
+        }
+    }
+
+    input.addEventListener('input', () => {
+        clearTimeout(previewTimer);
+        previewTimer = setTimeout(() => previewAction(input.value, true), 350);
+    });
+
+    editor.appendChild(input);
+    editor.appendChild(datalist);
+    editor.appendChild(analysisBox);
+    if (input.value.trim()) previewAction(input.value, false);
+    return editor;
 }
 
 // ---- Toast ----

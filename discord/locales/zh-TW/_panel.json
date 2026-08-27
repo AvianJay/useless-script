@@ -119,6 +119,22 @@
             "display": "FixLink 設定"
         }
     },
+    "hackeddetector": {
+        "_desc": "管理可疑新成員偵測與跨伺服器被盜帳號聯防",
+        "_display": "帳號安全聯防",
+        "hacked_cross_guild_defense_enabled": {
+            "desc": "關閉後不提供偵測證據、不刪除訊息，也不接受其他伺服器的聯防處置",
+            "display": "啟用跨頻道全域聯防"
+        },
+        "hacked_join_detection_action": {
+            "desc": "支援伺服器自訂 Moderate 動作；留空會恢復預設 28 天禁言",
+            "display": "新加入用戶處置"
+        },
+        "hacked_join_detection_enabled": {
+            "desc": "依帳號年齡、頭像與名稱特徵偵測可疑新成員",
+            "display": "啟用新加入用戶可疑偵測"
+        }
+    },
     "logger": {
         "_desc": "機器人日誌設定",
         "_display": "日誌系統",

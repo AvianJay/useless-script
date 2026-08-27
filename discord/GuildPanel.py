@@ -645,6 +645,23 @@ def api_set_settings(guild_id):
                              (not value.strip() or value.strip() in rendered_defaults)):
             value = None
 
+    if setting.get("action_context") == "member_join":
+        if value is None or not str(value).strip():
+            value = None
+        else:
+            analysis = _moderate_module().analyze_member_join_action(str(value), gid)
+            if not analysis["valid"]:
+                return jsonify({
+                    "error": analysis["error"],
+                    "action_analysis": analysis,
+                }), 400
+            if analysis["requires_confirmation"]:
+                return jsonify({
+                    "error": analysis["confirmation"],
+                    "action_analysis": analysis,
+                }), 400
+            value = analysis["normalized"]
+
     if setting.get("type") == "automod_config":
         for feature_name, feature_config in (value or {}).items():
             if not isinstance(feature_config, dict):
@@ -733,6 +750,8 @@ def api_action_preview(guild_id):
     payload = request.get_json(silent=True) or {}
     action = str(payload.get("action") or "")
     feature = str(payload.get("feature") or "")
+    if payload.get("context") == "member_join":
+        return jsonify(_moderate_module().analyze_member_join_action(action, int(guild_id)))
     return jsonify(_analyze_automod_action(feature, action, int(guild_id)))
 
 

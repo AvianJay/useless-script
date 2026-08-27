@@ -266,6 +266,47 @@ class SettingPersistenceTests(unittest.IsolatedAsyncioTestCase):
         self.assertIsNone(warning)
         trigger.assert_awaited_once_with(1, new, old)
 
+    async def test_member_join_action_is_validated_before_save(self):
+        setting = {
+            "database_key": "hacked_join_detection_action",
+            "type": "string",
+            "action_context": "member_join",
+        }
+        with patch.object(gs, "set_server_config", return_value=True) as setter:
+            with self.assertRaisesRegex(ValueError, "`warn`"):
+                await gs.apply_registered_setting(1, "HackedDetector", setting, "warn hi")
+        setter.assert_not_called()
+
+    async def test_member_join_action_blank_restores_default(self):
+        setting = {
+            "database_key": "hacked_join_detection_action",
+            "type": "string",
+            "action_context": "member_join",
+        }
+        with patch.object(gs, "set_server_config", return_value=True) as setter:
+            await gs.apply_registered_setting(1, "HackedDetector", setting, "  ")
+        setter.assert_called_once_with(1, "hacked_join_detection_action", None)
+
+    async def test_member_join_action_explicit_value_is_saved(self):
+        setting = {
+            "database_key": "hacked_join_detection_action",
+            "type": "string",
+            "action_context": "member_join",
+        }
+        with patch.object(gs, "set_server_config", return_value=True) as setter:
+            await gs.apply_registered_setting(1, "HackedDetector", setting, "mute 2h reason")
+        setter.assert_called_once_with(1, "hacked_join_detection_action", "mute 2h reason")
+
+    def test_member_join_presets_exclude_message_dependent_actions(self):
+        parent = SimpleNamespace(
+            session=SimpleNamespace(guild=SimpleNamespace(id=1)),
+        )
+        select = gs.RegisteredActionPresetSelect(parent)
+        values = {option.value for option in select.options}
+        self.assertIn("mute 10m 違規", values)
+        self.assertNotIn("delete", values)
+        self.assertFalse(any(value.startswith("warn") for value in values))
+
 
 class FakeAutoReplyCog:
     def __init__(self):
