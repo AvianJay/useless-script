@@ -1714,9 +1714,10 @@ async def use_scalpel(interaction: discord.Interaction):
 
             new_size = random.randint(1, get_server_config(guild_key, "dsize_surgery_max", 10))
             orig_size = get_user_data(guild_key, target_id, "last_dsize_size", 0)
-            set_user_data(guild_key, target_id, "last_dsize_size", orig_size + new_size)
-            # print(f"[DSize] {interaction.user} performed surgery on {target_user.display_name}, original size: {orig_size} cm, new size: {orig_size + new_size} cm")
-            log(f"{interaction.user} performed surgery on {target_user.display_name}, original size: {orig_size} cm, new size: {orig_size + new_size} cm", module_name="dsize", user=interaction.user, guild=interaction.guild)
+            final_size = orig_size + new_size
+            set_user_data(guild_key, target_id, "last_dsize_size", final_size)
+            # print(f"[DSize] {interaction.user} performed surgery on {target_user.display_name}, original size: {orig_size} cm, new size: {final_size} cm")
+            log(f"{interaction.user} performed surgery on {target_user.display_name}, original size: {orig_size} cm, new size: {final_size} cm", module_name="dsize", user=interaction.user, guild=interaction.guild)
             target_name = t("dsize.scope.themselves") if target_id == user_id else target_user.display_name
             embed = discord.Embed(title=t("dsize.surgery.performed_title",
                                           user=interaction.user.display_name,
@@ -1726,12 +1727,12 @@ async def use_scalpel(interaction: discord.Interaction):
                 content=t("dsize.surgery.dragged_in", user=target_user.mention), embed=embed,
                 allowed_mentions=discord.AllowedMentions(users=is_used_dsize, roles=False, everyone=False))
             for i in range(1, new_size + 1):
-                d_string_new = "=" * (orig_size + i - 1)
-                embed.set_field_at(0, name=f"{orig_size} cm", value=f"8{d_string_new}D", inline=False)
+                current_size = orig_size + i
+                d_string_new = "=" * (current_size - 1)
+                embed.set_field_at(0, name=f"{current_size} cm", value=f"8{d_string_new}D", inline=False)
                 await interaction.edit_original_response(embed=embed)
                 await asyncio.sleep(1)
-                orig_size += 1
-            embed.set_field_at(0, name=f"{orig_size + new_size} cm", value=f"8{'=' * (orig_size + new_size - 1)}D", inline=False)
+            embed.set_field_at(0, name=f"{final_size} cm", value=f"8{'=' * (final_size - 1)}D", inline=False)
             embed.color = 0x00ff00
             await interaction.edit_original_response(
                 content=t("dsize.surgery.target_succeeded", user=target_user.mention), embed=embed)
@@ -1740,7 +1741,7 @@ async def use_scalpel(interaction: discord.Interaction):
             history = get_user_data(guild_key, target_id, "dsize_history", [])
             history.append({
                 "date": now.isoformat(),
-                "size": orig_size + new_size,
+                "size": final_size,
                 "type": "手術成功"  # i18n: skip (stored history token)
             })
             if len(history) > 100:
