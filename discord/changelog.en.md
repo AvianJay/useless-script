@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.24.2
+* Updated account safety defense
+  * Suspicious new-member detection and cross-server compromised-account defense can now be enabled separately for each server. An opted-out server no longer contributes detection evidence, deletes matching messages, or receives defense actions from other servers.
+  * Suspicious new-member handling can use server-specific Moderate actions. Quick setup and the web panel support presets, custom parameters, and confirmation previews; leaving the action blank restores the default 28-day timeout.
+  * Timeout expiry is now tracked separately for each server with automatic migration of legacy data. Existing cases can still be unlocked and restored after detection or cross-server defense is disabled.
+* Updated AI image analysis
+  * Owners can mark models that accept images with `ai-config vision-tag` and select the delegated image-analysis model with `ai-config vision-delegate`; model lists and autocomplete also identify vision capability.
+  * Vision models receive the current attachment directly. Text-only models delegate image analysis when needed and then return to the original model to finish the response, preventing guesses about unseen images. Message emoji, sticker, avatar, and banner analysis also uses the configured vision model.
+  * Invalid attachments or a missing vision model are rejected before charging, and failed analysis requests are automatically refunded.
+* Added safe AI browser tools
+  * AI can open and read public HTTP(S) pages, capture accessibility snapshots and screenshots, navigate back or forward, reload, wait, and hover.
+  * Clicks, text input, key presses, selections, checkbox changes, and page evaluation must first be proposed and then confirmed exactly by the same user in their next message. Confirmation codes are single-use and expire after 5 minutes.
+  * Private-network targets and unsafe redirects, password and payment fields, uploads and downloads, local files, WebSockets, and host-code execution are blocked. Browser jobs use a single FIFO queue with wait and execution timeouts to prevent sessions from interfering with each other.
+* Updated related translations, quick setup, and the web panel.
+* Fixed some bugs.
+
 ## 0.24.1
 * Added complete Japanese localization | /language
   * Discord slash-command names, parameters, responses, buttons, and menus, along with prefix commands, the server panel, official website, documentation, and changelog, are now available in Japanese; automatic mode also recognizes Japanese Discord client and browser settings.
