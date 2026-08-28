@@ -17,6 +17,12 @@
     },
     "err": {
         "attachment_not_image": "添付ファイルは画像 (JPG、PNG、GIF、WebP など) である必要があります。",
+        "browser_confirmation_invalid": "ブラウザー操作の確認が無効、期限切れ、使用済み、または別のユーザー／チャンネルのものです。操作をもう一度提案してください。",
+        "browser_duplicate_job": "すでに実行中または待機中のブラウザー作業があります。",
+        "browser_identity_missing": "現在のブラウザー作業のユーザーを確認できません。",
+        "browser_lease_expired": "ブラウザー作業は 180 秒の利用時間を超えたため、自動終了しました。",
+        "browser_queue_full": "ブラウザーの待機列はすでに {limit} 人で満員です。しばらくしてから再試行してください。",
+        "browser_queue_timeout": "ブラウザー作業は {seconds} 秒以上待機したため、キャンセルされました。",
         "billing_only_self_supported": "❌ 現在、AI 支払者として設定できるのは自分自身のみです。 `!ai-server-billing set` または `!ai-server-billing clear` を使用します。",
         "charge_failed": "充電に失敗しました。後でもう一度お試しください。",
         "charge_failed_text": "❌ 充電に失敗しました。後でもう一度試してください。",
@@ -44,6 +50,8 @@
     "msg": {
         "attachment_note": "{note}\n\n添付ファイル: {filename}",
         "billing_no_payer": "現在、このサーバーには指定された AI 支払者がいません。デフォルトでは誰もが自分で支払います。",
+        "browser_confirmation_file_summary": "{destination} に対する {count} 件のブラウザー操作提案です。完全な JSON を添付しました。",
+        "browser_confirmation_instruction": "これらの操作はまだ実行されていません。承認する場合、次のメッセージに正確に入力してください：`{confirmation}`",
         "billing_payer": "現在、このサーバーでの AI の使用料は {payer_name} (ID: {payer_id}) によって支払われています。",
         "billing_payer_cleared": "✅ このサーバーの指定された AI 支払者をクリアしました。請求は各ユーザーが自分自身で支払うことになります。",
         "billing_payer_set_self": "✅ 自分自身、{display_name} (ID: {user_id}) をこのサーバーの AI 支払者として設定します。",
@@ -82,6 +90,9 @@
     "tool_label": {
         "analyze_message_emojis": "メッセージの絵文字とステッカーの分析",
         "analyze_user_profile_media": "ユーザーのアバターとバナーの分析",
+        "browser_confirm": "承認済みブラウザー操作を実行中",
+        "browser_propose": "ブラウザー操作の確認を作成中",
+        "browser_read": "ブラウザーページを読み取り中",
         "delete_ai_memory": "AIメモリの削除",
         "execute_code": "コードの実行",
         "fetch_raw": "生のコンテンツを取得する",
@@ -115,6 +126,8 @@
         "upsert_ai_memory": "AI メモリの更新"
     },
     "value": {
+        "browser_connecting": "ブラウザーに接続中...",
+        "browser_queue_position": "ブラウザーツールの待機中（{position} 番目）...",
         "describe_image_default_prompt": "この画像について説明してください",
         "guild_payer_note": "\nこのサーバーでの AI の使用料は、現在 {payer_name} によって支払われています。",
         "image_ready_caption": "完成しました、下の画像です。",

@@ -17,6 +17,12 @@
     },
     "err": {
         "attachment_not_image": "The attachment must be an image (JPG, PNG, GIF, WebP, etc.).",
+        "browser_confirmation_invalid": "The browser confirmation is invalid, expired, already used, or belongs to another user or channel. Propose the actions again.",
+        "browser_duplicate_job": "You already have a browser job running or queued.",
+        "browser_identity_missing": "The current browser job's user identity could not be verified.",
+        "browser_lease_expired": "The browser job exceeded its 180-second lease and was stopped automatically.",
+        "browser_queue_full": "The browser queue already has {limit} waiting users. Try again later.",
+        "browser_queue_timeout": "The browser job waited more than {seconds} seconds and was cancelled.",
         "billing_only_self_supported": "❌ You can currently only set yourself as the AI payer. Use `!ai-server-billing set` or `!ai-server-billing clear`.",
         "charge_failed": "Charge failed, please try again later.",
         "charge_failed_text": "❌ Charge failed, please try again later.",
@@ -44,6 +50,8 @@
     "msg": {
         "attachment_note": "{note}\n\nAttachment: {filename}",
         "billing_no_payer": "This server currently has no designated AI payer; everyone pays for themselves by default.",
+        "browser_confirmation_file_summary": "The browser proposal has {count} actions for {destination}; the full JSON is attached.",
+        "browser_confirmation_instruction": "These actions have not run. To approve them, send exactly this as your next message: `{confirmation}`",
         "billing_payer": "AI usage on this server is currently paid for by {payer_name} (ID: {payer_id}).",
         "billing_payer_cleared": "✅ Cleared this server's designated AI payer; billing will revert to each user paying for themselves.",
         "billing_payer_set_self": "✅ Set yourself, {display_name} (ID: {user_id}), as this server's AI payer.",
@@ -82,6 +90,9 @@
     "tool_label": {
         "analyze_message_emojis": "Analyzing message emojis and stickers",
         "analyze_user_profile_media": "Analyzing user avatar and banner",
+        "browser_confirm": "Running approved browser actions",
+        "browser_propose": "Proposing browser actions for approval",
+        "browser_read": "Reading browser page",
         "delete_ai_memory": "Deleting AI memory",
         "execute_code": "Executing code",
         "fetch_raw": "Fetching raw content",
@@ -115,6 +126,8 @@
         "upsert_ai_memory": "Updating AI memory"
     },
     "value": {
+        "browser_connecting": "Connecting to the browser...",
+        "browser_queue_position": "Browser tool queued (position {position})...",
         "describe_image_default_prompt": "Please describe this image",
         "guild_payer_note": "\nAI usage on this server is currently paid for by {payer_name}.",
         "image_ready_caption": "Done, the image is below.",

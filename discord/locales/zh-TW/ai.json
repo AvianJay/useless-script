@@ -16,6 +16,12 @@
     },
     "err": {
         "attachment_not_image": "附件必須是圖片格式（JPG、PNG、GIF、WebP 等）。",
+        "browser_confirmation_invalid": "瀏覽器操作確認無效、已過期、已使用，或不是由目前使用者與頻道提出。請重新提出操作。",
+        "browser_duplicate_job": "你已經有一個瀏覽器工作正在執行或排隊。",
+        "browser_identity_missing": "無法確認目前瀏覽器工作的使用者身分。",
+        "browser_lease_expired": "瀏覽器工作已超過 180 秒租約，已自動結束。",
+        "browser_queue_full": "瀏覽器工具目前已排滿 {limit} 位等待者，請稍後再試。",
+        "browser_queue_timeout": "瀏覽器工具排隊超過 {seconds} 秒，已取消這次工作。",
         "billing_only_self_supported": "❌ 現在只能把 AI 付款人設成你自己。請用 `!ai-server-billing set` 或 `!ai-server-billing clear`。",
         "charge_failed": "扣款失敗，請稍後再試。",
         "charge_failed_text": "❌ 扣款失敗，請稍後再試。",
@@ -43,6 +49,8 @@
     "msg": {
         "attachment_note": "{note}\n\n附件：{filename}",
         "billing_no_payer": "目前這個伺服器的 AI 沒有指定付款人，預設是各自付款。",
+        "browser_confirmation_file_summary": "瀏覽器操作提案包含 {count} 個動作，目的地為 {destination}；完整 JSON 已附檔。",
+        "browser_confirmation_instruction": "這些操作尚未執行。若同意，請在下一則訊息精確輸入：`{confirmation}`",
         "billing_payer": "目前這個伺服器的 AI 由 {payer_name}（ID: {payer_id}）付款。",
         "billing_payer_cleared": "✅ 已清除這個伺服器的 AI 指定付款人，之後會恢復各自付款。",
         "billing_payer_set_self": "✅ 已將這個伺服器的 AI 付款人設為你自己 {display_name}（ID: {user_id}）。",
@@ -79,6 +87,9 @@
     "tool_label": {
         "analyze_message_emojis": "分析訊息表情與貼圖",
         "analyze_user_profile_media": "分析使用者頭像與橫幅",
+        "browser_confirm": "執行已確認的瀏覽器操作",
+        "browser_propose": "提出瀏覽器操作確認",
+        "browser_read": "讀取瀏覽器頁面",
         "delete_ai_memory": "刪除 AI 記憶",
         "execute_code": "執行程式碼",
         "fetch_raw": "抓取原始內容",
@@ -112,6 +123,8 @@
         "upsert_ai_memory": "更新 AI 記憶"
     },
     "value": {
+        "browser_connecting": "正在連線到瀏覽器...",
+        "browser_queue_position": "瀏覽器工具排隊中（第 {position} 位）...",
         "describe_image_default_prompt": "請描述這張圖片",
         "guild_payer_note": "\n本伺服器 AI 目前由 {payer_name} 付款。",
         "image_ready_caption": "生好了，圖在下面。",
