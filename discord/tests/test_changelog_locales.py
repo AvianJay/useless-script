@@ -16,7 +16,7 @@ class ChangelogLocaleSyncTests(unittest.TestCase):
             with self.subTest(locale=locale):
                 versions = parse_changelog(locale=locale)
                 self.assertTrue(versions)
-                self.assertEqual(versions[0]["version"], "0.24.2")
+                self.assertEqual(versions[0]["version"], "0.24.3")
 
 
 if __name__ == "__main__":

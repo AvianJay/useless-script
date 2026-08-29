@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.24.3
+* Fixed command execution errors
+  * Fixed the owner-only `y!dev-economyhistory` command failing when global transaction history was requested because it referenced a nonexistent amount variable.
+  * Fixed `/itemmod editcustom` and `/itemmod listcustom` failing while displaying shop prices because they read currency settings from an invalid scope variable; they now use the current server's currency name.
+  * Fixed the ticket module not loading its translation helper and a variable-name collision in the claim flow, which prevented `/ticket panel`, `/ticket claim`, and related flows from displaying results.
+* Fixed some bugs.
+
 ## 0.24.2
 * Updated account safety defense
   * Suspicious new-member detection and cross-server compromised-account defense can now be enabled separately for each server. An opted-out server no longer contributes detection evidence, deletes matching messages, or receives defense actions from other servers.
