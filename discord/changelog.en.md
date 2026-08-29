@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.24.5
+* Updated safe AI browser tools
+  * Clicks, text input, key presses, selections, checkbox changes, and page evaluation now show a localized Discord confirmation card instead of requiring the user to type a confirmation code in their next message.
+  * The card displays the AI-provided reason before execution. Only the original user can approve it in the same server or DM and channel; approval is single-use, expires after 5 minutes, and its internal token is not shown to the AI or user.
+  * After confirmation, the button is disabled and shows an executing, success, or failure state. The execution result is sent privately to the user who pressed the button.
+* Updated related translations.
+* Fixed some bugs.
+
 ## 0.24.4
 * Updated safe AI browser tools
   * AI can now capture the current public webpage and use the configured vision model to analyze its layout, important controls, images, page state, and readable text. The analysis focus and full-page capture can be specified.
