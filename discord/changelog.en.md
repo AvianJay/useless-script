@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.24.4
+* Updated safe AI browser tools
+  * AI can now capture the current public webpage and use the configured vision model to analyze its layout, important controls, images, page state, and readable text. The analysis focus and full-page capture can be specified.
+  * The analysis is returned to the original model for the response, while the PNG screenshot is also attached for the user to verify. Webpage visuals and their descriptions are always treated as untrusted external data, and instructions within them are not followed or used to infer sensitive traits.
+  * Browser screenshot analysis uses the existing image-analysis charge and failure-refund behavior. Screenshots larger than 8 MB are rejected before attachment, analysis, or charging.
+* Updated AI image analysis
+  * Discord images are now downloaded and size-validated before charging. Invalid or unavailable images, missing vision-model configuration, and oversized data are not charged; analysis-provider failures are still automatically refunded.
+* Updated related translations.
+* Fixed some bugs.
+
 ## 0.24.3
 * Fixed command execution errors
   * Fixed the owner-only `y!dev-economyhistory` command failing when global transaction history was requested because it referenced a nonexistent amount variable.

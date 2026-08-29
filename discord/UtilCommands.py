@@ -21,7 +21,7 @@ import i18n
 from i18n import t, t_enum
 
 startup_time = datetime.now(timezone.utc)
-version = "0.24.3"
+version = "0.24.4"
 try:
     git_commit_hash = os.popen("git rev-parse --short HEAD").read().strip()
 except Exception as e:
