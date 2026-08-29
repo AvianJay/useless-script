@@ -31,6 +31,17 @@ def tool_context(user_id=1, guild_id=10, channel_id=20, request_text="browse"):
     }
 
 
+def completion_response(content="", *, tool_calls=None):
+    return SimpleNamespace(
+        model="test-model",
+        choices=[
+            SimpleNamespace(
+                message=SimpleNamespace(content=content, tool_calls=tool_calls, images=None)
+            )
+        ],
+    )
+
+
 class FakeResponse:
     def __init__(self, status, payload):
         self.status = status
@@ -123,6 +134,7 @@ class BrowserConfigTests(unittest.IsolatedAsyncioTestCase):
             item["function"] for item in enabled_tools if item["function"]["name"] == "browser_view"
         )
         self.assertEqual(set(view_schema["parameters"]["properties"]), {"prompt", "max_chars", "full_page"})
+        self.assertEqual(self.cog.BROWSER_LEASE_TIMEOUT_SECONDS, 5 * 60)
 
     async def test_owner_config_sets_masks_and_clears_endpoint(self):
         ctx = SimpleNamespace(send=AsyncMock())
@@ -384,7 +396,9 @@ class BrowserApprovalAndActionTests(unittest.IsolatedAsyncioTestCase):
     def setUp(self):
         self.cog = AICommands(SimpleNamespace())
         self.page = SimpleNamespace(url="https://example.com/form", goto=AsyncMock())
-        self.valid_url = AsyncMock(side_effect=lambda value: (str(value), None))
+        self.cog._get_browser_page = AsyncMock(return_value=(self.page, None))
+        self.cog._validate_browser_public_url = AsyncMock(side_effect=lambda value: (str(value), None))
+        self.cog._execute_browser_operations = AsyncMock(return_value=[{"ok": True}])
         self.operations = [
             {
                 "action": "fill",
@@ -393,65 +407,259 @@ class BrowserApprovalAndActionTests(unittest.IsolatedAsyncioTestCase):
             }
         ]
 
-    async def _propose(self, context=None, operations=None):
+    async def _start_proposal(self, context=None, operations=None):
         context = context or tool_context()
-        with (
-            patch.object(self.cog, "_get_browser_page", new=AsyncMock(return_value=(self.page, None))),
-            patch.object(self.cog, "_validate_browser_public_url", new=self.valid_url),
-        ):
-            result = await self.cog._tool_browser_propose(
+        presented = asyncio.get_running_loop().create_future()
+
+        async def presenter(record):
+            if not presented.done():
+                presented.set_result(record)
+
+        context["_browser_approval_presenter"] = presenter
+        task = asyncio.create_task(
+            self.cog._tool_browser_propose(
                 {"operations": operations or self.operations, "reason": "Update the display name."}, context
             )
-        token = context["pending_browser_approval"]["token"]
-        return context, result, token
+        )
+        record = await asyncio.wait_for(presented, timeout=1)
+        await asyncio.sleep(0)
+        return context, task, record
 
-    async def test_propose_does_not_execute_and_same_turn_cannot_confirm(self):
-        context, result, token = await self._propose()
-        self.assertTrue(result["proposed"])
-        self.assertIn("input hidden", " ".join(result["summary"]))
-        with patch.object(self.cog, "_execute_browser_operations", new=AsyncMock()) as execute:
-            rejected = await self.cog._tool_browser_confirm({"token": token}, context)
-            rejected_model_call = await self.cog._execute_ai_tool(
-                "browser_confirm", {"token": token}, context
-            )
-        self.assertIn("error", rejected)
-        self.assertIn("error", rejected_model_call)
-        execute.assert_not_awaited()
+    @staticmethod
+    def _interaction(context, *, channel_id=None):
+        channel = context["channel"] if channel_id is None else SimpleNamespace(id=channel_id)
+        return SimpleNamespace(user=context["user"], guild=context["guild"], channel=channel)
 
-    async def test_button_context_same_identity_confirms_once(self):
-        _context, _result, token = await self._propose()
-        confirm_context = tool_context()
-        confirm_context["_browser_confirmation_token"] = token
-        with (
-            patch.object(self.cog, "_get_browser_page", new=AsyncMock(return_value=(self.page, None))),
-            patch.object(self.cog, "_validate_browser_public_url", new=self.valid_url),
-            patch.object(self.cog, "_execute_browser_operations", new=AsyncMock(return_value=[{"ok": True}])) as execute,
-        ):
-            confirmed = await self.cog._tool_browser_confirm({"token": token}, confirm_context)
-            replay = await self.cog._tool_browser_confirm({"token": token}, confirm_context)
-        self.assertTrue(confirmed["confirmed"])
+    async def test_propose_waits_for_button_then_authorizes_whole_session(self):
+        context, task, record = await self._start_proposal()
+        self.assertFalse(task.done())
+        self.cog._execute_browser_operations.assert_not_awaited()
+
+        confirmed = await self.cog._execute_browser_approval_from_button(
+            self._interaction(context), record
+        )
+        await self.cog._resolve_browser_approval(record, confirmed)
+        result = await task
+
+        self.assertTrue(result["authorized"])
+        self.assertEqual(result["authorization_scope"], "current_browser_session")
+        self.assertTrue(context["_browser_interaction_authorized"])
+        self.page.goto.assert_not_awaited()
+        self.cog._execute_browser_operations.assert_awaited_once_with(self.page, record["operations"])
+
+        second = await self.cog._tool_browser_propose(
+            {"operations": self.operations, "reason": "Continue the task."}, context
+        )
+        self.assertTrue(second["authorized"])
+        self.assertEqual(self.cog._execute_browser_operations.await_count, 2)
+
+    async def test_confirmation_is_single_use_and_bound_to_identity_channel_and_ttl(self):
+        context, task, record = await self._start_proposal()
+        wrong = await self.cog._execute_browser_approval_from_button(
+            self._interaction(context, channel_id=999), record
+        )
+        self.assertIn("error", wrong)
+        self.assertFalse(task.done())
+
+        confirmed = await self.cog._execute_browser_approval_from_button(
+            self._interaction(context), record
+        )
+        replay = await self.cog._execute_browser_approval_from_button(
+            self._interaction(context), record
+        )
+        self.assertTrue(confirmed["authorized"])
         self.assertIn("error", replay)
-        execute.assert_awaited_once()
+        await self.cog._resolve_browser_approval(record, confirmed)
+        await task
 
-    async def test_identity_channel_ttl_and_single_use_binding(self):
-        _context, _result, token = await self._propose()
-        wrong_channel = tool_context(channel_id=999)
-        wrong_channel["_browser_confirmation_token"] = token
-        rejected = await self.cog._tool_browser_confirm({"token": token}, wrong_channel)
-        self.assertIn("error", rejected)
+        context, task, record = await self._start_proposal(tool_context(user_id=2))
+        record["expires_at"] = 0
+        expired = await self.cog._execute_browser_approval_from_button(
+            self._interaction(context), record
+        )
+        self.assertIn("error", expired)
+        await self.cog._resolve_browser_approval(record, expired)
+        await task
 
-        _context, _result, token = await self._propose()
-        self.cog._browser_approval_tokens[token]["expires_at"] = 0
-        expired = tool_context()
-        expired["_browser_confirmation_token"] = token
-        rejected = await self.cog._tool_browser_confirm({"token": token}, expired)
-        self.assertIn("error", rejected)
+    async def test_reject_resumes_tool_and_blocks_later_interactions_in_session(self):
+        context, task, record = await self._start_proposal()
+        rejected = await self.cog._reject_browser_approval_from_button(
+            self._interaction(context), record
+        )
+        await self.cog._resolve_browser_approval(record, rejected)
+        result = await task
+
+        self.assertTrue(result["rejected"])
+        self.assertTrue(context["_browser_interaction_denied"])
+        self.cog._execute_browser_operations.assert_not_awaited()
+        later = await self.cog._tool_browser_propose(
+            {"operations": self.operations, "reason": "Ask again."}, context
+        )
+        self.assertIn("error", later)
+        self.cog._execute_browser_operations.assert_not_awaited()
+
+    async def test_timeout_and_release_resume_pending_tool(self):
+        self.cog.BROWSER_APPROVAL_TTL_SECONDS = 0.01
+        _context, task, _record = await self._start_proposal()
+        result = await asyncio.wait_for(task, timeout=1)
+        self.assertIn("error", result)
+
+    async def test_generate_response_continues_same_tool_loop_after_button(self):
+        first = completion_response(
+            "I need browser control.",
+            tool_calls=[
+                {
+                    "id": "browser-proposal-1",
+                    "function": {
+                        "name": "browser_propose",
+                        "arguments": json.dumps(
+                            {"operations": self.operations, "reason": "Update the display name."}
+                        ),
+                    },
+                }
+            ],
+        )
+        second = completion_response(
+            "I need one more browser interaction.",
+            tool_calls=[
+                {
+                    "id": "browser-proposal-2",
+                    "function": {
+                        "name": "browser_propose",
+                        "arguments": json.dumps(
+                            {"operations": self.operations, "reason": "Continue the same browser task."}
+                        ),
+                    },
+                }
+            ],
+        )
+        third = completion_response(
+            "I will inspect the result.",
+            tool_calls=[
+                {
+                    "id": "browser-read-3",
+                    "function": {
+                        "name": "browser_read",
+                        "arguments": '{"action":"snapshot"}',
+                    },
+                }
+            ],
+        )
+        fourth = completion_response("The browser task is complete.")
+        responses = [
+            (first, "native"),
+            (second, "native"),
+            (third, "native"),
+            (fourth, "native"),
+        ]
+        events = []
+        request_count = 0
+
+        async def request(*_args, **_kwargs):
+            nonlocal request_count
+            request_count += 1
+            response = responses.pop(0)
+            events.append(f"request-{request_count}")
+            return response
+
+        async def execute_operations(_page, _operations):
+            events.append("operate")
+            return [{"action": "fill", "ok": True}]
+
+        async def read_page(_args, _context):
+            events.append("read")
+            return {"snapshot": "- textbox: updated", "url": self.page.url}
+
+        async def release(_context, **_kwargs):
+            events.append("release")
+
+        context = tool_context()
+        presented = asyncio.get_running_loop().create_future()
+
+        async def presenter(record):
+            presented.set_result(record)
+
+        context["_browser_approval_presenter"] = presenter
+        self.cog._execute_browser_operations = AsyncMock(side_effect=execute_operations)
+        self.cog._tool_browser_read = AsyncMock(side_effect=read_page)
+
+        with (
+            patch("ai._get_ai_browser_cdp_endpoint", return_value=CDP_ENDPOINT),
+            patch.object(self.cog, "_request_ai_completion", new=AsyncMock(side_effect=request)) as provider,
+            patch.object(self.cog, "_release_browser_lease", new=AsyncMock(side_effect=release)),
+        ):
+            response_task = asyncio.create_task(
+                self.cog.generate_response(
+                    [{"role": "user", "content": "update it"}],
+                    model="test-model",
+                    tool_context=context,
+                )
+            )
+            record = await asyncio.wait_for(presented, timeout=1)
+            self.assertFalse(response_task.done())
+            self.assertEqual(events, ["request-1"])
+
+            confirmed = await self.cog._execute_browser_approval_from_button(
+                self._interaction(context), record
+            )
+            await self.cog._resolve_browser_approval(record, confirmed)
+            text, model, _elapsed = await asyncio.wait_for(response_task, timeout=1)
+
+        self.assertEqual((text, model), ("The browser task is complete.", "test-model"))
+        self.assertEqual(
+            events,
+            [
+                "request-1",
+                "operate",
+                "request-2",
+                "operate",
+                "request-3",
+                "read",
+                "request-4",
+                "release",
+            ],
+        )
+        self.assertEqual(provider.await_count, 4)
+        self.assertEqual(self.cog._tool_browser_read.await_count, 1)
+        self.assertTrue(context["_browser_interaction_authorized"])
+
+    async def test_components_callbacks_resolve_pending_tool(self):
+        context, task, record = await self._start_proposal()
+        interaction = self._interaction(context)
+        interaction.response = SimpleNamespace(edit_message=AsyncMock())
+        interaction.edit_original_response = AsyncMock()
+        view = BrowserApprovalView(self.cog, record)
+
+        await view.confirm_callback(interaction)
+        result = await task
+
+        self.assertTrue(result["authorized"])
+        interaction.response.edit_message.assert_awaited_once()
+        edit_kwargs = interaction.edit_original_response.await_args.kwargs
+        self.assertEqual(edit_kwargs["attachments"], [])
+        self.assertIsNotNone(edit_kwargs["view"])
+
+        context, task, record = await self._start_proposal(tool_context(user_id=2))
+        interaction = self._interaction(context)
+        interaction.response = SimpleNamespace(edit_message=AsyncMock())
+        view = BrowserApprovalView(self.cog, record)
+
+        await view.reject_callback(interaction)
+        result = await task
+
+        self.assertTrue(result["rejected"])
+        interaction.response.edit_message.assert_awaited_once()
+
+        self.cog.BROWSER_APPROVAL_TTL_SECONDS = 300
+        context, task, _record = await self._start_proposal(tool_context(user_id=2))
+        await self.cog._release_browser_lease(context)
+        result = await asyncio.wait_for(task, timeout=1)
+        self.assertIn("error", result)
 
     async def test_proposal_queues_components_v2_approval_without_exposing_token(self):
-        context, result, token = await self._propose()
-        self.assertNotIn(token, json.dumps(result))
-        self.assertEqual(result["approval_ui"], "A Discord confirmation button will be shown in the tool status message.")
-        view = BrowserApprovalView(self.cog, context["pending_browser_approval"])
+        context, task, record = await self._start_proposal()
+        token = record["token"]
+        view = BrowserApprovalView(self.cog, record)
         components = view.to_components()
         self.assertNotIn(token, json.dumps(components))
         container = components[0]
@@ -459,6 +667,11 @@ class BrowserApprovalAndActionTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(container["components"][0]["content"], "**AI 想要操作瀏覽器**")
         self.assertEqual([item["type"] for item in container["components"]], [10, 14, 10, 14, 1])
         self.assertEqual(container["components"][2]["content"], "Update the display name.")
+        self.assertEqual(len(container["components"][4]["components"]), 2)
+        rejected = await self.cog._reject_browser_approval_from_button(self._interaction(context), record)
+        await self.cog._resolve_browser_approval(record, rejected)
+        result = await task
+        self.assertNotIn(token, json.dumps(result))
 
     async def test_locator_and_operation_validation_rejects_bad_shapes(self):
         invalid_batches = (
@@ -495,8 +708,8 @@ class BrowserApprovalAndActionTests(unittest.IsolatedAsyncioTestCase):
             )
             self.cog._log_tool_result(
                 "model",
-                "browser_confirm",
-                {"token": "secret-token"},
+                "browser_propose",
+                {"operations": self.operations},
                 {"ok": True, "data": {"token": "secret-token", "text": "private input"}},
                 tool_context(),
             )
@@ -507,12 +720,16 @@ class BrowserApprovalAndActionTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("redacted", joined)
 
     async def test_long_proposal_json_is_queued_as_attachment(self):
-        context, result, _token = await self._propose(
+        context, task, record = await self._start_proposal(
             operations=[{"action": "evaluate", "expression": "() => '" + ("x" * 2500) + "'"}]
         )
+        self.assertEqual(record["details_file"]["filename"], "browser-operation-proposal.json")
+        self.assertNotIn(record["token"], record["details_file"]["content"])
+        self.assertNotIn("pending_file_response", context)
+        rejected = await self.cog._reject_browser_approval_from_button(self._interaction(context), record)
+        await self.cog._resolve_browser_approval(record, rejected)
+        result = await task
         self.assertTrue(result["details_attached"])
-        self.assertEqual(context["pending_file_response"]["filename"], "browser-operation-proposal.json")
-        self.assertNotIn(_token, context["pending_file_response"]["summary"])
 
 
 class BrowserReadResultTests(unittest.IsolatedAsyncioTestCase):

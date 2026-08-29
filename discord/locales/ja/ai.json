@@ -1,9 +1,11 @@
 {
     "btn": {
-        "browser_confirm": "ブラウザー操作を承認",
+        "browser_confirm": "このブラウザーセッションを許可",
         "browser_confirmed": "承認済み",
+        "browser_confirm_expired": "期限切れ",
         "browser_confirm_failed": "承認に失敗",
         "browser_confirming": "実行中…",
+        "browser_reject": "拒否",
         "cancel": "キャンセル",
         "confirm_clear": "クリアの確認"
     },
@@ -23,12 +25,15 @@
     "err": {
         "attachment_not_image": "添付ファイルは画像 (JPG、PNG、GIF、WebP など) である必要があります。",
         "browser_confirmation_invalid": "ブラウザー操作の確認が無効、期限切れ、使用済み、または別のユーザー／チャンネルのものです。操作をもう一度提案してください。",
+        "browser_confirmation_cancelled": "ブラウザー操作の確認はキャンセルされました。",
         "browser_confirmation_failed": "ブラウザー操作を完了できませんでした：{error}",
+        "browser_confirmation_timeout": "ブラウザー操作の許可待ちがタイムアウトしました。",
         "browser_duplicate_job": "すでに実行中または待機中のブラウザー作業があります。",
         "browser_identity_missing": "現在のブラウザー作業のユーザーを確認できません。",
-        "browser_lease_expired": "ブラウザー作業は 180 秒の利用時間を超えたため、自動終了しました。",
+        "browser_lease_expired": "ブラウザー作業は 5 分の上限を超えたため、自動終了しました。",
         "browser_queue_full": "ブラウザーの待機列はすでに {limit} 人で満員です。しばらくしてから再試行してください。",
         "browser_queue_timeout": "ブラウザー作業は {seconds} 秒以上待機したため、キャンセルされました。",
+        "browser_session_rejected": "ユーザーがこのセッションのブラウザー操作を拒否しました。",
         "billing_only_self_supported": "❌ 現在、AI 支払者として設定できるのは自分自身のみです。 `!ai-server-billing set` または `!ai-server-billing clear` を使用します。",
         "charge_failed": "充電に失敗しました。後でもう一度お試しください。",
         "charge_failed_text": "❌ 充電に失敗しました。後でもう一度試してください。",
@@ -136,6 +141,9 @@
     "value": {
         "browser_connecting": "ブラウザーに接続中...",
         "browser_queue_position": "ブラウザーツールの待機中（{position} 番目）...",
+        "browser_waiting_for_ai": "このセッションのブラウザー操作が許可されました。AI の続行を待っています…",
+        "browser_waiting_for_ai_after_error": "ブラウザー操作で問題が発生しました。AI の続行を待っています…",
+        "browser_waiting_for_ai_after_rejection": "ブラウザー操作は拒否されました。AI の応答を待っています…",
         "describe_image_default_prompt": "この画像について説明してください",
         "guild_payer_note": "\nこのサーバーでの AI の使用料は、現在 {payer_name} によって支払われています。",
         "image_ready_caption": "完成しました、下の画像です。",
