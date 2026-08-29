@@ -975,7 +975,7 @@ class ItemModerate(commands.GroupCog, name=app_commands.locale_str("itemmod", i1
         set_custom_items(guild_id, custom_items)
         worth = data.get("worth")
         from Economy import get_currency_name
-        status = t("itemsystem.msg.status_listed", price=i18n.fmt_num(worth, decimals=2), currency=get_currency_name(scope_guild_id)) if worth else t("itemsystem.msg.status_unlisted")
+        status = t("itemsystem.msg.status_listed", price=i18n.fmt_num(worth, decimals=2), currency=get_currency_name(guild_id)) if worth else t("itemsystem.msg.status_unlisted")
         await interaction.response.send_message(t("itemsystem.msg.custom_updated", name=data["name"], status=status), ephemeral=True)
 
     @app_commands.command(name=app_commands.locale_str("listcustom", i18n_key="cmd.itemsystem.itemmod.listcustom.name"), description=app_commands.locale_str("List this server's custom items", i18n_key="cmd.itemsystem.itemmod.listcustom.desc"))
@@ -988,11 +988,12 @@ class ItemModerate(commands.GroupCog, name=app_commands.locale_str("itemmod", i1
         if not custom_items:
             await interaction.response.send_message(t("itemsystem.msg.no_custom_items"), ephemeral=True)
             return
+        from Economy import get_currency_name
         embed = discord.Embed(title=t("itemsystem.embed.custom_items_title"), color=0x9b59b6)
         for item_id, data in custom_items.items():
             preview = data["content"][:100] + ("..." if len(data["content"]) > 100 else "")
             worth = data.get("worth")
-            shop_line = t("itemsystem.msg.shop_price", price=i18n.fmt_num(worth, decimals=2), currency=get_currency_name(scope_guild_id)) if worth else t("itemsystem.msg.shop_unlisted")
+            shop_line = t("itemsystem.msg.shop_price", price=i18n.fmt_num(worth, decimals=2), currency=get_currency_name(guild_id)) if worth else t("itemsystem.msg.shop_unlisted")
             embed.add_field(
                 name=f"{data['name']} (`{item_id}`)",
                 value=t("itemsystem.msg.content_preview", preview=preview) + f"\n{data.get('description', '')}\n{shop_line}",

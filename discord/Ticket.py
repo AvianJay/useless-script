@@ -3,6 +3,7 @@ from globalenv import (
     get_all_server_config_key, config, modules,
 )
 import i18n
+from i18n import t
 from logger import log
 import discord
 from discord import app_commands
@@ -457,9 +458,9 @@ async def claim_ticket(interaction: discord.Interaction) -> str | None:
         return t("ticket.err.already_claimed", user=f"<@{entry['claimed_by']}>")
 
     tickets = get_active_tickets(guild.id)
-    for t in tickets:
-        if int(t.get("channel_id", 0)) == channel.id:
-            t["claimed_by"] = interaction.user.id
+    for ticket in tickets:
+        if int(ticket.get("channel_id", 0)) == channel.id:
+            ticket["claimed_by"] = interaction.user.id
             break
     save_active_tickets(guild.id, tickets)
 

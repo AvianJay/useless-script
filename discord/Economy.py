@@ -3386,9 +3386,6 @@ asyncio.run(bot.add_cog(EconomyMod()))
 async def dev_economy_history(ctx, user: discord.User, scope: str = "server", server_id: int = None):
     scope = (scope or "server").lower()
     if scope == "global":
-        if target_amount > MAX_GLOBAL_BALANCE:
-            await ctx.send(f"❌ 全域餘額不能超過 {MAX_GLOBAL_BALANCE:,.2f}。")
-            return
         guild_id = GLOBAL_GUILD_ID
     elif scope == "server":
         if server_id:
