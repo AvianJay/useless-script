@@ -1,9 +1,14 @@
 {
     "btn": {
+        "browser_confirm": "確認瀏覽器操作",
+        "browser_confirmed": "已確認",
+        "browser_confirm_failed": "確認失敗",
+        "browser_confirming": "執行中…",
         "cancel": "取消",
         "confirm_clear": "確認清除"
     },
     "embed": {
+        "browser_approval_header": "**AI 想要操作瀏覽器**",
         "cancelled_header": "## ❌ 已取消",
         "clear_history_header": "## 🗑️ 清除對話歷史",
         "error_header": "## ❌ 發生錯誤",
@@ -17,6 +22,7 @@
     "err": {
         "attachment_not_image": "附件必須是圖片格式（JPG、PNG、GIF、WebP 等）。",
         "browser_confirmation_invalid": "瀏覽器操作確認無效、已過期、已使用，或不是由目前使用者與頻道提出。請重新提出操作。",
+        "browser_confirmation_failed": "瀏覽器操作未完成：{error}",
         "browser_duplicate_job": "你已經有一個瀏覽器工作正在執行或排隊。",
         "browser_identity_missing": "無法確認目前瀏覽器工作的使用者身分。",
         "browser_lease_expired": "瀏覽器工作已超過 180 秒租約，已自動結束。",
@@ -50,7 +56,8 @@
         "attachment_note": "{note}\n\n附件：{filename}",
         "billing_no_payer": "目前這個伺服器的 AI 沒有指定付款人，預設是各自付款。",
         "browser_confirmation_file_summary": "瀏覽器操作提案包含 {count} 個動作，目的地為 {destination}；完整 JSON 已附檔。",
-        "browser_confirmation_instruction": "這些操作尚未執行。若同意，請在下一則訊息精確輸入：`{confirmation}`",
+        "browser_approval_default_reason": "AI 想在 {destination} 執行 {count} 個互動操作。",
+        "browser_confirmation_complete": "已執行 {count} 個瀏覽器操作。",
         "billing_payer": "目前這個伺服器的 AI 由 {payer_name}（ID: {payer_id}）付款。",
         "billing_payer_cleared": "✅ 已清除這個伺服器的 AI 指定付款人，之後會恢復各自付款。",
         "billing_payer_set_self": "✅ 已將這個伺服器的 AI 付款人設為你自己 {display_name}（ID: {user_id}）。",

@@ -1,9 +1,14 @@
 {
     "btn": {
+        "browser_confirm": "ブラウザー操作を承認",
+        "browser_confirmed": "承認済み",
+        "browser_confirm_failed": "承認に失敗",
+        "browser_confirming": "実行中…",
         "cancel": "キャンセル",
         "confirm_clear": "クリアの確認"
     },
     "embed": {
+        "browser_approval_header": "**AI がブラウザーを操作しようとしています**",
         "cancelled_header": "## ❌ キャンセルされました",
         "clear_history_header": "## 🗑️ 会話履歴をクリアする",
         "error_header": "## ❌ エラーが発生しました",
@@ -18,6 +23,7 @@
     "err": {
         "attachment_not_image": "添付ファイルは画像 (JPG、PNG、GIF、WebP など) である必要があります。",
         "browser_confirmation_invalid": "ブラウザー操作の確認が無効、期限切れ、使用済み、または別のユーザー／チャンネルのものです。操作をもう一度提案してください。",
+        "browser_confirmation_failed": "ブラウザー操作を完了できませんでした：{error}",
         "browser_duplicate_job": "すでに実行中または待機中のブラウザー作業があります。",
         "browser_identity_missing": "現在のブラウザー作業のユーザーを確認できません。",
         "browser_lease_expired": "ブラウザー作業は 180 秒の利用時間を超えたため、自動終了しました。",
@@ -51,7 +57,8 @@
         "attachment_note": "{note}\n\n添付ファイル: {filename}",
         "billing_no_payer": "現在、このサーバーには指定された AI 支払者がいません。デフォルトでは誰もが自分で支払います。",
         "browser_confirmation_file_summary": "{destination} に対する {count} 件のブラウザー操作提案です。完全な JSON を添付しました。",
-        "browser_confirmation_instruction": "これらの操作はまだ実行されていません。承認する場合、次のメッセージに正確に入力してください：`{confirmation}`",
+        "browser_approval_default_reason": "AI が {destination} で {count} 件のブラウザー操作を実行しようとしています。",
+        "browser_confirmation_complete": "{count} 件のブラウザー操作を実行しました。",
         "billing_payer": "現在、このサーバーでの AI の使用料は {payer_name} (ID: {payer_id}) によって支払われています。",
         "billing_payer_cleared": "✅ このサーバーの指定された AI 支払者をクリアしました。請求は各ユーザーが自分自身で支払うことになります。",
         "billing_payer_set_self": "✅ 自分自身、{display_name} (ID: {user_id}) をこのサーバーの AI 支払者として設定します。",

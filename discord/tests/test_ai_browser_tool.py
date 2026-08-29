@@ -12,6 +12,7 @@ sys.path.insert(0, str(DISCORD_DIR))
 
 from ai import (
     AICommands,
+    BrowserApprovalView,
     derive_ai_browser_launch_endpoint,
     normalize_ai_browser_cdp_endpoint,
     redact_ai_browser_cdp_endpoint,
@@ -107,7 +108,7 @@ class BrowserConfigTests(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn("1fec3e6d", displayed)
 
     def test_browser_schemas_are_conditional(self):
-        browser_tools = {"browser_read", "browser_view", "browser_propose", "browser_confirm"}
+        browser_tools = {"browser_read", "browser_view", "browser_propose"}
         with patch("ai._get_ai_browser_cdp_endpoint", return_value=""):
             disabled = {item["function"]["name"] for item in self.cog._build_ai_tools()}
         with patch("ai._get_ai_browser_cdp_endpoint", return_value=CDP_ENDPOINT):
@@ -115,6 +116,7 @@ class BrowserConfigTests(unittest.IsolatedAsyncioTestCase):
             enabled = {item["function"]["name"] for item in enabled_tools}
         self.assertTrue(browser_tools.isdisjoint(disabled))
         self.assertTrue(browser_tools.issubset(enabled))
+        self.assertNotIn("browser_confirm", enabled)
         self.assertEqual(self.cog._tool_result_max_length("browser_read"), 16_000)
         self.assertEqual(self.cog._tool_result_max_length("browser_view"), 16_000)
         view_schema = next(
@@ -398,9 +400,9 @@ class BrowserApprovalAndActionTests(unittest.IsolatedAsyncioTestCase):
             patch.object(self.cog, "_validate_browser_public_url", new=self.valid_url),
         ):
             result = await self.cog._tool_browser_propose(
-                {"operations": operations or self.operations}, context
+                {"operations": operations or self.operations, "reason": "Update the display name."}, context
             )
-        token = result["confirmation_text"].split()[-1]
+        token = context["pending_browser_approval"]["token"]
         return context, result, token
 
     async def test_propose_does_not_execute_and_same_turn_cannot_confirm(self):
@@ -409,13 +411,17 @@ class BrowserApprovalAndActionTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("input hidden", " ".join(result["summary"]))
         with patch.object(self.cog, "_execute_browser_operations", new=AsyncMock()) as execute:
             rejected = await self.cog._tool_browser_confirm({"token": token}, context)
+            rejected_model_call = await self.cog._execute_ai_tool(
+                "browser_confirm", {"token": token}, context
+            )
         self.assertIn("error", rejected)
+        self.assertIn("error", rejected_model_call)
         execute.assert_not_awaited()
 
-    async def test_next_exact_turn_same_identity_confirms_once(self):
+    async def test_button_context_same_identity_confirms_once(self):
         _context, _result, token = await self._propose()
-        confirm_context = tool_context(request_text=f"確認瀏覽器操作 {token}")
-        await self.cog._prepare_browser_confirmation_turn(confirm_context)
+        confirm_context = tool_context()
+        confirm_context["_browser_confirmation_token"] = token
         with (
             patch.object(self.cog, "_get_browser_page", new=AsyncMock(return_value=(self.page, None))),
             patch.object(self.cog, "_validate_browser_public_url", new=self.valid_url),
@@ -427,23 +433,32 @@ class BrowserApprovalAndActionTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("error", replay)
         execute.assert_awaited_once()
 
-    async def test_identity_channel_ttl_and_next_message_binding(self):
+    async def test_identity_channel_ttl_and_single_use_binding(self):
         _context, _result, token = await self._propose()
-        wrong_channel = tool_context(channel_id=999, request_text=f"確認瀏覽器操作 {token}")
-        await self.cog._prepare_browser_confirmation_turn(wrong_channel)
-        self.assertNotIn("_browser_confirmation_token", wrong_channel)
-
-        unrelated = tool_context(request_text="do something else")
-        await self.cog._prepare_browser_confirmation_turn(unrelated)
-        later = tool_context(request_text=f"確認瀏覽器操作 {token}")
-        await self.cog._prepare_browser_confirmation_turn(later)
-        self.assertNotIn("_browser_confirmation_token", later)
+        wrong_channel = tool_context(channel_id=999)
+        wrong_channel["_browser_confirmation_token"] = token
+        rejected = await self.cog._tool_browser_confirm({"token": token}, wrong_channel)
+        self.assertIn("error", rejected)
 
         _context, _result, token = await self._propose()
         self.cog._browser_approval_tokens[token]["expires_at"] = 0
-        expired = tool_context(request_text=f"確認瀏覽器操作 {token}")
-        await self.cog._prepare_browser_confirmation_turn(expired)
-        self.assertNotIn("_browser_confirmation_token", expired)
+        expired = tool_context()
+        expired["_browser_confirmation_token"] = token
+        rejected = await self.cog._tool_browser_confirm({"token": token}, expired)
+        self.assertIn("error", rejected)
+
+    async def test_proposal_queues_components_v2_approval_without_exposing_token(self):
+        context, result, token = await self._propose()
+        self.assertNotIn(token, json.dumps(result))
+        self.assertEqual(result["approval_ui"], "A Discord confirmation button will be shown in the tool status message.")
+        view = BrowserApprovalView(self.cog, context["pending_browser_approval"])
+        components = view.to_components()
+        self.assertNotIn(token, json.dumps(components))
+        container = components[0]
+        self.assertEqual(container["type"], 17)
+        self.assertEqual(container["components"][0]["content"], "**AI 想要操作瀏覽器**")
+        self.assertEqual([item["type"] for item in container["components"]], [10, 14, 10, 14, 1])
+        self.assertEqual(container["components"][2]["content"], "Update the display name.")
 
     async def test_locator_and_operation_validation_rejects_bad_shapes(self):
         invalid_batches = (
@@ -497,7 +512,7 @@ class BrowserApprovalAndActionTests(unittest.IsolatedAsyncioTestCase):
         )
         self.assertTrue(result["details_attached"])
         self.assertEqual(context["pending_file_response"]["filename"], "browser-operation-proposal.json")
-        self.assertIn(result["confirmation_text"], context["pending_file_response"]["summary"])
+        self.assertNotIn(_token, context["pending_file_response"]["summary"])
 
 
 class BrowserReadResultTests(unittest.IsolatedAsyncioTestCase):

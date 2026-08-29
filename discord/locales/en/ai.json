@@ -1,9 +1,14 @@
 {
     "btn": {
+        "browser_confirm": "Confirm browser actions",
+        "browser_confirmed": "Confirmed",
+        "browser_confirm_failed": "Confirmation failed",
+        "browser_confirming": "Running…",
         "cancel": "Cancel",
         "confirm_clear": "Confirm Clear"
     },
     "embed": {
+        "browser_approval_header": "**AI wants to control the browser**",
         "cancelled_header": "## ❌ Cancelled",
         "clear_history_header": "## 🗑️ Clear Conversation History",
         "error_header": "## ❌ An Error Occurred",
@@ -18,6 +23,7 @@
     "err": {
         "attachment_not_image": "The attachment must be an image (JPG, PNG, GIF, WebP, etc.).",
         "browser_confirmation_invalid": "The browser confirmation is invalid, expired, already used, or belongs to another user or channel. Propose the actions again.",
+        "browser_confirmation_failed": "The browser actions did not complete: {error}",
         "browser_duplicate_job": "You already have a browser job running or queued.",
         "browser_identity_missing": "The current browser job's user identity could not be verified.",
         "browser_lease_expired": "The browser job exceeded its 180-second lease and was stopped automatically.",
@@ -51,7 +57,8 @@
         "attachment_note": "{note}\n\nAttachment: {filename}",
         "billing_no_payer": "This server currently has no designated AI payer; everyone pays for themselves by default.",
         "browser_confirmation_file_summary": "The browser proposal has {count} actions for {destination}; the full JSON is attached.",
-        "browser_confirmation_instruction": "These actions have not run. To approve them, send exactly this as your next message: `{confirmation}`",
+        "browser_approval_default_reason": "The AI wants to perform {count} interactive browser actions at {destination}.",
+        "browser_confirmation_complete": "Ran {count} browser actions.",
         "billing_payer": "AI usage on this server is currently paid for by {payer_name} (ID: {payer_id}).",
         "billing_payer_cleared": "✅ Cleared this server's designated AI payer; billing will revert to each user paying for themselves.",
         "billing_payer_set_self": "✅ Set yourself, {display_name} (ID: {user_id}), as this server's AI payer.",
