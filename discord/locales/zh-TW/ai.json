@@ -90,6 +90,7 @@
         "browser_confirm": "執行已確認的瀏覽器操作",
         "browser_propose": "提出瀏覽器操作確認",
         "browser_read": "讀取瀏覽器頁面",
+        "browser_view": "查看瀏覽器頁面截圖",
         "delete_ai_memory": "刪除 AI 記憶",
         "execute_code": "執行程式碼",
         "fetch_raw": "抓取原始內容",

@@ -107,13 +107,20 @@ class BrowserConfigTests(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn("1fec3e6d", displayed)
 
     def test_browser_schemas_are_conditional(self):
+        browser_tools = {"browser_read", "browser_view", "browser_propose", "browser_confirm"}
         with patch("ai._get_ai_browser_cdp_endpoint", return_value=""):
             disabled = {item["function"]["name"] for item in self.cog._build_ai_tools()}
         with patch("ai._get_ai_browser_cdp_endpoint", return_value=CDP_ENDPOINT):
-            enabled = {item["function"]["name"] for item in self.cog._build_ai_tools()}
-        self.assertTrue({"browser_read", "browser_propose", "browser_confirm"}.isdisjoint(disabled))
-        self.assertTrue({"browser_read", "browser_propose", "browser_confirm"}.issubset(enabled))
+            enabled_tools = self.cog._build_ai_tools()
+            enabled = {item["function"]["name"] for item in enabled_tools}
+        self.assertTrue(browser_tools.isdisjoint(disabled))
+        self.assertTrue(browser_tools.issubset(enabled))
         self.assertEqual(self.cog._tool_result_max_length("browser_read"), 16_000)
+        self.assertEqual(self.cog._tool_result_max_length("browser_view"), 16_000)
+        view_schema = next(
+            item["function"] for item in enabled_tools if item["function"]["name"] == "browser_view"
+        )
+        self.assertEqual(set(view_schema["parameters"]["properties"]), {"prompt", "max_chars", "full_page"})
 
     async def test_owner_config_sets_masks_and_clears_endpoint(self):
         ctx = SimpleNamespace(send=AsyncMock())
@@ -465,7 +472,10 @@ class BrowserApprovalAndActionTests(unittest.IsolatedAsyncioTestCase):
         with patch("ai.log", side_effect=lambda message, **_kwargs: captured.append(message)):
             self.cog._log_tool_request_batch(
                 "model",
-                [{"name": "browser_propose", "arguments": {"operations": self.operations}}],
+                [
+                    {"name": "browser_propose", "arguments": {"operations": self.operations}},
+                    {"name": "browser_view", "arguments": {"prompt": "secret visual prompt"}},
+                ],
                 tool_context(),
             )
             self.cog._log_tool_result(
@@ -478,6 +488,7 @@ class BrowserApprovalAndActionTests(unittest.IsolatedAsyncioTestCase):
         joined = "\n".join(captured)
         self.assertNotIn("secret-token", joined)
         self.assertNotIn("private input", joined)
+        self.assertNotIn("secret visual prompt", joined)
         self.assertIn("redacted", joined)
 
     async def test_long_proposal_json_is_queued_as_attachment(self):
@@ -517,6 +528,50 @@ class BrowserReadResultTests(unittest.IsolatedAsyncioTestCase):
             result = await self.cog._tool_browser_read({"action": "screenshot"}, context)
         self.assertIn("error", result)
         self.assertNotIn("pending_image_attachments", context)
+
+    async def test_browser_view_returns_visual_analysis_and_attaches_screenshot(self):
+        page = SimpleNamespace(url="https://example.com/dashboard", screenshot=AsyncMock(return_value=b"png"))
+        context = tool_context()
+        analyze = AsyncMock(
+            return_value={
+                "analysis_model": "vision-model",
+                "cost": 25.0,
+                "currency": "coins",
+                "summary": "A dashboard with a blue status chart.",
+            }
+        )
+        with (
+            patch.object(self.cog, "_get_browser_page", new=AsyncMock(return_value=(page, None))),
+            patch.object(self.cog, "_analyze_image_bytes_for_tool", new=analyze),
+        ):
+            result = await self.cog._tool_browser_view(
+                {"prompt": "Inspect the status chart", "max_chars": 500},
+                context,
+            )
+
+        self.assertEqual(result["analysis"]["summary"], "A dashboard with a blue status chart.")
+        self.assertEqual(context["pending_image_attachments"][0]["kind"], "browser")
+        self.assertTrue(result["attachment_ref"].startswith("attachment://browser-view-"))
+        self.assertEqual(analyze.await_args.args[0], b"png")
+        self.assertEqual(analyze.await_args.kwargs["prompt"], "Inspect the status chart")
+        self.assertIn("untrusted webpage data", analyze.await_args.kwargs["system_prompt"])
+
+    async def test_browser_view_rejects_oversize_before_analysis_or_attachment(self):
+        page = SimpleNamespace(
+            url="https://example.com/",
+            screenshot=AsyncMock(return_value=b"x" * (self.cog.BROWSER_SCREENSHOT_MAX_BYTES + 1)),
+        )
+        context = tool_context()
+        analyze = AsyncMock()
+        with (
+            patch.object(self.cog, "_get_browser_page", new=AsyncMock(return_value=(page, None))),
+            patch.object(self.cog, "_analyze_image_bytes_for_tool", new=analyze),
+        ):
+            result = await self.cog._tool_browser_view({}, context)
+
+        self.assertIn("error", result)
+        self.assertNotIn("pending_image_attachments", context)
+        analyze.assert_not_awaited()
 
 
 if __name__ == "__main__":

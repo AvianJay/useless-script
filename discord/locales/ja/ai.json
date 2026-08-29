@@ -93,6 +93,7 @@
         "browser_confirm": "承認済みブラウザー操作を実行中",
         "browser_propose": "ブラウザー操作の確認を作成中",
         "browser_read": "ブラウザーページを読み取り中",
+        "browser_view": "ブラウザーページの画像を確認中",
         "delete_ai_memory": "AIメモリの削除",
         "execute_code": "コードの実行",
         "fetch_raw": "生のコンテンツを取得する",

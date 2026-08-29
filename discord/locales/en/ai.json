@@ -93,6 +93,7 @@
         "browser_confirm": "Running approved browser actions",
         "browser_propose": "Proposing browser actions for approval",
         "browser_read": "Reading browser page",
+        "browser_view": "Inspecting browser screenshot",
         "delete_ai_memory": "Deleting AI memory",
         "execute_code": "Executing code",
         "fetch_raw": "Fetching raw content",
