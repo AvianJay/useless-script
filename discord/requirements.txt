@@ -8,7 +8,7 @@ taiwanbus==0.1.0
 YouBikePython==0.1.2
 psutil~=7.1.2
 git+https://github.com/AvianJay/DiscordChatExporterPy.git@chinese
-playwright~=1.55.0
+playwright~=1.61.0
 Flask~=3.1.2
 hypercorn~=0.18.0
 git+https://github.com/Av1anJay/rynaki.git@main
