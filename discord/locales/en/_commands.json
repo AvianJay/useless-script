@@ -600,7 +600,8 @@
                 "name": "feedgrass"
             },
             "root": {
-                "desc": "Submit images"
+                "desc": "Submit images",
+                "name": "contribute"
             },
             "what_is_this_guy_talking_about": {
                 "desc": "Submit a \"What is this guy talking about\" image",
@@ -771,7 +772,8 @@
                 }
             },
             "root": {
-                "desc": "Look up natural-disaster work and school suspensions"
+                "desc": "Look up natural-disaster work and school suspensions",
+                "name": "nds"
             },
             "view": {
                 "desc": "Get the latest natural-disaster work/school suspension status",
@@ -1721,7 +1723,8 @@
                 }
             },
             "root": {
-                "desc": "Minigames"
+                "desc": "Minigames",
+                "name": "games"
             },
             "roulette": {
                 "choice": {

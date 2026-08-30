@@ -16,7 +16,8 @@
 涵蓋的宣告形式：
 - @app_commands.command / @bot.tree.command / @<group_var>.command
 - @bot.tree.context_menu（中文 base 名 → 翻轉為英文 base + zh 在地化）
-- class X(commands.GroupCog, name=..., description=...)（含 docstring 描述）
+- class X(commands.GroupCog, name/group_name=..., description/group_description=...)
+  （含 docstring 描述）
 - xxx = app_commands.Group(name=..., description=..., parent=...)
 - @app_commands.describe(param="...")
 - @app_commands.choices(param=[Choice(name=..., value=...)])
@@ -265,8 +266,12 @@ class ModuleScanner:
                     if isinstance(base, (ast.Attribute, ast.Name)))
                 if not is_groupcog:
                     continue
-                name_kw = next((k for k in node.keywords if k.arg == "name"), None)
-                desc_kw = next((k for k in node.keywords if k.arg == "description"), None)
+                name_kw = next(
+                    (k for k in node.keywords if k.arg == "group_name"), None
+                ) or next((k for k in node.keywords if k.arg == "name"), None)
+                desc_kw = next(
+                    (k for k in node.keywords if k.arg == "group_description"), None
+                ) or next((k for k in node.keywords if k.arg == "description"), None)
                 group_name = _string_of(name_kw.value) if name_kw else None
                 path = [_slug(group_name or node.name)]
                 class_group[id(node)] = path

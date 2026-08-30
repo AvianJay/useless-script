@@ -584,7 +584,15 @@ def contribute_feed_grass():
 
 @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
 @app_commands.allowed_installs(guilds=True, users=True)
-class Contribute(commands.GroupCog, description=app_commands.locale_str("Submit images", i18n_key="cmd.contribute.contribute.root.desc")):
+class Contribute(
+    commands.GroupCog,
+    group_name=app_commands.locale_str(
+        "contribute", i18n_key="cmd.contribute.contribute.root.name"
+    ),
+    group_description=app_commands.locale_str(
+        "Submit images", i18n_key="cmd.contribute.contribute.root.desc"
+    ),
+):
     def __init__(self, bot):
         self.bot = bot
     

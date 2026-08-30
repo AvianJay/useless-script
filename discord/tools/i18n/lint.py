@@ -12,6 +12,8 @@
 - plural-needed (warning)：zh 值為「{x} + 量詞」但 en 值是純字串（幾乎必然漏了英文複數）
 - untranslated (ratchet)：source 有、目標語言缺/null 的 key 數不得增加（locales/.coverage.json）
 - cmd-name (error)：cmd.*.name 的值必須是合法 Discord 指令名稱（含小寫檢查）
+- command-metadata (error)：locale_str 的字面 i18n_key 必須存在於原文目錄
+- command-group-i18n (error)：GroupCog 根名稱必須使用帶 i18n_key 的 locale_str
 - hardcoded (error)：locales/.migrated 內的模組不得再有中文字面值（docstring 與 # i18n: skip 除外）
 - dsl-frozen (error)：受保護的 DSL 字彙不得改動（tools/i18n/dsl_snapshot.json）
 - unused (warning)：語言檔 key 沒有被任何程式碼字面值引用
@@ -141,6 +143,65 @@ def check_catalogs(report: Report) -> dict[str, int]:
                 report.warning("plural-needed",
                                f"{key}: zh has a counted noun but en is not a plural entry")
     return untranslated
+
+
+def _call_tail(node: ast.AST) -> str | None:
+    if isinstance(node, ast.Name):
+        return node.id
+    if isinstance(node, ast.Attribute):
+        return node.attr
+    return None
+
+
+def _literal_i18n_key(node: ast.AST) -> str | None:
+    if not isinstance(node, ast.Call) or _call_tail(node.func) != "locale_str":
+        return None
+    for keyword in node.keywords:
+        if keyword.arg == "i18n_key" and isinstance(keyword.value, ast.Constant) \
+                and isinstance(keyword.value.value, str):
+            return keyword.value.value
+    return None
+
+
+def check_command_metadata(report: Report):
+    """檢查指令 metadata 的原文 key 與 GroupCog 根名稱宣告。"""
+    source_catalog = i18n._catalogs.get(i18n.SOURCE_LOCALE, {})
+    for path in ROOT.glob("*.py"):
+        try:
+            tree = ast.parse(path.read_text(encoding="utf-8-sig"))
+        except (SyntaxError, OSError) as error:
+            report.error("command-metadata", f"{path.name}: cannot parse ({error})")
+            continue
+
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Call):
+                key = _literal_i18n_key(node)
+                if key is not None and source_catalog.get(key) is None:
+                    report.error(
+                        "command-metadata",
+                        f"{path.name}:{node.lineno} source catalog missing {key}",
+                    )
+
+            if not isinstance(node, ast.ClassDef):
+                continue
+            is_group_cog = any(_call_tail(base) == "GroupCog" for base in node.bases)
+            if not is_group_cog:
+                continue
+            group_name = next(
+                (keyword.value for keyword in node.keywords if keyword.arg == "group_name"),
+                None,
+            )
+            if group_name is None:
+                group_name = next(
+                    (keyword.value for keyword in node.keywords if keyword.arg == "name"),
+                    None,
+                )
+            if group_name is None or _literal_i18n_key(group_name) is None:
+                report.error(
+                    "command-group-i18n",
+                    f"{path.name}:{node.lineno} {node.name} root name needs "
+                    "locale_str(..., i18n_key=...)",
+                )
 
 
 def check_ratchet(report: Report, untranslated: dict[str, int], update: bool):
@@ -399,6 +460,7 @@ def run(update_ratchet: bool = False, update_snapshot: bool = False,
         quiet: bool = False) -> Report:
     report = Report()
     untranslated = check_catalogs(report)
+    check_command_metadata(report)
     check_ratchet(report, untranslated, update_ratchet)
     check_hardcoded(report)
     check_dsl_frozen(report, update_snapshot)

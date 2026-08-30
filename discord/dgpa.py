@@ -123,7 +123,14 @@ def fetch_and_parse_nds(url: str = DEFAULT_URL, timeout: int = 10) -> Dict[str, 
 
 @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
 @app_commands.allowed_installs(guilds=True, users=True)
-class nds(commands.GroupCog, description=app_commands.locale_str("Look up natural-disaster work and school suspensions", i18n_key="cmd.dgpa.nds.root.desc")):
+class nds(
+    commands.GroupCog,
+    group_name=app_commands.locale_str("nds", i18n_key="cmd.dgpa.nds.root.name"),
+    group_description=app_commands.locale_str(
+        "Look up natural-disaster work and school suspensions",
+        i18n_key="cmd.dgpa.nds.root.desc",
+    ),
+):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
 

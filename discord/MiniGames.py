@@ -1219,7 +1219,15 @@ class BlackjackView(i18n.I18nView):
 
 @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
 @app_commands.allowed_installs(guilds=True, users=True)
-class MiniGamesCog(commands.GroupCog, group_name="games", description=app_commands.locale_str("Minigames", i18n_key="cmd.minigames.minigamescog.root.desc")):
+class MiniGamesCog(
+    commands.GroupCog,
+    group_name=app_commands.locale_str(
+        "games", i18n_key="cmd.minigames.minigamescog.root.name"
+    ),
+    group_description=app_commands.locale_str(
+        "Minigames", i18n_key="cmd.minigames.minigamescog.root.desc"
+    ),
+):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
         self.games: Dict[int, Game] = {}

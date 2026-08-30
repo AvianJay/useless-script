@@ -2,6 +2,7 @@
     "ai": {
         "ai": {
             "desc": "與 AI 助手對話",
+            "name": "ai",
             "param": {
                 "image": "傳入圖片讓 AI 分析（選用）",
                 "message": "你想問 AI 的問題或訊息",
@@ -108,7 +109,8 @@
     },
     "aki": {
         "aki": {
-            "desc": "與 Akinator 進行遊戲"
+            "desc": "與 Akinator 進行遊戲",
+            "name": "aki"
         }
     },
     "antibeast": {
@@ -130,6 +132,9 @@
             "list": {
                 "desc": "列出 AntiBeast 設定",
                 "name": "列出"
+            },
+            "root": {
+                "name": "antibeast"
             },
             "settings": {
                 "desc": "設定 AntiBeast 短時間多次觸發時的處置動作",
@@ -595,7 +600,8 @@
                 "name": "草飼"
             },
             "root": {
-                "desc": "投稿圖片"
+                "desc": "投稿圖片",
+                "name": "投稿"
             },
             "what_is_this_guy_talking_about": {
                 "desc": "投稿「這傢伙在說什麼呢」圖片",
@@ -652,7 +658,8 @@
                 "name": "快取統計"
             },
             "root": {
-                "desc": "DCTW 瀏覽器！"
+                "desc": "DCTW 瀏覽器！",
+                "name": "dctw"
             }
         },
         "key": {
@@ -765,7 +772,8 @@
                 }
             },
             "root": {
-                "desc": "天然災害停止上班及上課情形查詢"
+                "desc": "天然災害停止上班及上課情形查詢",
+                "name": "停班停課"
             },
             "view": {
                 "desc": "取得最新天然災害停止上班及上課情形",
@@ -788,6 +796,7 @@
                 "true": "是"
             },
             "desc": "量屌長",
+            "name": "dsize",
             "param": {
                 "global_dsize": "是否使用全域紀錄 (預設否)"
             },
@@ -1281,7 +1290,8 @@
     "fixlink": {
         "fixlink": {
             "root": {
-                "desc": "連結修復器"
+                "desc": "連結修復器",
+                "name": "連結修復"
             },
             "settings": {
                 "desc": "開啟 FixLink 互動式設定面板",
@@ -1291,7 +1301,8 @@
     },
     "gettingstarted": {
         "gettingstarted": {
-            "desc": "開啟伺服器快速設定中心"
+            "desc": "開啟伺服器快速設定中心",
+            "name": "快速設定"
         }
     },
     "guildpanel": {
@@ -1682,7 +1693,8 @@
                 }
             },
             "doom": {
-                "desc": "開始玩 DOOM"
+                "desc": "開始玩 DOOM",
+                "name": "doom"
             },
             "highlow": {
                 "desc": "比大小：猜下一張牌較大或較小",
@@ -1711,7 +1723,8 @@
                 }
             },
             "root": {
-                "desc": "迷你遊戲"
+                "desc": "迷你遊戲",
+                "name": "小遊戲"
             },
             "roulette": {
                 "choice": {
@@ -2302,6 +2315,7 @@
     "petpet": {
         "petpet": {
             "desc": "生成 PetPet GIF",
+            "name": "petpet",
             "param": {
                 "user": "要撫摸的使用者 (預設為自己)"
             },
@@ -2317,6 +2331,7 @@
                 "true": "是"
             },
             "desc": "從rule34.xxx隨機取得一張圖片",
+            "name": "r34",
             "param": {
                 "ai": "是否包含AI生成的圖片",
                 "pid": "頁數",
@@ -3129,6 +3144,7 @@
         },
         "nitro": {
             "desc": "我不想要被機器人幹走尼戳",
+            "name": "nitro",
             "param": {
                 "need_message": "是否只有近期發過訊息的用戶才能領取（最近 50 條訊息的作者）"
             },

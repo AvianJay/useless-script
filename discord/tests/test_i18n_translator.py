@@ -182,6 +182,60 @@ class CommandNameCatalogTests(unittest.TestCase):
         self.assertEqual(
             payload["options"][0]["name_localizations"]["ja"], "コマンド")
 
+    def test_semantic_root_names_are_in_translated_payloads(self):
+        async def build_payloads():
+            client = discord.Client(intents=discord.Intents.none())
+            tree = app_commands.CommandTree(client)
+            translator = i18n.CatalogTranslator()
+
+            async def callback(interaction: discord.Interaction):
+                pass
+
+            roots = (
+                (
+                    "fixlink",
+                    "cmd.fixlink.fixlink.root.name",
+                    "連結修復",
+                    "リンク修復",
+                ),
+                (
+                    "games",
+                    "cmd.minigames.minigamescog.root.name",
+                    "小遊戲",
+                    "ミニゲーム",
+                ),
+                ("nds", "cmd.dgpa.nds.root.name", "停班停課", "休業休校"),
+                (
+                    "contribute",
+                    "cmd.contribute.contribute.root.name",
+                    "投稿",
+                    "投稿",
+                ),
+            )
+            payloads = []
+            try:
+                for base_name, key, zh_name, ja_name in roots:
+                    group = app_commands.Group(
+                        name=app_commands.locale_str(base_name, i18n_key=key),
+                        description="Root command",
+                    )
+                    group.add_command(
+                        app_commands.Command(
+                            name="view",
+                            description="View",
+                            callback=callback,
+                        )
+                    )
+                    payload = await group.get_translated_payload(tree, translator)
+                    payloads.append((payload, zh_name, ja_name))
+            finally:
+                await client.close()
+            return payloads
+
+        for payload, zh_name, ja_name in _run(build_payloads()):
+            self.assertEqual(payload["name_localizations"]["zh-TW"], zh_name)
+            self.assertEqual(payload["name_localizations"]["ja"], ja_name)
+
 
 if __name__ == "__main__":
     unittest.main()
