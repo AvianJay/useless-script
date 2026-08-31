@@ -1948,6 +1948,12 @@ class AICommands(commands.Cog):
                     tool_context=active_tool_context,
                     round_index=round_index,
                 )
+                # Kept so mid-round status updates (browser connecting/queue) can re-render the
+                # same notice with a footnote instead of replacing it.
+                active_tool_context["_tool_progress_state"] = {
+                    "tool_calls": tool_calls,
+                    "progress_text": tool_progress_text,
+                }
                 if tool_progress_callback is not None:
                     try:
                         await tool_progress_callback(tool_calls, round_index, tool_progress_text)
@@ -2058,6 +2064,7 @@ class AICommands(commands.Cog):
         finally:
             active_tool_context.pop("_browser_progress_callback", None)
             active_tool_context.pop("_browser_approval_presenter", None)
+            active_tool_context.pop("_tool_progress_state", None)
             await self.browser.release_lease(active_tool_context)
 
     @staticmethod
@@ -2710,6 +2717,7 @@ class AICommands(commands.Cog):
         cls,
         tool_calls: list[dict],
         progress_text: str | None = None,
+        status_text: str | None = None,
     ) -> str:
         labels: list[str] = []
         seen: set[str] = set()
@@ -2730,15 +2738,20 @@ class AICommands(commands.Cog):
             loading_emoji = ":loading:"
 
         progress_text = cls._normalize_tool_progress_text(progress_text)
+        # Lifecycle status (browser connecting, queue position) is a footnote under the tool
+        # message rather than a replacement for it.
+        status_text = cls._normalize_tool_progress_text(status_text)
+        suffix = f"\n-# {status_text}" if status_text else ""
+
         if progress_text:
-            return f"{loading_emoji} {progress_text}"
+            return f"{loading_emoji} {progress_text}{suffix}"
 
         if not labels:
-            return f"{loading_emoji} " + t("ai.value.querying")
+            return f"{loading_emoji} " + t("ai.value.querying") + suffix
         labels[-1] = f"{loading_emoji} {labels[-1]}"
         if len(labels) > 4:
-            return '\n'.join(labels[:4]) + "\n" + t("ai.msg.waiting_tools", count=len(labels))
-        return '\n'.join(labels)
+            return '\n'.join(labels[:4]) + "\n" + t("ai.msg.waiting_tools", count=len(labels)) + suffix
+        return '\n'.join(labels) + suffix
 
     @staticmethod
     def _get_server_config_fallback(guild_id, key: str, default=None):
@@ -10203,9 +10216,12 @@ class AICommands(commands.Cog):
                 tool_calls: list[dict],
                 round_index: int,
                 progress_text: str = "",
+                status_text: str = "",
             ):
                 nonlocal tool_notice_text
-                notice = await self._build_tool_usage_notice(tool_calls, progress_text=progress_text)
+                notice = await self._build_tool_usage_notice(
+                    tool_calls, progress_text=progress_text, status_text=status_text
+                )
                 if notice == tool_notice_text:
                     return
                 tool_notice_text = notice
@@ -10908,9 +10924,12 @@ class AICommands(commands.Cog):
                     tool_calls: list[dict],
                     round_index: int,
                     progress_text: str = "",
+                    status_text: str = "",
                 ):
                     nonlocal tool_notice_message, tool_notice_text
-                    notice = await self._build_tool_usage_notice(tool_calls, progress_text=progress_text)
+                    notice = await self._build_tool_usage_notice(
+                        tool_calls, progress_text=progress_text, status_text=status_text
+                    )
                     if notice == tool_notice_text:
                         return
                     tool_notice_text = notice

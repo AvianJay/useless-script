@@ -418,6 +418,90 @@ class BrowserNetworkAndLifecycleTests(unittest.IsolatedAsyncioTestCase):
             original.close.assert_not_awaited()
 
 
+class BrowserProgressNoticeTests(unittest.IsolatedAsyncioTestCase):
+    def setUp(self):
+        self.cog = AICommands(SimpleNamespace())
+
+    async def test_status_is_a_footnote_and_keeps_the_tool_labels(self):
+        tool_calls = [{"name": "browser_read"}, {"name": "search_google"}]
+        plain = await self.cog._build_tool_usage_notice(tool_calls)
+        notice = await self.cog._build_tool_usage_notice(
+            tool_calls, status_text="Connecting to the browser..."
+        )
+        self.assertEqual(notice, plain + "\n-# Connecting to the browser...")
+
+    async def test_status_keeps_the_models_own_narration(self):
+        notice = await self.cog._build_tool_usage_notice(
+            [{"name": "browser_read"}],
+            progress_text="Let me open that page for you.",
+            status_text="Browser tool queued (position 2)...",
+        )
+        self.assertIn("Let me open that page for you.", notice)
+        self.assertEqual(notice.splitlines()[-1], "-# Browser tool queued (position 2)...")
+
+    async def test_notice_is_unchanged_when_there_is_no_status(self):
+        without = await self.cog._build_tool_usage_notice([{"name": "browser_read"}])
+        empty = await self.cog._build_tool_usage_notice([{"name": "browser_read"}], status_text="")
+        self.assertEqual(without, empty)
+        self.assertNotIn("-#", without)
+
+    async def test_browser_status_replays_the_rounds_tool_calls(self):
+        calls = []
+
+        async def callback(tool_calls, round_index, progress_text="", status_text=""):
+            calls.append((list(tool_calls), progress_text, status_text))
+
+        context = tool_context()
+        context["_browser_progress_callback"] = callback
+        context["_tool_progress_state"] = {
+            "tool_calls": [{"name": "browser_act"}],
+            "progress_text": "Filling the form.",
+        }
+        await self.cog.browser._notify_progress(context, "Connecting to the browser...")
+
+        self.assertEqual(calls, [([{"name": "browser_act"}], "Filling the form.", "Connecting to the browser...")])
+
+    async def test_attach_clears_the_connecting_footnote(self):
+        statuses = []
+
+        async def callback(tool_calls, round_index, progress_text="", status_text=""):
+            statuses.append(status_text)
+
+        page = SimpleNamespace(
+            route=AsyncMock(),
+            route_web_socket=AsyncMock(),
+            add_init_script=AsyncMock(),
+            set_default_timeout=MagicMock(),
+            on=MagicMock(),
+            is_closed=MagicMock(return_value=False),
+            close=AsyncMock(),
+        )
+        browser_context = SimpleNamespace(
+            pages=[],
+            new_page=AsyncMock(return_value=page),
+            new_cdp_session=AsyncMock(return_value=SimpleNamespace(send=AsyncMock(), detach=AsyncMock())),
+        )
+        playwright = SimpleNamespace(
+            chromium=SimpleNamespace(
+                connect_over_cdp=AsyncMock(return_value=SimpleNamespace(contexts=[browser_context]))
+            ),
+            stop=AsyncMock(),
+        )
+        context = tool_context()
+        context["_browser_progress_callback"] = callback
+        with (
+            patch("ai_browser.get_ai_browser_cdp_endpoint", return_value=CDP_ENDPOINT),
+            patch.object(self.cog.browser, "preflight_cdp", new=AsyncMock(return_value=("ws://cdp", None))),
+            patch("ai_browser.async_playwright", return_value=SimpleNamespace(start=AsyncMock(return_value=playwright))),
+        ):
+            _page, error = await self.cog.browser.get_page(context)
+            self.assertIsNone(error)
+            await self.cog.browser.release_lease(context)
+
+        self.assertTrue(statuses[0])
+        self.assertEqual(statuses[-1], "")
+
+
 class BrowserActionValidationTests(unittest.IsolatedAsyncioTestCase):
     def setUp(self):
         self.cog = AICommands(SimpleNamespace())

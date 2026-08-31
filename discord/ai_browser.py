@@ -566,11 +566,23 @@ class BrowserSessionManager:
     # ------------------------------------------------------------------
 
     async def _notify_progress(self, tool_context: dict, message: str) -> None:
+        """Show browser lifecycle status without discarding the round's tool message.
+
+        The round's own tool calls and narration are replayed so the notice keeps its
+        content; ``message`` is rendered as a footnote under it. An empty message clears
+        the footnote.
+        """
         callback = (tool_context or {}).get("_browser_progress_callback")
         if callback is None:
             return
+        state = (tool_context or {}).get("_tool_progress_state") or {}
         try:
-            await callback([{"name": "browser_read"}], 0, message)
+            await callback(
+                state.get("tool_calls") or [],
+                0,
+                state.get("progress_text") or "",
+                message,
+            )
         except Exception:
             pass
 
@@ -882,6 +894,7 @@ class BrowserSessionManager:
             page.set_default_timeout(BROWSER_ACTION_TIMEOUT_MS)
             page.on("popup", lambda popup: asyncio.create_task(self._close_owned_popup(popup)))
             page.on("download", lambda download: asyncio.create_task(download.cancel()))
+            await self._notify_progress(tool_context, "")
             return page, None
         except Exception as error:
             await self.cleanup_session(tool_context)
