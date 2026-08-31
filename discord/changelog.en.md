@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.24.6
+* Updated safe AI browser tools
+  * Browser interactions now require approval only once per job. The first action pauses the AI and shows a localized Discord confirmation card containing the reason and actual action, allowing the user to approve or reject it. The card is single-use and restricted to the original user in the same channel; rejecting it or letting it expire prevents later interactions in that job.
+  * Webpage snapshots now provide a `ref` for actionable elements. The AI must use a `ref` from the latest snapshot to perform one click, text input, key press, selection, checkbox, or scroll action at a time, receiving a fresh snapshot afterward. If the element becomes stale or the page changes while approval is pending, the original action is stopped to avoid interacting with the wrong control.
+  * Page evaluation shares the same approval and the confirmation card displays the JavaScript that will run; long scripts are attached in full for review. The browser job limit was extended to 5 minutes and Playwright was updated to 1.61.
+* Updated command localization
+  * Slash-command group roots such as Contribute, Minigames, work and school closure lookup, and FixLink now display correctly in Traditional Chinese, English, and Japanese. Automated checks now catch command groups without localized names and references to missing translation keys.
+* Updated related translations.
+* Fixed some bugs.
+
 ## 0.24.5
 * Updated safe AI browser tools
   * Clicks, text input, key presses, selections, checkbox changes, and page evaluation now show a localized Discord confirmation card instead of requiring the user to type a confirmation code in their next message.
