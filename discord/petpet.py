@@ -201,6 +201,8 @@ class PetPetCommand(commands.Cog):
         )
         bot.tree.add_command(self.ctx_menu)
 
+    @app_commands.allowed_installs(guilds=True, users=True)
+    @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
     @app_commands.command(name=app_commands.locale_str("petpet", i18n_key="cmd.petpet.petpet.name"), description=app_commands.locale_str("Generate a PetPet GIF", i18n_key="cmd.petpet.petpet.desc"))
     @app_commands.describe(user=app_commands.locale_str("The user to pet (default: yourself)", i18n_key="cmd.petpet.petpet.param.user"))
     async def petpet(self, interaction: discord.Interaction, user: Union[discord.Member, discord.User] = None):
@@ -271,6 +273,8 @@ class PetPetCommand(commands.Cog):
 
     #     await interaction.response.send_message(embed=embed)
     
+    @app_commands.allowed_installs(guilds=True, users=True)
+    @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
     async def petpet_context_menu(self, interaction: discord.Interaction, user: Union[discord.User, discord.Member]):
         try:
             await interaction.response.defer()
