@@ -59,6 +59,74 @@ class AIToolCallParsingTests(unittest.IsolatedAsyncioTestCase):
         self.assertIsNone(parsed)
         self.assertEqual(error, "channel_id must be a decimal string")
 
+    async def test_search_message_uses_discord_guild_search_with_exact_snowflakes(self):
+        channel_id = 1451539155774343168
+        guild_id = 1404587685645123665
+        channel = SimpleNamespace(id=channel_id, history=lambda: None)
+        raw_message = {"id": "1451539155774343999", "channel_id": str(channel_id)}
+        http = SimpleNamespace(
+            request=AsyncMock(
+                return_value={
+                    "total_results": 1,
+                    "messages": [[raw_message]],
+                }
+            )
+        )
+        message = SimpleNamespace(id=int(raw_message["id"]))
+        state = SimpleNamespace(http=http, create_message=MagicMock(return_value=message))
+        guild = SimpleNamespace(id=guild_id, _state=state, channels=[channel], threads=[])
+        self.cog.bot.intents = SimpleNamespace(message_content=True)
+
+        with (
+            patch.object(self.cog, "_validate_channel_tool_access", return_value=(None, {})),
+            patch.object(
+                self.cog,
+                "_serialize_message_for_tool",
+                new=AsyncMock(return_value={"id": raw_message["id"]}),
+            ),
+        ):
+            result = await self.cog._tool_search_message(
+                {"query": "Nicko", "author_id": "849221915856207895"},
+                {"guild": guild, "user": SimpleNamespace(id=42)},
+            )
+
+        http.request.assert_awaited_once()
+        request_call = http.request.await_args
+        self.assertEqual(request_call.args[0].path, "/guilds/{guild_id}/messages/search")
+        self.assertIn(("channel_id", str(channel_id)), request_call.kwargs["params"])
+        self.assertIn(("author_id", "849221915856207895"), request_call.kwargs["params"])
+        self.assertIn(("content", "Nicko"), request_call.kwargs["params"])
+        state.create_message.assert_called_once_with(channel=channel, data=raw_message)
+        self.assertEqual(result["messages"], [{"id": raw_message["id"]}])
+        self.assertEqual(result["total_results"], 1)
+
+    async def test_search_message_reports_discord_index_not_ready(self):
+        channel = SimpleNamespace(id=1451539155774343168, history=lambda: None)
+        http = SimpleNamespace(
+            request=AsyncMock(
+                return_value={
+                    "code": 110000,
+                    "message": "Index not yet available. Try again later",
+                    "documents_indexed": 12,
+                    "retry_after": 2,
+                }
+            )
+        )
+        guild = SimpleNamespace(
+            id=1404587685645123665,
+            _state=SimpleNamespace(http=http),
+            channels=[channel],
+            threads=[],
+        )
+        self.cog.bot.intents = SimpleNamespace(message_content=True)
+
+        with patch.object(self.cog, "_validate_channel_tool_access", return_value=(None, {})):
+            result = await self.cog._tool_search_message({}, {"guild": guild, "user": SimpleNamespace(id=42)})
+
+        self.assertEqual(result["retry_after"], 2)
+        self.assertEqual(result["documents_indexed"], 12)
+        self.assertIn("Index not yet available", result["error"])
+
     def test_activity_json_array_is_not_treated_as_tool_calls(self):
         message = SimpleNamespace(
             content=(

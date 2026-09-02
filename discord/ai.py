@@ -13,6 +13,7 @@ from globalenv import (
     set_user_data,
 )
 import discord
+from discord.http import Route
 from discord.ext import commands
 from discord import app_commands
 import aiohttp
@@ -4897,16 +4898,39 @@ class AICommands(commands.Cog):
                 "type": "function",
                 "function": {
                     "name": "search_message",
-                    "description": "Search visible messages in the current channel or another visible channel in the current guild by keyword. This respects both the current user's and the bot's channel permissions.",
+                    "description": (
+                        "Use Discord's indexed guild message search across every channel visible to both the requester and bot, "
+                        "or restrict it to one visible channel. Requires a guild, Read Message History, and the Message Content intent."
+                    ),
                     "parameters": {
                         "type": "object",
                         "properties": {
-                            "query": {"type": "string"},
+                            "query": {"type": "string", "description": "Message content to search for (maximum 1024 characters)."},
                             "channel_id": {"type": "string", "description": "Discord channel ID as an exact decimal string."},
-                            "limit": {"type": "integer"},
+                            "author_id": {"type": "string", "description": "Only messages from this exact decimal Discord user ID."},
+                            "author_type": {"type": "array", "items": {"type": "string", "enum": ["user", "bot", "webhook", "-user", "-bot", "-webhook"]}},
+                            "mentions_user_id": {"type": "string", "description": "Only messages mentioning this exact decimal Discord user ID."},
+                            "mentions_role_id": {"type": "string", "description": "Only messages mentioning this exact decimal Discord role ID."},
+                            "mention_everyone": {"type": "boolean"},
+                            "replied_to_user_id": {"type": "string", "description": "Only messages replying to this exact decimal Discord user ID."},
+                            "replied_to_message_id": {"type": "string", "description": "Only messages replying to this exact decimal Discord message ID."},
+                            "before_message_id": {"type": "string", "description": "Only messages before this exact decimal Discord message ID."},
+                            "after_message_id": {"type": "string", "description": "Only messages after this exact decimal Discord message ID."},
+                            "limit": {"type": "integer", "description": "Maximum matching messages to return (default 10, maximum 25)."},
+                            "offset": {"type": "integer", "description": "Pagination offset (default 0, maximum 9975)."},
+                            "slop": {"type": "integer", "description": "Maximum words allowed between query tokens (default 2, maximum 100)."},
+                            "sort_by": {"type": "string", "enum": ["timestamp", "relevance"]},
+                            "sort_order": {"type": "string", "enum": ["asc", "desc"]},
+                            "pinned": {"type": "boolean"},
+                            "has": {"type": "array", "items": {"type": "string", "enum": ["image", "sound", "video", "file", "sticker", "embed", "link", "poll", "snapshot", "-image", "-sound", "-video", "-file", "-sticker", "-embed", "-link", "-poll", "-snapshot"]}},
+                            "embed_type": {"type": "array", "items": {"type": "string", "enum": ["image", "video", "gif", "sound", "article"]}},
+                            "embed_provider": {"type": "string", "description": "Case-sensitive embed provider, for example Tenor."},
+                            "link_hostname": {"type": "string", "description": "Link hostname without a scheme, for example discord.com."},
+                            "attachment_filename": {"type": "string"},
+                            "attachment_extension": {"type": "string", "description": "Attachment extension without a leading dot, for example txt."},
+                            "include_nsfw": {"type": "boolean", "description": "Include age-restricted channels that are otherwise visible and searchable."},
                             "truncate": {"type": "boolean", "description": "Whether to truncate long message content (default: true)"},
                         },
-                        "required": ["query"],
                     },
                 },
             },
@@ -7653,24 +7677,73 @@ class AICommands(commands.Cog):
 
     async def _tool_search_message(self, args: dict, tool_context: dict) -> dict:
         query = re.sub(r"\s+", " ", str(args.get("query", "") or "")).strip()
-        if not query:
-            return {"error": "query is required"}
+        if len(query) > 1024:
+            return {"error": "query exceeds Discord's 1024-character search limit"}
 
-        channel, error = self._resolve_tool_channel(
-            args.get("channel_id"),
-            tool_context,
-            require_messageable=True,
-        )
-        if error:
-            return {"error": error}
+        guild = (tool_context or {}).get("guild")
+        if guild is None:
+            return {"error": "Discord indexed message search is only available in a guild."}
+        if not getattr(getattr(self.bot, "intents", None), "message_content", False):
+            return {"error": "Discord indexed message search requires the Message Content intent."}
 
-        error, access = self._validate_channel_tool_access(
-            channel,
-            tool_context,
-            require_history=True,
-        )
-        if error:
-            return {"error": error}
+        requested_channel_id = args.get("channel_id")
+        searchable_channels = []
+        if requested_channel_id not in (None, "", 0, "0"):
+            channel, error = self._resolve_tool_channel(
+                requested_channel_id,
+                tool_context,
+                require_messageable=True,
+            )
+            if error:
+                return {"error": error}
+            error, _access = self._validate_channel_tool_access(
+                channel,
+                tool_context,
+                require_history=True,
+            )
+            if error:
+                return {"error": error}
+            searchable_channels.append(channel)
+        else:
+            candidates = list(getattr(guild, "channels", []) or [])
+            candidates.extend(list(getattr(guild, "threads", []) or []))
+            seen_channel_ids = set()
+            for channel in candidates:
+                channel_id = getattr(channel, "id", None)
+                if channel_id is None or channel_id in seen_channel_ids:
+                    continue
+                seen_channel_ids.add(channel_id)
+                if not callable(getattr(channel, "history", None)):
+                    continue
+                error, access = self._validate_channel_tool_access(
+                    channel,
+                    tool_context,
+                    require_history=True,
+                )
+                if error:
+                    continue
+                if isinstance(channel, discord.Thread):
+                    requester = access.get("requester")
+                    bot_member = access.get("bot_member")
+                    if not self._private_thread_visible_to_member(
+                        channel, requester, access.get("requester_permissions")
+                    ):
+                        continue
+                    if not self._private_thread_visible_to_member(
+                        channel, bot_member, access.get("bot_permissions")
+                    ):
+                        continue
+                searchable_channels.append(channel)
+
+        if not searchable_channels:
+            return {"error": "No channels are searchable by both the current user and the bot."}
+        if len(searchable_channels) > 500:
+            return {
+                "error": (
+                    "More than 500 channels are searchable, exceeding Discord's guild-search filter limit. "
+                    "Specify channel_id to narrow the search."
+                )
+            }
 
         limit = self._coerce_int(
             args.get("limit"),
@@ -7678,33 +7751,118 @@ class AICommands(commands.Cog):
             minimum=1,
             maximum=self.MESSAGE_SEARCH_MAX_LIMIT,
         )
+        offset = self._coerce_int(args.get("offset"), 0, minimum=0, maximum=9975)
+        slop = self._coerce_int(args.get("slop"), 2, minimum=0, maximum=100)
         truncate = self._coerce_bool(args.get("truncate"), True)
-        guild = getattr(channel, "guild", None) or (tool_context or {}).get("guild")
-        lowered_query = query.lower()
-        scanned = 0
-        matches = []
+        params = [
+            ("limit", limit),
+            ("offset", offset),
+            ("slop", slop),
+            *(("channel_id", str(channel.id)) for channel in searchable_channels),
+        ]
+        if query:
+            params.append(("content", query))
 
+        snowflake_filters = {
+            "author_id": "author_id",
+            "mentions_user_id": "mentions",
+            "mentions_role_id": "mentions_role_id",
+            "replied_to_user_id": "replied_to_user_id",
+            "replied_to_message_id": "replied_to_message_id",
+            "before_message_id": "max_id",
+            "after_message_id": "min_id",
+        }
+        for argument_name, api_name in snowflake_filters.items():
+            value = args.get(argument_name)
+            if value in (None, ""):
+                continue
+            parsed, parse_error = self._parse_snowflake(value, argument_name)
+            if parse_error:
+                return {"error": parse_error}
+            params.append((api_name, str(parsed)))
+
+        for argument_name in ("sort_by", "sort_order"):
+            value = str(args.get(argument_name) or "").strip().lower()
+            if value:
+                params.append((argument_name, value))
+        if "pinned" in args:
+            params.append(("pinned", str(self._coerce_bool(args.get("pinned"))).lower()))
+        if "mention_everyone" in args:
+            params.append(("mention_everyone", str(self._coerce_bool(args.get("mention_everyone"))).lower()))
+        if "include_nsfw" in args:
+            params.append(("include_nsfw", str(self._coerce_bool(args.get("include_nsfw"))).lower()))
+        for argument_name in ("author_type", "has", "embed_type"):
+            for raw_value in args.get(argument_name) or []:
+                value = str(raw_value or "").strip().lower()
+                if value:
+                    params.append((argument_name, value))
+        text_filter_limits = {
+            "embed_provider": 256,
+            "link_hostname": 256,
+            "attachment_filename": 1024,
+            "attachment_extension": 256,
+        }
+        for argument_name, max_length in text_filter_limits.items():
+            value = str(args.get(argument_name) or "").strip()
+            if not value:
+                continue
+            if len(value) > max_length:
+                return {"error": f"{argument_name} exceeds Discord's {max_length}-character limit"}
+            params.append((argument_name, value))
+
+        state = getattr(guild, "_state", None)
+        http = getattr(state, "http", None)
+        if http is None:
+            return {"error": "Discord HTTP client is unavailable for guild message search."}
         try:
-            async for message in channel.history(limit=500):
-                scanned += 1
-                haystacks = [str(message.content or "")]
-                haystacks.extend(str(embed.title or "") for embed in getattr(message, "embeds", []) if getattr(embed, "title", None))
-                haystacks.extend(str(embed.description or "") for embed in getattr(message, "embeds", []) if getattr(embed, "description", None))
-                combined = "\n".join(part for part in haystacks if part)
-                if lowered_query not in combined.lower():
-                    continue
-                matches.append(await self._serialize_message_for_tool(message, guild, truncate=truncate))
-                if len(matches) >= limit:
-                    break
+            payload = await http.request(
+                Route("GET", "/guilds/{guild_id}/messages/search", guild_id=guild.id),
+                params=params,
+            )
         except (discord.Forbidden, discord.HTTPException) as exc:
-            return {"error": f"failed to search channel history: {exc}"}
+            return {"error": f"Discord guild message search failed: {exc}"}
 
-        matches.reverse()
+        if isinstance(payload, dict) and payload.get("code") == 110000:
+            return {
+                "error": str(payload.get("message") or "Discord's guild message index is not ready."),
+                "retry_after": payload.get("retry_after"),
+                "documents_indexed": payload.get("documents_indexed"),
+            }
+
+        raw_groups = payload.get("messages", []) if isinstance(payload, dict) else []
+        raw_messages = []
+        for group in raw_groups:
+            entries = group if isinstance(group, list) else [group]
+            raw_messages.extend(entry for entry in entries if isinstance(entry, dict))
+
+        channel_by_id = {int(channel.id): channel for channel in searchable_channels}
+        matches = []
+        seen_message_ids = set()
+        for raw_message in raw_messages:
+            try:
+                raw_message_id = int(raw_message.get("id"))
+                raw_channel_id = int(raw_message.get("channel_id"))
+            except (TypeError, ValueError):
+                continue
+            if raw_message_id in seen_message_ids:
+                continue
+            channel = channel_by_id.get(raw_channel_id)
+            if channel is None:
+                continue
+            seen_message_ids.add(raw_message_id)
+            message = state.create_message(channel=channel, data=raw_message)
+            matches.append(await self._serialize_message_for_tool(message, guild, truncate=truncate))
+
         return {
-            "channel": self._serialize_channel_for_tool(channel, access),
-            "query": query,
+            "scope": (
+                self._serialize_channel_for_tool(searchable_channels[0])
+                if requested_channel_id not in (None, "", 0, "0")
+                else {"guild_id": self._snowflake_string(guild.id), "searchable_channel_count": len(searchable_channels)}
+            ),
+            "query": query or None,
             "returned_count": len(matches),
-            "scanned_count": scanned,
+            "total_results": payload.get("total_results") if isinstance(payload, dict) else None,
+            "offset": offset,
             "messages": matches,
         }
 
