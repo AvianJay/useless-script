@@ -5,22 +5,26 @@
         "browser_confirming": "執行中…",
         "browser_reject": "拒絕",
         "cancel": "取消",
-        "confirm_clear": "確認清除"
+        "confirm_clear": "確認清除",
+        "confirm_delete_memory": "確認刪除"
     },
     "embed": {
         "browser_approval_header": "**AI 想要操作瀏覽器**",
         "cancelled_header": "## ❌ 已取消",
         "clear_history_header": "## 🗑️ 清除對話歷史",
+        "delete_memory_header": "## 🗑️ 刪除個人 AI 記憶",
         "error_header": "## ❌ 發生錯誤",
         "history_cleared_header": "## ✅ 對話歷史已清除",
         "history_header": {
             "other": "## 📜 對話歷史\n*共 {count} 條訊息*"
         },
         "history_header_empty": "## 📜 對話歷史",
+        "memory_deleted_header": "## ✅ 個人記憶已刪除",
         "security_header": "## ⚠️ 安全提醒"
     },
     "err": {
         "attachment_not_image": "附件必須是圖片格式（JPG、PNG、GIF、WebP 等）。",
+        "auto_summary_text_usage": "❌ 用法：`y!ai-auto-summary [on|off]`",
         "browser_confirmation_invalid": "瀏覽器操作確認無效、已過期、已使用，或不是由目前使用者與頻道提出。請重新提出操作。",
         "browser_confirmation_cancelled": "瀏覽器操作確認已取消。",
         "browser_confirmation_timeout": "等待瀏覽器操作確認逾時。",
@@ -39,6 +43,7 @@
         "insufficient_balance_text": "❌ 全域幣不足，無法送出請求。\n本次輸入費用：{input_cost} {currency}（{model} @ {rate}/字）\n目前餘額：{balance} {currency}{payer_note}",
         "invalid_model": "❌ 無效的模型名稱。",
         "model_prefix_needs_message": "❌ 模型名稱後面要接訊息內容，例如：`!ai openai-fast 你今天好嗎`",
+        "memory_not_found": "找不到這筆個人 AI 記憶；它可能已經被刪除。",
         "no_permission_billing_clear": "❌ 你需要管理伺服器或管理員權限才能清除 AI 付款人設定。",
         "no_permission_billing_modify": "❌ 你需要管理伺服器或管理員權限才能修改 AI 付款人。",
         "no_permission_billing_set": "❌ 你需要管理伺服器或管理員權限才能設定 AI 付款人。",
@@ -47,6 +52,7 @@
         "no_permission_prompt_modify": "❌ 你需要管理伺服器或管理員權限才能修改 AI 自訂 prompt。",
         "no_permission_prompt_set": "❌ 你需要管理伺服器或管理員權限才能設定 AI 自訂 prompt。",
         "not_your_conversation": "這不是你的對話！",
+        "not_your_memory": "這不是你的個人記憶操作。",
         "prompt_empty": "❌ 自訂 prompt 不能是空的。",
         "rate_limited": "你發送請求太頻繁了！請等待一分鐘後再試。",
         "rate_limited_text": "⏳ 你發送請求太頻繁了！請等待一分鐘後再試。",
@@ -56,6 +62,9 @@
     },
     "msg": {
         "attachment_note": "{note}\n\n附件：{filename}",
+        "auto_summary_disabled": "✅ 已關閉這個場景的自動提煉；目前排程已取消，既有對話與記憶不變。",
+        "auto_summary_enabled": "✅ 已開啟自動提煉。成功 AI 回覆後閒置 {minutes} 分鐘，系統會固定收取 {cost} {currency}，使用你的預設文字模型提煉最多 3 筆個人記憶，完成後清除該場景的舊對話。\n付款規則：{payer_rule}\n{schedule_detail}",
+        "auto_summary_status": "自動提煉場景：{scene}\n目前狀態：{status}\n上次處理：{last_result}",
         "billing_no_payer": "目前這個伺服器的 AI 沒有指定付款人，預設是各自付款。",
         "browser_approval_default_reason": "AI 想在 {destination} 執行一個瀏覽器互動操作。",
         "billing_payer": "目前這個伺服器的 AI 由 {payer_name}（ID: {payer_id}）付款。",
@@ -69,6 +78,7 @@
         "custom_prompt_display_as_file": "目前的 AI 自訂 prompt（{length}/{limit} 字），內容已附加為文字檔。",
         "custom_prompt_updated": "✅ 已更新這個伺服器的 AI 自訂 prompt（{length}/{limit} 字）。",
         "default_model_set": "✅ 已設定預設模型為：{model}",
+        "delete_memory_confirm": "確定要刪除這筆個人記憶嗎？\nID：`{memory_id}`\n標題：{title}\n內容預覽：{preview}",
         "error_footer": "-# 請稍後再試或直接 `/feedback` 反饋問題",
         "history_cleared_body": "你可以開始新的對話了！",
         "history_cleared_new_chat": "✅ 對話歷史已清除！你可以開始新的對話。",
@@ -81,7 +91,12 @@
             "other": "[省略 {count} 個圖片，避免超過 Discord 元件上限]"
         },
         "mention_mode_updated": "✅ 已{status}本伺服器的 AI 提及模式。{detail}",
+        "memory_delete_cancelled": "個人記憶保持不變。",
+        "memory_deleted": "已刪除個人記憶 `{memory_id}`。",
         "no_custom_prompt_set": "目前這個伺服器還沒有設定 AI 自訂 prompt。",
+        "personal_memory_display": "共 {count} 筆個人 AI 記憶：\n\n{content}",
+        "personal_memory_display_as_file": "共 {count} 筆個人 AI 記憶；完整內容已附加為 `ai_memory.txt`。",
+        "personal_memory_empty": "找不到符合條件的個人 AI 記憶。",
         "response_converted_to_file": "AI 回覆長度為 {length} 字，已改為文字附件傳送。",
         "response_view_updated": "已設定回應顯示方式：\n• 容器：{container_status}\n• 計費資訊：{cost_status}\n• 模型資訊：{model_status}",
         "security_footer": "-# 請以正常方式與 AI 互動",
@@ -137,7 +152,20 @@
         "browser_waiting_for_ai_after_error": "瀏覽器操作發生問題，正在等待 AI 繼續處理…",
         "browser_waiting_for_ai_after_rejection": "已拒絕瀏覽器操作，正在等待 AI 繼續回覆…",
         "browser_action_script_truncated": "_(顯示用已截短，完整程式碼在附件中)_",
+        "auto_summary_designated_payer": "由伺服器指定付款人 {payer_name}（ID: {payer_id}）支付",
+        "auto_summary_existing_history_scheduled": "目前已有完整對話，將從現在重新計算 30 分鐘。",
+        "auto_summary_never_run": "尚未處理過",
+        "auto_summary_requester_pays": "本伺服器未指定付款人，由你自己支付",
+        "auto_summary_result_failed_refunded": "{time} 模型或格式處理失敗，已全額退款並保留對話",
+        "auto_summary_result_insufficient": "{time} 餘額不足，未呼叫模型且保留對話",
+        "auto_summary_result_no_memory": "{time} 檢閱完成，沒有新增筆記，舊對話已清除",
+        "auto_summary_result_saved": "{time} 已提煉 {count} 筆個人記憶並清除舊對話",
+        "auto_summary_result_stale_refunded": "{time} 處理期間內容有更新，已全額退款並保留對話",
+        "auto_summary_result_unknown": "{time} 狀態未知",
+        "auto_summary_self_pays": "私訊由你自己支付",
+        "auto_summary_waiting_for_history": "目前還沒有完整成功問答；第一次成功回覆後才開始計時，不會立即扣款。",
         "describe_image_default_prompt": "請描述這張圖片",
+        "direct_messages": "私訊",
         "guild_payer_note": "\n本伺服器 AI 目前由 {payer_name} 付款。",
         "image_ready_caption": "生好了，圖在下面。",
         "mention_mode_detail_off": "提及 Bot 或回覆 AI 訊息不會再自動觸發 AI。",
@@ -152,6 +180,7 @@
         "toggle_off": "❌ 不使用",
         "toggle_on": "✅ 使用",
         "toggle_shown": "✅ 顯示",
+        "untitled_memory": "未命名記憶",
         "unknown_time": "未知時間"
     }
 }

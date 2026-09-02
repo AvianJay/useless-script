@@ -16,6 +16,42 @@
                 "new_conversation": "新規会話"
             }
         },
+        "ai_memory": {
+            "auto_summary": {
+                "desc": "30 分間操作がない後の個人メモ抽出を設定します",
+                "name": "自動要約",
+                "param": {
+                    "enabled": "30 分間操作がない後の抽出を有効または無効にします"
+                },
+                "param_name": {
+                    "enabled": "有効"
+                }
+            },
+            "delete": {
+                "desc": "自分の個人 AI メモを 1 件削除します",
+                "name": "削除",
+                "param": {
+                    "memory_id": "削除する個人メモの正確な ID"
+                },
+                "param_name": {
+                    "memory_id": "メモid"
+                }
+            },
+            "root": {
+                "desc": "自分の個人 AI メモを管理します",
+                "name": "aiメモ"
+            },
+            "view": {
+                "desc": "自分の個人 AI メモを表示または検索します",
+                "name": "表示",
+                "param": {
+                    "query": "キーワードで個人メモを検索します"
+                },
+                "param_name": {
+                    "query": "検索"
+                }
+            }
+        },
         "ai_admin": {
             "billing": {
                 "clear": {

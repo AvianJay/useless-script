@@ -5,12 +5,14 @@
         "browser_confirming": "実行中…",
         "browser_reject": "拒否",
         "cancel": "キャンセル",
-        "confirm_clear": "クリアの確認"
+        "confirm_clear": "クリアの確認",
+        "confirm_delete_memory": "削除を確認"
     },
     "embed": {
         "browser_approval_header": "**AI がブラウザーを操作しようとしています**",
         "cancelled_header": "## ❌ キャンセルされました",
         "clear_history_header": "## 🗑️ 会話履歴をクリアする",
+        "delete_memory_header": "## 🗑️ 個人 AI メモを削除",
         "error_header": "## ❌ エラーが発生しました",
         "history_cleared_header": "## ✅ 会話履歴が消去されました",
         "history_header": {
@@ -18,10 +20,12 @@
             "other": "## 📜 会話履歴\n*{count} メッセージ合計*"
         },
         "history_header_empty": "## 📜 会話履歴",
+        "memory_deleted_header": "## ✅ 個人メモを削除しました",
         "security_header": "## ⚠️ セキュリティに関するお知らせ"
     },
     "err": {
         "attachment_not_image": "添付ファイルは画像 (JPG、PNG、GIF、WebP など) である必要があります。",
+        "auto_summary_text_usage": "❌ 使用法: `y!ai-auto-summary [on|off]`",
         "browser_confirmation_invalid": "ブラウザー操作の確認が無効、期限切れ、使用済み、または別のユーザー／チャンネルのものです。操作をもう一度提案してください。",
         "browser_confirmation_cancelled": "ブラウザー操作の確認はキャンセルされました。",
         "browser_confirmation_timeout": "ブラウザー操作の許可待ちがタイムアウトしました。",
@@ -40,6 +44,7 @@
         "insufficient_balance_text": "❌ {currency} が不足しているため、リクエストを送信できません。\n今回の入力コスト: {input_cost} {currency} ({model} @ {rate}/char)\n現在の残高: {balance} {currency}{payer_note}",
         "invalid_model": "❌ モデル名が無効です。",
         "model_prefix_needs_message": "❌ モデル名の後にはメッセージが続く必要があります。 `!ai openai-fast how are you`",
+        "memory_not_found": "その個人 AI メモは見つかりません。すでに削除された可能性があります。",
         "no_permission_billing_clear": "❌ AI 支払者の設定をクリアするには、サーバーの管理または管理者の権限が必要です。",
         "no_permission_billing_modify": "❌ AI 支払者を変更するには、サーバーの管理または管理者の権限が必要です。",
         "no_permission_billing_set": "❌ AI Payer を設定するには、サーバーの管理または管理者の権限が必要です。",
@@ -48,6 +53,7 @@
         "no_permission_prompt_modify": "❌ カスタム AI プロンプトを変更するには、サーバーの管理または管理者の権限が必要です。",
         "no_permission_prompt_set": "❌ カスタム AI プロンプトを設定するには、サーバーの管理または管理者の権限が必要です。",
         "not_your_conversation": "これはあなたの会話ではありません!",
+        "not_your_memory": "この個人メモ操作はあなたのものではありません。",
         "prompt_empty": "❌ カスタム プロンプトを空にすることはできません。",
         "rate_limited": "リクエストの送信が早すぎます。しばらく待ってから、もう一度試してください。",
         "rate_limited_text": "⏳ リクエストの送信が速すぎます。しばらく待ってから、もう一度試してください。",
@@ -57,6 +63,9 @@
     },
     "msg": {
         "attachment_note": "{note}\n\n添付ファイル: {filename}",
+        "auto_summary_disabled": "✅ この場面の自動抽出を無効にしました。保留中の処理はキャンセルされ、既存の会話とメモは変更されません。",
+        "auto_summary_enabled": "✅ 自動抽出を有効にしました。AI の応答成功後に {minutes} 分間操作がないと、固定 {cost} {currency} を請求し、既定のテキストモデルで最大 3 件の個人メモを抽出してから、この場面の古い会話を消去します。\n支払い規則: {payer_rule}\n{schedule_detail}",
+        "auto_summary_status": "自動抽出の場面: {scene}\n現在の状態: {status}\n前回の結果: {last_result}",
         "billing_no_payer": "現在、このサーバーには指定された AI 支払者がいません。デフォルトでは誰もが自分で支払います。",
         "browser_approval_default_reason": "AI が {destination} でブラウザ操作を 1 件実行しようとしています。",
         "billing_payer": "現在、このサーバーでの AI の使用料は {payer_name} (ID: {payer_id}) によって支払われています。",
@@ -70,6 +79,7 @@
         "custom_prompt_display_as_file": "現在のカスタム AI プロンプト ({length}/{limit} 文字)。コンテンツはテキスト ファイルとして添付されます。",
         "custom_prompt_updated": "✅ このサーバーのカスタム AI プロンプト ({length}/{limit} 文字) を更新しました。",
         "default_model_set": "✅ デフォルトのモデルは {model} に設定されています。",
+        "delete_memory_confirm": "この個人メモを削除しますか？\nID: `{memory_id}`\nタイトル: {title}\n内容プレビュー: {preview}",
         "error_footer": "-# 後でもう一度試すか、`/feedback` を使用して問題を報告してください",
         "history_cleared_body": "今すぐ新しい会話を始めることができます。",
         "history_cleared_new_chat": "✅ 会話履歴が消去されました！新しい会話を開始できます。",
@@ -83,7 +93,12 @@
             "other": "[Discord のコンポーネント制限内に収まるように {count} 画像を省略しました]"
         },
         "mention_mode_updated": "✅ {status} このサーバーの AI メンション モード。 {detail}",
+        "memory_delete_cancelled": "個人メモは変更されません。",
+        "memory_deleted": "個人メモ `{memory_id}` を削除しました。",
         "no_custom_prompt_set": "このサーバーにはカスタム AI プロンプトがまだ設定されていません。",
+        "personal_memory_display": "個人 AI メモは {count} 件です:\n\n{content}",
+        "personal_memory_display_as_file": "個人 AI メモは {count} 件です。完全な内容を `ai_memory.txt` として添付しました。",
+        "personal_memory_empty": "条件に一致する個人 AI メモはありません。",
         "response_converted_to_file": "AI 応答は {length} 文字の長さであるため、代わりにテキスト添付ファイルとして送信されました。",
         "response_view_updated": "更新された応答表示設定:\n• コンテナ: {container_status}\n• 請求情報: {cost_status}\n• モデル情報: {model_status}",
         "security_footer": "-# 通常どおり AI と対話してください",
@@ -140,7 +155,20 @@
         "browser_waiting_for_ai_after_error": "ブラウザー操作で問題が発生しました。AI の続行を待っています…",
         "browser_waiting_for_ai_after_rejection": "ブラウザー操作は拒否されました。AI の応答を待っています…",
         "browser_action_script_truncated": "_(表示用に短縮しています。完全なスクリプトは添付ファイルにあります)_",
+        "auto_summary_designated_payer": "サーバー指定の支払者 {payer_name}（ID: {payer_id}）が支払います",
+        "auto_summary_existing_history_scheduled": "完全な会話がすでにあるため、30 分のタイマーを今から再開します。",
+        "auto_summary_never_run": "まだ処理されていません",
+        "auto_summary_requester_pays": "このサーバーには指定支払者がいないため、あなたが支払います",
+        "auto_summary_result_failed_refunded": "{time}: モデルまたは形式の処理に失敗し、全額返金して会話を保持しました",
+        "auto_summary_result_insufficient": "{time}: 残高不足のためモデルを呼び出さず、会話を保持しました",
+        "auto_summary_result_no_memory": "{time}: 新しいメモなしで確認を完了し、古い会話を消去しました",
+        "auto_summary_result_saved": "{time}: 個人メモを {count} 件抽出し、古い会話を消去しました",
+        "auto_summary_result_stale_refunded": "{time}: 処理中に内容が更新されたため、全額返金して会話を保持しました",
+        "auto_summary_result_unknown": "{time}: 不明な状態",
+        "auto_summary_self_pays": "ダイレクトメッセージではあなたが支払います",
+        "auto_summary_waiting_for_history": "完全な成功会話がまだありません。最初の応答成功後にタイマーが始まり、今すぐ請求されることはありません。",
         "describe_image_default_prompt": "この画像について説明してください",
+        "direct_messages": "ダイレクトメッセージ",
         "guild_payer_note": "\nこのサーバーでの AI の使用料は、現在 {payer_name} によって支払われています。",
         "image_ready_caption": "完成しました、下の画像です。",
         "mention_mode_detail_off": "ボットについて言及したり、AI メッセージに返信したりしても、AI が自動的にトリガーされなくなります。",
@@ -155,6 +183,7 @@
         "toggle_off": "❌ オフ",
         "toggle_on": "✅ オン",
         "toggle_shown": "✅表示",
+        "untitled_memory": "無題のメモ",
         "unknown_time": "不明な時間"
     }
 }

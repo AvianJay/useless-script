@@ -16,6 +16,42 @@
                 "new_conversation": "new_conversation"
             }
         },
+        "ai_memory": {
+            "auto_summary": {
+                "desc": "Configure personal memory extraction after 30 idle minutes",
+                "name": "auto-summary",
+                "param": {
+                    "enabled": "Enable or disable extraction after 30 idle minutes"
+                },
+                "param_name": {
+                    "enabled": "enabled"
+                }
+            },
+            "delete": {
+                "desc": "Delete one of your personal AI memories",
+                "name": "delete",
+                "param": {
+                    "memory_id": "Exact personal memory ID to delete"
+                },
+                "param_name": {
+                    "memory_id": "memory_id"
+                }
+            },
+            "root": {
+                "desc": "Manage your personal AI memory",
+                "name": "ai-memory"
+            },
+            "view": {
+                "desc": "View or search your personal AI memory",
+                "name": "view",
+                "param": {
+                    "query": "Search your personal memory by keyword"
+                },
+                "param_name": {
+                    "query": "query"
+                }
+            }
+        },
         "ai_admin": {
             "billing": {
                 "clear": {
