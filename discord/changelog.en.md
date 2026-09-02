@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.24.8
+* Updated AI message search
+  * AI now uses Discord's indexed guild message search across channels and threads where both the user and Bot can read message history, instead of scanning a limited amount of channel history. Searches can also be restricted to one visible channel.
+  * Searches support filters for keywords, author types, mentioned users or roles, reply targets, messages before or after another message, pinned state, attachment/embed/link types, filenames, sorting, and pagination, returning up to 25 results per request.
+  * Search remains guild-only and continues to enforce the user and Bot's channel permissions and private-thread visibility. If Discord has not finished indexing the guild, the index progress and suggested retry delay are returned.
+* Updated AI Discord data tools
+  * User, channel, role, and message IDs are now always passed and returned as exact decimal strings, preventing large Discord snowflakes from losing precision during JSON number handling and causing read, search, or user-data operations to target the wrong item.
+* Fixed some bugs.
+
+## 0.24.7
+* Updated PetPet
+  * Fixed `/petpet` and its context-menu command being unavailable in DMs or other non-guild channels.
+* Fixed some bugs.
+
 ## 0.24.6
 * Updated safe AI browser tools
   * Browser interactions now require approval only once per job. The first action pauses the AI and shows a localized Discord confirmation card containing the reason and actual action, allowing the user to approve or reject it. The card is single-use and restricted to the original user in the same channel; rejecting it or letting it expire prevents later interactions in that job.
