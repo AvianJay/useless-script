@@ -38,6 +38,27 @@ class AIToolCallParsingTests(unittest.IsolatedAsyncioTestCase):
             ],
         )
 
+    def test_discord_snowflake_tool_parameters_are_decimal_strings(self):
+        tools = {tool["function"]["name"]: tool["function"] for tool in self.cog._build_ai_tools()}
+
+        search_properties = tools["search_message"]["parameters"]["properties"]
+        read_properties = tools["read_message"]["parameters"]["properties"]
+        user_properties = tools["get_user"]["parameters"]["properties"]
+
+        self.assertEqual(search_properties["channel_id"]["type"], "string")
+        self.assertEqual(read_properties["channel_id"]["type"], "string")
+        self.assertEqual(read_properties["message_id"]["type"], "string")
+        self.assertEqual(user_properties["user_id"]["type"], "string")
+
+    def test_snowflake_parser_preserves_decimal_string_and_rejects_float(self):
+        snowflake = "1451539155774343168"
+
+        self.assertEqual(self.cog._parse_snowflake(snowflake, "channel_id"), (int(snowflake), None))
+        parsed, error = self.cog._parse_snowflake(1.4515391557743432e18, "channel_id")
+
+        self.assertIsNone(parsed)
+        self.assertEqual(error, "channel_id must be a decimal string")
+
     def test_activity_json_array_is_not_treated_as_tool_calls(self):
         message = SimpleNamespace(
             content=(

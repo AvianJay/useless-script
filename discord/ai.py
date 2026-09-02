@@ -2101,6 +2101,26 @@ class AICommands(commands.Cog):
         return parsed
 
     @staticmethod
+    def _snowflake_string(value) -> str | None:
+        """Serialize a Discord snowflake without exposing it as a JSON number."""
+        if value is None:
+            return None
+        return str(value)
+
+    @staticmethod
+    def _parse_snowflake(value, field_name: str) -> tuple[int | None, str | None]:
+        """Parse an exact decimal snowflake and reject lossy JSON floats."""
+        if isinstance(value, bool) or isinstance(value, float):
+            return None, f"{field_name} must be a decimal string"
+        raw = str(value or "").strip()
+        if not raw.isdecimal():
+            return None, f"{field_name} must be a decimal string"
+        parsed = int(raw)
+        if parsed <= 0:
+            return None, f"{field_name} must be a positive decimal string"
+        return parsed, None
+
+    @staticmethod
     def _safe_parse_tool_arguments(arguments) -> dict:
         if isinstance(arguments, dict):
             return arguments
@@ -2806,13 +2826,13 @@ class AICommands(commands.Cog):
         try:
             user_id = int(user_id)
         except (TypeError, ValueError):
-            return {"id": user_id, "display_name": str(user_id)}
+            return {"id": str(user_id), "display_name": str(user_id)}
 
         if guild:
             member = guild.get_member(user_id)
             if member:
                 return {
-                    "id": member.id,
+                    "id": str(member.id),
                     "name": member.name,
                     "display_name": member.display_name,
                 }
@@ -2825,11 +2845,11 @@ class AICommands(commands.Cog):
                 user = None
         if user:
             return {
-                "id": user.id,
+                "id": str(user.id),
                 "name": user.name,
                 "display_name": getattr(user, "display_name", user.name),
             }
-        return {"id": user_id, "display_name": f"user_{user_id}"}
+        return {"id": str(user_id), "display_name": f"user_{user_id}"}
 
     @staticmethod
     def _format_channel_ref(guild: discord.Guild | None, channel_id) -> str | None:
@@ -2891,10 +2911,9 @@ class AICommands(commands.Cog):
         if channel_id in (None, "", 0, "0"):
             channel = current_channel
         else:
-            try:
-                resolved_channel_id = int(channel_id)
-            except (TypeError, ValueError):
-                return None, "channel_id must be an integer"
+            resolved_channel_id, parse_error = self._parse_snowflake(channel_id, "channel_id")
+            if parse_error:
+                return None, parse_error
 
             channel = None
             if guild is None:
@@ -3293,11 +3312,11 @@ class AICommands(commands.Cog):
 
     def _serialize_channel_for_tool(self, channel, access: dict | None = None) -> dict:
         payload = {
-            "id": getattr(channel, "id", None),
+            "id": self._snowflake_string(getattr(channel, "id", None)),
             "name": getattr(channel, "name", None),
             "mention": getattr(channel, "mention", None),
             "type": str(getattr(channel, "type", None) or "unknown"),
-            "guild_id": getattr(getattr(channel, "guild", None), "id", None),
+            "guild_id": self._snowflake_string(getattr(getattr(channel, "guild", None), "id", None)),
         }
 
         topic = getattr(channel, "topic", None)
@@ -3307,14 +3326,14 @@ class AICommands(commands.Cog):
         parent = getattr(channel, "parent", None)
         if parent is not None:
             payload["parent"] = {
-                "id": getattr(parent, "id", None),
+                "id": self._snowflake_string(getattr(parent, "id", None)),
                 "name": getattr(parent, "name", None),
             }
 
         category = getattr(channel, "category", None)
         if category is not None:
             payload["category"] = {
-                "id": getattr(category, "id", None),
+                "id": self._snowflake_string(getattr(category, "id", None)),
                 "name": getattr(category, "name", None),
             }
 
@@ -3391,7 +3410,7 @@ class AICommands(commands.Cog):
             if snapshot_content:
                 snapshot_content = await MentionResolver.resolve_mentions(snapshot_content, guild, self.bot)
             forwarded_preview = {
-                "message_id": getattr(snapshot, "id", None),
+                "message_id": self._snowflake_string(getattr(snapshot, "id", None)),
                 "author": await self._resolve_user_display(getattr(snapshot_author, "id", None), guild) if snapshot_author else None,
                 "content_preview": self._truncate_tool_text(snapshot_content or "[圖片/附件]", max_len=240),
                 "channel_id": None,  # snapshot 沒有頻道資訊
@@ -3428,16 +3447,16 @@ class AICommands(commands.Cog):
                         if reference_content:
                             reference_content = await MentionResolver.resolve_mentions(reference_content, guild, self.bot)
                         forwarded_preview = {
-                            "message_id": getattr(resolved_reference, "id", None),
+                            "message_id": self._snowflake_string(getattr(resolved_reference, "id", None)),
                             "author": await self._resolve_user_display(getattr(getattr(resolved_reference, "author", None), "id", None), guild),
                             "content_preview": self._truncate_tool_text(reference_content or "[圖片/附件]", max_len=240),
-                            "channel_id": getattr(getattr(resolved_reference, "channel", None), "id", None),
+                            "channel_id": self._snowflake_string(getattr(getattr(resolved_reference, "channel", None), "id", None)),
                             "created_at": self._serialize_datetime(getattr(resolved_reference, "created_at", None)),
                         }
                     else:
                         # 轉發的訊息已被刪除
                         forwarded_preview = {
-                            "message_id": getattr(resolved_reference, "id", None),
+                            "message_id": self._snowflake_string(getattr(resolved_reference, "id", None)),
                             "author": None,
                             "content_preview": "[轉發的訊息已被刪除]",
                             "deleted": True,
@@ -3449,7 +3468,7 @@ class AICommands(commands.Cog):
                         if reference_content:
                             reference_content = await MentionResolver.resolve_mentions(reference_content, guild, self.bot)
                         reference_preview = {
-                            "message_id": getattr(resolved_reference, "id", None),
+                            "message_id": self._snowflake_string(getattr(resolved_reference, "id", None)),
                             "author": await self._resolve_user_display(getattr(getattr(resolved_reference, "author", None), "id", None), guild),
                             "content_preview": self._truncate_tool_text(reference_content or "[圖片/附件]", max_len=120),
                             "emoji_sticker_context": self._build_message_visual_metadata(resolved_reference),
@@ -3457,7 +3476,7 @@ class AICommands(commands.Cog):
                     else:
                         # 回覆的訊息已被刪除
                         reference_preview = {
-                            "message_id": getattr(resolved_reference, "id", None),
+                            "message_id": self._snowflake_string(getattr(resolved_reference, "id", None)),
                             "author": None,
                             "content_preview": "[回覆的訊息已被刪除]",
                             "deleted": True,
@@ -3488,8 +3507,8 @@ class AICommands(commands.Cog):
         component_text = self._extract_component_text(getattr(message, "components", None))
 
         result = {
-            "id": message.id,
-            "channel_id": getattr(getattr(message, "channel", None), "id", None),
+            "id": self._snowflake_string(message.id),
+            "channel_id": self._snowflake_string(getattr(getattr(message, "channel", None), "id", None)),
             "author": await self._resolve_user_display(getattr(getattr(message, "author", None), "id", None), guild),
             "content": content or None,
             "formatted": formatted,
@@ -3518,10 +3537,9 @@ class AICommands(commands.Cog):
         bot_user = getattr(self.bot, "user", None)
         bot_user_id = getattr(bot_user, "id", None)
 
-        try:
-            resolved_user_id = int(user_id)
-        except (TypeError, ValueError):
-            return None, "user_id must be an integer"
+        resolved_user_id, parse_error = self._parse_snowflake(user_id, "user_id")
+        if parse_error:
+            return None, parse_error
 
         if guild is None:
             allowed_ids = {getattr(current_user, "id", None), bot_user_id}
@@ -4560,7 +4578,7 @@ class AICommands(commands.Cog):
                                 "items": {"type": "string"},
                             },
                             "subject": {"type": "string"},
-                            "subject_user_id": {"type": "integer"},
+                            "subject_user_id": {"type": "string", "description": "Discord user ID as an exact decimal string."},
                         },
                         "required": ["content"],
                     },
@@ -4849,9 +4867,9 @@ class AICommands(commands.Cog):
                     "parameters": {
                         "type": "object",
                         "properties": {
-                            "channel_id": {"type": "integer"},
+                            "channel_id": {"type": "string", "description": "Discord channel ID as an exact decimal string."},
                             "limit": {"type": "integer"},
-                            "around_message_id": {"type": "integer", "description": "Read messages around this message id instead of only the latest history."},
+                            "around_message_id": {"type": "string", "description": "Discord message ID as an exact decimal string. Read messages around it instead of only the latest history."},
                             "before": {"type": "integer", "description": "How many messages before the target message to include when around_message_id is set."},
                             "after": {"type": "integer", "description": "How many messages after the target message to include when around_message_id is set."},
                             "truncate": {"type": "boolean", "description": "Whether to truncate long message content (default: true)"},
@@ -4867,8 +4885,8 @@ class AICommands(commands.Cog):
                     "parameters": {
                         "type": "object",
                         "properties": {
-                            "message_id": {"type": "integer"},
-                            "channel_id": {"type": "integer"},
+                            "message_id": {"type": "string", "description": "Discord message ID as an exact decimal string."},
+                            "channel_id": {"type": "string", "description": "Discord channel ID as an exact decimal string."},
                             "message_link": {"type": "string"},
                             "truncate": {"type": "boolean", "description": "Whether to truncate long message content (default: true)"},
                         },
@@ -4884,7 +4902,7 @@ class AICommands(commands.Cog):
                         "type": "object",
                         "properties": {
                             "query": {"type": "string"},
-                            "channel_id": {"type": "integer"},
+                            "channel_id": {"type": "string", "description": "Discord channel ID as an exact decimal string."},
                             "limit": {"type": "integer"},
                             "truncate": {"type": "boolean", "description": "Whether to truncate long message content (default: true)"},
                         },
@@ -4900,8 +4918,8 @@ class AICommands(commands.Cog):
                     "parameters": {
                         "type": "object",
                         "properties": {
-                            "user_id": {"type": "integer"},
-                            "channel_id": {"type": "integer"},
+                            "user_id": {"type": "string", "description": "Discord user ID as an exact decimal string."},
+                            "channel_id": {"type": "string", "description": "Discord channel ID as an exact decimal string."},
                         },
                     },
                 },
@@ -4918,8 +4936,8 @@ class AICommands(commands.Cog):
                     "parameters": {
                         "type": "object",
                         "properties": {
-                            "message_id": {"type": "integer"},
-                            "channel_id": {"type": "integer"},
+                            "message_id": {"type": "string", "description": "Discord message ID as an exact decimal string."},
+                            "channel_id": {"type": "string", "description": "Discord channel ID as an exact decimal string."},
                             "message_link": {"type": "string"},
                         },
                     },
@@ -4936,7 +4954,7 @@ class AICommands(commands.Cog):
                     "parameters": {
                         "type": "object",
                         "properties": {
-                            "user_id": {"type": "integer"},
+                            "user_id": {"type": "string", "description": "Discord user ID as an exact decimal string."},
                             "media": {"type": "string", "enum": ["avatar", "banner", "both"]},
                         },
                     },
@@ -4966,7 +4984,7 @@ class AICommands(commands.Cog):
                     "parameters": {
                         "type": "object",
                         "properties": {
-                            "target_user_id": {"type": "integer"},
+                            "target_user_id": {"type": "string", "description": "Discord user ID as an exact decimal string."},
                             "scope": {"type": "string", "enum": ["auto", "server", "global"]},
                             "include_history": {"type": "boolean"},
                             "include_leaderboard": {"type": "boolean"},
@@ -4983,7 +5001,7 @@ class AICommands(commands.Cog):
                     "parameters": {
                         "type": "object",
                         "properties": {
-                            "target_user_id": {"type": "integer"},
+                            "target_user_id": {"type": "string", "description": "Discord user ID as an exact decimal string."},
                             "scope": {"type": "string", "enum": ["auto", "server", "global"]},
                             "item_query": {"type": "string"},
                             "limit": {"type": "integer"},
@@ -4999,7 +5017,7 @@ class AICommands(commands.Cog):
                     "parameters": {
                         "type": "object",
                         "properties": {
-                            "target_user_id": {"type": "integer"},
+                            "target_user_id": {"type": "string", "description": "Discord user ID as an exact decimal string."},
                             "scope": {"type": "string", "enum": ["auto", "server", "global"]},
                             "include_history": {"type": "boolean"},
                         },
@@ -5088,7 +5106,7 @@ class AICommands(commands.Cog):
                         "properties": {
                             "mode": {"type": "string", "enum": ["favorites", "route", "stop", "youbike"]},
                             "query": {"type": "string"},
-                            "target_user_id": {"type": "integer"},
+                            "target_user_id": {"type": "string", "description": "Discord user ID as an exact decimal string."},
                             "route_key": {"type": "integer"},
                             "stop_id": {"type": "integer"},
                             "station_id": {"type": "string"},
@@ -5105,7 +5123,7 @@ class AICommands(commands.Cog):
                     "parameters": {
                         "type": "object",
                         "properties": {
-                            "target_user_id": {"type": "integer"},
+                            "target_user_id": {"type": "string", "description": "Discord user ID as an exact decimal string."},
                         },
                     },
                 },
@@ -5455,11 +5473,11 @@ class AICommands(commands.Cog):
             "entries": results[:limit],
             "memory_spaces": {
                 "user_global": {
-                    "user_id": getattr(current_user, "id", None),
+                    "user_id": self._snowflake_string(getattr(current_user, "id", None)),
                     "available": getattr(current_user, "id", None) is not None,
                 },
                 "guild_shared": {
-                    "guild_id": getattr(guild, "id", None),
+                    "guild_id": self._snowflake_string(getattr(guild, "id", None)),
                     "available": guild is not None,
                 },
             },
@@ -5492,10 +5510,9 @@ class AICommands(commands.Cog):
 
         subject_user_id = args.get("subject_user_id")
         if subject_user_id is not None:
-            try:
-                subject_user_id = int(subject_user_id)
-            except (TypeError, ValueError):
-                return {"error": "subject_user_id must be an integer"}
+            subject_user_id, parse_error = self._parse_snowflake(subject_user_id, "subject_user_id")
+            if parse_error:
+                return {"error": parse_error}
         elif scope == "user_global" and getattr(current_user, "id", None) is not None:
             subject_user_id = int(current_user.id)
 
@@ -7501,10 +7518,9 @@ class AICommands(commands.Cog):
             if around_message_id in (None, ""):
                 raw_messages = [message async for message in channel.history(limit=limit)]
             else:
-                try:
-                    around_message_id = int(around_message_id)
-                except (TypeError, ValueError):
-                    return {"error": "around_message_id must be an integer"}
+                around_message_id, parse_error = self._parse_snowflake(around_message_id, "around_message_id")
+                if parse_error:
+                    return {"error": parse_error}
 
                 fetch_message = getattr(channel, "fetch_message", None)
                 if not callable(fetch_message):
@@ -7613,10 +7629,9 @@ class AICommands(commands.Cog):
         if error:
             return {"error": error}
 
-        try:
-            resolved_message_id = int(message_id)
-        except (TypeError, ValueError):
-            return {"error": "message_id must be an integer"}
+        resolved_message_id, parse_error = self._parse_snowflake(message_id, "message_id")
+        if parse_error:
+            return {"error": parse_error}
 
         fetch_message = getattr(channel, "fetch_message", None)
         if not callable(fetch_message):
@@ -7720,7 +7735,7 @@ class AICommands(commands.Cog):
                 return {"error": error}
 
         user_payload = {
-            "id": getattr(target_user, "id", None),
+            "id": self._snowflake_string(getattr(target_user, "id", None)),
             "name": getattr(target_user, "name", None),
             "display_name": getattr(target_user, "display_name", None) or getattr(target_user, "name", None),
             "mention": getattr(target_user, "mention", None),
@@ -7751,7 +7766,7 @@ class AICommands(commands.Cog):
             )
             role_preview = [
                 {
-                    "id": role.id,
+                    "id": self._snowflake_string(role.id),
                     "name": role.name,
                 }
                 for role in list(reversed(member.roles[1:]))[: self.USER_TOOL_MAX_ROLE_PREVIEW]
@@ -7858,10 +7873,9 @@ class AICommands(commands.Cog):
         )
         if access_error:
             return None, None, access_error
-        try:
-            resolved_message_id = int(message_id)
-        except (TypeError, ValueError):
-            return None, None, "message_id must be an integer"
+        resolved_message_id, parse_error = self._parse_snowflake(message_id, "message_id")
+        if parse_error:
+            return None, None, parse_error
         fetch_message = getattr(channel, "fetch_message", None)
         if not callable(fetch_message):
             return None, None, "This channel does not support fetching a specific message."
@@ -7939,7 +7953,7 @@ class AICommands(commands.Cog):
                         merged[key] = analyzed[key]
             final_items.append(merged)
         result = {
-            "message_id": getattr(message, "id", None),
+            "message_id": self._snowflake_string(getattr(message, "id", None)),
             "channel": self._serialize_channel_for_tool(getattr(message, "channel", None), access),
             "jump_url": getattr(message, "jump_url", None),
             "items": final_items,
@@ -8119,7 +8133,7 @@ class AICommands(commands.Cog):
             )
             visible_channels.append(payload)
         return {
-            "guild_id": getattr(guild, "id", None),
+            "guild_id": self._snowflake_string(getattr(guild, "id", None)),
             "include_threads": include_threads,
             "returned_count": len(visible_channels),
             "channels": visible_channels,
@@ -8131,10 +8145,9 @@ class AICommands(commands.Cog):
         target_user_id = args.get("target_user_id") or getattr(current_user, "id", None)
         if target_user_id is None:
             return {"error": "target_user_id is required"}
-        try:
-            target_user_id = int(target_user_id)
-        except (TypeError, ValueError):
-            return {"error": "target_user_id must be an integer"}
+        target_user_id, parse_error = self._parse_snowflake(target_user_id, "target_user_id")
+        if parse_error:
+            return {"error": parse_error}
 
         scope_id, scope_label = self._resolve_scope_guild_id(
             tool_context,
@@ -8232,10 +8245,9 @@ class AICommands(commands.Cog):
         target_user_id = args.get("target_user_id") or getattr(current_user, "id", None)
         if target_user_id is None:
             return {"error": "target_user_id is required"}
-        try:
-            target_user_id = int(target_user_id)
-        except (TypeError, ValueError):
-            return {"error": "target_user_id must be an integer"}
+        target_user_id, parse_error = self._parse_snowflake(target_user_id, "target_user_id")
+        if parse_error:
+            return {"error": parse_error}
 
         scope_id, scope_label = self._resolve_scope_guild_id(tool_context, args.get("scope", "auto"), global_scope_id=0)
         item_query = str(args.get("item_query", "") or "").strip().lower()
@@ -8293,10 +8305,9 @@ class AICommands(commands.Cog):
         target_user_id = args.get("target_user_id") or getattr(current_user, "id", None)
         if target_user_id is None:
             return {"error": "target_user_id is required"}
-        try:
-            target_user_id = int(target_user_id)
-        except (TypeError, ValueError):
-            return {"error": "target_user_id must be an integer"}
+        target_user_id, parse_error = self._parse_snowflake(target_user_id, "target_user_id")
+        if parse_error:
+            return {"error": parse_error}
 
         scope_id, scope_label = self._resolve_scope_guild_id(tool_context, args.get("scope", "auto"), global_scope_id=0)
         include_history = self._coerce_bool(args.get("include_history"), True)
@@ -8875,7 +8886,7 @@ class AICommands(commands.Cog):
 
         return {
             "mode": "favorites",
-            "user_id": int(target_user_id),
+            "user_id": self._snowflake_string(target_user_id),
             "favorite_stop_count": len(favorite_stops),
             "favorite_youbike_count": len(favorite_youbike),
             "favorite_stops": stop_details,
@@ -8888,10 +8899,9 @@ class AICommands(commands.Cog):
         target_user_id = args.get("target_user_id") or getattr(current_user, "id", None)
         if target_user_id is None:
             return {"error": "target_user_id is required"}
-        try:
-            target_user_id = int(target_user_id)
-        except (TypeError, ValueError):
-            return {"error": "target_user_id must be an integer"}
+        target_user_id, parse_error = self._parse_snowflake(target_user_id, "target_user_id")
+        if parse_error:
+            return {"error": parse_error}
 
         guild_id = guild.id if guild else 0
         can_view_sensitive = self._can_manage_guild_ai_memory(current_user, guild)
