@@ -22,6 +22,7 @@
             "turn": "Turn"
         },
         "game_ended": "This game has ended.",
+        "game_ended_refunded": "🛑 The host ended this game. All stakes have been refunded.",
         "hand_footer": {
             "one": "{count} card | Pick cards from the dropdown, then hit Play, or just Pass.",
             "other": "{count} cards | Pick cards from the dropdown, then hit Play, or just Pass."
@@ -72,6 +73,7 @@
         "table_rule": "Rules: **{rule}**",
         "table_stake": " | 💰 Stake: {stake} {currency}",
         "table_title": "🎴 Big Two - in progress",
+        "timeout_refunded": "⏰ The table timed out. All stakes have been refunded.",
         "you_passed": "You passed.",
         "you_played": "✅ You played: {cards}",
         "your_hand_title": "🂠 Your hand"

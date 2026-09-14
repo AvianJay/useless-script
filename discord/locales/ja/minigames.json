@@ -22,6 +22,7 @@
             "turn": "ターン"
         },
         "game_ended": "このゲームは終了しました。",
+        "game_ended_refunded": "🛑 ホストがゲームを終了しました。賭け金はすべて返却されました。",
         "hand_footer": {
             "one": "{count} カード |ドロップダウンからカードを選択し、[再生] をクリックするか、単にパスします。",
             "other": "{count} カード |ドロップダウンからカードを選択し、[再生] をクリックするか、単にパスします。"
@@ -72,6 +73,7 @@
         "table_rule": "ルール: **{rule}**",
         "table_stake": " | 💰 ステーク: {stake} {currency}",
         "table_title": "🎴 ビッグ 2 - 進行中",
+        "timeout_refunded": "⏰ タイムアウトで終了しました。賭け金はすべて返却されました。",
         "you_passed": "あなたは合格しました。",
         "you_played": "✅ あなたがプレイした: {cards}",
         "your_hand_title": "🂠あなたの手"

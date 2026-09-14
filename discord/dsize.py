@@ -268,8 +268,8 @@ async def handle_checkin_rewards(interaction: discord.Interaction, user: Union[d
             ["grass", 20, "草"],
             ["fake_ruler", 5, "自欺欺人尺"],
             ["anti_surgery", 5, "抗手術藥物"],
-            ["surgery", 1, "手術刀"],
-            ["rusty_surgery", 1, "生鏽的手術刀"],
+            ["scalpel", 1, "手術刀"],
+            ["rusty_scalpel", 1, "生鏽的手術刀"],
             ["cheque_500", 1, "500元支票"],
         ]
 
@@ -277,8 +277,8 @@ async def handle_checkin_rewards(interaction: discord.Interaction, user: Union[d
             ["grass", 100, "草"],
             ["fake_ruler", 20, "自欺欺人尺"],
             ["anti_surgery", 20, "抗手術藥物"],
-            ["surgery", 3, "手術刀"],
-            ["rusty_surgery", 3, "生鏽的手術刀"],
+            ["scalpel", 3, "手術刀"],
+            ["rusty_scalpel", 3, "生鏽的手術刀"],
             ["cheque_1000", 1, "1000元支票"],
         ]
         # i18n: skip-end
@@ -1588,6 +1588,23 @@ async def reload_feedgrass_images(ctx: commands.Context):
     await ctx.reply(t("dsize.feedgrass.reloaded", count=loaded))
 
 
+def _pick_pool(filtered: list, full: list, nsfw: bool) -> list:
+    """挑出可用的圖片池，避免 random.choice([]) 在道具已消耗後才拋 IndexError。
+
+    只在「nsfw 頻道但沒有 nsfw 圖」時退回完整清單——那個方向是安全的（在 nsfw
+    頻道放一般圖沒問題）。反過來絕對不退回：一般頻道寧可明確報錯，也不能因為
+    沒有非 nsfw 圖就送出 nsfw 內容。
+    """
+    if filtered:
+        return filtered
+    if nsfw:
+        safe = [img for img in full if not img.get("nsfw", False)]
+        if safe:
+            return safe
+    raise RuntimeError(
+        "No usable feedgrass image for this channel rating; check the image manifest.")
+
+
 async def generate_feedgrass_image(target: discord.User, feeder: discord.User, random_users: list[discord.User] = [], nsfw: bool = False) -> BytesIO:
     if feeder.id != target.id:
         # check nsfw channel
@@ -1595,14 +1612,14 @@ async def generate_feedgrass_image(target: discord.User, feeder: discord.User, r
             new_feedgrass_images = [img for img in feedgrass_images if img.get("nsfw", False)]
         else:
             new_feedgrass_images = [img for img in feedgrass_images if not img.get("nsfw", False)]
-        img = random.choice(new_feedgrass_images)
+        img = random.choice(_pick_pool(new_feedgrass_images, feedgrass_images, nsfw))
     else:
         # check nsfw channel
         if nsfw:
             new_self_feedgrass_images = [img for img in self_feedgrass_images if img.get("nsfw", False)]
         else:
             new_self_feedgrass_images = [img for img in self_feedgrass_images if not img.get("nsfw", False)]
-        img = random.choice(new_self_feedgrass_images)
+        img = random.choice(_pick_pool(new_self_feedgrass_images, self_feedgrass_images, nsfw))
     image = Image.open(img["file"]).convert("RGBA")
     # width, height = image.size
     # fetch avatars
@@ -1791,6 +1808,8 @@ async def use_rusty_scalpel(interaction: discord.Interaction):
             if not removed:
                 await interaction.response.send_message(
                     t("dsize.item.err.missing", item=item_name("rusty_scalpel")), ephemeral=True)
+                # 少了這個 return，沒有道具的人照樣能完成一次生鏽手術（scalpel 分支有）。
+                return
             # update user statistics
             statistics = get_user_data(0, target_id, "dsize_statistics", {})
             statistics["total_surgeries"] = statistics.get("total_surgeries", 0) + 1
