@@ -17,14 +17,28 @@
             }
         },
         "ai_memory": {
+            "auto_clear": {
+                "desc": "Configure idle conversation auto-clearing",
+                "name": "auto-clear",
+                "param": {
+                    "enabled": "Enable or disable clearing the conversation after 30 idle minutes",
+                    "global_default": "Apply as your default everywhere and drop per-scope settings"
+                },
+                "param_name": {
+                    "enabled": "enabled",
+                    "global_default": "global"
+                }
+            },
             "auto_summary": {
                 "desc": "Configure personal memory extraction after 30 idle minutes",
                 "name": "auto-summary",
                 "param": {
-                    "enabled": "Enable or disable extraction after 30 idle minutes"
+                    "enabled": "Enable or disable extraction after 30 idle minutes",
+                    "global_default": "Apply as your default everywhere and drop per-scope settings"
                 },
                 "param_name": {
-                    "enabled": "enabled"
+                    "enabled": "enabled",
+                    "global_default": "global"
                 }
             },
             "delete": {

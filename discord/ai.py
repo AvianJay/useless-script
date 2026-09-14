@@ -1589,6 +1589,18 @@ class AICommands(commands.Cog):
     AI_USER_GLOBAL_MEMORY_KEY = "ai_user_global_memory"
     AI_GUILD_SHARED_MEMORY_KEY = "ai_guild_shared_memory"
     AI_AUTO_SUMMARY_CONFIG_KEY = "ai_auto_summary_config"
+    AI_AUTO_CLEAR_CONFIG_KEY = "ai_auto_clear_config"
+    AI_AUTO_IDLE_MODE_KEY = "ai_auto_idle_mode"
+    AI_AUTO_IDLE_GLOBAL_MODE_KEY = "ai_auto_idle_global_mode"
+    AI_AUTO_IDLE_MODE_NONE = "none"
+    AI_AUTO_IDLE_MODE_SUMMARY = "summary"
+    AI_AUTO_IDLE_MODE_CLEAR = "clear"
+    AI_AUTO_IDLE_MODE_INHERIT = "inherit"
+    AI_AUTO_IDLE_MODES = {
+        AI_AUTO_IDLE_MODE_NONE,
+        AI_AUTO_IDLE_MODE_SUMMARY,
+        AI_AUTO_IDLE_MODE_CLEAR,
+    }
     AI_MEMORY_WRITE_ACCESS_ADMINS = "admins"
     AI_MEMORY_WRITE_ACCESS_MEMBERS = "members"
     AI_MEMORY_WRITE_ACCESS_VALUES = {
@@ -1596,6 +1608,7 @@ class AICommands(commands.Cog):
         AI_MEMORY_WRITE_ACCESS_MEMBERS,
     }
     AI_AUTO_SUMMARY_TIMEOUT_SECONDS = 30 * 60
+    AI_AUTO_CLEAR_TIMEOUT_SECONDS = 30 * 60
     AI_AUTO_SUMMARY_COST = 20.0
     AI_AUTO_SUMMARY_MAX_NOTES = 3
     MAX_AI_MEMORY_ENTRIES = 80
@@ -1751,6 +1764,9 @@ class AICommands(commands.Cog):
         self._auto_summary_semaphore = asyncio.Semaphore(2)
         self._auto_summary_restore_task: asyncio.Task | None = None
         self._auto_summary_shutting_down = False
+        self._auto_clear_tasks: dict[tuple[int, int], asyncio.Task] = {}
+        self._auto_clear_locks: dict[tuple[int, int], asyncio.Lock] = {}
+        self._auto_clear_processing: set[tuple[int, int]] = set()
         self._docs_search_cache = None
         self._docs_feature_prompt_cache = None
         self._application_emoji_cache = None
@@ -1760,8 +1776,8 @@ class AICommands(commands.Cog):
     async def cog_load(self):
         self._auto_summary_shutting_down = False
         self._auto_summary_restore_task = asyncio.create_task(
-            self._restore_auto_summary_tasks(),
-            name="ai-auto-summary-restore",
+            self._restore_auto_idle_tasks(),
+            name="ai-auto-idle-restore",
         )
 
     async def cog_unload(self):
@@ -1771,6 +1787,9 @@ class AICommands(commands.Cog):
         for task in tuple(self._auto_summary_tasks.values()):
             task.cancel()
         self._auto_summary_tasks.clear()
+        for task in tuple(self._auto_clear_tasks.values()):
+            task.cancel()
+        self._auto_clear_tasks.clear()
 
     @staticmethod
     def _parse_model_prefix(message: str, default: str = "openai-fast") -> tuple[str, str]:
@@ -4451,27 +4470,116 @@ class AICommands(commands.Cog):
     def _auto_summary_context_key(cls, user_id: int, guild_id: int | None) -> tuple[int, int]:
         return int(user_id), cls._auto_summary_scope_id(guild_id)
 
-    def _get_auto_summary_config(self, user_id: int, guild_id: int | None) -> dict:
+    @classmethod
+    def _normalize_auto_idle_mode(cls, value, default: str | None = None) -> str | None:
+        """把任意輸入正規化成 none/summary/clear；無法辨識（含 inherit）回 default。"""
+        if value is None:
+            return default
+        mode = str(value).strip().lower()
+        if mode in cls.AI_AUTO_IDLE_MODES:
+            return mode
+        return default
+
+    def _get_auto_idle_global_mode(self, user_id: int) -> str | None:
+        """使用者的全域預設模式；從未設定過回 None。"""
+        return self._normalize_auto_idle_mode(
+            get_user_data(GLOBAL_GUILD_ID, int(user_id), self.AI_AUTO_IDLE_GLOBAL_MODE_KEY, None)
+        )
+
+    def _set_auto_idle_global_mode(self, user_id: int, mode: str) -> bool:
+        return set_user_data(
+            GLOBAL_GUILD_ID,
+            int(user_id),
+            self.AI_AUTO_IDLE_GLOBAL_MODE_KEY,
+            self._normalize_auto_idle_mode(mode, self.AI_AUTO_IDLE_MODE_NONE),
+        ) is not False
+
+    def _read_scope_auto_idle_mode(
+        self,
+        user_id: int,
+        guild_id: int | None,
+        *,
+        migrate: bool = True,
+    ) -> str | None:
+        """場景自己的設定；沒設定過（或已改回沿用全域）回 None。"""
         scope_id = self._auto_summary_scope_id(guild_id)
-        raw = get_user_data(scope_id, int(user_id), self.AI_AUTO_SUMMARY_CONFIG_KEY, {}) or {}
+        raw_mode = get_user_data(scope_id, int(user_id), self.AI_AUTO_IDLE_MODE_KEY, None)
+        if raw_mode is not None:
+            return self._normalize_auto_idle_mode(raw_mode)
+        legacy = get_user_data(scope_id, int(user_id), self.AI_AUTO_SUMMARY_CONFIG_KEY, None)
+        if not isinstance(legacy, dict) or "enabled" not in legacy:
+            return None
+        legacy_mode = (
+            self.AI_AUTO_IDLE_MODE_SUMMARY
+            if self._coerce_bool(legacy.get("enabled"), False)
+            else self.AI_AUTO_IDLE_MODE_NONE
+        )
+        if migrate:
+            set_user_data(scope_id, int(user_id), self.AI_AUTO_IDLE_MODE_KEY, legacy_mode)
+        return legacy_mode
+
+    def _resolve_auto_idle_mode(self, user_id: int, guild_id: int | None) -> tuple[str, str]:
+        """回傳 (mode, source)，source 為 scope / global / default。"""
+        scope_mode = self._read_scope_auto_idle_mode(user_id, guild_id)
+        if scope_mode is not None:
+            return scope_mode, "scope"
+        global_mode = self._get_auto_idle_global_mode(user_id)
+        if global_mode is not None:
+            return global_mode, "global"
+        return self.AI_AUTO_IDLE_MODE_NONE, "default"
+
+    def _get_auto_idle_state(self, config_key: str, user_id: int, guild_id: int | None) -> dict:
+        scope_id = self._auto_summary_scope_id(guild_id)
+        raw = get_user_data(scope_id, int(user_id), config_key, {}) or {}
         if not isinstance(raw, dict):
             raw = {}
-        config_data = dict(raw)
-        config_data["enabled"] = self._coerce_bool(config_data.get("enabled"), False)
-        config_data["due_at"] = self._coerce_timestamp(config_data.get("due_at"))
-        config_data["last_activity_at"] = self._coerce_timestamp(config_data.get("last_activity_at"))
-        if not isinstance(config_data.get("last_result"), dict):
-            config_data["last_result"] = None
-        return config_data
+        state = dict(raw)
+        state.pop("enabled", None)
+        state["due_at"] = self._coerce_timestamp(state.get("due_at"))
+        state["last_activity_at"] = self._coerce_timestamp(state.get("last_activity_at"))
+        if not isinstance(state.get("last_result"), dict):
+            state["last_result"] = None
+        return state
+
+    def _set_auto_idle_state(
+        self,
+        config_key: str,
+        user_id: int,
+        guild_id: int | None,
+        state: dict,
+    ) -> bool:
+        payload = dict(state or {})
+        # enabled/mode 由 AI_AUTO_IDLE_MODE_KEY 決定，不再存進狀態紀錄，
+        # 否則沿用全域預設的場景會被寫成場景自己的設定。
+        for derived_key in ("enabled", "mode", "mode_source"):
+            payload.pop(derived_key, None)
+        return set_user_data(
+            self._auto_summary_scope_id(guild_id),
+            int(user_id),
+            config_key,
+            payload,
+        ) is not False
+
+    def _decorate_auto_idle_state(self, state: dict, user_id: int, guild_id: int | None, mode: str) -> dict:
+        resolved_mode, source = self._resolve_auto_idle_mode(user_id, guild_id)
+        state["mode"] = resolved_mode
+        state["mode_source"] = source
+        state["enabled"] = resolved_mode == mode
+        return state
+
+    def _get_auto_summary_config(self, user_id: int, guild_id: int | None) -> dict:
+        state = self._get_auto_idle_state(self.AI_AUTO_SUMMARY_CONFIG_KEY, user_id, guild_id)
+        return self._decorate_auto_idle_state(state, user_id, guild_id, self.AI_AUTO_IDLE_MODE_SUMMARY)
 
     def _set_auto_summary_config(self, user_id: int, guild_id: int | None, config_data: dict) -> bool:
-        scope_id = self._auto_summary_scope_id(guild_id)
-        return set_user_data(
-            scope_id,
-            int(user_id),
-            self.AI_AUTO_SUMMARY_CONFIG_KEY,
-            dict(config_data or {}),
-        ) is not False
+        return self._set_auto_idle_state(self.AI_AUTO_SUMMARY_CONFIG_KEY, user_id, guild_id, config_data)
+
+    def _get_auto_clear_config(self, user_id: int, guild_id: int | None) -> dict:
+        state = self._get_auto_idle_state(self.AI_AUTO_CLEAR_CONFIG_KEY, user_id, guild_id)
+        return self._decorate_auto_idle_state(state, user_id, guild_id, self.AI_AUTO_IDLE_MODE_CLEAR)
+
+    def _set_auto_clear_config(self, user_id: int, guild_id: int | None, config_data: dict) -> bool:
+        return self._set_auto_idle_state(self.AI_AUTO_CLEAR_CONFIG_KEY, user_id, guild_id, config_data)
 
     @staticmethod
     def _stable_data_version(value) -> str:
@@ -4500,6 +4608,35 @@ class AICommands(commands.Cog):
         self._set_auto_summary_config(user_id, guild_id, config_data)
         return config_data
 
+    def _set_auto_clear_result(
+        self,
+        user_id: int,
+        guild_id: int | None,
+        status: str,
+        *,
+        clear_due: bool = True,
+    ) -> dict:
+        config_data = self._get_auto_clear_config(user_id, guild_id)
+        if clear_due:
+            config_data["due_at"] = None
+        config_data["last_result"] = {
+            "status": str(status),
+            "at": self._ai_memory_timestamp(),
+        }
+        self._set_auto_clear_config(user_id, guild_id, config_data)
+        return config_data
+
+    def _format_auto_clear_last_result(self, config_data: dict) -> str:
+        result = (config_data or {}).get("last_result")
+        if not isinstance(result, dict):
+            return t("ai.value.auto_clear_never_run")
+        status = str(result.get("status") or "").strip().lower()
+        result_key = {
+            "success_cleared": "ai.value.auto_clear_result_cleared",
+            "failed": "ai.value.auto_clear_result_failed",
+        }.get(status, "ai.value.auto_clear_result_unknown")
+        return t(result_key, time=str(result.get("at") or t("ai.value.unknown_time")))
+
     def _format_auto_summary_last_result(self, config_data: dict) -> str:
         result = (config_data or {}).get("last_result")
         if not isinstance(result, dict):
@@ -4526,13 +4663,27 @@ class AICommands(commands.Cog):
         self._auto_summary_tasks.pop(key, None)
         task.cancel()
 
-    def _clear_auto_summary_schedule(self, user_id: int, guild_id: int | None) -> None:
+    def _cancel_auto_clear_task(self, user_id: int, guild_id: int | None) -> None:
+        key = self._auto_summary_context_key(user_id, guild_id)
+        task = self._auto_clear_tasks.get(key)
+        if task is None or task.done() or key in self._auto_clear_processing:
+            return
+        self._auto_clear_tasks.pop(key, None)
+        task.cancel()
+
+    def _clear_ai_idle_schedule(self, user_id: int, guild_id: int | None) -> None:
+        """手動清除歷史／開新對話時，取消這個場景所有閒置排程。"""
         self._begin_ai_request(user_id, guild_id)
-        config_data = self._get_auto_summary_config(user_id, guild_id)
-        if config_data.get("enabled") or config_data.get("due_at") is not None:
-            config_data["due_at"] = None
-            self._set_auto_summary_config(user_id, guild_id, config_data)
+        summary_config = self._get_auto_summary_config(user_id, guild_id)
+        if summary_config.get("enabled") or summary_config.get("due_at") is not None:
+            summary_config["due_at"] = None
+            self._set_auto_summary_config(user_id, guild_id, summary_config)
         self._cancel_auto_summary_task(user_id, guild_id)
+        clear_config = self._get_auto_clear_config(user_id, guild_id)
+        if clear_config.get("enabled") or clear_config.get("due_at") is not None:
+            clear_config["due_at"] = None
+            self._set_auto_clear_config(user_id, guild_id, clear_config)
+        self._cancel_auto_clear_task(user_id, guild_id)
 
     def _schedule_auto_summary(self, user_id: int, guild_id: int | None, due_at: float) -> None:
         if self._auto_summary_shutting_down:
@@ -4572,7 +4723,94 @@ class AICommands(commands.Cog):
                 if config_data.get("enabled") and next_due_at and next_due_at > time.time():
                     self._schedule_auto_summary(user_id, guild_id, next_due_at)
 
-    async def _restore_auto_summary_tasks(self) -> None:
+    async def _auto_clear_waiter(self, user_id: int, guild_id: int, due_at: float) -> None:
+        key = self._auto_summary_context_key(user_id, guild_id)
+        current_task = asyncio.current_task()
+        try:
+            await asyncio.sleep(max(0.0, due_at - time.time()))
+            await self._run_auto_clear(user_id, guild_id, expected_due_at=due_at)
+        except asyncio.CancelledError:
+            raise
+        finally:
+            if self._auto_clear_tasks.get(key) is current_task:
+                self._auto_clear_tasks.pop(key, None)
+            if not self._auto_summary_shutting_down:
+                config_data = self._get_auto_clear_config(user_id, guild_id)
+                next_due_at = self._coerce_timestamp(config_data.get("due_at"))
+                if config_data.get("enabled") and next_due_at and next_due_at > time.time():
+                    self._schedule_auto_clear(user_id, guild_id, next_due_at)
+
+    def _schedule_auto_clear(self, user_id: int, guild_id: int | None, due_at: float) -> None:
+        if self._auto_summary_shutting_down:
+            return
+        due_at = self._coerce_timestamp(due_at)
+        if due_at is None:
+            return
+        key = self._auto_summary_context_key(user_id, guild_id)
+        if key in self._auto_clear_processing:
+            return
+        existing = self._auto_clear_tasks.get(key)
+        if existing is not None and not existing.done() and existing is not asyncio.current_task():
+            existing.cancel()
+        try:
+            task = asyncio.create_task(
+                self._auto_clear_waiter(int(user_id), key[1], due_at),
+                name=f"ai-auto-clear-{key[0]}-{key[1]}",
+            )
+        except RuntimeError:
+            return
+        self._auto_clear_tasks[key] = task
+
+    async def _run_auto_clear(
+        self,
+        user_id: int,
+        guild_id: int | None,
+        *,
+        expected_due_at: float | None = None,
+    ) -> str | None:
+        key = self._auto_summary_context_key(user_id, guild_id)
+        lock = self._auto_clear_locks.setdefault(key, asyncio.Lock())
+        async with lock:
+            config_data = self._get_auto_clear_config(user_id, guild_id)
+            if not config_data.get("enabled"):
+                return None
+            due_at = self._coerce_timestamp(config_data.get("due_at"))
+            expected_due_at = self._coerce_timestamp(expected_due_at)
+            if expected_due_at and due_at and abs(expected_due_at - due_at) > 0.001:
+                return None
+
+            history = ConversationManager.get_history(user_id, guild_id)
+            if not ConversationManager.has_complete_turn(history):
+                config_data["due_at"] = None
+                self._set_auto_clear_config(user_id, guild_id, config_data)
+                return None
+            activity_at = max(
+                self._coerce_timestamp(config_data.get("last_activity_at")) or 0.0,
+                ConversationManager.latest_timestamp(history),
+            )
+            computed_due_at = activity_at + self.AI_AUTO_CLEAR_TIMEOUT_SECONDS
+            if computed_due_at > time.time():
+                config_data["due_at"] = computed_due_at
+                self._set_auto_clear_config(user_id, guild_id, config_data)
+                self._schedule_auto_clear(user_id, guild_id, computed_due_at)
+                return None
+
+            self._auto_clear_processing.add(key)
+            try:
+                if not ConversationManager.clear_history(user_id, guild_id):
+                    self._set_auto_clear_result(user_id, guild_id, "failed", clear_due=False)
+                    log(
+                        f"AI auto-clear failed to clear history for {user_id}/{guild_id}",
+                        module_name="AI",
+                        level=logging.ERROR,
+                    )
+                    return "failed"
+                self._set_auto_clear_result(user_id, guild_id, "success_cleared")
+                return "success_cleared"
+            finally:
+                self._auto_clear_processing.discard(key)
+
+    async def _restore_auto_idle_tasks(self) -> None:
         try:
             wait_until_ready = getattr(self.bot, "wait_until_ready", None)
             if callable(wait_until_ready):
@@ -4581,63 +4819,179 @@ class AICommands(commands.Cog):
             try:
                 rows = connection.execute(
                     """
-                    SELECT user_id, guild_id, data_value
+                    SELECT DISTINCT user_id, guild_id
                     FROM user_data
-                    WHERE data_key = ?
+                    WHERE data_key IN (?, ?)
                     """,
-                    (self.AI_AUTO_SUMMARY_CONFIG_KEY,),
+                    (self.AI_AUTO_SUMMARY_CONFIG_KEY, self.AI_AUTO_CLEAR_CONFIG_KEY),
                 ).fetchall()
             finally:
                 close = getattr(connection, "close", None)
                 if callable(close):
                     close()
 
-            for user_id, guild_id, raw_config in rows:
-                try:
-                    config_data = json.loads(raw_config) if isinstance(raw_config, str) else raw_config
-                except (TypeError, json.JSONDecodeError):
-                    continue
-                if not isinstance(config_data, dict) or not self._coerce_bool(config_data.get("enabled"), False):
-                    continue
-                due_at = self._coerce_timestamp(config_data.get("due_at"))
-                if due_at is None:
-                    history = ConversationManager.get_history(int(user_id), int(guild_id or 0) or None)
-                    if not ConversationManager.has_complete_turn(history):
-                        continue
-                    activity_at = max(
-                        self._coerce_timestamp(config_data.get("last_activity_at")) or 0.0,
-                        ConversationManager.latest_timestamp(history),
-                    )
-                    due_at = activity_at + self.AI_AUTO_SUMMARY_TIMEOUT_SECONDS
-                    config_data["due_at"] = due_at
-                    self._set_auto_summary_config(int(user_id), int(guild_id or 0) or None, config_data)
-                self._schedule_auto_summary(int(user_id), int(guild_id or 0) or None, due_at)
+            for user_id, guild_id in rows:
+                self._restore_auto_idle_scope(int(user_id), int(guild_id or 0) or None)
         except asyncio.CancelledError:
             raise
         except Exception as error:
-            log(f"AI auto-summary restore failed: {error}", module_name="AI", level=logging.ERROR)
+            log(f"AI auto-idle restore failed: {error}", module_name="AI", level=logging.ERROR)
 
-    def _set_auto_summary_enabled(self, user_id: int, guild_id: int | None, enabled: bool) -> dict:
+    def _restore_auto_idle_scope(self, user_id: int, guild_id: int | None) -> None:
+        for getter, setter, scheduler, timeout_seconds in (
+            (
+                self._get_auto_summary_config,
+                self._set_auto_summary_config,
+                self._schedule_auto_summary,
+                self.AI_AUTO_SUMMARY_TIMEOUT_SECONDS,
+            ),
+            (
+                self._get_auto_clear_config,
+                self._set_auto_clear_config,
+                self._schedule_auto_clear,
+                self.AI_AUTO_CLEAR_TIMEOUT_SECONDS,
+            ),
+        ):
+            config_data = getter(user_id, guild_id)
+            if not config_data.get("enabled"):
+                continue
+            due_at = self._coerce_timestamp(config_data.get("due_at"))
+            if due_at is None:
+                history = ConversationManager.get_history(user_id, guild_id)
+                if not ConversationManager.has_complete_turn(history):
+                    continue
+                activity_at = max(
+                    self._coerce_timestamp(config_data.get("last_activity_at")) or 0.0,
+                    ConversationManager.latest_timestamp(history),
+                )
+                due_at = activity_at + timeout_seconds
+                config_data["due_at"] = due_at
+                setter(user_id, guild_id, config_data)
+            scheduler(user_id, guild_id, due_at)
+
+    def _activate_auto_idle_state(
+        self,
+        config_key: str,
+        user_id: int,
+        guild_id: int | None,
+        *,
+        enabled: bool,
+        timeout_seconds: int,
+    ) -> dict:
         now = time.time()
-        config_data = self._get_auto_summary_config(user_id, guild_id)
-        config_data["enabled"] = bool(enabled)
+        state = self._get_auto_idle_state(config_key, user_id, guild_id)
         if enabled:
-            config_data["enabled_at"] = now
+            state["enabled_at"] = now
             history = ConversationManager.get_history(user_id, guild_id)
             if ConversationManager.has_complete_turn(history):
-                config_data["last_activity_at"] = now
-                config_data["due_at"] = now + self.AI_AUTO_SUMMARY_TIMEOUT_SECONDS
+                state["last_activity_at"] = now
+                state["due_at"] = now + timeout_seconds
             else:
-                config_data["last_activity_at"] = None
-                config_data["due_at"] = None
+                state["last_activity_at"] = None
+                state["due_at"] = None
         else:
-            config_data["due_at"] = None
-        self._set_auto_summary_config(user_id, guild_id, config_data)
-        if enabled and config_data.get("due_at"):
-            self._schedule_auto_summary(user_id, guild_id, config_data["due_at"])
+            state["due_at"] = None
+        self._set_auto_idle_state(config_key, user_id, guild_id, state)
+        state["enabled"] = bool(enabled)
+        return state
+
+    def _refresh_auto_idle_scope(self, user_id: int, guild_id: int | None) -> tuple[dict, dict]:
+        """依目前解析出的模式重算這個場景的排程，回傳（提煉設定, 清除設定）。"""
+        mode, _ = self._resolve_auto_idle_mode(user_id, guild_id)
+        summary_config = self._activate_auto_idle_state(
+            self.AI_AUTO_SUMMARY_CONFIG_KEY,
+            user_id,
+            guild_id,
+            enabled=mode == self.AI_AUTO_IDLE_MODE_SUMMARY,
+            timeout_seconds=self.AI_AUTO_SUMMARY_TIMEOUT_SECONDS,
+        )
+        clear_config = self._activate_auto_idle_state(
+            self.AI_AUTO_CLEAR_CONFIG_KEY,
+            user_id,
+            guild_id,
+            enabled=mode == self.AI_AUTO_IDLE_MODE_CLEAR,
+            timeout_seconds=self.AI_AUTO_CLEAR_TIMEOUT_SECONDS,
+        )
+        if summary_config["enabled"] and summary_config.get("due_at"):
+            self._schedule_auto_summary(user_id, guild_id, summary_config["due_at"])
         else:
             self._cancel_auto_summary_task(user_id, guild_id)
-        return config_data
+        if clear_config["enabled"] and clear_config.get("due_at"):
+            self._schedule_auto_clear(user_id, guild_id, clear_config["due_at"])
+        else:
+            self._cancel_auto_clear_task(user_id, guild_id)
+        return summary_config, clear_config
+
+    def _set_scope_auto_idle_mode(self, user_id: int, guild_id: int | None, mode: str) -> tuple[dict, dict]:
+        """設定這個場景的模式；自動提煉與自動清除互斥，同時只會有一個生效。"""
+        set_user_data(
+            self._auto_summary_scope_id(guild_id),
+            int(user_id),
+            self.AI_AUTO_IDLE_MODE_KEY,
+            self._normalize_auto_idle_mode(mode, self.AI_AUTO_IDLE_MODE_NONE),
+        )
+        return self._refresh_auto_idle_scope(user_id, guild_id)
+
+    def _clear_auto_idle_scope_overrides(self, user_id: int) -> int:
+        """把使用者所有場景改回沿用全域預設，回傳原本有個別設定的場景數。"""
+        try:
+            connection = get_db_connection()
+            try:
+                rows = connection.execute(
+                    """
+                    SELECT DISTINCT guild_id
+                    FROM user_data
+                    WHERE user_id = ? AND data_key IN (?, ?, ?)
+                    """,
+                    (
+                        int(user_id),
+                        self.AI_AUTO_IDLE_MODE_KEY,
+                        self.AI_AUTO_SUMMARY_CONFIG_KEY,
+                        self.AI_AUTO_CLEAR_CONFIG_KEY,
+                    ),
+                ).fetchall()
+            finally:
+                close = getattr(connection, "close", None)
+                if callable(close):
+                    close()
+        except Exception as error:
+            log(f"AI auto-idle override scan failed: {error}", module_name="AI", level=logging.ERROR)
+            return 0
+
+        cleared = 0
+        for (guild_id,) in rows:
+            resolved_guild_id = int(guild_id or 0) or None
+            if self._read_scope_auto_idle_mode(user_id, resolved_guild_id, migrate=False) is not None:
+                cleared += 1
+            set_user_data(
+                self._auto_summary_scope_id(resolved_guild_id),
+                int(user_id),
+                self.AI_AUTO_IDLE_MODE_KEY,
+                self.AI_AUTO_IDLE_MODE_INHERIT,
+            )
+        return cleared
+
+    def _set_global_auto_idle_mode(self, user_id: int, mode: str) -> int:
+        """設定全域預設並清掉所有場景的個別設定，讓它立即覆寫全部場景。"""
+        self._set_auto_idle_global_mode(user_id, mode)
+        cleared = self._clear_auto_idle_scope_overrides(user_id)
+        self._resync_auto_idle_tasks(user_id)
+        return cleared
+
+    def _resync_auto_idle_tasks(self, user_id: int) -> None:
+        """全域預設變更後取消已不該再跑的排程；新排程會在下次對話時建立。"""
+        for tasks, getter, canceller in (
+            (self._auto_summary_tasks, self._get_auto_summary_config, self._cancel_auto_summary_task),
+            (self._auto_clear_tasks, self._get_auto_clear_config, self._cancel_auto_clear_task),
+        ):
+            for key in [existing for existing in tuple(tasks) if existing[0] == int(user_id)]:
+                scope_guild_id = key[1] or None
+                if not getter(user_id, scope_guild_id).get("enabled"):
+                    canceller(user_id, scope_guild_id)
+
+    def _record_ai_idle_activity(self, user_id: int, guild_id: int | None) -> None:
+        self._record_auto_summary_activity(user_id, guild_id)
+        self._record_auto_clear_activity(user_id, guild_id)
 
     def _record_auto_summary_activity(self, user_id: int, guild_id: int | None) -> None:
         config_data = self._get_auto_summary_config(user_id, guild_id)
@@ -4652,11 +5006,30 @@ class AICommands(commands.Cog):
         self._set_auto_summary_config(user_id, guild_id, config_data)
         self._schedule_auto_summary(user_id, guild_id, config_data["due_at"])
 
+    def _record_auto_clear_activity(self, user_id: int, guild_id: int | None) -> None:
+        config_data = self._get_auto_clear_config(user_id, guild_id)
+        if not config_data.get("enabled"):
+            return
+        history = ConversationManager.get_history(user_id, guild_id)
+        if not ConversationManager.has_complete_turn(history):
+            return
+        now = time.time()
+        config_data["last_activity_at"] = now
+        config_data["due_at"] = now + self.AI_AUTO_CLEAR_TIMEOUT_SECONDS
+        self._set_auto_clear_config(user_id, guild_id, config_data)
+        self._schedule_auto_clear(user_id, guild_id, config_data["due_at"])
+
     def _begin_ai_request(self, user_id: int, guild_id: int | None) -> int:
         key = self._auto_summary_context_key(user_id, guild_id)
         version = self._auto_summary_request_versions.get(key, 0) + 1
         self._auto_summary_request_versions[key] = version
         return version
+
+    async def _check_overdue_ai_idle(self, user_id: int, guild_id: int | None) -> str | None:
+        result = await self._check_overdue_auto_summary(user_id, guild_id)
+        if result is not None:
+            return result
+        return await self._check_overdue_auto_clear(user_id, guild_id)
 
     async def _check_overdue_auto_summary(self, user_id: int, guild_id: int | None) -> str | None:
         config_data = self._get_auto_summary_config(user_id, guild_id)
@@ -4677,6 +5050,27 @@ class AICommands(commands.Cog):
         if due_at <= time.time():
             return await self._run_auto_summary(user_id, guild_id, expected_due_at=due_at)
         self._schedule_auto_summary(user_id, guild_id, due_at)
+        return None
+
+    async def _check_overdue_auto_clear(self, user_id: int, guild_id: int | None) -> str | None:
+        config_data = self._get_auto_clear_config(user_id, guild_id)
+        if not config_data.get("enabled"):
+            return None
+        history = ConversationManager.get_history(user_id, guild_id)
+        if not ConversationManager.has_complete_turn(history):
+            return None
+        due_at = self._coerce_timestamp(config_data.get("due_at"))
+        if due_at is None:
+            activity_at = max(
+                self._coerce_timestamp(config_data.get("last_activity_at")) or 0.0,
+                ConversationManager.latest_timestamp(history),
+            )
+            due_at = activity_at + self.AI_AUTO_CLEAR_TIMEOUT_SECONDS
+            config_data["due_at"] = due_at
+            self._set_auto_clear_config(user_id, guild_id, config_data)
+        if due_at <= time.time():
+            return await self._run_auto_clear(user_id, guild_id, expected_due_at=due_at)
+        self._schedule_auto_clear(user_id, guild_id, due_at)
         return None
 
     async def _resolve_auto_summary_billing_target(self, user_id: int, guild_id: int | None) -> dict:
@@ -11325,10 +11719,10 @@ class AICommands(commands.Cog):
         try:
             # 處理對話歷史
             if new_conversation:
-                self._clear_auto_summary_schedule(user.id, guild_id)
+                self._clear_ai_idle_schedule(user.id, guild_id)
                 ConversationManager.clear_history(user.id, guild_id)
             else:
-                await self._check_overdue_auto_summary(user.id, guild_id)
+                await self._check_overdue_ai_idle(user.id, guild_id)
 
             history = ConversationManager.get_history(user.id, guild_id)
             tool_context = {
@@ -11567,7 +11961,7 @@ class AICommands(commands.Cog):
                 getattr(interaction.guild, "id", None),
                 getattr(response_message, "id", None),
             )
-            self._record_auto_summary_activity(user.id, guild_id)
+            self._record_ai_idle_activity(user.id, guild_id)
 
         except Exception as e:
             if not pending_image_attachments:
@@ -11615,7 +12009,7 @@ class AICommands(commands.Cog):
         confirm_view = ClearHistoryView(
             user.id,
             guild_id,
-            on_cleared=self._clear_auto_summary_schedule,
+            on_cleared=self._clear_ai_idle_schedule,
         )
         await interaction.response.send_message(view=confirm_view, ephemeral=True, allowed_mentions=SAFE_MENTIONS)
     
@@ -11711,67 +12105,219 @@ class AICommands(commands.Cog):
         view = DeleteAIMemoryView(self, interaction.user.id, target_id, entry)
         await interaction.response.send_message(view=view, ephemeral=True, allowed_mentions=SAFE_MENTIONS)
 
+    def _build_auto_idle_status_text(self, user, guild, *, target_mode: str) -> str:
+        user_id = user.id
+        guild_id = guild.id if guild else None
+        config_data = (
+            self._get_auto_summary_config(user_id, guild_id)
+            if target_mode == self.AI_AUTO_IDLE_MODE_SUMMARY
+            else self._get_auto_clear_config(user_id, guild_id)
+        )
+        source_key = {
+            "scope": "ai.value.auto_idle_source_scope",
+            "global": "ai.value.auto_idle_source_global",
+        }.get(config_data.get("mode_source"), "ai.value.auto_idle_source_default")
+        global_mode = self._get_auto_idle_global_mode(user_id)
+        global_key = {
+            self.AI_AUTO_IDLE_MODE_SUMMARY: "ai.value.auto_idle_global_summary",
+            self.AI_AUTO_IDLE_MODE_CLEAR: "ai.value.auto_idle_global_clear",
+            self.AI_AUTO_IDLE_MODE_NONE: "ai.value.auto_idle_global_none",
+        }.get(global_mode, "ai.value.auto_idle_global_unset")
+        last_result = (
+            self._format_auto_summary_last_result(config_data)
+            if target_mode == self.AI_AUTO_IDLE_MODE_SUMMARY
+            else self._format_auto_clear_last_result(config_data)
+        )
+        return t(
+            "ai.msg.auto_summary_status"
+            if target_mode == self.AI_AUTO_IDLE_MODE_SUMMARY
+            else "ai.msg.auto_clear_status",
+            scene=guild.name if guild else t("ai.value.direct_messages"),
+            status=t("ai.value.toggle_enabled") if config_data.get("enabled") else t("ai.value.toggle_disabled"),
+            source=t(source_key),
+            global_default=t(global_key),
+            last_result=last_result,
+        )
+
+    async def _build_auto_summary_payer_rule(self, guild) -> str:
+        if not guild:
+            return t("ai.value.auto_summary_self_pays")
+        payer_id = self._get_guild_ai_billing_user_id(guild.id)
+        if not payer_id:
+            return t("ai.value.auto_summary_requester_pays")
+        _, payer_name = await self._resolve_user_identity(payer_id, guild)
+        return t("ai.value.auto_summary_designated_payer", payer_name=payer_name, payer_id=payer_id)
+
+    async def _apply_auto_idle_command(
+        self,
+        user,
+        guild,
+        *,
+        target_mode: str,
+        enabled: bool,
+        global_default: bool,
+    ) -> str:
+        """執行 auto-summary / auto-clear 的開關，回傳要回覆的訊息。"""
+        user_id = user.id
+        guild_id = guild.id if guild else None
+        is_summary = target_mode == self.AI_AUTO_IDLE_MODE_SUMMARY
+        feature = t(
+            "ai.value.auto_idle_feature_summary" if is_summary else "ai.value.auto_idle_feature_clear"
+        )
+
+        if global_default:
+            current_mode = self._get_auto_idle_global_mode(user_id) or self.AI_AUTO_IDLE_MODE_NONE
+            if not enabled and current_mode != target_mode:
+                return t("ai.msg.auto_idle_global_already_disabled", feature=feature)
+            new_mode = target_mode if enabled else self.AI_AUTO_IDLE_MODE_NONE
+            switch_note = self._auto_idle_switch_note(current_mode, new_mode)
+            cleared = self._set_global_auto_idle_mode(user_id, new_mode)
+            self._refresh_auto_idle_scope(user_id, guild_id)
+            scope_note = t("ai.value.auto_idle_scope_overrides_cleared") if cleared else ""
+            if not enabled:
+                return t(
+                    "ai.msg.auto_summary_disabled_global" if is_summary else "ai.msg.auto_clear_disabled_global",
+                    scope_note=scope_note,
+                )
+            if is_summary:
+                return t(
+                    "ai.msg.auto_summary_enabled_global",
+                    switch_note=switch_note,
+                    minutes=self.AI_AUTO_SUMMARY_TIMEOUT_SECONDS // 60,
+                    cost=f"{self.AI_AUTO_SUMMARY_COST:,.0f}",
+                    currency=GLOBAL_CURRENCY_NAME,
+                    payer_rule=await self._build_auto_summary_payer_rule(guild),
+                    scope_note=scope_note,
+                )
+            return t(
+                "ai.msg.auto_clear_enabled_global",
+                switch_note=switch_note,
+                minutes=self.AI_AUTO_CLEAR_TIMEOUT_SECONDS // 60,
+                scope_note=scope_note,
+            )
+
+        current_mode, _ = self._resolve_auto_idle_mode(user_id, guild_id)
+        if not enabled and current_mode != target_mode:
+            return t("ai.msg.auto_idle_already_disabled", feature=feature)
+        new_mode = target_mode if enabled else self.AI_AUTO_IDLE_MODE_NONE
+        switch_note = self._auto_idle_switch_note(current_mode, new_mode)
+        summary_config, clear_config = self._set_scope_auto_idle_mode(user_id, guild_id, new_mode)
+        if not enabled:
+            return t("ai.msg.auto_summary_disabled" if is_summary else "ai.msg.auto_clear_disabled")
+
+        config_data = summary_config if is_summary else clear_config
+        if is_summary:
+            schedule_detail = (
+                t("ai.value.auto_summary_existing_history_scheduled")
+                if config_data.get("due_at")
+                else t("ai.value.auto_summary_waiting_for_history")
+            )
+            return t(
+                "ai.msg.auto_summary_enabled",
+                switch_note=switch_note,
+                minutes=self.AI_AUTO_SUMMARY_TIMEOUT_SECONDS // 60,
+                cost=f"{self.AI_AUTO_SUMMARY_COST:,.0f}",
+                currency=GLOBAL_CURRENCY_NAME,
+                payer_rule=await self._build_auto_summary_payer_rule(guild),
+                schedule_detail=schedule_detail,
+            )
+        schedule_detail = (
+            t("ai.value.auto_clear_existing_history_scheduled")
+            if config_data.get("due_at")
+            else t("ai.value.auto_clear_waiting_for_history")
+        )
+        return t(
+            "ai.msg.auto_clear_enabled",
+            switch_note=switch_note,
+            minutes=self.AI_AUTO_CLEAR_TIMEOUT_SECONDS // 60,
+            schedule_detail=schedule_detail,
+        )
+
+    def _auto_idle_switch_note(self, current_mode: str, new_mode: str) -> str:
+        """兩者互斥，切換時說明另一邊被一起關掉。"""
+        if new_mode == current_mode or new_mode == self.AI_AUTO_IDLE_MODE_NONE:
+            return ""
+        if current_mode == self.AI_AUTO_IDLE_MODE_SUMMARY:
+            return t("ai.value.auto_idle_switch_from_summary")
+        if current_mode == self.AI_AUTO_IDLE_MODE_CLEAR:
+            return t("ai.value.auto_idle_switch_from_clear")
+        return ""
+
+    async def _respond_auto_idle_command(
+        self,
+        send,
+        user,
+        guild,
+        *,
+        target_mode: str,
+        enabled: bool | None,
+        global_default: bool,
+    ) -> None:
+        if enabled is None:
+            await send(self._build_auto_idle_status_text(user, guild, target_mode=target_mode))
+            return
+        await send(
+            await self._apply_auto_idle_command(
+                user,
+                guild,
+                target_mode=target_mode,
+                enabled=enabled,
+                global_default=global_default,
+            )
+        )
+
     @ai_memory.command(
         name=app_commands.locale_str("auto-summary", i18n_key="cmd.ai.ai_memory.auto_summary.name"),
         description=app_commands.locale_str("Configure idle conversation memory extraction", i18n_key="cmd.ai.ai_memory.auto_summary.desc"),
     )
     @app_commands.describe(
-        enabled=app_commands.locale_str("Enable or disable 30-minute idle extraction", i18n_key="cmd.ai.ai_memory.auto_summary.param.enabled")
+        enabled=app_commands.locale_str("Enable or disable 30-minute idle extraction", i18n_key="cmd.ai.ai_memory.auto_summary.param.enabled"),
+        global_default=app_commands.locale_str("Apply as your default everywhere and drop per-scope settings", i18n_key="cmd.ai.ai_memory.auto_summary.param.global_default"),
     )
-    async def ai_memory_auto_summary(self, interaction: discord.Interaction, enabled: bool = None):
-        user_id = interaction.user.id
-        guild = interaction.guild
-        guild_id = guild.id if guild else None
-        if enabled is None:
-            config_data = self._get_auto_summary_config(user_id, guild_id)
-            status = t("ai.value.toggle_enabled") if config_data.get("enabled") else t("ai.value.toggle_disabled")
-            scene = guild.name if guild else t("ai.value.direct_messages")
-            await interaction.response.send_message(
-                t(
-                    "ai.msg.auto_summary_status",
-                    scene=scene,
-                    status=status,
-                    last_result=self._format_auto_summary_last_result(config_data),
-                ),
+    async def ai_memory_auto_summary(
+        self,
+        interaction: discord.Interaction,
+        enabled: bool = None,
+        global_default: bool = False,
+    ):
+        await self._respond_auto_idle_command(
+            lambda message: interaction.response.send_message(
+                message,
                 ephemeral=True,
                 allowed_mentions=SAFE_MENTIONS,
-            )
-            return
-
-        config_data = self._set_auto_summary_enabled(user_id, guild_id, enabled)
-        if not enabled:
-            await interaction.response.send_message(
-                t("ai.msg.auto_summary_disabled"),
-                ephemeral=True,
-                allowed_mentions=SAFE_MENTIONS,
-            )
-            return
-
-        if guild:
-            payer_id = self._get_guild_ai_billing_user_id(guild_id)
-            if payer_id:
-                _, payer_name = await self._resolve_user_identity(payer_id, guild)
-                payer_rule = t("ai.value.auto_summary_designated_payer", payer_name=payer_name, payer_id=payer_id)
-            else:
-                payer_rule = t("ai.value.auto_summary_requester_pays")
-        else:
-            payer_rule = t("ai.value.auto_summary_self_pays")
-        schedule_detail = (
-            t("ai.value.auto_summary_existing_history_scheduled")
-            if config_data.get("due_at")
-            else t("ai.value.auto_summary_waiting_for_history")
-        )
-        await interaction.response.send_message(
-            t(
-                "ai.msg.auto_summary_enabled",
-                minutes=self.AI_AUTO_SUMMARY_TIMEOUT_SECONDS // 60,
-                cost=f"{self.AI_AUTO_SUMMARY_COST:,.0f}",
-                currency=GLOBAL_CURRENCY_NAME,
-                payer_rule=payer_rule,
-                schedule_detail=schedule_detail,
             ),
-            ephemeral=True,
-            allowed_mentions=SAFE_MENTIONS,
+            interaction.user,
+            interaction.guild,
+            target_mode=self.AI_AUTO_IDLE_MODE_SUMMARY,
+            enabled=enabled,
+            global_default=global_default,
+        )
+
+    @ai_memory.command(
+        name=app_commands.locale_str("auto-clear", i18n_key="cmd.ai.ai_memory.auto_clear.name"),
+        description=app_commands.locale_str("Configure idle conversation auto-clearing", i18n_key="cmd.ai.ai_memory.auto_clear.desc"),
+    )
+    @app_commands.describe(
+        enabled=app_commands.locale_str("Enable or disable clearing the conversation after 30 idle minutes", i18n_key="cmd.ai.ai_memory.auto_clear.param.enabled"),
+        global_default=app_commands.locale_str("Apply as your default everywhere and drop per-scope settings", i18n_key="cmd.ai.ai_memory.auto_clear.param.global_default"),
+    )
+    async def ai_memory_auto_clear(
+        self,
+        interaction: discord.Interaction,
+        enabled: bool = None,
+        global_default: bool = False,
+    ):
+        await self._respond_auto_idle_command(
+            lambda message: interaction.response.send_message(
+                message,
+                ephemeral=True,
+                allowed_mentions=SAFE_MENTIONS,
+            ),
+            interaction.user,
+            interaction.guild,
+            target_mode=self.AI_AUTO_IDLE_MODE_CLEAR,
+            enabled=enabled,
+            global_default=global_default,
         )
 
     @app_commands.command(name=app_commands.locale_str("ai-set-response-view", i18n_key="cmd.ai.ai_set_response_view.name"), description=app_commands.locale_str("Set how AI command responses are displayed for you", i18n_key="cmd.ai.ai_set_response_view.desc"))
@@ -12169,7 +12715,7 @@ class AICommands(commands.Cog):
         tool_context: dict | None = None
         async with ctx.typing():
             try:
-                await self._check_overdue_auto_summary(user.id, guild_id)
+                await self._check_overdue_ai_idle(user.id, guild_id)
                 history = ConversationManager.get_history(user.id, guild_id)
                 tool_context = {
                     "user": user,
@@ -12426,7 +12972,7 @@ class AICommands(commands.Cog):
                     getattr(guild, "id", None),
                     getattr(response_message, "id", None),
                 )
-                self._record_auto_summary_activity(user.id, guild_id)
+                self._record_ai_idle_activity(user.id, guild_id)
 
             except Exception as e:
                 if not pending_image_attachments:
@@ -12467,60 +13013,51 @@ class AICommands(commands.Cog):
                     send_notice=lambda message: ctx.send(message, allowed_mentions=SAFE_MENTIONS),
                 )
 
-    @commands.command(name="ai-auto-summary", aliases=["aiautosummary"])
-    async def ai_auto_summary_text(self, ctx: commands.Context, enabled: str = None):
-        user_id = ctx.author.id
-        guild = ctx.guild
-        guild_id = guild.id if guild else None
-        if enabled is None:
-            config_data = self._get_auto_summary_config(user_id, guild_id)
-            status = t("ai.value.toggle_enabled") if config_data.get("enabled") else t("ai.value.toggle_disabled")
-            scene = guild.name if guild else t("ai.value.direct_messages")
-            await ctx.reply(
-                t(
-                    "ai.msg.auto_summary_status",
-                    scene=scene,
-                    status=status,
-                    last_result=self._format_auto_summary_last_result(config_data),
-                ),
-                allowed_mentions=SAFE_MENTIONS,
-            )
-            return
+    def _parse_auto_idle_text_args(self, enabled: str | None, scope: str | None) -> tuple[bool | None, bool] | None:
+        """解析 `[on|off] [global]`；無法解析回 None。"""
+        global_default = False
+        tokens = [str(token).strip().lower() for token in (enabled, scope) if str(token or "").strip()]
+        if tokens and tokens[-1] in {"global", "all", "default"}:
+            global_default = True
+            tokens.pop()
+        if len(tokens) > 1:
+            return None
+        if not tokens:
+            return None if global_default else (None, False)
+        if tokens[0] not in {"on", "off"}:
+            return None
+        return tokens[0] == "on", global_default
 
-        normalized = str(enabled).strip().lower()
-        if normalized not in {"on", "off"}:
+    @commands.command(name="ai-auto-summary", aliases=["aiautosummary"])
+    async def ai_auto_summary_text(self, ctx: commands.Context, enabled: str = None, scope: str = None):
+        parsed = self._parse_auto_idle_text_args(enabled, scope)
+        if parsed is None:
             await ctx.reply(t("ai.err.auto_summary_text_usage"), allowed_mentions=SAFE_MENTIONS)
             return
-        should_enable = normalized == "on"
-        config_data = self._set_auto_summary_enabled(user_id, guild_id, should_enable)
-        if not should_enable:
-            await ctx.reply(t("ai.msg.auto_summary_disabled"), allowed_mentions=SAFE_MENTIONS)
-            return
-
-        if guild:
-            payer_id = self._get_guild_ai_billing_user_id(guild_id)
-            if payer_id:
-                _, payer_name = await self._resolve_user_identity(payer_id, guild)
-                payer_rule = t("ai.value.auto_summary_designated_payer", payer_name=payer_name, payer_id=payer_id)
-            else:
-                payer_rule = t("ai.value.auto_summary_requester_pays")
-        else:
-            payer_rule = t("ai.value.auto_summary_self_pays")
-        schedule_detail = (
-            t("ai.value.auto_summary_existing_history_scheduled")
-            if config_data.get("due_at")
-            else t("ai.value.auto_summary_waiting_for_history")
+        should_enable, global_default = parsed
+        await self._respond_auto_idle_command(
+            lambda message: ctx.reply(message, allowed_mentions=SAFE_MENTIONS),
+            ctx.author,
+            ctx.guild,
+            target_mode=self.AI_AUTO_IDLE_MODE_SUMMARY,
+            enabled=should_enable,
+            global_default=global_default,
         )
-        await ctx.reply(
-            t(
-                "ai.msg.auto_summary_enabled",
-                minutes=self.AI_AUTO_SUMMARY_TIMEOUT_SECONDS // 60,
-                cost=f"{self.AI_AUTO_SUMMARY_COST:,.0f}",
-                currency=GLOBAL_CURRENCY_NAME,
-                payer_rule=payer_rule,
-                schedule_detail=schedule_detail,
-            ),
-            allowed_mentions=SAFE_MENTIONS,
+
+    @commands.command(name="ai-auto-clear", aliases=["aiautoclear"])
+    async def ai_auto_clear_text(self, ctx: commands.Context, enabled: str = None, scope: str = None):
+        parsed = self._parse_auto_idle_text_args(enabled, scope)
+        if parsed is None:
+            await ctx.reply(t("ai.err.auto_clear_text_usage"), allowed_mentions=SAFE_MENTIONS)
+            return
+        should_enable, global_default = parsed
+        await self._respond_auto_idle_command(
+            lambda message: ctx.reply(message, allowed_mentions=SAFE_MENTIONS),
+            ctx.author,
+            ctx.guild,
+            target_mode=self.AI_AUTO_IDLE_MODE_CLEAR,
+            enabled=should_enable,
+            global_default=global_default,
         )
 
     @commands.command(name="ai-new", aliases=["ainew", "newchat"])
@@ -12535,7 +13072,7 @@ class AICommands(commands.Cog):
         guild_id = ctx.guild.id if ctx.guild else None
         
         # 清除歷史
-        self._clear_auto_summary_schedule(user.id, guild_id)
+        self._clear_ai_idle_schedule(user.id, guild_id)
         ConversationManager.clear_history(user.id, guild_id)
         
         if message is None:
@@ -12556,7 +13093,7 @@ class AICommands(commands.Cog):
         user = ctx.author
         guild_id = ctx.guild.id if ctx.guild else None
         
-        self._clear_auto_summary_schedule(user.id, guild_id)
+        self._clear_ai_idle_schedule(user.id, guild_id)
         ConversationManager.clear_history(user.id, guild_id)
         await ctx.reply(t("ai.msg.history_cleared_simple"), allowed_mentions=SAFE_MENTIONS)
     

@@ -373,7 +373,7 @@ class AIMemoryTests(unittest.IsolatedAsyncioTestCase):
         refund.assert_awaited_once()
         clear_history.assert_not_called()
 
-    def test_auto_summary_configuration_isolated_by_context(self):
+    def _patched_user_data(self):
         stored = {}
 
         def fake_get(scope_id, user_id, key, default):
@@ -383,21 +383,151 @@ class AIMemoryTests(unittest.IsolatedAsyncioTestCase):
             stored[(scope_id, user_id, key)] = value
             return True
 
-        with patch("ai.get_user_data", side_effect=fake_get), patch("ai.set_user_data", side_effect=fake_set), patch.object(
-            ConversationManager, "get_history", return_value=[]
-        ):
-            self.cog._set_auto_summary_enabled(42, 100, True)
+        return stored, patch("ai.get_user_data", side_effect=fake_get), patch(
+            "ai.set_user_data", side_effect=fake_set
+        )
+
+    def test_auto_summary_configuration_isolated_by_context(self):
+        _stored, get_patch, set_patch = self._patched_user_data()
+        with get_patch, set_patch, patch.object(ConversationManager, "get_history", return_value=[]):
+            self.cog._set_scope_auto_idle_mode(42, 100, AICommands.AI_AUTO_IDLE_MODE_SUMMARY)
             guild_config = self.cog._get_auto_summary_config(42, 100)
             dm_config = self.cog._get_auto_summary_config(42, None)
 
         self.assertTrue(guild_config["enabled"])
         self.assertFalse(dm_config["enabled"])
 
+    def test_auto_clear_and_auto_summary_are_mutually_exclusive(self):
+        _stored, get_patch, set_patch = self._patched_user_data()
+        with get_patch, set_patch, patch.object(ConversationManager, "get_history", return_value=[]):
+            self.cog._set_scope_auto_idle_mode(42, 100, AICommands.AI_AUTO_IDLE_MODE_SUMMARY)
+            self.assertTrue(self.cog._get_auto_summary_config(42, 100)["enabled"])
+            self.assertFalse(self.cog._get_auto_clear_config(42, 100)["enabled"])
+
+            self.cog._set_scope_auto_idle_mode(42, 100, AICommands.AI_AUTO_IDLE_MODE_CLEAR)
+            self.assertFalse(self.cog._get_auto_summary_config(42, 100)["enabled"])
+            self.assertTrue(self.cog._get_auto_clear_config(42, 100)["enabled"])
+
+            self.cog._set_scope_auto_idle_mode(42, 100, AICommands.AI_AUTO_IDLE_MODE_NONE)
+            self.assertFalse(self.cog._get_auto_summary_config(42, 100)["enabled"])
+            self.assertFalse(self.cog._get_auto_clear_config(42, 100)["enabled"])
+
+    def test_global_default_applies_where_scope_has_no_setting(self):
+        _stored, get_patch, set_patch = self._patched_user_data()
+        with get_patch, set_patch, patch.object(ConversationManager, "get_history", return_value=[]):
+            self.cog._set_auto_idle_global_mode(42, AICommands.AI_AUTO_IDLE_MODE_CLEAR)
+
+            guild_config = self.cog._get_auto_clear_config(42, 100)
+            dm_config = self.cog._get_auto_clear_config(42, None)
+            self.assertTrue(guild_config["enabled"])
+            self.assertEqual(guild_config["mode_source"], "global")
+            self.assertTrue(dm_config["enabled"])
+
+            # 場景自己的設定優先於全域預設
+            self.cog._set_scope_auto_idle_mode(42, 100, AICommands.AI_AUTO_IDLE_MODE_SUMMARY)
+            guild_config = self.cog._get_auto_clear_config(42, 100)
+            self.assertFalse(guild_config["enabled"])
+            self.assertEqual(guild_config["mode_source"], "scope")
+            self.assertTrue(self.cog._get_auto_clear_config(42, None)["enabled"])
+
+    def test_setting_global_default_clears_scope_overrides(self):
+        stored, get_patch, set_patch = self._patched_user_data()
+
+        class _Cursor:
+            def __init__(self, rows):
+                self._rows = rows
+
+            def fetchall(self):
+                return self._rows
+
+        class _Connection:
+            def __init__(self, rows):
+                self._rows = rows
+
+            def execute(self, _query, _params):
+                return _Cursor(self._rows)
+
+            def close(self):
+                return None
+
+        with get_patch, set_patch, patch.object(ConversationManager, "get_history", return_value=[]):
+            self.cog._set_scope_auto_idle_mode(42, 100, AICommands.AI_AUTO_IDLE_MODE_SUMMARY)
+            self.assertEqual(self.cog._read_scope_auto_idle_mode(42, 100, migrate=False), "summary")
+
+            with patch("ai.get_db_connection", return_value=_Connection([(100,), (0,)])):
+                cleared = self.cog._set_global_auto_idle_mode(42, AICommands.AI_AUTO_IDLE_MODE_CLEAR)
+
+            self.assertEqual(cleared, 1)
+            self.assertIsNone(self.cog._read_scope_auto_idle_mode(42, 100, migrate=False))
+            self.assertTrue(self.cog._get_auto_clear_config(42, 100)["enabled"])
+
+    def test_legacy_auto_summary_config_migrates_to_scope_mode(self):
+        stored, get_patch, set_patch = self._patched_user_data()
+        stored[(100, 42, AICommands.AI_AUTO_SUMMARY_CONFIG_KEY)] = {"enabled": True, "due_at": None}
+
+        with get_patch, set_patch, patch.object(ConversationManager, "get_history", return_value=[]):
+            self.cog._set_auto_idle_global_mode(42, AICommands.AI_AUTO_IDLE_MODE_CLEAR)
+            config_data = self.cog._get_auto_summary_config(42, 100)
+
+        self.assertTrue(config_data["enabled"])
+        self.assertEqual(config_data["mode_source"], "scope")
+        self.assertEqual(stored[(100, 42, AICommands.AI_AUTO_IDLE_MODE_KEY)], "summary")
+
+    async def test_auto_clear_clears_history_without_charging(self):
+        config = {"enabled": True, "due_at": time.time() - 5, "last_activity_at": time.time() - 3600}
+
+        with patch.object(self.cog, "_get_auto_clear_config", side_effect=lambda *_: dict(config)), patch.object(
+            self.cog, "_set_auto_clear_config", return_value=True
+        ), patch.object(ConversationManager, "get_history", return_value=[{"role": "user"}, {"role": "assistant"}]), patch.object(
+            ConversationManager, "has_complete_turn", return_value=True
+        ), patch.object(ConversationManager, "latest_timestamp", return_value=time.time() - 3600), patch.object(
+            ConversationManager, "clear_history", return_value=True
+        ) as clear_history, patch.object(self.cog, "_set_auto_clear_result") as set_result, patch.object(
+            self.cog, "_charge_auto_summary", new=AsyncMock()
+        ) as charge:
+            result = await self.cog._run_auto_clear(42, None, expected_due_at=config["due_at"])
+
+        self.assertEqual(result, "success_cleared")
+        clear_history.assert_called_once_with(42, None)
+        charge.assert_not_awaited()
+        set_result.assert_called_once()
+
+    async def test_auto_clear_waits_when_conversation_is_still_fresh(self):
+        now = time.time()
+        config = {"enabled": True, "due_at": now - 5, "last_activity_at": now}
+
+        with patch.object(self.cog, "_get_auto_clear_config", side_effect=lambda *_: dict(config)), patch.object(
+            self.cog, "_set_auto_clear_config", return_value=True
+        ), patch.object(ConversationManager, "get_history", return_value=[{"role": "user"}, {"role": "assistant"}]), patch.object(
+            ConversationManager, "has_complete_turn", return_value=True
+        ), patch.object(ConversationManager, "latest_timestamp", return_value=now), patch.object(
+            ConversationManager, "clear_history", return_value=True
+        ) as clear_history, patch.object(self.cog, "_schedule_auto_clear") as schedule:
+            result = await self.cog._run_auto_clear(42, None, expected_due_at=config["due_at"])
+
+        self.assertIsNone(result)
+        clear_history.assert_not_called()
+        schedule.assert_called_once()
+
+    def test_auto_idle_text_args_accept_optional_global_token(self):
+        self.assertEqual(self.cog._parse_auto_idle_text_args(None, None), (None, False))
+        self.assertEqual(self.cog._parse_auto_idle_text_args("on", None), (True, False))
+        self.assertEqual(self.cog._parse_auto_idle_text_args("off", "global"), (False, True))
+        self.assertEqual(self.cog._parse_auto_idle_text_args("ON", "GLOBAL"), (True, True))
+        self.assertIsNone(self.cog._parse_auto_idle_text_args("global", None))
+        self.assertIsNone(self.cog._parse_auto_idle_text_args("maybe", None))
+        self.assertIsNone(self.cog._parse_auto_idle_text_args("on", "off"))
+
     def test_ai_memory_command_shape_has_no_cross_user_or_guild_options(self):
         commands_by_name = {command.name: command for command in AICommands.ai_memory.commands}
-        self.assertEqual(set(commands_by_name), {"view", "delete", "auto-summary"})
+        self.assertEqual(set(commands_by_name), {"view", "delete", "auto-summary", "auto-clear"})
         self.assertEqual({parameter.name for parameter in commands_by_name["view"].parameters}, {"query"})
         self.assertEqual({parameter.name for parameter in commands_by_name["delete"].parameters}, {"memory_id"})
+        for name in ("auto-summary", "auto-clear"):
+            self.assertEqual(
+                {parameter.name for parameter in commands_by_name[name].parameters},
+                {"enabled", "global_default"},
+            )
         self.assertNotIn("user", {parameter.name for command in commands_by_name.values() for parameter in command.parameters})
         self.assertNotIn("scope", {parameter.name for command in commands_by_name.values() for parameter in command.parameters})
 
@@ -405,8 +535,9 @@ class AIMemoryTests(unittest.IsolatedAsyncioTestCase):
         payload_by_name = {option["name"]: option for option in payload["options"]}
         self.assertEqual(payload_by_name["delete"]["options"][0]["name"], "memory_id")
         self.assertTrue(payload_by_name["delete"]["options"][0]["autocomplete"])
-        self.assertEqual(payload_by_name["auto-summary"]["options"][0]["type"], 5)
-
+        for name in ("auto-summary", "auto-clear"):
+            self.assertEqual({option["type"] for option in payload_by_name[name]["options"]}, {5})
+            self.assertFalse(any(option.get("required") for option in payload_by_name[name]["options"]))
 
 if __name__ == "__main__":
     unittest.main()

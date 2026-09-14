@@ -17,14 +17,28 @@
             }
         },
         "ai_memory": {
+            "auto_clear": {
+                "desc": "30 分間操作がない後の会話の自動消去を設定します",
+                "name": "自動消去",
+                "param": {
+                    "enabled": "30 分間操作がない後の会話の自動消去を有効または無効にします",
+                    "global_default": "グローバル既定にし、各場面の個別設定を解除します"
+                },
+                "param_name": {
+                    "enabled": "有効",
+                    "global_default": "グローバル"
+                }
+            },
             "auto_summary": {
                 "desc": "30 分間操作がない後の個人メモ抽出を設定します",
                 "name": "自動要約",
                 "param": {
-                    "enabled": "30 分間操作がない後の抽出を有効または無効にします"
+                    "enabled": "30 分間操作がない後の抽出を有効または無効にします",
+                    "global_default": "グローバル既定にし、各場面の個別設定を解除します"
                 },
                 "param_name": {
-                    "enabled": "有効"
+                    "enabled": "有効",
+                    "global_default": "グローバル"
                 }
             },
             "delete": {

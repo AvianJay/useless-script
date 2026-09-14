@@ -17,14 +17,28 @@
             }
         },
         "ai_memory": {
+            "auto_clear": {
+                "desc": "設定閒置 30 分鐘後自動清除對話",
+                "name": "自動清除",
+                "param": {
+                    "enabled": "開啟或關閉閒置 30 分鐘自動清除對話",
+                    "global_default": "設為全域預設，並清除各場景的個別設定"
+                },
+                "param_name": {
+                    "enabled": "啟用",
+                    "global_default": "全域"
+                }
+            },
             "auto_summary": {
                 "desc": "設定閒置 30 分鐘後自動提煉個人記憶",
                 "name": "自動提煉",
                 "param": {
-                    "enabled": "開啟或關閉閒置 30 分鐘自動提煉"
+                    "enabled": "開啟或關閉閒置 30 分鐘自動提煉",
+                    "global_default": "設為全域預設，並清除各場景的個別設定"
                 },
                 "param_name": {
-                    "enabled": "啟用"
+                    "enabled": "啟用",
+                    "global_default": "全域"
                 }
             },
             "delete": {
