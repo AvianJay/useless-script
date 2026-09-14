@@ -138,6 +138,9 @@ AUTOMOD_IGNORE_CHANNEL_FEATURES = {
 AUTOMOD_IGNORE_CHANNEL_TYPES = {
     "anti_voice_spam": [discord.ChannelType.voice, discord.ChannelType.stage_voice],
 }
+# 備援快速設定精靈能放的 Select 上限。Discord 的 View 只有 5 列、每個 Select 佔一整列，
+# 而完成按鈕還要一列，所以最多 4 個 Select。
+AUTOMOD_MAX_WIZARD_SELECTS = 4
 # 需要以布林值儲存的設定欄位（而非字串）
 AUTOMOD_BOOLEAN_SETTINGS = {"allow_current_server", "log_into_voice_channel"}
 # 處置在「沒有觸發訊息」的情境下執行的功能，必須用 analyze_member_join_action 驗證
@@ -862,7 +865,12 @@ class QuickSetupView(discord.ui.View):
             mode_sel.callback = self._on_flagged_local_match_mode_select
             self.add_item(mode_sel)
 
-        if self.feature in AUTOMOD_IGNORE_CHANNEL_FEATURES:
+        # Discord 的 View 只有 5 個 action row，每個 Select 都吃掉一整列，
+        # 而最後的完成按鈕也需要一列，所以 Select 總數上限是 4。
+        # 處置動作 Select 是必要的（沒有它就無法完成設定），忽略頻道則可事後再設，
+        # 因此空間不足時優先放棄忽略頻道選單 —— 否則 add_item 會直接拋
+        # ValueError: could not find open space for item（anti_spam 過去就是這樣壞的）。
+        if self.feature in AUTOMOD_IGNORE_CHANNEL_FEATURES and len(self.children) + 2 <= AUTOMOD_MAX_WIZARD_SELECTS:
             ignore_sel = discord.ui.ChannelSelect(
                 placeholder=t("automoderate.quick_setup.ignore_channels_ph"),
                 channel_types=AUTOMOD_IGNORE_CHANNEL_TYPES.get(

@@ -353,14 +353,14 @@
             "ban_1d": "ban 1d 7d {reason}",
             "ban_perm": "ban 0 0 {reason}",
             "delete": "delete",
-            "delete_warn": "delete {user}, {reason}",
+            "delete_warn": "delete {user} - {reason}",
             "force_verify_1d": "force_verify 1d",
             "kick": "kick {reason}",
             "mute_10m": "mute 10m {reason}",
             "mute_1h": "mute 1h {reason}",
             "smm": "smm",
             "to_10m": "to 10m {reason}",
-            "warn": "warn {user}, {reason}"
+            "warn": "warn {user} - {reason}"
         },
         "warn": "Public warning"
     },

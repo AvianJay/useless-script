@@ -64,7 +64,7 @@
                 "desc": "Detect Discord invite links.",
                 "field": {
                     "action": {
-                        "default": "delete {user}, please don't post invite links to other servers."
+                        "default": "delete {user} - please don't post invite links to other servers."
                     },
                     "allow_current_server": "Allow this server's own link"
                 },
@@ -84,7 +84,7 @@
                 "desc": "Detect similar messages posted in a short time.",
                 "field": {
                     "action": {
-                        "default": "mute 10m auto-mute for spamming, delete {user}, please don't spam."
+                        "default": "mute 10m auto-mute for spamming, delete {user} - please don't spam."
                     },
                     "max_messages": "Max similar messages",
                     "similarity": "Similarity (%)"
@@ -95,7 +95,7 @@
                 "desc": "Limit how often User Install commands can be triggered.",
                 "field": {
                     "action": {
-                        "default": "delete {user}, please don't abuse user-installed app commands., mute 10m abusing user-installed commands"
+                        "default": "delete {user} - please don't abuse user-installed app commands., mute 10m abusing user-installed commands"
                     },
                     "max_count": "Max trigger count"
                 },
@@ -153,7 +153,7 @@
                 "desc": "Automatically act when someone speaks in the honeypot channel.",
                 "field": {
                     "action": {
-                        "default": "delete {user} was the last account banned, don't post here!, ban {user} 5s 12h [auto-ban] suspected compromised account"
+                        "default": "delete {user} was the last account banned - don't post here!, ban {user} 5s 12h [auto-ban] suspected compromised account"
                     },
                     "channel_id": "Trap channel"
                 },

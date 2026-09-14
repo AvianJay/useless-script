@@ -350,17 +350,17 @@
         "smm": "モデレーションアナウンスを送信する",
         "to_10m": "10 分間ミュートします (略記)",
         "value": {
-            "ban_1d": "禁止 1d 7d {reason}",
-            "ban_perm": "禁止 0 0 {reason}",
-            "delete": "削除する",
-            "delete_warn": "{user}、{reason} を削除します",
-            "force_verify_1d": "強制検証 1d",
-            "kick": "キック {reason}",
-            "mute_10m": "ミュート 10 分 {reason}",
-            "mute_1h": "1時間ミュート {reason}",
-            "smm": "うーん",
-            "to_10m": "10mまで {reason}",
-            "warn": "警告 {user}、{reason}"
+            "ban_1d": "ban 1d 7d {reason}",
+            "ban_perm": "ban 0 0 {reason}",
+            "delete": "delete",
+            "delete_warn": "delete {user}、{reason}",
+            "force_verify_1d": "force_verify 1d",
+            "kick": "kick {reason}",
+            "mute_10m": "mute 10m {reason}",
+            "mute_1h": "mute 1h {reason}",
+            "smm": "smm",
+            "to_10m": "to 10m {reason}",
+            "warn": "warn {user}、{reason}"
         },
         "warn": "公衆の警告"
     },

@@ -15,10 +15,10 @@
         "save_action": "Yes, save this action"
     },
     "default_action": {
-        "invite_link": "delete {user}, please don't post invite links to other servers.",
+        "invite_link": "delete {user} - please don't post invite links to other servers.",
         "scamtrap": "delete {user} was the last account to get banned - don't talk in here!, ban {user} 5s 12h [auto-ban] likely compromised account",
-        "spam": "mute 10m auto-mute for spamming, delete {user}, please don't spam.",
-        "uispam": "delete {user}, please don't abuse user-installed app commands., mute 10m user-install command abuse",
+        "spam": "mute 10m auto-mute for spamming, delete {user} - please don't spam.",
+        "uispam": "delete {user} - please don't abuse user-installed app commands., mute 10m user-install command abuse",
         "voice_spam": "mute 10m auto-mute for voice-join spam"
     },
     "default_reason": {
