@@ -1,5 +1,33 @@
 # Changelog
 
+## 0.24.9
+* Added AutoModerate voice-join spam detection | /automod
+  * Added `anti_voice_spam`, which detects members repeatedly joining voice channels to spam the join sound. The max join count, time window, detection scope (same channel only or any voice channel in the server), action, and ignored channels are all configurable.
+  * Dynamic Voice lobby and temporary channels, the AFK channel, and administrators are skipped, so normal channel switching and bot-initiated moves are never counted.
+  * When triggered, a notice is posted in the voice channel's built-in text chat by default, showing the join count, time window, and action result. It can be turned off with `log_into_voice_channel`, and is not sent if the action failed.
+  * Configurable from `/automod quick-setup`, `/automod settings`, `/gettingstarted`, and the web panel.
+* Updated AutoModerate | /automod
+  * Fixed commas inside the built-in default actions being treated as action separators, which split the English defaults for invite links, anti-spam, and user-install abuse into invalid actions.
+  * Fixed the Japanese locale translating action keywords such as `ban`, `mute`, and `delete`, producing action strings that could not be parsed.
+  * Fixed the quick-setup wizard failing to open when its menus exceeded Discord's component row limit (anti-spam was previously broken by this). When there is not enough room the action menu is kept, and ignored channels can be set afterwards with `/automod settings`.
+  * Features that act without a triggering message (flagged user joins, voice-join spam) now use the stricter action validation, which rejects actions such as `delete` and `warn` that silently do nothing in that context.
+* Fixed security issues
+  * The web panel's session signing key could fall back to a default value present in the public source code, allowing anyone to forge a signed session and enter the guild panel. It now uses a separate `FLASK_SECRET_KEY` setting, generated and written back to the config when missing, and no longer shares the OAuth client secret.
+  * The report panel's moderation buttons had no permission checks, so any member who could see the report channel could ban, kick, or mute others, or add someone to the blacklist role. Each button now checks the matching permission and denies by default.
+  * AutoReply substituted `{content}`, `{author}`, and similar variables before command parsing, letting any member embed syntax such as `{mention:true}` in a message to make the bot ping `@everyone`. Substituted values are no longer parsed as commands, and commands written by the template author still work.
+* Updated the report system
+  * Fixed permanent bans not actually being applied while the moderation announcement was still posted. Failures are now reported to the moderator instead.
+  * Fixed reports failing to send when the reported message or the reason was too long.
+* Updated minigames | /games
+  * Fixed every button in `/games tower` failing with an "interaction failed" error after the first floor. The Big Two lobby, High-Low, and Blackjack screen transitions were fixed as well.
+  * Fixed Big Two stakes not being refunded when the host ended the game or the table timed out. Stakes are now fully refunded and recorded.
+* Updated the economy and item systems
+  * Fixed dropping an item that no longer exists removing it from the inventory before failing, destroying the item permanently.
+  * Fixed `/dsize` check-in rewards granting scalpels with the wrong item ID, so the scalpels received could never be used and errored when dropped.
+  * Fixed users without a rusty scalpel still being able to complete one surgery.
+  * Fixed grass feeding erroring only after the grass had already been consumed when no image matched the filter. Normal channels no longer fall back to NSFW images.
+* Fixed some bugs.
+
 ## 0.24.8
 * Updated AI message search
   * AI now uses Discord's indexed guild message search across channels and threads where both the user and Bot can read message history, instead of scanning a limited amount of channel history. Searches can also be restricted to one visible channel.
