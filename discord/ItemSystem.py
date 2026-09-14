@@ -510,7 +510,13 @@ class ItemSystem(commands.GroupCog, name=app_commands.locale_str("item", i18n_ke
             await interaction.response.send_message(t("itemsystem.err.not_owned"), ephemeral=True)
             return
         target_item = get_item_by_id(item_id, guild_id if guild_id else None)
-        
+        if not target_item:
+            # 背包裡有、但定義已不存在的道具（管理員刪掉自訂道具、或發放時寫錯 id）。
+            # 一定要在 remove_item_from_user 之前擋下來：原本會先把道具刪掉，
+            # 之後才在組訊息時 TypeError，道具就這樣永久消失且沒有回滾。
+            await interaction.response.send_message(t("itemsystem.err.invalid_item"), ephemeral=True)
+            return
+
         if can_pickup:
             if pickup_duration <= 0 or pickup_duration > 86400:
                 await interaction.response.send_message(t("itemsystem.err.pickup_duration_range"), ephemeral=True)

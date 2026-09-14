@@ -22,6 +22,7 @@
             "turn": "輪到"
         },
         "game_ended": "此局已結束。",
+        "game_ended_refunded": "🛑 房主結束了這局，底注已全數退還。",
         "hand_footer": "共 {count} 張｜用下拉選牌後按「出牌」或直接「Pass」。",
         "joined": "加入成功！",
         "lobby_desc": "規則：**{rule}**｜人數：{count}/4",
@@ -66,6 +67,7 @@
         "table_rule": "規則：**{rule}**",
         "table_stake": "｜💰 賭注：{stake} {currency}",
         "table_title": "🎴 大老二 進行中",
+        "timeout_refunded": "⏰ 牌局因超時結束，底注已全數退還。",
         "you_passed": "你選擇 Pass。",
         "you_played": "✅ 你出了：{cards}",
         "your_hand_title": "🂠 你的手牌"

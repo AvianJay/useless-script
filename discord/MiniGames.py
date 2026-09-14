@@ -796,23 +796,33 @@ class TableView(i18n.I18nView):
     async def end_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
         if interaction.user.id != self.game.owner_id:
             return await interaction.response.send_message(t("minigames.err.host_only_end"), ephemeral=True)
+        # 先退還已收取的底注，否則房主一按結束就把全桌的錢銷毀了。
+        refunded = self.cog.refund_big2_stakes(
+            self.game, reason_detail=f"Host {interaction.user.id} ended the Big2 table early.")
         self.cog.games.pop(self.game.channel_id, None)
-        await interaction.response.edit_message(content=t("minigames.bigtwo.game_ended"), embed=None, view=None)
+        content = (t("minigames.bigtwo.game_ended_refunded")
+                   if refunded else t("minigames.bigtwo.game_ended"))
+        await interaction.response.edit_message(content=content, embed=None, view=None)
         self.stop()
 
     async def on_timeout(self):
         if self.game.active_view is not self:
             return
         self.game.active_view = None
-        # timeout=None，理論上不會觸發；若將來改為有 timeout 則停用按鈕
+        # timeout=600，輪到的玩家掛機就會走到這裡；同樣必須退還底注。
+        refunded = self.cog.refund_big2_stakes(
+            self.game, reason_detail="Big2 table timed out before a winner was decided.")
         for child in self.children:
             child.disabled = True
         if self.game.lobby_message is not None:
             try:
-                await self.game.lobby_message.edit(content=t("minigames.msg.ended_by_timeout"), view=self)
-                self.cog.games.pop(self.game.channel_id, None)
+                content = (t("minigames.bigtwo.timeout_refunded")
+                           if refunded else t("minigames.msg.ended_by_timeout"))
+                await self.game.lobby_message.edit(content=content, view=self)
             except (discord.NotFound, discord.HTTPException):
                 pass
+        # 不論訊息能否編輯成功，牌局都必須從 games 移除，否則頻道會卡住無法開新局。
+        self.cog.games.pop(self.game.channel_id, None)
         self.stop()
 
 
@@ -1267,14 +1277,15 @@ class MiniGamesCog(
             edit_kwargs["content"] = content
         if embed is not discord.utils.MISSING:
             edit_kwargs["embed"] = embed
+        # 停舊 view 必須早於 message.edit 註冊新 view，理由同 tower_pick_tile 的註解。
+        if old_view is not None and old_view is not view:
+            old_view.stop()
         await message.edit(**edit_kwargs)
         game.lobby_message = message
         game.lobby_message_id = message.id
         game.active_view = view
         if view is not None and hasattr(view, "message"):
             view.message = message
-        if old_view is not None and old_view is not view:
-            old_view.stop()
 
     def _resolve_audit_user(self, guild_id: int, user_id: int):
         if guild_id != GLOBAL_GUILD_ID:
@@ -2488,6 +2499,9 @@ class MiniGamesCog(
                 if isinstance(child, discord.ui.Button):
                     child.disabled = True
             old_view = game.active_view
+            # 停舊 view 必須早於 edit_message 註冊新 view，理由同 tower_pick_tile 的註解。
+            if old_view is not None and old_view is not view:
+                old_view.stop()
             await interaction.response.edit_message(embed=embed, view=view)
             msg = await interaction.original_response()
             game.message = msg
@@ -2495,8 +2509,6 @@ class MiniGamesCog(
             game.active_view = None
             view.message = msg
             view.stop()
-            if old_view is not None and old_view is not view:
-                old_view.stop()
             return
 
         safe = game.safe_level()
@@ -2542,6 +2554,9 @@ class MiniGamesCog(
                 if isinstance(child, discord.ui.Button):
                     child.disabled = True
             old_view = game.active_view
+            # 停舊 view 必須早於 edit_message 註冊新 view，理由同 tower_pick_tile 的註解。
+            if old_view is not None and old_view is not view:
+                old_view.stop()
             await interaction.response.edit_message(embed=embed, view=view)
             msg = await interaction.original_response()
             game.message = msg
@@ -2549,22 +2564,24 @@ class MiniGamesCog(
             game.active_view = None
             view.message = msg
             view.stop()
-            if old_view is not None and old_view is not view:
-                old_view.stop()
             return
 
         game.awaiting_continue = True
         embed = self._tower_embed(game, phase="result_safe")
         view = TowerGameView(self, game)
         old_view = game.active_view
+        # 舊 view 一定要在 edit_message 註冊新 view 之前停掉。ViewStore 的 dispatch
+        # 表以 message_id 為 key 共用，而 Tower 的 custom_id（tile_{層}_{格}）在每個
+        # view 之間都相同；晚一步呼叫 stop() 會連剛註冊好的新按鈕一起移除，導致第一層
+        # 之後的每次點擊都變成「互動失敗」。
+        if old_view is not None and old_view is not view:
+            old_view.stop()
         await interaction.response.edit_message(embed=embed, view=view)
         msg = await interaction.original_response()
         game.message = msg
         game.message_id = msg.id
         game.active_view = view
         view.message = msg
-        if old_view is not None and old_view is not view:
-            old_view.stop()
 
     async def tower_cashout(self, interaction: discord.Interaction, game: TowerGame):
         if interaction.user.id != game.user_id:
@@ -2608,6 +2625,9 @@ class MiniGamesCog(
             if isinstance(child, discord.ui.Button):
                 child.disabled = True
         old_view = game.active_view
+        # 停舊 view 必須早於 edit_message 註冊新 view，理由同 tower_pick_tile 的註解。
+        if old_view is not None and old_view is not view:
+            old_view.stop()
         await interaction.response.edit_message(embed=embed, view=view)
         msg = await interaction.original_response()
         game.message = msg
@@ -2615,8 +2635,6 @@ class MiniGamesCog(
         game.active_view = None
         view.message = msg
         view.stop()
-        if old_view is not None and old_view is not view:
-            old_view.stop()
 
     # -----------------------------
     # Slots 拉霸機
@@ -2850,13 +2868,14 @@ class MiniGamesCog(
         result = t("minigames.highlow.correct", old=old_card, new=new_card)
         new_view = HighLowView(self, game)
         old_view = game.active_view
+        # 停舊 view 必須早於 edit_message 註冊新 view，理由同 tower_pick_tile 的註解。
+        if old_view is not None and old_view is not new_view:
+            old_view.stop()
         await interaction.response.edit_message(embed=self._highlow_embed(game, result), view=new_view)
         msg = await interaction.original_response()
         game.message = msg
         game.active_view = new_view
         new_view.message = msg
-        if old_view is not None and old_view is not new_view:
-            old_view.stop()
 
     async def highlow_cashout(self, interaction: discord.Interaction, game: HighLowGame, view: HighLowView):
         if interaction.user.id != game.user_id:
@@ -3028,13 +3047,14 @@ class MiniGamesCog(
 
         new_view = BlackjackView(self, game)
         old_view = game.active_view
+        # 停舊 view 必須早於 edit_message 註冊新 view，理由同 tower_pick_tile 的註解。
+        if old_view is not None and old_view is not new_view:
+            old_view.stop()
         await interaction.response.edit_message(embed=await self._bj_embed(game, reveal=False), view=new_view)
         msg = await interaction.original_response()
         game.message = msg
         game.active_view = new_view
         new_view.message = msg
-        if old_view is not None and old_view is not new_view:
-            old_view.stop()
 
     async def bj_stand(self, interaction: discord.Interaction, game: BlackjackGame, view: BlackjackView):
         if interaction.user.id != game.user_id:
@@ -3364,6 +3384,56 @@ class MiniGamesCog(
         embed.add_field(name=t("minigames.bigtwo.field.status"), value=" ".join(statuses), inline=False)
         embed.set_footer(text=t("minigames.bigtwo.table_footer"))
         return embed
+
+    def refund_big2_stakes(self, g: Game, *, reason_detail: str) -> bool:
+        """把已收取但還沒結算的大老二賭注退還給全部玩家。
+
+        開局時每位玩家都會先被扣掉底注（見 start 的扣款區塊），獎金則要等
+        update_table_message() 判定分出勝負才發放。中途把牌局丟掉（房主按
+        「結束」或 view 超時）而不退款，等於把所有人的錢憑空銷毀，房主還能
+        重複操作來燒別人的餘額。
+
+        回傳是否真的退了款；stake 為 0 或已結算過都會回傳 False。
+        """
+        if g.stake <= 0 or g.stake_paid or not g.players:
+            return False
+        # 和發獎金共用 stake_paid 旗標，確保退款與發獎二選一且各自只做一次。
+        g.stake_paid = True
+        currency = get_currency_name(g.guild_id)
+        try:
+            settlements = mutate_balances_atomic(
+                g.guild_id,
+                {p.user_id: g.stake for p in g.players},
+            )
+        except Exception as exc:
+            g.stake_paid = False  # 沒退成功就讓後續路徑還有機會補退
+            log(f"Big2 stake refund failed for channel {g.channel_id}: {exc}",
+                level=logging.ERROR, module_name="MiniGames")
+            return False
+
+        for p in g.players:
+            balance_before, balance_after = settlements[p.user_id]
+            self._log_economy_history(
+                g.guild_id,
+                p.user_id,
+                "大老二退還",  # i18n: skip (stored tx data)
+                g.stake,
+                f"牌局未完成，退還底注 {g.stake:,.0f} {currency}",  # i18n: skip (stored tx data)
+            )
+            queue_economy_audit_log(
+                "big2_refund",
+                guild_id=g.guild_id,
+                target=self._resolve_audit_user(g.guild_id, p.user_id),
+                currency=currency,
+                amount=g.stake,
+                balance_before=balance_before,
+                balance_after=balance_after,
+                detail=reason_detail,
+                color=0x95A5A6,
+            )
+        if g.guild_id != GLOBAL_GUILD_ID:
+            record_transaction(g.guild_id)
+        return True
 
     async def update_table_message(self, channel: discord.abc.Messageable, g: Game):
         try:

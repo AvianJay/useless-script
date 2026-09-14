@@ -47,6 +47,9 @@ default_config = {
     "webverify_turnstile_secret": "",
     "webverify_url": "http://localhost:8080/server-verify",
     "client_secret": "",
+    # 網頁控制面板 session cookie 的簽章金鑰。留空時 Website.py 會自動產生一把
+    # 寫回這裡；也可以用環境變數 FLASK_SECRET_KEY 覆蓋。切勿與 client_secret 共用。
+    "flask_secret_key": "",
     "process_monitor_channel_id": 0,
     "process_monitor_alert_channel_id": 0,
     "cpu_usage_threshold": 80,
