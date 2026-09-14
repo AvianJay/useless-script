@@ -1082,6 +1082,17 @@ const AUTOMOD_FEATURES = [
         { key: 'action', label: t('web.js.automod.f_action'), type: 'string', default: 'mute 10m 刷頻自動禁言, delete {user}，請勿刷頻。' },
         { key: 'ignore_channels', label: t('web.js.automod.f_ignore_channels'), type: 'channel_list', default: [] },
     ]},
+    { id: 'anti_voice_spam', label: '🔊 ' + t('web.js.automod.voice_spam'), desc: t('web.js.automod.voice_spam_desc'), fields: [
+        { key: 'max_joins', label: t('web.js.automod.f_max_voice_joins'), type: 'number', default: '5', min: 1, max: 50 },
+        { key: 'time_window', label: t('web.js.automod.f_time_window'), type: 'number', default: '60', min: 5, max: 3600 },
+        { key: 'detect_mode', label: t('web.js.automod.f_detect_mode'), type: 'select', default: 'same_channel', options: [
+            { value: 'same_channel', label: t('web.js.automod.mode_same_channel') },
+            { value: 'any_channel', label: t('web.js.automod.mode_any_channel') },
+        ] },
+        { key: 'action', label: t('web.js.automod.f_action'), type: 'string', default: 'mute 10m 語音房抽插自動禁言' },
+        { key: 'ignore_channels', label: t('web.js.automod.f_ignore_channels'), type: 'channel_list', default: [], channelTypes: ['voice', 'stage_voice'] },
+        { key: 'log_into_voice_channel', label: t('web.js.automod.f_log_into_voice'), type: 'boolean', default: true },
+    ]},
     { id: 'automod_detect', label: '🛡️ ' + t('web.js.automod.detect'), desc: t('web.js.automod.detect_desc'), fields: [
         { key: 'log_channel', label: t('web.js.automod.f_log_channel'), type: 'channel', default: '' },
         { key: 'action', label: t('web.js.automod.f_extra_action'), type: 'string', default: '', placeholder: t('web.js.automod.ph_optional') },
@@ -1149,7 +1160,7 @@ function buildAutomodConfigEditor(mod, s, value, channels) {
         return [];
     }
 
-    function buildAutomodChannelListEditor(initialValue, onChange) {
+    function buildAutomodChannelListEditor(initialValue, onChange, allowedTypes) {
         const selected = normalizeChannelListValue(initialValue);
         const container = document.createElement('div');
         container.className = 'role-list-container';
@@ -1163,7 +1174,7 @@ function buildAutomodConfigEditor(mod, s, value, channels) {
         sel.innerHTML = '<option value="">➕ ' + t('web.js.common.add_channel') + '</option>';
         container.appendChild(sel);
 
-        const allowedChannels = channels.filter(ch => ['text', 'news'].includes(ch.type));
+        const allowedChannels = channels.filter(ch => (allowedTypes || ['text', 'news']).includes(ch.type));
 
         function renderTags() {
             tagsWrap.innerHTML = '';
@@ -1302,7 +1313,7 @@ function buildAutomodConfigEditor(mod, s, value, channels) {
                 wrap.appendChild(slider);
                 row.appendChild(wrap);
             } else if (field.type === 'channel_list') {
-                row.appendChild(buildAutomodChannelListEditor(rawCur, val => setFeatValue(feat.id, field.key, val)));
+                row.appendChild(buildAutomodChannelListEditor(rawCur, val => setFeatValue(feat.id, field.key, val), field.channelTypes));
             } else if (field.type === 'number') {
                 const input = document.createElement('input');
                 input.type = 'number';

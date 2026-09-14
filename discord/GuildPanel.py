@@ -40,15 +40,19 @@ AUTOMOD_FEATURE_IDS = (
     "anti_uispam",
     "anti_raid",
     "anti_spam",
+    "anti_voice_spam",
     "automod_detect",
     "flagged_user",
 )
+# 需以布林值往返的 automod 欄位（對應 AutoModerate.AUTOMOD_BOOLEAN_SETTINGS）
+AUTOMOD_BOOLEAN_KEYS = ("allow_current_server", "log_into_voice_channel")
 
 
 def _analyze_automod_action(feature_name, action, guild_id):
     from Moderate import analyze_action_string, analyze_member_join_action
 
-    analyzer = analyze_member_join_action if feature_name == "flagged_user" else analyze_action_string
+    # flagged_user 與 anti_voice_spam 的處置都在沒有觸發訊息的情境執行
+    analyzer = analyze_member_join_action if feature_name in ("flagged_user", "anti_voice_spam") else analyze_action_string
     return analyzer(action, guild_id)
 
 
@@ -899,7 +903,7 @@ def _serialize(value, stype, guild_id=None):
             for key, item_value in data.items():
                 if key == "enabled" or item_value is None:
                     continue
-                if key == "allow_current_server":
+                if key in AUTOMOD_BOOLEAN_KEYS:
                     row[key] = _coerce_bool(item_value)
                 elif key == "ignore_channels":
                     raw_channels = item_value if isinstance(item_value, list) else re.findall(r"\d+", str(item_value))
@@ -1054,7 +1058,7 @@ def _coerce(value, stype, guild_id=None):
                     continue
                 if v is None:
                     continue
-                if k == "allow_current_server":
+                if k in AUTOMOD_BOOLEAN_KEYS:
                     if isinstance(v, bool):
                         row[k] = v
                     else:
@@ -1078,6 +1082,11 @@ def _coerce(value, stype, guild_id=None):
                     raise ValueError("flagged_user.action_source 只接受 local、api 或 both")
                 if row["local_match_mode"] not in ("active", "history"):
                     raise ValueError("flagged_user.local_match_mode 只接受 active 或 history")
+            if feat == "anti_voice_spam":
+                row.setdefault("detect_mode", "same_channel")
+                row.setdefault("log_into_voice_channel", True)
+                if row["detect_mode"] not in ("same_channel", "any_channel"):
+                    raise ValueError("anti_voice_spam.detect_mode 只接受 same_channel 或 any_channel")
             out[feat] = row
         return out
 

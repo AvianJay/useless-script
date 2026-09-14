@@ -101,6 +101,22 @@
                 },
                 "label": "ユーザーがインストールしたアプリの悪用"
             },
+            "anti_voice_spam": {
+                "desc": "参加音を連続させる繰り返しの入室を検出します。",
+                "field": {
+                    "action": {
+                        "default": "mute 10m ボイス入退室スパムの自動ミュート"
+                    },
+                    "detect_mode": "検出範囲",
+                    "log_into_voice_channel": "ボイスチャンネルに通知を送信",
+                    "max_joins": "最大参加回数"
+                },
+                "label": "ボイス入退室スパム",
+                "option": {
+                    "any_channel": "すべてのボイスチャンネル",
+                    "same_channel": "同じチャンネルのみ"
+                }
+            },
             "automod_detect": {
                 "desc": "Discord のネイティブ AutoMod イベントを受信し、追加のアクションを実行します。",
                 "field": {

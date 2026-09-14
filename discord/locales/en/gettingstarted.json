@@ -101,6 +101,22 @@
                 },
                 "label": "User-install app abuse"
             },
+            "anti_voice_spam": {
+                "desc": "Detect repeated voice-channel joins that spam the join sound.",
+                "field": {
+                    "action": {
+                        "default": "mute 10m auto-mute for voice-join spam"
+                    },
+                    "detect_mode": "Detection scope",
+                    "log_into_voice_channel": "Post a notice in the voice channel",
+                    "max_joins": "Max voice joins"
+                },
+                "label": "Voice-join spam",
+                "option": {
+                    "any_channel": "All voice channels",
+                    "same_channel": "Same channel only"
+                }
+            },
             "automod_detect": {
                 "desc": "Receive Discord's native AutoMod events and run extra actions.",
                 "field": {

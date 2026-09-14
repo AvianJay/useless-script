@@ -26,6 +26,7 @@ BLACKLIST_SYNC_INTERVAL_MINUTES = 30
 LOCAL_FLAG_LOOKBACK_MONTHS = 3
 FLAGGED_USER_ACTION_SOURCES = {"local", "api", "both"}
 FLAGGED_USER_LOCAL_MATCH_MODES = {"active", "history"}
+ANTI_VOICE_SPAM_DETECT_MODES = {"same_channel", "any_channel"}
 
 if "Moderate" in modules:
     import Moderate
@@ -48,7 +49,7 @@ def _action_input_suggestions() -> list[tuple[str, str]]:
     ]
 
 
-def _flagged_user_action_input_suggestions() -> list[tuple[str, str]]:
+def _messageless_action_input_suggestions() -> list[tuple[str, str]]:
     if "Moderate" not in modules:
         return []
     return [
@@ -84,6 +85,12 @@ all_settings = [
     "anti_spam-similarity",
     "anti_spam-action",
     "anti_spam-ignore_channels",
+    "anti_voice_spam-max_joins",
+    "anti_voice_spam-time_window",
+    "anti_voice_spam-detect_mode",
+    "anti_voice_spam-action",
+    "anti_voice_spam-ignore_channels",
+    "anti_voice_spam-log_into_voice_channel",
     "automod_detect-log_channel",
     "automod_detect-action",
     "automod_detect-filter_rule",
@@ -106,6 +113,13 @@ _raid_tracker: dict[int, list[tuple[discord.Member, datetime]]] = {}
 # 結構: {guild_id: {user_id: [(content, timestamp), ...]}}
 _spam_tracker: dict[int, dict[int, list[tuple[str, datetime]]]] = {}
 
+# 用於追蹤語音房抽插（反覆連進語音頻道）的記憶體字典
+# 結構: {guild_id: {(user_id, channel_id | None): [timestamp, ...]}}
+#   same_channel 模式的 key 是 (user_id, channel_id)；any_channel 模式是 (user_id, None)
+_voice_spam_tracker: dict[int, dict[tuple[int, int | None], list[datetime]]] = {}
+# 單一伺服器的 key 數上限；只有超過才做一次全掃，平時是 O(1)
+_VOICE_SPAM_TRACKER_MAX_KEYS = 500
+
 INVITE_LINK_RE = re.compile(
     r"(?:https?://)?(?:www\.)?(?:discord\.gg|discord(?:app)?\.com/invite)/([A-Za-z0-9-]+)",
     re.IGNORECASE,
@@ -118,7 +132,16 @@ AUTOMOD_IGNORE_CHANNEL_FEATURES = {
     "too_many_emojis",
     "anti_uispam",
     "anti_spam",
+    "anti_voice_spam",
 }
+# 忽略頻道選單的頻道型別；沒列到的功能沿用文字/公告頻道
+AUTOMOD_IGNORE_CHANNEL_TYPES = {
+    "anti_voice_spam": [discord.ChannelType.voice, discord.ChannelType.stage_voice],
+}
+# 需要以布林值儲存的設定欄位（而非字串）
+AUTOMOD_BOOLEAN_SETTINGS = {"allow_current_server", "log_into_voice_channel"}
+# 處置在「沒有觸發訊息」的情境下執行的功能，必須用 analyze_member_join_action 驗證
+MESSAGELESS_ACTION_FEATURES = {"flagged_user", "anti_voice_spam"}
 
 
 def _subtract_calendar_months(value: datetime, months: int) -> datetime:
@@ -348,6 +371,61 @@ def _is_ignored_channel(feature_config: dict, channel_id: int) -> bool:
     return channel_id in _normalize_channel_id_list(feature_config.get("ignore_channels"))
 
 
+def _automod_int(feature_config: dict, key: str, default: int, *, minimum: int = 1) -> int:
+    """讀取數值設定；設定值可能是管理員手打的字串，壞值一律退回預設。
+
+    這是必要的防禦：語音事件頻率極高，若讓 int() 拋 ValueError，
+    一個打錯的設定值會在每一個語音事件上重複爆炸。
+    """
+    try:
+        value = int(str(feature_config.get(key, default)).strip())
+    except (TypeError, ValueError):
+        return default
+    return value if value >= minimum else default
+
+
+def _dynamic_voice_channel_ids(guild_id: int) -> set[int]:
+    """DynamicVoice 管理的頻道 ID（入口房 + 存活的臨時房）。
+
+    DynamicVoice 自己就會製造 join/move/leave 事件：使用者進入口房後，
+    機器人會再把他搬到新建的臨時房（DynamicVoice.py:284），而臨時房一空就被刪除，
+    所以「離開後想回來」又得再進入口房一次。不豁免的話一次正常操作會被算成多次。
+
+    created_dynamic_channels 會被積極清空，臨時房 ID 可能已經不在清單裡；
+    但入口房 ID 在設定裡是穩定的，所以 before/after 兩側都比對即可攔下那次搬移。
+    """
+    if "DynamicVoice" not in modules:
+        return set()
+    channel_ids: set[int] = set()
+    lobby = get_server_config(guild_id, "dynamic_voice_channel")
+    if lobby:
+        try:
+            channel_ids.add(int(lobby))
+        except (TypeError, ValueError):
+            pass
+    channel_ids.update(_normalize_channel_id_list(get_server_config(guild_id, "created_dynamic_channels", [])))
+    return channel_ids
+
+
+def _prune_voice_spam_tracker(guild_id: int, now: datetime, time_window: int) -> None:
+    """只在 key 數超過上限時才全掃一次，平時成本是一個 len() 比較。
+
+    順手丟掉空的 guild 項 —— 既有的追蹤器都沒做這件事，是唯一真正會累積的部分。
+    """
+    guild_tracker = _voice_spam_tracker.get(guild_id)
+    if guild_tracker is None:
+        return
+    if len(guild_tracker) > _VOICE_SPAM_TRACKER_MAX_KEYS:
+        stale = [
+            key for key, timestamps in guild_tracker.items()
+            if not timestamps or (now - timestamps[-1]).total_seconds() >= time_window
+        ]
+        for key in stale:
+            del guild_tracker[key]
+    if not guild_tracker:
+        _voice_spam_tracker.pop(guild_id, None)
+
+
 def _extract_invite_codes(content: str) -> list[str]:
     seen = set()
     codes = []
@@ -427,11 +505,13 @@ async def action_value_autocomplete(interaction: discord.Interaction, current: s
             )
 
     lowered = current_text.casefold()
-    suggestions = (
-        [(t("automoderate.suggest.clear"), "clear"), *_flagged_user_action_input_suggestions()]
-        if setting == "flagged_user-action"
-        else _action_input_suggestions()
-    )
+    if setting == "flagged_user-action":
+        # 只有 flagged_user 的處置可以清空（它的 action 是選用的）
+        suggestions = [(t("automoderate.suggest.clear"), "clear"), *_messageless_action_input_suggestions()]
+    elif setting.split("-")[0] in MESSAGELESS_ACTION_FEATURES:
+        suggestions = _messageless_action_input_suggestions()
+    else:
+        suggestions = _action_input_suggestions()
     for label, value in suggestions:
         if lowered and lowered not in label.casefold() and lowered not in value.casefold():
             continue
@@ -541,7 +621,7 @@ class CustomActionModal(i18n.I18nModal, title=i18n.K("automoderate.modal.custom_
     async def on_submit(self, interaction: discord.Interaction):
         analyzer = (
             Moderate.analyze_member_join_action
-            if self.quick_setup_view.feature == "flagged_user"
+            if self.quick_setup_view.feature in MESSAGELESS_ACTION_FEATURES
             else Moderate.analyze_action_string
         )
         analysis = analyzer(self.action_input.value, interaction.guild_id)
@@ -598,8 +678,8 @@ class QuickSetupView(discord.ui.View):
                         embed.add_field(name=t("automoderate.field.channel"), value=ch.mention if ch else v, inline=False)
                     elif k == "ignore_channels":
                         embed.add_field(name=t("automoderate.field.ignore_channels"), value=self._format_channel_list(guild, v), inline=False)
-                    elif k == "allow_current_server":
-                        embed.add_field(name=t("automoderate.field.allow_current_server"), value=t("common.state.yes") if _is_truthy(v) else t("common.state.no"), inline=False)
+                    elif k in AUTOMOD_BOOLEAN_SETTINGS:
+                        embed.add_field(name=t_enum("automoderate.field", k), value=t("common.state.yes") if _is_truthy(v) else t("common.state.no"), inline=False)
                     elif k == "action":
                         embed.add_field(name=t("automoderate.field.action"), value=f"`{str(v)[:50]}{'...' if len(str(v)) > 50 else ''}`", inline=False)
                     else:
@@ -617,6 +697,7 @@ class QuickSetupView(discord.ui.View):
             discord.SelectOption(label=t("automoderate.feature_name.anti_uispam"), value="anti_uispam", description=t("automoderate.feature_desc.anti_uispam")),
             discord.SelectOption(label=t("automoderate.feature_name.anti_raid"), value="anti_raid", description=t("automoderate.feature_desc.anti_raid")),
             discord.SelectOption(label=t("automoderate.feature_name.anti_spam"), value="anti_spam", description=t("automoderate.feature_desc.anti_spam")),
+            discord.SelectOption(label=t("automoderate.feature_name.anti_voice_spam"), value="anti_voice_spam", description=t("automoderate.feature_desc.anti_voice_spam")),
             discord.SelectOption(label=t("automoderate.feature_name.automod_detect"), value="automod_detect", description=t("automoderate.feature_desc.automod_detect")),
             discord.SelectOption(label=t("automoderate.feature_name.flagged_user"), value="flagged_user", description=t("automoderate.feature_desc.flagged_user")),
         ]
@@ -731,6 +812,25 @@ class QuickSetupView(discord.ui.View):
             ])
             sim_sel.callback = self._on_spam_similarity_select
             self.add_item(sim_sel)
+        elif self.feature == "anti_voice_spam":
+            # Discord 的 View 只有 5 個 action row，而每個 Select 就吃掉一整列；
+            # 這裡還會再加上忽略頻道 Select、處置動作 Select 與完成按鈕，
+            # 所以本功能最多只能放 2 個專屬 Select（4 個 Select + 1 顆按鈕是上限）。
+            # time_window 與 log_into_voice_channel 沿用預設值，
+            # 可用 /automod settings、完整設定精靈或網頁面板調整。
+            joins_sel = discord.ui.Select(placeholder=t("automoderate.quick_setup.max_voice_joins_ph"), options=[
+                discord.SelectOption(label="3", value="3"),
+                discord.SelectOption(label="5", value="5"),
+                discord.SelectOption(label="10", value="10"),
+            ])
+            joins_sel.callback = self._on_voice_spam_joins_select
+            self.add_item(joins_sel)
+            mode_sel = discord.ui.Select(placeholder=t("automoderate.quick_setup.detect_mode_ph"), options=[
+                discord.SelectOption(label=t("automoderate.quick_setup.detect_mode_same"), value="same_channel"),
+                discord.SelectOption(label=t("automoderate.quick_setup.detect_mode_any"), value="any_channel"),
+            ])
+            mode_sel.callback = self._on_voice_spam_detect_mode_select
+            self.add_item(mode_sel)
         elif self.feature == "automod_detect":
             ch_sel = discord.ui.ChannelSelect(
                 placeholder=t("automoderate.quick_setup.log_channel_ph"),
@@ -765,15 +865,17 @@ class QuickSetupView(discord.ui.View):
         if self.feature in AUTOMOD_IGNORE_CHANNEL_FEATURES:
             ignore_sel = discord.ui.ChannelSelect(
                 placeholder=t("automoderate.quick_setup.ignore_channels_ph"),
-                channel_types=[discord.ChannelType.text, discord.ChannelType.news],
+                channel_types=AUTOMOD_IGNORE_CHANNEL_TYPES.get(
+                    self.feature, [discord.ChannelType.text, discord.ChannelType.news]
+                ),
                 min_values=0, max_values=25,
             )
             ignore_sel.callback = self._on_ignore_channels_select
             self.add_item(ignore_sel)
 
         action_presets = (
-            [*_flagged_user_action_input_suggestions(), (t("automoderate.suggest.custom"), "__custom__")]
-            if self.feature == "flagged_user"
+            [*_messageless_action_input_suggestions(), (t("automoderate.suggest.custom"), "__custom__")]
+            if self.feature in MESSAGELESS_ACTION_FEATURES
             else _action_presets()
         )
         action_opts = [discord.SelectOption(label=l, value=v) for l, v in action_presets]
@@ -796,6 +898,7 @@ class QuickSetupView(discord.ui.View):
             "anti_uispam": {"max_count": "5", "time_window": "60"},
             "anti_raid": {"max_joins": "5", "time_window": "60"},
             "anti_spam": {"max_messages": "5", "time_window": "30", "similarity": "75"},
+            "anti_voice_spam": {"max_joins": "5", "time_window": "60", "detect_mode": "same_channel", "log_into_voice_channel": True},
             "escape_punish": {"punishment": "ban", "duration": "0"},
             "automod_detect": {},
             "flagged_user": {"action_source": "both", "local_match_mode": "active"},
@@ -874,6 +977,16 @@ class QuickSetupView(discord.ui.View):
         await interaction.response.defer()
         await interaction.message.edit(embed=self._get_embed(interaction.guild), view=self)
 
+    async def _on_voice_spam_joins_select(self, interaction: discord.Interaction):
+        self.config["max_joins"] = interaction.data["values"][0]
+        await interaction.response.defer()
+        await interaction.message.edit(embed=self._get_embed(interaction.guild), view=self)
+
+    async def _on_voice_spam_detect_mode_select(self, interaction: discord.Interaction):
+        self.config["detect_mode"] = interaction.data["values"][0]
+        await interaction.response.defer()
+        await interaction.message.edit(embed=self._get_embed(interaction.guild), view=self)
+
     async def _on_flagged_action_source_select(self, interaction: discord.Interaction):
         self.config["action_source"] = interaction.data["values"][0]
         await interaction.response.defer()
@@ -900,7 +1013,7 @@ class QuickSetupView(discord.ui.View):
         await interaction.message.edit(embed=self._get_embed(interaction.guild), view=self)
 
     async def _on_finish(self, interaction: discord.Interaction):
-        if self.feature not in ("scamtrap", "escape_punish", "too_many_h1", "too_many_emojis", "anti_invite_link", "anti_uispam", "anti_raid", "anti_spam", "automod_detect", "flagged_user"):
+        if self.feature not in ("scamtrap", "escape_punish", "too_many_h1", "too_many_emojis", "anti_invite_link", "anti_uispam", "anti_raid", "anti_spam", "anti_voice_spam", "automod_detect", "flagged_user"):
             await interaction.response.send_message(t("automoderate.err.invalid_feature"), ephemeral=True)
             return
         if self.feature == "scamtrap" and "channel_id" not in self.config:
@@ -912,7 +1025,7 @@ class QuickSetupView(discord.ui.View):
         if self.feature == "flagged_user" and "log_channel" not in self.config:
             await interaction.response.send_message(t("automoderate.err.flagged_user_needs_channel"), ephemeral=True)
             return
-        if "action" not in self.config and self.feature in ("scamtrap", "too_many_h1", "too_many_emojis", "anti_invite_link", "anti_uispam", "anti_raid", "anti_spam"):
+        if "action" not in self.config and self.feature in ("scamtrap", "too_many_h1", "too_many_emojis", "anti_invite_link", "anti_uispam", "anti_raid", "anti_spam", "anti_voice_spam"):
             await interaction.response.send_message(t("automoderate.err.pick_action"), ephemeral=True)
             return
 
@@ -923,7 +1036,7 @@ class QuickSetupView(discord.ui.View):
             if k and v is not None:
                 if k == "ignore_channels":
                     automod_settings[self.feature][k] = _normalize_channel_id_list(v)
-                elif k == "allow_current_server":
+                elif k in AUTOMOD_BOOLEAN_SETTINGS:
                     automod_settings[self.feature][k] = _is_truthy(v)
                 else:
                     automod_settings[self.feature][k] = str(v)
@@ -1130,6 +1243,7 @@ class AutoModerate(commands.GroupCog, name=app_commands.locale_str("automod", i1
             app_commands.Choice(name=app_commands.locale_str("User-installed app abuse", i18n_key="cmd.automoderate.automod.toggle.choice.anti_uispam"), value="anti_uispam"),
             app_commands.Choice(name=app_commands.locale_str("Anti-raid (mass-join detection)", i18n_key="cmd.automoderate.automod.toggle.choice.anti_raid"), value="anti_raid"),
             app_commands.Choice(name=app_commands.locale_str("Anti-spam", i18n_key="cmd.automoderate.automod.toggle.choice.anti_spam"), value="anti_spam"),
+            app_commands.Choice(name=app_commands.locale_str("Voice-join spam (repeated voice joins)", i18n_key="cmd.automoderate.automod.toggle.choice.anti_voice_spam"), value="anti_voice_spam"),
             app_commands.Choice(name=app_commands.locale_str("AutoMod detection (native AutoMod triggers)", i18n_key="cmd.automoderate.automod.toggle.choice.automod_detect"), value="automod_detect"),
             app_commands.Choice(name=app_commands.locale_str("Flagged user joins", i18n_key="cmd.automoderate.automod.toggle.choice.flagged_user"), value="flagged_user"),
         ],
@@ -1174,6 +1288,9 @@ class AutoModerate(commands.GroupCog, name=app_commands.locale_str("automod", i1
         if setting == "anti_invite_link" and enable == "True":
             if "action" not in automod_settings.get("anti_invite_link", {}):
                 await interaction.followup.send(t("automoderate.warn.anti_invite_no_action", command=await get_command_mention('automod', 'settings')), ephemeral=True)
+        if setting == "anti_voice_spam" and enable == "True":
+            if not automod_settings.get("anti_voice_spam", {}).get("action"):
+                await interaction.followup.send(t("automoderate.warn.anti_voice_spam_no_action", command=await get_command_mention('automod', 'settings')), ephemeral=True)
 
     @app_commands.command(name=app_commands.locale_str("quick-setup", i18n_key="cmd.automoderate.automod.quick_setup.name"), description=app_commands.locale_str("Interactive quick-setup wizard (menu guided)", i18n_key="cmd.automoderate.automod.quick_setup.desc"))
     async def quick_setup_automod(self, interaction: discord.Interaction):
@@ -1217,7 +1334,13 @@ class AutoModerate(commands.GroupCog, name=app_commands.locale_str("automod", i1
             if clear_action:
                 value = ""
             else:
-                analyzer = Moderate.analyze_member_join_action if setting_base == "flagged_user" else Moderate.analyze_action_string
+                # 這兩個功能的處置都在「沒有觸發訊息」的情境下執行，
+                # 必須用限制較嚴的驗證器（會擋掉 delete/warn，它們在 message=None 時是靜默的 no-op）
+                analyzer = (
+                    Moderate.analyze_member_join_action
+                    if setting_base in MESSAGELESS_ACTION_FEATURES
+                    else Moderate.analyze_action_string
+                )
                 action_analysis = analyzer(value, guild_id)
                 if not action_analysis["valid"]:
                     await interaction.response.send_message(
@@ -1239,10 +1362,10 @@ class AutoModerate(commands.GroupCog, name=app_commands.locale_str("automod", i1
                     return
                 value = action_analysis["normalized"]
         value = parse_mention_to_id(value) if setting_key in ["channel_id", "log_channel"] else value
-        if setting_key == "allow_current_server":
+        if setting_key in AUTOMOD_BOOLEAN_SETTINGS:
             normalized_value = str(value).strip().lower()
             if normalized_value not in ("true", "false", "1", "0", "yes", "no", "on", "off"):
-                await interaction.response.send_message(t("automoderate.err.allow_current_server_bool"), ephemeral=True)
+                await interaction.response.send_message(t("automoderate.err.boolean_expected", setting=setting), ephemeral=True)
                 return
             value = _is_truthy(normalized_value)
         if setting_base == "flagged_user" and setting_key == "action_source":
@@ -1254,6 +1377,11 @@ class AutoModerate(commands.GroupCog, name=app_commands.locale_str("automod", i1
             value = str(value).strip().lower()
             if value not in FLAGGED_USER_LOCAL_MATCH_MODES:
                 await interaction.response.send_message(t("automoderate.err.local_match_mode_invalid"), ephemeral=True)
+                return
+        if setting_base == "anti_voice_spam" and setting_key == "detect_mode":
+            value = str(value).strip().lower()
+            if value not in ANTI_VOICE_SPAM_DETECT_MODES:
+                await interaction.response.send_message(t("automoderate.err.detect_mode_invalid"), ephemeral=True)
                 return
         if setting_key == "ignore_channels":
             raw_text = str(value or "").strip()
@@ -1502,7 +1630,7 @@ class AutoModerate(commands.GroupCog, name=app_commands.locale_str("automod", i1
         )
         for feature in ("scamtrap", "escape_punish", "too_many_h1", "too_many_emojis",
                         "anti_invite_link", "anti_uispam", "anti_raid", "anti_spam",
-                        "automod_detect", "flagged_user"):
+                        "anti_voice_spam", "automod_detect", "flagged_user"):
             embed.add_field(
                 name=t("automoderate.info.feature_heading",
                        name=t_enum("automoderate.feature_name_emoji", feature), key=feature),
@@ -1783,6 +1911,148 @@ class AutoModerate(commands.GroupCog, name=app_commands.locale_str("automod", i1
                 guild=member.guild,
             )
                 
+
+    @commands.Cog.listener()
+    async def on_voice_state_update(self, member: discord.Member, before: discord.VoiceState, after: discord.VoiceState):
+        """偵測語音房抽插（反覆連進語音頻道洗加入音效）。
+
+        刻意偏離其他 listener 的寫法：語音事件頻率極高（每次開關麥克風、耳機、
+        直播、分享畫面都會觸發），所以先做零成本的事件分類，只有真正「連上語音」
+        才開 i18n scope 並讀資料庫。請勿把 guild_scope 移到最前面。
+        """
+        if member.bot:
+            return
+        if after.channel is None:
+            # 離開語音不計數。機器人主動踢出／斷線／頻道被刪除也都走這條，
+            # 所以機器人自己的動作永遠不會回頭餵大計數器。
+            return
+        if before.channel is not None and before.channel.id == after.channel.id:
+            # 同頻道內的自身狀態變化（麥克風／耳機／直播／畫面／suppress）
+            return
+        async with i18n.guild_scope(member.guild.id):
+            await self._on_voice_state_update_impl(member, before, after)
+
+    async def _on_voice_state_update_impl(self, member: discord.Member, before: discord.VoiceState, after: discord.VoiceState):
+        guild = member.guild
+        guild_id = guild.id
+        automod_settings = get_server_config(guild_id, "automod", {})
+        if not isinstance(automod_settings, dict):
+            return
+        settings = automod_settings.get("anti_voice_spam", {})
+        if not isinstance(settings, dict) or not settings.get("enabled", False):
+            return
+        if member.guild_permissions.administrator:
+            return
+        if _is_ignored_channel(settings, after.channel.id):
+            return
+
+        # DynamicVoice 自己就會製造 join/move 事件（入口房 → 臨時房），必須整組豁免
+        dynamic_ids = _dynamic_voice_channel_ids(guild_id)
+        if dynamic_ids and (
+            after.channel.id in dynamic_ids
+            or (before.channel is not None and before.channel.id in dynamic_ids)
+        ):
+            return
+        # Discord 把閒置成員自動搬到 AFK 頻道，不是搗亂
+        afk_channel = guild.afk_channel
+        if afk_channel is not None and (
+            after.channel.id == afk_channel.id
+            or (before.channel is not None and before.channel.id == afk_channel.id)
+        ):
+            return
+
+        max_joins = _automod_int(settings, "max_joins", 5)
+        time_window = _automod_int(settings, "time_window", 60, minimum=5)
+        detect_mode = str(settings.get("detect_mode", "same_channel") or "same_channel").strip().lower()
+        if detect_mode not in ANTI_VOICE_SPAM_DETECT_MODES:
+            detect_mode = "same_channel"
+        action = settings.get("action") or t("automoderate.default_action.voice_spam")
+
+        now = datetime.now(timezone.utc)
+        guild_tracker = _voice_spam_tracker.setdefault(guild_id, {})
+        # same_channel 只算同一個頻道的重複連入，所以正常換房不會觸發；
+        # any_channel 把整個伺服器的連入併在一起算，連跨房跳躍也抓。
+        tracker_key = (member.id, after.channel.id if detect_mode == "same_channel" else None)
+        timestamps = guild_tracker.setdefault(tracker_key, [])
+
+        # 先清過期再記錄本次（與 anti_spam 同序）；用 >= 讓管理員填的數字符合字面意義
+        timestamps[:] = [ts for ts in timestamps if (now - ts).total_seconds() < time_window]
+        timestamps.append(now)
+
+        if len(timestamps) < max_joins:
+            _prune_voice_spam_tracker(guild_id, now, time_window)
+            return
+
+        join_count = len(timestamps)
+        # 先清空再執行動作：語音事件頻率高，若動作失敗而計數器留在門檻上，
+        # 下一個連入事件會立刻重試並重複記錄錯誤，形成日誌洪水。
+        timestamps.clear()
+        guild_tracker.pop(tracker_key, None)
+        if not guild_tracker:
+            _voice_spam_tracker.pop(guild_id, None)
+
+        # 語音事件沒有訊息可用，所以要用限制較嚴的驗證器擋掉 delete/warn 這類
+        # 在 message=None 時會靜默失效的動作（設定可能繞過 UI 被寫進資料庫）
+        if "Moderate" in modules:
+            analysis = Moderate.analyze_member_join_action(action, guild_id)
+            if not analysis["valid"] or analysis["requires_confirmation"]:
+                log(
+                    f"Voice-join-spam action config is invalid: {analysis.get('error') or analysis.get('confirmation')}",
+                    level=logging.ERROR, module_name="AutoModerate", user=member, guild=guild,
+                )
+                return
+
+        action_result = None
+        try:
+            result_lines = await do_action_str(action, guild=guild, user=member)
+            action_result = "\n".join(result_lines) or t("automoderate.voice_spam.action_done")
+            log(
+                f"{member} was handled for voice-join spam ({join_count} joins within {time_window}s, "
+                f"mode={detect_mode}, channel={after.channel.id}): {action}\nResult: {action_result}",
+                module_name="AutoModerate", user=member, guild=guild,
+            )
+        except Exception as error:
+            log(
+                f"Failed to run the voice-join-spam action on {member}: {error}",
+                level=logging.ERROR, module_name="AutoModerate", user=member, guild=guild,
+            )
+
+        # 只有真的處置成功才公告，否則訊息會在什麼都沒做的情況下宣稱已處置
+        if action_result is not None and _is_truthy(settings.get("log_into_voice_channel", True), default=True):
+            await self._send_voice_spam_notice(member, after.channel, join_count, time_window, action_result)
+
+    async def _send_voice_spam_notice(self, member: discord.Member, channel, join_count: int, time_window: int, action_result: str):
+        """往語音頻道的內建文字聊天發通知，讓還在房內的人知道剛剛發生什麼事。
+
+        通知失敗絕不能影響已經完成的處置，所以權限檢查與 send 都各自吞掉錯誤。
+        """
+        guild = member.guild
+        perms = channel.permissions_for(guild.me)
+        if not (perms.view_channel and perms.send_messages):
+            log(
+                f"Skipped the voice-join-spam notice in channel {channel.id}: missing view/send permission.",
+                module_name="AutoModerate", user=member, guild=guild,
+            )
+            return
+        embed = discord.Embed(
+            title=t("automoderate.voice_spam.notice_title"),
+            description=t("automoderate.voice_spam.notice_desc",
+                          user=member.mention, count=join_count, seconds=time_window),
+            color=0xED4245,
+            timestamp=datetime.now(timezone.utc),
+        )
+        embed.add_field(
+            name=t("automoderate.voice_spam.action_result"),
+            value=str(action_result)[:1024],
+            inline=False,
+        )
+        try:
+            await channel.send(embed=embed)
+        except Exception as error:
+            log(
+                f"Failed to send the voice-join-spam notice to channel {channel.id}: {error}",
+                level=logging.ERROR, module_name="AutoModerate", user=member, guild=guild,
+            )
 
     @commands.Cog.listener()
     async def on_member_update(self, before: discord.Member, after: discord.Member):

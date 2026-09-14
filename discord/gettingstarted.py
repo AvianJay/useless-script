@@ -2424,6 +2424,36 @@ def automod_feature_schemas(*, locale: str | None = None) -> list[dict]:
             ],
         },
         {
+            "id": "anti_voice_spam",
+            "label": tt("gettingstarted.automod.feature.anti_voice_spam.label"),
+            "description": tt("gettingstarted.automod.feature.anti_voice_spam.desc"),
+            "fields": [
+                {"key": "max_joins", "label": tt("gettingstarted.automod.feature.anti_voice_spam.field.max_joins"), "type": "number", "default": "5", "min": 1, "max": 50},
+                {"key": "time_window", "label": tt("gettingstarted.automod.field.time_window"), "type": "number", "default": "60", "min": 5, "max": 3600},
+                {
+                    "key": "detect_mode",
+                    "label": tt("gettingstarted.automod.feature.anti_voice_spam.field.detect_mode"),
+                    "type": "select",
+                    "default": "same_channel",
+                    "options": [
+                        {"label": tt("gettingstarted.automod.feature.anti_voice_spam.option.same_channel"), "value": "same_channel"},
+                        {"label": tt("gettingstarted.automod.feature.anti_voice_spam.option.any_channel"), "value": "any_channel"},
+                    ],
+                },
+                {
+                    "key": "action",
+                    "label": tt("gettingstarted.automod.field.action"),
+                    "type": "string",
+                    "default": tt("gettingstarted.automod.feature.anti_voice_spam.field.action.default"),
+                    "required": True,
+                    # 語音事件沒有觸發訊息，必須用限制較嚴的驗證器（擋掉 delete/warn）
+                    "action_context": "member_join",
+                },
+                {"key": "ignore_channels", "label": tt("gettingstarted.automod.field.ignore_channels"), "type": "channel_list", "default": [], "channel_types": ["voice", "stage_voice"]},
+                {"key": "log_into_voice_channel", "label": tt("gettingstarted.automod.feature.anti_voice_spam.field.log_into_voice_channel"), "type": "boolean", "default": True},
+            ],
+        },
+        {
             "id": "automod_detect",
             "label": tt("gettingstarted.automod.feature.automod_detect.label"),
             "description": tt("gettingstarted.automod.feature.automod_detect.desc"),
@@ -3015,11 +3045,24 @@ class AutoModerateFieldView(SetupView):
 
 
 class AutoModerateChannelListAdd(discord.ui.ChannelSelect):
+    # 欄位 schema 可用 channel_types 指定可選的頻道型別（語音類功能要選語音頻道），
+    # 沒指定就沿用文字/公告頻道。
+    CHANNEL_TYPE_NAMES = {
+        "text": discord.ChannelType.text,
+        "news": discord.ChannelType.news,
+        "voice": discord.ChannelType.voice,
+        "stage_voice": discord.ChannelType.stage_voice,
+        "forum": discord.ChannelType.forum,
+    }
+    DEFAULT_CHANNEL_TYPES = [discord.ChannelType.text, discord.ChannelType.news]
+
     def __init__(self, parent: "AutoModerateChannelListView"):
         self.parent_view = parent
+        names = parent.field_schema.get("channel_types") or []
+        channel_types = [self.CHANNEL_TYPE_NAMES[name] for name in names if name in self.CHANNEL_TYPE_NAMES]
         super().__init__(
             placeholder=t("gettingstarted.automod.add_ignore_channel_ph"),
-            channel_types=[discord.ChannelType.text, discord.ChannelType.news],
+            channel_types=channel_types or self.DEFAULT_CHANNEL_TYPES,
             min_values=1,
             max_values=25,
             row=0,

@@ -11,7 +11,7 @@
         "_desc": "Auto-moderation settings (including invite-link detection)",
         "_display": "Auto Moderation",
         "automod": {
-            "desc": "Enable and configure scam trap, invite links, punishment evasion, flagged-user joins, anti-raid, anti-spam, AutoMod detection, and more",
+            "desc": "Enable and configure scam trap, invite links, punishment evasion, flagged-user joins, anti-raid, anti-spam, voice-join spam, AutoMod detection, and more",
             "display": "Auto-moderation rules"
         }
     },

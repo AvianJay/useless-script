@@ -99,6 +99,22 @@
                 },
                 "label": "用戶安裝應用程式濫用"
             },
+            "anti_voice_spam": {
+                "desc": "偵測反覆連進語音頻道洗加入音效。",
+                "field": {
+                    "action": {
+                        "default": "mute 10m 語音房抽插自動禁言"
+                    },
+                    "detect_mode": "偵測範圍",
+                    "log_into_voice_channel": "在語音頻道發送通知",
+                    "max_joins": "最大進入次數"
+                },
+                "label": "語音房抽插",
+                "option": {
+                    "any_channel": "全伺服器語音",
+                    "same_channel": "僅同一頻道"
+                }
+            },
             "automod_detect": {
                 "desc": "接收 Discord 原生 AutoMod 事件並執行額外處置。",
                 "field": {

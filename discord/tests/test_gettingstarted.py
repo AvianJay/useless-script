@@ -362,6 +362,7 @@ class ComplexSchemaTests(unittest.TestCase):
             "anti_uispam",
             "anti_raid",
             "anti_spam",
+            "anti_voice_spam",
             "automod_detect",
             "flagged_user",
         }
