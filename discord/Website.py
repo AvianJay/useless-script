@@ -4,6 +4,8 @@ from flask import (
 )
 import os
 import asyncio
+import logging
+import secrets
 from pathlib import Path
 from urllib.parse import urlsplit
 from hypercorn.config import Config
@@ -26,11 +28,36 @@ else:
     UtilCommands = None
 
 app = Flask(__name__, template_folder='templates', static_folder='static')
-app.secret_key = (
-    os.environ.get("FLASK_SECRET_KEY")
-    or config("client_secret", "")
-    or "please-change-this-secret"
-)
+
+
+def _resolve_flask_secret_key() -> str:
+    """取得 Flask session 的簽章金鑰，必要時自動產生並寫回設定檔。
+
+    絕對不能退回硬編碼常數：那串常數就在公開的原始碼裡，任何人都能拿它簽出
+    合法的 session cookie，偽造 GuildPanel 寫入的 session["panel_user"]，
+    直接以任意伺服器管理員的身分登入控制面板。
+    也不再沿用 Discord OAuth 的 client_secret — 一把鑰匙只該有一個用途，
+    而且面板金鑰輪替時不應該連帶失效 OAuth。
+    """
+    secret = os.environ.get("FLASK_SECRET_KEY") or config("flask_secret_key", "")
+    if secret:
+        return secret
+
+    secret = secrets.token_urlsafe(48)
+    try:
+        config("flask_secret_key", secret, mode="w")
+        log("未設定 Flask session 金鑰，已自動產生一把並寫入設定檔。",
+            module_name="Website", level=logging.WARNING)
+    except Exception as exc:
+        # 寫不進設定檔也不能退回固定值：這次啟動用隨機金鑰，代價只是重啟後
+        # 所有面板 session 失效，總比金鑰可被預測好。
+        log(f"無法將 Flask session 金鑰寫入設定檔（{exc}），本次啟動使用暫時金鑰，"
+            "重啟後所有面板登入階段會失效。請設定環境變數 FLASK_SECRET_KEY。",
+            module_name="Website", level=logging.ERROR)
+    return secret
+
+
+app.secret_key = _resolve_flask_secret_key()
 
 # ============= i18n (choke point 4) =============
 # 每個 request 依 ?lang= > session > 面板登入者的個人語言 > Accept-Language

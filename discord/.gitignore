@@ -9,3 +9,7 @@ data.db
 *.log
 avatar_temp.ico
 i18n-candidates.json
+
+# 稽核報告（本機產物，不入版控）
+docs/bug-audit.html
+docs/bug-audit.md

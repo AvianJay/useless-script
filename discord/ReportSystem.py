@@ -107,6 +107,21 @@ async def check_message_with_ai(text: str, history_messages: str = "", reason: s
         return {"level": 0, "reason": t("reportsystem.msg.ai_parse_failed"), "suggestion_actions": []}
 
 
+#: Discord embed 單一欄位的字元上限。
+EMBED_FIELD_LIMIT = 1024
+
+
+def _truncate_field(value, limit: int = EMBED_FIELD_LIMIT) -> str:
+    """把使用者輸入截到 embed 欄位允許的長度，超長時附上省略號。
+
+    超過上限時 Discord 會用 HTTP 400 退回整個 embed，導致該則訊息完全無法被檢舉。
+    """
+    text = str(value) if value is not None else ""
+    if len(text) <= limit:
+        return text
+    return text[:limit - 1] + "…"
+
+
 def _validate_ai_response(result: dict) -> dict:
     """驗證並修正 AI 回應格式"""
     # 確保 level 是整數
@@ -234,6 +249,45 @@ class doModerationActions(i18n.I18nView):
         if not self.ai_suggestions:
             self.remove_item(self.ai_suggestion_button)
 
+    #: 每個按鈕所需的伺服器權限（任一即可）。沒列出的 custom_id 一律拒絕。
+    REQUIRED_PERMISSIONS = {
+        "ai_suggestion_button": ("ban_members",),
+        "ban_button": ("ban_members",),
+        "kick_button": ("kick_members",),
+        "mute_button": ("moderate_members",),
+        "view_messages_button": ("manage_messages",),
+        "remove_reporter_rights_button": ("manage_roles",),
+        "reject_report_button": ("manage_messages",),
+    }
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        """檢查按下按鈕的人是否真的有權限執行該處置。
+
+        這個面板會被貼進伺服器設定的檢舉頻道，而 Discord 只要成員「看得到」
+        該訊息就會送出 component interaction（即使該成員被禁止發言）。少了這
+        道檢查，任何能讀取檢舉頻道的一般成員都能按下封鎖／踢出／禁言，或把
+        檢舉人加進黑名單身分組。管理員權限本身已涵蓋所有權限，不需另外處理。
+        """
+        guild = interaction.guild
+        member = interaction.user if isinstance(interaction.user, discord.Member) else None
+        if member is None and guild is not None:
+            member = guild.get_member(interaction.user.id)
+        if guild is None or member is None:
+            await interaction.response.send_message(
+                t("common.err.no_permission"), ephemeral=True)
+            return False
+
+        custom_id = (interaction.data or {}).get("custom_id")
+        required = self.REQUIRED_PERMISSIONS.get(custom_id)
+        permissions = member.guild_permissions
+        if not required or not any(getattr(permissions, name, False) for name in required):
+            log(f"Blocked unauthorised report action {custom_id!r} by {member.id} "
+                f"in guild {guild.id}", level=logging.WARNING, module_name="ReportSystem")
+            await interaction.response.send_message(
+                t("common.err.no_permission"), ephemeral=True)
+            return False
+        return True
+
     # AI 建議的處置按鈕
     @discord.ui.button(label=i18n.K("reportsystem.btn.ai_suggestion"), style=discord.ButtonStyle.danger, custom_id="ai_suggestion_button")
     async def ai_suggestion_button(self, interaction: discord.Interaction, button: discord.ui.Button):
@@ -286,8 +340,25 @@ class doModerationActions(i18n.I18nView):
                     duration = Moderate.timestr_to_seconds(self.duration.value) if self.duration.value else 0
                     delete = Moderate.timestr_to_seconds(self.delete_messages.value) if self.delete_messages.value else 0
                     default_reason = t("reportsystem.msg.default_reason")
-                    await Moderate.ban_user(interaction.guild, user, reason=self.reason.value or default_reason, duration=duration if duration > 0 else None, delete_message_seconds=delete if delete > 0 else 0)
+                    # duration 直接傳 0 代表永久：ban_user 內部以 `if duration > 0`
+                    # 判斷，傳 None 會在那行拋 TypeError，而且會被它自己的
+                    # except Exception 吞掉只回傳 False——結果是人沒被封鎖，
+                    # 公告卻照發。
+                    banned = await Moderate.ban_user(
+                        interaction.guild, user,
+                        reason=self.reason.value or default_reason,
+                        duration=duration,
+                        delete_message_seconds=delete if delete > 0 else 0,
+                    )
+                    if not banned:
+                        # 封鎖失敗就絕對不能發公告，否則頻道上會出現一則
+                        # 「已封鎖」但當事人其實還在伺服器裡。
+                        await modal_interaction.response.send_message(
+                            t("reportsystem.msg.ban_failed"), ephemeral=True)
+                        return
                     await send_moderation_message(user, interaction.user, [{"action": "ban"}], self.reason.value or default_reason, message_content)
+                    await modal_interaction.response.send_message(
+                        t("reportsystem.msg.banned", user=user.mention), ephemeral=True)
                 except Exception as e:
                     # print(f"Error occurred: {str(e)}")
                     log(f"Error banning user: {str(e)}", level=logging.ERROR, module_name="ReportSystem")
@@ -463,10 +534,13 @@ async def report_message(interaction: discord.Interaction, message: discord.Mess
                 title=t("reportsystem.embed.new_report_title", locale=guild_loc),
                 color=discord.Color.red()
             )
-            embed.add_field(name=t("reportsystem.field.reported_message", locale=guild_loc), value=message.content or t("reportsystem.msg.no_content", locale=guild_loc), inline=False)
+            # embed 欄位上限 1024 字元，被檢舉訊息與檢舉理由都由使用者自由輸入；
+            # 超長時整個 embed 會被 Discord 退回 HTTP 400，等於該則訊息永遠無法被檢舉。
+            reported_content = message.content or t("reportsystem.msg.no_content", locale=guild_loc)
+            embed.add_field(name=t("reportsystem.field.reported_message", locale=guild_loc), value=_truncate_field(reported_content), inline=False)
             embed.add_field(name=t("reportsystem.field.reporter", locale=guild_loc), value=interaction.user.mention, inline=False)
             embed.add_field(name=t("reportsystem.field.author", locale=guild_loc), value=message.author.mention, inline=False)
-            embed.add_field(name=t("reportsystem.field.reason", locale=guild_loc), value=reason, inline=False)
+            embed.add_field(name=t("reportsystem.field.reason", locale=guild_loc), value=_truncate_field(reason), inline=False)
             embed.add_field(name=t("reportsystem.field.ai_verdict", locale=guild_loc), value=t("reportsystem.msg.ai_loading", locale=guild_loc), inline=False)
             embed.add_field(name=t("reportsystem.field.message_link", locale=guild_loc), value=t("reportsystem.msg.jump_link", locale=guild_loc, url=message.jump_url), inline=False)
             if message.attachments:

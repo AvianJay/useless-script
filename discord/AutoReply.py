@@ -300,6 +300,32 @@ def autoreply_pack_description(pack_key: str, *, locale: str | None = None) -> s
                   default=AUTOREPLY_TEMPLATE_PACKS.get(pack_key, {}).get("description", ""))
 
 
+# 代入樣板的外部文字（訊息內容、使用者名稱、頻道／身分組名稱…）必須先把大括號
+# 換成哨符，否則它會被後面的指令解析器（{mention:}、{react:}、{sticker:}、
+# {embed*:}、{guildvar:}）當成樣板指令執行——任何成員只要送出
+# 「<觸發詞> {mention:true} @everyone」就能逼 bot ping 全伺服器。
+# 哨符在所有指令都解析完之後，才由 _restore_injected_braces() 還原成字面大括號。
+_BRACE_OPEN_SENTINEL = "\x00AR_LB\x00"
+_BRACE_CLOSE_SENTINEL = "\x00AR_RB\x00"
+
+
+def neutralize_injected_value(value) -> str:
+    """把要代入樣板的外部文字中的大括號換掉，使其無法被解析成指令。"""
+    if value is None:
+        return ""
+    text = str(value)
+    if "{" not in text and "}" not in text:
+        return text
+    return text.replace("{", _BRACE_OPEN_SENTINEL).replace("}", _BRACE_CLOSE_SENTINEL)
+
+
+def restore_injected_braces(text):
+    """所有指令解析完成後，把哨符還原成字面大括號。"""
+    if not text:
+        return text
+    return str(text).replace(_BRACE_OPEN_SENTINEL, "{").replace(_BRACE_CLOSE_SENTINEL, "}")
+
+
 class TemplateSyntaxError(ValueError):
     pass
 
@@ -1494,8 +1520,12 @@ class AutoReply(commands.GroupCog, name=app_commands.locale_str("autoreply", i18
         if operator is None:
             return False
 
-        resolved_left = await self._resolve_response_variables(left_text.strip(), message, context)
-        resolved_right = await self._resolve_response_variables(right_text.strip(), message, context)
+        # 條件比較是拿字面值互比，不會再經過指令解析，所以先還原哨符，
+        # 免得含大括號的訊息內容在比較時多出哨符字元而比不相等。
+        resolved_left = restore_injected_braces(
+            await self._resolve_response_variables(left_text.strip(), message, context))
+        resolved_right = restore_injected_braces(
+            await self._resolve_response_variables(right_text.strip(), message, context))
         return self._compare_condition_values(resolved_left, operator, resolved_right)
 
     def _validate_if_payload(self, payload: str):
@@ -1701,27 +1731,29 @@ class AutoReply(commands.GroupCog, name=app_commands.locale_str("autoreply", i18
         role_name = getattr(getattr(author, "top_role", None), "name", "")
         channel_name = getattr(channel, "name", "")
 
+        # 凡是來自使用者/伺服器、內容不受樣板作者控制的字串，都要先經
+        # neutralize_injected_value() 去除大括號的指令意義。
         replacements = {
             "{user}": author.mention,
-            "{content}": message.content,
-            "{guild}": guild.name,
-            "{server}": guild.name,
+            "{content}": neutralize_injected_value(message.content),
+            "{guild}": neutralize_injected_value(guild.name),
+            "{server}": neutralize_injected_value(guild.name),
             "{guildid}": str(guild.id),
             "{guildicon}": guild.icon.url if guild.icon else "",
-            "{guildowner}": guild.owner.name if guild.owner else "",
+            "{guildowner}": neutralize_injected_value(guild.owner.name if guild.owner else ""),
             "{guildownerid}": str(guild.owner.id) if guild.owner else "",
             "{guildmembers}": str(guild.member_count),
             "{guildroles}": str(len(guild.roles)),
             "{guildbanner}": guild.banner.url if guild.banner else "",
             "{guildboosts}": str(guild.premium_subscription_count) if guild.premium_subscription_count is not None else "0",
-            "{channel}": channel_name,
-            "{author}": author.name,
-            "{member}": author.name,
+            "{channel}": neutralize_injected_value(channel_name),
+            "{author}": neutralize_injected_value(author.name),
+            "{member}": neutralize_injected_value(author.name),
             "{authorid}": str(author.id),
             "{authoravatar}": author.display_avatar.url if author.display_avatar else "",
             "{authorbanner}": author.banner.url if getattr(author, "banner", None) else "",
             "{authorcreated}": author.created_at.strftime("%Y/%m/%d %H:%M:%S"),
-            "{role}": role_name,
+            "{role}": neutralize_injected_value(role_name),
             "{id}": str(author.id),
             "{date}": now.strftime("%Y/%m/%d"),
             "{year}": now.strftime("%Y"),
@@ -1742,7 +1774,8 @@ class AutoReply(commands.GroupCog, name=app_commands.locale_str("autoreply", i18
 
         def content_split_replacer(match):
             token = match.group(1)
-            return self._resolve_contentsplit_token(token, content_parts)
+            return neutralize_injected_value(
+                self._resolve_contentsplit_token(token, content_parts))
 
         response = re.sub(r"\{(contentsplit:[^{}]+|contentsplit\(-?\d+\))\}", content_split_replacer, response)
 
@@ -1858,7 +1891,9 @@ class AutoReply(commands.GroupCog, name=app_commands.locale_str("autoreply", i18
 
     async def _build_embed_from_tokens(self, extracted: dict, message: discord.Message, context: dict):
         async def resolver(value: str) -> str:
-            return await self._resolve_response_variables(value, message, context)
+            # embed 欄位不再經過指令解析器，這裡就是它的還原點。
+            return restore_injected_braces(
+                await self._resolve_response_variables(value, message, context))
 
         return await build_shared_embed_from_tokens(
             extracted,
@@ -1974,6 +2009,9 @@ class AutoReply(commands.GroupCog, name=app_commands.locale_str("autoreply", i18
         response = sticker_pattern.sub(sticker_replacer, response)
         response, extracted_embed = self._extract_embed_tokens(response)
         embed = await self._build_embed_from_tokens(extracted_embed, message, context)
+
+        # 所有指令都解析完了，把代入文字裡的大括號還原成字面值。
+        response = restore_injected_braces(response)
 
         if not response and not sticker and embed is None:
             return "", None, None, allowed_mentions
