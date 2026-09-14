@@ -1267,14 +1267,15 @@ class MiniGamesCog(
             edit_kwargs["content"] = content
         if embed is not discord.utils.MISSING:
             edit_kwargs["embed"] = embed
+        # 停舊 view 必須早於 message.edit 註冊新 view，理由同 tower_pick_tile 的註解。
+        if old_view is not None and old_view is not view:
+            old_view.stop()
         await message.edit(**edit_kwargs)
         game.lobby_message = message
         game.lobby_message_id = message.id
         game.active_view = view
         if view is not None and hasattr(view, "message"):
             view.message = message
-        if old_view is not None and old_view is not view:
-            old_view.stop()
 
     def _resolve_audit_user(self, guild_id: int, user_id: int):
         if guild_id != GLOBAL_GUILD_ID:
@@ -2488,6 +2489,9 @@ class MiniGamesCog(
                 if isinstance(child, discord.ui.Button):
                     child.disabled = True
             old_view = game.active_view
+            # 停舊 view 必須早於 edit_message 註冊新 view，理由同 tower_pick_tile 的註解。
+            if old_view is not None and old_view is not view:
+                old_view.stop()
             await interaction.response.edit_message(embed=embed, view=view)
             msg = await interaction.original_response()
             game.message = msg
@@ -2495,8 +2499,6 @@ class MiniGamesCog(
             game.active_view = None
             view.message = msg
             view.stop()
-            if old_view is not None and old_view is not view:
-                old_view.stop()
             return
 
         safe = game.safe_level()
@@ -2542,6 +2544,9 @@ class MiniGamesCog(
                 if isinstance(child, discord.ui.Button):
                     child.disabled = True
             old_view = game.active_view
+            # 停舊 view 必須早於 edit_message 註冊新 view，理由同 tower_pick_tile 的註解。
+            if old_view is not None and old_view is not view:
+                old_view.stop()
             await interaction.response.edit_message(embed=embed, view=view)
             msg = await interaction.original_response()
             game.message = msg
@@ -2549,22 +2554,24 @@ class MiniGamesCog(
             game.active_view = None
             view.message = msg
             view.stop()
-            if old_view is not None and old_view is not view:
-                old_view.stop()
             return
 
         game.awaiting_continue = True
         embed = self._tower_embed(game, phase="result_safe")
         view = TowerGameView(self, game)
         old_view = game.active_view
+        # 舊 view 一定要在 edit_message 註冊新 view 之前停掉。ViewStore 的 dispatch
+        # 表以 message_id 為 key 共用，而 Tower 的 custom_id（tile_{層}_{格}）在每個
+        # view 之間都相同；晚一步呼叫 stop() 會連剛註冊好的新按鈕一起移除，導致第一層
+        # 之後的每次點擊都變成「互動失敗」。
+        if old_view is not None and old_view is not view:
+            old_view.stop()
         await interaction.response.edit_message(embed=embed, view=view)
         msg = await interaction.original_response()
         game.message = msg
         game.message_id = msg.id
         game.active_view = view
         view.message = msg
-        if old_view is not None and old_view is not view:
-            old_view.stop()
 
     async def tower_cashout(self, interaction: discord.Interaction, game: TowerGame):
         if interaction.user.id != game.user_id:
@@ -2608,6 +2615,9 @@ class MiniGamesCog(
             if isinstance(child, discord.ui.Button):
                 child.disabled = True
         old_view = game.active_view
+        # 停舊 view 必須早於 edit_message 註冊新 view，理由同 tower_pick_tile 的註解。
+        if old_view is not None and old_view is not view:
+            old_view.stop()
         await interaction.response.edit_message(embed=embed, view=view)
         msg = await interaction.original_response()
         game.message = msg
@@ -2615,8 +2625,6 @@ class MiniGamesCog(
         game.active_view = None
         view.message = msg
         view.stop()
-        if old_view is not None and old_view is not view:
-            old_view.stop()
 
     # -----------------------------
     # Slots 拉霸機
@@ -2850,13 +2858,14 @@ class MiniGamesCog(
         result = t("minigames.highlow.correct", old=old_card, new=new_card)
         new_view = HighLowView(self, game)
         old_view = game.active_view
+        # 停舊 view 必須早於 edit_message 註冊新 view，理由同 tower_pick_tile 的註解。
+        if old_view is not None and old_view is not new_view:
+            old_view.stop()
         await interaction.response.edit_message(embed=self._highlow_embed(game, result), view=new_view)
         msg = await interaction.original_response()
         game.message = msg
         game.active_view = new_view
         new_view.message = msg
-        if old_view is not None and old_view is not new_view:
-            old_view.stop()
 
     async def highlow_cashout(self, interaction: discord.Interaction, game: HighLowGame, view: HighLowView):
         if interaction.user.id != game.user_id:
@@ -3028,13 +3037,14 @@ class MiniGamesCog(
 
         new_view = BlackjackView(self, game)
         old_view = game.active_view
+        # 停舊 view 必須早於 edit_message 註冊新 view，理由同 tower_pick_tile 的註解。
+        if old_view is not None and old_view is not new_view:
+            old_view.stop()
         await interaction.response.edit_message(embed=await self._bj_embed(game, reveal=False), view=new_view)
         msg = await interaction.original_response()
         game.message = msg
         game.active_view = new_view
         new_view.message = msg
-        if old_view is not None and old_view is not new_view:
-            old_view.stop()
 
     async def bj_stand(self, interaction: discord.Interaction, game: BlackjackGame, view: BlackjackView):
         if interaction.user.id != game.user_id:
