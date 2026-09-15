@@ -1,0 +1,104 @@
+{
+    "ac": {
+        "all_variants": "★ 「{query}」に一致する {count} 件をすべて追加",
+        "entry_app": "ゲーム：{name}（{app_id}）",
+        "entry_name": "名前：{name}",
+        "entry_pattern": "含む：{pattern}",
+        "observed": "◆ このサーバーで検出済み：{name}"
+    },
+    "audit": {
+        "add": "ActivityRole：対応するアクティビティを検出",
+        "remove": "ActivityRole：アクティビティが終了"
+    },
+    "config": {
+        "and_more": "、ほか {count} 件",
+        "deleted_role": "削除されたロール（ID: `{role_id}`）",
+        "no_mappings": "アクティビティの対応設定がまだありません。`/activity-role add` から始めてください。",
+        "part_games": "ゲーム：{value}",
+        "part_names": "名前：{value}",
+        "part_patterns": "含む：{value}",
+        "part_types": "種類：{value}",
+        "title": "🎮 アクティビティロール設定"
+    },
+    "err": {
+        "already_mapped": "⚠️ この項目はすでに登録されています。",
+        "bad_app_id": "⚠️ application ID は数字のみで指定してください。",
+        "empty_name": "⚠️ アクティビティ名を空にはできません。",
+        "entry_not_found": "⚠️ この項目は見つかりません。すでに削除された可能性があります。",
+        "log_channel_perms": "⚠️ ボットに {channel} の閲覧権限または送信権限がありません。先に権限を調整してください。",
+        "missing_manage_roles": "⚠️ ボットに「ロールの管理」権限がないため、アクティビティロールを有効にできません。",
+        "no_mapping": "⚠️ {role} にはまだアクティビティの対応設定がありません。",
+        "no_match": "⚠️ ゲーム一覧に「{query}」に一致する項目がありません。",
+        "pattern_too_short": "⚠️ 部分一致は 3 文字以上にしてください。短すぎると多数のアクティビティに誤って一致します。",
+        "refresh_cooldown": "⚠️ ゲーム一覧は全体で共有されており、つい先ほど更新されました。{when} 以降に再試行してください。",
+        "refresh_failed": "⚠️ ゲーム一覧の更新に失敗しました。後でもう一度お試しください。",
+        "role_everyone": "⚠️ @everyone はアクティビティロールに使用できません。",
+        "role_managed": "⚠️ {role} は連携サービスが管理するロールのため、ボットからは付与できません。",
+        "role_too_high": "⚠️ {role} はボットの最上位ロール以上の位置にあるため、付与できません。",
+        "types_empty": "⚠️ アクティビティの種類は少なくとも 1 つ残す必要があります。"
+    },
+    "field": {
+        "added": "付与",
+        "mode": "モード",
+        "remove_after": "解除の遅延",
+        "removed": "解除",
+        "status": "状態",
+        "warning": "⚠️ 注意"
+    },
+    "log": {
+        "footer": "ユーザー ID：{user_id}",
+        "title": "🎮 アクティビティロールの変更",
+        "updated": "{user} のアクティビティロールを更新しました。"
+    },
+    "msg": {
+        "added": "✅ {count} 件のアクティビティを {role} に対応付けました：{entries}",
+        "added_custom": "✅ **{name}**（`{app_id}`）を {role} に対応付けました。",
+        "added_custom_unverified": "✅ `{app_id}` を {role} に対応付けました。\n⚠️ この ID の名前を取得できませんでした。入力間違いがないか確認してください（照合自体は正常に動作します）。",
+        "added_pattern": "✅ アクティビティ名に「{pattern}」を含む場合に {role} を付与します。",
+        "disabled": "✅ アクティビティロールを無効にしました。",
+        "enabled": "✅ アクティビティロールを有効にしました。",
+        "entry_removed": "✅ {role} からこの項目を削除しました。",
+        "games_refreshed": "✅ ゲーム一覧を更新しました（{count} 件）。",
+        "log_channel_cleared": "✅ ログチャンネルの設定を解除しました。",
+        "log_channel_set": "✅ ログチャンネルを {channel} に設定しました。",
+        "mode_set_live": "✅ モードを**ライブ**に設定しました：アクティビティ終了時にロールを解除します。",
+        "mode_set_sticky": "✅ モードを**保持**に設定しました：一度付与したロールは解除しません。",
+        "remove_after_set": "✅ 解除の遅延を {minutes} 分に設定しました。",
+        "removed": "✅ {role} のアクティビティ対応設定をすべて削除しました。",
+        "types_set": "✅ {role} のアクティビティ種類を設定しました：{types}"
+    },
+    "observed": {
+        "empty": "まだアクティビティを検出していません。",
+        "footer": "Discord のゲーム一覧に載っていないアプリでも、このサーバーで誰かが起動すれば表示されます。",
+        "row": "**{name}** — {count} 回、{when}｜{source}｜`{app_id}`",
+        "src_custom": "カスタムアプリ",
+        "src_detectable": "公式一覧",
+        "title": "🔍 最近このサーバーで検出したアクティビティ"
+    },
+    "status": {
+        "enabled_guilds": "有効なサーバー数",
+        "games_count": "{count} 件",
+        "games_index": "ゲーム一覧",
+        "games_missing": "未読み込み",
+        "games_updated": "一覧の更新",
+        "intent": "Presence intent",
+        "queue": "実行状況",
+        "queue_value": "worker {workers}｜待機 {pending}｜保留 {debounce}｜解除予定 {removals}",
+        "raw_event": "raw presence イベント",
+        "title": "🎮 アクティビティロール診断"
+    },
+    "value": {
+        "disabled": "無効",
+        "enabled": "有効",
+        "mode_live": "ライブ（終了時に解除）",
+        "mode_sticky": "保持（付与後は解除しない）",
+        "off": "❌ オフ",
+        "on": "✅ オン",
+        "remove_after": "{minutes} 分後",
+        "remove_immediately": "即時"
+    },
+    "warn": {
+        "no_presence_intent": "現在このボットには Presence intent がないため、ロールは変更されません。設定は保持され、intent を有効にすると自動的に反映されます。",
+        "raw_disabled": "`on_raw_presence_update` が無効です（members intent が有効な間は既定でオフ）。Bot のコンストラクタに `enable_raw_presences=True` を渡してください。渡さない場合、キャッシュ済みのメンバーのみが更新されます。"
+    }
+}

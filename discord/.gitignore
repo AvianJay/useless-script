@@ -13,3 +13,6 @@ i18n-candidates.json
 # 稽核報告（本機產物，不入版控）
 docs/bug-audit.html
 docs/bug-audit.md
+
+# ActivityRole 的可偵測遊戲清單快取（執行期產物）
+cache/

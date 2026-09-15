@@ -1,4 +1,154 @@
 {
+    "activityrole": {
+        "activity_role": {
+            "root": {
+                "name": "activity-role",
+                "desc": "Automatically assign roles based on member activity"
+            },
+            "toggle": {
+                "name": "toggle",
+                "desc": "Enable or disable activity roles",
+                "param": {
+                    "enable": "Whether to enable activity roles"
+                },
+                "param_name": {
+                    "enable": "enable"
+                },
+                "choice": {
+                    "true": "Enable",
+                    "false": "Disable"
+                }
+            },
+            "mode": {
+                "name": "mode",
+                "desc": "Choose whether roles are taken back when the activity stops",
+                "param": {
+                    "mode": "live: remove when the activity stops / sticky: keep it once earned"
+                },
+                "param_name": {
+                    "mode": "mode"
+                },
+                "choice": {
+                    "live": "Live (remove when stopped)",
+                    "sticky": "Sticky (keep once earned)"
+                }
+            },
+            "remove_after": {
+                "name": "remove-after",
+                "desc": "Delay before a role is taken back after the activity stops",
+                "param": {
+                    "minutes": "0 means remove immediately; a delay greatly reduces flapping from alt-tabbing"
+                },
+                "param_name": {
+                    "minutes": "minutes"
+                }
+            },
+            "set_log_channel": {
+                "name": "set-log-channel",
+                "desc": "Set the channel that logs activity role changes",
+                "param": {
+                    "channel": "Leave blank to clear the setting"
+                },
+                "param_name": {
+                    "channel": "channel"
+                }
+            },
+            "types": {
+                "name": "types",
+                "desc": "Choose which activity types count for a role",
+                "param": {
+                    "role": "The role to configure",
+                    "playing": "Playing a game (default on)",
+                    "streaming": "Streaming",
+                    "listening": "Listening (e.g. Spotify)",
+                    "watching": "Watching",
+                    "competing": "Competing"
+                },
+                "param_name": {
+                    "role": "role",
+                    "playing": "playing",
+                    "streaming": "streaming",
+                    "listening": "listening",
+                    "watching": "watching",
+                    "competing": "competing"
+                }
+            },
+            "add": {
+                "name": "add",
+                "desc": "Map an activity to a role",
+                "param": {
+                    "role": "The role to grant",
+                    "game": "Pick from the list, or type an activity name directly"
+                },
+                "param_name": {
+                    "role": "role",
+                    "game": "activity"
+                }
+            },
+            "add_custom": {
+                "name": "add-custom",
+                "desc": "Map a role by raw application ID (for apps not in the game list)",
+                "param": {
+                    "role": "The role to grant",
+                    "app_id": "The application ID shown in the activity"
+                },
+                "param_name": {
+                    "role": "role",
+                    "app_id": "app_id"
+                }
+            },
+            "add_pattern": {
+                "name": "add-pattern",
+                "desc": "Map a role by a loose name match",
+                "param": {
+                    "role": "The role to grant",
+                    "pattern": "Grants the role when the activity name contains this text"
+                },
+                "param_name": {
+                    "role": "role",
+                    "pattern": "pattern"
+                }
+            },
+            "remove_entry": {
+                "name": "remove-entry",
+                "desc": "Remove a single match entry from a role",
+                "param": {
+                    "role": "The role to edit",
+                    "entry": "The entry to remove"
+                },
+                "param_name": {
+                    "role": "role",
+                    "entry": "entry"
+                }
+            },
+            "remove": {
+                "name": "remove",
+                "desc": "Remove every match entry for a role",
+                "param": {
+                    "role": "The role to unmap"
+                },
+                "param_name": {
+                    "role": "role"
+                }
+            },
+            "list": {
+                "name": "list",
+                "desc": "View the current activity role configuration"
+            },
+            "observed": {
+                "name": "observed",
+                "desc": "View activities recently seen in this server"
+            },
+            "status": {
+                "name": "status",
+                "desc": "Diagnostics for the activity role system"
+            },
+            "refresh_games": {
+                "name": "refresh-games",
+                "desc": "Force a refresh of the detectable game list"
+            }
+        }
+    },
     "ai": {
         "ai": {
             "desc": "Chat with the AI assistant",

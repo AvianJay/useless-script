@@ -1,4 +1,31 @@
 {
+    "activityrole": {
+        "_display": "Activity Roles",
+        "_desc": "Grant roles automatically based on what members are playing (mappings are managed with /activity-role)",
+        "activityrole_enabled": {
+            "display": "Enable activity roles",
+            "desc": "Automatically grant roles based on the game or app members are running (requires the Presence intent)"
+        },
+        "activityrole_mode": {
+            "display": "Mode",
+            "desc": "live takes the role back when the activity stops; sticky keeps it once earned",
+            "option": {
+                "live": "Live (remove when stopped)",
+                "sticky": "Sticky (keep once earned)"
+            }
+        },
+        "activityrole_remove_after": {
+            "display": "Removal delay (minutes)",
+            "desc": "Wait this long after the activity stops before taking the role back; a delay reduces flapping from alt-tabbing"
+        },
+        "activityrole_ignore_bots": {
+            "display": "Ignore bot accounts"
+        },
+        "activityrole_log_channel": {
+            "display": "Log channel",
+            "desc": "Where to report activity role changes"
+        }
+    },
     "antibeast": {
         "_desc": "Block everyone/here and protected-role mentions",
         "_display": "AntiBeast",

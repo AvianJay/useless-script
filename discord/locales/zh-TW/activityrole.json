@@ -1,0 +1,104 @@
+{
+    "ac": {
+        "all_variants": "★ 全選符合「{query}」的 {count} 個項目",
+        "entry_app": "遊戲：{name}（{app_id}）",
+        "entry_name": "名稱：{name}",
+        "entry_pattern": "包含：{pattern}",
+        "observed": "◆ 本伺服器出現過：{name}"
+    },
+    "audit": {
+        "add": "ActivityRole 自動指派（偵測到對應活動）",
+        "remove": "ActivityRole 自動收回（活動已結束）"
+    },
+    "config": {
+        "and_more": "，另有 {count} 項",
+        "deleted_role": "已刪除的身分組（ID: `{role_id}`）",
+        "no_mappings": "尚未設定任何活動對應。用 `/activity-role add` 開始。",
+        "part_games": "遊戲：{value}",
+        "part_names": "名稱：{value}",
+        "part_patterns": "包含：{value}",
+        "part_types": "型別：{value}",
+        "title": "🎮 活動身分組設定"
+    },
+    "err": {
+        "already_mapped": "⚠️ 這個項目已經在對應清單裡了。",
+        "bad_app_id": "⚠️ application ID 必須是純數字。",
+        "empty_name": "⚠️ 活動名稱不能空白。",
+        "entry_not_found": "⚠️ 找不到這個項目，可能已經被移除了。",
+        "log_channel_perms": "⚠️ 機器人在 {channel} 沒有檢視頻道或發送訊息的權限，請先調整後再設定。",
+        "missing_manage_roles": "⚠️ 機器人缺少「管理身分組」權限，無法啟用活動身分組。",
+        "no_mapping": "⚠️ {role} 還沒有任何活動對應。",
+        "no_match": "⚠️ 遊戲清單裡找不到符合「{query}」的項目。",
+        "pattern_too_short": "⚠️ 包含比對至少要 3 個字，太短會誤判一大堆活動。",
+        "refresh_cooldown": "⚠️ 遊戲清單是全域共用的，剛剛才更新過。請於 {when} 後再試。",
+        "refresh_failed": "⚠️ 更新遊戲清單失敗，請稍後再試。",
+        "role_everyone": "⚠️ 無法使用 @everyone 作為活動身分組。",
+        "role_managed": "⚠️ {role} 是由整合服務管理的身分組，機器人無法指派。",
+        "role_too_high": "⚠️ {role} 的順位高於或等於機器人的最高身分組，無法指派。",
+        "types_empty": "⚠️ 至少要保留一種活動型別。"
+    },
+    "field": {
+        "added": "已指派",
+        "mode": "模式",
+        "remove_after": "延後收回",
+        "removed": "已收回",
+        "status": "狀態",
+        "warning": "⚠️ 注意"
+    },
+    "log": {
+        "footer": "使用者 ID：{user_id}",
+        "title": "🎮 活動身分組變動",
+        "updated": "{user} 的活動身分組已更新。"
+    },
+    "msg": {
+        "added": "✅ 已把 {count} 個活動項目對應到 {role}：{entries}",
+        "added_custom": "✅ 已把 **{name}**（`{app_id}`）對應到 {role}。",
+        "added_custom_unverified": "✅ 已把 `{app_id}` 對應到 {role}。\n⚠️ 無法反查這個 ID 的名稱，請確認沒打錯 —— 比對本身仍會正常運作。",
+        "added_pattern": "✅ 已設定：活動名稱包含「{pattern}」時指派 {role}。",
+        "disabled": "✅ 已停用活動身分組。",
+        "enabled": "✅ 已啟用活動身分組。",
+        "entry_removed": "✅ 已從 {role} 移除該項目。",
+        "games_refreshed": "✅ 遊戲清單已更新，共 {count} 筆。",
+        "log_channel_cleared": "✅ 已清除日誌頻道設定。",
+        "log_channel_set": "✅ 已將日誌頻道設為 {channel}。",
+        "mode_set_live": "✅ 模式已設為**動態**：活動結束後會收回身分組。",
+        "mode_set_sticky": "✅ 模式已設為**保留**：拿到後就不會收回。",
+        "remove_after_set": "✅ 延後收回已設為 {minutes} 分鐘。",
+        "removed": "✅ 已移除 {role} 的所有活動對應。",
+        "types_set": "✅ {role} 的活動型別已設為：{types}"
+    },
+    "observed": {
+        "empty": "還沒觀測到任何活動。",
+        "footer": "只要有人在本伺服器跑過，即使不在 Discord 的遊戲清單裡也會出現在這裡。",
+        "row": "**{name}** — {count} 次，{when}｜{source}｜`{app_id}`",
+        "src_custom": "自訂 app",
+        "src_detectable": "官方清單",
+        "title": "🔍 本伺服器最近出現的活動"
+    },
+    "status": {
+        "enabled_guilds": "已啟用的伺服器數",
+        "games_count": "{count} 筆",
+        "games_index": "遊戲清單",
+        "games_missing": "尚未載入",
+        "games_updated": "清單更新於",
+        "intent": "Presence intent",
+        "queue": "執行狀態",
+        "queue_value": "worker {workers}｜待處理 {pending}｜等待中 {debounce}｜排定收回 {removals}",
+        "raw_event": "raw presence 事件",
+        "title": "🎮 活動身分組診斷"
+    },
+    "value": {
+        "disabled": "已停用",
+        "enabled": "已啟用",
+        "mode_live": "動態（活動結束即收回）",
+        "mode_sticky": "保留（拿到就不收回）",
+        "off": "❌ 關閉",
+        "on": "✅ 開啟",
+        "remove_after": "{minutes} 分鐘後",
+        "remove_immediately": "立即收回"
+    },
+    "warn": {
+        "no_presence_intent": "本機器人目前沒有 Presence intent，因此不會有任何身分組變動。設定會保留，intent 開啟後就會自動生效。",
+        "raw_disabled": "`on_raw_presence_update` 沒有啟用（members intent 開啟時它預設是關的）。請在 Bot 建構子傳入 `enable_raw_presences=True`，否則只有已快取的成員會被更新。"
+    }
+}

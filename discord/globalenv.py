@@ -16,7 +16,7 @@ from pathlib import Path
 
 
 # Global configuration for backward compatibility
-config_version = 34
+config_version = 35
 config_path = 'config.json'
 
 default_config = {
@@ -27,6 +27,10 @@ default_config = {
     "bot_activities": [
         {"type": "playing", "name": "Robot"}
     ],
+    # Guild Presences privileged intent（ActivityRole 需要）。未經 Discord 核准就
+    # 打開會讓 gateway 以 4014 Disallowed intents 斷線，所以預設關閉；低於門檻的
+    # 測試用 app 在 Developer Portal 勾選後再把這裡設為 true。
+    "enable_presence_intent": False,
     "owners": [123456789012345678],  # 機器人擁有者 ID 列表
     "prefix": "!",  # 指令前綴
     "r34_user_id": "",
@@ -305,7 +309,13 @@ intents = discord.Intents.default()
 intents.message_content = True
 intents.members = True
 intents.guilds = True
-bot = commands.Bot(command_prefix=config("prefix", "!"), intents=intents, chunk_guilds_at_startup=False, enable_debug_events=True, tree_cls=i18n.I18nCommandTree)
+# Presence 是 privileged intent：未經 Discord 核准就打開會讓 gateway 直接以 4014
+# (Disallowed intents) 斷線，所以由設定檔控制，預設關閉。低於門檻的測試用 app 在
+# Developer Portal 打勾後，把 config 的 enable_presence_intent 設 true 即可。
+intents.presences = bool(config("enable_presence_intent", False))
+# on_raw_presence_update 的預設開關是「members 關且 presences 開」，而本專案的
+# members 是開的，所以必須明確指定，否則 ActivityRole 收不到任何 presence 事件。
+bot = commands.Bot(command_prefix=config("prefix", "!"), intents=intents, chunk_guilds_at_startup=False, enable_debug_events=True, enable_raw_presences=True, tree_cls=i18n.I18nCommandTree)
 configure_runtime_logging()
 
 

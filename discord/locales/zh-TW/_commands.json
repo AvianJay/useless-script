@@ -1,4 +1,154 @@
 {
+    "activityrole": {
+        "activity_role": {
+            "root": {
+                "name": "活動身分組",
+                "desc": "依成員正在進行的活動自動指派身分組"
+            },
+            "toggle": {
+                "name": "開關",
+                "desc": "啟用或停用活動身分組",
+                "param": {
+                    "enable": "是否啟用活動身分組"
+                },
+                "param_name": {
+                    "enable": "啟用"
+                },
+                "choice": {
+                    "true": "啟用",
+                    "false": "停用"
+                }
+            },
+            "mode": {
+                "name": "模式",
+                "desc": "設定活動結束後要不要收回身分組",
+                "param": {
+                    "mode": "動態：活動結束就收回／保留：拿到後就不收回"
+                },
+                "param_name": {
+                    "mode": "模式"
+                },
+                "choice": {
+                    "live": "動態（活動結束即收回）",
+                    "sticky": "保留（拿到就不收回）"
+                }
+            },
+            "remove_after": {
+                "name": "延後收回",
+                "desc": "活動結束後延後多久才收回身分組",
+                "param": {
+                    "minutes": "0 為立即收回；設定延遲可大幅減少切換視窗造成的抖動"
+                },
+                "param_name": {
+                    "minutes": "分鐘"
+                }
+            },
+            "set_log_channel": {
+                "name": "設定日誌頻道",
+                "desc": "設定記錄活動身分組變動的頻道",
+                "param": {
+                    "channel": "留空則清除設定"
+                },
+                "param_name": {
+                    "channel": "頻道"
+                }
+            },
+            "types": {
+                "name": "活動型別",
+                "desc": "設定哪些活動型別才會觸發這個身分組",
+                "param": {
+                    "role": "要設定的身分組",
+                    "playing": "正在玩遊戲（預設開啟）",
+                    "streaming": "正在開台",
+                    "listening": "正在聽（例如 Spotify）",
+                    "watching": "正在觀看",
+                    "competing": "正在參賽"
+                },
+                "param_name": {
+                    "role": "身分組",
+                    "playing": "遊戲",
+                    "streaming": "開台",
+                    "listening": "聆聽",
+                    "watching": "觀看",
+                    "competing": "參賽"
+                }
+            },
+            "add": {
+                "name": "新增",
+                "desc": "把一個活動對應到身分組",
+                "param": {
+                    "role": "要指派的身分組",
+                    "game": "從清單挑選，或直接輸入活動名稱"
+                },
+                "param_name": {
+                    "role": "身分組",
+                    "game": "活動"
+                }
+            },
+            "add_custom": {
+                "name": "新增自訂",
+                "desc": "用 application ID 對應身分組（適用於不在遊戲清單裡的 app）",
+                "param": {
+                    "role": "要指派的身分組",
+                    "app_id": "活動顯示的 application ID"
+                },
+                "param_name": {
+                    "role": "身分組",
+                    "app_id": "應用程式id"
+                }
+            },
+            "add_pattern": {
+                "name": "新增包含比對",
+                "desc": "用名稱包含的方式對應身分組",
+                "param": {
+                    "role": "要指派的身分組",
+                    "pattern": "活動名稱包含這段文字時就指派"
+                },
+                "param_name": {
+                    "role": "身分組",
+                    "pattern": "關鍵字"
+                }
+            },
+            "remove_entry": {
+                "name": "移除項目",
+                "desc": "從身分組移除單一比對項目",
+                "param": {
+                    "role": "要編輯的身分組",
+                    "entry": "要移除的項目"
+                },
+                "param_name": {
+                    "role": "身分組",
+                    "entry": "項目"
+                }
+            },
+            "remove": {
+                "name": "移除",
+                "desc": "移除身分組的所有比對項目",
+                "param": {
+                    "role": "要取消對應的身分組"
+                },
+                "param_name": {
+                    "role": "身分組"
+                }
+            },
+            "list": {
+                "name": "列出",
+                "desc": "查看目前的活動身分組設定"
+            },
+            "observed": {
+                "name": "觀測清單",
+                "desc": "查看本伺服器最近出現過的活動"
+            },
+            "status": {
+                "name": "診斷",
+                "desc": "查看活動身分組系統的運作狀態"
+            },
+            "refresh_games": {
+                "name": "更新遊戲清單",
+                "desc": "強制重新抓取 Discord 的可偵測遊戲清單"
+            }
+        }
+    },
     "ai": {
         "ai": {
             "desc": "與 AI 助手對話",

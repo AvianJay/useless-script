@@ -1,0 +1,104 @@
+{
+    "ac": {
+        "all_variants": "★ Add all {count} entries matching \"{query}\"",
+        "entry_app": "Game: {name} ({app_id})",
+        "entry_name": "Name: {name}",
+        "entry_pattern": "Contains: {pattern}",
+        "observed": "◆ Seen in this server: {name}"
+    },
+    "audit": {
+        "add": "ActivityRole: matching activity detected",
+        "remove": "ActivityRole: activity ended"
+    },
+    "config": {
+        "and_more": ", and {count} more",
+        "deleted_role": "Deleted role (ID: `{role_id}`)",
+        "no_mappings": "No activity mappings configured yet. Start with `/activity-role add`.",
+        "part_games": "Games: {value}",
+        "part_names": "Names: {value}",
+        "part_patterns": "Contains: {value}",
+        "part_types": "Types: {value}",
+        "title": "🎮 Activity Role Settings"
+    },
+    "err": {
+        "already_mapped": "⚠️ That entry is already mapped.",
+        "bad_app_id": "⚠️ An application ID must be digits only.",
+        "empty_name": "⚠️ The activity name cannot be blank.",
+        "entry_not_found": "⚠️ That entry no longer exists; it may already have been removed.",
+        "log_channel_perms": "⚠️ The bot cannot view or send messages in {channel}. Fix that first, then set it again.",
+        "missing_manage_roles": "⚠️ The bot is missing the Manage Roles permission, so activity roles cannot be enabled.",
+        "no_mapping": "⚠️ {role} has no activity mappings yet.",
+        "no_match": "⚠️ Nothing in the game list matches \"{query}\".",
+        "pattern_too_short": "⚠️ A contains-match needs at least 3 characters; anything shorter matches far too many activities.",
+        "refresh_cooldown": "⚠️ The game list is shared globally and was just refreshed. Try again after {when}.",
+        "refresh_failed": "⚠️ Could not refresh the game list. Please try again later.",
+        "role_everyone": "⚠️ @everyone cannot be used as an activity role.",
+        "role_managed": "⚠️ {role} is managed by an integration, so the bot cannot assign it.",
+        "role_too_high": "⚠️ {role} is at or above the bot's highest role, so it cannot be assigned.",
+        "types_empty": "⚠️ At least one activity type must remain enabled."
+    },
+    "field": {
+        "added": "Granted",
+        "mode": "Mode",
+        "remove_after": "Removal delay",
+        "removed": "Removed",
+        "status": "Status",
+        "warning": "⚠️ Heads up"
+    },
+    "log": {
+        "footer": "User ID: {user_id}",
+        "title": "🎮 Activity Role Change",
+        "updated": "Activity roles updated for {user}."
+    },
+    "msg": {
+        "added": "✅ Mapped {count} activity entr(ies) to {role}: {entries}",
+        "added_custom": "✅ Mapped **{name}** (`{app_id}`) to {role}.",
+        "added_custom_unverified": "✅ Mapped `{app_id}` to {role}.\n⚠️ That ID could not be resolved to a name, so double-check it for typos — matching itself still works.",
+        "added_pattern": "✅ {role} will now be granted when an activity name contains \"{pattern}\".",
+        "disabled": "✅ Activity roles disabled.",
+        "enabled": "✅ Activity roles enabled.",
+        "entry_removed": "✅ Removed that entry from {role}.",
+        "games_refreshed": "✅ Game list refreshed: {count} entries.",
+        "log_channel_cleared": "✅ Log channel cleared.",
+        "log_channel_set": "✅ Log channel set to {channel}.",
+        "mode_set_live": "✅ Mode set to **live**: the role is removed once the activity stops.",
+        "mode_set_sticky": "✅ Mode set to **sticky**: the role is kept once earned.",
+        "remove_after_set": "✅ Removal delay set to {minutes} minute(s).",
+        "removed": "✅ Removed every activity mapping for {role}.",
+        "types_set": "✅ Activity types for {role} set to: {types}"
+    },
+    "observed": {
+        "empty": "No activities observed yet.",
+        "footer": "Anything a member runs here shows up, even apps missing from Discord's game list.",
+        "row": "**{name}** — {count}x, {when} | {source} | `{app_id}`",
+        "src_custom": "custom app",
+        "src_detectable": "official list",
+        "title": "🔍 Activities Recently Seen Here"
+    },
+    "status": {
+        "enabled_guilds": "Servers with it enabled",
+        "games_count": "{count} entries",
+        "games_index": "Game list",
+        "games_missing": "Not loaded",
+        "games_updated": "List updated",
+        "intent": "Presence intent",
+        "queue": "Runtime",
+        "queue_value": "workers {workers} | queued {pending} | debouncing {debounce} | scheduled removals {removals}",
+        "raw_event": "Raw presence event",
+        "title": "🎮 Activity Role Diagnostics"
+    },
+    "value": {
+        "disabled": "Disabled",
+        "enabled": "Enabled",
+        "mode_live": "Live (removed when the activity stops)",
+        "mode_sticky": "Sticky (kept once earned)",
+        "off": "❌ Off",
+        "on": "✅ On",
+        "remove_after": "after {minutes} minute(s)",
+        "remove_immediately": "Immediately"
+    },
+    "warn": {
+        "no_presence_intent": "This bot does not currently have the Presence intent, so no roles will change. Your configuration is kept and takes effect as soon as the intent is enabled.",
+        "raw_disabled": "`on_raw_presence_update` is disabled (it defaults off while the members intent is on). Pass `enable_raw_presences=True` to the Bot constructor, or only already-cached members will be updated."
+    }
+}

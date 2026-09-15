@@ -1,4 +1,31 @@
 {
+    "activityrole": {
+        "_display": "アクティビティロール",
+        "_desc": "メンバーがプレイ中のゲームや使用中のアプリに応じてロールを自動付与します（対応規則は /アクティビティロール で設定）",
+        "activityrole_enabled": {
+            "display": "アクティビティロールを有効化",
+            "desc": "メンバーが実行中のゲームやアプリに応じてロールを自動付与します（Presence intent が必要）"
+        },
+        "activityrole_mode": {
+            "display": "モード",
+            "desc": "ライブ：終了時にロールを解除／保持：付与後は解除しない",
+            "option": {
+                "live": "ライブ（終了時に解除）",
+                "sticky": "保持（付与後は解除しない）"
+            }
+        },
+        "activityrole_remove_after": {
+            "display": "解除の遅延（分）",
+            "desc": "アクティビティ終了後この時間だけ待ってからロールを解除します。遅延によりウィンドウ切り替えの揺れが減ります"
+        },
+        "activityrole_ignore_bots": {
+            "display": "ボットアカウントを無視"
+        },
+        "activityrole_log_channel": {
+            "display": "ログチャンネル",
+            "desc": "アクティビティロールの変更を報告するチャンネル"
+        }
+    },
     "antibeast": {
         "_desc": "すべてのユーザー/ここおよび保護されたロールへの言及をブロックする",
         "_display": "アンチビースト",

@@ -1,4 +1,154 @@
 {
+    "activityrole": {
+        "activity_role": {
+            "root": {
+                "name": "アクティビティロール",
+                "desc": "メンバーのアクティビティに応じてロールを自動付与します"
+            },
+            "toggle": {
+                "name": "切り替え",
+                "desc": "アクティビティロールを有効または無効にします",
+                "param": {
+                    "enable": "アクティビティロールを有効にするか"
+                },
+                "param_name": {
+                    "enable": "有効"
+                },
+                "choice": {
+                    "true": "有効",
+                    "false": "無効"
+                }
+            },
+            "mode": {
+                "name": "モード",
+                "desc": "アクティビティ終了時にロールを解除するかを設定します",
+                "param": {
+                    "mode": "ライブ：終了時に解除／保持：付与後は解除しない"
+                },
+                "param_name": {
+                    "mode": "モード"
+                },
+                "choice": {
+                    "live": "ライブ（終了時に解除）",
+                    "sticky": "保持（付与後は解除しない）"
+                }
+            },
+            "remove_after": {
+                "name": "解除の遅延",
+                "desc": "アクティビティ終了後どれだけ待ってロールを解除するか",
+                "param": {
+                    "minutes": "0 で即時解除。遅延を設けるとウィンドウ切り替えによる揺れが大幅に減ります"
+                },
+                "param_name": {
+                    "minutes": "分"
+                }
+            },
+            "set_log_channel": {
+                "name": "ログチャンネル設定",
+                "desc": "アクティビティロールの変更を記録するチャンネルを設定します",
+                "param": {
+                    "channel": "空欄にすると設定を解除します"
+                },
+                "param_name": {
+                    "channel": "チャンネル"
+                }
+            },
+            "types": {
+                "name": "アクティビティ種類",
+                "desc": "どのアクティビティ種類でロールを付与するかを設定します",
+                "param": {
+                    "role": "設定するロール",
+                    "playing": "ゲームをプレイ中（既定で有効）",
+                    "streaming": "配信中",
+                    "listening": "再生中（Spotify など）",
+                    "watching": "視聴中",
+                    "competing": "参加中"
+                },
+                "param_name": {
+                    "role": "ロール",
+                    "playing": "プレイ",
+                    "streaming": "配信",
+                    "listening": "再生",
+                    "watching": "視聴",
+                    "competing": "参加"
+                }
+            },
+            "add": {
+                "name": "追加",
+                "desc": "アクティビティをロールに対応付けます",
+                "param": {
+                    "role": "付与するロール",
+                    "game": "一覧から選択するか、アクティビティ名を直接入力します"
+                },
+                "param_name": {
+                    "role": "ロール",
+                    "game": "アクティビティ"
+                }
+            },
+            "add_custom": {
+                "name": "カスタム追加",
+                "desc": "application ID でロールを対応付けます（ゲーム一覧にないアプリ向け）",
+                "param": {
+                    "role": "付与するロール",
+                    "app_id": "アクティビティに表示される application ID"
+                },
+                "param_name": {
+                    "role": "ロール",
+                    "app_id": "アプリid"
+                }
+            },
+            "add_pattern": {
+                "name": "部分一致追加",
+                "desc": "名前の部分一致でロールを対応付けます",
+                "param": {
+                    "role": "付与するロール",
+                    "pattern": "アクティビティ名にこの文字列を含む場合に付与します"
+                },
+                "param_name": {
+                    "role": "ロール",
+                    "pattern": "キーワード"
+                }
+            },
+            "remove_entry": {
+                "name": "項目削除",
+                "desc": "ロールから個別の照合項目を削除します",
+                "param": {
+                    "role": "編集するロール",
+                    "entry": "削除する項目"
+                },
+                "param_name": {
+                    "role": "ロール",
+                    "entry": "項目"
+                }
+            },
+            "remove": {
+                "name": "削除",
+                "desc": "ロールのすべての照合項目を削除します",
+                "param": {
+                    "role": "対応付けを解除するロール"
+                },
+                "param_name": {
+                    "role": "ロール"
+                }
+            },
+            "list": {
+                "name": "一覧",
+                "desc": "現在のアクティビティロール設定を表示します"
+            },
+            "observed": {
+                "name": "検出一覧",
+                "desc": "このサーバーで最近検出したアクティビティを表示します"
+            },
+            "status": {
+                "name": "診断",
+                "desc": "アクティビティロール機能の稼働状況を表示します"
+            },
+            "refresh_games": {
+                "name": "ゲーム一覧更新",
+                "desc": "Discord の検出可能ゲーム一覧を強制的に再取得します"
+            }
+        }
+    },
     "ai": {
         "ai": {
             "desc": "AIアシスタントとチャットする",

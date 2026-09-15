@@ -52,10 +52,10 @@ class CatalogLintTests(unittest.TestCase):
         en_files, en = _load_locale("en")
         ja_files, ja = _load_locale("ja")
         self.assertEqual(ja_files, zh_files | en_files)
-        self.assertEqual(len(ja_files), 50)
+        self.assertEqual(len(ja_files), 51)
         expected_keys = set(zh) | set(en)
         self.assertTrue(expected_keys <= set(ja))
-        self.assertEqual(len(ja), 5890)
+        self.assertEqual(len(ja), 6055)
 
     def test_japanese_catalog_contains_no_null_values(self):
         _files, ja = _load_locale("ja")

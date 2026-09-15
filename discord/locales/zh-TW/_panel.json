@@ -1,4 +1,31 @@
 {
+    "activityrole": {
+        "_display": "活動身分組",
+        "_desc": "依成員正在玩的遊戲或使用的 app 自動指派身分組（對應規則用 /活動身分組 設定）",
+        "activityrole_enabled": {
+            "display": "啟用活動身分組",
+            "desc": "依成員正在執行的遊戲或 app 自動指派身分組（需要 Presence intent）"
+        },
+        "activityrole_mode": {
+            "display": "模式",
+            "desc": "動態：活動結束就收回身分組；保留：拿到後就不收回",
+            "option": {
+                "live": "動態（活動結束即收回）",
+                "sticky": "保留（拿到就不收回）"
+            }
+        },
+        "activityrole_remove_after": {
+            "display": "延後收回（分鐘）",
+            "desc": "活動結束後等這麼久才收回身分組；設定延遲可減少切換視窗造成的抖動"
+        },
+        "activityrole_ignore_bots": {
+            "display": "忽略機器人帳號"
+        },
+        "activityrole_log_channel": {
+            "display": "日誌頻道",
+            "desc": "回報活動身分組變動的頻道"
+        }
+    },
     "antibeast": {
         "_desc": "阻擋 everyone/here 與受保護身分組提及",
         "_display": "AntiBeast",
