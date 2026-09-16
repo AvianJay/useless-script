@@ -1899,6 +1899,35 @@ async def tutorial(ctx: commands.Context):
     embed.set_footer(text="by AvianJay")
     await ctx.send(embed=await apply_ui_embed_emojis(embed))
 
+@bot.command(aliases=["steal", "se"])
+@commands.bot_has_permissions(manage_emojis=True)
+@commands.cooldown(1, 10, commands.BucketType.guild)
+@commands.guild_only()
+@commands.has_permissions(manage_emojis=True)
+async def steal_emoji(ctx: commands.Context, *, emoji: str):
+    """偷取表情符號
+
+    用法： steal_emoji <表情符號>
+    這個指令會將指定的表情符號下載下來，並新增至伺服器。
+    """
+    guild = ctx.guild
+    if not guild:
+        await ctx.send(await replace_native_ui_emojis("❌ " + t("utilcommands.steal_emoji.not_in_guild")))
+        return
+    emojis = []
+    # regex 解析表情符號
+    custom_emoji_pattern = r'<(a?):(\w+):(\d+)>'
+    matches = re.findall(custom_emoji_pattern, emoji)
+    if not matches:
+        await ctx.send(await replace_native_ui_emojis("❌ " + t("utilcommands.steal_emoji.invalid_emoji")))
+        return
+    for match in matches:
+        animated, name, emoji_id = match
+        url = f"https://cdn.discordapp.com/emojis/{emoji_id}.{'gif' if animated else 'png'}"
+        emojis.append((name, url, animated == 'a'))
+        await guild.emojis.create(name=name, url=url, animated=animated == 'a')
+    await ctx.send(await replace_native_ui_emojis("✅ " + t("utilcommands.steal_emoji.success", count=len(emojis))))
+
 
 asyncio.run(bot.add_cog(InfoCommands(bot)))
 

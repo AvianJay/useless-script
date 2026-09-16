@@ -22,9 +22,13 @@
             "logs_text": "We automatically collect certain log data, such as error reports and usage statistics, so that we can analyze and improve the Bot.",
             "user_label": "User information: ",
             "user_text": "We collect user IDs for identification and service delivery.",
-            "excluded_intro": "The Bot does not collect the following type of information:",
+            "activity_label": "Activity statistics: ",
+            "activity_text": "When a server administrator enables the activity role feature, we record the activity names and application IDs seen in that server, an occurrence count, and when each was last seen, in order to populate the configuration menu. This record contains no user identifiers, is limited to 50 entries per server, and entries are deleted automatically 30 days after they were last seen.",
+            "excluded_intro": "The Bot does not collect the following types of information:",
             "message_label": "Message content: ",
-            "message_text": "We do not collect or store the content of your Discord messages. The Bot only processes a message when another user applies a Bot feature to that message."
+            "message_text": "We do not collect or store the content of your Discord messages. The Bot only processes a message when another user applies a Bot feature to that message.",
+            "presence_label": "Online status and activities: ",
+            "presence_text": "We do not store your online status, the activities you are running, or your device platform. This data is evaluated in memory when the event arrives, solely to decide whether a role needs to be assigned, and is discarded immediately afterwards. It is never used for analytics and is never aggregated across servers."
         },
         "use": {
             "heading": "2. How We Use Information",
