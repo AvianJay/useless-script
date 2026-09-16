@@ -998,9 +998,13 @@ def _append_custom_emojis(
 def _collect_custom_emojis_from_message(
     message: discord.Message,
     limit: int = _MAX_EMOJI_INFO_RESULTS,
+    emojis: list[discord.PartialEmoji] | None = None,
+    seen_ids: set[int] | None = None,
 ) -> list[discord.PartialEmoji]:
-    emojis: list[discord.PartialEmoji] = []
-    seen_ids: set[int] = set()
+    """emojis / seen_ids 可以傳入既有的容器，讓多個來源（指令參數、轉發內容、
+    被回覆的訊息）共用同一份去重結果。"""
+    emojis = [] if emojis is None else emojis
+    seen_ids = set() if seen_ids is None else seen_ids
 
     _append_custom_emojis(message.content, emojis, seen_ids, limit=limit)
     if len(emojis) >= limit:
@@ -1899,34 +1903,186 @@ async def tutorial(ctx: commands.Context):
     embed.set_footer(text="by AvianJay")
     await ctx.send(embed=await apply_ui_embed_emojis(embed))
 
+_STEAL_EMOJI_MAX = 10
+_STEAL_EMOJI_MAX_BYTES = 256 * 1024  # Discord 對自訂表情符號的檔案大小上限
+_STEAL_EMOJI_TIMEOUT = aiohttp.ClientTimeout(total=15)
+_EMOJI_NAME_INVALID_RE = re.compile(r"[^A-Za-z0-9_]")
+
+
+def _sanitize_emoji_name(name: str) -> str:
+    """Discord 只接受 2-32 個字元的 [A-Za-z0-9_]。"""
+    cleaned = _EMOJI_NAME_INVALID_RE.sub("_", name).strip("_")[:32]
+    return cleaned if len(cleaned) >= 2 else f"emoji{cleaned}"
+
+
+def _emoji_slots(guild: discord.Guild) -> tuple[int, int, int]:
+    """回傳 (靜態已用, 動畫已用, 單一類型上限)；靜態與動畫的額度是分開算的。"""
+    animated = sum(1 for emoji in guild.emojis if emoji.animated)
+    return len(guild.emojis) - animated, animated, guild.emoji_limit
+
+
+async def _resolve_replied_message(ctx: commands.Context) -> discord.Message | None:
+    reference = ctx.message.reference
+    if reference is None:
+        return None
+    if isinstance(reference.resolved, discord.Message):
+        return reference.resolved
+    if reference.message_id is None:
+        return None
+    try:
+        return await ctx.channel.fetch_message(reference.message_id)
+    except discord.HTTPException:
+        return None
+
+
+async def _collect_steal_targets(ctx: commands.Context, raw: str) -> list[discord.PartialEmoji]:
+    """指令參數 > 轉發內容 > 被回覆的訊息，依序收集並去重。
+
+    多抓一個是為了判斷有沒有超過上限（要顯示截斷提示）。"""
+    limit = _STEAL_EMOJI_MAX + 1
+    emojis: list[discord.PartialEmoji] = []
+    seen_ids: set[int] = set()
+
+    _append_custom_emojis(raw, emojis, seen_ids, limit=limit)
+    _collect_custom_emojis_from_message(ctx.message, limit=limit, emojis=emojis, seen_ids=seen_ids)
+    if len(emojis) < limit:
+        replied = await _resolve_replied_message(ctx)
+        if replied is not None:
+            _collect_custom_emojis_from_message(replied, limit=limit, emojis=emojis, seen_ids=seen_ids)
+    return emojis
+
+
+def _emoji_cdn_url(emoji: discord.PartialEmoji) -> str:
+    """不用 PartialEmoji.url：它現在回傳的是 webp（動圖是 .webp?animated=true），
+    而表情符號上傳要的是 png / gif。"""
+    return f"https://cdn.discordapp.com/emojis/{emoji.id}.{'gif' if emoji.animated else 'png'}"
+
+
+async def _download_emoji_image(
+    session: aiohttp.ClientSession,
+    emoji: discord.PartialEmoji,
+) -> tuple[bytes | None, str | None]:
+    """回傳 (圖片 bytes, 失敗原因)，其中一個必為 None。"""
+    try:
+        async with session.get(_emoji_cdn_url(emoji)) as response:
+            if response.status != 200:
+                return None, t("utilcommands.steal_emoji.reason.download_failed",
+                               error=f"HTTP {response.status}")
+            image = await response.read()
+    except (aiohttp.ClientError, asyncio.TimeoutError) as e:
+        return None, t("utilcommands.steal_emoji.reason.download_failed", error=type(e).__name__)
+
+    if len(image) > _STEAL_EMOJI_MAX_BYTES:
+        return None, t("utilcommands.steal_emoji.reason.too_large",
+                       limit=_STEAL_EMOJI_MAX_BYTES // 1024)
+    return image, None
+
+
+def _clamp_field(value: str, limit: int = 1024) -> str:
+    return value if len(value) <= limit else value[:limit - 1] + "…"
+
+
+def _build_steal_emoji_embed(
+    added: list[str],
+    failed: list[str],
+    *,
+    static_used: int,
+    animated_used: int,
+    limit: int,
+    truncated: bool,
+) -> discord.Embed:
+    embed = discord.Embed(
+        title=("✅ " if added else "❌ ") + t("utilcommands.steal_emoji.title"),
+        color=0x00ff00 if added else 0xff0000,
+    )
+    if truncated:
+        embed.description = t("utilcommands.steal_emoji.truncated", count=_STEAL_EMOJI_MAX)
+    if added:
+        embed.add_field(name=t("utilcommands.steal_emoji.field.added", count=len(added)),
+                        value=_clamp_field("\n".join(added)), inline=False)
+    if failed:
+        embed.add_field(name=t("utilcommands.steal_emoji.field.failed", count=len(failed)),
+                        value=_clamp_field("\n".join(failed)), inline=False)
+    embed.set_footer(text=t("utilcommands.steal_emoji.slots_footer",
+                            static=static_used, animated=animated_used, limit=limit))
+    return embed
+
+
 @bot.command(aliases=["steal", "se"])
-@commands.bot_has_permissions(manage_emojis=True)
-@commands.cooldown(1, 10, commands.BucketType.guild)
 @commands.guild_only()
 @commands.has_permissions(manage_emojis=True)
-async def steal_emoji(ctx: commands.Context, *, emoji: str):
+@commands.bot_has_permissions(manage_emojis=True)
+@commands.cooldown(1, 10, commands.BucketType.guild)
+async def steal_emoji(ctx: commands.Context, *, emoji: str = ""):
     """偷取表情符號
 
-    用法： steal_emoji <表情符號>
-    這個指令會將指定的表情符號下載下來，並新增至伺服器。
+    用法： steal_emoji <表情符號>/<回覆含有表情符號的訊息>
+    把訊息裡的自訂表情符號下載下來新增到這個伺服器，一次最多 10 個。
     """
+    targets = await _collect_steal_targets(ctx, emoji)
+    if not targets:
+        ctx.command.reset_cooldown(ctx)  # 根本沒開始偷，不佔用冷卻
+        await ctx.send(await replace_native_ui_emojis(
+            "❌ " + t("utilcommands.steal_emoji.invalid_emoji")))
+        return
+
+    truncated = len(targets) > _STEAL_EMOJI_MAX
+    targets = targets[:_STEAL_EMOJI_MAX]
+
     guild = ctx.guild
-    if not guild:
-        await ctx.send(await replace_native_ui_emojis("❌ " + t("utilcommands.steal_emoji.not_in_guild")))
-        return
-    emojis = []
-    # regex 解析表情符號
-    custom_emoji_pattern = r'<(a?):(\w+):(\d+)>'
-    matches = re.findall(custom_emoji_pattern, emoji)
-    if not matches:
-        await ctx.send(await replace_native_ui_emojis("❌ " + t("utilcommands.steal_emoji.invalid_emoji")))
-        return
-    for match in matches:
-        animated, name, emoji_id = match
-        url = f"https://cdn.discordapp.com/emojis/{emoji_id}.{'gif' if animated else 'png'}"
-        emojis.append((name, url, animated == 'a'))
-        await guild.emojis.create(name=name, url=url, animated=animated == 'a')
-    await ctx.send(await replace_native_ui_emojis("✅ " + t("utilcommands.steal_emoji.success", count=len(emojis))))
+    static_used, animated_used, limit = _emoji_slots(guild)
+    reason = t("utilcommands.steal_emoji.audit_reason", user=f"{ctx.author} ({ctx.author.id})")
+    added: list[str] = []
+    failed: list[str] = []
+
+    async with ctx.typing():
+        async with aiohttp.ClientSession(timeout=_STEAL_EMOJI_TIMEOUT) as session:
+            for target in targets:
+                label = f"`:{target.name}:`"
+
+                if discord.utils.get(guild.emojis, id=target.id) is not None:
+                    failed.append(f"{label} — {t('utilcommands.steal_emoji.reason.already_added')}")
+                    continue
+                if (animated_used if target.animated else static_used) >= limit:
+                    failed.append(f"{label} — {t('utilcommands.steal_emoji.reason.no_slot')}")
+                    continue
+
+                image, error = await _download_emoji_image(session, target)
+                if image is None:
+                    failed.append(f"{label} — {error}")
+                    continue
+
+                try:
+                    created = await guild.create_custom_emoji(
+                        name=_sanitize_emoji_name(target.name),
+                        image=image,
+                        reason=reason,
+                    )
+                except discord.HTTPException as e:
+                    if e.code == 30008:  # Maximum number of emojis reached
+                        # 伺服器回報滿了，同類型的後續就不用再試
+                        if target.animated:
+                            animated_used = limit
+                        else:
+                            static_used = limit
+                        failed.append(f"{label} — {t('utilcommands.steal_emoji.reason.no_slot')}")
+                    else:
+                        failed.append(f"{label} — "
+                                      f"{t('utilcommands.steal_emoji.reason.rejected', error=e.text or e)}")
+                    continue
+
+                added.append(f"{created} `:{created.name}:`")
+                if target.animated:
+                    animated_used += 1
+                else:
+                    static_used += 1
+
+    embed = _build_steal_emoji_embed(
+        added, failed,
+        static_used=static_used, animated_used=animated_used,
+        limit=limit, truncated=truncated,
+    )
+    await ctx.send(embed=await apply_ui_embed_emojis(embed))
 
 
 asyncio.run(bot.add_cog(InfoCommands(bot)))

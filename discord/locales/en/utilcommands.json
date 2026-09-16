@@ -170,6 +170,33 @@
         "unknown": "Unknown",
         "unknown_user": "Unknown user"
     },
+    "steal_emoji": {
+        "audit_reason": "Added by {user} via the steal emoji command",
+        "field": {
+            "added": {
+                "one": "Added {count} emoji",
+                "other": "Added {count} emojis"
+            },
+            "failed": {
+                "one": "Couldn't add {count} emoji",
+                "other": "Couldn't add {count} emojis"
+            }
+        },
+        "invalid_emoji": "No custom emoji found. Put the emoji after the command, or reply to a message that has one.",
+        "reason": {
+            "already_added": "This server already has it",
+            "download_failed": "Download failed ({error})",
+            "no_slot": "No emoji slots left",
+            "rejected": "Discord rejected it: {error}",
+            "too_large": "File is over {limit} KB"
+        },
+        "slots_footer": "Static {static}/{limit} · Animated {animated}/{limit}",
+        "title": "Steal emoji",
+        "truncated": {
+            "one": "Only {count} emoji can be stolen at a time; the rest were skipped.",
+            "other": "Only {count} emojis can be stolen at a time; the rest were skipped."
+        }
+    },
     "sticker_info": {
         "author": "Sticker info"
     },
@@ -183,6 +210,12 @@
     "target": {
         "emoji": "emoji",
         "sticker": "sticker"
+    },
+    "textlength": {
+        "result": {
+            "one": "{count} character.",
+            "other": "{count} characters."
+        }
     },
     "tutorial": {
         "ai_misc": {

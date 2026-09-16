@@ -170,6 +170,24 @@
         "unknown": "不明",
         "unknown_user": "不明なユーザー"
     },
+    "steal_emoji": {
+        "audit_reason": "{user} が絵文字を盗むコマンドで追加",
+        "field": {
+            "added": "{count} 個を追加しました",
+            "failed": "{count} 個は追加できませんでした"
+        },
+        "invalid_emoji": "カスタム絵文字が見つかりませんでした。コマンドの後に絵文字を付けるか、絵文字を含むメッセージに返信してください。",
+        "reason": {
+            "already_added": "このサーバーには既にあります",
+            "download_failed": "ダウンロードに失敗しました（{error}）",
+            "no_slot": "絵文字のスロットが満杯です",
+            "rejected": "Discord に拒否されました：{error}",
+            "too_large": "ファイルが {limit} KB を超えています"
+        },
+        "slots_footer": "静止 {static}/{limit}・アニメ {animated}/{limit}",
+        "title": "絵文字を盗む",
+        "truncated": "一度に盗めるのは {count} 個までです。残りはスキップしました。"
+    },
     "sticker_info": {
         "author": "ステッカー情報"
     },
@@ -183,6 +201,9 @@
     "target": {
         "emoji": "絵文字",
         "sticker": "ステッカー"
+    },
+    "textlength": {
+        "result": "{count} 文字です。"
     },
     "tutorial": {
         "ai_misc": {

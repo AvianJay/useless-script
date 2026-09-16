@@ -167,6 +167,24 @@
         "unknown": "未知",
         "unknown_user": "未知用戶"
     },
+    "steal_emoji": {
+        "audit_reason": "由 {user} 使用偷取表情符號指令新增",
+        "field": {
+            "added": "已新增 {count} 個",
+            "failed": "未新增 {count} 個"
+        },
+        "invalid_emoji": "找不到自訂表情符號。請在指令後面附上表情符號，或是回覆一則含有表情符號的訊息。",
+        "reason": {
+            "already_added": "這個伺服器已經有了",
+            "download_failed": "下載失敗（{error}）",
+            "no_slot": "表情符號欄位已滿",
+            "rejected": "Discord 拒絕：{error}",
+            "too_large": "檔案超過 {limit} KB"
+        },
+        "slots_footer": "靜態 {static}/{limit}．動畫 {animated}/{limit}",
+        "title": "偷取表情符號",
+        "truncated": "一次最多只能偷 {count} 個，其餘已略過。"
+    },
     "sticker_info": {
         "author": "貼圖資訊"
     },
@@ -180,6 +198,9 @@
     "target": {
         "emoji": "表情符號",
         "sticker": "貼圖"
+    },
+    "textlength": {
+        "result": "{count} 個字。"
     },
     "tutorial": {
         "ai_misc": {

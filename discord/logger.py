@@ -659,6 +659,14 @@ class LoggerCog(commands.Cog):
                 log(f"Command {ctx.command} bot missing permissions: {missing}", module_name="Logger", level=logging.WARNING, user=ctx.author, guild=ctx.guild)
                 return
 
+            if isinstance(error, commands.CommandOnCooldown):
+                # CommandOnCooldown 不是 CheckFailure，不接的話會掉到最後的泛用錯誤訊息
+                if ctx.author.id not in self.error_user_cache:
+                    await ctx.send(t("logger.err.cooldown", seconds=f"{error.retry_after:.1f}"), allowed_mentions=discord.AllowedMentions.none())
+                    self.error_user_cache[ctx.author.id] = True
+                log(f"Command {ctx.command} by {ctx.author} is on cooldown: {error.retry_after:.1f}s", module_name="Logger", level=logging.INFO, user=ctx.author, guild=ctx.guild)
+                return
+
             if isinstance(error, commands.CheckFailure):
                 if ctx.author.id not in self.error_user_cache:
                     variant = random.randrange(5)
