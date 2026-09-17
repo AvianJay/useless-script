@@ -53,6 +53,8 @@ class CasinoRulesTests(unittest.TestCase):
         roulette = rules.play_roulette("number", 0, rng)
         self.assertTrue(roulette["won"])
         self.assertEqual(roulette["multiplier"], 36.0)
+        self.assertTrue(rules.play_roulette("even", rng=rng)["won"])
+        self.assertTrue(rules.roulette_is_win(0, "even"))
         self.assertEqual(rules.play_dice(1, rng)["multiplier"], 5.7)
         self.assertEqual(rules.play_coinflip("heads", rng)["multiplier"], 1.9)
 

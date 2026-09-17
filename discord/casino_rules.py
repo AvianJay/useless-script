@@ -104,8 +104,6 @@ def roulette_color(number: int) -> str:
 def roulette_is_win(result: int, bet_type: str, chosen_number: Optional[int] = None) -> bool:
     if bet_type == "number":
         return chosen_number == result
-    if result == 0:
-        return False
     if bet_type == "red":
         return roulette_color(result) == "red"
     if bet_type == "black":
