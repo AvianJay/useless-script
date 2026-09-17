@@ -117,6 +117,7 @@
         "radio_switching": "📻 Switched to {station} radio mode, waiting for station data...",
         "recommend_added_play_warning": "⚠️ Recommended tracks were added, but playback failed: {error}",
         "restore_auto_done": "✅ Automatically restored the playback state from before shutdown.",
+        "restore_retrying_node": "⚠️ The restored track failed to load; retrying on another Lavalink node.",
         "restore_failed_count_suffix": {
             "one": " ({failed} failed to load)",
             "other": " ({failed} failed to load)"

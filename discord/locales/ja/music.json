@@ -117,6 +117,7 @@
         "radio_switching": "📻 {station} 無線モードに切り替えて、ステーション データを待機しています...",
         "recommend_added_play_warning": "⚠️ 推奨トラックが追加されましたが、再生に失敗しました: {error}",
         "restore_auto_done": "✅ シャットダウン前の再生状態を自動的に復元します。",
+        "restore_retrying_node": "⚠️ 復元したトラックの読み込みに失敗したため、別の Lavalink ノードで再試行します。",
         "restore_failed_count_suffix": {
             "one": " ({failed} のロードに失敗しました)",
             "other": " ({failed} のロードに失敗しました)"

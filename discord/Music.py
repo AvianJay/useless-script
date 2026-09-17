@@ -13,7 +13,7 @@ from enum import Enum
 import aiohttp
 import html
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from functools import partial
 from urllib.parse import urlparse, quote
@@ -34,6 +34,8 @@ ALLOWED_DOMAINS = [
 
 MUSIC_SAVED_STATE_KEY = "music_saved_queue"
 MUSIC_SAVED_STATE_VERSION = 2
+RESTORE_START_TIMEOUT_SECONDS = 30
+RESTORE_STABILITY_SECONDS = 10
 
 aiohttp.client_reqrep.ClientRequest.DEFAULT_HEADERS["Accept-Encoding"] = "gzip, deflate"
 
@@ -98,6 +100,9 @@ class PendingRestore:
     track: Optional[lava_lyra.Track]
     channel: Any
     success_message: Optional[str]
+    saved_state: Optional[dict[str, Any]] = None
+    failed_nodes: set[int] = field(default_factory=set)
+    started: bool = False
     error: Optional[str] = None
     timeout_task: Optional[asyncio.Task] = None
 
@@ -279,10 +284,24 @@ class Music(commands.GroupCog,
             return None
         return channel
 
-    async def _load_saved_track(self, source, descriptor: dict[str, Any]) -> lava_lyra.Track:
+    async def _load_saved_track(self, source, descriptor: dict[str, Any], *, prefer_uri: bool = False) -> lava_lyra.Track:
         encoded = descriptor.get("encoded")
         uri = descriptor.get("uri")
         encoded_error: Optional[Exception] = None
+        uri_error: Optional[Exception] = None
+
+        async def load_uri():
+            results = await source.get_tracks(uri)
+            if results:
+                return results.tracks[0] if isinstance(results, lava_lyra.Playlist) else results[0]
+            return None
+
+        if prefer_uri and uri:
+            try:
+                if track := await load_uri():
+                    return track
+            except Exception as e:
+                uri_error = e
 
         if encoded:
             node = getattr(source, "node", source)
@@ -291,18 +310,19 @@ class Music(commands.GroupCog,
             except Exception as e:
                 encoded_error = e
 
-        if uri:
+        if uri and not prefer_uri:
             try:
-                results = await source.get_tracks(uri)
-                if results:
-                    return results.tracks[0] if isinstance(results, lava_lyra.Playlist) else results[0]
+                if track := await load_uri():
+                    return track
             except Exception as e:
-                if encoded_error:
-                    raise RuntimeError(t("music.err.saved_track_load_failed_both", uri=uri)) from e
-                raise
+                uri_error = e
 
+        if encoded_error and uri_error:
+            raise RuntimeError(t("music.err.saved_track_load_failed_both", uri=uri)) from uri_error
         if encoded_error:
             raise RuntimeError(t("music.err.saved_track_decode_failed")) from encoded_error
+        if uri_error:
+            raise uri_error
         raise RuntimeError(t("music.err.saved_track_missing_data"))
 
     async def _send_restore_status(self, channel, message: str, guild: discord.Guild, *, level: int = logging.INFO):
@@ -313,6 +333,18 @@ class Music(commands.GroupCog,
             await channel.send(message)
         except Exception as e:
             log(f"Failed to send music restore notification: {e}", level=logging.WARNING, module_name="Music", guild=guild)
+
+    @staticmethod
+    def _select_restore_node(failed_nodes: Optional[set[int]] = None):
+        failed_nodes = failed_nodes or set()
+        if not failed_nodes:
+            return lava_lyra.NodePool.get_node()
+        available = [
+            node
+            for node in lava_lyra.NodePool._nodes.values()
+            if getattr(node, "_available", False) and id(node) not in failed_nodes
+        ]
+        return random.choice(available) if available else None
 
     def _cancel_pending_restore(self, guild_id: int) -> Optional[PendingRestore]:
         pending = self._pending_restores.pop(guild_id, None)
@@ -328,6 +360,8 @@ class Music(commands.GroupCog,
         channel,
         *,
         success_message: Optional[str] = None,
+        saved_state: Optional[dict[str, Any]] = None,
+        failed_nodes: Optional[set[int]] = None,
     ) -> PendingRestore:
         self._cancel_pending_restore(guild.id)
         pending = PendingRestore(
@@ -335,6 +369,8 @@ class Music(commands.GroupCog,
             track=track,
             channel=channel,
             success_message=success_message,
+            saved_state=saved_state,
+            failed_nodes=set(failed_nodes or ()),
         )
         self._pending_restores[guild.id] = pending
         return pending
@@ -346,22 +382,36 @@ class Music(commands.GroupCog,
 
     async def _restore_confirmation_timeout(self, guild: discord.Guild, pending: PendingRestore):
         try:
-            await asyncio.sleep(30)
+            await asyncio.sleep(RESTORE_START_TIMEOUT_SECONDS)
+        except asyncio.CancelledError:
+            return
+
+        if self._pending_restores.get(guild.id) is not pending:
+            return
+        async with i18n.guild_scope(guild.id):
+            pending.error = pending.error or t("music.err.restore_start_timeout")
+            await self._fail_pending_restore(pending.player)
+
+    async def _restore_stability_confirmation(self, guild: discord.Guild, pending: PendingRestore):
+        try:
+            await asyncio.sleep(RESTORE_STABILITY_SECONDS)
         except asyncio.CancelledError:
             return
 
         if self._pending_restores.get(guild.id) is not pending:
             return
         self._pending_restores.pop(guild.id, None)
-        await self._discard_restore_player(guild.id, pending.player)
         async with i18n.guild_scope(guild.id):
-            error = pending.error or t("music.err.restore_start_timeout")
-            await self._send_restore_status(
-                pending.channel,
-                t("music.err.restore_failed", error=error),
-                guild,
-                level=logging.WARNING,
-            )
+            if not set_server_config(guild.id, MUSIC_SAVED_STATE_KEY, None):
+                await self._send_restore_status(
+                    pending.channel,
+                    t("music.err.restore_failed", error=t("music.err.clear_restored_state_failed")),
+                    guild,
+                    level=logging.WARNING,
+                )
+                return
+            if pending.success_message:
+                await self._send_restore_status(pending.channel, pending.success_message, guild)
 
     async def _confirm_restore_started(self, player: lava_lyra.Player, track: Optional[lava_lyra.Track]):
         guild = player.guild
@@ -372,17 +422,12 @@ class Music(commands.GroupCog,
             if getattr(track, "track_id", None) != getattr(pending.track, "track_id", None):
                 return
 
-        self._cancel_pending_restore(guild.id)
-        if not set_server_config(guild.id, MUSIC_SAVED_STATE_KEY, None):
-            await self._send_restore_status(
-                pending.channel,
-                t("music.err.restore_failed", error=t("music.err.clear_restored_state_failed")),
-                guild,
-                level=logging.WARNING,
-            )
+        if pending.started:
             return
-        if pending.success_message:
-            await self._send_restore_status(pending.channel, pending.success_message, guild)
+        pending.started = True
+        if pending.timeout_task and pending.timeout_task is not asyncio.current_task():
+            pending.timeout_task.cancel()
+        pending.timeout_task = asyncio.create_task(self._restore_stability_confirmation(guild, pending))
 
     async def _fail_pending_restore(self, player: lava_lyra.Player):
         guild = player.guild
@@ -392,7 +437,28 @@ class Music(commands.GroupCog,
 
         self._cancel_pending_restore(guild.id)
         error = pending.error or t("music.err.restore_track_load_failed")
+        failed_nodes = set(pending.failed_nodes)
+        player_node = getattr(player, "node", None)
+        if player_node is not None:
+            failed_nodes.add(id(player_node))
         await self._discard_restore_player(guild.id, player)
+
+        next_node = self._select_restore_node(failed_nodes) if pending.saved_state else None
+        if next_node is not None:
+            await self._send_restore_status(
+                pending.channel,
+                t("music.msg.restore_retrying_node"),
+                guild,
+                level=logging.WARNING,
+            )
+            await self._restore_saved_session_impl(
+                guild,
+                pending.saved_state,
+                restore_node=next_node,
+                failed_nodes=failed_nodes,
+            )
+            return True
+
         await self._send_restore_status(
             pending.channel,
             t("music.err.restore_failed", error=error),
@@ -425,7 +491,14 @@ class Music(commands.GroupCog,
         async with i18n.guild_scope(guild.id):
             return await self._restore_saved_session_impl(guild, saved)
 
-    async def _restore_saved_session_impl(self, guild: discord.Guild, saved: dict[str, Any]) -> bool:
+    async def _restore_saved_session_impl(
+        self,
+        guild: discord.Guild,
+        saved: dict[str, Any],
+        *,
+        restore_node=None,
+        failed_nodes: Optional[set[int]] = None,
+    ) -> bool:
         text_channel = await self._resolve_restore_text_channel(guild, saved.get("text_channel_id"))
         voice_channel = guild.get_channel(saved.get("voice_channel_id"))
         if voice_channel is None:
@@ -444,18 +517,19 @@ class Music(commands.GroupCog,
         mode = saved.get("mode", "track")
         loaded_current = None
         loaded_queue: list[lava_lyra.Track] = []
-        restore_node = None
+        failed_nodes = set(failed_nodes or ())
         current_descriptor, queue_descriptors = self._saved_track_descriptors(saved)
 
         try:
+            if restore_node is None:
+                restore_node = self._select_restore_node(failed_nodes)
             if mode == "track":
                 if not current_descriptor and not queue_descriptors:
                     raise RuntimeError(t("music.err.saved_state_no_tracks"))
-                restore_node = lava_lyra.NodePool.get_node()
                 if current_descriptor:
-                    loaded_current = await self._load_saved_track(restore_node, current_descriptor)
+                    loaded_current = await self._load_saved_track(restore_node, current_descriptor, prefer_uri=True)
                 for descriptor in queue_descriptors:
-                    loaded_queue.append(await self._load_saved_track(restore_node, descriptor))
+                    loaded_queue.append(await self._load_saved_track(restore_node, descriptor, prefer_uri=True))
             elif mode == "radio":
                 if saved.get("radio_station") not in RADIO_STATIONS:
                     raise RuntimeError(t("music.err.saved_radio_missing"))
@@ -486,6 +560,8 @@ class Music(commands.GroupCog,
                     None,
                     text_channel,
                     success_message=t("music.msg.restore_auto_done"),
+                    saved_state=saved,
+                    failed_nodes=failed_nodes,
                 )
                 await self._activate_radio_mode(guild, text_channel, player, station)
                 self._start_restore_confirmation_timeout(guild, pending)
@@ -527,6 +603,8 @@ class Music(commands.GroupCog,
                     track_to_play,
                     text_channel,
                     success_message=t("music.msg.restore_auto_done"),
+                    saved_state=saved,
+                    failed_nodes=failed_nodes,
                 )
                 await player.play(track_to_play, start=start_position)
                 self._start_restore_confirmation_timeout(guild, pending)
@@ -1269,6 +1347,9 @@ class Music(commands.GroupCog,
         if pending and pending.player is player:
             pending.error = error
         log(f"Lavalink track exception: {error}", level=logging.ERROR, module_name="Music", guild=player.guild)
+        if pending and pending.player is player:
+            async with i18n.guild_scope(player.guild.id):
+                await self._fail_pending_restore(player)
 
     @commands.Cog.listener()
     async def on_lyra_track_end(self, player: lava_lyra.Player, track: Optional[lava_lyra.Track], reason: Optional[str]):
@@ -1957,7 +2038,9 @@ class Music(commands.GroupCog,
 
             for descriptor, is_current in descriptors:
                 try:
-                    loaded_entries.append((descriptor, await self._load_saved_track(source, descriptor), is_current))
+                    loaded_entries.append(
+                        (descriptor, await self._load_saved_track(source, descriptor, prefer_uri=True), is_current)
+                    )
                 except Exception as e:
                     identifier = descriptor.get("uri") or "encoded track"
                     log(f"Failed to load saved track {identifier}: {e}", level=logging.WARNING, module_name="Music", guild=guild)

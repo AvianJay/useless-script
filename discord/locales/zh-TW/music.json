@@ -114,6 +114,7 @@
         "radio_switching": "📻 已切換到 {station} 電台模式，正在等待電台資料...",
         "recommend_added_play_warning": "⚠️ 推薦歌曲已添加，但播放失敗: {error}",
         "restore_auto_done": "✅ 已自動還原關機前的音樂播放狀態。",
+        "restore_retrying_node": "⚠️ 還原的歌曲載入失敗，正在改用其他 Lavalink 節點重試。",
         "restore_failed_count_suffix": {
             "other": "（{failed} 首無法載入）"
         },

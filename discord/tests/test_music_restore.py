@@ -191,6 +191,23 @@ class MusicRestoreTests(unittest.IsolatedAsyncioTestCase):
         node.build_track.assert_awaited_once_with("bad-encoded")
         node.get_tracks.assert_awaited_once_with("https://example.com/fallback")
 
+    async def test_saved_track_prefers_fresh_uri_resolution(self):
+        fresh_track = make_track("fresh")
+        node = SimpleNamespace(
+            build_track=AsyncMock(),
+            get_tracks=AsyncMock(return_value=[fresh_track]),
+        )
+
+        loaded = await self.cog._load_saved_track(
+            node,
+            {"encoded": "stale-encoded", "uri": "https://example.com/fresh"},
+            prefer_uri=True,
+        )
+
+        self.assertIs(loaded, fresh_track)
+        node.get_tracks.assert_awaited_once_with("https://example.com/fresh")
+        node.build_track.assert_not_awaited()
+
     def test_voice_permission_checks_missing_permission_capacity_and_stage(self):
         bot_member = SimpleNamespace()
         guild = SimpleNamespace(me=bot_member)
@@ -218,9 +235,10 @@ class MusicRestoreTests(unittest.IsolatedAsyncioTestCase):
         current = make_track("current")
         queued = make_track("queued")
         node = SimpleNamespace(
-            build_track=AsyncMock(side_effect=[current, queued]),
-            get_tracks=AsyncMock(),
+            build_track=AsyncMock(),
+            get_tracks=AsyncMock(side_effect=[[current], [queued]]),
         )
+        player.node = node
         saved = {
             "version": 2,
             "mode": "track",
@@ -254,10 +272,13 @@ class MusicRestoreTests(unittest.IsolatedAsyncioTestCase):
         self.assertIs(music.text_channels[guild.id], text)
         save_config.assert_not_called()
 
-        timeout_task = self.cog._pending_restores[guild.id].timeout_task
-        with patch.object(music, "set_server_config", return_value=True) as confirm_save:
+        pending = self.cog._pending_restores[guild.id]
+        with (
+            patch.object(music, "RESTORE_STABILITY_SECONDS", 0),
+            patch.object(music, "set_server_config", return_value=True) as confirm_save,
+        ):
             await self.cog._confirm_restore_started(player, current)
-        await asyncio.gather(timeout_task, return_exceptions=True)
+            await pending.timeout_task
 
         confirm_save.assert_called_once_with(guild.id, music.MUSIC_SAVED_STATE_KEY, None)
         start_timer.assert_called_once_with(guild, player)
@@ -305,7 +326,8 @@ class MusicRestoreTests(unittest.IsolatedAsyncioTestCase):
         player.channel = voice
         guild.get_channel = MagicMock(return_value=voice)
         track = make_track("play-failure")
-        node = SimpleNamespace(build_track=AsyncMock(return_value=track), get_tracks=AsyncMock())
+        node = SimpleNamespace(build_track=AsyncMock(), get_tracks=AsyncMock(return_value=[track]))
+        player.node = node
         saved = {
             "version": 2,
             "mode": "track",
@@ -361,6 +383,8 @@ class MusicRestoreTests(unittest.IsolatedAsyncioTestCase):
         voice = FakeVoiceChannel(603, guild, player=player, members=[SimpleNamespace(bot=False)])
         player.channel = voice
         text = FakeTextChannel(703, guild)
+        node = SimpleNamespace(_available=True)
+        player.node = node
         guild.get_channel = MagicMock(return_value=voice)
         self.bot.get_channel.return_value = text
         saved = {
@@ -376,6 +400,7 @@ class MusicRestoreTests(unittest.IsolatedAsyncioTestCase):
         with (
             patch.object(music.discord, "VoiceChannel", FakeVoiceChannel),
             patch.object(music.discord, "StageChannel", FakeStageChannel),
+            patch.object(music.lava_lyra.NodePool, "get_node", return_value=node),
             patch.object(self.cog, "_activate_radio_mode", AsyncMock()) as activate,
             patch.object(self.cog, "_start_empty_channel_timer"),
             patch.object(music, "set_server_config", return_value=True) as save_config,
@@ -387,11 +412,16 @@ class MusicRestoreTests(unittest.IsolatedAsyncioTestCase):
         activate.assert_awaited_once_with(guild, text, player, music.RADIO_STATIONS["r-a-dio"])
         player.set_pause.assert_awaited_once_with(True)
         save_config.assert_not_called()
+        player_cls = voice.connect.await_args.kwargs["cls"]
+        self.assertIs(player_cls.keywords["node"], node)
 
-        timeout_task = self.cog._pending_restores[guild.id].timeout_task
-        with patch.object(music, "set_server_config", return_value=True) as confirm_save:
+        pending = self.cog._pending_restores[guild.id]
+        with (
+            patch.object(music, "RESTORE_STABILITY_SECONDS", 0),
+            patch.object(music, "set_server_config", return_value=True) as confirm_save,
+        ):
             await self.cog._confirm_restore_started(player, None)
-        await asyncio.gather(timeout_task, return_exceptions=True)
+            await pending.timeout_task
 
         confirm_save.assert_called_once_with(guild.id, music.MUSIC_SAVED_STATE_KEY, None)
 
@@ -415,28 +445,96 @@ class MusicRestoreTests(unittest.IsolatedAsyncioTestCase):
                 player.play.assert_not_awaited()
                 player.destroy.assert_not_awaited()
 
-    async def test_pending_restore_load_failure_keeps_snapshot_and_reports_exception(self):
+    async def test_track_exception_during_stability_keeps_snapshot(self):
         guild = SimpleNamespace(id=509)
         player = make_player(SimpleNamespace(members=[]), current=None)
         player.guild = guild
         track = make_track("restore-failure")
         text = SimpleNamespace(send=AsyncMock())
-        pending = self.cog._arm_restore_confirmation(guild, player, track, text)
+        pending = self.cog._arm_restore_confirmation(
+            guild,
+            player,
+            track,
+            text,
+            saved_state={"version": 2, "mode": "track"},
+        )
         self.cog._start_restore_confirmation_timeout(guild, pending)
-        timeout_task = pending.timeout_task
+        await self.cog._confirm_restore_started(player, track)
+        stability_task = pending.timeout_task
 
-        await self.cog.on_lyra_track_exception(player, track, {"message": "HTTP 403"})
         with (
+            patch.object(self.cog, "_select_restore_node", return_value=None),
             patch.object(self.cog, "_discard_restore_player", AsyncMock()) as discard,
             patch.object(music, "set_server_config", return_value=True) as save_config,
         ):
+            await self.cog.on_lyra_track_exception(player, track, {"message": "HTTP 403"})
             await self.cog._on_lyra_track_end_impl(player, None, "loadFailed")
 
-        await asyncio.gather(timeout_task, return_exceptions=True)
+        await asyncio.gather(stability_task, return_exceptions=True)
         discard.assert_awaited_once_with(guild.id, player)
         save_config.assert_not_called()
         self.assertNotIn(guild.id, self.cog._pending_restores)
         self.assertIn("HTTP 403", text.send.await_args.args[0])
+
+    async def test_failed_restore_retries_on_an_untried_node(self):
+        guild = SimpleNamespace(id=510)
+        failed_node = SimpleNamespace(_available=True)
+        next_node = SimpleNamespace(_available=True)
+        player = make_player(SimpleNamespace(members=[]), current=None)
+        player.guild = guild
+        player.node = failed_node
+        text = SimpleNamespace(send=AsyncMock())
+        saved = {"version": 2, "mode": "track"}
+        self.cog._arm_restore_confirmation(guild, player, make_track("failed"), text, saved_state=saved)
+
+        with (
+            patch.object(music.lava_lyra.NodePool, "_nodes", {"failed": failed_node, "next": next_node}),
+            patch.object(self.cog, "_discard_restore_player", AsyncMock()) as discard,
+            patch.object(self.cog, "_restore_saved_session_impl", AsyncMock(return_value=True)) as retry,
+        ):
+            handled = await self.cog._fail_pending_restore(player)
+
+        self.assertTrue(handled)
+        discard.assert_awaited_once_with(guild.id, player)
+        retry.assert_awaited_once_with(
+            guild,
+            saved,
+            restore_node=next_node,
+            failed_nodes={id(failed_node)},
+        )
+        self.assertIn("其他 Lavalink 節點", text.send.await_args.args[0])
+
+    async def test_failed_restore_reports_final_error_when_all_nodes_exhausted(self):
+        guild = SimpleNamespace(id=511)
+        first_node = SimpleNamespace(_available=True)
+        second_node = SimpleNamespace(_available=True)
+        player = make_player(SimpleNamespace(members=[]), current=None)
+        player.guild = guild
+        player.node = first_node
+        text = SimpleNamespace(send=AsyncMock())
+        pending = self.cog._arm_restore_confirmation(
+            guild,
+            player,
+            make_track("failed"),
+            text,
+            saved_state={"version": 2, "mode": "track"},
+            failed_nodes={id(second_node)},
+        )
+        pending.error = "HTTP 403"
+
+        with (
+            patch.object(music.lava_lyra.NodePool, "_nodes", {"first": first_node, "second": second_node}),
+            patch.object(self.cog, "_discard_restore_player", AsyncMock()) as discard,
+            patch.object(self.cog, "_restore_saved_session_impl", AsyncMock()) as retry,
+        ):
+            handled = await self.cog._fail_pending_restore(player)
+
+        self.assertTrue(handled)
+        discard.assert_awaited_once_with(guild.id, player)
+        retry.assert_not_awaited()
+        self.assertNotIn(guild.id, self.cog._pending_restores)
+        self.assertIn("HTTP 403", text.send.await_args.args[0])
+        self.assertIn("已保留", text.send.await_args.args[0])
 
     async def test_shutdown_saves_guild_without_text_mapping_before_destroy(self):
         guild = SimpleNamespace(id=504)
@@ -522,10 +620,13 @@ class MusicRestoreTests(unittest.IsolatedAsyncioTestCase):
         self.assertIs(player_cls.keywords["node"], node)
         save_config.assert_not_called()
 
-        timeout_task = self.cog._pending_restores[guild.id].timeout_task
-        with patch.object(music, "set_server_config", return_value=True) as confirm_save:
+        pending = self.cog._pending_restores[guild.id]
+        with (
+            patch.object(music, "RESTORE_STABILITY_SECONDS", 0),
+            patch.object(music, "set_server_config", return_value=True) as confirm_save,
+        ):
             await self.cog._confirm_restore_started(player, first)
-        await asyncio.gather(timeout_task, return_exceptions=True)
+            await pending.timeout_task
 
         confirm_save.assert_called_once_with(guild.id, music.MUSIC_SAVED_STATE_KEY, None)
         self.assertIn("已回復 2 首", interaction.followup.send.await_args.args[0])
