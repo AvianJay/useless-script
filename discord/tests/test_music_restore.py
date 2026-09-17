@@ -123,6 +123,13 @@ class MusicRestoreTests(unittest.IsolatedAsyncioTestCase):
         self.cog = music.Music(self.bot)
 
     async def asyncTearDown(self):
+        pending_tasks = []
+        for guild_id in list(self.cog._pending_restores):
+            pending = self.cog._cancel_pending_restore(guild_id)
+            if pending and pending.timeout_task:
+                pending_tasks.append(pending.timeout_task)
+        if pending_tasks:
+            await asyncio.gather(*pending_tasks, return_exceptions=True)
         for task in list(music.leave_timers.values()):
             task.cancel()
         if music.leave_timers:
@@ -201,6 +208,7 @@ class MusicRestoreTests(unittest.IsolatedAsyncioTestCase):
         guild = SimpleNamespace(id=500, me=bot_member, voice_client=None)
         human = SimpleNamespace(bot=False)
         player = make_player(None, current=None, paused=False)
+        player.guild = guild
         voice = FakeVoiceChannel(600, guild, player=player, members=[human])
         player.channel = voice
         text = FakeTextChannel(700, guild)
@@ -236,14 +244,22 @@ class MusicRestoreTests(unittest.IsolatedAsyncioTestCase):
             restored = await self.cog._restore_saved_session(guild, saved)
 
         self.assertTrue(restored)
-        voice.connect.assert_awaited_once_with(cls=music.lava_lyra.Player)
+        player_cls = voice.connect.await_args.kwargs["cls"]
+        self.assertIs(player_cls.keywords["node"], node)
         player.set_volume.assert_awaited_once_with(42)
         player.play.assert_awaited_once_with(current, start=4321)
         player.set_pause.assert_awaited_once_with(True)
         self.assertEqual(list(music.get_queue(guild.id)), [queued])
         self.assertEqual(music.loop_modes[guild.id], music.LoopMode.QUEUE)
         self.assertIs(music.text_channels[guild.id], text)
-        save_config.assert_called_once_with(guild.id, music.MUSIC_SAVED_STATE_KEY, None)
+        save_config.assert_not_called()
+
+        timeout_task = self.cog._pending_restores[guild.id].timeout_task
+        with patch.object(music, "set_server_config", return_value=True) as confirm_save:
+            await self.cog._confirm_restore_started(player, current)
+        await asyncio.gather(timeout_task, return_exceptions=True)
+
+        confirm_save.assert_called_once_with(guild.id, music.MUSIC_SAVED_STATE_KEY, None)
         start_timer.assert_called_once_with(guild, player)
 
     async def test_auto_restore_load_failure_keeps_snapshot_and_does_not_connect(self):
@@ -283,6 +299,7 @@ class MusicRestoreTests(unittest.IsolatedAsyncioTestCase):
         bot_member = SimpleNamespace(edit=AsyncMock())
         guild = SimpleNamespace(id=506, me=bot_member, voice_client=None)
         player = make_player(None, current=None)
+        player.guild = guild
         player.play.side_effect = RuntimeError("play failed")
         voice = FakeVoiceChannel(606, guild, player=player, members=[SimpleNamespace(bot=False)])
         player.channel = voice
@@ -340,6 +357,7 @@ class MusicRestoreTests(unittest.IsolatedAsyncioTestCase):
         bot_member = SimpleNamespace(edit=AsyncMock())
         guild = SimpleNamespace(id=503, me=bot_member, voice_client=None)
         player = make_player(None, current=None)
+        player.guild = guild
         voice = FakeVoiceChannel(603, guild, player=player, members=[SimpleNamespace(bot=False)])
         player.channel = voice
         text = FakeTextChannel(703, guild)
@@ -368,7 +386,57 @@ class MusicRestoreTests(unittest.IsolatedAsyncioTestCase):
         player.set_volume.assert_awaited_once_with(65)
         activate.assert_awaited_once_with(guild, text, player, music.RADIO_STATIONS["r-a-dio"])
         player.set_pause.assert_awaited_once_with(True)
-        save_config.assert_called_once_with(guild.id, music.MUSIC_SAVED_STATE_KEY, None)
+        save_config.assert_not_called()
+
+        timeout_task = self.cog._pending_restores[guild.id].timeout_task
+        with patch.object(music, "set_server_config", return_value=True) as confirm_save:
+            await self.cog._confirm_restore_started(player, None)
+        await asyncio.gather(timeout_task, return_exceptions=True)
+
+        confirm_save.assert_called_once_with(guild.id, music.MUSIC_SAVED_STATE_KEY, None)
+
+    async def test_load_failed_variants_do_not_advance_queue(self):
+        guild = SimpleNamespace(id=508)
+        player = make_player(SimpleNamespace(members=[]), current=None)
+        player.guild = guild
+        queued = make_track("queued")
+
+        for reason in ("LOAD_FAILED", "loadFailed", "TrackEndReason.LOAD_FAILED"):
+            with self.subTest(reason=reason):
+                queue = music.get_queue(guild.id)
+                queue.clear()
+                queue.add(queued)
+                player.play.reset_mock()
+                player.destroy.reset_mock()
+
+                await self.cog._on_lyra_track_end_impl(player, None, reason)
+
+                self.assertEqual(list(queue), [queued])
+                player.play.assert_not_awaited()
+                player.destroy.assert_not_awaited()
+
+    async def test_pending_restore_load_failure_keeps_snapshot_and_reports_exception(self):
+        guild = SimpleNamespace(id=509)
+        player = make_player(SimpleNamespace(members=[]), current=None)
+        player.guild = guild
+        track = make_track("restore-failure")
+        text = SimpleNamespace(send=AsyncMock())
+        pending = self.cog._arm_restore_confirmation(guild, player, track, text)
+        self.cog._start_restore_confirmation_timeout(guild, pending)
+        timeout_task = pending.timeout_task
+
+        await self.cog.on_lyra_track_exception(player, track, {"message": "HTTP 403"})
+        with (
+            patch.object(self.cog, "_discard_restore_player", AsyncMock()) as discard,
+            patch.object(music, "set_server_config", return_value=True) as save_config,
+        ):
+            await self.cog._on_lyra_track_end_impl(player, None, "loadFailed")
+
+        await asyncio.gather(timeout_task, return_exceptions=True)
+        discard.assert_awaited_once_with(guild.id, player)
+        save_config.assert_not_called()
+        self.assertNotIn(guild.id, self.cog._pending_restores)
+        self.assertIn("HTTP 403", text.send.await_args.args[0])
 
     async def test_shutdown_saves_guild_without_text_mapping_before_destroy(self):
         guild = SimpleNamespace(id=504)
@@ -419,6 +487,7 @@ class MusicRestoreTests(unittest.IsolatedAsyncioTestCase):
         bot_member = SimpleNamespace(edit=AsyncMock())
         guild = SimpleNamespace(id=505, me=bot_member, voice_client=None)
         player = make_player(None, current=None)
+        player.guild = guild
         voice = FakeVoiceChannel(605, guild, player=player, members=[SimpleNamespace(bot=False)])
         player.channel = voice
         guild.get_channel = MagicMock(return_value=voice)
@@ -449,7 +518,16 @@ class MusicRestoreTests(unittest.IsolatedAsyncioTestCase):
 
         player.play.assert_awaited_once_with(first, start=0)
         self.assertEqual(list(music.get_queue(guild.id)), [second])
-        save_config.assert_called_once_with(guild.id, music.MUSIC_SAVED_STATE_KEY, None)
+        player_cls = voice.connect.await_args.kwargs["cls"]
+        self.assertIs(player_cls.keywords["node"], node)
+        save_config.assert_not_called()
+
+        timeout_task = self.cog._pending_restores[guild.id].timeout_task
+        with patch.object(music, "set_server_config", return_value=True) as confirm_save:
+            await self.cog._confirm_restore_started(player, first)
+        await asyncio.gather(timeout_task, return_exceptions=True)
+
+        confirm_save.assert_called_once_with(guild.id, music.MUSIC_SAVED_STATE_KEY, None)
         self.assertIn("已回復 2 首", interaction.followup.send.await_args.args[0])
 
 

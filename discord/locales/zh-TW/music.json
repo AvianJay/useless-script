@@ -54,6 +54,8 @@
         "restore_failed": "⚠️ 自動還原音樂失敗：{error}。播放狀態已保留。",
         "restore_manual_failed": "⚠️ 回復播放狀態失敗，保存資料已保留: {error}",
         "restore_preload_failed": "⚠️ 無法預先載入保存的音樂：{error}。播放狀態已保留。",
+        "restore_start_timeout": "Lavalink 未在 30 秒內回報開始播放",
+        "restore_track_load_failed": "Lavalink 載入歌曲失敗",
         "restore_unsupported_mode_raw": "不支援的播放模式: {mode}",
         "restore_voice_channel_gone": "⚠️ 保存的語音頻道已不存在，播放狀態已保留供稍後重試。",
         "restore_voice_permission": "⚠️ 無法自動還原音樂：{reason}。播放狀態已保留。",

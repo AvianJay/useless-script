@@ -55,6 +55,8 @@
         "restore_failed": "⚠️ Failed to auto-restore music: {error}. The saved state was kept.",
         "restore_manual_failed": "⚠️ Failed to restore playback state; the saved data was kept: {error}",
         "restore_preload_failed": "⚠️ Couldn't preload the saved music: {error}. The saved state was kept.",
+        "restore_start_timeout": "Lavalink did not report playback starting within 30 seconds",
+        "restore_track_load_failed": "Lavalink failed to load the track",
         "restore_unsupported_mode_raw": "Unsupported playback mode: {mode}",
         "restore_voice_channel_gone": "⚠️ The saved voice channel no longer exists; the saved state was kept for a later retry.",
         "restore_voice_permission": "⚠️ Couldn't auto-restore music: {reason}. The saved state was kept.",

@@ -15,6 +15,7 @@ import html
 import re
 from dataclasses import dataclass
 from datetime import datetime, timezone
+from functools import partial
 from urllib.parse import urlparse, quote
 import i18n
 from i18n import t
@@ -91,6 +92,16 @@ class RadioStation:
     website: str
 
 
+@dataclass
+class PendingRestore:
+    player: lava_lyra.Player
+    track: Optional[lava_lyra.Track]
+    channel: Any
+    success_message: Optional[str]
+    error: Optional[str] = None
+    timeout_task: Optional[asyncio.Task] = None
+
+
 RADIO_STATIONS: dict[str, RadioStation] = {
     "listenmoe": RadioStation(
         key="listenmoe",
@@ -136,6 +147,7 @@ class Music(commands.GroupCog,
         self._radio_last_announced: dict[int, str] = {}
         self._notification_tasks: set[asyncio.Task] = set()
         self._restore_task: Optional[asyncio.Task] = None
+        self._pending_restores: dict[int, PendingRestore] = {}
         self._restore_started = False
         self._shutdown_started = False
 
@@ -302,6 +314,93 @@ class Music(commands.GroupCog,
         except Exception as e:
             log(f"Failed to send music restore notification: {e}", level=logging.WARNING, module_name="Music", guild=guild)
 
+    def _cancel_pending_restore(self, guild_id: int) -> Optional[PendingRestore]:
+        pending = self._pending_restores.pop(guild_id, None)
+        if pending and pending.timeout_task and pending.timeout_task is not asyncio.current_task():
+            pending.timeout_task.cancel()
+        return pending
+
+    def _arm_restore_confirmation(
+        self,
+        guild: discord.Guild,
+        player: lava_lyra.Player,
+        track: Optional[lava_lyra.Track],
+        channel,
+        *,
+        success_message: Optional[str] = None,
+    ) -> PendingRestore:
+        self._cancel_pending_restore(guild.id)
+        pending = PendingRestore(
+            player=player,
+            track=track,
+            channel=channel,
+            success_message=success_message,
+        )
+        self._pending_restores[guild.id] = pending
+        return pending
+
+    def _start_restore_confirmation_timeout(self, guild: discord.Guild, pending: PendingRestore):
+        if self._pending_restores.get(guild.id) is not pending:
+            return
+        pending.timeout_task = asyncio.create_task(self._restore_confirmation_timeout(guild, pending))
+
+    async def _restore_confirmation_timeout(self, guild: discord.Guild, pending: PendingRestore):
+        try:
+            await asyncio.sleep(30)
+        except asyncio.CancelledError:
+            return
+
+        if self._pending_restores.get(guild.id) is not pending:
+            return
+        self._pending_restores.pop(guild.id, None)
+        await self._discard_restore_player(guild.id, pending.player)
+        async with i18n.guild_scope(guild.id):
+            error = pending.error or t("music.err.restore_start_timeout")
+            await self._send_restore_status(
+                pending.channel,
+                t("music.err.restore_failed", error=error),
+                guild,
+                level=logging.WARNING,
+            )
+
+    async def _confirm_restore_started(self, player: lava_lyra.Player, track: Optional[lava_lyra.Track]):
+        guild = player.guild
+        pending = self._pending_restores.get(guild.id)
+        if not pending or pending.player is not player:
+            return
+        if pending.track is not None and track is not pending.track:
+            if getattr(track, "track_id", None) != getattr(pending.track, "track_id", None):
+                return
+
+        self._cancel_pending_restore(guild.id)
+        if not set_server_config(guild.id, MUSIC_SAVED_STATE_KEY, None):
+            await self._send_restore_status(
+                pending.channel,
+                t("music.err.restore_failed", error=t("music.err.clear_restored_state_failed")),
+                guild,
+                level=logging.WARNING,
+            )
+            return
+        if pending.success_message:
+            await self._send_restore_status(pending.channel, pending.success_message, guild)
+
+    async def _fail_pending_restore(self, player: lava_lyra.Player):
+        guild = player.guild
+        pending = self._pending_restores.get(guild.id)
+        if not pending or pending.player is not player:
+            return False
+
+        self._cancel_pending_restore(guild.id)
+        error = pending.error or t("music.err.restore_track_load_failed")
+        await self._discard_restore_player(guild.id, player)
+        await self._send_restore_status(
+            pending.channel,
+            t("music.err.restore_failed", error=error),
+            guild,
+            level=logging.WARNING,
+        )
+        return True
+
     async def _discard_restore_player(self, guild_id: int, player: Optional[lava_lyra.Player]):
         if player:
             try:
@@ -345,17 +444,18 @@ class Music(commands.GroupCog,
         mode = saved.get("mode", "track")
         loaded_current = None
         loaded_queue: list[lava_lyra.Track] = []
+        restore_node = None
         current_descriptor, queue_descriptors = self._saved_track_descriptors(saved)
 
         try:
             if mode == "track":
                 if not current_descriptor and not queue_descriptors:
                     raise RuntimeError(t("music.err.saved_state_no_tracks"))
-                node = lava_lyra.NodePool.get_node()
+                restore_node = lava_lyra.NodePool.get_node()
                 if current_descriptor:
-                    loaded_current = await self._load_saved_track(node, current_descriptor)
+                    loaded_current = await self._load_saved_track(restore_node, current_descriptor)
                 for descriptor in queue_descriptors:
-                    loaded_queue.append(await self._load_saved_track(node, descriptor))
+                    loaded_queue.append(await self._load_saved_track(restore_node, descriptor))
             elif mode == "radio":
                 if saved.get("radio_station") not in RADIO_STATIONS:
                     raise RuntimeError(t("music.err.saved_radio_missing"))
@@ -367,7 +467,8 @@ class Music(commands.GroupCog,
 
         player: Optional[lava_lyra.Player] = None
         try:
-            player = await voice_channel.connect(cls=lava_lyra.Player)
+            player_cls = partial(lava_lyra.Player, node=restore_node) if restore_node else lava_lyra.Player
+            player = await voice_channel.connect(cls=player_cls)
             if isinstance(voice_channel, discord.StageChannel):
                 await guild.me.edit(suppress=False)
 
@@ -379,7 +480,15 @@ class Music(commands.GroupCog,
 
             if mode == "radio":
                 station = RADIO_STATIONS[saved["radio_station"]]
+                pending = self._arm_restore_confirmation(
+                    guild,
+                    player,
+                    None,
+                    text_channel,
+                    success_message=t("music.msg.restore_auto_done"),
+                )
                 await self._activate_radio_mode(guild, text_channel, player, station)
+                self._start_restore_confirmation_timeout(guild, pending)
                 if saved.get("paused"):
                     await player.set_pause(True)
             else:
@@ -412,16 +521,22 @@ class Music(commands.GroupCog,
 
                 for track in remaining_tracks:
                     queue.add(track)
+                pending = self._arm_restore_confirmation(
+                    guild,
+                    player,
+                    track_to_play,
+                    text_channel,
+                    success_message=t("music.msg.restore_auto_done"),
+                )
                 await player.play(track_to_play, start=start_position)
+                self._start_restore_confirmation_timeout(guild, pending)
                 if saved.get("paused"):
                     await player.set_pause(True)
 
-            if not set_server_config(guild.id, MUSIC_SAVED_STATE_KEY, None):
-                raise RuntimeError(t("music.err.clear_restored_state_failed"))
             self._start_empty_channel_timer(guild, player)
-            await self._send_restore_status(text_channel, t("music.msg.restore_auto_done"), guild)
             return True
         except Exception as e:
+            self._cancel_pending_restore(guild.id)
             await self._discard_restore_player(guild.id, player)
             await self._send_restore_status(text_channel, t("music.err.restore_failed", error=str(e)), guild, level=logging.WARNING)
             return False
@@ -977,6 +1092,7 @@ class Music(commands.GroupCog,
     async def _cleanup_player(self, guild_id: int, send_message: bool = False, message: str = None):
         """統一的清理方法"""
         try:
+            self._cancel_pending_restore(guild_id)
             queue = get_queue(guild_id)
             queue.clear()
             radio_station = radio_modes.get(guild_id)
@@ -1101,16 +1217,20 @@ class Music(commands.GroupCog,
                 log(f"Cancelled the auto-leave timer", module_name="Music", guild=member.guild)
     
     @commands.Cog.listener()
-    async def on_lyra_track_start(self, player: lava_lyra.Player, track: lava_lyra.Track):
+    async def on_lyra_track_start(self, player: lava_lyra.Player, track: Optional[lava_lyra.Track]):
         """當音樂開始播放時"""
         if not player:
             return
         async with i18n.guild_scope(player.guild.id):
             await self._on_lyra_track_start_impl(player, track)
 
-    async def _on_lyra_track_start_impl(self, player: lava_lyra.Player, track: lava_lyra.Track):
+    async def _on_lyra_track_start_impl(self, player: lava_lyra.Player, track: Optional[lava_lyra.Track]):
+        await self._confirm_restore_started(player, track)
         station = self._get_guild_radio_station(player.guild.id)
         if station:
+            return
+        if track is None:
+            log("Received TrackStart without a track", level=logging.WARNING, module_name="Music", guild=player.guild)
             return
         
         embed = discord.Embed(
@@ -1141,23 +1261,37 @@ class Music(commands.GroupCog,
             pass
 
     @commands.Cog.listener()
-    async def on_lyra_track_end(self, player: lava_lyra.Player, track: lava_lyra.Track, reason: Optional[str]):
+    async def on_lyra_track_exception(self, player: lava_lyra.Player, track: Optional[lava_lyra.Track], exception: Any):
+        if not player:
+            return
+        error = str(exception) if exception else "Unknown Lavalink track exception"
+        pending = self._pending_restores.get(player.guild.id)
+        if pending and pending.player is player:
+            pending.error = error
+        log(f"Lavalink track exception: {error}", level=logging.ERROR, module_name="Music", guild=player.guild)
+
+    @commands.Cog.listener()
+    async def on_lyra_track_end(self, player: lava_lyra.Player, track: Optional[lava_lyra.Track], reason: Optional[str]):
         """當音樂結束播放時"""
         if not player:
             return
         async with i18n.guild_scope(player.guild.id):
             await self._on_lyra_track_end_impl(player, track, reason)
 
-    async def _on_lyra_track_end_impl(self, player: lava_lyra.Player, track: lava_lyra.Track, reason: Optional[str]):
+    async def _on_lyra_track_end_impl(self, player: lava_lyra.Player, track: Optional[lava_lyra.Track], reason: Optional[str]):
         guild_id = player.guild.id
         queue = get_queue(guild_id)
         station = self._get_guild_radio_station(guild_id)
         
-        # 檢查結束原因，可能是字串或枚舉
-        reason_str = str(reason).upper() if reason else ""
+        # Lavalink v3 uses LOAD_FAILED while v4 uses loadFailed.
+        reason_str = str(reason) if reason else ""
+        reason_key = re.sub(r"[^a-z]", "", reason_str.casefold())
         log(f"Track ended with reason: {reason_str}", module_name="Music", guild=player.guild)
 
-        if station and "STOPPED" not in reason_str and "REPLACED" not in reason_str:
+        if reason_key.endswith("loadfailed") and await self._fail_pending_restore(player):
+            return
+
+        if station and not reason_key.endswith(("stopped", "replaced")):
             try:
                 await asyncio.sleep(1)
                 await self._play_radio_stream(player, station)
@@ -1165,23 +1299,15 @@ class Music(commands.GroupCog,
                 log(f"Radio stream reconnect failed: {e}", level=logging.ERROR, module_name="Music", guild=player.guild)
             return
         
-        # 只在正常結束時播放下一首
-        # REPLACED: 被新歌曲替換（不需要自動播放）
-        # STOPPED: 手動停止（skip 會自己處理下一首）
-        # LOAD_FAILED: 載入失敗
-        if "REPLACED" in reason_str or "LOAD_FAILED" in reason_str:
-            return
-        
-        # STOPPED 通常是 skip 或 stop 指令觸發的，這些指令會自己處理
-        # 但如果是自然結束 (FINISHED)，需要播放下一首
-        if "STOPPED" in reason_str:
+        # Only a naturally finished track advances the queue.
+        if not reason_key.endswith("finished"):
             return
         
         # 取得循環模式
         loop_mode = loop_modes.get(guild_id, LoopMode.OFF)
         
         # 單曲循環：重新播放同一首歌
-        if loop_mode == LoopMode.TRACK:
+        if loop_mode == LoopMode.TRACK and track is not None:
             try:
                 await player.play(track)
             except Exception as e:
@@ -1189,7 +1315,7 @@ class Music(commands.GroupCog,
             return
         
         # 隊列循環：將剛播完的歌加回隊列尾端
-        if loop_mode == LoopMode.QUEUE:
+        if loop_mode == LoopMode.QUEUE and track is not None:
             queue.add(track)
         
         # 播放下一首歌 (FINISHED 的情況)
@@ -1222,6 +1348,9 @@ class Music(commands.GroupCog,
         if restore_task and not restore_task.done() and restore_task is not asyncio.current_task():
             restore_task.cancel()
             await asyncio.gather(restore_task, return_exceptions=True)
+
+        for guild_id in list(self._pending_restores):
+            self._cancel_pending_restore(guild_id)
 
         active_sessions = []
         for guild in list(self.bot.guilds):
@@ -1812,10 +1941,12 @@ class Music(commands.GroupCog,
 
         guild_id = guild.id
         loaded_entries: list[tuple[dict[str, Any], lava_lyra.Track, bool]] = []
+        restore_node = None
         failed = 0
         if mode == "track":
             try:
-                source = player or lava_lyra.NodePool.get_node()
+                restore_node = None if player else lava_lyra.NodePool.get_node()
+                source = player or restore_node
             except Exception as e:
                 await interaction.followup.send(t("music.err.no_lavalink_node", error=str(e)), ephemeral=True)
                 return
@@ -1839,7 +1970,8 @@ class Music(commands.GroupCog,
         created_player = False
         if not player:
             try:
-                player = await voice_channel.connect(cls=lava_lyra.Player)
+                player_cls = partial(lava_lyra.Player, node=restore_node) if restore_node else lava_lyra.Player
+                player = await voice_channel.connect(cls=player_cls)
                 created_player = True
                 if isinstance(voice_channel, discord.StageChannel):
                     await guild.me.edit(suppress=False)
@@ -1850,6 +1982,7 @@ class Music(commands.GroupCog,
         text_channels[guild_id] = interaction.channel
         queue = get_queue(guild_id)
         added = len(loaded_entries)
+        needs_start_confirmation = False
 
         try:
             if saved.get("version") == MUSIC_SAVED_STATE_VERSION:
@@ -1857,7 +1990,10 @@ class Music(commands.GroupCog,
 
             if mode == "radio":
                 station = RADIO_STATIONS[saved["radio_station"]]
+                pending = self._arm_restore_confirmation(guild, player, None, interaction.channel)
                 await self._activate_radio_mode(guild, interaction.channel, player, station)
+                self._start_restore_confirmation_timeout(guild, pending)
+                needs_start_confirmation = True
                 if saved.get("paused"):
                     await player.set_pause(True)
                 added = 1
@@ -1891,16 +2027,20 @@ class Music(commands.GroupCog,
                         elif getattr(track_to_play, "is_seekable", False):
                             start_position = saved_position
 
+                    pending = self._arm_restore_confirmation(guild, player, track_to_play, interaction.channel)
                     await player.play(track_to_play, start=start_position)
+                    self._start_restore_confirmation_timeout(guild, pending)
+                    needs_start_confirmation = True
                     for _, track, _ in loaded_entries:
                         queue.add(track)
                     if saved.get("paused"):
                         await player.set_pause(True)
 
-            if not set_server_config(guild_id, MUSIC_SAVED_STATE_KEY, None):
+            if not needs_start_confirmation and not set_server_config(guild_id, MUSIC_SAVED_STATE_KEY, None):
                 raise RuntimeError(t("music.err.clear_restored_state_failed"))
             self._start_empty_channel_timer(guild, player)
         except Exception as e:
+            self._cancel_pending_restore(guild_id)
             if created_player:
                 await self._discard_restore_player(guild_id, player)
             log(f"Manual playback-state restore failed: {e}", level=logging.ERROR, module_name="Music", guild=guild)

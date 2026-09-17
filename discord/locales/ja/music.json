@@ -55,6 +55,8 @@
         "restore_failed": "⚠️ 音楽の自動復元に失敗しました: {error}。保存された状態は保持されました。",
         "restore_manual_failed": "⚠️ 再生状態の復元に失敗しました。保存されたデータは保持されました: {error}",
         "restore_preload_failed": "⚠️ 保存された音楽をプリロードできませんでした: {error}。保存された状態は保持されました。",
+        "restore_start_timeout": "Lavalink は 30 秒以内に再生開始を報告しませんでした",
+        "restore_track_load_failed": "Lavalink がトラックを読み込めませんでした",
         "restore_unsupported_mode_raw": "サポートされていない再生モード: {mode}",
         "restore_voice_channel_gone": "⚠️ 保存された音声チャンネルはもう存在しません。保存された状態は、後で再試行できるように保持されていました。",
         "restore_voice_permission": "⚠️ 音楽を自動復元できませんでした: {reason}。保存された状態は保持されました。",
