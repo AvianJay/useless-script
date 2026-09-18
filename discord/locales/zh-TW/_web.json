@@ -1,4 +1,18 @@
 {
+    "preview": {
+        "index_summary": "管理與自動化 · 音樂與娛樂\nAI 對話 · 經濟與實用工具",
+        "docs_intro": "指令查詢與功能設定指南",
+        "docs_summary": "查閱指令用法、權限需求與設定步驟。",
+        "privacy_intro": "了解你的資料如何被處理",
+        "privacy_summary": "資料收集與使用方式，以及資料刪除請求與聯絡管道。",
+        "terms_intro": "使用機器人前的服務說明",
+        "terms_summary": "服務內容、使用規範與責任說明。",
+        "read_docs": "閱讀文件",
+        "getting_started": "快速入門",
+        "home": "回到首頁",
+        "read_policy": "閱讀政策",
+        "read_terms": "閱讀條款"
+    },
     "footer": {
         "copyright": "© {year} {name}。保留所有權利。"
     },

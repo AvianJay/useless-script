@@ -6,16 +6,22 @@ import os
 import asyncio
 import logging
 import secrets
+import time
+from functools import lru_cache
+from io import BytesIO
 from pathlib import Path
+from threading import Lock
 from urllib.parse import urlsplit
 from hypercorn.config import Config
 from hypercorn.asyncio import serve
 from globalenv import bot, modules, config, on_ready_tasks, get_global_config, on_close_tasks
 from logger import log
-from PIL import Image
+from PIL import Image, ImageDraw
+import aiohttp
 import requests
 from discord.ext import commands
 from doc_markdown import load_docs_site
+from web_preview import build_link_preview
 
 # Shutdown event for graceful shutdown
 _shutdown_event: asyncio.Event = None
@@ -200,22 +206,19 @@ def api_commit_logs():
     logs = UtilCommands.get_commit_logs(10) if UtilCommands else ["N/A"]
     return {"commit_logs": logs}
 
-def _get_bot_og_data():
-    """Get common Open Graph data for templates"""
-    website_url = config("website_url", "")
-    # Use our own server to serve the avatar for OG image (Discord can't crawl its own CDN)
-    avatar_url = f"{website_url}/og-image.png" if website_url else ""
-    return {"avatar_url": avatar_url, "website_url": website_url}
+def _get_link_preview(page):
+    return build_link_preview(
+        page, website_url=config("website_url", ""), name=bot.user.name,
+        bot_id=bot.user.id, locale=getattr(g, "locale", _i18n.DEFAULT_LOCALE),
+        translate=_i18n.t,
+    )
 
 @app.route('/')
 def index():
-    og = _get_bot_og_data()
-    return render_template('index.html', bot=bot, gtag=config("website_gtag", ""), module_count=len(modules), **og)
+    return render_template('index.html', bot=bot, gtag=config("website_gtag", ""), module_count=len(modules), link_preview=_get_link_preview("index"))
 
 @app.route('/docs')
 def docs():
-    from flask import g
-    og = _get_bot_og_data()
     base_dir = Path(__file__).resolve().parent
     docs_sidebar_groups, docs_sections = load_docs_site(
         base_dir / "docs", locale=getattr(g, "locale", None))
@@ -225,40 +228,91 @@ def docs():
         gtag=config("website_gtag", ""),
         docs_sidebar_groups=docs_sidebar_groups,
         docs_sections=docs_sections,
-        **og,
+        link_preview=_get_link_preview("docs"),
     )
 
 @app.route('/privacy-policy')
 def privacy_policy():
-    return render_template('PrivacyPolicy.html', bot=bot, contact_email=config("support_email", "support@example.com"), support_server_invite=config("support_server_invite", ""), gtag=config("website_gtag", ""))
+    return render_template('PrivacyPolicy.html', bot=bot, contact_email=config("support_email", "support@example.com"), support_server_invite=config("support_server_invite", ""), gtag=config("website_gtag", ""), link_preview=_get_link_preview("privacy"))
 
 @app.route('/terms-of-service')
 def terms_of_service():
-    return render_template('TermsofService.html', bot=bot, gtag=config("website_gtag", ""))
+    return render_template('TermsofService.html', bot=bot, gtag=config("website_gtag", ""), link_preview=_get_link_preview("terms"))
 AVATAR_ICO = None
 AVATAR_PNG = None
+_avatar_png_url = None
+_avatar_png_retry_at = 0.0
+_avatar_png_lock = Lock()
+_OG_IMAGE_TIMEOUT = aiohttp.ClientTimeout(total=4, connect=2, sock_read=3)
+
+
+async def _download_og_avatar(avatar_url):
+    # A total deadline also covers slow streaming bodies and redirects, leaving
+    # room for the page fetch within Discord's 10-second unfurl budget.
+    async with aiohttp.ClientSession(timeout=_OG_IMAGE_TIMEOUT) as client:
+        async with client.get(avatar_url) as response:
+            response.raise_for_status()
+            data = bytearray()
+            async for chunk in response.content.iter_chunked(65536):
+                data.extend(chunk)
+                if len(data) > 8 * 1024 * 1024:
+                    raise ValueError("Preview avatar exceeds the image download limit")
+            return bytes(data)
+
+
+@lru_cache(maxsize=1)
+def _fallback_og_image():
+    """A self-contained PNG, also available when the bot has no custom avatar."""
+    image = Image.new("RGB", (512, 512), "#5865F2")
+    draw = ImageDraw.Draw(image)
+    draw.line((256, 96, 256, 160), fill="white", width=20)
+    draw.ellipse((232, 72, 280, 120), fill="white")
+    draw.rounded_rectangle((96, 152, 416, 408), radius=64, fill="white")
+    for x in (184, 328):
+        draw.ellipse((x - 24, 232, x + 24, 280), fill="#5865F2")
+    draw.rounded_rectangle((200, 328, 312, 344), radius=8, fill="#5865F2")
+    output = BytesIO()
+    image.save(output, format="PNG")
+    return output.getvalue()
+
+
+def _get_og_image():
+    global AVATAR_PNG, _avatar_png_url, _avatar_png_retry_at
+    avatar = getattr(getattr(bot, "user", None), "avatar", None)
+    avatar_url = str(avatar.url) if avatar else None
+    if not avatar_url:
+        return _fallback_og_image(), 300
+    if avatar_url == _avatar_png_url:
+        if AVATAR_PNG is not None:
+            return AVATAR_PNG, 3600
+        if time.monotonic() < _avatar_png_retry_at:
+            return _fallback_og_image(), 60
+    # Concurrent crawlers should get a usable image instead of waiting in a queue.
+    if not _avatar_png_lock.acquire(blocking=False):
+        return _fallback_og_image(), 60
+    try:
+        _avatar_png_url = avatar_url
+        AVATAR_PNG = None
+        try:
+            data = asyncio.run(_download_og_avatar(avatar_url))
+            with Image.open(BytesIO(data)) as source:
+                image = source.convert("RGBA").resize((512, 512), Image.Resampling.LANCZOS)
+            output = BytesIO()
+            image.save(output, format="PNG")
+            AVATAR_PNG = output.getvalue()
+        except (aiohttp.ClientError, OSError, ValueError, Image.DecompressionBombError):
+            _avatar_png_retry_at = time.monotonic() + 60
+            log("OG image unavailable; serving the built-in preview image.", module_name="Website")
+            return _fallback_og_image(), 60
+        return AVATAR_PNG, 3600
+    finally:
+        _avatar_png_lock.release()
 
 @app.route('/og-image.png')
 def og_image():
-    """Serve bot avatar as PNG for Open Graph / Discord embed previews"""
-    global AVATAR_PNG
-    if AVATAR_PNG is None:
-        avatar_url = str(bot.user.avatar.url) if bot.user.avatar else None
-        if avatar_url:
-            avatar_path = os.path.join('static', 'og_avatar.png')
-            try:
-                avatar_image = Image.open(requests.get(avatar_url, stream=True).raw)
-                avatar_image = avatar_image.convert('RGBA')
-                avatar_image = avatar_image.resize((512, 512), Image.LANCZOS)
-                avatar_image.save(avatar_path, format='PNG')
-                AVATAR_PNG = avatar_path
-            except Exception as e:
-                log(f"無法下載或轉換機器人頭像為 OG 圖片: {e}", module_name="Website")
-                AVATAR_PNG = None
-                return '', 404
-        else:
-            return '', 404
-    return send_file(AVATAR_PNG, mimetype='image/png')
+    """Serve a cached avatar or fallback without requiring a session or login."""
+    data, max_age = _get_og_image()
+    return send_file(BytesIO(data), mimetype='image/png', max_age=max_age)
 
 @app.route('/favicon.ico')
 def favicon():

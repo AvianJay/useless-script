@@ -1,4 +1,18 @@
 {
+    "preview": {
+        "index_summary": "管理と自動化 · 音楽とエンタメ\nAI チャット · 経済システムと便利なツール",
+        "docs_intro": "コマンドと機能設定のガイド",
+        "docs_summary": "コマンドの使い方、必要な権限、設定手順を確認できます。",
+        "privacy_intro": "データの取り扱いについて",
+        "privacy_summary": "データの収集と利用、削除依頼、お問い合わせ方法をご案内します。",
+        "terms_intro": "ボットを使う前のサービス案内",
+        "terms_summary": "サービス内容、利用ルール、責任に関する説明をご確認ください。",
+        "read_docs": "ドキュメントを読む",
+        "getting_started": "はじめに",
+        "home": "ホームに戻る",
+        "read_policy": "ポリシーを読む",
+        "read_terms": "規約を読む"
+    },
     "footer": {
         "copyright": "© {year} {name}。無断転載を禁じます。"
     },

@@ -1,0 +1,21 @@
+{% if link_preview %}
+    <meta name="description" content="{{ link_preview.description }}">
+    <meta property="og:type" content="website">
+    <meta property="og:title" content="{{ link_preview.title }}">
+    <meta property="og:description" content="{{ link_preview.description }}">
+    <meta property="og:site_name" content="{{ link_preview.site_name }}">
+    <meta name="theme-color" content="#5865F2">
+    <meta name="twitter:card" content="summary">
+    <meta name="twitter:title" content="{{ link_preview.title }}">
+    <meta name="twitter:description" content="{{ link_preview.description }}">
+    {% if link_preview.url %}
+    <meta property="og:url" content="{{ link_preview.url }}">
+    {% endif %}
+    {% if link_preview.image_url %}
+    <meta property="og:image" content="{{ link_preview.image_url }}">
+    <meta name="twitter:image" content="{{ link_preview.image_url }}">
+    {% endif %}
+    {% if link_preview.component_embed %}
+    <script id="discord:component-embed" type="application/json">{{ link_preview.component_embed | tojson }}</script>
+    {% endif %}
+{% endif %}

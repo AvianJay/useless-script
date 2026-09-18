@@ -5,20 +5,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{{ bot.user.name }} | {{ t("web.index.title") }}</title>
-    <meta name="description" content="{{ t('web.index.meta_desc', name=bot.user.name) }}">
-    <!-- Open Graph / Discord Embed -->
-    <meta property="og:type" content="website">
-    <meta property="og:title" content="{{ bot.user.name }} | {{ t('web.index.title') }}">
-    <meta property="og:description" content="{{ t('web.index.og_desc', count=module_count) }}">
-    <meta property="og:url" content="{{ website_url }}">
-    <meta property="og:image" content="{{ avatar_url }}">
-    <meta property="og:site_name" content="{{ bot.user.name }}">
-    <meta name="theme-color" content="#5865F2">
-    <!-- Twitter Card -->
-    <meta name="twitter:card" content="summary">
-    <meta name="twitter:title" content="{{ bot.user.name }} | {{ t('web.index.title') }}">
-    <meta name="twitter:description" content="{{ t('web.index.twitter_desc', count=module_count) }}">
-    <meta name="twitter:image" content="{{ avatar_url }}">
+    {% include '_link_preview.html' %}
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">

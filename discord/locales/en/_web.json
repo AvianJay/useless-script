@@ -1,4 +1,18 @@
 {
+    "preview": {
+        "index_summary": "Moderation & automation · Music & entertainment\nAI chat · Economy & utilities",
+        "docs_intro": "Your guide to commands and feature setup",
+        "docs_summary": "Find command usage, required permissions, and setup steps.",
+        "privacy_intro": "Understand how your data is handled",
+        "privacy_summary": "Learn about data collection and use, deletion requests, and contact options.",
+        "terms_intro": "Service information before using the bot",
+        "terms_summary": "Read about the service, usage rules, and liability.",
+        "read_docs": "Read docs",
+        "getting_started": "Getting started",
+        "home": "Home",
+        "read_policy": "Read policy",
+        "read_terms": "Read terms"
+    },
     "footer": {
         "copyright": "© {year} {name}. All rights reserved."
     },
