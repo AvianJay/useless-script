@@ -61,6 +61,10 @@ class AutoPublish(commands.GroupCog, name=app_commands.locale_str("autopublish",
                 return  # Ignore replies
             if message.interaction_metadata:
                 return  # Ignore interaction messages
+            if message.activity:
+                return  # Ignore activity messages
+            if message.poll:
+                return  # Ignore poll messages
             autopublish_settings = get_server_config(guild.id, "autopublish", {})
             if not autopublish_settings:
                 return
