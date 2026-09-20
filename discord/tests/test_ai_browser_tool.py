@@ -987,7 +987,10 @@ class BrowserApprovalTests(unittest.IsolatedAsyncioTestCase):
 
             confirmed = await self.cog.browser.execute_approval_from_button(self._interaction(context), record)
             await self.cog.browser.resolve_approval(record, confirmed)
-            text, model, _elapsed = await asyncio.wait_for(response_task, timeout=1)
+            text, model, _elapsed, _reasoning_content = await asyncio.wait_for(
+                response_task,
+                timeout=1,
+            )
 
         self.assertEqual((text, model), ("The browser task is complete.", "test-model"))
         self.assertEqual(

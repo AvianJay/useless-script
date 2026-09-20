@@ -582,11 +582,19 @@ class ConversationManager:
         return cleaned_history
     
     @classmethod
-    def add_message(cls, user_id: int, role: str, content: str, guild_id: int = None):
+    def add_message(
+        cls,
+        user_id: int,
+        role: str,
+        content: str,
+        guild_id: int = None,
+        reasoning_content: str | None = None,
+    ):
         """添加訊息到歷史"""
         key = cls.get_conversation_key(user_id, guild_id)
         history = cls.get_history(user_id, guild_id)
-        if str(role or "").strip().lower() == "assistant":
+        normalized_role = str(role or "").strip().lower()
+        if normalized_role == "assistant":
             content = cls.strip_legacy_tool_usage_history(content)
             if not content:
                 return
@@ -595,11 +603,17 @@ class ConversationManager:
         if len(content) > cls.MAX_MESSAGE_LENGTH:
             content = content[:cls.MAX_MESSAGE_LENGTH] + "..."
         
-        history.append({
+        stored_message = {
             "role": role,
             "content": content,
             "timestamp": time.time()
-        })
+        }
+        # Thinking-mode providers require this value to be replayed verbatim on
+        # later requests that include tools. Keep it private in conversation
+        # storage; it is never included in Discord-facing response text.
+        if normalized_role == "assistant" and reasoning_content is not None:
+            stored_message["reasoning_content"] = str(reasoning_content)
+        history.append(stored_message)
         
         # 保持歷史長度限制
         if len(history) > cls.MAX_HISTORY_LENGTH:
@@ -621,6 +635,8 @@ class ConversationManager:
             if not isinstance(message, dict):
                 continue
             total += cls._estimate_tokens(message.get("content", "")) + 12
+            if "reasoning_content" in message:
+                total += cls._estimate_tokens(message.get("reasoning_content", ""))
         return total
 
     @classmethod
@@ -689,7 +705,14 @@ class ConversationManager:
                 content = cls.strip_legacy_tool_usage_history(content)
             if role not in {"user", "assistant"} or not content:
                 continue
-            normalized.append({"role": role, "content": content})
+            normalized_message = {"role": role, "content": content}
+            if role == "assistant" and "reasoning_content" in msg:
+                # Preserve even an empty string: some thinking-mode APIs require
+                # the field to be present on every replayed assistant turn.
+                normalized_message["reasoning_content"] = str(
+                    msg.get("reasoning_content") or ""
+                )
+            normalized.append(normalized_message)
 
         if cls._estimate_history_tokens(normalized) <= cls.API_MAX_CONTEXT_TOKENS:
             return normalized
@@ -1951,6 +1974,34 @@ class AICommands(commands.Cog):
         message = str(error or "").lower()
         return "tool" in message or "function" in message
 
+    @staticmethod
+    def _is_missing_reasoning_content_error(error: Exception) -> bool:
+        message = str(error or "").lower()
+        return (
+            "reasoning_content" in message
+            and "thinking mode" in message
+            and "passed back" in message
+        )
+
+    @staticmethod
+    def _backfill_missing_reasoning_content(messages: list) -> tuple[list, int]:
+        """Make legacy assistant history acceptable after reasoning was not stored."""
+        prepared = []
+        repaired_count = 0
+        for message in messages or []:
+            if not isinstance(message, dict):
+                prepared.append(message)
+                continue
+            copied = dict(message)
+            if (
+                str(copied.get("role") or "").strip().lower() == "assistant"
+                and "reasoning_content" not in copied
+            ):
+                copied["reasoning_content"] = ""
+                repaired_count += 1
+            prepared.append(copied)
+        return prepared, repaired_count
+
     @classmethod
     def _get_ai_retry_delay_seconds(cls, error: Exception, attempt_index: int) -> float:
         headers = getattr(getattr(error, "response", None), "headers", None) or getattr(error, "headers", None)
@@ -2025,7 +2076,31 @@ class AICommands(commands.Cog):
             client = _create_ai_client()
             return await asyncio.to_thread(client.chat.completions.create, **kwargs)
 
-        return await self._run_ai_completion_with_retry(request_once, model=model)
+        try:
+            return await self._run_ai_completion_with_retry(request_once, model=model)
+        except Exception as error:
+            if not self._is_missing_reasoning_content_error(error):
+                raise
+
+            repaired_messages, repaired_count = self._backfill_missing_reasoning_content(
+                kwargs.get("messages") or []
+            )
+            if repaired_count <= 0:
+                raise
+
+            # Conversations created before reasoning persistence was added cannot
+            # recover the discarded text. An explicit empty field is the narrow
+            # compatibility fallback accepted by thinking-mode providers.
+            kwargs["messages"] = repaired_messages
+            log(
+                (
+                    f"AI completion repaired {repaired_count} legacy assistant message(s) "
+                    f"missing reasoning_content for model={model}"
+                ),
+                module_name="AI",
+                level=logging.WARNING,
+            )
+            return await self._run_ai_completion_with_retry(request_once, model=model)
 
     def check_rate_limit(self, user_id: int) -> bool:
         """檢查速率限制 (每分鐘 10 次請求)"""
@@ -2070,7 +2145,7 @@ class AICommands(commands.Cog):
         image: bytes = None,
         tool_context: dict | None = None,
         tool_progress_callback=None,
-    ) -> tuple[str, str, str]:
+    ) -> tuple[str, str, str, str | None]:
         """Generate an AI response with optional tool calling."""
         active_tool_context = tool_context or {}
         if active_tool_context:
@@ -2111,7 +2186,13 @@ class AICommands(commands.Cog):
                 if not tool_calls:
                     end_time = time.perf_counter()
                     response_text = ConversationManager.strip_legacy_tool_usage_history(response_text)
-                    return response_text, getattr(response, "model", model), f"{end_time - start_time:.2f}s"
+                    reasoning_content = self._extract_message_reasoning_content(message)
+                    return (
+                        response_text,
+                        getattr(response, "model", model),
+                        f"{end_time - start_time:.2f}s",
+                        reasoning_content,
+                    )
 
                 self._log_tool_request_batch(
                     model=getattr(response, "model", model),
@@ -2159,13 +2240,15 @@ class AICommands(commands.Cog):
                         }
                     )
                 if tool_call_mode == "native":
-                    working_messages.append(
-                        {
-                            "role": "assistant",
-                            "content": response_text or "",
-                            "tool_calls": self._build_native_tool_call_entries(tool_calls),
-                        }
-                    )
+                    assistant_message = {
+                        "role": "assistant",
+                        "content": response_text or "",
+                        "tool_calls": self._build_native_tool_call_entries(tool_calls),
+                    }
+                    reasoning_content = self._extract_message_reasoning_content(message)
+                    if reasoning_content is not None:
+                        assistant_message["reasoning_content"] = reasoning_content
+                    working_messages.append(assistant_message)
                     for entry in tool_results:
                         working_messages.append(
                             {
@@ -2179,12 +2262,14 @@ class AICommands(commands.Cog):
                         )
                 else:
                     requested_tools = ", ".join(result["name"] for result in tool_results if result.get("name"))
-                    working_messages.append(
-                        {
-                            "role": "assistant",
-                            "content": response_text or f"[Tool request] {requested_tools}",
-                        }
-                    )
+                    assistant_message = {
+                        "role": "assistant",
+                        "content": response_text or f"[Tool request] {requested_tools}",
+                    }
+                    reasoning_content = self._extract_message_reasoning_content(message)
+                    if reasoning_content is not None:
+                        assistant_message["reasoning_content"] = reasoning_content
+                    working_messages.append(assistant_message)
                     tool_payload = {
                         "tool_results": tool_results,
                         "instructions": (
@@ -2228,7 +2313,13 @@ class AICommands(commands.Cog):
                     module_name="AI",
                 )
             final_text = ConversationManager.strip_legacy_tool_usage_history(final_text)
-            return final_text, getattr(final_response, "model", model), f"{end_time - start_time:.2f}s"
+            final_reasoning_content = self._extract_message_reasoning_content(final_message)
+            return (
+                final_text,
+                getattr(final_response, "model", model),
+                f"{end_time - start_time:.2f}s",
+                final_reasoning_content,
+            )
         except Exception as e:
             log(f"AI tool response error: {e}", module_name="AI", level=logging.ERROR)
             raise
@@ -2338,6 +2429,30 @@ class AICommands(commands.Cog):
                 }
             )
         return normalized
+
+    @staticmethod
+    def _extract_message_reasoning_content(message) -> str | None:
+        """Return provider reasoning exactly when the response actually supplied it."""
+        if isinstance(message, dict):
+            if "reasoning_content" not in message:
+                return None
+            return str(message.get("reasoning_content") or "")
+
+        fields_set = getattr(message, "model_fields_set", None)
+        if fields_set is None:
+            fields_set = getattr(message, "__fields_set__", None)
+        if fields_set and "reasoning_content" in fields_set:
+            return str(getattr(message, "reasoning_content", None) or "")
+
+        model_extra = getattr(message, "model_extra", None)
+        if isinstance(model_extra, dict) and "reasoning_content" in model_extra:
+            return str(model_extra.get("reasoning_content") or "")
+
+        missing = object()
+        value = getattr(message, "reasoning_content", missing)
+        if value is missing or value is None:
+            return None
+        return str(value)
 
     @staticmethod
     def _extract_emulated_tool_calls(message) -> list[dict]:
@@ -11829,7 +11944,7 @@ class AICommands(commands.Cog):
                 image_bytes = await image.read()
             
             # 生成回應
-            response_text, model_name, response_time = await self.generate_response(
+            response_text, model_name, response_time, reasoning_content = await self.generate_response(
                 messages,
                 model=selected_model,
                 image=image_bytes,
@@ -11918,7 +12033,13 @@ class AICommands(commands.Cog):
             if generated_image_attachments:
                 image_names = ", ".join(str(item.get("filename") or "image") for item in generated_image_attachments)
                 assistant_history_text += f"\n[images:{image_names}]"
-            ConversationManager.add_message(user.id, "assistant", assistant_history_text, guild_id)
+            ConversationManager.add_message(
+                user.id,
+                "assistant",
+                assistant_history_text,
+                guild_id,
+                reasoning_content=reasoning_content,
+            )
             
             # 建立回應
             warning = None
@@ -12836,7 +12957,7 @@ class AICommands(commands.Cog):
                     image_bytes = await image_attachment.read()
                 
                 # 生成回應
-                response_text, model_name, response_time = await self.generate_response(
+                response_text, model_name, response_time, reasoning_content = await self.generate_response(
                     messages,
                     model=selected_model,
                     image=image_bytes,
@@ -12925,7 +13046,13 @@ class AICommands(commands.Cog):
                 if generated_image_attachments:
                     image_names = ", ".join(str(item.get("filename") or "image") for item in generated_image_attachments)
                     assistant_history_text += f"\n[images:{image_names}]"
-                ConversationManager.add_message(user.id, "assistant", assistant_history_text, guild_id)
+                ConversationManager.add_message(
+                    user.id,
+                    "assistant",
+                    assistant_history_text,
+                    guild_id,
+                    reasoning_content=reasoning_content,
+                )
                 
                 # 建立回應（使用 Component V2 避免 @everyone/@here 攻擊）
                 warning = None

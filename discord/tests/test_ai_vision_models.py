@@ -176,7 +176,7 @@ class AIVisionRoutingTests(unittest.IsolatedAsyncioTestCase):
             patch.object(cog, "_request_ai_completion", new=request),
             patch.object(cog, "_execute_ai_tool", new=execute),
         ):
-            text, model, _ = await cog.generate_response(
+            text, model, _, _reasoning_content = await cog.generate_response(
                 [{"role": "user", "content": "what is this?"}],
                 model="text-model",
                 image=b"hidden-image",
@@ -208,7 +208,7 @@ class AIVisionRoutingTests(unittest.IsolatedAsyncioTestCase):
             patch.object(cog, "_request_ai_completion", new=request),
             patch.object(cog, "_execute_ai_tool", new=execute),
         ):
-            text, model, _ = await cog.generate_response(
+            text, model, _, _reasoning_content = await cog.generate_response(
                 [{"role": "user", "content": "what is this?"}],
                 model="text-model",
                 image=b"hidden-image",

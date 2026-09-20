@@ -204,7 +204,7 @@ class AIToolCallParsingTests(unittest.IsolatedAsyncioTestCase):
                 new=AsyncMock(),
             ) as execute_tool,
         ):
-            response_text, model, _elapsed = await self.cog.generate_response(
+            response_text, model, _elapsed, reasoning_content = await self.cog.generate_response(
                 [{"role": "user", "content": "給我幾個 Discord 狀態"}],
                 model="test-model",
                 tool_context={"user": SimpleNamespace(id=1)},
@@ -212,7 +212,104 @@ class AIToolCallParsingTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(response_text, content)
         self.assertEqual(model, "test-model")
+        self.assertIsNone(reasoning_content)
         execute_tool.assert_not_awaited()
+
+    async def test_reasoning_content_is_replayed_during_native_tool_loop(self):
+        first_message = SimpleNamespace(
+            content="我先查一下。",
+            reasoning_content="必須原樣回傳的思考",
+            tool_calls=[
+                {
+                    "id": "native-call-1",
+                    "function": {
+                        "name": "get_bot_status",
+                        "arguments": "{}",
+                    },
+                }
+            ],
+            images=None,
+        )
+        final_message = SimpleNamespace(
+            content="查完了。",
+            reasoning_content="最後一輪思考",
+            tool_calls=None,
+            images=None,
+        )
+        responses = [
+            (SimpleNamespace(model="test-model", choices=[SimpleNamespace(message=first_message)]), "native"),
+            (SimpleNamespace(model="test-model", choices=[SimpleNamespace(message=final_message)]), "native"),
+        ]
+        submitted_messages = []
+
+        async def request(messages, **_kwargs):
+            submitted_messages.append(messages)
+            return responses.pop(0)
+
+        with (
+            patch.object(self.cog, "_request_ai_completion", new=request),
+            patch.object(
+                self.cog,
+                "_execute_ai_tool",
+                new=AsyncMock(return_value={"online": True}),
+            ),
+        ):
+            response_text, model, _elapsed, reasoning_content = await self.cog.generate_response(
+                [{"role": "user", "content": "bot 在線嗎"}],
+                model="test-model",
+                tool_context={"user": SimpleNamespace(id=1)},
+            )
+
+        replayed_assistant = submitted_messages[1][1]
+        self.assertEqual(replayed_assistant["role"], "assistant")
+        self.assertEqual(replayed_assistant["reasoning_content"], "必須原樣回傳的思考")
+        self.assertEqual(response_text, "查完了。")
+        self.assertEqual(model, "test-model")
+        self.assertEqual(reasoning_content, "最後一輪思考")
+
+    async def test_legacy_history_is_retried_with_empty_reasoning_marker(self):
+        class MissingReasoningContentError(Exception):
+            status_code = 400
+
+        expected_response = SimpleNamespace(model="test-model", choices=[])
+        create_completion = MagicMock(
+            side_effect=[
+                MissingReasoningContentError(
+                    "The `reasoning_content` in the thinking mode must be passed back to the API."
+                ),
+                expected_response,
+            ]
+        )
+        client = SimpleNamespace(
+            chat=SimpleNamespace(
+                completions=SimpleNamespace(create=create_completion),
+            )
+        )
+        messages = [
+            {"role": "user", "content": "上一題"},
+            {"role": "assistant", "content": "舊答案"},
+            {"role": "user", "content": "繼續"},
+        ]
+
+        with (
+            patch("ai._get_ai_model_rates", return_value={"test-model": 0.1}),
+            patch("ai._create_ai_client", return_value=client),
+        ):
+            response = await self.cog._generate_ai_completion(
+                model="test-model",
+                messages=messages,
+                tools=[{"type": "function", "function": {"name": "get_bot_status"}}],
+            )
+
+        self.assertIs(response, expected_response)
+        self.assertNotIn(
+            "reasoning_content",
+            create_completion.call_args_list[0].kwargs["messages"][1],
+        )
+        self.assertEqual(
+            create_completion.call_args_list[1].kwargs["messages"][1]["reasoning_content"],
+            "",
+        )
 
     async def test_native_success_does_not_prepare_emulation_prompt(self):
         messages = [{"role": "user", "content": "bot 在線嗎"}]

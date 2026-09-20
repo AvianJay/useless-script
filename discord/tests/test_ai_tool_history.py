@@ -46,6 +46,35 @@ class AIToolHistoryTests(unittest.TestCase):
             ],
         )
 
+    def test_api_history_preserves_reasoning_content_for_thinking_mode(self):
+        history = [
+            {"role": "user", "content": "請先思考再回答"},
+            {
+                "role": "assistant",
+                "content": "答案",
+                "reasoning_content": "必須原樣回傳的思考內容",
+            },
+        ]
+
+        formatted = ConversationManager.format_for_api(history)
+
+        self.assertEqual(
+            formatted[1],
+            {
+                "role": "assistant",
+                "content": "答案",
+                "reasoning_content": "必須原樣回傳的思考內容",
+            },
+        )
+
+    def test_api_history_preserves_empty_reasoning_content_field(self):
+        formatted = ConversationManager.format_for_api(
+            [{"role": "assistant", "content": "答案", "reasoning_content": ""}]
+        )
+
+        self.assertIn("reasoning_content", formatted[0])
+        self.assertEqual(formatted[0]["reasoning_content"], "")
+
 
 if __name__ == "__main__":
     unittest.main()
