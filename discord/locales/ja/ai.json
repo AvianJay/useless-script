@@ -150,6 +150,7 @@
         "list_channels": "表示されているチャンネルのリストを表示する",
         "read_channel": "チャンネルコンテンツの読み取り",
         "read_message": "単一のメッセージを読む",
+        "view_message": "メッセージ画像を確認中",
         "search_ai": "AIで探す",
         "search_bot_docs": "ボットドキュメントの検索",
         "search_google": "Googleで検索する",

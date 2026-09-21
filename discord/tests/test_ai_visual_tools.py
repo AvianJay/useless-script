@@ -1,5 +1,6 @@
 import asyncio
 import io
+import json
 import sqlite3
 import sys
 import tempfile
@@ -8,6 +9,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock, patch
 
+import discord
 from PIL import Image
 
 
@@ -452,6 +454,321 @@ class AIProfileAndChannelToolTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("missing required channel permissions", result["error"])
 
 
+class AIMessageScreenshotToolTests(unittest.IsolatedAsyncioTestCase):
+    def setUp(self):
+        self.cog = AICommands(SimpleNamespace(user=SimpleNamespace(id=999)))
+        self.channel = SimpleNamespace(id=22, guild=None, name="dm")
+        self.message = SimpleNamespace(
+            id=33,
+            channel=self.channel,
+            jump_url="https://discord.com/channels/@me/22/33",
+        )
+        self.cog._resolve_message_for_visual_tool = AsyncMock(
+            return_value=(self.message, {}, None)
+        )
+        self.cog._serialize_message_for_tool = AsyncMock(
+            return_value={"id": "33", "content": "formatted fallback"}
+        )
+        self.cog._analyze_image_bytes_for_tool = AsyncMock(
+            return_value={"summary": "visual details", "cost": 25.0}
+        )
+        self.screenshot = AsyncMock(return_value=io.BytesIO(b"png-data"))
+        self.tool_context = {"user": SimpleNamespace(id=1)}
+
+    async def _call(self, mode):
+        with (
+            patch("ai.modules", ["MessageImage"]),
+            patch(
+                "ai.importlib.import_module",
+                return_value=SimpleNamespace(screenshot=self.screenshot),
+            ),
+        ):
+            return await self.cog._tool_view_message({"mode": mode}, self.tool_context)
+
+    async def test_display_attaches_without_paid_analysis(self):
+        result = await self._call("display")
+
+        self.cog._analyze_image_bytes_for_tool.assert_not_awaited()
+        self.assertEqual(result["analysis_cost"], 0.0)
+        self.assertEqual(result["attachment_ref"], "attachment://message-33.png")
+        self.assertEqual(self.tool_context["pending_image_attachments"][0]["content"], b"png-data")
+        self.screenshot.assert_awaited_once_with(
+            self.message,
+            include_context=False,
+            context_limit=10,
+            context_window_seconds=300,
+            timeout=30.0,
+            max_bytes=self.cog.IMAGE_ANALYZE_MAX_BYTES,
+        )
+
+    async def test_inspect_analyzes_without_attaching(self):
+        result = await self._call("inspect")
+
+        self.cog._analyze_image_bytes_for_tool.assert_awaited_once()
+        self.assertEqual(result["analysis"]["summary"], "visual details")
+        self.assertNotIn("pending_image_attachments", self.tool_context)
+
+    async def test_inspect_and_display_keeps_attachment_when_analysis_fails(self):
+        self.cog._analyze_image_bytes_for_tool.return_value = {
+            "error": "insufficient 全域幣",
+            "cost": 0.0,
+        }
+
+        result = await self._call("inspect_and_display")
+
+        self.assertIn("attachment_ref", result)
+        self.assertIn("error", result["analysis"])
+        self.assertEqual(len(self.tool_context["pending_image_attachments"]), 1)
+
+    async def test_permission_error_stops_before_rendering(self):
+        self.cog._resolve_message_for_visual_tool.return_value = (
+            None,
+            None,
+            "Current user is missing required channel permissions: view_channel",
+        )
+
+        result = await self.cog._tool_view_message({}, self.tool_context)
+
+        self.assertIn("missing required channel permissions", result["error"])
+        self.screenshot.assert_not_awaited()
+
+
+class AIMessageStructureTests(unittest.IsolatedAsyncioTestCase):
+    def setUp(self):
+        self.cog = AICommands(SimpleNamespace())
+
+    def test_embed_component_attachment_and_poll_keep_structure(self):
+        embed = discord.Embed(
+            title="Status",
+            description="line 1\nline 2",
+            url="https://example.com",
+        )
+        embed.add_field(name="First", value="same", inline=True)
+        embed.add_field(name="Second", value="same", inline=False)
+        component = SimpleNamespace(
+            type=SimpleNamespace(value=17),
+            content=None,
+            label=None,
+            description=None,
+            placeholder=None,
+            title=None,
+            value=None,
+            custom_id=None,
+            url=None,
+            disabled=None,
+            required=None,
+            spoiler=None,
+            divider=None,
+            min_values=None,
+            max_values=None,
+            spacing=None,
+            style=None,
+            emoji=None,
+            media=None,
+            items=[],
+            accessory=None,
+            components=[],
+            children=[
+                SimpleNamespace(
+                    type=SimpleNamespace(value=10),
+                    content="duplicate",
+                    label=None,
+                    description=None,
+                    placeholder=None,
+                    title=None,
+                    value=None,
+                    custom_id=None,
+                    url=None,
+                    disabled=None,
+                    required=None,
+                    spoiler=None,
+                    divider=None,
+                    min_values=None,
+                    max_values=None,
+                    spacing=None,
+                    style=None,
+                    emoji=None,
+                    media=None,
+                    items=[],
+                    accessory=None,
+                    components=[],
+                    children=[],
+                    options=[],
+                ),
+                SimpleNamespace(
+                    type=SimpleNamespace(value=10),
+                    content="duplicate",
+                    label=None,
+                    description=None,
+                    placeholder=None,
+                    title=None,
+                    value=None,
+                    custom_id=None,
+                    url=None,
+                    disabled=None,
+                    required=None,
+                    spoiler=None,
+                    divider=None,
+                    min_values=None,
+                    max_values=None,
+                    spacing=None,
+                    style=None,
+                    emoji=None,
+                    media=None,
+                    items=[],
+                    accessory=None,
+                    components=[],
+                    children=[],
+                    options=[],
+                ),
+            ],
+            options=[],
+        )
+        poll = SimpleNamespace(
+            question=SimpleNamespace(text="Choose"),
+            answers=[SimpleNamespace(id=1, text="A", emoji=None, vote_count=3, self_voted=False)],
+            total_votes=3,
+            expires_at=None,
+            is_finalized=lambda: False,
+        )
+
+        embed_payload = self.cog._serialize_embed_for_context(embed)
+        component_payload = self.cog._serialize_component_for_context(component)
+        poll_payload = self.cog._serialize_poll_for_context(poll)
+
+        self.assertEqual(embed_payload["fields"][1], {"name": "Second", "value": "same", "inline": False})
+        self.assertEqual(
+            [item["content"] for item in component_payload["children"]],
+            ["duplicate", "duplicate"],
+        )
+        self.assertEqual(poll_payload["answers"][0]["vote_count"], 3)
+
+    def test_message_payload_is_bounded_at_field_boundaries(self):
+        payload = {
+            "id": "123",
+            "channel_id": "456",
+            "content": "a" * 12000,
+            "formatted": "b" * 12000,
+            "embeds": [{"title": "c" * 9000}],
+        }
+
+        bounded = self.cog._bound_message_payload(payload, max_chars=8000)
+
+        self.assertLessEqual(len(json.dumps(bounded, ensure_ascii=False)), 8000)
+        self.assertTrue(bounded["truncated"])
+        self.assertIn("123", json.dumps(bounded, ensure_ascii=False))
+
+    async def test_recent_context_preserves_markdown_and_has_source_ids(self):
+        message = SimpleNamespace(
+            id=123,
+            channel=SimpleNamespace(id=456),
+            author=SimpleNamespace(id=7, name="seven", display_name="Seven", bot=False),
+            content="first line\n```py\nx = 1\n```",
+            message_snapshots=[],
+            reference=None,
+            attachments=[],
+            embeds=[],
+            components=[],
+            poll=None,
+            stickers=[],
+            reactions=[],
+        )
+
+        formatted = await self.cog._format_msg_for_context(
+            message,
+            None,
+            SimpleNamespace(),
+            truncate=True,
+            visual_metadata={"items": [], "truncated": False},
+        )
+
+        self.assertIn("message_id=123 channel_id=456", formatted)
+        self.assertIn("first line\n```py\nx = 1", formatted)
+        self.assertLessEqual(len(formatted), 1200)
+
+    async def test_explicit_read_keeps_untriggered_bot_content(self):
+        message = SimpleNamespace(
+            id=123,
+            channel=SimpleNamespace(id=456),
+            author=SimpleNamespace(id=8, name="robot", display_name="Robot", bot=True),
+            content="bot output",
+            interaction_metadata=None,
+            message_snapshots=[],
+            reference=None,
+            attachments=[],
+            embeds=[],
+            components=[],
+            poll=None,
+            stickers=[],
+            reactions=[],
+        )
+        metadata = {"items": [], "truncated": False}
+
+        background = await self.cog._format_msg_for_context(
+            message,
+            None,
+            SimpleNamespace(),
+            visual_metadata=metadata,
+        )
+        explicit = await self.cog._format_msg_for_context(
+            message,
+            None,
+            SimpleNamespace(),
+            visual_metadata=metadata,
+            include_untriggered_bots=True,
+        )
+
+        self.assertIsNone(background)
+        self.assertIn("bot output", explicit)
+
+
+class AIMessageResolutionTests(unittest.IsolatedAsyncioTestCase):
+    def setUp(self):
+        self.cog = AICommands(SimpleNamespace(user=SimpleNamespace(id=999)))
+        self.cog._validate_channel_tool_access = Mock(return_value=(None, {}))
+
+    async def test_cross_guild_link_is_rejected(self):
+        result = await self.cog._resolve_message_for_visual_tool(
+            {"message_link": "https://discord.com/channels/99/22/33"},
+            {
+                "guild": SimpleNamespace(id=10),
+                "channel": SimpleNamespace(id=22),
+                "user": SimpleNamespace(id=1),
+            },
+        )
+
+        self.assertIn("current guild", result[2])
+
+    async def test_default_target_prefers_resolved_reply(self):
+        channel = SimpleNamespace(id=22, guild=None)
+        replied = SimpleNamespace(id=33, author=SimpleNamespace(id=2), channel=channel)
+        request = SimpleNamespace(
+            id=44,
+            channel=channel,
+            reference=SimpleNamespace(resolved=replied, message_id=33, channel_id=22),
+        )
+
+        message, _access, error = await self.cog._resolve_message_for_visual_tool(
+            {},
+            {"guild": None, "channel": channel, "message": request, "user": SimpleNamespace(id=1)},
+        )
+
+        self.assertIsNone(error)
+        self.assertIs(message, replied)
+
+    async def test_default_target_falls_back_to_current_request(self):
+        channel = SimpleNamespace(id=22, guild=None)
+        request = SimpleNamespace(id=44, author=SimpleNamespace(id=1), channel=channel, reference=None)
+
+        message, _access, error = await self.cog._resolve_message_for_visual_tool(
+            {},
+            {"guild": None, "channel": channel, "message": request, "user": SimpleNamespace(id=1)},
+        )
+
+        self.assertIsNone(error)
+        self.assertIs(message, request)
+
+
 class AIToolPromptTests(unittest.TestCase):
     def test_new_tools_are_registered_and_context_rule_is_in_both_prompts(self):
         cog = AICommands(SimpleNamespace())
@@ -459,7 +776,7 @@ class AIToolPromptTests(unittest.TestCase):
         tool_names = {tool["function"]["name"] for tool in tools}
 
         self.assertTrue(
-            {"analyze_message_emojis", "analyze_user_profile_media", "list_channels"}.issubset(tool_names)
+            {"analyze_message_emojis", "view_message", "analyze_user_profile_media", "list_channels"}.issubset(tool_names)
         )
         self.assertIn("上面在講什麼", TOOL_USAGE_PROMPT)
         emulated = cog._prepare_tool_emulation_messages([{"role": "user", "content": "上面在講什麼"}], tools)
@@ -487,6 +804,10 @@ class AIToolPromptTests(unittest.TestCase):
         self.assertEqual(
             cog._tool_result_max_length("list_channels"),
             cog.CHANNEL_LIST_TOOL_RESULT_MAX_LENGTH,
+        )
+        self.assertEqual(
+            cog._tool_result_max_length("view_message"),
+            cog.MESSAGE_TOOL_RESULT_MAX_LENGTH,
         )
 
 

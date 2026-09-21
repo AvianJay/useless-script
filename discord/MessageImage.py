@@ -607,8 +607,58 @@ async def badquote(ctx: commands.Context):
     await ctx.reply(file=discord.File(output_buffer, filename=f"message_quote.{ext}"), view=view)
 
 
-async def screenshot(message: discord.Message):
-    # check browser alive
+class _ExportChannelAdapter:
+    """Read-only channel facade for chat_exporter, including DM channels."""
+
+    def __init__(self, channel):
+        self._channel = channel
+        self.guild = getattr(channel, "guild", None)
+        self.id = getattr(channel, "id", 0)
+        self.name = getattr(channel, "name", None) or "Direct Message"
+        self.topic = getattr(channel, "topic", None)
+        self.created_at = getattr(channel, "created_at", None)
+
+    def __getattr__(self, name):
+        return getattr(self._channel, name)
+
+
+async def _collect_screenshot_messages(
+    message: discord.Message,
+    *,
+    include_context: bool,
+    context_limit: int,
+    context_window_seconds: int,
+) -> list[discord.Message]:
+    """Return newest-first messages, which is the ordering raw_export expects."""
+    messages = [message]
+    if not include_context or context_limit <= 1:
+        return messages
+
+    previous_limit = max(min(int(context_limit) - 1, 9), 0)
+    message_time = message.created_at
+    try:
+        async for previous in message.channel.history(
+            limit=previous_limit,
+            before=message.created_at,
+            oldest_first=False,
+        ):
+            age = (message_time - previous.created_at).total_seconds()
+            if previous.author.id != message.author.id or age >= context_window_seconds:
+                break
+            messages.append(previous)
+    except Exception:
+        pass
+    return messages
+
+
+async def _render_message_screenshot(
+    message: discord.Message,
+    *,
+    include_context: bool,
+    context_limit: int,
+    context_window_seconds: int,
+    render_metadata: dict | None = None,
+) -> bytes:
     global browser
     if browser is None:
         raise Exception(t("messageimage.err.browser_not_started"))
@@ -619,40 +669,33 @@ async def screenshot(message: discord.Message):
     times = {"getting_messages": 0, "generating_html": 0, "taking_screenshot": 0}
     start_time = time.perf_counter()
 
-    # try to get previous message (group consecutive messages from same author)
-    messages = [message]
-    message_time = message.created_at
-    try:
-        # Logic to find previous messages from the same author within reason
-        # This logic was slightly different in the two commands, unifying to the more robust history check
-        # However, the provided snippet for `screenshot_cmd` had a weird while loop with `current_msg.next()` which isn't standard discord.py async iterator usage.
-        # The `screenshot_generator` logic using `async for` is cleaner. Let's use that logic but adapted for a helper.
-        
-        # Note: The original context menu code appended to `messages` then seemingly relied on `chat_exporter` handling order or `messages` being in reverse order?
-        # `chat_exporter` usually expects messages in chronological order.
-        # The context menu code: `messages.append(msg)` inside `history(oldest_first=False)` means `messages` is [target, target-1, target-2].
-        # Then it passes this list to chat_exporter.
-
-        async for msg in message.channel.history(limit=10, before=message.created_at, oldest_first=False):
-            if msg.author.id == message.author.id and (message_time - msg.created_at).total_seconds() < 300:  # 5 minutes threshold
-                messages.append(msg)
-            else:
-                break
-    except Exception:
-        # traceback.print_exc()
-        pass
+    messages = await _collect_screenshot_messages(
+        message,
+        include_context=include_context,
+        context_limit=context_limit,
+        context_window_seconds=context_window_seconds,
+    )
+    if render_metadata is not None:
+        rendered_messages = list(reversed(messages))
+        render_metadata.update({
+            "message_count": len(rendered_messages),
+            "message_ids": [str(getattr(item, "id", "")) for item in rendered_messages],
+            "display_order": "oldest_to_newest",
+        })
     times["getting_messages"] = time.perf_counter() - start_time
     start_time = time.perf_counter()
-    
-    # chat_exporter expects chronological order usually, so reverse to [target-2, target-1, target]
-    # messages.reverse()
 
     try:
+        export_channel = (
+            message.channel
+            if getattr(message.channel, "guild", None) is not None
+            else _ExportChannelAdapter(message.channel)
+        )
         html_content = await chat_exporter.raw_export(
-            message.channel,
+            export_channel,
             messages=messages,
             tz_info="Asia/Taipei",
-            guild=message.channel.guild,
+            guild=getattr(message.channel, "guild", None),
             bot=bot,
             raise_exceptions=True
         )
@@ -663,6 +706,7 @@ async def screenshot(message: discord.Message):
     times["generating_html"] = time.perf_counter() - start_time
     start_time = time.perf_counter()
 
+    page = None
     try:
         page = await browser.new_page(viewport={"width": 1920, "height": 1080})
         await page.set_content(html_content, wait_until="load")
@@ -679,18 +723,52 @@ async def screenshot(message: discord.Message):
             await page.set_viewport_size({"width": new_width, "height": new_height})
         # Locate the message group container
         image_bytes = await chatlog.screenshot(type="png")
-        await page.close()
     except Exception as e:
         log(f"Screenshot failed: {e}", module_name="MessageImage", level=logging.ERROR)
-        # traceback.print_exc()
-        # If screenshot fails, maybe we want to return the HTML for debugging? 
-        # The original code did this in one place. For simplicity in a shared function, let's just raise.
         raise Exception(t("messageimage.err.screenshot_failed", error=str(e)))
+    finally:
+        if page is not None:
+            try:
+                await page.close()
+            except Exception:
+                pass
     times["taking_screenshot"] = time.perf_counter() - start_time
     # log the times for debugging
     log(f"Screenshot generated: get_messages={times['getting_messages']*1000:.2f}ms, generate_html={times['generating_html']*1000:.2f}ms, screenshot={times['taking_screenshot']*1000:.2f}ms", module_name="MessageImage")
 
-    return io.BytesIO(image_bytes)
+    return image_bytes
+
+
+async def screenshot(
+    message: discord.Message,
+    *,
+    include_context: bool = True,
+    context_limit: int = 10,
+    context_window_seconds: int = 300,
+    timeout: float = 30.0,
+    max_bytes: int | None = None,
+):
+    """Render a Discord message transcript fragment as a PNG buffer."""
+    render_metadata = {}
+    try:
+        image_bytes = await asyncio.wait_for(
+            _render_message_screenshot(
+                message,
+                include_context=include_context,
+                context_limit=max(1, min(int(context_limit), 10)),
+                context_window_seconds=max(1, int(context_window_seconds)),
+                render_metadata=render_metadata,
+            ),
+            timeout=max(1.0, float(timeout)),
+        )
+    except asyncio.TimeoutError as exc:
+        raise Exception(t("messageimage.err.screenshot_failed", error="generation timed out")) from exc
+
+    if max_bytes is not None and len(image_bytes) > max_bytes:
+        raise Exception(f"screenshot exceeds {int(max_bytes)} bytes")
+    output = io.BytesIO(image_bytes)
+    output.render_metadata = render_metadata
+    return output
 
 
 @bot.tree.context_menu(name=app_commands.locale_str("Screenshot Generator", i18n_key="cmd.messageimage.ctx.screenshot_generator.name"))

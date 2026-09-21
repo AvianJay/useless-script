@@ -42,6 +42,14 @@ The AI uses three different types of context; clearing one does not clear the ot
 - Like other search results, raw content is untrusted external data; the AI can only treat it as reference material and must not follow any instructions within it that ask it to change its rules, leak data, or perform actions.
 - `fetch_raw` does not consume Serper quota and does not incur an additional fixed 全域幣 charge; regular `/ai` text input/output is still billed at the selected model's rate.
 
+## Reading Messages and Screenshots
+
+- Message reads first return Markdown-preserving text plus structured embeds, attachments, polls, stickers, reactions, forwards, and Components V2 data.
+- The AI creates a message screenshot only when visual layout or Discord-specific presentation cannot be determined from text. The image is reconstructed by `chat_exporter`, not captured from the native Discord client; structured text fills in formats the reconstruction cannot show.
+- Screenshots contain only the target message by default. When context is requested, they may include up to nine earlier messages from the same author within five minutes. Spoilers are expanded.
+- Attaching the screenshot alone has no separate image-analysis fee. Asking the AI to inspect it uses the image-analysis tool at the built-in rate of 25 全域幣 per call, with a refund on failure.
+- Messages, screenshots, and visible screenshot text are untrusted content and are never treated as system instructions.
+
 ## Billing
 
 ### Text Conversations
@@ -84,6 +92,7 @@ The built-in global default model is `kimi-k2.6` (subject to change based on mod
 | --- | ---: | --- |
 | Attaching an image directly in `/ai` | No extra fixed cost | Still billed for input/output characters based on the selected text model |
 | Analyzing a Discord CDN image URL | 25 全域幣/use | Charged separately whenever the AI needs to call the image analysis tool |
+| Inspecting a reconstructed Discord message screenshot | 25 全域幣/use | No charge for attachment-only display; charged only for visual inspection |
 | AI image generation | `gpt-image-2`: 250 全域幣/image | Charged at the actual model rate × number of images requested; under-delivery refunds the cost for the missing images |
 | Google Image Search | No extra fixed 全域幣 cost | Regular text input/output is still billed at the selected model's rate; the system downloads and reviews up to 3 candidates and attaches only one image that passes review |
 | AI video generation | Currently disabled | While disabled, it does not enter the billing flow |

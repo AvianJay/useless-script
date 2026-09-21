@@ -150,6 +150,7 @@
         "list_channels": "Listing visible channels",
         "read_channel": "Reading channel content",
         "read_message": "Reading a single message",
+        "view_message": "Inspecting a message screenshot",
         "search_ai": "Searching with AI",
         "search_bot_docs": "Searching bot docs",
         "search_google": "Searching Google",

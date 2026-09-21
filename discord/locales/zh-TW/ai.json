@@ -147,6 +147,7 @@
         "list_channels": "列出可見頻道",
         "read_channel": "讀取頻道內容",
         "read_message": "讀取單則訊息",
+        "view_message": "查看訊息截圖",
         "search_ai": "與 AI 搜尋",
         "search_bot_docs": "正在搜尋機器人文檔",
         "search_google": "搜尋 Google",
