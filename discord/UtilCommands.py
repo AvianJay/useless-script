@@ -414,7 +414,7 @@ def build_ping_embed(*, bot_latency: str | float, defer_latency: float = None, t
     if defer_latency:
         embed.add_field(name=t("utilcommands.ping.field.rest_defer"), value=f"{defer_latency}ms")
     if typing_latency:
-        embed.add_field(name=t("utilcommands.ping.field.rest_typing"), value=f"{defer_latency}ms")
+        embed.add_field(name=t("utilcommands.ping.field.rest_typing"), value=f"{typing_latency}ms")
     return embed
 
 
