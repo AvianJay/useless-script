@@ -263,7 +263,7 @@ class MatchTests(unittest.IsolatedAsyncioTestCase):
     async def test_builtin_platform_table(self):
         cases = [
             ("Twitter", "https://x.com/discord/status/1234567890?ref_src=test", "fxtwitter.com"),
-            ("Instagram", "https://www.instagram.com/p/ABC_123/?img_index=2&utm_source=test", "vxinstagram.com"),
+            ("Instagram", "https://www.instagram.com/p/ABC_123/?img_index=2&utm_source=test", "oginstagram.com"),
             ("TikTok", "https://www.tiktok.com/@user/video/1234567890?is_from_webapp=1", "tnktok.com"),
             ("Reddit", "https://www.reddit.com/r/test/comments/abc123/title/?utm_source=share", "vxreddit.com"),
             ("Facebook", "https://www.facebook.com/user/posts/pfbid123/?utm_source=test", "facebed.com"),

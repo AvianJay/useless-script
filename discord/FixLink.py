@@ -71,10 +71,11 @@ supported_platforms = {
         ],
         "keep_query_keys": ["img_index"],
         "fixers": {
+            "OGInstagram": {"host": "oginstagram.com"},
             "VxInstagram": {"host": "vxinstagram.com"},
             "KKInstagram": {"host": "kkinstagram.com"},
         },
-        "default_fixer": "VxInstagram",
+        "default_fixer": "OGInstagram",
     },
     "TikTok": {
         "origins": ["tiktok.com", "m.tiktok.com", "vm.tiktok.com", "vt.tiktok.com"],
