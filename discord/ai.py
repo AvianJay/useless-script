@@ -35,6 +35,7 @@ from datetime import datetime, timezone, timedelta
 from logger import log
 import logging
 from pathlib import Path
+from types import SimpleNamespace
 from urllib.parse import urljoin, urlparse
 from uuid import uuid4
 from PIL import Image, ImageDraw, ImageOps, UnidentifiedImageError
@@ -2066,10 +2067,11 @@ class AICommands(commands.Cog):
         ) from last_error
 
     async def _generate_ai_completion(self, **kwargs):
-        """封裝 AI 請求，方便未來統一修改"""
+        """Run an OpenAI-compatible chat request as a stream and rebuild the response."""
         kwargs = dict(kwargs or {})
         kwargs.pop("provider", None)
         kwargs.pop("web_search", None)
+        kwargs["stream"] = True
         image = kwargs.pop("image", None)
         model = str(kwargs.get("model", "openai-fast") or "openai-fast")
         if model not in _get_ai_model_rates() and model not in _get_ai_video_model_rates():
@@ -2078,8 +2080,12 @@ class AICommands(commands.Cog):
         kwargs["messages"] = _attach_image_to_messages(kwargs.get("messages") or [], image)
 
         async def request_once():
-            client = _create_ai_client()
-            return await asyncio.to_thread(client.chat.completions.create, **kwargs)
+            def request_and_collect():
+                client = _create_ai_client()
+                stream = client.chat.completions.create(**kwargs)
+                return self._collect_ai_completion_stream(stream, fallback_model=model)
+
+            return await asyncio.to_thread(request_and_collect)
 
         try:
             return await self._run_ai_completion_with_retry(request_once, model=model)
@@ -2106,6 +2112,167 @@ class AICommands(commands.Cog):
                 level=logging.WARNING,
             )
             return await self._run_ai_completion_with_retry(request_once, model=model)
+
+    @staticmethod
+    def _ai_stream_value(value, key: str, default=None):
+        if isinstance(value, dict):
+            return value.get(key, default)
+        return getattr(value, key, default)
+
+    @classmethod
+    def _collect_ai_completion_stream(cls, stream, *, fallback_model: str):
+        """Collect ChatCompletionChunk objects into the response shape used by callers."""
+        existing_choices = cls._ai_stream_value(stream, "choices")
+        if existing_choices:
+            first_choice = existing_choices[0]
+            if cls._ai_stream_value(first_choice, "message") is not None:
+                # Compatibility with tests and providers that ignore stream=True.
+                return stream
+
+        try:
+            chunks = iter(stream)
+        except TypeError:
+            # A few compatible providers may ignore stream=True and return a
+            # regular completion, including an empty completion on edge cases.
+            return stream
+
+        response_id = None
+        response_model = fallback_model
+        response_created = None
+        response_usage = None
+        choices: dict[int, dict] = {}
+
+        try:
+            for chunk in chunks:
+                response_id = cls._ai_stream_value(chunk, "id", response_id)
+                response_model = cls._ai_stream_value(chunk, "model", response_model) or response_model
+                response_created = cls._ai_stream_value(chunk, "created", response_created)
+                chunk_usage = cls._ai_stream_value(chunk, "usage")
+                if chunk_usage is not None:
+                    response_usage = chunk_usage
+
+                for fallback_index, raw_choice in enumerate(cls._ai_stream_value(chunk, "choices", []) or []):
+                    choice_index = cls._ai_stream_value(raw_choice, "index", fallback_index)
+                    try:
+                        choice_index = int(choice_index)
+                    except (TypeError, ValueError):
+                        choice_index = fallback_index
+
+                    choice = choices.setdefault(
+                        choice_index,
+                        {
+                            "content": [],
+                            "reasoning_content": [],
+                            "has_reasoning_content": False,
+                            "role": "assistant",
+                            "tool_calls": {},
+                            "images": [],
+                            "finish_reason": None,
+                            "logprobs": None,
+                        },
+                    )
+                    delta = cls._ai_stream_value(raw_choice, "delta", {}) or {}
+
+                    role = cls._ai_stream_value(delta, "role")
+                    if role:
+                        choice["role"] = role
+
+                    content = cls._ai_stream_value(delta, "content")
+                    if content is not None:
+                        choice["content"].append(str(content))
+
+                    reasoning_content = cls._ai_stream_value(delta, "reasoning_content")
+                    if reasoning_content is not None:
+                        choice["has_reasoning_content"] = True
+                        choice["reasoning_content"].append(str(reasoning_content))
+
+                    images = cls._ai_stream_value(delta, "images")
+                    if images:
+                        choice["images"].extend(images)
+
+                    for fallback_tool_index, raw_tool_call in enumerate(
+                        cls._ai_stream_value(delta, "tool_calls", []) or []
+                    ):
+                        tool_index = cls._ai_stream_value(raw_tool_call, "index", fallback_tool_index)
+                        try:
+                            tool_index = int(tool_index)
+                        except (TypeError, ValueError):
+                            tool_index = fallback_tool_index
+                        tool_call = choice["tool_calls"].setdefault(
+                            tool_index,
+                            {"id": None, "type": "function", "name": [], "arguments": []},
+                        )
+                        tool_id = cls._ai_stream_value(raw_tool_call, "id")
+                        tool_type = cls._ai_stream_value(raw_tool_call, "type")
+                        if tool_id:
+                            tool_call["id"] = tool_id
+                        if tool_type:
+                            tool_call["type"] = tool_type
+                        function = cls._ai_stream_value(raw_tool_call, "function", {}) or {}
+                        function_name = cls._ai_stream_value(function, "name")
+                        function_arguments = cls._ai_stream_value(function, "arguments")
+                        if function_name is not None:
+                            tool_call["name"].append(str(function_name))
+                        if function_arguments is not None:
+                            tool_call["arguments"].append(str(function_arguments))
+
+                    finish_reason = cls._ai_stream_value(raw_choice, "finish_reason")
+                    if finish_reason is not None:
+                        choice["finish_reason"] = finish_reason
+                    logprobs = cls._ai_stream_value(raw_choice, "logprobs")
+                    if logprobs is not None:
+                        choice["logprobs"] = logprobs
+        finally:
+            close = getattr(stream, "close", None)
+            if callable(close):
+                close()
+
+        if not choices:
+            raise RuntimeError("AI provider returned an empty completion stream")
+
+        completed_choices = []
+        for choice_index in sorted(choices):
+            choice = choices[choice_index]
+            tool_calls = []
+            for tool_index in sorted(choice["tool_calls"]):
+                tool_call = choice["tool_calls"][tool_index]
+                tool_calls.append(
+                    SimpleNamespace(
+                        id=tool_call["id"] or f"call_{tool_index + 1}",
+                        type=tool_call["type"],
+                        function=SimpleNamespace(
+                            name="".join(tool_call["name"]),
+                            arguments="".join(tool_call["arguments"]),
+                        ),
+                    )
+                )
+
+            message_fields = {
+                "role": choice["role"],
+                "content": "".join(choice["content"]),
+                "tool_calls": tool_calls or None,
+                "images": choice["images"] or None,
+            }
+            if choice["has_reasoning_content"]:
+                message_fields["reasoning_content"] = "".join(choice["reasoning_content"])
+
+            completed_choices.append(
+                SimpleNamespace(
+                    index=choice_index,
+                    message=SimpleNamespace(**message_fields),
+                    finish_reason=choice["finish_reason"],
+                    logprobs=choice["logprobs"],
+                )
+            )
+
+        return SimpleNamespace(
+            id=response_id,
+            object="chat.completion",
+            created=response_created,
+            model=response_model,
+            choices=completed_choices,
+            usage=response_usage,
+        )
 
     def check_rate_limit(self, user_id: int) -> bool:
         """檢查速率限制 (每分鐘 10 次請求)"""

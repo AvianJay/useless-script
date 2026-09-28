@@ -311,6 +311,140 @@ class AIToolCallParsingTests(unittest.IsolatedAsyncioTestCase):
             "",
         )
 
+    async def test_ai_completion_uses_streaming_and_rebuilds_response(self):
+        class CompletionStream:
+            def __init__(self, chunks):
+                self.chunks = chunks
+                self.closed = False
+
+            def __iter__(self):
+                return iter(self.chunks)
+
+            def close(self):
+                self.closed = True
+
+        stream = CompletionStream(
+            [
+                SimpleNamespace(
+                    id="completion-1",
+                    model="test-model-returned",
+                    created=123,
+                    usage=None,
+                    choices=[
+                        SimpleNamespace(
+                            index=0,
+                            delta=SimpleNamespace(
+                                role="assistant",
+                                content="Hello ",
+                                reasoning_content="think ",
+                                tool_calls=None,
+                                images=None,
+                            ),
+                            finish_reason=None,
+                            logprobs=None,
+                        )
+                    ],
+                ),
+                SimpleNamespace(
+                    id="completion-1",
+                    model="test-model-returned",
+                    created=123,
+                    usage=SimpleNamespace(total_tokens=3),
+                    choices=[
+                        SimpleNamespace(
+                            index=0,
+                            delta=SimpleNamespace(
+                                role=None,
+                                content="world",
+                                reasoning_content="step",
+                                tool_calls=None,
+                                images=None,
+                            ),
+                            finish_reason="stop",
+                            logprobs=None,
+                        )
+                    ],
+                ),
+            ]
+        )
+        create_completion = MagicMock(return_value=stream)
+        client = SimpleNamespace(
+            chat=SimpleNamespace(completions=SimpleNamespace(create=create_completion))
+        )
+
+        with (
+            patch("ai._get_ai_model_rates", return_value={"test-model": 0.1}),
+            patch("ai._create_ai_client", return_value=client),
+        ):
+            response = await self.cog._generate_ai_completion(
+                model="test-model",
+                messages=[{"role": "user", "content": "Hi"}],
+            )
+
+        self.assertTrue(create_completion.call_args.kwargs["stream"])
+        self.assertEqual(response.model, "test-model-returned")
+        self.assertEqual(response.choices[0].message.content, "Hello world")
+        self.assertEqual(response.choices[0].message.reasoning_content, "think step")
+        self.assertEqual(response.choices[0].finish_reason, "stop")
+        self.assertTrue(stream.closed)
+
+    def test_streamed_native_tool_call_fragments_are_merged(self):
+        chunks = [
+            SimpleNamespace(
+                choices=[
+                    SimpleNamespace(
+                        index=0,
+                        delta=SimpleNamespace(
+                            role="assistant",
+                            content=None,
+                            reasoning_content=None,
+                            images=None,
+                            tool_calls=[
+                                SimpleNamespace(
+                                    index=0,
+                                    id="call_abc",
+                                    type="function",
+                                    function=SimpleNamespace(name="get_bot_", arguments='{"full"'),
+                                )
+                            ],
+                        ),
+                        finish_reason=None,
+                        logprobs=None,
+                    )
+                ]
+            ),
+            SimpleNamespace(
+                choices=[
+                    SimpleNamespace(
+                        index=0,
+                        delta=SimpleNamespace(
+                            role=None,
+                            content=None,
+                            reasoning_content=None,
+                            images=None,
+                            tool_calls=[
+                                SimpleNamespace(
+                                    index=0,
+                                    id=None,
+                                    type=None,
+                                    function=SimpleNamespace(name="status", arguments=":true}"),
+                                )
+                            ],
+                        ),
+                        finish_reason="tool_calls",
+                        logprobs=None,
+                    )
+                ]
+            ),
+        ]
+
+        response = self.cog._collect_ai_completion_stream(chunks, fallback_model="test-model")
+        tool_call = response.choices[0].message.tool_calls[0]
+
+        self.assertEqual(tool_call.id, "call_abc")
+        self.assertEqual(tool_call.function.name, "get_bot_status")
+        self.assertEqual(tool_call.function.arguments, '{"full":true}')
+
     async def test_native_success_does_not_prepare_emulation_prompt(self):
         messages = [{"role": "user", "content": "bot 在線嗎"}]
         tools = [{"type": "function", "function": {"name": "get_bot_status"}}]
