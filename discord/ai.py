@@ -547,6 +547,8 @@ class ConversationManager:
     HISTORY_SUMMARY_MAX_CHARS = 2200
     HISTORY_SUMMARY_HEAD_MESSAGES = 6
     HISTORY_SUMMARY_TAIL_MESSAGES = 12
+    TIME_GAP_NOTICE_MIN_SECONDS = 30 * 60  # 兩則訊息間隔超過這個秒數才插入時間流逝提示
+    PROMPT_TIMEZONE = timezone(timedelta(hours=8))
     LEGACY_TOOL_USAGE_HISTORY_LINE_PATTERN = re.compile(
         r"(?im)^[ \t]*\[used tools:[^\r\n]*\][ \t]*(?:\r?\n|$)"
     )
@@ -591,8 +593,9 @@ class ConversationManager:
         content: str,
         guild_id: int = None,
         reasoning_content: str | None = None,
+        timestamp: float | None = None,
     ):
-        """添加訊息到歷史"""
+        """添加訊息到歷史；timestamp 未指定時使用寫入當下的時間"""
         key = cls.get_conversation_key(user_id, guild_id)
         history = cls.get_history(user_id, guild_id)
         normalized_role = str(role or "").strip().lower()
@@ -608,7 +611,7 @@ class ConversationManager:
         stored_message = {
             "role": role,
             "content": content,
-            "timestamp": time.time()
+            "timestamp": timestamp if timestamp is not None else time.time()
         }
         # Thinking-mode providers require this value to be replayed verbatim on
         # later requests that include tools. Keep it private in conversation
@@ -686,6 +689,58 @@ class ConversationManager:
         return latest
 
     @staticmethod
+    def _message_timestamp(message: dict) -> float | None:
+        try:
+            timestamp = float(message.get("timestamp"))
+        except (TypeError, ValueError):
+            return None
+        if not math.isfinite(timestamp) or timestamp <= 0:
+            return None
+        return timestamp
+
+    @staticmethod
+    def describe_elapsed(seconds: float) -> str:
+        """把經過秒數轉成粗略描述，給模型判斷時間感用，不需要精確"""
+        minutes = max(1, int(seconds // 60))
+        hours = minutes // 60
+        days = hours // 24
+        if minutes < 60:
+            value, unit = minutes, "minute"
+        elif hours < 48:
+            value, unit = hours, "hour"
+        elif days < 14:
+            value, unit = days, "day"
+        elif days < 60:
+            value, unit = days // 7, "week"
+        elif days < 365:
+            value, unit = days // 30, "month"
+        else:
+            value, unit = days // 365, "year"
+        return f"about {value} {unit}{'' if value == 1 else 's'}"
+
+    @classmethod
+    def build_time_gap_note(cls, previous_at: float | None, current_at: float | None) -> str:
+        """兩則訊息間隔夠久時產生時間流逝提示。
+
+        只依賴已儲存的時間戳，同一段歷史每次重送的內容都相同，不會破壞 prompt cache。
+        """
+        if not previous_at or not current_at:
+            return ""
+        elapsed = current_at - previous_at
+        if elapsed < cls.TIME_GAP_NOTICE_MIN_SECONDS:
+            return ""
+        sent_at = datetime.fromtimestamp(current_at, cls.PROMPT_TIMEZONE)
+        return (
+            f"[Time gap: {cls.describe_elapsed(elapsed)} after the previous message · "
+            f"sent {sent_at.strftime('%Y-%m-%d %H:%M %a')} UTC+08:00]"
+        )
+
+    @classmethod
+    def prepend_time_gap_note(cls, content: str, previous_at: float | None, current_at: float | None) -> str:
+        note = cls.build_time_gap_note(previous_at, current_at)
+        return f"{note}\n{content}" if note else content
+
+    @staticmethod
     def has_complete_turn(history: list) -> bool:
         roles = {
             str(message.get("role") or "").strip().lower()
@@ -698,6 +753,7 @@ class ConversationManager:
     def format_for_api(cls, history: list) -> list:
         """格式化歷史記錄以供 API 使用"""
         normalized = []
+        previous_at = None
         for msg in history:
             if not isinstance(msg, dict):
                 continue
@@ -707,6 +763,12 @@ class ConversationManager:
                 content = cls.strip_legacy_tool_usage_history(content)
             if role not in {"user", "assistant"} or not content:
                 continue
+            message_at = cls._message_timestamp(msg)
+            # 只標在 user 訊息上；標在 assistant 上模型容易模仿，在回覆開頭輸出同樣的標記
+            if role == "user":
+                content = cls.prepend_time_gap_note(content, previous_at, message_at)
+            if message_at:
+                previous_at = message_at
             normalized_message = {"role": role, "content": content}
             if role == "assistant" and "reasoning_content" in msg:
                 # Preserve even an empty string: some thinking-mode APIs require
@@ -4405,6 +4467,10 @@ class AICommands(commands.Cog):
             "[Runtime context]",
             # 精確到分鐘即可，秒級時間戳會讓 prompt cache 每次都失效
             f"Current time: {now.strftime('%Y-%m-%d %H:%M')} UTC+08:00 (Asia/Taipei, {now.strftime('%A')}).",
+            "A user message may start with a system-inserted [Time gap: ...] note: that much real time passed since the previous message. "
+            "Use it to judge whether earlier plans, moods, ongoing activities, and relative dates such as today or tomorrow are still current; "
+            "mention the gap only when it matters, and never write such a note yourself.",
+            "Memory entries show how long ago they were updated; time-sensitive memories such as plans, deadlines, or current situations may be outdated.",
             "The current user's user_global memory and the current guild's guild_shared memory are already injected below when available.",
             "You may proactively create or update user_global or guild_shared for clearly stated, durable, low-risk information that will help future conversations.",
             "Do not infer durable memory from jokes, one-off requests, weak signals, or third-party claims. Delete memory only after an explicit request.",
@@ -4462,6 +4528,23 @@ class AICommands(commands.Cog):
     @classmethod
     def _ai_memory_timestamp(cls) -> str:
         return cls._get_prompt_now().isoformat(timespec="seconds")
+
+    @classmethod
+    def _describe_ai_memory_age(cls, value) -> str:
+        """以日曆日計算記憶距今多久；同一天內字串不變，避免注入的記憶列表頻繁變動"""
+        try:
+            updated = datetime.fromisoformat(str(value or "").strip())
+        except ValueError:
+            return ""
+        now = cls._get_prompt_now()
+        if updated.tzinfo is None:
+            updated = updated.replace(tzinfo=now.tzinfo)
+        days = (now.date() - updated.astimezone(now.tzinfo).date()).days
+        if days <= 0:
+            return "today"
+        if days == 1:
+            return "yesterday"
+        return f"{ConversationManager.describe_elapsed(days * 86400)} ago"
 
     @classmethod
     def _normalize_ai_memory_tags(cls, tags) -> list[str]:
@@ -4833,6 +4916,7 @@ class AICommands(commands.Cog):
             "tags": entry.get("tags") or [],
             "created_at": entry.get("created_at"),
             "updated_at": entry.get("updated_at"),
+            "updated_age": self._describe_ai_memory_age(entry.get("updated_at")) or None,
         }
         if scope == "guild_shared":
             serialized["write_access"] = self._get_ai_memory_write_access(entry)
@@ -4883,7 +4967,8 @@ class AICommands(commands.Cog):
         if tags:
             parts.append(f"tags={', '.join(tags)}")
         if updated_at:
-            parts.append(f"updated={updated_at}")
+            age = self._describe_ai_memory_age(updated_at)
+            parts.append(f"updated={updated_at} ({age})" if age else f"updated={updated_at}")
         if scope == "guild_shared":
             parts.append(f"write_access={self._get_ai_memory_write_access(entry)}")
         parts.append(f"content={content}")
@@ -12471,6 +12556,8 @@ class AICommands(commands.Cog):
                 await self._check_overdue_ai_idle(user.id, guild_id)
 
             history = ConversationManager.get_history(user.id, guild_id)
+            # 以使用者送出的時間為準，工具跑很久時才不會把回應延遲算進時間間隔
+            request_at = interaction.created_at.timestamp()
             tool_context = {
                 "user": user,
                 "guild": interaction.guild,
@@ -12567,7 +12654,14 @@ class AICommands(commands.Cog):
             messages.extend(ConversationManager.format_for_api(history))
             if recent_messages_block:
                 messages.append({"role": "user", "content": recent_messages_block})
-            messages.append({"role": "user", "content": ai_request_message})
+            messages.append({
+                "role": "user",
+                "content": ConversationManager.prepend_time_gap_note(
+                    ai_request_message,
+                    ConversationManager.latest_timestamp(history),
+                    request_at,
+                ),
+            })
             
             # 下載圖片 bytes（若有）
             image_bytes = None
@@ -12639,7 +12733,7 @@ class AICommands(commands.Cog):
             #     billing_info += f" | 餘額不足少扣 {shortfall:,.2f}（原應扣 {total_cost:,.2f}）"
             
             # 儲存對話歷史（圖片為一次性，不存入歷史）
-            ConversationManager.add_message(user.id, "user", resolved_message, guild_id)
+            ConversationManager.add_message(user.id, "user", resolved_message, guild_id, timestamp=request_at)
             has_rendered_markdown_attachments = any(
                 str(item.get("kind") or "") in {"math", "table"}
                 for item in pending_image_attachments
@@ -13466,6 +13560,8 @@ class AICommands(commands.Cog):
             try:
                 await self._check_overdue_ai_idle(user.id, guild_id)
                 history = ConversationManager.get_history(user.id, guild_id)
+                # 以使用者送出的時間為準，工具跑很久時才不會把回應延遲算進時間間隔
+                request_at = ctx.message.created_at.timestamp()
                 tool_context = {
                     "user": user,
                     "guild": guild,
@@ -13577,7 +13673,14 @@ class AICommands(commands.Cog):
                 messages.extend(ConversationManager.format_for_api(history))
                 if recent_messages_block:
                     messages.append({"role": "user", "content": recent_messages_block})
-                messages.append({"role": "user", "content": ai_request_message})
+                messages.append({
+                    "role": "user",
+                    "content": ConversationManager.prepend_time_gap_note(
+                        ai_request_message,
+                        ConversationManager.latest_timestamp(history),
+                        request_at,
+                    ),
+                })
                 
                 # 下載圖片 bytes（若有）
                 image_bytes = None
@@ -13649,7 +13752,7 @@ class AICommands(commands.Cog):
                     billing_info += " | " + t("ai.value.shortfall_suffix", shortfall=f"{shortfall:,.2f}", total_cost=f"{total_cost:,.2f}")
                 
                 # 儲存對話歷史（圖片為一次性，不存入歷史）
-                ConversationManager.add_message(user.id, "user", final_message, guild_id)
+                ConversationManager.add_message(user.id, "user", final_message, guild_id, timestamp=request_at)
                 has_rendered_markdown_attachments = any(
                     str(item.get("kind") or "") in {"math", "table"}
                     for item in pending_image_attachments

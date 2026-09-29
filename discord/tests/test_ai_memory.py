@@ -2,6 +2,7 @@ import json
 import sys
 import unittest
 import time
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -80,6 +81,27 @@ class AIMemoryTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("id=relevant-old", context)
         self.assertIn(full_content, context)
         self.assertNotIn("...[truncated]", context)
+
+    def test_profile_context_shows_memory_age(self):
+        now = datetime(2026, 9, 30, 12, 0, tzinfo=timezone(timedelta(hours=8)))
+        entries = [
+            {"memory_id": "fresh", "content": "今天的計畫", "updated_at": "2026-09-30T01:00:00+08:00"},
+            {"memory_id": "old", "content": "期末考準備中", "updated_at": "2026-06-20T10:00:00+08:00"},
+            {"memory_id": "legacy", "content": "沒有時間", "updated_at": "not-a-date"},
+        ]
+
+        with patch.object(AICommands, "_get_prompt_now", return_value=now), patch.object(
+            self.cog,
+            "_get_ai_memory_entries",
+            side_effect=lambda scope, _: (entries, None) if scope == "user_global" else ([], None),
+        ):
+            context = self.cog._build_ai_profile_context({"user": self.user})
+            serialized = self.cog._serialize_ai_memory_entry(entries[1], "user_global")
+
+        self.assertIn("updated=2026-09-30T01:00:00+08:00 (today)", context)
+        self.assertIn("updated=2026-06-20T10:00:00+08:00 (about 3 months ago)", context)
+        self.assertIn("updated=not-a-date |", context)
+        self.assertEqual(serialized["updated_age"], "about 3 months ago")
 
     async def test_regular_member_creates_members_writable_guild_memory(self):
         guild = SimpleNamespace(id=100, owner_id=1)
