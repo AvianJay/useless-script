@@ -313,6 +313,39 @@
         "ticket_max_per_user": {
             "display": "Max open tickets per user"
         },
+        "ticket_modal_detail_enabled": {
+            "display": "Show description field"
+        },
+        "ticket_modal_detail_label": {
+            "desc": "Label of the description field in the form (max 45 characters)",
+            "display": "Description field label"
+        },
+        "ticket_modal_detail_placeholder": {
+            "desc": "Hint text shown inside the empty description box (max 100 characters); leave empty for none",
+            "display": "Description field placeholder"
+        },
+        "ticket_modal_detail_required": {
+            "display": "Description field required"
+        },
+        "ticket_modal_enabled": {
+            "desc": "When off, clicking the button opens a ticket immediately without asking for a subject or description",
+            "display": "Show form when opening"
+        },
+        "ticket_modal_subject_label": {
+            "desc": "Label of the subject field in the form (max 45 characters)",
+            "display": "Subject field label"
+        },
+        "ticket_modal_subject_placeholder": {
+            "desc": "Hint text shown inside the empty subject box (max 100 characters); leave empty for none",
+            "display": "Subject field placeholder"
+        },
+        "ticket_modal_subject_required": {
+            "display": "Subject field required"
+        },
+        "ticket_modal_title": {
+            "desc": "Title of the ticket form window (max 45 characters); {type} placeholder inserts the ticket type name",
+            "display": "Form title"
+        },
         "ticket_name_template": {
             "desc": "{number} and {user} placeholders supported",
             "display": "Channel name template"

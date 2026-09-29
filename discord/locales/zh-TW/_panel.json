@@ -313,6 +313,39 @@
         "ticket_max_per_user": {
             "display": "每人同時開啟上限"
         },
+        "ticket_modal_detail_enabled": {
+            "display": "顯示描述欄位"
+        },
+        "ticket_modal_detail_label": {
+            "desc": "表單中描述欄位的標題（最多 45 字）",
+            "display": "描述欄位名稱"
+        },
+        "ticket_modal_detail_placeholder": {
+            "desc": "描述輸入框內的灰色提示文字（最多 100 字），留空不顯示",
+            "display": "描述欄位提示文字"
+        },
+        "ticket_modal_detail_required": {
+            "display": "描述欄位必填"
+        },
+        "ticket_modal_enabled": {
+            "desc": "關閉後點擊按鈕會直接開啟票口，不再詢問主題與描述",
+            "display": "開票時顯示表單"
+        },
+        "ticket_modal_subject_label": {
+            "desc": "表單中主題欄位的標題（最多 45 字）",
+            "display": "主題欄位名稱"
+        },
+        "ticket_modal_subject_placeholder": {
+            "desc": "主題輸入框內的灰色提示文字（最多 100 字），留空不顯示",
+            "display": "主題欄位提示文字"
+        },
+        "ticket_modal_subject_required": {
+            "display": "主題欄位必填"
+        },
+        "ticket_modal_title": {
+            "desc": "開票表單的視窗標題（最多 45 字），可用 {type} 佔位符代表開票類別名稱",
+            "display": "表單標題"
+        },
         "ticket_name_template": {
             "desc": "可用 {number}、{user} 佔位符",
             "display": "頻道名稱範本"

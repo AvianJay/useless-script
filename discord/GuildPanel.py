@@ -1443,6 +1443,15 @@ def _register_all():
             {"display": "面板圖片網址", "description": "顯示在面板 embed 下方的大圖（http/https 網址），留空不顯示", "database_key": "ticket_panel_image", "type": "string", "default": None},
             {"display": "開票歡迎訊息", "description": "可用 {user}、{subject} 佔位符", "database_key": "ticket_welcome_message", "type": "text", "default": None, "default_i18n_key": "panel.ticket.ticket_welcome_message.default"},
             {"display": "頻道名稱範本", "description": "可用 {number}、{user} 佔位符", "database_key": "ticket_name_template", "type": "string", "default": "ticket-{number}"},
+            {"display": "開票時顯示表單", "description": "關閉後點擊按鈕會直接開啟票口，不再詢問主題與描述", "database_key": "ticket_modal_enabled", "type": "boolean", "default": True},
+            {"display": "表單標題", "description": "開票表單的視窗標題（最多 45 字），可用 {type} 佔位符代表開票類別名稱", "database_key": "ticket_modal_title", "type": "string", "default": None, "default_i18n_key": "ticket.modal.open_title"},
+            {"display": "主題欄位名稱", "description": "表單中主題欄位的標題（最多 45 字）", "database_key": "ticket_modal_subject_label", "type": "string", "default": None, "default_i18n_key": "ticket.modal.subject"},
+            {"display": "主題欄位提示文字", "description": "主題輸入框內的灰色提示文字（最多 100 字），留空不顯示", "database_key": "ticket_modal_subject_placeholder", "type": "string", "default": None},
+            {"display": "主題欄位必填", "database_key": "ticket_modal_subject_required", "type": "boolean", "default": True},
+            {"display": "顯示描述欄位", "database_key": "ticket_modal_detail_enabled", "type": "boolean", "default": True},
+            {"display": "描述欄位名稱", "description": "表單中描述欄位的標題（最多 45 字）", "database_key": "ticket_modal_detail_label", "type": "string", "default": None, "default_i18n_key": "ticket.modal.detail"},
+            {"display": "描述欄位提示文字", "description": "描述輸入框內的灰色提示文字（最多 100 字），留空不顯示", "database_key": "ticket_modal_detail_placeholder", "type": "string", "default": None},
+            {"display": "描述欄位必填", "database_key": "ticket_modal_detail_required", "type": "boolean", "default": False},
         ], description="私人客服票口：開票、認領、關閉與 HTML 逐字稿", icon="🎫")
 
 

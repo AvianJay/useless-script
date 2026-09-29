@@ -313,6 +313,39 @@
         "ticket_max_per_user": {
             "display": "ユーザーごとのオープンチケットの最大数"
         },
+        "ticket_modal_detail_enabled": {
+            "display": "説明欄を表示"
+        },
+        "ticket_modal_detail_label": {
+            "desc": "フォーム内の説明欄のラベル（最大 45 文字）",
+            "display": "説明欄のラベル"
+        },
+        "ticket_modal_detail_placeholder": {
+            "desc": "説明欄が空のときに表示されるヒント（最大 100 文字）。空欄で非表示",
+            "display": "説明欄のプレースホルダー"
+        },
+        "ticket_modal_detail_required": {
+            "display": "説明欄を必須にする"
+        },
+        "ticket_modal_enabled": {
+            "desc": "オフにすると、ボタンを押した時点で件名や説明を尋ねずにチケットを作成します",
+            "display": "チケット作成時にフォームを表示"
+        },
+        "ticket_modal_subject_label": {
+            "desc": "フォーム内の件名欄のラベル（最大 45 文字）",
+            "display": "件名欄のラベル"
+        },
+        "ticket_modal_subject_placeholder": {
+            "desc": "件名欄が空のときに表示されるヒント（最大 100 文字）。空欄で非表示",
+            "display": "件名欄のプレースホルダー"
+        },
+        "ticket_modal_subject_required": {
+            "display": "件名欄を必須にする"
+        },
+        "ticket_modal_title": {
+            "desc": "チケットフォームのウィンドウタイトル（最大 45 文字）。{type} でチケット種別名を挿入できます",
+            "display": "フォームのタイトル"
+        },
         "ticket_name_template": {
             "desc": "{number} および {user} プレースホルダーのサポート",
             "display": "チャンネル名のテンプレート"

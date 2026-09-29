@@ -23,6 +23,10 @@ TICKET_TYPES_KEY = "ticket_types"
 TRANSCRIPT_MESSAGE_LIMIT = 2000
 TRANSCRIPT_CACHE_TTL = 3600
 MAX_TICKET_TYPES = 10
+# Discord modal 限制
+MODAL_TITLE_MAX = 45
+MODAL_LABEL_MAX = 45
+MODAL_PLACEHOLDER_MAX = 100
 
 BUTTON_STYLES = {
     "primary": discord.ButtonStyle.primary,
@@ -133,6 +137,28 @@ def effective_welcome(guild_id: int, ticket_type: dict | None) -> str:
         "panel.ticket.ticket_welcome_message.default",
         locale=i18n.resolve_locale(guild_id=guild_id),
     ) or "")
+
+
+def is_modal_enabled(guild_id: int) -> bool:
+    return bool(get_server_config(guild_id, "ticket_modal_enabled", True))
+
+
+def get_modal_config(guild_id: int) -> dict:
+    """開票表單設定；文字欄位空字串代表使用預設（由呼叫端以語言檔補上）。"""
+    def text(key: str, limit: int) -> str:
+        return str(get_server_config(guild_id, key, "") or "").strip()[:limit]
+
+    return {
+        # title 在套用 {type} 後才截斷
+        "title": str(get_server_config(guild_id, "ticket_modal_title", "") or "").strip(),
+        "subject_label": text("ticket_modal_subject_label", MODAL_LABEL_MAX),
+        "subject_placeholder": text("ticket_modal_subject_placeholder", MODAL_PLACEHOLDER_MAX),
+        "subject_required": bool(get_server_config(guild_id, "ticket_modal_subject_required", True)),
+        "detail_enabled": bool(get_server_config(guild_id, "ticket_modal_detail_enabled", True)),
+        "detail_label": text("ticket_modal_detail_label", MODAL_LABEL_MAX),
+        "detail_placeholder": text("ticket_modal_detail_placeholder", MODAL_PLACEHOLDER_MAX),
+        "detail_required": bool(get_server_config(guild_id, "ticket_modal_detail_required", False)),
+    }
 
 
 def get_max_per_user(guild_id: int) -> int:
@@ -266,8 +292,10 @@ async def create_ticket(guild: discord.Guild, opener: discord.Member,
         number,
     )
     guild_loc = i18n.resolve_locale(guild_id=guild_id)
+    # 表單關閉或主題非必填時 subject 可能為空
+    display_subject = subject or t("ticket.msg.no_subject", locale=guild_loc)
     # topic 開頭是機器格式（resolve_ticket 解析用），其後才是顯示文字
-    topic = f"[t:{number}:{opener.id}] " + t("ticket.topic.display", locale=guild_loc, number=number, subject=subject[:60])
+    topic = f"[t:{number}:{opener.id}] " + t("ticket.topic.display", locale=guild_loc, number=number, subject=display_subject[:60])
 
     try:
         channel = await guild.create_text_channel(
@@ -287,13 +315,13 @@ async def create_ticket(guild: discord.Guild, opener: discord.Member,
     embed.add_field(name=t("ticket.field.opener", locale=guild_loc), value=opener.mention, inline=True)
     if ticket_type:
         embed.add_field(name=t("ticket.field.type", locale=guild_loc), value=ticket_type.get("label", "?"), inline=True)
-    embed.add_field(name=t("ticket.field.subject", locale=guild_loc), value=subject or t("ticket.msg.no_subject", locale=guild_loc), inline=True)
+    embed.add_field(name=t("ticket.field.subject", locale=guild_loc), value=display_subject, inline=True)
     if detail:
         embed.add_field(name=t("ticket.field.detail", locale=guild_loc), value=detail[:1024], inline=False)
     embed.add_field(name=t("ticket.field.opened_at", locale=guild_loc), value=discord.utils.format_dt(discord.utils.utcnow(), "f"), inline=True)
 
     welcome = effective_welcome(guild_id, ticket_type)
-    welcome = welcome.replace("{user}", opener.mention).replace("{subject}", subject)
+    welcome = welcome.replace("{user}", opener.mention).replace("{subject}", display_subject)
 
     message = None
     try:
@@ -498,38 +526,60 @@ async def claim_ticket(interaction: discord.Interaction) -> str | None:
 
 # ============= Views / Modal =============
 
-class TicketOpenModal(i18n.I18nModal, title=i18n.K("ticket.modal.open_title")):
-    subject = discord.ui.TextInput(label=i18n.K("ticket.modal.subject"), max_length=100, required=True)
-    detail = discord.ui.TextInput(
-        label=i18n.K("ticket.modal.detail"), style=discord.TextStyle.paragraph,
-        max_length=1000, required=False,
-    )
+async def open_ticket(interaction: discord.Interaction, ticket_type: dict | None,
+                      subject: str, detail: str):
+    """Create a ticket for an already-deferred interaction and report the result."""
+    guild = interaction.guild
+    async with _get_lock(guild.id):
+        error = precheck_open(guild, interaction.user, ticket_type)
+        if error:
+            await interaction.followup.send(error, ephemeral=True)
+            return
+        try:
+            channel = await create_ticket(guild, interaction.user, subject, detail, ticket_type=ticket_type)
+        except TicketError as e:
+            await interaction.followup.send(str(e), ephemeral=True)
+            return
+    await interaction.followup.send(t("ticket.msg.created", channel=channel.mention), ephemeral=True)
 
-    def __init__(self, ticket_type: dict | None = None):
+
+class TicketOpenModal(i18n.I18nModal, title=i18n.K("ticket.modal.open_title")):
+    # 欄位依伺服器的表單設定動態建立；自訂文字是 guild 資料，原樣使用
+    def __init__(self, guild_id: int, ticket_type: dict | None = None):
         super().__init__()
         self.ticket_type = ticket_type
-        if ticket_type:
-            self.title = t("ticket.modal.open_title_typed", label=str(ticket_type.get('label', ''))[:30])
+        form = get_modal_config(guild_id)
+        type_label = str(ticket_type.get("label", "")) if ticket_type else ""
+
+        title = form["title"].replace("{type}", type_label).strip()[:MODAL_TITLE_MAX]
+        if title:
+            self.title = title
+        elif ticket_type:
+            self.title = t("ticket.modal.open_title_typed", label=type_label[:30])
+
+        self.subject = discord.ui.TextInput(
+            label=form["subject_label"] or t("ticket.modal.subject"),
+            placeholder=form["subject_placeholder"] or None,
+            required=form["subject_required"], max_length=100,
+        )
+        self.add_item(self.subject)
+        self.detail = None
+        if form["detail_enabled"]:
+            self.detail = discord.ui.TextInput(
+                label=form["detail_label"] or t("ticket.modal.detail"),
+                style=discord.TextStyle.paragraph,
+                placeholder=form["detail_placeholder"] or None,
+                required=form["detail_required"], max_length=1000,
+            )
+            self.add_item(self.detail)
 
     async def on_submit(self, interaction: discord.Interaction):
         await interaction.response.defer(ephemeral=True, thinking=True)
-        guild = interaction.guild
-        async with _get_lock(guild.id):
-            error = precheck_open(guild, interaction.user, self.ticket_type)
-            if error:
-                await interaction.followup.send(error, ephemeral=True)
-                return
-            try:
-                channel = await create_ticket(
-                    guild, interaction.user,
-                    str(self.subject.value or "").strip(),
-                    str(self.detail.value or "").strip(),
-                    ticket_type=self.ticket_type,
-                )
-            except TicketError as e:
-                await interaction.followup.send(str(e), ephemeral=True)
-                return
-        await interaction.followup.send(t("ticket.msg.created", channel=channel.mention), ephemeral=True)
+        await open_ticket(
+            interaction, self.ticket_type,
+            str(self.subject.value or "").strip(),
+            str(self.detail.value or "").strip() if self.detail else "",
+        )
 
 
 async def handle_open_button(interaction: discord.Interaction, ticket_type: dict | None):
@@ -537,7 +587,12 @@ async def handle_open_button(interaction: discord.Interaction, ticket_type: dict
     if error:
         await interaction.response.send_message(error, ephemeral=True)
         return
-    await interaction.response.send_modal(TicketOpenModal(ticket_type))
+    if not is_modal_enabled(interaction.guild.id):
+        # 表單已關閉：直接開票，不詢問主題與描述
+        await interaction.response.defer(ephemeral=True, thinking=True)
+        await open_ticket(interaction, ticket_type, "", "")
+        return
+    await interaction.response.send_modal(TicketOpenModal(interaction.guild.id, ticket_type))
 
 
 class TicketOpenButton(
