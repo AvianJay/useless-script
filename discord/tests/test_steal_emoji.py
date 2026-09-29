@@ -179,6 +179,12 @@ class CollectTargetTests(unittest.TestCase):
         targets = asyncio.run(util._collect_steal_targets(ctx, ""))
         self.assertEqual([(e.name, e.animated) for e in targets], [("party", True)])
 
+    def test_reply_to_forwarded_message_is_searched(self):
+        replied = make_message(snapshots=[SimpleNamespace(content="<:fwd:66>")])
+        ctx = make_ctx(FakeGuild(), content="!steal", replied=replied)
+        targets = asyncio.run(util._collect_steal_targets(ctx, ""))
+        self.assertEqual([(e.name, e.id) for e in targets], [("fwd", 66)])
+
     def test_plain_text_yields_nothing(self):
         ctx = make_ctx(FakeGuild(), content="!steal 😀")
         self.assertEqual(asyncio.run(util._collect_steal_targets(ctx, "😀")), [])
