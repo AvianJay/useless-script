@@ -1,3 +1,4 @@
+import base64
 import io
 import sys
 import unittest
@@ -334,6 +335,105 @@ class AIImageSearchTests(unittest.IsolatedAsyncioTestCase):
             )
 
         self.assertIn("textual content types", result["error"])
+
+    def test_upload_html_is_exposed_and_forces_html_filename(self):
+        tool_names = {item["function"]["name"] for item in self.cog._build_ai_tools()}
+
+        self.assertIn("upload_html", tool_names)
+        self.assertEqual(self.cog._sanitize_upload_html_name(None), "page.html")
+        self.assertEqual(self.cog._sanitize_upload_html_name("../My Demo.txt"), "My-Demo.html")
+        self.assertEqual(self.cog._sanitize_upload_html_name("chart.html"), "chart.html")
+
+    async def test_upload_html_rejects_empty_and_oversized_without_request(self):
+        with patch("ai.aiohttp.ClientSession") as session:
+            empty = await self.cog._tool_upload_html({"html": "  "}, {})
+            with patch.object(self.cog, "UPLOAD_HTML_MAX_BYTES", 10):
+                oversized = await self.cog._tool_upload_html({"html": "<p>too large</p>"}, {})
+
+        self.assertIn("required", empty["error"])
+        self.assertIn("too large", oversized["error"])
+        session.assert_not_called()
+
+    async def test_upload_html_posts_base64_and_hides_edit_token(self):
+        posted = {}
+
+        class FakeContent:
+            async def iter_chunked(self, _):
+                yield b'{"url": "/p/abc123", "slug": "abc123", "editToken": "secret-token"}'
+
+        class FakeResponse:
+            status = 200
+            content = FakeContent()
+
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, *_):
+                return False
+
+        class FakeSession:
+            def __init__(self, **_):
+                pass
+
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, *_):
+                return False
+
+            def post(self, url, **kwargs):
+                posted["url"] = url
+                posted["json"] = kwargs.get("json")
+                return FakeResponse()
+
+        tool_context = {}
+        html_content = "<!doctype html><title>測試</title>"
+        with patch("ai.aiohttp.ClientSession", FakeSession):
+            result = await self.cog._tool_upload_html(
+                {"html": html_content, "filename": "demo"},
+                tool_context,
+            )
+
+        self.assertEqual(posted["url"], "https://sharemyhtml.com/api/upload")
+        self.assertEqual(posted["json"]["fileName"], "demo.html")
+        self.assertEqual(
+            base64.b64decode(posted["json"]["contentBase64"]).decode("utf-8"),
+            html_content,
+        )
+        self.assertEqual(result["url"], "https://sharemyhtml.com/p/abc123")
+        self.assertNotIn("secret-token", str(result))
+        self.assertEqual(self.cog._pop_uploaded_html_chars(tool_context), len(html_content))
+        self.assertEqual(self.cog._pop_uploaded_html_chars(tool_context), 0)
+
+    async def test_upload_html_reports_rate_limit_without_billing(self):
+        class FakeResponse:
+            status = 429
+
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, *_):
+                return False
+
+        class FakeSession:
+            def __init__(self, **_):
+                pass
+
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, *_):
+                return False
+
+            def post(self, *_args, **_kwargs):
+                return FakeResponse()
+
+        tool_context = {}
+        with patch("ai.aiohttp.ClientSession", FakeSession):
+            result = await self.cog._tool_upload_html({"html": "<p>hi</p>"}, tool_context)
+
+        self.assertIn("rate limiting", result["error"])
+        self.assertEqual(self.cog._pop_uploaded_html_chars(tool_context), 0)
 
 
 if __name__ == "__main__":

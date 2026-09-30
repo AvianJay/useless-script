@@ -157,6 +157,7 @@
         "search_google_images": "画像の検索と確認",
         "search_message": "メッセージの検索",
         "send_as_file": "ファイルとして準備中",
+        "upload_html": "HTML ページをアップロード中",
         "upsert_ai_memory": "AI メモリの更新"
     },
     "value": {

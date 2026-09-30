@@ -154,6 +154,7 @@
         "search_google_images": "搜尋並審查圖片",
         "search_message": "搜尋訊息",
         "send_as_file": "整理為檔案",
+        "upload_html": "上傳 HTML 網頁",
         "upsert_ai_memory": "更新 AI 記憶"
     },
     "value": {

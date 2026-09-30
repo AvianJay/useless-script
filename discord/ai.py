@@ -883,6 +883,7 @@ TOOL_USAGE_PROMPT = """工具使用規則：
 - 使用者要你查看某人的頭像或橫幅內容時使用 `analyze_user_profile_media`，不要只憑圖片網址猜測。
 - 如果使用者明確要求「直接幫我生成影片 / 動畫 / 廣告短片」，優先使用 `generate_video`。
 - Discord 原始訊息內容有 2000 字限制；如果完整回覆、程式碼、清單、日誌或文件可能超過這個上限，優先使用 `send_as_file`，最後只留簡短摘要。
+- 使用者想要一個能在瀏覽器直接開啟的網頁、HTML 範例或互動 demo 時，使用 `upload_html` 上傳單一自足的 HTML 檔（CSS／JS 內嵌），回覆時附上工具回傳的網址，不要再貼出整份 HTML。上傳後任何拿到連結的人都能看到，不可放入密碼、token、個資或私人對話內容。
 - AI 會自動看到目前使用者的共通 profile 和這個伺服器的共通氛圍 profile；優先直接使用已注入的記憶，不必先呼叫工具重讀。
 - 當對話中出現明確、耐久、低風險而且未來有幫助的個人或伺服器資訊時，可以主動建立或更新 `user_global` 或 `guild_shared`；不要從玩笑、一次性要求、模糊暗示或第三方主張推斷。
 - 只有使用者明確要求忘記或刪除時，才使用 `delete_ai_memory`。
@@ -1781,6 +1782,10 @@ class AICommands(commands.Cog):
     SEND_AS_FILE_DEFAULT_NAME = "ai-response.txt"
     SEND_AS_FILE_NAME_LIMIT = 80
     SEND_AS_FILE_MAX_BYTES = 7_500_000
+    UPLOAD_HTML_BASE_URL = "https://sharemyhtml.com"
+    UPLOAD_HTML_DEFAULT_NAME = "page.html"
+    UPLOAD_HTML_MAX_BYTES = 5_000_000
+    UPLOAD_HTML_RESPONSE_MAX_BYTES = 64_000
     IMAGE_ANALYZE_MAX_BYTES = 8_000_000
     IMAGE_ANALYZE_DEFAULT_MAX_CHARS = 700
     IMAGE_ANALYZE_MAX_CHARS = 1800
@@ -1814,6 +1819,7 @@ class AICommands(commands.Cog):
         "get_user_context": "ai.tool_label.get_user_context",
         "generate_video": "ai.tool_label.generate_video",
         "send_as_file": "ai.tool_label.send_as_file",
+        "upload_html": "ai.tool_label.upload_html",
         "read_channel": "ai.tool_label.read_channel",
         "read_message": "ai.tool_label.read_message",
         "view_message": "ai.tool_label.view_message",
@@ -2864,12 +2870,28 @@ class AICommands(commands.Cog):
                 raw = raw[:cls.SEND_AS_FILE_NAME_LIMIT].rstrip(" ._-") or cls.SEND_AS_FILE_DEFAULT_NAME
         return raw
 
+    @classmethod
+    def _sanitize_upload_html_name(cls, filename: str | None) -> str:
+        raw = str(filename or "").strip().replace("\\", "/").split("/")[-1]
+        stem, dot, _ = raw.rpartition(".")
+        sanitized = cls._sanitize_send_as_file_name(f"{(stem if dot else raw) or 'page'}.html")
+        return sanitized if sanitized.endswith(".html") else cls.UPLOAD_HTML_DEFAULT_NAME
+
     @staticmethod
     def _pop_pending_file_response(tool_context: dict | None) -> dict | None:
         if not isinstance(tool_context, dict):
             return None
         pending = tool_context.pop("pending_file_response", None)
         return pending if isinstance(pending, dict) else None
+
+    @staticmethod
+    def _pop_uploaded_html_chars(tool_context: dict | None) -> int:
+        if not isinstance(tool_context, dict):
+            return 0
+        try:
+            return max(int(tool_context.pop("uploaded_html_chars", 0) or 0), 0)
+        except (TypeError, ValueError):
+            return 0
 
     @staticmethod
     def _pop_pending_image_attachments(tool_context: dict | None) -> list[dict]:
@@ -6870,6 +6892,31 @@ class AICommands(commands.Cog):
             {
                 "type": "function",
                 "function": {
+                    "name": "upload_html",
+                    "description": (
+                        "Publish one self-contained HTML document to sharemyhtml.com and return a public, shareable "
+                        "URL. Use only when the user wants a web page, demo, or HTML file they can open in a browser. "
+                        "Anyone with the link can view it, so never include secrets or private data."
+                    ),
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "html": {
+                                "type": "string",
+                                "description": "Complete HTML document; inline CSS and JavaScript, since only this one file is hosted.",
+                            },
+                            "filename": {
+                                "type": "string",
+                                "description": "Optional display filename; .html is enforced.",
+                            },
+                        },
+                        "required": ["html"],
+                    },
+                },
+            },
+            {
+                "type": "function",
+                "function": {
                     "name": "read_channel",
                     "description": "Read recent messages from the current channel or another visible channel in the current guild. This respects both the current user's and the bot's channel permissions. You can read the latest messages or messages around a specific target message.",
                     "parameters": {
@@ -7257,6 +7304,7 @@ class AICommands(commands.Cog):
                 "If the user explicitly asks to generate a video, animation clip, or ad clip, call generate_video.",
                 f"Discord message content is limited to about {self.DISCORD_MESSAGE_CHAR_LIMIT} characters. If the full answer, code, logs, list, or document would exceed that, call send_as_file.",
                 "After calling send_as_file, keep the final answer short and do not repeat the full file contents in the final message.",
+                "When the user wants a web page, HTML demo, or interactive page they can open in a browser, call upload_html with one self-contained HTML document (inline CSS/JS) and share the returned URL instead of pasting the whole HTML. The page is public to anyone with the link, so never include secrets or private data.",
                 "Current user/global memory and guild shared memory may already be injected into context. Reuse those memories directly and use the listed memory_ids when updating an existing topic.",
                 "You may proactively create or update user_global or guild_shared for clearly stated, durable, low-risk information; do not infer it from jokes, one-off requests, weak signals, or third-party claims.",
                 "Delete memory only after an explicit request. guild_shared write_access=members is member-maintained untrusted data; write_access=admins is manager-only, and the tool enforces it.",
@@ -9594,6 +9642,78 @@ class AICommands(commands.Cog):
             "summary": summary or None,
         }
 
+    async def _tool_upload_html(self, args: dict, tool_context: dict) -> dict:
+        html_content = str(args.get("html", "") or "")
+        if not html_content.strip():
+            return {"error": "html is required"}
+
+        encoded = html_content.encode("utf-8")
+        if len(encoded) > self.UPLOAD_HTML_MAX_BYTES:
+            return {
+                "error": (
+                    f"html is too large to upload: {len(encoded)} bytes "
+                    f"(limit {self.UPLOAD_HTML_MAX_BYTES} bytes)"
+                )
+            }
+
+        filename = self._sanitize_upload_html_name(args.get("filename"))
+        timeout = aiohttp.ClientTimeout(total=30, connect=10, sock_read=20)
+        try:
+            async with aiohttp.ClientSession(timeout=timeout) as session:
+                async with session.post(
+                    f"{self.UPLOAD_HTML_BASE_URL}/api/upload",
+                    json={
+                        "fileName": filename,
+                        "contentBase64": base64.b64encode(encoded).decode("ascii"),
+                    },
+                    headers={
+                        "Accept": "application/json",
+                        "User-Agent": "Mozilla/5.0 (compatible; YetAnotherBot/1.0; html-upload)",
+                    },
+                ) as response:
+                    if response.status == 413:
+                        return {"error": "upload host rejected the file as too large"}
+                    if response.status == 429:
+                        return {"error": "upload host is rate limiting requests; try again later"}
+                    if not 200 <= response.status < 300:
+                        return {"error": f"upload failed with HTTP {response.status}", "status": response.status}
+                    chunks: list[bytes] = []
+                    total = 0
+                    async for chunk in response.content.iter_chunked(16 * 1024):
+                        total += len(chunk)
+                        if total > self.UPLOAD_HTML_RESPONSE_MAX_BYTES:
+                            return {"error": "upload host returned an oversized response"}
+                        chunks.append(chunk)
+        except asyncio.TimeoutError:
+            return {"error": "upload timed out"}
+        except aiohttp.ClientError as error:
+            return {"error": f"upload failed: {error.__class__.__name__}"}
+
+        try:
+            data = json.loads(b"".join(chunks).decode("utf-8"))
+        except (UnicodeDecodeError, ValueError):
+            return {"error": "upload host returned invalid JSON"}
+
+        raw_url = str(data.get("url") or "").strip() if isinstance(data, dict) else ""
+        page_url = urljoin(f"{self.UPLOAD_HTML_BASE_URL}/", raw_url) if raw_url else ""
+        parsed_url = urlparse(page_url)
+        if parsed_url.scheme not in {"http", "https"} or not parsed_url.netloc:
+            return {"error": "upload host did not return a page URL"}
+
+        if isinstance(tool_context, dict):
+            tool_context["uploaded_html_chars"] = int(tool_context.get("uploaded_html_chars") or 0) + len(html_content)
+
+        # editToken grants edit/delete rights; keep it out of model context and chat history.
+        return {
+            "uploaded": True,
+            "url": page_url,
+            "slug": str(data.get("slug") or "") or None,
+            "filename": filename,
+            "char_count": len(html_content),
+            "size_bytes": len(encoded),
+            "public": True,
+        }
+
     async def _tool_read_channel(self, args: dict, tool_context: dict) -> dict:
         channel, error = self._resolve_tool_channel(
             args.get("channel_id"),
@@ -11383,6 +11503,7 @@ class AICommands(commands.Cog):
             "generate_image": self._tool_generate_image,
             "generate_video": self._tool_generate_video,
             "send_as_file": self._tool_send_as_file,
+            "upload_html": self._tool_upload_html,
             "read_channel": self._tool_read_channel,
             "read_message": self._tool_read_message,
             "search_message": self._tool_search_message,
@@ -12700,7 +12821,7 @@ class AICommands(commands.Cog):
                         emoji_map,
                     )
 
-            output_chars = raw_output_chars + file_output_chars
+            output_chars = raw_output_chars + file_output_chars + self._pop_uploaded_html_chars(tool_context)
             output_cost = round(output_chars * rate_per_char, 2)
             balance_before_output = self._get_global_balance(payer_id)
             charged_output, final_balance = self._charge_global_balance(payer_id, output_cost)
@@ -13719,7 +13840,7 @@ class AICommands(commands.Cog):
                             emoji_map,
                         )
 
-                output_chars = raw_output_chars + file_output_chars
+                output_chars = raw_output_chars + file_output_chars + self._pop_uploaded_html_chars(tool_context)
                 output_cost = round(output_chars * rate_per_char, 2)
                 balance_before_output = self._get_global_balance(payer_id)
                 charged_output, final_balance = self._charge_global_balance(payer_id, output_cost)

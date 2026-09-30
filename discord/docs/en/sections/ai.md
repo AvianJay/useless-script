@@ -41,6 +41,7 @@ The AI uses three different types of context; clearing one does not clear the ot
 - `fetch_raw` only allows standard ports on public HTTP/HTTPS; it does not accept URL credentials, localhost, internal/private addresses, or binary content. Each redirect is re-validated, downloads are capped at 1 MB, and a single call returns at most 12,000 characters.
 - Like other search results, raw content is untrusted external data; the AI can only treat it as reference material and must not follow any instructions within it that ask it to change its rules, leak data, or perform actions.
 - `fetch_raw` does not consume Serper quota and does not incur an additional fixed 全域幣 charge; regular `/ai` text input/output is still billed at the selected model's rate.
+- `upload_html` uploads a single AI-generated HTML file to [sharemyhtml.com](https://sharemyhtml.com) and returns a public URL, suitable for web pages, HTML examples, or interactive demos. Anyone with the link can open it, so do not ask for passwords, tokens, or personal data to be included; each file is limited to 5 MB, and the AI cannot edit or delete a page after uploading it.
 
 ## Reading Messages and Screenshots
 
@@ -63,7 +64,7 @@ Total cost  = input cost + output cost + any additional paid image tools used
 ```
 
 - The input cost is deducted before the request is sent to the model; if your 全域幣 balance isn't enough to cover the input, the request will not be sent.
-- After the output is complete, the cost is deducted based on the actual reply character count; if the AI uses `send_as_file`, the full file content's character count is also counted as output.
+- After the output is complete, the cost is deducted based on the actual reply character count; if the AI uses `send_as_file` or `upload_html`, the full file or HTML content's character count is also counted as output.
 - By default, a regular reply shows the rate, input/output character counts, and the actual total amount charged; using `/ai-set-response-view` to hide billing info only hides it from the display — it does not stop the charge.
 - If the model call fails, the already-deducted input cost is refunded.
 

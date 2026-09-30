@@ -157,6 +157,7 @@
         "search_google_images": "Searching and reviewing images",
         "search_message": "Searching messages",
         "send_as_file": "Preparing as file",
+        "upload_html": "Uploading HTML page",
         "upsert_ai_memory": "Updating AI memory"
     },
     "value": {
