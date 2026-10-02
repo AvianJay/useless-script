@@ -138,6 +138,12 @@ AI 使用三種不同的上下文，清除其中一種不會連帶清除其他�
 
 付費圖片工具若執行失敗會退回該工具已扣費用。
 
+### 參考圖生成與編輯
+
+- 在 `/ai` 附圖並要求編輯或依照該圖生成，AI 可將目前附圖交給 `generate_image`；也可指定一個 Discord CDN 圖片網址。每次支援一張參考圖，會將圖片轉為 PNG 後呼叫 OpenAI 相容 Images API 的 `images.edit`；純文字生成仍使用 `images.generate`。
+- `gpt-image-2` 預設標記為支援圖片輸入。新增其他圖片模型後，Bot 擁有者可用 `y!aicfg image-input-tag <model> on` 開啟，或以 `off` 關閉；請先確認目前 API 供應商的該模型支援圖片編輯端點。此標記與文字模型的 vision 標記分開管理。
+- `y!aicfg image-models` 會以 `[image-input]` 顯示支援的模型。未標記模型、無效參考圖或下載失敗會在生成扣款前回報；生成失敗仍會退款，計費沿用每張圖片的模型費率。
+
 ### Google 圖片搜尋與安全性
 
 - AI 可透過 Serper Images 搜尋公開圖片。由於該 endpoint 沒有 SafeSearch 選項，Bot 會依序下載最多 3 個候選並交給目前設定的 AI 審查模型；審查逾時、格式錯誤或無法確定時一律不顯示。

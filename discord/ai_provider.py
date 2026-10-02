@@ -11,6 +11,7 @@ AI_API_KEY_CONFIG_KEY = "ai_api_key"
 AI_MODELS_CONFIG_KEY = "ai_models"
 AI_VIDEO_MODELS_CONFIG_KEY = "ai_video_models"
 AI_IMAGE_MODELS_CONFIG_KEY = "ai_image_models"
+AI_IMAGE_INPUT_MODELS_CONFIG_KEY = "ai_image_input_models"
 AI_DEFAULT_MODEL_CONFIG_KEY = "ai_default_model"
 AI_IMAGE_MODEL_CONFIG_KEY = "ai_image_model"
 AI_REVIEW_MODEL_CONFIG_KEY = "ai_review_model"
@@ -43,6 +44,7 @@ DEFAULT_AI_IMAGE_MODELS = {
 }
 DEFAULT_AI_DEFAULT_MODEL = "kimi-k2.6"
 DEFAULT_AI_IMAGE_MODEL = "gpt-image-2"
+DEFAULT_AI_IMAGE_INPUT_MODELS = ["gpt-image-2"]
 DEFAULT_AI_REVIEW_MODEL = "openai"
 DEFAULT_AI_REPORT_MODEL = "openai-fast"
 DEFAULT_AI_VISION_MODELS = []
@@ -53,6 +55,7 @@ AI_GLOBAL_CONFIG_DEFAULTS = {
     AI_MODELS_CONFIG_KEY: DEFAULT_AI_MODELS,
     AI_VIDEO_MODELS_CONFIG_KEY: DEFAULT_AI_VIDEO_MODELS,
     AI_IMAGE_MODELS_CONFIG_KEY: DEFAULT_AI_IMAGE_MODELS,
+    AI_IMAGE_INPUT_MODELS_CONFIG_KEY: DEFAULT_AI_IMAGE_INPUT_MODELS,
     AI_DEFAULT_MODEL_CONFIG_KEY: DEFAULT_AI_DEFAULT_MODEL,
     AI_IMAGE_MODEL_CONFIG_KEY: DEFAULT_AI_IMAGE_MODEL,
     AI_REVIEW_MODEL_CONFIG_KEY: DEFAULT_AI_REVIEW_MODEL,
@@ -294,7 +297,38 @@ def get_ai_image_model_rates() -> dict[str, float]:
 
 
 def set_ai_image_model_rates(models: dict[str, float]):
-    set_global_config(AI_IMAGE_MODELS_CONFIG_KEY, coerce_ai_rate_dict(models, {}))
+    model_rates = coerce_ai_rate_dict(models, {})
+    input_models = get_ai_image_input_models()
+    set_global_config(AI_IMAGE_MODELS_CONFIG_KEY, model_rates)
+    set_global_config(
+        AI_IMAGE_INPUT_MODELS_CONFIG_KEY,
+        coerce_ai_model_list(input_models, model_rates),
+    )
+
+
+def get_ai_image_input_models() -> list[str]:
+    ensure_ai_global_config_defaults()
+    return coerce_ai_model_list(
+        get_global_config(AI_IMAGE_INPUT_MODELS_CONFIG_KEY, DEFAULT_AI_IMAGE_INPUT_MODELS),
+        get_ai_image_model_rates(),
+    )
+
+
+def set_ai_image_input_models(models):
+    set_global_config(
+        AI_IMAGE_INPUT_MODELS_CONFIG_KEY,
+        coerce_ai_model_list(models, get_ai_image_model_rates()),
+    )
+
+
+def format_ai_image_models_for_display(model_rates: dict[str, float], input_models=None) -> str:
+    if not model_rates:
+        return "(empty)"
+    input_model_names = set(input_models or [])
+    return "\n".join(
+        f"- {model}: {rate:.2f}/image{' [image-input]' if model in input_model_names else ''}"
+        for model, rate in model_rates.items()
+    )
 
 
 def get_ai_image_model() -> str:

@@ -100,6 +100,12 @@ The built-in global default model is `kimi-k2.6` (subject to change based on mod
 
 If a paid image tool fails to execute, the cost already charged for that tool is refunded.
 
+### Reference Images and Editing
+
+- Attach an image in `/ai` and ask for an edit or reference-based generation. The AI can pass the current attachment or one Discord CDN image URL to `generate_image`. One reference image is supported per call; it is converted to PNG for the OpenAI-compatible Images API's `images.edit`. Text-only generation continues to use `images.generate`.
+- `gpt-image-2` supports image input by default. After adding another image model, the bot owner can enable its tag with `y!aicfg image-input-tag <model> on`, or disable it with `off`. First confirm that the current API provider supports image edits for that model. This setting is separate from text models' vision tags.
+- `y!aicfg image-models` marks enabled models with `[image-input]`. An unmarked model, invalid image, or failed download is rejected before the generation charge. Generation failures are refunded, and the existing per-image model rate applies.
+
 ### Google Image Search & Safety
 
 - The AI can search for public images via Serper Images. Since this endpoint has no SafeSearch option, the bot downloads up to 3 candidates in sequence and passes them to the currently configured AI review model; if review times out, the format is invalid, or the result is inconclusive, the image will not be shown.
