@@ -16,7 +16,7 @@ from pathlib import Path
 
 
 # Global configuration for backward compatibility
-config_version = 35
+config_version = 36
 config_path = 'config.json'
 
 default_config = {
@@ -81,6 +81,8 @@ default_config = {
             "name": "Default Node"
         }
     ],
+    # NodeLink v3 節點使用相同欄位，Lyra 會自動辨識後端。
+    "nodelink_nodes": [],
     "upvote_board_channel_id": 0,
     "pollinations_api_key": "",
     "economy_log_channel_id": 0,

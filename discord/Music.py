@@ -1110,19 +1110,26 @@ class Music(commands.GroupCog,
 
     @commands.Cog.listener()
     async def on_ready(self):
-        """初始化 Lavalink 節點"""
+        """初始化 Lavalink / NodeLink 節點（Lyra 自動辨識後端）。"""
         if self._nodes_initialized:
             return
         self._nodes_initialized = True
         
-        lavalink_nodes = config("lavalink_nodes", [])
-        if not lavalink_nodes:
-            log("No Lavalink nodes configured; set lavalink_nodes in config.json", level=logging.ERROR, module_name="Music")
+        configured_nodes = [
+            (node_type, node_config, f"{prefix}_{i}")
+            for node_type, config_key, prefix in (
+                ("Lavalink", "lavalink_nodes", "NODE"),
+                ("NodeLink", "nodelink_nodes", "NODELINK"),
+            )
+            for i, node_config in enumerate(config(config_key, []))
+        ]
+        if not configured_nodes:
+            log("No music nodes configured; set lavalink_nodes or nodelink_nodes in config.json", level=logging.ERROR, module_name="Music")
             return
         
         connected = 0
-        for i, node_config in enumerate(lavalink_nodes):
-            identifier = node_config.get("id", f"NODE_{i}")
+        for node_type, node_config, default_identifier in configured_nodes:
+            identifier = node_config.get("id", default_identifier)
             display_name = node_config.get("name", identifier)
             try:
                 await lava_lyra.NodePool.create_node(
@@ -1131,21 +1138,21 @@ class Music(commands.GroupCog,
                     port=node_config.get("port", 2333),
                     password=node_config.get("password", "youshallnotpass"),
                     identifier=identifier,
-                    lyrics=False,
-                    search=True,
-                    fallback=True,
+                    lyrics=node_config.get("lyrics", False),
+                    search=node_config.get("search", True),
+                    fallback=node_config.get("fallback", True),
                     secure=node_config.get("secure", False),
                 )
                 self.node_names[identifier] = display_name
                 connected += 1
-                log(f"Created Lavalink node: {display_name} ({node_config.get('host')}:{node_config.get('port')})", module_name="Music")
+                log(f"Created {node_type} node: {display_name} ({node_config.get('host')}:{node_config.get('port')})", module_name="Music")
             except Exception as e:
-                log(f"Failed to connect to Lavalink node {display_name}: {e}", level=logging.ERROR, module_name="Music")
+                log(f"Failed to connect to {node_type} node {display_name}: {e}", level=logging.ERROR, module_name="Music")
         
         if connected == 0:
-            log("All Lavalink nodes failed to connect", level=logging.ERROR, module_name="Music")
+            log("All music nodes failed to connect", level=logging.ERROR, module_name="Music")
         else:
-            log(f"Successfully connected {connected}/{len(lavalink_nodes)} Lavalink nodes", module_name="Music")
+            log(f"Successfully connected {connected}/{len(configured_nodes)} music nodes", module_name="Music")
             self._schedule_saved_sessions_restore()
         on_close_tasks.add(self.music_quit_task)
         on_close_tasks.add(self._shutdown_radio_tasks)

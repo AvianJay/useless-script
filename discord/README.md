@@ -3,6 +3,41 @@
 
 [邀請我的機器人awa](https://discord.com/oauth2/authorize?client_id=1048398804359061585)
 
+## 音樂節點
+
+使用 `lava-lyra~=2.2.4`，需要 Python ≥ 3.12、Lavalink ≥ 4.2.0 或 NodeLink ≥ 3.2.0。
+Lyra 會從伺服器的 `/v4/info` 自動辨識 NodeLink，不需要傳入 `nodelink=True`。
+參考 [Lyra 2.2.4 節點實作](https://github.com/ParrotXray/lava-lyra/blob/v2.2.4/lava_lyra/pool.py)。
+
+`config.json` 保留 `lavalink_nodes`，另可加入 `nodelink_nodes`；兩者共用節點池、搜尋和自動備援。
+啟動時會自動補上空的 `nodelink_nodes`。將以下設定合併到 `config.json`，填入自己的節點資訊：
+
+```json
+{
+    "nodelink_nodes": [
+        {
+            "id": "NODELINK_MAIN",
+            "host": "localhost",
+            "port": 2333,
+            "password": "YOUR_NODE_PASSWORD",
+            "name": "NodeLink",
+            "secure": false,
+            "lyrics": false,
+            "search": true,
+            "fallback": true
+        }
+    ]
+}
+```
+
+只使用 NodeLink 時可將 `lavalink_nodes` 設為 `[]`。兩個清單中的 `id` 必須唯一；
+省略時分別產生 `NODE_0`、`NODELINK_0` 等識別碼。`host` 填主機名稱或 IP，不含協定與連接埠；
+HTTPS / WSS 節點使用 `secure: true`。
+`lyrics`、`search`、`fallback` 可依節點調整，預設分別為 `false`、`true`、`true`；
+歌詞與進階搜尋需要伺服器支援，自動備援需要至少兩個可用節點。
+
+在 `discord/` 執行 `python -m pip install -U "lava-lyra~=2.2.4"` 後重啟機器人。
+
 ## Discord 網址預覽
 
 首頁、`/docs`、`/privacy-policy` 與 `/terms-of-service` 會在 HTML 中直接輸出

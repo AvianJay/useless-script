@@ -110,6 +110,92 @@ def make_player(channel, *, current=None, position=0, volume=80, paused=False):
     )
 
 
+class MusicNodeConfigTests(unittest.IsolatedAsyncioTestCase):
+    def setUp(self):
+        self.bot = MagicMock()
+        self.cog = music.Music(self.bot)
+        self.cog._schedule_saved_sessions_restore = MagicMock()
+
+    async def test_nodelink_only_uses_shared_pool_and_per_node_options(self):
+        settings = {
+            "lavalink_nodes": [],
+            "nodelink_nodes": [{
+                "id": "NL_MAIN",
+                "name": "NodeLink Main",
+                "host": "music.example.com",
+                "port": 443,
+                "password": "test-password",
+                "secure": True,
+                "lyrics": True,
+                "search": False,
+                "fallback": False,
+            }],
+        }
+        with (
+            patch.object(music, "config", side_effect=lambda key, default: settings.get(key, default)),
+            patch.object(music.lava_lyra.NodePool, "create_node", autospec=True) as create_node,
+            patch.object(music, "on_close_tasks", set()) as close_tasks,
+        ):
+            await self.cog.on_ready()
+            await self.cog.on_ready()
+
+        create_node.assert_awaited_once_with(
+            bot=self.bot,
+            host="music.example.com",
+            port=443,
+            password="test-password",
+            identifier="NL_MAIN",
+            lyrics=True,
+            search=False,
+            fallback=False,
+            secure=True,
+        )
+        self.assertEqual(self.cog.node_names, {"NL_MAIN": "NodeLink Main"})
+        self.cog._schedule_saved_sessions_restore.assert_called_once_with()
+        self.assertIn(self.cog.music_quit_task, close_tasks)
+        self.assertIn(self.cog._shutdown_radio_tasks, close_tasks)
+
+    async def test_mixed_nodes_have_unique_default_ids_and_keep_legacy_defaults(self):
+        settings = {"lavalink_nodes": [{}], "nodelink_nodes": [{}]}
+        with (
+            patch.object(music, "config", side_effect=lambda key, default: settings.get(key, default)),
+            patch.object(music.lava_lyra.NodePool, "create_node", autospec=True) as create_node,
+            patch.object(music, "on_close_tasks", set()),
+        ):
+            await self.cog.on_ready()
+
+        self.assertEqual(
+            [call.kwargs["identifier"] for call in create_node.await_args_list],
+            ["NODE_0", "NODELINK_0"],
+        )
+        for call in create_node.await_args_list:
+            self.assertEqual(call.kwargs["host"], "localhost")
+            self.assertEqual(call.kwargs["port"], 2333)
+            self.assertFalse(call.kwargs["lyrics"])
+            self.assertTrue(call.kwargs["search"])
+            self.assertTrue(call.kwargs["fallback"])
+            self.assertFalse(call.kwargs["secure"])
+        self.cog._schedule_saved_sessions_restore.assert_called_once_with()
+
+    async def test_failed_lavalink_still_connects_nodelink_and_restores(self):
+        settings = {"lavalink_nodes": [{"id": "LL"}], "nodelink_nodes": [{"id": "NL"}]}
+        with (
+            patch.object(music, "config", side_effect=lambda key, default: settings.get(key, default)),
+            patch.object(
+                music.lava_lyra.NodePool,
+                "create_node",
+                autospec=True,
+                side_effect=[RuntimeError("offline"), SimpleNamespace()],
+            ) as create_node,
+            patch.object(music, "on_close_tasks", set()),
+        ):
+            await self.cog.on_ready()
+
+        self.assertEqual(create_node.await_count, 2)
+        self.assertEqual(self.cog.node_names, {"NL": "NL"})
+        self.cog._schedule_saved_sessions_restore.assert_called_once_with()
+
+
 class MusicRestoreTests(unittest.IsolatedAsyncioTestCase):
     def setUp(self):
         music.music_queues.clear()
