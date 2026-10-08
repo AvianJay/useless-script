@@ -1793,6 +1793,9 @@ class AICommands(commands.Cog):
     IMAGE_ANALYZE_MAX_BYTES = 8_000_000
     IMAGE_ANALYZE_DEFAULT_MAX_CHARS = 700
     IMAGE_ANALYZE_MAX_CHARS = 1800
+    # Thinking-mode vision models count reasoning against max_tokens; without
+    # headroom they can hit the limit before emitting any content.
+    VISION_REASONING_TOKEN_HEADROOM = 2048
     VISUAL_DESCRIPTION_ANALYSIS_VERSION = 1
     VISUAL_DESCRIPTION_MAX_ASSETS = 8
     VISUAL_DESCRIPTION_PROFILE_TTL_SECONDS = 24 * 60 * 60
@@ -8301,7 +8304,7 @@ class AICommands(commands.Cog):
                         },
                     ],
                     image=image_bytes,
-                    max_tokens=220,
+                    max_tokens=220 + self.VISION_REASONING_TOKEN_HEADROOM,
                 ),
                 timeout=self.EXTERNAL_IMAGE_REVIEW_TIMEOUT_SECONDS,
             )
@@ -9059,7 +9062,7 @@ class AICommands(commands.Cog):
                         },
                     ],
                     image=sheet_bytes,
-                    max_tokens=max(300, min(1600, len(downloaded) * 180)),
+                    max_tokens=max(300, min(1600, len(downloaded) * 180)) + self.VISION_REASONING_TOKEN_HEADROOM,
                 )
                 raw_text = str(getattr(response.choices[0].message, "content", "") or "").strip()
                 model_name = str(getattr(response, "model", requested_model) or requested_model)
@@ -9197,11 +9200,13 @@ class AICommands(commands.Cog):
                     },
                 ],
                 image=image_bytes,
-                max_tokens=max(80, min(700, max_chars // 2)),
+                max_tokens=max(80, min(700, max_chars // 2)) + self.VISION_REASONING_TOKEN_HEADROOM,
             )
             raw_text = str(getattr(response.choices[0].message, "content", "") or "").strip()
             summary = self._truncate_tool_text(raw_text, max_len=max_chars)
             if not summary:
+                if getattr(response.choices[0], "finish_reason", None) == "length":
+                    raise RuntimeError("visual analysis hit the token limit before producing a description")
                 raise RuntimeError("visual analysis returned no description")
             return {
                 "analysis_model": getattr(response, "model", requested_model),
