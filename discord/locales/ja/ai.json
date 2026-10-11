@@ -58,6 +58,7 @@
         "prompt_empty": "❌ カスタム プロンプトを空にすることはできません。",
         "rate_limited": "リクエストの送信が早すぎます。しばらく待ってから、もう一度試してください。",
         "rate_limited_text": "⏳ リクエストの送信が速すぎます。しばらく待ってから、もう一度試してください。",
+        "request_in_progress": "⏳ AI リクエストを処理中です。完了するまで次のリクエストを送信しないでください。",
         "suspicious_input_filtered": "メッセージに不審なコンテンツが含まれていたため、フィルターされました。\n通常どおり AI と対話してください。",
         "suspicious_input_filtered_text": "⚠️ メッセージに不審な内容が含まれていたため、フィルターされました。通常通りAIと対話してください。",
         "text_command_usage": "❌メッセージを入力するか画像を添付してください！使用法: `!ai <your question>`"
@@ -109,6 +110,7 @@
         "personal_memory_display": "個人 AI メモは {count} 件です:\n\n{content}",
         "personal_memory_display_as_file": "個人 AI メモは {count} 件です。完全な内容を `ai_memory.txt` として添付しました。",
         "personal_memory_empty": "条件に一致する個人 AI メモはありません。",
+        "request_cancelled": "❌ {mention}、リクエストをキャンセルしました。",
         "response_converted_to_file": "AI 応答は {length} 文字の長さであるため、代わりにテキスト添付ファイルとして送信されました。",
         "response_view_updated": "更新された応答表示設定:\n• コンテナ: {container_status}\n• 請求情報: {cost_status}\n• モデル情報: {model_status}",
         "security_footer": "-# 通常どおり AI と対話してください",

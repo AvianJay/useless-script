@@ -1372,11 +1372,12 @@ class AIResponseBuilder:
 class ClearHistoryView(discord.ui.LayoutView):
     """確認清除對話歷史的 LayoutView"""
     
-    def __init__(self, user_id: int, guild_id: int = None, on_cleared=None):
+    def __init__(self, user_id: int, guild_id: int = None, on_cleared=None, is_busy=None):
         super().__init__(timeout=60)
         self.user_id = user_id
         self.guild_id = guild_id
         self.on_cleared = on_cleared
+        self.is_busy = is_busy
         self.confirmed = False
         
         # 建立容器
@@ -1414,6 +1415,11 @@ class ClearHistoryView(discord.ui.LayoutView):
         return True
 
     async def confirm_callback(self, interaction: discord.Interaction):
+        if callable(self.is_busy) and self.is_busy(self.user_id):
+            await interaction.response.send_message(
+                t("ai.err.request_in_progress"), ephemeral=True, allowed_mentions=SAFE_MENTIONS
+            )
+            return
         ConversationManager.clear_history(self.user_id, self.guild_id)
         if callable(self.on_cleared):
             callback_result = self.on_cleared(self.user_id, self.guild_id)
@@ -1858,6 +1864,8 @@ class AICommands(commands.Cog):
     
     def __init__(self, bot):
         self.bot = bot
+        self._active_ai_requests: dict[int, SimpleNamespace] = {}
+        self._ai_request_message_ids: dict[int, SimpleNamespace] = {}
         self.rate_limits = {}  # 簡單的速率限制
         self._ai_response_message_ids: dict[int, dict[int, float]] = {}
         self._auto_summary_tasks: dict[tuple[int, int], asyncio.Task] = {}
@@ -1886,6 +1894,12 @@ class AICommands(commands.Cog):
 
     async def cog_unload(self):
         self._auto_summary_shutting_down = True
+        request_tasks = [state.task for state in tuple(self._active_ai_requests.values())]
+        for task in request_tasks:
+            if not task.done() and not task.cancelling():
+                task.cancel()
+        if request_tasks:
+            await asyncio.gather(*request_tasks, return_exceptions=True)
         if self._auto_summary_restore_task is not None:
             self._auto_summary_restore_task.cancel()
         for task in tuple(self._auto_summary_tasks.values()):
@@ -1894,6 +1908,98 @@ class AICommands(commands.Cog):
         for task in tuple(self._auto_clear_tasks.values()):
             task.cancel()
         self._auto_clear_tasks.clear()
+
+    def _is_ai_request_busy(self, user_id: int) -> bool:
+        return int(user_id) in self._active_ai_requests
+
+    async def _run_ai_request(self, user_id: int, request, *, source_message=None) -> bool:
+        """Reserve one request per user until processing and cancellation cleanup finish."""
+        user_id = int(user_id)
+        if self._is_ai_request_busy(user_id):
+            return False
+        message_id = getattr(source_message, "id", None)
+        state = SimpleNamespace(
+            task=None,
+            user_id=user_id,
+            source_message=source_message,
+            cancelled=False,
+            tool_notice_message=None,
+            billing=None,
+            refundable_amount=0.0,
+        )
+        self._active_ai_requests[user_id] = state
+        if message_id is not None:
+            self._ai_request_message_ids[message_id] = state
+        try:
+            state.task = asyncio.create_task(request(state), name=f"ai-request-{user_id}")
+            try:
+                await state.task
+            except asyncio.CancelledError:
+                self._refund_cancelled_ai_request(state)
+                if state.tool_notice_message is not None:
+                    try:
+                        await state.tool_notice_message.delete()
+                    except Exception:
+                        pass
+                if not state.cancelled:
+                    raise
+                await source_message.channel.send(
+                    t("ai.msg.request_cancelled", mention=f"<@{user_id}>"),
+                    allowed_mentions=discord.AllowedMentions(
+                        users=[discord.Object(id=user_id)], roles=False, everyone=False,
+                    ),
+                )
+            return True
+        finally:
+            if self._active_ai_requests.get(user_id) is state:
+                self._active_ai_requests.pop(user_id, None)
+            if message_id is not None and self._ai_request_message_ids.get(message_id) is state:
+                self._ai_request_message_ids.pop(message_id, None)
+
+    def _refund_cancelled_ai_request(self, state) -> None:
+        billing = state.billing
+        amount = state.refundable_amount
+        if not billing or amount <= 0:
+            return
+        state.refundable_amount = 0.0
+        payer_id = billing["payer_id"]
+        balance_before = self._get_global_balance(payer_id)
+        balance_after = self._refund_global_balance(payer_id, amount)
+        detail = f"model={billing['model']} refund_on_cancel{billing['billing_detail_suffix']}"
+        self._log_economy_transaction(payer_id, "AI refund", amount, detail)
+        self._queue_economy_audit_log(
+            user=billing["billing_actor"],
+            action="ai_refund",
+            amount=amount,
+            detail=detail,
+            balance_before=balance_before,
+            balance_after=balance_after,
+            color=0x27AE60,
+            **billing["audit_context"],
+        )
+
+    def _cancel_ai_message_requests(self, message_ids, channel_id: int) -> None:
+        for message_id in message_ids:
+            state = self._ai_request_message_ids.get(message_id)
+            if (
+                state is None
+                or state.cancelled
+                or state.task is None
+                or state.task.done()
+                or state.task.cancelling()
+                or getattr(state.source_message.channel, "id", None) != channel_id
+            ):
+                continue
+            state.cancelled = True
+            state.task.cancel()
+
+    @commands.Cog.listener()
+    async def on_raw_message_delete(self, payload: discord.RawMessageDeleteEvent):
+        self._cancel_ai_message_requests((payload.message_id,), payload.channel_id)
+
+    @commands.Cog.listener()
+    async def on_raw_bulk_message_delete(self, payload: discord.RawBulkMessageDeleteEvent):
+        self._cancel_ai_message_requests(payload.message_ids, payload.channel_id)
 
     @staticmethod
     def _parse_model_prefix(message: str, default: str = "openai-fast") -> tuple[str, str]:
@@ -5479,6 +5585,11 @@ class AICommands(commands.Cog):
         *,
         expected_due_at: float | None = None,
     ) -> str | None:
+        while True:
+            state = self._active_ai_requests.get(int(user_id))
+            if state is None or state.task is asyncio.current_task():
+                break
+            await asyncio.sleep(1)
         key = self._auto_summary_context_key(user_id, guild_id)
         lock = self._auto_clear_locks.setdefault(key, asyncio.Lock())
         async with lock:
@@ -6007,6 +6118,11 @@ class AICommands(commands.Cog):
         *,
         expected_due_at: float | None = None,
     ) -> str | None:
+        while True:
+            state = self._active_ai_requests.get(int(user_id))
+            if state is None or state.task is asyncio.current_task():
+                break
+            await asyncio.sleep(1)
         key = self._auto_summary_context_key(user_id, guild_id)
         lock = self._auto_summary_locks.setdefault(key, asyncio.Lock())
         async with lock:
@@ -9101,7 +9217,7 @@ class AICommands(commands.Cog):
                     "analysis_model": model_name,
                     "all_cached": False,
                 }
-            except Exception as error:
+            except (Exception, asyncio.CancelledError) as error:
                 balance_before_refund = self._get_global_balance(payer_id)
                 balance_after_refund = self._refund_global_balance(payer_id, charged_amount)
                 self._log_economy_transaction(
@@ -9119,6 +9235,8 @@ class AICommands(commands.Cog):
                     balance_after=balance_after_refund,
                     color=0x27AE60,
                 )
+                if isinstance(error, asyncio.CancelledError):
+                    raise
                 return {
                     "error": f"visual analysis failed: {error}",
                     "items": [*results, *unavailable],
@@ -9214,7 +9332,7 @@ class AICommands(commands.Cog):
                 "currency": GLOBAL_CURRENCY_NAME,
                 "summary": summary,
             }
-        except Exception as error:
+        except (Exception, asyncio.CancelledError) as error:
             balance_before_refund = self._get_global_balance(payer_id)
             balance_after_refund = self._refund_global_balance(payer_id, charged_amount)
             refund_detail = f"model={requested_model} refund_on_error{billing_detail_suffix}"
@@ -9233,6 +9351,8 @@ class AICommands(commands.Cog):
                 balance_after=balance_after_refund,
                 color=0x27AE60,
             )
+            if isinstance(error, asyncio.CancelledError):
+                raise
             return {
                 "error": f"image analysis failed: {error}",
                 "refunded": charged_amount,
@@ -9535,7 +9655,7 @@ class AICommands(commands.Cog):
                 "revised_prompts": revised_prompts[:delivered_count],
                 "note": "Tell the user the generated image is attached below.",
             }
-        except Exception as e:
+        except (Exception, asyncio.CancelledError) as e:
             if tool_context is not None:
                 del tool_context.get("pending_image_attachments", [])[pending_image_count:]
             balance_before_refund = self._get_global_balance(payer_id)
@@ -9555,6 +9675,8 @@ class AICommands(commands.Cog):
                 balance_after=balance_after_refund,
                 color=0x27AE60,
             )
+            if isinstance(e, asyncio.CancelledError):
+                raise
             return {"error": f"image generation failed: {e}"}
 
     @classmethod
@@ -12679,6 +12801,27 @@ class AICommands(commands.Cog):
         model: str = None
     ):
         """與 AI 助手對話"""
+        accepted = await self._run_ai_request(
+            interaction.user.id,
+            lambda state: self._ai_chat_request(
+                interaction, message, image, new_conversation, model, request_state=state
+            ),
+        )
+        if not accepted:
+            await interaction.response.send_message(
+                t("ai.err.request_in_progress"), ephemeral=True, allowed_mentions=SAFE_MENTIONS
+            )
+
+    async def _ai_chat_request(
+        self,
+        interaction: discord.Interaction,
+        message: str,
+        image: discord.Attachment = None,
+        new_conversation: bool = False,
+        model: str = None,
+        *,
+        request_state,
+    ):
         
         user = interaction.user
         guild_id = interaction.guild.id if interaction.guild else None
@@ -12756,6 +12899,14 @@ class AICommands(commands.Cog):
 
         balance_before_input = global_balance
         charged_input, balance_after_input = self._charge_global_balance(payer_id, input_cost)
+        request_state.billing = {
+            "payer_id": payer_id,
+            "model": selected_model,
+            "billing_actor": billing_actor,
+            "billing_detail_suffix": billing_detail_suffix,
+            "audit_context": {"interaction": interaction},
+        }
+        request_state.refundable_amount = charged_input
         if charged_input < input_cost:
             view = AIResponseBuilder.create_error_view(t("ai.err.charge_failed"))
             await interaction.response.send_message(view=view, ephemeral=True, allowed_mentions=SAFE_MENTIONS)
@@ -12940,6 +13091,7 @@ class AICommands(commands.Cog):
             output_cost = round(output_chars * rate_per_char, 2)
             balance_before_output = self._get_global_balance(payer_id)
             charged_output, final_balance = self._charge_global_balance(payer_id, output_cost)
+            request_state.refundable_amount += charged_output
             self._log_economy_transaction(
                 payer_id,
                 "AI output charge",
@@ -12968,8 +13120,7 @@ class AICommands(commands.Cog):
             # if shortfall > 0:
             #     billing_info += f" | 餘額不足少扣 {shortfall:,.2f}（原應扣 {total_cost:,.2f}）"
             
-            # 儲存對話歷史（圖片為一次性，不存入歷史）
-            ConversationManager.add_message(user.id, "user", resolved_message, guild_id, timestamp=request_at)
+            # 準備對話歷史文字（圖片為一次性，不存入歷史）
             has_rendered_markdown_attachments = any(
                 str(item.get("kind") or "") in {"math", "table"}
                 for item in pending_image_attachments
@@ -12994,13 +13145,6 @@ class AICommands(commands.Cog):
             if generated_image_attachments:
                 image_names = ", ".join(str(item.get("filename") or "image") for item in generated_image_attachments)
                 assistant_history_text += f"\n[images:{image_names}]"
-            ConversationManager.add_message(
-                user.id,
-                "assistant",
-                assistant_history_text,
-                guild_id,
-                reasoning_content=reasoning_content,
-            )
             
             # 建立回應
             warning = None
@@ -13023,22 +13167,24 @@ class AICommands(commands.Cog):
                 show_model=response_view_config.get("model", True),
                 generated_image_attachments=pending_image_attachments,
             )
-            if pending_file_response:
-                file_attachment = self._build_pending_file_attachment(pending_file_response)
-                response_message = await interaction.edit_original_response(
-                    content=None,
-                    attachments=image_files,
-                    view=view,
-                )
-                pending_images_delivered_inline = bool(image_files)
+            file_attachment = self._build_pending_file_attachment(pending_file_response) if pending_file_response else None
+            response_message = await interaction.edit_original_response(
+                content=None,
+                attachments=image_files,
+                view=view,
+            )
+            pending_images_delivered_inline = bool(image_files)
+            if file_attachment is not None:
                 await interaction.followup.send(file=file_attachment, allowed_mentions=SAFE_MENTIONS)
-            else:
-                response_message = await interaction.edit_original_response(
-                    content=None,
-                    attachments=image_files,
-                    view=view,
-                )
-                pending_images_delivered_inline = bool(image_files)
+            request_state.refundable_amount = 0.0
+            ConversationManager.add_message(user.id, "user", resolved_message, guild_id, timestamp=request_at)
+            ConversationManager.add_message(
+                user.id,
+                "assistant",
+                assistant_history_text,
+                guild_id,
+                reasoning_content=reasoning_content,
+            )
             self._remember_ai_response_message(
                 getattr(interaction.guild, "id", None),
                 getattr(response_message, "id", None),
@@ -13050,6 +13196,7 @@ class AICommands(commands.Cog):
                 pending_image_attachments = self._pop_pending_image_attachments(tool_context)
             balance_before_refund = self._get_global_balance(payer_id)
             balance_after_refund = self._refund_global_balance(payer_id, charged_input)
+            request_state.refundable_amount = max(0.0, request_state.refundable_amount - charged_input)
             self._log_economy_transaction(
                 payer_id,
                 "AI refund",
@@ -13088,10 +13235,16 @@ class AICommands(commands.Cog):
         user = interaction.user
         guild_id = interaction.guild.id if interaction.guild else None
         
+        if self._is_ai_request_busy(user.id):
+            await interaction.response.send_message(
+                t("ai.err.request_in_progress"), ephemeral=True, allowed_mentions=SAFE_MENTIONS
+            )
+            return
         confirm_view = ClearHistoryView(
             user.id,
             guild_id,
             on_cleared=self._clear_ai_idle_schedule,
+            is_busy=self._is_ai_request_busy,
         )
         await interaction.response.send_message(view=confirm_view, ephemeral=True, allowed_mentions=SAFE_MENTIONS)
     
@@ -13630,6 +13783,15 @@ class AICommands(commands.Cog):
         用法: !ai <訊息>
         別名: !ask, !chat
         """
+        accepted = await self._run_ai_request(
+            ctx.author.id,
+            lambda state: self._ai_text_request(ctx, message=message, request_state=state),
+            source_message=ctx.message,
+        )
+        if not accepted:
+            await ctx.reply(t("ai.err.request_in_progress"), allowed_mentions=SAFE_MENTIONS)
+
+    async def _ai_text_request(self, ctx: commands.Context, *, message: str = None, request_state):
         user = ctx.author
         guild = ctx.guild
         guild_id = guild.id if guild else None
@@ -13715,6 +13877,14 @@ class AICommands(commands.Cog):
 
         balance_before_input = global_balance
         charged_input, balance_after_input = self._charge_global_balance(payer_id, input_cost)
+        request_state.billing = {
+            "payer_id": payer_id,
+            "model": selected_model,
+            "billing_actor": billing_actor,
+            "billing_detail_suffix": billing_detail_suffix,
+            "audit_context": {"ctx": ctx},
+        }
+        request_state.refundable_amount = charged_input
         if charged_input < input_cost:
             await ctx.reply(t("ai.err.charge_failed_text"), allowed_mentions=SAFE_MENTIONS)
             return
@@ -13826,6 +13996,7 @@ class AICommands(commands.Cog):
                             view=approval_view,
                             allowed_mentions=SAFE_MENTIONS,
                         )
+                    request_state.tool_notice_message = tool_notice_message
                     return tool_notice_message
 
                 tool_context["_browser_approval_presenter"] = self._make_browser_approval_presenter(
@@ -13863,6 +14034,7 @@ class AICommands(commands.Cog):
                             )
                         else:
                             await tool_notice_message.edit(content=notice, attachments=[], view=None)
+                    request_state.tool_notice_message = tool_notice_message
                 
                 # i18n: skip-start (system prompt context sent to the model, not shown to Discord users)
                 # 構建訊息列表（包含用戶名稱和頻道上下文）
@@ -13959,6 +14131,7 @@ class AICommands(commands.Cog):
                 output_cost = round(output_chars * rate_per_char, 2)
                 balance_before_output = self._get_global_balance(payer_id)
                 charged_output, final_balance = self._charge_global_balance(payer_id, output_cost)
+                request_state.refundable_amount += charged_output
                 self._log_economy_transaction(
                     payer_id,
                     "AI output charge",
@@ -13987,8 +14160,7 @@ class AICommands(commands.Cog):
                 if shortfall > 0:
                     billing_info += " | " + t("ai.value.shortfall_suffix", shortfall=f"{shortfall:,.2f}", total_cost=f"{total_cost:,.2f}")
                 
-                # 儲存對話歷史（圖片為一次性，不存入歷史）
-                ConversationManager.add_message(user.id, "user", final_message, guild_id, timestamp=request_at)
+                # 準備對話歷史文字（圖片為一次性，不存入歷史）
                 has_rendered_markdown_attachments = any(
                     str(item.get("kind") or "") in {"math", "table"}
                     for item in pending_image_attachments
@@ -14013,13 +14185,6 @@ class AICommands(commands.Cog):
                 if generated_image_attachments:
                     image_names = ", ".join(str(item.get("filename") or "image") for item in generated_image_attachments)
                     assistant_history_text += f"\n[images:{image_names}]"
-                ConversationManager.add_message(
-                    user.id,
-                    "assistant",
-                    assistant_history_text,
-                    guild_id,
-                    reasoning_content=reasoning_content,
-                )
                 
                 # 建立回應（使用 Component V2 避免 @everyone/@here 攻擊）
                 warning = None
@@ -14048,20 +14213,23 @@ class AICommands(commands.Cog):
                     except Exception:
                         pass
 
-                if pending_file_response:
-                    file_attachment = self._build_pending_file_attachment(pending_file_response)
-                    if image_files:
-                        response_message = await ctx.reply(view=view, files=image_files, allowed_mentions=SAFE_MENTIONS)
-                        pending_images_delivered_inline = True
-                    else:
-                        response_message = await ctx.reply(view=view, allowed_mentions=SAFE_MENTIONS)
-                    await ctx.send(file=file_attachment, allowed_mentions=SAFE_MENTIONS)
+                file_attachment = self._build_pending_file_attachment(pending_file_response) if pending_file_response else None
+                if image_files:
+                    response_message = await ctx.reply(view=view, files=image_files, allowed_mentions=SAFE_MENTIONS)
+                    pending_images_delivered_inline = True
                 else:
-                    if image_files:
-                        response_message = await ctx.reply(view=view, files=image_files, allowed_mentions=SAFE_MENTIONS)
-                        pending_images_delivered_inline = True
-                    else:
-                        response_message = await ctx.reply(view=view, allowed_mentions=SAFE_MENTIONS)
+                    response_message = await ctx.reply(view=view, allowed_mentions=SAFE_MENTIONS)
+                if file_attachment is not None:
+                    await ctx.send(file=file_attachment, allowed_mentions=SAFE_MENTIONS)
+                request_state.refundable_amount = 0.0
+                ConversationManager.add_message(user.id, "user", final_message, guild_id, timestamp=request_at)
+                ConversationManager.add_message(
+                    user.id,
+                    "assistant",
+                    assistant_history_text,
+                    guild_id,
+                    reasoning_content=reasoning_content,
+                )
                 self._remember_ai_response_message(
                     getattr(guild, "id", None),
                     getattr(response_message, "id", None),
@@ -14073,6 +14241,7 @@ class AICommands(commands.Cog):
                     pending_image_attachments = self._pop_pending_image_attachments(tool_context)
                 balance_before_refund = self._get_global_balance(payer_id)
                 balance_after_refund = self._refund_global_balance(payer_id, charged_input)
+                request_state.refundable_amount = max(0.0, request_state.refundable_amount - charged_input)
                 self._log_economy_transaction(
                     payer_id,
                     "AI refund",
@@ -14162,6 +14331,15 @@ class AICommands(commands.Cog):
         用法: !ai-new <訊息>
         別名: !ainew, !newchat
         """
+        accepted = await self._run_ai_request(
+            ctx.author.id,
+            lambda state: self._ai_new_request(ctx, message=message, request_state=state),
+            source_message=ctx.message,
+        )
+        if not accepted:
+            await ctx.reply(t("ai.err.request_in_progress"), allowed_mentions=SAFE_MENTIONS)
+
+    async def _ai_new_request(self, ctx: commands.Context, *, message: str = None, request_state):
         user = ctx.author
         guild_id = ctx.guild.id if ctx.guild else None
         
@@ -14173,8 +14351,7 @@ class AICommands(commands.Cog):
             await ctx.reply(t("ai.msg.history_cleared_new_chat"), allowed_mentions=SAFE_MENTIONS)
             return
         
-        # 如果有訊息，直接調用 ai 指令
-        await self.ai_text_command(ctx, message=message)
+        await self._ai_text_request(ctx, message=message, request_state=request_state)
     
     @commands.command(name="ai-clear", aliases=["aiclear", "clearchat"])
     async def ai_clear_text(self, ctx: commands.Context):
@@ -14186,6 +14363,9 @@ class AICommands(commands.Cog):
         """
         user = ctx.author
         guild_id = ctx.guild.id if ctx.guild else None
+        if self._is_ai_request_busy(user.id):
+            await ctx.reply(t("ai.err.request_in_progress"), allowed_mentions=SAFE_MENTIONS)
+            return
         
         self._clear_ai_idle_schedule(user.id, guild_id)
         ConversationManager.clear_history(user.id, guild_id)

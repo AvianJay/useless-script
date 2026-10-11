@@ -58,6 +58,7 @@
         "prompt_empty": "❌ The custom prompt cannot be empty.",
         "rate_limited": "You're sending requests too fast! Please wait a minute and try again.",
         "rate_limited_text": "⏳ You're sending requests too fast! Please wait a minute and try again.",
+        "request_in_progress": "⏳ You already have an AI request in progress. Please wait for it to finish before sending another request.",
         "suspicious_input_filtered": "Your message contained suspicious content and was filtered.\nPlease interact with the AI normally.",
         "suspicious_input_filtered_text": "⚠️ Your message contained suspicious content and was filtered. Please interact with the AI normally.",
         "text_command_usage": "❌ Please enter a message or attach an image! Usage: `!ai <your question>`"
@@ -109,6 +110,7 @@
         "personal_memory_display": "{count} personal AI memories:\n\n{content}",
         "personal_memory_display_as_file": "{count} personal AI memories; full content is attached as `ai_memory.txt`.",
         "personal_memory_empty": "No matching personal AI memories were found.",
+        "request_cancelled": "❌ {mention}, you cancelled the request.",
         "response_converted_to_file": "The AI reply is {length} characters long, so it was sent as a text attachment instead.",
         "response_view_updated": "Response display settings updated:\n• Container: {container_status}\n• Billing info: {cost_status}\n• Model info: {model_status}",
         "security_footer": "-# Please interact with the AI normally",

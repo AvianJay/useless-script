@@ -57,6 +57,7 @@
         "prompt_empty": "❌ 自訂 prompt 不能是空的。",
         "rate_limited": "你發送請求太頻繁了！請等待一分鐘後再試。",
         "rate_limited_text": "⏳ 你發送請求太頻繁了！請等待一分鐘後再試。",
+        "request_in_progress": "⏳ 你還有一個 AI 請求正在處理，請等待完成後再送出下一個請求。",
         "suspicious_input_filtered": "你的訊息包含可疑內容，已被系統過濾。\n請以正常方式與 AI 互動。",
         "suspicious_input_filtered_text": "⚠️ 你的訊息包含可疑內容，已被系統過濾。請以正常方式與 AI 互動。",
         "text_command_usage": "❌ 請輸入訊息或附上圖片！用法: `!ai <你的問題>`"
@@ -107,6 +108,7 @@
         "personal_memory_display": "共 {count} 筆個人 AI 記憶：\n\n{content}",
         "personal_memory_display_as_file": "共 {count} 筆個人 AI 記憶；完整內容已附加為 `ai_memory.txt`。",
         "personal_memory_empty": "找不到符合條件的個人 AI 記憶。",
+        "request_cancelled": "❌ {mention}，你取消了請求。",
         "response_converted_to_file": "AI 回覆長度為 {length} 字，已改為文字附件傳送。",
         "response_view_updated": "已設定回應顯示方式：\n• 容器：{container_status}\n• 計費資訊：{cost_status}\n• 模型資訊：{model_status}",
         "security_footer": "-# 請以正常方式與 AI 互動",
