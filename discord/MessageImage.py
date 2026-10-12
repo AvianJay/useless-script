@@ -17,6 +17,8 @@ import random
 import time
 import json
 import math
+import base64
+import hashlib
 import tempfile
 import i18n
 from i18n import t
@@ -478,59 +480,175 @@ async def create(message: discord.Message, animate_gif=False) -> tuple[io.BytesI
     return output_buffer, ext
 
 
-class UpvoteView(i18n.I18nView):
-    def __init__(self, original_user: discord.User = None):
-        super().__init__()
-        self.upvotes = 0
-        self.original_user = original_user
-        self.on_board_message = None  # 用於追蹤已經被放上看板的訊息
-        self.on_guild_board_message = None  # 用於追蹤已經被放上公會看板的訊息
-        self.upvoted_users = set()  # 用於追蹤已經點過讚的用戶
-        self._lock = asyncio.Lock()  # 序列化按鈕點擊以避免競態條件
+# 讚按鈕不存資料庫，所有狀態都編進 custom_id（上限 100 字元）：
+#   uv:<作者 ID>:<讚數>:<看板訊息 ID>:<伺服器看板訊息 ID>:<按過讚的人>
+# ID 用 base36 縮短，0 表示還沒上看板；按過讚的人用 288 bit 的 Bloom filter 記錄，
+# base64 後固定 48 字元。Bloom filter 不會漏判，但有小機率把沒按過的人誤判成按過
+# （約 20 票時 0.3%、50 票時 6%）。
+UPVOTE_VOTER_FILTER_BYTES = 36
+UPVOTE_VOTER_FILTER_HASHES = 4
+_BASE36_DIGITS = "0123456789abcdefghijklmnopqrstuvwxyz"
 
-    @discord.ui.button(emoji="⬆️", style=discord.ButtonStyle.green)
-    async def upvote(self, interaction: discord.Interaction, button: discord.ui.Button):
-        async with self._lock:
-            if interaction.user.id in self.upvoted_users:
-                await interaction.response.send_message(t("messageimage.err.already_upvoted"), ephemeral=True)
-                return
-            self.upvotes += 1
-            self.upvoted_users.add(interaction.user.id)
-            button.label = t("messageimage.value.upvote_count_suffix", count=self.upvotes)
-            if self.upvotes >= 5:
-                channel = bot.get_channel(config("upvote_board_channel_id"))
-                message = interaction.message
-                image = message.attachments[0].url if message.attachments else None
-                if channel and image:
-                    if self.on_board_message is None:  # 確保同一則訊息不會被重複放上看板
-                        embed = discord.Embed()
-                        embed.set_image(url=image)
-                        embed.set_author(name=self.original_user.display_name + f"({self.original_user.name})", icon_url=self.original_user.display_avatar.url if self.original_user.display_avatar else None)
-                        sent_message = await channel.send(embed=embed, content=t("messageimage.value.upvote_board_content", count=self.upvotes))
-                        self.on_board_message = sent_message
-                    else:
-                        # 如果已經在看板上了，更新看板訊息的內容
-                        try:
-                            await self.on_board_message.edit(content=t("messageimage.value.upvote_board_content", count=self.upvotes))
-                        except Exception as e:
-                            log(f"Failed to update board message: {e}", module_name="MessageImage", level=logging.ERROR)
-                guild_channel_id = get_server_config(interaction.guild.id, "upvote_board_channel_id")
-                if guild_channel_id:
-                    guild_channel = bot.get_channel(guild_channel_id)
-                    if guild_channel and image:
-                        if self.on_guild_board_message is None:  # 確保同一則訊息不會被重複放上公會看板
-                            embed = discord.Embed()
-                            embed.set_image(url=image)
-                            embed.set_author(name=self.original_user.display_name + f"({self.original_user.name})", icon_url=self.original_user.display_avatar.url if self.original_user.display_avatar else None)
-                            sent_message = await guild_channel.send(embed=embed, content=t("messageimage.value.upvote_board_content", count=self.upvotes))
-                            self.on_guild_board_message = sent_message
-                        else:
-                            # 如果已經在公會看板上了，更新公會看板訊息的內容
-                            try:
-                                await self.on_guild_board_message.edit(content=t("messageimage.value.upvote_board_content", count=self.upvotes))
-                            except Exception as e:
-                                log(f"Failed to update guild board message: {e}", module_name="MessageImage", level=logging.ERROR)
-            await interaction.response.edit_message(view=self)
+
+def _to_base36(value: int) -> str:
+    digits = ""
+    while True:
+        value, remainder = divmod(value, 36)
+        digits = _BASE36_DIGITS[remainder] + digits
+        if not value:
+            return digits
+
+
+def _upvote_voter_bits(message_id: int, user_id: int) -> int:
+    digest = hashlib.blake2b(f"{message_id}:{user_id}".encode(), digest_size=UPVOTE_VOTER_FILTER_HASHES * 2).digest()
+    bits = 0
+    for i in range(0, len(digest), 2):
+        bits |= 1 << (int.from_bytes(digest[i:i + 2], "big") % (UPVOTE_VOTER_FILTER_BYTES * 8))
+    return bits
+
+
+class _UpvoteQueue:
+    """同一則訊息的按讚要依序處理；排隊中的 interaction 帶的是舊的 custom_id，所以記下最新的"""
+
+    def __init__(self):
+        self.lock = asyncio.Lock()
+        self.custom_id = None
+        self.pending = 0
+
+
+_upvote_queues: dict[int, _UpvoteQueue] = {}
+
+
+class UpvoteButton(
+    discord.ui.DynamicItem[discord.ui.Button],
+    template=r"uv:(?P<author_id>[0-9a-z]+):(?P<count>[0-9]+):(?P<board_id>[0-9a-z]+):(?P<guild_board_id>[0-9a-z]+):(?P<voters>[A-Za-z0-9_-]{48})",
+):
+    def __init__(self, author_id: int, count: int = 0, board_id: int = 0, guild_board_id: int = 0, voters: int = 0):
+        self.author_id = author_id
+        self.count = count
+        self.board_id = board_id
+        self.guild_board_id = guild_board_id
+        self.voters = voters
+        super().__init__(discord.ui.Button(emoji="⬆️", style=discord.ButtonStyle.green, custom_id=self._encode()))
+        self._refresh()
+
+    def _encode(self) -> str:
+        voters = base64.urlsafe_b64encode(self.voters.to_bytes(UPVOTE_VOTER_FILTER_BYTES, "big")).decode()
+        return f"uv:{_to_base36(self.author_id)}:{self.count}:{_to_base36(self.board_id)}:{_to_base36(self.guild_board_id)}:{voters}"
+
+    def _refresh(self):
+        self.custom_id = self._encode()
+        self.item.label = t("messageimage.value.upvote_count_suffix", count=self.count) if self.count else None
+
+    @staticmethod
+    def _decode(match: re.Match) -> dict:
+        return {
+            "author_id": int(match["author_id"], 36),
+            "count": int(match["count"]),
+            "board_id": int(match["board_id"], 36),
+            "guild_board_id": int(match["guild_board_id"], 36),
+            "voters": int.from_bytes(base64.urlsafe_b64decode(match["voters"]), "big"),
+        }
+
+    @classmethod
+    async def from_custom_id(cls, interaction: discord.Interaction, item: discord.ui.Item, match: re.Match):
+        return cls(**cls._decode(match))
+
+    def sync(self, custom_id: str):
+        """換成 custom_id 記錄的狀態；不是讚按鈕的 custom_id 就忽略"""
+        match = self.template.fullmatch(custom_id)
+        if match:
+            for name, value in self._decode(match).items():
+                setattr(self, name, value)
+            self._refresh()
+
+    async def callback(self, interaction: discord.Interaction):
+        message = interaction.message
+        await interaction.response.defer()
+        queue = _upvote_queues.setdefault(message.id, _UpvoteQueue())
+        queue.pending += 1
+        try:
+            async with queue.lock:
+                if queue.custom_id:
+                    self.sync(queue.custom_id)
+                voter_bits = _upvote_voter_bits(message.id, interaction.user.id)
+                if self.voters & voter_bits == voter_bits:
+                    await interaction.followup.send(t("messageimage.err.already_upvoted"), ephemeral=True)
+                    return
+                self.count += 1
+                self.voters |= voter_bits
+                if self.count >= 5:
+                    await self._update_boards(interaction)
+                self._refresh()
+                # self.view 是從訊息重建的暫時 view，先 stop 才不會被存進 ViewStore，
+                # 蓋掉原本 view 還在處理的 GIF / 重新產生等按鈕
+                self.view.stop()
+                await interaction.edit_original_response(view=self.view)
+                queue.custom_id = self.custom_id
+        finally:
+            queue.pending -= 1
+            if not queue.pending:
+                del _upvote_queues[message.id]
+
+    async def _update_boards(self, interaction: discord.Interaction):
+        message = interaction.message
+        image = message.attachments[0].url if message.attachments else None
+        if not image:
+            return
+        self.board_id = await self._post_to_board(interaction, bot.get_channel(config("upvote_board_channel_id")), self.board_id, image)
+        guild_channel_id = get_server_config(interaction.guild.id, "upvote_board_channel_id") if interaction.guild else None
+        if guild_channel_id:
+            self.guild_board_id = await self._post_to_board(interaction, bot.get_channel(guild_channel_id), self.guild_board_id, image)
+
+    async def _post_to_board(self, interaction: discord.Interaction, channel, board_message_id: int, image: str) -> int:
+        """還沒上看板就發新訊息，已經上了就更新讚數；回傳看板訊息 ID"""
+        if channel is None:
+            return board_message_id
+        content = t("messageimage.value.upvote_board_content", count=self.count)
+        try:
+            if board_message_id:
+                await channel.get_partial_message(board_message_id).edit(content=content)
+                return board_message_id
+            author = (
+                (interaction.guild and interaction.guild.get_member(self.author_id))
+                or bot.get_user(self.author_id)
+                or await bot.fetch_user(self.author_id)
+            )
+            embed = discord.Embed()
+            embed.set_image(url=image)
+            embed.set_author(name=author.display_name + f"({author.name})", icon_url=author.display_avatar.url)
+            sent_message = await channel.send(embed=embed, content=content)
+            return sent_message.id
+        except discord.HTTPException as e:
+            log(f"Failed to update board message: {e}", module_name="MessageImage", level=logging.ERROR)
+            return board_message_id
+
+
+bot.add_dynamic_items(UpvoteButton)
+
+
+class UpvoteView(i18n.I18nView):
+    def __init__(self, original_user: discord.abc.User):
+        super().__init__()
+        self.upvote_button = UpvoteButton(original_user.id)
+        # 讚按鈕維持在第一個（子類別用裝飾器宣告的按鈕在 super().__init__() 就已經加進來了）
+        other_items = self.children
+        self.clear_items()
+        self.add_item(self.upvote_button)
+        for item in other_items:
+            self.add_item(item)
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        # 讚數是 UpvoteButton 直接改在訊息上的，這個 view 手上的還是舊值；
+        # 先同步，子類別的按鈕用 view=self 編輯訊息時才不會把讚數蓋回去
+        for row in interaction.message.components:
+            for component in getattr(row, "children", ()):
+                self.upvote_button.sync(getattr(component, "custom_id", None) or "")
+        return True
+
+    async def on_timeout(self):
+        # discord.py 移除逾時的 view 時，會把它含有的 DynamicItem 從全域註冊一併移除，要補回去
+        bot.add_dynamic_items(UpvoteButton)
 
 
 @bot.tree.command(name=app_commands.locale_str("upvoteboard", i18n_key="cmd.messageimage.upvoteboard.name"), description=app_commands.locale_str("Set up the upvote board; posts here once 5 people upvote a message.", i18n_key="cmd.messageimage.upvoteboard.desc"))
@@ -566,7 +684,7 @@ class BadQuoteView(UpvoteView):
         await interaction.response.edit_message(view=self)
         try:
             output_buffer, ext = await create(self.original_message, animate_gif=True)
-            await interaction.edit_original_response(attachments=[discord.File(output_buffer, filename=f"message_quote.{ext}")], view=self)
+            await interaction.edit_original_response(attachments=[discord.File(output_buffer, filename=f"message_quote.{ext}")])
         except discord.HTTPException as e:
             await interaction.followup.send(t("messageimage.err.upload_failed_size_limit"), ephemeral=True)
 
@@ -1120,7 +1238,6 @@ class WhatIsThisGuyTalkingView(UpvoteView):
             buffer = await _build_whatisthisguytalking_preview(self.screenshot_bytes)
             await interaction.edit_original_response(
                 attachments=[discord.File(buffer, filename="whatisthisguytalking.png")],
-                view=self
             )
         except Exception as e:
             await interaction.followup.send(t("messageimage.err.regen_failed", error=str(e)), ephemeral=True)
@@ -1197,7 +1314,6 @@ class EnhancedWhatIsThisGuyTalkingView(UpvoteView):
             buffer = await _build_whatisthisguytalking_preview(self.screenshot_bytes)
             await interaction.edit_original_response(
                 attachments=[discord.File(buffer, filename="whatisthisguytalking.png")],
-                view=self,
             )
         except Exception as e:
             await interaction.followup.send(t("messageimage.err.regen_failed", error=str(e)), ephemeral=True)
@@ -1222,7 +1338,6 @@ class EnhancedWhatIsThisGuyTalkingView(UpvoteView):
 
             await interaction.edit_original_response(
                 attachments=[discord.File(output_buffer, filename="whatisthisguytalking.gif")],
-                view=self,
             )
         except discord.HTTPException as e:
             await interaction.followup.send(t("messageimage.err.gif_generation_failed", error=str(e)), ephemeral=True)
@@ -1249,7 +1364,6 @@ class EnhancedWhatIsThisGuyTalkingView(UpvoteView):
 
             await interaction.edit_original_response(
                 attachments=[discord.File(output_buffer, filename="whatisthisguytalking.mp4")],
-                view=self,
             )
         except discord.HTTPException as e:
             await interaction.followup.send(t("messageimage.err.video_generation_failed", error=str(e)), ephemeral=True)

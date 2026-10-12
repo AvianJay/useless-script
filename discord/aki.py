@@ -11,6 +11,7 @@ from i18n import t
 in_game_sessions = {}
 last_game_time = {}
 
+
 @app_commands.allowed_installs(guilds=True, users=True)
 @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
 class Aki(commands.Cog):
@@ -41,16 +42,21 @@ class Aki(commands.Cog):
         if datetime.now(timezone.utc) - last_game_time.get(interaction.user.id, datetime.min.replace(tzinfo=timezone.utc)) < timedelta(minutes=1):
             await interaction.followup.send(t("aki.err.on_cooldown"), ephemeral=True)
             return
+        game = None
         try:
             in_game_sessions[interaction.user.id] = True
             game = AkinatorGame(interaction)
             await game.start()
         except Exception as e:
-            if not interaction.response.is_done():
-                await interaction.response.send_message(t("aki.err.generic", error=str(e)), ephemeral=True)
-            else:
-                await interaction.followup.send(t("aki.err.generic", error=str(e)), ephemeral=True)
             in_game_sessions.pop(interaction.user.id, None)
+            if game is not None:
+                game.view.stop()
+            error = (t("aki.err.service_unavailable") if isinstance(e, rynaki.AkinatorError)
+                     else t("aki.err.generic", error=str(e)))
+            if not interaction.response.is_done():
+                await interaction.response.send_message(error, ephemeral=True)
+            else:
+                await interaction.followup.send(error, ephemeral=True)
 
 
 class AkinatorGame:
@@ -124,7 +130,7 @@ class AkinatorView(i18n.I18nView):
         await interaction.response.defer()
         try:
             await self.game.post_answer(answer)
-        except rynaki.main.AkinatorError:
+        except rynaki.AkinatorError:
             in_game_sessions.pop(self.game.interaction.user.id, None)
             last_game_time[self.game.interaction.user.id] = datetime.now(timezone.utc)
             await interaction.followup.send(t("aki.err.service_unavailable"), ephemeral=True)
