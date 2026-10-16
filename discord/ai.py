@@ -1658,14 +1658,20 @@ class AIStreamProgress:
     """Live counters for one streamed completion, written by the stream collector thread.
 
     The event loop only reads these fields; each is replaced as a whole rather than
-    mutated in place, so a reader never sees a container mid-update.
+    mutated in place, so a reader never sees a container mid-update. The one field the
+    event loop writes is ``cancelled``, which tells the collector to stop reading.
     """
 
     CONTENT_HEAD_MAX_CHARS = 400
+    # Enough to preview a call's short leading field (query, url, ...) without copying the
+    # whole payload of a large call such as upload_html on every delta.
+    ARGUMENTS_HEAD_MAX_CHARS = 600
     # CJK text runs about one token per character; other text about four characters per token.
     CJK_PATTERN = re.compile(r"[\u2e80-\u9fff\uac00-\ud7af\uf900-\ufaff\uff00-\uffef\U00020000-\U0002fa1f]")
 
     def __init__(self):
+        # Survives reset() so a cancel that lands before the worker thread starts still counts.
+        self.cancelled = False
         self.reset()
 
     def reset(self) -> None:
@@ -1673,32 +1679,71 @@ class AIStreamProgress:
         self.first_token_at = None
         self.finished_at = None
         self.estimated_tokens = 0.0
+        self.estimated_reasoning_tokens = 0.0
         self.completion_tokens = None
+        self.reasoning_tokens = None
         self.content_head = ""
-        self.tool_names = ()
+        self.tool_calls = ()
+        self._tool_call_parts: dict[int, list[str]] = {}
 
-    def add_text(self, text: str, *, content: bool = False) -> None:
+    @classmethod
+    def estimate_tokens(cls, text: str) -> float:
+        cjk_chars = len(cls.CJK_PATTERN.findall(text))
+        return cjk_chars + (len(text) - cjk_chars) / 4
+
+    def add_text(self, text: str, *, content: bool = False, reasoning: bool = False) -> None:
         if not text:
             return
         if self.first_token_at is None:
             self.first_token_at = time.perf_counter()
-        cjk_chars = len(self.CJK_PATTERN.findall(text))
-        self.estimated_tokens += cjk_chars + (len(text) - cjk_chars) / 4
+        estimate = self.estimate_tokens(text)
+        self.estimated_tokens += estimate
+        if reasoning:
+            self.estimated_reasoning_tokens += estimate
         if content and len(self.content_head) < self.CONTENT_HEAD_MAX_CHARS:
             self.content_head = (self.content_head + text)[: self.CONTENT_HEAD_MAX_CHARS]
 
-    def record_usage(self, completion_tokens) -> None:
+    def add_tool_call_delta(self, index: int, name: str | None, arguments: str | None) -> None:
+        parts = self._tool_call_parts.setdefault(index, ["", ""])
+        changed = False
+        if name:
+            parts[0] += name
+            changed = True
+        if arguments and len(parts[1]) < self.ARGUMENTS_HEAD_MAX_CHARS:
+            parts[1] = (parts[1] + arguments)[: self.ARGUMENTS_HEAD_MAX_CHARS]
+            changed = True
+        if changed:
+            self.tool_calls = tuple(
+                (call_name, call_arguments)
+                for _, (call_name, call_arguments) in sorted(self._tool_call_parts.items())
+                if call_name
+            )
+        self.add_text(name or "")
+        self.add_text(arguments or "")
+
+    @staticmethod
+    def _positive_int(value) -> int | None:
         try:
-            completion_tokens = int(completion_tokens)
+            value = int(value)
         except (TypeError, ValueError):
+            return None
+        return value if value > 0 else None
+
+    def record_usage(self, completion_tokens, reasoning_tokens=None) -> None:
+        completion_tokens = self._positive_int(completion_tokens)
+        if completion_tokens is None:
             return
-        if completion_tokens > 0:
-            self.completion_tokens = completion_tokens
+        self.completion_tokens = completion_tokens
+        self.reasoning_tokens = self._positive_int(reasoning_tokens)
 
     @property
     def tokens(self) -> int:
         # Provider usage also counts hidden reasoning; the estimate only covers streamed text.
         return self.completion_tokens or round(self.estimated_tokens)
+
+    @property
+    def reasoning(self) -> int:
+        return min(self.tokens, self.reasoning_tokens or round(self.estimated_reasoning_tokens))
 
 
 # ============================================
@@ -1728,9 +1773,10 @@ class AICommands(commands.Cog):
     TOOL_PROGRESS_TEXT_MAX_LENGTH = 180
     # Mid-stream notice edits share Discord's per-token (slash) / per-channel (prefix) edit
     # bucket with the round's own notice, so one stream never edits more than every 2s.
-    TOOL_STREAM_POLL_SECONDS = 0.5
-    TOOL_STREAM_NOTICE_INTERVAL_SECONDS = 2.0
-    TOOL_STREAM_STATS_DELAY_SECONDS = 5.0
+    STREAM_NOTICE_POLL_SECONDS = 0.5
+    STREAM_NOTICE_INTERVAL_SECONDS = 2.0
+    STREAM_STATS_DELAY_SECONDS = 5.0
+    TOOL_USAGE_DETAIL_MAX_LENGTH = 60
     AI_RETRY_MAX_ATTEMPTS = 4
     AI_RETRY_BASE_DELAY_SECONDS = 1.5
     AI_RETRY_MAX_DELAY_SECONDS = 12.0
@@ -1909,6 +1955,20 @@ class AICommands(commands.Cog):
         "browser_view": "ai.tool_label.browser_view",
         "browser_act": "ai.tool_label.browser_act",
         "browser_evaluate": "ai.tool_label.browser_evaluate",
+    }
+    # One short, public-facing argument per tool shown next to its label. Browser tools are
+    # deliberately absent: their arguments are redacted from logs and stay off the channel too.
+    TOOL_USAGE_DETAIL_FIELDS = {
+        "search_ai": "query",
+        "search_google": "query",
+        "search_google_images": "query",
+        "search_bot_docs": "query",
+        "search_message": "query",
+        "fetch_webpage": "url",
+        "fetch_raw": "url",
+        "generate_image": "prompt",
+        "generate_video": "prompt",
+        "execute_code": "language",
     }
     EMOJI_NAME_PATTERN = re.compile(r'(?<!<):([a-zA-Z0-9_]{2,32}):')
     CUSTOM_EMOJI_LITERAL_PATTERN = re.compile(r'<a?:[a-zA-Z0-9_]{2,32}:\d+>')
@@ -2306,6 +2366,8 @@ class AICommands(commands.Cog):
         kwargs.pop("provider", None)
         kwargs.pop("web_search", None)
         stream_progress = kwargs.pop("stream_progress", None)
+        if stream_progress is None:
+            stream_progress = AIStreamProgress()
         kwargs["stream"] = True
         image = kwargs.pop("image", None)
         model = str(kwargs.get("model", "openai-fast") or "openai-fast")
@@ -2316,8 +2378,7 @@ class AICommands(commands.Cog):
 
         async def request_once():
             def request_and_collect():
-                if stream_progress is not None:
-                    stream_progress.reset()
+                stream_progress.reset()
                 client = _create_ai_client()
                 stream = client.chat.completions.create(**kwargs)
                 return self._collect_ai_completion_stream(
@@ -2326,7 +2387,13 @@ class AICommands(commands.Cog):
                     progress=stream_progress,
                 )
 
-            return await asyncio.to_thread(request_and_collect)
+            try:
+                return await asyncio.to_thread(request_and_collect)
+            except asyncio.CancelledError:
+                # The worker thread cannot be interrupted, so it would otherwise read the whole
+                # stream for nobody. Stopping it closes the stream and the provider stops too.
+                stream_progress.cancelled = True
+                raise
 
         try:
             return await self._run_ai_completion_with_retry(request_once, model=model)
@@ -2393,13 +2460,19 @@ class AICommands(commands.Cog):
 
         try:
             for chunk in chunks:
+                if progress.cancelled:
+                    break
                 response_id = cls._ai_stream_value(chunk, "id", response_id)
                 response_model = cls._ai_stream_value(chunk, "model", response_model) or response_model
                 response_created = cls._ai_stream_value(chunk, "created", response_created)
                 chunk_usage = cls._ai_stream_value(chunk, "usage")
                 if chunk_usage is not None:
                     response_usage = chunk_usage
-                    progress.record_usage(cls._ai_stream_value(chunk_usage, "completion_tokens"))
+                    usage_details = cls._ai_stream_value(chunk_usage, "completion_tokens_details")
+                    progress.record_usage(
+                        cls._ai_stream_value(chunk_usage, "completion_tokens"),
+                        cls._ai_stream_value(usage_details, "reasoning_tokens"),
+                    )
 
                 for fallback_index, raw_choice in enumerate(cls._ai_stream_value(chunk, "choices", []) or []):
                     choice_index = cls._ai_stream_value(raw_choice, "index", fallback_index)
@@ -2438,7 +2511,7 @@ class AICommands(commands.Cog):
                         reasoning_content = str(reasoning_content)
                         choice["has_reasoning_content"] = True
                         choice["reasoning_content"].append(reasoning_content)
-                        progress.add_text(reasoning_content)
+                        progress.add_text(reasoning_content, reasoning=True)
 
                     images = cls._ai_stream_value(delta, "images")
                     if images:
@@ -2468,13 +2541,10 @@ class AICommands(commands.Cog):
                         if function_name is not None:
                             function_name = str(function_name)
                             tool_call["name"].append(function_name)
-                            progress.add_text(function_name)
-                            names = ("".join(call["name"]) for _, call in sorted(choice["tool_calls"].items()))
-                            progress.tool_names = tuple(filter(None, names))
                         if function_arguments is not None:
                             function_arguments = str(function_arguments)
                             tool_call["arguments"].append(function_arguments)
-                            progress.add_text(function_arguments)
+                        progress.add_tool_call_delta(tool_index, function_name, function_arguments)
 
                     finish_reason = cls._ai_stream_value(raw_choice, "finish_reason")
                     if finish_reason is not None:
@@ -2590,8 +2660,8 @@ class AICommands(commands.Cog):
             tools = self._build_ai_tools() if active_tool_context else None
 
             for round_index in range(1, (self.MAX_TOOL_ITERATIONS if tools else 1) + 1):
-                stream_progress = AIStreamProgress() if tools and tool_progress_callback is not None else None
-                async with self._streaming_tool_notice(stream_progress, tool_progress_callback, round_index):
+                stream_progress = AIStreamProgress() if tool_progress_callback is not None else None
+                async with self._streaming_notice(stream_progress, tool_progress_callback, round_index):
                     response, tool_call_mode = await self._request_ai_completion(
                         working_messages,
                         model=model,
@@ -2731,19 +2801,22 @@ class AICommands(commands.Cog):
                     )
                 working_image = None
 
-            final_response, _ = await self._request_ai_completion(
-                working_messages
-                + [
-                    {
-                        "role": "user",
-                        "content": (
-                            "Please provide your final answer now. "
-                            "Do not call more tools unless absolutely necessary."
-                        ),
-                    }
-                ],
-                model=model,
-            )
+            stream_progress = AIStreamProgress() if tool_progress_callback is not None else None
+            async with self._streaming_notice(stream_progress, tool_progress_callback, self.MAX_TOOL_ITERATIONS + 1):
+                final_response, _ = await self._request_ai_completion(
+                    working_messages
+                    + [
+                        {
+                            "role": "user",
+                            "content": (
+                                "Please provide your final answer now. "
+                                "Do not call more tools unless absolutely necessary."
+                            ),
+                        }
+                    ],
+                    model=model,
+                    stream_progress=stream_progress,
+                )
             end_time = time.perf_counter()
             final_message = final_response.choices[0].message
             final_text = str(getattr(final_message, "content", "") or "").strip()
@@ -3488,7 +3561,7 @@ class AICommands(commands.Cog):
         stats_text: str | None = None,
         receiving: bool = False,
     ) -> str:
-        """receiving marks a tool call whose arguments are still streaming in."""
+        """receiving marks a round whose output (tool arguments or text) is still streaming in."""
         labels: list[str] = []
         seen: set[str] = set()
         for tool_call in tool_calls or []:
@@ -3497,6 +3570,9 @@ class AICommands(commands.Cog):
                 continue
             label_key = cls.TOOL_USAGE_LABELS.get(tool_name)
             label = t(label_key) if label_key else tool_name
+            detail = cls._tool_usage_detail(tool_name, (tool_call or {}).get("arguments"))
+            if detail:
+                label = t("ai.value.tool_label_detail", label=label, detail=detail)
             if label in seen:
                 continue
             seen.add(label)
@@ -3528,6 +3604,35 @@ class AICommands(commands.Cog):
             return '\n'.join(labels[:4]) + "\n" + t("ai.msg.waiting_tools", count=len(labels)) + suffix
         return '\n'.join(labels) + suffix
 
+    @classmethod
+    def _tool_usage_detail(cls, tool_name: str, arguments) -> str:
+        """The tool's public-facing argument for its label, once that value has fully arrived."""
+        field = cls.TOOL_USAGE_DETAIL_FIELDS.get(tool_name)
+        if not field or not arguments:
+            return ""
+        if isinstance(arguments, dict):
+            value = arguments.get(field)
+        else:
+            # Arguments may still be streaming in, so this reads one closed JSON value
+            # instead of parsing the whole (possibly unfinished) object.
+            raw = str(arguments)
+            match = re.search(rf'"{re.escape(field)}"\s*:\s*', raw)
+            if match is None:
+                return ""
+            try:
+                value, _end = json.JSONDecoder().raw_decode(raw, match.end())
+            except ValueError:
+                return ""
+        if not isinstance(value, str):
+            return ""
+        if field == "url":
+            # Without a scheme Discord neither links nor unfurls it, so truncating stays harmless.
+            value = re.sub(r"^[a-z][a-z0-9+.-]*://", "", value, flags=re.IGNORECASE)
+        value = re.sub(r"\s+", " ", value).strip()
+        if len(value) > cls.TOOL_USAGE_DETAIL_MAX_LENGTH:
+            value = value[: cls.TOOL_USAGE_DETAIL_MAX_LENGTH - 3].rstrip() + "..."
+        return discord.utils.escape_mentions(discord.utils.escape_markdown(value))
+
     @staticmethod
     def _format_ai_stream_stats(
         progress: AIStreamProgress | None,
@@ -3535,7 +3640,7 @@ class AICommands(commands.Cog):
         receiving: bool = False,
         now: float | None = None,
     ) -> str:
-        """Render `↓/↑ N Tokens | X TPS` for a streamed round, or "" when nothing streamed."""
+        """Render `↓/↑ N Tokens | X TPS | first token` for a streamed round, or "" when nothing streamed."""
         tokens = progress.tokens if progress is not None else 0
         if tokens <= 0:
             return ""
@@ -3549,22 +3654,31 @@ class AICommands(commands.Cog):
             arrow = "↑"
             elapsed = (progress.finished_at or now) - progress.started_at
         tokens_per_second = tokens / elapsed if elapsed > 0 else 0.0
-        return f"{arrow} {tokens:,} Tokens | {tokens_per_second:.1f} TPS"
+        tokens_text = f"{tokens:,} Tokens"
+        reasoning = progress.reasoning
+        if reasoning > 0:
+            reasoning_text = t("ai.value.stream_reasoning_tokens", tokens=f"{reasoning:,}")
+            tokens_text = f"{tokens_text} ({reasoning_text})"
+        parts = [f"{arrow} {tokens_text}", f"{tokens_per_second:.1f} TPS"]
+        if progress.first_token_at is not None:
+            first_token_seconds = progress.first_token_at - progress.started_at
+            parts.append(t("ai.value.stream_first_token", seconds=f"{first_token_seconds:.1f}"))
+        return " | ".join(parts)
 
     @contextlib.asynccontextmanager
-    async def _streaming_tool_notice(
+    async def _streaming_notice(
         self,
         progress: AIStreamProgress | None,
         tool_progress_callback,
         round_index: int,
     ):
-        """Mirror a native tool call into the tool notice while its round is still streaming."""
+        """Mirror a round's stream into the tool notice while it is still arriving."""
         if progress is None or tool_progress_callback is None:
             yield
             return
         stopped = asyncio.Event()
         watcher = asyncio.create_task(
-            self._watch_streaming_tool_call(progress, tool_progress_callback, round_index, stopped)
+            self._watch_stream_progress(progress, tool_progress_callback, round_index, stopped)
         )
         try:
             yield
@@ -3574,7 +3688,7 @@ class AICommands(commands.Cog):
             stopped.set()
             await asyncio.gather(watcher, return_exceptions=True)
 
-    async def _watch_streaming_tool_call(
+    async def _watch_stream_progress(
         self,
         progress: AIStreamProgress,
         tool_progress_callback,
@@ -3585,35 +3699,41 @@ class AICommands(commands.Cog):
         shown_at = None
         while True:
             try:
-                await asyncio.wait_for(stopped.wait(), timeout=self.TOOL_STREAM_POLL_SECONDS)
+                await asyncio.wait_for(stopped.wait(), timeout=self.STREAM_NOTICE_POLL_SECONDS)
                 return
             except asyncio.TimeoutError:
                 pass
             now = time.perf_counter()
-            tool_names = progress.tool_names
-            # Plain answers never touch the notice; only a streaming native tool call does.
-            if not tool_names:
-                continue
-            if shown_at is not None and now - shown_at < self.TOOL_STREAM_NOTICE_INTERVAL_SECONDS:
-                continue
+            tool_calls = progress.tool_calls
             first_token_at = progress.first_token_at
-            stats_text = ""
-            if first_token_at is not None and now - first_token_at >= self.TOOL_STREAM_STATS_DELAY_SECONDS:
-                stats_text = self._format_ai_stream_stats(progress, receiving=True, now=now)
-            notice = (tool_names, progress.content_head, stats_text)
+            long_running = first_token_at is not None and now - first_token_at >= self.STREAM_STATS_DELAY_SECONDS
+            # A tool call shows as soon as it streams in, anything else only once it runs long,
+            # so short plain answers never touch the notice.
+            if not tool_calls and not long_running:
+                continue
+            if shown_at is not None and now - shown_at < self.STREAM_NOTICE_INTERVAL_SECONDS:
+                continue
+            stats_text = self._format_ai_stream_stats(progress, receiving=True, now=now) if long_running else ""
+            if tool_calls:
+                progress_text = progress.content_head
+            elif progress.content_head:
+                progress_text = t("ai.value.stream_writing")
+            else:
+                progress_text = t("ai.value.stream_thinking")
+            notice = (tool_calls, progress_text, stats_text)
             if notice == shown:
                 continue
             shown = notice
             try:
                 await tool_progress_callback(
-                    [{"name": name} for name in tool_names],
+                    [{"name": name, "arguments": arguments} for name, arguments in tool_calls],
                     round_index,
-                    notice[1],
+                    progress_text,
                     stats_text=stats_text,
                     receiving=True,
                 )
             except Exception as error:
-                log(f"AI streaming tool notice failed: {error}", module_name="AI", level=logging.WARNING)
+                log(f"AI streaming notice failed: {error}", module_name="AI", level=logging.WARNING)
                 return
             # Spacing counts from when the edit lands, so a throttled edit slows the next one too.
             shown_at = time.perf_counter()

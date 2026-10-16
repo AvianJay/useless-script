@@ -209,12 +209,17 @@
         "querying": "Querying...",
         "role_user": "You",
         "shortfall_suffix": "Balance was insufficient, charged {shortfall} less (should have charged {total_cost})",
+        "stream_first_token": "first token {seconds}s",
+        "stream_reasoning_tokens": "{tokens} reasoning",
+        "stream_thinking": "Thinking",
+        "stream_writing": "Writing the reply",
         "toggle_disabled": "disabled",
         "toggle_enabled": "enabled",
         "toggle_hidden": "❌ Hidden",
         "toggle_off": "❌ Off",
         "toggle_on": "✅ On",
         "toggle_shown": "✅ Shown",
+        "tool_label_detail": "{label}: {detail}",
         "untitled_memory": "Untitled memory",
         "unknown_time": "unknown time"
     }

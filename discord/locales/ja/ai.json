@@ -209,12 +209,17 @@
         "querying": "クエリ中...",
         "role_user": "あなた",
         "shortfall_suffix": "残高が不十分でした。請求額は {shortfall} 未満です ({total_cost} を請求する必要がありました)",
+        "stream_first_token": "初回応答 {seconds}秒",
+        "stream_reasoning_tokens": "思考 {tokens}",
+        "stream_thinking": "思考中",
+        "stream_writing": "返信を作成中",
         "toggle_disabled": "無効化された",
         "toggle_enabled": "有効",
         "toggle_hidden": "❌ 非表示",
         "toggle_off": "❌ オフ",
         "toggle_on": "✅ オン",
         "toggle_shown": "✅表示",
+        "tool_label_detail": "{label}「{detail}」",
         "untitled_memory": "無題のメモ",
         "unknown_time": "不明な時間"
     }

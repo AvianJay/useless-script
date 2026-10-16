@@ -206,12 +206,17 @@
         "querying": "查詢中...",
         "role_user": "你",
         "shortfall_suffix": "餘額不足少扣 {shortfall}（原應扣 {total_cost}）",
+        "stream_first_token": "首字 {seconds}s",
+        "stream_reasoning_tokens": "思考 {tokens}",
+        "stream_thinking": "思考中",
+        "stream_writing": "撰寫回覆中",
         "toggle_disabled": "關閉",
         "toggle_enabled": "開啟",
         "toggle_hidden": "❌ 隱藏",
         "toggle_off": "❌ 不使用",
         "toggle_on": "✅ 使用",
         "toggle_shown": "✅ 顯示",
+        "tool_label_detail": "{label}「{detail}」",
         "untitled_memory": "未命名記憶",
         "unknown_time": "未知時間"
     }
