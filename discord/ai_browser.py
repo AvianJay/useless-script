@@ -568,9 +568,9 @@ class BrowserSessionManager:
     async def _notify_progress(self, tool_context: dict, message: str) -> None:
         """Show browser lifecycle status without discarding the round's tool message.
 
-        The round's own tool calls and narration are replayed so the notice keeps its
-        content; ``message`` is rendered as a footnote under it. An empty message clears
-        the footnote.
+        The round's own tool calls, narration and token stats are replayed so the notice
+        keeps its content; ``message`` is rendered as a footnote under it. An empty message
+        clears the footnote.
         """
         callback = (tool_context or {}).get("_browser_progress_callback")
         if callback is None:
@@ -582,6 +582,7 @@ class BrowserSessionManager:
                 0,
                 state.get("progress_text") or "",
                 message,
+                stats_text=state.get("stats_text") or "",
             )
         except Exception:
             pass

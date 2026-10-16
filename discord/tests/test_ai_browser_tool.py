@@ -448,23 +448,34 @@ class BrowserProgressNoticeTests(unittest.IsolatedAsyncioTestCase):
     async def test_browser_status_replays_the_rounds_tool_calls(self):
         calls = []
 
-        async def callback(tool_calls, round_index, progress_text="", status_text=""):
-            calls.append((list(tool_calls), progress_text, status_text))
+        async def callback(tool_calls, round_index, progress_text="", status_text="", stats_text=""):
+            calls.append((list(tool_calls), progress_text, status_text, stats_text))
 
         context = tool_context()
         context["_browser_progress_callback"] = callback
         context["_tool_progress_state"] = {
             "tool_calls": [{"name": "browser_act"}],
             "progress_text": "Filling the form.",
+            "stats_text": "↑ 120 Tokens | 40.0 TPS",
         }
         await self.cog.browser._notify_progress(context, "Connecting to the browser...")
 
-        self.assertEqual(calls, [([{"name": "browser_act"}], "Filling the form.", "Connecting to the browser...")])
+        self.assertEqual(
+            calls,
+            [
+                (
+                    [{"name": "browser_act"}],
+                    "Filling the form.",
+                    "Connecting to the browser...",
+                    "↑ 120 Tokens | 40.0 TPS",
+                )
+            ],
+        )
 
     async def test_attach_clears_the_connecting_footnote(self):
         statuses = []
 
-        async def callback(tool_calls, round_index, progress_text="", status_text=""):
+        async def callback(tool_calls, round_index, progress_text="", status_text="", stats_text=""):
             statuses.append(status_text)
 
         page = SimpleNamespace(
