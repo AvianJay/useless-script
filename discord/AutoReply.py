@@ -766,7 +766,7 @@ class AutoReplyBuilderView(discord.ui.View):
 @app_commands.default_permissions(manage_guild=True)
 @app_commands.allowed_installs(guilds=True, users=False)
 @app_commands.allowed_contexts(guilds=True, dms=False, private_channels=False)
-class AutoReply(commands.GroupCog, name=app_commands.locale_str("autoreply", i18n_key="cmd.autoreply.autoreply.root.name"), description=app_commands.locale_str("Auto-reply configuration commands", i18n_key="cmd.autoreply.autoreply.root.desc")):
+class AutoReply(commands.GroupCog, group_name=app_commands.locale_str("autoreply", i18n_key="cmd.autoreply.autoreply.root.name"), description=app_commands.locale_str("Auto-reply configuration commands", i18n_key="cmd.autoreply.autoreply.root.desc")):
     """自動回覆設定指令群組"""
 
     def __init__(self, bot):
