@@ -3,11 +3,15 @@ import io
 import sys
 import unittest
 from contextlib import ExitStack
+from email.parser import BytesParser
+from email.policy import default
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, Mock, patch
+from unittest.mock import AsyncMock, Mock, call, patch
 
 import aiohttp
+import httpx
+from openai import OpenAI
 from PIL import Image
 
 
@@ -19,11 +23,12 @@ from ai import AICommands
 
 
 IMAGE_URL = "https://cdn.discordapp.com/attachments/1/2/reference.png"
+SECOND_IMAGE_URL = "https://media.discordapp.net/attachments/1/3/style.png"
 
 
-def image_bytes(image_format="PNG"):
+def image_bytes(image_format="PNG", color=(20, 40, 60)):
     output = io.BytesIO()
-    Image.new("RGB", (8, 6), (20, 40, 60)).save(output, format=image_format)
+    Image.new("RGB", (8, 6), color).save(output, format=image_format)
     return output.getvalue()
 
 
@@ -124,6 +129,7 @@ class AIImageGenerationTests(unittest.IsolatedAsyncioTestCase):
     async def test_text_only_generation_sends_no_image(self):
         result = await self.cog._tool_generate_image({"prompt": "Draw a cat"}, self.context)
         self.assertFalse(result["used_reference_image"])
+        self.assertEqual(result["reference_image_count"], 0)
         self.assertNotIn("image", self.request.await_args.kwargs)
         self.fetch.assert_not_awaited()
         self.charge.assert_called_once_with(1, 250.0)
@@ -152,6 +158,120 @@ class AIImageGenerationTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(result["used_reference_image"])
         self.fetch.assert_awaited_once_with(IMAGE_URL)
 
+    async def test_all_current_attachments_are_uploaded_in_order_without_analysis(self):
+        self.context["request_image_attachments"] = [
+            SimpleNamespace(url=IMAGE_URL), SimpleNamespace(url=SECOND_IMAGE_URL),
+        ]
+        self.fetch.side_effect = [(self.png, None), (image_bytes(color=(90, 80, 70)), None)]
+        with patch.object(self.cog, "_analyze_image_bytes_for_tool", AsyncMock()) as analyze:
+            result = await self.cog._tool_generate_image({
+                "prompt": "Use the first character with the second image's colors",
+                "source": "current_attachments",
+            }, self.context)
+
+        self.assertEqual(result["reference_image_count"], 2)
+        self.assertTrue(result["used_reference_image"])
+        self.assertEqual(self.fetch.await_args_list, [call(IMAGE_URL), call(SECOND_IMAGE_URL)])
+        references = self.request.await_args.kwargs["image"]
+        self.assertEqual([item[0] for item in references], ["reference-1.png", "reference-2.png"])
+        for reference, expected_color in zip(references, [(20, 40, 60), (90, 80, 70)]):
+            self.assertEqual(reference[2], "image/png")
+            with Image.open(io.BytesIO(reference[1])) as decoded:
+                self.assertEqual(decoded.convert("RGB").getpixel((0, 0)), expected_color)
+        analyze.assert_not_awaited()
+        self.charge.assert_called_once_with(1, 250.0)
+
+    async def test_single_attachment_source_still_selects_only_the_first_image(self):
+        self.context["request_image_attachments"] = [
+            SimpleNamespace(url=IMAGE_URL), SimpleNamespace(url=SECOND_IMAGE_URL),
+        ]
+        result = await self.cog._tool_generate_image({
+            "prompt": "Edit the first image", "source": "current_attachment",
+        }, self.context)
+        self.assertEqual(result["reference_image_count"], 1)
+        self.fetch.assert_awaited_once_with(IMAGE_URL)
+        self.assertEqual(self.request.await_args.kwargs["image"][0], "reference.png")
+
+    async def test_plural_source_accepts_legacy_single_attachment_context(self):
+        self.context["request_image_attachment"] = SimpleNamespace(url=IMAGE_URL)
+        result = await self.cog._tool_generate_image({
+            "prompt": "Edit this", "source": "current_attachments",
+        }, self.context)
+        self.assertEqual(result["reference_image_count"], 1)
+        self.fetch.assert_awaited_once_with(IMAGE_URL)
+
+    async def test_url_list_accepts_sixteen_reference_images(self):
+        urls = [f"https://cdn.discordapp.com/attachments/1/2/reference-{index}.png" for index in range(16)]
+        result = await self.cog._tool_generate_image({
+            "prompt": "Combine these references", "image_urls": urls,
+        }, self.context)
+        self.assertEqual(result["reference_image_count"], 16)
+        self.assertEqual(len(self.request.await_args.kwargs["image"]), 16)
+        self.assertEqual(self.fetch.await_args_list, [call(url) for url in urls])
+        self.charge.assert_called_once_with(1, 250.0)
+
+    async def test_too_many_references_are_rejected_before_download_or_charge(self):
+        urls = [f"https://cdn.discordapp.com/attachments/1/2/reference-{index}.png" for index in range(17)]
+        self.context["request_image_attachments"] = [SimpleNamespace(url=url) for url in urls]
+        for arguments in ({"image_urls": urls}, {"source": "current_attachments"}):
+            with self.subTest(arguments=arguments):
+                result = await self.cog._tool_generate_image({"prompt": "Edit these", **arguments}, self.context)
+                self.assertIn("limit is 16", result["error"])
+        self.fetch.assert_not_awaited()
+        self.charge.assert_not_called()
+        self.request.assert_not_awaited()
+
+    async def test_malformed_url_lists_are_rejected_before_download_or_charge(self):
+        for urls in (IMAGE_URL, None, [], [None], [123], [""]):
+            with self.subTest(urls=urls):
+                result = await self.cog._tool_generate_image({
+                    "prompt": "Edit these", "image_urls": urls,
+                }, self.context)
+                self.assertIn("non-empty array", result["error"])
+        self.fetch.assert_not_awaited()
+        self.charge.assert_not_called()
+        self.request.assert_not_awaited()
+
+    async def test_invalid_later_url_is_rejected_before_any_download(self):
+        result = await self.cog._tool_generate_image({
+            "prompt": "Combine these", "image_urls": [IMAGE_URL, "https://example.com/style.png"],
+        }, self.context)
+        self.assertIn("https URLs", result["error"])
+        self.fetch.assert_not_awaited()
+        self.charge.assert_not_called()
+        self.request.assert_not_awaited()
+
+    async def test_invalid_later_reference_rejects_the_whole_request_before_charge(self):
+        self.fetch.side_effect = [(self.png, None), (b"not an image", None)]
+        result = await self.cog._tool_generate_image({
+            "prompt": "Combine these", "image_urls": [IMAGE_URL, SECOND_IMAGE_URL],
+        }, self.context)
+        self.assertIn("reference image 2 is invalid", result["error"])
+        self.charge.assert_not_called()
+        self.request.assert_not_awaited()
+
+    async def test_later_reference_download_failure_is_not_silently_omitted(self):
+        self.fetch.side_effect = [(self.png, None), (None, "Discord CDN returned HTTP 404")]
+        result = await self.cog._tool_generate_image({
+            "prompt": "Combine these", "image_urls": [IMAGE_URL, SECOND_IMAGE_URL],
+        }, self.context)
+        self.assertIn("reference image 2 download failed", result["error"])
+        self.charge.assert_not_called()
+        self.request.assert_not_awaited()
+
+    def test_runtime_context_identifies_all_images_and_their_order(self):
+        self.context["request_image_attachments"] = [
+            SimpleNamespace(filename="character.png", url=IMAGE_URL),
+            SimpleNamespace(filename="style.png", url=SECOND_IMAGE_URL),
+        ]
+        with patch("ai._is_ai_vision_model", return_value=False):
+            context = self.cog._build_runtime_prompt_context(self.context)
+        self.assertIn("2 image(s), in upload order", context)
+        self.assertIn(f"1. character.png: {IMAGE_URL}", context)
+        self.assertIn(f"2. style.png: {SECOND_IMAGE_URL}", context)
+        self.assertIn("generate_image source=current_attachments", context)
+        self.assertIn("cannot see them directly", context)
+
     async def test_newly_tagged_model_can_receive_images(self):
         self.input_models.return_value = ["gpt-image-2", "another-image-model"]
         result = await self.cog._tool_generate_image({
@@ -174,8 +294,11 @@ class AIImageGenerationTests(unittest.IsolatedAsyncioTestCase):
     async def test_invalid_sources_are_rejected_before_charge(self):
         for arguments in (
             {"source": "current_attachment", "image_url": IMAGE_URL},
+            {"source": "current_attachment", "image_urls": [IMAGE_URL]},
+            {"source": "current_attachments", "image_urls": [IMAGE_URL]},
             {"source": "unknown"},
             {"source": "current_attachment"},
+            {"source": "current_attachments"},
             {"image_url": "https://example.com/reference.png"},
             {"image_url": "http://cdn.discordapp.com/reference.png"},
         ):
@@ -243,9 +366,11 @@ class AIImageGenerationTests(unittest.IsolatedAsyncioTestCase):
         self.context["pending_image_attachments"] = [previous]
         self.request.side_effect = RuntimeError("provider unavailable")
         result = await self.cog._tool_generate_image({
-            "prompt": "Edit this", "image_url": IMAGE_URL,
+            "prompt": "Combine these", "image_urls": [IMAGE_URL, SECOND_IMAGE_URL],
         }, self.context)
         self.assertIn("provider unavailable", result["error"])
+        self.request.assert_awaited_once()
+        self.assertEqual(len(self.request.await_args.kwargs["image"]), 2)
         self.charge.assert_called_once_with(1, 250.0)
         self.refund.assert_called_once_with(1, 250.0)
         self.assertEqual(self.context["pending_image_attachments"], [previous])
@@ -274,8 +399,10 @@ class AIImageGenerationTests(unittest.IsolatedAsyncioTestCase):
         tool = next(tool["function"] for tool in self.cog._build_ai_tools()
                     if tool["function"]["name"] == "generate_image")
         properties = tool["parameters"]["properties"]
-        self.assertEqual(properties["source"]["enum"], ["current_attachment"])
+        self.assertEqual(properties["source"]["enum"], ["current_attachment", "current_attachments"])
         self.assertIn("image_url", properties)
+        self.assertEqual(properties["image_urls"]["type"], "array")
+        self.assertEqual(properties["image_urls"]["maxItems"], 16)
         self.assertEqual(properties["model"]["enum"], ["another-image-model", "gpt-image-2"])
         self.assertIn("Models supporting image input: gpt-image-2.", tool["description"])
 
@@ -303,6 +430,40 @@ class AIImageGenerationTests(unittest.IsolatedAsyncioTestCase):
 
 
 class AIImageEndpointTests(unittest.IsolatedAsyncioTestCase):
+    async def test_multiple_images_are_encoded_as_separate_multipart_uploads(self):
+        cog = AICommands(SimpleNamespace())
+        references = [
+            ("reference-1.png", image_bytes(), "image/png"),
+            ("reference-2.png", image_bytes(color=(90, 80, 70)), "image/png"),
+        ]
+        requests = []
+
+        def handle(request):
+            requests.append(request)
+            headers = f"Content-Type: {request.headers['content-type']}\r\nMIME-Version: 1.0\r\n\r\n".encode()
+            multipart = BytesParser(policy=default).parsebytes(headers + request.read())
+            uploads = [
+                part for part in multipart.iter_parts()
+                if part.get_param("name", header="content-disposition") == "image[]"
+            ]
+            self.assertEqual(len(uploads), 2)
+            for upload, (filename, content, mime) in zip(uploads, references):
+                self.assertEqual(upload.get_filename(), filename)
+                self.assertEqual(upload.get_content_type(), mime)
+                self.assertEqual(upload.get_payload(decode=True), content)
+            return httpx.Response(200, json={"created": 0, "data": []})
+
+        with OpenAI(
+            api_key="test-key", base_url="https://mock.invalid/v1",
+            http_client=httpx.Client(transport=httpx.MockTransport(handle)),
+        ) as client:
+            with patch("ai._create_ai_client", return_value=client):
+                await cog._create_image_generation_response(
+                    model="gpt-image-2", prompt="Combine these references", image=references,
+                )
+        self.assertEqual(len(requests), 1)
+        self.assertEqual(requests[0].url.path, "/v1/images/edits")
+
     async def test_generation_and_edit_requests_use_the_corresponding_endpoint(self):
         cog = AICommands(SimpleNamespace())
         response = SimpleNamespace(data=[])
@@ -317,6 +478,29 @@ class AIImageEndpointTests(unittest.IsolatedAsyncioTestCase):
             )
         client.images.generate.assert_called_once_with(model="gpt-image-2", prompt="Draw a cat")
         client.images.edit.assert_called_once_with(model="gpt-image-2", prompt="Edit this cat", image=reference)
+
+
+class AIMultipleImageMessageTests(unittest.TestCase):
+    def test_vision_messages_preserve_image_order_and_original_content(self):
+        first = image_bytes()
+        second = image_bytes("JPEG")
+        text = {"type": "text", "text": "Use the first character in the second style"}
+        messages = [
+            {"role": "user", "content": "previous question"},
+            {"role": "assistant", "content": "previous answer"},
+            {"role": "user", "content": [text]},
+        ]
+        prepared = ai_provider.attach_image_to_messages(messages, [first, second])
+        self.assertEqual(prepared[:2], messages[:2])
+        self.assertEqual(messages[-1]["content"], [text])
+        self.assertEqual(prepared[-1]["content"][0], text)
+        for part, content, mime in zip(
+            prepared[-1]["content"][1:], [first, second], ["image/png", "image/jpeg"],
+        ):
+            header, encoded = part["image_url"]["url"].split(",", 1)
+            self.assertEqual(header, f"data:{mime};base64")
+            self.assertEqual(base64.b64decode(encoded), content)
+        self.assertEqual(len(prepared[-1]["content"]), 3)
 
 
 if __name__ == "__main__":

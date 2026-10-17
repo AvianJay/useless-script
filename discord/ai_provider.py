@@ -399,7 +399,7 @@ def guess_image_mime_type(image: bytes) -> str:
     return "image/png"
 
 
-def content_with_image(content, image: bytes):
+def content_with_image(content, image: bytes | list[bytes]):
     parts = []
     if isinstance(content, list):
         parts.extend(content)
@@ -407,16 +407,18 @@ def content_with_image(content, image: bytes):
         text = str(content or "").strip()
         if text:
             parts.append({"type": "text", "text": text})
-    mime_type = guess_image_mime_type(image)
-    encoded_image = base64.b64encode(image).decode("ascii")
-    parts.append({
-        "type": "image_url",
-        "image_url": {"url": f"data:{mime_type};base64,{encoded_image}"},
-    })
+    images = image if isinstance(image, list) else [image]
+    for image_bytes in images:
+        mime_type = guess_image_mime_type(image_bytes)
+        encoded_image = base64.b64encode(image_bytes).decode("ascii")
+        parts.append({
+            "type": "image_url",
+            "image_url": {"url": f"data:{mime_type};base64,{encoded_image}"},
+        })
     return parts
 
 
-def attach_image_to_messages(messages: list, image: bytes | None) -> list:
+def attach_image_to_messages(messages: list, image: bytes | list[bytes] | None) -> list:
     prepared = [dict(message) for message in (messages or [])]
     if not image:
         return prepared
@@ -428,7 +430,7 @@ def attach_image_to_messages(messages: list, image: bytes | None) -> list:
     return prepared
 
 
-def create_ai_chat_completion(*, model: str, messages: list, image: bytes | None = None, **kwargs):
+def create_ai_chat_completion(*, model: str, messages: list, image: bytes | list[bytes] | None = None, **kwargs):
     client = create_ai_client()
     return client.chat.completions.create(
         model=model,

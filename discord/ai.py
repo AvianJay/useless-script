@@ -925,7 +925,7 @@ Response formatting helpers:
 - In LaTeX, use explicit balanced braces such as `\\frac{1}{2}`, `\\sqrt{2}`, and `\\sqrt[3]{8}`.
 - Complete top-level Markdown tables with a header separator are rendered as inline images automatically. Use tables when rows and columns make the answer easier to compare.
 - Use the `image_analyze` tool when the user asks about an image URL. The URL must be on cdn.discordapp.com or media.discordapp.net.
-- When runtime context says the current request has an image that this model cannot see directly, call `image_analyze` with `source: "current_attachment"` before answering any question that depends on the image. For editing or reference-based generation, you can forward the image directly with `generate_image` without analyzing it first. Never guess unseen image contents.
+- When runtime context says the current request has images that this model cannot see directly, call `image_analyze` for each relevant image before answering any question that depends on them. Use `source: "current_attachment"` for the first image or its listed Discord CDN URL for another image. For editing or reference-based generation, forward the images directly with `generate_image` without analyzing them first. Never guess unseen image contents.
 - To mention a slash command, write exactly: <command_mention>/autoreply list</command_mention>. The renderer will convert it to Discord's command mention when possible.
 - To show a Discord CDN image in the response body, write exactly: <image>https://cdn.discordapp.com/...</image> or <image>https://media.discordapp.net/...</image>.
 - To show a small side image, write exactly: <thumbnail>https://cdn.discordapp.com/...</thumbnail> or <thumbnail>https://media.discordapp.net/...</thumbnail>.
@@ -933,7 +933,7 @@ Response formatting helpers:
 - Use <generated_image></generated_image> only when an image was actually generated in this reply. Put it exactly where the generated image should appear. If omitted, generated images will be appended at the bottom automatically.
 - When `search_google_images` returns an attachment URL, place it with <attachment_image>attachment://filename</attachment_image>. If omitted, approved searched images are appended automatically. Never place the original external image URL in an image tag.
 - Use the `generate_image` tool when the user asks you to create, draw, render, or generate an image. If the tool reports attachments, say the image is attached below.
-- To edit or generate from a reference image, use `generate_image` with `source: "current_attachment"` or a Discord CDN `image_url`, but not both. Pass the actual image instead of only describing it. Omit both for text-only generation. Only use models marked as supporting image input.
+- To edit or generate from reference images, use `generate_image` with `source: "current_attachments"` for all current images in upload order, `source: "current_attachment"` for only the first, or `image_urls` for an ordered list of Discord CDN URLs (`image_url` also accepts one URL). Do not combine source with URLs. Pass the actual images instead of only describing them. Omit reference inputs for text-only generation. Only use models marked as supporting image input; at most 16 reference images are allowed.
 
 Layout markup (Discord Components V2). Plain Markdown is the default; use layout tags only when they make the answer clearly easier to read:
 - <container color="green" spoiler>...</container> makes a card. color is a hex like #57F287 or one of blurple/green/red/orange/yellow/gold/purple/blue/teal/grey; spoiler hides the card until clicked. Containers cannot be nested, and once you use one, text outside containers is shown without a card.
@@ -1914,6 +1914,7 @@ class AICommands(commands.Cog):
     IMAGE_TOOL_ALLOWED_SIZES = {"auto", "1024x1024", "1536x1024", "1024x1536", "256x256", "512x512", "1792x1024", "1024x1792"}
     IMAGE_TOOL_ALLOWED_QUALITIES = {"auto", "low", "medium", "high", "standard", "hd"}
     IMAGE_TOOL_MAX_COUNT = 4
+    IMAGE_TOOL_MAX_REFERENCE_IMAGES = 16
     IMAGE_TOOL_MAX_B64_BYTES = 7_500_000
     IMAGE_FILES_PER_MESSAGE = 10
     IMAGE_BYTES_PER_MESSAGE = 25 * 1024 * 1024
@@ -2657,7 +2658,7 @@ class AICommands(commands.Cog):
         self.rate_limits[user_id].append(current_time)
         return True
     
-    async def _generate_response_legacy(self, messages: list, model: str = "openai-fast", image: bytes = None) -> tuple[str, str, str]:
+    async def _generate_response_legacy(self, messages: list, model: str = "openai-fast", image: bytes | list[bytes] | None = None) -> tuple[str, str, str]:
         """使用 OpenAI-compatible API 生成 AI 回應"""
         try:
             start_time = time.perf_counter()
@@ -2678,7 +2679,7 @@ class AICommands(commands.Cog):
         self,
         messages: list,
         model: str = "openai-fast",
-        image: bytes = None,
+        image: bytes | list[bytes] | None = None,
         tool_context: dict | None = None,
         tool_progress_callback=None,
     ) -> tuple[str, str, str, str | None]:
@@ -5020,6 +5021,15 @@ class AICommands(commands.Cog):
         )  # i18n: skip-end
         return self._docs_feature_prompt_cache
 
+    @staticmethod
+    def _get_request_image_attachments(tool_context: dict | None) -> list[discord.Attachment]:
+        context = tool_context or {}
+        attachments = context.get("request_image_attachments")
+        if attachments is not None:
+            return [attachment for attachment in attachments if attachment is not None]
+        attachment = context.get("request_image_attachment")
+        return [attachment] if attachment is not None else []
+
     def _build_runtime_prompt_context(self, tool_context: dict | None = None) -> str:
         now = self._get_prompt_now()
         lines = [
@@ -5040,17 +5050,25 @@ class AICommands(commands.Cog):
         guild = (tool_context or {}).get("guild")
         if guild is not None:
             lines.append("guild_shared memory in this channel is shared by members of the current server.")
-        if (tool_context or {}).get("request_image_attachment") is not None:
+        request_images = self._get_request_image_attachments(tool_context)
+        if request_images:
             selected_model = str((tool_context or {}).get("model") or "").strip()
             if _is_ai_vision_model(selected_model):
-                lines.append("The current request image is attached directly and this model may inspect it.")
+                lines.append("The current request images are attached directly and this model may inspect them.")
             else:
                 lines.append(
-                    "The current request contains an image, but this model cannot see it directly. "
-                    "If the answer depends on the image, call image_analyze with source=current_attachment first. "
-                    "For editing or reference-based generation, forward it with generate_image source=current_attachment; "
-                    "image analysis is not required just to forward the image. "
+                    "The current request contains images, but this model cannot see them directly. "
+                    "If the answer depends on an image, call image_analyze with source=current_attachment for the first "
+                    "or image_url for another image first. "
+                    "For editing or reference-based generation, forward all images with generate_image source=current_attachments; "
+                    "image analysis is not required just to forward the images. "
                     "Do not guess the image contents."
+                )
+            lines.append(f"Current request has {len(request_images)} image(s), in upload order:")
+            for index, attachment in enumerate(request_images, 1):
+                lines.append(
+                    f"{index}. {getattr(attachment, 'filename', '') or 'image'}: "
+                    f"{getattr(attachment, 'url', '')}"
                 )
         return "\n".join(lines)
 
@@ -7392,9 +7410,11 @@ class AICommands(commands.Cog):
                 "function": {
                     "name": "generate_image",
                     "description": (
-                        "Generate or edit an image from a prompt, optionally with one reference image. "
-                        "Use source=current_attachment for the current request's image, or one Discord CDN image_url; "
-                        "do not provide both. Omit both for text-only generation. "
+                        f"Generate or edit an image from a prompt, optionally with up to {self.IMAGE_TOOL_MAX_REFERENCE_IMAGES} reference images. "
+                        "Use source=current_attachments for all current images in upload order, "
+                        "source=current_attachment for only the first, or image_urls for an ordered list of Discord CDN URLs "
+                        "(image_url also accepts one URL). Do not combine source with URLs. "
+                        "Omit reference inputs for text-only generation. "
                         f"Default model: {_get_ai_image_model()}. "
                         f"Models supporting image input: {', '.join(image_input_models) or '(none)'}. "
                         "Use this when the user asks to create, draw, render, generate, or edit an image."
@@ -7404,10 +7424,17 @@ class AICommands(commands.Cog):
                         "properties": {
                             "prompt": {"type": "string"},
                             "model": {"type": "string", "enum": sorted(image_models)},
-                            "source": {"type": "string", "enum": ["current_attachment"]},
+                            "source": {"type": "string", "enum": ["current_attachment", "current_attachments"]},
                             "image_url": {
                                 "type": "string",
                                 "description": "Optional reference image URL on cdn.discordapp.com or media.discordapp.net.",
+                            },
+                            "image_urls": {
+                                "type": "array",
+                                "items": {"type": "string"},
+                                "minItems": 1,
+                                "maxItems": self.IMAGE_TOOL_MAX_REFERENCE_IMAGES,
+                                "description": "Ordered reference image URLs on cdn.discordapp.com or media.discordapp.net.",
                             },
                             "size": {"type": "string"},
                             "quality": {"type": "string"},
@@ -7863,7 +7890,7 @@ class AICommands(commands.Cog):
                 "The first browser_act or browser_evaluate call in a browser session pauses until the user presses Allow or Reject in Discord. If allowed, the action runs and later interactive calls in this browser session execute without another prompt, so you may inspect the result and continue. If rejected, do not ask again in the same session. Never claim the user approved, and never call tools that do not exist such as browser_confirm or browser_propose.",
                 "Use browser_evaluate to run page-context JavaScript; the user sees the full script in the approval prompt, so keep it short and purposeful.",
                 "Never use browser tools for passwords, payment fields, uploads, downloads, local files, browser/profile management, or host Python/Node execution.",
-                "When runtime context says the current request has an image that the selected model cannot see directly, call image_analyze with source=current_attachment before answering anything that depends on the image. For editing or reference-based generation, forward the image with generate_image source=current_attachment without analyzing it first. Never guess unseen image contents.",
+                "When runtime context says the current request has images that the selected model cannot see directly, call image_analyze for each relevant image (source=current_attachment for the first, image_url for others) before answering anything that depends on them. For editing or reference-based generation, forward all images with generate_image source=current_attachments without analyzing them first. Never guess unseen image contents.",
                 "If the user explicitly asks to generate a video, animation clip, or ad clip, call generate_video.",
                 f"Discord message content is limited to about {self.DISCORD_MESSAGE_CHAR_LIMIT} characters. If the full answer, code, logs, list, or document would exceed that, call send_as_file.",
                 "After calling send_as_file, keep the final answer short and do not repeat the full file contents in the final message.",
@@ -9791,7 +9818,8 @@ class AICommands(commands.Cog):
         if source:
             if source != "current_attachment":
                 return {"error": "source must be current_attachment"}
-            current_attachment = (tool_context or {}).get("request_image_attachment")
+            request_images = self._get_request_image_attachments(tool_context)
+            current_attachment = request_images[0] if request_images else None
             if current_attachment is None:
                 return {"error": "the current request has no image attachment"}
             image_url = str(getattr(current_attachment, "url", "") or "").strip()
@@ -9906,12 +9934,29 @@ class AICommands(commands.Cog):
 
         source = str(args.get("source") or "").strip()
         image_url = str(args.get("image_url") or "").strip()
-        if source and image_url:
-            return {"error": "provide only one of source=current_attachment or image_url"}
-        if source and source != "current_attachment":
-            return {"error": "source must be current_attachment"}
-        reference_image = None
-        if source or image_url:
+        image_urls = args.get("image_urls", [])
+        if "image_urls" in args and (
+            not isinstance(image_urls, list)
+            or not image_urls
+            or any(not isinstance(url, str) or not url.strip() for url in image_urls)
+        ):
+            return {"error": "image_urls must be a non-empty array of image URL strings"}
+        if source and (image_url or image_urls):
+            return {"error": "provide either source or image_url/image_urls, not both"}
+        if source and source not in {"current_attachment", "current_attachments"}:
+            return {"error": "source must be current_attachment or current_attachments"}
+        reference_urls = ([image_url] if image_url else []) + image_urls
+        if source:
+            request_images = self._get_request_image_attachments(tool_context)
+            if not request_images:
+                return {"error": "the current request has no image attachment"}
+            selected_images = request_images[:1] if source == "current_attachment" else request_images
+            reference_urls = [str(getattr(attachment, "url", "") or "").strip() for attachment in selected_images]
+        if len(reference_urls) > self.IMAGE_TOOL_MAX_REFERENCE_IMAGES:
+            return {"error": f"too many reference images; limit is {self.IMAGE_TOOL_MAX_REFERENCE_IMAGES}"}
+
+        reference_images = []
+        if reference_urls:
             input_models = _get_ai_image_input_models()
             if model not in input_models:
                 return {
@@ -9919,25 +9964,21 @@ class AICommands(commands.Cog):
                     "available_models": input_models,
                     "note": "Choose an image-input model and keep the reference image; do not retry without it.",
                 }
-            if source:
-                current_attachment = (tool_context or {}).get("request_image_attachment")
-                if current_attachment is None:
-                    return {"error": "the current request has no image attachment"}
-                image_url = str(getattr(current_attachment, "url", "") or "").strip()
-            normalized_url = normalize_discord_image_url(image_url)
-            if not normalized_url:
-                return {"error": "image_url must be an https URL on cdn.discordapp.com or media.discordapp.net"}
-            try:
-                image_bytes, fetch_error = await self._fetch_discord_image_bytes(normalized_url)
-                if fetch_error or not image_bytes:
-                    return {"error": f"reference image download failed: {fetch_error or 'empty image'}"}
-                if len(image_bytes) > self.IMAGE_ANALYZE_MAX_BYTES:
-                    return {"error": f"reference image is too large; limit is {self.IMAGE_ANALYZE_MAX_BYTES} bytes"}
-                reference_image = await asyncio.to_thread(self._prepare_image_generation_reference, image_bytes)
-            except (aiohttp.ClientError, asyncio.TimeoutError):
-                return {"error": "reference image download failed"}
-            except (UnidentifiedImageError, OSError, ValueError, Image.DecompressionBombError, Image.DecompressionBombWarning):
-                return {"error": "reference image is invalid, unsupported, or too large"}
+            normalized_urls = [normalize_discord_image_url(url) for url in reference_urls]
+            if any(url is None for url in normalized_urls):
+                return {"error": "image_url/image_urls must contain only https URLs on cdn.discordapp.com or media.discordapp.net"}
+            for index, normalized_url in enumerate(normalized_urls, 1):
+                try:
+                    image_bytes, fetch_error = await self._fetch_discord_image_bytes(normalized_url)
+                    if fetch_error or not image_bytes:
+                        return {"error": f"reference image {index} download failed: {fetch_error or 'empty image'}"}
+                    if len(image_bytes) > self.IMAGE_ANALYZE_MAX_BYTES:
+                        return {"error": f"reference image {index} is too large; limit is {self.IMAGE_ANALYZE_MAX_BYTES} bytes"}
+                    reference_images.append(await asyncio.to_thread(self._prepare_image_generation_reference, image_bytes))
+                except (aiohttp.ClientError, asyncio.TimeoutError):
+                    return {"error": f"reference image {index} download failed"}
+                except (UnidentifiedImageError, OSError, ValueError, Image.DecompressionBombError, Image.DecompressionBombWarning):
+                    return {"error": f"reference image {index} is invalid, unsupported, or too large"}
 
         image_count = self._coerce_int(args.get("n"), 1, minimum=1, maximum=self.IMAGE_TOOL_MAX_COUNT)
         requester = (tool_context or {}).get("user")
@@ -9998,8 +10039,13 @@ class AICommands(commands.Cog):
             }
             if quality:
                 request_kwargs["quality"] = quality
-            if reference_image is not None:
-                request_kwargs["image"] = ("reference.png", reference_image, "image/png")
+            if len(reference_images) == 1:
+                request_kwargs["image"] = ("reference.png", reference_images[0], "image/png")
+            elif reference_images:
+                request_kwargs["image"] = [
+                    (f"reference-{index}.png", content, "image/png")
+                    for index, content in enumerate(reference_images, 1)
+                ]
 
             response = await self._create_image_generation_response(**request_kwargs)
 
@@ -10069,7 +10115,8 @@ class AICommands(commands.Cog):
                 "prompt": prompt,
                 "size": size,
                 "quality": quality or None,
-                "used_reference_image": reference_image is not None,
+                "used_reference_image": bool(reference_images),
+                "reference_image_count": len(reference_images),
                 "count": image_count,
                 "delivered_count": delivered_count,
                 "elapsed_seconds": elapsed,
@@ -12173,7 +12220,7 @@ class AICommands(commands.Cog):
         self,
         messages: list,
         model: str,
-        image: bytes = None,
+        image: bytes | list[bytes] | None = None,
         tools: list | None = None,
         stream_progress: AIStreamProgress | None = None,
     ) -> tuple:
@@ -13212,6 +13259,7 @@ class AICommands(commands.Cog):
     @app_commands.describe(
         message=app_commands.locale_str("The question or message you want to ask the AI", i18n_key="cmd.ai.ai.param.message"),
         image=app_commands.locale_str("Attach an image for the AI to analyze (optional)", i18n_key="cmd.ai.ai.param.image"),
+        image2=app_commands.locale_str("Attach an image for the AI to analyze (optional)", i18n_key="cmd.ai.ai.param.image"),
         new_conversation=app_commands.locale_str("Start a new conversation (clears previous history)", i18n_key="cmd.ai.ai.param.new_conversation"),
         model=app_commands.locale_str("Choose an AI model (default: openai)", i18n_key="cmd.ai.ai.param.model")
     )
@@ -13225,13 +13273,15 @@ class AICommands(commands.Cog):
         message: str,
         image: discord.Attachment = None,
         new_conversation: bool = False,
-        model: str = None
+        model: str = None,
+        image2: discord.Attachment = None,
     ):
         """與 AI 助手對話"""
         accepted = await self._run_ai_request(
             interaction.user.id,
             lambda state: self._ai_chat_request(
-                interaction, message, image, new_conversation, model, request_state=state
+                interaction, message, image, new_conversation, model, request_state=state,
+                additional_images=[image2] if image2 is not None else [],
             ),
         )
         if not accepted:
@@ -13282,8 +13332,10 @@ class AICommands(commands.Cog):
         *,
         request_state,
         followup: dict | None = None,
+        additional_images: list[discord.Attachment] | None = None,
     ):
-
+        image_attachments = [attachment for attachment in (image, *(additional_images or [])) if attachment is not None]
+        image = image_attachments[0] if image_attachments else None
         user = interaction.user
         guild_id = interaction.guild.id if interaction.guild else None
         self._begin_ai_request(user.id, guild_id)
@@ -13298,7 +13350,7 @@ class AICommands(commands.Cog):
             return
 
         # 驗證圖片類型（如果有）
-        if image is not None and (not image.content_type or not image.content_type.startswith("image/")):
+        if any(not attachment.content_type or not attachment.content_type.startswith("image/") for attachment in image_attachments):
             view = AIResponseBuilder.create_error_view(t("ai.err.attachment_not_image"))
             await interaction.response.send_message(view=view, ephemeral=True, allowed_mentions=SAFE_MENTIONS)
             return
@@ -13423,6 +13475,7 @@ class AICommands(commands.Cog):
                 "request_text": resolved_message,
                 "request_visual_metadata": request_visual_metadata,
                 "request_image_attachment": image,
+                "request_image_attachments": image_attachments,
             }
             tool_notice_text = None
 
@@ -13528,7 +13581,8 @@ class AICommands(commands.Cog):
             # 下載圖片 bytes（若有）
             image_bytes = None
             if image and _is_ai_vision_model(selected_model):
-                image_bytes = await image.read()
+                images = [await attachment.read() for attachment in image_attachments]
+                image_bytes = images[0] if len(images) == 1 else images
             
             # 生成回應
             response_text, model_name, response_time, reasoning_content = await self.generate_response(
@@ -14282,11 +14336,11 @@ class AICommands(commands.Cog):
         emoji_context, emoji_map = await self._build_guild_emoji_context(guild)
         
         # 偵測訊息附件中的圖片
-        image_attachment = None
-        for att in ctx.message.attachments:
-            if att.content_type and att.content_type.startswith("image/"):
-                image_attachment = att
-                break
+        image_attachments = [
+            attachment for attachment in ctx.message.attachments
+            if attachment.content_type and attachment.content_type.startswith("image/")
+        ]
+        image_attachment = image_attachments[0] if image_attachments else None
         
         # 若無文字也無圖片則提示用法
         if message is None and image_attachment is None:
@@ -14449,6 +14503,7 @@ class AICommands(commands.Cog):
                     "request_text": final_message,
                     "request_visual_metadata": current_visual_metadata,
                     "request_image_attachment": image_attachment,
+                    "request_image_attachments": image_attachments,
                 }
                 tool_notice_text = None
 
@@ -14571,7 +14626,8 @@ class AICommands(commands.Cog):
                 # 下載圖片 bytes（若有）
                 image_bytes = None
                 if image_attachment and _is_ai_vision_model(selected_model):
-                    image_bytes = await image_attachment.read()
+                    images = [await attachment.read() for attachment in image_attachments]
+                    image_bytes = images[0] if len(images) == 1 else images
                 
                 # 生成回應
                 response_text, model_name, response_time, reasoning_content = await self.generate_response(

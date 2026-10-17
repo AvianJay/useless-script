@@ -294,6 +294,72 @@ class AIRequestDeliveryTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(self.cog._active_ai_requests, {})
         self.assertEqual(self.cog._ai_request_message_ids, {})
 
+    async def test_text_request_preserves_all_image_attachments_without_reading_for_text_model(self):
+        first = SimpleNamespace(content_type="image/png", read=AsyncMock(return_value=b"first image"))
+        document = SimpleNamespace(content_type="text/plain", read=AsyncMock())
+        second = SimpleNamespace(content_type="image/webp", read=AsyncMock(return_value=b"second image"))
+        self.source.attachments = [first, document, second]
+        with patch("ai._is_ai_vision_model", return_value=False):
+            await self._wait(self._start_text())
+        context = self.generate.await_args.kwargs["tool_context"]
+        self.assertEqual(context["request_image_attachments"], [first, second])
+        self.assertIs(context["request_image_attachment"], first)
+        self.assertIsNone(self.generate.await_args.kwargs["image"])
+        first.read.assert_not_awaited()
+        second.read.assert_not_awaited()
+        document.read.assert_not_awaited()
+
+    async def test_text_request_passes_every_image_to_vision_model_in_upload_order(self):
+        first = SimpleNamespace(content_type="image/png", read=AsyncMock(return_value=b"first image"))
+        second = SimpleNamespace(content_type="image/webp", read=AsyncMock(return_value=b"second image"))
+        self.source.attachments = [first, second]
+        with patch("ai._is_ai_vision_model", return_value=True):
+            await self._wait(self._start_text())
+        self.assertEqual(self.generate.await_args.kwargs["image"], [b"first image", b"second image"])
+        first.read.assert_awaited_once()
+        second.read.assert_awaited_once()
+
+    async def test_slash_request_accepts_image2_with_or_without_the_first_slot(self):
+        for include_first in (True, False):
+            with self.subTest(include_first=include_first):
+                first = SimpleNamespace(content_type="image/png", read=AsyncMock(return_value=b"first image"))
+                second = SimpleNamespace(content_type="image/png", read=AsyncMock(return_value=b"second image"))
+                interaction = SimpleNamespace(
+                    user=self.user,
+                    guild=None,
+                    channel=self.channel,
+                    created_at=self.source.created_at,
+                    response=SimpleNamespace(defer=AsyncMock(), send_message=AsyncMock()),
+                    edit_original_response=AsyncMock(return_value=SimpleNamespace(id=1001)),
+                )
+                with patch("ai._is_ai_vision_model", return_value=True):
+                    await AICommands.ai_chat.callback(
+                        self.cog, interaction, message="ask", image=first if include_first else None, image2=second,
+                    )
+                context = self.generate.await_args.kwargs["tool_context"]
+                self.assertEqual(context["request_image_attachments"], [first, second] if include_first else [second])
+                self.assertIs(context["request_image_attachment"], first if include_first else second)
+                self.assertEqual(
+                    self.generate.await_args.kwargs["image"],
+                    [b"first image", b"second image"] if include_first else b"second image",
+                )
+                interaction.edit_original_response.assert_awaited_once()
+                self.refund.assert_not_called()
+
+    async def test_slash_request_rejects_non_image_in_a_later_slot_before_charge(self):
+        first = SimpleNamespace(content_type="image/png")
+        document = SimpleNamespace(content_type="text/plain")
+        interaction = SimpleNamespace(
+            user=self.user,
+            guild=None,
+            channel=self.channel,
+            response=SimpleNamespace(send_message=AsyncMock()),
+        )
+        await AICommands.ai_chat.callback(self.cog, interaction, message="ask", image=first, image2=document)
+        interaction.response.send_message.assert_awaited_once()
+        self.generate.assert_not_awaited()
+        self.charge.assert_not_called()
+
     async def test_slash_cancellation_during_defer_refunds_pre_try_charge(self):
         defer_started = asyncio.Event()
 
