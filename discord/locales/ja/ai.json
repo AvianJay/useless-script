@@ -92,6 +92,7 @@
         "default_model_set": "✅ デフォルトのモデルは {model} に設定されています。",
         "delete_memory_confirm": "この個人メモを削除しますか？\nID: `{memory_id}`\nタイトル: {title}\n内容プレビュー: {preview}",
         "error_footer": "-# 後でもう一度試すか、`/feedback` を使用して問題を報告してください",
+        "followup_header": "-# ↪ {user}：{label}",
         "history_cleared_body": "今すぐ新しい会話を始めることができます。",
         "history_cleared_new_chat": "✅ 会話履歴が消去されました！新しい会話を開始できます。",
         "history_cleared_simple": "✅ 会話履歴が消去されました！",
@@ -99,6 +100,8 @@
         "history_footer": "-# {total_count} メッセージのうちの最新の {shown_count} を表示します",
         "image_attachment_send_failed": "⚠️ 画像は生成されましたが、添付ファイルの送信に失敗しました。",
         "image_source_line": "-# 画像ソース: <{url}>",
+        "invalid_image_omitted": "[無効な Discord 画像 URL を省略しました]",
+        "layout_trimmed": "-# Discord の上限を超えたため、レイアウトの一部を省略しました",
         "media_omitted": {
             "one": "[Discord のコンポーネント制限内に収まるように {count} 画像を省略しました]",
             "other": "[Discord のコンポーネント制限内に収まるように {count} 画像を省略しました]"

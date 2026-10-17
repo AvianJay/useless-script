@@ -774,6 +774,14 @@ class BrowserApprovalTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(record["details_file"]["content"], script)
         self.assertNotIn(record["token"], record["details_file"]["content"])
         self.assertLess(len(record["display_action"]), len(script))
+        container = BrowserApprovalView(self.cog, record).to_components()[0]
+        self.assertIn(
+            {"type": 13, "file": {"url": "attachment://browser-evaluate-script.js"}},
+            [
+                {key: item[key] for key in ("type", "file") if key in item}
+                for item in container["components"]
+            ],
+        )
 
         rejected = await self.cog.browser.reject_approval_from_button(self._interaction(context), record)
         await self.cog.browser.resolve_approval(record, rejected)

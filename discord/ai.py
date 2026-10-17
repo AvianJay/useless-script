@@ -42,6 +42,7 @@ from uuid import uuid4
 from PIL import Image, ImageDraw, ImageOps, UnidentifiedImageError
 from doc_markdown import read_markdown_file, extract_markdown_search_entries, load_docs_site
 from OwnerTools import is_owner
+import ai_layout
 from ai_rich_media import render_rich_markdown_images
 from ai_provider import (
     attach_image_to_messages as _attach_image_to_messages,
@@ -933,113 +934,56 @@ Response formatting helpers:
 - When `search_google_images` returns an attachment URL, place it with <attachment_image>attachment://filename</attachment_image>. If omitted, approved searched images are appended automatically. Never place the original external image URL in an image tag.
 - Use the `generate_image` tool when the user asks you to create, draw, render, or generate an image. If the tool reports attachments, say the image is attached below.
 - To edit or generate from a reference image, use `generate_image` with `source: "current_attachment"` or a Discord CDN `image_url`, but not both. Pass the actual image instead of only describing it. Omit both for text-only generation. Only use models marked as supporting image input.
+
+Layout markup (Discord Components V2). Plain Markdown is the default; use layout tags only when they make the answer clearly easier to read:
+- <container color="green" spoiler>...</container> makes a card. color is a hex like #57F287 or one of blurple/green/red/orange/yellow/gold/purple/blue/teal/grey; spoiler hides the card until clicked. Containers cannot be nested, and once you use one, text outside containers is shown without a card.
+- <section>text<thumbnail alt="...">URL</thumbnail></section> puts a small image beside the text; <section>text<button url="https://...">Label</button></section> puts a button beside it.
+- <gallery><image alt="..." spoiler>URL</image>...</gallery> shows up to 10 images in a grid. URLs follow the same rules as <image>; attachment:// references from tools also work.
+- <separator spacing="large" divider="false"/> adds a larger or invisible gap. A line with only --- is still a normal divider.
+- <buttons><button url="https://..." emoji="...">Label</button></buttons> shows up to 5 link buttons (http/https only). emoji is optional and must be a single emoji.
+- <file></file> places the send_as_file attachment; without it the file appears at the end.
+- One reply holds at most 40 layout pieces and about 3600 visible characters. Anything beyond that is cut off, so keep layouts compact.
+
+Follow-up choices (use rarely):
+- A <button> without url, or <select placeholder="..."><option description="...">Choice</option>...</select>, sends its label to you as the clicker's next message.
+- Only offer them when the user has to pick one of a few concrete next steps: a clarifying question with discrete answers, a branching guide, a quiz, a game, or a choose-your-path story. Most replies should have none.
+- Never add generic follow-ups such as "Anything else?", "Want to know more?", or "Continue" just to keep the conversation going.
+- At most one set per reply: one <select> (up to 25 options) or up to 5 follow-up buttons; 2-4 choices is best. Labels are sent verbatim, so write each one as a short, self-contained message of at most 80 characters.
+- Anyone in the channel can click by default. Add requester_only to <buttons>, <select>, or a single <button> when only the person you are answering should continue, such as their own settings or their story.
 """
 
 
 class AIResponseBuilder:
     """使用 Component V2 (LayoutView) 建立 AI 回應"""
 
-    RESPONSE_TEXT_MAX_LENGTH = 1900
-    RESPONSE_MAX_MEDIA_COMPONENTS = 9
-    RESPONSE_MEDIA_TAG_PATTERN = re.compile(r"<(image|thumbnail)>(.*?)</\1>", re.IGNORECASE | re.DOTALL)
-    RESPONSE_GENERATED_IMAGE_TAG_PATTERN = re.compile(r"<generated_image>(.*?)</generated_image>", re.IGNORECASE | re.DOTALL)
-    RESPONSE_ATTACHMENT_IMAGE_TAG_PATTERN = re.compile(r"<attachment_image>(.*?)</attachment_image>", re.IGNORECASE | re.DOTALL)
-    RESPONSE_LAYOUT_TAG_PATTERN = re.compile(
-        r"<(image|thumbnail)>(.*?)</\1>|<(generated_image|attachment_image)>(.*?)</\3>",
-        re.IGNORECASE | re.DOTALL,
-    )
-    RESPONSE_CODE_FENCE_PATTERN = re.compile(r"```.*?```", re.DOTALL)
+    RESPONSE_MAX_MEDIA_COMPONENTS = ai_layout.MAX_MEDIA_COST
+    # 判斷要不要自動轉成檔案時，替 header／warning／footer 預留的字數
+    RESPONSE_RESERVED_TEXT = 350
+    ZERO_WIDTH_SPACE = chr(0x200B)
+    BUTTON_STYLES = {
+        "primary": discord.ButtonStyle.primary,
+        "secondary": discord.ButtonStyle.secondary,
+        "success": discord.ButtonStyle.success,
+        "danger": discord.ButtonStyle.danger,
+    }
 
     @classmethod
-    def _split_response_text_chunks(cls, text: str, max_length: int | None = None) -> list[str]:
-        max_length = max_length or cls.RESPONSE_TEXT_MAX_LENGTH
-        remaining = str(text or "")
-        chunks: list[str] = []
-
-        while remaining:
-            if len(remaining) <= max_length:
-                chunks.append(remaining)
-                break
-
-            split_point = remaining.rfind('\n\n', 0, max_length)
-            if split_point == -1:
-                split_point = remaining.rfind('\n', 0, max_length)
-            if split_point == -1:
-                split_point = remaining.rfind(' ', 0, max_length)
-            if split_point == -1:
-                split_point = max_length
-
-            chunks.append(remaining[:split_point])
-            remaining = remaining[split_point:].lstrip()
-
-        return [chunk for chunk in chunks if chunk] or [""]
-
-    @classmethod
-    def _iter_response_text_sections(cls, response_text: str) -> list[list[str]]:
-        sections: list[list[str]] = []
-        for section in re.split(r'(?m)^\s*---\s*$', str(response_text or "")):
-            if not section.strip():
-                continue
-            chunks = cls._split_response_text_chunks(section.strip('\n'))
-            if chunks:
-                sections.append(chunks)
-        return sections or [[str(response_text or "")]]
-
-    @classmethod
-    def _iter_response_text_items(cls, response_text: str) -> list[tuple[str, list[str] | None]]:
-        text = str(response_text or "")
-        items: list[tuple[str, list[str] | None]] = []
-        cursor = 0
-
-        for match in re.finditer(r'(?m)^\s*---\s*$', text):
-            section = text[cursor:match.start()].strip('\n')
-            if section.strip():
-                items.append(("text", cls._split_response_text_chunks(section)))
-            items.append(("separator", None))
-            cursor = match.end()
-
-        section = text[cursor:].strip('\n')
-        if section.strip():
-            items.append(("text", cls._split_response_text_chunks(section)))
-
-        return items or [("text", [text])]
-
-    @classmethod
-    def _protect_response_code_fences(cls, text: str) -> tuple[str, list[str]]:
-        fences: list[str] = []
-
-        def preserve(match: re.Match) -> str:
-            fences.append(match.group(0))
-            return f"\x01CODE{len(fences) - 1}\x01"
-
-        return cls.RESPONSE_CODE_FENCE_PATTERN.sub(preserve, text), fences
-
-    @staticmethod
-    def _restore_response_code_fences(text: str, fences: list[str]) -> str:
-        restored = text
-        for index, fence in enumerate(fences):
-            restored = restored.replace(f"\x01CODE{index}\x01", fence)
-        return restored
-
-    @staticmethod
-    def _build_generated_image_refs(generated_image_attachments: list[dict] | None) -> list[str]:
-        refs: list[str] = []
-        for payload in generated_image_attachments or []:
-            if str((payload or {}).get("kind") or "generated") not in {"generated", "browser"}:
-                continue
-            filename = str((payload or {}).get("filename") or "").strip()
-            if filename:
-                refs.append(f"attachment://{filename}")
-        return refs
-
-    @staticmethod
-    def _build_attachment_refs(image_attachments: list[dict] | None) -> list[str]:
-        refs: list[str] = []
-        for payload in image_attachments or []:
-            filename = str((payload or {}).get("filename") or "").strip()
-            if filename:
-                refs.append(f"attachment://{filename}")
-        return refs
+    def _parse_response_layout(
+        cls,
+        response_text: str,
+        image_attachments: list[dict] | None = None,
+        *,
+        file_name: str | None = None,
+        max_media_cost: float | None = None,
+    ) -> ai_layout.Layout:
+        return ai_layout.parse_layout(
+            response_text,
+            normalize_image_url=normalize_discord_image_url,
+            attachments=image_attachments,
+            file_name=file_name,
+            invalid_image_text=t("ai.msg.invalid_image_omitted"),
+            max_media_cost=cls.RESPONSE_MAX_MEDIA_COMPONENTS if max_media_cost is None else max_media_cost,
+        )
 
     @classmethod
     def count_reserved_media_components(
@@ -1047,24 +991,11 @@ class AIResponseBuilder:
         response_text: str,
         image_attachments: list[dict] | None = None,
     ) -> int:
-        text, _ = cls._protect_response_code_fences(str(response_text or ""))
-        attachment_refs = set(cls._build_attachment_refs(image_attachments))
-        reserved = len(attachment_refs)
-
-        for match in cls.RESPONSE_LAYOUT_TAG_PATTERN.finditer(text):
-            tag_name = (match.group(1) or match.group(3) or "").lower()
-            if tag_name in {"generated_image", "attachment_image"}:
-                inline_ref = str(match.group(4) or "").strip()
-                if not inline_ref or inline_ref in attachment_refs:
-                    continue
-                if tag_name == "generated_image" and normalize_discord_image_url(inline_ref):
-                    reserved += 1
-                continue
-
-            if normalize_discord_image_url(match.group(2)):
-                reserved += 3 if tag_name == "thumbnail" else 1
-
-        return reserved
+        return cls._parse_response_layout(
+            response_text,
+            image_attachments,
+            max_media_cost=float("inf"),
+        ).media_cost
 
     @classmethod
     def filter_renderable_image_attachments(
@@ -1076,15 +1007,11 @@ class AIResponseBuilder:
         if not payloads:
             return []
 
-        rendered_refs = {
-            str(value)
-            for item_type, value in cls._iter_response_layout_items(response_text, payloads)
-            if item_type == "image" and str(value or "").startswith("attachment://")
-        }
+        placed_refs = set(cls._parse_response_layout(response_text, payloads).placed_attachment_refs)
         return [
             payload
             for payload in payloads
-            if f"attachment://{str(payload.get('filename') or '').strip()}" in rendered_refs
+            if f"attachment://{str(payload.get('filename') or '').strip()}" in placed_refs
         ]
 
     @classmethod
@@ -1093,120 +1020,118 @@ class AIResponseBuilder:
         response_text: str,
         generated_image_attachments: list[dict] | None = None,
     ) -> list[tuple[str, list[str] | str | None]]:
-        original_text = str(response_text or "")
-        text, fences = cls._protect_response_code_fences(original_text)
-        items: list[tuple[str, list[str] | str | None]] = []
-        cursor = 0
-        media_components = 0
-        omitted_media = 0
-        generated_refs = cls._build_generated_image_refs(generated_image_attachments)
-        attachment_refs = cls._build_attachment_refs(generated_image_attachments)
-        attachment_ref_set = set(attachment_refs)
-        used_attachment_refs: set[str] = set()
-        generated_index = 0
-
-        def add_text(raw_text: str):
-            restored = cls._restore_response_code_fences(raw_text, fences)
-            if restored.strip():
-                items.extend(cls._iter_response_text_items(restored))
-
-        for match in cls.RESPONSE_LAYOUT_TAG_PATTERN.finditer(text):
-            add_text(text[cursor:match.start()])
-
-            tag_name = (match.group(1) or match.group(3) or "").lower()
-            component_cost = 3 if tag_name == "thumbnail" else 1
-            media_ref: str | None = None
-            if tag_name in {"generated_image", "attachment_image"}:
-                inline_ref = str(match.group(4) or "").strip()
-                if inline_ref in attachment_ref_set and inline_ref not in used_attachment_refs:
-                    media_ref = inline_ref
-                elif inline_ref and tag_name == "generated_image":
-                    media_ref = normalize_discord_image_url(inline_ref)
-                elif not inline_ref and tag_name == "generated_image":
-                    while generated_index < len(generated_refs):
-                        candidate = generated_refs[generated_index]
-                        generated_index += 1
-                        if candidate not in used_attachment_refs:
-                            media_ref = candidate
-                            break
-            else:
-                media_ref = normalize_discord_image_url(match.group(2))
-
-            if not media_ref:
-                if tag_name not in {"generated_image", "attachment_image"}:
-                    items.append(("text", cls._split_response_text_chunks("[invalid Discord image URL omitted]")))
-            elif media_components + component_cost > cls.RESPONSE_MAX_MEDIA_COMPONENTS:
-                omitted_media += 1
-            else:
-                media_components += component_cost
-                if media_ref in attachment_ref_set:
-                    used_attachment_refs.add(media_ref)
-                items.append(("image" if tag_name in {"generated_image", "attachment_image"} else tag_name, media_ref))
-            cursor = match.end()
-
-        add_text(text[cursor:])
-        for media_ref in attachment_refs:
-            if media_ref in used_attachment_refs:
-                continue
-            if media_components + 1 > cls.RESPONSE_MAX_MEDIA_COMPONENTS:
-                omitted_media += 1
-                continue
-            media_components += 1
-            used_attachment_refs.add(media_ref)
-            items.append(("image", media_ref))
-        if omitted_media:
-            items.append(("text", cls._split_response_text_chunks(t("ai.msg.media_omitted", count=omitted_media))))
-        if not items:
-            items.extend(cls._iter_response_text_items(original_text))
-
-        return items
+        layout = cls._parse_response_layout(response_text, generated_image_attachments)
+        items = ai_layout.flatten_layout_items(layout.nodes)
+        if layout.omitted_media:
+            items.append(("text", [t("ai.msg.media_omitted", count=layout.omitted_media)]))
+        return items or [("text", [str(response_text or "")])]
 
     @staticmethod
-    def _append_image_item(target, image_url: str):
-        gallery = discord.ui.MediaGallery()
-        gallery.add_item(media=image_url)
-        target.add_item(gallery)
+    def strip_media_tags_for_history(response_text: str) -> str:
+        return ai_layout.strip_layout_tags(
+            response_text,
+            keep_media=False,
+            normalize_image_url=normalize_discord_image_url,
+        )
 
     @staticmethod
-    def _append_thumbnail_item(target, image_url: str):
-        thumbnail = discord.ui.Thumbnail(image_url)
-        target.add_item(discord.ui.Section("​", accessory=thumbnail))
+    def strip_layout_tags_for_fallback(response_text: str) -> str:
+        return ai_layout.strip_layout_tags(response_text, keep_media=True)
+
+    @staticmethod
+    def _media_kwargs(media: ai_layout.Media) -> dict:
+        kwargs = {}
+        if media.description:
+            kwargs["description"] = media.description
+        if media.spoiler:
+            kwargs["spoiler"] = True
+        return kwargs
 
     @classmethod
-    def strip_media_tags_for_history(cls, response_text: str) -> str:
-        # i18n: skip-start (stored assistant history is replayed back to the model, not shown to users)
-        def replace_media(match: re.Match) -> str:
-            tag_name = match.group(1).lower()
-            label = "縮圖" if tag_name == "thumbnail" else "圖片"
-            image_url = normalize_discord_image_url(match.group(2))
-            return f"[{label}: {image_url}]" if image_url else f"[{label}: 已略過無效 URL]"
-        # i18n: skip-end
-
-        stripped = cls.RESPONSE_MEDIA_TAG_PATTERN.sub(replace_media, str(response_text or ""))
-        stripped = cls.RESPONSE_GENERATED_IMAGE_TAG_PATTERN.sub("", stripped)
-        return cls.RESPONSE_ATTACHMENT_IMAGE_TAG_PATTERN.sub("", stripped)
+    def _build_layout_button(cls, button: ai_layout.Button, requester_id: int) -> discord.ui.Item:
+        if not button.is_followup:
+            return discord.ui.Button(
+                style=discord.ButtonStyle.link,
+                label=button.label or None,
+                url=button.url,
+                emoji=button.emoji,
+            )
+        return AIFollowupButton(
+            requester_id,
+            button.requester_only,
+            button.index,
+            label=button.label,
+            style=cls.BUTTON_STYLES.get(button.style, discord.ButtonStyle.secondary),
+            emoji=button.emoji,
+        )
 
     @classmethod
-    def _append_response_text_to_container(
-        cls,
-        container: discord.ui.Container,
-        response_text: str,
-        generated_image_attachments: list[dict] | None = None,
-    ):
-        for item_type, value in cls._iter_response_layout_items(response_text, generated_image_attachments):
-            if item_type == "separator":
-                container.add_item(discord.ui.Separator(spacing=discord.SeparatorSpacing.small))
-                continue
-            if item_type == "image":
-                cls._append_image_item(container, str(value or ""))
-                continue
-            if item_type == "thumbnail":
-                cls._append_thumbnail_item(container, str(value or ""))
-                continue
+    def _append_layout_nodes(cls, target, nodes: list, *, requester_id: int) -> bool:
+        """把版面節點加進 view 或 Container；回傳有沒有放追問元件"""
+        has_followups = False
+        for node in nodes:
+            if isinstance(node, ai_layout.Container):
+                container = discord.ui.Container(
+                    accent_colour=discord.Colour(ai_layout.DEFAULT_COLOR if node.color is None else node.color),
+                    spoiler=node.spoiler,
+                )
+                has_followups |= cls._append_layout_nodes(container, node.children, requester_id=requester_id)
+                target.add_item(container)
+            elif isinstance(node, ai_layout.Text):
+                target.add_item(discord.ui.TextDisplay(node.content))
+            elif isinstance(node, ai_layout.Separator):
+                target.add_item(
+                    discord.ui.Separator(
+                        visible=node.visible,
+                        spacing=discord.SeparatorSpacing.large if node.large else discord.SeparatorSpacing.small,
+                    )
+                )
+            elif isinstance(node, ai_layout.Gallery):
+                gallery = discord.ui.MediaGallery()
+                for media in node.items:
+                    gallery.add_item(media=media.ref, **cls._media_kwargs(media))
+                target.add_item(gallery)
+            elif isinstance(node, ai_layout.Thumbnail):
+                thumbnail = discord.ui.Thumbnail(node.media.ref, **cls._media_kwargs(node.media))
+                target.add_item(discord.ui.Section(cls.ZERO_WIDTH_SPACE, accessory=thumbnail))
+            elif isinstance(node, ai_layout.Section):
+                if isinstance(node.accessory, ai_layout.Media):
+                    accessory = discord.ui.Thumbnail(node.accessory.ref, **cls._media_kwargs(node.accessory))
+                else:
+                    accessory = cls._build_layout_button(node.accessory, requester_id)
+                    has_followups |= node.accessory.is_followup
+                target.add_item(discord.ui.Section(node.text, accessory=accessory))
+            elif isinstance(node, ai_layout.ButtonRow):
+                row = discord.ui.ActionRow()
+                for button in node.buttons:
+                    row.add_item(cls._build_layout_button(button, requester_id))
+                    has_followups |= button.is_followup
+                target.add_item(row)
+            elif isinstance(node, ai_layout.SelectMenu):
+                options = [
+                    discord.SelectOption(
+                        label=option.label,
+                        value=str(index),
+                        description=option.description,
+                        emoji=option.emoji,
+                    )
+                    for index, option in enumerate(node.options)
+                ]
+                row = discord.ui.ActionRow()
+                row.add_item(
+                    AIFollowupSelect(
+                        requester_id,
+                        node.requester_only,
+                        options=options,
+                        placeholder=node.placeholder,
+                    )
+                )
+                target.add_item(row)
+                has_followups = True
+            elif isinstance(node, ai_layout.FileBlock):
+                target.add_item(discord.ui.File(node.ref, **({"spoiler": True} if node.spoiler else {})))
+        return has_followups
 
-            for chunk in value or []:
-                container.add_item(discord.ui.TextDisplay(chunk))
-    
     @classmethod
     def create_response_view(
         cls,
@@ -1220,67 +1145,66 @@ class AIResponseBuilder:
         show_cost: bool = True,
         show_model: bool = True,
         generated_image_attachments: list[dict] | None = None,
+        *,
+        header: str | None = None,
+        file_name: str | None = None,
+        requester_id: int | None = None,
     ) -> discord.ui.LayoutView:
         """建立 AI 回應的 LayoutView"""
-        
+        layout = cls._parse_response_layout(response_text, generated_image_attachments, file_name=file_name)
+        # AI 自己排了 Container 就不再包預設外框（Container 不能巢狀）
+        wrap = use_container and not layout.has_containers
+
+        warning_text = t("ai.msg.warning_prefix", warning=warning) if warning else None
+        footer_parts = []
+        if billing_info and show_cost:
+            footer_parts.append(billing_info)
+        if show_model:
+            footer_parts.append(f"{model_name} | {response_time or t('ai.value.unknown_time')}")
+        footer_text = "-# " + " | ".join(footer_parts) if footer_parts else None
+        notices = []
+        if layout.omitted_media:
+            notices.append(t("ai.msg.media_omitted", count=layout.omitted_media))
+        trimmed_notice = t("ai.msg.layout_trimmed")
+
+        fixed_texts = [text for text in (header, warning_text, footer_text, *notices) if text]
+        # 多預留一個元件給可能出現的截斷提示
+        reserved_components = len(fixed_texts) + 1
+        if wrap:
+            reserved_components += 1 + bool(warning_text) + bool(footer_text)
+        ai_layout.fit_layout(
+            layout,
+            reserved_components=reserved_components,
+            reserved_text=sum(len(text) for text in fixed_texts) + len(trimmed_notice),
+        )
+        if layout.trimmed:
+            notices.append(trimmed_notice)
+
         view = discord.ui.LayoutView()
-        
-        # 根據設定決定是否使用 Container
-        if use_container:
-            # 主容器
-            container = discord.ui.Container(accent_colour=discord.Colour.blurple())
-            
-            # 警告區塊（如果有）
-            if warning:
-                container.add_item(discord.ui.TextDisplay(t("ai.msg.warning_prefix", warning=warning)))
-                container.add_item(discord.ui.Separator(spacing=discord.SeparatorSpacing.small))
-
-            # 回應內容 - 支援 `---` 轉成 View 分隔線，並自動分段長訊息
-            cls._append_response_text_to_container(container, response_text, generated_image_attachments)
-
-            # 底部資訊
-            if show_cost or show_model:
-                footer_parts = []
-                if billing_info and show_cost:
-                    footer_parts.append(billing_info)
-                if show_model:
-                    footer_parts.append(f"{model_name} | {response_time or t('ai.value.unknown_time')}")
-                if footer_parts:
-                    container.add_item(discord.ui.Separator(spacing=discord.SeparatorSpacing.small))
-                    container.add_item(discord.ui.TextDisplay("-# " + " | ".join(footer_parts)))
-
-            view.add_item(container)
-        else:
-            # 不使用 Container，直接添加到 LayoutView
-            # 警告區塊（如果有）
-            if warning:
-                view.add_item(discord.ui.TextDisplay(t("ai.msg.warning_prefix", warning=warning)))
-
-            # 回應內容 - 支援 `---` 轉成 View 分隔線，並自動分段長訊息
-            for item_type, value in cls._iter_response_layout_items(response_text, generated_image_attachments):
-                if item_type == "separator":
-                    view.add_item(discord.ui.Separator(spacing=discord.SeparatorSpacing.small))
-                    continue
-                if item_type == "image":
-                    cls._append_image_item(view, str(value or ""))
-                    continue
-                if item_type == "thumbnail":
-                    cls._append_thumbnail_item(view, str(value or ""))
-                    continue
-                for chunk in value or []:
-                    view.add_item(discord.ui.TextDisplay(chunk))
-            
-            # 底部資訊
-            footer_parts = []
-            if billing_info and show_cost:
-                footer_parts.append(billing_info)
-            if show_model:
-                footer_parts.append(f"{model_name} | {response_time or t('ai.value.unknown_time')}")
-            if footer_parts:
-                view.add_item(discord.ui.TextDisplay("-# " + " | ".join(footer_parts)))
-        
+        target = discord.ui.Container(accent_colour=discord.Colour.blurple()) if wrap else view
+        if header:
+            target.add_item(discord.ui.TextDisplay(header))
+        if warning_text:
+            target.add_item(discord.ui.TextDisplay(warning_text))
+            if wrap:
+                target.add_item(discord.ui.Separator(spacing=discord.SeparatorSpacing.small))
+        # 空回覆也要有一個元件，否則 Discord 會拒絕整則訊息
+        nodes = layout.nodes or [ai_layout.Text(cls.ZERO_WIDTH_SPACE)]
+        has_followups = cls._append_layout_nodes(target, nodes, requester_id=int(requester_id or 0))
+        for notice in notices:
+            target.add_item(discord.ui.TextDisplay(notice))
+        if footer_text:
+            if wrap:
+                target.add_item(discord.ui.Separator(spacing=discord.SeparatorSpacing.small))
+            target.add_item(discord.ui.TextDisplay(footer_text))
+        if wrap:
+            view.add_item(target)
+        if has_followups:
+            # 追問元件是全域註冊的 DynamicItem。先 stop() 讓這個 view 不被存進 ViewStore，
+            # 否則 view 逾時被移除時，會連 DynamicItem 的全域註冊一起拿掉（見 MessageImage.UpvoteView.on_timeout）
+            view.stop()
         return view
-    
+
     @staticmethod
     def create_error_view(error_message: str) -> discord.ui.LayoutView:
         """建立錯誤訊息的 LayoutView"""
@@ -1558,6 +1482,10 @@ class BrowserApprovalView(discord.ui.LayoutView):
         if display_action:
             container.add_item(discord.ui.Separator(spacing=discord.SeparatorSpacing.small))
             container.add_item(discord.ui.TextDisplay(display_action[:3500]))
+        details_file = self.approval.get("details_file")
+        if isinstance(details_file, dict) and details_file.get("filename"):
+            # CV2 訊息的附件要有元件引用才會顯示
+            container.add_item(discord.ui.File(f"attachment://{details_file['filename']}"))
         container.add_item(discord.ui.Separator(spacing=discord.SeparatorSpacing.small))
         row = discord.ui.ActionRow()
         row.add_item(self.confirm_button)
@@ -1648,6 +1576,111 @@ class BrowserApprovalView(discord.ui.LayoutView):
                 )
             except Exception:
                 pass
+
+
+class AIFollowupButton(
+    discord.ui.DynamicItem[discord.ui.Button],
+    template=r"ai:fu:(?P<owner>[0-9]+):(?P<scope>[ar]):(?P<index>[0-9]{1,2})",
+):
+    """AI 回覆裡的追問按鈕：點擊後把按鈕文字當成點擊者的下一則訊息送給 AI"""
+
+    def __init__(
+        self,
+        owner_id: int,
+        requester_only: bool,
+        index: int,
+        *,
+        label: str,
+        style: discord.ButtonStyle = discord.ButtonStyle.secondary,
+        emoji=None,
+    ):
+        self.owner_id = int(owner_id)
+        self.requester_only = bool(requester_only)
+        scope = "r" if self.requester_only else "a"
+        super().__init__(
+            discord.ui.Button(
+                label=label,
+                style=style,
+                emoji=emoji,
+                custom_id=f"ai:fu:{self.owner_id}:{scope}:{int(index)}",
+            )
+        )
+
+    @classmethod
+    async def from_custom_id(cls, interaction: discord.Interaction, item: discord.ui.Button, match: re.Match):
+        return cls(
+            int(match["owner"]),
+            match["scope"] == "r",
+            int(match["index"]),
+            label=item.label,
+            style=item.style,
+            emoji=item.emoji,
+        )
+
+    async def callback(self, interaction: discord.Interaction):
+        cog = interaction.client.get_cog("AICommands")
+        if cog is None:
+            return
+        await cog._start_ai_followup(
+            interaction,
+            self.item.label,
+            owner_id=self.owner_id,
+            requester_only=self.requester_only,
+        )
+
+
+class AIFollowupSelect(
+    discord.ui.DynamicItem[discord.ui.Select],
+    template=r"ai:fs:(?P<owner>[0-9]+):(?P<scope>[ar])",
+):
+    """AI 回覆裡的追問選單：選項的 value 是索引，送出的是選項文字"""
+
+    def __init__(
+        self,
+        owner_id: int,
+        requester_only: bool,
+        *,
+        options: list[discord.SelectOption],
+        placeholder: str | None = None,
+    ):
+        self.owner_id = int(owner_id)
+        self.requester_only = bool(requester_only)
+        scope = "r" if self.requester_only else "a"
+        super().__init__(
+            discord.ui.Select(
+                custom_id=f"ai:fs:{self.owner_id}:{scope}",
+                options=options,
+                placeholder=placeholder,
+                min_values=1,
+                max_values=1,
+            )
+        )
+
+    @classmethod
+    async def from_custom_id(cls, interaction: discord.Interaction, item: discord.ui.Select, match: re.Match):
+        return cls(
+            int(match["owner"]),
+            match["scope"] == "r",
+            options=item.options,
+            placeholder=item.placeholder,
+        )
+
+    async def callback(self, interaction: discord.Interaction):
+        selected = next(iter(self.item.values), None)
+        option = next((option for option in self.item.options if option.value == selected), None)
+        cog = interaction.client.get_cog("AICommands")
+        if option is None or cog is None:
+            await interaction.response.defer()
+            return
+        await cog._start_ai_followup(
+            interaction,
+            option.label,
+            owner_id=self.owner_id,
+            requester_only=self.requester_only,
+        )
+
+
+bot.add_dynamic_items(AIFollowupButton, AIFollowupSelect)
 
 
 class _AutoSummaryStaleError(RuntimeError):
@@ -3184,6 +3217,85 @@ class AICommands(commands.Cog):
         content = str((file_payload or {}).get("content") or "")
         return discord.File(io.BytesIO(content.encode("utf-8")), filename=filename)
 
+    def _can_inline_file_response(self, file_payload: dict | None, image_payloads: list[dict] | None) -> bool:
+        """文字檔能不能跟圖片一起附在同一則 CV2 回覆裡"""
+        if not isinstance(file_payload, dict):
+            return False
+        filename = str(file_payload.get("filename") or "")
+        image_contents = []
+        for payload in image_payloads or []:
+            if str(payload.get("filename") or "") == filename:
+                return False
+            content = payload.get("content")
+            if isinstance(content, (bytes, bytearray)) and content:
+                image_contents.append(content)
+        if len(image_contents) + 1 > self.IMAGE_FILES_PER_MESSAGE:
+            return False
+        file_size = int(
+            file_payload.get("size_bytes")
+            or len(str(file_payload.get("content") or "").encode("utf-8"))
+        )
+        return sum(len(content) for content in image_contents) + file_size <= self.IMAGE_BYTES_PER_MESSAGE
+
+    async def _send_ai_response_view(
+        self,
+        send,
+        response_text: str,
+        image_payloads: list[dict],
+        file_payload: dict | None,
+        **view_options,
+    ) -> tuple:
+        """送出最終的 CV2 回覆，回傳 (訊息, 圖片是否已附上, 文字檔是否已附上)。
+
+        AI 排的版面被 Discord 拒絕（400）時，改用去掉版面標記的內容重送一次。
+        """
+        inline_file = self._can_inline_file_response(file_payload, image_payloads)
+        file_name = str(file_payload.get("filename")) if inline_file else None
+
+        def build(text: str):
+            view = AIResponseBuilder.create_response_view(
+                text,
+                generated_image_attachments=image_payloads,
+                file_name=file_name,
+                **view_options,
+            )
+            # discord.File 只能送一次，重送時要重新建立
+            files = self._build_pending_image_files(image_payloads)
+            images_attached = bool(files)
+            if inline_file:
+                files.append(self._build_pending_file_attachment(file_payload))
+            return view, files, images_attached
+
+        view, files, images_attached = build(response_text)
+        try:
+            message = await send(view, files)
+        except discord.HTTPException as error:
+            if error.status != 400:
+                raise
+            log(
+                f"AI response layout was rejected, resending without layout tags: {error}",
+                module_name="AI",
+                level=logging.WARNING,
+            )
+            view, files, images_attached = build(AIResponseBuilder.strip_layout_tags_for_fallback(response_text))
+            message = await send(view, files)
+        return message, images_attached, inline_file
+
+    async def _build_reply_context(self, message: discord.Message, guild) -> tuple[str, dict]:
+        """把使用者正在回覆（或追問）的訊息整理成給模型的上下文"""
+        visual_metadata = self._build_message_visual_metadata(message)
+        content = await self._format_msg_for_context(
+            message,
+            guild,
+            self.bot,
+            self_id=getattr(getattr(self.bot, "user", None), "id", None),
+            truncate=False,
+            visual_metadata=visual_metadata,
+            include_untriggered_bots=True,
+        )
+        content = self._truncate_tool_text(content or "", max_len=1500)
+        return f"[用戶正在回覆以下訊息]\n{content}\n[/回覆訊息]\n\n", visual_metadata  # i18n: skip (fed into model request content, not shown to users)
+
     def _make_browser_approval_presenter(self, tool_context: dict, send_view):
         """Build the approval presenter; send_view(view, attachments) returns the bound message."""
         async def presenter(record: dict) -> None:
@@ -3386,7 +3498,11 @@ class AICommands(commands.Cog):
             source_lines = "\n".join(t("ai.msg.image_source_line", url=url) for url in missing_source_urls)
             resolved_response_text = f"{resolved_response_text.rstrip()}\n\n{source_lines}".strip()
 
-        if pending_file_response is None and len(resolved_response_text) > self.AI_AUTO_FILE_THRESHOLD:
+        visible_length = ai_layout.visible_text_length(resolved_response_text)
+        if (
+            pending_file_response is None
+            and visible_length > self.AI_AUTO_FILE_THRESHOLD - AIResponseBuilder.RESPONSE_RESERVED_TEXT
+        ):
             summary = t("ai.msg.response_converted_to_file", length=len(resolved_response_text))
             pending_file_response = self._queue_auto_file_response(
                 resolved_response_text,
@@ -13123,6 +13239,39 @@ class AICommands(commands.Cog):
                 t("ai.err.request_in_progress"), ephemeral=True, allowed_mentions=SAFE_MENTIONS
             )
 
+    async def _start_ai_followup(
+        self,
+        interaction: discord.Interaction,
+        label: str,
+        *,
+        owner_id: int,
+        requester_only: bool,
+    ):
+        """追問按鈕／選單：以點擊者的身分把文字送給 AI"""
+        label = str(label or "").strip()
+        if not label:
+            await interaction.response.defer()
+            return
+        clicked_by_owner = interaction.user.id == owner_id
+        if requester_only and not clicked_by_owner:
+            await interaction.response.send_message(
+                t("ai.err.not_your_conversation"), ephemeral=True, allowed_mentions=SAFE_MENTIONS
+            )
+            return
+        followup = {
+            "label": label,
+            # 原提問者的對話歷史裡已經有這則回覆，別人點的時候才需要附上它
+            "source_message": None if clicked_by_owner else interaction.message,
+        }
+        accepted = await self._run_ai_request(
+            interaction.user.id,
+            lambda state: self._ai_chat_request(interaction, label, request_state=state, followup=followup),
+        )
+        if not accepted:
+            await interaction.response.send_message(
+                t("ai.err.request_in_progress"), ephemeral=True, allowed_mentions=SAFE_MENTIONS
+            )
+
     async def _ai_chat_request(
         self,
         interaction: discord.Interaction,
@@ -13132,8 +13281,9 @@ class AICommands(commands.Cog):
         model: str = None,
         *,
         request_state,
+        followup: dict | None = None,
     ):
-        
+
         user = interaction.user
         guild_id = interaction.guild.id if interaction.guild else None
         self._begin_ai_request(user.id, guild_id)
@@ -13254,6 +13404,14 @@ class AICommands(commands.Cog):
                 await self._check_overdue_ai_idle(user.id, guild_id)
 
             history = ConversationManager.get_history(user.id, guild_id)
+            # 別人點追問時，把按鈕所在的 AI 回覆當成回覆上下文；defer 之後才組，避開互動的 3 秒期限
+            reply_context = ""
+            followup_source = (followup or {}).get("source_message")
+            if followup_source is not None:
+                try:
+                    reply_context, _ = await self._build_reply_context(followup_source, interaction.guild)
+                except Exception as e:
+                    log(f"Failed to build follow-up context: {e}", module_name="AI", level=logging.WARNING)
             # 以使用者送出的時間為準，工具跑很久時才不會把回應延遲算進時間間隔
             request_at = interaction.created_at.timestamp()
             tool_context = {
@@ -13361,12 +13519,12 @@ class AICommands(commands.Cog):
             messages.append({
                 "role": "user",
                 "content": ConversationManager.prepend_time_gap_note(
-                    ai_request_message,
+                    f"{reply_context}{ai_request_message}",
                     ConversationManager.latest_timestamp(history),
                     request_at,
                 ),
             })
-            
+
             # 下載圖片 bytes（若有）
             image_bytes = None
             if image and _is_ai_vision_model(selected_model):
@@ -13470,10 +13628,19 @@ class AICommands(commands.Cog):
 
             # 取得使用者回應視圖配置
             response_view_config = self._get_response_view_config(user.id)
-            image_files = self._build_pending_image_files(pending_image_attachments)
+            header = None
+            if followup:
+                header = t(
+                    "ai.msg.followup_header",
+                    user=user.mention,
+                    label=discord.utils.escape_markdown(str(followup.get("label") or "")),
+                )
 
-            view = AIResponseBuilder.create_response_view(
-                response_text=display_response_text,
+            response_message, pending_images_delivered_inline, file_delivered_inline = await self._send_ai_response_view(
+                lambda view, files: interaction.edit_original_response(content=None, attachments=files, view=view),
+                display_response_text,
+                pending_image_attachments,
+                pending_file_response,
                 user=user,
                 model_name=model_name,
                 response_time=response_time,
@@ -13482,19 +13649,18 @@ class AICommands(commands.Cog):
                 use_container=response_view_config.get("container", True),
                 show_cost=response_view_config.get("cost", True),
                 show_model=response_view_config.get("model", True),
-                generated_image_attachments=pending_image_attachments,
+                header=header,
+                requester_id=user.id,
             )
-            file_attachment = self._build_pending_file_attachment(pending_file_response) if pending_file_response else None
-            response_message = await interaction.edit_original_response(
-                content=None,
-                attachments=image_files,
-                view=view,
-            )
-            pending_images_delivered_inline = bool(image_files)
-            if file_attachment is not None:
-                await interaction.followup.send(file=file_attachment, allowed_mentions=SAFE_MENTIONS)
+            if pending_file_response and not file_delivered_inline:
+                await interaction.followup.send(
+                    file=self._build_pending_file_attachment(pending_file_response),
+                    allowed_mentions=SAFE_MENTIONS,
+                )
             request_state.refundable_amount = 0.0
-            ConversationManager.add_message(user.id, "user", resolved_message, guild_id, timestamp=request_at)
+            ConversationManager.add_message(
+                user.id, "user", f"{reply_context}{resolved_message}", guild_id, timestamp=request_at
+            )
             ConversationManager.add_message(
                 user.id,
                 "assistant",
@@ -14229,18 +14395,7 @@ class AICommands(commands.Cog):
             try:
                 replied_msg = await ctx.channel.fetch_message(ctx.message.reference.message_id)
                 if replied_msg:
-                    replied_visual_metadata = self._build_message_visual_metadata(replied_msg)
-                    replied_content = await self._format_msg_for_context(
-                        replied_msg,
-                        guild,
-                        self.bot,
-                        self_id=getattr(getattr(self.bot, "user", None), "id", None),
-                        truncate=False,
-                        visual_metadata=replied_visual_metadata,
-                        include_untriggered_bots=True,
-                    )
-                    replied_content = self._truncate_tool_text(replied_content or "", max_len=1500)
-                    reply_context = f"[用戶正在回覆以下訊息]\n{replied_content}\n[/回覆訊息]\n\n"  # i18n: skip (fed into model request content, not shown to users)
+                    reply_context, replied_visual_metadata = await self._build_reply_context(replied_msg, guild)
             except Exception as e:
                 log(f"Failed to fetch replied message: {e}", module_name="AI", level=logging.WARNING)
         
@@ -14516,10 +14671,22 @@ class AICommands(commands.Cog):
                 
                 # 取得使用者回應視圖配置
                 response_view_config = self._get_response_view_config(user.id)
-                image_files = self._build_pending_image_files(pending_image_attachments)
+                if tool_notice_message is not None:
+                    try:
+                        await tool_notice_message.delete()
+                    except Exception:
+                        pass
 
-                view = AIResponseBuilder.create_response_view(
-                    response_text=display_response_text,
+                async def send_response(view, files):
+                    if files:
+                        return await ctx.reply(view=view, files=files, allowed_mentions=SAFE_MENTIONS)
+                    return await ctx.reply(view=view, allowed_mentions=SAFE_MENTIONS)
+
+                response_message, pending_images_delivered_inline, file_delivered_inline = await self._send_ai_response_view(
+                    send_response,
+                    display_response_text,
+                    pending_image_attachments,
+                    pending_file_response,
                     user=user,
                     model_name=model_name,
                     warning=warning,
@@ -14528,22 +14695,13 @@ class AICommands(commands.Cog):
                     use_container=response_view_config.get("container", True),
                     show_cost=response_view_config.get("cost", True),
                     show_model=response_view_config.get("model", True),
-                    generated_image_attachments=pending_image_attachments,
+                    requester_id=user.id,
                 )
-                if tool_notice_message is not None:
-                    try:
-                        await tool_notice_message.delete()
-                    except Exception:
-                        pass
-
-                file_attachment = self._build_pending_file_attachment(pending_file_response) if pending_file_response else None
-                if image_files:
-                    response_message = await ctx.reply(view=view, files=image_files, allowed_mentions=SAFE_MENTIONS)
-                    pending_images_delivered_inline = True
-                else:
-                    response_message = await ctx.reply(view=view, allowed_mentions=SAFE_MENTIONS)
-                if file_attachment is not None:
-                    await ctx.send(file=file_attachment, allowed_mentions=SAFE_MENTIONS)
+                if pending_file_response and not file_delivered_inline:
+                    await ctx.send(
+                        file=self._build_pending_file_attachment(pending_file_response),
+                        allowed_mentions=SAFE_MENTIONS,
+                    )
                 request_state.refundable_amount = 0.0
                 ConversationManager.add_message(user.id, "user", final_message, guild_id, timestamp=request_at)
                 ConversationManager.add_message(

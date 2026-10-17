@@ -92,6 +92,7 @@
         "default_model_set": "✅ Default model set to: {model}",
         "delete_memory_confirm": "Delete this personal memory?\nID: `{memory_id}`\nTitle: {title}\nContent preview: {preview}",
         "error_footer": "-# Please try again later, or use `/feedback` to report the issue",
+        "followup_header": "-# ↪ {user}: {label}",
         "history_cleared_body": "You can start a new conversation now!",
         "history_cleared_new_chat": "✅ Conversation history cleared! You can start a new conversation.",
         "history_cleared_simple": "✅ Conversation history cleared!",
@@ -99,6 +100,8 @@
         "history_footer": "-# Showing the most recent {shown_count} of {total_count} messages",
         "image_attachment_send_failed": "⚠️ The image was generated, but sending the attachment failed.",
         "image_source_line": "-# Image source: <{url}>",
+        "invalid_image_omitted": "[Invalid Discord image URL omitted]",
+        "layout_trimmed": "-# Part of this layout was left out to fit Discord's limits",
         "media_omitted": {
             "one": "[Omitted {count} image to stay under Discord's component limit]",
             "other": "[Omitted {count} images to stay under Discord's component limit]"

@@ -226,6 +226,7 @@ class AIRequestDeliveryTests(unittest.IsolatedAsyncioTestCase):
                 new=AsyncMock(return_value=("answer", "answer", pending_file, [])),
             ),
             patch.object(self.cog, "_build_pending_file_attachment", return_value=attachment),
+            patch.object(self.cog, "_can_inline_file_response", return_value=False),
         ):
             pending = self._start_text()
             await self._wait(file_send_started.wait())
@@ -238,6 +239,24 @@ class AIRequestDeliveryTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertIs(self.ctx.send.await_args.kwargs["file"], attachment)
         self._assert_cancelled(17.0)
+
+    async def test_file_response_is_attached_to_the_reply(self):
+        pending_file = {"filename": "answer.txt", "content": "filedata", "char_count": 8}
+        attachment = object()
+
+        with (
+            patch.object(
+                self.cog,
+                "_prepare_ai_response_delivery",
+                new=AsyncMock(return_value=("answer", "answer", pending_file, [])),
+            ),
+            patch.object(self.cog, "_build_pending_file_attachment", return_value=attachment),
+        ):
+            await self._wait(self._start_text())
+
+        self.assertEqual(self.ctx.reply.await_args.kwargs["files"], [attachment])
+        self.ctx.send.assert_not_awaited()
+        self.assertEqual(self.add_message.call_count, 2)
 
     async def test_success_records_history_only_after_response_delivery(self):
         delivery_started = asyncio.Event()

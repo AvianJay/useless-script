@@ -91,6 +91,7 @@
         "default_model_set": "✅ 已設定預設模型為：{model}",
         "delete_memory_confirm": "確定要刪除這筆個人記憶嗎？\nID：`{memory_id}`\n標題：{title}\n內容預覽：{preview}",
         "error_footer": "-# 請稍後再試或直接 `/feedback` 反饋問題",
+        "followup_header": "-# ↪ {user}：{label}",
         "history_cleared_body": "你可以開始新的對話了！",
         "history_cleared_new_chat": "✅ 對話歷史已清除！你可以開始新的對話。",
         "history_cleared_simple": "✅ 對話歷史已清除！",
@@ -98,6 +99,8 @@
         "history_footer": "-# 顯示最近 {shown_count} 條，共 {total_count} 條訊息",
         "image_attachment_send_failed": "⚠️ 圖片已生成，但傳送附件時失敗。",
         "image_source_line": "-# 圖片來源：<{url}>",
+        "invalid_image_omitted": "[已略過無效的 Discord 圖片網址]",
+        "layout_trimmed": "-# 版面超過 Discord 上限，已省略部分內容",
         "media_omitted": {
             "other": "[省略 {count} 個圖片，避免超過 Discord 元件上限]"
         },

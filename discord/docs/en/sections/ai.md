@@ -18,6 +18,8 @@ Chat with AI using a selectable model, with support for images, multi-turn conve
 
 > `y!` is the default prefix; if the server has changed its prefix, use that server's current prefix instead.
 
+AI replies may be laid out as cards or image galleries, or include link buttons. When you need to pick one of a few options, the AI may occasionally add follow-up buttons or a menu; clicking one sends that text to the AI as your next message and is charged like a normal message. Anyone can click them by default, but the AI can limit them to the person who asked.
+
 ## Memory & Cross-Server Context
 
 The AI uses three different types of context; clearing one does not clear the others:

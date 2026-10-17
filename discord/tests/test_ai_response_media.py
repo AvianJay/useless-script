@@ -8,7 +8,7 @@ import discord
 DISCORD_DIR = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(DISCORD_DIR))
 
-from ai import AIResponseBuilder
+from ai import AIFollowupButton, AIFollowupSelect, AIResponseBuilder
 
 
 class AIResponseMediaTests(unittest.TestCase):
@@ -100,6 +100,86 @@ class AIResponseMediaTests(unittest.TestCase):
             ],
         )
         self.assertEqual(len(urls), len(set(urls)))
+
+    def test_ai_containers_replace_the_default_wrapper(self):
+        view = AIResponseBuilder.create_response_view(
+            '<container color="green" spoiler>Card A</container><container>Card B</container>',
+            user=None,
+            billing_info="cost",
+            model_name="model",
+            response_time="1s",
+        )
+
+        containers = [child for child in view.children if isinstance(child, discord.ui.Container)]
+        payloads = [container.to_component_dict() for container in containers]
+        self.assertEqual([payload["accent_color"] for payload in payloads], [0x57F287, 0x5865F2])
+        self.assertEqual([payload["spoiler"] for payload in payloads], [True, False])
+        self.assertIsInstance(view.children[-1], discord.ui.TextDisplay)
+        self.assertTrue(view.children[-1].content.startswith("-# cost"))
+
+    def test_followup_buttons_and_select_use_persistent_custom_ids(self):
+        button_view = AIResponseBuilder.create_response_view(
+            '<buttons requester_only><button url="https://example.com">Docs</button><button>Ask</button></buttons>',
+            user=None,
+            show_cost=False,
+            show_model=False,
+            requester_id=42,
+        )
+        select_view = AIResponseBuilder.create_response_view(
+            "<select><option>A</option><option>B</option></select>",
+            user=None,
+            show_cost=False,
+            show_model=False,
+            requester_id=7,
+        )
+
+        buttons = [item for item in button_view.walk_children() if isinstance(item, AIFollowupButton)]
+        self.assertEqual([button.custom_id for button in buttons], ["ai:fu:42:r:0"])
+        link = next(
+            item
+            for item in button_view.walk_children()
+            if isinstance(item, discord.ui.Button) and item.style is discord.ButtonStyle.link
+        )
+        self.assertEqual(link.url, "https://example.com")
+        select = next(item for item in select_view.walk_children() if isinstance(item, AIFollowupSelect))
+        self.assertEqual(select.custom_id, "ai:fs:7:a")
+        self.assertEqual([option.value for option in select.item.options], ["0", "1"])
+
+    def test_file_name_adds_a_file_component(self):
+        view = AIResponseBuilder.create_response_view(
+            "Summary",
+            user=None,
+            show_cost=False,
+            show_model=False,
+            file_name="answer.txt",
+        )
+
+        files = [item for item in view.walk_children() if isinstance(item, discord.ui.File)]
+        self.assertEqual([item.to_component_dict()["file"]["url"] for item in files], ["attachment://answer.txt"])
+
+    def test_oversized_layout_stays_within_discord_limits(self):
+        response = "\n---\n".join(
+            f"<section>Item {index}<button url='https://example.com/{index}'>Open</button></section>" + "x" * 200
+            for index in range(60)
+        )
+
+        view = AIResponseBuilder.create_response_view(
+            response,
+            user=None,
+            billing_info="cost",
+            model_name="model",
+            response_time="1s",
+            warning="careful",
+        )
+
+        self.assertLessEqual(view.total_children_count, 40)
+        self.assertLessEqual(view.content_length(), 3950)
+        self.assertIn("-# ", view.children[0].children[-1].content)
+
+    def test_empty_response_still_has_a_component(self):
+        view = AIResponseBuilder.create_response_view("", user=None, show_cost=False, show_model=False)
+
+        self.assertEqual(view.total_children_count, 2)
 
 
 if __name__ == "__main__":
