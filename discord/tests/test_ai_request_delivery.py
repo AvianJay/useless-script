@@ -86,7 +86,7 @@ class AIRequestDeliveryTests(unittest.IsolatedAsyncioTestCase):
             "generate_response",
             new=AsyncMock(return_value=("answer", "test model", 0.1, None)),
         )
-        cog_patch("_resolve_ai_custom_emojis", side_effect=lambda text, _emoji_map: text)
+        cog_patch("_resolve_ai_emojis", side_effect=lambda text, _emoji_map: text)
         cog_patch(
             "_prepare_ai_response_delivery",
             new=AsyncMock(return_value=("answer", "answer", None, [])),

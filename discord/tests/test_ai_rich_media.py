@@ -77,6 +77,23 @@ class AIRichMarkdownMediaTests(unittest.TestCase):
         self.assertEqual(response, original)
         self.assertEqual(attachments, [])
 
+    def test_table_inline_assets_are_passed_to_renderer(self):
+        original = "| A |\n|---|\n| <t:1792259663:T> |"
+        emoji_images = {"123456789012345678": b"png"}
+        markup_labels = {"<t:1792259663:T>": "00:54:23"}
+
+        with patch("ai_rich_media.render_table_png", return_value=b"image") as render:
+            _, attachments = render_rich_markdown_images(
+                original,
+                max_images=9,
+                emoji_images=emoji_images,
+                markup_labels=markup_labels,
+            )
+
+        self.assertEqual(len(attachments), 1)
+        self.assertIs(render.call_args.kwargs["emoji_images"], emoji_images)
+        self.assertIs(render.call_args.kwargs["markup_labels"], markup_labels)
+
     def test_failed_table_render_does_not_block_later_math(self):
         original = "| A | B |\n|---|---|\n| 1 | 2 |\n\n$$x$$"
 

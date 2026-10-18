@@ -124,6 +124,30 @@
         },
         "warning_prefix": "⚠️ **Warning**: {warning}"
     },
+    "table": {
+        "time": {
+            "short_time": "h:mm A",
+            "long_time": "h:mm:ss A",
+            "short_date": "MM/DD/YYYY",
+            "long_date": "MMMM D, YYYY",
+            "short_datetime": "MMMM D, YYYY h:mm A",
+            "long_datetime": "dddd, MMMM D, YYYY h:mm A",
+            "weekday_names": "Sunday,Monday,Tuesday,Wednesday,Thursday,Friday,Saturday",
+            "month_names": "January,February,March,April,May,June,July,August,September,October,November,December",
+            "meridiem": "AM,PM",
+            "past": "{value} ago",
+            "future": "in {value}",
+            "few_seconds": "a few seconds",
+            "minutes": { "one": "a minute", "other": "{count} minutes" },
+            "hours": { "one": "an hour", "other": "{count} hours" },
+            "days": { "one": "a day", "other": "{count} days" },
+            "months": { "one": "a month", "other": "{count} months" },
+            "years": { "one": "a year", "other": "{count} years" }
+        },
+        "unknown_user": "unknown-user",
+        "unknown_role": "deleted-role",
+        "unknown_channel": "unknown"
+    },
     "tool_label": {
         "analyze_message_emojis": "Analyzing message emojis and stickers",
         "analyze_user_profile_media": "Analyzing user avatar and banner",

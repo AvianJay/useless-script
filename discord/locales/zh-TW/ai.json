@@ -121,6 +121,30 @@
         },
         "warning_prefix": "⚠️ **警告**: {warning}"
     },
+    "table": {
+        "time": {
+            "short_time": "HH:mm",
+            "long_time": "HH:mm:ss",
+            "short_date": "YYYY/MM/DD",
+            "long_date": "YYYY年M月D日",
+            "short_datetime": "YYYY年M月D日 HH:mm",
+            "long_datetime": "YYYY年M月D日dddd HH:mm",
+            "weekday_names": "星期日,星期一,星期二,星期三,星期四,星期五,星期六",
+            "month_names": "1月,2月,3月,4月,5月,6月,7月,8月,9月,10月,11月,12月",
+            "meridiem": "上午,下午",
+            "past": "{value}前",
+            "future": "{value}後",
+            "few_seconds": "幾秒",
+            "minutes": { "other": "{count} 分鐘" },
+            "hours": { "other": "{count} 小時" },
+            "days": { "other": "{count} 天" },
+            "months": { "other": "{count} 個月" },
+            "years": { "other": "{count} 年" }
+        },
+        "unknown_user": "未知使用者",
+        "unknown_role": "已刪除的身分組",
+        "unknown_channel": "未知頻道"
+    },
     "tool_label": {
         "analyze_message_emojis": "分析訊息表情與貼圖",
         "analyze_user_profile_media": "分析使用者頭像與橫幅",

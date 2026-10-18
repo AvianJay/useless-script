@@ -4,20 +4,39 @@ from io import BytesIO
 from pathlib import Path
 from unittest.mock import patch
 
-from PIL import Image
+from PIL import Image, ImageDraw
 
 
 DISCORD_DIR = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(DISCORD_DIR))
 
+import ai_table
 from ai_table import (
     TABLE_BACKGROUND_COLOR,
+    TABLE_MENTION_FILL,
     TABLE_MUTED_TEXT_COLOR,
+    TABLE_ROW_COLOR,
     TABLE_TEXT_COLOR,
+    TABLE_TIMESTAMP_FILL,
+    collect_table_markup,
     parse_markdown_tables,
     render_markdown_tables,
     render_table_png,
 )
+
+
+def _colors(image_bytes: bytes) -> set:
+    with Image.open(BytesIO(image_bytes)) as rendered:
+        image = rendered.convert("RGBA")
+        return {color for _count, color in image.getcolors(maxcolors=image.width * image.height)}
+
+
+def _solid_png(color) -> bytes:
+    image = Image.new("RGBA", (64, 64), (0, 0, 0, 0))
+    ImageDraw.Draw(image).rectangle((8, 8, 56, 56), fill=color)
+    output = BytesIO()
+    image.save(output, format="PNG")
+    return output.getvalue()
 
 
 class AITableRenderingTests(unittest.TestCase):
@@ -127,6 +146,74 @@ class AITableRenderingTests(unittest.TestCase):
 
         self.assertEqual(response, original)
         self.assertEqual(attachments, [])
+
+    def test_unicode_emoji_are_drawn_in_color(self):
+        table = parse_markdown_tables("| 功能 | 支援 |\n|---|:---:|\n| 表格 | ✅ |")[0]
+
+        # Twemoji 的 ✅ 是綠底，以前會畫成 Noto 缺字的方框
+        self.assertIn((119, 178, 85, 255), _colors(render_table_png(table)))
+
+    def test_cells_with_line_breaks_render(self):
+        _, attachments = render_markdown_tables("| 項目 |\n|---|\n| 第一行<br>第二行 |")
+
+        self.assertEqual(len(attachments), 1)
+
+    def test_custom_emoji_use_fetched_images(self):
+        table = parse_markdown_tables("| 表情 |\n|---|\n| <:pepe:123456789012345678> |")[0]
+
+        with_image = render_table_png(table, emoji_images={"123456789012345678": _solid_png((255, 0, 255, 255))})
+        without_image = render_table_png(table)
+
+        self.assertIn((255, 0, 255, 255), _colors(with_image))
+        self.assertNotIn((255, 0, 255, 255), _colors(without_image))
+
+    def test_timestamps_and_mentions_get_discord_style_backgrounds(self):
+        table = parse_markdown_tables(
+            "| 時間 | 誰 |\n|---|---|\n| <t:1792259663:T> | <@123456789012345678> |"
+        )[0]
+
+        colors = _colors(render_table_png(table, markup_labels={"<t:1792259663:T>": "00:54:23"}))
+
+        self.assertIn(ai_table._blend(TABLE_ROW_COLOR, TABLE_TIMESTAMP_FILL), colors)
+        self.assertIn(ai_table._blend(TABLE_ROW_COLOR, TABLE_MENTION_FILL), colors)
+
+    def test_markup_labels_replace_raw_discord_markup(self):
+        chain = ai_table._font_chain(22, False)
+        assets = ai_table._InlineAssets({}, {"<t:1792259663:T>": "00:54:23"})
+        cases = {
+            "<t:1792259663:T>": "00:54:23",
+            "<t:1792259663:d>": "2026/10/18",
+            "<@123456789012345678>": "@unknown-user",
+            "</ai chat:123456789012345678>": "/ai chat",
+            "<:ghost:123456789012345678>": ":ghost:",
+            "影片 00:54:23": "影片 00:54:23",
+        }
+        for markup, expected in cases.items():
+            with self.subTest(markup=markup):
+                paragraphs = ai_table._cell_paragraphs(markup, chain, assets, TABLE_TEXT_COLOR)
+                self.assertEqual("".join(piece.text for piece in paragraphs[0]), expected)
+
+    def test_missing_glyphs_fall_back_and_invisible_characters_are_dropped(self):
+        chain = ai_table._font_chain(22, False)
+
+        # ☐ 不在 Noto Sans TC 裡，改用 DejaVu
+        self.assertIsNotNone(chain.font_for("☐"))
+        self.assertIsNot(chain.font_for("☐"), chain.primary)
+        pieces = ai_table._char_pieces(f"A{chr(0x200B)}{chr(0xFE0F)}B", chain, TABLE_TEXT_COLOR)
+        self.assertEqual("".join(piece.text for piece in pieces), "AB")
+
+    def test_collect_table_markup_only_reads_table_cells(self):
+        text = (
+            "<t:1792259663:R> 在表格外\n\n"
+            "| 時間 | 表情 |\n|---|---|\n"
+            "| <t:1792259663:T> | <:pepe:123456789012345678> <:pepe:123456789012345678> |\n\n"
+            "```\n| <@123456789012345678> |\n|---|\n```"
+        )
+
+        self.assertEqual(
+            [match.group(0) for match in collect_table_markup(text)],
+            ["<t:1792259663:T>", "<:pepe:123456789012345678>"],
+        )
 
 
 if __name__ == "__main__":

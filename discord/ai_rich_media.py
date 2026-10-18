@@ -104,6 +104,8 @@ def render_rich_markdown_images(
     max_images: int,
     max_tables: int = 4,
     max_math: int = 6,
+    emoji_images: dict[str, bytes] | None = None,
+    markup_labels: dict[str, str] | None = None,
 ) -> tuple[str, list[dict]]:
     text = str(markdown_text or "")
     if "|" not in text and "$" not in text:
@@ -141,7 +143,11 @@ def render_rich_markdown_images(
         ):
             try:
                 if candidate.kind == "table":
-                    image_bytes = render_table_png(candidate.value)
+                    image_bytes = render_table_png(
+                        candidate.value,
+                        emoji_images=emoji_images,
+                        markup_labels=markup_labels,
+                    )
                     filename = f"ai-table-{uuid4().hex[:12]}.png"
                     source_key = "table_source"
                 else:

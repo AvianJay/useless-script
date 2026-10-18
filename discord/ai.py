@@ -42,8 +42,10 @@ from uuid import uuid4
 from PIL import Image, ImageDraw, ImageOps, UnidentifiedImageError
 from doc_markdown import read_markdown_file, extract_markdown_search_entries, load_docs_site
 from OwnerTools import is_owner
+import ai_emoji
 import ai_layout
 from ai_rich_media import render_rich_markdown_images
+from ai_table import collect_table_markup
 from ai_provider import (
     attach_image_to_messages as _attach_image_to_messages,
     coerce_ai_rate_dict as _coerce_ai_rate_dict,
@@ -924,6 +926,7 @@ Response formatting helpers:
 - Use backticks for short variable mentions such as `x`. Do not use single-dollar LaTeX; the renderer only treats it as a compatibility fallback.
 - In LaTeX, use explicit balanced braces such as `\\frac{1}{2}`, `\\sqrt{2}`, and `\\sqrt[3]{8}`.
 - Complete top-level Markdown tables with a header separator are rendered as inline images automatically. Use tables when rows and columns make the answer easier to compare.
+- Write Unicode emoji directly or use standard Discord shortcodes such as :white_check_mark:; both are displayed as emoji. For custom emoji, only use names from the provided custom emoji list and never invent :names:.
 - Use the `image_analyze` tool when the user asks about an image URL. The URL must be on cdn.discordapp.com or media.discordapp.net.
 - When runtime context says the current request has images that this model cannot see directly, call `image_analyze` for each relevant image before answering any question that depends on them. Use `source: "current_attachment"` for the first image or its listed Discord CDN URL for another image. For editing or reference-based generation, forward the images directly with `generate_image` without analyzing them first. Never guess unseen image contents.
 - To mention a slash command, write exactly: <command_mention>/autoreply list</command_mention>. The renderer will convert it to Discord's command mention when possible.
@@ -2004,11 +2007,18 @@ class AICommands(commands.Cog):
         "generate_video": "prompt",
         "execute_code": "language",
     }
-    EMOJI_NAME_PATTERN = re.compile(r'(?<!<):([a-zA-Z0-9_]{2,32}):')
-    CUSTOM_EMOJI_LITERAL_PATTERN = re.compile(r'<a?:[a-zA-Z0-9_]{2,32}:\d+>')
-    EMOJI_SHORTHAND_WRAPPER_PATTERN = re.compile(r'<a?:([a-zA-Z0-9_]{2,32}):>')
-    BROKEN_NESTED_EMOJI_PATTERN = re.compile(r'<:?(<a?:[a-zA-Z0-9_]{2,32}:\d+>):?\d*>')
-    
+    TABLE_EMOJI_FETCH_LIMIT = 24
+    TABLE_EMOJI_FETCH_TIMEOUT = 6
+    TIMESTAMP_STYLE_KEYS = {
+        "t": "ai.table.time.short_time",
+        "T": "ai.table.time.long_time",
+        "d": "ai.table.time.short_date",
+        "D": "ai.table.time.long_date",
+        "f": "ai.table.time.short_datetime",
+        "F": "ai.table.time.long_datetime",
+    }
+    TIMESTAMP_TOKEN_PATTERN = re.compile(r"YYYY|MMMM|MM|M|DD|D|dddd|HH|H|hh|h|mm|ss|A")
+
     def __init__(self, bot):
         self.bot = bot
         self._active_ai_requests: dict[int, SimpleNamespace] = {}
@@ -3524,16 +3534,156 @@ class AICommands(commands.Cog):
                 0,
                 AIResponseBuilder.RESPONSE_MAX_MEDIA_COMPONENTS - reserved_media_components,
             )
+            emoji_images, markup_labels = (
+                await self._resolve_table_markup(display_response_text, tool_context)
+                if available_rich_images
+                else ({}, {})
+            )
             display_response_text, rich_attachments = await asyncio.to_thread(
                 render_rich_markdown_images,
                 display_response_text,
                 max_images=available_rich_images,
                 max_tables=4,
                 max_math=6,
+                emoji_images=emoji_images,
+                markup_labels=markup_labels,
             )
             pending_image_attachments.extend(rich_attachments)
 
         return resolved_response_text, display_response_text, pending_file_response, pending_image_attachments
+
+    async def _resolve_table_markup(
+        self,
+        response_text: str,
+        tool_context: dict | None,
+    ) -> tuple[dict[str, bytes], dict[str, str]]:
+        """表格會畫成圖片，裡面的自訂表情要先抓圖，時間戳與提及要先換成 Discord 會顯示的文字"""
+        matches = collect_table_markup(response_text)
+        if not matches:
+            return {}, {}
+
+        context = tool_context or {}
+        guild = context.get("guild")
+        requester = context.get("user")
+        labels: dict[str, str] = {}
+        emoji_ids: list[str] = []
+        mentions: list[re.Match] = []
+        for match in matches:
+            emoji_id = match.group("emoji_id")
+            if emoji_id:
+                if emoji_id not in emoji_ids and len(emoji_ids) < self.TABLE_EMOJI_FETCH_LIMIT:
+                    emoji_ids.append(emoji_id)
+            elif match.group("timestamp") is not None:
+                labels[match.group(0)] = self._format_discord_timestamp(
+                    int(match.group("timestamp")),
+                    match.group("style"),
+                )
+            elif match.group("mention"):
+                mentions.append(match)
+
+        emoji_images, mention_labels = await asyncio.gather(
+            self._fetch_table_emoji_images(emoji_ids),
+            asyncio.gather(
+                *(
+                    self._table_mention_label(match.group("mention"), int(match.group("mention_id")), guild, requester)
+                    for match in mentions
+                )
+            ),
+        )
+        labels.update(zip((match.group(0) for match in mentions), mention_labels))
+        return emoji_images, labels
+
+    async def _fetch_table_emoji_images(self, emoji_ids: list[str]) -> dict[str, bytes]:
+        async def fetch(emoji_id: str) -> bytes | None:
+            try:
+                image_bytes, _error = await asyncio.wait_for(
+                    self._fetch_discord_image_bytes(f"https://cdn.discordapp.com/emojis/{emoji_id}.png?size=64"),
+                    timeout=self.TABLE_EMOJI_FETCH_TIMEOUT,
+                )
+            except Exception as e:
+                log(f"Failed to fetch table emoji {emoji_id}: {e}", module_name="AI", level=logging.WARNING)
+                return None
+            return image_bytes
+
+        results = await asyncio.gather(*(fetch(emoji_id) for emoji_id in emoji_ids))
+        return {emoji_id: image for emoji_id, image in zip(emoji_ids, results) if image}
+
+    async def _table_mention_label(self, kind: str, target_id: int, guild, requester) -> str:
+        if kind == "@&":
+            role = guild.get_role(target_id) if guild else None
+            return f"@{role.name}" if role else "@" + t("ai.table.unknown_role")
+        if kind == "#":
+            channel = guild.get_channel_or_thread(target_id) if guild else None
+            # 圖片誰都看得到，提問者看不到的頻道不畫出名稱
+            if (
+                channel is not None
+                and isinstance(requester, discord.Member)
+                and channel.permissions_for(requester).view_channel
+            ):
+                return f"#{channel.name}"
+            return "#" + t("ai.table.unknown_channel")
+
+        user = (guild.get_member(target_id) if guild else None) or self.bot.get_user(target_id)
+        if user is None:
+            try:
+                user = await asyncio.wait_for(self.bot.fetch_user(target_id), timeout=3)
+            except Exception:
+                user = None
+        return f"@{user.display_name}" if user else "@" + t("ai.table.unknown_user")
+
+    @classmethod
+    def _format_discord_timestamp(cls, timestamp: int, style: str | None, *, now: float | None = None) -> str:
+        """照 Discord 用戶端的格式把 <t:...> 換成文字；圖片沒有觀看者時區，固定用 UTC+8"""
+        try:
+            moment = datetime.fromtimestamp(timestamp, ConversationManager.PROMPT_TIMEZONE)
+        except (OverflowError, OSError, ValueError):
+            return str(timestamp)
+        if style == "R":
+            return cls._format_relative_time(timestamp - (time.time() if now is None else now))
+
+        weekdays = t("ai.table.time.weekday_names").split(",")
+        months = t("ai.table.time.month_names").split(",")
+        meridiem = t("ai.table.time.meridiem").split(",")
+        hour12 = moment.hour % 12 or 12
+        values = {
+            "YYYY": f"{moment.year:04d}",
+            "MMMM": months[moment.month - 1],
+            "MM": f"{moment.month:02d}",
+            "M": str(moment.month),
+            "DD": f"{moment.day:02d}",
+            "D": str(moment.day),
+            "dddd": weekdays[moment.isoweekday() % 7],
+            "HH": f"{moment.hour:02d}",
+            "H": str(moment.hour),
+            "hh": f"{hour12:02d}",
+            "h": str(hour12),
+            "mm": f"{moment.minute:02d}",
+            "ss": f"{moment.second:02d}",
+            "A": meridiem[moment.hour >= 12],
+        }
+        pattern = t(cls.TIMESTAMP_STYLE_KEYS.get(style or "f", "ai.table.time.short_datetime"))
+        return cls.TIMESTAMP_TOKEN_PATTERN.sub(lambda match: values[match.group(0)], pattern)
+
+    @staticmethod
+    def _format_relative_time(delta_seconds: float) -> str:
+        seconds = abs(delta_seconds)
+        minutes = seconds / 60
+        hours = minutes / 60
+        days = hours / 24
+        # 門檻照 moment.js 的 fromNow，跟 Discord 的 <t:...:R> 一致
+        if seconds < 45:
+            value = t("ai.table.time.few_seconds")
+        elif minutes < 45:
+            value = t("ai.table.time.minutes", count=max(1, round(minutes)))
+        elif hours < 22:
+            value = t("ai.table.time.hours", count=max(1, round(hours)))
+        elif days < 26:
+            value = t("ai.table.time.days", count=max(1, round(days)))
+        elif days < 320:
+            value = t("ai.table.time.months", count=max(1, round(days / 30.4)))
+        else:
+            value = t("ai.table.time.years", count=max(1, round(days / 365)))
+        return t("ai.table.time.future" if delta_seconds > 0 else "ai.table.time.past", value=value)
 
     def _build_web_search_messages(self, query: str, max_chars: int, include_sources: bool) -> list[dict]:
         source_instruction = (
@@ -12624,43 +12774,10 @@ class AICommands(commands.Cog):
         # i18n: skip-end
         return context, emoji_map
 
-    @classmethod
-    def _resolve_ai_custom_emojis(cls, text: str, emoji_map: dict[str, str]) -> str:
-        """將 AI 輸出的 :emoji_name: 轉為 Discord 自訂表情符號格式。"""
-        if not text or not emoji_map:
-            return text
-
-        normalized = str(text)
-
-        # 修復常見壞格式，例如 <:<:emoji:1234>:1234> 或 <<:emoji:1234>1234>
-        for _ in range(3):
-            collapsed = cls.BROKEN_NESTED_EMOJI_PATTERN.sub(r"\1", normalized)
-            if collapsed == normalized:
-                break
-            normalized = collapsed
-
-        preserved_mentions: list[str] = []
-
-        def preserve_literal(match: re.Match) -> str:
-            preserved_mentions.append(match.group(0))
-            return f"\x00EMJ{len(preserved_mentions) - 1}\x00"
-
-        # 先保護已合法的 <a:name:id> / <:name:id>，避免被二次替換
-        normalized = cls.CUSTOM_EMOJI_LITERAL_PATTERN.sub(preserve_literal, normalized)
-
-        # 將 AI 可能輸出的 <:name:> / <a:name:> 先轉回 :name: 再統一映射
-        normalized = cls.EMOJI_SHORTHAND_WRAPPER_PATTERN.sub(lambda m: f":{m.group(1)}:", normalized)
-
-        def repl(match: re.Match) -> str:
-            name = match.group(1)
-            return emoji_map.get(name.lower(), match.group(0))
-
-        normalized = cls.EMOJI_NAME_PATTERN.sub(repl, normalized)
-
-        for index, mention in enumerate(preserved_mentions):
-            normalized = normalized.replace(f"\x00EMJ{index}\x00", mention)
-
-        return normalized
+    @staticmethod
+    def _resolve_ai_emojis(text: str, emoji_map: dict[str, str]) -> str:
+        """將 AI 輸出的 :名稱: 轉為伺服器自訂表情或 Discord 內建 emoji，認不得的名稱保留原樣"""
+        return ai_emoji.resolve_shortcodes(text, emoji_map)
 
     async def model_select_autocomplete(
         self,
@@ -13593,7 +13710,7 @@ class AICommands(commands.Cog):
                 tool_progress_callback=tool_progress_callback,
             )
 
-            response_text = self._resolve_ai_custom_emojis(response_text, emoji_map)
+            response_text = self._resolve_ai_emojis(response_text, emoji_map)
             response_text, display_response_text, pending_file_response, pending_image_attachments = await self._prepare_ai_response_delivery(
                 response_text,
                 tool_context,
@@ -13611,7 +13728,7 @@ class AICommands(commands.Cog):
                     or len(str(pending_file_response.get("content") or ""))
                 )
                 if pending_file_response.get("summary"):
-                    pending_file_response["summary"] = self._resolve_ai_custom_emojis(
+                    pending_file_response["summary"] = self._resolve_ai_emojis(
                         str(pending_file_response.get("summary") or ""),
                         emoji_map,
                     )
@@ -14638,7 +14755,7 @@ class AICommands(commands.Cog):
                     tool_progress_callback=tool_progress_callback,
                 )
 
-                response_text = self._resolve_ai_custom_emojis(response_text, emoji_map)
+                response_text = self._resolve_ai_emojis(response_text, emoji_map)
                 response_text, display_response_text, pending_file_response, pending_image_attachments = await self._prepare_ai_response_delivery(
                     response_text,
                     tool_context,
@@ -14656,7 +14773,7 @@ class AICommands(commands.Cog):
                         or len(str(pending_file_response.get("content") or ""))
                     )
                     if pending_file_response.get("summary"):
-                        pending_file_response["summary"] = self._resolve_ai_custom_emojis(
+                        pending_file_response["summary"] = self._resolve_ai_emojis(
                             str(pending_file_response.get("summary") or ""),
                             emoji_map,
                         )

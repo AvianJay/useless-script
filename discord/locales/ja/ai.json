@@ -124,6 +124,30 @@
         },
         "warning_prefix": "⚠️ **警告**: {warning}"
     },
+    "table": {
+        "time": {
+            "short_time": "HH:mm",
+            "long_time": "HH:mm:ss",
+            "short_date": "YYYY/MM/DD",
+            "long_date": "YYYY年M月D日",
+            "short_datetime": "YYYY年M月D日 HH:mm",
+            "long_datetime": "YYYY年M月D日 dddd HH:mm",
+            "weekday_names": "日曜日,月曜日,火曜日,水曜日,木曜日,金曜日,土曜日",
+            "month_names": "1月,2月,3月,4月,5月,6月,7月,8月,9月,10月,11月,12月",
+            "meridiem": "午前,午後",
+            "past": "{value}前",
+            "future": "{value}後",
+            "few_seconds": "数秒",
+            "minutes": { "other": "{count}分" },
+            "hours": { "other": "{count}時間" },
+            "days": { "other": "{count}日" },
+            "months": { "other": "{count}ヶ月" },
+            "years": { "other": "{count}年" }
+        },
+        "unknown_user": "不明なユーザー",
+        "unknown_role": "削除されたロール",
+        "unknown_channel": "不明なチャンネル"
+    },
     "tool_label": {
         "analyze_message_emojis": "メッセージの絵文字とステッカーの分析",
         "analyze_user_profile_media": "ユーザーのアバターとバナーの分析",
