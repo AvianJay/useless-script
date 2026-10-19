@@ -5190,6 +5190,7 @@ class AICommands(commands.Cog):
 
     def _build_runtime_prompt_context(self, tool_context: dict | None = None) -> str:
         now = self._get_prompt_now()
+        selected_model = str((tool_context or {}).get("model") or "").strip()
         lines = [
             "[Runtime context]",
             # 精確到分鐘即可，秒級時間戳會讓 prompt cache 每次都失效
@@ -5205,12 +5206,13 @@ class AICommands(commands.Cog):
             "Before creating memory, merge the same person, preference, project, or topic into one concise existing entry using its memory_id. Create another entry only for a genuinely distinct topic, and compress existing content before approaching 2000 characters.",
             "Avoid storing secrets, credentials, exact financial data, or highly sensitive personal information.",
         ]
+        if selected_model:
+            lines.append(f"Current model: {selected_model}. Use this model name when asked about your model identity.")
         guild = (tool_context or {}).get("guild")
         if guild is not None:
             lines.append("guild_shared memory in this channel is shared by members of the current server.")
         request_images = self._get_request_image_attachments(tool_context)
         if request_images:
-            selected_model = str((tool_context or {}).get("model") or "").strip()
             if _is_ai_vision_model(selected_model):
                 lines.append("The current request images are attached directly and this model may inspect them.")
             else:
