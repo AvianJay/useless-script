@@ -187,7 +187,17 @@
         "search_message": "Searching messages",
         "send_as_file": "Preparing as file",
         "upload_html": "Uploading HTML page",
-        "upsert_ai_memory": "Updating AI memory"
+        "upsert_ai_memory": "Updating AI memory",
+        "create_resource": "Preparing a resource",
+        "list_attachments": "Listing attachments",
+        "list_resources": "Listing resources",
+        "list_skills": "Listing skills",
+        "load_skill": "Loading a skill",
+        "node_repl": "Running JavaScript",
+        "read_attachment": "Reading an attachment",
+        "read_resource": "Reading a resource",
+        "read_skill_file": "Reading skill reference",
+        "send_resource": "Attaching a result file"
     },
     "value": {
         "auto_clear_existing_history_scheduled": "A complete conversation already exists, so the 30-minute timer restarts now.",

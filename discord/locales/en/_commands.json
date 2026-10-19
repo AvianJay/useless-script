@@ -157,13 +157,15 @@
                 "image": "Attach an image for the AI to analyze (optional)",
                 "message": "The question or message you want to ask the AI",
                 "model": "Choose an AI model (default: openai)",
-                "new_conversation": "Start a new conversation (clears previous history)"
+                "new_conversation": "Start a new conversation (clears previous history)",
+                "file": "Attach a document or data file (optional)"
             },
             "param_name": {
                 "image": "image",
                 "message": "message",
                 "model": "model",
-                "new_conversation": "new_conversation"
+                "new_conversation": "new_conversation",
+                "file": "file"
             }
         },
         "ai_memory": {

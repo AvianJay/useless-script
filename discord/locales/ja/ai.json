@@ -187,7 +187,17 @@
         "search_message": "メッセージの検索",
         "send_as_file": "ファイルとして準備中",
         "upload_html": "HTML ページをアップロード中",
-        "upsert_ai_memory": "AI メモリの更新"
+        "upsert_ai_memory": "AI メモリの更新",
+        "create_resource": "データを準備中",
+        "list_attachments": "添付ファイルを確認中",
+        "list_resources": "リソースを確認中",
+        "list_skills": "スキルを確認中",
+        "load_skill": "スキルを読み込み中",
+        "node_repl": "JavaScript を実行中",
+        "read_attachment": "添付ファイルを読み込み中",
+        "read_resource": "リソースを読み込み中",
+        "read_skill_file": "スキルの参照を確認中",
+        "send_resource": "結果ファイルを添付中"
     },
     "value": {
         "auto_clear_existing_history_scheduled": "完全な会話がすでにあるため、30 分のタイマーを今から再開します。",

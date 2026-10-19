@@ -157,13 +157,15 @@
                 "image": "AIが分析する画像を添付（オプション）",
                 "message": "AIに聞きたい質問やメッセージ",
                 "model": "AI モデルを選択します (デフォルト: openai)",
-                "new_conversation": "新しい会話を開始します (以前の履歴をクリアします)"
+                "new_conversation": "新しい会話を開始します (以前の履歴をクリアします)",
+                "file": "文書やデータファイルを添付（任意）"
             },
             "param_name": {
                 "image": "画像",
                 "message": "メッセージ",
                 "model": "モデル",
-                "new_conversation": "新規会話"
+                "new_conversation": "新規会話",
+                "file": "ファイル"
             }
         },
         "ai_memory": {

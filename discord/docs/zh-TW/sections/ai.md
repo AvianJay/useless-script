@@ -198,3 +198,23 @@ AI 使用三種不同的上下文，清除其中一種不會連帶清除其他�
 | `y!ai-server-prompt` | 查看目前 Prompt |
 | `y!ai-server-prompt [內容]` | 設定 Prompt |
 | `y!ai-server-prompt clear` | 清除 Prompt |
+
+## 任務技能與檔案分析
+
+AI 會按任務載入所需的操作說明與工具。目前包含瀏覽器、附來源的網路研究、Discord 對話考古、附件讀取、資料分析，以及 Meta Threads 文字發文。可以直接說「整理昨天的討論並附訊息連結」、「比較這幾個來源」，或「分析這份 CSV，附上清理後的檔案」。
+
+- 可透過 `/ai` 的「檔案」選項、文字指令訊息的附件，或引用可見訊息中的附件提供文件。支援文字、CSV/TSV、JSON、PDF、DOCX 與 XLSX，單檔上限 8 MB。PDF 僅擷取文字，不含 OCR；試算表公式不會執行。
+- 大型結果會暫存成可分段讀取的資源。JavaScript 變數與資源只保留於本次請求，完成、取消或逾時後清除。CSV、JSON 等文字結果可作為附件交付。
+- 瀏覽器操作沿用 Discord 的允許／拒絕流程。Node 執行環境呼叫相同的瀏覽器與 Discord 權限檢查，無法直接存取主機檔案、機器人憑證或網路。
+- Meta Threads 使用已設定 profile 的現有登入狀態，目前支援文字與連結，不支援媒體上傳。只有明確要求發佈時才會送出，並驗證結果、回傳貼文連結；要求草稿或測試技能不會發文。帳號互動限機器人擁有者及經擁有者開放的發文者。
+
+### 擁有者的技能執行設定
+
+在 bot 主機安裝更新後的 Python requirements，啟動 Linux Docker daemon，並先執行 `docker pull node:24-alpine`。Bot 不會自動拉取映像，也不會退回主機直接執行程式；沙箱不可用時，仍可使用原有瀏覽器工具與 Piston 執行工具。
+
+- `!aicfg node-repl`：查看目前沙箱設定。
+- `!aicfg node-repl on [image]`：以預先拉取且相容 Node 的映像啟用；`off` 關閉。
+- `!aicfg browser-cdp <profile CDP URL>`：沿用現有方式設定瀏覽器。
+- `!aicfg threads-publisher <Discord 使用者 ID> on`：開放該使用者操作 Threads 帳號；`off` 撤銷額外權限。機器人擁有者原本就有權限。
+
+每個 kernel 均停用網路、使用唯讀檔案系統，只掛載一個唯讀 worker 程式，並採用非特權使用者及 CPU／記憶體／程序數限制。每個 bot 實例最多同時執行兩個 kernel。單次請求上限十分鐘、最多十二輪技能／工具操作，共用 48 次工具呼叫額度，包含 JavaScript 中的工具呼叫；請求結束後移除容器。

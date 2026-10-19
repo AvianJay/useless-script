@@ -1,6 +1,8 @@
 discord.py[voice] @ git+https://github.com/Rapptz/discord.py.git@108e9abb5264d02056e5106fd89488ee122510f7
 requests~=2.32.5
 pillow~=11.3.0
+pypdf>=5,<7
+openpyxl~=3.1.5
 matplotlib~=3.10.0
 fonttools>=4.40
 emoji~=2.15.0

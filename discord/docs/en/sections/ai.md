@@ -160,3 +160,24 @@ Administrators can provide server context, reply style, or preferences, up to 1,
 | `y!ai-server-prompt` | View the current prompt |
 | `y!ai-server-prompt [content]` | Set the prompt |
 | `y!ai-server-prompt clear` | Clear the prompt |
+
+
+## Task Skills and File Analysis
+
+The AI loads task instructions and tools only when needed. Available skills cover browser automation, web research with sources, Discord conversation investigation, reading attachments, data analysis, and text posting on Meta Threads. Ask naturally, for example: "Summarize yesterday's discussion with message links", "Compare these sources", or "Analyze this CSV and attach the cleaned result".
+
+- Attach a document through `/ai`'s `file` option, attach it to a prefix-command message, or reference a visible message containing the file. Supported formats include text, CSV/TSV, JSON, PDF, DOCX and XLSX, up to 8 MB. PDF text extraction does not include OCR. Spreadsheet formulas are not executed.
+- Large results are kept as temporary resources that the AI can read in slices. JavaScript variables and resources last for one request and are removed after completion, cancellation or timeout. Textual CSV/JSON results can be returned as attachments.
+- Browser actions retain the existing Discord Allow/Reject flow. The Node runtime calls the same permission-checked browser and Discord handlers. It cannot access host files, bot credentials or the network directly.
+- Meta Threads uses the configured profile's existing login and currently supports text and links, not media uploads. The AI publishes only when asked to publish, verifies the result, and returns its permalink. Drafting or testing the skill does not publish anything. Account interactions are restricted to bot owners and explicitly enabled publishers.
+
+### Owner Setup for Skill Execution
+
+Install the updated Python requirements and run a Linux Docker daemon on the bot host. Prepare the sandbox image with `docker pull node:24-alpine`. The bot does not automatically pull images or fall back to host execution. If the sandbox is unavailable, direct browser tools and the existing Piston execution tool remain usable.
+
+- `!aicfg node-repl` displays the current sandbox setting.
+- `!aicfg node-repl on [image]` enables the kernel using a pre-pulled Node-compatible image; `off` disables it.
+- `!aicfg browser-cdp <profile CDP URL>` configures the managed browser as before.
+- `!aicfg threads-publisher <Discord user ID> on` permits that user to interact with the Threads account; `off` revokes the extra permission. Bot owners are already permitted.
+
+Each kernel has no network, a read-only filesystem, one read-only worker-script mount, an unprivileged user, and CPU/memory/process limits. At most two kernels run per bot instance. Requests have a ten-minute deadline, up to twelve skill/tool rounds and a shared 48-call budget, including calls made through JavaScript. Containers are removed when the request ends.

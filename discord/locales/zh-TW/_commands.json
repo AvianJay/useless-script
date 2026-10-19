@@ -157,13 +157,15 @@
                 "image": "傳入圖片讓 AI 分析（選用）",
                 "message": "你想問 AI 的問題或訊息",
                 "model": "選擇 AI 模型（預設 openai）",
-                "new_conversation": "是否開始新對話（清除之前的對話歷史）"
+                "new_conversation": "是否開始新對話（清除之前的對話歷史）",
+                "file": "附加文件或資料檔案（選填）"
             },
             "param_name": {
                 "image": "圖片",
                 "message": "訊息",
                 "model": "模型",
-                "new_conversation": "新對話"
+                "new_conversation": "新對話",
+                "file": "檔案"
             }
         },
         "ai_memory": {

@@ -184,7 +184,17 @@
         "search_message": "搜尋訊息",
         "send_as_file": "整理為檔案",
         "upload_html": "上傳 HTML 網頁",
-        "upsert_ai_memory": "更新 AI 記憶"
+        "upsert_ai_memory": "更新 AI 記憶",
+        "create_resource": "準備資料",
+        "list_attachments": "查詢附件",
+        "list_resources": "查詢暫存資料",
+        "list_skills": "查詢可用技能",
+        "load_skill": "載入技能",
+        "node_repl": "執行 JavaScript",
+        "read_attachment": "讀取附件",
+        "read_resource": "讀取暫存資料",
+        "read_skill_file": "讀取技能參考",
+        "send_resource": "附上結果檔案"
     },
     "value": {
         "auto_clear_existing_history_scheduled": "目前已有完整對話，將從現在重新計算 30 分鐘。",

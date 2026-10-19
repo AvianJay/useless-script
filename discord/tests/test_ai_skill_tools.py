@@ -1,0 +1,198 @@
+import asyncio
+import json
+import sys
+import unittest
+from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import AsyncMock, patch
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from ai import AICommands
+from ai_skills import skill_session
+
+
+def response(content='', calls=None):
+    return SimpleNamespace(model='fixture-model', choices=[SimpleNamespace(message=SimpleNamespace(
+        content=content, tool_calls=calls, images=None, reasoning_content=None,
+    ))])
+
+
+def native_call(name, arguments):
+    return SimpleNamespace(id=f'call-{name}', function=SimpleNamespace(name=name, arguments=json.dumps(arguments)))
+
+
+class AISkillToolTests(unittest.IsolatedAsyncioTestCase):
+    def setUp(self):
+        self.cog = AICommands(SimpleNamespace())
+        self.context = {'user': SimpleNamespace(id=42), 'channel': SimpleNamespace(id=1)}
+        self.cog._get_docs_feature_prompt = lambda: ''
+
+    async def asyncTearDown(self):
+        await self.cog._close_skill_session(self.context)
+
+    async def test_tools_are_loaded_on_demand_and_not_shared_between_requests(self):
+        before = {tool['function']['name'] for tool in self.cog._build_request_ai_tools(self.context)}
+        self.assertIn('load_skill', before)
+        self.assertNotIn('search_google', before)
+        self.assertNotIn('read_message', before)
+        await self.cog._execute_ai_tool('load_skill', {'name': 'web-research'}, self.context)
+        after = {tool['function']['name'] for tool in self.cog._build_request_ai_tools(self.context)}
+        self.assertIn('search_google', after)
+        other = {tool['function']['name'] for tool in self.cog._build_request_ai_tools({'user': SimpleNamespace(id=99)})}
+        self.assertNotIn('search_google', other)
+
+    async def test_unknown_skill_and_unloaded_reference_do_not_enable_tools(self):
+        unknown = await self.cog._execute_ai_tool('load_skill', {'name': '../../config'}, self.context)
+        reference = await self.cog._execute_ai_tool('read_skill_file', {'name': 'browser', 'path': 'references/repl.md'}, self.context)
+        self.assertFalse(unknown['ok'])
+        self.assertFalse(reference['ok'])
+        self.assertEqual(skill_session(self.context).loaded, set())
+
+    async def test_native_loop_refreshes_schemas_after_skill_activation(self):
+        offered = []
+        responses = [response(calls=[native_call('load_skill', {'name': 'discord-investigate'})]),
+                     response(calls=[native_call('get_user', {'user_id': '42'})]), response('Done')]
+
+        async def request(messages, **kwargs):
+            offered.append({item['function']['name'] for item in kwargs['tools']})
+            return responses.pop(0), 'native'
+
+        with patch.object(self.cog, '_request_ai_completion', side_effect=request), patch.object(
+            self.cog, '_tool_get_user', new=AsyncMock(return_value={'id': '42'})), patch('ai._is_ai_vision_model', return_value=False):
+            result = await self.cog.generate_response([{'role': 'user', 'content': 'Look up this user'}], tool_context=self.context)
+        self.assertEqual(result[0], 'Done')
+        self.assertNotIn('get_user', offered[0])
+        self.assertIn('get_user', offered[1])
+        self.assertNotIn('_skill_session', self.context)
+
+    async def test_emulated_loop_refreshes_schemas_after_skill_activation(self):
+        responses = [response(json.dumps({'tool_calls': [{'name': 'load_skill', 'arguments': {'name': 'web-research'}}]})),
+                     response(json.dumps({'tool_calls': [{'name': 'search_google', 'arguments': {'query': 'fixture'}}]})),
+                     response('Answer with evidence')]
+        generated = AsyncMock(side_effect=responses)
+        with patch.object(self.cog, '_generate_ai_completion', new=generated), patch('ai._resolve_ai_tool_call_mode', return_value='emulated'), patch.object(
+            self.cog, '_tool_search_google', new=AsyncMock(return_value={'results': []})), patch('ai._is_ai_vision_model', return_value=False):
+            result = await self.cog.generate_response([{'role': 'user', 'content': 'Research'}], tool_context=self.context)
+        self.assertEqual(result[0], 'Answer with evidence')
+        first = generated.await_args_list[0].kwargs['messages'][0]['content']
+        second = generated.await_args_list[1].kwargs['messages'][0]['content']
+        first_schemas = json.loads(next(line[14:] for line in first.splitlines() if line.startswith('Tool schemas: ')))
+        second_schemas = json.loads(next(line[14:] for line in second.splitlines() if line.startswith('Tool schemas: ')))
+        self.assertNotIn('search_google', first_schemas)
+        self.assertIn('search_google', second_schemas)
+
+    async def test_large_tool_result_can_be_read_without_repeating_fetch(self):
+        skill_session(self.context)
+        with patch.object(self.cog, '_tool_fetch_raw', new=AsyncMock(return_value={'text': 'x' * 24000})):
+            result = await self.cog._execute_ai_tool('fetch_raw', {'url': 'https://example.com'}, self.context)
+        resource_id = result['data']['resource_id']
+        read = await self.cog._execute_ai_tool('read_resource', {'resource_id': resource_id, 'offset': 15000, 'limit': 16000}, self.context)
+        self.assertIn('x' * 100, read['data']['text'])
+        self.assertIsNone(read['data']['next_offset'])
+
+    async def test_bridge_rejects_recursion_unloaded_tools_and_browser_rejection(self):
+        state = skill_session(self.context)
+        state.loaded.add('data-analysis')
+        for name in ('node_repl', 'load_skill', 'read_message'):
+            self.assertFalse((await self.cog._node_tool_bridge(name, {}, self.context))['ok'])
+        state.loaded.add('browser')
+        with patch('ai._get_ai_browser_cdp_endpoint', return_value='configured'), patch.object(
+            self.cog, '_tool_browser_act', new=AsyncMock(return_value={'error': 'Session rejected'})) as action:
+            result = await self.cog._node_tool_bridge('browser_act', {'action': 'click'}, self.context)
+        self.assertFalse(result['ok'])
+        self.assertEqual(result['error'], 'Session rejected')
+        self.assertIs(action.await_args.args[1], self.context)
+
+    async def test_attachment_access_is_checked_before_download(self):
+        source = SimpleNamespace(attachments=[SimpleNamespace(id=1)], channel=SimpleNamespace(id=2))
+        self.context['message'] = source
+        with patch.object(self.cog, '_validate_channel_tool_access', return_value=('No permission', {})), patch('ai_skill_tools.aiohttp.ClientSession') as session:
+            result = await self.cog._execute_ai_tool('read_attachment', {'attachment_id': '1'}, self.context)
+        self.assertFalse(result['ok'])
+        session.assert_not_called()
+
+    async def test_attachment_ids_must_not_be_rounded_javascript_numbers(self):
+        with patch.object(self.cog, '_attachment_candidates', new=AsyncMock()) as candidates:
+            result = await self.cog._execute_ai_tool('read_attachment', {'attachment_id': 1451539155774343168}, self.context)
+        self.assertFalse(result['ok'])
+        candidates.assert_not_awaited()
+
+    async def test_resource_catalog_keeps_every_handle_at_capacity(self):
+        state = skill_session(self.context)
+        for index in range(32):
+            state.resources.add(str(index), filename=f'{index}-' + 'x' * 110, source='fixture:' + 'y' * 280)
+        result = await self.cog._execute_ai_tool('list_resources', {}, self.context)
+        self.assertTrue(result['ok'])
+        self.assertEqual(len(result['data']['resources']), 32)
+        self.assertEqual({item['resource_id'] for item in result['data']['resources']}, set(state.resources.items))
+
+    async def test_send_resource_queues_the_actual_content_and_prevents_fake_binary_files(self):
+        state = skill_session(self.context)
+        csv = state.resources.add('a,b\n1,2\n', filename='result.csv')
+        sent = await self.cog._execute_ai_tool('send_resource', {'resource_id': csv.resource_id}, self.context)
+        self.assertTrue(sent['data']['queued'])
+        self.assertEqual(self.context['pending_file_response']['content'], csv.text)
+        fake = state.resources.add('not a PDF', filename='result.pdf')
+        rejected = await self.cog._execute_ai_tool('send_resource', {'resource_id': fake.resource_id}, self.context)
+        self.assertFalse(rejected['ok'])
+
+    async def test_bridge_calls_share_the_request_budget(self):
+        skill_session(self.context)
+        with patch.object(self.cog, 'MAX_SKILL_TOOL_CALLS', 1):
+            first = await self.cog._execute_ai_tool('list_resources', {}, self.context)
+            second = await self.cog._execute_ai_tool('list_resources', {}, self.context)
+        self.assertTrue(first['ok'])
+        self.assertFalse(second['ok'])
+
+    async def test_threads_interactions_require_an_owner_or_enabled_publisher(self):
+        with patch('ai_skill_tools.config', return_value=[]), patch('ai_skill_tools.get_global_config', return_value=[]):
+            self.assertIsNotNone(self.cog._threads_interaction_error('https://www.threads.com/@account', self.context))
+            self.assertIsNone(self.cog._threads_interaction_error('https://threads.com.example.org', self.context))
+        with patch('ai_skill_tools.config', return_value=[42]), patch('ai_skill_tools.get_global_config', return_value=[]):
+            self.assertIsNone(self.cog._threads_interaction_error('https://www.threads.com', self.context))
+        with patch('ai_skill_tools.config', return_value=[]), patch('ai_skill_tools.get_global_config', return_value=['42']):
+            self.assertIsNone(self.cog._threads_interaction_error('https://www.threads.net', self.context))
+
+    async def test_invalid_kernel_configuration_does_not_consume_a_slot(self):
+        skill_session(self.context).loaded.add('data-analysis')
+        def config_value(key, default=None):
+            return '--invalid image' if key == 'ai_node_repl_image' else default
+        with patch('ai_skill_tools.get_global_config', side_effect=config_value):
+            for _ in range(3):
+                result = await self.cog._execute_ai_tool('node_repl', {'code': 'write(1)'}, self.context)
+                self.assertFalse(result['ok'])
+        self.assertEqual(self.cog._node_kernel_semaphore._value, 2)
+
+    async def test_kernel_start_failure_releases_slot_before_fallback(self):
+        state = skill_session(self.context)
+        state.loaded.add('data-analysis')
+        kernel = SimpleNamespace(evaluate=AsyncMock(side_effect=RuntimeError('fixture startup failure')), close=AsyncMock())
+        with patch('ai_skill_tools.NodeKernel', return_value=kernel):
+            result = await self.cog._execute_ai_tool('node_repl', {'code': 'write(1)'}, self.context)
+        self.assertFalse(result['ok'])
+        kernel.close.assert_awaited_once()
+        self.assertEqual(self.cog._node_kernel_semaphore._value, 2)
+        self.assertIsNone(state.node)
+
+    async def test_cancellation_and_request_deadline_close_kernel(self):
+        state = skill_session(self.context)
+        state.node = SimpleNamespace(close=AsyncMock())
+        close = state.node.close
+        started = asyncio.Event()
+
+        async def request(*args, **kwargs):
+            started.set()
+            await asyncio.Event().wait()
+
+        with patch.object(self.cog, '_request_ai_completion', side_effect=request), patch.object(
+            self.cog, 'MAX_SKILL_REQUEST_SECONDS', 0.1), patch('ai._is_ai_vision_model', return_value=False):
+            with self.assertRaises(TimeoutError):
+                await self.cog.generate_response([{'role': 'user', 'content': 'Wait'}], tool_context=self.context)
+        self.assertTrue(started.is_set())
+        close.assert_awaited_once()
+        self.assertNotIn('_skill_session', self.context)
+
+
+if __name__ == '__main__':
+    unittest.main()

@@ -88,6 +88,8 @@ from ai_provider import (
 )
 
 import ai_browser
+from ai_skill_tools import AISkillTools, SKILL_TOOL_NAMES
+from ai_skills import skill_session
 from ai_browser import (
     AI_BROWSER_CDP_ENDPOINT_CONFIG_KEY,
     derive_ai_browser_launch_endpoint,
@@ -1787,7 +1789,7 @@ class AIStreamProgress:
 # AI Commands Cog
 # ============================================
 
-class AICommands(commands.Cog):
+class AICommands(AISkillTools, commands.Cog):
     """AI 聊天機器人指令"""
     ai_memory = app_commands.Group(
         name=app_commands.locale_str("ai-memory", i18n_key="cmd.ai.ai_memory.root.name"),
@@ -1954,6 +1956,7 @@ class AICommands(commands.Cog):
     AI_RESPONSE_VIEW_CONFIG_KEY = "ai_response_view_config"
     COMMAND_MENTION_TAG_PATTERN = re.compile(r"<command_mention>(.*?)</command_mention>", re.IGNORECASE | re.DOTALL)
     TOOL_USAGE_LABELS = {
+        **{name: f"ai.tool_label.{name}" for name in SKILL_TOOL_NAMES},
         "image_analyze": "ai.tool_label.image_analyze",
         "generate_image": "ai.tool_label.generate_image",
         "search_ai": "ai.tool_label.search_ai",
@@ -1997,6 +2000,7 @@ class AICommands(commands.Cog):
     # One short, public-facing argument per tool shown next to its label. Browser tools are
     # deliberately absent: their arguments are redacted from logs and stay off the channel too.
     TOOL_USAGE_DETAIL_FIELDS = {
+        "load_skill": "name",
         "search_ai": "query",
         "search_google": "query",
         "search_google_images": "query",
@@ -2042,6 +2046,7 @@ class AICommands(commands.Cog):
         self._application_emoji_cache = None
         self._visual_description_cache_fill_lock = asyncio.Lock()
         self.browser = ai_browser.BrowserSessionManager()
+        self._node_kernel_semaphore = asyncio.Semaphore(2)
 
     async def cog_load(self):
         self._auto_summary_shutting_down = False
@@ -2694,17 +2699,41 @@ class AICommands(commands.Cog):
         tool_context: dict | None = None,
         tool_progress_callback=None,
     ) -> tuple[str, str, str, str | None]:
+        async with asyncio.timeout(self.MAX_SKILL_REQUEST_SECONDS):
+            return await self._generate_response_with_skills(
+                messages, model=model, image=image, tool_context=tool_context,
+                tool_progress_callback=tool_progress_callback,
+            )
+
+    async def _generate_response_with_skills(
+        self,
+        messages: list,
+        model: str = "openai-fast",
+        image: bytes | list[bytes] | None = None,
+        tool_context: dict | None = None,
+        tool_progress_callback=None,
+    ) -> tuple[str, str, str, str | None]:
         """Generate an AI response with optional tool calling."""
         active_tool_context = tool_context or {}
+        use_tools = bool(active_tool_context)
         if active_tool_context:
             active_tool_context["_browser_progress_callback"] = tool_progress_callback
         try:
             start_time = time.perf_counter()
             working_messages = [dict(message) for message in messages]
             working_image = image if _is_ai_vision_model(model) else None
-            tools = self._build_ai_tools() if active_tool_context else None
-
-            for round_index in range(1, (self.MAX_TOOL_ITERATIONS if tools else 1) + 1):
+            completed_rounds = 0
+            for round_index in range(1, max(self.MAX_TOOL_ITERATIONS, self.MAX_SKILL_TOOL_ITERATIONS) + 1):
+                state = skill_session(active_tool_context) if use_tools else None
+                round_limit = self.MAX_SKILL_TOOL_ITERATIONS if state and state.loaded else self.MAX_TOOL_ITERATIONS
+                if round_index > (round_limit if use_tools else 1):
+                    break
+                if time.perf_counter() - start_time > self.MAX_SKILL_REQUEST_SECONDS:
+                    break
+                # load_skill changes which schemas must be sent on the next round,
+                # including when the provider uses emulated tool calling.
+                tools = self._build_request_ai_tools(active_tool_context) if use_tools else None
+                completed_rounds = round_index
                 stream_progress = AIStreamProgress() if tool_progress_callback is not None else None
                 async with self._streaming_notice(stream_progress, tool_progress_callback, round_index):
                     response, tool_call_mode = await self._request_ai_completion(
@@ -2847,7 +2876,7 @@ class AICommands(commands.Cog):
                 working_image = None
 
             stream_progress = AIStreamProgress() if tool_progress_callback is not None else None
-            async with self._streaming_notice(stream_progress, tool_progress_callback, self.MAX_TOOL_ITERATIONS + 1):
+            async with self._streaming_notice(stream_progress, tool_progress_callback, completed_rounds + 1):
                 final_response, _ = await self._request_ai_completion(
                     working_messages
                     + [
@@ -2888,7 +2917,10 @@ class AICommands(commands.Cog):
             active_tool_context.pop("_browser_progress_callback", None)
             active_tool_context.pop("_browser_approval_presenter", None)
             active_tool_context.pop("_tool_progress_state", None)
-            await self.browser.release_lease(active_tool_context)
+            try:
+                await self._close_skill_session(active_tool_context)
+            finally:
+                await self.browser.release_lease(active_tool_context)
 
     @staticmethod
     def _coerce_bool(value, default: bool = False) -> bool:
@@ -3091,6 +3123,12 @@ class AICommands(commands.Cog):
 
     @classmethod
     def _tool_result_max_length(cls, tool_name: str | None) -> int:
+        if tool_name == "list_resources":
+            return 32000
+        if tool_name in {"load_skill", "read_skill_file"}:
+            return 26000
+        if tool_name in {"read_resource", "node_repl", "list_attachments"}:
+            return 20000
         if tool_name in cls.BROWSER_TOOL_NAMES:
             return cls.BROWSER_TOOL_RESULT_MAX_LENGTH
         if tool_name == "get_ai_memory":
@@ -3109,6 +3147,8 @@ class AICommands(commands.Cog):
 
     @classmethod
     def _tool_payload_max_length(cls, tool_results: list[dict]) -> int:
+        if any(entry.get("name") in SKILL_TOOL_NAMES for entry in tool_results or []):
+            return 64000
         requested_length = cls.MAX_TOOL_RESULT_LENGTH * 2
         contains_browser_result = False
         for entry in tool_results or []:
@@ -3736,7 +3776,7 @@ class AICommands(commands.Cog):
         for tool_call in tool_calls:
             name = str(tool_call.get("name") or "unknown")
             arguments = self._safe_parse_tool_arguments(tool_call.get("arguments"))
-            if name in self.BROWSER_TOOL_NAMES:
+            if name in self.BROWSER_TOOL_NAMES or name == "node_repl":
                 arguments = self._browser_tool_log_placeholder(name, arguments)
             requested.append(f"{name}(args={self._tool_log_preview(arguments, max_len=160)})")
         if not requested:
@@ -3762,7 +3802,7 @@ class AICommands(commands.Cog):
         guild = (tool_context or {}).get("guild")
         ok = bool((result or {}).get("ok"))
         payload = (result or {}).get("data") if ok else (result or {}).get("error")
-        if tool_name in self.BROWSER_TOOL_NAMES:
+        if tool_name in self.BROWSER_TOOL_NAMES or tool_name == "node_repl":
             arguments = self._browser_tool_log_placeholder(tool_name, arguments)
             payload = {"redacted": True}
         status = "ok" if ok else "error"
@@ -5211,6 +5251,13 @@ class AICommands(commands.Cog):
         guild = (tool_context or {}).get("guild")
         if guild is not None:
             lines.append("guild_shared memory in this channel is shared by members of the current server.")
+        request_files = (tool_context or {}).get("request_file_attachments") or getattr(
+            (tool_context or {}).get("message"), "attachments", []) or []
+        if request_files:
+            lines.append("Current request file attachments (untrusted metadata; load file-reader or data-analysis to read): " + json.dumps([
+                {"attachment_id": str(item.id), "filename": str(item.filename)[:120], "size_bytes": item.size}
+                for item in request_files[:16]
+            ], ensure_ascii=False))
         request_images = self._get_request_image_attachments(tool_context)
         if request_images:
             if _is_ai_vision_model(selected_model):
@@ -5242,7 +5289,8 @@ class AICommands(commands.Cog):
         parts = [
             SYSTEM_PROMPT,
             build_ai_response_language_prompt(),
-            TOOL_USAGE_PROMPT,
+            self._filter_skill_prompt(TOOL_USAGE_PROMPT),
+            self._skill_catalog_prompt(),
             self._build_runtime_prompt_context(tool_context),
             self._get_docs_feature_prompt(),
             self._build_guild_ai_custom_prompt_context(tool_context),
@@ -8070,6 +8118,7 @@ class AICommands(commands.Cog):
                 docs_feature_prompt,
             ]
         )
+        tool_prompt = self._filter_skill_prompt(tool_prompt, available_names=tool_names)
         return [{"role": "system", "content": tool_prompt}, *messages]
 
     async def _tool_browser_read(self, args: dict, tool_context: dict) -> dict:
@@ -8218,6 +8267,9 @@ class AICommands(commands.Cog):
             return None, None, {
                 "error": "navigate to a public HTTP(S) page with browser_read before interacting with it"
             }
+        threads_error = self._threads_interaction_error(starting_url, tool_context)
+        if threads_error:
+            return None, None, {"error": threads_error}
         return page, starting_url, None
 
     async def _tool_browser_act(self, args: dict, tool_context: dict) -> dict:
@@ -12339,6 +12391,12 @@ class AICommands(commands.Cog):
         }
 
     async def _execute_ai_tool(self, name: str, arguments: dict, tool_context: dict) -> dict:
+        tool_context = tool_context if isinstance(tool_context, dict) else {}
+        state = tool_context.get("_skill_session") if isinstance(tool_context, dict) else None
+        if state is not None:
+            state.tool_calls += 1
+            if state.tool_calls > self.MAX_SKILL_TOOL_CALLS:
+                return {"ok": False, "error": "Request tool-call budget exhausted; finish with the available evidence"}
         handlers = {
             "search_bot_docs": self._tool_search_bot_docs,
             "get_ai_memory": self._tool_get_ai_memory,
@@ -12382,6 +12440,7 @@ class AICommands(commands.Cog):
             "browser_act": self._tool_browser_act,
             "browser_evaluate": self._tool_browser_evaluate,
         }
+        handlers.update({tool_name: getattr(self, f"_tool_{tool_name}") for tool_name in SKILL_TOOL_NAMES})
         handler = handlers.get(name)
         if handler is None:
             return {"ok": False, "error": f"Unknown tool: {name}"}
@@ -12389,7 +12448,7 @@ class AICommands(commands.Cog):
             result = await handler(arguments or {}, tool_context or {})
             return {
                 "ok": True,
-                "data": self._shrink_tool_data(result, max_len=self._tool_result_max_length(name)),
+                "data": self._preserve_skill_result(name, result, tool_context, self._tool_result_max_length(name)),
             }
         except Exception as e:
             log(f"AI tool execution failed: {name} -> {e}", module_name="AI", level=logging.ERROR)
@@ -13001,6 +13060,44 @@ class AICommands(commands.Cog):
             allowed_mentions=SAFE_MENTIONS,
         )
 
+    @ai_config_text.command(name="node-repl")
+    @is_owner()
+    async def ai_config_node_repl_text(self, ctx: commands.Context, enabled: str = None, image: str = None):
+        from ai_node_repl import DEFAULT_NODE_IMAGE, NodeKernel
+        if enabled is None:
+            await ctx.send(
+                f"ai_node_repl_enabled: {bool(get_global_config('ai_node_repl_enabled', True))}\n"
+                f"ai_node_repl_image: {get_global_config('ai_node_repl_image', DEFAULT_NODE_IMAGE)}",
+                allowed_mentions=SAFE_MENTIONS,
+            )
+            return
+        if enabled.lower() not in {"on", "off"}:
+            await ctx.send("Usage: ai-config node-repl <on|off> [pre-pulled Docker image]", allowed_mentions=SAFE_MENTIONS)
+            return
+        if image is not None:
+            try:
+                NodeKernel(image=image)
+            except ValueError:
+                await ctx.send("Invalid Node sandbox image", allowed_mentions=SAFE_MENTIONS)
+                return
+            set_global_config("ai_node_repl_image", image)
+        set_global_config("ai_node_repl_enabled", enabled.lower() == "on")
+        await ctx.send(f"Node REPL: {enabled.lower()}", allowed_mentions=SAFE_MENTIONS)
+
+    @ai_config_text.command(name="threads-publisher")
+    @is_owner()
+    async def ai_config_threads_publisher_text(self, ctx: commands.Context, user_id: str, enabled: str):
+        if not user_id.isdecimal() or int(user_id) <= 0 or enabled.lower() not in {"on", "off"}:
+            await ctx.send("Usage: ai-config threads-publisher <Discord user ID> <on|off>", allowed_mentions=SAFE_MENTIONS)
+            return
+        publishers = {str(item) for item in get_global_config("ai_threads_publisher_ids", []) or []}
+        if enabled.lower() == "on":
+            publishers.add(str(int(user_id)))
+        else:
+            publishers.discard(str(int(user_id)))
+        set_global_config("ai_threads_publisher_ids", sorted(publishers))
+        await ctx.send(f"Threads publisher {int(user_id)}: {enabled.lower()}", allowed_mentions=SAFE_MENTIONS)
+
     @ai_config_text.command(
         name="server-prompt-limit",
         aliases=["guild-prompt-limit", "prompt-limit"],
@@ -13406,6 +13503,7 @@ class AICommands(commands.Cog):
         message=app_commands.locale_str("The question or message you want to ask the AI", i18n_key="cmd.ai.ai.param.message"),
         image=app_commands.locale_str("Attach an image for the AI to analyze (optional)", i18n_key="cmd.ai.ai.param.image"),
         image2=app_commands.locale_str("Attach an image for the AI to analyze (optional)", i18n_key="cmd.ai.ai.param.image"),
+        file=app_commands.locale_str("Attach a document or data file (optional)", i18n_key="cmd.ai.ai.param.file"),
         new_conversation=app_commands.locale_str("Start a new conversation (clears previous history)", i18n_key="cmd.ai.ai.param.new_conversation"),
         model=app_commands.locale_str("Choose an AI model (default: openai)", i18n_key="cmd.ai.ai.param.model")
     )
@@ -13421,6 +13519,7 @@ class AICommands(commands.Cog):
         new_conversation: bool = False,
         model: str = None,
         image2: discord.Attachment = None,
+        file: discord.Attachment = None,
     ):
         """與 AI 助手對話"""
         accepted = await self._run_ai_request(
@@ -13428,6 +13527,7 @@ class AICommands(commands.Cog):
             lambda state: self._ai_chat_request(
                 interaction, message, image, new_conversation, model, request_state=state,
                 additional_images=[image2] if image2 is not None else [],
+                file_attachment=file,
             ),
         )
         if not accepted:
@@ -13479,6 +13579,7 @@ class AICommands(commands.Cog):
         request_state,
         followup: dict | None = None,
         additional_images: list[discord.Attachment] | None = None,
+        file_attachment: discord.Attachment = None,
     ):
         image_attachments = [attachment for attachment in (image, *(additional_images or [])) if attachment is not None]
         image = image_attachments[0] if image_attachments else None
@@ -13622,6 +13723,7 @@ class AICommands(commands.Cog):
                 "request_visual_metadata": request_visual_metadata,
                 "request_image_attachment": image,
                 "request_image_attachments": image_attachments,
+                "request_file_attachments": [file_attachment] if file_attachment is not None else [],
             }
             tool_notice_text = None
 
