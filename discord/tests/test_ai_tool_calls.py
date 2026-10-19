@@ -2,7 +2,9 @@ import sys
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, Mock, patch
+
+import discord
 
 
 DISCORD_DIR = Path(__file__).resolve().parents[1]
@@ -580,6 +582,95 @@ class AIToolCallParsingTests(unittest.IsolatedAsyncioTestCase):
             messages=emulated_messages,
             model="test-model",
         )
+
+
+class AIGetUserToolTests(unittest.IsolatedAsyncioTestCase):
+    BOT_ID = 900
+    REQUESTER_ID = 100
+    TARGET_ID = 1451539155774343168
+
+    def make_user(self, user_id, name):
+        return SimpleNamespace(
+            id=user_id,
+            name=name,
+            display_name=name.title(),
+            mention=f"<@{user_id}>",
+            bot=False,
+            created_at=None,
+            display_avatar=SimpleNamespace(url=f"https://cdn.discordapp.com/avatars/{user_id}/hash.png"),
+        )
+
+    def make_cog(self, fetched_user=None, fetch_error=None):
+        bot = SimpleNamespace(
+            user=self.make_user(self.BOT_ID, "bot"),
+            get_user=Mock(return_value=None),
+            fetch_user=AsyncMock(return_value=fetched_user, side_effect=fetch_error),
+        )
+        return AICommands(bot)
+
+    async def test_user_outside_guild_returns_public_info_without_member_data(self):
+        target = self.make_user(self.TARGET_ID, "outsider")
+        cog = self.make_cog(fetched_user=target)
+        not_found = discord.NotFound(SimpleNamespace(status=404, reason="Not Found"), "Unknown Member")
+        guild = SimpleNamespace(id=1, get_member=Mock(return_value=None), fetch_member=AsyncMock(side_effect=not_found))
+        channel = SimpleNamespace(id=2)
+        cog._resolve_tool_channel = Mock(return_value=(channel, None))
+        cog._validate_channel_tool_access = Mock(return_value=(None, {}))
+        cog._serialize_channel_for_tool = Mock(return_value={"id": "2"})
+
+        result = await cog._tool_get_user(
+            {"user_id": str(self.TARGET_ID)},
+            {"user": self.make_user(self.REQUESTER_ID, "requester"), "guild": guild, "channel": channel},
+        )
+
+        cog.bot.fetch_user.assert_awaited_once_with(self.TARGET_ID)
+        self.assertEqual(result["user"]["id"], str(self.TARGET_ID))
+        self.assertEqual(result["context"], "guild")
+        self.assertFalse(result["is_guild_member"])
+        self.assertIn("guild_info_unavailable", result)
+        self.assertNotIn("member", result)
+        self.assertIsNone(result["channel_permissions"]["target_permissions"])
+
+    async def test_dm_can_inspect_other_users_and_marks_dm_participants(self):
+        friend = self.make_user(self.TARGET_ID, "friend")
+        stranger = self.make_user(200, "stranger")
+        requester = self.make_user(self.REQUESTER_ID, "requester")
+        cog = self.make_cog()
+        cog.bot.get_user = Mock(side_effect=lambda user_id: {self.TARGET_ID: friend, 200: stranger}.get(user_id))
+        dm_channel = SimpleNamespace(id=3, recipients=[friend])
+        tool_context = {"user": requester, "guild": None, "channel": dm_channel}
+
+        friend_result = await cog._tool_get_user({"user_id": str(self.TARGET_ID)}, tool_context)
+        stranger_result = await cog._tool_get_user({"user_id": "200"}, tool_context)
+
+        self.assertEqual(friend_result["context"], "dm")
+        self.assertTrue(friend_result["in_current_dm"])
+        self.assertFalse(friend_result["is_guild_member"])
+        self.assertIn("guild_info_unavailable", friend_result)
+        self.assertEqual(stranger_result["user"]["id"], "200")
+        self.assertFalse(stranger_result["in_current_dm"])
+        cog.bot.fetch_user.assert_not_awaited()
+
+    async def test_dm_defaults_to_current_user(self):
+        requester = self.make_user(self.REQUESTER_ID, "requester")
+        cog = self.make_cog()
+
+        result = await cog._tool_get_user({}, {"user": requester, "guild": None, "channel": None})
+
+        self.assertTrue(result["is_current_user"])
+        self.assertTrue(result["in_current_dm"])
+        cog.bot.get_user.assert_not_called()
+
+    async def test_unknown_user_returns_error(self):
+        not_found = discord.NotFound(SimpleNamespace(status=404, reason="Not Found"), "Unknown User")
+        cog = self.make_cog(fetch_error=not_found)
+
+        result = await cog._tool_get_user(
+            {"user_id": str(self.TARGET_ID)},
+            {"user": self.make_user(self.REQUESTER_ID, "requester"), "guild": None, "channel": None},
+        )
+
+        self.assertEqual(result, {"error": "User not found."})
 
 
 if __name__ == "__main__":

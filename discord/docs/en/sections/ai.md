@@ -48,6 +48,7 @@ The AI uses three different types of context; clearing one does not clear the ot
 ## Reading Messages and Screenshots
 
 - Message reads first return Markdown-preserving text plus structured embeds, attachments, polls, stickers, reactions, forwards, and Components V2 data.
+- The AI can look up any Discord user by ID. Members of the current server include their nickname, roles, and permissions; users outside the server, or any lookup made in DMs, only return public info such as name, avatar, and account creation date.
 - The AI creates a message screenshot only when visual layout or Discord-specific presentation cannot be determined from text. The image is reconstructed by `chat_exporter`, not captured from the native Discord client; structured text fills in formats the reconstruction cannot show.
 - Screenshots contain only the target message by default. When context is requested, they may include up to nine earlier messages from the same author within five minutes. Spoilers are expanded.
 - Attaching the screenshot alone has no separate image-analysis fee. Asking the AI to inspect it uses the image-analysis tool at the built-in rate of 25 全域幣 per call, with a refund on failure.
