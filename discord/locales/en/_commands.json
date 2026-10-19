@@ -307,6 +307,37 @@
                 "cost": "cost",
                 "model": "model"
             }
+        },
+        "ai_knowledge": {
+            "root": {
+                "name": "ai-knowledge",
+                "desc": "Search and contribute public AI knowledge"
+            },
+            "search": {
+                "name": "search",
+                "desc": "Search approved public knowledge",
+                "param": {
+                    "query": "Keywords to search"
+                }
+            },
+            "submit": {
+                "name": "submit",
+                "desc": "Submit public knowledge for automatic review",
+                "param": {
+                    "title": "Short public title",
+                    "content": "Public content, up to 4000 characters; never include private information",
+                    "source_url": "Optional public source URL",
+                    "knowledge_id": "Existing knowledge ID to revise",
+                    "expected_version": "Current version, required for revisions"
+                }
+            },
+            "status": {
+                "name": "status",
+                "desc": "View your submission's automatic review result",
+                "param": {
+                    "submission_id": "Your submission ID"
+                }
+            }
         }
     },
     "aki": {

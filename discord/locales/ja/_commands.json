@@ -307,6 +307,37 @@
                 "cost": "コスト",
                 "model": "モデル"
             }
+        },
+        "ai_knowledge": {
+            "root": {
+                "name": "ai-ナレッジ",
+                "desc": "全ユーザー共通の AI 知識を検索・投稿"
+            },
+            "search": {
+                "name": "検索",
+                "desc": "承認済みの公開知識を検索",
+                "param": {
+                    "query": "検索キーワード"
+                }
+            },
+            "submit": {
+                "name": "投稿",
+                "desc": "公開知識を投稿し review model で自動審査",
+                "param": {
+                    "title": "短い公開タイトル",
+                    "content": "公開内容・最大 4000 文字・個人情報は含めないでください",
+                    "source_url": "任意の公開ソース URL",
+                    "knowledge_id": "改訂する既存の知識 ID",
+                    "expected_version": "改訂時に必要な現在のバージョン"
+                }
+            },
+            "status": {
+                "name": "状態",
+                "desc": "自分の投稿と自動審査結果を確認",
+                "param": {
+                    "submission_id": "自分の投稿 ID"
+                }
+            }
         }
     },
     "aki": {

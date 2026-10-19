@@ -197,7 +197,11 @@
         "read_attachment": "Reading an attachment",
         "read_resource": "Reading a resource",
         "read_skill_file": "Reading skill reference",
-        "send_resource": "Attaching a result file"
+        "send_resource": "Attaching a result file",
+        "search_knowledge": "Search public knowledge",
+        "get_knowledge": "Read public knowledge",
+        "submit_knowledge": "Submit public knowledge",
+        "get_knowledge_submission": "Check submission status"
     },
     "value": {
         "auto_clear_existing_history_scheduled": "A complete conversation already exists, so the 30-minute timer restarts now.",
@@ -259,5 +263,29 @@
         "tool_label_detail": "{label}: {detail}",
         "untitled_memory": "Untitled memory",
         "unknown_time": "unknown time"
+    },
+    "knowledge": {
+        "channel_cleared": "✅ Global knowledge review notifications disabled.",
+        "channel_invalid": "❌ Text channel not found. Provide a channel mention or ID.",
+        "channel_permissions": "❌ The bot needs View Channel, Send Messages and Embed Links permissions.",
+        "channel_set": "✅ Global knowledge review results will be sent to {channel}; undelivered results will be retried.",
+        "channel_status": "Global knowledge administrator notification channel ID: {channel_id} (0 means disabled).",
+        "empty": "No matching published knowledge.",
+        "invalid": "❌ Could not submit: {reason}",
+        "not_found": "❌ Not found, or you cannot access this submission.",
+        "notification_body": "Submission: {submission_id}\nKnowledge: {knowledge_id}\nResult: {status}\nContributor ID: {user_id}\nReview model: {model}",
+        "notification_title": "Global knowledge automatic review result",
+        "reason": "Review explanation",
+        "removed": "✅ Knowledge withdrawn from global search and automatic context.",
+        "results_file": "Found {count} published entries; full content is attached as a text file.",
+        "save_failed": "❌ Could not save the setting. Try again later.",
+        "status_pending": "Pending automatic review",
+        "status_reviewing": "Under automatic review",
+        "status_approved": "Approved",
+        "status_rejected": "Rejected",
+        "status_error": "Review failed; not published",
+        "submission_status": "Submission: {submission_id}\nStatus: {status}\nKnowledge ID: {knowledge_id}\nReview model: {model}\nExplanation: {reason}",
+        "submitted": "✅ Submission {submission_id} received. Status: {status}. It becomes public to all users and servers only after review-model approval. Use the knowledge status command to check the result.",
+        "title": "Public title"
     }
 }

@@ -20,6 +20,28 @@ Chat with AI using a selectable model, with support for images, multi-turn conve
 
 AI replies may be laid out as cards or image galleries, or include link buttons. When you need to pick one of a few options, the AI may occasionally add follow-up buttons or a menu; clicking one sends that text to the AI as your next message and is charged like a normal message. Anyone can click them by default, but the AI can limit them to the person who asked.
 
+## Public Knowledge and Contributions
+
+Public knowledge is shared by all users, servers and DMs, stored separately from personal/server memory. Every AI request automatically retrieves relevant approved entries; the AI can proactively search and read full entries as needed.
+
+| Command | Description |
+| --- | --- |
+| `/ai-knowledge search [query]` | Search approved entries, or show recent entries without a query |
+| `/ai-knowledge submit title content [source_url] [knowledge_id] [expected_version]` | Submit public knowledge; revisions require the ID, current version and complete replacement content |
+| `/ai-knowledge status submission_id` | Privately check your submission; bot owners can inspect all submissions |
+| `y!ai-knowledge [query]` | Prefix knowledge search |
+| `y!ai-knowledge submit "Title" content` | Prefix contribution |
+| `y!ai-knowledge status submission_id` | Prefix submission status |
+| `y!ai-config knowledge-channel #channel` | Configure notifications; use `off` to disable |
+| `y!ai-knowledge remove knowledge_id` | Bot owner: withdraw knowledge from search and automatic context |
+
+- Background reviews use the existing `ai_review_model`, configured with `y!ai-config review-model`. Only approved submissions are published. Rejection, malformed responses and service errors never publish content.
+- Titles allow 80 characters and content 4,000 characters; each user can create 5 submissions per hour. Identical submissions are deduplicated. Revision version checks prevent overwriting newer content.
+- Failed reviews retry up to 3 times. Pending reviews resume after restart; failed notifications are retained for retry and delivered after a channel is configured.
+- Administrator notifications include the submission ID, result, model and explanation, without reposting rejected/unreviewed text. Unpublished submissions are visible only to their contributor and bot owners.
+- The AI proactively uses, searches and maintains memory without waiting for a "remember" command, and proposes reusable public solutions and lessons. Personal and server-only information stays in its original scope. Deletion still requires an explicit request.
+- Reviews have no additional fixed bot-currency fee; normal AI conversations retain their existing billing. Model approval does not guarantee factual correctness; verify time-sensitive claims.
+
 ## Memory & Cross-Server Context
 
 The AI uses three different types of context; clearing one does not clear the others:

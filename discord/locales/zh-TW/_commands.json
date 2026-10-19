@@ -307,6 +307,37 @@
                 "cost": "花費",
                 "model": "模型"
             }
+        },
+        "ai_knowledge": {
+            "root": {
+                "name": "ai-知識",
+                "desc": "搜尋與投稿所有使用者共用的 AI 知識"
+            },
+            "search": {
+                "name": "搜尋",
+                "desc": "搜尋已審核通過的全域知識",
+                "param": {
+                    "query": "搜尋關鍵字"
+                }
+            },
+            "submit": {
+                "name": "投稿",
+                "desc": "投稿公開知識，交由 review model 自動審核",
+                "param": {
+                    "title": "簡短的公開標題",
+                    "content": "公開內容，最多 4000 字，請勿包含私人資訊",
+                    "source_url": "選填公開來源網址",
+                    "knowledge_id": "要修訂的既有知識 ID",
+                    "expected_version": "修訂時必填的目前版本"
+                }
+            },
+            "status": {
+                "name": "狀態",
+                "desc": "查看自己的投稿與自動審核結果",
+                "param": {
+                    "submission_id": "自己的投稿 ID"
+                }
+            }
         }
     },
     "aki": {

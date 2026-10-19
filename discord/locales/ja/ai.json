@@ -197,7 +197,11 @@
         "read_attachment": "添付ファイルを読み込み中",
         "read_resource": "リソースを読み込み中",
         "read_skill_file": "スキルの参照を確認中",
-        "send_resource": "結果ファイルを添付中"
+        "send_resource": "結果ファイルを添付中",
+        "search_knowledge": "公開知識を検索",
+        "get_knowledge": "公開知識を読む",
+        "submit_knowledge": "公開知識を投稿",
+        "get_knowledge_submission": "投稿状況を確認"
     },
     "value": {
         "auto_clear_existing_history_scheduled": "完全な会話がすでにあるため、30 分のタイマーを今から再開します。",
@@ -259,5 +263,29 @@
         "tool_label_detail": "{label}「{detail}」",
         "untitled_memory": "無題のメモ",
         "unknown_time": "不明な時間"
+    },
+    "knowledge": {
+        "channel_cleared": "✅ グローバル知識ベースの審査通知を無効にしました。",
+        "channel_invalid": "❌ テキストチャンネルが見つかりません。チャンネルのメンションまたは ID を指定してください。",
+        "channel_permissions": "❌ Bot にチャンネル閲覧・メッセージ送信・埋め込みリンクの権限が必要です。",
+        "channel_set": "✅ グローバル知識ベースの審査結果を {channel} に通知します。未配信の結果も再送します。",
+        "channel_status": "グローバル知識ベースの管理者通知チャンネル ID：{channel_id}（0 は無効）。",
+        "empty": "一致する公開済みの知識はありません。",
+        "invalid": "❌ 投稿できません：{reason}",
+        "not_found": "❌ 見つからないか、この投稿を閲覧する権限がありません。",
+        "notification_body": "投稿：{submission_id}\n知識：{knowledge_id}\n結果：{status}\n投稿者 ID：{user_id}\n審査モデル：{model}",
+        "notification_title": "グローバル知識ベースの自動審査結果",
+        "reason": "審査の説明",
+        "removed": "✅ 知識の公開を取り下げました。検索や自動コンテキストには表示されません。",
+        "results_file": "公開済みの知識が {count} 件見つかりました。全文をテキストファイルに添付しました。",
+        "save_failed": "❌ 設定を保存できませんでした。後でもう一度お試しください。",
+        "status_pending": "自動審査待ち",
+        "status_reviewing": "自動審査中",
+        "status_approved": "承認済み",
+        "status_rejected": "不承認",
+        "status_error": "審査失敗・未公開",
+        "submission_status": "投稿：{submission_id}\n状態：{status}\n知識 ID：{knowledge_id}\n審査モデル：{model}\n説明：{reason}",
+        "submitted": "✅ 投稿 {submission_id} を受け付けました。状態：{status}。review model の承認後に、すべてのユーザーとサーバーへ公開されます。知識ベースの状態コマンドで結果を確認できます。",
+        "title": "公開タイトル"
     }
 }

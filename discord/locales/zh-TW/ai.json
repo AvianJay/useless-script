@@ -194,7 +194,11 @@
         "read_attachment": "讀取附件",
         "read_resource": "讀取暫存資料",
         "read_skill_file": "讀取技能參考",
-        "send_resource": "附上結果檔案"
+        "send_resource": "附上結果檔案",
+        "search_knowledge": "搜尋全域知識",
+        "get_knowledge": "讀取全域知識",
+        "submit_knowledge": "投稿全域知識",
+        "get_knowledge_submission": "查詢投稿狀態"
     },
     "value": {
         "auto_clear_existing_history_scheduled": "目前已有完整對話，將從現在重新計算 30 分鐘。",
@@ -256,5 +260,29 @@
         "tool_label_detail": "{label}「{detail}」",
         "untitled_memory": "未命名記憶",
         "unknown_time": "未知時間"
+    },
+    "knowledge": {
+        "channel_cleared": "✅ 已關閉全域知識庫審核通知。",
+        "channel_invalid": "❌ 找不到文字頻道，請提供頻道提及或 ID。",
+        "channel_permissions": "❌ Bot 需要查看頻道、傳送訊息與嵌入連結權限。",
+        "channel_set": "✅ 全域知識庫審核結果將通知至 {channel}；尚未送達的結果會補送。",
+        "channel_status": "全域知識庫管理員通知頻道 ID：{channel_id}（0 為關閉）。",
+        "empty": "目前沒有符合的已發布知識。",
+        "invalid": "❌ 無法投稿：{reason}",
+        "not_found": "❌ 找不到資料，或你沒有查看此投稿的權限。",
+        "notification_body": "投稿：{submission_id}\n知識：{knowledge_id}\n結果：{status}\n投稿者 ID：{user_id}\n審核模型：{model}",
+        "notification_title": "全域知識庫自動審核結果",
+        "reason": "審核說明",
+        "removed": "✅ 已下架知識，不再提供全域搜尋或自動帶入。",
+        "results_file": "找到 {count} 筆已發布知識；完整內容已附為文字檔。",
+        "save_failed": "❌ 設定儲存失敗，請稍後重試。",
+        "status_pending": "等待自動審核",
+        "status_reviewing": "自動審核中",
+        "status_approved": "審核通過",
+        "status_rejected": "審核未通過",
+        "status_error": "審核失敗，未發布",
+        "submission_status": "投稿：{submission_id}\n狀態：{status}\n知識 ID：{knowledge_id}\n審核模型：{model}\n說明：{reason}",
+        "submitted": "✅ 投稿 {submission_id} 已受理，目前狀態：{status}。通過 review model 自動審核後才會公開給所有使用者與伺服器；可使用知識庫狀態指令查詢。",
+        "title": "公開標題"
     }
 }
