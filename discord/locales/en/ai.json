@@ -1,4 +1,15 @@
 {
+    "ask_user": {
+        "title": "AI has a question",
+        "reply": "Type a reply",
+        "answer_label": "Your answer",
+        "waiting": "{mention}, choose an option or type a reply within {seconds} seconds.",
+        "answered": "Answer received. The AI is continuing.",
+        "timed_out": "No answer received before the timeout. The AI is continuing.",
+        "cancelled": "This question was cancelled.",
+        "closed": "This question is closed. Your answer was not submitted.",
+        "answer_empty": "Please enter an answer."
+    },
     "btn": {
         "browser_confirm": "Allow this browser session",
         "browser_confirm_expired": "Expired",
@@ -149,6 +160,7 @@
         "unknown_channel": "unknown"
     },
     "tool_label": {
+        "ask_user": "Ask user",
         "analyze_message_emojis": "Analyzing message emojis and stickers",
         "analyze_user_profile_media": "Analyzing user avatar and banner",
         "browser_read": "Reading browser page",

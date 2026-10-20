@@ -1,4 +1,15 @@
 {
+    "ask_user": {
+        "title": "AI 想問你",
+        "reply": "輸入回覆",
+        "answer_label": "你的回答",
+        "waiting": "{mention}，請在 {seconds} 秒內選擇選項或輸入回覆。",
+        "answered": "已收到回答，AI 將繼續處理。",
+        "timed_out": "等待回答逾時，AI 將繼續處理。",
+        "cancelled": "此問題已取消。",
+        "closed": "此問題已結束，你的回答未送出。",
+        "answer_empty": "請輸入回答。"
+    },
     "btn": {
         "browser_confirm": "允許此瀏覽器工作",
         "browser_confirm_expired": "已逾時",
@@ -146,6 +157,7 @@
         "unknown_channel": "未知頻道"
     },
     "tool_label": {
+        "ask_user": "詢問使用者",
         "analyze_message_emojis": "分析訊息表情與貼圖",
         "analyze_user_profile_media": "分析使用者頭像與橫幅",
         "browser_read": "讀取瀏覽器頁面",

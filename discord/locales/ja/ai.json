@@ -1,4 +1,15 @@
 {
+    "ask_user": {
+        "title": "AI からの質問",
+        "reply": "回答を入力",
+        "answer_label": "あなたの回答",
+        "waiting": "{mention}、{seconds} 秒以内に選択肢を選ぶか、回答を入力してください。",
+        "answered": "回答を受け取りました。AI が処理を続けます。",
+        "timed_out": "回答を待機中にタイムアウトしました。AI が処理を続けます。",
+        "cancelled": "この質問はキャンセルされました。",
+        "closed": "この質問は終了しました。回答は送信されていません。",
+        "answer_empty": "回答を入力してください。"
+    },
     "btn": {
         "browser_confirm": "このブラウザーセッションを許可",
         "browser_confirm_expired": "期限切れ",
@@ -149,6 +160,7 @@
         "unknown_channel": "不明なチャンネル"
     },
     "tool_label": {
+        "ask_user": "ユーザーに質問",
         "analyze_message_emojis": "メッセージの絵文字とステッカーの分析",
         "analyze_user_profile_media": "ユーザーのアバターとバナーの分析",
         "browser_read": "ブラウザーページを読み取り中",

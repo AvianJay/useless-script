@@ -560,6 +560,10 @@ class BrowserSessionManager:
             result = {"error": f"browser approval UI failed: {format_browser_error(error)}"}
             await self.resolve_approval(record, result)
             return result
+        finally:
+            cleanup = record.pop("_prompt_cleanup", None)
+            if cleanup is not None:
+                await cleanup()
 
     # ------------------------------------------------------------------
     # Lease queue

@@ -849,34 +849,79 @@ class BrowserApprovalTests(unittest.IsolatedAsyncioTestCase):
     async def test_components_callbacks_resolve_pending_tool(self):
         context, task, record = await self._start_action()
         interaction = self._interaction(context)
-        interaction.response = SimpleNamespace(edit_message=AsyncMock())
+        interaction.response = SimpleNamespace(defer=AsyncMock())
         interaction.edit_original_response = AsyncMock()
         view = BrowserApprovalView(self.cog, record)
+        message = SimpleNamespace(delete=AsyncMock())
+        view.bound_message = message
 
         await view.confirm_callback(interaction)
         result = await task
 
         self.assertTrue(result["authorized"])
-        interaction.response.edit_message.assert_awaited_once()
-        edit_kwargs = interaction.edit_original_response.await_args.kwargs
-        self.assertEqual(edit_kwargs["attachments"], [])
-        self.assertIsNotNone(edit_kwargs["view"])
+        interaction.response.defer.assert_awaited_once()
+        message.delete.assert_awaited_once_with()
+        interaction.edit_original_response.assert_not_awaited()
+        self.assertIsNone(view.bound_message)
 
         context, task, record = await self._start_action(tool_context(user_id=2))
         interaction = self._interaction(context)
-        interaction.response = SimpleNamespace(edit_message=AsyncMock())
+        interaction.response = SimpleNamespace(defer=AsyncMock())
         view = BrowserApprovalView(self.cog, record)
+        message = SimpleNamespace(delete=AsyncMock())
+        view.bound_message = message
 
         await view.reject_callback(interaction)
         result = await task
 
         self.assertTrue(result["rejected"])
-        interaction.response.edit_message.assert_awaited_once()
+        interaction.response.defer.assert_awaited_once()
+        message.delete.assert_awaited_once_with()
+        self.assertIsNone(view.bound_message)
 
         context, task, _record = await self._start_action(tool_context(user_id=3))
         await self.cog.browser.release_lease(context)
         result = await asyncio.wait_for(task, timeout=1)
         self.assertIn("error", result)
+
+    async def test_presented_approvals_are_deleted_on_resolution_timeout_and_cancellation(self):
+        for index, outcome in enumerate(("confirm", "reject", "timeout", "cancel"), start=10):
+            with self.subTest(outcome=outcome):
+                context = tool_context(user_id=index)
+                presented = asyncio.Event()
+                message = SimpleNamespace(delete=AsyncMock())
+                views = []
+
+                async def send_view(view, _attachments):
+                    views.append(view)
+                    presented.set()
+                    return message
+
+                context["_browser_approval_presenter"] = self.cog._make_browser_approval_presenter(context, send_view)
+                with patch("ai_browser.BROWSER_APPROVAL_TTL_SECONDS", 0.05 if outcome == "timeout" else 60):
+                    task = asyncio.create_task(self.cog._tool_browser_act(self.action_args, context))
+                    try:
+                        await asyncio.wait_for(presented.wait(), timeout=2)
+                        interaction = self._interaction(context)
+                        interaction.response = SimpleNamespace(defer=AsyncMock())
+                        if outcome == "confirm":
+                            await views[0].confirm_callback(interaction)
+                        elif outcome == "reject":
+                            await views[0].reject_callback(interaction)
+                        elif outcome == "cancel":
+                            task.cancel()
+                        if outcome == "cancel":
+                            with self.assertRaises(asyncio.CancelledError):
+                                await task
+                        else:
+                            await asyncio.wait_for(task, timeout=2)
+                    finally:
+                        if not task.done():
+                            task.cancel()
+                        await asyncio.gather(task, return_exceptions=True)
+                message.delete.assert_awaited_once_with()
+                self.assertTrue(views[0].is_finished())
+                self.assertIsNone(views[0].bound_message)
 
     async def test_approval_view_renders_reason_and_action_without_the_token(self):
         context, task, record = await self._start_action()
@@ -886,7 +931,7 @@ class BrowserApprovalTests(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn(token, json.dumps(components))
         container = components[0]
         self.assertEqual(container["type"], 17)
-        self.assertEqual(container["components"][0]["content"], "**AI 想要操作瀏覽器**")
+        self.assertEqual(container["components"][0]["content"], "<@1>\n**AI 想要操作瀏覽器**")
         self.assertEqual([item["type"] for item in container["components"]], [10, 14, 10, 14, 10, 14, 1])
         self.assertEqual(container["components"][2]["content"], "Update the display name.")
         self.assertIn("Display name field", container["components"][4]["content"])

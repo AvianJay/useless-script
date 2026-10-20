@@ -1,5 +1,6 @@
 import asyncio
 import sys
+import time
 import unittest
 from contextlib import ExitStack
 from datetime import datetime, timezone
@@ -7,11 +8,13 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import discord
+
 
 DISCORD_DIR = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(DISCORD_DIR))
 
-from ai import AICommands
+from ai import AIAskUserView, AICommands, BrowserApprovalView, SAFE_MENTIONS
 
 
 class AIRequestDeliveryTests(unittest.IsolatedAsyncioTestCase):
@@ -41,6 +44,7 @@ class AIRequestDeliveryTests(unittest.IsolatedAsyncioTestCase):
         )
         self.balance = 100.0
         self.tasks = []
+        self.prompt_texts = {}
         patches = ExitStack()
         self.addCleanup(patches.close)
 
@@ -81,7 +85,6 @@ class AIRequestDeliveryTests(unittest.IsolatedAsyncioTestCase):
         cog_patch("_build_text_visual_metadata", return_value={"items": []})
         cog_patch("_format_visual_metadata_for_context", return_value="")
         cog_patch("_build_system_with_context", return_value="system prompt")
-        cog_patch("_make_browser_approval_presenter", return_value=None)
         self.generate = cog_patch(
             "generate_response",
             new=AsyncMock(return_value=("answer", "test model", 0.1, None)),
@@ -318,6 +321,138 @@ class AIRequestDeliveryTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(self.generate.await_args.kwargs["image"], [b"first image", b"second image"])
         first.read.assert_awaited_once()
         second.read.assert_awaited_once()
+
+    async def _generate_with_prompts(self, _messages, *, tool_context, tool_progress_callback, **_kwargs):
+        await tool_progress_callback([{"name": "browser_act"}], 1)
+        approval = {
+            "identity": (self.user.id, None, self.channel.id),
+            "expires_at": time.monotonic() + 60,
+            "tool_context": tool_context,
+            "display_reason": "Allow this action? @everyone <@7>",
+            "details_file": {"filename": "browser-evaluate-script.js", "content": "() => document.title"},
+        }
+        await tool_context["_browser_approval_presenter"](approval)
+        await approval["_prompt_cleanup"]()
+        result = await self.cog._tool_ask_user(
+            {"question": "Which option? @everyone <@7>", "choices": ["A", "B"]}, tool_context,
+        )
+        self.assertEqual(result["answer"], "A")
+        await tool_progress_callback([{"name": "get_bot_status"}], 2)
+        return "answer", "test model", 0.1, None
+
+    def _prompt_sender(self, messages):
+        messages = iter(messages)
+
+        async def send(**kwargs):
+            view = kwargs.get("view")
+            if isinstance(view, (AIAskUserView, BrowserApprovalView)):
+                self.prompt_texts[id(view)] = [getattr(item, "content", "") for item in view.walk_children()]
+            if isinstance(view, AIAskUserView):
+                view.finish("answered", "A")
+            return next(messages)
+
+        return send
+
+    def _assert_prompt_delivery(self, browser_call, question_call):
+        self.assertIsInstance(browser_call.kwargs["view"], BrowserApprovalView)
+        self.assertIsInstance(question_call.kwargs["view"], AIAskUserView)
+        self.addCleanup(browser_call.kwargs["view"].stop)
+        for call in (browser_call, question_call):
+            mentions = call.kwargs["allowed_mentions"]
+            self.assertEqual([user.id for user in mentions.users], [42])
+            self.assertFalse(mentions.roles)
+            self.assertFalse(mentions.everyone)
+            self.assertFalse(mentions.replied_user)
+            texts = self.prompt_texts[id(call.kwargs["view"])]
+            self.assertTrue(any("<@42>" in text for text in texts))
+        files = browser_call.kwargs["files"]
+        self.assertEqual([file.filename for file in files], ["browser-evaluate-script.js"])
+        for file in files:
+            self.addCleanup(file.close)
+
+    async def test_text_prompts_reply_to_tool_notice_and_are_deleted_after_answer(self):
+        progress = SimpleNamespace(edit=AsyncMock(), delete=AsyncMock())
+        approval_message = SimpleNamespace(edit=AsyncMock(), delete=AsyncMock())
+        question_message = SimpleNamespace(edit=AsyncMock(), delete=AsyncMock())
+        self.ctx.send.side_effect = self._prompt_sender([progress, approval_message, question_message])
+        self.cog._build_tool_usage_notice = AsyncMock(side_effect=["Waiting", "Resuming"])
+        self.generate.side_effect = self._generate_with_prompts
+
+        await self._wait(self._start_text())
+
+        self.assertEqual(self.ctx.send.await_count, 3)
+        status_call, browser_call, question_call = self.ctx.send.await_args_list
+        self.assertEqual(status_call.kwargs["content"], "Waiting")
+        self.assertIs(status_call.kwargs["allowed_mentions"], SAFE_MENTIONS)
+        self._assert_prompt_delivery(browser_call, question_call)
+        self.assertIs(browser_call.kwargs["reference"], progress)
+        self.assertIs(question_call.kwargs["reference"], progress)
+        self.assertFalse(browser_call.kwargs["mention_author"])
+        self.assertFalse(question_call.kwargs["mention_author"])
+        progress.edit.assert_awaited_once_with(
+            content="Resuming", attachments=[], view=None, allowed_mentions=SAFE_MENTIONS,
+        )
+        progress.delete.assert_awaited_once()
+        approval_message.edit.assert_not_awaited()
+        approval_message.delete.assert_awaited_once_with()
+        question_message.edit.assert_not_awaited()
+        question_message.delete.assert_awaited_once_with()
+
+    async def test_slash_prompts_reply_to_tool_notice_and_are_deleted_after_answer(self):
+        approval_message = SimpleNamespace(edit=AsyncMock(), delete=AsyncMock())
+        question_message = SimpleNamespace(edit=AsyncMock(), delete=AsyncMock())
+        progress = SimpleNamespace(id=1001, reply=AsyncMock(side_effect=self._prompt_sender([approval_message, question_message])))
+        interaction = SimpleNamespace(
+            user=self.user, guild=None, channel=self.channel, created_at=self.source.created_at,
+            response=SimpleNamespace(defer=AsyncMock(), send_message=AsyncMock()),
+            followup=SimpleNamespace(send=AsyncMock()),
+            original_response=AsyncMock(return_value=progress),
+            edit_original_response=AsyncMock(return_value=progress),
+        )
+        self.cog._build_tool_usage_notice = AsyncMock(side_effect=["Waiting", "Resuming"])
+        self.generate.side_effect = self._generate_with_prompts
+
+        await AICommands.ai_chat.callback(self.cog, interaction, message="ask")
+
+        self.assertEqual(progress.reply.await_count, 2)
+        browser_call, question_call = progress.reply.await_args_list
+        self._assert_prompt_delivery(browser_call, question_call)
+        self.assertFalse(browser_call.kwargs["mention_author"])
+        self.assertFalse(question_call.kwargs["mention_author"])
+        interaction.followup.send.assert_not_awaited()
+        for call in interaction.edit_original_response.await_args_list:
+            self.assertIsNot(call.kwargs.get("view"), browser_call.kwargs["view"])
+            self.assertIsNot(call.kwargs.get("view"), question_call.kwargs["view"])
+        status_updates = [call.kwargs.get("content") for call in interaction.edit_original_response.await_args_list]
+        self.assertEqual(status_updates[:2], ["Waiting", "Resuming"])
+        approval_message.edit.assert_not_awaited()
+        question_message.edit.assert_not_awaited()
+        approval_message.delete.assert_awaited_once_with()
+        question_message.delete.assert_awaited_once_with()
+
+    async def test_slash_prompt_still_works_without_channel_send_permission(self):
+        interaction = SimpleNamespace(
+            user=self.user, guild=None, channel=self.channel, created_at=self.source.created_at,
+            response=SimpleNamespace(defer=AsyncMock(), send_message=AsyncMock()),
+            followup=SimpleNamespace(send=AsyncMock()),
+            original_response=AsyncMock(),
+            edit_original_response=AsyncMock(return_value=SimpleNamespace(id=1001)),
+            app_permissions=discord.Permissions.none(),
+        )
+        await AICommands.ai_chat.callback(self.cog, interaction, message="ask")
+        # Exercise the installed-app fallback after collecting its real presenter.
+        interaction.guild = SimpleNamespace(id=300)
+        context = self.generate.await_args.kwargs["tool_context"]
+        question = AIAskUserView(self.user.id, "Question?", [], 60)
+        self.addCleanup(question.stop)
+        await context["_ask_user_presenter"](question)
+
+        interaction.original_response.assert_not_awaited()
+        interaction.followup.send.assert_awaited_once()
+        kwargs = interaction.followup.send.await_args.kwargs
+        self.assertIs(kwargs["view"], question)
+        self.assertTrue(kwargs["wait"])
+        self.assertEqual([user.id for user in kwargs["allowed_mentions"].users], [42])
 
     async def test_slash_request_accepts_image2_with_or_without_the_first_slot(self):
         for include_first in (True, False):
