@@ -281,6 +281,16 @@ class AIImageAnalyzeDelegationTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result["cost"], 25.0)
         self.cog._fetch_discord_image_bytes.assert_awaited_once_with(image_url)
 
+    async def test_external_display_urls_are_rejected_by_image_analysis_before_fetch_or_charge(self):
+        result = await self.cog._tool_image_analyze(
+            {"image_url": "https://images.example.com/photo.png"},
+            self.context,
+        )
+
+        self.assertIn("cdn.discordapp.com or media.discordapp.net", result["error"])
+        self.cog._fetch_discord_image_bytes.assert_not_awaited()
+        self.cog._charge_global_balance.assert_not_called()
+
     async def test_tool_rejects_ambiguous_or_missing_source_before_charging(self):
         both = await self.cog._tool_image_analyze(
             {

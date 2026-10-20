@@ -149,11 +149,21 @@
             "past": "{value}前",
             "future": "{value}後",
             "few_seconds": "数秒",
-            "minutes": { "other": "{count}分" },
-            "hours": { "other": "{count}時間" },
-            "days": { "other": "{count}日" },
-            "months": { "other": "{count}ヶ月" },
-            "years": { "other": "{count}年" }
+            "minutes": {
+                "other": "{count}分"
+            },
+            "hours": {
+                "other": "{count}時間"
+            },
+            "days": {
+                "other": "{count}日"
+            },
+            "months": {
+                "other": "{count}ヶ月"
+            },
+            "years": {
+                "other": "{count}年"
+            }
         },
         "unknown_user": "不明なユーザー",
         "unknown_role": "削除されたロール",

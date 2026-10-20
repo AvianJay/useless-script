@@ -149,11 +149,26 @@
             "past": "{value} ago",
             "future": "in {value}",
             "few_seconds": "a few seconds",
-            "minutes": { "one": "a minute", "other": "{count} minutes" },
-            "hours": { "one": "an hour", "other": "{count} hours" },
-            "days": { "one": "a day", "other": "{count} days" },
-            "months": { "one": "a month", "other": "{count} months" },
-            "years": { "one": "a year", "other": "{count} years" }
+            "minutes": {
+                "one": "a minute",
+                "other": "{count} minutes"
+            },
+            "hours": {
+                "one": "an hour",
+                "other": "{count} hours"
+            },
+            "days": {
+                "one": "a day",
+                "other": "{count} days"
+            },
+            "months": {
+                "one": "a month",
+                "other": "{count} months"
+            },
+            "years": {
+                "one": "a year",
+                "other": "{count} years"
+            }
         },
         "unknown_user": "unknown-user",
         "unknown_role": "deleted-role",

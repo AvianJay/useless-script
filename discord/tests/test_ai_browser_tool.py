@@ -158,6 +158,7 @@ class BrowserConfigTests(unittest.IsolatedAsyncioTestCase):
         read = tools["browser_read"]["parameters"]
         self.assertIn("scroll", read["properties"]["action"]["enum"])
         self.assertNotIn("hover", read["properties"]["action"]["enum"])
+        self.assertNotIn("screenshot", read["properties"]["action"]["enum"])
 
     async def test_owner_config_sets_masks_and_clears_endpoint(self):
         ctx = SimpleNamespace(send=AsyncMock())
@@ -1134,23 +1135,16 @@ class BrowserReadResultTests(unittest.IsolatedAsyncioTestCase):
             await self.cog._tool_browser_read({"action": "scroll", "delta_y": 400}, tool_context())
             page.mouse.wheel.assert_awaited_once_with(0, 400)
 
-    async def test_screenshot_uses_pending_image_pipeline_and_enforces_size_limit(self):
+    async def test_browser_read_rejects_screenshot_display_before_capturing(self):
         page = SimpleNamespace(url="https://example.com/", screenshot=AsyncMock(return_value=b"png"))
         context = tool_context()
         with patch.object(self.cog.browser, "get_page", new=AsyncMock(return_value=(page, None))):
             result = await self.cog._tool_browser_read({"action": "screenshot"}, context)
-        self.assertEqual(len(context["pending_image_attachments"]), 1)
-        self.assertEqual(context["pending_image_attachments"][0]["kind"], "browser")
-        self.assertTrue(result["attachment_ref"].startswith("attachment://"))
-
-        page.screenshot = AsyncMock(return_value=b"x" * (self.cog.BROWSER_SCREENSHOT_MAX_BYTES + 1))
-        context = tool_context()
-        with patch.object(self.cog.browser, "get_page", new=AsyncMock(return_value=(page, None))):
-            result = await self.cog._tool_browser_read({"action": "screenshot"}, context)
         self.assertIn("error", result)
+        page.screenshot.assert_not_awaited()
         self.assertNotIn("pending_image_attachments", context)
 
-    async def test_browser_view_returns_visual_analysis_and_attaches_screenshot(self):
+    async def test_browser_view_returns_visual_analysis_without_attaching_screenshot(self):
         page = SimpleNamespace(url="https://example.com/dashboard", screenshot=AsyncMock(return_value=b"png"))
         context = tool_context()
         analyze = AsyncMock(
@@ -1171,11 +1165,25 @@ class BrowserReadResultTests(unittest.IsolatedAsyncioTestCase):
             )
 
         self.assertEqual(result["analysis"]["summary"], "A dashboard with a blue status chart.")
-        self.assertEqual(context["pending_image_attachments"][0]["kind"], "browser")
-        self.assertTrue(result["attachment_ref"].startswith("attachment://browser-view-"))
+        self.assertNotIn("pending_image_attachments", context)
+        self.assertNotIn("attachment", result)
+        self.assertNotIn("attachment_ref", result)
         self.assertEqual(analyze.await_args.args[0], b"png")
         self.assertEqual(analyze.await_args.kwargs["prompt"], "Inspect the status chart")
         self.assertIn("untrusted webpage data", analyze.await_args.kwargs["system_prompt"])
+
+    async def test_browser_view_analysis_failure_does_not_attach_screenshot(self):
+        page = SimpleNamespace(url="https://example.com/", screenshot=AsyncMock(return_value=b"png"))
+        context = tool_context()
+        with (
+            patch.object(self.cog.browser, "get_page", new=AsyncMock(return_value=(page, None))),
+            patch.object(self.cog, "_analyze_image_bytes_for_tool", new=AsyncMock(return_value={"error": "failed"})),
+        ):
+            result = await self.cog._tool_browser_view({}, context)
+
+        self.assertEqual(result["analysis"], {"error": "failed"})
+        self.assertNotIn("pending_image_attachments", context)
+        self.assertNotIn("attachment_ref", result)
 
     async def test_browser_view_rejects_oversize_before_analysis_or_attachment(self):
         page = SimpleNamespace(

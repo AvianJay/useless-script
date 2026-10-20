@@ -233,10 +233,24 @@ class ToolUsageDetailTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(emulated.endswith(with_query))
         self.assertTrue(streaming.endswith(f" {label}"))
 
-    def test_url_drops_its_scheme_and_markdown_is_escaped(self):
-        detail = AICommands._tool_usage_detail("fetch_webpage", '{"url": "https://example.com/a_b"}')
+    def test_fetch_preview_shows_only_the_domain_for_complete_and_streamed_arguments(self):
+        url = "https://user:password@news.example.com:443/a_b?q=private#section"
+        for tool_name in ("fetch_webpage", "fetch_raw"):
+            for arguments in ({"url": url}, '{"url": "' + url + '", "max_chars":'):
+                with self.subTest(tool_name=tool_name, arguments=arguments):
+                    detail = AICommands._tool_usage_detail(tool_name, arguments)
+                    self.assertEqual(detail, "news.example.com")
 
-        self.assertEqual(detail, "example.com/a\\_b")
+    def test_invalid_or_unfinished_urls_show_no_preview(self):
+        for arguments in (
+            {"url": "https://"},
+            {"url": "https://[invalid/path"},
+            {"url": "javascript:alert(1)"},
+            {"url": "example.com/path"},
+            '{"url": "https://example.com/path',
+        ):
+            with self.subTest(arguments=arguments):
+                self.assertEqual(AICommands._tool_usage_detail("fetch_webpage", arguments), "")
 
     def test_long_values_are_truncated_and_mentions_escaped(self):
         long_detail = AICommands._tool_usage_detail("generate_image", {"prompt": "x" * 200})

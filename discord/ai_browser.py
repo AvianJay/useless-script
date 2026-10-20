@@ -59,7 +59,6 @@ BROWSER_ACT_ACTIONS = {
 BROWSER_READ_ACTIONS = {
     "navigate",
     "snapshot",
-    "screenshot",
     "back",
     "forward",
     "reload",

@@ -146,11 +146,21 @@
             "past": "{value}前",
             "future": "{value}後",
             "few_seconds": "幾秒",
-            "minutes": { "other": "{count} 分鐘" },
-            "hours": { "other": "{count} 小時" },
-            "days": { "other": "{count} 天" },
-            "months": { "other": "{count} 個月" },
-            "years": { "other": "{count} 年" }
+            "minutes": {
+                "other": "{count} 分鐘"
+            },
+            "hours": {
+                "other": "{count} 小時"
+            },
+            "days": {
+                "other": "{count} 天"
+            },
+            "months": {
+                "other": "{count} 個月"
+            },
+            "years": {
+                "other": "{count} 年"
+            }
         },
         "unknown_user": "未知使用者",
         "unknown_role": "已刪除的身分組",

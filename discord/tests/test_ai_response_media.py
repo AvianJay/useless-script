@@ -12,6 +12,60 @@ from ai import AIFollowupButton, AIFollowupSelect, AIResponseBuilder
 
 
 class AIResponseMediaTests(unittest.TestCase):
+    def test_external_images_thumbnails_and_galleries_render_direct_urls(self):
+        image_url = "https://images.example.com/photo.png?width=640&height=480"
+        thumbnail_url = "http://static.example.net:8080/thumb.jpg"
+        gallery_url = "https://another.example.org/gallery.webp"
+        view = AIResponseBuilder.create_response_view(
+            f"<image>{image_url.replace('&', '&amp;')}</image>"
+            f"<section>Preview<thumbnail>{thumbnail_url}</thumbnail></section>"
+            f"<gallery><image>{gallery_url}</image></gallery>",
+            user=None,
+            show_cost=False,
+            show_model=False,
+        )
+
+        gallery_urls = [
+            entry["media"]["url"]
+            for item in view.walk_children()
+            if isinstance(item, discord.ui.MediaGallery)
+            for entry in item.to_component_dict()["items"]
+        ]
+        thumbnail_urls = [
+            item.to_component_dict()["media"]["url"]
+            for item in view.walk_children()
+            if isinstance(item, discord.ui.Thumbnail)
+        ]
+
+        self.assertEqual(gallery_urls, [image_url, gallery_url])
+        self.assertEqual(thumbnail_urls, [thumbnail_url])
+
+    def test_external_image_urls_are_preserved_in_history(self):
+        image_url = "https://images.example.com/photo.png"
+        thumbnail_url = "http://static.example.net/thumb.jpg"
+
+        history = AIResponseBuilder.strip_media_tags_for_history(
+            f"<image>{image_url}</image><thumbnail>{thumbnail_url}</thumbnail>"
+        )
+
+        self.assertIn(image_url, history)
+        self.assertIn(thumbnail_url, history)
+        self.assertNotIn("<image>", history)
+        self.assertNotIn("<thumbnail>", history)
+
+    def test_invalid_display_urls_are_omitted(self):
+        for url in (
+            "javascript:alert(1)",
+            "file:///C:/image.png",
+            "https://",
+            "https://[invalid/image.png",
+            "https://example.com:invalid/image.png",
+            "https://user:password@example.com/image.png",
+        ):
+            with self.subTest(url=url):
+                items = AIResponseBuilder._iter_response_layout_items(f"<image>{url}</image>")
+                self.assertFalse(any(item_type == "image" for item_type, _ in items))
+
     def test_empty_generated_image_tag_only_uses_native_images(self):
         payloads = [
             {"filename": "table.png", "content": b"table", "kind": "table"},
