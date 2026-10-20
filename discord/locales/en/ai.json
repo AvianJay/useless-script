@@ -220,7 +220,7 @@
         "list_resources": "Listing resources",
         "list_skills": "Listing skills",
         "load_skill": "Loading a skill",
-        "node_repl": "Running JavaScript",
+        "node_repl": "Running Node REPL",
         "read_attachment": "Reading an attachment",
         "read_resource": "Reading a resource",
         "read_skill_file": "Reading skill reference",

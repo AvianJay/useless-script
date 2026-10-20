@@ -10,6 +10,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from ai import AICommands
 from ai_skills import get_skill_registry, skill_session
+from ai_node_repl import NodeSandboxUnavailable
 
 
 def response(content='', calls=None):
@@ -97,6 +98,52 @@ class AISkillToolTests(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(unknown['ok'])
         self.assertFalse(reference['ok'])
         self.assertEqual(skill_session(self.context).loaded, set())
+
+    async def test_browser_defaults_to_repl_and_only_exposes_direct_fallback_after_failure(self):
+        skill_session(self.context).loaded.add('browser')
+        with patch('ai._get_ai_browser_cdp_endpoint', return_value='configured'):
+            before = {tool['function']['name'] for tool in self.cog._build_request_ai_tools(self.context)}
+            self.assertIn('node_repl', before)
+            self.assertNotIn('browser_act', before)
+            rejected = await self.cog._execute_ai_tool('browser_act', {'action':'click'}, self.context)
+            self.assertFalse(rejected['ok'])
+            self.context['_node_repl_unavailable'] = True
+            after = {tool['function']['name'] for tool in self.cog._build_request_ai_tools(self.context)}
+            self.assertIn('browser_act', after)
+
+    async def test_threads_loads_the_browser_dependency_and_repl(self):
+        with patch('ai_skill_tools.get_global_config', return_value='configured'):
+            result = await self.cog._execute_ai_tool('load_skill', {'name':'threads-posting'}, self.context)
+        self.assertTrue(result['ok'])
+        self.assertEqual(skill_session(self.context).loaded, {'browser','threads-posting'})
+        self.assertIn('node_repl', result['data']['tools'])
+
+    async def test_playwright_mutation_uses_existing_approval_and_rejection_gate(self):
+        skill_session(self.context).loaded.add('browser')
+        page = SimpleNamespace(url='https://example.com')
+        payload = {'operation':'fill','target':[{'kind':'role','role':'textbox'}],'text':'Draft'}
+        with patch.object(self.cog, '_prepare_browser_interaction', new=AsyncMock(return_value=(page,page.url,None))), patch.object(
+            self.cog.browser, 'request_approval', new=AsyncMock(return_value={'approved':False})) as approval, patch.object(
+            self.cog.browser, 'execute_playwright_action', new=AsyncMock()) as execute:
+            await self.cog._tool_browser_playwright(payload,self.context)
+            approval.assert_awaited_once()
+            execute.assert_not_awaited()
+        with patch.object(self.cog, '_prepare_browser_interaction', new=AsyncMock(return_value=(None,None,{'error':'Session rejected'}))), patch.object(
+            self.cog.browser, 'execute_playwright_action', new=AsyncMock()) as execute:
+            result = await self.cog._tool_browser_playwright(payload,self.context)
+            self.assertEqual(result['error'],'Session rejected')
+            execute.assert_not_awaited()
+
+    async def test_unavailable_sandbox_exposes_fallback_without_claiming_node_execution(self):
+        skill_session(self.context).loaded.add('browser')
+        kernel = SimpleNamespace(evaluate=AsyncMock(side_effect=NodeSandboxUnavailable('fixture unavailable')), close=AsyncMock())
+        with patch('ai_skill_tools.NodeKernel',return_value=kernel):
+            result = await self.cog._execute_ai_tool('node_repl',{'code':'write(1)'},self.context)
+        self.assertFalse(result['ok'])
+        self.assertTrue(self.context['_node_repl_unavailable'])
+        self.assertEqual(self.cog._model_name_with_runtime('model',self.context),'model')
+        self.context['node_repl_runtime']={'engine':'node','sandbox':'docker'}
+        self.assertEqual(self.cog._model_name_with_runtime('model',self.context),'model | Node REPL')
 
     async def test_native_loop_refreshes_schemas_after_skill_activation(self):
         offered = []

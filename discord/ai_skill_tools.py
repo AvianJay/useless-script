@@ -9,7 +9,8 @@ from urllib.parse import urlparse
 
 import aiohttp
 
-from ai_node_repl import DEFAULT_NODE_IMAGE, NodeKernel
+from ai_node_repl import DEFAULT_NODE_IMAGE, NodeKernel, NodeSandboxUnavailable
+from ai_browser_playwright import READ_OPERATIONS, normalize_playwright_request
 from ai_skills import (
     MAX_ATTACHMENT_BYTES, SECRET_FILENAME, extract_attachment,
     get_skill_registry, skill_session,
@@ -45,7 +46,7 @@ SKILL_TOOL_SCHEMAS = [
     _tool("send_resource", "Queue a textual resource as the reply's downloadable attachment. This does not convert text into binary Office/PDF/image formats.", {
         "resource_id": _STR, "summary": _STR,
     }, ("resource_id",)),
-    _tool("node_repl", "Execute persistent JavaScript with top-level await in a Docker-isolated, networkless kernel. Use the loaded skill reference for browser/tools/resources APIs. Variables last only for this request.", {
+    _tool("node_repl", "Run persistent JavaScript in Docker. For browsing use browser.page.getByRole/locator, mouse and keyboard (real Python Playwright backend). Read the loaded browser reference first. Returned runtime metadata proves which Node kernel and evaluation ran.", {
         "code": _STR, "reset": {"type": "boolean"},
         "timeout_seconds": {"type": "integer", "minimum": 1, "maximum": 300},
     }),
@@ -103,15 +104,19 @@ class AISkillTools:
             for name in hidden
         ))
 
-    def _build_request_ai_tools(self, context: dict) -> list[dict]:
+    def _build_request_ai_tools(self, context: dict, *, for_bridge=False) -> list[dict]:
         registry = get_skill_registry()
         state = skill_session(context)
         enabled = set()
         for name in state.loaded:
             enabled.update(registry.get(name).tools)
-        return [tool for tool in [*self._build_ai_tools(), *SKILL_TOOL_SCHEMAS]
+        tools = [tool for tool in [*self._build_ai_tools(), *SKILL_TOOL_SCHEMAS]
                 if tool["function"]["name"] not in registry.gated_tools
                 or tool["function"]["name"] in enabled]
+        if not for_bridge and "browser" in state.loaded and not context.get("_node_repl_unavailable"):
+            tools = [tool for tool in tools if tool["function"]["name"] not in {
+                "browser_read", "browser_view", "browser_act", "browser_evaluate"}]
+        return tools
 
     async def _tool_list_skills(self, args: dict, context: dict) -> dict:
         state = skill_session(context)
@@ -131,8 +136,16 @@ class AISkillTools:
         state = skill_session(context)
         already_loaded = skill.name in state.loaded
         state.loaded.add(skill.name)
+        instructions = skill.instructions
+        tool_names = set(skill.tools)
+        if skill.name == "threads-posting":
+            browser = get_skill_registry().get("browser")
+            state.loaded.add("browser")
+            tool_names.update(browser.tools)
+            instructions = browser.instructions + "\n\n" + instructions
         return {"name": skill.name, "already_loaded": already_loaded,
-                "instructions": skill.instructions, "tools": sorted(skill.tools)}
+                "instructions": instructions, "tools": sorted(tool_names),
+                "loaded_skills": sorted(state.loaded), "browser_execution": "node_repl" if "browser" in state.loaded else None}
 
     async def _tool_read_skill_file(self, args: dict, context: dict) -> dict:
         name = str(args.get("name") or "")
@@ -225,16 +238,44 @@ class AISkillTools:
 
     async def _node_tool_bridge(self, name: str, args: dict, context: dict) -> dict:
         blocked = {"node_repl", "load_skill", "list_skills", "read_skill_file"}
-        available = {item["function"]["name"] for item in self._build_request_ai_tools(context)}
+        available = {item["function"]["name"] for item in self._build_request_ai_tools(context, for_bridge=True)}
+        if "browser" in skill_session(context).loaded:
+            available.add("browser_playwright")
         if name in blocked or name not in available:
             return {"ok": False, "error": "Tool is not available to this skill runtime"}
         # The context comes from the active Python request, never from Node JSON.
         # Existing handlers retain Discord permission and browser approval checks.
-        result = await self._execute_ai_tool(name, args, context)
+        result = await self._execute_ai_tool(name, args, context, _from_node=True)
         data = result.get("data")
         if result.get("ok") and isinstance(data, dict) and data.get("error"):
-            return {"ok": False, "error": str(data["error"])}
+            return {"ok": False, "error": str(data["error"]), "data": data}
         return result
+
+    async def _tool_browser_playwright(self, args: dict, context: dict) -> dict:
+        if "browser" not in skill_session(context).loaded:
+            raise ValueError("Load browser before using its Playwright bridge")
+        spec = normalize_playwright_request(args)
+        if spec["operation"] in READ_OPERATIONS:
+            page, error = await self.browser.get_page(context)
+            if error or page is None:
+                return {"error": error or "Browser page unavailable"}
+            _, error = await self.browser.validate_public_url(page.url)
+            if error:
+                return {"error": "Navigate to a public page before inspecting it"}
+            return await self.browser.inspect_playwright(page, spec, context)
+        page, starting_url, error = await self._prepare_browser_interaction(context)
+        if error is not None:
+            return error
+        if context.get("_browser_interaction_authorized"):
+            return await self.browser.execute_playwright_action(page, spec, context)
+        return await self.browser.request_approval(
+            context, kind="act", payload=spec, reason="Browser REPL interaction",
+            starting_url=starting_url, presenter=context.get("_browser_approval_presenter"))
+
+    @staticmethod
+    def _model_name_with_runtime(model_name: str, context: dict | None) -> str:
+        runtime = (context or {}).get("node_repl_runtime") or {}
+        return f"{model_name} | Node REPL" if runtime.get("engine") == "node" else model_name
 
     async def _reset_skill_kernel(self, state) -> None:
         try:
@@ -256,7 +297,8 @@ class AISkillTools:
         if not code.strip() and args.get("reset") is True:
             return {"reset": True}
         if not get_global_config("ai_node_repl_enabled", True):
-            raise ValueError("Node sandbox is disabled; use direct tools or execute_code")
+            context["_node_repl_unavailable"] = True
+            raise NodeSandboxUnavailable("Node sandbox is disabled; direct browser tools are now exposed as fallback")
         if state.node is None:
             kernel = NodeKernel(image=str(get_global_config("ai_node_repl_image", DEFAULT_NODE_IMAGE)))
             try:
@@ -266,10 +308,21 @@ class AISkillTools:
             state.node_slot = True
             state.node = kernel
         try:
-            return await state.node.evaluate(
+            result = await state.node.evaluate(
                 code, lambda name, arguments: self._node_tool_bridge(name, arguments, context),
                 timeout=self._coerce_int(args.get("timeout_seconds"), 120, minimum=1, maximum=300))
+            if result.get("runtime"):
+                context["node_repl_runtime"] = dict(result["runtime"])
+                context.pop("_node_repl_unavailable", None)
+            return result
+        except NodeSandboxUnavailable:
+            context["_node_repl_unavailable"] = True
+            await self._reset_skill_kernel(state)
+            raise
         except BaseException:
+            runtime = getattr(state.node, "last_runtime", None)
+            if runtime:
+                context["node_repl_runtime"] = dict(runtime)
             await self._reset_skill_kernel(state)
             raise
 

@@ -3,7 +3,8 @@ name: threads-posting
 description: Draft, edit or publish text posts and replies on Meta Threads through the configured signed-in browser profile; use only for Meta Threads, not Discord discussion threads.
 ---
 
-Load the browser skill for browser tools and, when useful, its Node REPL reference.
+Loading this skill also loads browser. Read its REPL reference and use `node_repl`
+with `browser.page` locators and keyboard/mouse operations.
 Use the managed browser page with the profile's existing login. Never request,
 read or export passwords, cookies, access tokens or browser storage. If sign-in is
 required, stop the account-dependent work and explain that the profile needs to
@@ -28,6 +29,15 @@ stop rather than switching profiles or posting as another account. Identify the
 composer, editable field and publishing control from fresh snapshots. Follow the
 UI's current length limits; do not silently split a post into multiple posts.
 Use the ordinary browser approval flow and honor a rejected session.
+
+The feed's text-entry placeholder may be a button, not the editable textbox.
+Open the composer using its observed role/name, then locate the dialog's actual
+`[contenteditable="true"][role="textbox"]`. Fill that element and read back its
+text. Check that the publishing control is enabled. If a ref times out, switch to
+the observed role/CSS locator instead of repeatedly clicking the same stale ref.
+For custom keyboard handling, focus the editor and use real keyboard input. A
+coordinate click based on current observed bounds can focus it as a fallback.
+Do not blame React or login state without checking the editor, focus and account.
 
 For an authorized publication, enter the intended text, inspect the resulting
 draft, then activate the publishing control once. Verify the resulting post or

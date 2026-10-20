@@ -52,6 +52,41 @@ class NodeWorkerProtocolTests(unittest.IsolatedAsyncioTestCase):
         second = await self.kernel.evaluate('count += 2; write(count)', self.broker)
         self.assertEqual(first['output'], ['40'])
         self.assertEqual(second['output'], ['42'])
+        self.assertEqual(first['runtime']['engine'], 'node')
+        self.assertRegex(first['runtime']['node_version'], r'^\d+\.\d+\.\d+')
+        self.assertEqual(first['runtime']['kernel_id'], second['runtime']['kernel_id'])
+        self.assertEqual(second['runtime']['evaluation'], 2)
+
+    async def test_playwright_facade_serializes_locator_chain_and_keyboard(self):
+        async def broker(name, arguments):
+            return {'ok': True, 'data': {'value': 'Draft'} if arguments['operation']=='inner_text' else {'ok': True}}
+        self.broker.side_effect = broker
+        result = await self.kernel.evaluate('var editor = browser.page.getByRole("dialog").getByRole("textbox").first(); await editor.fill("Draft"); write(await editor.innerText()); await browser.page.mouse.click(120,80); await browser.page.keyboard.insertText("More");', self.broker)
+        self.assertTrue(result['ok'])
+        self.assertEqual(result['output'], ['Draft'])
+        calls = self.broker.await_args_list
+        self.assertEqual([call.args[1]['operation'] for call in calls], ['fill', 'inner_text', 'mouse_click', 'keyboard_insert_text'])
+        self.assertEqual(calls[0].args[0], 'browser_playwright')
+        self.assertEqual(calls[0].args[1]['target'], [
+            {'kind':'role','role':'dialog'}, {'kind':'role','role':'textbox'}, {'kind':'nth','index':0},
+        ])
+        self.assertEqual(result['runtime']['bridge_calls'], 4)
+
+    async def test_bridge_failure_retains_recovery_details(self):
+        self.broker.return_value = {'ok': False, 'error': 'Click timed out', 'data': {'snapshot': 'Fresh UI', 'action_may_have_applied': True}}
+        result = await self.kernel.evaluate('await browser.page.getByRole("button").click()', self.broker)
+        self.assertFalse(result['ok'])
+        self.assertEqual(result['details']['snapshot'], 'Fresh UI')
+        self.assertTrue(result['details']['action_may_have_applied'])
+        self.assertEqual(result['runtime']['bridge_calls'], 1)
+
+    async def test_large_unicode_output_and_failure_details_stay_within_protocol_limit(self):
+        self.broker.return_value = {'ok':False,'error':'Timeout','data':{'snapshot':'中'*12000,'action_may_have_applied':True}}
+        result = await self.kernel.evaluate('write("\\u4e2d".repeat(12000)); await browser.page.getByRole("button").click()', self.broker)
+        self.assertFalse(result['ok'])
+        self.assertTrue(result['truncated'])
+        self.assertTrue(result['details']['action_may_have_applied'])
+        self.assertEqual(len(result['details']['snapshot']), 4000)
 
     async def test_csv_handles_quoted_newlines_and_safe_spreadsheet_output(self):
         code = r'''

@@ -19,6 +19,10 @@ class NodeSandboxError(RuntimeError):
     pass
 
 
+class NodeSandboxUnavailable(NodeSandboxError):
+    pass
+
+
 class NodeKernel:
     def __init__(self, *, image: str = DEFAULT_NODE_IMAGE):
         if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._/:@-]{0,200}", image):
@@ -28,6 +32,9 @@ class NodeKernel:
         self.process = None
         self.lock = asyncio.Lock()
         self.docker = shutil.which("docker")
+        self.node_version = None
+        self.evaluations = 0
+        self.last_runtime = None
 
     def command(self) -> list[str]:
         if not self.docker:
@@ -74,12 +81,13 @@ class NodeKernel:
                 ready = await self._receive()
                 if ready.get("type") != "ready":
                     raise NodeSandboxError("Node sandbox did not initialize")
+                self.node_version = str(ready.get("node_version") or "unknown")[:40]
         except asyncio.CancelledError:
             await self.close()
             raise
         except Exception:
             await self.close()
-            raise NodeSandboxError(
+            raise NodeSandboxUnavailable(
                 f"Node sandbox unavailable. Start Docker and pre-pull {self.image}; "
                 "direct browser tools and execute_code remain available."
             ) from None
@@ -90,17 +98,25 @@ class NodeKernel:
         async with self.lock:
             await self.start()
             evaluation_id = uuid4().hex
+            self.evaluations += 1
             rpc_calls = 0
+            self.last_runtime = {"engine": "node", "sandbox": "docker", "node_version": self.node_version,
+                                 "kernel_id": self.name.removeprefix("ai-skill-")[:12],
+                                 "evaluation": self.evaluations, "bridge_calls": 0}
             try:
                 async with asyncio.timeout(max(1, min(300, timeout))):
                     await self._send({"type": "evaluate", "id": evaluation_id, "code": code})
                     while True:
                         message = await self._receive()
                         if message.get("type") == "result" and message.get("id") == evaluation_id:
-                            return {key: message.get(key) for key in ("ok", "output", "value", "error", "truncated")}
+                            return {
+                                **{key: message.get(key) for key in ("ok", "output", "value", "error", "details", "truncated")},
+                                "runtime": dict(self.last_runtime),
+                            }
                         if message.get("type") != "rpc" or message.get("evaluation_id") != evaluation_id:
                             raise NodeSandboxError("Unexpected Node sandbox message")
                         rpc_calls += 1
+                        self.last_runtime["bridge_calls"] = rpc_calls
                         if rpc_calls > 24:
                             raise NodeSandboxError("Node bridge call limit exceeded")
                         name, arguments = message.get("name"), message.get("arguments")

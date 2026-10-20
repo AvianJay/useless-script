@@ -25,6 +25,7 @@ from uuid import uuid4
 from playwright.async_api import async_playwright
 
 from i18n import t
+from ai_browser_playwright import BrowserPlaywrightMixin
 
 AI_BROWSER_CDP_ENDPOINT_CONFIG_KEY = "ai_browser_cdp_endpoint"
 
@@ -329,13 +330,16 @@ def summarize_browser_action(kind: str, payload: dict) -> str:
         )
         return f"**JavaScript** {scope}\n```js\n{body}\n```{note}"
 
-    action = str(payload.get("action") or "action")
+    action = str(payload.get("operation") or payload.get("action") or "action")
     element = _clip(re.sub(r"\s+", " ", str(payload.get("element") or "")).strip(), 200)
     ref = str(payload.get("ref") or "")
-    lines = [f"**{action}** — {element}" if element else f"**{action}**", f"`ref={ref}`"]
-    if action in {"fill", "type"}:
+    target = json.dumps(payload["target"], ensure_ascii=False) if payload.get("target") else f"ref={ref}"
+    if "x" in payload:
+        target = f"viewport CSS pixels: x={payload['x']}, y={payload['y']}"
+    lines = [f"**{action}** — {element}" if element else f"**{action}**", f"`{_clip(target, 800)}`"]
+    if action in {"fill", "type", "keyboard_type", "keyboard_insert_text"}:
         lines.append("```\n" + _clip(str(payload.get("text") or ""), 500) + "\n```")
-    elif action == "press":
+    elif action in {"press", "keyboard_press"}:
         lines.append(f"`key={_clip(str(payload.get('key') or ''), 40)}`")
     elif action == "select_option":
         values = payload.get("values") or []
@@ -343,7 +347,7 @@ def summarize_browser_action(kind: str, payload: dict) -> str:
     return "\n".join(lines)
 
 
-class BrowserSessionManager:
+class BrowserSessionManager(BrowserPlaywrightMixin):
     """Owns the global browser lease queue, the CDP session, and action execution.
 
     One instance per cog. All state that used to live on ``AICommands`` moved here;
@@ -1075,6 +1079,8 @@ class BrowserSessionManager:
         return result
 
     async def execute_action(self, page, action: dict, tool_context: dict) -> dict:
+        if action.get("action") == "playwright":
+            return await self.execute_playwright_action(page, action, tool_context)
         name = action["action"]
         ref = action["ref"]
         timeout = action.get("timeout_ms", BROWSER_ACTION_TIMEOUT_MS)
