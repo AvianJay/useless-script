@@ -8,15 +8,65 @@ import json
 import math
 import re
 
+from playwright.async_api import expect
+
 
 READ_OPERATIONS = {
     "count", "is_visible", "is_enabled", "inner_text", "text_content",
     "input_value", "get_attribute", "bounding_box", "wait_for", "viewport", "title", "url",
 }
-LOCATOR_ACTIONS = {"click", "dblclick", "hover", "focus", "fill", "type", "press", "check", "uncheck", "select_option"}
+LOCATOR_ACTIONS = {"click", "dblclick", "hover", "focus", "fill", "replace_text", "type", "press", "check", "uncheck", "select_option"}
 MOUSE_ACTIONS = {"mouse_click", "mouse_dblclick", "mouse_move", "mouse_wheel"}
 KEYBOARD_ACTIONS = {"keyboard_press", "keyboard_type", "keyboard_insert_text"}
 ATTRIBUTES = {"role", "type", "name", "id", "class", "aria-label", "aria-disabled", "placeholder", "contenteditable", "disabled", "href", "data-testid"}
+
+BROWSER_PLAYWRIGHT_TOOL_SCHEMA = {
+    "type": "function",
+    "function": {
+        "name": "browser_playwright",
+        "description": (
+            "Use stable role/CSS locators and real keyboard/mouse operations on the managed browser page. "
+            "Available directly when the Node sandbox cannot start; otherwise use browser.page in node_repl. "
+            "For a rich editor that ignores fill or execCommand, use replace_text: it focuses the editable target, "
+            "selects all, presses Backspace, verifies it is empty, types using keyboard events and verifies the result. "
+            "It never submits or publishes. All mutations use the existing browser session approval and permissions."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "operation": {"type": "string", "enum": sorted(READ_OPERATIONS | LOCATOR_ACTIONS | MOUSE_ACTIONS | KEYBOARD_ACTIONS)},
+                "target": {
+                    "type": "array", "minItems": 1, "maxItems": 8,
+                    "description": "Observed locator chain. Example: [{kind: role, role: dialog}, {kind: role, role: textbox}]. Required for locator operations.",
+                    "items": {
+                        "type": "object", "required": ["kind"],
+                        "properties": {
+                            "kind": {"type": "string", "enum": ["css", "role", "text", "label", "placeholder", "filter", "nth"]},
+                            **{key: {"type": "string"} for key in ("selector", "role", "name", "text", "hasText")},
+                            "exact": {"type": "boolean"}, "index": {"type": "integer", "minimum": -1},
+                        },
+                    },
+                },
+                "text": {"type": "string", "maxLength": 8000, "description": "fill/type/replace_text or keyboard input; replace_text replaces the entire target's text."},
+                "key": {"type": "string", "description": "press/keyboard_press: Playwright key such as ControlOrMeta+A or Backspace."},
+                "name": {"type": "string", "enum": sorted(ATTRIBUTES), "description": "get_attribute: attribute name."},
+                "values": {"type": "array", "items": {"type": "string"}, "maxItems": 20},
+                **{key: {"type": "number"} for key in ("x", "y", "delta_x", "delta_y")},
+                "options": {
+                    "type": "object", "properties": {
+                        "timeout": {"type": "integer", "minimum": 1, "maximum": 30000},
+                        "delay": {"type": "number", "minimum": 0, "maximum": 100},
+                        "button": {"type": "string", "enum": ["left", "middle", "right"]},
+                        "force": {"type": "boolean"},
+                        "state": {"type": "string", "enum": ["attached", "detached", "visible", "hidden"]},
+                    },
+                },
+                "reason": {"type": "string", "maxLength": 600},
+            },
+            "required": ["operation"],
+        },
+    },
+}
 
 
 def normalize_target(value) -> list[dict]:
@@ -63,7 +113,7 @@ def normalize_playwright_request(args: dict) -> dict:
     spec = {"action": "playwright", "operation": operation, "timeout_ms": max(1, min(30000, int(timeout)))}
     if operation in LOCATOR_ACTIONS or operation in READ_OPERATIONS - {"viewport", "title", "url"}:
         spec["target"] = normalize_target(args.get("target"))
-    if operation in {"fill", "type", "keyboard_type", "keyboard_insert_text"}:
+    if operation in {"fill", "replace_text", "type", "keyboard_type", "keyboard_insert_text"}:
         text = args.get("text")
         if not isinstance(text, str) or len(text) > 8000:
             raise ValueError("text must be a string up to 8000 characters")
@@ -80,7 +130,7 @@ def normalize_playwright_request(args: dict) -> dict:
             if not isinstance(value, (int, float)) or isinstance(value, bool) or not math.isfinite(value) or abs(value) > 20000:
                 raise ValueError("Mouse coordinates/deltas must be finite CSS pixel values")
             spec[field] = value
-    if operation in {"type", "keyboard_type"}:
+    if operation in {"replace_text", "type", "keyboard_type"}:
         delay = options.get("delay", 0)
         if not isinstance(delay, (int, float)) or not math.isfinite(delay) or not 0 <= delay <= 100:
             raise ValueError("Typing delay must be between 0 and 100 ms")
@@ -152,6 +202,58 @@ _TARGET_INFO = """point => {
 
 
 class BrowserPlaywrightMixin:
+    async def _playwright_failure_result(self, page, context, operation, error) -> dict:
+        result = await self._failure_result(page, context, operation, error)
+        if result.get("hint"):
+            result["hint"] = "Inspect the current snapshot and narrow the locator using the target's dialog, name or observed CSS. Do not retry an ambiguous or stale target unchanged."
+        if "snapshot" not in result:
+            result.update(await self.snapshot_payload(page, max_chars=12000))
+        return result
+
+    async def replace_editor_text(self, locator, text: str, *, timeout: int, delay: float) -> None:
+        """Replace editable text through keyboard events and verify application readback."""
+        text = text.replace("\r\n", "\n").replace("\r", "\n")
+        field = await locator.evaluate(
+            """element => ({
+                input: ['INPUT', 'TEXTAREA'].includes(element.tagName),
+                multiline: element.tagName !== 'INPUT',
+                editable: element.isContentEditable ||
+                    element.tagName === 'TEXTAREA' ||
+                    (element.tagName === 'INPUT' && ['text', 'search', 'email', 'url', 'tel', ''].includes(element.type))
+            })""", timeout=timeout,
+        )
+        if not field.get("editable"):
+            raise ValueError("replace_text requires the actual input, textarea or contenteditable textbox")
+        if "\n" in text and not field["multiline"]:
+            raise ValueError("The target is a single-line input; it cannot accept multiline text")
+
+        async def verify(expected):
+            if field["input"]:
+                await expect(locator).to_have_value(expected, timeout=timeout)
+            else:
+                # Contenteditable paragraphs may contribute a trailing empty line.
+                pattern = re.compile("^" + re.escape(expected) + r"\n?$")
+                await expect(locator).to_have_text(pattern, use_inner_text=True, timeout=timeout)
+
+        await locator.focus(timeout=timeout)
+        focused = await locator.evaluate(
+            "element => element === element.ownerDocument.activeElement || element.contains(element.ownerDocument.activeElement)",
+            timeout=timeout,
+        )
+        if not focused:
+            raise ValueError("The target did not retain keyboard focus; inspect the current editor")
+        await locator.press("ControlOrMeta+A", timeout=timeout)
+        await locator.press("Backspace", timeout=timeout)
+        await verify("")
+        for index, line in enumerate(text.split("\n")):
+            if index:
+                # A plain Enter can submit a composer; Shift+Enter inserts a line
+                # break rather than a new Lexical paragraph or submit command.
+                await locator.press("Shift+Enter", timeout=timeout)
+            if line:
+                await locator.press_sequentially(line, delay=delay, timeout=timeout)
+        await verify(text)
+
     async def inspect_playwright(self, page, spec: dict, context: dict) -> dict:
         operation, timeout = spec["operation"], spec["timeout_ms"]
         try:
@@ -176,7 +278,7 @@ class BrowserPlaywrightMixin:
                     value = True
             return {"operation": operation, "value": value, "coordinate_space": "viewport CSS pixels"}
         except Exception as error:
-            return await self._failure_result(page, context, operation, error)
+            return await self._playwright_failure_result(page, context, operation, error)
 
     async def _guard_point_or_focus(self, page, point=None, *, editable=False):
         info = await page.evaluate(_TARGET_INFO, point)
@@ -196,7 +298,7 @@ class BrowserPlaywrightMixin:
         try:
             if operation in LOCATOR_ACTIONS:
                 locator = resolve_locator(page, spec["target"])
-                if operation in {"fill", "type", "press", "focus"}:
+                if operation in {"fill", "replace_text", "type", "press", "focus"}:
                     await self.ensure_field_allowed(locator, timeout)
                 if operation in {"click", "dblclick"}:
                     await self.ensure_field_allowed(locator, timeout)
@@ -206,6 +308,8 @@ class BrowserPlaywrightMixin:
                     await getattr(locator, operation)(timeout=timeout, button=spec["button"], force=spec["force"], no_wait_after=True)
                 elif operation == "fill":
                     await locator.fill(spec["text"], timeout=timeout)
+                elif operation == "replace_text":
+                    await self.replace_editor_text(locator, spec["text"], timeout=timeout, delay=spec["delay"])
                 elif operation == "type":
                     await locator.press_sequentially(spec["text"], delay=spec["delay"], timeout=timeout)
                 elif operation == "press":
@@ -239,10 +343,12 @@ class BrowserPlaywrightMixin:
                 else:
                     await page.keyboard.insert_text(spec["text"])
         except Exception as error:
-            result = await self._failure_result(page, context, operation, error)
+            result = await self._playwright_failure_result(page, context, operation, error)
             result["phase"] = phase
             result["action_may_have_applied"] = phase == "action"
             return result
         result = {"ok": True, "action": operation, "target": spec.get("target"), "coordinate_space": "viewport CSS pixels"}
+        if operation == "replace_text":
+            result["text_verified"] = True
         result.update(await self.snapshot_payload(page, max_chars=12000))
         return result

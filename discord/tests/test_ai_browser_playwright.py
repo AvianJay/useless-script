@@ -4,6 +4,8 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock
 
+from playwright.async_api import Error, async_playwright
+
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from ai_browser import BrowserSessionManager, summarize_browser_action
@@ -109,3 +111,132 @@ class BrowserPlaywrightExecutionTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(result['action_may_have_applied'])
         self.assertEqual(result['phase'], 'action')
         self.assertEqual(result['snapshot'], 'fresh failure UI')
+
+
+class BrowserPlaywrightKeyboardIntegrationTests(unittest.IsolatedAsyncioTestCase):
+    async def asyncSetUp(self):
+        runtime = await async_playwright().start()
+        self.addAsyncCleanup(runtime.stop)
+        executable = Path(runtime.chromium.executable_path)
+        try:
+            browser = await runtime.chromium.launch(
+                executable_path=str(executable) if executable.is_file() else None, headless=True,
+            )
+        except Error as error:
+            if "Executable doesn't exist" in str(error):
+                self.skipTest('Install Playwright Chromium for keyboard integration tests')
+            raise
+        self.addAsyncCleanup(browser.close)
+        self.page = await browser.new_page()
+        await self.page.set_content('''
+            <button id="post" onclick="window.published = true">Post</button>
+            <div role="textbox" aria-label="Draft" contenteditable="true" id="editor"><p>Old draft</p></div>
+            <input id="other" value="Leave this alone">
+            <script>
+                window.published = false;
+                window.model = 'Old draft';
+                window.keys = [];
+                window.execCalls = 0;
+                document.execCommand = () => { window.execCalls++; return false; };
+                const editor = document.getElementById('editor');
+                document.addEventListener('keydown', event => {
+                    window.keys.push(event.key);
+                    if (window.blockDeletion && event.key === 'Backspace') event.preventDefault();
+                    if (event.key === 'Enter' && !event.shiftKey) {
+                        window.published = true;
+                        event.preventDefault();
+                    }
+                });
+                editor.addEventListener('beforeinput', event => {
+                    if (window.blockInsertion && event.inputType === 'insertText') event.preventDefault();
+                });
+                editor.addEventListener('input', event => {
+                    if (event.isTrusted) window.model = editor.innerText;
+                });
+                new MutationObserver(() => {
+                    if (editor.innerText !== window.model) editor.innerText = window.model;
+                }).observe(editor, {subtree: true, childList: true, characterData: true});
+            </script>
+        ''')
+        self.manager = BrowserSessionManager()
+        self.manager.snapshot_payload = AsyncMock(return_value={'snapshot': 'current editor'})
+
+    async def replace(self, text, *, target=None, timeout=1500):
+        spec = normalize_playwright_request({
+            'operation': 'replace_text', 'target': target or [{'kind': 'role', 'role': 'textbox', 'name': 'Draft'}],
+            'text': text, 'options': {'timeout': timeout},
+        })
+        return await self.manager.execute_playwright_action(self.page, spec, {})
+
+    async def test_keyboard_replaces_controlled_editor_when_script_mutations_do_not_work(self):
+        await self.page.evaluate('''() => {
+            document.execCommand('insertText', false, 'Wrong draft');
+            const editor = document.getElementById('editor');
+            editor.textContent = 'Wrong draft';
+            editor.dispatchEvent(new Event('input', {bubbles: true}));
+        }''')
+        await self.page.wait_for_function("document.getElementById('editor').innerText === 'Old draft'")
+        text = 'Fresh draft\n\u6e2c\u8a66\u91cd\u6253'
+        result = await self.replace(text)
+        self.assertTrue(result.get('ok'), result)
+        self.assertTrue(result['text_verified'])
+        self.assertEqual(await self.page.get_by_role('textbox', name='Draft').inner_text(), text)
+        self.assertEqual(await self.page.evaluate('window.model'), text)
+        self.assertIn('Backspace', await self.page.evaluate('window.keys'))
+        self.assertEqual(await self.page.evaluate('window.execCalls'), 1)
+        self.assertFalse(await self.page.evaluate('window.published'))
+        self.assertEqual(await self.page.locator('#other').input_value(), 'Leave this alone')
+
+    async def test_clear_verifies_empty_and_supports_plain_inputs(self):
+        result = await self.replace('')
+        self.assertTrue(result.get('text_verified'), result)
+        self.assertEqual((await self.page.get_by_role('textbox', name='Draft').inner_text()).strip(), '')
+        result = await self.replace('Updated input', target=[{'kind': 'css', 'selector': '#other'}])
+        self.assertTrue(result.get('text_verified'), result)
+        self.assertEqual(await self.page.locator('#other').input_value(), 'Updated input')
+        self.assertFalse(await self.page.evaluate('window.published'))
+
+    async def test_failed_deletion_does_not_append_replacement(self):
+        await self.page.evaluate('window.blockDeletion = true')
+        result = await self.replace('Never append this', timeout=150)
+        self.assertIn('error', result)
+        self.assertNotIn('text_verified', result)
+        self.assertTrue(result['action_may_have_applied'])
+        self.assertEqual(await self.page.get_by_role('textbox', name='Draft').inner_text(), 'Old draft')
+        self.assertEqual(result['snapshot'], 'current editor')
+        self.assertFalse(await self.page.evaluate('window.published'))
+
+    async def test_rejected_input_is_reported_instead_of_claiming_success(self):
+        await self.page.evaluate('window.blockInsertion = true')
+        result = await self.replace('Rejected', timeout=150)
+        self.assertIn('error', result)
+        self.assertNotIn('text_verified', result)
+        self.assertEqual((await self.page.get_by_role('textbox', name='Draft').inner_text()).strip(), '')
+        self.assertFalse(await self.page.evaluate('window.published'))
+
+    async def test_noneditable_and_sensitive_targets_are_not_typed_into(self):
+        result = await self.replace('Do not publish', target=[{'kind': 'role', 'role': 'button', 'name': 'Post'}])
+        self.assertIn('error', result)
+        self.assertFalse(await self.page.evaluate('window.published'))
+        await self.page.locator('#other').evaluate("element => element.type = 'password'")
+        result = await self.replace('Blocked', target=[{'kind': 'css', 'selector': '#other'}])
+        self.assertIn('error', result)
+        self.assertEqual(await self.page.locator('#other').input_value(), 'Leave this alone')
+
+    async def test_multiline_text_does_not_erase_a_single_line_input(self):
+        result = await self.replace('First\nSecond', target=[{'kind': 'css', 'selector': '#other'}])
+        self.assertIn('error', result)
+        self.assertEqual(await self.page.locator('#other').input_value(), 'Leave this alone')
+        self.assertFalse(await self.page.evaluate('window.published'))
+
+    async def test_ambiguous_locator_requires_a_more_specific_target(self):
+        result = await self.replace('Do not guess', target=[{'kind': 'role', 'role': 'textbox'}])
+        self.assertIn('error', result)
+        self.assertFalse(result['action_may_have_applied'])
+        self.assertIn('narrow', result['hint'])
+        self.assertEqual(await self.page.locator('#editor').inner_text(), 'Old draft')
+        inspected = await self.manager.inspect_playwright(self.page, normalize_playwright_request({
+            'operation': 'inner_text', 'target': [{'kind': 'role', 'role': 'textbox'}],
+        }), {})
+        self.assertIn('narrow', inspected['hint'])
+        self.assertEqual(inspected['snapshot'], 'current editor')

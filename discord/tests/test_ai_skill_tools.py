@@ -105,11 +105,28 @@ class AISkillToolTests(unittest.IsolatedAsyncioTestCase):
             before = {tool['function']['name'] for tool in self.cog._build_request_ai_tools(self.context)}
             self.assertIn('node_repl', before)
             self.assertNotIn('browser_act', before)
+            self.assertNotIn('browser_playwright', before)
             rejected = await self.cog._execute_ai_tool('browser_act', {'action':'click'}, self.context)
             self.assertFalse(rejected['ok'])
             self.context['_node_repl_unavailable'] = True
             after = {tool['function']['name'] for tool in self.cog._build_request_ai_tools(self.context)}
             self.assertIn('browser_act', after)
+            self.assertIn('browser_playwright', after)
+            schemas = {tool['function']['name']: tool['function']
+                       for tool in self.cog._build_request_ai_tools(self.context)}
+            self.assertIn('replace_text', schemas['browser_playwright']['parameters']['properties']['operation']['enum'])
+
+    async def test_playwright_is_gated_until_browser_loads_and_available_to_node_bridge(self):
+        with patch('ai._get_ai_browser_cdp_endpoint', return_value='configured'):
+            before = {tool['function']['name'] for tool in self.cog._build_request_ai_tools(self.context)}
+            self.assertNotIn('browser_playwright', before)
+            skill_session(self.context).loaded.add('browser')
+            with patch.object(self.cog, '_tool_browser_playwright', new=AsyncMock(return_value={'text_verified': True})) as action:
+                payload = {'operation': 'replace_text', 'target': [{'kind': 'role', 'role': 'textbox'}], 'text': 'Draft'}
+                result = await self.cog._node_tool_bridge('browser_playwright', payload, self.context)
+            self.assertTrue(result['ok'])
+            self.assertTrue(result['data']['text_verified'])
+            self.assertEqual(action.await_args.args, (payload, self.context))
 
     async def test_threads_loads_the_browser_dependency_and_repl(self):
         with patch('ai_skill_tools.get_global_config', return_value='configured'):
@@ -141,6 +158,9 @@ class AISkillToolTests(unittest.IsolatedAsyncioTestCase):
             result = await self.cog._execute_ai_tool('node_repl',{'code':'write(1)'},self.context)
         self.assertFalse(result['ok'])
         self.assertTrue(self.context['_node_repl_unavailable'])
+        with patch('ai._get_ai_browser_cdp_endpoint', return_value='configured'):
+            schemas = self.cog._build_request_ai_tools(self.context)
+            self.assertIn('browser_playwright', {item['function']['name'] for item in schemas})
         self.assertEqual(self.cog._model_name_with_runtime('model',self.context),'model')
         self.context['node_repl_runtime']={'engine':'node','sandbox':'docker'}
         self.assertEqual(self.cog._model_name_with_runtime('model',self.context),'model | Node REPL')

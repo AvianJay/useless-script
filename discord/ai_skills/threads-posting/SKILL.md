@@ -39,6 +39,13 @@ For custom keyboard handling, focus the editor and use real keyboard input. A
 coordinate click based on current observed bounds can focus it as a fallback.
 Do not blame React or login state without checking the editor, focus and account.
 
+For a request to clear and retype, use `editor.replaceText(text)` on that textbox.
+It verifies deletion and replacement through real keyboard input. If Node cannot
+start, use `browser_playwright` with `operation: replace_text`, the observed target
+chain and replacement text. Do not retry `execCommand` or DOM assignment, suggest
+a browser restart, or ask the user to clear the editor before trying this path.
+Publish only after the replacement is verified and the draft matches the request.
+
 For an authorized publication, enter the intended text, inspect the resulting
 draft, then activate the publishing control once. Verify the resulting post or
 reply and return its direct permalink. If the action times out or the result is

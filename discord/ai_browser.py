@@ -337,7 +337,7 @@ def summarize_browser_action(kind: str, payload: dict) -> str:
     if "x" in payload:
         target = f"viewport CSS pixels: x={payload['x']}, y={payload['y']}"
     lines = [f"**{action}** — {element}" if element else f"**{action}**", f"`{_clip(target, 800)}`"]
-    if action in {"fill", "type", "keyboard_type", "keyboard_insert_text"}:
+    if action in {"fill", "replace_text", "type", "keyboard_type", "keyboard_insert_text"}:
         lines.append("```\n" + _clip(str(payload.get("text") or ""), 500) + "\n```")
     elif action in {"press", "keyboard_press"}:
         lines.append(f"`key={_clip(str(payload.get('key') or ''), 40)}`")

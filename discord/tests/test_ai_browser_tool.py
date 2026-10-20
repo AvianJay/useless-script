@@ -129,7 +129,7 @@ class BrowserConfigTests(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn("1fec3e6d", displayed)
 
     def test_browser_schemas_are_conditional(self):
-        browser_tools = {"browser_read", "browser_view", "browser_act", "browser_evaluate"}
+        browser_tools = {"browser_read", "browser_view", "browser_act", "browser_evaluate", "browser_playwright"}
         with patch("ai._get_ai_browser_cdp_endpoint", return_value=""):
             disabled = {item["function"]["name"] for item in self.cog._build_ai_tools()}
         with patch("ai._get_ai_browser_cdp_endpoint", return_value=CDP_ENDPOINT):

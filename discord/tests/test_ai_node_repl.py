@@ -80,6 +80,18 @@ class NodeWorkerProtocolTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(result['details']['action_may_have_applied'])
         self.assertEqual(result['runtime']['bridge_calls'], 1)
 
+    async def test_rich_editor_replace_and_clear_use_verified_keyboard_operation(self):
+        self.broker.return_value = {'ok': True, 'data': {'text_verified': True}}
+        result = await self.kernel.evaluate(
+            'var editor = browser.page.getByRole("textbox"); write(await editor.replaceText("Fresh draft")); await editor.clear();',
+            self.broker,
+        )
+        self.assertTrue(result['ok'])
+        calls = self.broker.await_args_list
+        self.assertEqual([call.args[0] for call in calls], ['browser_playwright', 'browser_playwright'])
+        self.assertEqual([call.args[1]['operation'] for call in calls], ['replace_text', 'replace_text'])
+        self.assertEqual([call.args[1]['text'] for call in calls], ['Fresh draft', ''])
+
     async def test_large_unicode_output_and_failure_details_stay_within_protocol_limit(self):
         self.broker.return_value = {'ok':False,'error':'Timeout','data':{'snapshot':'中'*12000,'action_may_have_applied':True}}
         result = await self.kernel.evaluate('write("\\u4e2d".repeat(12000)); await browser.page.getByRole("button").click()', self.broker)

@@ -93,7 +93,8 @@ class BrowserLocator {
   hover(options = {}) { return this.call('hover', {options}); }
   focus(options = {}) { return this.call('focus', {options}); }
   fill(text, options = {}) { return this.call('fill', {text, options}); }
-  clear(options = {}) { return this.fill('', options); }
+  replaceText(text, options = {}) { return this.call('replace_text', {text, options}); }
+  clear(options = {}) { return this.replaceText('', options); }
   pressSequentially(text, options = {}) { return this.call('type', {text, options}); }
   press(key, options = {}) { return this.call('press', {key, options}); }
   check(options = {}) { return this.call('check', {options}); }

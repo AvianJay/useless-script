@@ -213,6 +213,7 @@
         "list_skills": "查詢可用技能",
         "load_skill": "載入技能",
         "node_repl": "執行 Node REPL",
+        "browser_playwright": "操作瀏覽器",
         "read_attachment": "讀取附件",
         "read_resource": "讀取暫存資料",
         "read_skill_file": "讀取技能參考",

@@ -115,7 +115,7 @@ class AISkillTools:
                 or tool["function"]["name"] in enabled]
         if not for_bridge and "browser" in state.loaded and not context.get("_node_repl_unavailable"):
             tools = [tool for tool in tools if tool["function"]["name"] not in {
-                "browser_read", "browser_view", "browser_act", "browser_evaluate"}]
+                "browser_read", "browser_view", "browser_act", "browser_evaluate", "browser_playwright"}]
         return tools
 
     async def _tool_list_skills(self, args: dict, context: dict) -> dict:
@@ -239,8 +239,6 @@ class AISkillTools:
     async def _node_tool_bridge(self, name: str, args: dict, context: dict) -> dict:
         blocked = {"node_repl", "load_skill", "list_skills", "read_skill_file"}
         available = {item["function"]["name"] for item in self._build_request_ai_tools(context, for_bridge=True)}
-        if "browser" in skill_session(context).loaded:
-            available.add("browser_playwright")
         if name in blocked or name not in available:
             return {"ok": False, "error": "Tool is not available to this skill runtime"}
         # The context comes from the active Python request, never from Node JSON.
@@ -269,7 +267,7 @@ class AISkillTools:
         if context.get("_browser_interaction_authorized"):
             return await self.browser.execute_playwright_action(page, spec, context)
         return await self.browser.request_approval(
-            context, kind="act", payload=spec, reason="Browser REPL interaction",
+            context, kind="act", payload=spec, reason=str(args.get("reason") or "Browser interaction")[:600],
             starting_url=starting_url, presenter=context.get("_browser_approval_presenter"))
 
     @staticmethod

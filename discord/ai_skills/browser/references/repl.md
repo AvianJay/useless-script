@@ -17,7 +17,7 @@ Available globals:
 - Locator operations: `count()`, `isVisible()`, `isEnabled()`, `innerText()`,
   `textContent()`, `inputValue()`, `getAttribute(name)`, `boundingBox()`,
   `waitFor({state, timeout})`, `click()`, `dblclick()`, `hover()`, `focus()`,
-  `fill(text)`, `clear()`, `pressSequentially(text, {delay})`, `press(key)`,
+  `fill(text)`, `replaceText(text)`, `clear()`, `pressSequentially(text, {delay})`, `press(key)`,
   `check()`, `uncheck()`, `selectOption(valueOrValues)`.
 - `browser.page.mouse.click(x,y)`, `dblclick(x,y)`, `move(x,y)`, `wheel(dx,dy)`.
 - `browser.page.keyboard.press(key)`, `type(text,{delay})`, `insertText(text)`.
@@ -34,9 +34,25 @@ For a rich editor, locate the actual textbox instead of its opening button:
 ```javascript
 var page = browser.page;
 var editor = page.locator('[contenteditable="true"][role="textbox"]').first();
-await editor.fill('The text requested by the user');
+await editor.replaceText('The text requested by the user');
 write(await editor.innerText());
 ```
+
+`replaceText` uses select-all, Backspace and keyboard typing, verifies the field
+became empty before typing, and verifies the requested text afterwards. `clear()`
+is a verified `replaceText('')`. A failed verification is an error, never evidence
+that the text was replaced. Newlines use Shift+Enter; it does not press an
+unmodified Enter or activate a publishing control. Multiline text is rejected
+for a single-line input before clearing it.
+
+If Node startup fails, use direct `browser_playwright` with the same locator chain:
+
+```json
+{"operation":"replace_text","target":[{"kind":"role","role":"dialog"},{"kind":"role","role":"textbox"}],"text":"The requested replacement"}
+```
+
+This runs Python Playwright without Docker and retains the same approval checks.
+Use it instead of repeating page-script `execCommand` or DOM text assignments.
 
 If a locator action failed after the target was found, error details include
 `action_may_have_applied` and a current snapshot. Inspect before retrying. A failed

@@ -1,7 +1,7 @@
 ---
 name: browser
 description: Browse interactive public websites, follow links, search within a site, paginate, and collect structured information across multiple steps.
-allowed-tools: browser_read browser_view browser_act browser_evaluate node_repl
+allowed-tools: browser_read browser_view browser_act browser_evaluate browser_playwright node_repl
 ---
 
 Use `node_repl` for browser work. Read [the REPL API](references/repl.md) first.
@@ -19,6 +19,20 @@ that looks like an editor may be a button that only opens the real editor. Inspe
 the dialog and locate its textbox before typing. Verify text and enabled controls
 after filling. If the editor needs keyboard events, focus it and use
 `pressSequentially` or `browser.page.keyboard.insertText`.
+
+If fill or page-script insertion does not change the editor, use
+`await editor.replaceText(text)`. This focuses the actual editable target, selects
+all, presses Backspace, verifies that it cleared, types through keyboard events,
+then verifies the requested text. It does not submit. Do not keep retrying
+`execCommand`, textContent/innerHTML assignment or synthetic input events.
+If replacement fails verification, inspect the fresh snapshot and focus before
+another attempt; do not publish an unverified draft.
+
+When Node cannot start, direct `browser_playwright` exposes the same locator,
+keyboard and mouse operations. Use `operation: replace_text` with an observed
+`target` chain and `text` for editor recovery. Docker failure does not prevent
+typing with Python Playwright. Continue through this fallback before asking the
+user to edit manually. Do not restart a browser to recover an input failure.
 
 Coordinates are a fallback based on a current viewport screenshot/visual analysis
 or an observed `boundingBox()`. They use viewport CSS pixels. Reinspect after

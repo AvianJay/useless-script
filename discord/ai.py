@@ -88,6 +88,7 @@ from ai_provider import (
 )
 
 import ai_browser
+from ai_browser_playwright import BROWSER_PLAYWRIGHT_TOOL_SCHEMA
 from ai_skill_tools import AISkillTools, SKILL_TOOL_NAMES
 from ai_knowledge import PROACTIVE_MEMORY_PROMPT
 from ai_knowledge_tools import AIKnowledgeTools, KNOWLEDGE_NOTIFY_CHANNEL_KEY, KNOWLEDGE_TOOL_SCHEMAS
@@ -2096,6 +2097,7 @@ class AICommands(AISkillTools, AIKnowledgeTools, commands.Cog):
         "browser_view": "ai.tool_label.browser_view",
         "browser_act": "ai.tool_label.browser_act",
         "browser_evaluate": "ai.tool_label.browser_evaluate",
+        "browser_playwright": "ai.tool_label.browser_playwright",
     }
     # One short, public-facing argument per tool shown next to its label. Browser tools are
     # deliberately absent: their arguments are redacted from logs and stay off the channel too.
@@ -7271,6 +7273,7 @@ class AICommands(AISkillTools, AIKnowledgeTools, commands.Cog):
 
     def _build_browser_ai_tools(self) -> list[dict]:
         return [
+            BROWSER_PLAYWRIGHT_TOOL_SCHEMA,
             {
                 "type": "function",
                 "function": {
