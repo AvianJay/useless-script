@@ -9,7 +9,7 @@ from unittest.mock import AsyncMock, patch
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from ai import AICommands
-from ai_skills import skill_session
+from ai_skills import get_skill_registry, skill_session
 
 
 def response(content='', calls=None):
@@ -30,6 +30,55 @@ class AISkillToolTests(unittest.IsolatedAsyncioTestCase):
 
     async def asyncTearDown(self):
         await self.cog._close_skill_session(self.context)
+
+    def test_catalog_maps_unloaded_tools_to_skills_without_exposing_schemas(self):
+        with patch.object(self.cog, '_skill_availability', return_value=(True, None)):
+            catalog = self.cog._skill_catalog_prompt()
+        for skill in get_skill_registry().skills.values():
+            entry = next(line for line in catalog.splitlines() if line.startswith(f'- {skill.name}:'))
+            for tool_name in skill.tools:
+                self.assertIn(tool_name, entry)
+        self.assertIn('including when the user only asks whether you have that tool', catalog)
+        offered = {tool['function']['name'] for tool in self.cog._build_request_ai_tools(self.context)}
+        self.assertNotIn('get_user', offered)
+        self.assertEqual(skill_session(self.context).loaded, set())
+
+    async def test_list_skills_reports_tool_names_availability_and_loaded_state(self):
+        with patch.object(self.cog, '_skill_availability', return_value=(True, None)):
+            result = await self.cog._execute_ai_tool('list_skills', {}, self.context)
+            skills = {skill['name']: skill for skill in result['data']['skills']}
+            self.assertIn('get_user', skills['discord-investigate']['tools'])
+            self.assertTrue(skills['discord-investigate']['available'])
+            self.assertFalse(skills['discord-investigate']['loaded'])
+            self.assertEqual(skill_session(self.context).loaded, set())
+
+            await self.cog._execute_ai_tool('load_skill', {'name': 'discord-investigate'}, self.context)
+            result = await self.cog._execute_ai_tool('list_skills', {}, self.context)
+            loaded = next(skill for skill in result['data']['skills'] if skill['name'] == 'discord-investigate')
+            self.assertTrue(loaded['loaded'])
+            self.assertEqual(loaded['tools'], skills['discord-investigate']['tools'])
+
+        with patch.object(self.cog, '_skill_availability', return_value=(False, 'Not configured')):
+            result = await self.cog._execute_ai_tool('list_skills', {}, self.context)
+        self.assertTrue(all(not skill['available'] and skill['reason'] == 'Not configured'
+                            for skill in result['data']['skills']))
+
+    def test_emulated_prompt_preserves_discovery_of_tools_outside_current_schemas(self):
+        with patch.object(self.cog, '_skill_availability', return_value=(True, None)):
+            catalog = self.cog._skill_catalog_prompt()
+        messages = self.cog._prepare_tool_emulation_messages(
+            [{'role': 'system', 'content': catalog},
+             {'role': 'user', 'content': 'do u have get_user tool'}],
+            self.cog._build_request_ai_tools(self.context),
+        )
+        prompt = messages[0]['content']
+        schemas = json.loads(next(line[14:] for line in prompt.splitlines() if line.startswith('Tool schemas: ')))
+        self.assertNotIn('get_user', schemas)
+        self.assertIn('list_skills', schemas)
+        self.assertIn('load_skill', schemas)
+        self.assertIn('before claiming a tool is missing', prompt)
+        self.assertEqual(messages[1]['content'], catalog)
+        self.assertIn('get_user', messages[1]['content'])
 
     async def test_tools_are_loaded_on_demand_and_not_shared_between_requests(self):
         before = {tool['function']['name'] for tool in self.cog._build_request_ai_tools(self.context)}
