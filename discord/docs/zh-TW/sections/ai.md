@@ -38,10 +38,15 @@ AI 回覆可能會排成卡片、圖庫，或附上連結按鈕。需要你從�
 | `y!ai-knowledge [query]` | 前綴版知識搜尋 |
 | `y!ai-knowledge submit "標題" 內容` | 前綴版投稿 |
 | `y!ai-knowledge status submission_id` | 前綴版投稿狀態查詢 |
+| `y!ai-knowledge review submission_id` | Bot 擁有者開啟人工覆核按鈕；點「檢視投稿」私密查看原文 |
+| `y!ai-knowledge approve submission_id [說明]` | Bot 擁有者直接核准投稿，包括已被 AI 退件的投稿 |
+| `y!ai-knowledge reject submission_id [說明]` | Bot 擁有者駁回未發布的投稿 |
 | `y!ai-config knowledge-channel #頻道` | 設定通知頻道；`off` 關閉 |
 | `y!ai-knowledge remove knowledge_id` | Bot 擁有者下架知識，停止搜尋與自動帶入 |
 
-- 使用既有 `ai_review_model` 自動審核，沿用 `y!ai-config review-model` 設定。投稿先進背景佇列，只有審核通過才會正式發布；拒絕、格式錯誤與服務失敗都不會發布。
+- 使用既有 `ai_review_model` 自動審核，沿用 `y!ai-config review-model` 設定。投稿先進背景佇列，通過自動審核或 Bot 擁有者人工核准後才會正式發布。
+- 審核通知附「檢視投稿／人工通過／人工駁回」按鈕，僅 Bot 擁有者可操作，重啟後仍有效。待審、審核中、已退件或審核失敗的投稿都能人工覆核；人工結果會記錄審核者 ID 並重新通知，AI 晚到的結果不會覆蓋人工決定。舊通知可用 `review` 或 `approve` 加投稿 ID 補審。
+- 人工核准仍會檢查修訂版本，不能覆蓋較新的內容或恢復已下架知識。重複核准不會重複發布；已發布投稿請用 `remove` 下架。
 - 單筆標題最多 80 字、內容最多 4,000 字，每人每小時最多 5 筆新投稿。相同投稿不會重複排隊；修訂有版本檢查，避免覆蓋審核期間的新內容。
 - 審核失敗會自動重試最多 3 次；重啟後會恢復待審投稿。通知失敗會保留並重試，未設定頻道時可日後設定再補送。
 - 管理員通知包含投稿 ID、結果、審核模型與說明；不會轉貼被拒絕或尚未審核的原文。未發布投稿只供投稿者與 Bot 擁有者查詢。

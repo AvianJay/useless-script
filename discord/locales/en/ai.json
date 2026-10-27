@@ -293,6 +293,10 @@
         "unknown_time": "unknown time"
     },
     "knowledge": {
+        "already_approved": "This submission is already published. To withdraw it, use ai-knowledge remove {knowledge_id}.",
+        "button_inspect": "View submission",
+        "button_approve": "Approve manually",
+        "button_reject": "Reject manually",
         "channel_cleared": "✅ Global knowledge review notifications disabled.",
         "channel_invalid": "❌ Text channel not found. Provide a channel mention or ID.",
         "channel_permissions": "❌ The bot needs View Channel, Send Messages and Embed Links permissions.",
@@ -300,12 +304,20 @@
         "channel_status": "Global knowledge administrator notification channel ID: {channel_id} (0 means disabled).",
         "empty": "No matching published knowledge.",
         "invalid": "❌ Could not submit: {reason}",
+        "invalid_review_reason": "❌ Review explanations must be at most 400 characters and contain no sensitive data or prompt injections.",
+        "manual_approved": "Manually approved by a bot owner.",
+        "manual_rejected": "Manually rejected by a bot owner.",
+        "manual_notification_title": "Global knowledge manual review result",
         "not_found": "❌ Not found, or you cannot access this submission.",
         "notification_body": "Submission: {submission_id}\nKnowledge: {knowledge_id}\nResult: {status}\nContributor ID: {user_id}\nReview model: {model}",
         "notification_title": "Global knowledge automatic review result",
+        "owner_only": "❌ Only bot owners can inspect submission drafts or review them manually.",
+        "preview_file": "The full submission is attached as a text file, visible only to you.",
         "reason": "Review explanation",
         "removed": "✅ Knowledge withdrawn from global search and automatic context.",
         "results_file": "Found {count} published entries; full content is attached as a text file.",
+        "reviewed_by": "Manual reviewer ID: {user_id}",
+        "reviewer": "Manual reviewer ID",
         "save_failed": "❌ Could not save the setting. Try again later.",
         "status_pending": "Pending automatic review",
         "status_reviewing": "Under automatic review",
@@ -313,7 +325,9 @@
         "status_rejected": "Rejected",
         "status_error": "Review failed; not published",
         "submission_status": "Submission: {submission_id}\nStatus: {status}\nKnowledge ID: {knowledge_id}\nReview model: {model}\nExplanation: {reason}",
-        "submitted": "✅ Submission {submission_id} received. Status: {status}. It becomes public to all users and servers only after review-model approval. Use the knowledge status command to check the result.",
-        "title": "Public title"
+        "submitted": "✅ Submission {submission_id} received. Status: {status}. It becomes public to all users and servers after automatic review or manual bot-owner approval. Use the knowledge status command to check the result.",
+        "title": "Public title",
+        "unavailable": "❌ Knowledge features are temporarily unavailable. Try again later.",
+        "withdrawn_submission": "❌ This submission's knowledge has been withdrawn. Create a new submission to publish it again."
     }
 }

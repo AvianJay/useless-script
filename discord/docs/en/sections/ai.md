@@ -32,10 +32,15 @@ Public knowledge is shared by all users, servers and DMs, stored separately from
 | `y!ai-knowledge [query]` | Prefix knowledge search |
 | `y!ai-knowledge submit "Title" content` | Prefix contribution |
 | `y!ai-knowledge status submission_id` | Prefix submission status |
+| `y!ai-knowledge review submission_id` | Bot owner: open review buttons; View submission shows the full draft privately |
+| `y!ai-knowledge approve submission_id [reason]` | Bot owner: approve a submission, including one rejected by the AI |
+| `y!ai-knowledge reject submission_id [reason]` | Bot owner: reject an unpublished submission |
 | `y!ai-config knowledge-channel #channel` | Configure notifications; use `off` to disable |
 | `y!ai-knowledge remove knowledge_id` | Bot owner: withdraw knowledge from search and automatic context |
 
-- Background reviews use the existing `ai_review_model`, configured with `y!ai-config review-model`. Only approved submissions are published. Rejection, malformed responses and service errors never publish content.
+- Background reviews use the existing `ai_review_model`, configured with `y!ai-config review-model`. Publication requires automatic approval or manual approval by a bot owner.
+- Review notifications include View submission, Approve manually and Reject manually buttons. Only bot owners can use them, and they work after a restart. Pending, in-progress, rejected and failed submissions can be reviewed manually. Decisions record the reviewer ID and trigger a new notification; late AI results cannot overwrite them. Use `review` or `approve` with the submission ID for older notifications.
+- Manual approval still checks revision versions and cannot overwrite newer content or restore withdrawn entries. Repeated approval does not republish; use `remove` to withdraw published knowledge.
 - Titles allow 80 characters and content 4,000 characters; each user can create 5 submissions per hour. Identical submissions are deduplicated. Revision version checks prevent overwriting newer content.
 - Failed reviews retry up to 3 times. Pending reviews resume after restart; failed notifications are retained for retry and delivered after a channel is configured.
 - Administrator notifications include the submission ID, result, model and explanation, without reposting rejected/unreviewed text. Unpublished submissions are visible only to their contributor and bot owners.

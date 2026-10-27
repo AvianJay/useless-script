@@ -288,6 +288,10 @@
         "unknown_time": "不明な時間"
     },
     "knowledge": {
+        "already_approved": "この投稿はすでに公開されています。取り下げるには ai-knowledge remove {knowledge_id} を使用してください。",
+        "button_inspect": "投稿を確認",
+        "button_approve": "手動で承認",
+        "button_reject": "手動で却下",
         "channel_cleared": "✅ グローバル知識ベースの審査通知を無効にしました。",
         "channel_invalid": "❌ テキストチャンネルが見つかりません。チャンネルのメンションまたは ID を指定してください。",
         "channel_permissions": "❌ Bot にチャンネル閲覧・メッセージ送信・埋め込みリンクの権限が必要です。",
@@ -295,12 +299,20 @@
         "channel_status": "グローバル知識ベースの管理者通知チャンネル ID：{channel_id}（0 は無効）。",
         "empty": "一致する公開済みの知識はありません。",
         "invalid": "❌ 投稿できません：{reason}",
+        "invalid_review_reason": "❌ 審査理由は 400 文字以内で、機密情報やプロンプトインジェクションを含めないでください。",
+        "manual_approved": "Bot オーナーが手動で承認しました。",
+        "manual_rejected": "Bot オーナーが手動で却下しました。",
+        "manual_notification_title": "グローバル知識ベースの手動審査結果",
         "not_found": "❌ 見つからないか、この投稿を閲覧する権限がありません。",
         "notification_body": "投稿：{submission_id}\n知識：{knowledge_id}\n結果：{status}\n投稿者 ID：{user_id}\n審査モデル：{model}",
         "notification_title": "グローバル知識ベースの自動審査結果",
+        "owner_only": "❌ 投稿原文の確認と手動審査は Bot オーナーのみ利用できます。",
+        "preview_file": "投稿全文をテキストファイルに添付しました。あなただけに表示されます。",
         "reason": "審査の説明",
         "removed": "✅ 知識の公開を取り下げました。検索や自動コンテキストには表示されません。",
         "results_file": "公開済みの知識が {count} 件見つかりました。全文をテキストファイルに添付しました。",
+        "reviewed_by": "手動審査者 ID：{user_id}",
+        "reviewer": "手動審査者 ID",
         "save_failed": "❌ 設定を保存できませんでした。後でもう一度お試しください。",
         "status_pending": "自動審査待ち",
         "status_reviewing": "自動審査中",
@@ -308,7 +320,9 @@
         "status_rejected": "不承認",
         "status_error": "審査失敗・未公開",
         "submission_status": "投稿：{submission_id}\n状態：{status}\n知識 ID：{knowledge_id}\n審査モデル：{model}\n説明：{reason}",
-        "submitted": "✅ 投稿 {submission_id} を受け付けました。状態：{status}。review model の承認後に、すべてのユーザーとサーバーへ公開されます。知識ベースの状態コマンドで結果を確認できます。",
-        "title": "公開タイトル"
+        "submitted": "✅ 投稿 {submission_id} を受け付けました。状態：{status}。自動審査または Bot オーナーの手動承認後に、すべてのユーザーとサーバーへ公開されます。知識ベースの状態コマンドで結果を確認できます。",
+        "title": "公開タイトル",
+        "unavailable": "❌ 知識ベース機能は一時的に利用できません。後でもう一度お試しください。",
+        "withdrawn_submission": "❌ この投稿の知識は公開が取り下げられています。再公開するには新しく投稿してください。"
     }
 }

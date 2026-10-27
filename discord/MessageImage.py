@@ -1,7 +1,12 @@
-﻿from PIL import Image, ImageDraw, ImageFont, ImageSequence
+﻿from PIL import Image, ImageDraw, ImageFont, ImageOps, ImageSequence
 import io
 import os
 import sys
+import unicodedata
+from dataclasses import dataclass, replace
+from datetime import datetime, timedelta, timezone
+from functools import lru_cache
+from itertools import accumulate
 import discord
 import aiohttp
 from discord.ext import commands
@@ -22,6 +27,8 @@ import hashlib
 import tempfile
 import i18n
 from i18n import t
+import ai_emoji
+import ai_table
 if "OwnerTools" in modules:
     import OwnerTools
 
@@ -46,198 +53,402 @@ whatisthisguytalking_gif_cooldowns = {}
 whatisthisguytalking_video_cooldowns = {}
 whatisthisguytalking_images = []
 
-def resolve_mentions(text, message):
-    guild = message.guild
-    if not guild:
-         return text
-    
-    def replace_user(match):
-        uid = int(match.group(1))
-        member = guild.get_member(uid)
-        return f"@{member.display_name}" if member else match.group(0)
+QUOTE_SIZE = (1200, 630)
+QUOTE_AVATAR_SIZE = 630
+QUOTE_TEXT_BOX = (560, 50, 1150, 580)
+QUOTE_FONT_SIZES = tuple(range(55, 19, -2))
+QUOTE_NAME_FONT_SIZE = 25
+QUOTE_NAME_MIN_FONT_SIZE = 14
+QUOTE_NAME_GAP = 20
+QUOTE_MAX_CUSTOM_EMOJIS = 50
+QUOTE_ITALIC_SHEAR = 0.2
+QUOTE_ITALIC_SUPERSAMPLE = 4
+QUOTE_TEXT_COLOR = (255, 255, 255, 255)
+QUOTE_SUBTEXT_COLOR = (148, 155, 164, 255)
+QUOTE_LINK_COLOR = (0, 168, 252, 255)
+QUOTE_MENTION_COLOR = (201, 205, 251, 255)
+QUOTE_CODE_COLOR = (219, 222, 225, 255)
+QUOTE_BAR_COLOR = (78, 80, 88, 255)
+QUOTE_CODE_BLOCK_FILL = (43, 45, 49, 255)
+# 行內色塊（樣式 -> 底色），依序畫，後面的蓋在前面上面
+QUOTE_INLINE_FILLS = (
+    ("spoiler", (255, 255, 255, 26)),
+    ("code", (43, 45, 49, 255)),
+    ("mention", (88, 101, 242, 77)),
+    ("timestamp", (78, 80, 88, 122)),
+)
+QUOTE_PILL_STYLES = frozenset({"code", "mention", "timestamp"})
+# 區塊種類 -> (字型家族, 字級倍率, 文字顏色)
+QUOTE_BLOCK_STYLES = {
+    "text": ("bold", 1.0, QUOTE_TEXT_COLOR),
+    "h1": ("bold", 1.5, QUOTE_TEXT_COLOR),
+    "h2": ("bold", 1.3, QUOTE_TEXT_COLOR),
+    "h3": ("bold", 1.15, QUOTE_TEXT_COLOR),
+    "subtext": ("light", 0.75, QUOTE_SUBTEXT_COLOR),
+    "code": ("mono", 0.8, QUOTE_CODE_COLOR),
+    "name": ("light", 1.0, QUOTE_TEXT_COLOR),
+}
+QUOTE_TIMEZONE = timezone(timedelta(hours=8))
+QUOTE_TIMESTAMP_FORMATS = {"t": "%H:%M", "T": "%H:%M:%S", "d": "%Y/%m/%d", "D": "%Y/%m/%d"}
 
-    def replace_role(match):
-        rid = int(match.group(1))
-        role = guild.get_role(rid)
-        return f"@{role.name}" if role else match.group(0)
+# 避頭尾：這些標點不放在行首／行尾
+_QUOTE_NO_BREAK_BEFORE = frozenset("!),.:;?]}、。，．！？；：）」』】》〉〕…ー～")
+_QUOTE_NO_BREAK_AFTER = frozenset("([{（「『【《〈〔")
+# 常被拿來湊「空白名字」的填充字，字型多半沒有 glyph，當空白處理
+_QUOTE_BLANK_CHARS = frozenset(map(chr, (0x115F, 0x1160, 0x2800, 0x3164, 0xFFA0)))
+_QUOTE_ZERO_WIDTH_SPACE = chr(0x200B)
+_QUOTE_TEXT_PRESENTATION = chr(0xFE0E)
 
-    def replace_channel(match):
-        cid = int(match.group(1))
-        channel = guild.get_channel(cid)
-        return f"#{channel.name}" if channel else match.group(0)
+_QUOTE_CODE_BLOCK = re.compile(r"```(?:[A-Za-z0-9_+\-.#]+?\n)?\n*([\s\S]*?)\n*```")
+_QUOTE_HEADING = re.compile(r"(#{1,3}) +(?=\S)")
+_QUOTE_SUBTEXT = re.compile(r"-# +(?=\S)")
+_QUOTE_LIST_ITEM = re.compile(r"( *)([-*]|\d{1,9}\.) +(?=\S)")
+# 跟 Discord（simple-markdown）一樣，在目前位置依序試每條規則，都不符合就當一般文字
+_QUOTE_INLINE_RULES = (
+    ("escape", re.compile(r"\\([^0-9A-Za-z\s])")),
+    ("emoji", re.compile(r"<a?:(\w{1,32}):(\d{15,21})>")),
+    ("user", re.compile(r"<@!?(\d{15,21})>")),
+    ("role", re.compile(r"<@&(\d{15,21})>")),
+    ("channel", re.compile(r"<#(\d{15,21})>")),
+    ("timestamp", re.compile(r"<t:(-?\d{1,13})(?::([tTdDfFR]))?>")),
+    ("command", re.compile(r"</([^<>:\n]{1,100}):\d{15,21}>")),
+    ("autolink", re.compile(r"<(https?://[^\s>]+)>")),
+    ("url", re.compile(r"https?://[^\s<]+[^<.,:;\"')\]\s]")),
+    ("link", re.compile(r"\[((?:\\.|[^\[\]\\])+)\]\(\s*<?(https?://[^\s<>()]+)>?\s*\)")),
+    ("code", re.compile(r"(`+)(.*?[^`])\1(?!`)", re.DOTALL)),
+    ("bold", re.compile(r"\*\*(.+?)\*\*(?!\*)", re.DOTALL)),
+    ("underline", re.compile(r"__(.+?)__(?!_)", re.DOTALL)),
+    ("italic", re.compile(r"\*(?=\S)((?:\*\*|\\.|\s+(?:\\.|[^\s*\\]|\*\*)|[^\s*\\])+?)\*(?!\*)", re.DOTALL)),
+    ("italic", re.compile(r"\b_((?:__|\\.|[^\\_])+?)_\b", re.DOTALL)),
+    ("strike", re.compile(r"~~(.+?)~~", re.DOTALL)),
+    ("spoiler", re.compile(r"\|\|(.+?)\|\|", re.DOTALL)),
+)
+_QUOTE_NESTED_RULES = frozenset({"bold", "underline", "italic", "strike", "spoiler"})
+_QUOTE_INLINE_TEXT = re.compile(r".+?(?=[\\<*_~|\[`]|https?://|\Z)", re.DOTALL)
+_QUOTE_MAX_NESTING = 16
 
-    text = re.sub(r'<@!?(\d+)>', replace_user, text)
-    text = re.sub(r'<@&(\d+)>', replace_role, text)
-    text = re.sub(r'<#(\d+)>', replace_channel, text)
-    return text
 
-class Segment:
-    def __init__(self, type, content, url=None):
-        self.type = type # 'text' or 'emoji'
-        self.content = content
-        self.url = url
-        self.width = 0
-        self.height = 0
-        self.image = None
+@dataclass(slots=True)
+class _QuoteRun:
+    text: str
+    style: frozenset = frozenset()
+    emoji_id: str | None = None
 
-async def prepare_segments(text, font):
-    segments = []
-    # Split by custom emojis <a:name:id> or <:name:id>
-    pattern = r'<(a?):(\w+):(\d+)>'
-    last_pos = 0
-    temp_segments = []
-    
-    for match in re.finditer(pattern, text):
-        if match.start() > last_pos:
-            temp_segments.append(Segment('text', text[last_pos:match.start()]))
-        
-        is_animated = match.group(1) == 'a'
-        name = match.group(2)
-        emoji_id = match.group(3)
-        ext = 'gif' if is_animated else 'png'
-        url = f"https://cdn.discordapp.com/emojis/{emoji_id}.{ext}"
-        
-        temp_segments.append(Segment('emoji', name, url))
-        last_pos = match.end()
-    
-    if last_pos < len(text):
-        temp_segments.append(Segment('text', text[last_pos:]))
-    
-    # Now process text segments for Unicode Emojis
-    final_segments = []
-    for seg in temp_segments:
-        if seg.type == 'text':
-             last_idx = 0
-             # emoji.analyze yields Token objects
-             for match in emoji.analyze(seg.content, non_emoji=False):
-                 start = match.value.start
-                 end = match.value.end
-                 char = match.chars
-                 
-                 if start > last_idx:
-                     final_segments.append(Segment('text', seg.content[last_idx:start]))
-                 
-                 final_segments.append(Segment('unicode_emoji', char))
-                 last_idx = end
-             
-             if last_idx < len(seg.content):
-                 final_segments.append(Segment('text', seg.content[last_idx:]))
-        else:
-             final_segments.append(seg)
-    
-    return final_segments
 
-def get_text_size(text, font):
-    # 使用 getlength 來獲取正確的寬度（包含空格）
+@dataclass(slots=True)
+class _QuoteBlock:
+    """訊息裡的一行；同一組（引用、清單、同一個程式碼區塊）的連續行會靠左對齊成一塊"""
+    runs: list
+    kind: str = "text"
+    group: object = None
+    level: int = 0
+    bullet: str | None = None
+
+
+@dataclass(slots=True)
+class _QuotePiece:
+    """排版單位：一個字（含組合附加符號）、一個 emoji，或色塊兩側的留白"""
+    text: str = ""
+    font_path: str | None = None
+    size: int = 0
+    width: float = 0.0
+    style: frozenset = frozenset()
+    color: tuple = QUOTE_TEXT_COLOR
+    emoji: str | None = None
+    emoji_id: str | None = None
+    space: bool = False
+    breakable: bool = False  # 可以在這個 piece 前面換行
+
+
+@dataclass(slots=True)
+class _QuoteLine:
+    pieces: list
+    width: float
+    ascent: int
+    descent: int
+    height: int
+    gap: int
+    size: int
+    family: str
+    color: tuple
+    kind: str = "text"
+    group: object = None
+    inset: int = 0  # 引用線、清單縮排佔掉的寬度
+
+
+def _quote_timestamp_label(match: re.Match) -> str:
     try:
-        width = font.getlength(text)
-    except AttributeError:
-        # 舊版 Pillow 備用方案
-        bbox = font.getmask(text).getbbox()
-        width = bbox[2] - bbox[0] if bbox else 0
-    
-    # 高度使用 getbbox 或 getmetrics
-    bbox = font.getmask(text).getbbox()
-    if bbox:
-        height = bbox[3] - bbox[1]
-    else:
-        # 對於純空格，使用字體的 metrics
-        ascent, descent = font.getmetrics()
-        height = ascent + descent
-    
-    return int(width), height
+        moment = datetime.fromtimestamp(int(match.group(1)), QUOTE_TIMEZONE)
+    except (OverflowError, OSError, ValueError):
+        return match.group(0)
+    return moment.strftime(QUOTE_TIMESTAMP_FORMATS.get(match.group(2) or "f", "%Y/%m/%d %H:%M"))
 
-def get_twemoji_url(emoji_char):
-    """將 Unicode emoji 轉換為 Twemoji CDN URL"""
-    # 將 emoji 轉換為 codepoints
-    codepoints = []
-    for char in emoji_char:
-        cp = ord(char)
-        # 跳過變體選擇器 (FE0E, FE0F)
-        if cp not in (0xFE0E, 0xFE0F):
-            codepoints.append(f"{cp:x}")
-    
-    filename = "-".join(codepoints)
-    return f"https://cdn.jsdelivr.net/gh/twitter/twemoji@latest/assets/72x72/{filename}.png"
 
-def render_sheared_text(text, font_path, font_size, fill="white", shear=0.2, scale=4):
-    """Render italic-like text at a higher resolution, then downsample for sharper output."""
-    hi_font = ImageFont.truetype(font_path, font_size * scale)
-    bbox = hi_font.getbbox(text)
-    text_w = max(bbox[2] - bbox[0], 1)
-    text_h = max(bbox[3] - bbox[1], 1)
-
-    padding = 12 * scale
-    canvas_w = text_w + padding * 2
-    canvas_h = text_h + padding * 2
-
-    text_img = Image.new("RGBA", (canvas_w, canvas_h), (0, 0, 0, 0))
-    text_draw = ImageDraw.Draw(text_img)
-    text_draw.text((padding - bbox[0], padding - bbox[1]), text, font=hi_font, fill=fill)
-
-    sheared = text_img.transform(
-        text_img.size,
-        Image.AFFINE,
-        (1, shear, 0, 0, 1, 0),
-        resample=Image.Resampling.BICUBIC,
+def _quote_markup_label(message: discord.Message, kind: str, match: re.Match) -> str:
+    """把提及、時間戳、指令換成 Discord 上看到的文字；快取裡沒有就找訊息自帶的提及資料"""
+    if kind == "timestamp":
+        return _quote_timestamp_label(match)
+    if kind == "command":
+        return f"/{match.group(1)}"
+    guild = message.guild
+    target_id = int(match.group(1))
+    if kind == "user":
+        user = (
+            (guild and guild.get_member(target_id))
+            or next((user for user in message.mentions if user.id == target_id), None)
+            or bot.get_user(target_id)
+        )
+        return f"@{user.display_name}" if user else "@unknown-user"
+    if kind == "role":
+        role = (guild and guild.get_role(target_id)) or next(
+            (role for role in message.role_mentions if role.id == target_id), None
+        )
+        return f"@{role.name}" if role else "@deleted-role"
+    channel = (
+        (guild and guild.get_channel_or_thread(target_id))
+        or bot.get_channel(target_id)
+        or next((channel for channel in message.channel_mentions if channel.id == target_id), None)
     )
+    name = getattr(channel, "name", None)
+    return f"#{name}" if name else "#unknown"
 
-    downsampled = sheared.resize(
-        (max(sheared.width // scale, 1), max(sheared.height // scale, 1)),
-        Image.Resampling.LANCZOS,
-    )
-    cropped_bbox = downsampled.getbbox()
-    return downsampled.crop(cropped_bbox) if cropped_bbox else downsampled
 
-def draw_quote_signature(target_img, center_x, name_y, name):
-    """Draw the author name on the final opaque image to avoid fuzzy edges from later compositing."""
-    sheared_name = render_sheared_text(
-        f" - {name}",
-        os.path.join(fontdir, "notolight.ttf"),
-        25,
-        fill="white",
-        shear=0.2,
-        scale=4,
-    )
-    name_x = center_x - sheared_name.width // 2
-    target_img.paste(sheared_name, (name_x, int(name_y)), sheared_name)
+def _parse_quote_inline(text: str, style: frozenset, resolve, depth: int = 0) -> list[_QuoteRun]:
+    runs = []
+    rules = _QUOTE_INLINE_RULES if depth < _QUOTE_MAX_NESTING else ()
+    position = 0
+    while position < len(text):
+        for kind, pattern in rules:
+            match = pattern.match(text, position)
+            if match:
+                break
+        else:
+            kind, match = "text", _QUOTE_INLINE_TEXT.match(text, position)
+        position = match.end()
 
-async def load_emojis(segments, size):
-    async with aiohttp.ClientSession() as session:
-        for seg in segments:
-            if seg.type == 'emoji' and seg.url:
-                try:
-                    async with session.get(seg.url) as resp:
-                        if resp.status == 200:
-                            data = await resp.read()
-                            img = Image.open(io.BytesIO(data)).convert("RGBA")
-                            img = img.resize((size, size), Image.Resampling.LANCZOS)
-                            seg.image = img
-                            seg.width = size
-                            seg.height = size
-                except Exception as e:
-                    print(f"Failed to load emoji {seg.url}: {e}")
-                    # Fallback to text representation
-                    seg.type = 'text'
-                    seg.content = f":{seg.content}:"
-            
-            # 處理 Unicode emoji - 從 Twemoji 下載圖片
-            elif seg.type == 'unicode_emoji':
-                url = get_twemoji_url(seg.content)
-                try:
-                    async with session.get(url) as resp:
-                        if resp.status == 200:
-                            data = await resp.read()
-                            img = Image.open(io.BytesIO(data)).convert("RGBA")
-                            img = img.resize((size, size), Image.Resampling.LANCZOS)
-                            seg.image = img
-                            seg.width = size
-                            seg.height = size
-                        else:
-                            # 如果下載失敗，保留為文字
-                            print(f"Failed to load unicode emoji {seg.content}, status: {resp.status}")
-                except Exception as e:
-                    print(f"Failed to load unicode emoji {seg.content}: {e}")
+        if kind in ("text", "escape"):
+            value = match.group(1) if kind == "escape" else match.group(0)
+            if runs and runs[-1].style == style and runs[-1].emoji_id is None:
+                runs[-1].text += value
+            else:
+                runs.append(_QuoteRun(value, style))
+        elif kind == "emoji":
+            runs.append(_QuoteRun(f":{match.group(1)}:", style, match.group(2)))
+        elif kind in ("autolink", "url"):
+            runs.append(_QuoteRun(match.group(1) if kind == "autolink" else match.group(0), style | {"link"}))
+        elif kind == "link":
+            runs.extend(_parse_quote_inline(match.group(1), style | {"link"}, resolve, depth + 1))
+        elif kind == "code":
+            code = match.group(2)
+            runs.append(_QuoteRun(code.strip() or code, style | {"code"}))
+        elif kind in _QUOTE_NESTED_RULES:
+            runs.extend(_parse_quote_inline(match.group(1), style | {kind}, resolve, depth + 1))
+        else:
+            label_style = "timestamp" if kind == "timestamp" else "mention"
+            runs.append(_QuoteRun(resolve(kind, match), style | {label_style}))
+    return runs
+
+
+def _split_quote_runs(runs: list[_QuoteRun], line_count: int) -> list[list[_QuoteRun]]:
+    lines = [[] for _ in range(line_count)]
+    index = 0
+    for run in runs:
+        if run.emoji_id:
+            lines[index].append(run)
+            continue
+        for offset, part in enumerate(run.text.split("\n")):
+            if offset:
+                index = min(index + 1, line_count - 1)
+            if part:
+                lines[index].append(_QuoteRun(part, run.style))
+    return lines
+
+
+def _parse_quote_lines(text: str, resolve) -> list[_QuoteBlock]:
+    """先拆掉每行的區塊語法（引用、標題、小字、清單），剩下的接起來一起解析行內語法，跨行的 ||暴雷|| 才對得起來"""
+    entries = []
+    in_block_quote = False
+    for line in text.split("\n"):
+        quote = in_block_quote
+        if not quote and line.startswith(">>> "):
+            in_block_quote = quote = True
+            line = line[4:]
+        elif not quote and line.startswith("> "):
+            quote = True
+            line = line[2:]
+
+        block = _QuoteBlock([])
+        if match := _QUOTE_HEADING.match(line):
+            block.kind = f"h{len(match.group(1))}"
+        elif match := _QUOTE_SUBTEXT.match(line):
+            block.kind = "subtext"
+        elif match := _QUOTE_LIST_ITEM.match(line):
+            block.level = min(len(match.group(1)) // 2, 3)
+            marker = match.group(2)
+            block.bullet = f"{marker} " if marker[0].isdigit() else ("• " if block.level == 0 else "◦ ")
+        if match:
+            line = line[match.end():]
+        block.group = "quote" if quote else ("list" if block.bullet else None)
+        entries.append((line, block))
+
+    runs = _parse_quote_inline("\n".join(line for line, _ in entries), frozenset(), resolve)
+    for (_, block), line_runs in zip(entries, _split_quote_runs(runs, len(entries))):
+        block.runs = line_runs
+    return [block for _, block in entries]
+
+
+def _parse_quote_markdown(content: str, resolve) -> list[_QuoteBlock]:
+    """把 Discord markdown 拆成一行一行的區塊；resolve(kind, match) 回傳提及、時間戳要顯示的文字"""
+    content = unicodedata.normalize("NFC", content.replace("\r\n", "\n").replace("\r", "\n")).replace("\t", "    ")
+    blocks = []
+    cursor = 0
+    for index, match in enumerate(_QUOTE_CODE_BLOCK.finditer(content)):
+        before = content[cursor:match.start()]
+        if cursor:
+            before = before.removeprefix("\n")
+        if before:
+            blocks.extend(_parse_quote_lines(before.removesuffix("\n"), resolve))
+        code = match.group(1)
+        if code.strip():
+            blocks.extend(
+                _QuoteBlock([_QuoteRun(line)] if line else [], "code", ("code", index))
+                for line in code.split("\n")
+            )
+        cursor = match.end()
+    rest = content[cursor:]
+    if cursor:
+        rest = rest.removeprefix("\n")
+    if rest:
+        blocks.extend(_parse_quote_lines(rest, resolve))
+
+    # 連續空行只留一行，頭尾的空行拿掉
+    result = []
+    for block in blocks:
+        if block.kind != "code" and not block.bullet and not any(run.emoji_id or run.text.strip() for run in block.runs):
+            if result and result[-1].kind != "blank":
+                result.append(_QuoteBlock([], "blank", block.group))
+        else:
+            result.append(block)
+    while result and result[-1].kind == "blank":
+        result.pop()
+    return result
+
+
+@lru_cache(maxsize=None)
+def _quote_font_paths(family: str) -> tuple[str, ...]:
+    """字型家族的主字型，加上缺字時依序往後找的字型（系統字型清單跟 AI 表格圖片共用）"""
+    bold = family == "bold"
+    paths = [os.path.join(fontdir, "notobold.ttf" if bold else "notolight.ttf")]
+    if family == "mono":
+        paths.insert(0, ai_table._matplotlib_font("DejaVuSansMono.ttf"))
+    if not bold:
+        # Noto Sans TC 的拉丁擴充、西里爾、希臘字母不齊，先用同系列的 Noto Sans 補
+        paths.append(os.path.join(fontdir, "notoregular.ttf"))
+    paths.extend(ai_table._fallback_font_paths(bold))
+    return tuple(dict.fromkeys(path for path in paths if path and os.path.exists(path)))
+
+
+@lru_cache(maxsize=8192)
+def _quote_font_path(family: str, char: str) -> str | None:
+    """第一個有這個字的字型；都沒有時回傳 None"""
+    codepoint = ord(char)
+    return next((path for path in _quote_font_paths(family) if codepoint in ai_table._font_codepoints(path)), None)
+
+
+@lru_cache(maxsize=64)
+def _quote_font(path: str, size: int):
+    return ImageFont.truetype(path, size, layout_engine=ImageFont.Layout.BASIC)
+
+
+@lru_cache(maxsize=65536)
+def _quote_text_width(path: str, size: int, text: str) -> float:
+    return _quote_font(path, size).getlength(text)
+
+
+def _quote_pieces_width(pieces) -> float:
+    return sum(piece.width for piece in pieces)
+
+
+def _quote_bar_metrics(size: int) -> tuple[int, int]:
+    """引用線的寬度，以及引用線跟文字的距離"""
+    return max(2, round(size * 0.08)), max(4, round(size * 0.35))
+
+
+def _quote_code_padding(size: int) -> int:
+    return max(4, round(size * 0.3))
+
+
+def _quote_emoji_margin(emoji_size: int) -> int:
+    return max(1, round(emoji_size * 0.04))
+
+
+def _is_variation_selector(char: str) -> bool:
+    codepoint = ord(char)
+    return 0xFE00 <= codepoint <= 0xFE0F or 0xE0100 <= codepoint <= 0xE01EF
+
+
+def _append_quote_chars(pieces: list, text: str, family: str, size: int, color, style: frozenset):
+    primary = _quote_font_paths(family)[0]
+    breakable = False
+    for char in text:
+        if char.isspace() or char in _QUOTE_BLANK_CHARS:
+            path = None if char in _QUOTE_BLANK_CHARS else _quote_font_path(family, char)
+            width = _quote_text_width(path, size, char) if path else _quote_text_width(primary, size, " ")
+            pieces.append(_QuotePiece(" ", None, size, width, style, color, space=True))
+            continue
+        if char == _QUOTE_ZERO_WIDTH_SPACE:
+            breakable = True
+            continue
+        category = unicodedata.category(char)
+        # 控制字元、方向覆寫、零寬字元、落單的變體選擇符都不畫，免得變成方塊
+        if category in ("Cc", "Cf", "Cs") or _is_variation_selector(char):
+            continue
+        if category.startswith("M") and pieces and pieces[-1].font_path and not pieces[-1].space:
+            # 組合附加符號（注音調號、重音、Zalgo）跟前一個字畫在一起
+            previous = pieces[-1]
+            if ord(char) in ai_table._font_codepoints(previous.font_path):
+                previous.text += char
+                previous.width = _quote_text_width(previous.font_path, previous.size, previous.text)
+                continue
+        path = _quote_font_path(family, char)
+        if path is None:
+            # 所有字型都沒有的字（例如 𝓐 這類花體）改用相容字形 A
+            normalized = unicodedata.normalize("NFKC", char)
+            if normalized != char and all(_quote_font_path(family, item) for item in normalized):
+                _append_quote_chars(pieces, normalized, family, size, color, style)
+                continue
+            path = primary
+        pieces.append(_QuotePiece(char, path, size, _quote_text_width(path, size, char), style, color, breakable=breakable))
+        breakable = False
+
+
+def _append_quote_text(pieces: list, text: str, family: str, size: int, color, style: frozenset, emoji_size: int):
+    cursor = 0
+    for found in emoji.emoji_list(text):
+        _append_quote_chars(pieces, text[cursor:found["match_start"]], family, size, color, style)
+        sequence = found["emoji"]
+        # ©、™、♠ 這類預設是文字樣式的符號也畫成 Twemoji；只有後面接 U+FE0E（明確要求文字樣式）才照文字畫
+        text_presentation = text[found["match_end"]:found["match_end"] + 1] == _QUOTE_TEXT_PRESENTATION
+        if text_presentation or ai_emoji.twemoji_glyph(sequence) is None:
+            _append_quote_chars(pieces, sequence, family, size, color, style)
+        else:
+            width = emoji_size + 2 * _quote_emoji_margin(emoji_size)
+            pieces.append(_QuotePiece(width=width, style=style, color=color, emoji=sequence))
+        cursor = found["match_end"]
+    _append_quote_chars(pieces, text[cursor:], family, size, color, style)
+
+
+def _quote_run_format(style: frozenset, family: str, size: int, color) -> tuple[str, int, tuple]:
+    if "bold" in style and family == "light":
+        family = "bold"
+    if "code" in style:
+        family, size, color = "mono", max(1, round(size * 0.85)), QUOTE_CODE_COLOR
+    if "mention" in style:
+        color = QUOTE_MENTION_COLOR
+    elif "link" in style:
+        color = QUOTE_LINK_COLOR
+    return family, size, color
+
 
 def _is_cjk(char):
     """判斷字元是否為 CJK（中日韓）字元，用於逐字換行"""
@@ -256,87 +467,359 @@ def _is_cjk(char):
         (0xAC00 <= cp <= 0xD7AF)       # Hangul Syllables
     )
 
-def _split_text_for_wrapping(text):
-    """將文字拆分為可換行的單位：CJK 字元逐字拆分，其他按空白分割"""
-    tokens = []
-    buffer = ""
-    for char in text:
-        if _is_cjk(char):
-            if buffer:
-                # 先把累積的非 CJK 文字按空白分割加入
-                tokens.extend(re.split(r'(\s+)', buffer))
-                buffer = ""
-            tokens.append(char)
+
+def _quote_piece_is_wide(piece: _QuotePiece) -> bool:
+    return bool(piece.emoji or piece.emoji_id or (piece.text and _is_cjk(piece.text[0])))
+
+
+def _mark_quote_breaks(pieces: list):
+    """空白後面可以換行；中日韓文字、emoji 前後都可以換行，但避開不能放行首／行尾的標點"""
+    for previous, piece in zip(pieces, pieces[1:]):
+        if piece.space:
+            continue
+        if previous.space:
+            piece.breakable = True
+        elif (
+            (_quote_piece_is_wide(previous) or _quote_piece_is_wide(piece))
+            and piece.text[:1] not in _QUOTE_NO_BREAK_BEFORE
+            and previous.text[-1:] not in _QUOTE_NO_BREAK_AFTER
+        ):
+            piece.breakable = True
+
+
+def _quote_pieces(runs, family: str, size: int, color, emoji_size: int, custom_emojis=None) -> list[_QuotePiece]:
+    custom_emojis = custom_emojis or {}
+    pieces = []
+    for run in runs:
+        run_family, run_size, run_color = _quote_run_format(run.style, family, size, color)
+        pill_padding = max(2, round(size * 0.12)) if run.style & QUOTE_PILL_STYLES else 0
+        if pill_padding:
+            pieces.append(_QuotePiece(width=pill_padding, style=run.style))
+        if run.emoji_id and run.emoji_id in custom_emojis:
+            width = emoji_size + 2 * _quote_emoji_margin(emoji_size)
+            pieces.append(_QuotePiece(width=width, style=run.style, emoji_id=run.emoji_id))
         else:
-            buffer += char
-    if buffer:
-        tokens.extend(re.split(r'(\s+)', buffer))
-    return [t for t in tokens if t]  # 過濾空字串
+            _append_quote_text(pieces, run.text, run_family, run_size, run_color, run.style, emoji_size)
+        if pill_padding:
+            pieces.append(_QuotePiece(width=pill_padding, style=run.style))
+    _mark_quote_breaks(pieces)
+    return pieces
 
-def layout_segments(segments, font, max_width, emoji_size, emoji_font=None):
-    lines = []
-    current_line = []
-    current_width = 0
-    
-    space_width, _ = get_text_size(" ", font) # Measure space once
 
-    for seg in segments:
-        if seg.type == 'emoji':
-             seg.width = emoji_size
-             seg.height = emoji_size
-        elif seg.type == 'unicode_emoji':
-             # Unicode emoji 將會被下載為圖片，使用與自定義 emoji 相同的尺寸
-             seg.width = emoji_size
-             seg.height = emoji_size
-        else: # text
-             pass # width calculated below
+def _strip_quote_spaces(row: list) -> list:
+    end = len(row)
+    while end and row[end - 1].space:
+        end -= 1
+    return row[:end]
 
-        if seg.type == 'text':
-            # Split text logic - 使用支援 CJK 逐字換行的拆分
-            words = _split_text_for_wrapping(seg.content)
-            for word in words:
-                word_w, word_h = get_text_size(word, font)
-                if current_width + word_w > max_width and current_line:
-                     lines.append(current_line)
-                     current_line = []
-                     current_width = 0
-                
-                word_seg = Segment('text', word)
-                word_seg.width = word_w
-                word_seg.height = word_h
-                current_line.append(word_seg)
-                current_width += word_w
+
+def _wrap_quote_pieces(pieces: list, max_width: float, keep_indent: bool = False) -> list[list]:
+    rows = []
+    row = []
+    width = 0.0
+    for piece in pieces:
+        if not row and piece.space and (rows or not keep_indent):
+            continue
+        if row and not piece.space and width + piece.width > max_width:
+            cut = None if piece.breakable else next(
+                (index for index in range(len(row) - 1, 0, -1) if row[index].breakable), None
+            )
+            if cut is None:
+                # 這個 piece 前面本來就能換行，或整段都沒有換行點（很長的英文字）就硬斷
+                rows.append(_strip_quote_spaces(row))
+                row = []
+            else:
+                rows.append(_strip_quote_spaces(row[:cut]))
+                row = row[cut:]
+            width = _quote_pieces_width(row)
+            if row and width + piece.width > max_width:
+                rows.append(row)
+                row = []
+                width = 0.0
+        row.append(piece)
+        width += piece.width
+    rows.append(_strip_quote_spaces(row))
+    return rows
+
+
+def _layout_quote_block(block: _QuoteBlock, size: int, max_width: float, custom_emojis) -> list[_QuoteLine]:
+    family, scale, color = QUOTE_BLOCK_STYLES.get(block.kind, QUOTE_BLOCK_STYLES["text"])
+    block_size = max(1, round(size * scale))
+    ascent, descent = _quote_font(_quote_font_paths(family)[0], block_size).getmetrics()
+    gap = max(2, round(block_size * 0.18))
+
+    def make_line(pieces, inset):
+        return _QuoteLine(
+            pieces, _quote_pieces_width(pieces), ascent, descent, ascent + descent + gap, gap,
+            block_size, family, color, block.kind, block.group, inset,
+        )
+
+    if block.kind == "blank":
+        # 段落間的空行只留半行高
+        blank = make_line([], 0)
+        blank.height //= 2
+        blank.gap = 0
+        return [blank]
+
+    inset = 0
+    if block.group == "quote":
+        inset += sum(_quote_bar_metrics(size))
+    if block.bullet:
+        inset += block.level * block_size
+    emoji_size = ascent + descent
+    bullet = _quote_pieces([_QuoteRun(block.bullet)], family, block_size, color, emoji_size) if block.bullet else []
+    hanging = _quote_pieces_width(bullet)
+    padding = 2 * _quote_code_padding(size) if block.kind == "code" else 0
+    pieces = _quote_pieces(block.runs, family, block_size, color, emoji_size, custom_emojis)
+    rows = _wrap_quote_pieces(pieces, max(1, max_width - inset - hanging - padding), keep_indent=block.kind == "code")
+    return [make_line(bullet + rows[0], inset)] + [make_line(row, inset + hanging) for row in rows[1:]]
+
+
+def _layout_quote(blocks, size: int, max_width: float, custom_emojis) -> list[_QuoteLine]:
+    return [line for block in blocks for line in _layout_quote_block(block, size, max_width, custom_emojis)]
+
+
+def _quote_layout_height(lines: list[_QuoteLine], size: int) -> int:
+    code_groups = {line.group for line in lines if line.kind == "code"}
+    return sum(line.height for line in lines) + len(code_groups) * 2 * _quote_code_padding(size)
+
+
+def _ellipsize_quote_line(line: _QuoteLine, max_width: float) -> _QuoteLine:
+    suffix = []
+    _append_quote_chars(suffix, "…", line.family, line.size, line.color, frozenset())
+    suffix_width = _quote_pieces_width(suffix)
+    pieces = list(line.pieces)
+    while pieces and (pieces[-1].space or _quote_pieces_width(pieces) + suffix_width > max_width):
+        pieces.pop()
+    pieces += suffix
+    return replace(line, pieces=pieces, width=_quote_pieces_width(pieces))
+
+
+def _fit_quote_layout(blocks, max_width: int, max_height: int, custom_emojis) -> tuple[int, list[_QuoteLine]]:
+    """找放得下的最大字級；最小字級還放不下就截斷，最後一行補上刪節號"""
+    low, high = 0, len(QUOTE_FONT_SIZES) - 1
+    best = None
+    while low <= high:
+        middle = (low + high) // 2
+        size = QUOTE_FONT_SIZES[middle]
+        lines = _layout_quote(blocks, size, max_width, custom_emojis)
+        if _quote_layout_height(lines, size) <= max_height:
+            best = size, lines
+            high = middle - 1
         else:
-             # Emoji or Unicode Emoji
-             if current_width + seg.width > max_width and current_line:
-                 lines.append(current_line)
-                 current_line = []
-                 current_width = 0
-             current_line.append(seg)
-             current_width += seg.width
-                
-    if current_line:
-        lines.append(current_line)
-    return lines
+            low = middle + 1
+    if best:
+        return best
 
-async def create(message: discord.Message, animate_gif=False) -> tuple[io.BytesIO, str]:
-    name = message.author.display_name
-    avatar_url = message.author.display_avatar.url if message.author.display_avatar else None
-    content = message.content.strip()
-    
-    # Resolve mentions
-    content = resolve_mentions(content, message)
+    size = QUOTE_FONT_SIZES[-1]
+    kept = []
+    for line in _layout_quote(blocks, size, max_width, custom_emojis):
+        if kept and _quote_layout_height(kept + [line], size) > max_height:
+            break
+        kept.append(line)
+    while len(kept) > 1 and kept[-1].kind == "blank":
+        kept.pop()
+    last = kept[-1]
+    padding = 2 * _quote_code_padding(size) if last.kind == "code" else 0
+    kept[-1] = _ellipsize_quote_line(last, max_width - last.inset - padding)
+    return size, kept
 
-    # 1. 載入頭像資料
-    async with aiohttp.ClientSession() as session:
-        async with session.get(avatar_url) as resp:
-            avatar_data = await resp.read()
-            avatar_img = Image.open(io.BytesIO(avatar_data))
-    
+
+def _alpha_composite(target: Image.Image, image: Image.Image, x, y):
+    """Image.alpha_composite 的位置不能是負的，也不能超出邊界，先裁掉外面的部分"""
+    x, y = round(x), round(y)
+    left, top = max(0, -x), max(0, -y)
+    right, bottom = min(image.width, target.width - x), min(image.height, target.height - y)
+    if right <= left or bottom <= top:
+        return
+    if (left, top, right, bottom) != (0, 0, image.width, image.height):
+        image = image.crop((left, top, right, bottom))
+    target.alpha_composite(image, (x + left, y + top))
+
+
+def _fill_quote_rect(target: Image.Image, box, fill, radius: int = 0):
+    left, top, right, bottom = (round(value) for value in box)
+    if right <= left or bottom <= top:
+        return
+    tile = Image.new("RGBA", (right - left, bottom - top), (0, 0, 0, 0))
+    ImageDraw.Draw(tile).rounded_rectangle((0, 0, tile.width - 1, tile.height - 1), radius=radius, fill=fill)
+    _alpha_composite(target, tile, left, top)
+
+
+def _round_up(value: int, multiple: int) -> int:
+    return -(-value // multiple) * multiple
+
+
+def _draw_quote_text(target: Image.Image, x: float, baseline: int, text: str, font_path: str, size: int, color, italic: bool):
+    """先畫成遮罩再上色合成，透明圖層上的字邊緣才不會變黑；斜體放大畫再斜切縮小，邊緣比較銳利"""
+    scale = QUOTE_ITALIC_SUPERSAMPLE if italic else 1
+    shear = QUOTE_ITALIC_SHEAR if italic else 0
+    font = _quote_font(font_path, size * scale)
+    left, top, right, bottom = font.getbbox(text, anchor="ls")
+    if right <= left or bottom <= top:
+        return
+    origin_x = _round_up(max(0, math.ceil(shear * max(bottom, 0)) - left), scale)
+    origin_y = _round_up(max(0, -top), scale)
+    width = _round_up(origin_x + right + math.ceil(shear * max(-top, 0)), scale)
+    height = _round_up(origin_y + max(bottom, 0), scale)
+    mask = Image.new("L", (width, height), 0)
+    ImageDraw.Draw(mask).text((origin_x, origin_y), text, font=font, fill=255, anchor="ls")
+    if italic:
+        mask = mask.transform(
+            mask.size,
+            Image.Transform.AFFINE,
+            (1, shear, -shear * origin_y, 0, 1, 0),
+            resample=Image.Resampling.BICUBIC,
+        )
+        mask = mask.resize((width // scale, height // scale), Image.Resampling.LANCZOS)
+    tile = Image.new("RGBA", mask.size, color[:3] + (0,))
+    tile.putalpha(mask if color[3] == 255 else mask.point(lambda value: value * color[3] // 255))
+    _alpha_composite(target, tile, x - origin_x // scale, baseline - origin_y // scale)
+
+
+def _quote_emoji_image(piece: _QuotePiece, size: int, custom_emojis, cache: dict) -> Image.Image | None:
+    if piece.emoji:
+        return ai_emoji.render_twemoji(piece.emoji, size)
+    key = (piece.emoji_id, size)
+    if key not in cache:
+        source = custom_emojis.get(piece.emoji_id)
+        tile = None
+        if source is not None:
+            image = ImageOps.contain(source, (size, size), Image.Resampling.LANCZOS)
+            tile = Image.new("RGBA", (size, size), (0, 0, 0, 0))
+            tile.alpha_composite(image, ((size - image.width) // 2, (size - image.height) // 2))
+        cache[key] = tile
+    return cache[key]
+
+
+def _quote_style_spans(pieces, positions, style: str) -> list[list]:
+    spans = []
+    for piece, left in zip(pieces, positions):
+        if style not in piece.style:
+            continue
+        if spans and abs(spans[-1][1] - left) < 0.01:
+            spans[-1][1] = left + piece.width
+        else:
+            spans.append([left, left + piece.width, piece.color])
+    return spans
+
+
+def _draw_quote_line(target: Image.Image, line: _QuoteLine, x: float, top: int, custom_emojis, cache: dict):
+    baseline = top + line.ascent
+    positions = list(accumulate((piece.width for piece in line.pieces), initial=x))
+    pill_top, pill_bottom = baseline - round(line.size * 0.95), baseline + round(line.size * 0.3)
+    for style, fill in QUOTE_INLINE_FILLS:
+        for start, end, _ in _quote_style_spans(line.pieces, positions, style):
+            _fill_quote_rect(target, (start, pill_top, end, pill_bottom), fill, radius=max(2, line.size // 8))
+
+    # 相鄰、同字型同顏色的字併成一段畫；空白不畫，順便當分段點
+    runs = []
+    for piece, left in zip(line.pieces, positions):
+        if piece.space or not piece.text or not piece.font_path:
+            continue
+        key = (piece.font_path, piece.size, piece.color, "italic" in piece.style)
+        if runs and runs[-1][0] == key and abs(runs[-1][3] - left) < 0.01:
+            runs[-1][2] += piece.text
+            runs[-1][3] = left + piece.width
+        else:
+            runs.append([key, left, piece.text, left + piece.width])
+    for (font_path, size, color, italic), left, text, _ in runs:
+        _draw_quote_text(target, left, baseline, text, font_path, size, color, italic)
+
+    emoji_size = line.ascent + line.descent
+    margin = _quote_emoji_margin(emoji_size)
+    for piece, left in zip(line.pieces, positions):
+        if piece.emoji or piece.emoji_id:
+            image = _quote_emoji_image(piece, emoji_size, custom_emojis, cache)
+            if image is not None:
+                _alpha_composite(target, image, left + margin, top)
+
+    thickness = max(1, round(line.size / 16))
+    for style, offset in (("underline", round(line.size * 0.12)), ("strike", -round(line.size * 0.3))):
+        for start, end, color in _quote_style_spans(line.pieces, positions, style):
+            _fill_quote_rect(target, (start, baseline + offset, end, baseline + offset + thickness), color)
+
+
+def _draw_quote_lines(target: Image.Image, lines: list[_QuoteLine], size: int, center_x: int, top: int, custom_emojis) -> int:
+    """一般的行各自置中；引用、清單、程式碼區塊整組置中、組內靠左。回傳畫完後的 y"""
+    cache = {}
+    y = top
+    index = 0
+    while index < len(lines):
+        group = lines[index].group
+        end = index + 1
+        while group is not None and end < len(lines) and lines[end].group == group:
+            end += 1
+        members = lines[index:end]
+        index = end
+        if group is None:
+            line = members[0]
+            _draw_quote_line(target, line, center_x - line.width / 2, y, custom_emojis, cache)
+            y += line.height
+            continue
+
+        width = max(line.inset + line.width for line in members)
+        left = round(center_x - width / 2)
+        content_height = sum(line.height for line in members) - members[-1].gap
+        padding = _quote_code_padding(size) if members[0].kind == "code" else 0
+        if padding:
+            box = (left - padding, y, left + width + padding, y + content_height + 2 * padding)
+            _fill_quote_rect(target, box, QUOTE_CODE_BLOCK_FILL, radius=padding)
+            y += padding
+        if group == "quote":
+            bar_width, _ = _quote_bar_metrics(size)
+            _fill_quote_rect(target, (left, y, left + bar_width, y + content_height), QUOTE_BAR_COLOR, radius=bar_width // 2)
+        for line in members:
+            _draw_quote_line(target, line, left + line.inset, y, custom_emojis, cache)
+            y += line.height
+        y += padding
+    return y
+
+
+def _render_quote_name(name: str, max_width: int) -> Image.Image | None:
+    """署名用細體斜體；跟內文一樣有字型 fallback 跟 emoji，但不解析 markdown（Discord 名稱本來就不會）"""
+    name = unicodedata.normalize("NFC", name.strip())
+    block = _QuoteBlock([_QuoteRun(f"- {name}", frozenset({"italic"}))], "name")
+    for size in range(QUOTE_NAME_FONT_SIZE, QUOTE_NAME_MIN_FONT_SIZE - 1, -1):
+        line = _layout_quote_block(block, size, math.inf, {})[0]
+        if line.width <= max_width:
+            break
+    else:
+        line = _ellipsize_quote_line(line, max_width)
+    padding = line.size
+    canvas = Image.new("RGBA", (math.ceil(line.width) + padding * 2, line.ascent + line.descent + padding), (0, 0, 0, 0))
+    _draw_quote_line(canvas, line, padding, 0, {}, {})
+    bbox = canvas.getbbox()
+    return canvas.crop(bbox) if bbox else None
+
+
+async def _download_quote_emojis(session: aiohttp.ClientSession, blocks) -> dict[str, Image.Image]:
+    emoji_ids = list(dict.fromkeys(run.emoji_id for block in blocks for run in block.runs if run.emoji_id))
+    emoji_ids = emoji_ids[:QUOTE_MAX_CUSTOM_EMOJIS]
+
+    async def fetch(emoji_id):
+        url = f"https://cdn.discordapp.com/emojis/{emoji_id}.png?size=128"
+        try:
+            async with session.get(url, timeout=aiohttp.ClientTimeout(total=10)) as resp:
+                if resp.status != 200:
+                    return None
+                data = await resp.read()
+            with Image.open(io.BytesIO(data)) as source:
+                return source.convert("RGBA")
+        except Exception as e:
+            log(f"Failed to load emoji {url}: {e}", module_name="MessageImage", level=logging.WARNING)
+            return None
+
+    images = await asyncio.gather(*(fetch(emoji_id) for emoji_id in emoji_ids))
+    # 抓不到的自訂表情會照 :名稱: 畫成文字
+    return {emoji_id: image for emoji_id, image in zip(emoji_ids, images) if image is not None}
+
+
+def _render_quote_image(avatar_img: Image.Image, name: str, blocks, custom_emojis, animate_gif=False) -> tuple[io.BytesIO, str]:
     # 判斷是否為動態圖片
     is_animated = getattr(avatar_img, "is_animated", False)
 
-    width, height = 1200, 630
+    width, height = QUOTE_SIZE
 
     # --- 2. 建立「前景層」(文字與遮罩) ---
     # 建立一個完全透明的圖層，我們把所有文字和遮罩畫在這裡，只需畫一次以節省效能
@@ -345,89 +828,30 @@ async def create(message: discord.Message, animate_gif=False) -> tuple[io.BytesI
 
     # 畫漸層弧形遮罩
     for i in range(51):
-        alpha = min((i+1) * 5, 255)  
+        alpha = min((i+1) * 5, 255)
         draw_fg.arc([-300 + i, -200, 630 + i, 1030], 270, 90, fill=(0, 0, 0, alpha), width=150)
 
     # 畫右側黑底區塊
     draw_fg.rectangle([540, 0, 700, 300], fill="black")
 
     # Area constraints
-    x_min, x_max = 560, 1150
-    y_min, y_max = 50, 580
+    x_min, y_min, x_max, y_max = QUOTE_TEXT_BOX
     max_w = x_max - x_min
     max_h = y_max - y_min
-
-    # Font handling with auto-shrink
-    font_size = 55
-    min_font_size = 20
-    final_lines = []
-    final_font = None
-    final_emoji_font = None
-
-    base_segments = await prepare_segments(content, None) 
-    
-    while font_size >= min_font_size:
-        font_msg = ImageFont.truetype(os.path.join(fontdir, "notobold.ttf"), font_size)
-        try:
-            emoji_font_obj = ImageFont.truetype(os.path.join(fontdir, "twemoji.ttf"), font_size)
-        except Exception:
-            emoji_font_obj = font_msg
-
-        ascent, descent = font_msg.getmetrics()
-        line_height = ascent + descent + 10
-        emoji_size = ascent + descent
-        
-        lines = layout_segments(base_segments, font_msg, max_w, emoji_size, emoji_font=emoji_font_obj)
-        total_height = len(lines) * line_height
-        
-        if total_height <= max_h or font_size == min_font_size:
-            final_lines = lines
-            final_font = font_msg
-            final_emoji_font = emoji_font_obj
-            break
-        
-        font_size -= 2 
-
-    # Load custom emojis
-    ascent, descent = final_font.getmetrics()
-    emoji_size = ascent + descent
-    await load_emojis(base_segments, emoji_size)
-
-    # Calculate vertical position
-    total_text_height = len(final_lines) * (emoji_size + 10) 
-    
-    font_name = ImageFont.truetype(os.path.join(fontdir, "notoregular.ttf"), 25)
-    name_w, name_h = get_text_size(f" - {name}", font_name)
-    
-    total_content_height = total_text_height + 20 + name_h
-    start_y = y_min + (max_h - total_content_height) // 2
-    
-    current_y = start_y
     center_x = (x_min + x_max) // 2
 
-    # Draw Text and Emojis (畫在 foreground 上)
-    for line in final_lines:
-        line_width = sum(seg.width for seg in line)
-        start_x = center_x - line_width // 2
-        cursor_x = start_x
-        
-        for seg in line:
-            if seg.type == 'emoji' and seg.image:
-                foreground.paste(seg.image, (int(cursor_x), int(current_y)), seg.image)
-            elif seg.type == 'unicode_emoji':
-                if seg.image:
-                    foreground.paste(seg.image, (int(cursor_x), int(current_y)), seg.image)
-                else:
-                    draw_fg.text((cursor_x, current_y), seg.content, font=final_font, fill="white")
-            else:
-                draw_fg.text((cursor_x, current_y), seg.content, font=final_font, fill="white")
-            
-            cursor_x += seg.width
-        
-        current_y += emoji_size + 10
+    # 署名先排好，內文能用的高度要扣掉它
+    name_image = _render_quote_name(name, max_w)
+    name_height = name_image.height + QUOTE_NAME_GAP if name_image else 0
+    font_size, lines = _fit_quote_layout(blocks, max_w, max_h - name_height, custom_emojis)
 
-    # Draw Name (畫在 foreground 上)
-    name_y = current_y + 20
+    # 文字畫在獨立的透明圖層，最後一次合成到前景
+    text_layer = Image.new("RGBA", (width, height), (0, 0, 0, 0))
+    start_y = y_min + (max_h - _quote_layout_height(lines, font_size) - name_height) // 2
+    current_y = _draw_quote_lines(text_layer, lines, font_size, center_x, start_y, custom_emojis)
+    if name_image:
+        _alpha_composite(text_layer, name_image, center_x - name_image.width // 2, current_y + QUOTE_NAME_GAP)
+    foreground.alpha_composite(text_layer)
 
     # --- 3. 合成最終圖片 (處理 GIF 幀數或靜態 PNG) ---
     output_buffer = io.BytesIO()
@@ -435,49 +859,63 @@ async def create(message: discord.Message, animate_gif=False) -> tuple[io.BytesI
     if is_animated and animate_gif:
         frames = []
         durations = []
-        
+
         for frame in ImageSequence.Iterator(avatar_img):
             # 取得每一幀的持續時間 (預設 50 毫秒)
             durations.append(frame.info.get('duration', 50))
-            
+
             # 處理單幀背景
-            frame_rgba = frame.convert("RGBA").resize((630, 630), Image.Resampling.LANCZOS)
+            frame_rgba = frame.convert("RGBA").resize((QUOTE_AVATAR_SIZE, QUOTE_AVATAR_SIZE), Image.Resampling.LANCZOS)
             base = Image.new("RGBA", (width, height), (0, 0, 0, 255))
             base.paste(frame_rgba, (0, 0), frame_rgba)
-            
+
             # 將前面準備好的文字前景疊加上去
             combined = Image.alpha_composite(base, foreground)
-            draw_quote_signature(combined, center_x, name_y, name)
-            
+
             # 轉換為 RGB 以利 GIF 儲存 (去透明底)
             frames.append(combined.convert("RGB"))
-            
+
         # 儲存為動態 GIF
         frames[0].save(
-            output_buffer, 
-            format="GIF", 
-            save_all=True, 
-            append_images=frames[1:], 
-            duration=durations, 
+            output_buffer,
+            format="GIF",
+            save_all=True,
+            append_images=frames[1:],
+            duration=durations,
             loop=0,
             optimize=True
         )
         ext = "gif"
     else:
         # 靜態 PNG 處理
-        avatar_rgba = avatar_img.convert("RGBA").resize((630, 630), Image.Resampling.LANCZOS)
+        avatar_rgba = avatar_img.convert("RGBA").resize((QUOTE_AVATAR_SIZE, QUOTE_AVATAR_SIZE), Image.Resampling.LANCZOS)
         base = Image.new("RGBA", (width, height), (0, 0, 0, 255))
         base.paste(avatar_rgba, (0, 0), avatar_rgba)
-        
+
         combined = Image.alpha_composite(base, foreground)
-        draw_quote_signature(combined, center_x, name_y, name)
         combined.save(output_buffer, format="PNG")
         ext = "png"
 
     output_buffer.seek(0)
-    
+
     # 回傳 buffer 和副檔名，讓外層可以決定檔案名稱
     return output_buffer, ext
+
+
+async def create(message: discord.Message, animate_gif=False) -> tuple[io.BytesIO, str]:
+    blocks = _parse_quote_markdown(
+        message.content.strip(),
+        lambda kind, match: _quote_markup_label(message, kind, match),
+    )
+
+    # 1. 載入頭像與自訂表情
+    async with aiohttp.ClientSession() as session:
+        async with session.get(message.author.display_avatar.url) as resp:
+            avatar_data = await resp.read()
+        custom_emojis = await _download_quote_emojis(session, blocks)
+    avatar_img = Image.open(io.BytesIO(avatar_data))
+
+    return _render_quote_image(avatar_img, message.author.display_name, blocks, custom_emojis, animate_gif)
 
 
 # 讚按鈕不存資料庫，所有狀態都編進 custom_id（上限 100 字元）：

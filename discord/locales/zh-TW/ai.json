@@ -285,6 +285,10 @@
         "unknown_time": "未知時間"
     },
     "knowledge": {
+        "already_approved": "此投稿已發布。若要撤下，請使用 ai-knowledge remove {knowledge_id}。",
+        "button_inspect": "檢視投稿",
+        "button_approve": "人工通過",
+        "button_reject": "人工駁回",
         "channel_cleared": "✅ 已關閉全域知識庫審核通知。",
         "channel_invalid": "❌ 找不到文字頻道，請提供頻道提及或 ID。",
         "channel_permissions": "❌ Bot 需要查看頻道、傳送訊息與嵌入連結權限。",
@@ -292,12 +296,20 @@
         "channel_status": "全域知識庫管理員通知頻道 ID：{channel_id}（0 為關閉）。",
         "empty": "目前沒有符合的已發布知識。",
         "invalid": "❌ 無法投稿：{reason}",
+        "invalid_review_reason": "❌ 審核說明最多 400 字，且不可包含敏感資料或指令注入內容。",
+        "manual_approved": "Bot 擁有者人工審核通過。",
+        "manual_rejected": "Bot 擁有者人工駁回。",
+        "manual_notification_title": "全域知識庫人工審核結果",
         "not_found": "❌ 找不到資料，或你沒有查看此投稿的權限。",
         "notification_body": "投稿：{submission_id}\n知識：{knowledge_id}\n結果：{status}\n投稿者 ID：{user_id}\n審核模型：{model}",
         "notification_title": "全域知識庫自動審核結果",
+        "owner_only": "❌ 只有 Bot 擁有者可以檢視投稿原文或進行人工審核。",
+        "preview_file": "投稿全文已附為文字檔，僅你可見。",
         "reason": "審核說明",
         "removed": "✅ 已下架知識，不再提供全域搜尋或自動帶入。",
         "results_file": "找到 {count} 筆已發布知識；完整內容已附為文字檔。",
+        "reviewed_by": "人工審核者 ID：{user_id}",
+        "reviewer": "人工審核者 ID",
         "save_failed": "❌ 設定儲存失敗，請稍後重試。",
         "status_pending": "等待自動審核",
         "status_reviewing": "自動審核中",
@@ -305,7 +317,9 @@
         "status_rejected": "審核未通過",
         "status_error": "審核失敗，未發布",
         "submission_status": "投稿：{submission_id}\n狀態：{status}\n知識 ID：{knowledge_id}\n審核模型：{model}\n說明：{reason}",
-        "submitted": "✅ 投稿 {submission_id} 已受理，目前狀態：{status}。通過 review model 自動審核後才會公開給所有使用者與伺服器；可使用知識庫狀態指令查詢。",
-        "title": "公開標題"
+        "submitted": "✅ 投稿 {submission_id} 已受理，目前狀態：{status}。通過自動審核或 Bot 擁有者人工核准後才會公開給所有使用者與伺服器；可使用知識庫狀態指令查詢。",
+        "title": "公開標題",
+        "unavailable": "❌ 知識庫功能暫時無法使用，請稍後重試。",
+        "withdrawn_submission": "❌ 此投稿對應的知識已下架，不能透過舊投稿重新發布；請重新投稿。"
     }
 }

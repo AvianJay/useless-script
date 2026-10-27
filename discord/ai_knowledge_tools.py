@@ -15,7 +15,7 @@ from discord.ext import commands
 
 import i18n
 from i18n import t
-from globalenv import config, get_db_connection, get_global_config, set_global_config
+from globalenv import bot, config, get_db_connection, get_global_config, set_global_config
 from ai_provider import get_ai_review_model
 from ai_knowledge import (
     KNOWLEDGE_REVIEW_PROMPT, MAX_KNOWLEDGE_CONTENT, KnowledgeStore, parse_knowledge_review,
@@ -42,7 +42,7 @@ KNOWLEDGE_TOOL_SCHEMAS = [
     _tool("get_knowledge", "Read the complete approved public knowledge entry and its version before using or revising it.", {
         "knowledge_id": {"type": "string"},
     }, ["knowledge_id"]),
-    _tool("submit_knowledge", "Proactively propose reusable PUBLIC knowledge or a revision for automatic review. Never submit personal/server-specific information, secrets or private context. Publication requires separate review-model approval. Search existing knowledge first; a revision replaces the whole entry and requires its current version.", {
+    _tool("submit_knowledge", "Proactively propose reusable PUBLIC knowledge or a revision for automatic review. Never submit personal/server-specific information, secrets or private context. Publication requires review-model or bot-owner approval. Search existing knowledge first; a revision replaces the whole entry and requires its current version.", {
         "title": {"type": "string", "maxLength": 80},
         "content": {"type": "string", "maxLength": MAX_KNOWLEDGE_CONTENT},
         "tags": {"type": "array", "items": {"type": "string"}, "maxItems": 8},
@@ -53,6 +53,44 @@ KNOWLEDGE_TOOL_SCHEMAS = [
         "submission_id": {"type": "string"},
     }, ["submission_id"]),
 ]
+
+
+class AIKnowledgeReviewButton(
+    discord.ui.DynamicItem[discord.ui.Button],
+    template=r"ai:kb:(?P<action>inspect|approve|reject):(?P<submission>s_[0-9a-f]{16})",
+):
+    """Owner-only review controls that continue working after a restart."""
+
+    def __init__(self, submission_id: str, action: str):
+        self.submission_id = submission_id
+        self.action = action
+        styles = {"inspect": discord.ButtonStyle.secondary, "approve": discord.ButtonStyle.success,
+                  "reject": discord.ButtonStyle.danger}
+        super().__init__(discord.ui.Button(
+            label=t(f"ai.knowledge.button_{action}"), style=styles[action],
+            custom_id=f"ai:kb:{action}:{submission_id}",
+        ))
+
+    @classmethod
+    async def from_custom_id(cls, interaction: discord.Interaction, item: discord.ui.Button, match: re.Match):
+        return cls(match["submission"], match["action"])
+
+    async def callback(self, interaction: discord.Interaction):
+        cog = interaction.client.get_cog("AICommands")
+        if cog is None:
+            await interaction.response.send_message(t("ai.knowledge.unavailable"), ephemeral=True, allowed_mentions=NO_MENTIONS)
+            return
+        await cog._handle_knowledge_review_button(interaction, self.submission_id, self.action)
+
+
+bot.add_dynamic_items(AIKnowledgeReviewButton)
+
+
+def _knowledge_review_view(item: dict) -> discord.ui.View:
+    view = discord.ui.View(timeout=None)
+    for action in (("inspect",) if item["status"] == "approved" else ("inspect", "approve", "reject")):
+        view.add_item(AIKnowledgeReviewButton(item["submission_id"], action))
+    return view
 
 
 class AIKnowledgeTools:
@@ -174,7 +212,7 @@ class AIKnowledgeTools:
             "submission_id": submission["submission_id"], "status": submission["status"],
             "knowledge_id": submission["knowledge_id"], "created": created,
             "published": submission["status"] == "approved" and self._knowledge_store.get_entry(submission["knowledge_id"]) is not None,
-            "note": "Automatic review is required before public use. Check get_knowledge_submission for the result.",
+            "note": "Review-model or bot-owner approval is required before public use. Check get_knowledge_submission for the result.",
         }
 
     async def _tool_get_knowledge_submission(self, args: dict, tool_context: dict) -> dict:
@@ -182,7 +220,62 @@ class AIKnowledgeTools:
         user = (tool_context or {}).get("user")
         if item is None or (item["submitter_id"] != getattr(user, "id", None) and not self._knowledge_owner(user)):
             return {"error": "Submission not found or not owned by the current user"}
-        return {key: item[key] for key in ("submission_id", "knowledge_id", "title", "status", "reason", "review_model", "attempts")}
+        return {key: item[key] for key in ("submission_id", "knowledge_id", "title", "status", "reason", "review_model", "attempts", "reviewer_id")}
+
+    @staticmethod
+    def _knowledge_submission_status(item: dict) -> str:
+        message = t(
+            "ai.knowledge.submission_status", submission_id=item["submission_id"],
+            status=t(f"ai.knowledge.status_{item['status']}"), reason=item["reason"] or "—",
+            knowledge_id=item["knowledge_id"] or "—", model=item["review_model"] or "—",
+        )
+        if item.get("reviewer_id") is not None:
+            message += "\n" + t("ai.knowledge.reviewed_by", user_id=str(item["reviewer_id"]))
+        return message
+
+    def _manual_knowledge_review(self, user, submission_id: str, *, approved: bool, reason: str = "") -> str:
+        if not self._knowledge_owner(user):
+            return t("ai.knowledge.owner_only")
+        reason = re.sub(r"\s+", " ", reason).strip()
+        if len(reason) > 400 or (reason and self._validate_ai_memory_content(reason)):
+            return t("ai.knowledge.invalid_review_reason")
+        item = self._knowledge_store.manual_review(
+            submission_id.strip()[:48], approved=approved, reviewer_id=int(user.id),
+            reason=reason or t("ai.knowledge.manual_approved" if approved else "ai.knowledge.manual_rejected"),
+        )
+        if item is None:
+            return t("ai.knowledge.not_found")
+        self._knowledge_wakeup.set()
+        if item["status"] == "approved" and self._knowledge_store.get_entry(item["knowledge_id"]) is None:
+            return t("ai.knowledge.withdrawn_submission")
+        if item["status"] == "approved" and not approved:
+            return t("ai.knowledge.already_approved", knowledge_id=item["knowledge_id"])
+        return self._knowledge_submission_status(item)
+
+    async def _handle_knowledge_review_button(self, interaction: discord.Interaction, submission_id: str, action: str):
+        if not self._knowledge_owner(interaction.user):
+            await interaction.response.send_message(t("ai.knowledge.owner_only"), ephemeral=True, allowed_mentions=NO_MENTIONS)
+            return
+        await interaction.response.defer(ephemeral=True, thinking=True)
+        if action != "inspect":
+            message = self._manual_knowledge_review(interaction.user, submission_id, approved=action == "approve")
+            await interaction.followup.send(message, ephemeral=True, allowed_mentions=NO_MENTIONS)
+            return
+        item = self._knowledge_store.get_submission(submission_id)
+        if item is None:
+            await interaction.followup.send(t("ai.knowledge.not_found"), ephemeral=True, allowed_mentions=NO_MENTIONS)
+            return
+        body = self._knowledge_submission_status(item) + f"\n\n{item['title']}\n{item['content']}"
+        if item["tags"]:
+            body += "\n\n" + ", ".join(item["tags"])
+        if item["source_url"]:
+            body += "\n" + item["source_url"]
+        kwargs = {}
+        if len(body) > 1800:
+            kwargs["file"] = discord.File(io.BytesIO(body.encode("utf-8")), filename="knowledge_submission.txt")
+            body = t("ai.knowledge.preview_file")
+        await interaction.followup.send(body, **kwargs, view=_knowledge_review_view(item),
+                                        ephemeral=True, allowed_mentions=NO_MENTIONS)
 
     async def _request_knowledge_review(self, submission: dict) -> dict:
         model = get_ai_review_model()
@@ -234,16 +327,18 @@ class AIKnowledgeTools:
                 status = t(f"ai.knowledge.status_{item['status']}")
                 # Do not post rejected/unreviewed content, which may contain private data.
                 embed = discord.Embed(
-                    title=t("ai.knowledge.notification_title"),
+                    title=t("ai.knowledge.manual_notification_title" if item.get("reviewer_id") is not None else "ai.knowledge.notification_title"),
                     description=t("ai.knowledge.notification_body", submission_id=item["submission_id"],
                                   knowledge_id=item["knowledge_id"] or "—", status=status,
                                   user_id=str(item["submitter_id"]), model=item["review_model"] or "—"),
                     color=0x27AE60 if item["status"] == "approved" else 0xE67E22,
                 )
                 embed.add_field(name=t("ai.knowledge.reason"), value=item["reason"][:400] or "—", inline=False)
+                if item.get("reviewer_id") is not None:
+                    embed.add_field(name=t("ai.knowledge.reviewer"), value=str(item["reviewer_id"]), inline=False)
                 if item["status"] == "approved":
                     embed.add_field(name=t("ai.knowledge.title"), value=item["title"][:80], inline=False)
-                await channel.send(embed=embed, allowed_mentions=NO_MENTIONS)
+                await channel.send(embed=embed, view=_knowledge_review_view(item), allowed_mentions=NO_MENTIONS)
             return True
         except Exception as error:
             log(f"AI knowledge notification failed: {type(error).__name__}", module_name="AI", level=logging.WARNING)
@@ -254,7 +349,7 @@ class AIKnowledgeTools:
             await self._review_knowledge_submission(submission_id)
         for item in self._knowledge_store.notifications():
             if await self._notify_knowledge_review(item):
-                self._knowledge_store.mark_notified(item["submission_id"])
+                self._knowledge_store.mark_notified(item["submission_id"], updated_at=item["updated_at"])
 
     async def _knowledge_worker(self):
         await self.bot.wait_until_ready()
@@ -332,11 +427,7 @@ class AIKnowledgeTools:
     @app_commands.describe(submission_id=app_commands.locale_str("Your submission ID", i18n_key="cmd.ai.ai_knowledge.status.param.submission_id"))
     async def ai_knowledge_status(self, interaction: discord.Interaction, submission_id: str):
         result = await self._tool_get_knowledge_submission({"submission_id": submission_id}, {"user": interaction.user})
-        message = t("ai.knowledge.not_found") if "error" in result else t(
-            "ai.knowledge.submission_status", submission_id=result["submission_id"],
-            status=t(f"ai.knowledge.status_{result['status']}"), reason=result["reason"] or "—",
-            knowledge_id=result["knowledge_id"] or "—", model=result["review_model"] or "—",
-        )
+        message = t("ai.knowledge.not_found") if "error" in result else self._knowledge_submission_status(result)
         await interaction.response.send_message(message, ephemeral=True, allowed_mentions=NO_MENTIONS)
 
     @commands.group(name="ai-knowledge", aliases=["aikb"], invoke_without_command=True)
@@ -356,11 +447,32 @@ class AIKnowledgeTools:
     @ai_knowledge_text.command(name="status")
     async def ai_knowledge_status_text(self, ctx: commands.Context, submission_id: str):
         result = await self._tool_get_knowledge_submission({"submission_id": submission_id}, {"user": ctx.author})
-        message = t("ai.knowledge.not_found") if "error" in result else t(
-            "ai.knowledge.submission_status", submission_id=result["submission_id"],
-            status=t(f"ai.knowledge.status_{result['status']}"), reason=result["reason"] or "—",
-            knowledge_id=result["knowledge_id"] or "—", model=result["review_model"] or "—",
-        )
+        message = t("ai.knowledge.not_found") if "error" in result else self._knowledge_submission_status(result)
+        await ctx.reply(message, allowed_mentions=NO_MENTIONS)
+
+    @ai_knowledge_text.command(name="review")
+    @is_owner()
+    async def ai_knowledge_review_text(self, ctx: commands.Context, submission_id: str):
+        if not self._knowledge_owner(ctx.author):
+            await ctx.reply(t("ai.knowledge.owner_only"), allowed_mentions=NO_MENTIONS)
+            return
+        item = self._knowledge_store.get_submission(submission_id.strip()[:48])
+        if item is None:
+            await ctx.reply(t("ai.knowledge.not_found"), allowed_mentions=NO_MENTIONS)
+            return
+        # Prefix replies are public: show only metadata; the inspect button reveals the draft privately.
+        await ctx.reply(self._knowledge_submission_status(item), view=_knowledge_review_view(item), allowed_mentions=NO_MENTIONS)
+
+    @ai_knowledge_text.command(name="approve")
+    @is_owner()
+    async def ai_knowledge_approve_text(self, ctx: commands.Context, submission_id: str, *, reason: str = ""):
+        message = self._manual_knowledge_review(ctx.author, submission_id, approved=True, reason=reason)
+        await ctx.reply(message, allowed_mentions=NO_MENTIONS)
+
+    @ai_knowledge_text.command(name="reject")
+    @is_owner()
+    async def ai_knowledge_reject_text(self, ctx: commands.Context, submission_id: str, *, reason: str = ""):
+        message = self._manual_knowledge_review(ctx.author, submission_id, approved=False, reason=reason)
         await ctx.reply(message, allowed_mentions=NO_MENTIONS)
 
     @ai_knowledge_text.command(name="remove")

@@ -921,7 +921,7 @@ TOOL_USAGE_PROMPT = """工具使用規則：
 - 使用者想要一個能在瀏覽器直接開啟的網頁、HTML 範例或互動 demo 時，使用 `upload_html` 上傳單一自足的 HTML 檔（CSS／JS 內嵌），回覆時附上工具回傳的網址，不要再貼出整份 HTML。上傳後任何拿到連結的人都能看到，不可放入密碼、token、個資或私人對話內容。
 - AI 會自動看到目前使用者的共通 profile 和這個伺服器的共通氛圍 profile；優先直接使用已注入的記憶，不必先呼叫工具重讀。
 - 每次對話都要主動使用相關記憶，資訊不足時自行搜尋 `get_ai_memory`、`search_knowledge`，不必等使用者說「記住」或「查知識庫」。出現明確、耐久、低風險而且未來有幫助的個人或伺服器資訊時，主動建立或更新 `user_global` 或 `guild_shared`；不要從玩笑、一次性要求、模糊暗示或第三方主張推斷。
-- 可跨伺服器重用的公開事實、驗證過的解法與通用經驗，先搜尋 `search_knowledge` 避免重複，再主動使用 `submit_knowledge` 投稿；修訂時沿用 `knowledge_id` 與目前版本。投稿通過獨立 review model 審核後才會公開，未通過前不得聲稱已收錄。不可把個人資訊、私密對話或伺服器限定資料轉成公開知識。
+- 可跨伺服器重用的公開事實、驗證過的解法與通用經驗，先搜尋 `search_knowledge` 避免重複，再主動使用 `submit_knowledge` 投稿；修訂時沿用 `knowledge_id` 與目前版本。投稿通過獨立 review model 審核或 Bot 擁有者人工核准後才會公開，未通過前不得聲稱已收錄。不可把個人資訊、私密對話或伺服器限定資料轉成公開知識。
 - 只有使用者明確要求忘記或刪除時，才使用 `delete_ai_memory`。
 - `user_global` 記憶是某個使用者跨伺服器共通的長期記憶；`guild_shared` 記憶是這個伺服器共享的共同記憶。
 - `guild_shared` 只適合放伺服器氛圍、共同梗、共同偏好、bot 使用習慣。`write_access=members` 可由所有成員修改；`write_access=admins` 只有伺服器管理者能修改，普通成員不可建立或取得此權限。
