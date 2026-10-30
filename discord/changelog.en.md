@@ -1,5 +1,88 @@
 # Changelog
 
+## 0.25.0
+* Added Activity Roles | /activity-role
+  * Roles are assigned automatically based on members' current activities. Playing, streaming, listening, watching, and competing can be counted (only playing by default). Entries can be picked from Discord's detectable game list, mapped to custom apps by application ID, or matched when the activity name contains a given text (at least 3 characters).
+  * Roles can be removed when the activity ends or kept once granted, and removal can be delayed by 0 to 1,440 minutes to reduce flapping. A log channel can record every assignment and removal, and changes missed while the Bot was offline are reconciled after a restart.
+  * Only mapped roles are added or removed. @everyone, integration-managed roles, and roles at or above the Bot's highest role cannot be configured. All subcommands require Administrator, and the web panel can configure enablement, mode, delayed removal, and the log channel.
+  * Roles are only assigned when the Bot has the Presence Intent enabled. Setup still works without it, and the related subcommands show a reminder.
+* Added emoji stealing | y!steal_emoji
+  * Paste custom emojis after the command, or reply to a message containing them (forwarded messages included), to add up to 10 emojis to the current server at once.
+  * Both the user and the Bot need Manage Emojis, with a 10-second per-server cooldown. Results list successes and failure reasons (already exists, slots full, download failed, larger than 256 KB, and more), along with static and animated slot usage.
+* Added AI task skills and the Node REPL sandbox
+  * AI now loads the instructions and tools of a matching skill for each task. Built-in skills cover browsing, web research, Discord history investigation, attachment reading, data analysis, and Threads posting. Loading a skill grants no extra permissions, and a request with a loaded skill can run up to 12 rounds of tool calls.
+  * The browser and data-analysis skills can run JavaScript in a Docker-isolated Node.js environment with networking disabled, a read-only file system, and CPU and memory limits. The sandbox is removed when the request ends, and tool calls inside it go through the same permission checks and browser approval cards.
+  * Fixed AI claiming it had no browser or other tools and refusing the task when the matching skill had not been loaded yet.
+* Added AI file reading | /ai
+  * `/ai` has a new file option. Files can also be attached to prefix commands, or AI can read attachments from a replied-to message. Text, CSV/TSV, JSON, PDF, DOCX, and XLSX are supported, up to 8 MB per file.
+  * PDFs are text-only and limited to 80 pages, XLSX formulas are never executed, and key, credential, and `.env`-style files are rejected. AI can attach processed results such as CSV, JSON, or Markdown as downloadable files.
+* Added the AI global knowledge base | /ai-knowledge
+  * A global knowledge base shared across all servers and DMs has been added, stored separately from personal and server memory. The most relevant published entries are included with every request. `/ai-knowledge search`, `/ai-knowledge submit`, and `/ai-knowledge status` let users search knowledge, submit or revise entries, and check the review results of their own submissions.
+  * Submissions are reviewed automatically by the review model, and only publicly reusable facts, solutions, and experience are published. Personal or server-specific information, private conversations, credentials, and unverifiable claims are rejected. The Bot owner can manually review or remove entries, and each user can submit up to 5 entries per hour.
+* Added AI questions to the user
+  * When AI is missing information that affects its next step or needs you to choose, it mentions the requester with up to 4 option buttons and a "Type a reply" button. The answer is passed straight back to the current request.
+  * Only the original requester can answer. The wait defaults to 120 seconds with a maximum of 300 seconds; on timeout AI continues without an answer and never treats it as consent. The question message is deleted automatically after it is answered, times out, or is cancelled.
+* Added AI response layouts and follow-up buttons | /ai
+  * AI responses can use Discord Components V2 layouts, including cards, galleries, spacing, and link buttons. Plain Markdown remains the default; layouts are trimmed automatically when they exceed Discord's limits and resent as plain text if rejected.
+  * When a choice between clear options is needed, AI can attach one set of follow-up buttons or a select menu. Selecting an option continues the conversation as the user who clicked and is charged like a normal message. AI can restrict the buttons to the original requester, and they keep working after the Bot restarts.
+  * Fixed `---` inside code blocks being turned into a separator.
+* Added AI message screenshots and HTML uploads
+  * When reading messages, AI now gets the full text with Markdown preserved, along with embeds, attachments, polls, stickers, reactions, forwarded content, and Components V2 structure. When the layout cannot be understood from text, it can create a reconstructed message screenshot. Attaching it to the response is free, while having AI inspect it is charged as image analysis and refunded automatically on failure.
+  * When a directly openable webpage or interactive example is needed, AI uploads a single self-contained HTML file (up to 5 MB) and returns a public URL. Anyone with the link can open it and it cannot be edited or deleted afterwards, so do not include private data.
+* Updated AI memory | /ai-memory
+  * Added `/ai-memory auto-clear` and `y!ai-auto-clear`. When enabled, conversation history is cleared automatically after 30 minutes of inactivity, free of charge and without affecting long-term memory. It cannot be enabled together with auto-summary.
+  * Auto-clear and auto-summary have a new global option that sets a personal default shared across all servers and DMs.
+  * AI now proactively uses and saves clear, long-lived, low-risk memories, and submits publicly reusable solutions to the global knowledge base on the user's behalf (still subject to review).
+* Updated AI request handling
+  * Each user can have only one AI request in progress at a time across servers and DMs. Sending another one while it is processing is not charged.
+  * Deleting the prefix-command or mention message that triggered AI cancels the request, stops receiving the AI response, and refunds the charged fees. Conversation history cannot be cleared while a request is running, and cancelled or undelivered requests are no longer written to history.
+  * The progress notice now shows tool names and key arguments, thinking/writing states, and statistics such as tokens, TPS, and time to first token in real time.
+  * When more than 30 minutes have passed since the previous message in a conversation, AI is told how much time has elapsed so it can judge whether earlier plans or "today/tomorrow" still apply. When asked which model it uses, AI answers with the currently selected model name.
+  * Fixed multi-turn conversations or tool calls possibly failing with thinking-mode models, and made image analysis with thinking-mode vision models less likely to fail.
+* Updated AI images | /ai
+  * Image generation supports reference images: attach images or provide Discord CDN image URLs to edit or generate from them, up to 16 per request, without paying for analysis first. `/ai` has a second image parameter and `y!ai` reads every image in the message. If any image is invalid or the model does not support image input, the request is rejected before charging.
+  * Images and galleries in AI responses can display image URLs from any HTTP(S) source. Image analysis and reference images still only accept Discord CDN images. Browser screenshot analysis is now used only by AI and is no longer attached to the response.
+  * `:name:` shortcodes in AI responses are converted to emojis, preferring custom emojis. Times, code, and URLs are not affected.
+  * Fixed emojis, custom emojis, Simplified Chinese, Japanese shinjitai, and Korean appearing as boxes in table images. Timestamps and mentions are now shown in Discord's format, and cells containing `<br>` no longer make the table fall back to Markdown.
+  * Fixed a failed image generation also removing other already generated images from the same response.
+* Updated AI Discord data tools
+  * AI can look up users outside the current server by ID, or other users in DMs, receiving only public account data in those cases.
+  * AI can read the online status, per-device status, custom status, and activities such as games, streams, and Spotify of cached members in the current server. Users in DMs or outside the server cannot be read. This requires the Bot's Presence Intent and is limited by Discord's privacy settings (invisible users appear offline).
+* Updated safe AI browser tools
+  * Browsing tasks now operate pages with Playwright inside the Node REPL, locating elements by role, text, label, or viewport coordinates, with real keyboard input. The original browser tools are used only when the sandbox is unavailable.
+  * Approval cards are now sent as a separate message mentioning the user and deleted automatically once handled. Coordinate actions are limited to the viewport and are rejected on password or payment fields, or links that open new windows or trigger downloads.
+  * AI can draft or publish text posts on Threads through the browser account configured by the owner. Clicking, typing, or posting on Threads is restricted to the Bot owner and users they allow, and the first action still requires approval on the card.
+  * Fixed clearing and retyping content in rich-text editors such as Threads failing. Content is now selected and deleted with the real keyboard, typed character by character, and verified.
+* Updated Terrible Make it a Quote
+  * Markdown is now rendered like Discord, including bold, italics, code, headings, quotes, lists, spoilers, and mention styles, with the original line breaks preserved. Timestamps are converted to dates and times.
+  * Fixed emojis, Korean, and decorative fonts appearing as boxes, mentions appearing as raw `<@ID>`, and long messages overflowing the image and pushing the signature off-screen.
+* Updated upvote buttons | /upvoteboard
+  * Fixed upvote buttons on Make it a Quote, Screenshot Generator, and similar images stopping working after about 3 minutes or after a Bot restart. The buttons now work permanently, and upvotes after reaching the board keep updating the same board message.
+* Updated tickets | /ticket
+  * Added ticket form settings: the form can be turned off so members open tickets directly, or the form title and the subject and description fields' labels, placeholders, and required state can be customized, and the description field can be hidden. Configurable from the web panel.
+* Updated music | /music
+  * Automatic playback restoration now clears the saved state and sends its notice only after the track is actually playing steadily. If loading fails, playback errors, or nothing starts within 30 seconds, the reason is reported and the state is kept; with multiple nodes, another node is tried.
+  * Fixed a failed track load being treated as finished, which replayed the same track repeatedly in single-track loop.
+* Added official website link previews
+  * Links to the official website's home page, documentation, privacy policy, or terms of service now show a preview with a title, description, and image in Traditional Chinese, English, or Japanese according to the link's language.
+* Updated FixLink | /fixlink
+  * Added the OGInstagram fixer for Instagram and made it the default. Servers that already saved their settings keep their previously selected fixer.
+* Updated AutoPublish | /autopublish
+  * Polls and activity invites in announcement channels are no longer auto-published and no longer use up the publishing quota.
+* Updated minigames | /games roulette
+  * When roulette lands on 0, betting on even now counts as a win.
+* Updated the privacy policy
+  * Added descriptions of the activity statistics used by Activity Roles and how online status and activities are handled.
+* Fixed command issues
+  * Fixed AutoReply management in `/autoreply builder` and `/gettingstarted` reporting the module as unavailable since 0.24.0.
+  * Fixed custom items sending raw template text without processing AutoReply variables and templates since 0.24.0. Template syntax is now also checked when items are added or edited.
+  * Fixed `/textlength` showing a raw translation key instead of the character count.
+  * Fixed the Typing latency in `y!ping` showing as `Nonems`.
+  * Fixed `/aki` being stuck on "you already have a game in progress" after a failed start.
+  * Prefix commands on cooldown now show how many seconds remain.
+* Updated related documentation and translations.
+* Fixed some bugs.
+
 ## 0.24.9
 * Added AutoModerate voice-join spam detection | /automod
   * Added `anti_voice_spam`, which detects members repeatedly joining voice channels to spam the join sound. The max join count, time window, detection scope (same channel only or any voice channel in the server), action, and ignored channels are all configurable.
