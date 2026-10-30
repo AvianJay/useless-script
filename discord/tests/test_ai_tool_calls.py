@@ -1,5 +1,6 @@
 import sys
 import unittest
+from datetime import datetime, timezone
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, Mock, patch
@@ -608,6 +609,136 @@ class AIGetUserToolTests(unittest.IsolatedAsyncioTestCase):
         )
         return AICommands(bot)
 
+    def make_member_context(self, *, presences=True, cached=True):
+        member = Mock(spec=discord.Member)
+        member.configure_mock(
+            **vars(self.make_user(self.TARGET_ID, "member")),
+            nick=None,
+            joined_at=None,
+            pending=False,
+            timed_out_until=None,
+            roles=[SimpleNamespace(id=1, name="@everyone")],
+            top_role=None,
+            guild_permissions=discord.Permissions.none(),
+            status=discord.Status.online,
+            desktop_status=discord.Status.online,
+            mobile_status=discord.Status.idle,
+            web_status=discord.Status.offline,
+            activities=(),
+        )
+        member.is_on_mobile.return_value = True
+        guild = SimpleNamespace(
+            id=1,
+            get_member=Mock(return_value=member if cached else None),
+            fetch_member=AsyncMock(return_value=member),
+        )
+        cog = self.make_cog()
+        cog.bot.intents = SimpleNamespace(presences=presences)
+        cog._resolve_tool_channel = Mock(return_value=(None, None))
+        cog._validate_channel_tool_access = Mock(return_value=(None, {}))
+        context = {"user": self.make_user(self.REQUESTER_ID, "requester"), "guild": guild}
+        return cog, member, context
+
+    async def test_member_presence_includes_status_clients_and_shared_activities(self):
+        cog, member, context = self.make_member_context()
+        start = datetime(2026, 10, 30, 0, 0, tzinfo=timezone.utc)
+        member.activities = (
+            discord.CustomActivity("Taking a break", emoji="☕"),
+            discord.Game("Minecraft", timestamps={"start": int(start.timestamp() * 1000)}),
+            discord.Streaming(name="Live coding", url="https://twitch.tv/example"),
+            discord.Activity(
+                type=discord.ActivityType.playing,
+                name="Example game",
+                application_id=str(self.TARGET_ID),
+                details="Ranked match",
+                state="In a party",
+            ),
+            discord.Spotify(
+                details="Example song",
+                state="Artist One; Artist Two",
+                assets={"large_text": "Example album"},
+                timestamps={"start": int(start.timestamp() * 1000), "end": int(start.timestamp() * 1000) + 180000},
+                sync_id="example-track",
+                session_id="private-session",
+            ),
+        )
+
+        result = await cog._tool_get_user({"user_id": str(self.TARGET_ID)}, context)
+
+        presence = result["presence"]
+        self.assertTrue(presence["available"])
+        self.assertEqual(presence["source"], "gateway_cache")
+        self.assertEqual(presence["status"], "online")
+        self.assertEqual(presence["desktop_status"], "online")
+        self.assertEqual(presence["mobile_status"], "idle")
+        self.assertEqual(presence["web_status"], "offline")
+        self.assertTrue(presence["is_on_mobile"])
+        custom, game, stream, rich, spotify = presence["activities"]
+        self.assertEqual(custom, {"type": "custom", "name": "Taking a break", "state": "Taking a break", "emoji": "☕"})
+        self.assertEqual(game["type"], "playing")
+        self.assertEqual(game["name"], "Minecraft")
+        self.assertEqual(game["start"], start.isoformat())
+        self.assertEqual(stream["type"], "streaming")
+        self.assertEqual(stream["url"], "https://twitch.tv/example")
+        self.assertEqual(rich["application_id"], str(self.TARGET_ID))
+        self.assertEqual(rich["details"], "Ranked match")
+        self.assertEqual(rich["state"], "In a party")
+        self.assertEqual(spotify["type"], "listening")
+        self.assertEqual(spotify["title"], "Example song")
+        self.assertEqual(spotify["artists"], ["Artist One", "Artist Two"])
+        self.assertEqual(spotify["album"], "Example album")
+        self.assertEqual(spotify["track_url"], "https://open.spotify.com/track/example-track")
+        self.assertEqual(spotify["start"], start.isoformat())
+        self.assertEqual(spotify["end"], "2026-10-30T00:03:00+00:00")
+        self.assertNotIn("session_id", spotify)
+
+    async def test_presence_prefers_cache_over_current_user_interaction_snapshot(self):
+        cog, member, context = self.make_member_context()
+        interaction_member = Mock(spec=discord.Member)
+        interaction_member.configure_mock(**vars(self.make_user(self.TARGET_ID, "member")))
+        interaction_member.status = discord.Status.offline
+        # Other member fields are unrelated to the interaction's missing presence.
+        for field in ("roles", "nick", "joined_at", "pending", "timed_out_until", "top_role", "guild_permissions"):
+            setattr(interaction_member, field, getattr(member, field))
+        context["user"] = interaction_member
+
+        result = await cog._tool_get_user({}, context)
+
+        self.assertTrue(result["is_current_user"])
+        self.assertEqual(result["presence"]["status"], "online")
+
+    async def test_offline_presence_has_no_activities_and_explains_invisible_status(self):
+        cog, member, context = self.make_member_context()
+        member.status = discord.Status.offline
+
+        result = await cog._tool_get_user({"user_id": str(self.TARGET_ID)}, context)
+
+        self.assertTrue(result["presence"]["available"])
+        self.assertEqual(result["presence"]["status"], "offline")
+        self.assertEqual(result["presence"]["activities"], [])
+        self.assertIn("invisible", result["presence"]["note"])
+
+    async def test_disabled_presence_intent_does_not_report_offline(self):
+        cog, _member, context = self.make_member_context(presences=False)
+
+        result = await cog._tool_get_user({"user_id": str(self.TARGET_ID)}, context)
+
+        self.assertFalse(result["presence"]["available"])
+        self.assertIn("enable_presence_intent=true", result["presence"]["reason"])
+        self.assertNotIn("status", result["presence"])
+        self.assertNotIn("activities", result["presence"])
+
+    async def test_rest_only_member_does_not_report_default_offline_presence(self):
+        cog, _member, context = self.make_member_context(cached=False)
+
+        result = await cog._tool_get_user({"user_id": str(self.TARGET_ID)}, context)
+
+        context["guild"].fetch_member.assert_awaited_once_with(self.TARGET_ID)
+        self.assertTrue(result["is_guild_member"])
+        self.assertFalse(result["presence"]["available"])
+        self.assertIn("not cached", result["presence"]["reason"])
+        self.assertNotIn("status", result["presence"])
+
     async def test_user_outside_guild_returns_public_info_without_member_data(self):
         target = self.make_user(self.TARGET_ID, "outsider")
         cog = self.make_cog(fetched_user=target)
@@ -629,6 +760,8 @@ class AIGetUserToolTests(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(result["is_guild_member"])
         self.assertIn("guild_info_unavailable", result)
         self.assertNotIn("member", result)
+        self.assertFalse(result["presence"]["available"])
+        self.assertNotIn("status", result["presence"])
         self.assertIsNone(result["channel_permissions"]["target_permissions"])
 
     async def test_dm_can_inspect_other_users_and_marks_dm_participants(self):
@@ -649,6 +782,9 @@ class AIGetUserToolTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("guild_info_unavailable", friend_result)
         self.assertEqual(stranger_result["user"]["id"], "200")
         self.assertFalse(stranger_result["in_current_dm"])
+        for result in (friend_result, stranger_result):
+            self.assertFalse(result["presence"]["available"])
+            self.assertNotIn("status", result["presence"])
         cog.bot.fetch_user.assert_not_awaited()
 
     async def test_dm_defaults_to_current_user(self):
