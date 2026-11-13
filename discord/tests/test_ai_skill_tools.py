@@ -261,14 +261,56 @@ class AISkillToolTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(first['ok'])
         self.assertFalse(second['ok'])
 
-    async def test_threads_interactions_require_an_owner_or_enabled_publisher(self):
-        with patch('ai_skill_tools.config', return_value=[]), patch('ai_skill_tools.get_global_config', return_value=[]):
-            self.assertIsNotNone(self.cog._threads_interaction_error('https://www.threads.com/@account', self.context))
-            self.assertIsNone(self.cog._threads_interaction_error('https://threads.com.example.org', self.context))
-        with patch('ai_skill_tools.config', return_value=[42]), patch('ai_skill_tools.get_global_config', return_value=[]):
-            self.assertIsNone(self.cog._threads_interaction_error('https://www.threads.com', self.context))
-        with patch('ai_skill_tools.config', return_value=[]), patch('ai_skill_tools.get_global_config', return_value=['42']):
-            self.assertIsNone(self.cog._threads_interaction_error('https://www.threads.net', self.context))
+    async def test_threads_interactions_allow_regular_users_with_browser_approval(self):
+        skill_session(self.context).loaded.add('browser')
+        actions = (
+            ('browser_act', {'action': 'click', 'ref': 'e1', 'element': 'Post button'}, 'execute_action'),
+            ('browser_evaluate', {'expression': '() => 1'}, 'execute_evaluate'),
+            ('browser_playwright', {'operation': 'click', 'target': [
+                {'kind': 'role', 'role': 'button', 'name': 'Post'},
+            ]}, 'execute_playwright_action'),
+        )
+        for host in ('threads.com', 'www.threads.com', 'threads.net', 'www.threads.net'):
+            for name, payload, executor in actions:
+                for authorized in (False, True):
+                    with self.subTest(host=host, tool=name, authorized=authorized):
+                        page = SimpleNamespace(url=f'https://{host}/@account')
+                        self.context['_browser_interaction_authorized'] = authorized
+                        with patch.dict('globalenv._config', {'owners': []}), patch(
+                            'ai_skill_tools.get_global_config', side_effect=lambda key, default=None: default), patch(
+                            'ai._get_ai_browser_cdp_endpoint', return_value='configured'), patch.object(
+                            self.cog.browser, 'get_page', new=AsyncMock(return_value=(page, None))), patch.object(
+                            self.cog.browser, 'validate_public_url', new=AsyncMock(return_value=(page.url, None))), patch.object(
+                            self.cog.browser, 'request_approval', new=AsyncMock(return_value={'approved': False})) as approval, patch.object(
+                            self.cog.browser, executor, new=AsyncMock(return_value={'performed': True})) as execute:
+                            result = await self.cog._node_tool_bridge(name, payload, self.context)
+                        self.assertTrue(result['ok'], result)
+                        if authorized:
+                            self.assertTrue(result['data']['performed'])
+                            execute.assert_awaited_once()
+                            approval.assert_not_awaited()
+                        else:
+                            self.assertFalse(result['data']['approved'])
+                            approval.assert_awaited_once()
+                            self.assertEqual(approval.await_args.kwargs['starting_url'], page.url)
+                            execute.assert_not_awaited()
+
+    async def test_threads_interactions_still_honor_a_rejected_browser_session(self):
+        skill_session(self.context).loaded.add('browser')
+        self.context['_browser_interaction_denied'] = True
+        self.context['_browser_interaction_authorized'] = True
+        with patch('ai._get_ai_browser_cdp_endpoint', return_value='configured'), patch.object(
+            self.cog.browser, 'get_page', new=AsyncMock()) as get_page, patch.object(
+            self.cog.browser, 'request_approval', new=AsyncMock()) as approval, patch.object(
+            self.cog.browser, 'execute_playwright_action', new=AsyncMock()) as execute:
+            result = await self.cog._node_tool_bridge('browser_playwright', {
+                'operation': 'click', 'target': [{'kind': 'role', 'role': 'button', 'name': 'Post'}],
+            }, self.context)
+        self.assertFalse(result['ok'])
+        self.assertIn('error', result)
+        get_page.assert_not_awaited()
+        approval.assert_not_awaited()
+        execute.assert_not_awaited()
 
     async def test_invalid_kernel_configuration_does_not_consume_a_slot(self):
         skill_session(self.context).loaded.add('data-analysis')

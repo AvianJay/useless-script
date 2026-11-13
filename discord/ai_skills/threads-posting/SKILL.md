@@ -9,8 +9,8 @@ Use the managed browser page with the profile's existing login. Never request,
 read or export passwords, cookies, access tokens or browser storage. If sign-in is
 required, stop the account-dependent work and explain that the profile needs to
 be signed in. Do not fill login or verification fields.
-Threads account interactions are available only to bot owners or publishers
-explicitly enabled by an owner with `ai-config threads-publisher`.
+Threads account interactions are available to all users through the ordinary
+browser approval flow; no owner role or publisher allowlist is required.
 
 Determine whether the user wants a draft, a new post, or a reply to a particular
 post. For replies, inspect the target and context first. Preserve supplied wording,

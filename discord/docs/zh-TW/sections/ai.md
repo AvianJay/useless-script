@@ -173,9 +173,16 @@ AI 使用三種不同的上下文，清除其中一種不會連帶清除其他�
 
 ### 參考圖生成與編輯
 
-- 在 `/ai` 附圖並要求編輯或依照該圖生成，AI 可將目前附圖交給 `generate_image`；也可指定一個 Discord CDN 圖片網址。每次支援一張參考圖，會將圖片轉為 PNG 後呼叫 OpenAI 相容 Images API 的 `images.edit`；純文字生成仍使用 `images.generate`。
+- 在 `/ai` 附圖並要求編輯或依照該圖生成，AI 可將目前附圖交給 `generate_image`；也可指定 Discord CDN 圖片網址。每次最多支援 16 張參考圖，依上傳或網址順序轉為 PNG 後呼叫 OpenAI 相容 Images API 的 `images.edit`；GIF 參考圖只取第一格，純文字生成仍使用 `images.generate`。
 - `gpt-image-2` 預設標記為支援圖片輸入。新增其他圖片模型後，Bot 擁有者可用 `y!aicfg image-input-tag <model> on` 開啟，或以 `off` 關閉；請先確認目前 API 供應商的該模型支援圖片編輯端點。此標記與文字模型的 vision 標記分開管理。
 - `y!aicfg image-models` 會以 `[image-input]` 顯示支援的模型。未標記模型、無效參考圖或下載失敗會在生成扣款前回報；生成失敗仍會退款，計費沿用每張圖片的模型費率。
+
+### GPT Image 2.6 動態 GIF
+
+- 可要求 AI「製作循環 GIF」或附上參考圖要求動畫化。`generate_image` 支援 `output_format: "gif"`、`frame_count`（2–16，預設 9）及 `frame_duration_ms`（20–2000 毫秒，預設 200）；GIF 預設使用 `size: "auto"`，也可指定寬高皆為 16 倍數的每格尺寸，實際上限仍由供應商決定。
+- 支援 `gpt-image-2.6-sunburst`、`gpt-image-2.6-flare`，以及供應商提供的 `gpt-image-2.6` 別名。全新設定會包含這些模型，預設費率為每張圖片或每個 GIF 250 全域幣；`n` 是動畫個數，不是影格數。
+- 既有模型清單不會自動覆寫。Bot 擁有者可用 `y!aicfg image-model-rate gpt-image-2.6-flare 250` 加入模型；參考圖動畫另用 `y!aicfg image-input-tag gpt-image-2.6-flare on` 啟用圖片輸入。未指定模型的 GIF 請求會選擇已設定且支援 GIF 的模型。
+- API 供應商及使用的金鑰必須已開放 GIF 功能。若拒絕請求或只回傳靜態圖，工具會回報錯誤並退款；成功時會保留原始動畫內容，以 `.gif` 附件傳送。
 
 ### Google 圖片搜尋與安全性
 
@@ -238,7 +245,7 @@ AI 會按任務載入所需的操作說明與工具。目前包含瀏覽器、�
 - 瀏覽器操作沿用 Discord 的允許／拒絕流程。Node 執行環境呼叫相同的瀏覽器與 Discord 權限檢查，無法直接存取主機檔案、機器人憑證或網路。
 - 瀏覽任務預設透過 Node REPL 執行，可用 Playwright 風格的角色／CSS 定位、真正的鍵盤輸入與視窗座標滑鼠操作，後端由 Python Playwright 執行。Docker 啟動不可用時才開放原有工具備援；ref 逾時後應重新檢查頁面、改用穩定定位，不會一直重點同一個 ref。
 - 執行中的標籤會顯示 Node REPL；只有 kernel 確實執行過，回覆的模型頁尾才會加上 `Node REPL`。工具結果與已遮蔽的診斷紀錄會提供 Node 版本、kernel ID、執行次數與橋接呼叫數；程式碼與瀏覽器內容仍不會寫入這些紀錄。
-- Meta Threads 使用已設定 profile 的現有登入狀態，目前支援文字與連結，不支援媒體上傳。只有明確要求發佈時才會送出，並驗證結果、回傳貼文連結；要求草稿或測試技能不會發文。帳號互動限機器人擁有者及經擁有者開放的發文者。
+- Meta Threads 使用已設定 profile 的現有登入狀態，目前支援文字與連結，不支援媒體上傳。只有明確要求發佈時才會送出，並驗證結果、回傳貼文連結；要求草稿或測試技能不會發文。所有使用者皆可操作帳號與發文，不需擁有者身分或加入白名單，第一次操作仍需在瀏覽器授權卡片上允許。
 
 ### 擁有者的技能執行設定
 
@@ -247,6 +254,5 @@ AI 會按任務載入所需的操作說明與工具。目前包含瀏覽器、�
 - `!aicfg node-repl`：查看目前沙箱設定。
 - `!aicfg node-repl on [image]`：以預先拉取且相容 Node 的映像啟用；`off` 關閉。
 - `!aicfg browser-cdp <profile CDP URL>`：沿用現有方式設定瀏覽器。
-- `!aicfg threads-publisher <Discord 使用者 ID> on`：開放該使用者操作 Threads 帳號；`off` 撤銷額外權限。機器人擁有者原本就有權限。
 
 每個 kernel 均停用網路、使用唯讀檔案系統，只掛載一個唯讀 worker 程式，並採用非特權使用者及 CPU／記憶體／程序數限制。每個 bot 實例最多同時執行兩個 kernel。單次請求上限十分鐘、最多十二輪技能／工具操作，共用 48 次工具呼叫額度，包含 JavaScript 中的工具呼叫；請求結束後移除容器。

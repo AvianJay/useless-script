@@ -39,12 +39,14 @@ DEFAULT_AI_VIDEO_MODELS = {
     "seedance-2.0-fast-el": 500.00,
     "seedance-2.0-pro-el": 1000.00,
 }
+AI_GIF_IMAGE_MODELS = ("gpt-image-2.6", "gpt-image-2.6-sunburst", "gpt-image-2.6-flare")
 DEFAULT_AI_IMAGE_MODELS = {
     "gpt-image-2": 250.00,
+    **{model: 250.00 for model in AI_GIF_IMAGE_MODELS},
 }
 DEFAULT_AI_DEFAULT_MODEL = "kimi-k2.6"
 DEFAULT_AI_IMAGE_MODEL = "gpt-image-2"
-DEFAULT_AI_IMAGE_INPUT_MODELS = ["gpt-image-2"]
+DEFAULT_AI_IMAGE_INPUT_MODELS = ["gpt-image-2", *AI_GIF_IMAGE_MODELS]
 DEFAULT_AI_REVIEW_MODEL = "openai"
 DEFAULT_AI_REPORT_MODEL = "openai-fast"
 DEFAULT_AI_VISION_MODELS = []

@@ -1,5 +1,6 @@
 import base64
 import io
+import json
 import sys
 import unittest
 from contextlib import ExitStack
@@ -32,6 +33,13 @@ def image_bytes(image_format="PNG", color=(20, 40, 60)):
     return output.getvalue()
 
 
+def animated_gif_bytes():
+    output = io.BytesIO()
+    frames = [Image.new("RGB", (8, 6), color) for color in ("red", "blue")]
+    frames[0].save(output, format="GIF", save_all=True, append_images=frames[1:], duration=120, loop=0)
+    return output.getvalue()
+
+
 class AIImageInputConfigTests(unittest.TestCase):
     def setUp(self):
         self.store = {
@@ -51,8 +59,21 @@ class AIImageInputConfigTests(unittest.TestCase):
             side_effect=lambda key, value: self.store.__setitem__(key, value),
         ))
 
-    def test_only_gpt_image_2_accepts_image_input_by_default(self):
+    def test_default_image_input_tags_are_limited_to_configured_models(self):
         self.assertEqual(ai_provider.get_ai_image_input_models(), ["gpt-image-2"])
+
+    def test_new_configs_include_gpt_image_26_models_with_image_input(self):
+        self.store.clear()
+        rates = ai_provider.get_ai_image_model_rates()
+        for model in ai_provider.AI_GIF_IMAGE_MODELS:
+            self.assertEqual(rates[model], 250.0)
+            self.assertIn(model, ai_provider.get_ai_image_input_models())
+
+    def test_existing_image_model_rates_and_input_tags_are_preserved(self):
+        self.store[ai_provider.AI_IMAGE_INPUT_MODELS_CONFIG_KEY] = []
+        ai_provider.ensure_ai_global_config_defaults()
+        self.assertEqual(set(ai_provider.get_ai_image_model_rates()), {"gpt-image-2", "another-image-model"})
+        self.assertEqual(ai_provider.get_ai_image_input_models(), [])
 
     def test_tags_filter_unknown_models_and_duplicates(self):
         ai_provider.set_ai_image_input_models([
@@ -134,6 +155,158 @@ class AIImageGenerationTests(unittest.IsolatedAsyncioTestCase):
         self.fetch.assert_not_awaited()
         self.charge.assert_called_once_with(1, 250.0)
         self.refund.assert_not_called()
+        self.assertNotIn("output_format", self.request.await_args.kwargs)
+        self.assertNotIn("extra_body", self.request.await_args.kwargs)
+
+    def _enable_gif_models(self):
+        self.rates.return_value.update({model: 250.0 for model in ai_provider.AI_GIF_IMAGE_MODELS})
+        self.input_models.return_value = ["gpt-image-2", *ai_provider.AI_GIF_IMAGE_MODELS]
+        self.response.data = [{"b64_json": base64.b64encode(animated_gif_bytes()).decode("ascii")}]
+
+    async def test_gif_generation_preserves_frames_timing_and_attachment_bytes(self):
+        self._enable_gif_models()
+        result = await self.cog._tool_generate_image({
+            "prompt": "A blinking light, seamless loop", "output_format": "gif",
+            "frame_count": 2, "frame_duration_ms": 120,
+        }, self.context)
+        self.assertEqual(result["model"], "gpt-image-2.6")
+        self.assertEqual(result["output_format"], "gif")
+        self.assertEqual(result["frame_count"], 2)
+        self.assertEqual(result["frame_duration_ms"], 120)
+        self.assertEqual(result["size"], "auto")
+        self.request.assert_awaited_once_with(
+            model="gpt-image-2.6", prompt="A blinking light, seamless loop", n=1, size="auto",
+            output_format="gif", extra_body={"frame_count": 2, "frame_duration_ms": 120},
+        )
+        [payload] = self.context["pending_image_attachments"]
+        self.assertTrue(payload["filename"].endswith(".gif"))
+        self.assertEqual(payload["content"], animated_gif_bytes())
+        [attachment] = self.cog._build_pending_image_files([payload])
+        try:
+            self.assertEqual(attachment.filename, payload["filename"])
+            with Image.open(attachment.fp) as generated:
+                self.assertEqual(generated.format, "GIF")
+                self.assertEqual(generated.n_frames, 2)
+                self.assertEqual(generated.info["loop"], 0)
+                for index in range(generated.n_frames):
+                    generated.seek(index)
+                    self.assertEqual(generated.info["duration"], 120)
+        finally:
+            attachment.close()
+        self.charge.assert_called_once_with(1, 250.0)
+        self.refund.assert_not_called()
+
+    async def test_gif_reference_edit_uses_selected_model_and_default_animation_settings(self):
+        self._enable_gif_models()
+        for model in ai_provider.AI_GIF_IMAGE_MODELS:
+            with self.subTest(model=model):
+                result = await self.cog._tool_generate_image({
+                    "prompt": "Animate the reference", "model": model, "image_url": IMAGE_URL,
+                    "output_format": "gif", "size": "512x288",
+                }, self.context)
+                self.assertTrue(result["used_reference_image"])
+                request = self.request.await_args.kwargs
+                self.assertEqual(request["model"], model)
+                self.assertEqual(request["size"], "512x288")
+                self.assertEqual(request["output_format"], "gif")
+                self.assertEqual(request["extra_body"], {"frame_count": 9, "frame_duration_ms": 200})
+                self.assertEqual(request["image"][0], "reference.png")
+
+    async def test_gif_uses_configured_default_when_it_supports_animation(self):
+        self._enable_gif_models()
+        with patch("ai._get_ai_image_model", return_value="gpt-image-2.6-flare"):
+            result = await self.cog._tool_generate_image({"prompt": "Animate a light", "output_format": "gif"}, self.context)
+        self.assertEqual(result["model"], "gpt-image-2.6-flare")
+
+    async def test_gif_never_switches_an_explicit_unsupported_model_or_enables_unconfigured_models(self):
+        for extra in ({}, {"model": "gpt-image-2"}):
+            result = await self.cog._tool_generate_image({
+                "prompt": "Animate this", "output_format": "gif", "image_url": IMAGE_URL, **extra,
+            }, self.context)
+            self.assertIn("does not support animated GIF", result["error"])
+            self.assertEqual(result["available_models"], [])
+        self._enable_gif_models()
+        result = await self.cog._tool_generate_image({
+            "prompt": "Animate this", "model": "gpt-image-2", "output_format": "gif", "image_url": IMAGE_URL,
+        }, self.context)
+        self.assertEqual(result["available_models"], list(ai_provider.AI_GIF_IMAGE_MODELS))
+        self.fetch.assert_not_awaited()
+        self.charge.assert_not_called()
+        self.request.assert_not_awaited()
+
+    async def test_invalid_gif_options_are_rejected_before_download_or_charge(self):
+        self._enable_gif_models()
+        invalid_values = {
+            "frame_count": [None, True, 1, 17, 2.5, "2"],
+            "frame_duration_ms": [None, False, 19, 2001, 120.5, "120"],
+            "size": ["0x256", "512x287", "-16x256", "512X288", "256", "16.0x256"],
+        }
+        for key, values in invalid_values.items():
+            for value in values:
+                with self.subTest(key=key, value=value):
+                    result = await self.cog._tool_generate_image({
+                        "prompt": "Animate this", "output_format": "gif", "image_url": IMAGE_URL, key: value,
+                    }, self.context)
+                    self.assertIn("error", result)
+        self.fetch.assert_not_awaited()
+        self.charge.assert_not_called()
+        self.request.assert_not_awaited()
+
+    async def test_frame_options_require_gif_and_unknown_formats_are_rejected(self):
+        for extra in ({"frame_count": 2}, {"output_format": "png", "frame_duration_ms": 120}, {"output_format": "svg"}):
+            with self.subTest(extra=extra):
+                result = await self.cog._tool_generate_image({"prompt": "Draw this", **extra}, self.context)
+                self.assertIn("error", result)
+        self.charge.assert_not_called()
+        self.request.assert_not_awaited()
+
+    async def test_output_extension_uses_image_bytes_when_metadata_is_incorrect(self):
+        for image_format, expected_extension in (("GIF", "gif"), ("WEBP", "webp"), ("JPEG", "jpg")):
+            with self.subTest(image_format=image_format):
+                self.response.output_format = "png"
+                self.response.data = [{"b64_json": base64.b64encode(image_bytes(image_format)).decode("ascii")}]
+                result = await self.cog._tool_generate_image({"prompt": "Draw a light"}, self.context)
+                self.assertTrue(result["attachments"][0]["filename"].endswith("." + expected_extension))
+
+    async def test_static_formats_are_forwarded_without_animation_options(self):
+        for output_format in ("png", "jpeg", "webp"):
+            with self.subTest(output_format=output_format):
+                self.response.data = [{"b64_json": base64.b64encode(image_bytes(output_format.upper())).decode("ascii")}]
+                result = await self.cog._tool_generate_image({"prompt": "Draw a light", "output_format": output_format}, self.context)
+                self.assertEqual(result["output_format"], output_format)
+                self.assertEqual(self.request.await_args.kwargs["output_format"], output_format)
+                self.assertNotIn("extra_body", self.request.await_args.kwargs)
+
+    async def test_static_response_to_gif_request_refunds_and_preserves_previous_attachments(self):
+        self._enable_gif_models()
+        previous = {"filename": "previous.png", "content": self.png}
+        self.context["pending_image_attachments"] = [previous]
+        self.response.data.append({"b64_json": base64.b64encode(self.png).decode("ascii")})
+        result = await self.cog._tool_generate_image({
+            "prompt": "Animate a light", "output_format": "gif", "n": 2,
+        }, self.context)
+        self.assertIn("did not return an animated GIF", result["error"])
+        self.refund.assert_called_once_with(1, 500.0)
+        self.assertEqual(self.context["pending_image_attachments"], [previous])
+
+    async def test_single_frame_gif_is_rejected_and_refunded(self):
+        self._enable_gif_models()
+        self.response.data = [{"b64_json": base64.b64encode(image_bytes("GIF")).decode("ascii")}]
+        result = await self.cog._tool_generate_image({"prompt": "Animate a light", "output_format": "gif"}, self.context)
+        self.assertIn("did not return an animated GIF", result["error"])
+        self.refund.assert_called_once_with(1, 250.0)
+        self.assertEqual(self.context.get("pending_image_attachments", []), [])
+
+    def test_tool_schema_exposes_gif_models_and_frame_limits(self):
+        self._enable_gif_models()
+        tool = next(tool["function"] for tool in self.cog._build_ai_tools() if tool["function"]["name"] == "generate_image")
+        properties = tool["parameters"]["properties"]
+        self.assertIn("gif", properties["output_format"]["enum"])
+        self.assertEqual((properties["frame_count"]["minimum"], properties["frame_count"]["maximum"]), (2, 16))
+        self.assertEqual((properties["frame_duration_ms"]["minimum"], properties["frame_duration_ms"]["maximum"]), (20, 2000))
+        for model in ai_provider.AI_GIF_IMAGE_MODELS:
+            self.assertIn(model, properties["model"]["enum"])
+            self.assertIn(model, tool["description"])
 
     async def test_current_attachment_is_uploaded_without_vision_analysis(self):
         self.context["request_image_attachment"] = SimpleNamespace(url=IMAGE_URL)
@@ -430,6 +603,41 @@ class AIImageGenerationTests(unittest.IsolatedAsyncioTestCase):
 
 
 class AIImageEndpointTests(unittest.IsolatedAsyncioTestCase):
+    async def test_gif_fields_reach_json_generation_and_multipart_edit_requests(self):
+        cog = AICommands(SimpleNamespace())
+        paths = []
+
+        def handle(request):
+            paths.append(request.url.path)
+            if request.url.path.endswith("/edits"):
+                headers = f"Content-Type: {request.headers['content-type']}\r\nMIME-Version: 1.0\r\n\r\n".encode()
+                multipart = BytesParser(policy=default).parsebytes(headers + request.read())
+                fields = {
+                    part.get_param("name", header="content-disposition"): part.get_payload(decode=True).decode()
+                    for part in multipart.iter_parts() if not part.get_filename()
+                }
+                self.assertTrue(any(part.get_filename() == "reference.png" for part in multipart.iter_parts()))
+            else:
+                fields = json.loads(request.read())
+            self.assertEqual(fields["output_format"], "gif")
+            self.assertEqual(int(fields["frame_count"]), 2)
+            self.assertEqual(int(fields["frame_duration_ms"]), 120)
+            self.assertNotIn("extra_body", fields)
+            self.assertNotIn("stream", fields)
+            return httpx.Response(200, json={"created": 0, "data": []})
+
+        with OpenAI(
+            api_key="test-key", base_url="https://mock.invalid/v1", max_retries=0,
+            http_client=httpx.Client(transport=httpx.MockTransport(handle)),
+        ) as client:
+            with patch("ai._create_ai_client", return_value=client):
+                for references in ({}, {"image": ("reference.png", image_bytes(), "image/png")}):
+                    await cog._create_image_generation_response(
+                        model="gpt-image-2.6", prompt="Animate a light", output_format="gif", size="auto",
+                        extra_body={"frame_count": 2, "frame_duration_ms": 120}, **references,
+                    )
+        self.assertEqual(paths, ["/v1/images/generations", "/v1/images/edits"])
+
     async def test_multiple_images_are_encoded_as_separate_multipart_uploads(self):
         cog = AICommands(SimpleNamespace())
         references = [

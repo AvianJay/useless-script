@@ -135,9 +135,16 @@ If a paid image tool fails to execute, the cost already charged for that tool is
 
 ### Reference Images and Editing
 
-- Attach an image in `/ai` and ask for an edit or reference-based generation. The AI can pass the current attachment or one Discord CDN image URL to `generate_image`. One reference image is supported per call; it is converted to PNG for the OpenAI-compatible Images API's `images.edit`. Text-only generation continues to use `images.generate`.
+- Attach images in `/ai` and ask for an edit or reference-based generation. The AI can pass current attachments or Discord CDN image URLs to `generate_image`. Up to 16 reference images are converted to PNG in upload or URL order for the OpenAI-compatible Images API's `images.edit`; GIF references use only their first frame. Text-only generation continues to use `images.generate`.
 - `gpt-image-2` supports image input by default. After adding another image model, the bot owner can enable its tag with `y!aicfg image-input-tag <model> on`, or disable it with `off`. First confirm that the current API provider supports image edits for that model. This setting is separate from text models' vision tags.
 - `y!aicfg image-models` marks enabled models with `[image-input]`. An unmarked model, invalid image, or failed download is rejected before the generation charge. Generation failures are refunded, and the existing per-image model rate applies.
+
+### GPT Image 2.6 animated GIFs
+
+- Ask the AI to create a looping GIF, optionally with reference images. `generate_image` accepts `output_format: "gif"`, `frame_count` (2–16, default 9), and `frame_duration_ms` (20–2000 milliseconds, default 200). GIF size defaults to `auto`; explicit frame dimensions must be positive multiples of 16 and remain within the provider's limits.
+- Supported models are `gpt-image-2.6-sunburst`, `gpt-image-2.6-flare`, and the provider alias `gpt-image-2.6`. New configurations include these models at 250 global coins per image or complete GIF. `n` counts animations, not frames.
+- Existing model lists are preserved. Owners can add a model with `y!aicfg image-model-rate gpt-image-2.6-flare 250` and enable reference inputs with `y!aicfg image-input-tag gpt-image-2.6-flare on`. GIF requests without a model select a configured model that supports GIF output.
+- The API provider and key must have GIF access. Rejected requests or static-only results are refunded; successful animations are sent unchanged as `.gif` attachments.
 
 ### Google Image Search & Safety
 
@@ -201,7 +208,7 @@ The AI loads task instructions and tools only when needed. Available skills cove
 - Browser actions retain the existing Discord Allow/Reject flow. The Node runtime calls the same permission-checked browser and Discord handlers. It cannot access host files, bot credentials or the network directly.
 - Browsing now runs through Node REPL by default, with Playwright-style role/CSS locators, real keyboard input and viewport-coordinate mouse actions backed by Python Playwright. Unavailable Docker startup exposes the direct tools as a fallback. A ref timeout should lead to a fresh inspection and stable locator rather than repeated clicks on the same ref.
 - The progress label says Node REPL, and the response's model footer includes `Node REPL` only after a kernel really ran. Tool results and redacted diagnostic logs include the Node version, kernel ID, evaluation number and bridge-call count. Scripts and browser contents remain redacted from those logs.
-- Meta Threads uses the configured profile's existing login and currently supports text and links, not media uploads. The AI publishes only when asked to publish, verifies the result, and returns its permalink. Drafting or testing the skill does not publish anything. Account interactions are restricted to bot owners and explicitly enabled publishers.
+- Meta Threads uses the configured profile's existing login and currently supports text and links, not media uploads. The AI publishes only when asked to publish, verifies the result, and returns its permalink. Drafting or testing the skill does not publish anything. All users can interact with the account and publish without an owner role or publisher allowlist. The first interaction still requires approval on the browser approval card.
 
 ### Owner Setup for Skill Execution
 
@@ -210,6 +217,5 @@ Install the updated Python requirements and run a Linux Docker daemon on the bot
 - `!aicfg node-repl` displays the current sandbox setting.
 - `!aicfg node-repl on [image]` enables the kernel using a pre-pulled Node-compatible image; `off` disables it.
 - `!aicfg browser-cdp <profile CDP URL>` configures the managed browser as before.
-- `!aicfg threads-publisher <Discord user ID> on` permits that user to interact with the Threads account; `off` revokes the extra permission. Bot owners are already permitted.
 
 Each kernel has no network, a read-only filesystem, one read-only worker-script mount, an unprivileged user, and CPU/memory/process limits. At most two kernels run per bot instance. Requests have a ten-minute deadline, up to twelve skill/tool rounds and a shared 48-call budget, including calls made through JavaScript. Containers are removed when the request ends.

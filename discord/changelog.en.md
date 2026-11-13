@@ -51,7 +51,7 @@
 * Updated safe AI browser tools
   * Browsing tasks now operate pages with Playwright inside the Node REPL, locating elements by role, text, label, or viewport coordinates, with real keyboard input. The original browser tools are used only when the sandbox is unavailable.
   * Approval cards are now sent as a separate message mentioning the user and deleted automatically once handled. Coordinate actions are limited to the viewport and are rejected on password or payment fields, or links that open new windows or trigger downloads.
-  * AI can draft or publish text posts on Threads through the browser account configured by the owner. Clicking, typing, or posting on Threads is restricted to the Bot owner and users they allow, and the first action still requires approval on the card.
+  * All users can draft or publish text posts on Threads through the browser account configured by the owner without joining a publisher allowlist. The first action still requires approval on the card.
   * Fixed clearing and retyping content in rich-text editors such as Threads failing. Content is now selected and deleted with the real keyboard, typed character by character, and verified.
 * Updated Terrible Make it a Quote
   * Markdown is now rendered like Discord, including bold, italics, code, headings, quotes, lists, spoilers, and mention styles, with the original line breaks preserved. Timestamps are converted to dates and times.

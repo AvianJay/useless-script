@@ -15,7 +15,7 @@ from ai_skills import (
     MAX_ATTACHMENT_BYTES, SECRET_FILENAME, extract_attachment,
     get_skill_registry, skill_session,
 )
-from globalenv import config, get_global_config
+from globalenv import get_global_config
 
 
 def _tool(name, description, properties=None, required=()):
@@ -58,18 +58,6 @@ class AISkillTools:
     MAX_SKILL_TOOL_ITERATIONS = 12
     MAX_SKILL_TOOL_CALLS = 48
     MAX_SKILL_REQUEST_SECONDS = 600
-
-    def _can_interact_with_threads(self, context: dict) -> bool:
-        user_id = getattr(context.get("user"), "id", None)
-        allowed = [*(config("owners", []) or []), *(get_global_config("ai_threads_publisher_ids", []) or [])]
-        return user_id is not None and str(user_id) in {str(item) for item in allowed}
-
-    def _threads_interaction_error(self, url: str, context: dict) -> str | None:
-        host = (urlparse(url).hostname or "").lower()
-        threads_host = any(host == domain or host.endswith("." + domain) for domain in ("threads.com", "threads.net"))
-        if threads_host and not self._can_interact_with_threads(context):
-            return "Threads account interactions require a bot owner or a configured Threads publisher"
-        return None
 
     def _skill_availability(self, name: str) -> tuple[bool, str | None]:
         if name in {"browser", "threads-posting"} and not get_global_config("ai_browser_cdp_endpoint", ""):

@@ -47,6 +47,7 @@ import ai_layout
 from ai_rich_media import render_rich_markdown_images
 from ai_table import collect_table_markup
 from ai_provider import (
+    AI_GIF_IMAGE_MODELS,
     attach_image_to_messages as _attach_image_to_messages,
     coerce_ai_rate_dict as _coerce_ai_rate_dict,
     create_ai_client as _create_ai_client,
@@ -68,6 +69,7 @@ from ai_provider import (
     get_ai_video_model_rates as _get_ai_video_model_rates,
     get_ai_vision_model as _get_ai_vision_model,
     get_ai_vision_models as _get_ai_vision_models,
+    guess_image_mime_type as _guess_image_mime_type,
     is_ai_text_model as _is_ai_text_model,
     is_ai_vision_model as _is_ai_vision_model,
     mark_ai_native_tools_unsupported as _mark_ai_native_tools_unsupported,
@@ -966,6 +968,7 @@ Response formatting helpers:
 - Use <generated_image></generated_image> only when an image was actually generated in this reply. Put it exactly where the generated image should appear. If omitted, generated images will be appended at the bottom automatically.
 - When `search_google_images` returns an attachment URL, place it with <attachment_image>attachment://filename</attachment_image>. If omitted, approved searched images are appended automatically.
 - Use the `generate_image` tool when the user asks you to create, draw, render, or generate an image. If the tool reports attachments, say the image is attached below.
+- For animated GIF requests, use `generate_image` with output_format="gif" and a listed GIF-capable model. Describe the motion and loop in the prompt; use size="auto" unless a frame size is requested. frame_count (2–16, default 9) and frame_duration_ms (20–2000, default 200) apply only to GIF output.
 - To edit or generate from reference images, use `generate_image` with `source: "current_attachments"` for all current images in upload order, `source: "current_attachment"` for only the first, or `image_urls` for an ordered list of Discord CDN URLs (`image_url` also accepts one URL). Do not combine source with URLs. Pass the actual images instead of only describing them. Omit reference inputs for text-only generation. Only use models marked as supporting image input; at most 16 reference images are allowed.
 
 Layout markup (Discord Components V2). Plain Markdown is the default; use layout tags only when they make the answer clearly easier to read:
@@ -2019,6 +2022,7 @@ class AICommands(AISkillTools, AIKnowledgeTools, commands.Cog):
     IMAGE_TOOL_DEFAULT_SIZE = "1024x1024"
     IMAGE_TOOL_ALLOWED_SIZES = {"auto", "1024x1024", "1536x1024", "1024x1536", "256x256", "512x512", "1792x1024", "1024x1792"}
     IMAGE_TOOL_ALLOWED_QUALITIES = {"auto", "low", "medium", "high", "standard", "hd"}
+    IMAGE_TOOL_ALLOWED_OUTPUT_FORMATS = {"png", "jpeg", "webp", "gif"}
     IMAGE_TOOL_MAX_COUNT = 4
     IMAGE_TOOL_MAX_REFERENCE_IMAGES = 16
     IMAGE_TOOL_MAX_B64_BYTES = 7_500_000
@@ -7429,6 +7433,7 @@ class AICommands(AISkillTools, AIKnowledgeTools, commands.Cog):
     def _build_ai_tools(self) -> list[dict]:
         image_models = _get_ai_image_model_rates()
         image_input_models = _get_ai_image_input_models()
+        gif_models = [model for model in AI_GIF_IMAGE_MODELS if model in image_models]
         tools = [
             {
                 "type": "function",
@@ -7778,7 +7783,10 @@ class AICommands(AISkillTools, AIKnowledgeTools, commands.Cog):
                         "Omit reference inputs for text-only generation. "
                         f"Default model: {_get_ai_image_model()}. "
                         f"Models supporting image input: {', '.join(image_input_models) or '(none)'}. "
-                        "Use this when the user asks to create, draw, render, generate, or edit an image."
+                        f"Models supporting animated GIF output: {', '.join(gif_models) or '(none)'}. "
+                        "For animation, set output_format=gif and describe the motion and loop. "
+                        "GIF requests without a model use a configured GIF-capable model. "
+                        "Use this when the user asks to create, draw, render, generate, or edit an image or animated GIF."
                     ),
                     "parameters": {
                         "type": "object",
@@ -7797,9 +7805,28 @@ class AICommands(AISkillTools, AIKnowledgeTools, commands.Cog):
                                 "maxItems": self.IMAGE_TOOL_MAX_REFERENCE_IMAGES,
                                 "description": "Ordered reference image URLs on cdn.discordapp.com or media.discordapp.net.",
                             },
-                            "size": {"type": "string"},
+                            "size": {
+                                "type": "string",
+                                "description": "GIF: auto (default), or WIDTHxHEIGHT per frame with positive multiples of 16; model pixel limits still apply. Other formats default to 1024x1024.",
+                            },
                             "quality": {"type": "string"},
-                            "n": {"type": "integer"},
+                            "output_format": {
+                                "type": "string",
+                                "enum": sorted(self.IMAGE_TOOL_ALLOWED_OUTPUT_FORMATS),
+                                "description": "Set gif for an animated GIF; omitted uses the provider's default image format.",
+                            },
+                            "frame_count": {
+                                "type": "integer", "minimum": 2, "maximum": 16,
+                                "description": "GIF only: number of frames, default 9.",
+                            },
+                            "frame_duration_ms": {
+                                "type": "integer", "minimum": 20, "maximum": 2000,
+                                "description": "GIF only: delay per frame in milliseconds, default 200; rounded to 10 ms by the API.",
+                            },
+                            "n": {
+                                "type": "integer", "minimum": 1, "maximum": self.IMAGE_TOOL_MAX_COUNT,
+                                "description": "Number of images or complete animations to generate; not the number of GIF frames.",
+                            },
                         },
                         "required": ["prompt"],
                     },
@@ -8401,9 +8428,6 @@ class AICommands(AISkillTools, AIKnowledgeTools, commands.Cog):
             return None, None, {
                 "error": "navigate to a public HTTP(S) page with browser_read before interacting with it"
             }
-        threads_error = self._threads_interaction_error(starting_url, tool_context)
-        if threads_error:
-            return None, None, {"error": threads_error}
         return page, starting_url, None
 
     async def _tool_browser_act(self, args: dict, tool_context: dict) -> dict:
@@ -10313,16 +10337,49 @@ class AICommands(AISkillTools, AIKnowledgeTools, commands.Cog):
         if len(prompt) > self.IMAGE_TOOL_MAX_PROMPT_CHARS:
             prompt = prompt[: self.IMAGE_TOOL_MAX_PROMPT_CHARS]
 
+        output_format = str(args.get("output_format") or "").strip().lower()
+        if output_format and output_format not in self.IMAGE_TOOL_ALLOWED_OUTPUT_FORMATS:
+            return {
+                "error": f"unsupported image output format: {output_format}",
+                "available_formats": sorted(self.IMAGE_TOOL_ALLOWED_OUTPUT_FORMATS),
+            }
+        is_gif = output_format == "gif"
+        if not is_gif and any(key in args for key in ("frame_count", "frame_duration_ms")):
+            return {"error": "frame_count and frame_duration_ms require output_format=gif"}
+        gif_options = {}
+        if is_gif:
+            for key, default, minimum, maximum in (
+                ("frame_count", 9, 2, 16),
+                ("frame_duration_ms", 200, 20, 2000),
+            ):
+                value = args.get(key, default)
+                if type(value) is not int or not minimum <= value <= maximum:
+                    return {"error": f"{key} must be an integer between {minimum} and {maximum}"}
+                gif_options[key] = value
+
         image_model_rates = _get_ai_image_model_rates()
+        gif_models = [model for model in AI_GIF_IMAGE_MODELS if model in image_model_rates]
         model = str(args.get("model") or _get_ai_image_model() or "").strip()
+        if is_gif and not args.get("model") and model not in gif_models and gif_models:
+            model = gif_models[0]
         if model not in image_model_rates:
             return {
                 "error": f"unsupported image model: {model}",
                 "available_models": sorted(image_model_rates),
             }
+        if is_gif and model not in gif_models:
+            return {
+                "error": f"image model does not support animated GIF output: {model}",
+                "available_models": gif_models,
+                "note": "Configure a GPT Image 2.6 model with ai-config image-model-rate before requesting GIF output.",
+            }
 
-        size = str(args.get("size") or self.IMAGE_TOOL_DEFAULT_SIZE).strip()
-        if size not in self.IMAGE_TOOL_ALLOWED_SIZES:
+        size = str(args.get("size") or ("auto" if is_gif else self.IMAGE_TOOL_DEFAULT_SIZE)).strip()
+        if is_gif and size != "auto":
+            dimensions = re.fullmatch(r"([1-9][0-9]{0,4})x([1-9][0-9]{0,4})", size)
+            if not dimensions or any(int(edge) % 16 for edge in dimensions.groups()):
+                return {"error": "GIF size must be auto or WIDTHxHEIGHT with positive dimensions divisible by 16"}
+        elif not is_gif and size not in self.IMAGE_TOOL_ALLOWED_SIZES:
             return {
                 "error": f"unsupported image size: {size}",
                 "available_sizes": sorted(self.IMAGE_TOOL_ALLOWED_SIZES),
@@ -10442,6 +10499,11 @@ class AICommands(AISkillTools, AIKnowledgeTools, commands.Cog):
             }
             if quality:
                 request_kwargs["quality"] = quality
+            if output_format:
+                request_kwargs["output_format"] = output_format
+            if gif_options:
+                # Older OpenAI SDKs lack named GIF parameters; extra_body also works for multipart edits.
+                request_kwargs["extra_body"] = gif_options
             if len(reference_images) == 1:
                 request_kwargs["image"] = ("reference.png", reference_images[0], "image/png")
             elif reference_images:
@@ -10458,11 +10520,6 @@ class AICommands(AISkillTools, AIKnowledgeTools, commands.Cog):
             attachments: list[dict] = []
             revised_prompts: list[str] = []
 
-            output_format = str(getattr(response, "output_format", "") or "png").lower()
-            extension = output_format if output_format in {"png", "jpeg", "jpg", "webp"} else "png"
-            if extension == "jpeg":
-                extension = "jpg"
-
             for index, item in enumerate(data, start=1):
                 revised_prompt = self._image_response_item_value(item, "revised_prompt")
                 if revised_prompt:
@@ -10478,6 +10535,12 @@ class AICommands(AISkillTools, AIKnowledgeTools, commands.Cog):
                     image_bytes = self._decode_generated_image_b64(str(b64_json))
                     if len(image_bytes) > self.IMAGE_TOOL_MAX_B64_BYTES:
                         raise RuntimeError(f"generated image is too large: {len(image_bytes)} bytes")
+                    # Inspect the bytes: compatible providers may omit or misreport output_format.
+                    extension = image_extension_for_mime_type(_guess_image_mime_type(image_bytes))
+                    if is_gif:
+                        with Image.open(io.BytesIO(image_bytes)) as generated:
+                            if generated.format != "GIF" or not getattr(generated, "is_animated", False):
+                                raise RuntimeError("image provider did not return an animated GIF")
                     attachments.append(
                         self._queue_pending_image_attachment(
                             tool_context,
@@ -10518,6 +10581,8 @@ class AICommands(AISkillTools, AIKnowledgeTools, commands.Cog):
                 "prompt": prompt,
                 "size": size,
                 "quality": quality or None,
+                "output_format": "jpeg" if extension == "jpg" else extension,
+                **gif_options,
                 "used_reference_image": bool(reference_images),
                 "reference_image_count": len(reference_images),
                 "count": image_count,
@@ -13358,20 +13423,6 @@ class AICommands(AISkillTools, AIKnowledgeTools, commands.Cog):
             set_global_config("ai_node_repl_image", image)
         set_global_config("ai_node_repl_enabled", enabled.lower() == "on")
         await ctx.send(f"Node REPL: {enabled.lower()}", allowed_mentions=SAFE_MENTIONS)
-
-    @ai_config_text.command(name="threads-publisher")
-    @is_owner()
-    async def ai_config_threads_publisher_text(self, ctx: commands.Context, user_id: str, enabled: str):
-        if not user_id.isdecimal() or int(user_id) <= 0 or enabled.lower() not in {"on", "off"}:
-            await ctx.send("Usage: ai-config threads-publisher <Discord user ID> <on|off>", allowed_mentions=SAFE_MENTIONS)
-            return
-        publishers = {str(item) for item in get_global_config("ai_threads_publisher_ids", []) or []}
-        if enabled.lower() == "on":
-            publishers.add(str(int(user_id)))
-        else:
-            publishers.discard(str(int(user_id)))
-        set_global_config("ai_threads_publisher_ids", sorted(publishers))
-        await ctx.send(f"Threads publisher {int(user_id)}: {enabled.lower()}", allowed_mentions=SAFE_MENTIONS)
 
     @ai_config_text.command(
         name="server-prompt-limit",
