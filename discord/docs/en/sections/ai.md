@@ -65,6 +65,9 @@ The AI uses three different types of context; clearing one does not clear the ot
 
 ## External Data Tools
 
+- `search_ai` uses native `web_search` through an OpenAI-compatible Responses API, defaults to `gpt-6.1-terra`, and does not use Serper. It requires a completed search call and returns a summary, citations, and deduplicated sources; a model-only answer is rejected.
+- Bot owners can configure the independent search provider with `y!ai-config search-endpoint <API base URL>`, `y!ai-config search-api-key <key>`, and `y!ai-config search-model <model>`. Omit the argument to view the current setting; keys are never echoed. Settings are stored in the bot database, do not change regular chat settings, and do not read Codex configuration at runtime. The default search endpoint is `https://api.openai.com/v1`; a separate search key is required.
+- Search requests have a 120-second overall timeout, summaries are capped at 900 characters, and at most 4 sources are returned. Search incurs provider model/tool usage without an additional fixed currency charge; normal chat text remains billed at the selected chat model's rate.
 - `search_google` and `search_google_images` search via Serper; `fetch_webpage` extracts readable page content via Serper.
 - Tool previews for `fetch_webpage` and `fetch_raw` show only the domain, without URL paths, query parameters, or fragments.
 - Reply images, thumbnails, and galleries can display image URLs from any HTTP/HTTPS host. Image downloads for `image_analyze` and generation references remain restricted to Discord CDN sources.

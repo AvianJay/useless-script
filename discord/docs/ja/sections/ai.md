@@ -65,6 +65,9 @@ AI は 3 つの異なるタイプのコンテキストを使用します。 1 �
 
 ## 外部データ ツール
 
+- `search_ai` は OpenAI 互換 Responses API のネイティブ `web_search` を使用し、既定モデルは `gpt-6.1-terra` です。Serper は使用しません。検索の完了記録を確認し、要約・引用・重複を除いた出典を返します。検索を実行せずに生成された回答はエラーとして扱います。
+- Bot 所有者は `y!ai-config search-endpoint <API base URL>`、`y!ai-config search-api-key <key>`、`y!ai-config search-model <model>` で検索専用の接続先・キー・モデルを設定できます。引数を省略すると現在の設定を表示しますが、キーの値は表示しません。設定は Bot のデータベースに保存され、通常のチャット設定には影響せず、実行時に Codex の設定を読みません。既定の検索接続先は `https://api.openai.com/v1` で、検索用キーの設定が別途必要です。
+- 検索リクエスト全体のタイムアウトは 120 秒、要約は最大 900 文字、出典は最大 4 件です。検索にはプロバイダーのモデル・ツール使用量が発生しますが、固定の追加通貨料金はありません。通常のチャット入出力は選択したチャットモデルの料金で計算します。
 - `search_google` および `search_google_images` は Serper 経由で検索します。 `fetch_webpage` は、Serper 経由で読み取り可能なページ コンテンツを抽出します。
 - `fetch_webpage` と `fetch_raw` のツールプレビューにはドメインだけを表示し、URL のパス、クエリ、フラグメントは表示しません。
 - 返信内の画像、サムネイル、ギャラリーには、任意の HTTP/HTTPS ホストの画像 URL を表示できます。`image_analyze` と画像生成の参照画像の取得は、引き続き Discord CDN に限定されます。

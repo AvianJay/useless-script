@@ -103,6 +103,9 @@ AI 使用三種不同的上下文，清除其中一種不會連帶清除其他�
 
 ## 外部資料工具
 
+- `search_ai` 使用 OpenAI 相容 Responses API 的原生 `web_search`，預設模型為 `gpt-6.1-terra`，不經 Serper。工具強制執行搜尋，回傳摘要、引用與去重來源；供應商未回傳完成的搜尋紀錄時會回報失敗，不把模型自行回答當作搜尋結果。
+- Bot 擁有者可用 `y!ai-config search-endpoint <API base URL>`、`y!ai-config search-api-key <key>` 與 `y!ai-config search-model <model>` 設定獨立搜尋供應商；不帶參數可查看目前值，key 只顯示是否設定。設定保存在 Bot 資料庫，不影響一般聊天的 endpoint、key 或預設模型，也不會在執行時讀取 Codex 設定。未設定搜尋 endpoint 時預設為 `https://api.openai.com/v1`，仍須另設搜尋 key。
+- 搜尋請求有 120 秒總逾時；摘要最多 900 字、來源最多 4 筆。搜尋會產生供應商的模型／工具用量，不另扣固定全域幣；一般對話輸入與輸出仍照所選聊天模型計費。
 - `search_google` 與 `search_google_images` 透過 Serper 搜尋；`fetch_webpage` 透過 Serper 抽取可讀頁面內容。
 - `fetch_webpage` 與 `fetch_raw` 的工具預覽只顯示網域，不顯示網址路徑、查詢參數或片段。
 - 回覆中的圖片、縮圖與圖庫可直接展示任意 HTTP／HTTPS 來源的圖片網址；`image_analyze` 與圖片生成參考圖的抓取仍限 Discord CDN 來源。

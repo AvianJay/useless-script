@@ -6,7 +6,7 @@ openpyxl~=3.1.5
 matplotlib~=3.10.0
 fonttools>=4.40
 emoji~=2.15.0
-openai>=1.0.0
+openai>=2.0.0
 taiwanbus==0.1.0
 YouBikePython==0.1.2
 psutil~=7.1.2

@@ -1,13 +1,16 @@
 import base64
 import math
 
-from openai import OpenAI
+from openai import AsyncOpenAI, OpenAI
 
 from globalenv import get_global_config, set_global_config
 
 
 AI_ENDPOINT_CONFIG_KEY = "ai_endpoint"
 AI_API_KEY_CONFIG_KEY = "ai_api_key"
+AI_SEARCH_ENDPOINT_CONFIG_KEY = "ai_search_endpoint"
+AI_SEARCH_API_KEY_CONFIG_KEY = "ai_search_api_key"
+AI_SEARCH_MODEL_CONFIG_KEY = "ai_search_model"
 AI_MODELS_CONFIG_KEY = "ai_models"
 AI_VIDEO_MODELS_CONFIG_KEY = "ai_video_models"
 AI_IMAGE_MODELS_CONFIG_KEY = "ai_image_models"
@@ -23,6 +26,8 @@ AI_VISION_MODEL_CONFIG_KEY = "ai_vision_model"
 VALID_AI_TOOL_CALL_MODES = {"auto", "native", "emulated"}
 
 DEFAULT_AI_ENDPOINT = "https://api.poe.com/v1"
+DEFAULT_AI_SEARCH_ENDPOINT = "https://api.openai.com/v1"
+DEFAULT_AI_SEARCH_MODEL = "gpt-6.1-terra"
 DEFAULT_AI_MODELS = {
     "openai-fast": 0.05,
     "openai": 0.10,
@@ -54,6 +59,9 @@ DEFAULT_AI_VISION_MODEL = ""
 AI_GLOBAL_CONFIG_DEFAULTS = {
     AI_ENDPOINT_CONFIG_KEY: DEFAULT_AI_ENDPOINT,
     AI_API_KEY_CONFIG_KEY: "",
+    AI_SEARCH_ENDPOINT_CONFIG_KEY: DEFAULT_AI_SEARCH_ENDPOINT,
+    AI_SEARCH_API_KEY_CONFIG_KEY: "",
+    AI_SEARCH_MODEL_CONFIG_KEY: DEFAULT_AI_SEARCH_MODEL,
     AI_MODELS_CONFIG_KEY: DEFAULT_AI_MODELS,
     AI_VIDEO_MODELS_CONFIG_KEY: DEFAULT_AI_VIDEO_MODELS,
     AI_IMAGE_MODELS_CONFIG_KEY: DEFAULT_AI_IMAGE_MODELS,
@@ -200,6 +208,32 @@ def get_ai_api_key() -> str:
 
 def set_ai_api_key(api_key: str):
     set_global_config(AI_API_KEY_CONFIG_KEY, str(api_key or "").strip())
+
+
+def get_ai_search_endpoint() -> str:
+    endpoint = str(get_global_config(AI_SEARCH_ENDPOINT_CONFIG_KEY, "") or "").strip()
+    return (endpoint or DEFAULT_AI_SEARCH_ENDPOINT).rstrip("/")
+
+
+def set_ai_search_endpoint(endpoint: str):
+    set_global_config(AI_SEARCH_ENDPOINT_CONFIG_KEY, str(endpoint or "").strip().rstrip("/"))
+
+
+def get_ai_search_api_key() -> str:
+    return str(get_global_config(AI_SEARCH_API_KEY_CONFIG_KEY, "") or "").strip()
+
+
+def set_ai_search_api_key(api_key: str):
+    set_global_config(AI_SEARCH_API_KEY_CONFIG_KEY, str(api_key or "").strip())
+
+
+def get_ai_search_model() -> str:
+    model = str(get_global_config(AI_SEARCH_MODEL_CONFIG_KEY, "") or "").strip()
+    return model or DEFAULT_AI_SEARCH_MODEL
+
+
+def set_ai_search_model(model: str):
+    set_global_config(AI_SEARCH_MODEL_CONFIG_KEY, str(model or "").strip())
 
 
 def get_ai_model_rates() -> dict[str, float]:
@@ -377,6 +411,18 @@ def create_ai_client() -> OpenAI:
     if not api_key:
         raise RuntimeError("ai_api_key is not configured")
     return OpenAI(api_key=api_key, base_url=get_ai_endpoint())
+
+
+def create_ai_search_client() -> AsyncOpenAI:
+    api_key = get_ai_search_api_key()
+    if not api_key:
+        raise RuntimeError("ai_search_api_key is not configured; use ai-config search-api-key <key>")
+    return AsyncOpenAI(
+        api_key=api_key,
+        base_url=get_ai_search_endpoint(),
+        timeout=90.0,
+        max_retries=2,
+    )
 
 
 def format_ai_models_for_display(model_rates: dict[str, float], vision_models=None) -> str:
