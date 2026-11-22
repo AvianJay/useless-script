@@ -9,10 +9,12 @@ nodes are annotated with ``[ref=eN]`` and resolved back with the ``aria-ref=``
 selector engine, so the model never writes CSS selectors by hand.
 """
 
-from globalenv import get_global_config, set_global_config
+from globalenv import config, get_global_config, set_global_config
 import aiohttp
 import asyncio
 import html
+import hashlib
+from contextlib import suppress
 import ipaddress
 import json
 import re
@@ -22,10 +24,11 @@ import time
 from urllib.parse import urljoin, urlparse
 from uuid import uuid4
 
-from playwright.async_api import async_playwright
+from playwright.async_api import TimeoutError as PlaywrightTimeoutError, async_playwright
 
+from ai_browser_network import ChromiumRequestGuard
 from i18n import t
-from ai_browser_playwright import BrowserPlaywrightMixin
+from ai_browser_playwright import KEYBOARD_ACTIONS, LOCATOR_ACTIONS, MOUSE_ACTIONS, BrowserPlaywrightMixin
 
 AI_BROWSER_CDP_ENDPOINT_CONFIG_KEY = "ai_browser_cdp_endpoint"
 
@@ -57,7 +60,13 @@ BROWSER_ACT_ACTIONS = {
     "check",
     "uncheck",
 }
-BROWSER_READ_ACTIONS = {
+BROWSER_TAB_ACTIONS = {"list_tabs", "new_tab", "select_tab", "close_tab", "keep_tab", "set_live_preview"}
+BROWSER_PREVIEW_INTERVAL = 5
+BROWSER_RESUME_TTL_SECONDS = 60 * 60
+BROWSER_ACTIVITY_LIMIT = 8
+BROWSER_READY_TIMEOUT_MS = 10_000
+BROWSER_RESUME_STATES = {"reading", "draft_pending_review", "waiting_for_user", "follow_up"}
+BROWSER_READ_ACTIONS = BROWSER_TAB_ACTIONS | {
     "navigate",
     "snapshot",
     "back",
@@ -321,6 +330,8 @@ def _clip(text: str, limit: int) -> str:
 def summarize_browser_action(kind: str, payload: dict) -> str:
     """User-facing description of the pending action. Shows content instead of hiding it."""
     payload = payload or {}
+    if kind == "close_tab":
+        return f"**Close existing shared tab** `{payload['tab_id']}`"
     if kind == "evaluate":
         expression = str(payload.get("expression") or "")
         scope = f"on element `{payload['ref']}`" if payload.get("ref") else "on the page"
@@ -361,6 +372,28 @@ class BrowserSessionManager(BrowserPlaywrightMixin):
         self._jobs_by_user: dict[int, dict] = {}
         self._approval_lock = asyncio.Lock()
         self._approval_tokens: dict[str, dict] = {}
+        self._retained_tabs: dict[str, dict] = {}
+        self._retained_profile: str | None = None
+
+    def annotate_tool_result(self, name, arguments, result, context):
+        session = context.get("_browser_session") or {}
+        if target := session.get("preview_target"):
+            status = session["preview_status"] if self._preview_selection_matches(session, target) else "paused_tab_or_origin_changed"
+            result.setdefault("preview_status", status)
+        if result.get("error"):
+            return
+        allowed = {
+            "browser_read": {"navigate", "back", "forward", "reload", "snapshot"},
+            "browser_act": BROWSER_ACT_ACTIONS,
+            "browser_playwright": LOCATOR_ACTIONS | KEYBOARD_ACTIONS | MOUSE_ACTIONS,
+        }.get(name, set())
+        operation = str(arguments.get("operation") if name == "browser_playwright" else arguments.get("action")).strip().lower()
+        if operation not in allowed:
+            return
+        tab = self._tab_for_page(session, session.get("page"))
+        if tab is not None and tab["owned"]:
+            # 只記錄工具定義的動作名稱；不寫入網址、參數或任何頁面內容。
+            tab["activity"] = (tab["activity"] + [operation])[-BROWSER_ACTIVITY_LIMIT:]
 
     # ------------------------------------------------------------------
     # Identity
@@ -432,8 +465,21 @@ class BrowserSessionManager(BrowserPlaywrightMixin):
             return {"error": claim_error or t("ai.err.browser_confirmation_invalid")}
 
         tool_context = record.get("tool_context") or {}
-        tool_context["_browser_interaction_authorized"] = True
-        tool_context.pop("_browser_interaction_denied", None)
+        expected_page = record.get("starting_page")
+        session = tool_context.get("_browser_session") or {}
+        if expected_page is not None and (session.get("page") is not expected_page or expected_page.is_closed()):
+            return {"error": "The selected tab changed before approval."}
+        if record["kind"] == "close_tab":
+            tab = session["tabs"].get(record["payload"]["tab_id"])
+            async with session["lock"]:
+                if (session["cleaned"] or not tab or expected_page is None or session["page"] is not expected_page
+                        or tab["page"] is not expected_page or expected_page.url != record["starting_url"]):
+                    return {"error": "Tab or URL changed before approval."}
+                if len(session["context"].pages) <= 1:
+                    return {"error": "This is now the last existing tab; it was not closed."}
+                await expected_page.close(run_before_unload=False)
+                session["page"] = None
+                return {"closed": True, "tab_id": tab["id"], "confirmed": True}
         page, page_error = await self.get_page(tool_context)
         if page_error or page is None:
             return {
@@ -451,6 +497,8 @@ class BrowserSessionManager(BrowserPlaywrightMixin):
                 "error": "browser page changed before the approved action could run",
             }
 
+        tool_context["_browser_interaction_authorized"] = True
+        tool_context.pop("_browser_interaction_denied", None)
         payload = record.get("payload") or {}
         if record.get("kind") == "evaluate":
             result = await self.execute_evaluate(page, payload, tool_context)
@@ -513,6 +561,7 @@ class BrowserSessionManager(BrowserPlaywrightMixin):
             "kind": kind,
             "payload": json.loads(json.dumps(payload, ensure_ascii=False)),
             "starting_url": starting_url,
+            "starting_page": (tool_context.get("_browser_session") or {}).get("page"),
             "created_at": now,
             "expires_at": now + approval_wait_seconds,
             "used": False,
@@ -693,38 +742,52 @@ class BrowserSessionManager(BrowserPlaywrightMixin):
         except asyncio.CancelledError:
             return
 
+    def _remember_tab(self, context, tab):
+        target_id = tab["target_id"]
+        expires = time.monotonic() + BROWSER_RESUME_TTL_SECONDS
+        self._retained_tabs[target_id] = {
+            "scope": self.context_identity(context), "id": tab["id"], "expires": expires,
+            "activity": list(tab["activity"]), "status": tab.get("resume_status"),
+        }
+        # 過期只清掉進度，仍保留分頁歸屬，避免被其他使用者接手。
+        def expire_progress():
+            record = self._retained_tabs.get(target_id)
+            if record and record["expires"] == expires:
+                record["activity"] = []
+                record["status"] = None
+        asyncio.get_running_loop().call_later(BROWSER_RESUME_TTL_SECONDS, expire_progress)
+
     async def cleanup_session(self, tool_context: dict | None) -> None:
         context = tool_context or {}
         session = context.get("_browser_session")
         if not isinstance(session, dict):
             return
-        cleanup_lock = session.get("cleanup_lock")
-        if cleanup_lock is None:
-            cleanup_lock = asyncio.Lock()
-            session["cleanup_lock"] = cleanup_lock
-        async with cleanup_lock:
-            if session.get("cleaned"):
+        async with session["lock"]:
+            if session["cleaned"]:
                 return
             session["cleaned"] = True
-            page = session.get("page")
-            if page is not None:
-                try:
-                    if not page.is_closed():
-                        await page.close(run_before_unload=False)
-                except Exception:
-                    pass
-            page_cdp_session = session.get("page_cdp_session")
-            if page_cdp_session is not None:
-                try:
-                    await page_cdp_session.detach()
-                except Exception:
-                    pass
-            playwright = session.get("playwright")
-            if playwright is not None:
-                try:
-                    await playwright.stop()
-                except Exception:
-                    pass
+            await self.stop_preview(context, session)
+            for tab in list(session["tabs"].values()):
+                page, target_id = tab["page"], tab.get("target_id")
+                if tab["owned"] and not tab["keep"]:
+                    with suppress(Exception):
+                        if not page.is_closed():
+                            await asyncio.wait_for(page.close(run_before_unload=False), 3)
+                    if page.is_closed():
+                        self._retained_tabs.pop(target_id, None)
+                if target_id and tab["owned"] and not tab.get("dormant") and not page.is_closed():
+                    self._remember_tab(context, tab)
+                if (cdp := tab.get("cdp")) is not None:
+                    if (script_id := tab.get("script_id")) and not page.is_closed():
+                        with suppress(Exception):
+                            await asyncio.wait_for(cdp.send("Page.removeScriptToEvaluateOnNewDocument", {"identifier": script_id}), 3)
+                    with suppress(Exception):
+                        await asyncio.wait_for(cdp.detach(), 3)
+            if guard := session.get("guard"):
+                await guard.close()
+            if session.get("playwright"):
+                with suppress(Exception):
+                    await session["playwright"].stop()
             context.pop("_browser_session", None)
 
     async def release_lease(self, tool_context: dict | None, *, from_watchdog: bool = False) -> None:
@@ -817,96 +880,338 @@ class BrowserSessionManager(BrowserPlaywrightMixin):
                         return None, f"CDP startup poll failed with HTTP {response.status}"
         return None, "browser profile did not become ready within 30 seconds"
 
-    async def _route_request(self, route, request, session: dict) -> None:
-        raw_url = str(getattr(request, "url", "") or "")
+    async def _session(self, context):
+        ticket, error = await self.acquire_lease(context)
+        if error or not ticket:
+            return None, error or "browser lease unavailable"
+        session = context.setdefault("_browser_session", {
+            "lock": asyncio.Lock(), "cleaned": False, "tabs": {}, "next_id": 1, "id_prefix": secrets.token_hex(4), "page": None,
+        })
         try:
-            parsed = urlparse(raw_url)
-            if parsed.scheme in {"about", "data", "blob"}:
-                await route.continue_()
-                return
-            normalized = normalize_public_web_url(raw_url)
-            if not normalized:
-                session["last_blocked_url"] = raw_url[:300]
-                await route.abort("blockedbyclient")
-                return
-            target_error = await validate_public_fetch_target(normalized)
-            if target_error:
-                session["last_blocked_url"] = normalized[:300]
-                await route.abort("blockedbyclient")
-                return
-            await route.continue_()
-        except Exception:
+            async with session["lock"]:
+                if session["cleaned"] or context.get("_browser_lease_expired"):
+                    return None, "browser session has ended"
+                if session.get("context") is None:
+                    endpoint, error = normalize_ai_browser_cdp_endpoint(get_ai_browser_cdp_endpoint())
+                    if error or not endpoint:
+                        return None, error or "browser CDP endpoint is not configured"
+                    addr, error = await self.preflight_cdp(endpoint)
+                    if error or not addr:
+                        return None, error or "browser CDP endpoint is unavailable"
+                    pw = session["playwright"] = await async_playwright().start()
+                    browser = await pw.chromium.connect_over_cdp(addr, timeout=30_000)
+                    if not browser.contexts:
+                        raise RuntimeError("CDP browser has no default context")
+                    session["context"] = browser.contexts[0]
+                    session["browser"] = browser
+                    session["scope"] = self.context_identity(context)
+                    session["allow_shared_tabs"] = session["scope"][0] in (config("owners", []) or [])
+                    if self._retained_profile != endpoint:
+                        self._retained_tabs.clear()
+                        self._retained_profile = endpoint
+                    if self._retained_tabs:
+                        cdp = await browser.new_browser_cdp_session()
+                        try:
+                            targets = await cdp.send("Target.getTargets")
+                            alive = {info["targetId"] for info in targets["targetInfos"]}
+                            for target_id in self._retained_tabs.keys() - alive:
+                                del self._retained_tabs[target_id]
+                        finally:
+                            await cdp.detach()
+                    await self._notify_progress(context, "")
+                return session, None
+        except asyncio.CancelledError:
+            await self.cleanup_session(context)
+            raise
+        except Exception as exc:
+            await self.cleanup_session(context)
+            # A connection error can contain a credential-bearing websocket address.
+            return None, f"browser CDP attach failed: {type(exc).__name__}"
+
+    @staticmethod
+    def _tab_for_page(session, page):
+        return next((tab for tab in session.get("tabs", {}).values() if tab["page"] is page), None)
+
+    def _register(self, session, page, *, owned=False, target_id=None, retained=None):
+        if tab := self._tab_for_page(session, page):
+            if owned:
+                tab["owned"] = True
+            return tab
+        if retained:
+            key = retained["id"]
+        else:
+            key = f"{session['id_prefix']}-t{session['next_id']}"
+            session["next_id"] += 1
+        tab = {"id": key, "page": page, "owned": owned, "keep": bool(retained),
+               "target_id": target_id, "activity": [], "dormant": bool(retained)}
+        if retained and retained["expires"] > time.monotonic():
+            tab["activity"] = list(retained["activity"])
+            tab["resume_status"] = retained["status"]
+            tab["resumed"] = True
+        session["tabs"][key] = tab
+        if owned:
+            # 只接管任務自己開的分頁衍生的 popup，不推測人手開的分頁是誰的。
+            def popup(child):
+                if not session["cleaned"]:
+                    self._register(session, child, owned=True)
+            page.on("popup", popup)
+        def download_started(download):
+            async def cancel():
+                with suppress(Exception):
+                    await download.cancel()
+            asyncio.create_task(cancel())
+        if owned:
+            page.on("download", download_started)
+        return tab
+
+    @staticmethod
+    async def _target_id(session, page):
+        cdp = await session["context"].new_cdp_session(page)
+        try:
+            return (await cdp.send("Target.getTargetInfo"))["targetInfo"]["targetId"]
+        finally:
+            await cdp.detach()
+
+    async def _prepare_tab(self, session, tab):
+        if tab.get("prepared"):
+            return
+        page = tab["page"]
+        if (old_cdp := tab.pop("cdp", None)) is not None:
+            await old_cdp.detach()
+        cdp = tab["cdp"] = await session["context"].new_cdp_session(page)
+        tab["target_id"] = target_id = (await cdp.send("Target.getTargetInfo"))["targetInfo"]["targetId"]
+        if session.get("guard") is None:
+            guard = ChromiumRequestGuard(await session["browser"].new_browser_cdp_session(), self.validate_public_url)
+            guard.managed.add(target_id)
             try:
-                await route.abort("blockedbyclient")
-            except Exception:
-                pass
+                await guard.start()
+            except BaseException:
+                await guard.close()
+                raise
+            session["guard"] = guard
+        else:
+            session["guard"].managed.add(target_id)
+        await cdp.send("Network.enable")
+        await cdp.send("Network.setBypassServiceWorker", {"bypass": True})
+        # 不改寫已開著的文件；這個 CDP 腳本僅在後續導覽生效。
+        script = await cdp.send("Page.addScriptToEvaluateOnNewDocument", {"source": """(() => {
+            for (const name of ['WebTransport', 'RTCPeerConnection', 'webkitRTCPeerConnection']) {
+                try { Object.defineProperty(window, name, {value: undefined, configurable: false, writable: false}); }
+                catch (_) {}
+            }
+        })();"""})
+        tab["script_id"] = script.get("identifier")
+        page.set_default_timeout(BROWSER_ACTION_TIMEOUT_MS)
+        tab["prepared"] = True
 
-    @staticmethod
-    async def _close_owned_popup(popup) -> None:
-        try:
-            await popup.close(run_before_unload=False)
-        except Exception:
-            pass
-
-    @staticmethod
-    async def _block_websocket(websocket_route) -> None:
-        try:
-            await websocket_route.close(code=1008, reason="Browser tool allows public HTTP(S) requests only")
-        except Exception:
-            pass
+    async def _new_tab(self, session):
+        tab = self._register(session, await session["context"].new_page(), owned=True)
+        await self._prepare_tab(session, tab)
+        session["page"] = tab["page"]
+        return tab
 
     async def get_page(self, tool_context: dict) -> tuple[object | None, str | None]:
-        ticket, lease_error = await self.acquire_lease(tool_context)
-        if lease_error or ticket is None:
-            return None, lease_error or "browser lease unavailable"
-        existing = tool_context.get("_browser_session")
-        if isinstance(existing, dict) and existing.get("page") is not None and not existing.get("cleaned"):
-            return existing["page"], None
-
-        endpoint, endpoint_error = normalize_ai_browser_cdp_endpoint(get_ai_browser_cdp_endpoint())
-        if endpoint_error or not endpoint:
-            return None, endpoint_error or "browser CDP endpoint is not configured"
-        cdp_url, preflight_error = await self.preflight_cdp(endpoint)
-        if preflight_error or not cdp_url:
-            return None, preflight_error or "browser CDP endpoint is unavailable"
-
-        session = {"cleanup_lock": asyncio.Lock(), "cleaned": False, "page": None, "playwright": None}
-        tool_context["_browser_session"] = session
-        try:
-            playwright = await async_playwright().start()
-            session["playwright"] = playwright
-            browser = await playwright.chromium.connect_over_cdp(cdp_url, timeout=30_000)
-            if not browser.contexts:
-                raise RuntimeError("CDP browser has no default context")
-            default_context = browser.contexts[0]
-            session["original_page_count"] = len(default_context.pages)
-            page = await default_context.new_page()
-            session["page"] = page
-            page_cdp_session = await default_context.new_cdp_session(page)
-            session["page_cdp_session"] = page_cdp_session
-            await page_cdp_session.send("Network.enable")
-            await page_cdp_session.send("Network.setBypassServiceWorker", {"bypass": True})
-            await page.route("**/*", lambda route, request: self._route_request(route, request, session))
-            await page.route_web_socket("**/*", self._block_websocket)
-            await page.add_init_script(
-                """(() => {
-                    const deny = () => { throw new Error('Disabled by browser tool policy'); };
-                    for (const name of ['WebTransport', 'RTCPeerConnection', 'webkitRTCPeerConnection']) {
-                        try { Object.defineProperty(window, name, {value: deny, configurable: false, writable: false}); }
-                        catch (_) {}
-                    }
-                    try { Object.defineProperty(window, 'open', {value: () => null, configurable: false, writable: false}); }
-                    catch (_) {}
-                })();"""
-            )
-            page.set_default_timeout(BROWSER_ACTION_TIMEOUT_MS)
-            page.on("popup", lambda popup: asyncio.create_task(self._close_owned_popup(popup)))
-            page.on("download", lambda download: asyncio.create_task(download.cancel()))
-            await self._notify_progress(tool_context, "")
+        session, error = await self._session(tool_context)
+        if error:
+            return None, error
+        async with session["lock"]:
+            if session["cleaned"]:
+                return None, "browser session has ended"
+            page = session["page"]
+            if page is None:
+                page = (await self._new_tab(session))["page"]
+            if page.is_closed():
+                return None, "Selected tab was closed; use list_tabs and select_tab or new_tab."
+            if page.url != "about:blank":
+                _, error = await self.validate_public_url(page.url)
+                if error:
+                    return None, error
             return page, None
-        except Exception as error:
-            await self.cleanup_session(tool_context)
-            return None, f"browser CDP attach failed: {format_browser_error(error)}"
+
+    async def tab_command(self, action, args, context):
+        session, error = await self._session(context)
+        if error:
+            return {"error": error}
+        async with session["lock"]:
+            if session["cleaned"]:
+                return {"error": "browser session has ended"}
+            if action == "list_tabs":
+                rows = []
+                for page in list(session["context"].pages):
+                    if page.is_closed():
+                        continue
+                    tab = self._tab_for_page(session, page)
+                    if tab is None:
+                        if not self._retained_tabs and not session["allow_shared_tabs"]:
+                            continue
+                        try:
+                            target_id = await self._target_id(session, page)
+                        except Exception:
+                            continue  # 分頁可能在列出時已關閉。
+                        retained = self._retained_tabs.get(target_id)
+                        if retained and retained["scope"] != session["scope"]:
+                            continue
+                        if not retained and not session["allow_shared_tabs"]:
+                            continue
+                        tab = self._register(session, page, owned=bool(retained), target_id=target_id, retained=retained)
+                    url = page.url
+                    if url != "about:blank" and (await self.validate_public_url(url))[1]:
+                        continue
+                    row = {"tab_id": tab["id"], "url": urlparse(url)._replace(query="", fragment="").geturl(),
+                           "selected": page is session["page"], "auto_close": tab["owned"] and not tab["keep"]}
+                    if tab.get("resumed"):
+                        row["continuation"] = {"recent_operations": list(tab["activity"]), "status": tab.get("resume_status")}
+                    if not tab["owned"]:
+                        row["shared"] = True
+                    rows.append(row)
+                return {"tabs": rows}
+            if action == "new_tab":
+                auto_close = args.get("auto_close", True)
+                if not isinstance(auto_close, bool):
+                    return {"error": "auto_close must be true or false"}
+                tab = await self._new_tab(session)
+                tab["keep"] = not auto_close
+                return {"tab_id": tab["id"], "auto_close": auto_close}
+            if action == "set_live_preview":
+                return await self.set_preview(args, context, session)
+            key = str(args.get("tab_id") or "")
+            tab = session["tabs"].get(key)
+            if not tab or tab["page"].is_closed():
+                return {"error": "Unknown or closed tab; list_tabs for current tab IDs."}
+            page = tab["page"]
+            if action == "select_tab":
+                if page.url != "about:blank":
+                    _, error = await self.validate_public_url(page.url)
+                    if error:
+                        return {"error": error}
+                await self._prepare_tab(session, tab)
+                await page.bring_to_front()
+                if tab.pop("dormant", False):
+                    # 接續操作完成後恢復預設清理；仍需保留時再明確指定。
+                    tab["keep"] = False
+                session["page"] = page
+            elif action == "keep_tab":
+                if not tab["owned"] or not isinstance(args.get("enabled"), bool):
+                    return {"error": "keep_tab requires an AI-created tab and enabled: true or false"}
+                status = args.get("resume_status")
+                if status is not None and (not isinstance(status, str) or status not in BROWSER_RESUME_STATES):
+                    return {"error": "Unknown resume_status"}
+                if not tab["target_id"]:
+                    tab["target_id"] = await self._target_id(session, page)
+                tab["dormant"] = False
+                tab["keep"] = args["enabled"]
+                tab["resume_status"] = status if tab["keep"] else None
+            elif action == "close_tab":
+                if tab["owned"]:
+                    await page.close(run_before_unload=False)
+                    self._retained_tabs.pop(tab.get("target_id"), None)
+                    if session["page"] is page:
+                        session["page"] = None
+                    return {"closed": True, "tab_id": key}
+                if context.get("_browser_interaction_denied") or session["page"] is not page:
+                    return {"error": "Closing an existing tab requires the selected tab and user approval."}
+                if len(session["context"].pages) == 1:
+                    return {"error": "Refusing to close the profile's last existing tab."}
+            if action != "close_tab":
+                return {"action": action, "tab_id": key, "auto_close": tab["owned"] and not tab["keep"]}
+        # Never hold the tab lock while waiting for a Discord interaction.
+        return await self.request_approval(context, kind="close_tab", payload={"tab_id": key},
+            reason="Close this pre-existing shared browser tab: " + urlparse(page.url)._replace(query="", fragment="").geturl(),
+            starting_url=page.url, presenter=context.get("_browser_approval_presenter"))
+
+    @staticmethod
+    def _preview_origin(url):
+        parsed = urlparse(normalize_public_web_url(url) or "")
+        return (parsed.scheme, parsed.hostname, parsed.port or (443 if parsed.scheme == "https" else 80))
+
+    def _preview_selection_matches(self, session, target):
+        page, origin = target
+        return session.get("page") is page and not page.is_closed() and self._preview_origin(page.url) == origin
+
+    async def _clear_preview(self, context, session):
+        if session.get("preview_visible"):
+            try:
+                await asyncio.wait_for(context["_browser_preview_presenter"](None), 8)
+            except Exception:
+                return False
+            session["preview_visible"] = False
+        return True
+
+    async def stop_preview(self, context, session):
+        if stop := session.pop("preview_stop", None):
+            stop.set()
+        if task := session.pop("preview_task", None):
+            await asyncio.gather(task, return_exceptions=True)
+        session.pop("preview_target", None)
+        session.pop("preview_status", None)
+        return await self._clear_preview(context, session)
+
+    async def set_preview(self, args, context, session):
+        enabled = args.get("enabled")
+        if not isinstance(enabled, bool):
+            return {"error": "set_live_preview requires enabled: true or false"}
+        if not enabled:
+            removed = await self.stop_preview(context, session)
+            return {"live_preview": False, **({} if removed else {"warning": "Discord preview removal could not be confirmed."})}
+        presenter = context.get("_browser_preview_presenter")
+        page = session.get("page")
+        if not presenter or not page or page.is_closed() or not normalize_public_web_url(page.url):
+            return {"error": "Select a public HTTP(S) page; live preview needs an active Discord tool message."}
+        origin = self._preview_origin(page.url)
+        target = (page, origin)
+        if session.get("preview_target") == target:
+            return {"live_preview": True, "preview_status": session["preview_status"]}
+        await self.stop_preview(context, session)
+        stop = session["preview_stop"] = asyncio.Event()
+        session["preview_target"] = target
+        session["preview_status"] = "retrying"
+        last = None
+
+        def selected():
+            return self._preview_selection_matches(session, target)
+
+        async def frame():
+            nonlocal last
+            if not selected():
+                await self._clear_preview(context, session)
+                session["preview_status"] = "paused_tab_or_origin_changed"
+                last = None
+                return
+            before = page.url
+            try:
+                if (await asyncio.wait_for(self.validate_public_url(before), 5))[1]:
+                    await self._clear_preview(context, session)
+                    session["preview_status"] = "paused_non_public_page"
+                    last = None
+                    return
+                image = await page.screenshot(type="jpeg", quality=65, scale="css", timeout=5000,
+                    mask=[page.locator('input[type=password],input[autocomplete^="cc-"],input[autocomplete="one-time-code"]')])
+                if stop.is_set() or not selected() or page.url != before:
+                    await self._clear_preview(context, session)
+                    session["preview_status"] = "retrying" if selected() else "paused_tab_or_origin_changed"
+                    last = None
+                    return
+                if len(image) > BROWSER_SCREENSHOT_MAX_BYTES:
+                    raise ValueError("Preview exceeds the upload limit")
+                digest = hashlib.sha256(image).digest()
+                if digest != last:
+                    session["preview_visible"] = True
+                    await asyncio.wait_for(presenter(image), 8)
+                    last = digest
+                session["preview_status"] = "live"
+            except Exception:
+                session["preview_status"] = "retrying"
+
+        async def refresh():
+            while not stop.is_set():
+                try:
+                    await asyncio.wait_for(stop.wait(), BROWSER_PREVIEW_INTERVAL)
+                except TimeoutError:
+                    await frame()
+
+        await frame()
+        session["preview_task"] = asyncio.create_task(refresh())
+        return {"live_preview": True, "preview_status": session["preview_status"], "interval_seconds": BROWSER_PREVIEW_INTERVAL}
 
     async def validate_public_url(self, value: str | None) -> tuple[str | None, str | None]:
         normalized = normalize_public_web_url(value)
@@ -920,6 +1225,30 @@ class BrowserSessionManager(BrowserPlaywrightMixin):
     # ------------------------------------------------------------------
     # Snapshots
     # ------------------------------------------------------------------
+
+    @staticmethod
+    async def wait_for_initial_content(page, timeout: int) -> bool:
+        # DOMContentLoaded can precede the first React render. Never wait for network
+        # idle: streaming apps may keep connections open for the life of the tab.
+        try:
+            handle = await page.wait_for_function(
+                """() => {
+                    const visible = el => !!el.getClientRects().length &&
+                        getComputedStyle(el).visibility === 'visible' && !el.closest('[hidden],[aria-hidden=true],[inert]');
+                    if (['discord.com', 'canary.discord.com', 'ptb.discord.com'].includes(location.hostname) &&
+                        ['app', 'channels', 'quest-home', 'login'].includes(location.pathname.split('/')[1])) {
+                        return Array.from(document.querySelectorAll('[data-list-id="guildsnav"], input[name="email"], input[name="password"], [role="alert"]')).some(visible);
+                    }
+                    if (document.body?.innerText.trim()) return true;
+                    return Array.from(document.querySelectorAll('button:not(:disabled), a[href], input:not([type=hidden]), [role=button], [role=textbox], img[alt]:not([alt=""]), video[controls]')).some(visible);
+                }""",
+                polling=150,
+                timeout=min(timeout, BROWSER_READY_TIMEOUT_MS),
+            )
+            await handle.dispose()
+            return True
+        except PlaywrightTimeoutError:
+            return False
 
     @staticmethod
     async def _raw_ai_snapshot(page, timeout: int) -> str:
@@ -1048,17 +1377,16 @@ class BrowserSessionManager(BrowserPlaywrightMixin):
             raise ValueError("password and payment fields are not supported")
 
     @staticmethod
-    async def ensure_click_does_not_open_popup(locator, timeout: int = BROWSER_ACTION_TIMEOUT_MS) -> None:
-        opens_popup = await locator.evaluate(
+    async def ensure_click_is_not_download(locator, timeout: int = BROWSER_ACTION_TIMEOUT_MS) -> None:
+        downloads = await locator.evaluate(
             """element => {
                 const link = element.closest ? element.closest('a, area') : null;
-                const target = (link && link.getAttribute('target') || '').toLowerCase();
-                return target === '_blank' || !!(link && link.hasAttribute('download'));
+                return !!(link && link.hasAttribute('download'));
             }""",
             timeout=timeout,
         )
-        if opens_popup:
-            raise ValueError("popups and downloads are not supported")
+        if downloads:
+            raise ValueError("downloads are not supported")
 
     # ------------------------------------------------------------------
     # Execution
@@ -1068,10 +1396,9 @@ class BrowserSessionManager(BrowserPlaywrightMixin):
         return page.locator(f"aria-ref={ref}")
 
     async def _failure_result(self, page, tool_context: dict, action_label: str, error: Exception) -> dict:
-        session = (tool_context or {}).get("_browser_session") or {}
-        if session.get("last_blocked_url"):
-            return {"error": f"browser {action_label} attempted a non-public HTTP(S) request and was blocked"}
         message = format_browser_error(error)
+        if "ERR_BLOCKED_BY_CLIENT" in message:
+            return {"error": f"browser {action_label} was blocked by browser network policy"}
         result = {"error": f"browser {action_label} failed: {message}"}
         if is_element_resolution_error(message):
             result["hint"] = STALE_REF_HINT
@@ -1089,7 +1416,7 @@ class BrowserSessionManager(BrowserPlaywrightMixin):
             if name in {"fill", "type"}:
                 await self.ensure_field_allowed(locator, timeout)
             if name in {"click", "dblclick"}:
-                await self.ensure_click_does_not_open_popup(locator, timeout)
+                await self.ensure_click_is_not_download(locator, timeout)
 
             if name == "click":
                 await locator.click(timeout=timeout)

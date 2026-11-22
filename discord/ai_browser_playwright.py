@@ -196,7 +196,7 @@ _TARGET_INFO = """point => {
         id: editable.id || '', autocomplete: editable.getAttribute('autocomplete') || '',
         ariaLabel: editable.getAttribute('aria-label') || '', placeholder: editable.getAttribute('placeholder') || '',
         editable: editable.isContentEditable || ['INPUT','TEXTAREA'].includes(editable.tagName),
-        popup: !!(link && ((link.getAttribute('target') || '').toLowerCase() === '_blank' || link.hasAttribute('download')))
+        download: !!(link && link.hasAttribute('download'))
     };
 }"""
 
@@ -287,8 +287,8 @@ class BrowserPlaywrightMixin:
         haystack = " ".join(str(info.get(key) or "") for key in ("type", "name", "id", "autocomplete", "ariaLabel", "placeholder"))
         if re.search(r"password|passwd|passcode|credit.?card|card.?number|payment|billing|cvv|cvc|security.?code|one.?time.?password|otp", haystack, re.I):
             raise ValueError("password and payment fields are not supported")
-        if info.get("popup") and point is not None:
-            raise ValueError("popups and downloads are not supported")
+        if info.get("download") and point is not None:
+            raise ValueError("downloads are not supported")
         if editable and not info.get("editable"):
             raise ValueError("Focus an editable field before inserting text")
 
@@ -302,7 +302,7 @@ class BrowserPlaywrightMixin:
                     await self.ensure_field_allowed(locator, timeout)
                 if operation in {"click", "dblclick"}:
                     await self.ensure_field_allowed(locator, timeout)
-                    await self.ensure_click_does_not_open_popup(locator, timeout)
+                    await self.ensure_click_is_not_download(locator, timeout)
                 phase = "action"
                 if operation in {"click", "dblclick"}:
                     await getattr(locator, operation)(timeout=timeout, button=spec["button"], force=spec["force"], no_wait_after=True)

@@ -183,6 +183,14 @@ Object.assign(server.context, {
   browser: Object.freeze({
     ...pageProxy,
     page: pageProxy,
+    tabs: Object.freeze({
+      list: () => rpc('browser_read', {action: 'list_tabs'}),
+      new: ({auto_close = true} = {}) => rpc('browser_read', {action: 'new_tab', auto_close}),
+      select: tab_id => rpc('browser_read', {action: 'select_tab', tab_id}),
+      close: tab_id => rpc('browser_read', {action: 'close_tab', tab_id}),
+      keep: (tab_id, enabled = true, resume_status) => rpc('browser_read', {action: 'keep_tab', tab_id, enabled, resume_status}),
+    }),
+    livePreview: enabled => rpc('browser_read', {action: 'set_live_preview', enabled}),
     read: args => rpc('browser_read', args),
     act: args => rpc('browser_act', args),
     evaluate: args => rpc('browser_evaluate', args),

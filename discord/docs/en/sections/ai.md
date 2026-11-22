@@ -84,7 +84,9 @@ The AI uses three different types of context; clearing one does not clear the ot
 - The AI creates a message screenshot only when visual layout or Discord-specific presentation cannot be determined from text. The image is reconstructed by `chat_exporter`, not captured from the native Discord client; structured text fills in formats the reconstruction cannot show.
 - Screenshots contain only the target message by default. When context is requested, they may include up to nine earlier messages from the same author within five minutes. Spoilers are expanded.
 - Attaching the screenshot alone has no separate image-analysis fee. Asking the AI to inspect it uses the image-analysis tool at the built-in rate of 25 全域幣 per call, with a refund on failure.
-- External webpage screenshots are used only for visual inspection by `browser_view` and are never attached to replies. External images are displayed using their direct image URLs rather than webpage screenshots.
+- Every requester can start a task in the configured browser, and website sign-ins are shared. Use a dedicated profile without accounts that can read private information. Only bot owners can select manually opened tabs. The browser host still needs its own private-network isolation; tool-level filtering is not a firewall.
+- New tasks start in a fresh tab, and tabs opened by the AI close by default. Kept tabs can be resumed by the same requester in the same server and channel. Tab IDs stay stable while the bot is running; recent operation names and continuation status are held in memory for one hour, without page contents, cookies, or screenshots. Interaction approval starts fresh each request.
+- `browser_view` analyzes a still. Live preview is separate, off by default, and visible to anyone who can see the tool notice. Switching tabs or sites pauses the preview instead of showing the new page; temporary capture failures are retried. The preview is not attached to the final reply.
 - Messages, screenshots, and visible screenshot text are untrusted content and are never treated as system instructions.
 
 ## Billing

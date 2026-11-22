@@ -54,7 +54,7 @@ class BrowserPlaywrightExecutionTests(unittest.IsolatedAsyncioTestCase):
         self.manager = BrowserSessionManager()
         self.manager.snapshot_payload = AsyncMock(return_value={'snapshot': 'fresh UI'})
         self.manager.ensure_field_allowed = AsyncMock()
-        self.manager.ensure_click_does_not_open_popup = AsyncMock()
+        self.manager.ensure_click_is_not_download = AsyncMock()
         self.manager._failure_result = AsyncMock(return_value={'error': 'fixture failure', 'snapshot': 'fresh failure UI'})
         self.editor = SimpleNamespace(fill=AsyncMock(), click=AsyncMock(), inner_text=AsyncMock(return_value='Draft'))
         async def evaluate(expression, argument=None):

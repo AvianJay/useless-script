@@ -389,8 +389,9 @@ class AIRequestDeliveryTests(unittest.IsolatedAsyncioTestCase):
         self.assertIs(question_call.kwargs["reference"], progress)
         self.assertFalse(browser_call.kwargs["mention_author"])
         self.assertFalse(question_call.kwargs["mention_author"])
+        # 更新文字不清除正在顯示的瀏覽器即時畫面。
         progress.edit.assert_awaited_once_with(
-            content="Resuming", attachments=[], view=None, allowed_mentions=SAFE_MENTIONS,
+            content="Resuming", view=None, allowed_mentions=SAFE_MENTIONS,
         )
         progress.delete.assert_awaited_once()
         approval_message.edit.assert_not_awaited()

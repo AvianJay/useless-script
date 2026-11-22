@@ -47,6 +47,7 @@ def snapshot_page(url="https://example.com/form", snapshot="- button \"Submit\" 
     return SimpleNamespace(
         url=url,
         goto=AsyncMock(),
+        wait_for_function=AsyncMock(return_value=SimpleNamespace(dispose=AsyncMock())),
         title=AsyncMock(return_value="Example"),
         aria_snapshot=AsyncMock(return_value=snapshot),
     )
@@ -91,10 +92,14 @@ class FakeManagerSession:
         return self.post_response
 
 
-class FakeRoute:
-    def __init__(self):
-        self.continue_ = AsyncMock()
-        self.abort = AsyncMock()
+def fake_cdp(target_id="test-tab", pages=()):
+    async def send(method, _params=None):
+        if method == "Target.getTargetInfo":
+            return {"targetInfo": {"targetId": target_id}}
+        if method == "Target.getTargets":
+            return {"targetInfos": [{"targetId": page.target_id} for page in pages]}
+        return {}
+    return SimpleNamespace(send=AsyncMock(side_effect=send), detach=AsyncMock(), on=MagicMock())
 
 
 class BrowserConfigTests(unittest.IsolatedAsyncioTestCase):
@@ -347,38 +352,11 @@ class BrowserNetworkAndLifecycleTests(unittest.IsolatedAsyncioTestCase):
         self.assertIsNone(normalized)
         self.assertIn("non-public", error)
 
-    async def test_page_route_blocks_private_redirect_and_subresource(self):
-        session = {}
-        route = FakeRoute()
-        request = SimpleNamespace(url="http://10.0.0.1/private")
-        await self.cog.browser._route_request(route, request, session)
-        route.abort.assert_awaited_once()
-
-        route = FakeRoute()
-        request = SimpleNamespace(url="https://cdn.example/app.js")
-        with patch(
-            "ai_browser.validate_public_fetch_target",
-            new=AsyncMock(return_value="target host resolved to a non-public address"),
-        ):
-            await self.cog.browser._route_request(route, request, session)
-        route.abort.assert_awaited_once()
-
-        route = FakeRoute()
-        request = SimpleNamespace(url="data:text/plain,ok")
-        await self.cog.browser._route_request(route, request, session)
-        route.continue_.assert_awaited_once()
-
-        websocket_route = SimpleNamespace(close=AsyncMock())
-        await self.cog.browser._block_websocket(websocket_route)
-        websocket_route.close.assert_awaited_once_with(
-            code=1008,
-            reason="Browser tool allows public HTTP(S) requests only",
-        )
-
     async def test_attach_uses_new_page_and_cleanup_never_closes_browser_or_original_pages(self):
         original_pages = [SimpleNamespace(close=AsyncMock()), SimpleNamespace(close=AsyncMock())]
         page = SimpleNamespace(
             route=AsyncMock(),
+            url="about:blank",
             route_web_socket=AsyncMock(),
             add_init_script=AsyncMock(),
             set_default_timeout=MagicMock(),
@@ -386,13 +364,15 @@ class BrowserNetworkAndLifecycleTests(unittest.IsolatedAsyncioTestCase):
             is_closed=MagicMock(return_value=False),
             close=AsyncMock(),
         )
-        page_cdp_session = SimpleNamespace(send=AsyncMock(), detach=AsyncMock())
+        page_cdp_session = fake_cdp()
         context = SimpleNamespace(
-            pages=original_pages,
+            pages=original_pages, route=AsyncMock(),
             new_page=AsyncMock(return_value=page),
             new_cdp_session=AsyncMock(return_value=page_cdp_session),
         )
-        browser = SimpleNamespace(contexts=[context], close=AsyncMock())
+        guard_cdp = fake_cdp()
+        browser = SimpleNamespace(contexts=[context], close=AsyncMock(),
+                                  new_browser_cdp_session=AsyncMock(return_value=guard_cdp))
         playwright = SimpleNamespace(
             chromium=SimpleNamespace(connect_over_cdp=AsyncMock(return_value=browser)),
             stop=AsyncMock(),
@@ -407,16 +387,214 @@ class BrowserNetworkAndLifecycleTests(unittest.IsolatedAsyncioTestCase):
             actual_page, error = await self.cog.browser.get_page(request_context)
             self.assertIsNone(error)
             self.assertIs(actual_page, page)
-            self.assertEqual(request_context["_browser_session"]["original_page_count"], 2)
+            self.assertIs(request_context["_browser_session"]["context"], context)
+            page.route_web_socket.assert_not_awaited()
             await self.cog.browser.release_lease(request_context)
 
         page.close.assert_awaited_once()
         page_cdp_session.send.assert_any_await("Network.setBypassServiceWorker", {"bypass": True})
         page_cdp_session.detach.assert_awaited_once()
+        guard_cdp.send.assert_any_await("Fetch.disable")
+        guard_cdp.detach.assert_awaited_once()
+        context.route.assert_not_awaited()
         playwright.stop.assert_awaited_once()
         browser.close.assert_not_awaited()
         for original in original_pages:
             original.close.assert_not_awaited()
+
+
+class BrowserTabControlsTests(unittest.IsolatedAsyncioTestCase):
+    async def asyncSetUp(self):
+        self.m = ai_browser.BrowserSessionManager()
+        self.pages = []
+        self.serial = 0
+        self.profile = SimpleNamespace(pages=self.pages, new_page=AsyncMock(side_effect=self.make_page),
+            new_cdp_session=AsyncMock(side_effect=lambda page: fake_cdp(page.target_id)), route=AsyncMock())
+        self.browser = SimpleNamespace(contexts=[self.profile],
+            new_browser_cdp_session=AsyncMock(side_effect=lambda: fake_cdp(pages=self.pages)))
+        self.pw = SimpleNamespace(chromium=SimpleNamespace(connect_over_cdp=AsyncMock(
+            return_value=self.browser)), stop=AsyncMock())
+        for mocked in (patch('ai_browser.get_ai_browser_cdp_endpoint', return_value=CDP_ENDPOINT),
+                       patch('ai_browser.config', return_value=[2345]),
+                       patch.object(self.m, 'preflight_cdp', AsyncMock(return_value=('ws://test', None))),
+                       patch('ai_browser.async_playwright', return_value=SimpleNamespace(start=AsyncMock(return_value=self.pw))),
+                       patch('ai_browser.validate_public_fetch_target', AsyncMock(return_value=None))):
+            mocked.start()
+            self.addCleanup(mocked.stop)
+        self.ctx = tool_context(2345)
+        self.addAsyncCleanup(self.m.release_lease, self.ctx)
+
+    def make_page(self, url='about:blank'):
+        self.serial += 1
+        page = SimpleNamespace(url=url, target_id=f'target-{self.serial}', frames=[], set_default_timeout=MagicMock(), add_init_script=AsyncMock(),
+                               bring_to_front=AsyncMock(), is_closed=MagicMock(return_value=False), on=MagicMock(),
+                               locator=MagicMock(), screenshot=AsyncMock(return_value=b'frame'))
+        def close(**kwargs):
+            self.pages.remove(page)
+            page.is_closed.return_value = True
+        page.close = AsyncMock(side_effect=close)
+        self.pages.append(page)
+        return page
+
+    async def command(self, action, **kwargs):
+        return await self.m.tab_command(action, kwargs, self.ctx)
+
+    async def test_continuation_has_no_throwaway_tab_and_cleanup_preserves_originals(self):
+        original = self.make_page('https://example.org/task?key=redact#fragment')
+        self.make_page('chrome://settings')
+        rows = (await self.command('list_tabs'))['tabs']
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]['url'], 'https://example.org/task')
+        self.profile.new_page.assert_not_awaited()
+        self.profile.route.assert_not_awaited()
+        key = rows[0]['tab_id']
+        await self.command('select_tab', tab_id=key)
+        page, error = await self.m.get_page(self.ctx)
+        self.assertIsNone(error)
+        self.assertIs(page, original)
+        self.assertNotIn('error', await self.command('new_tab'))
+        created = self.pages[-1]
+        kept = await self.command('new_tab')
+        retained = self.pages[-1]
+        await self.command('keep_tab', tab_id=kept['tab_id'], enabled=True)
+        await self.m.release_lease(self.ctx)
+        original.close.assert_not_awaited()
+        retained.close.assert_not_awaited()
+        created.close.assert_awaited_once()
+        self.pw.stop.assert_awaited_once()
+        self.profile.route.assert_not_awaited()
+
+    async def test_retained_tab_is_scoped_and_continues_without_a_new_tab(self):
+        self.make_page('https://example.org/manual')
+        self.ctx = tool_context(100, channel_id=20)
+        kept = await self.command('new_tab')
+        page = self.pages[-1]
+        page.url = 'https://example.org/draft?secret=not-for-history'
+        result = {'snapshot': 'not-for-history'}
+        self.m.annotate_tool_result('browser_playwright', {'operation': 'fill', 'text': 'not-for-history'}, result, self.ctx)
+        await self.command('keep_tab', tab_id=kept['tab_id'], enabled=True, resume_status='draft_pending_review')
+        await self.m.release_lease(self.ctx)
+        self.assertNotIn('not-for-history', repr(self.m._retained_tabs))
+
+        for context in (tool_context(101), tool_context(100, channel_id=21), tool_context(100, guild_id=11)):
+            self.assertEqual(await self.m.tab_command('list_tabs', {}, context), {'tabs': []})
+            self.assertIn('error', await self.m.tab_command('select_tab', {'tab_id': kept['tab_id']}, context))
+            await self.m.release_lease(context)
+
+        self.ctx = tool_context(100, channel_id=20)
+        self.addAsyncCleanup(self.m.release_lease, self.ctx)
+        rows = (await self.command('list_tabs'))['tabs']
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]['tab_id'], kept['tab_id'])
+        self.assertEqual(rows[0]['continuation'], {'recent_operations': ['fill'], 'status': 'draft_pending_review'})
+        self.assertEqual(rows[0]['url'], 'https://example.org/draft')
+        selected = await self.command('select_tab', tab_id=kept['tab_id'])
+        self.assertTrue(selected['auto_close'])
+        self.assertIs((await self.m.get_page(self.ctx))[0], page)
+        self.profile.new_page.assert_awaited_once()
+        await self.m.release_lease(self.ctx)
+        page.close.assert_awaited_once()
+        self.assertEqual(self.m._retained_tabs, {})
+
+    async def test_listing_an_expired_continuation_does_not_refresh_it(self):
+        kept = await self.command('new_tab', auto_close=False)
+        page = self.pages[-1]
+        await self.m.release_lease(self.ctx)
+        self.m._retained_tabs[page.target_id]['expires'] = 0
+        rows = (await self.command('list_tabs'))['tabs']
+        await self.m.release_lease(self.ctx)
+        self.assertEqual(rows[0]['tab_id'], kept['tab_id'])
+        self.assertNotIn('continuation', rows[0])
+        self.assertEqual(self.m._retained_tabs[page.target_id]['expires'], 0)
+        page.close.assert_not_awaited()
+
+    async def test_new_tab_can_opt_out_and_switch_back_to_default(self):
+        keep = await self.command('new_tab', auto_close=False)
+        retained = self.pages[-1]
+        temporary = await self.command('new_tab', auto_close=False)
+        dropped = self.pages[-1]
+        self.assertFalse(keep['auto_close'])
+        self.assertTrue((await self.command('keep_tab', tab_id=temporary['tab_id'], enabled=False))['auto_close'])
+        self.assertIn('error', await self.command('new_tab', auto_close='false'))
+        await self.m.release_lease(self.ctx)
+        retained.close.assert_not_awaited()
+        dropped.close.assert_awaited_once()
+
+    async def test_owned_popups_auto_close_but_unrelated_new_tab_does_not(self):
+        root, _ = await self.m.get_page(self.ctx)
+        popup = self.make_page('https://example.com/popup')
+        dict(c.args for c in root.on.call_args_list)['popup'](popup)
+        manual = self.make_page('https://example.com/manual')
+        await self.command('list_tabs')
+        await self.m.release_lease(self.ctx)
+        root.close.assert_awaited_once()
+        popup.close.assert_awaited_once()
+        manual.close.assert_not_awaited()
+
+    async def test_existing_tab_close_requires_approval_bound_to_the_tab(self):
+        original = self.make_page('https://example.org/task')
+        self.make_page('https://example.org/other')
+        key = (await self.command('list_tabs'))['tabs'][0]['tab_id']
+        await self.command('select_tab', tab_id=key)
+        async def approve(record):
+            original.close.assert_not_awaited()
+            result = await self.m.execute_approval_from_button(SimpleNamespace(**self.ctx), record)
+            await self.m.resolve_approval(record, result)
+        self.ctx['_browser_approval_presenter'] = approve
+        result = await self.command('close_tab', tab_id=key)
+        self.assertTrue(result['confirmed'])
+        original.close.assert_awaited_once()
+        self.assertFalse(self.ctx.get('_browser_interaction_authorized'))
+
+    async def test_preview_is_opt_in_deduplicated_and_removed(self):
+        presenter = self.ctx['_browser_preview_presenter'] = AsyncMock()
+        page, _ = await self.m.get_page(self.ctx)
+        page.url = 'https://example.org/'
+        page.screenshot.assert_not_awaited()
+        with patch('ai_browser.BROWSER_PREVIEW_INTERVAL', 0.01):
+            self.assertTrue((await self.command('set_live_preview', enabled=True))['live_preview'])
+            await asyncio.sleep(0.04)
+            presenter.assert_awaited_once_with(b'frame')
+            page.screenshot.return_value = b'changed'
+            await asyncio.sleep(0.04)
+            self.assertFalse((await self.command('set_live_preview', enabled=False))['live_preview'])
+        self.assertEqual([c.args[0] for c in presenter.await_args_list], [b'frame', b'changed', None])
+        self.assertNotIn('pending_image_attachments', self.ctx)
+
+    async def test_preview_recovers_from_timeout_and_does_not_follow_another_tab(self):
+        presenter = self.ctx['_browser_preview_presenter'] = AsyncMock()
+        first = await self.command('new_tab')
+        page = self.pages[-1]
+        page.url = 'https://example.org/'
+        page.screenshot.side_effect = [TimeoutError(), b'first', b'first', b'first', b'first']
+        with patch('ai_browser.BROWSER_PREVIEW_INTERVAL', 0.01):
+            result = await self.command('set_live_preview', enabled=True)
+            self.assertEqual(result['preview_status'], 'retrying')
+            await asyncio.sleep(0.025)
+            presenter.assert_awaited_once_with(b'first')
+            await self.command('new_tab')
+            other = self.pages[-1]
+            other.url = 'https://example.net/'
+            await asyncio.sleep(0.025)
+            result = {}
+            self.m.annotate_tool_result('browser_read', {'action': 'list_tabs'}, result, self.ctx)
+            self.assertEqual(result['preview_status'], 'paused_tab_or_origin_changed')
+            other.screenshot.assert_not_awaited()
+            self.assertEqual(presenter.await_args.args, (None,))
+            page.screenshot.side_effect = None
+            page.screenshot.return_value = b'resumed'
+            await self.command('select_tab', tab_id=first['tab_id'])
+            await asyncio.sleep(0.025)
+            self.assertEqual(presenter.await_args.args, (b'resumed',))
+            await self.command('set_live_preview', enabled=False)
+
+    async def test_closed_selection_does_not_silently_act_on_another_tab(self):
+        page, _ = await self.m.get_page(self.ctx)
+        await page.close()
+        self.make_page('https://example.org/')
+        result, error = await self.m.get_page(self.ctx)
+        self.assertIsNone(result)
+        self.assertIn('closed', error)
 
 
 class BrowserProgressNoticeTests(unittest.IsolatedAsyncioTestCase):
@@ -481,6 +659,7 @@ class BrowserProgressNoticeTests(unittest.IsolatedAsyncioTestCase):
 
         page = SimpleNamespace(
             route=AsyncMock(),
+            url="about:blank",
             route_web_socket=AsyncMock(),
             add_init_script=AsyncMock(),
             set_default_timeout=MagicMock(),
@@ -489,14 +668,13 @@ class BrowserProgressNoticeTests(unittest.IsolatedAsyncioTestCase):
             close=AsyncMock(),
         )
         browser_context = SimpleNamespace(
-            pages=[],
+            pages=[], route=AsyncMock(), unroute=AsyncMock(),
             new_page=AsyncMock(return_value=page),
-            new_cdp_session=AsyncMock(return_value=SimpleNamespace(send=AsyncMock(), detach=AsyncMock())),
+            new_cdp_session=AsyncMock(return_value=fake_cdp()),
         )
+        browser = SimpleNamespace(contexts=[browser_context], new_browser_cdp_session=AsyncMock(return_value=fake_cdp()))
         playwright = SimpleNamespace(
-            chromium=SimpleNamespace(
-                connect_over_cdp=AsyncMock(return_value=SimpleNamespace(contexts=[browser_context]))
-            ),
+            chromium=SimpleNamespace(connect_over_cdp=AsyncMock(return_value=browser)),
             stop=AsyncMock(),
         )
         context = tool_context()
@@ -632,14 +810,12 @@ class BrowserActionExecutionTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_blocked_request_reports_the_ssrf_reason_without_a_snapshot(self):
         self.locator.click = AsyncMock(side_effect=RuntimeError("net::ERR_BLOCKED_BY_CLIENT"))
-        context = tool_context()
-        context["_browser_session"] = {"last_blocked_url": "http://10.0.0.1/"}
         action, _ = self.cog.browser.normalize_action(
             {"action": "click", "ref": "e5", "element": "link"}
         )
-        result = await self.cog.browser.execute_action(self.page, action, context)
+        result = await self.cog.browser.execute_action(self.page, action, tool_context())
 
-        self.assertIn("non-public", result["error"])
+        self.assertIn("network policy", result["error"])
         self.assertNotIn("snapshot", result)
 
     async def test_snapshot_failure_does_not_mask_a_successful_action(self):

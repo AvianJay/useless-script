@@ -8,6 +8,22 @@ The kernel and resources are discarded when the response completes or is cancell
 
 Available globals:
 
+- `await browser.tabs.list()` returns `{tabs:[{tab_id,url,selected,auto_close,continuation?}]}`
+  without opening a tab. `tabs.new()` selects a new auto-closing tab;
+  `tabs.new({auto_close:false})` keeps it. `tabs.select(id)` switches `browser.page`
+  without navigation, and `tabs.close(id)` closes one tab. Use `tabs.keep(id, true, status)`
+  to leave an AI-created tab open, or pass `false` to restore cleanup. Optional status:
+  `reading`, `draft_pending_review`, `waiting_for_user`, or `follow_up`. In a later
+  request, list again to recover the stable ID and the recent operation names. Metadata
+  is limited to the same user/server/channel, in memory, with one hour of progress history.
+- `await browser.livePreview(true|false)` toggles a viewport attachment on the active
+  Discord tool notice. It pins the selected public tab and origin: switching either
+  pauses it, and returning resumes it. Roughly every 5 seconds, changed frames replace
+  the last image. Temporary capture failures are retried; `preview_status` distinguishes
+  live, paused and retrying states. Disabling or ending the task removes the attachment.
+- In the direct `browser_read` fallback use `action` = `list_tabs`, `new_tab`, `select_tab`,
+  `close_tab`, `keep_tab`, or `set_live_preview`; use `tab_id`, `enabled`, and optionally
+  `resume_status` for `keep_tab`.
 - `browser.page` (also most methods directly on `browser`) controls the managed
   page through real Python Playwright. Use `goto(url)`, `snapshot()`, `title()`,
   `url()`, `viewportSize()` and `evaluate(functionOrExpression, optionalArgument)`.

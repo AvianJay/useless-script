@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.25.1
+* Updated AI browser tools | /ai
+  * Fixed Discord's blank page caused by blocked WebSockets and added support for links that open in new tabs.
+  * New tasks start in a fresh tab that closes by default. The AI can keep a tab for the same user to resume in the same server and channel; recent operations and continuation status are available for one hour.
+  * Optional live previews appear on the tool progress message. They are off by default, pause when switching tabs or sites, and retry temporary capture failures.
+
 ## 0.25.0
 * Added Activity Roles | /activity-role
   * Roles are assigned automatically based on members' current activities. Playing, streaming, listening, watching, and competing can be counted (only playing by default). Entries can be picked from Discord's detectable game list, mapped to custom apps by application ID, or matched when the activity name contains a given text (at least 3 characters).

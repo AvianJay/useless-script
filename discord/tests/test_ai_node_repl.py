@@ -1,5 +1,6 @@
 import asyncio
 import json
+import os
 import shutil
 import sys
 import unittest
@@ -31,21 +32,19 @@ class NodeSandboxCommandTests(unittest.TestCase):
             kernel.command()
 
 
-@unittest.skipUnless(shutil.which('node'), 'Node is needed to test the trusted protocol fixture')
+@unittest.skipUnless(os.environ.get('AI_TEST_NODE_DOCKER') or shutil.which('node'), 'Node is needed for the protocol fixtures')
 class NodeWorkerProtocolTests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self):
         self.kernel = NodeKernel()
-        self.kernel.docker = None
-        worker = Path(__file__).resolve().parents[1] / 'ai_node_worker.cjs'
-        # Test-only override: run these fixed, trusted fixture snippets locally.
-        # Production NodeKernel.command always requires the Docker sandbox.
-        self.command = patch.object(self.kernel, 'command', return_value=[shutil.which('node'), str(worker)])
-        self.command.start()
+        self.addAsyncCleanup(self.kernel.close)
+        if not os.environ.get('AI_TEST_NODE_DOCKER'):
+            self.kernel.docker = None
+            worker = Path(__file__).resolve().parents[1] / 'ai_node_worker.cjs'
+            # 測試可在相容的本機 Node 跑固定案例，或指定使用正式的 Node 24 容器。
+            command = patch.object(self.kernel, 'command', return_value=[shutil.which('node'), str(worker)])
+            command.start()
+            self.addCleanup(command.stop)
         self.broker = AsyncMock(return_value={'ok': True, 'data': {'count': 3}})
-
-    async def asyncTearDown(self):
-        await self.kernel.close()
-        self.command.stop()
 
     async def test_top_level_await_and_variables_persist(self):
         first = await self.kernel.evaluate('var count = await Promise.resolve(40); write(count)', self.broker)
@@ -71,6 +70,19 @@ class NodeWorkerProtocolTests(unittest.IsolatedAsyncioTestCase):
             {'kind':'role','role':'dialog'}, {'kind':'role','role':'textbox'}, {'kind':'nth','index':0},
         ])
         self.assertEqual(result['runtime']['bridge_calls'], 4)
+
+    async def test_browser_tabs_and_preview_bridge(self):
+        result = await self.kernel.evaluate(
+            'await browser.tabs.list(); await browser.tabs.new(); await browser.tabs.select("t2"); '
+            'await browser.tabs.keep("t2", true, "draft_pending_review"); await browser.livePreview(true); await browser.tabs.close("t2");', self.broker)
+        self.assertTrue(result['ok'])
+        calls = self.broker.await_args_list
+        self.assertEqual([c.args[0] for c in calls], ['browser_read'] * 6)
+        self.assertEqual([c.args[1]['action'] for c in calls],
+                         ['list_tabs', 'new_tab', 'select_tab', 'keep_tab', 'set_live_preview', 'close_tab'])
+        self.assertEqual(calls[2].args[1]['tab_id'], 't2')
+        self.assertEqual(calls[3].args[1]['resume_status'], 'draft_pending_review')
+        self.assertIs(calls[4].args[1]['enabled'], True)
 
     async def test_bridge_failure_retains_recovery_details(self):
         self.broker.return_value = {'ok': False, 'error': 'Click timed out', 'data': {'snapshot': 'Fresh UI', 'action_may_have_applied': True}}
