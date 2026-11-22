@@ -27,7 +27,9 @@ stable ID for the lifetime of this bot process and reports a bounded list of rec
 operations for one hour. Listing alone does not change retention. Selecting a kept
 tab restores automatic closing for the resumed task unless the AI keeps it again.
 The next request needs fresh interaction approval. Closing a borrowed tab always
-requires separately confirming that exact tab.
+requires separately confirming that exact tab. Browser tool results and Node REPL
+results report `browser_calls_remaining` after browser use. If it is low and work
+remains, keep the relevant tab before the budget runs out and report the next step.
 
 Use `await browser.livePreview(true)` to share changing viewport images on this
 request's **Discord tool progress message**. It is off by default; anyone who can

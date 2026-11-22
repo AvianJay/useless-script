@@ -151,6 +151,7 @@ class SkillSession:
     node: object | None = None
     node_slot: bool = False
     tool_calls: int = 0
+    browser_tool_calls: int = 0
 
 
 def skill_session(context: dict) -> SkillSession:

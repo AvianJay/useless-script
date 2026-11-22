@@ -253,13 +253,59 @@ class AISkillToolTests(unittest.IsolatedAsyncioTestCase):
         rejected = await self.cog._execute_ai_tool('send_resource', {'resource_id': fake.resource_id}, self.context)
         self.assertFalse(rejected['ok'])
 
-    async def test_bridge_calls_share_the_request_budget(self):
-        skill_session(self.context)
+    async def test_general_tools_share_the_budget_with_non_browser_bridge_calls(self):
+        skill_session(self.context).loaded.add('data-analysis')
         with patch.object(self.cog, 'MAX_SKILL_TOOL_CALLS', 1):
             first = await self.cog._execute_ai_tool('list_resources', {}, self.context)
-            second = await self.cog._execute_ai_tool('list_resources', {}, self.context)
+            second = await self.cog._node_tool_bridge('list_resources', {}, self.context)
         self.assertTrue(first['ok'])
         self.assertFalse(second['ok'])
+        self.assertIn('budget exhausted', second['error'])
+
+    async def test_browser_bridge_and_direct_fallback_share_only_the_browser_budget(self):
+        state = skill_session(self.context)
+        state.loaded.add('browser')
+        with patch.multiple(self.cog, MAX_SKILL_TOOL_CALLS=1, MAX_BROWSER_TOOL_CALLS=2), patch(
+            'ai._get_ai_browser_cdp_endpoint', return_value='configured'), patch.object(
+            self.cog, '_tool_browser_read', new=AsyncMock(return_value={'tabs': []})) as handler:
+            self.assertFalse((await self.cog._execute_ai_tool('browser_read', {}, self.context))['ok'])
+            bridged = await self.cog._node_tool_bridge('browser_read', {'action': 'list_tabs'}, self.context)
+            self.assertEqual(bridged['data']['browser_calls_remaining'], 1)
+            self.assertEqual(state.tool_calls, 0)
+            self.assertTrue((await self.cog._execute_ai_tool('list_resources', {}, self.context))['ok'])
+            self.assertFalse((await self.cog._execute_ai_tool('list_resources', {}, self.context))['ok'])
+            self.context['_node_repl_unavailable'] = True
+            direct = await self.cog._execute_ai_tool('browser_read', {'action': 'list_tabs'}, self.context)
+            self.assertEqual(direct['data']['browser_calls_remaining'], 0)
+            capped = await self.cog._node_tool_bridge('browser_read', {}, self.context)
+            self.assertIn('Browser tool-call budget exhausted', capped['error'])
+            self.assertEqual(handler.await_count, 2)
+
+    async def test_only_browser_usage_unlocks_extra_model_rounds(self):
+        for use_browser in (False, True):
+            with self.subTest(use_browser=use_browser):
+                context = {'user': SimpleNamespace(id=42), 'channel': SimpleNamespace(id=1)}
+                skill_session(context).loaded.add('browser')
+                calls = []
+
+                async def model(_messages, *, tools=None, **_kwargs):
+                    if tools is None:
+                        return response('Done'), 'native'
+                    calls.append(tools)
+                    return response(calls=[native_call('node_repl', {'code': 'fixture'})]), 'native'
+
+                async def node(_args, active_context):
+                    if use_browser:
+                        await self.cog._node_tool_bridge('browser_read', {'action': 'list_tabs'}, active_context)
+                    return {'ok': True}
+
+                with patch.multiple(self.cog, MAX_SKILL_TOOL_ITERATIONS=2, MAX_BROWSER_TOOL_ITERATIONS=4), patch(
+                    'ai._get_ai_browser_cdp_endpoint', return_value='configured'), patch.object(
+                    self.cog, '_tool_browser_read', new=AsyncMock(side_effect=lambda *_: {'tabs': []})), patch.object(
+                    self.cog, '_tool_node_repl', side_effect=node), patch.object(self.cog, '_request_ai_completion', side_effect=model):
+                    result = await self.cog.generate_response([{'role': 'user', 'content': 'Fixture'}], tool_context=context)
+                self.assertEqual(result[0], 'Done')
+                self.assertEqual(len(calls), 4 if use_browser else 2)
 
     async def test_threads_interactions_allow_regular_users_with_browser_approval(self):
         skill_session(self.context).loaded.add('browser')

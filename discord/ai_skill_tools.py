@@ -57,6 +57,8 @@ SKILL_TOOL_NAMES = frozenset(tool["function"]["name"] for tool in SKILL_TOOL_SCH
 class AISkillTools:
     MAX_SKILL_TOOL_ITERATIONS = 12
     MAX_SKILL_TOOL_CALLS = 48
+    MAX_BROWSER_TOOL_ITERATIONS = 20
+    MAX_BROWSER_TOOL_CALLS = 72
     MAX_SKILL_REQUEST_SECONDS = 600
 
     def _skill_availability(self, name: str) -> tuple[bool, str | None]:

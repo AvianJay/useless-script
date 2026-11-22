@@ -2839,10 +2839,16 @@ class AICommands(AISkillTools, AIKnowledgeTools, commands.Cog):
             working_messages = [dict(message) for message in messages]
             working_image = image if _is_ai_vision_model(model) else None
             completed_rounds = 0
-            for round_index in range(1, max(self.MAX_TOOL_ITERATIONS, self.MAX_SKILL_TOOL_ITERATIONS) + 1):
+            max_rounds = max(self.MAX_TOOL_ITERATIONS, self.MAX_SKILL_TOOL_ITERATIONS, self.MAX_BROWSER_TOOL_ITERATIONS)
+            for round_index in range(1, max_rounds + 1):
                 state = skill_session(active_tool_context) if use_tools else None
-                round_limit = self.MAX_SKILL_TOOL_ITERATIONS if state and state.loaded else self.MAX_TOOL_ITERATIONS
-                if round_index > (round_limit if use_tools else 1):
+                if state and state.browser_tool_calls:
+                    round_limit = self.MAX_BROWSER_TOOL_ITERATIONS
+                elif state and state.loaded:
+                    round_limit = self.MAX_SKILL_TOOL_ITERATIONS
+                else:
+                    round_limit = self.MAX_TOOL_ITERATIONS if use_tools else 1
+                if round_index > round_limit:
                     break
                 if time.perf_counter() - start_time > self.MAX_SKILL_REQUEST_SECONDS:
                     break
@@ -12806,13 +12812,18 @@ class AICommands(AISkillTools, AIKnowledgeTools, commands.Cog):
 
     async def _execute_ai_tool(self, name: str, arguments: dict, tool_context: dict, *, _from_node=False) -> dict:
         tool_context = tool_context if isinstance(tool_context, dict) else {}
-        state = tool_context.get("_skill_session") if isinstance(tool_context, dict) else None
-        if state is not None:
-            state.tool_calls += 1
-            if state.tool_calls > self.MAX_SKILL_TOOL_CALLS:
-                return {"ok": False, "error": "Request tool-call budget exhausted; finish with the available evidence"}
-            if "browser" in state.loaded and name in self.BROWSER_TOOL_NAMES and not _from_node and not tool_context.get("_node_repl_unavailable"):
+        state = tool_context.get("_skill_session")
+        browser_call = state is not None and "browser" in state.loaded and name in self.BROWSER_TOOL_NAMES
+        if browser_call:
+            if not _from_node and not tool_context.get("_node_repl_unavailable"):
                 return {"ok": False, "error": "Use node_repl with browser.page for browser work. Direct browser tools are available only after a sandbox startup failure."}
+            if state.browser_tool_calls >= self.MAX_BROWSER_TOOL_CALLS:
+                return {"ok": False, "error": "Browser tool-call budget exhausted; finish with the available evidence"}
+            state.browser_tool_calls += 1
+        elif state is not None:
+            if state.tool_calls >= self.MAX_SKILL_TOOL_CALLS:
+                return {"ok": False, "error": "Request tool-call budget exhausted; finish with the available evidence"}
+            state.tool_calls += 1
         handlers = {
             "ask_user": self._tool_ask_user,
             "search_bot_docs": self._tool_search_bot_docs,
@@ -12870,6 +12881,8 @@ class AICommands(AISkillTools, AIKnowledgeTools, commands.Cog):
             result = await handler(arguments or {}, tool_context or {})
             if name in self.BROWSER_TOOL_NAMES and isinstance(result, dict):
                 self.browser.annotate_tool_result(name, arguments or {}, result, tool_context or {})
+            if isinstance(result, dict) and (browser_call or (name == "node_repl" and state and state.browser_tool_calls)):
+                result["browser_calls_remaining"] = self.MAX_BROWSER_TOOL_CALLS - state.browser_tool_calls
             return {
                 "ok": True,
                 "data": self._preserve_skill_result(name, result, tool_context, self._tool_result_max_length(name)),
