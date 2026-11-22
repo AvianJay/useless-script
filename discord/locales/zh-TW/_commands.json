@@ -2502,6 +2502,23 @@
             }
         }
     },
+    "muteleaderboard": {
+        "mute_leaderboard": {
+            "choice": {
+                "actor": "執行禁言次數",
+                "count": "被禁言次數",
+                "duration": "累計被禁言時長"
+            },
+            "desc": "查看本伺服器被禁言次數、累計被禁言時長或執行禁言次數的前 10 名",
+            "name": "禁言排行榜",
+            "param": {
+                "metric": "排行依據（預設為被禁言次數）"
+            },
+            "param_name": {
+                "metric": "排行依據"
+            }
+        }
+    },
     "owoify": {
         "owoify": {
             "desc": "文字也能變可愛！",

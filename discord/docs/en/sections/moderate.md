@@ -14,8 +14,17 @@ Core moderation module providing a full set of user management tools. Supports d
 | `/custom-action-add` | Add or update a custom server moderation action |
 | `/custom-action-remove` | Delete a custom server moderation action |
 | `/custom-action-list` | View custom server moderation actions |
+| `/mute-leaderboard` | Show this server's public mute leaderboard; available to all members |
 
 > **Duration format:** supports `s` / `秒`, `m` / `分鐘`, `h` / `小時`, `d` / `天`, `w` / `週`, `M` / `月`, `y` / `年`, and can be combined like `1d12h`.
+
+## Mute leaderboard
+
+Any member can use `/mute-leaderboard` in a server; the results are public. Each ranking shows the top 10. Leave `metric` unset to rank members by **mutes received**, or choose **total time muted** or **mutes issued**. The last option ranks those who issued the mutes, including Discord AutoMod.
+
+- **Counts:** Starting or extending a mute adds one. Shortening or lifting it adds none, and lifting it early does not erase the original count.
+- **Duration:** An early lift stops the clock at the time of removal. Overlapping periods for the same member count only once. If the expiry cannot be recovered (for example, from an old AutoMod audit entry), the mute counts toward frequency but not duration.
+- **Coverage:** No ranking includes the fixed mutes applied by cross-server compromised-account protection. The initial import reads up to 45 days of audit logs. Records continue to accumulate; this is not a rolling 45-day window. Even if the bot lacks View Audit Log, members can still query the records it has. The footer shows the start date (`YYYY-MM-DD`, UTC) and import status.
 
 ## Action Strings
 

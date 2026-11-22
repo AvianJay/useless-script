@@ -1,0 +1,20 @@
+{
+    "automod": "Discord AutoMod",
+    "count": {
+        "other": "{count} 次"
+    },
+    "duration_note": "無法從紀錄確認到期時間的禁言，不計入累計時長。",
+    "empty": "本伺服器尚無可列入此排行的禁言紀錄。",
+    "footer": "統計自 {date}（UTC）起｜{status}",
+    "status": {
+        "complete": "歷史紀錄回補完成",
+        "no_permission": "無法回補：Bot 缺少「檢視審核紀錄」權限",
+        "retry": "歷史紀錄回補待重試",
+        "running": "正在回補歷史紀錄"
+    },
+    "title": {
+        "actor": "執行禁言次數排行（前 10 名）",
+        "count": "被禁言次數排行（前 10 名）",
+        "duration": "累計被禁言時長排行（前 10 名）"
+    }
+}

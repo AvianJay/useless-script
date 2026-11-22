@@ -2502,6 +2502,23 @@
             }
         }
     },
+    "muteleaderboard": {
+        "mute_leaderboard": {
+            "choice": {
+                "actor": "Mutes issued",
+                "count": "Mutes received",
+                "duration": "Total time muted"
+            },
+            "desc": "Show this server's top 10 by mutes received, total time muted, or mutes issued",
+            "name": "mute-leaderboard",
+            "param": {
+                "metric": "How to rank entries (default: mutes received)"
+            },
+            "param_name": {
+                "metric": "metric"
+            }
+        }
+    },
     "owoify": {
         "owoify": {
             "desc": "Make text cute!",

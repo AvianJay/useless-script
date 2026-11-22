@@ -1,0 +1,21 @@
+{
+    "automod": "Discord AutoMod",
+    "count": {
+        "one": "{count} mute",
+        "other": "{count} mutes"
+    },
+    "duration_note": "Mutes whose expiry could not be recovered are not included in the total time.",
+    "empty": "This server has no recorded mutes for this ranking yet.",
+    "footer": "Records since {date} (UTC) | {status}",
+    "status": {
+        "complete": "History import complete",
+        "no_permission": "History unavailable: the bot needs View Audit Log",
+        "retry": "History import waiting to retry",
+        "running": "Importing mute history"
+    },
+    "title": {
+        "actor": "Top 10 by mutes issued",
+        "count": "Top 10 by mutes received",
+        "duration": "Top 10 by total time muted"
+    }
+}

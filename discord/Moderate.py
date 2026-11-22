@@ -8,6 +8,7 @@ import aiohttp
 from datetime import datetime, timedelta, timezone
 from typing import Union, Optional
 import ModerationNotify
+from mute_tracking import tracked_timeout
 from logger import log
 import logging
 import re
@@ -1133,7 +1134,10 @@ async def do_action_str(
                     logs.append(t("moderate.log.mute_skipped", reason=msg))
                     execution_status = merge_status(execution_status, "skipped")
                 else:
-                    await user.timeout(datetime.now(timezone.utc) + timedelta(seconds=duration_seconds), reason=reason)
+                    await tracked_timeout(
+                        user, datetime.now(timezone.utc) + timedelta(seconds=duration_seconds),
+                        reason=reason, actor_id=getattr(moderator, "id", None),
+                    )
                     logs.append(t("moderate.log.mute_done", reason=reason, duration=duration_seconds))
             else:
                 logs.append(t("moderate.log.mute_done", reason=reason, duration=duration_seconds))
@@ -1172,7 +1176,7 @@ async def do_action_str(
                 if not ok:
                     logs.append(t("moderate.log.unmute_skipped", reason=msg))
                 else:
-                    await user.timeout(None, reason=reason)
+                    await tracked_timeout(user, None, reason=reason, actor_id=getattr(moderator, "id", None))
                     logs.append(t("moderate.log.unmute_done", reason=reason))
             else:
                 logs.append(t("moderate.log.unmute_done", reason=reason))
@@ -1858,7 +1862,10 @@ class Moderate(commands.Cog):
                     try:
                         if action["action"] == "mute":
                             duration = action.get("duration", 0)
-                            await user.timeout(timedelta(minutes=duration), reason=action.get("reason") or None)
+                            await tracked_timeout(
+                                user, timedelta(minutes=duration), reason=action.get("reason") or None,
+                                actor_id=interaction.user.id,
+                            )
                             results.append(t("moderate.multi_action.mute_result", user=user.mention, duration=get_time_text(duration)))
                         elif action["action"] == "kick":
                             ModerationNotify.ignore_user(user.id)  # 避免重複通知
@@ -2097,7 +2104,7 @@ class Moderate(commands.Cog):
 
         # 執行禁言（可能耗時）
         try:
-            await user.timeout(timedelta(seconds=duration_seconds), reason=reason)
+            await tracked_timeout(user, timedelta(seconds=duration_seconds), reason=reason, actor_id=interaction.user.id)
         except Exception as e:
             print(f"[!] Error muting {user}: {e}")
             await interaction.followup.send(t("moderate.err.mute_error", error=e))
@@ -2142,7 +2149,7 @@ class Moderate(commands.Cog):
 
         # 執行解除禁言
         try:
-            await user.timeout(None, reason=t("moderate.audit.untimeout"))
+            await tracked_timeout(user, None, reason=t("moderate.audit.untimeout"), actor_id=interaction.user.id)
         except Exception as e:
             print(f"[!] Error untiming out {user}: {e}")
             await interaction.followup.send(t("moderate.err.untimeout_error", error=e))
@@ -2704,6 +2711,9 @@ async def _execute_moderation(
     duration_seconds: int = 0,
     executor: Optional[discord.Member] = None,
     locale: str | None = None,
+    *,
+    actor_id: int | None = None,
+    source: str = "bot",
 ) -> tuple[bool, str]:
     """執行 request / vote 通過後的懲處動作，回傳 (是否成功, 結果訊息)。
 
@@ -2756,7 +2766,10 @@ async def _execute_moderation(
         return True, t("moderate.msg.kicked", locale=locale, user=member.mention)
     # timeout
     try:
-        await member.timeout(timedelta(seconds=duration_seconds), reason=reason)
+        await tracked_timeout(
+            member, timedelta(seconds=duration_seconds), reason=reason,
+            actor_id=executor.id if executor is not None else actor_id, source=source,
+        )
     except Exception as e:
         return False, t("moderate.err.mute_error", locale=locale, error=e)
     log(f"Muted {member} for {duration_seconds}s, reason: {reason}", module_name="Moderate", guild=guild)
@@ -2802,7 +2815,7 @@ class RequestView(i18n.I18nView):
         await interaction.response.defer()
         ok, msg = await _execute_moderation(
             self.guild, self.action, self.target_id, self.reason,
-            self.duration_seconds, executor=interaction.user, locale=self.locale,
+            self.duration_seconds, executor=interaction.user, locale=self.locale, source="request",
         )
         self._disable_buttons()
         self.embed.color = discord.Color.green() if ok else discord.Color.red()
@@ -3114,7 +3127,9 @@ class VoteView(i18n.I18nView):
         active_vote_initiators.discard((self.guild.id, self.initiator_id))
         if success:
             ok, msg = await _execute_moderation(
-                self.guild, self.action, self.target_id, self.reason, self.duration_seconds, locale=self.locale)
+                self.guild, self.action, self.target_id, self.reason, self.duration_seconds,
+                locale=self.locale, actor_id=self.initiator_id, source="vote",
+            )
             if ok:
                 self.embed.color = discord.Color.green()
                 self.embed.add_field(name=t("moderate.field.result", locale=self.locale), value=t("moderate.vote.passed", locale=self.locale, result=msg), inline=False)

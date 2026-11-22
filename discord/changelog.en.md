@@ -5,6 +5,12 @@
   * Fixed Discord's blank page caused by blocked WebSockets and added support for links that open in new tabs.
   * New tasks start in a fresh tab that closes by default. The AI can keep a tab for the same user to resume in the same server and channel; recent operations and continuation status are available for one hour.
   * Optional live previews appear on the tool progress message. They are off by default, pause when switching tabs or sites, and retry temporary capture failures.
+* Added a public mute leaderboard | /mute-leaderboard
+  * Any server member can view the top 10 by mutes received (default), total time muted, or mutes issued.
+  * The initial import covers up to 45 days of audit logs. Records continue to accumulate after that, and the leaderboard still shows recorded data if the bot lacks View Audit Log.
+* Updated AI web search | /ai
+  * `search_ai` now uses native Responses API web search with `gpt-6.1-terra` by default, without Perplexity or Serper. Results include citations and sources; requests without a completed search return an error.
+  * Added independent search endpoint, API key, and model settings without changing regular chat. Google search, image search, and Serper page extraction are unchanged.
 
 ## 0.25.0
 * Added Activity Roles | /activity-role

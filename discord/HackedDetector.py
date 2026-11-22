@@ -18,6 +18,7 @@ import logging
 import Moderate
 from Moderate import check_member_hierarchy
 from ModerationNotify import ignore_user
+from mute_tracking import tracked_timeout
 from datetime import datetime, timedelta, timezone
 from pyfiglet import Figlet
 import re
@@ -462,7 +463,7 @@ class HackedDetector(commands.Cog):
             )
             return False
 
-    async def unlock_user(self, user: discord.User):
+    async def unlock_user(self, user: discord.User, *, actor_id: int | None = None):
         # untimeout the user in all mutual guilds
         guilds = self._normalize_guild_ids(self._get_hacked_user_data(user.id, "hacked_timed_out_channel", []))
         admin_removed = self._normalize_admin_removed(self._get_hacked_user_data(user.id, "hacked_admin_removed", {}) or {})
@@ -480,9 +481,10 @@ class HackedDetector(commands.Cog):
                 log(f"Unlock skipped guild={guild.id}: member {user.id} not found.", level=logging.DEBUG, module_name="HackedDetector", user=user)
                 continue
             try:
-                # discord.Member.timeout is a coroutine in discord.py v2 → await it
-                await member.timeout(None, reason=t("hackeddetector.audit.unlock",
-                                                     locale=i18n.resolve_locale(guild_id=guild.id)))
+                await tracked_timeout(
+                    member, None, reason=t("hackeddetector.audit.unlock", locale=i18n.resolve_locale(guild_id=guild.id)),
+                    actor_id=actor_id if actor_id is not None else getattr(guild.me, "id", None),
+                )
                 # log(f"User {user} has been unmuted in guild {guild.name} ({guild.id}).", level=logging.INFO, module_name="HackedDetector", user=user) ##anti 429##
             except Exception as e:
                 log(f"Failed to untimeout user {user} in guild {guild.name} ({guild.id}): {e}", level=logging.ERROR, module_name="HackedDetector", user=user)
@@ -622,8 +624,8 @@ class HackedDetector(commands.Cog):
 
         until = self._timeout_until()
         try:
-            await member.timeout(
-                until,
+            await tracked_timeout(
+                member, until, actor_id=bot_member.id, source="hacked_cross_guild",
                 reason=t(
                     "hackeddetector.audit.hacked_timeout",
                     locale=i18n.resolve_locale(guild_id=guild.id),
@@ -883,7 +885,7 @@ class HackedDetector(commands.Cog):
                 log(f"Unlock code mismatch for user {interaction.user.id}.", level=logging.DEBUG, module_name="HackedDetector", user=interaction.user, guild=interaction.guild)
                 await interaction.response.send_message(t("hackeddetector.err.wrong_code"), ephemeral=True)
                 return
-            success = await self.parent.unlock_user(self.user)
+            success = await self.parent.unlock_user(self.user, actor_id=interaction.user.id)
             if success:
                 await interaction.response.send_message(t("hackeddetector.msg.unlocked"), ephemeral=True)
                 log(f"Unlock success for user {interaction.user.id}.", level=logging.DEBUG, module_name="HackedDetector", user=interaction.user, guild=interaction.guild)

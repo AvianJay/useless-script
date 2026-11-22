@@ -52,7 +52,7 @@ class CatalogLintTests(unittest.TestCase):
         en_files, en = _load_locale("en")
         ja_files, ja = _load_locale("ja")
         self.assertEqual(ja_files, zh_files | en_files)
-        self.assertEqual(len(ja_files), 51)
+        self.assertEqual(len(ja_files), 52)
         expected_keys = set(zh) | set(en)
         self.assertTrue(expected_keys <= set(ja))
         self.assertEqual(set(ja), expected_keys)

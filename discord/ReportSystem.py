@@ -8,6 +8,7 @@ import aiohttp
 from database import db
 from globalenv import bot, start_bot, db, get_server_config, set_server_config, get_server_config_i18n, modules, get_command_mention, config
 from logger import log
+from mute_tracking import tracked_timeout
 import logging
 import re
 from ai_provider import create_ai_chat_completion, get_ai_report_model
@@ -306,7 +307,10 @@ class doModerationActions(i18n.I18nView):
                         duration = duration[0] if duration else 0
                     duration = int(duration) if duration else 0
                     if duration > 0:
-                        await interaction.guild.get_member(target.id).timeout(discord.utils.utcnow() + timedelta(seconds=duration), reason=self.ai_reason)
+                        await tracked_timeout(
+                            interaction.guild.get_member(target.id), discord.utils.utcnow() + timedelta(seconds=duration),
+                            reason=self.ai_reason, actor_id=interaction.user.id,
+                        )
                 # elif action.get("action") == "blacklist_reporter":
                 #     # 封鎖檢舉人
                 #     if self.reporter:
@@ -398,7 +402,10 @@ class doModerationActions(i18n.I18nView):
                         await modal_interaction.response.send_message(t("reportsystem.msg.invalid_duration"), ephemeral=True)
                         return
                     default_reason = t("reportsystem.msg.default_reason")
-                    await interaction.guild.get_member(parent_user.id).timeout(discord.utils.utcnow() + timedelta(seconds=mute_duration), reason=self.reason.value or default_reason)
+                    await tracked_timeout(
+                        interaction.guild.get_member(parent_user.id), discord.utils.utcnow() + timedelta(seconds=mute_duration),
+                        reason=self.reason.value or default_reason, actor_id=modal_interaction.user.id,
+                    )
                     await send_moderation_message(parent_user, interaction.user, [{"action": "mute", "duration": mute_duration}], self.reason.value or default_reason, message_content)
                     await modal_interaction.response.send_message(t("reportsystem.msg.muted", user=parent_user.mention, duration=get_time_text(mute_duration)), ephemeral=True)
                 except Exception as e:

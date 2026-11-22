@@ -2502,6 +2502,23 @@
             }
         }
     },
+    "muteleaderboard": {
+        "mute_leaderboard": {
+            "choice": {
+                "actor": "ミュートした回数",
+                "count": "ミュートされた回数",
+                "duration": "ミュートされた合計時間"
+            },
+            "desc": "このサーバーでミュートされた回数・合計時間、またはミュートした回数の上位10件を表示します",
+            "name": "ミュートランキング",
+            "param": {
+                "metric": "順位を決める基準（既定：ミュートされた回数）"
+            },
+            "param_name": {
+                "metric": "集計基準"
+            }
+        }
+    },
     "owoify": {
         "owoify": {
             "desc": "文字を可愛くしよう！",
