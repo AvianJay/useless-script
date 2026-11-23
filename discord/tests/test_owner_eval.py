@@ -1,9 +1,11 @@
 import importlib.util
+import subprocess
 import sys
 import unittest
 from pathlib import Path
+from tempfile import TemporaryDirectory
 from types import ModuleType, SimpleNamespace
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import discord
 from discord.ext import commands
@@ -80,6 +82,35 @@ def make_context(owner_id: int = 1):
         guild=SimpleNamespace(id=30),
         send=AsyncMock(),
     )
+
+
+class OwnerRestartVersionTests(unittest.TestCase):
+    def test_same_release_version_uses_updated_head(self):
+        with TemporaryDirectory() as path:
+            source = Path(path) / "UtilCommands.py"
+            source.write_text('startup_time = datetime.now(timezone.utc)\nversion = "0.25.0"\n', encoding="utf-8")
+            with (
+                patch.object(owner_tools, "UTIL_COMMANDS_SOURCE_PATH", source),
+                patch.object(owner_tools.UtilCommands, "full_version", "0.25.0 (f48eb50)"),
+                patch.object(owner_tools.subprocess, "check_output", return_value="d26bb6d\n") as git,
+            ):
+                self.assertEqual(owner_tools.get_latest_full_version(), "0.25.0 (d26bb6d)")
+                self.assertEqual(git.call_args.args[0], ["git", "rev-parse", "--short", "HEAD"])
+                self.assertEqual(git.call_args.kwargs["cwd"], owner_tools.REPO_ROOT)
+
+    def test_unreadable_version_still_uses_updated_head(self):
+        with (
+            patch.object(owner_tools, "load_literal_from_module", side_effect=ValueError),
+            patch.object(owner_tools.subprocess, "check_output", return_value="d26bb6d\n"),
+        ):
+            self.assertEqual(owner_tools.get_latest_full_version(), "unknown (d26bb6d)")
+
+    def test_git_failure_keeps_the_version_from_disk(self):
+        with (
+            patch.object(owner_tools, "load_literal_from_module", return_value="0.25.0"),
+            patch.object(owner_tools.subprocess, "check_output", side_effect=subprocess.CalledProcessError(128, "git")),
+        ):
+            self.assertEqual(owner_tools.get_latest_full_version(), "0.25.0 (unknown)")
 
 
 class OwnerEvalExecutionTests(unittest.IsolatedAsyncioTestCase):

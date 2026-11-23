@@ -287,12 +287,19 @@ def load_literal_from_module(module_path: Path, variable_name: str):
     for node in module_ast.body:
         if not isinstance(node, ast.Assign):
             continue
-        value = evaluate_static_ast_node(node.value, context)
-        for target in node.targets:
-            if isinstance(target, ast.Name):
-                context[target.id] = value
-                if target.id == variable_name:
-                    return value
+        names = [target.id for target in node.targets if isinstance(target, ast.Name)]
+        if variable_name in names:
+            return evaluate_static_ast_node(node.value, context)
+        if not names:
+            continue
+        try:
+            value = evaluate_static_ast_node(node.value, context)
+        except (TypeError, ValueError):
+            # Skip runtime-only assignments without keeping stale values for their names.
+            for name in names:
+                context.pop(name, None)
+            continue
+        context.update(dict.fromkeys(names, value))
     raise ValueError(f"{variable_name} not found in {module_path.name}")
 
 
@@ -397,7 +404,7 @@ def get_latest_full_version():
         if not isinstance(latest_version, str):
             raise ValueError("version is not a string")
     except Exception:
-        return UtilCommands.full_version
+        latest_version = "unknown"
 
     try:
         git_commit_hash = subprocess.check_output(
