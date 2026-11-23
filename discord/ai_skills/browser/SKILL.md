@@ -1,6 +1,6 @@
 ---
 name: browser
-description: Browse interactive public websites, follow links, search within a site, paginate, and collect structured information across multiple steps.
+description: Browse and interact with HTTP(S) sites using the shared browser's existing sign-in, including sending a requested message in Discord Web.
 allowed-tools: browser_read browser_view browser_act browser_evaluate browser_playwright node_repl
 ---
 
@@ -17,6 +17,13 @@ list tabs first and look for `continuation` and the matching URL. Select that ta
 snapshot, not an old ref. Then continue the task without opening a new tab. Only
 bot owners can borrow manually opened tabs. A popup is another tab; list/select
 it rather than repeating the click. Rebuild locators after switching.
+
+For an explicit request to post via Discord Web, “here” means the current Discord
+channel URL in runtime context. Open that URL, not an invite. Check the channel
+and composer before sending the requested text under the signed-in identity.
+Do not use that identity to bypass the requester's channel or posting permissions.
+Verify the new message in the channel before reporting success; if login or access
+is missing, report what the page shows rather than replying with the text as the bot.
 
 **Default to closing, not mandatory closing.** AI-created tabs and their popups
 close at task end, including errors and timeouts. Keep a tab when a draft or

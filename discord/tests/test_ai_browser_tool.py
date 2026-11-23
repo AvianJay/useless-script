@@ -133,6 +133,12 @@ class BrowserConfigTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("/api/profiles/***/cdp", displayed)
         self.assertNotIn("1fec3e6d", displayed)
 
+    def test_current_guild_channel_url_in_runtime_context(self):
+        runtime = self.cog._build_runtime_prompt_context
+        self.assertIn("https://discord.com/channels/10/20", runtime(tool_context()))
+        self.assertNotIn("discord.com/channels/", runtime(tool_context(guild_id=None)))
+        self.assertNotIn("discord.com/channels/", runtime({"guild": SimpleNamespace(id=10)}))
+
     def test_browser_schemas_are_conditional(self):
         browser_tools = {"browser_read", "browser_view", "browser_act", "browser_evaluate", "browser_playwright"}
         with patch("ai._get_ai_browser_cdp_endpoint", return_value=""):
