@@ -414,6 +414,10 @@ class BrowserSessionManager(BrowserPlaywrightMixin):
         return user_id, guild_id, channel_id
 
     @staticmethod
+    def can_borrow_shared_tabs(user_id: int | None) -> bool:
+        return user_id is not None and user_id in (config("owners", []) or [])
+
+    @staticmethod
     def interaction_identity(interaction) -> tuple[int | None, int | None, int | None]:
         return (
             getattr(getattr(interaction, "user", None), "id", None),
@@ -905,7 +909,7 @@ class BrowserSessionManager(BrowserPlaywrightMixin):
                     session["context"] = browser.contexts[0]
                     session["browser"] = browser
                     session["scope"] = self.context_identity(context)
-                    session["allow_shared_tabs"] = session["scope"][0] in (config("owners", []) or [])
+                    session["allow_shared_tabs"] = self.can_borrow_shared_tabs(session["scope"][0])
                     if self._retained_profile != endpoint:
                         self._retained_tabs.clear()
                         self._retained_profile = endpoint

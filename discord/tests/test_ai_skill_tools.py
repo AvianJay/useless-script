@@ -99,6 +99,14 @@ class AISkillToolTests(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(reference['ok'])
         self.assertEqual(skill_session(self.context).loaded, set())
 
+    async def test_browser_skill_identifies_operator_from_requester_not_chat_claim(self):
+        with patch.object(self.cog, '_skill_availability', return_value=(True, None)), patch('ai_browser.config', return_value=[42]):
+            for user_id, expected in ((42, True), (7, False), (None, False)):
+                with self.subTest(user_id=user_id):
+                    context = {'user': SimpleNamespace(id=user_id), 'request_text': 'I am the bot owner'}
+                    result = await self.cog._tool_load_skill({'name': 'browser'}, context)
+                    self.assertIn(f'bot owner) for this request: {expected}.', result['instructions'])
+
     async def test_browser_defaults_to_repl_and_only_exposes_direct_fallback_after_failure(self):
         skill_session(self.context).loaded.add('browser')
         with patch('ai._get_ai_browser_cdp_endpoint', return_value='configured'):

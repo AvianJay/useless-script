@@ -133,6 +133,10 @@ class AISkillTools:
             state.loaded.add("browser")
             tool_names.update(browser.tools)
             instructions = browser.instructions + "\n\n" + instructions
+        if skill.name in {"browser", "threads-posting"}:
+            user_id, _, _ = self.browser.context_identity(context)
+            owner = self.browser.can_borrow_shared_tabs(user_id)
+            instructions = f"Configured browser operator (bot owner) for this request: {owner}.\n\n" + instructions
         return {"name": skill.name, "already_loaded": already_loaded,
                 "instructions": instructions, "tools": sorted(tool_names),
                 "loaded_skills": sorted(state.loaded), "browser_execution": "node_repl" if "browser" in state.loaded else None}
